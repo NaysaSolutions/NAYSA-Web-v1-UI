@@ -1,0 +1,589 @@
+@import url('https://fonts.googleapis.com/css2?family=Work+Sans:opsz,wght@8..144,400;8..144,900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+body {
+    font-family: 'Roboto', sans-serif;
+    /* font-family: Calibri, Arial, sans-serif; */
+    /* font-family: Verdana, Geneva, Tahoma, sans-serif */
+  }
+
+  .oswald-text {
+    font-family: 'Oswald', sans-serif;
+  }
+  
+  .nowrap-header {
+    white-space: nowrap;
+  } 
+
+
+
+  @layer components {
+
+  
+  /* TRANSACTION HEADER UI */
+
+  .global-tran-main-div-ui {
+    @apply p-2 bg-gray-100 min-h-screen mt-32 sm:mt-24 md:mt-6 lg:mt-9
+    dark:bg-black;
+  }
+  
+  .global-tran-headerToolbar-ui {
+    @apply sticky top-0 z-40 shadow-md;
+  }
+  
+  .global-tran-header-div-ui {
+    @apply bg-white shadow-md rounded-lg p-2 mt-20 md:mt-28
+    dark:bg-gray-800;
+  }
+
+  /* bg-gradient-to-r from-blue-400 to-purple-300 */
+  .global-tran-header-ui {
+    /* @apply fixed mt-24 top-12 left-6 right-6 z-30 bg-blue-300 p-1 rounded-lg text-blue-900 shadow-lg 
+            lg:p-1 mb-4 flex flex-col 
+            sm:flex-row sm:justify-between sm:items-center gap-y-1 sm:gap-y-0 sm:gap-x-4
+            md:mt-14
+            dark:bg-blue-900 dark:text-white; */
+      @apply fixed mt-24 top-12 left-6 right-6 z-30 bg-gradient-to-r from-blue-200 to-blue-200 p-1 rounded-lg text-blue-900 shadow-xl 
+            lg:p-1 mb-4 flex flex-col 
+            sm:flex-row sm:justify-between sm:items-center gap-y-1 sm:gap-y-0 sm:gap-x-4
+            md:mt-14
+            dark:bg-blue-900 dark:text-white;
+  }
+
+  .global-tran-headertext-div-ui {
+    @apply text-center sm:text-left;
+  }
+
+  .global-tran-headertext-ui {
+    @apply text-base sm:text-xl lg:text-2xl font-semibold pl-3;
+  }
+
+  /* TRANSACTION STATUS UI */
+
+  .global-tran-headerstat-div-ui {
+    @apply flex flex-col sm:flex-row gap-y-1 sm:gap-x-5 items-center sm:items-start text-center sm:text-left pr-2 sm:pr-4;
+  }
+  
+  .global-tran-headerstat-text-ui {
+    @apply text-xs sm:text-xs lg:text-sm font-semibold text-center text-gray-600
+    dark:text-white dark:font-semibold;
+  }
+
+  .global-tran-stat-text-ui {
+    @apply text-sm sm:text-sm lg:text-base font-extrabold text-center;
+  }
+
+  .global-tran-stat-text-closed-ui {
+    @apply text-red-600
+    dark:text-red-400;
+  }
+
+  .global-tran-stat-text-finalized-ui {
+    @apply text-blue-800
+    dark:text-blue-300;
+  }
+
+  .global-tran-stat-text-open-ui {
+    @apply text-gray-800
+    dark:text-gray-200;
+  }
+
+
+
+  /* TRANSACTION TABS UI */
+
+  .global-tran-header-tab-div-ui {
+    @apply flex border-b text-sm mb-4 justify-center lg:justify-start;
+  }
+
+  .global-tran-tab-padding-ui {
+    @apply py-1 px-2;
+  }
+
+  .global-tran-tab-text_active-ui {
+    @apply flex text-sm lg:text-base font-bold text-blue-600 border-b-2 border-blue-600
+    dark:text-blue-300 dark:font-medium;
+  }
+  
+  .global-tran-tab-text_inactive-ui {
+    @apply text-sm lg:text-base text-gray-500 font-medium
+    dark:text-gray-400 dark:font-medium;
+  }
+
+  .global-tran-tab-div-ui {
+    @apply bg-white shadow-md rounded-lg p-4 mt-2 mb-3
+    dark:bg-gray-800;
+  }
+
+  .global-tran-tab-nav-ui {
+    @apply flex flex-col justify-center sm:flex-row sm:items-center md:justify-between mb-2 text-sm sm:text-base lg:text-base gap-2 sm:gap-0;
+  }
+
+
+
+  /* TRANSACTION LOOKUP BUTTON UI */
+
+  .global-tran-button-lookup {
+    @apply bg-blue-600 hover:bg-blue-700 text-white font-medium px-16 p-2 rounded-lg text-sm
+            sm:text-xs flex items-center justify-center focus:outline-none w-full sm:w-auto mr-2
+            dark:bg-blue-900 dark:hover:bg-blue-800;
+  }
+
+  .global-tran-button-generateGL {
+    @apply bg-blue-600 hover:bg-blue-700 text-white font-medium px-14 p-2 rounded-lg text-sm 
+            sm:text-xs flex items-center justify-center focus:outline-none w-full sm:w-auto mr-2
+            dark:bg-blue-900 dark:hover:bg-blue-800;
+  }
+
+  .global-tran-spinner-main-div-ui {
+    @apply fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50;
+  }
+
+  .global-tran-spinner-sub-div-ui {
+    @apply bg-white p-6 rounded-lg shadow-lg flex flex-col items-center 
+            dark:bg-black dark:text-white;
+  }
+  
+
+
+  /* TRANSACTION TEXTBOX AND TEXT BUTTON UI */
+
+  .global-tran-textbox-group-div-ui {
+      @apply space-y-4 p-2;
+    }
+
+  .global-tran-textbox-ui {
+      @apply block w-full appearance-none rounded-lg border border-gray-400 bg-white 
+      px-2 pb-1 pt-2 text-xs text-black 
+      focus:border-blue-600 focus:outline-none focus:ring-0 
+      h-[30px] sm:h-[30px] lg:h-[35px]
+      cursor-pointer
+      dark:bg-gray-600 dark:text-white;
+    }
+
+  .global-tran-textbox-remarks-ui {
+      @apply block w-full appearance-none rounded-lg border border-gray-400 bg-white px-2 pb-2 text-xs text-black focus:border-blue-600 focus:outline-none focus:ring-0
+      dark:bg-gray-600 dark:text-white;
+    }
+    
+  .global-tran-textbox-button-search-padding-ui {
+        @apply w-[40px] h-[30px] sm:h-[30px] lg:h-[35px] absolute inset-y-0 right-0;
+      }
+
+  .global-tran-textbox-button-search-enabled-ui {
+        @apply bg-blue-600 hover:bg-blue-700
+        dark:bg-blue-900 dark:hover:bg-blue-800;
+      }
+      
+  .global-tran-textbox-button-search-disabled-ui {
+    @apply bg-blue-400
+    dark:bg-blue-800;
+  }
+
+  .global-tran-textbox-button-search-ui {
+    @apply text-white rounded-r-lg flex items-center justify-center focus:outline-none;
+  }
+    
+  .global-tran-floating-label {
+    @apply absolute start-1 top-2 z-10 origin-[0] -translate-y-5 scale-75 transform bg-white px-2 text-sm text-gray-600 transition-all
+            peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:scale-100
+            peer-focus:top-2 peer-focus:-translate-y-5 peer-focus:scale-75 peer-focus:text-blue-600
+            dark:bg-gray-600 dark:text-white dark:peer-focus:text-white;
+  }
+
+  .global-tran-floating-label-remarks {
+    @apply absolute left-4 top-0 z-10 origin-[0] scale-75 transform bg-white px-1 text-xs text-gray-600 transition-all 
+    peer-placeholder-shown:top-4 peer-placeholder-shown:scale-100 
+    peer-focus:top-0 peer-focus:scale-75 peer-focus:text-blue-600
+    dark:bg-gray-600 dark:text-white dark:peer-focus:text-white;
+  }
+
+  .global-tran-asterisk-ui {
+    @apply text-red-600 font-extrabold;
+  }
+
+
+
+  /* TRANSACTION TABLE UI */
+
+  .global-tran-table-main-div-ui {
+    @apply overflow-x-auto bg-white shadow-lg rounded-lg
+    /* h-[360px] */
+    dark:bg-black;
+  }
+
+  .global-tran-table-main-sub-div-ui {
+    @apply max-h-[360px] overflow-y-auto relative;
+ 
+  }
+
+  .global-tran-table-div-ui {
+    @apply min-w-full border-collapse;
+  }
+
+  .global-tran-thead-div-ui {
+    /* @apply sticky top-0 bg-blue-300 z-10 
+    dark:bg-blue-900 dark:text-white; */
+    @apply sticky top-0 bg-blue-200 z-10 
+    dark:bg-blue-900 dark:text-white;
+  }
+
+  .global-tran-th-ui {
+    @apply px-2 py-2 sm:py-2 lg:py-2 text-center text-[10px] sm:text-[10px] lg:text-xs font-bold text-gray-900
+    dark:text-gray-300;
+  }
+
+  .global-tran-tr-ui {
+    @apply hover:bg-blue-50 border
+    dark:text-black dark:hover:bg-blue-700;
+  }
+
+  .global-tran-td-ui {
+    @apply px-1 border text-[10px] sm:text-[10px] lg:text-xs text-gray-900 whitespace-normal
+    dark:text-white;
+  }
+
+  .global-tran-td-inputclass-ui {
+    @apply h-4 bg-transparent focus:outline-none focus:ring-0 whitespace-normal;
+  }
+
+  .global-tran-td-button-add-ui {
+    @apply bg-blue-500 text-white px-3 py-1 rounded-lg hover:bg-blue-700 transition w-[35px]
+    dark:bg-black dark:hover:bg-blue-900;
+  }
+
+  .global-tran-td-button-delete-ui {
+    @apply bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-700 transition w-[35px]
+    dark:bg-black dark:hover:bg-red-900;
+  }
+
+  
+  /* TRANSACTION TAB FOOTER UI */
+
+   .global-tran-tab-footer-main-div-ui {
+    @apply flex flex-col sm:flex-row sm:items-center sm:justify-between mt-8 gap-4 sm:gap-0;
+  }
+
+  .global-tran-tab-footer-button-div-ui {
+    @apply flex justify-center sm:justify-start;
+  }
+
+  .global-tran-tab-footer-button-add-ui {
+    @apply bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 text-sm rounded-lg 
+          flex items-center justify-center focus:outline-none w-full sm:w-auto
+          dark:bg-blue-900 dark:hover:bg-blue-800;
+  }
+
+
+  .global-tran-tab-footer-total-main-div-ui {
+    @apply flex flex-col sm:flex-row sm:flex-wrap sm:justify-end gap-2 sm:gap-x-6 p-2;
+  }
+
+  .global-tran-tab-footer-total-div-ui {
+    @apply flex justify-between sm:items-center sm:gap-2;
+  }
+
+  .global-tran-tab-footer-total-label-ui {
+    @apply text-sm font-bold text-blue-700
+    dark:text-gray-400 dark:font-semibold;
+  }
+
+  .global-tran-tab-footer-total-value-ui {
+    @apply text-sm font-extrabold text-gray-900 text-right
+    dark:text-white dark:font-semibold;
+  }
+  
+
+
+
+
+
+  /* REFERENCE FILES & MASTERDATA */
+
+  .global-ref-main-div-ui {
+    @apply p-2 bg-gray-100 min-h-screen
+    dark:bg-black;
+  }
+
+  .global-ref-tab-div-ui {
+    @apply mt-6 bg-white p-4 sm:p-6 shadow-md rounded-lg
+    dark:bg-gray-800;
+  }
+
+    .global-ref-textbox-ui {
+        @apply block w-full appearance-none rounded-lg border border-gray-400 bg-white px-2.5 pb-2.5 pt-4 text-sm text-black focus:border-blue-600 focus:outline-none focus:ring-0;
+      }
+
+    .global-ref-header-ui {
+      /* @apply bg-gradient-to-r from-blue-400 to-purple-300 p-4 rounded-lg text-blue-900 shadow-lg */
+      @apply bg-gradient-to-r from-blue-200 to-blue-200 p-2 rounded-lg text-blue-900 shadow-lg
+      dark:from-blue-900 dark:bg-blue-900 dark:text-white;
+    }
+  
+    .global-ref-headertext-ui {
+      @apply text-xs sm:text-sm lg:text-2xl font-semibold ml-2 whitespace-nowrap;
+    }
+
+    
+  /* REFERENCE FILES TABLE UI */
+
+  .global-ref-table-main-div-ui {
+    @apply bg-white rounded-lg shadow-lg
+    /* h-[360px] */
+    dark:bg-black;
+  }
+
+  .global-ref-table-main-sub-div-ui {
+    @apply max-h-[560px] overflow-y-auto relative rounded-lg
+    dark:bg-black;
+  }
+
+  .global-ref-table-div-ui {
+    @apply min-w-full border-collapse;
+  }
+
+  .global-ref-thead-div-ui {
+    /* @apply sticky top-0 bg-blue-300 z-10
+    dark:bg-blue-900 dark:text-white; */
+    @apply sticky top-0 bg-blue-50
+    dark:bg-blue-900 dark:text-white;
+  }
+
+  .global-ref-th-ui {
+    @apply px-2 py-2 sm:py-2 lg:py-2 text-center text-[10px] sm:text-[10px] lg:text-xs font-bold text-gray-900 cursor-pointer whitespace-nowrap
+    dark:text-gray-300;
+  }
+
+  .global-ref-tr-ui {
+    /* @apply hover:bg-blue-200 border
+    dark:text-black dark:hover:bg-blue-700; */
+    @apply sticky top-0 bg-blue-200 z-10
+    dark:bg-blue-900 dark:text-white;
+  }
+
+  .global-ref-td-ui {
+    @apply border text-[9px] sm:text-[10px] lg:text-[11px] text-gray-900 whitespace-normal px-2 py-1
+    dark:text-white;
+  }
+
+  .global-ref-td-inputclass-ui {
+    @apply h-4 bg-transparent focus:outline-none focus:ring-0 whitespace-normal;
+  }
+
+  .global-ref-td-button-edit-ui {
+    @apply bg-blue-500 text-white rounded-lg hover:bg-blue-700 transition w-[35px] text-[13px]
+    dark:bg-blue-800 dark:hover:bg-blue-900;
+  }
+
+  .global-ref-td-button-delete-ui {
+    @apply bg-red-500 text-white rounded-lg hover:bg-red-700 transition w-[35px] text-[13px]
+    dark:bg-red-800 dark:hover:bg-red-900;
+  }
+
+
+  
+  /* REFERENCE FILES TEXTBOX AND TEXT BUTTON UI */
+
+  .global-ref-textbox-group-div-ui {
+    @apply space-y-4 p-2;
+  }
+
+.global-ref-textbox-ui {
+    @apply block w-full appearance-none rounded-lg border border-gray-400 bg-white 
+    px-2 pb-2 pt-2 text-xs text-black 
+    focus:border-blue-600 focus:outline-none focus:ring-0 
+    h-[30px] sm:h-[30px] lg:h-[35px]
+    dark:bg-gray-600 dark:text-white;
+  }
+
+.global-ref-textbox-remarks-ui {
+    @apply block w-full appearance-none rounded-lg border border-gray-400 bg-white px-4 pb-4 pt-2 mb-2 text-xs text-black focus:border-blue-600 focus:outline-none focus:ring-0
+    dark:bg-gray-600 dark:text-white;
+  }
+  
+.global-ref-textbox-button-search-padding-ui {
+      @apply w-[40px] h-[30px] sm:h-[30px] lg:h-[40px] absolute inset-y-0 right-0;
+    }
+
+.global-ref-textbox-button-search-enabled-ui {
+      @apply bg-blue-600 hover:bg-blue-700
+      dark:bg-blue-900 dark:hover:bg-blue-800;
+    }
+    
+.global-ref-textbox-button-search-disabled-ui {
+  @apply bg-blue-400
+  dark:bg-blue-800;
+}
+
+.global-ref-textbox-button-search-ui {
+  @apply text-white rounded-r-lg flex items-center justify-center focus:outline-none;
+}
+
+.global-ref-floating-label {
+  @apply absolute start-1 top-2 z-10 origin-[0] -translate-y-4 scale-75 transform 
+                    bg-gray-100 px-2 text-xs text-gray-400 transition-all 
+                    peer-placeholder-shown:top-1/2 
+                    peer-placeholder-shown:-translate-y-1/2 
+                    peer-placeholder-shown:scale-100 
+                    peer-focus:top-2 
+                    peer-focus:-translate-y-4 
+                    peer-focus:scale-75 
+                    peer-focus:text-blue-600
+                    /* @apply absolute -top-2 left-2 bg-white dark:bg-gray-900 px-1 text-sm font-normal opacity-90 */
+                    dark:bg-gray-600 dark:text-white dark:peer-focus:text-white;
+}
+
+.global-ref-label-enabled {
+  @apply bg-white text-gray-600
+          dark:bg-gray-600 dark:text-white dark:peer-focus:text-white;
+}
+
+.global-ref-label-disabled {
+  @apply bg-gray-100 text-gray-500
+          dark:bg-gray-600 dark:text-gray-500 dark:peer-focus:text-white;
+}
+
+.global-ref-textbox-enabled {
+  @apply bg-white border border-gray-300 focus:border-blue-600 text-black
+          dark:bg-gray-600 dark:text-white dark:peer-focus:text-white;
+}
+
+.global-ref-textbox-disabled {
+  @apply bg-gray-100 border border-gray-300 text-gray-500 cursor-not-allowed
+          dark:bg-gray-600 dark:text-gray-500 dark:peer-focus:text-white;
+}
+
+.global-ref-filterbox-ui {
+    @apply block w-full appearance-none rounded-lg border border-gray-300 bg-white 
+    px-2 text-black 
+    focus:border-blue-500 focus:outline-none focus:ring-0 
+    text-[10px] sm:text-[11px] lg:text-[12px]
+    h-[20px] sm:h-[20px] lg:h-[25px]
+    font-medium
+    dark:bg-gray-600 dark:text-white;
+  }
+
+
+.global-ref-asterisk-ui {
+  @apply text-red-600 font-extrabold;
+}
+
+.global-ref-norecords-ui {
+  @apply px-4 py-2 border text-center text-sm dark:text-white;
+}
+
+
+  /* MODAL / LOOKUP */
+
+  .global-lookup-table-main-div-ui {
+    @apply overflow-x-auto bg-white shadow-lg rounded 
+    dark:bg-black;
+  }
+
+  .global-lookup-table-main-sub-div-ui {
+    @apply max-h-[360px] overflow-y-auto relative;
+  }
+
+  .global-lookup-button-close-ui {
+    @apply absolute top-3 right-3 text-red-500 hover:text-red-700;
+  }
+
+  .global-lookup-loading-main-div-ui {
+    @apply flex justify-center items-center h-32;
+  }
+
+  .global-lookup-loading-sub-div-ui {
+    @apply w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin;
+  }
+  
+  .global-lookup-loading-div-ui {
+    @apply w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin;
+  }
+
+  .global-lookup-filter-text-ui {
+    @apply w-full border px-2 py-1 rounded text-xs text-black
+    dark:bg-black;
+  }
+
+
+  .global-lookup-table-div-ui {
+    @apply min-w-full border-collapse text-xs;
+  }
+  
+  .global-lookup-thead-div-ui {
+    @apply sticky top-0 bg-blue-300 z-10
+    /* dark:bg-gradient-to-r dark:from-blue-900 dark:to-purple-900 dark:text-white; */   
+    dark:bg-blue-900 dark:text-white;
+  }
+
+  .global-lookup-th-ui {
+    @apply px-1 py-1 sm:py-2 md:py-2 md:px-2  text-center text-[10px] sm:text-[10px] lg:text-xs font-bold text-gray-900 cursor-pointer
+    dark:text-gray-300;
+  }
+
+  .global-lookup-tr-ui {
+    @apply hover:bg-blue-200 border
+    dark:text-black dark:hover:bg-blue-700;
+  }
+
+  .global-lookup-td-ui {
+    @apply text-[10px] sm:text-[10px] lg:text-[11px] text-gray-900 px-2 border border-blue-100 whitespace-nowrap
+    dark:text-white;
+  }
+
+  .global-lookup-td-apply-ui {
+    @apply text-[10px] sm:text-[10px] lg:text-xs text-gray-900 px-2 text-center border border-blue-100
+    dark:text-white;
+  }
+
+  .global-lookup-td-inputclass-ui {
+    @apply h-4 bg-transparent focus:outline-none focus:ring-0 whitespace-normal;
+  }
+
+  .global-lookup-td-button-add-ui {
+    @apply bg-blue-500 text-white px-3 py-1 rounded-lg hover:bg-blue-700 transition w-[35px]
+    dark:bg-black dark:hover:bg-blue-900;
+  }
+
+  .global-lookup-apply-button-ui {
+    @apply bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-800 text-white
+    dark:bg-blue-900 dark:hover:bg-blue-600;
+  }
+
+  .global-lookup-count-ui {
+    @apply p-2 text-xs text-gray-800
+    dark:text-gray-300
+  }
+
+  .global-lookup-main-div-ui {
+    @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50
+  }
+
+  .global-lookup-div-ui {
+    @apply bg-white rounded-lg p-4 w-full overflow-auto relative
+    dark:bg-gray-800;
+  }
+
+  .global-lookup-headertext-ui {
+    @apply text-base font-semibold mb-2 text-black
+    dark:text-white;
+  }
+
+  
+  .global-lookup-footer-div-ui {
+    @apply sticky bottom-0 bg-white z-20 flex justify-between items-center p-3
+    dark:bg-gray-800 dark:text-white;
+  }
+
+  .global-lookup-footer-button-prevnext-ui {
+    @apply px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-800 text-white rounded disabled:opacity-50 disabled:hover:bg-blue-600
+    dark:bg-blue-900 dark:hover:bg-blue-600 dark:disabled:hover:bg-blue-900;
+  }
+
+  
+
+}
