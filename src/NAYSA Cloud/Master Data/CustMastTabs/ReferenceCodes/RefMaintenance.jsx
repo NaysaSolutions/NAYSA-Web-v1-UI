@@ -12,6 +12,7 @@ import {
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer";
 import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
+import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo";
 
 /* ---------- Small UI helpers ---------- */
 const SectionHeader = ({ title, subtitle }) => (
@@ -25,9 +26,7 @@ const SectionHeader = ({ title, subtitle }) => (
 
 // keep your white-box fix here
 const Card = ({ children, className = "" }) => (
-  <div
-    className={`global-tran-textbox-group-div-ui self-start !h-fit ${className}`}
-  >
+  <div className={`global-tran-textbox-group-div-ui self-start !h-fit ${className}`}>
     {children}
   </div>
 );
@@ -124,7 +123,11 @@ export default function RefMaintenance({
 
       const normalized = mapRow ? mapRow(row) : row;
       setSelectedCode(normalized?.[codeKey] ?? code);
+
+      // ✅ IMPORTANT:
+      // Keep your current behavior: populate form with normalized row (includes reg fields if present)
       setForm((p) => ({ ...(emptyForm || {}), ...p, ...normalized }));
+
       setIsEditing(false);
     } catch (e) {
       console.error(e);
@@ -138,10 +141,8 @@ export default function RefMaintenance({
     const code = String(form?.[codeKey] ?? "").trim();
     const name = String(form?.[nameKey] ?? "").trim();
 
-    if (!code)
-      return Swal.fire("Required", `${codeLabel} is required.`, "warning");
-    if (!name)
-      return Swal.fire("Required", `${nameLabel} is required.`, "warning");
+    if (!code) return Swal.fire("Required", `${codeLabel} is required.`, "warning");
+    if (!name) return Swal.fire("Required", `${nameLabel} is required.`, "warning");
 
     setIsLoading(true);
     try {
@@ -234,6 +235,42 @@ export default function RefMaintenance({
     [isLoading, form]
   );
 
+  const normalizeRegistrationInfo = (x) => {
+    const v = x || {};
+    return {
+      registeredBy:
+        v.registeredBy ??
+        v.registered_by ??
+        v.createdBy ??
+        v.created_by ??
+        "",
+      registeredDate:
+        v.registeredDate ??
+        v.registered_date ??
+        v.createdDate ??
+        v.created_date ??
+        "",
+      lastUpdatedBy:
+        v.lastUpdatedBy ??
+        v.last_updated_by ??
+        v.updatedBy ??
+        v.updated_by ??
+        "",
+      lastUpdatedDate:
+        v.lastUpdatedDate ??
+        v.last_updated_date ??
+        v.updatedDate ??
+        v.updated_date ??
+        "",
+    };
+  };
+
+  // ✅ Use current form to display registration info
+  // (works whether data came from list-click or double-click fetchOne)
+  const registrationData = useMemo(() => {
+    return normalizeRegistrationInfo(form);
+  }, [form]);
+
   return (
     <>
       {/* Header */}
@@ -266,64 +303,73 @@ export default function RefMaintenance({
 
       {/* List + Form */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
-        {/* FORM */}
-        <Card>
-          <SectionHeader
-            title="Basic Information"
-            subtitle={
-              isEditing ? "Edit mode enabled." : "View mode. Click Add to create or edit."
-            }
-          />
-
-          <div className="grid grid-cols-1 gap-3">
-            <FieldRenderer
-              label={codeLabel}
-              required
-              type="text"
-              value={form?.[codeKey] ?? ""}
-              onChange={(v) => updateForm({ [codeKey]: v })}
-              readOnly={!isEditing}
-              disabled={isLoading}
+        {/* ✅ LEFT: FORM SIDE (NOW 2 CARDS: Basic + Registration) */}
+        <div className="grid grid-cols-1 gap-3">
+          {/* BASIC INFORMATION */}
+          <Card>
+            <SectionHeader
+              title="Basic Information"
+              subtitle={
+                isEditing ? "Edit mode enabled." : "View mode. Click Add to create or edit."
+              }
             />
 
-            <FieldRenderer
-              label={nameLabel}
-              required
-              type="text"
-              value={form?.[nameKey] ?? ""}
-              onChange={(v) => updateForm({ [nameKey]: v })}
-              readOnly={!isEditing}
-              disabled={isLoading}
-            />
-
-            {/* Optional fields — only show if keys exist in form */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3">
               <FieldRenderer
-                label="Due Days"
+                label={codeLabel}
                 required
-                type="number"
-                value={form?.[daysKey] ?? 0}
-                onChange={(v) => updateForm({ [daysKey]: v })}
+                type="text"
+                value={form?.[codeKey] ?? ""}
+                onChange={(v) => updateForm({ [codeKey]: v })}
                 readOnly={!isEditing}
                 disabled={isLoading}
               />
 
-              {extraKey ? (
+              <FieldRenderer
+                label={nameLabel}
+                required
+                type="text"
+                value={form?.[nameKey] ?? ""}
+                onChange={(v) => updateForm({ [nameKey]: v })}
+                readOnly={!isEditing}
+                disabled={isLoading}
+              />
+
+              {/* Optional fields — only show if keys exist in form */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <FieldRenderer
-                  label={extraColLabel || "Extra"}
-                  type="select"
-                  options={extraOptions || []}
-                  value={(form?.[extraKey] ?? extraDefault) || extraDefault}
-                  onChange={(v) => updateForm({ [extraKey]: v })}
+                  label="Due Days"
+                  required
+                  type="number"
+                  value={form?.[daysKey] ?? 0}
+                  onChange={(v) => updateForm({ [daysKey]: v })}
                   readOnly={!isEditing}
                   disabled={isLoading}
                 />
-              ) : null}
-            </div>
-          </div>
-        </Card>
 
-        {/* LIST */}
+                {extraKey ? (
+                  <FieldRenderer
+                    label={extraColLabel || "Extra"}
+                    type="select"
+                    options={extraOptions || []}
+                    value={(form?.[extraKey] ?? extraDefault) || extraDefault}
+                    onChange={(v) => updateForm({ [extraKey]: v })}
+                    readOnly={!isEditing}
+                    disabled={isLoading}
+                  />
+                ) : null}
+              </div>
+            </div>
+          </Card>
+
+          {/* ✅ REGISTRATION INFORMATION (NEW CARD) */}
+          <Card>
+            <SectionHeader title="Registration Information" />
+            <RegistrationInfo data={registrationData} disabled />
+          </Card>
+        </div>
+
+        {/* RIGHT: LIST */}
         <Card>
           <SectionHeader
             title="List"
@@ -373,8 +419,7 @@ export default function RefMaintenance({
                       {extraKey ? (
                         <td className="px-3 py-2 text-gray-700">
                           {(() => {
-                            const raw =
-                              (r?.[extraKey] ?? extraDefault) || extraDefault;
+                            const raw = (r?.[extraKey] ?? extraDefault) || extraDefault;
                             const opt = (extraOptions || []).find(
                               (o) =>
                                 String(o.value).toUpperCase() ===

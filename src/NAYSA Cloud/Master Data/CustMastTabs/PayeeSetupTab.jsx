@@ -142,6 +142,18 @@ const PayeeSetupTab = forwardRef(
         return true;
       });
     }, [taxClassOptions]);
+    // ✅ Auto-default Tax Rate Class based on SL Type (editable)
+    React.useEffect(() => {
+      // do not override existing value
+      if (form.taxClass) return;
+
+      if (isSupplier) {
+        onChangeForm({ taxClass: "WC" }); // Corporate
+      } else if (isEmployee) {
+        onChangeForm({ taxClass: "WI" }); // Individual
+      }
+    }, [isSupplier, isEmployee]);
+
 
 
 

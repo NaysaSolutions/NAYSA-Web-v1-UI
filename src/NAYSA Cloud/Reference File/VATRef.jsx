@@ -37,7 +37,7 @@ import COAMastLookupModal from "@/NAYSA Cloud/Lookup/SearchCOAMast.jsx";
 
 const VATRef = () => {
   const docType = "VATRef";
-  const documentTitle = reftables[docType] || "VAT Reference";
+  const documentTitle = reftables[docType];
   const pdfLink = reftablesPDFGuide[docType];
   const videoLink = reftablesVideoGuide[docType];
 

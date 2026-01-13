@@ -20,6 +20,7 @@ import { ResetProvider } from "./NAYSA Cloud/Components/ResetContext";
 
 import Login from "./NAYSA Cloud/Authentication/Login.jsx";
 import Register from "./NAYSA Cloud/Authentication/Register.jsx";
+import ChangePassword from "./NAYSA Cloud/Authentication/ChangePassword.jsx";
 import Dashboard1 from "./NAYSA Cloud/Components/Dashboard1.jsx";
 import { useAuth } from "./NAYSA Cloud/Authentication/AuthContext.jsx";
 
@@ -157,25 +158,29 @@ const AppContent = () => {
 
   /* -------- Auth pages (no navbar/sidebar) -------- */
   if (!user) {
-    return (
-      <Routes>
-        <Route
-          path="/"
-          element={<Login onSwitchToRegister={() => navigate("/register")} />}
-        />
-        <Route
-          path="/register"
-          element={
-            <Register
-              onRegister={() => navigate("/")}
-              onSwitchToLogin={() => navigate("/")}
-            />
-          }
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    );
-  }
+  return (
+    <Routes>
+      <Route
+        path="/"
+        element={<Login onSwitchToRegister={() => navigate("/register")} />}
+      />
+      <Route
+        path="/register"
+        element={
+          <Register
+            onRegister={() => navigate("/")}
+            onSwitchToLogin={() => navigate("/")}
+          />
+        }
+      />
+
+      {/* ✅ allow reset/change password even when not logged in */}
+      <Route path="/change-password" element={<ChangePassword />} />
+
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
 
   /* -------- App pages (with navbar + sidebar) -------- */
   return (
