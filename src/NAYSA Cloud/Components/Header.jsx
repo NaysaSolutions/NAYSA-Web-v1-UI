@@ -18,6 +18,7 @@ const Header = ({
   // actions
   showActions = true,
   showBIRForm=true,
+  isViewDocument=false,
 
   // action callbacks
   pdfLink, videoLink, onPrint, printData, onReset, onSave, onPost, onCancel, onCopy, onAttach,
@@ -99,7 +100,7 @@ const Header = ({
         </div>
 
         {/* Actions (hidden when showActions=false) */}
-        {showActions && (
+        {showActions && !isViewDocument && (
           <div className="flex flex-wrap justify-center md:justify-end gap-1 lg:gap-2 w-full md:w-auto">
             <button onClick={handleSave}  className="px-3 py-2 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-800 dark:hover:bg-blue-700">
               <FontAwesomeIcon icon={faSave} /> <span className="hidden lg:inline ml-2">Save</span>

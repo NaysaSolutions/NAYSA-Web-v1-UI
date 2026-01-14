@@ -296,8 +296,9 @@ body {
     @apply text-sm font-extrabold text-gray-900 text-right
     dark:text-white dark:font-semibold;
   }
-  
 
+   /* Transaction Table Behavior */
+  /* Keep scroll working */
 
 
 

@@ -1,6 +1,6 @@
 import { useState, useEffect,useRef,useCallback } from "react";
 import Swal from 'sweetalert2';
-import { useNavigate } from "react-router-dom";
+import { useNavigate,useLocation  } from "react-router-dom";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -87,12 +87,27 @@ import { faAdd } from "@fortawesome/free-solid-svg-icons/faAdd";
 
 
 const SVI = () => {
+
+  // View Document Const
   const loadedFromUrlRef = useRef(false);
   const navigate = useNavigate();
+  const location = useLocation(); 
+  const [isViewDocument, setIsViewDocument] = useState(false);
+  useEffect(() => {
+    const p = new URLSearchParams(location.search);
+    if (p.get("viewDocument") === "true") {
+      setIsViewDocument(true);
+    }
+    }, []); 
+  const isViewDocumentUrl = isViewDocument;
+
+
+
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
   const { user } = useAuth();
   const { resetFlag } = useReset();
   const [state, setState] = useState({
+
 
     // HS Option
     glCurrMode:"M",
@@ -1058,31 +1073,37 @@ const handleCopy = async () => {
 
 
 //  ** View Document and Transaction History Retrieval ***
- const cleanUrl = useCallback(() => {
-    navigate(location.pathname, { replace: true });
-  }, [navigate, location.pathname]);
+const cleanUrl = useCallback(() => {
+  window.history.replaceState({}, "", window.location.origin);
+}, []);
 
-
-  const handleHistoryRowPick = useCallback((row) => {
+const handleHistoryRowPick = useCallback(
+  async (row) => {
     const docNo = row?.docNo;
     const branchCode = row?.branchCode;
     if (!docNo || !branchCode) return;
-    fetchTranData(docNo, branchCode);
+
+    await fetchTranData(docNo, branchCode); 
     setTopTab("details");
-  });
+    cleanUrl(); // 
+  },
+  [fetchTranData, cleanUrl]
+);
 
 
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const docNo = params.get("sviNo");         
-    const branchCode = params.get("branchCode");    
-    
-    if (!loadedFromUrlRef.current && docNo && branchCode) {
-      loadedFromUrlRef.current = true;
-      handleHistoryRowPick({ docNo, branchCode });
-      cleanUrl();
-    }
-  }, [location.search, handleHistoryRowPick, cleanUrl]);
+useEffect(() => {
+  const params = new URLSearchParams(location.search);
+  const docNo = params.get("sviNo");
+  const branchCode = params.get("branchCode");
+
+  if (!loadedFromUrlRef.current && docNo && branchCode) {
+    loadedFromUrlRef.current = true;
+    handleHistoryRowPick({ docNo, branchCode });
+  }
+}, [location.search, handleHistoryRowPick]);
+
+
+
 
 
 
@@ -1715,7 +1736,8 @@ return (
 
         activeTopTab={topTab} 
         showActions={topTab === "details"} 
-        showBIRForm={false}      
+        showBIRForm={false}    
+        isViewDocument={isViewDocument}  
         onDetails={() => setTopTab("details")}
         onHistory={() => setTopTab("history")}
         disableRouteNavigation={true}         
@@ -1868,7 +1890,7 @@ return (
                                 ? "global-tran-textbox-button-search-disabled-ui"
                                 : "global-tran-textbox-button-search-enabled-ui"
                             } global-tran-textbox-button-search-ui`}
-                            disabled={isFormDisabled} 
+                            disabled
                         >
                             <FontAwesomeIcon icon={faMagnifyingGlass} />
                         </button>
@@ -1876,7 +1898,7 @@ return (
 
                     {/* Customer Name Display - Make this wider */}
                     <div className="relative w-full md:w-6/6 lg:w-4/4"> {/* Added width classes here */}
-                        <input type="text" id="custName" placeholder=" " value={custName} className="peer global-tran-textbox-ui"/>
+                        <input type="text" id="custName" placeholder=" " value={custName} className="peer global-tran-textbox-ui" disabled />
                         <label htmlFor="custName"className="global-tran-floating-label">
                             <span className="global-tran-asterisk-ui"> * </span>Customer Name
                         </label>
@@ -2116,6 +2138,7 @@ return (
         </div>
 
       {/* Invoice Details Button */}
+    
       <div className="global-tran-table-main-div-ui">
       <div className="global-tran-table-main-sub-div-ui"> 
         <table className="min-w-full border-collapse">
@@ -2198,6 +2221,7 @@ return (
                     type="text"
                     className="w-[100px] global-tran-td-inputclass-ui"
                     value={row.billName || ""}
+                    readOnly={isFormDisabled}
                     onChange={(e) => handleDetailChange(index, 'billName', e.target.value)}
                     maxLength={useGetFieldLength(tblFieldArray, "bill_name")}
                   />
@@ -2209,6 +2233,7 @@ return (
                   type="text"
                   className="w-[100px] global-tran-td-inputclass-ui"
                   value={row.sviSpecs || ""}
+                  readOnly={isFormDisabled}
                   onChange={(e) => handleDetailChange(index, "sviSpecs", e.target.value)}
                   maxLength={useGetFieldLength(tblFieldArray, "svi_specs")}
                 />
@@ -2222,6 +2247,7 @@ return (
                         type="text"
                         className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
                         value={row.quantity || ""}
+                        readOnly={isFormDisabled}
                         onChange={(e) => {
                             const inputValue = e.target.value;
                             const sanitizedValue = inputValue.replace(/[^0-9.]/g, '');
@@ -2263,6 +2289,7 @@ return (
                     type="text"
                     className="w-[100px] text-center global-tran-td-inputclass-ui"
                     value={row.uomCode || ""}
+                    readOnly={isFormDisabled}
                     onChange={(e) => handleDetailChange(index, 'uomCode', e.target.value)}
                   />
                 </td>
@@ -2272,6 +2299,7 @@ return (
                         type="text"
                         className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
                         value={row.unitPrice || ""}
+                        readOnly={isFormDisabled}
                         onChange={(e) => {
                             const inputValue = e.target.value;
                             const sanitizedValue = inputValue.replace(/[^0-9.]/g, '');
@@ -2322,6 +2350,7 @@ return (
                     type="text"
                     className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
                     value={row.discRate || ""}
+                    readOnly={isFormDisabled}
                     onChange={(e) => {
                       const value = e.target.value;
                       if (/^\d{0,12}(\.\d{0,2})?$/.test(value) || value === "") {
@@ -2339,11 +2368,13 @@ return (
                       }
                     }}
                     onFocus={(e) => {
+                            if (isFormDisabled) return;
                             if (e.target.value === "0.00" || e.target.value === "0") {
                               e.target.value = "";
                             }
                           }}   
                     onBlur={async (e) => {
+                      if (isFormDisabled) return;
                       const value = e.target.value;
                       const num = parseFormattedNumber(value);
                       if (!isNaN(num)) {
@@ -2360,6 +2391,7 @@ return (
                     type="text"
                     className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
                     value={row.discAmount || ""}
+                    readOnly={isFormDisabled}
                     onChange={(e) => {
                       const value = e.target.value;
                       if (/^\d{0,12}(\.\d{0,2})?$/.test(value) || value === "") {
@@ -2377,11 +2409,13 @@ return (
                       }
                     }}
                     onFocus={(e) => {
+                            if (isFormDisabled) return;
                             if (e.target.value === "0.00" || e.target.value === "0") {
                               e.target.value = "";
                             }
                           }}   
                     onBlur={async (e) => {
+                      if (isFormDisabled) return;
                       const value = e.target.value;
                       const num = parseFormattedNumber(value);
                       if (!isNaN(num)) {
@@ -2632,6 +2666,8 @@ return (
         </table>
       </div>
       </div>
+ 
+
 
     {/* Invoice Details Footer */}
     <div className="global-tran-tab-footer-main-div-ui">
@@ -2977,6 +3013,7 @@ return (
                       type="text"
                       className="w-[120px] global-tran-td-inputclass-ui text-right"
                       value={row.debit || ""}
+                      readOnly={isFormDisabled}
                       onChange={(e) => {
                             const inputValue = e.target.value;
                             const sanitizedValue = inputValue.replace(/[^0-9.]/g, '');
@@ -2990,12 +3027,16 @@ return (
                                 handleBlurGL(index, 'debit', e.target.value,true);
                               }}}
                       onFocus={(e) => {
+                            if (isFormDisabled) return;
                             if (e.target.value === "0.00" || e.target.value === "0") {
                               e.target.value = "";
                               handleDetailChangeGL(index, "debit", "");
                             }
                           }}
-                      onBlur={(e) => handleBlurGL(index, 'debit', e.target.value)}
+                      onBlur={(e) => {
+                            if (isFormDisabled) return;
+                            handleBlurGL(index, 'debit', e.target.value);
+                          }}  
                       
                     /> 
                 </td>
@@ -3005,6 +3046,7 @@ return (
                       type="text"
                       className="w-[120px] global-tran-td-inputclass-ui text-right"
                       value={row.credit || ""}
+                      readOnly={isFormDisabled}
                       onChange={(e) => {
                             const inputValue = e.target.value;
                             const sanitizedValue = inputValue.replace(/[^0-9.]/g, '');
@@ -3017,12 +3059,18 @@ return (
                                 handleBlurGL(index, 'credit', e.target.value,true);
                               }}}
                       onFocus={(e) => {
+                             if (isFormDisabled) return;
                             if (e.target.value === "0.00" || e.target.value === "0") {
                               e.target.value = "";
                               handleDetailChangeGL(index, "credit", "");
                             }
                           }}
-                      onBlur={(e) => handleBlurGL(index, 'credit', e.target.value)}
+                      onBlur={(e) => {
+                            if (isFormDisabled) return;
+                            handleBlurGL(index, 'credit', e.target.value);
+                          }}      
+
+
                     />
                   </td>
 
@@ -3031,6 +3079,7 @@ return (
                       type="text"
                       className="w-[120px] global-tran-td-inputclass-ui text-right"
                       value={row.debitFx1 || ""}
+                      readOnly={isFormDisabled}
                       onChange={(e) => {
                             const inputValue = e.target.value;
                             const sanitizedValue = inputValue.replace(/[^0-9.]/g, '');
@@ -3043,12 +3092,17 @@ return (
                                 handleBlurGL(index, 'debitFx1', e.target.value,true);
                               }}}
                       onFocus={(e) => {
+                            if (isFormDisabled) return;
                             if (e.target.value === "0.00" || e.target.value === "0") {
                               e.target.value = "";
                               handleDetailChangeGL(index, "debitFx1", "");
                             }
                           }}
-                      onBlur={(e) => handleBlurGL(index, 'debitFx1', e.target.value)}
+                      onBlur={(e) => {
+                            if (isFormDisabled) return;
+                            handleBlurGL(index, 'debitFx1', e.target.value);
+                          }}
+                      
                     />
                   </td>
                   <td className={`global-tran-td-ui text-right ${withCurr2? "" : "hidden"}`}>
@@ -3056,6 +3110,7 @@ return (
                       type="text"
                       className="w-[120px] global-tran-td-inputclass-ui text-right"
                       value={row.creditFx1 || ""}
+                      readOnly={isFormDisabled}
                       onChange={(e) => {
                             const inputValue = e.target.value;
                             const sanitizedValue = inputValue.replace(/[^0-9.]/g, '');
@@ -3068,12 +3123,17 @@ return (
                                 handleBlurGL(index, 'creditFx1', e.target.value,true);
                               }}}
                       onFocus={(e) => {
+                            if (isFormDisabled) return;
                             if (e.target.value === "0.00" || e.target.value === "0") {
                               e.target.value = "";
                               handleDetailChangeGL(index, "creditFx1", "");
                             }
                           }}
-                      onBlur={(e) => handleBlurGL(index, 'creditFx1', e.target.value)}
+                      onBlur={(e) => {
+                                      if (isFormDisabled) return;
+                                      handleBlurGL(index, 'creditFx1', e.target.value);
+                                    }}      
+
                     />
                   </td>
 
@@ -3082,6 +3142,7 @@ return (
                       type="text"
                       className="w-[120px] global-tran-td-inputclass-ui text-right"
                       value={row.debitFx2 || ""}
+                      readOnly={isFormDisabled}
                       onChange={(e) => {
                             const inputValue = e.target.value;
                             const sanitizedValue = inputValue.replace(/[^0-9.]/g, '');
@@ -3094,12 +3155,17 @@ return (
                                 handleBlurGL(index, 'debitFx2', e.target.value,true);
                               }}}
                       onFocus={(e) => {
+                            if (isFormDisabled) return;
                             if (e.target.value === "0.00" || e.target.value === "0") {
                               e.target.value = "";
                               handleDetailChangeGL(index, "debitFx2", "");
                             }
                           }}
-                      onBlur={(e) => handleBlurGL(index, 'debitFx2', e.target.value)}
+                      onBlur={(e) => {
+                                      if (isFormDisabled) return;
+                                      handleBlurGL(index, 'debitFx2', e.target.value);
+                                    }}
+
                     />
                   </td>
                   <td className={`global-tran-td-ui text-right ${withCurr3? "": "hidden"}`}>
@@ -3107,6 +3173,7 @@ return (
                       type="text"
                       className="w-[120px] global-tran-td-inputclass-ui text-right"
                       value={row.creditFx2 || ""}
+                      readOnly={isFormDisabled}
                       onChange={(e) => {
                             const inputValue = e.target.value;
                             const sanitizedValue = inputValue.replace(/[^0-9.]/g, '');
@@ -3119,12 +3186,16 @@ return (
                                 handleBlurGL(index, 'creditFx2', e.target.value,true);
                               }}}
                       onFocus={(e) => {
+                            if (isFormDisabled) return;
                             if (e.target.value === "0.00" || e.target.value === "0") {
                               e.target.value = "";
                               handleDetailChangeGL(index, "creditFx2", "");
                             }
                           }}
-                      onBlur={(e) => handleBlurGL(index, 'creditFx2', e.target.value)}
+                      onBlur={(e) => {
+                                      if (isFormDisabled) return;
+                                      handleBlurGL(index, 'creditFx2', e.target.value);
+                                    }}
                     />
                   </td>
                   <td className="global-tran-td-ui">
@@ -3132,6 +3203,7 @@ return (
                       type="text"
                       className="w-[100px] global-tran-td-inputclass-ui"
                       value={row.slRefNo || ""}
+                      readOnly={isFormDisabled}
                       maxLength={useGetFieldLength(tblFieldArray, "slref_no")} 
                       onChange={(e) => handleDetailChangeGL(index, 'slRefNo', e.target.value)}
                     />
@@ -3141,6 +3213,7 @@ return (
                       type="date"
                       className="w-[100px] global-tran-td-inputclass-ui"
                       value={row.slRefDate || ""}
+                      readOnly={isFormDisabled}
                       onChange={(e) => handleDetailChangeGL(index, 'slRefDate', e.target.value)}
                     />
 
@@ -3150,6 +3223,7 @@ return (
                       type="text"
                       className="w-[100px] global-tran-td-inputclass-ui"
                       value={row.remarks || ""}
+                      readOnly={isFormDisabled}
                       maxLength={useGetFieldLength(tblFieldArray, "remarks")} 
                       onChange={(e) => handleDetailChangeGL(index, 'remarks', e.target.value)}
                     />
