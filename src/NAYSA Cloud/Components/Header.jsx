@@ -86,7 +86,9 @@ const Header = ({
             <FontAwesomeIcon icon={faPen} className="w-4 h-3 mr-2" />
             Transaction Details
           </button>
+          
 
+          {!isViewDocument && (
           <button
             className={`flex items-center px-3 py-2 rounded-md text-xs md:text-sm font-bold transition-colors duration-200
               ${computedActive === "history"
@@ -97,6 +99,8 @@ const Header = ({
             <FontAwesomeIcon icon={faList} className="w-4 h-4 mr-2" />
             Transaction History
           </button>
+          )}
+
         </div>
 
         {/* Actions (hidden when showActions=false) */}
