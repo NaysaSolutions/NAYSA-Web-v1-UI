@@ -41,7 +41,7 @@ const CurrencyCode = ({ onSelect }) => {
 
   // Document Global Setup
   const docType = "Currency";
-  const documentTitle = reftables[docType] || "Currency Codes";
+  const documentTitle = reftables[docType];
   const pdfLink = reftablesPDFGuide[docType];
   const videoLink = reftablesVideoGuide[docType];
 

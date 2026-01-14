@@ -1,9 +1,18 @@
+import COAMast from "../Master Data/COAMast";
+import CutoffRef from "../Reference File/CutoffRef";
+
 export const reftables = {
 
-    // General Ledger Module
+    // Reference Files
     Branch: "Branch Codes",
     BankType: "Bank Type Codes",
     UserAccRight: "User Access Rights",
+    Company: "Company ID",
+    VATRef: "VAT Codes",
+    Cutoff: "Cycle Period",
+    Currency: "Currency Codes",
+    COAMast: "Chart of Accounts",
+    UserUpdate: "Update User",
 
     // Accounts Payable Module
     APV: "Accounts Payable Voucher Transaction",

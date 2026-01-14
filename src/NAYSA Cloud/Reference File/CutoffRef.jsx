@@ -59,7 +59,7 @@ const CutoffRef = ({ onSelect }) => {
   const { user } = useAuth();
 
   const docType = "Cutoff";
-  const documentTitle = reftables[docType] || "Cycle Period";
+  const documentTitle = reftables[docType];
   const pdfLink = reftablesPDFGuide[docType];
   const videoLink = reftablesVideoGuide[docType];
 

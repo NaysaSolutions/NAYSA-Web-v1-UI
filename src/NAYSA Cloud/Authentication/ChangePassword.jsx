@@ -1,16 +1,20 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL";
+import {
+  apiClient,
+  setTenant,
+  getTenant,
+} from "@/NAYSA Cloud/Configuration/BaseURL";
 import Swal from "sweetalert2";
 import { FiLock, FiEye, FiEyeOff } from "react-icons/fi";
 
 const REQUIREMENTS = [
-  { key: "len",      test: (p) => p.length >= 8,                          label: "At least 8 characters" },
-  { key: "lower",    test: (p) => /[a-z]/.test(p),                         label: "Contains a lowercase letter" },
-  { key: "upper",    test: (p) => /[A-Z]/.test(p),                         label: "Contains an uppercase letter" },
-  { key: "digit",    test: (p) => /\d/.test(p),                            label: "Contains a number" },
-  { key: "special",  test: (p) => /[^A-Za-z0-9]/.test(p),                  label: "Contains a special character" },
-  { key: "spaces",   test: (p) => !/\s/.test(p),                           label: "No spaces" },
+  { key: "len", test: (p) => p.length >= 8, label: "At least 8 characters" },
+  { key: "lower", test: (p) => /[a-z]/.test(p), label: "Contains a lowercase letter" },
+  { key: "upper", test: (p) => /[A-Z]/.test(p), label: "Contains an uppercase letter" },
+  { key: "digit", test: (p) => /\d/.test(p), label: "Contains a number" },
+  { key: "special", test: (p) => /[^A-Za-z0-9]/.test(p), label: "Contains a special character" },
+  { key: "spaces", test: (p) => !/\s/.test(p), label: "No spaces" },
 ];
 
 function scorePassword(p = "") {
@@ -30,21 +34,41 @@ function strengthLabel(score) {
 
 const ChangePassword = () => {
   const navigate = useNavigate();
+
   const user = useMemo(() => {
     const p = new URLSearchParams(window.location.search);
     return (p.get("user") || "").trim();
   }, []);
 
-  const [oldPassword, setOldPassword]   = useState("");
-  const [newPassword, setNewPassword]   = useState("");
-  const [confirm, setConfirm]           = useState("");
-  const [showOld, setShowOld]           = useState(false);
-  const [showNew, setShowNew]           = useState(false);
-  const [showConf, setShowConf]         = useState(false);
-  const [loading, setLoading]           = useState(false);
+  const mode = useMemo(() => {
+    const p = new URLSearchParams(window.location.search);
+    return (p.get("mode") || "").trim(); // reset | release | "" (optional)
+  }, []);
+
+  const companyFromLink = useMemo(() => {
+    const p = new URLSearchParams(window.location.search);
+    return (p.get("company") || "").trim();
+  }, []);
+
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [showOld, setShowOld] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConf, setShowConf] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const score = scorePassword(newPassword);
   const strength = strengthLabel(score);
+  const strengthWidth = `${(score / 5) * 100}%`;
+
+  // ✅ Set tenant ONCE from link (recommended).
+  // If link has no company, we do NOT ask user — we show error to request a new link.
+  useEffect(() => {
+    if (companyFromLink) {
+      setTenant(companyFromLink);
+    }
+  }, [companyFromLink]);
 
   const extraRulesOk = useMemo(() => {
     if (!user) return false;
@@ -55,19 +79,39 @@ const ChangePassword = () => {
   }, [user, oldPassword, newPassword]);
 
   const baseReqsOk = REQUIREMENTS.every((r) => r.test(newPassword));
-  const canSubmit  = baseReqsOk && extraRulesOk && newPassword && confirm === newPassword && user && !loading;
+  const tenant = getTenant(); // used by apiClient to attach X-Company-DB
+
+  const canSubmit =
+    !!user &&
+    !!tenant &&
+    baseReqsOk &&
+    extraRulesOk &&
+    newPassword &&
+    confirm === newPassword &&
+    !loading;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!user) {
-      Swal.fire("Error", "Missing or invalid user in the link (?user=USERCODE).", "error");
+      Swal.fire("Error", "Missing or invalid user in the link.", "error");
       return;
     }
+
+    if (!tenant) {
+      Swal.fire(
+        "Error",
+        "Missing company in the link. Please request a new reset link.",
+        "error"
+      );
+      return;
+    }
+
     if (!baseReqsOk || !extraRulesOk) {
       Swal.fire("Error", "Please meet all password requirements.", "error");
       return;
     }
+
     if (confirm !== newPassword) {
       Swal.fire("Error", "New password and confirmation do not match.", "error");
       return;
@@ -75,15 +119,18 @@ const ChangePassword = () => {
 
     setLoading(true);
     try {
+      // ✅ IMPORTANT: DO NOT send X-No-Tenant here.
+      // We NEED X-Company-DB for tenant routing.
       const { data } = await apiClient.post("/users/change-password", {
         userCode: user,
         oldPassword,
         newPassword,
+        mode,
       });
 
       if (data?.status === "success") {
         await Swal.fire("Success", "Password changed successfully.", "success");
-        navigate("/login", { replace: true });
+        navigate("/", { replace: true });
       } else {
         Swal.fire("Error", data?.message || "Password change failed.", "error");
       }
@@ -91,7 +138,7 @@ const ChangePassword = () => {
       const payload = err?.response?.data;
       const details = payload?.errors
         ? Object.values(payload.errors).flat().join("\n")
-        : (payload?.message || err.message || "Request failed.");
+        : payload?.message || err.message || "Request failed.";
       Swal.fire("Error", details, "error");
     } finally {
       setLoading(false);
@@ -101,27 +148,28 @@ const ChangePassword = () => {
   const reqItemClass = (ok) =>
     `flex items-start gap-2 text-sm ${ok ? "text-green-600" : "text-gray-500"}`;
 
-  const strengthWidth = `${(score / 5) * 100}%`;
-
   return (
     <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(to_bottom,#7392b7,#d8e1e9)] px-4">
-      {/* Decorative blobs */}
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute -top-24 -left-24 h-72 w-72 rounded-full bg-gradient-to-tr from-indigo-300/30 to-sky-200/30 blur-3xl" />
         <div className="absolute -bottom-24 -right-24 h-80 w-80 rounded-full bg-gradient-to-tr from-purple-500/25 to-fuchsia-400/25 blur-3xl" />
       </div>
 
-      {/* center vertically and reduce outer spacing so card is shorter */}
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-center py-8">
         <div className="w-full max-w-md rounded-2xl border border-white/40 bg-white/40 p-4 shadow-xl backdrop-blur-md">
-          {/* Logo and product name inside the card to save vertical space */}
           <div className="mb-3 flex flex-col items-center text-center">
             <img src="/naysa_logo.png" alt="NAYSA Logo" className="w-28 md:w-32 drop-shadow-md" />
-            <h1 className="mt-2 text-lg font-bold tracking-tight text-blue-900">NAYSA Financials Cloud</h1>
+            <h1 className="mt-2 text-lg font-bold tracking-tight text-blue-900">
+              NAYSA Financials Cloud
+            </h1>
           </div>
 
           <h2 className="text-xl font-semibold text-gray-900 text-center">Change Password</h2>
-          <p className="text-xs text-center text-gray-500 mt-1">User: <span className="font-medium">{user || "(not set)"}</span></p>
+
+          <p className="text-xs text-center text-gray-500 mt-1">
+            User: <span className="font-medium">{user || "(not set)"}</span>
+            {" "}• Tenant: <span className="font-medium">{tenant || "(missing)"}</span>
+          </p>
 
           <form onSubmit={handleSubmit} className="mt-4 space-y-3">
             {/* Old Password */}
@@ -141,7 +189,7 @@ const ChangePassword = () => {
                 <button
                   type="button"
                   onClick={() => setShowOld(!showOld)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:text-slate-600 focus-visible:outline-none"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:text-slate-600"
                   aria-label={showOld ? "Hide password" : "Show password"}
                 >
                   {showOld ? <FiEyeOff className="h-5 w-5" /> : <FiEye className="h-5 w-5" />}
@@ -166,14 +214,13 @@ const ChangePassword = () => {
                 <button
                   type="button"
                   onClick={() => setShowNew(!showNew)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:text-slate-600 focus-visible:outline-none"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:text-slate-600"
                   aria-label={showNew ? "Hide password" : "Show password"}
                 >
                   {showNew ? <FiEyeOff className="h-5 w-5" /> : <FiEye className="h-5 w-5" />}
                 </button>
               </div>
 
-              {/* Strength meter */}
               <div className="mt-2">
                 <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
                   <div
@@ -181,7 +228,9 @@ const ChangePassword = () => {
                     style={{ width: strengthWidth }}
                   />
                 </div>
-                <div className="mt-1 text-xs text-gray-600">Strength: <span className="font-medium">{strength}</span></div>
+                <div className="mt-1 text-xs text-gray-600">
+                  Strength: <span className="font-medium">{strength}</span>
+                </div>
               </div>
             </label>
 
@@ -202,7 +251,7 @@ const ChangePassword = () => {
                 <button
                   type="button"
                   onClick={() => setShowConf(!showConf)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:text-slate-600 focus-visible:outline-none"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:text-slate-600"
                   aria-label={showConf ? "Hide password" : "Show password"}
                 >
                   {showConf ? <FiEyeOff className="h-5 w-5" /> : <FiEye className="h-5 w-5" />}
@@ -210,7 +259,6 @@ const ChangePassword = () => {
               </div>
             </label>
 
-            {/* Requirements checklist */}
             <div className="mt-2 rounded-lg bg-gray-50 border p-3">
               <div className="text-xs font-semibold text-gray-700 mb-2">Password requirements</div>
               <ul className="space-y-1">
@@ -242,22 +290,13 @@ const ChangePassword = () => {
               type="submit"
               disabled={!canSubmit}
               className={`group relative inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2 font-medium text-white shadow-lg transition ${
-                canSubmit ? "bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500" : "disabled:cursor-not-allowed disabled:opacity-60 bg-gray-400"
+                canSubmit
+                  ? "bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500"
+                  : "disabled:cursor-not-allowed disabled:opacity-60 bg-gray-400"
               }`}
             >
-              {loading ? (
-                <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" aria-hidden="true">
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" className="opacity-25" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0A12 12 0 002 12h2z" />
-                </svg>
-              ) : (
-                <span>{loading ? "Saving..." : "Change Password"}</span>
-              )}
+              {loading ? "Saving..." : "Change Password"}
             </button>
-
-            <p className="text-[11px] text-gray-500 mt-2 text-center">
-              Tip: Use a phrase with mixed case, numbers, and symbols (e.g., <em>RainyDay#204</em>).
-            </p>
           </form>
         </div>
       </div>
