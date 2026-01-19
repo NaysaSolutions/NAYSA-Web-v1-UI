@@ -10,7 +10,11 @@ export const docTypes = {
   APCM:"APCM",
   APDM:"APDM",
   CR:"CR",
-  AR:"AR"
+  AR:"AR",
+  MSRR:"MSRR",
+  MSIS:"MSIS",
+  MSAJ:"MSAJ",
+  MSST:"MSST"
 
 };
 
@@ -35,6 +39,12 @@ export const docTypeNames = {
     CR: "Collection Receipt Transaction",
     AR: "Acknowledgement Receipt Transaction",
     SOA: "Statement of Account Transaction",
+
+
+    MSRR: "MS Receiving Report Transaction",
+    MSIS: "MS Issue Slip Transaction",
+    MSST: "MS Stock Transfer Transaction",
+    MSAJ: "MS Inventory Adjustment Transaction",
   };
 
 
