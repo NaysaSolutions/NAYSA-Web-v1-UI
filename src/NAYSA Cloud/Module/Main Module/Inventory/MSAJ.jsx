@@ -21,6 +21,9 @@ import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
 import PostSVI from "../../../Module/Main Module/Accounts Receivable/PostSVI.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
+import MSInvLookup from "../../../Lookup/SearchMSInvLookup.jsx";
+import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
+import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
 
 
 // Configuration
@@ -83,6 +86,7 @@ import {
 // Header
 import Header from '@/NAYSA Cloud/Components/Header';
 import { faAdd } from "@fortawesome/free-solid-svg-icons/faAdd";
+import { User } from "lucide-react";
 
 
 const MSAJ = () => {
@@ -189,6 +193,8 @@ const MSAJ = () => {
     showVatModal:false,
     showAtcModal:false,
     showSlModal:false,
+    msLookupModalOpen:false,
+    warehouseLookupOpen:false,
 
     currencyModalOpen:false,
     branchModalOpen:false,
@@ -197,7 +203,8 @@ const MSAJ = () => {
     showAttachModal:false,
     showSignatoryModal:false,
     showPostingModal:false,
-    showAllTranDocNo:false
+    showAllTranDocNo:false,
+    locationLookupOpen:false
    });
 
   const updateState = (updates) => {
@@ -288,7 +295,10 @@ const MSAJ = () => {
   showAttachModal,
   showSignatoryModal,
   showPostingModal,
-  showAllTranDocNo
+  showAllTranDocNo,
+  msLookupModalOpen,
+  warehouseLookupOpen,
+  locationLookupOpen
 
 } = state;
 
@@ -1422,8 +1432,19 @@ const handleSaveAndPrint = async (documentID) => {
 
 
 
+  const handleCloseWarehouseLookup = (row) => {
+    if (!row) {
+      updateState({ warehouseLookupOpen: false });
+      return;
+    }
+  };
 
-
+  const handleCloseLocationLookup = (row) => {
+    if (!row) {
+      updateState({ locationLookupOpen: false });
+      return;
+    }
+  };
 
 
 
@@ -1554,9 +1575,12 @@ return (
         </div>
 
         {/* SVI Header Form Section - Main Grid Container */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 rounded-lg relative" id="svi_hd">
-
-            <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"> {/* Nested grid for 3 columns */}
+       <div
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 rounded-lg relative"
+            id="pr_hd"
+          >
+            {/* Columns 1–3 (Header fields) */}
+            <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
                 {/* Column 1 */}
                 <div className="global-tran-textbox-group-div-ui">
@@ -1685,12 +1709,79 @@ return (
                 {/* Column 3 */}
                 <div className="global-tran-textbox-group-div-ui">
                    
+               <div className="relative group flex-[1.3]">
+                   <input
+                     type="text"
+                     id="WHcode"
+                     value={state.WHname || state.WHcode || ""}
+                     readOnly
+                     placeholder=" "
+                     className="peer global-tran-textbox-ui"
+                   />
+                   <label
+                     htmlFor="WHcode"
+                     className="global-tran-floating-label"
+                   >
+                     Warehouse <span className="text-red-500">*</span>
+                   </label>
+                   <button
+                     type="button"
+                     className={`global-tran-textbox-button-search-padding-ui ${
+                       isFetchDisabled
+                         ? "global-tran-textbox-button-search-disabled-ui"
+                         : "global-tran-textbox-button-search-enabled-ui"
+                     } global-tran-textbox-button-search-ui`}
+                     disabled={isFormDisabled}
+                     onClick={() =>
+                       !isFormDisabled &&
+                       updateState({ warehouseLookupOpen: true })
+                     }
+                   >
+                     <FontAwesomeIcon icon={faMagnifyingGlass} />
+                   </button>
+                 </div>
+ 
+                 <div className="relative group flex-[1.3]">
+                   <input
+                     type="text"
+                     id="locName"
+                     value={state.locName || state.locCode || ""}
+                     readOnly
+                     placeholder=" "
+                     className="peer global-tran-textbox-ui"
+                     onClick={() =>
+                       !isFormDisabled &&
+                       updateState({ locationLookupOpen: true })
+                     }
+                   />
+                   <label
+                     htmlFor="locName"
+                     className="global-tran-floating-label"
+                   >
+                     Location <span className="text-red-500">*</span>
+                   </label>
+                   <button
+                     type="button"
+                     className={`global-tran-textbox-button-search-padding-ui ${
+                       isFetchDisabled
+                         ? "global-tran-textbox-button-search-disabled-ui"
+                         : "global-tran-textbox-button-search-enabled-ui"
+                     } global-tran-textbox-button-search-ui`}
+                     disabled={isFormDisabled}
+                     onClick={() =>
+                       !isFormDisabled &&
+                       updateState({ locationLookupOpen: true })
+                     }
+                   >
+                     <FontAwesomeIcon icon={faMagnifyingGlass} />
+                   </button>
+                 </div>                  
         
                 </div>
 
                 {/* Remarks Section - Now inside the 3-column container, spanning all 3 */}
-                <div className="col-span-full">
-                    <div className="relative p-2"> 
+               <div className="col-span-full">
+                <div className="relative p-2">
                         <textarea
                             id="remarks"
                             placeholder=""
@@ -2918,8 +3009,34 @@ return (
         onClose={() => updateState({ showAllTranDocNo: false })}
       />
     )} 
-   
 
+
+     {msLookupModalOpen && (
+        <MSInvLookup
+          isOpen={msLookupModalOpen}
+          onClose={handleCloseMSLookup}
+          userCode={userCode || "NSI"}
+          whouseCode={state.whouseCode || ""}
+          locCode={state.locCode || ""}
+          docType="MSAJ"
+          />
+        )}
+
+        {warehouseLookupOpen && (
+            <WarehouseLookupModal
+              isOpen={warehouseLookupOpen}
+              onClose={handleCloseWarehouseLookup}
+              filter="ActiveAll"
+            />
+          )}  
+   
+      {locationLookupOpen && (
+        <LocationLookupModal
+          isOpen={locationLookupOpen}
+          onClose={handleCloseLocationLookup}
+          filter="ActiveAll"
+        />
+      )}
 
       {showSpinner && <LoadingSpinner />}
     </div>
