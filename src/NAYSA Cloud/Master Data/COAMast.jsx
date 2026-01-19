@@ -27,31 +27,20 @@ import {
   reftablesVideoGuide,
 } from "@/NAYSA Cloud/Global/reftable";
 
-// ✅ GLOBAL REGISTRATION INFO
 import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
-
-/**
- * NOTE (Aligned to your sproc_PHP_COAMast):
- * - Uses: acctCode, acctName, classCode, acctType, acctGroup, acctBalance, reqSL, reqRC, fsConsoCode, fsConsoName, oldCode, active
- * - Registration fields are NOT returned by your current Load/Get modes, so RegistrationInfo will stay blank
- *   until you add registered_by/registered_date/updated_by/updated_date to the SELECT.
- */
 
 const COAMast = () => {
   const { user } = useAuth();
 
   const docType = "COAMast";
   const documentTitle = reftables[docType];
-  // kept for consistency (in case you show these elsewhere)
   const pdfLink = reftablesPDFGuide[docType];
   const videoLink = reftablesVideoGuide[docType];
 
-  // --- helpers to keep UI values consistent with your sproc / DB ---
   const toUiBalance = (v) => {
     const x = String(v || "").toUpperCase();
     if (x === "DR") return "Debit";
     if (x === "CR") return "Credit";
-    // if already human readable
     if (String(v) === "Debit" || String(v) === "Credit") return v;
     return v || "";
   };
@@ -63,22 +52,21 @@ const COAMast = () => {
     return v || "";
   };
 
-  // --- FORM DATA (aligned to sproc) ---
   const [formData, setFormData] = useState({
     acctCode: "",
     acctName: "",
-    classCode: "", // Classification
+    classCode: "",
     acctType: "",
     acctGroup: "",
-    acctBalance: "", // UI: Debit/Credit | DB: DR/CR
+    acctBalance: "",
     reqSL: "N",
     reqRC: "N",
-    fsConsoCode: "", // sproc uses fsCode param but returns fsConsoCode
-    fsConsoName: "", // optional (from join)
+    fsConsoCode: "",
+    fsConsoName: "",
     oldCode: "",
     active: "Y",
 
-    // ⚠️ not in your sproc Load/Get/Upsert (kept only if you plan to extend sproc)
+    // UI-only (unless you extend sproc)
     contraAccount: "",
     reqBudget: "N",
   });
@@ -87,7 +75,6 @@ const COAMast = () => {
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
 
-  // ✅ always visible (right side column 3)
   const [registrationInfo, setRegistrationInfo] = useState({
     registeredBy: "",
     registeredDate: "",
@@ -102,7 +89,11 @@ const COAMast = () => {
   const [isOpenExport, setOpenExport] = useState(false);
   const exportRef = useRef(null);
 
-  const [sortConfig, setSortConfig] = useState({ key: "acctCode", direction: "asc" });
+  const [sortConfig, setSortConfig] = useState({
+    key: "acctCode",
+    direction: "asc",
+  });
+
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
@@ -120,6 +111,11 @@ const COAMast = () => {
     active: "",
   });
 
+  const [balanceTypes, setBalanceTypes] = useState([]);
+  const [accountGroups, setAccountGroups] = useState([]);
+  const [accountTypes, setAccountTypes] = useState([]);
+
+
   const filterInputClass =
     "w-full px-3 py-1 text-xs rounded-md border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-300";
 
@@ -136,12 +132,10 @@ const COAMast = () => {
       .toLowerCase()
       .includes(String(searchValue || "").toLowerCase());
 
-  // --- API parsing helpers (your API sometimes returns JSON string in data[0].result) ---
   const extractRowsFromResponse = (response) => {
     const payload = response?.data;
     if (!payload?.success) return [];
 
-    // common pattern: data[0].result is JSON string
     if (Array.isArray(payload.data) && payload.data[0]?.result) {
       try {
         return JSON.parse(payload.data[0].result) || [];
@@ -150,14 +144,11 @@ const COAMast = () => {
       }
     }
 
-    // fallback: already array
     if (Array.isArray(payload.data)) return payload.data;
-
     return [];
   };
 
   const mapRowToUi = (a) => {
-    // support both old keys (fsConsCode) and sproc keys (fsConsoCode)
     const fsConsoCode = a?.fsConsoCode ?? a?.fsConsCode ?? "";
     const fsConsoName = a?.fsConsoName ?? a?.fsConsDesc ?? "";
 
@@ -175,11 +166,9 @@ const COAMast = () => {
       oldCode: a?.oldCode ?? a?.old_code ?? "",
       active: a?.active ?? a?.isActive ?? a?.ACTIVE ?? "Y",
 
-      // optional/future
       contraAccount: a?.contraAccount ?? "",
       reqBudget: a?.reqBudget ?? "N",
 
-      // registration (only if your sproc returns it)
       registeredBy: a?.registeredBy ?? a?.REGISTERED_BY ?? "",
       registeredDate: a?.registeredDate ?? a?.REGISTERED_DATE ?? "",
       lastUpdatedBy: a?.lastUpdatedBy ?? a?.UPDATED_BY ?? "",
@@ -187,17 +176,58 @@ const COAMast = () => {
     };
   };
 
+  const parseSprocJsonResult = (response) => {
+    const payload = response?.data;
+    if (!payload?.success) return [];
+
+    const rows = payload?.data || [];
+    // your sproc returns: [{ result: "[{...}]" }]
+    if (Array.isArray(rows) && rows[0]?.result) {
+      try {
+        return JSON.parse(rows[0].result) || [];
+      } catch (e) {
+        console.error("Invalid JSON in sproc result:", rows[0]?.result);
+        return [];
+      }
+    }
+
+    return Array.isArray(rows) ? rows : [];
+  };
+
+  const normalizeDropdown = (items) =>
+    (items || []).map((x) => ({
+      // handle any column naming your hs_dropdown uses
+      code: x?.DROPDOWN_CODE ?? x?.dropdown_code ?? x?.dropdownCode ?? x?.CODE ?? x?.code ?? "",
+      name: x?.DROPDOWN_NAME ?? x?.dropdown_name ?? x?.dropdownName ?? x?.NAME ?? x?.name ?? "",
+    })).filter((x) => x.code || x.name);
+
+
+  const fetchHSDropdown = async (dropdownColumn, setter) => {
+    try {
+      const res = await apiClient.post("/getHSDropdown", {
+        dropdownColumn,
+        docCode: "COAMAST",
+      });
+
+      const raw = parseSprocJsonResult(res);
+      setter(normalizeDropdown(raw));
+    } catch (err) {
+      console.error(`Dropdown load failed [${dropdownColumn}]`, err);
+      setter([]);
+    }
+  };
+
+
+
   const fetchAccounts = async () => {
     setLoading(true);
     try {
-      // ⚠️ keep your existing endpoint; backend should map this to sproc mode 'Load'
       const response = await apiClient.post("/lookupCOA", {
         PARAMS: JSON.stringify({ search: "", page: 1, pageSize: 1000 }),
       });
 
       const rows = extractRowsFromResponse(response);
-      const mapped = rows.map((a) => mapRowToUi(a));
-      setAccounts(mapped);
+      setAccounts(rows.map((a) => mapRowToUi(a)));
     } catch (err) {
       console.error(err);
       await useSwalErrorAlert("Error", `Failed to fetch accounts: ${err.message}`);
@@ -210,18 +240,15 @@ const COAMast = () => {
   const getAccount = async (acctCode) => {
     setLoading(true);
     try {
-      // ⚠️ keep your existing endpoint; backend should map this to sproc mode 'Get'
       const response = await apiClient.post("/lookupCOA", {
         PARAMS: JSON.stringify({ search: "Single", acctCode }),
       });
 
       const rows = extractRowsFromResponse(response);
       const row = rows?.[0] ? mapRowToUi(rows[0]) : null;
-
       if (!row) throw new Error("Account not found");
 
-      // ✅ update registration info ALWAYS (column 3 stays visible)
-      // NOTE: will only populate if your sproc returns these fields
+      // update reg info
       setRegistrationInfo({
         registeredBy: row.registeredBy || "",
         registeredDate: row.registeredDate
@@ -233,7 +260,6 @@ const COAMast = () => {
           : "",
       });
 
-      // remove registration keys from form
       const { registeredBy, registeredDate, lastUpdatedBy, lastUpdatedDate, ...formOnly } = row;
       return formOnly;
     } catch (error) {
@@ -245,7 +271,7 @@ const COAMast = () => {
     }
   };
 
-  // close export on outside click
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (exportRef.current && !exportRef.current.contains(event.target)) setOpenExport(false);
@@ -254,7 +280,6 @@ const COAMast = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // ctrl+s save
   useEffect(() => {
     const onKey = (e) => {
       if (e.ctrlKey && e.key.toLowerCase() === "s") {
@@ -264,9 +289,9 @@ const COAMast = () => {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [saving, isEditing]); // eslint-disable-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saving, isEditing]);
 
-  // spinner delay
   useEffect(() => {
     let timer;
     if (loading) timer = setTimeout(() => setShowSpinner(true), 200);
@@ -276,7 +301,12 @@ const COAMast = () => {
 
   useEffect(() => {
     fetchAccounts();
+
+    fetchHSDropdown("NBAL", setBalanceTypes);
+    fetchHSDropdown("ACCT_GRP", setAccountGroups);
+    fetchHSDropdown("ACCT_TYPE", setAccountTypes);
   }, []);
+
 
   const filtered = useMemo(() => {
     const f = columnFilters;
@@ -334,10 +364,10 @@ const COAMast = () => {
       contraAccount: "",
       reqBudget: "N",
     });
+
     setSelectedAccount(null);
     setIsEditing(false);
 
-    // keep column 3 visible, just clear values
     setRegistrationInfo({
       registeredBy: "",
       registeredDate: "",
@@ -356,14 +386,28 @@ const COAMast = () => {
     setIsEditing(true);
   };
 
+  const latestGetRef = useRef(0);
+
+
   const handleEditAccount = async (row) => {
+    // mark this click as the latest request
+    const reqId = ++latestGetRef.current;
+
+    // (optional) set highlight immediately
+    setSelectedAccount(row);
+
     const full = await getAccount(row.acctCode);
+
+    // if another row was clicked while we were loading, ignore this result
+    if (reqId !== latestGetRef.current) return;
+
     if (full) {
       setFormData(full);
       setSelectedAccount(full);
       setIsEditing(true);
     }
   };
+
 
   const handleSort = (key) => {
     setSortConfig((p) => ({
@@ -385,7 +429,6 @@ const COAMast = () => {
     }
 
     try {
-      // IMPORTANT: follow sproc json keys (fsCode, active, userCode)
       const payload = {
         acctCode: formData.acctCode,
         acctName: formData.acctName,
@@ -395,21 +438,20 @@ const COAMast = () => {
         acctBalance: toDbBalance(formData.acctBalance),
         reqSL: formData.reqSL,
         reqRC: formData.reqRC,
-        fsCode: formData.fsConsoCode, // sproc expects $.json_data.fsCode
+        fsCode: formData.fsConsoCode,
         oldCode: formData.oldCode,
         active: formData.active,
         userCode: user?.USER_CODE || "ADMIN",
 
-        // keep old keys too (safe if your API still expects these)
+        // safe legacy key
         fsConsoCode: formData.fsConsoCode,
       };
 
-      // keep your endpoints as-is (backend must map to sproc Upsert)
       const apiEndpoint = selectedAccount ? "/updateCOA" : "/createCOA";
       const response = await apiClient.post(apiEndpoint, payload);
 
       if (response.data.success) {
-        await useSwalshowSaveSuccessDialog(resetForm, () => {});
+        await useSwalshowSaveSuccessDialog(resetForm, () => { });
         await fetchAccounts();
       } else {
         await useSwalErrorAlert("Error", response.data.message || "Operation failed");
@@ -502,9 +544,8 @@ const COAMast = () => {
 
           <button
             onClick={handleSaveAccount}
-            className={`bg-blue-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 ${
-              !isEditing || saving ? "opacity-50 cursor-not-allowed" : ""
-            }`}
+            className={`bg-blue-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 ${!isEditing || saving ? "opacity-50 cursor-not-allowed" : ""
+              }`}
             disabled={!isEditing || saving}
             title="Ctrl+S to Save"
           >
@@ -563,7 +604,7 @@ const COAMast = () => {
         </div>
       </div>
 
-      {/* FORM (3 columns based on your requested structure) */}
+      {/* FORM */}
       <div className="global-tran-tab-div-ui mt-5" style={{ minHeight: "calc(100vh - 170px)" }}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Column 1 */}
@@ -578,16 +619,14 @@ const COAMast = () => {
                 value={formData.acctCode}
                 onChange={handleFormChange}
                 disabled={isEditing && selectedAccount}
-                className={`peer global-ref-textbox-ui ${
-                  isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                } ${isEditing && selectedAccount ? "bg-blue-100 cursor-not-allowed" : ""}`}
+                className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
+                  } ${isEditing && selectedAccount ? "bg-blue-100 cursor-not-allowed" : ""}`}
                 maxLength={20}
               />
               <label
                 htmlFor="acctCode"
-                className={`global-ref-floating-label ${
-                  !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                }`}
+                className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
+                  }`}
               >
                 <span className="global-ref-asterisk-ui">*</span> Account Code
               </label>
@@ -603,16 +642,14 @@ const COAMast = () => {
                 value={formData.acctName}
                 onChange={handleFormChange}
                 disabled={!isEditing}
-                className={`peer global-ref-textbox-ui ${
-                  isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                }`}
+                className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
+                  }`}
                 maxLength={100}
               />
               <label
                 htmlFor="acctName"
-                className={`global-ref-floating-label ${
-                  !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                }`}
+                className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
+                  }`}
               >
                 <span className="global-ref-asterisk-ui">*</span> Account Name
               </label>
@@ -620,52 +657,88 @@ const COAMast = () => {
 
             {/* Account Type | Account Group */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Account Type */}
               <div className="relative">
-                <input
-                  type="text"
+                <select
                   id="acctType"
                   name="acctType"
-                  placeholder=" "
                   value={formData.acctType}
                   onChange={handleFormChange}
                   disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${
-                    isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                  }`}
-                />
+                  className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
+                    }`}
+                >
+                  <option value=""></option>
+                  {accountTypes.map((item) => (
+                    <option key={item.code} value={item.code}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+
                 <label
                   htmlFor="acctType"
-                  className={`global-ref-floating-label ${
-                    !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                  }`}
+                  className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
+                    }`}
                 >
                   Account Type
                 </label>
+
+                <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
+                  <svg
+                    className="h-4 w-4 text-gray-500"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
               </div>
 
+              {/* Account Group */}
               <div className="relative">
-                <input
-                  type="text"
+                <select
                   id="acctGroup"
                   name="acctGroup"
-                  placeholder=" "
                   value={formData.acctGroup}
                   onChange={handleFormChange}
                   disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${
-                    isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                  }`}
-                />
+                  className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
+                    }`}
+                >
+                  <option value=""></option>
+                  {accountGroups.map((item) => (
+                    <option key={item.code} value={item.code}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+
                 <label
                   htmlFor="acctGroup"
-                  className={`global-ref-floating-label ${
-                    !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                  }`}
+                  className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
+                    }`}
                 >
                   Account Group
                 </label>
+
+                {/* ✅ Added arrow icon to match other selects */}
+                <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
+                  <svg
+                    className="h-4 w-4 text-gray-500"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
               </div>
             </div>
+
 
             {/* Balance Type | Active */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -676,19 +749,21 @@ const COAMast = () => {
                   value={formData.acctBalance}
                   onChange={handleFormChange}
                   disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${
-                    isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                  }`}
+                  className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
+                    }`}
                 >
-                  <option value="">Select Balance Type</option>
-                  <option value="Debit">Debit</option>
-                  <option value="Credit">Credit</option>
+                  <option value=""></option>
+                  {balanceTypes.map((item) => (
+                    <option key={item.code} value={item.code}>
+                      {item.name}
+                    </option>
+                  ))}
                 </select>
+
                 <label
                   htmlFor="acctBalance"
-                  className={`global-ref-floating-label ${
-                    !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                  }`}
+                  className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
+                    }`}
                 >
                   <span className="global-ref-asterisk-ui">*</span> Balance Type
                 </label>
@@ -712,18 +787,16 @@ const COAMast = () => {
                   value={formData.active}
                   onChange={handleFormChange}
                   disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${
-                    isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                  }`}
+                  className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
+                    }`}
                 >
                   <option value="Y">Yes</option>
                   <option value="N">No</option>
                 </select>
                 <label
                   htmlFor="active"
-                  className={`global-ref-floating-label ${
-                    !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                  }`}
+                  className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
+                    }`}
                 >
                   Active
                 </label>
@@ -744,7 +817,7 @@ const COAMast = () => {
 
           {/* Column 2 */}
           <div className="global-ref-textbox-group-div-ui space-y-4">
-            {/* SL Required | RC Required | Budget Required (budget kept as UI-only unless you add it to sproc) */}
+            {/* SL Required | RC Required | Budget Required */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="relative">
                 <select
@@ -753,18 +826,16 @@ const COAMast = () => {
                   value={formData.reqSL}
                   onChange={handleFormChange}
                   disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${
-                    isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                  }`}
+                  className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
+                    }`}
                 >
                   <option value="N">No</option>
                   <option value="Y">Yes</option>
                 </select>
                 <label
                   htmlFor="reqSL"
-                  className={`global-ref-floating-label ${
-                    !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                  }`}
+                  className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
+                    }`}
                 >
                   SL Required
                 </label>
@@ -788,18 +859,16 @@ const COAMast = () => {
                   value={formData.reqRC}
                   onChange={handleFormChange}
                   disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${
-                    isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                  }`}
+                  className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
+                    }`}
                 >
                   <option value="N">No</option>
                   <option value="Y">Yes</option>
                 </select>
                 <label
                   htmlFor="reqRC"
-                  className={`global-ref-floating-label ${
-                    !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                  }`}
+                  className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
+                    }`}
                 >
                   RC Required
                 </label>
@@ -823,18 +892,16 @@ const COAMast = () => {
                   value={formData.reqBudget}
                   onChange={handleFormChange}
                   disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${
-                    isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                  }`}
+                  className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
+                    }`}
                 >
                   <option value="N">No</option>
                   <option value="Y">Yes</option>
                 </select>
                 <label
                   htmlFor="reqBudget"
-                  className={`global-ref-floating-label ${
-                    !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                  }`}
+                  className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
+                    }`}
                 >
                   Budget Required
                 </label>
@@ -852,7 +919,7 @@ const COAMast = () => {
               </div>
             </div>
 
-            {/* Classification (classCode) */}
+            {/* Classification */}
             <div className="relative">
               <input
                 type="text"
@@ -862,22 +929,20 @@ const COAMast = () => {
                 value={formData.classCode}
                 onChange={handleFormChange}
                 disabled={!isEditing}
-                className={`peer global-ref-textbox-ui ${
-                  isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                }`}
+                className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
+                  }`}
               />
               <label
                 htmlFor="classCode"
-                className={`global-ref-floating-label ${
-                  !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                }`}
+                className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
+                  }`}
               >
                 Classification
               </label>
             </div>
 
-            {/* FS Code | Old Code | Contra Account */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* FS Code | FS Description */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="relative">
                 <input
                   type="text"
@@ -887,20 +952,42 @@ const COAMast = () => {
                   value={formData.fsConsoCode}
                   onChange={handleFormChange}
                   disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${
-                    isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                  }`}
+                  className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
+                    }`}
                 />
                 <label
                   htmlFor="fsConsoCode"
-                  className={`global-ref-floating-label ${
-                    !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                  }`}
+                  className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
+                    }`}
                 >
                   FS Code
                 </label>
               </div>
 
+              <div className="relative">
+                <input
+                  type="text"
+                  id="fsConsoName"
+                  name="fsConsoName"
+                  placeholder=" "
+                  value={formData.fsConsoName}
+                  onChange={handleFormChange}
+                  disabled={!isEditing}
+                  className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
+                    }`}
+                />
+                <label
+                  htmlFor="fsConsoName"
+                  className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
+                    }`}
+                >
+                  FS Description
+                </label>
+              </div>
+            </div>
+
+            {/* Old Code | Contra Account */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="relative">
                 <input
                   type="text"
@@ -910,15 +997,13 @@ const COAMast = () => {
                   value={formData.oldCode}
                   onChange={handleFormChange}
                   disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${
-                    isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                  }`}
+                  className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
+                    }`}
                 />
                 <label
                   htmlFor="oldCode"
-                  className={`global-ref-floating-label ${
-                    !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                  }`}
+                  className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
+                    }`}
                 >
                   Old Code
                 </label>
@@ -933,43 +1018,17 @@ const COAMast = () => {
                   value={formData.contraAccount}
                   onChange={handleFormChange}
                   disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${
-                    isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                  }`}
+                  className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
+                    }`}
                 />
                 <label
                   htmlFor="contraAccount"
-                  className={`global-ref-floating-label ${
-                    !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                  }`}
+                  className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
+                    }`}
                 >
                   Contra Account
                 </label>
               </div>
-            </div>
-
-            {/* FS Description (fsConsoName) */}
-            <div className="relative">
-              <input
-                type="text"
-                id="fsConsoName"
-                name="fsConsoName"
-                placeholder=" "
-                value={formData.fsConsoName}
-                onChange={handleFormChange}
-                disabled={!isEditing}
-                className={`peer global-ref-textbox-ui ${
-                  isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                }`}
-              />
-              <label
-                htmlFor="fsConsoName"
-                className={`global-ref-floating-label ${
-                  !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                }`}
-              >
-                FS Description
-              </label>
             </div>
           </div>
 
@@ -979,7 +1038,7 @@ const COAMast = () => {
           </div>
         </div>
 
-        {/* TABLE (VendMast style) */}
+        {/* TABLE */}
         <div className="global-tran-table-main-div-ui mt-6">
           <div className="global-tran-table-main-sub-div-ui">
             <table className="global-tran-table-div-ui">
@@ -1025,6 +1084,7 @@ const COAMast = () => {
                       }}
                     />
                   </th>
+
                   <th className="global-tran-th-ui">
                     <input
                       className={filterInputClass}
@@ -1036,6 +1096,7 @@ const COAMast = () => {
                       }}
                     />
                   </th>
+
                   <th className="global-tran-th-ui">
                     <input
                       className={filterInputClass}
@@ -1047,6 +1108,7 @@ const COAMast = () => {
                       }}
                     />
                   </th>
+
                   <th className="global-tran-th-ui">
                     <input
                       className={filterInputClass}
@@ -1058,6 +1120,7 @@ const COAMast = () => {
                       }}
                     />
                   </th>
+
                   <th className="global-tran-th-ui">
                     <select
                       className={filterInputClass}
@@ -1072,6 +1135,7 @@ const COAMast = () => {
                       <option value="Credit">Credit</option>
                     </select>
                   </th>
+
                   <th className="global-tran-th-ui">
                     <select
                       className={filterInputClass}
@@ -1086,6 +1150,7 @@ const COAMast = () => {
                       <option value="No">No</option>
                     </select>
                   </th>
+
                   <th className="global-tran-th-ui">
                     <select
                       className={filterInputClass}
@@ -1100,6 +1165,7 @@ const COAMast = () => {
                       <option value="No">No</option>
                     </select>
                   </th>
+
                   <th className="global-tran-th-ui">
                     <input
                       className={filterInputClass}
@@ -1111,6 +1177,7 @@ const COAMast = () => {
                       }}
                     />
                   </th>
+
                   <th className="global-tran-th-ui">
                     <input
                       className={filterInputClass}
@@ -1122,6 +1189,7 @@ const COAMast = () => {
                       }}
                     />
                   </th>
+
                   <th className="global-tran-th-ui">
                     <input
                       className={filterInputClass}
@@ -1133,6 +1201,7 @@ const COAMast = () => {
                       }}
                     />
                   </th>
+
                   <th className="global-tran-th-ui">
                     <select
                       className={filterInputClass}
@@ -1147,6 +1216,7 @@ const COAMast = () => {
                       <option value="No">No</option>
                     </select>
                   </th>
+
                   <th className="global-tran-th-ui"></th>
                   <th className="global-tran-th-ui"></th>
                 </tr>
@@ -1169,9 +1239,8 @@ const COAMast = () => {
                   pageRows.map((row, idx) => (
                     <tr
                       key={idx}
-                      className={`global-tran-tr-ui ${
-                        selectedAccount?.acctCode === row.acctCode ? "bg-blue-50" : ""
-                      }`}
+                      className={`global-tran-tr-ui ${selectedAccount?.acctCode === row.acctCode ? "bg-blue-50" : ""
+                        }`}
                       onClick={() => handleEditAccount(row)}
                     >
                       <td className="global-tran-td-ui">{row.acctCode}</td>
@@ -1186,11 +1255,10 @@ const COAMast = () => {
                       <td className="global-tran-td-ui">{row.oldCode}</td>
                       <td className="global-tran-td-ui">
                         <span
-                          className={`inline-block rounded-full px-2 py-1 text-xs font-bold ${
-                            row.active === "Y"
-                              ? "bg-green-100 text-green-800"
-                              : "bg-red-100 text-red-800"
-                          }`}
+                          className={`inline-block rounded-full px-2 py-1 text-xs font-bold ${row.active === "Y"
+                            ? "bg-green-100 text-green-800"
+                            : "bg-red-100 text-red-800"
+                            }`}
                         >
                           {row.active === "Y" ? "Yes" : "No"}
                         </span>
