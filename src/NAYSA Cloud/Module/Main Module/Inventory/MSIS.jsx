@@ -26,6 +26,7 @@ import MSLookupModal from "../../../Lookup/SearchMSMast.jsx";
 import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
 import COAMastLookupModal from "../../../Lookup/SearchCOAMast.jsx";
+import MSInvLookup from "../../../Lookup/SearchMSInvLookup.jsx";
 
 // Configuration
 import { postRequest } from "../../../Configuration/BaseURL.jsx";
@@ -90,7 +91,6 @@ const MSIS = () => {
     documentNo: "",
     documentStatus: "",
     status: "OPEN",
-    currRate: "",
 
     // UI state
     activeTab: "basic",
@@ -113,8 +113,6 @@ const MSIS = () => {
     // Responsibility Center / Requesting Dept
     reqRcCode: "",
     reqRcName: "",
-    currCode: "",
-    currName: "",
     attention: "",
     vendCOde: "",
     vendName: "",
@@ -135,7 +133,6 @@ const MSIS = () => {
     rcName: "", // responsibility center name for display
     requestDept: "",
     vendCode: "",
-    vendName: "",
     refPoNo1: "",
     refPrNo2: "",
     remarks: "",
@@ -157,7 +154,6 @@ const MSIS = () => {
     detailRows: [],
 
     // Modal states
-    selectedRowIndex: null,
     modalContext: "",
     selectionContext: "",
     selectedRowIndex: null,
@@ -175,8 +171,7 @@ const MSIS = () => {
     warehouseLookupOpen: false,
     locationLookupOpen: false,
     drAcctLookupOpen: false,
-drAcctRowIndex: null,
-
+    drAcctRowIndex: null,
 
     // RC Lookup modal (table)
     rcLookupModalOpen: false,
@@ -311,7 +306,7 @@ drAcctRowIndex: null,
   };
   const statusColor = statusMap[displayStatus] || "";
   const isFormDisabled = ["FINALIZED", "CANCELLED", "CLOSED"].includes(
-    displayStatus
+    displayStatus,
   );
 
   const updateTotalsDisplay = (qtyNeeded) => {
@@ -415,8 +410,7 @@ drAcctRowIndex: null,
       warehouseLookupOpen: false,
       locationLookupOpen: false,
       drAcctCode: "",
-drAcctName: "",
-
+      drAcctName: "",
     });
 
     updateTotalsDisplay(0);
@@ -450,49 +444,63 @@ drAcctName: "",
   };
 
   const handleCloseAccountModal = (selectedAccount) => {
-  console.log("🟦 COA MODAL CLOSED");
-  console.log("🟦 source:", accountModalSource, " rowIndex:", selectedRowIndex);
-  console.log("🟦 selectedAccount:", selectedAccount);
+    console.log("🟦 COA MODAL CLOSED");
+    console.log(
+      "🟦 source:",
+      accountModalSource,
+      " rowIndex:",
+      selectedRowIndex,
+    );
+    console.log("🟦 selectedAccount:", selectedAccount);
 
-  // always close modal
-  if (!selectedAccount || selectedRowIndex === null || selectedRowIndex === undefined) {
-    updateState({ showAccountModal: false, selectedRowIndex: null, accountModalSource: null });
-    return;
-  }
-
-  const acctCode = selectedAccount?.acctCode ?? "";
-  const acctName = selectedAccount?.acctName ?? "";
-
-  if (accountModalSource === "drAcct") {
-    console.log("✅ DR ACCT SELECTED:", { acctCode, acctName });
-
-    // ✅ IMPORTANT: update using prev state (no stale detailRows)
-    setState((prev) => {
-      const rows = [...(prev.detailRows || [])];
-      const row = { ...(rows[selectedRowIndex] || {}) };
-
-      row.drAcctCode = acctCode;
-      row.drAcctName = acctName;
-
-      rows[selectedRowIndex] = row;
-
-      return {
-        ...prev,
-        detailRows: rows,
+    // always close modal
+    if (
+      !selectedAccount ||
+      selectedRowIndex === null ||
+      selectedRowIndex === undefined
+    ) {
+      updateState({
         showAccountModal: false,
         selectedRowIndex: null,
         accountModalSource: null,
-      };
+      });
+      return;
+    }
+
+    const acctCode = selectedAccount?.acctCode ?? "";
+    const acctName = selectedAccount?.acctName ?? "";
+
+    if (accountModalSource === "drAcct") {
+      console.log("✅ DR ACCT SELECTED:", { acctCode, acctName });
+
+      // ✅ IMPORTANT: update using prev state (no stale detailRows)
+      setState((prev) => {
+        const rows = [...(prev.detailRows || [])];
+        const row = { ...(rows[selectedRowIndex] || {}) };
+
+        row.drAcctCode = acctCode;
+        row.drAcctName = acctName;
+
+        rows[selectedRowIndex] = row;
+
+        return {
+          ...prev,
+          detailRows: rows,
+          showAccountModal: false,
+          selectedRowIndex: null,
+          accountModalSource: null,
+        };
+      });
+
+      return; // prevent the updateState below from re-closing again
+    }
+
+    updateState({
+      showAccountModal: false,
+      selectedRowIndex: null,
+      accountModalSource: null,
     });
-
-    return; // prevent the updateState below from re-closing again
-  }
-
-  updateState({ showAccountModal: false, selectedRowIndex: null, accountModalSource: null });
-};
-
-
-
+  };
 
   const loadCompanyData = async () => {
     updateState({ isLoading: true });
@@ -544,7 +552,7 @@ drAcctName: "",
   const loadCurrencyMode = (
     mode = glCurrMode,
     defaultCurr = glCurrDefault,
-    curr = currCode
+    curr = currCode,
   ) => {
     const calcWithCurr3 = mode === "T";
     const calcWithCurr2 =
@@ -647,13 +655,12 @@ drAcctName: "",
         poQty: formatNumber(item.poQty ?? 0, 6),
         rrQty: formatNumber(item.rrQty ?? 0, 6),
         drAcctCode: item.drAcctCode ?? "",
-drAcctName: item.drAcctName ?? "",
-
+        drAcctName: item.drAcctName ?? "",
       }));
 
       const totalQty = retrievedDetailRows.reduce(
         (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
-        0
+        0,
       );
       updateTotalsDisplay(totalQty);
 
@@ -697,67 +704,69 @@ drAcctName: item.drAcctName ?? "",
     }
   };
 
-  const handleCloseMSLookup = (selectedItem) => {
-    if (!selectedItem) {
-      updateState({ msLookupModalOpen: false });
-      return;
-    }
+  const handleCloseMSLookup = (selectedItems) => {
+  console.log("MSIS ← MSInvLookup returned:", selectedItems);
 
-    const today = header.rr_date || new Date().toISOString().split("T")[0];
+  // always close modal
+  updateState({ msLookupModalOpen: false });
 
-    const newRow = {
-      lN: detailRows.length + 1,
+  if (!selectedItems) return;
 
-      // FROM LOOKUP
-      itemCode: selectedItem.itemCode ?? "",
-      itemName: selectedItem.itemName ?? "",
-      uomCode: selectedItem.uomCode ?? selectedItem.uom ?? "", // ✅ map uom
-      qtyOnHand: selectedItem.qtyOnHand ?? selectedItem.qtyHand ?? "0.000000", // ✅ map qtyHand
+  // ✅ Multi-select support
+  const itemsArray = Array.isArray(selectedItems) ? selectedItems : [selectedItems];
+  if (itemsArray.length === 0) return;
 
-      // OPTIONAL: keep these if you want to show them somewhere
-      categCode: selectedItem.categCode ?? "",
-      categDesc: selectedItem.categDesc ?? "",
-      classCode: selectedItem.classCode ?? "",
-      classDesc: selectedItem.classDesc ?? "",
+  // build new rows
+  const newRows = itemsArray.map((item) => ({
+    itemCode: item?.itemCode ?? "",
+    itemName: item?.itemName ?? "",
+    uomCode: item?.uomCode ?? "",
 
-      // DEFAULTS (MSIS fields)
-      quantity: "0.000000",
-      unitCost: "0.000000",
-      amount: "0.000000",
+    // MSIS uses "quantity" as issued qty
+    quantity: formatNumber(0, 6),
 
-      lotNo: "",
-      bbDate: "",
-      itemStat: "",
-      drAcctCode: "",
-drAcctName: "",
+    // from lookup
+    unitCost: formatNumber(parseFormattedNumber(item?.unitCost ?? 0), 6),
+    amount: formatNumber(0, 2),
 
+    lotNo: item?.lotNo ?? "",
+    bbDate: item?.bbDate ? new Date(item.bbDate).toISOString().split("T")[0] : "",
 
-      // default warehouse/location from header (your earlier setup)
-      whouseCode: state.WHcode ?? "",
-      whName: state.WHname ?? "",
-      locCode: state.locCode ?? "",
-      locName: state.locName ?? "",
+    itemStat: item?.qstatCode ?? "",
 
-      drAcct: "",
-      rcCode: state.rcCode ?? "",
-      slCode: "",
+    whouseCode: item?.whouseCode ?? state.WHcode ?? "",
+    locCode: item?.locCode ?? state.locCode ?? "",
 
-      mrsNo: "",
-      mrsQty: "0.000000",
-    };
+    qtyOnHand: formatNumber(parseFormattedNumber(item?.qtyHand ?? 0), 6),
 
-    const updatedRows = [...detailRows, newRow];
-    updateState({
-      detailRows: updatedRows,
-      msLookupModalOpen: false,
-    });
+    uniqueKey: item?.uniqueKey ?? "",
 
-    const totalQty = updatedRows.reduce(
-      (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
+    // keep existing fields your table expects
+    drAcctCode: "",
+    drAcctName: "",
+    rcCode: state.rcCode || "",
+    slCode: "",
+    mrsNo: "",
+    mrsQty: formatNumber(0, 6),
+
+    remarks: "",
+  }));
+
+  // ✅ Append to detailRows safely
+  setState((prev) => {
+    const updated = [...(prev.detailRows || []), ...newRows];
+
+    // ✅ recompute totals based on "quantity" (MSIS)
+    const totalQty = updated.reduce(
+      (acc, r) => acc + (parseFormattedNumber(r.quantity) || 0),
       0
     );
     updateTotalsDisplay(totalQty);
-  };
+
+    return { ...prev, detailRows: updated };
+  });
+};
+
 
   const handlePrNoBlur = () => {
     if (!state.documentID && state.documentNo && state.branchCode) {
@@ -766,41 +775,38 @@ drAcctName: "",
   };
 
   const handleOpenDrAcctLookup = (rowIndex) => {
-  if (isFormDisabled) return;
-  updateState({ drAcctLookupOpen: true, drAcctRowIndex: rowIndex });
-};
+    if (isFormDisabled) return;
+    updateState({ drAcctLookupOpen: true, drAcctRowIndex: rowIndex });
+  };
 
-const handleCloseDrAcctLookup = (acct) => {
-  console.log("🔍 DR ACCT SELECTED FROM MODAL:", acct);
+  const handleCloseDrAcctLookup = (acct) => {
+    console.log("🔍 DR ACCT SELECTED FROM MODAL:", acct);
 
-  const rowIndex = state.drAcctRowIndex;
-  console.log("➡️ Target Row Index:", rowIndex);
+    const rowIndex = state.drAcctRowIndex;
+    console.log("➡️ Target Row Index:", rowIndex);
 
-  updateState({
-    drAcctLookupOpen: false,
-    drAcctRowIndex: null,
-  });
+    updateState({
+      drAcctLookupOpen: false,
+      drAcctRowIndex: null,
+    });
 
-  if (!acct || rowIndex === null || rowIndex === undefined) return;
+    if (!acct || rowIndex === null || rowIndex === undefined) return;
 
-  const updatedRows = [...state.detailRows];
-  const row = { ...updatedRows[rowIndex] };
+    const updatedRows = [...state.detailRows];
+    const row = { ...updatedRows[rowIndex] };
 
-  // TEMPORARY: log row before update
-  console.log("📌 Row BEFORE update:", row);
+    // TEMPORARY: log row before update
+    console.log("📌 Row BEFORE update:", row);
 
-  row.drAcctCode = acct?.acctCode ?? acct?.GL_CODE ?? acct?.glCode ?? "";
-  row.drAcctName = acct?.acctName ?? acct?.GL_NAME ?? acct?.glName ?? "";
+    row.drAcctCode = acct?.acctCode ?? acct?.GL_CODE ?? acct?.glCode ?? "";
+    row.drAcctName = acct?.acctName ?? acct?.GL_NAME ?? acct?.glName ?? "";
 
-  // TEMPORARY: log row after update
-  console.log("✅ Row AFTER update:", row);
+    // TEMPORARY: log row after update
+    console.log("✅ Row AFTER update:", row);
 
-  updatedRows[rowIndex] = row;
-  updateState({ detailRows: updatedRows });
-};
-
-
-
+    updatedRows[rowIndex] = row;
+    updateState({ detailRows: updatedRows });
+  };
 
   // ==========================
   // HEADER EVENTS
@@ -865,36 +871,35 @@ const handleCloseDrAcctLookup = (acct) => {
     const today = header.rr_date || new Date().toISOString().split("T")[0];
 
     const newRow = {
-  invType: typeCode,
-  groupId: "",
-  poStatus: status || "",
-  itemCode: "",
-  itemName: "",
-  uomCode: "",
-  qtyOnHand: "0.000000",
-  qtyAlloc: "0.000000",
-  qtyNeeded: "0.000000",
-  uomCode2: "",
-  uomQty2: "0.000000",
-  dateNeeded: today,
-  itemSpecs: "",
-  serviceCode: "",
-  serviceName: "",
-  poQty: "0.000000",
-  rrQty: "0.000000",
+      invType: typeCode,
+      groupId: "",
+      poStatus: status || "",
+      itemCode: "",
+      itemName: "",
+      uomCode: "",
+      qtyOnHand: "0.000000",
+      qtyAlloc: "0.000000",
+      qtyNeeded: "0.000000",
+      uomCode2: "",
+      uomQty2: "0.000000",
+      dateNeeded: today,
+      itemSpecs: "",
+      serviceCode: "",
+      serviceName: "",
+      poQty: "0.000000",
+      rrQty: "0.000000",
 
-  // ✅ add these
-  drAcctCode: "",
-  drAcctName: "",
-};
-
+      // ✅ add these
+      drAcctCode: "",
+      drAcctName: "",
+    };
 
     const updatedRows = [...detailRows, newRow];
     updateState({ detailRows: updatedRows });
 
     const totalQty = updatedRows.reduce(
       (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
-      0
+      0,
     );
     updateTotalsDisplay(totalQty);
 
@@ -902,10 +907,16 @@ const handleCloseDrAcctLookup = (acct) => {
   };
 
   const handleOpenMSLookup = () => {
-    if (isFormDisabled) return;
-    setShowTypeDropdown(false);
-    updateState({ msLookupModalOpen: true });
-  };
+  console.log("MSIS → opening MSInvLookup with:", {
+    userCode: state.userCode,
+    whouseCode: state.WHcode,
+    locCode: state.locCode,
+    docType: "MSIS",
+  });
+
+  updateState({ msLookupModalOpen: true });
+};
+
 
   const handleDeleteRow = (index) => {
     const updatedRows = [...detailRows];
@@ -915,7 +926,7 @@ const handleCloseDrAcctLookup = (acct) => {
 
     const totalQty = updatedRows.reduce(
       (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
-      0
+      0,
     );
     updateTotalsDisplay(totalQty);
   };
@@ -953,7 +964,7 @@ const handleCloseDrAcctLookup = (acct) => {
 
     const totalQty = updatedRows.reduce(
       (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
-      0
+      0,
     );
     updateTotalsDisplay(totalQty);
   };
@@ -1065,12 +1076,12 @@ const handleCloseDrAcctLookup = (acct) => {
         msisData,
         updateState,
         "msisId",
-        "msisNo"
+        "msisNo",
       );
 
       if (response) {
         useSwalshowSaveSuccessDialog(handleReset, () =>
-          handleSaveAndPrint(response.data[0].msisId)
+          handleSaveAndPrint(response.data[0].msisId),
         );
       }
 
@@ -1165,7 +1176,7 @@ const handleCloseDrAcctLookup = (acct) => {
         documentID,
         userCode || "NSI",
         confirmation.reason,
-        updateState
+        updateState,
       );
 
       if (result.success) {
@@ -1187,7 +1198,7 @@ const handleCloseDrAcctLookup = (acct) => {
         docType,
         documentID,
         userCode,
-        updateState
+        updateState,
       );
       if (result.success) {
         Swal.fire({
@@ -1914,7 +1925,7 @@ const handleCloseDrAcctLookup = (acct) => {
                       row.amount ??
                       String(
                         (parseFormattedNumber(qty) || 0) *
-                          (parseFormattedNumber(unitCost) || 0)
+                          (parseFormattedNumber(unitCost) || 0),
                       );
 
                     return (
@@ -1934,7 +1945,7 @@ const handleCloseDrAcctLookup = (acct) => {
                               handleDetailChange(
                                 index,
                                 "itemCode",
-                                e.target.value
+                                e.target.value,
                               )
                             }
                             disabled={isFormDisabled}
@@ -1951,7 +1962,7 @@ const handleCloseDrAcctLookup = (acct) => {
                               handleDetailChange(
                                 index,
                                 "itemName",
-                                e.target.value
+                                e.target.value,
                               )
                             }
                             disabled={isFormDisabled}
@@ -1968,7 +1979,7 @@ const handleCloseDrAcctLookup = (acct) => {
                               handleDetailChange(
                                 index,
                                 "uomCode",
-                                e.target.value
+                                e.target.value,
                               )
                             }
                             disabled={isFormDisabled}
@@ -1985,7 +1996,7 @@ const handleCloseDrAcctLookup = (acct) => {
                               handleDetailChange(
                                 index,
                                 "quantity",
-                                e.target.value
+                                e.target.value,
                               )
                             }
                             disabled={isFormDisabled}
@@ -2002,7 +2013,7 @@ const handleCloseDrAcctLookup = (acct) => {
                               handleDetailChange(
                                 index,
                                 "unitCost",
-                                e.target.value
+                                e.target.value,
                               )
                             }
                             disabled={isFormDisabled}
@@ -2043,7 +2054,7 @@ const handleCloseDrAcctLookup = (acct) => {
                               handleDetailChange(
                                 index,
                                 "bbDate",
-                                e.target.value
+                                e.target.value,
                               )
                             }
                             disabled={isFormDisabled}
@@ -2060,7 +2071,7 @@ const handleCloseDrAcctLookup = (acct) => {
                               handleDetailChange(
                                 index,
                                 "itemStat",
-                                e.target.value
+                                e.target.value,
                               )
                             }
                             disabled={isFormDisabled}
@@ -2084,7 +2095,7 @@ const handleCloseDrAcctLookup = (acct) => {
                               handleDetailChange(
                                 index,
                                 "whName",
-                                e.target.value
+                                e.target.value,
                               )
                             }
                             disabled={isFormDisabled}
@@ -2101,7 +2112,7 @@ const handleCloseDrAcctLookup = (acct) => {
                               handleDetailChange(
                                 index,
                                 "locName",
-                                e.target.value
+                                e.target.value,
                               )
                             }
                             disabled={isFormDisabled}
@@ -2111,20 +2122,26 @@ const handleCloseDrAcctLookup = (acct) => {
                         {/* DR Account */}
                         <td className="global-tran-td-ui relative">
                           <div className="flex items-center">
-                          <input
-  type="text"
-  className="global-tran-td-inputclass-ui"
-  value={row.drAcctCode || ""}   // ✅ FIXED
-  readOnly
-  onClick={() => {
-    console.log("🟨 DR ACCT CLICK row:", index, " current:", row.drAcctCode, row.drAcctName);
-    updateState({
-      selectedRowIndex: index,
-      showAccountModal: true,
-      accountModalSource: "drAcct",
-    });
-  }}
-/>
+                            <input
+                              type="text"
+                              className="global-tran-td-inputclass-ui"
+                              value={row.drAcctCode || ""} // ✅ FIXED
+                              readOnly
+                              onClick={() => {
+                                console.log(
+                                  "🟨 DR ACCT CLICK row:",
+                                  index,
+                                  " current:",
+                                  row.drAcctCode,
+                                  row.drAcctName,
+                                );
+                                updateState({
+                                  selectedRowIndex: index,
+                                  showAccountModal: true,
+                                  accountModalSource: "drAcct",
+                                });
+                              }}
+                            />
 
                             {!isFormDisabled && (
                               <FontAwesomeIcon
@@ -2152,7 +2169,7 @@ const handleCloseDrAcctLookup = (acct) => {
                               handleDetailChange(
                                 index,
                                 "rcCode",
-                                e.target.value
+                                e.target.value,
                               )
                             }
                             disabled={isFormDisabled}
@@ -2169,7 +2186,7 @@ const handleCloseDrAcctLookup = (acct) => {
                               handleDetailChange(
                                 index,
                                 "slCode",
-                                e.target.value
+                                e.target.value,
                               )
                             }
                             disabled={isFormDisabled}
@@ -2186,7 +2203,7 @@ const handleCloseDrAcctLookup = (acct) => {
                               handleDetailChange(
                                 index,
                                 "qtyOnHand",
-                                e.target.value
+                                e.target.value,
                               )
                             }
                             disabled={isFormDisabled}
@@ -2216,7 +2233,7 @@ const handleCloseDrAcctLookup = (acct) => {
                               handleDetailChange(
                                 index,
                                 "mrsQty",
-                                e.target.value
+                                e.target.value,
                               )
                             }
                             disabled={isFormDisabled}
@@ -2246,34 +2263,8 @@ const handleCloseDrAcctLookup = (acct) => {
           <div className="global-tran-tab-footer-main-div-ui">
             <div className="global-tran-tab-footer-button-div-ui">
               <div className="inline-block">
-                {showTypeDropdown && (
-                  <div className="mb-2 bg-white dark:bg-slate-800 border rounded-md shadow-lg z-50 min-w-[140px]">
-                    <button
-                      type="button"
-                      className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700"
-                      onClick={() => handleSelectTypeAndAddRow("FG")}
-                    >
-                      FG
-                    </button>
-                    <button
-                      type="button"
-                      className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700"
-                      onClick={handleOpenMSLookup}
-                    >
-                      MS
-                    </button>
-                    <button
-                      type="button"
-                      className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700"
-                      onClick={() => handleSelectTypeAndAddRow("RM")}
-                    >
-                      RM
-                    </button>
-                  </div>
-                )}
-
                 <button
-                  onClick={handleAddRowClick}
+                  onClick={handleOpenMSLookup}
                   disabled={isFormDisabled || !rcCode || !reqRcCode}
                   className={`global-tran-tab-footer-button-add-ui ${
                     isFormDisabled || !rcCode || !reqRcCode
@@ -2399,12 +2390,16 @@ const handleCloseDrAcctLookup = (acct) => {
       )}
 
       {msLookupModalOpen && (
-        <MSLookupModal
-          isOpen={msLookupModalOpen}
-          onClose={handleCloseMSLookup}
-          customParam={null} // or pass something if you need it
-        />
-      )}
+  <MSInvLookup
+    isOpen={msLookupModalOpen}
+    onClose={handleCloseMSLookup}
+    userCode={state.userCode || "NSI"}
+    whouseCode={state.WHcode || ""}
+    locCode={state.locCode || ""}
+    docType="MSIS"
+  />
+)}
+
 
       {state.warehouseLookupOpen && (
         <WarehouseLookupModal
@@ -2415,13 +2410,13 @@ const handleCloseDrAcctLookup = (acct) => {
       )}
 
       {/* COA Account Modal */}
-            {showAccountModal && (
-              <COAMastLookupModal
-                isOpen={showAccountModal}
-                onClose={handleCloseAccountModal}
-                source={accountModalSource}
-              />
-            )}
+      {showAccountModal && (
+        <COAMastLookupModal
+          isOpen={showAccountModal}
+          onClose={handleCloseAccountModal}
+          source={accountModalSource}
+        />
+      )}
 
       {state.locationLookupOpen && (
         <LocationLookupModal
