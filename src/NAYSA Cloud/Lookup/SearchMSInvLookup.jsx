@@ -14,6 +14,7 @@ const MSInvLookup = ({
   whouseCode = "",
   locCode = "",
   docType = "MSIS",
+  tranType ="",
   debug = true,
 }) => {
   const [rows, setRows] = useState([]);
@@ -30,6 +31,7 @@ const MSInvLookup = ({
     qstatCode: "",
     whouseCode: "",
     locCode: "",
+    tranType:"",
   });
 
   // selection
@@ -101,7 +103,7 @@ const MSInvLookup = ({
       isMounted = false;
       setModalReady(false);
     };
-  }, [isOpen, whouseCode, locCode, userCode, docType]);
+  }, [isOpen, whouseCode, locCode, userCode, docType, tranType]);
 
   // -------------------------
   // Helpers
