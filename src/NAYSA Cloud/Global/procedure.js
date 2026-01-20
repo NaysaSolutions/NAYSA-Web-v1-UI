@@ -311,6 +311,8 @@ if ((!documentNo || !branchCode) && direction === '') {
 export const useIsTranExist = async (documentNo, branchCode, docType, fieldName) => {
   try {
     const query = `${fieldName}=${encodeURIComponent(documentNo)}&branchCode=${encodeURIComponent(branchCode)}`;
+
+    
     const endpoint = `get${docType}?${query}`;
 
     const response = await fetchData(endpoint);
