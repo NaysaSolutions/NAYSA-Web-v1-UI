@@ -132,8 +132,10 @@ export async function useTopDocDropDown(documentCode, documentCol) {
     }
   };
 
+
   try {
     const response = await postRequest("getHSDropdown", JSON.stringify(payload));
+    console.log(response)
     
     // Validate response structure
     if (!response || !response.success || !response.data || !Array.isArray(response.data)) {

@@ -488,8 +488,11 @@ useEffect(() => {
           });
         };   
 
+        
+
       // 🔹 2. Document row (independent)
       const docRow = await useTopDocControlRow(docType);
+
       if (docRow) {
         updateState({
           documentName: docRow.docName,
@@ -773,7 +776,8 @@ const handleDocNoBlur = () => {
 };
 
 
-  const handleAddRow = async () => {
+
+const handleGetItem = async () => {
  if (!selectedAJType) {
     return;
   }
@@ -806,6 +810,46 @@ const handleDocNoBlur = () => {
     });
   };
 
+
+
+  const handleAddRow = async () => {
+  if (!selectedAJType) return;
+
+
+  const lookupTypes = ["IL", "IR", "CA"];
+  
+  if (lookupTypes.includes(selectedAJType)) {
+    updateState({ msLookupModalOpen: true });
+    return; 
+  }
+
+
+  const newRow = {
+    lnNo: detailRows.length + 1, 
+    itemCode: "",
+    itemName: "",
+    categCode: "",   
+    quantity: "1.00",
+    uomCode: "",
+    unitCost: "0.00",
+    itemAmount: "0.00",    
+    lotNo: "",  
+    qstatCode: "",  
+    bbDate: "",  
+    qtyHand: "0.00",    
+    whouseCode: "",   
+    locCode: "",  
+    acctCode: "",  
+    rcCode: "",  
+    sltypeCode: "",       
+    slCode: "",
+    uniqueKey: ""
+  };
+
+  updateState({
+    detailRows: [...detailRows, newRow]
+  });
+};
 
 
 
@@ -1493,6 +1537,44 @@ const handleCloseBranchModal = (selectedBranch) => {
     }
     updateState({ branchModalOpen: false });
   };
+
+
+
+  const handleCloseMSLookup = (selectedItems) => {
+  updateState({ msLookupModalOpen: false });
+
+  if (!selectedItems) return;
+
+  const itemsArray = Array.isArray(selectedItems) ? selectedItems : [selectedItems];
+  if (itemsArray.length === 0) return;
+
+  const newRows = itemsArray.map((item) => ({
+    itemCode: item?.itemCode ?? "",
+    itemName: item?.itemName ?? "",
+    uomCode: item?.uomCode ?? "",
+    quantity: formatNumber(0, 6),
+    unitCost: formatNumber(parseFormattedNumber(item?.unitCost ?? 0), 6),
+    amount: formatNumber(0, 2),
+    lotNo: item?.lotNo ?? "",
+    bbDate: item?.bbDate ? new Date(item.bbDate).toISOString().split("T")[0] : "",
+    qstatCode: item?.qstatCode ?? "",
+    whouseCode: item?.whouseCode ?? state.WHcode ?? "",
+    locCode: item?.locCode ?? state.locCode ?? "",
+    qtyHand: formatNumber(parseFormattedNumber(item?.qtyHand ?? 0), 6),
+    uniqueKey: item?.uniqueKey ?? "",
+    acctCode: "",
+    sltypeCode: "",
+    rcCode: "",
+    slCode: ""
+  }));
+
+
+setState((prev) => {
+    const updated = [...(prev.detailRows || []), ...newRows];
+    updateTotalsDisplay(0,0);
+    return { ...prev, detailRows: updated };
+  });
+};
 
 
 
@@ -3019,6 +3101,7 @@ return (
           whouseCode={state.whouseCode || ""}
           locCode={state.locCode || ""}
           docType="MSAJ"
+          tranType={selectedAJType}
           />
         )}
 
