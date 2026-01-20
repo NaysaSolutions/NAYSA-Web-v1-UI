@@ -317,7 +317,7 @@ const PO = () => {
   };
   const statusColor = statusMap[displayStatus] || "";
   const isFormDisabled = ["FINALIZED", "CANCELLED", "CLOSED"].includes(
-    displayStatus
+    displayStatus,
   );
 
   // ===== Amount / VAT helpers (JO-style, adapted for PO) =====
@@ -530,7 +530,7 @@ const PO = () => {
   const loadCurrencyMode = (
     mode = glCurrMode,
     defaultCurr = glCurrDefault,
-    curr = currCode
+    curr = currCode,
   ) => {
     const calcWithCurr3 = mode === "T";
     const calcWithCurr2 =
@@ -586,7 +586,7 @@ const PO = () => {
         poNoParam,
         _branchCode,
         docType,
-        "poNo"
+        "poNo",
       );
 
       console.log("📄 PO PARSED DATA:", data);
@@ -666,7 +666,7 @@ const PO = () => {
 
       const totalQty = retrievedDetailRows.reduce(
         (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
-        0
+        0,
       );
       updateTotalsDisplay(retrievedDetailRows);
 
@@ -782,7 +782,7 @@ const PO = () => {
 
     const totalQty = updatedRows.reduce(
       (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
-      0
+      0,
     );
     updateTotalsDisplay(updatedRows);
   };
@@ -878,7 +878,7 @@ const PO = () => {
 
     const totalQty = updatedRows.reduce(
       (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
-      0
+      0,
     );
     updateTotalsDisplay(updatedRows);
 
@@ -886,39 +886,15 @@ const PO = () => {
   };
 
   const handleClosePROpenModal = (selection) => {
-    // Closed without selection
+    // Always close the modal
     if (!selection) {
-      updateState({ prLookupModalOpen: false,
-        // ✅ PR ref
-  sourcePrNo: header?.PRNo || "",
-  branchCode: header?.BC || branchCode,
-
-  // ✅ Department (shown in header "Department" textbox is rcName)
-  // Department in PO header should come from PR's Responsibility Center (rcName)
-rcCode: header?.rcCode || header?.RCCODE || header?.RcCode || "",
-rcName: header?.rcName || header?.RCNAME || header?.RcName || "",
-
-
-  // ✅ Requesting Dept (if you want them same as PR)
-  reqRcCode: header?.ReqRcCode || reqRcCode,
-  reqRcName: header?.ReqRcName || reqRcName, // ✅ ADD THIS
-
-  // ✅ Details from PR
-  detailRows: newDetailRows,
-  qtyOnHand: formatNumber(
-  item.qtyOnHand ?? item.QtyOnHand ?? item.qty_on_hand ?? item.QtyOnHand ?? 0,
-  6
-),
-       });
+      updateState({ prLookupModalOpen: false });
       return;
     }
 
     const { header, details } = selection;
 
-    // header: row from HEADER grid (BC, PRNo, ReqRcCode, etc.)
-    // details: array of selected PR detail rows
-
-    const newDetailRows = (details || []).map((row, idx) => {
+    const newDetailRows = (details || []).map((row) => {
       const qty = parseFloat(row.QtyNeeded || 0) || 0;
       const formattedQty = formatNumber(qty, 6);
 
@@ -935,15 +911,17 @@ rcName: header?.rcName || header?.RCNAME || header?.RcName || "",
         uomCode2: "",
         uomQty2: "0.000000",
         dateNeeded: row.DateNeeded
-          ? row.DateNeeded.substring(0, 10)
-          : header?.DateNeeded?.substring(0, 10) || "",
+          ? String(row.DateNeeded).substring(0, 10)
+          : header?.DateNeeded
+            ? String(header.DateNeeded).substring(0, 10)
+            : "",
         itemSpecs: "",
         serviceCode: "",
         serviceName: "",
         poQty: formattedQty,
         rrQty: "0.000000",
 
-        // NEW monetary fields (default 0, user will key unitPrice)
+        // monetary defaults
         unitPrice: "0.000000",
         grossAmt: "0.000000",
         discRate: "0.000000",
@@ -956,21 +934,24 @@ rcName: header?.rcName || header?.RCNAME || header?.RcName || "",
       };
     });
 
-    // recalc totals
-    const totalQty = newDetailRows.reduce(
-      (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
-      0
-    );
-
     updateTotalsDisplay(newDetailRows);
 
-    // update header + detail
     updateState({
       prLookupModalOpen: false,
+
+      // PR reference
       sourcePrNo: header?.PRNo || "",
       branchCode: header?.BC || branchCode,
-      rcCode: header?.ReqRcCode || rcCode,
+
+      // If you want dept from PR:
+      rcCode: header?.rcCode || rcCode,
+      rcName: header?.rcName || rcName,
+
+      // Requesting RC
       reqRcCode: header?.ReqRcCode || reqRcCode,
+      reqRcName: header?.ReqRcName || reqRcName,
+
+      // apply selected details
       detailRows: newDetailRows,
     });
   };
@@ -989,7 +970,7 @@ rcName: header?.rcName || header?.RCNAME || header?.RcName || "",
 
     const totalQty = updatedRows.reduce(
       (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
-      0
+      0,
     );
     updateTotalsDisplay(updatedRows);
   };
@@ -1084,7 +1065,7 @@ rcName: header?.rcName || header?.RCNAME || header?.RcName || "",
     // If already posted/cancelled/finalized, do not allow save
     const stat = String(state.status || "").toUpperCase(); // this holds "O" from API
     const locked = ["FINALIZED", "CANCELLED", "CLOSED", "F", "X", "C"].includes(
-      stat
+      stat,
     );
     if (locked) return;
 
@@ -1233,7 +1214,7 @@ rcName: header?.rcName || header?.RCNAME || header?.RcName || "",
         poData,
         updateState,
         "poId",
-        "poNo"
+        "poNo",
       );
 
       if (response) {
@@ -1257,7 +1238,7 @@ rcName: header?.rcName || header?.RCNAME || header?.RcName || "",
 
         // 3) SUCCESS DIALOG + (optional) PRINT – same as before
         useSwalshowSaveSuccessDialog(handleReset, () =>
-          handleSaveAndPrint(savedPoId)
+          handleSaveAndPrint(savedPoId),
         );
       }
 
@@ -1352,7 +1333,7 @@ rcName: header?.rcName || header?.RCNAME || header?.RcName || "",
         documentID,
         userCode || "NSI",
         confirmation.reason,
-        updateState
+        updateState,
       );
 
       if (result.success) {
@@ -1374,7 +1355,7 @@ rcName: header?.rcName || header?.RCNAME || header?.RcName || "",
         docType,
         documentID,
         userCode,
-        updateState
+        updateState,
       );
       if (result.success) {
         Swal.fire({
@@ -1451,94 +1432,100 @@ rcName: header?.rcName || header?.RCNAME || header?.RcName || "",
     }
   };
 
- const handleClosePayeeModal = async (selectedData) => {
-  if (!selectedData) {
-    updateState({ payeeModalOpen: false });
-    return;
-  }
+  const handleClosePayeeModal = async (selectedData) => {
+    if (!selectedData) {
+      updateState({ payeeModalOpen: false });
+      return;
+    }
 
-  updateState({ payeeModalOpen: false, isLoading: true });
+    updateState({ payeeModalOpen: false, isLoading: true });
 
-  try {
-    let newVendCode = selectedData?.vendCode || "";
-    let newVendName = selectedData?.vendName || "";
+    try {
+      let newVendCode = selectedData?.vendCode || "";
+      let newVendName = selectedData?.vendName || "";
 
-    // ✅ vendor vat code from lookup row
-    let vendVatCodeToUse = selectedData?.vatCode || "";
+      // ✅ vendor vat code from lookup row
+      let vendVatCodeToUse = selectedData?.vatCode || "";
 
-    // currency: from row → current currCode → default
-    let currCodeToUse = selectedData?.currCode || currCode || glCurrDefault;
+      // currency: from row → current currCode → default
+      let currCodeToUse = selectedData?.currCode || currCode || glCurrDefault;
 
-    // payterm: start from lookup row if it has one
-    let paytermCodeToUse = selectedData?.paytermCode || "";
+      // payterm: start from lookup row if it has one
+      let paytermCodeToUse = selectedData?.paytermCode || "";
 
-    // If vendor has no currency/payterm/vatCode in lookup row, query getVendMast
-    if ((!selectedData.currCode || !paytermCodeToUse || !vendVatCodeToUse) && newVendCode) {
-      try {
-        const vendResponse = await postRequest("getVendMast", {
-          VEND_CODE: newVendCode,
-        });
+      // If vendor has no currency/payterm/vatCode in lookup row, query getVendMast
+      if (
+        (!selectedData.currCode || !paytermCodeToUse || !vendVatCodeToUse) &&
+        newVendCode
+      ) {
+        try {
+          const vendResponse = await postRequest("getVendMast", {
+            VEND_CODE: newVendCode,
+          });
 
-        if (vendResponse.success && vendResponse.data?.[0]?.result) {
-          const vendData = JSON.parse(vendResponse.data[0].result);
-          const vendRow = vendData[0] || {};
+          if (vendResponse.success && vendResponse.data?.[0]?.result) {
+            const vendData = JSON.parse(vendResponse.data[0].result);
+            const vendRow = vendData[0] || {};
 
-          if (!selectedData.currCode && vendRow.currCode) currCodeToUse = vendRow.currCode;
-          if (!paytermCodeToUse && vendRow.paytermCode) paytermCodeToUse = vendRow.paytermCode;
+            if (!selectedData.currCode && vendRow.currCode)
+              currCodeToUse = vendRow.currCode;
+            if (!paytermCodeToUse && vendRow.paytermCode)
+              paytermCodeToUse = vendRow.paytermCode;
 
-          // ✅ grab vatCode from vendor master if missing
-          if (!vendVatCodeToUse && vendRow.vatCode) vendVatCodeToUse = vendRow.vatCode;
+            // ✅ grab vatCode from vendor master if missing
+            if (!vendVatCodeToUse && vendRow.vatCode)
+              vendVatCodeToUse = vendRow.vatCode;
+          }
+        } catch (err) {
+          console.error("Error getting vendor master:", err);
         }
-      } catch (err) {
-        console.error("Error getting vendor master:", err);
-      }
-    }
-
-    // ✅ Apply payee in header
-    updateState({
-      vendCode: newVendCode,
-      vendNameHeader: newVendName,
-      vendVatCode: vendVatCodeToUse || "", // ✅ store vendor VAT in state
-    });
-
-    // ✅ Apply currency
-    await handleSelectCurrency(currCodeToUse);
-
-    // ✅ Auto-apply payterm
-    if (paytermCodeToUse) {
-      await handleSelectPayTerm(paytermCodeToUse);
-    }
-
-    // ✅ If vendor has VAT code: apply to ALL existing detail rows + compute VAT
-    if (vendVatCodeToUse) {
-      let vatRate = 0;
-
-      try {
-        const vatRow = await useTopVatRow(vendVatCodeToUse);
-        vatRate = vatRow?.vatRate ?? 0;
-      } catch (err) {
-        console.error("Error fetching VAT row:", err);
       }
 
-      // apply + recalc rows
-      const updatedRows = (detailRows || []).map((r) => {
-        const row = {
-          ...r,
-          vatCode: vendVatCodeToUse,
-          vatRate: vatRate,
-        };
-        return recalcDetailRow(row);
+      // ✅ Apply payee in header
+      updateState({
+        vendCode: newVendCode,
+        vendNameHeader: newVendName,
+        vendVatCode: vendVatCodeToUse || "", // ✅ store vendor VAT in state
       });
 
-      updateState({ detailRows: updatedRows });
-      updateTotalsDisplay(updatedRows);
+      // ✅ Apply currency
+      await handleSelectCurrency(currCodeToUse);
+
+      // ✅ Auto-apply payterm
+      if (paytermCodeToUse) {
+        await handleSelectPayTerm(paytermCodeToUse);
+      }
+
+      // ✅ If vendor has VAT code: apply to ALL existing detail rows + compute VAT
+      if (vendVatCodeToUse) {
+        let vatRate = 0;
+
+        try {
+          const vatRow = await useTopVatRow(vendVatCodeToUse);
+          vatRate = vatRow?.vatRate ?? 0;
+        } catch (err) {
+          console.error("Error fetching VAT row:", err);
+        }
+
+        // apply + recalc rows
+        const updatedRows = (detailRows || []).map((r) => {
+          const row = {
+            ...r,
+            vatCode: vendVatCodeToUse,
+            vatRate: vatRate,
+          };
+          return recalcDetailRow(row);
+        });
+
+        updateState({ detailRows: updatedRows });
+        updateTotalsDisplay(updatedRows);
+      }
+    } catch (error) {
+      console.error("Error in handleClosePayeeModal:", error);
+    } finally {
+      updateState({ isLoading: false });
     }
-  } catch (error) {
-    console.error("Error in handleClosePayeeModal:", error);
-  } finally {
-    updateState({ isLoading: false });
-  }
-};
+  };
 
   const handlePOStatChange = (e) => {
     const selectedType = e.target.value;
@@ -2167,23 +2154,23 @@ rcName: header?.rcName || header?.RCNAME || header?.RcName || "",
 
                       {/* PR Status */}
                       <td className="global-tran-td-ui">
-                            <select
-                              className="w-[120px] global-tran-td-inputclass-ui"
-                              value={row.prStatus || "OPEN"}
-                              onChange={(e) =>
-                                handleDetailChange(
-                                  index,
-                                  "prStatus",
-                                  e.target.value
-                                )
-                              }
-                              disabled={isFormDisabled}
-                            >
-                              <option value="OPEN">Open</option>
-                              <option value="CLOSED">Closed</option>
-                              <option value="CANCELLED">Cancelled</option>
-                            </select>
-                          </td>
+                        <select
+                          className="w-[120px] global-tran-td-inputclass-ui"
+                          value={row.prStatus || "OPEN"}
+                          onChange={(e) =>
+                            handleDetailChange(
+                              index,
+                              "prStatus",
+                              e.target.value,
+                            )
+                          }
+                          disabled={isFormDisabled}
+                        >
+                          <option value="OPEN">Open</option>
+                          <option value="CLOSED">Closed</option>
+                          <option value="CANCELLED">Cancelled</option>
+                        </select>
+                      </td>
 
                       {/* Type */}
                       <td className="global-tran-td-ui">
@@ -2208,7 +2195,7 @@ rcName: header?.rcName || header?.RCNAME || header?.RcName || "",
                             handleDetailChange(
                               index,
                               "itemCode",
-                              e.target.value
+                              e.target.value,
                             )
                           }
                           disabled={isFormDisabled}
@@ -2225,7 +2212,7 @@ rcName: header?.rcName || header?.RCNAME || header?.RcName || "",
                             handleDetailChange(
                               index,
                               "itemName",
-                              e.target.value
+                              e.target.value,
                             )
                           }
                           disabled={isFormDisabled}
@@ -2242,7 +2229,7 @@ rcName: header?.rcName || header?.RCNAME || header?.RcName || "",
                             handleDetailChange(
                               index,
                               "itemSpecs",
-                              e.target.value
+                              e.target.value,
                             )
                           }
                           disabled={isFormDisabled}
@@ -2272,7 +2259,7 @@ rcName: header?.rcName || header?.RCNAME || header?.RcName || "",
                             handleDetailChange(
                               index,
                               "qtyOnHand",
-                              e.target.value
+                              e.target.value,
                             )
                           }
                           disabled={isFormDisabled}
@@ -2289,7 +2276,7 @@ rcName: header?.rcName || header?.RCNAME || header?.RcName || "",
                             handleDetailChange(
                               index,
                               "qtyNeeded",
-                              e.target.value
+                              e.target.value,
                             )
                           }
                           disabled={isFormDisabled}
@@ -2319,7 +2306,7 @@ rcName: header?.rcName || header?.RCNAME || header?.RcName || "",
                             handleDetailChange(
                               index,
                               "unitPrice",
-                              e.target.value
+                              e.target.value,
                             )
                           }
                           disabled={isFormDisabled}
@@ -2336,7 +2323,7 @@ rcName: header?.rcName || header?.RCNAME || header?.RcName || "",
                             handleDetailChange(
                               index,
                               "grossAmt",
-                              e.target.value
+                              e.target.value,
                             )
                           }
                           disabled={isFormDisabled}
@@ -2353,7 +2340,7 @@ rcName: header?.rcName || header?.RCNAME || header?.RcName || "",
                             handleDetailChange(
                               index,
                               "discRate",
-                              e.target.value
+                              e.target.value,
                             )
                           }
                           disabled={isFormDisabled}
@@ -2383,7 +2370,7 @@ rcName: header?.rcName || header?.RCNAME || header?.RcName || "",
                             handleDetailChange(
                               index,
                               "totalAmt",
-                              e.target.value
+                              e.target.value,
                             )
                           }
                           disabled={isFormDisabled}
@@ -2446,7 +2433,7 @@ rcName: header?.rcName || header?.RCNAME || header?.RcName || "",
                             handleDetailChange(
                               index,
                               "dateNeeded",
-                              e.target.value
+                              e.target.value,
                             )
                           }
                           disabled={isFormDisabled}
