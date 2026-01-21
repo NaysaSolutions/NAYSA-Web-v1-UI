@@ -21,13 +21,13 @@ import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
 import PostSVI from "../../../Module/Main Module/Accounts Receivable/PostSVI.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
-import MSInvLookup from "../../../Lookup/SearchMSInvLookup.jsx";
+import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
 import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
 
 
 // Configuration
-import { postRequest} from '../../../Configuration/BaseURL.jsx'
+import { postRequest,fetchDataJson} from '../../../Configuration/BaseURL.jsx'
 import { useReset } from "../../../Components/ResetContext";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import {
@@ -71,6 +71,11 @@ import {
 } from '@/NAYSA Cloud/Global/dates';
 
 import {
+  useSelectedHSColConfig,
+} from '@/NAYSA Cloud/Global/selectedData';
+
+
+import {
   useHandlePrint,
 } from '@/NAYSA Cloud/Global/report';
 
@@ -96,6 +101,11 @@ const MSAJ = () => {
   const navigate = useNavigate();
   const location = useLocation(); 
   const [isViewDocument, setIsViewDocument] = useState(false);
+  const { companyInfo, currentUserRow } = useAuth();
+  const decQty = companyInfo?.itemDecqtyMS ?? 2;
+  const decUcost = companyInfo?.itemDecUcostMS ?? 6;
+
+
   useEffect(() => {
     const p = new URLSearchParams(location.search);
     if (p.get("viewDocument") === "true") {
@@ -172,6 +182,8 @@ const MSAJ = () => {
     //Detail 1-2
     detailRows  :[],
     detailRowsGL :[],
+    globalLookupRow:[],
+    globalLookupHeader:[],
 
    
     totalDebit:"0.00",
@@ -268,6 +280,8 @@ const MSAJ = () => {
   tblFieldArray,
   detailRows,
   detailRowsGL,
+  globalLookupRow,
+  globalLookupHeader,
   totalDebit,
   totalCredit,
   totalDebitFx1,
@@ -344,7 +358,7 @@ const MSAJ = () => {
 
   const updateTotalsDisplay = (quantity, amount) => {
     setTotals({
-          totalQuantity: formatNumber(quantity),
+          totalQuantity: formatNumber(quantity,decQty),
           totalAmount: formatNumber(amount),
       });
   };
@@ -584,9 +598,10 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
     // Format rows
     const retrievedDetailRows = (data.dt1 || []).map(item => ({
       ...item,
-      quantity: formatNumber(item.quantity),
-      unitCost: formatNumber(item.unitCost),
-      itemAmount: formatNumber(item.itemAmount),
+      quantity: formatNumber(item.quantity,decQty),
+      unitCost: formatNumber(item.unitCost,decUcost),
+      itemAmount: formatNumber(item.itemAmount,2),
+      qtyHand: formatNumber(item.qtyHand,decQty),
     }));
 
     const formattedGLRows = (data.dt2 || []).map(glRow => ({
@@ -640,45 +655,35 @@ const handleDocNoBlur = () => {
 };
 
 
+const handleActivityOption = async (action) => {
+  // Prevent execution if document is already processed
+  if (documentStatus !== '') return;
 
-
-
-
- const handleActivityOption = async (action) => {
-  if (action === "Upsert" && detailRowsGL.length === 0) {
-    updateState({ triggerGLEntries: true });
-    return;
-  }
-
-
-  if (documentStatus === '') {
-   
-  updateState({ isLoading: true });
-
+  // 1. Helper function for formatting payload 
+  // This is synchronous to prevent Babel 'await' errors during mapping
+  const getFormattedPayload = (targetGLRows) => {
     const {
-        branchCode,
-        documentNo,
-        documentID,
-        selectedAJType,    
-        refDocNo1,
-        refDocNo2,      
-        remarks,
-        userCode, 
-        detailRows,
-        detailRowsGL
+      branchCode,
+      documentNo,
+      documentID,
+      documentDate,
+      selectedAJType,
+      refDocNo1,
+      refDocNo2,
+      remarks,
+      userCode,
+      detailRows
     } = state;
 
-    updateState({ isLoading: true });
-
-    const glData = {
+    return {
       branchCode: branchCode,
       msajNo: documentNo || "",
       msajId: documentID || "",
       msajDate: documentDate,
       ajtranType: selectedAJType,
       refDocNo1: refDocNo1,
-      refDocNo2: refDocNo2, 
-      remarks: remarks|| "",
+      refDocNo2: refDocNo2,
+      remarks: remarks || "",
       userCode: userCode,
       dt1: detailRows.map((row, index) => ({
         lnNo: String(index + 1),
@@ -702,78 +707,85 @@ const handleDocNoBlur = () => {
         uniqueKey: row.uniqueKey || "",
         operation: row.operation || ""
       })),
-       dt2: detailRowsGL.map((entry, index) => ({
-          recNo: String(index + 1),
-          acctCode: entry.acctCode || "",
-          rcCode: entry.rcCode || "",
-          sltypeCode: entry.sltypeCode || "",
-          slCode: entry.slCode || "",
-          particular: entry.particular || "",
-          vatCode: entry.vatCode || "",
-          vatName: entry.vatName || "",
-          atcCode: entry.atcCode || "",
-          atcName: entry.atcName || "",
-          debit: parseFormattedNumber(entry.debit || 0),
-          credit: parseFormattedNumber(entry.credit || 0),
-          debitFx1: parseFormattedNumber(entry.debitFx1 || 0),
-          creditFx1: parseFormattedNumber(entry.creditFx1 || 0),
-          debitFx2: parseFormattedNumber(entry.debitFx2 || 0),
-          creditFx2: parseFormattedNumber(entry.creditFx2 || 0),
-          slRefNo: entry.slRefNo || "",
-          slRefDate: entry.slRefDate ? new Date(entry.slRefDate).toISOString().split("T")[0] : null,
-          remarks: entry.remarks || ""
-        }))
+      dt2: targetGLRows.map((entry, index) => ({
+        recNo: String(index + 1),
+        acctCode: entry.acctCode || "",
+        rcCode: entry.rcCode || "",
+        sltypeCode: entry.sltypeCode || "",
+        slCode: entry.slCode || "",
+        particular: entry.particular || "",
+        vatCode: entry.vatCode || "",
+        vatName: entry.vatName || "",
+        atcCode: entry.atcCode || "",
+        atcName: entry.atcName || "",
+        debit: parseFormattedNumber(entry.debit || 0),
+        credit: parseFormattedNumber(entry.credit || 0),
+        debitFx1: parseFormattedNumber(entry.debitFx1 || 0),
+        creditFx1: parseFormattedNumber(entry.creditFx1 || 0),
+        debitFx2: parseFormattedNumber(entry.debitFx2 || 0),
+        creditFx2: parseFormattedNumber(entry.creditFx2 || 0),
+        slRefNo: entry.slRefNo || "",
+        slRefDate: entry.slRefDate ? new Date(entry.slRefDate).toISOString().split("T")[0] : null,
+        remarks: entry.remarks || ""
+      }))
     };
+  };
 
+  updateState({ isLoading: true });
+
+  try {
+    let currentGL = state.detailRowsGL;
+
+    // --- STEP 1: AUTO-GENERATE IF UPSERTING WITH EMPTY GL ---
+    // This allows "Generate then Save" in one click
+    if (action === "Upsert" && currentGL.length === 0) {
+      const genPayload = getFormattedPayload([]);
+      const newGlEntries = await useGenerateGLEntries(docType, genPayload);
+
+      if (newGlEntries && newGlEntries.length > 0) {
+        currentGL = newGlEntries;
+        updateState({ detailRowsGL: newGlEntries });
+      } else {
+        updateState({ isLoading: false });
+        console.warn("GL Generation failed. Upsert cancelled.");
+        return; 
+      }
+    }
+
+    // --- STEP 2: MANUAL GENERATE GL ---
     if (action === "GenerateGL") {
-        try {
-            const newGlEntries = await useGenerateGLEntries(docType, glData);
-
-            if (newGlEntries) {
-                updateState({ detailRowsGL: newGlEntries });
-            } else {
-                console.warn("GL entries generation failed or returned no data.");
-            }
-        } catch (error) {
-            console.error("Error during GL generation:", error);
-        } finally {
-            updateState({ isLoading: false });
-        }
+      const genPayload = getFormattedPayload(currentGL);
+      const newGlEntries = await useGenerateGLEntries(docType, genPayload);
+      if (newGlEntries) {
+        updateState({ detailRowsGL: newGlEntries });
+      }
     }
 
-
-
-
+    // --- STEP 3: UPSERT (SAVE) ---
     if (action === "Upsert") {
-        try {
+      // We use currentGL variable because state updates are async 
+      // and wouldn't be available yet if we just generated them.
+      const savePayload = getFormattedPayload(currentGL);
+      const response = await useTransactionUpsert(docType, savePayload, updateState, 'msajId', 'msajNo');
 
-          const response = await useTransactionUpsert(docType, glData, updateState, 'msajId', 'msajNo');
-          if (response) {
+      if (response) {
+        const isZero = Number(noReprints) === 0;
+        const onSaveAndPrint = isZero
+          ? () => updateState({ showSignatoryModal: true })
+          : () => handleSaveAndPrint(response.data[0].msajId);
 
-                const isZero = Number(noReprints) === 0;
-                const onSaveAndPrint =
-                  isZero
-                    ? () => updateState({ showSignatoryModal: true })                  
-                    : () => handleSaveAndPrint(response.data[0].msajId); 
-                useSwalshowSaveSuccessDialog(
-                  handleReset,          
-                  onSaveAndPrint       
-                );
-          }
-
-         
-           
-        } catch (error) {
-            console.error("Error during transaction upsert:", error);
-        } finally {
-            updateState({ isLoading: false});
-        }
-
-        updateState({isDocNoDisabled: true,isFetchDisabled: true,});
+        useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
+        updateState({ isDocNoDisabled: true, isFetchDisabled: true });
+      }
     }
+  } catch (error) {
+    console.error("Error in transaction flow:", error);
+  } finally {
+    updateState({ isLoading: false });
   }
-
 };
+
+
 
 
 
@@ -816,13 +828,14 @@ const handleGetItem = async () => {
   const handleAddRow = async () => {
   if (!selectedAJType) return;
 
+    await handleOpenMSLookup();
+    return;
 
-  const lookupTypes = ["IL", "IR", "CA"];
-  
-  if (lookupTypes.includes(selectedAJType)) {
-    updateState({ msLookupModalOpen: true });
-    return; 
-  }
+  // const lookupTypes = ["IL", "IR", "CA"];  
+  // if (lookupTypes.includes(selectedAJType)) { 
+  //   await handleOpenMSLookup();
+  //   return;
+  // }
 
 
   const newRow = {
@@ -1136,6 +1149,12 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
     autoFillBlanks('slCode', value.slCode, { sltypeCode: value.sltypeCode });
   }
 
+
+  
+   if (['bbDate'].includes(field)) {
+        row[field] = value;
+    }
+
   if (runCalculations) {
     const origQuantity = parseFormattedNumber(row.quantity) || 0;
     const origUnitCost = parseFormattedNumber(row.unitCost) || 0;
@@ -1159,7 +1178,8 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
       const calculatedAmount = +(finalQtyForMath * origUnitCost).toFixed(2);
 
       row.itemAmount = formatNumber(calculatedAmount);
-      row.quantity = formatNumber(selectedAJType === "CA" ? 0 : processedQty, 6);
+      row.quantity = formatNumber(selectedAJType === "CA" ? 0 : processedQty, decQty);
+      row.unitCost = formatNumber(origUnitCost, decUcost);
     };
 
     if (field === 'quantity' || field === 'unitCost') {
@@ -1168,7 +1188,9 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
   }
 
   updatedRows[index] = row;
-  updateState({ detailRows: updatedRows });
+  updateState({ detailRows: updatedRows,
+                detailRowsGL :[],
+   });
   updateTotals(updatedRows);
 };
 
@@ -1471,12 +1493,62 @@ const handleCloseBranchModal = (selectedBranch) => {
 
 
 
+
+  
+  const handleOpenMSLookup = async () => {
+    try {
+      updateState({ isLoading: true });
+  
+      const endpoint ="getInvLookupMS"
+      const response = await fetchDataJson(endpoint, { userCode, whouseCode :state.whouseCode || "", locCode: state.locCode || "", docType:"MSAJ" ,tranType :selectedAJType });
+      const custData = response?.data?.[0]?.result ? JSON.parse(response.data[0].result) : [];
+  
+
+      const lookupTypes = ["BB", "IG"];  
+      const colConfig = await useSelectedHSColConfig(lookupTypes.includes(selectedAJType) ? "AllMastItemLookup" : "getInvLookupMS");
+
+
+     if (custData.length === 0) {
+        useSwalErrorAlert("MS Location Balance","No records found")
+         updateState({ isLoading: false });
+        return; 
+      }
+  
+      updateState({ globalLookupRow: custData,
+                    globalLookupHeader:colConfig,
+                    msLookupModalOpen: true
+        });
+  
+    } catch (error) {
+      console.error("Failed to fetch Open AR Balance:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "Failed to fetch Open AR Balance.",
+      });
+      updateState({ 
+          globalLookupRow: [] ,
+          globalLookupHeader: [] });
+    }
+  
+     updateState({ isLoading: false });
+  };
+  
+  
+
+
+
+
+
+
+
+
   const handleCloseMSLookup = (selectedItems) => {
   updateState({ msLookupModalOpen: false });
 
   if (!selectedItems) return;
 
-  const itemsArray = Array.isArray(selectedItems) ? selectedItems : [selectedItems];
+  const itemsArray = Array.isArray(selectedItems.records) ? selectedItems.records : [selectedItems.records];
   if (itemsArray.length === 0) return;
 
   const newRows = itemsArray.map((item) => ({
@@ -1484,15 +1556,15 @@ const handleCloseBranchModal = (selectedBranch) => {
     itemName: item?.itemName ?? "",
     categCode: item?.categCode ?? "",
     uomCode: item?.uomCode ?? "",
-    quantity: formatNumber(0, 6),
-    unitCost: formatNumber(parseFormattedNumber(item?.unitCost ?? 0), 6),
+    quantity: formatNumber(0, decQty),
+    unitCost: formatNumber(parseFormattedNumber(item?.unitCost ?? 0), decUcost),
     amount: formatNumber(0, 2),
     lotNo: item?.lotNo ?? "",
     bbDate: item?.bbDate ? new Date(item.bbDate).toISOString().split("T")[0] : "",
     qstatCode: item?.qstatCode ?? "",
     whouseCode: item?.whouseCode ?? state.WHcode ?? "",
     locCode: item?.locCode ?? state.locCode ?? "",
-    qtyHand: formatNumber(parseFormattedNumber(item?.qtyHand ?? 0), 6),
+    qtyHand: formatNumber(parseFormattedNumber(item?.qtyHand ?? 0), decQty),
     uniqueKey: item?.uniqueKey ?? "",
     operation:  (selectedAJType === "IL" || selectedAJType === "IR") ? "S" : "A",
     acctCode: "",
@@ -2008,7 +2080,7 @@ return (
                             }
                         }}
                         onFocus={(e) => {
-                            if (e.target.value === "0.00" || e.target.value === "0") {
+                            if (e.target.value === "0.00" || parseFormattedNumber(e.target.value) === 0) {
                               e.target.value = "";
                             }
                           }}   
@@ -2054,14 +2126,14 @@ return (
                     maxLength={useGetFieldLength(tblFieldArray, "lot_no")}
                     />
                 </td>
-                
-                <td className="global-tran-td-ui">
+                          
+                 <td className="global-tran-td-ui">
                     <input
                       type="date"
                       className="w-[100px] global-tran-td-inputclass-ui"
                       value={row.bbDate || ""}
                       readOnly={isFormDisabled}
-                      onChange={(e) => handleDetailChangeGL(index, 'bbDate', e.target.value)}
+                      onChange={(e) => handleDetailChange(index, 'bbDate', e.target.value)}
                     />
                 </td>
 
@@ -3034,17 +3106,20 @@ return (
     )} 
 
 
-     {msLookupModalOpen && (
-        <MSInvLookup
-          isOpen={msLookupModalOpen}
-          onClose={handleCloseMSLookup}
-          userCode={userCode || "NSI"}
-          whouseCode={state.whouseCode || ""}
-          locCode={state.locCode || ""}
-          docType="MSAJ"
-          tranType={selectedAJType}
-          />
+
+      {msLookupModalOpen && (
+              <GlobalLookupModalv1
+                isOpen={msLookupModalOpen}
+                data={globalLookupRow}
+                btnCaption="Get Selected Items"
+                title="MS Location Balance"
+                endpoint={globalLookupHeader}
+                onClose={handleCloseMSLookup}
+                onCancel={() => updateState({ msLookupModalOpen: false })}
+              />
         )}
+        
+
 
         {warehouseLookupOpen && (
             <WarehouseLookupModal
