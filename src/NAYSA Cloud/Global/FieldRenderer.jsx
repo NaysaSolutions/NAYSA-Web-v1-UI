@@ -3,41 +3,69 @@ import { faMagnifyingGlass } from "@fortawesome/free-solid-svg-icons";
 
 const FieldRenderer = ({
   id,
+  name,                 // ✅ add this
   label,
   required = false,
-  type = "text", // "text" | "number" | "date" | "select" | "lookup"
+  type = "text",
   value,
   onChange,
   onLookup,
   disabled,
-  options = [], // for select
+  options = [],
 }) => {
   const isEnabled = !disabled;
 
+  // ✅ Safely derive a string key for the input id
+  const labelText = typeof label === "string" ? label : "";
+  const idSource = id || name || labelText;
+
   const inputId =
-    id ||
-    (label ? label.toLowerCase().replace(/[^a-z0-9]+/gi, "_") : undefined);
+    idSource
+      ? String(idSource).toLowerCase().replace(/[^a-z0-9]+/gi, "_")
+      : undefined;
 
-  const baseInput = `peer global-ref-textbox-ui ${isEnabled ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-    }`;
+  const baseInput = `peer global-ref-textbox-ui ${
+    isEnabled ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
+  }`;
 
-  const labelClass = `global-ref-floating-label ${isEnabled ? "global-ref-label-enabled" : "global-ref-label-disabled"
-    }`;
+  const labelClass = `global-ref-floating-label ${
+    isEnabled ? "global-ref-label-enabled" : "global-ref-label-disabled"
+  }`;
 
+  // ✅ keep your original behavior (value only), but safer if some callers pass event
   const handleChange = (e) => {
-    if (onChange) onChange(e.target.value);
-  };
+  if (!onChange) return;
+
+  // ✅ If caller uses handleFormChange(event)
+  if (name) {
+    onChange({ target: { name, value: e.target.value } });
+    return;
+  }
+
+  // ✅ fallback: if caller uses onChange(value)
+  onChange(e.target.value);
+};
+
+
+  const renderLabel = () => (
+    <label htmlFor={inputId} className={labelClass}>
+      {/* ✅ asterisk on LEFT side */}
+      {required && <span className="global-ref-asterisk-ui mr-1"></span>}
+      {label}
+    </label>
+  );
 
   return (
     <div className="relative w-full">
-      {/* LOOKUP FIELD (BLUE MAGNIFY BUTTON) */}
+      {/* LOOKUP */}
       {type === "lookup" && (
         <>
           <div
-            className={`flex items-stretch global-ref-textbox-ui ${isEnabled
+            className={`flex items-stretch global-ref-textbox-ui ${
+              isEnabled
                 ? "global-ref-textbox-enabled"
                 : "global-ref-textbox-disabled"
-              }`}
+            }`}
           >
             <input
               id={inputId}
@@ -49,36 +77,31 @@ const FieldRenderer = ({
               onClick={() => isEnabled && onLookup && onLookup()}
             />
 
-            {/* BLUE MAGNIFY BUTTON */}
             <button
               type="button"
               onClick={() => isEnabled && onLookup && onLookup()}
               disabled={!isEnabled}
               tabIndex={-1}
               className={`
-    absolute right-[1px] inset-y-[1px]
-    w-10 flex items-center justify-center
-    rounded-r-md
-    ${isEnabled
-                  ? "bg-blue-600 hover:bg-blue-700 text-white"
-                  : "bg-gray-300 text-gray-500 cursor-not-allowed"}
-  `}
+                absolute right-[1px] inset-y-[1px]
+                w-10 flex items-center justify-center
+                rounded-r-md
+                ${
+                  isEnabled
+                    ? "bg-blue-600 hover:bg-blue-700 text-white"
+                    : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                }
+              `}
             >
               <FontAwesomeIcon icon={faMagnifyingGlass} />
             </button>
-
           </div>
 
-          <label htmlFor={inputId} className={labelClass}>
-            {label}
-            {required && (
-              <span className="global-ref-asterisk-ui ml-1">*</span>
-            )}
-          </label>
+          {renderLabel()}
         </>
       )}
 
-      {/* TEXT FIELD */}
+      {/* TEXT */}
       {type === "text" && (
         <>
           <input
@@ -90,16 +113,11 @@ const FieldRenderer = ({
             disabled={disabled}
             className={baseInput}
           />
-          <label htmlFor={inputId} className={labelClass}>
-            {label}
-            {required && (
-              <span className="global-ref-asterisk-ui ml-1">*</span>
-            )}
-          </label>
+          {renderLabel()}
         </>
       )}
 
-      {/* NUMBER FIELD */}
+      {/* NUMBER */}
       {type === "number" && (
         <>
           <input
@@ -111,16 +129,11 @@ const FieldRenderer = ({
             disabled={disabled}
             className={baseInput}
           />
-          <label htmlFor={inputId} className={labelClass}>
-            {label}
-            {required && (
-              <span className="global-ref-asterisk-ui ml-1">*</span>
-            )}
-          </label>
+          {renderLabel()}
         </>
       )}
 
-      {/* DATE FIELD */}
+      {/* DATE */}
       {type === "date" && (
         <>
           <input
@@ -132,16 +145,11 @@ const FieldRenderer = ({
             disabled={disabled}
             className={baseInput}
           />
-          <label htmlFor={inputId} className={labelClass}>
-            {label}
-            {required && (
-              <span className="global-ref-asterisk-ui ml-1">*</span>
-            )}
-          </label>
+          {renderLabel()}
         </>
       )}
 
-      {/* SELECT FIELD */}
+      {/* SELECT */}
       {type === "select" && (
         <>
           <select
@@ -159,12 +167,7 @@ const FieldRenderer = ({
             ))}
           </select>
 
-          <label htmlFor={inputId} className={labelClass}>
-            {label}
-            {required && (
-              <span className="global-ref-asterisk-ui ml-1">*</span>
-            )}
-          </label>
+          {renderLabel()}
 
           <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
             <svg

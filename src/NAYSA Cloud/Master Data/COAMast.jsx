@@ -13,10 +13,7 @@ import {
   faFilePdf,
 } from "@fortawesome/free-solid-svg-icons";
 
-import {
-  useTopDocDropDown,
-} from '@/NAYSA Cloud/Global/top1RefTable';
-
+import { useTopDocDropDown } from "@/NAYSA Cloud/Global/top1RefTable";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import {
@@ -24,6 +21,7 @@ import {
   useSwalDeleteConfirm,
   useSwalDeleteSuccess,
   useSwalshowSaveSuccessDialog,
+  useSwalValidationAlert,
 } from "@/NAYSA Cloud/Global/behavior";
 
 import {
@@ -34,6 +32,8 @@ import {
 
 import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
 
+// ✅ FieldRenderer (adjust path as needed)
+import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 
 const COAMast = () => {
   const { user } = useAuth();
@@ -42,6 +42,16 @@ const COAMast = () => {
   const documentTitle = reftables[docType];
   const pdfLink = reftablesPDFGuide[docType];
   const videoLink = reftablesVideoGuide[docType];
+
+  const showValidation = async (title, lines) => {
+    const msg = Array.isArray(lines) ? lines.join("\n") : String(lines || "");
+    return useSwalValidationAlert({
+      icon: "error",
+      title,
+      message: msg,
+    });
+  };
+
 
   const toUiBalance = (v) => {
     const x = String(v || "").toUpperCase();
@@ -57,7 +67,6 @@ const COAMast = () => {
     if (x === "CREDIT" || x === "CR") return "CR";
     return v || "";
   };
-
 
   const [formData, setFormData] = useState({
     acctCode: "",
@@ -122,8 +131,6 @@ const COAMast = () => {
   const [accountGroups, setAccountGroups] = useState([]);
   const [accountTypes, setAccountTypes] = useState([]);
 
-
-
   const filterInputClass =
     "w-full px-3 py-1 text-xs rounded-md border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-300";
 
@@ -169,8 +176,6 @@ const COAMast = () => {
     return found?.name || x;
   };
 
-
-
   const mapRowToUi = (a) => {
     const fsConsoCode = a?.fsConsoCode ?? a?.fsConsCode ?? a?.fsconso_code ?? "";
     const fsConsoName = a?.fsConsoName ?? a?.fsConsDesc ?? a?.fsconso_name ?? "";
@@ -182,32 +187,47 @@ const COAMast = () => {
       acctType: a?.acctType ?? a?.acct_type ?? "",
       acctGroup: a?.acctGroup ?? a?.acct_group ?? "",
       acctBalance: toUiBalance(a?.acctBalance ?? a?.acct_balance ?? ""),
-      reqSL: toYN(a?.reqSL ?? a?.req_sl ?? "N"),   // ✅ normalize
-      reqRC: toYN(a?.reqRC ?? a?.req_rc ?? "N"),   // ✅ normalize
+      reqSL: toYN(a?.reqSL ?? a?.req_sl ?? "N"),
+      reqRC: toYN(a?.reqRC ?? a?.req_rc ?? "N"),
       fsConsoCode,
       fsConsoName,
       oldCode: a?.oldCode ?? a?.old_code ?? "",
       active: toYN(a?.active ?? a?.isActive ?? a?.ACTIVE ?? "Y", "Y"),
+
+      registeredBy: a?.registeredBy ?? a?.registered_by ?? "",
+      registeredDate: a?.registeredDate ?? a?.registered_date ?? "",
+      lastUpdatedBy: a?.lastUpdatedBy ?? a?.updated_by ?? "",
+      lastUpdatedDate: a?.lastUpdatedDate ?? a?.updated_date ?? "",
+
     };
   };
 
-  // NOTE: HSDropdown is now loaded using useTopDocDropDown (same pattern as SVI)
-  // so we no longer need to parse axios response wrappers here.
-
   const normalizeDropdown = (items) =>
-    (items || []).map((x) => {
-      // handle any column naming your hs_dropdown uses
-      const rawCode = x?.DROPDOWN_CODE ?? x?.dropdown_code ?? x?.dropdownCode ?? x?.CODE ?? x?.code ?? "";
-      const rawName = x?.DROPDOWN_NAME ?? x?.dropdown_name ?? x?.dropdownName ?? x?.NAME ?? x?.name ?? "";
+    (items || [])
+      .map((x) => {
+        const rawCode =
+          x?.DROPDOWN_CODE ??
+          x?.dropdown_code ??
+          x?.dropdownCode ??
+          x?.CODE ??
+          x?.code ??
+          "";
+        const rawName =
+          x?.DROPDOWN_NAME ??
+          x?.dropdown_name ??
+          x?.dropdownName ??
+          x?.NAME ??
+          x?.name ??
+          "";
 
-      // For NBAL, DB usually stores DR/CR but UI expects Debit/Credit (because we also convert on load/save)
-      const u = String(rawCode || "").toUpperCase();
-      const uiCode = u === "DR" ? "Debit" : u === "CR" ? "Credit" : rawCode;
-      const uiName = rawName || (u === "DR" ? "Debit" : u === "CR" ? "Credit" : "");
+        const u = String(rawCode || "").toUpperCase();
+        const uiCode = u === "DR" ? "Debit" : u === "CR" ? "Credit" : rawCode;
+        const uiName =
+          rawName || (u === "DR" ? "Debit" : u === "CR" ? "Credit" : "");
 
-      return { code: uiCode || "", name: uiName || "" };
-    }).filter((x) => x.code || x.name);
-
+        return { code: uiCode || "", name: uiName || "" };
+      })
+      .filter((x) => x.code || x.name);
 
   const ACCT_TYPE_CODE = {
     ASSET: "A",
@@ -226,14 +246,9 @@ const COAMast = () => {
     if (!item) return item;
     const code = String(item.code || "").trim();
     const name = String(item.name || "").trim();
-
-    // already A/L/E...
     if (code.length === 1) return { code, name };
 
-    const mapped =
-      ACCT_TYPE_CODE[code.toUpperCase()] ||
-      ACCT_TYPE_CODE[name.toUpperCase()];
-
+    const mapped = ACCT_TYPE_CODE[code.toUpperCase()] || ACCT_TYPE_CODE[name.toUpperCase()];
     return mapped ? { code: mapped, name } : item;
   };
 
@@ -241,17 +256,11 @@ const COAMast = () => {
     if (!item) return item;
     const code = String(item.code || "").trim();
     const name = String(item.name || "").trim();
-
-    // already B/I
     if (code.length === 1) return { code, name };
 
-    const mapped =
-      ACCT_GRP_CODE[code.toUpperCase()] ||
-      ACCT_GRP_CODE[name.toUpperCase()];
-
+    const mapped = ACCT_GRP_CODE[code.toUpperCase()] || ACCT_GRP_CODE[name.toUpperCase()];
     return mapped ? { code: mapped, name } : item;
   };
-
 
   const latestDropdownReqRef = useRef(0);
 
@@ -267,10 +276,7 @@ const COAMast = () => {
 
       if (reqId !== latestDropdownReqRef.current) return;
 
-      // Balance Type: keep your current normalizeDropdown (Debit/Credit UI)
       setBalanceTypes(normalizeDropdown(bal));
-
-      // Account Type / Group: normalize to CODE values (A/L/E..., B/I)
       setAccountTypes(normalizeDropdown(typ).map(normalizeAcctType));
       setAccountGroups(normalizeDropdown(grp).map(normalizeAcctGroup));
     } catch (err) {
@@ -283,14 +289,10 @@ const COAMast = () => {
     }
   };
 
-
-
-
   const fetchAccounts = async () => {
     setLoading(true);
     try {
-      const response = await apiClient.get("/cOA"); // ✅ use Load list
-
+      const response = await apiClient.get("/cOA");
       const rows = extractRowsFromResponse(response);
       setAccounts(rows.map((a) => mapRowToUi(a)));
     } catch (err) {
@@ -301,7 +303,6 @@ const COAMast = () => {
       setLoading(false);
     }
   };
-
 
   const getAccount = async (acctCode) => {
     setLoading(true);
@@ -314,7 +315,6 @@ const COAMast = () => {
       const row = rows?.[0] ? mapRowToUi(rows[0]) : null;
       if (!row) throw new Error("Account not found");
 
-      // update reg info
       setRegistrationInfo({
         registeredBy: row.registeredBy || "",
         registeredDate: row.registeredDate
@@ -336,7 +336,6 @@ const COAMast = () => {
       setLoading(false);
     }
   };
-
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -367,11 +366,8 @@ const COAMast = () => {
 
   useEffect(() => {
     fetchAccounts();
-
-    // HS dropdowns (same pattern as SVI)
     loadHSDropdowns();
   }, []);
-
 
   const filtered = useMemo(() => {
     const f = columnFilters;
@@ -441,10 +437,24 @@ const COAMast = () => {
     });
   };
 
+  // ✅ Keep your original handler (used in some places)
   const handleFormChange = (e) => {
     const { name, value } = e.target;
-    setFormData((p) => ({ ...p, [name]: value }));
+
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+
+    // ✅ reset duplicate flag when Account Code changes
+    if (name === "acctCode") {
+      setIsDupCode(false);
+    }
   };
+
+
+  // ✅ Helper for FieldRenderer (since it returns value only)
+  const setField = (name, value) => setFormData((p) => ({ ...p, [name]: value }));
 
   const startNew = () => {
     resetForm();
@@ -453,17 +463,12 @@ const COAMast = () => {
 
   const latestGetRef = useRef(0);
 
-
   const handleEditAccount = async (row) => {
-    // mark this click as the latest request
     const reqId = ++latestGetRef.current;
-
-    // (optional) set highlight immediately
     setSelectedAccount(row);
 
     const full = await getAccount(row.acctCode);
 
-    // if another row was clicked while we were loading, ignore this result
     if (reqId !== latestGetRef.current) return;
 
     if (full) {
@@ -473,7 +478,6 @@ const COAMast = () => {
     }
   };
 
-
   const handleSort = (key) => {
     setSortConfig((p) => ({
       key,
@@ -481,56 +485,131 @@ const COAMast = () => {
     }));
   };
 
+  const [isDupCode, setIsDupCode] = useState(false);
+
   const handleSaveAccount = async () => {
-  setSaving(true);
+    setSaving(true);
 
-  if (!formData.acctCode || !formData.acctName || !formData.acctBalance) {
-    await useSwalErrorAlert(
-      "Error",
-      "Please fill in all required fields: Account Code, Account Name, and Balance Type."
-    );
-    setSaving(false);
-    return;
-  }
+    try {
+      const missingFields = [];
 
-  try {
-    const response = await apiClient.post("/upsertCOA", {
-      PARAMS: JSON.stringify({
-        json_data: {
-          acctCode: formData.acctCode,
-          acctName: formData.acctName,
-          classCode: formData.classCode,
-          acctType: formData.acctType,
-          acctGroup: formData.acctGroup,
-          acctBalance: toDbBalance(formData.acctBalance),
-          reqSL: formData.reqSL,
-          reqRC: formData.reqRC,
-          fsCode: formData.fsConsoCode,
-          oldCode: formData.oldCode,
-          active: formData.active,
-          userCode: user?.USER_CODE || "ADMIN",
-        },
-      }),
-    });
+      const acctCode = (formData.acctCode || "").trim();
+      const acctName = (formData.acctName || "").trim();
+      const acctBalance = (formData.acctBalance || "").trim();
 
-    if (response?.data?.status === "success") {
-      await useSwalshowSaveSuccessDialog(resetForm, () => {});
-      await fetchAccounts();
-    } else {
-      await useSwalErrorAlert("Error", response?.data?.message || "Operation failed");
+      const classCode = (formData.classCode || "").trim();     // Account Classification
+      const acctType = (formData.acctType || "").trim();      // Account Type
+      const acctGroup = (formData.acctGroup || "").trim();     // Account Group
+      const reqSL = (formData.reqSL || "").trim();         // SL Required
+      const reqRC = (formData.reqRC || "").trim();         // RC Required
+
+      if (!acctCode) missingFields.push("Account Code");
+      if (!acctName) missingFields.push("Account Name");
+      if (!classCode) missingFields.push("Account Classification");
+      if (!acctType) missingFields.push("Account Type");
+      if (!acctGroup) missingFields.push("Account Group");
+      if (!acctBalance) missingFields.push("Balance Type");
+
+      // if you allow only Y/N, validate too
+      if (!reqSL) missingFields.push("SL Required (Y/N)");
+      else if (!["Y", "N"].includes(reqSL.toUpperCase()))
+        missingFields.push("SL Required (Y/N)");
+
+      if (!reqRC) missingFields.push("RC Required (Y/N)");
+      else if (!["Y", "N"].includes(reqRC.toUpperCase()))
+        missingFields.push("RC Required (Y/N)");
+
+      if (missingFields.length > 0) {
+        await showValidation(
+          "Missing Required Field(s)",
+          missingFields.map((f) => `• ${f}`)
+        );
+        setSaving(false);
+        return;
+      }
+
+      const isAdd = !selectedAccount;
+
+      // ✅ avoid double popup (already warned on blur)
+      if (isAdd && isDupCode) return;
+
+      // ✅ safety net (if blur didn't happen)
+      if (isAdd) {
+        const isDuplicate = accounts.some(
+          (a) =>
+            String(a?.acctCode || "")
+              .trim()
+              .toUpperCase() === acctCode.toUpperCase()
+        );
+
+        if (isDuplicate) {
+          setIsDupCode(true);
+          await showValidation("Duplicate Entry", ["Duplicate Code is not allowed."]);
+          return;
+        }
+      }
+
+      const response = await apiClient.post("/upsertCOA", {
+        json_data: JSON.stringify({
+          json_data: {
+            action: isAdd ? "ADD" : "EDIT",
+            acctCode,
+            acctName,
+            classCode: formData.classCode,
+            acctType: formData.acctType,
+            acctGroup: formData.acctGroup,
+            acctBalance: toDbBalance(acctBalance),
+            reqSL: formData.reqSL,
+            reqRC: formData.reqRC,
+            fsCode: formData.fsConsoCode,
+            oldCode: formData.oldCode,
+            active: formData.active,
+            userCode: user?.USER_CODE || "ADMIN",
+          },
+        }),
+      });
+
+      if (response?.data?.status === "success") {
+        await useSwalshowSaveSuccessDialog(resetForm, () => { });
+        await fetchAccounts();
+      } else {
+        await useSwalErrorAlert("Save Failed", response?.data?.message || "Unable to save record.");
+      }
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.response?.data?.msg ||
+        err?.message ||
+        "Failed to save transaction.";
+
+      await useSwalValidationAlert({ icon: "error", title: "Save Failed", message: msg });
+    } finally {
+      setSaving(false);
     }
-  } catch (err) {
-    console.error(err);
-    await useSwalErrorAlert("Error", err?.message || "Failed to save account");
-  } finally {
-    setSaving(false);
-  }
-};
+  };
 
+  const handleAcctCodeBlur = async () => {
+    const code = (formData.acctCode || "").trim();
+    if (!code) return;
+
+    const isAdd = !selectedAccount;
+    if (!isAdd) return;
+
+    const dup = accounts.some(
+      (a) => (a?.acctCode || "").trim().toUpperCase() === code.toUpperCase()
+    );
+
+    setIsDupCode(dup);
+
+    if (dup) {
+      await showValidation("Duplicate Entry", ["Duplicate Code is not allowed."]);
+    }
+  };
 
   const handleDeleteAccount = async () => {
     if (!selectedAccount?.acctCode) {
-      await useSwalErrorAlert("Error", "Please select an account to delete.");
+      await showValidation("Error", ["Please select an account to delete."]);
       return;
     }
 
@@ -544,22 +623,38 @@ const COAMast = () => {
 
     try {
       const response = await apiClient.post("/deleteCOA", {
-        acctCode: selectedAccount.acctCode,
-        USERID: user?.USER_CODE || "ADMIN",
+        json_data: JSON.stringify({
+          json_data: {
+            acctCode: selectedAccount.acctCode,
+            userCode: user?.USER_CODE || "ADMIN",
+          },
+        }),
       });
 
-      if (response.data.success) {
+      if (response?.data?.status === "success") {
         await useSwalDeleteSuccess();
         await fetchAccounts();
         resetForm();
       } else {
-        await useSwalErrorAlert("Error", response.data.message || "Failed to delete account.");
+        await showValidation("Error", [
+          response?.data?.message || "Failed to delete account.",
+        ]);
       }
-    } catch (error) {
-      console.error(error);
-      await useSwalErrorAlert("Error", "Failed to delete account.");
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.response?.data?.msg ||
+        err?.message ||
+        "Failed to delete account.";
+
+      await showValidation("Error", [msg]);
     }
   };
+
+
+
+
 
   const handleExport = (format) => {
     setOpenExport(false);
@@ -587,6 +682,27 @@ const COAMast = () => {
       useSwalErrorAlert("Export Error", `Failed to export to ${String(format).toUpperCase()}`);
     }
   };
+
+  // ✅ FieldRenderer options
+  const optAcctType = useMemo(
+    () => accountTypes.map((x) => ({ value: x.code, label: x.name })),
+    [accountTypes]
+  );
+  const optAcctGroup = useMemo(
+    () => accountGroups.map((x) => ({ value: x.code, label: x.name })),
+    [accountGroups]
+  );
+  const optBalance = useMemo(
+    () => balanceTypes.map((x) => ({ value: x.code, label: x.name })),
+    [balanceTypes]
+  );
+  const optYN = useMemo(
+    () => [
+      { value: "N", label: "No" },
+      { value: "Y", label: "Yes" },
+    ],
+    []
+  );
 
   return (
     <div className="global-ref-main-div-ui mt-24">
@@ -673,7 +789,7 @@ const COAMast = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Column 1 */}
           <div className="global-ref-textbox-group-div-ui space-y-4">
-            {/* Account Code */}
+            {/* Account Code (kept original due to special styling + maxLength) */}
             <div className="relative">
               <input
                 type="text"
@@ -682,6 +798,7 @@ const COAMast = () => {
                 placeholder=" "
                 value={formData.acctCode}
                 onChange={handleFormChange}
+                onBlur={handleAcctCodeBlur}
                 disabled={isEditing && selectedAccount}
                 className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
                   } ${isEditing && selectedAccount ? "bg-blue-100 cursor-not-allowed" : ""}`}
@@ -697,191 +814,84 @@ const COAMast = () => {
             </div>
 
             {/* Account Name */}
-            <div className="relative">
-              <input
-                type="text"
-                id="acctName"
-                name="acctName"
-                placeholder=" "
-                value={formData.acctName}
-                onChange={handleFormChange}
-                disabled={!isEditing}
-                className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                  }`}
-                maxLength={100}
-              />
-              <label
-                htmlFor="acctName"
-                className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                  }`}
-              >
-                <span className="global-ref-asterisk-ui">*</span> Account Name
-              </label>
-            </div>
+            <FieldRenderer
+              type="text"
+              name="acctName"
+              label={
+                <>
+                  <span className="global-ref-asterisk-ui">*</span> Account Name
+                </>
+              }
+              value={formData.acctName}
+              onChange={handleFormChange}
+              disabled={!isEditing}
+              required
+            />
+
 
             {/* Account Type | Account Group */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Account Type */}
-              <div className="relative">
-                <select
-                  id="acctType"
-                  name="acctType"
-                  value={formData.acctType || ""}
-                  onChange={handleFormChange}
-                  disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${isEditing
-                    ? "global-ref-textbox-enabled"
-                    : "global-ref-textbox-disabled"
-                    }`}
-                >
-                  <option value=""></option>
-                  {accountTypes.map((item) => (
-                    <option key={item.code} value={item.code}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
+              <FieldRenderer
+                type="select"
+                name="acctType"
+                label={
+                  <>
+                    <span className="global-ref-asterisk-ui">*</span> Account Type
+                  </>
+                }
+                value={formData.acctType}
+                options={optAcctType}
+                onChange={handleFormChange}
+                disabled={!isEditing}
+                required
+              />
 
+              <FieldRenderer
+                type="select"
+                name="acctGroup"
+                label={
+                  <>
+                    <span className="global-ref-asterisk-ui">*</span> Account Group
+                  </>
+                }
+                value={formData.acctGroup}
+                options={optAcctGroup}
+                onChange={handleFormChange}
+                disabled={!isEditing}
+                required
+              />
 
-                <label
-                  htmlFor="acctType"
-                  className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                    }`}
-                >
-                  Account Type
-                </label>
-
-                <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
-                  <svg
-                    className="h-4 w-4 text-gray-500"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
-
-              {/* Account Group */}
-              <div className="relative">
-                <select
-                  id="acctGroup"
-                  name="acctGroup"
-                  value={formData.acctGroup || ""}
-                  onChange={handleFormChange}
-                  disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${isEditing
-                    ? "global-ref-textbox-enabled"
-                    : "global-ref-textbox-disabled"
-                    }`}
-                >
-                  <option value=""></option>
-                  {accountGroups.map((item) => (
-                    <option key={item.code} value={item.code}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-
-
-                <label
-                  htmlFor="acctGroup"
-                  className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                    }`}
-                >
-                  Account Group
-                </label>
-
-                {/* ✅ Added arrow icon to match other selects */}
-                <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
-                  <svg
-                    className="h-4 w-4 text-gray-500"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
             </div>
-
 
             {/* Balance Type | Active */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="relative">
-                <select
-                  id="acctBalance"
-                  name="acctBalance"
-                  value={formData.acctBalance}
-                  onChange={handleFormChange}
-                  disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                    }`}
-                >
-                  <option value=""></option>
-                  {balanceTypes.map((item) => (
-                    <option key={item.code} value={item.code}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
+              <FieldRenderer
+                id="acctBalance"
+                label={
+                  <>
+                    <span className="global-ref-asterisk-ui">*</span> Account Balance
+                  </>
+                }
+                required
+                type="select"
+                value={formData.acctBalance || ""}
+                disabled={!isEditing}
+                options={optBalance}
+                onChange={(v) => setField("acctBalance", v)}
+              />
 
-                <label
-                  htmlFor="acctBalance"
-                  className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                    }`}
-                >
-                  <span className="global-ref-asterisk-ui">*</span> Balance Type
-                </label>
-                <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
-                  <svg
-                    className="h-4 w-4 text-gray-500"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
-
-              <div className="relative">
-                <select
-                  id="active"
-                  name="active"
-                  value={formData.active}
-                  onChange={handleFormChange}
-                  disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                    }`}
-                >
-                  <option value="Y">Yes</option>
-                  <option value="N">No</option>
-                </select>
-                <label
-                  htmlFor="active"
-                  className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                    }`}
-                >
-                  Active
-                </label>
-                <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
-                  <svg
-                    className="h-4 w-4 text-gray-500"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
+              <FieldRenderer
+                id="active"
+                label="Active"
+                type="select"
+                value={formData.active}
+                disabled={!isEditing}
+                options={[
+                  { value: "Y", label: "Yes" },
+                  { value: "N", label: "No" },
+                ]}
+                onChange={(v) => setField("active", v)}
+              />
             </div>
           </div>
 
@@ -889,226 +899,105 @@ const COAMast = () => {
           <div className="global-ref-textbox-group-div-ui space-y-4">
             {/* SL Required | RC Required | Budget Required */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="relative">
-                <select
-                  id="reqSL"
-                  name="reqSL"
-                  value={formData.reqSL}
-                  onChange={handleFormChange}
-                  disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                    }`}
-                >
-                  <option value="N">No</option>
-                  <option value="Y">Yes</option>
-                </select>
-                <label
-                  htmlFor="reqSL"
-                  className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                    }`}
-                >
-                  SL Required
-                </label>
-                <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
-                  <svg
-                    className="h-4 w-4 text-gray-500"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
-
-              <div className="relative">
-                <select
-                  id="reqRC"
-                  name="reqRC"
-                  value={formData.reqRC}
-                  onChange={handleFormChange}
-                  disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                    }`}
-                >
-                  <option value="N">No</option>
-                  <option value="Y">Yes</option>
-                </select>
-                <label
-                  htmlFor="reqRC"
-                  className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                    }`}
-                >
-                  RC Required
-                </label>
-                <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
-                  <svg
-                    className="h-4 w-4 text-gray-500"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
-
-              <div className="relative">
-                <select
-                  id="reqBudget"
-                  name="reqBudget"
-                  value={formData.reqBudget}
-                  onChange={handleFormChange}
-                  disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                    }`}
-                >
-                  <option value="N">No</option>
-                  <option value="Y">Yes</option>
-                </select>
-                <label
-                  htmlFor="reqBudget"
-                  className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                    }`}
-                >
-                  Budget Required
-                </label>
-                <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
-                  <svg
-                    className="h-4 w-4 text-gray-500"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
+              <FieldRenderer
+                id="reqSL"
+                label={
+                  <>
+                    <span className="global-ref-asterisk-ui">*</span> SL Required
+                  </>
+                }
+                type="select"
+                value={formData.reqSL}
+                disabled={!isEditing}
+                options={optYN}
+                onChange={(v) => setField("reqSL", v)}
+              />
+              <FieldRenderer
+                id="reqRC"
+                label={
+                  <>
+                    <span className="global-ref-asterisk-ui">*</span> RC Required
+                  </>
+                }
+                type="select"
+                value={formData.reqRC}
+                disabled={!isEditing}
+                options={optYN}
+                onChange={(v) => setField("reqRC", v)}
+              />
+              <FieldRenderer
+                id="reqBudget"
+                label="Budget Required"
+                type="select"
+                value={formData.reqBudget}
+                disabled={!isEditing}
+                options={optYN}
+                onChange={(v) => setField("reqBudget", v)}
+              />
             </div>
 
             {/* Classification */}
-            <div className="relative">
-              <input
-                type="text"
-                id="classCode"
-                name="classCode"
-                placeholder=" "
-                value={formData.classCode}
-                onChange={handleFormChange}
-                disabled={!isEditing}
-                className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                  }`}
-              />
-              <label
-                htmlFor="classCode"
-                className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                  }`}
-              >
-                Classification
-              </label>
-            </div>
+            <FieldRenderer
+              id="classCode"
+              label={
+                <>
+                  <span className="global-ref-asterisk-ui">*</span> Account Classification
+                </>
+              }
+              type="text"
+              value={formData.classCode}
+              disabled={!isEditing}
+              onChange={(v) => setField("classCode", v)}
+            />
 
-            {/* FS Code | FS Description */}
+            {/* FS Code | FS Description
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="relative">
-                <input
-                  type="text"
-                  id="fsConsoCode"
-                  name="fsConsoCode"
-                  placeholder=" "
-                  value={formData.fsConsoCode}
-                  onChange={handleFormChange}
-                  disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                    }`}
-                />
-                <label
-                  htmlFor="fsConsoCode"
-                  className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                    }`}
-                >
-                  FS Code
-                </label>
-              </div>
-
-              <div className="relative">
-                <input
-                  type="text"
-                  id="fsConsoName"
-                  name="fsConsoName"
-                  placeholder=" "
-                  value={formData.fsConsoName}
-                  onChange={handleFormChange}
-                  disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                    }`}
-                />
-                <label
-                  htmlFor="fsConsoName"
-                  className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                    }`}
-                >
-                  FS Description
-                </label>
-              </div>
-            </div>
+              <FieldRenderer
+                id="fsConsoCode"
+                label="FS Code"
+                type="text"
+                value={formData.fsConsoCode}
+                disabled={!isEditing}
+                onChange={(v) => setField("fsConsoCode", v)}
+              />
+              <FieldRenderer
+                id="fsConsoName"
+                label="FS Description"
+                type="text"
+                value={formData.fsConsoName}
+                disabled={!isEditing}
+                onChange={(v) => setField("fsConsoName", v)}
+              />
+            </div> */}
 
             {/* Old Code | Contra Account */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="relative">
-                <input
-                  type="text"
-                  id="oldCode"
-                  name="oldCode"
-                  placeholder=" "
-                  value={formData.oldCode}
-                  onChange={handleFormChange}
-                  disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                    }`}
-                />
-                <label
-                  htmlFor="oldCode"
-                  className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                    }`}
-                >
-                  Old Code
-                </label>
-              </div>
-
-              <div className="relative">
-                <input
-                  type="text"
-                  id="contraAccount"
-                  name="contraAccount"
-                  placeholder=" "
-                  value={formData.contraAccount}
-                  onChange={handleFormChange}
-                  disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                    }`}
-                />
-                <label
-                  htmlFor="contraAccount"
-                  className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                    }`}
-                >
-                  Contra Account
-                </label>
-              </div>
+              <FieldRenderer
+                id="oldCode"
+                label="Old Code"
+                type="text"
+                value={formData.oldCode}
+                disabled={!isEditing}
+                onChange={(v) => setField("oldCode", v)}
+              />
+              <FieldRenderer
+                id="contraAccount"
+                label="Contra Account"
+                type="text"
+                value={formData.contraAccount}
+                disabled={!isEditing}
+                onChange={(v) => setField("contraAccount", v)}
+              />
             </div>
           </div>
 
-          {/* Column 3 (registration info ALWAYS) */}
+          {/* Column 3 */}
           <div className="global-ref-textbox-group-div-ui">
             <RegistrationInfo data={registrationInfo} disabled={true} />
           </div>
         </div>
 
-        {/* TABLE */}
+        {/* TABLE (unchanged) */}
         <div className="global-tran-table-main-div-ui mt-6">
           <div className="global-tran-table-main-sub-div-ui">
             <table className="global-tran-table-div-ui">
@@ -1119,11 +1008,11 @@ const COAMast = () => {
                     "Account Name": "acctName",
                     "Account Type": "acctType",
                     "Account Group": "acctGroup",
-                    "Balance Type": "acctBalance",
+                    "Account Balance": "acctBalance",
                     "SL Required": "reqSL",
                     "RC Required": "reqRC",
-                    Classification: "classCode",
-                    "FS Code": "fsConsoCode",
+                    "Account Classification": "classCode",
+                    // "FS Code": "fsConsoCode",
                     "Old Code": "oldCode",
                     Active: "active",
                   }).map(([label, key]) => (
@@ -1308,11 +1197,11 @@ const COAMast = () => {
                 ) : (
                   pageRows.map((row) => (
                     <tr
-                      key={row.acctCode} // ✅ important: stable key
+                      key={row.acctCode}
                       className={`global-tran-tr-ui ${selectedAccount?.acctCode === row.acctCode ? "bg-blue-50" : ""
                         }`}
-                      onClick={() => setSelectedAccount(row)} // ✅ highlight only
-                      onDoubleClick={() => handleEditAccount(row)} // ✅ retrieve on double click
+                      onClick={() => setSelectedAccount(row)}
+                      onDoubleClick={() => handleEditAccount(row)}
                     >
                       <td className="global-tran-td-ui">{row.acctCode}</td>
                       <td className="global-tran-td-ui">{row.acctName}</td>
@@ -1322,13 +1211,11 @@ const COAMast = () => {
                       <td className="global-tran-td-ui">{row.reqSL === "Y" ? "Yes" : "No"}</td>
                       <td className="global-tran-td-ui">{row.reqRC === "Y" ? "Yes" : "No"}</td>
                       <td className="global-tran-td-ui">{row.classCode}</td>
-                      <td className="global-tran-td-ui">{row.fsConsoCode}</td>
+                      {/* <td className="global-tran-td-ui">{row.fsConsoCode}</td> */}
                       <td className="global-tran-td-ui">{row.oldCode}</td>
                       <td className="global-tran-td-ui">
                         <span
-                          className={`inline-block rounded-full px-2 py-1 text-xs font-bold ${row.active === "Y"
-                            ? "bg-green-100 text-green-800"
-                            : "bg-red-100 text-red-800"
+                          className={`inline-block rounded-full px-2 py-1 text-xs font-bold ${row.active === "Y" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
                             }`}
                         >
                           {row.active === "Y" ? "Yes" : "No"}
