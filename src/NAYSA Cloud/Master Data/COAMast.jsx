@@ -13,6 +13,10 @@ import {
   faFilePdf,
 } from "@fortawesome/free-solid-svg-icons";
 
+import {
+  useTopDocDropDown,
+} from '@/NAYSA Cloud/Global/top1RefTable';
+
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import {
@@ -21,6 +25,7 @@ import {
   useSwalDeleteSuccess,
   useSwalshowSaveSuccessDialog,
 } from "@/NAYSA Cloud/Global/behavior";
+
 import {
   reftables,
   reftablesPDFGuide,
@@ -28,6 +33,7 @@ import {
 } from "@/NAYSA Cloud/Global/reftable";
 
 import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
+
 
 const COAMast = () => {
   const { user } = useAuth();
@@ -51,6 +57,7 @@ const COAMast = () => {
     if (x === "CREDIT" || x === "CR") return "CR";
     return v || "";
   };
+
 
   const [formData, setFormData] = useState({
     acctCode: "",
@@ -116,6 +123,7 @@ const COAMast = () => {
   const [accountTypes, setAccountTypes] = useState([]);
 
 
+
   const filterInputClass =
     "w-full px-3 py-1 text-xs rounded-md border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-300";
 
@@ -148,83 +156,140 @@ const COAMast = () => {
     return [];
   };
 
+  const toYN = (v, defaultVal = "N") => {
+    const x = String(v ?? "").trim().toUpperCase();
+    if (x === "Y" || x === "YES" || x === "TRUE" || x === "1") return "Y";
+    if (x === "N" || x === "NO" || x === "FALSE" || x === "0") return "N";
+    return defaultVal;
+  };
+
+  const codeToName = (list, code) => {
+    const x = String(code ?? "").trim();
+    const found = (list || []).find((i) => String(i.code) === x);
+    return found?.name || x;
+  };
+
+
+
   const mapRowToUi = (a) => {
-    const fsConsoCode = a?.fsConsoCode ?? a?.fsConsCode ?? "";
-    const fsConsoName = a?.fsConsoName ?? a?.fsConsDesc ?? "";
+    const fsConsoCode = a?.fsConsoCode ?? a?.fsConsCode ?? a?.fsconso_code ?? "";
+    const fsConsoName = a?.fsConsoName ?? a?.fsConsDesc ?? a?.fsconso_name ?? "";
 
     return {
       acctCode: a?.acctCode ?? a?.acct_code ?? "",
       acctName: a?.acctName ?? a?.acct_name ?? "",
-      classCode: a?.classCode ?? a?.acctClassification ?? a?.class_code ?? "",
+      classCode: a?.classCode ?? a?.class_code ?? "",
       acctType: a?.acctType ?? a?.acct_type ?? "",
       acctGroup: a?.acctGroup ?? a?.acct_group ?? "",
       acctBalance: toUiBalance(a?.acctBalance ?? a?.acct_balance ?? ""),
-      reqSL: a?.reqSL ?? a?.req_sl ?? "N",
-      reqRC: a?.reqRC ?? a?.req_rc ?? "N",
+      reqSL: toYN(a?.reqSL ?? a?.req_sl ?? "N"),   // ✅ normalize
+      reqRC: toYN(a?.reqRC ?? a?.req_rc ?? "N"),   // ✅ normalize
       fsConsoCode,
       fsConsoName,
       oldCode: a?.oldCode ?? a?.old_code ?? "",
-      active: a?.active ?? a?.isActive ?? a?.ACTIVE ?? "Y",
-
-      contraAccount: a?.contraAccount ?? "",
-      reqBudget: a?.reqBudget ?? "N",
-
-      registeredBy: a?.registeredBy ?? a?.REGISTERED_BY ?? "",
-      registeredDate: a?.registeredDate ?? a?.REGISTERED_DATE ?? "",
-      lastUpdatedBy: a?.lastUpdatedBy ?? a?.UPDATED_BY ?? "",
-      lastUpdatedDate: a?.lastUpdatedDate ?? a?.UPDATED_DATE ?? "",
+      active: toYN(a?.active ?? a?.isActive ?? a?.ACTIVE ?? "Y", "Y"),
     };
   };
 
-  const parseSprocJsonResult = (response) => {
-    const payload = response?.data;
-    if (!payload?.success) return [];
-
-    const rows = payload?.data || [];
-    // your sproc returns: [{ result: "[{...}]" }]
-    if (Array.isArray(rows) && rows[0]?.result) {
-      try {
-        return JSON.parse(rows[0].result) || [];
-      } catch (e) {
-        console.error("Invalid JSON in sproc result:", rows[0]?.result);
-        return [];
-      }
-    }
-
-    return Array.isArray(rows) ? rows : [];
-  };
+  // NOTE: HSDropdown is now loaded using useTopDocDropDown (same pattern as SVI)
+  // so we no longer need to parse axios response wrappers here.
 
   const normalizeDropdown = (items) =>
-    (items || []).map((x) => ({
+    (items || []).map((x) => {
       // handle any column naming your hs_dropdown uses
-      code: x?.DROPDOWN_CODE ?? x?.dropdown_code ?? x?.dropdownCode ?? x?.CODE ?? x?.code ?? "",
-      name: x?.DROPDOWN_NAME ?? x?.dropdown_name ?? x?.dropdownName ?? x?.NAME ?? x?.name ?? "",
-    })).filter((x) => x.code || x.name);
+      const rawCode = x?.DROPDOWN_CODE ?? x?.dropdown_code ?? x?.dropdownCode ?? x?.CODE ?? x?.code ?? "";
+      const rawName = x?.DROPDOWN_NAME ?? x?.dropdown_name ?? x?.dropdownName ?? x?.NAME ?? x?.name ?? "";
+
+      // For NBAL, DB usually stores DR/CR but UI expects Debit/Credit (because we also convert on load/save)
+      const u = String(rawCode || "").toUpperCase();
+      const uiCode = u === "DR" ? "Debit" : u === "CR" ? "Credit" : rawCode;
+      const uiName = rawName || (u === "DR" ? "Debit" : u === "CR" ? "Credit" : "");
+
+      return { code: uiCode || "", name: uiName || "" };
+    }).filter((x) => x.code || x.name);
 
 
-  const fetchHSDropdown = async (dropdownColumn, setter) => {
+  const ACCT_TYPE_CODE = {
+    ASSET: "A",
+    LIABILITY: "L",
+    CAPITAL: "C",
+    INCOME: "I",
+    EXPENSE: "E",
+  };
+
+  const ACCT_GRP_CODE = {
+    "BALANCE SHEET": "B",
+    "INCOME STATEMENT": "I",
+  };
+
+  const normalizeAcctType = (item) => {
+    if (!item) return item;
+    const code = String(item.code || "").trim();
+    const name = String(item.name || "").trim();
+
+    // already A/L/E...
+    if (code.length === 1) return { code, name };
+
+    const mapped =
+      ACCT_TYPE_CODE[code.toUpperCase()] ||
+      ACCT_TYPE_CODE[name.toUpperCase()];
+
+    return mapped ? { code: mapped, name } : item;
+  };
+
+  const normalizeAcctGroup = (item) => {
+    if (!item) return item;
+    const code = String(item.code || "").trim();
+    const name = String(item.name || "").trim();
+
+    // already B/I
+    if (code.length === 1) return { code, name };
+
+    const mapped =
+      ACCT_GRP_CODE[code.toUpperCase()] ||
+      ACCT_GRP_CODE[name.toUpperCase()];
+
+    return mapped ? { code: mapped, name } : item;
+  };
+
+
+  const latestDropdownReqRef = useRef(0);
+
+  const loadHSDropdowns = async () => {
+    const reqId = ++latestDropdownReqRef.current;
+
     try {
-      const res = await apiClient.post("/getHSDropdown", {
-        dropdownColumn,
-        docCode: "COAMAST",
-      });
+      const [bal, grp, typ] = await Promise.all([
+        useTopDocDropDown("COAMAST", "NBAL"),
+        useTopDocDropDown("COAMAST", "ACCT_TYPE"),
+        useTopDocDropDown("COAMAST", "ACCT_GRP"),
+      ]);
 
-      const raw = parseSprocJsonResult(res);
-      setter(normalizeDropdown(raw));
+      if (reqId !== latestDropdownReqRef.current) return;
+
+      // Balance Type: keep your current normalizeDropdown (Debit/Credit UI)
+      setBalanceTypes(normalizeDropdown(bal));
+
+      // Account Type / Group: normalize to CODE values (A/L/E..., B/I)
+      setAccountTypes(normalizeDropdown(typ).map(normalizeAcctType));
+      setAccountGroups(normalizeDropdown(grp).map(normalizeAcctGroup));
     } catch (err) {
-      console.error(`Dropdown load failed [${dropdownColumn}]`, err);
-      setter([]);
+      console.error("Dropdown load failed", err);
+      if (reqId !== latestDropdownReqRef.current) return;
+
+      setBalanceTypes([]);
+      setAccountTypes([]);
+      setAccountGroups([]);
     }
   };
+
 
 
 
   const fetchAccounts = async () => {
     setLoading(true);
     try {
-      const response = await apiClient.post("/lookupCOA", {
-        PARAMS: JSON.stringify({ search: "", page: 1, pageSize: 1000 }),
-      });
+      const response = await apiClient.get("/cOA"); // ✅ use Load list
 
       const rows = extractRowsFromResponse(response);
       setAccounts(rows.map((a) => mapRowToUi(a)));
@@ -236,6 +301,7 @@ const COAMast = () => {
       setLoading(false);
     }
   };
+
 
   const getAccount = async (acctCode) => {
     setLoading(true);
@@ -302,9 +368,8 @@ const COAMast = () => {
   useEffect(() => {
     fetchAccounts();
 
-    fetchHSDropdown("NBAL", setBalanceTypes);
-    fetchHSDropdown("ACCT_GRP", setAccountGroups);
-    fetchHSDropdown("ACCT_TYPE", setAccountTypes);
+    // HS dropdowns (same pattern as SVI)
+    loadHSDropdowns();
   }, []);
 
 
@@ -417,52 +482,51 @@ const COAMast = () => {
   };
 
   const handleSaveAccount = async () => {
-    setSaving(true);
+  setSaving(true);
 
-    if (!formData.acctCode || !formData.acctName || !formData.acctBalance) {
-      await useSwalErrorAlert(
-        "Error",
-        "Please fill in all required fields: Account Code, Account Name, and Balance Type."
-      );
-      setSaving(false);
-      return;
+  if (!formData.acctCode || !formData.acctName || !formData.acctBalance) {
+    await useSwalErrorAlert(
+      "Error",
+      "Please fill in all required fields: Account Code, Account Name, and Balance Type."
+    );
+    setSaving(false);
+    return;
+  }
+
+  try {
+    const response = await apiClient.post("/upsertCOA", {
+      PARAMS: JSON.stringify({
+        json_data: {
+          acctCode: formData.acctCode,
+          acctName: formData.acctName,
+          classCode: formData.classCode,
+          acctType: formData.acctType,
+          acctGroup: formData.acctGroup,
+          acctBalance: toDbBalance(formData.acctBalance),
+          reqSL: formData.reqSL,
+          reqRC: formData.reqRC,
+          fsCode: formData.fsConsoCode,
+          oldCode: formData.oldCode,
+          active: formData.active,
+          userCode: user?.USER_CODE || "ADMIN",
+        },
+      }),
+    });
+
+    if (response?.data?.status === "success") {
+      await useSwalshowSaveSuccessDialog(resetForm, () => {});
+      await fetchAccounts();
+    } else {
+      await useSwalErrorAlert("Error", response?.data?.message || "Operation failed");
     }
+  } catch (err) {
+    console.error(err);
+    await useSwalErrorAlert("Error", err?.message || "Failed to save account");
+  } finally {
+    setSaving(false);
+  }
+};
 
-    try {
-      const payload = {
-        acctCode: formData.acctCode,
-        acctName: formData.acctName,
-        classCode: formData.classCode,
-        acctType: formData.acctType,
-        acctGroup: formData.acctGroup,
-        acctBalance: toDbBalance(formData.acctBalance),
-        reqSL: formData.reqSL,
-        reqRC: formData.reqRC,
-        fsCode: formData.fsConsoCode,
-        oldCode: formData.oldCode,
-        active: formData.active,
-        userCode: user?.USER_CODE || "ADMIN",
-
-        // safe legacy key
-        fsConsoCode: formData.fsConsoCode,
-      };
-
-      const apiEndpoint = selectedAccount ? "/updateCOA" : "/createCOA";
-      const response = await apiClient.post(apiEndpoint, payload);
-
-      if (response.data.success) {
-        await useSwalshowSaveSuccessDialog(resetForm, () => { });
-        await fetchAccounts();
-      } else {
-        await useSwalErrorAlert("Error", response.data.message || "Operation failed");
-      }
-    } catch (err) {
-      console.error(err);
-      await useSwalErrorAlert("Error", err.message || "Failed to save account");
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const handleDeleteAccount = async () => {
     if (!selectedAccount?.acctCode) {
@@ -662,10 +726,12 @@ const COAMast = () => {
                 <select
                   id="acctType"
                   name="acctType"
-                  value={formData.acctType}
+                  value={formData.acctType || ""}
                   onChange={handleFormChange}
                   disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
+                  className={`peer global-ref-textbox-ui ${isEditing
+                    ? "global-ref-textbox-enabled"
+                    : "global-ref-textbox-disabled"
                     }`}
                 >
                   <option value=""></option>
@@ -675,6 +741,7 @@ const COAMast = () => {
                     </option>
                   ))}
                 </select>
+
 
                 <label
                   htmlFor="acctType"
@@ -702,10 +769,12 @@ const COAMast = () => {
                 <select
                   id="acctGroup"
                   name="acctGroup"
-                  value={formData.acctGroup}
+                  value={formData.acctGroup || ""}
                   onChange={handleFormChange}
                   disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
+                  className={`peer global-ref-textbox-ui ${isEditing
+                    ? "global-ref-textbox-enabled"
+                    : "global-ref-textbox-disabled"
                     }`}
                 >
                   <option value=""></option>
@@ -715,6 +784,7 @@ const COAMast = () => {
                     </option>
                   ))}
                 </select>
+
 
                 <label
                   htmlFor="acctGroup"
@@ -1236,17 +1306,18 @@ const COAMast = () => {
                     </td>
                   </tr>
                 ) : (
-                  pageRows.map((row, idx) => (
+                  pageRows.map((row) => (
                     <tr
-                      key={idx}
+                      key={row.acctCode} // ✅ important: stable key
                       className={`global-tran-tr-ui ${selectedAccount?.acctCode === row.acctCode ? "bg-blue-50" : ""
                         }`}
-                      onClick={() => handleEditAccount(row)}
+                      onClick={() => setSelectedAccount(row)} // ✅ highlight only
+                      onDoubleClick={() => handleEditAccount(row)} // ✅ retrieve on double click
                     >
                       <td className="global-tran-td-ui">{row.acctCode}</td>
                       <td className="global-tran-td-ui">{row.acctName}</td>
-                      <td className="global-tran-td-ui">{row.acctType}</td>
-                      <td className="global-tran-td-ui">{row.acctGroup}</td>
+                      <td className="global-tran-td-ui">{codeToName(accountTypes, row.acctType)}</td>
+                      <td className="global-tran-td-ui">{codeToName(accountGroups, row.acctGroup)}</td>
                       <td className="global-tran-td-ui">{row.acctBalance}</td>
                       <td className="global-tran-td-ui">{row.reqSL === "Y" ? "Yes" : "No"}</td>
                       <td className="global-tran-td-ui">{row.reqRC === "Y" ? "Yes" : "No"}</td>
