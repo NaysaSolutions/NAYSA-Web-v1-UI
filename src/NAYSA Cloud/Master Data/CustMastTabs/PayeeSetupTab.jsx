@@ -1,5 +1,5 @@
 // src/NAYSA Cloud/Master Data/CustMastTabs/PayeeSetupTab.jsx
-import React, { forwardRef, useImperativeHandle, useMemo, useState } from "react";
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer";
 
 import SearchCusMast from "@/NAYSA Cloud/Lookup/SearchCustMast.jsx";
@@ -11,23 +11,19 @@ import SearchCOAMast from "@/NAYSA Cloud/Lookup/SearchCOAMast.jsx";
 import SearchPayTermRef from "@/NAYSA Cloud/Lookup/SearchPayTermRef.jsx";
 import SearchCurrRef from "@/NAYSA Cloud/Lookup/SearchCurrRef.jsx";
 
-
 const SectionHeader = ({ title }) => (
   <div className="mb-3">
     <div className="text-sm font-bold text-gray-800">{title}</div>
   </div>
 );
 
-/**
- * ✅ Cards must be same size & aligned:
- * - remove self-start / !h-fit
- * - use h-full + flex-col so content stays top-aligned while card stretches equally
- */
 const Card = ({ children, className = "" }) => (
   <div className={`global-tran-textbox-group-div-ui flex flex-col ${className}`}>
     {children}
   </div>
 );
+
+const normalizeUpper = (v) => String(v ?? "").toUpperCase().trim();
 
 const PayeeSetupTab = forwardRef(
   (
@@ -39,9 +35,7 @@ const PayeeSetupTab = forwardRef(
       sourceOptions,
       activeOptions,
       onChangeForm,
-
-      // ✅ parent fetch after selecting code (customer or vendor)
-      onSelectCustomerCode, // keep name to avoid breaking CustMast/VendMast
+      onSelectCustomerCode,
 
       payeeTypeOptions = [],
       apAccountOptions = [],
@@ -52,15 +46,14 @@ const PayeeSetupTab = forwardRef(
     ref
   ) => {
     useImperativeHandle(ref, () => ({}));
-    const isReadOnly = !isEditing;
 
-    const sl = useMemo(
-      () => String(form?.sltypeCode || "").toUpperCase().trim(),
-      [form?.sltypeCode]
-    );
+    // ✅ SINGLE MASTER SWITCH: disable everything until Add/Edit
+    const isReadOnly = !isEditing;
+    const isDisabled = isReadOnly || isLoading;
+
+    const sl = useMemo(() => normalizeUpper(form?.sltypeCode || ""), [form?.sltypeCode]);
     const isVendor = useMemo(() => sl !== "CU", [sl]);
 
-    // ✅ map the correct field names based on mode
     const f = useMemo(() => {
       if (isVendor) {
         return {
@@ -94,13 +87,12 @@ const PayeeSetupTab = forwardRef(
       };
     }, [isVendor]);
 
-    const isEmployee = useMemo(() => sl === "EM", [sl]);      // adjust code if yours differs
-    const isSupplier = useMemo(() => sl === "SU", [sl]);     // or whatever supplier code you use
-
+    const isEmployee = useMemo(() => sl === "EM", [sl]);
+    const isSupplier = useMemo(() => sl === "SU", [sl]);
 
     const buildRegisteredName = (fn, mn, ln) => {
       return [fn, mn, ln]
-        .map(v => v?.trim())
+        .map((v) => v?.trim())
         .filter(Boolean)
         .join(" ");
     };
@@ -118,7 +110,7 @@ const PayeeSetupTab = forwardRef(
               ? o
               : (o?.value ?? o?.code ?? o?.taxClass ?? o?.tax_class ?? "");
 
-          const value = String(rawValue || "").toUpperCase().trim();
+          const value = normalizeUpper(rawValue || "");
           if (!value) return null;
 
           let label =
@@ -133,7 +125,6 @@ const PayeeSetupTab = forwardRef(
         })
         .filter(Boolean);
 
-      // remove duplicates (keep first occurrence)
       const seen = new Set();
       return [...base, ...extra].filter((x) => {
         const k = x.value;
@@ -142,21 +133,61 @@ const PayeeSetupTab = forwardRef(
         return true;
       });
     }, [taxClassOptions]);
-    // ✅ Auto-default Tax Rate Class based on SL Type (editable)
-    React.useEffect(() => {
-      // do not override existing value
-      if (form.taxClass) return;
 
-      if (isSupplier) {
-        onChangeForm({ taxClass: "WC" }); // Corporate
-      } else if (isEmployee) {
-        onChangeForm({ taxClass: "WI" }); // Individual
+    /* ------------------------------------------------------------------
+       ✅ FIX: Tax Class default should NOT override user choice.
+       - We only auto-set when:
+         a) taxClass is empty, OR
+         b) taxClass was previously auto-set by this effect
+       - If user changes taxClass manually, we stop auto-overriding.
+    ------------------------------------------------------------------ */
+    const taxAutoRef = useRef({
+      lastAutoValue: "", // "WC"/"WI"
+      userTouched: false,
+      lastSl: "",
+    });
+
+    // Mark tax class as "user touched" when user changes it manually
+    const handleTaxClassChange = (v) => {
+      taxAutoRef.current.userTouched = true;
+      onChangeForm({ taxClass: v });
+    };
+
+    useEffect(() => {
+      if (!isEditing) return;
+
+      const desired = sl === "SU" ? "WC" : sl === "EM" ? "WI" : "";
+      if (!desired) {
+        taxAutoRef.current.lastSl = sl;
+        return;
       }
-    }, [isSupplier, isEmployee]);
 
+      const current = normalizeUpper(form?.taxClass || "");
 
+      const wasAuto = current && current === taxAutoRef.current.lastAutoValue;
+      const isEmpty = !current;
 
+      // If SL type changed, we can auto-update only if:
+      // - taxClass empty OR taxClass was previously auto-set OR user hasn't touched
+      const slChanged = taxAutoRef.current.lastSl !== sl;
 
+      if (slChanged) {
+        // if user already picked something manually AND it's not the previous auto value, don't override
+        if (taxAutoRef.current.userTouched && !wasAuto && !isEmpty) {
+          taxAutoRef.current.lastSl = sl;
+          return;
+        }
+      }
+
+      if (isEmpty || wasAuto) {
+        taxAutoRef.current.lastAutoValue = desired;
+        taxAutoRef.current.userTouched = false; // reset because we’re applying a default
+        onChangeForm({ taxClass: desired });
+      }
+
+      taxAutoRef.current.lastSl = sl;
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sl, isEditing]);
 
     // Lookup modal states
     const [isCustLookupOpen, setIsCustLookupOpen] = useState(false);
@@ -168,31 +199,14 @@ const PayeeSetupTab = forwardRef(
     const [isPayTermLookupOpen, setIsPayTermLookupOpen] = useState(false);
     const [isCurrLookupOpen, setIsCurrLookupOpen] = useState(false);
 
-
     const openPayeeLookup = () => {
+      if (isDisabled) return;
       if (isVendor) setIsVendLookupOpen(true);
       else setIsCustLookupOpen(true);
     };
 
-    const applySelectedCode = async (code) => {
-      if (!code) return;
-      // update correct field immediately
-      onChangeForm({ [f.code]: code });
-
-      // fetch full record in parent (VendMast or CustMast)
-      if (typeof onSelectCustomerCode === "function") {
-        await onSelectCustomerCode(code);
-      }
-    };
-
     return (
-      /**
-       * ✅ Equal card heights:
-       * - items-stretch + auto-rows-fr makes each row same height
-       * - each Card uses h-full
-       */
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start rounded-lg relative">
-
         {/* CARD 1: BASIC INFORMATION */}
         <Card className="border border-blue-500/30 p-6 rounded-lg shadow-xl">
           <SectionHeader title="Basic Information" />
@@ -205,7 +219,7 @@ const PayeeSetupTab = forwardRef(
               options={sltypeOptions}
               onChange={(v) => onChangeForm({ sltypeCode: v })}
               readOnly={isReadOnly}
-              disabled={isLoading}
+              disabled={isDisabled}
             />
 
             <FieldRenderer
@@ -215,34 +229,32 @@ const PayeeSetupTab = forwardRef(
               options={activeOptions}
               onChange={(v) => onChangeForm({ active: v })}
               readOnly={isReadOnly}
-              disabled={isLoading}
+              disabled={isDisabled}
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Payee/Customer Code (kept as you currently designed: lookup + not editable) */}
             <FieldRenderer
               label={isVendor ? "Payee Code" : "Customer Code"}
               required
               type="lookup"
               value={form[f.code] || ""}
-              onLookup={openPayeeLookup}
-              readOnly={isReadOnly}
-              disabled={isLoading}
+              onLookup={isDisabled ? undefined : openPayeeLookup}
+              readOnly={true}
+              disabled={isDisabled}
             />
-
 
             <FieldRenderer
               label="Tax Rate Class"
               required
-              type="select"                        // ✅ force dropdown
-              value={String(form.taxClass || "").toUpperCase().trim()}
-              options={mappedTaxClassOptions}      // ✅ has WC/WI even if backend is empty
-              onChange={(v) => onChangeForm({ taxClass: v })}
+              type="select"
+              value={normalizeUpper(form.taxClass || "")}
+              options={mappedTaxClassOptions}
+              onChange={handleTaxClassChange}     // ✅ user-touch tracking
               readOnly={isReadOnly}
-              disabled={isLoading}
+              disabled={isDisabled}
             />
-
-
           </div>
 
           <FieldRenderer
@@ -252,9 +264,8 @@ const PayeeSetupTab = forwardRef(
             value={form[f.name] || ""}
             onChange={(v) => onChangeForm({ [f.name]: v })}
             readOnly={isReadOnly || isEmployee}
-            disabled={isLoading || isEmployee}
+            disabled={isDisabled || isEmployee}
           />
-
 
           <FieldRenderer
             label="Business Name"
@@ -263,7 +274,7 @@ const PayeeSetupTab = forwardRef(
             value={form.businessName || ""}
             onChange={(v) => onChangeForm({ businessName: v })}
             readOnly={isReadOnly}
-            disabled={isLoading}
+            disabled={isDisabled}
           />
 
           {"checkName" in (form || {}) && (
@@ -273,7 +284,7 @@ const PayeeSetupTab = forwardRef(
               value={form.checkName || ""}
               onChange={(v) => onChangeForm({ checkName: v })}
               readOnly={isReadOnly}
-              disabled={isLoading}
+              disabled={isDisabled}
             />
           )}
 
@@ -284,19 +295,13 @@ const PayeeSetupTab = forwardRef(
               value={form.firstName || ""}
               onChange={(v) => {
                 const updates = { firstName: v };
-
                 if (isEmployee) {
-                  updates[f.name] = buildRegisteredName(
-                    v,
-                    form.middleName,
-                    form.lastName
-                  );
+                  updates[f.name] = buildRegisteredName(v, form.middleName, form.lastName);
                 }
-
                 onChangeForm(updates);
               }}
               readOnly={isReadOnly}
-              disabled={isLoading || isSupplier}
+              disabled={isDisabled || isSupplier}
             />
 
             <FieldRenderer
@@ -305,19 +310,13 @@ const PayeeSetupTab = forwardRef(
               value={form.middleName || ""}
               onChange={(v) => {
                 const updates = { middleName: v };
-
                 if (isEmployee) {
-                  updates[f.name] = buildRegisteredName(
-                    form.firstName,
-                    v,
-                    form.lastName
-                  );
+                  updates[f.name] = buildRegisteredName(form.firstName, v, form.lastName);
                 }
-
                 onChangeForm(updates);
               }}
               readOnly={isReadOnly}
-              disabled={isLoading || isSupplier}
+              disabled={isDisabled || isSupplier}
             />
 
             <FieldRenderer
@@ -326,21 +325,14 @@ const PayeeSetupTab = forwardRef(
               value={form.lastName || ""}
               onChange={(v) => {
                 const updates = { lastName: v };
-
                 if (isEmployee) {
-                  updates[f.name] = buildRegisteredName(
-                    form.firstName,
-                    form.middleName,
-                    v
-                  );
+                  updates[f.name] = buildRegisteredName(form.firstName, form.middleName, v);
                 }
-
                 onChangeForm(updates);
               }}
               readOnly={isReadOnly}
-              disabled={isLoading || isSupplier}
+              disabled={isDisabled || isSupplier}
             />
-
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -350,16 +342,16 @@ const PayeeSetupTab = forwardRef(
               value={form.oldCode || ""}
               onChange={(v) => onChangeForm({ oldCode: v })}
               readOnly={isReadOnly}
-              disabled={isLoading}
+              disabled={isDisabled}
             />
 
             <FieldRenderer
               label="Branch"
               type="lookup"
               value={form.branchCode || ""}
-              onLookup={() => setIsBranchLookupOpen(true)}
+              onLookup={isDisabled ? undefined : () => setIsBranchLookupOpen(true)}
               readOnly={isReadOnly}
-              disabled={isLoading}
+              disabled={isDisabled}
             />
 
             <FieldRenderer
@@ -369,7 +361,7 @@ const PayeeSetupTab = forwardRef(
               options={payeeTypeOptions}
               onChange={(v) => onChangeForm({ payeeType: v })}
               readOnly={isReadOnly}
-              disabled={isLoading}
+              disabled={isDisabled}
             />
           </div>
         </Card>
@@ -385,7 +377,7 @@ const PayeeSetupTab = forwardRef(
               value={form[f.contact] || ""}
               onChange={(v) => onChangeForm({ [f.contact]: v })}
               readOnly={isReadOnly}
-              disabled={isLoading}
+              disabled={isDisabled}
             />
 
             <FieldRenderer
@@ -394,7 +386,7 @@ const PayeeSetupTab = forwardRef(
               value={form[f.position] || ""}
               onChange={(v) => onChangeForm({ [f.position]: v })}
               readOnly={isReadOnly}
-              disabled={isLoading}
+              disabled={isDisabled}
             />
           </div>
 
@@ -405,23 +397,19 @@ const PayeeSetupTab = forwardRef(
               value={form[f.tel] || ""}
               onChange={(v) => onChangeForm({ [f.tel]: v })}
               readOnly={isReadOnly}
-              disabled={isLoading}
+              disabled={isDisabled}
             />
-
 
             <FieldRenderer
               label={isVendor ? "Mobile No." : "Fax No."}
               type="text"
               value={isVendor ? (form[f.mobile] || "") : (form.custFaxNo || "")}
               onChange={(v) =>
-                isVendor
-                  ? onChangeForm({ [f.mobile]: v })   // vendMobileno
-                  : onChangeForm({ custFaxNo: v })
+                isVendor ? onChangeForm({ [f.mobile]: v }) : onChangeForm({ custFaxNo: v })
               }
               readOnly={isReadOnly}
-              disabled={isLoading}
+              disabled={isDisabled}
             />
-
           </div>
 
           <FieldRenderer
@@ -430,7 +418,7 @@ const PayeeSetupTab = forwardRef(
             value={form[f.email] || ""}
             onChange={(v) => onChangeForm({ [f.email]: v })}
             readOnly={isReadOnly}
-            disabled={isLoading}
+            disabled={isDisabled}
           />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -441,7 +429,7 @@ const PayeeSetupTab = forwardRef(
               value={form[f.addr1] || ""}
               onChange={(v) => onChangeForm({ [f.addr1]: v })}
               readOnly={isReadOnly}
-              disabled={isLoading}
+              disabled={isDisabled}
             />
 
             <FieldRenderer
@@ -450,7 +438,7 @@ const PayeeSetupTab = forwardRef(
               value={form[f.addr2] || ""}
               onChange={(v) => onChangeForm({ [f.addr2]: v })}
               readOnly={isReadOnly}
-              disabled={isLoading}
+              disabled={isDisabled}
             />
           </div>
 
@@ -460,9 +448,8 @@ const PayeeSetupTab = forwardRef(
             value={form[f.addr3] || ""}
             onChange={(v) => onChangeForm({ [f.addr3]: v })}
             readOnly={isReadOnly}
-            disabled={isLoading}
+            disabled={isDisabled}
           />
-
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <FieldRenderer
@@ -471,7 +458,7 @@ const PayeeSetupTab = forwardRef(
               value={form[f.zip] || ""}
               onChange={(v) => onChangeForm({ [f.zip]: v })}
               readOnly={isReadOnly}
-              disabled={isLoading}
+              disabled={isDisabled}
             />
 
             <FieldRenderer
@@ -482,28 +469,21 @@ const PayeeSetupTab = forwardRef(
               options={sourceOptions}
               onChange={(v) => onChangeForm({ source: v })}
               readOnly={isReadOnly}
-              disabled={isLoading}
+              disabled={isDisabled}
             />
           </div>
         </Card>
 
+        {/* CARD 3: ACCOUNTING INFORMATION */}
         <Card className="border border-blue-500/30 p-4 rounded-lg shadow-xl self-start !h-fit !min-h-0">
           <SectionHeader title="Accounting Information" />
 
-          {/* Row 1 */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             <FieldRenderer
               label="TIN"
               required
               type="text"
-              value={
-                form.vendTin ||
-                form.custTin ||
-                form.vend_tin ||
-                form.cust_tin ||
-                form.tin ||
-                ""
-              }
+              value={form.vendTin || form.custTin || form.vend_tin || form.cust_tin || form.tin || ""}
               onChange={(v) =>
                 onChangeForm({
                   vendTin: v,
@@ -512,102 +492,71 @@ const PayeeSetupTab = forwardRef(
                 })
               }
               readOnly={isReadOnly}
-              disabled={isLoading}
+              disabled={isDisabled}
             />
-
-
 
             <FieldRenderer
               label="Default ATC"
               type="lookup"
               value={form.atcCode || ""}
-              onLookup={() => setIsATCLookupOpen(true)}
+              onLookup={isDisabled ? undefined : () => setIsATCLookupOpen(true)}
               readOnly={isReadOnly}
-              disabled={isLoading}
+              disabled={isDisabled}
             />
 
             <FieldRenderer
               label="Default VAT"
               type="lookup"
               value={form.vatCode || ""}
-              onLookup={() => setIsVATLookupOpen(true)}
+              onLookup={isDisabled ? undefined : () => setIsVATLookupOpen(true)}
               readOnly={isReadOnly}
-              disabled={isLoading}
+              disabled={isDisabled}
             />
           </div>
 
-          {/* Row 2 */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mt-2">
             <FieldRenderer
               label="Default Payment Terms"
               required
               type="lookup"
               value={form.paytermCode || ""}
-              onLookup={() => setIsPayTermLookupOpen(true)}
+              onLookup={isDisabled ? undefined : () => setIsPayTermLookupOpen(true)}
               readOnly={isReadOnly}
-              disabled={isLoading}
+              disabled={isDisabled}
             />
-
 
             <FieldRenderer
               label="Default A/P Account"
               required
               type="lookup"
               value={form.acctCode || ""}
-              onLookup={() => setIsAPAcctLookupOpen(true)}
+              onLookup={isDisabled ? undefined : () => setIsAPAcctLookupOpen(true)}
               readOnly={isReadOnly}
-              disabled={isLoading}
+              disabled={isDisabled}
             />
-
-
 
             <FieldRenderer
               label="Default Currency"
               type="lookup"
               value={form.currCode || ""}
-              onLookup={() => setIsCurrLookupOpen(true)}
+              onLookup={isDisabled ? undefined : () => setIsCurrLookupOpen(true)}
               readOnly={isReadOnly}
-              disabled={isLoading}
+              disabled={isDisabled}
             />
 
+            
           </div>
         </Card>
-
-
 
         {/* CARD 4: REGISTRATION INFORMATION */}
         <Card className="border border-blue-500/30 p-4 rounded-lg shadow-xl self-start !h-fit !min-h-0">
           <SectionHeader title="Registration Information" />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <FieldRenderer
-              label="Registered By"
-              type="text"
-              value={form.registeredBy || form.registered_by || ""}
-              readOnly={true}
-              disabled={true}
-            />
-            <FieldRenderer
-              label="Registered Date"
-              type="text"
-              value={form.registeredDate || form.registered_date || ""}
-              readOnly={true}
-              disabled={true}
-            />
-            <FieldRenderer
-              label="Updated By"
-              type="text"
-              value={form.updatedBy || form.updated_by || ""}
-              readOnly={true}
-              disabled={true}
-            />
-            <FieldRenderer
-              label="Updated Date"
-              type="text"
-              value={form.updatedDate || form.updated_date || ""}
-              readOnly={true}
-              disabled={true}
-            />
+            <FieldRenderer label="Registered By" type="text" value={form.registeredBy || form.registered_by || ""} readOnly disabled />
+            <FieldRenderer label="Registered Date" type="text" value={form.registeredDate || form.registered_date || ""} readOnly disabled />
+            <FieldRenderer label="Updated By" type="text" value={form.updatedBy || form.updated_by || ""} readOnly disabled />
+            <FieldRenderer label="Updated Date" type="text" value={form.updatedDate || form.updated_date || ""} readOnly disabled />
           </div>
         </Card>
 
@@ -620,24 +569,21 @@ const PayeeSetupTab = forwardRef(
             if (!selected) return;
 
             const code = selected?.custCode ?? selected?.cust_code ?? "";
-            const tin =
-              selected?.custTin ?? selected?.cust_tin ?? selected?.tin ?? "";
+            const tin = selected?.custTin ?? selected?.cust_tin ?? selected?.tin ?? "";
 
-            // ✅ set immediately so it shows and won't flicker
             onChangeForm({
               custCode: code,
               custTin: tin,
-              vendTin: tin, // optional safety
-              tin: tin,     // optional safety
+              vendTin: tin,
+              tin: tin,
+              __isNew: false,
             });
 
-            // ✅ still fetch full record in parent (CustMast)
             if (typeof onSelectCustomerCode === "function") {
               await onSelectCustomerCode(code);
             }
           }}
         />
-
 
         <SearchVendMast
           isOpen={isVendLookupOpen}
@@ -648,25 +594,21 @@ const PayeeSetupTab = forwardRef(
             if (!selected) return;
 
             const code = selected?.vendCode ?? selected?.vend_code ?? "";
-            const tin =
-              selected?.vendTin ?? selected?.vend_tin ?? selected?.tin ?? "";
+            const tin = selected?.vendTin ?? selected?.vend_tin ?? selected?.tin ?? "";
 
-            // ✅ set immediately so it shows and won't flicker
             onChangeForm({
               vendCode: code,
               vendTin: tin,
-              custTin: tin, // optional safety
-              tin: tin,     // optional safety
+              custTin: tin,
+              tin: tin,
+              __isNew: false,
             });
 
-            // fetch full record
             if (typeof onSelectCustomerCode === "function") {
               await onSelectCustomerCode(code);
             }
           }}
         />
-
-
 
         <SearchBranchRef
           isOpen={isBranchLookupOpen}
@@ -706,7 +648,6 @@ const PayeeSetupTab = forwardRef(
           onClose={(selected) => {
             setIsPayTermLookupOpen(false);
             if (!selected) return;
-
             onChangeForm({
               paytermCode: selected.paytermCode,
               paytermName: selected.paytermName,
@@ -744,9 +685,6 @@ const PayeeSetupTab = forwardRef(
             });
           }}
         />
-
-
-
       </div>
     );
   }

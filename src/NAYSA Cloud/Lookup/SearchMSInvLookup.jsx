@@ -57,14 +57,12 @@ const MSInvLookup = ({
       setSelectedKeys(new Set());
 
       const payload = {
-        whouseCode: whouseCode || "",
-        locCode: locCode || "",
-        docType: docType || "MSIS",
-        userCode: userCode || "",
-        tranType: tranType || "",
-        dt1: [],
-        mode: "Lookup",
-      };
+  whouseCode: whouseCode || "",
+  locCode: locCode || "",
+  docType: docType || "MSIS",
+  userCode: userCode || "",
+};
+
 
       try {
         log("MSInvLookup → API payload:", payload);
