@@ -21,6 +21,9 @@ import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
 import PostSVI from "../../../Module/Main Module/Accounts Receivable/PostSVI.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
+import MSInvLookup from "../../../Lookup/SearchMSInvLookup.jsx";
+import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
+import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
 
 
 // Configuration
@@ -83,6 +86,7 @@ import {
 // Header
 import Header from '@/NAYSA Cloud/Components/Header';
 import { faAdd } from "@fortawesome/free-solid-svg-icons/faAdd";
+import { User } from "lucide-react";
 
 
 const MSAJ = () => {
@@ -189,6 +193,8 @@ const MSAJ = () => {
     showVatModal:false,
     showAtcModal:false,
     showSlModal:false,
+    msLookupModalOpen:false,
+    warehouseLookupOpen:false,
 
     currencyModalOpen:false,
     branchModalOpen:false,
@@ -197,7 +203,8 @@ const MSAJ = () => {
     showAttachModal:false,
     showSignatoryModal:false,
     showPostingModal:false,
-    showAllTranDocNo:false
+    showAllTranDocNo:false,
+    locationLookupOpen:false
    });
 
   const updateState = (updates) => {
@@ -288,7 +295,10 @@ const MSAJ = () => {
   showAttachModal,
   showSignatoryModal,
   showPostingModal,
-  showAllTranDocNo
+  showAllTranDocNo,
+  msLookupModalOpen,
+  warehouseLookupOpen,
+  locationLookupOpen
 
 } = state;
 
@@ -478,8 +488,11 @@ useEffect(() => {
           });
         };   
 
+        
+
       // 🔹 2. Document row (independent)
       const docRow = await useTopDocControlRow(docType);
+
       if (docRow) {
         updateState({
           documentName: docRow.docName,
@@ -559,10 +572,10 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
   updateState({ isLoading: true });
 
   try {
-    const data = await useFetchTranData(documentNo, branchCode,docType,"ajNo",direction);
+    const data = await useFetchTranData(documentNo, branchCode,docType,"msajNo",direction);
 
 
-    if (!data?.ajId) {
+    if (!data?.msajId) {
       Swal.fire({ icon: 'info', title: 'No Records Found', text: 'Transaction does not exist.' });
       return resetState();
     }
@@ -592,10 +605,10 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       documentStatus: data.sviStatus,
       status: data.docStatus,
       noReprints:data.noReprints,
-      documentID: data.ajId,
-      documentNo: data.ajNo,
+      documentID: data.msajId,
+      documentNo: data.msajNo,
       branchCode: data.branchCode,
-      documentDate: useFormatToDate(data.ajDate),
+      documentDate: useFormatToDate(data.msajDate),
       selectedAJType: data.ajtranType,
       refDocNo1: data.refDocNo1,
       refDocNo2: data.refDocNo2,   
@@ -659,9 +672,9 @@ const handleDocNoBlur = () => {
 
     const glData = {
       branchCode: branchCode,
-      ajNo: documentNo || "",
-      ajId: documentID || "",
-      ajDate: documentDate,
+      msajNo: documentNo || "",
+      msajId: documentID || "",
+      msajDate: documentDate,
       ajtranType: selectedAJType,
       refDocNo1: refDocNo1,
       refDocNo2: refDocNo2, 
@@ -669,25 +682,25 @@ const handleDocNoBlur = () => {
       userCode: userCode,
       dt1: detailRows.map((row, index) => ({
         lnNo: String(index + 1),
-        itemCode: row.billCode || "",
-        itemName: row.billName || "",
-        categCode: row.billName || "",
+        itemCode: row.itemCode || "",
+        itemName: row.itemName || "",
+        categCode: row.categCode || "",
         quantity: parseFormattedNumber(row.quantity || 0),
         uomCode: row.uomCode || "",
         unitCost: parseFormattedNumber(row.unitCost || 0),
         itemAmount: parseFormattedNumber(row.itemAmount || 0),
         lotNo: row.lotNo || "",
-        qstatCode: row.lqstatCodeotNo || "",
-        bbDate: entry.bbDate ? new Date(entry.bbDate).toISOString().split("T")[0] : null,
+        qstatCode: row.qstatCode || "",
+        bbDate: row.bbDate ? new Date(row.bbDate).toISOString().split("T")[0] : null,
         qtyHand: parseFormattedNumber(row.qtyHand || 0),
         whouseCode: row.whouseCode || "",
-        locCode: row.locCode || "",
         locCode: row.locCode || "",
         acctCode: row.acctCode || "",
         rcCode: row.rcCode || "",
         slTypeCode: row.sltypeCode || "",
         slCode: row.slCode || "",
-        uniqueKey: row.uniqueKey || ""
+        uniqueKey: row.uniqueKey || "",
+        operation: row.operation || ""
       })),
        dt2: detailRowsGL.map((entry, index) => ({
           recNo: String(index + 1),
@@ -734,14 +747,14 @@ const handleDocNoBlur = () => {
     if (action === "Upsert") {
         try {
 
-          const response = await useTransactionUpsert(docType, glData, updateState, 'ajId', 'ajNo');
+          const response = await useTransactionUpsert(docType, glData, updateState, 'msajId', 'msajNo');
           if (response) {
 
                 const isZero = Number(noReprints) === 0;
                 const onSaveAndPrint =
                   isZero
                     ? () => updateState({ showSignatoryModal: true })                  
-                    : () => handleSaveAndPrint(response.data[0].ajId); 
+                    : () => handleSaveAndPrint(response.data[0].msajId); 
                 useSwalshowSaveSuccessDialog(
                   handleReset,          
                   onSaveAndPrint       
@@ -763,7 +776,8 @@ const handleDocNoBlur = () => {
 };
 
 
-  const handleAddRow = async () => {
+
+const handleGetItem = async () => {
  if (!selectedAJType) {
     return;
   }
@@ -790,12 +804,53 @@ const handleDocNoBlur = () => {
         rcCode: "",  
         sltypeCode: "",       
         slCode: "",
-        uniqueKey: ""
+        uniqueKey: "",
+        operation:""
       }
       ]
     });
   };
 
+
+
+  const handleAddRow = async () => {
+  if (!selectedAJType) return;
+
+
+  const lookupTypes = ["IL", "IR", "CA"];
+  
+  if (lookupTypes.includes(selectedAJType)) {
+    updateState({ msLookupModalOpen: true });
+    return; 
+  }
+
+
+  const newRow = {
+    lnNo: detailRows.length + 1, 
+    itemCode: "",
+    itemName: "",
+    categCode: "",   
+    quantity: "1.00",
+    uomCode: "",
+    unitCost: "0.00",
+    itemAmount: "0.00",    
+    lotNo: "",  
+    qstatCode: "",  
+    bbDate: "",  
+    qtyHand: "0.00",    
+    whouseCode: "",   
+    locCode: "",  
+    acctCode: "",  
+    rcCode: "",  
+    sltypeCode: "",       
+    slCode: "",
+    uniqueKey: ""
+  };
+
+  updateState({
+    detailRows: [...detailRows, newRow]
+  });
+};
 
 
 
@@ -999,7 +1054,7 @@ const handleHistoryRowPick = useCallback(
 
 useEffect(() => {
   const params = new URLSearchParams(location.search);
-  const docNo = params.get("ajNo");
+  const docNo = params.get("msajNo");
   const branchCode = params.get("branchCode");
 
   if (!loadedFromUrlRef.current && docNo && branchCode) {
@@ -1041,153 +1096,83 @@ useEffect(() => {
 
 
 
-
 const handleDetailChange = async (index, field, value, runCalculations = true) => {
-    // const updatedRows = [...detailRows];
+  const updatedRows = [...detailRows];
 
-    // updatedRows[index] = {
-    //   ...updatedRows[index],
-    //   [field]: value,
-    // }
-   
-    //  const row = updatedRows[index];
+  updatedRows[index] = {
+    ...updatedRows[index],
+    [field]: value,
+  };
 
-    //   if (field === 'itemCode') {
-    //       row.vatCode = value.vatCode,
-    //       row.vatAcct = value.acctCode,
-    //       row.vatName = value.vatName;     
-    //     };
+  const row = updatedRows[index];
 
-    //   if (field === 'atcCode' ){
-    //       row.atcCode = value.atcCode,
-    //       row.atcName = value.atcName;     
-    //     };
+  const autoFillBlanks = (fieldName, newValue, extraData = {}) => {
+    if (index === 0) {
+      updatedRows.forEach((r, i) => {
+        if (i !== 0 && (!r[fieldName] || r[fieldName].toString().trim() === "")) {
+          updatedRows[i] = {
+            ...r,
+            [fieldName]: newValue,
+            ...extraData
+          };
+        }
+      });
+    }
+  };
 
+  if (field === 'acctCode') {
+    row.acctCode = value.acctCode;
+    autoFillBlanks('acctCode', value.acctCode);
+  }
 
-    //   if (field === 'billCode'){
-    //       row.billCode= value.billCode,
-    //       row.billName= value.billName,
-    //       row.uomCode=value.uomCode,
-    //       row.arAcct = value.arAcct,
-    //       row.salesAcct= value.salesAcct,
-    //       row.discAcct= value.sDiscAcct,
-    //       row.rcCode= value.rcCode,
-    //       row.quantity= "1.00",
-    //       row.grossAmount= "0.00",
-    //       row.unitPrice= "0.00",
-    //       row.vatAmount= "0.00",
-    //       row.atcAmount= "0.00",
-    //       row.amountDue= "0.00",
-    //       row.discRate= "0.00",
-    //       row.discAmount= "0.00",
-    //       row.sviAmount ="0.00"
-    // };
+  if (field === 'rcCode') {
+    row.rcCode = value.rcCode;
+    autoFillBlanks('rcCode', value.rcCode);
+  }
 
+  if (field === 'slCode') {
+    row.slCode = value.slCode;
+    row.sltypeCode = value.sltypeCode;
+    autoFillBlanks('slCode', value.slCode, { sltypeCode: value.sltypeCode });
+  }
 
-    // if (['salesAcct', 'arAcct', 'vatAcct', 'discAcct'].includes(field)) {
-    //   row[field] = value.acctCode;
-    // }
+  if (runCalculations) {
+    const origQuantity = parseFormattedNumber(row.quantity) || 0;
+    const origUnitCost = parseFormattedNumber(row.unitCost) || 0;
+    const origQtyHand = parseFormattedNumber(row.qtyHand) || 0;
+    const origOperation = row.operation;
 
+    const recalcRow = async () => {
+      let processedQty = Math.abs(origQuantity);
 
+      if (origOperation === "S" && (selectedAJType === "IL" || selectedAJType === "IR")) {
+        if (processedQty > origQtyHand) {
+          useSwalErrorAlert('Exceeds Stock', `Quantity (${processedQty}) exceeds Quantity on Hand (${origQtyHand}). Value has been adjusted.`);
+          processedQty = origQtyHand;
+        }
+        processedQty = processedQty * -1;
+      } else {
+        processedQty = Math.abs(processedQty);
+      }
 
-    // if (field === 'rcCode' ){
-    //       row.rcCode = value.rcCode   
-    // };
+      const finalQtyForMath = (selectedAJType === "CA") ? 1 : processedQty;
+      const calculatedAmount = +(finalQtyForMath * origUnitCost).toFixed(2);
 
+      row.itemAmount = formatNumber(calculatedAmount);
+      row.quantity = formatNumber(selectedAJType === "CA" ? 0 : processedQty, 6);
+    };
 
+    if (field === 'quantity' || field === 'unitCost') {
+      await recalcRow();
+    }
+  }
 
-
-
-    // if (runCalculations) {  
-    //   const origQuantity = parseFormattedNumber(row.quantity) || 0;
-    //   const origUnitPrice = parseFormattedNumber(row.unitPrice) || 0;
-    //   const origDiscAmount = parseFormattedNumber(row.discAmount) || 0;
-    //   const origVatCode = row.vatCode || "";
-    //   const origAtcCode = row.atcCode || "";
-
-  
-    //   // shared calculation logic
-    //   async function recalcRow(newGrossAmt, newDiscAmount) {
-    //     const newNetDiscount = +(newGrossAmt - newDiscAmount).toFixed(2);
-    //     const newVatAmount = origVatCode ? await useTopVatAmount(origVatCode, newNetDiscount) : 0;
-    //     const newNetOfVat = +(newNetDiscount - newVatAmount).toFixed(2);
-    //     const newATCAmount = origAtcCode ? await useTopATCAmount(origAtcCode, newNetOfVat) : 0;
-    //     const newAmountDue = +(newNetDiscount - newATCAmount).toFixed(2);
-
-
-    //     row.grossAmount = formatNumber(newGrossAmt);
-    //     row.netDisc = formatNumber(newNetDiscount);
-    //     row.vatAmount = formatNumber(newVatAmount);
-    //     row.atcAmount = formatNumber(newATCAmount);
-    //     row.sviAmount = formatNumber(newAmountDue);
-    //     row.discAmount = formatNumber(newDiscAmount);
-    //     row.quantity = formatNumber(parseFormattedNumber (row.quantity));
-    //     row.unitPrice = formatNumber(parseFormattedNumber (row.unitPrice));
-    //   }
-
-    //   if (field === 'quantity') {
-    //     const newQuantity = parseFormattedNumber(row.quantity) || 0;
-    //     const newGrossAmt = +(newQuantity * origUnitPrice).toFixed(2);
-    //     const discountRate = parseFormattedNumber(row.discRate) || 0;
-    //     const newDiscAmount = +(discountRate * newGrossAmt * 0.01).toFixed(2);
-    //     row.discAmount = newDiscAmount.toFixed(2);
-    //     await recalcRow(newGrossAmt, newDiscAmount);
-    //   }
-
-    //   if (field === 'unitPrice') {
-    //     const newPrice = parseFormattedNumber(row.unitPrice) || 0;
-    //     const newGrossAmt = +(origQuantity * newPrice).toFixed(2);
-    //     const discountRate = parseFormattedNumber(row.discRate) || 0;
-    //     const newDiscAmount = +(discountRate * newGrossAmt * 0.01).toFixed(2);
-    //     row.discAmount = newDiscAmount.toFixed(2);
-    //     await recalcRow(newGrossAmt, newDiscAmount);
-    //   }
-
-    //   if (field === 'discRate') {
-    //     const newDiscRate = parseFormattedNumber(row.discRate) || 0;
-    //     const newGrossAmt = +(origQuantity * origUnitPrice).toFixed(2);
-    //     const newDiscAmount = +(newDiscRate * newGrossAmt * 0.01).toFixed(2);
-    //     row.discAmount = newDiscAmount.toFixed(2);
-    //     await recalcRow(newGrossAmt, newDiscAmount);
-    //   }
-
-    //   if (field === 'discAmount') {
-    //     const newDiscAmt = parseFormattedNumber(row.discAmount) || 0;
-    //     const newGrossAmt = +(origQuantity * origUnitPrice).toFixed(2);
-    //     const newDiscRate = +((newDiscAmt / newGrossAmt) * 100).toFixed(2);
-    //     row.discRate = newDiscRate.toFixed(2);
-    //     await recalcRow(newGrossAmt, newDiscAmt);
-    //   }
-
-
-    // if (field === 'vatCode' || field === 'atcCode') {
-    //   async function updateVatAndAtc() {
-    //     const newNetDiscount = +(parseFormattedNumber(row.grossAmount) - parseFormattedNumber(row.discAmount)).toFixed(2);
-    //     let newVatAmount = parseFormattedNumber(row.vatAmount) || 0;
-
-    //     if (field === 'vatCode') {
-    //       newVatAmount = row.vatCode ? await useTopVatAmount(row.vatCode, newNetDiscount) : 0;
-    //       row.vatAmount = newVatAmount.toFixed(2);
-    //     }
-
-    //     const newNetOfVat = +(newNetDiscount - newVatAmount).toFixed(2);
-    //     const newATCAmount = row.atcCode ? await useTopATCAmount(row.atcCode, newNetOfVat) : 0;
-
-    //     row.atcAmount = newATCAmount.toFixed(2);
-    //     row.amountDue = +(newNetDiscount - newATCAmount).toFixed(2);
-    //   }
-
-    //   await updateVatAndAtc();
-    // }
-
-
-//   }
-
-//     updatedRows[index] = row;
-//     updateState({ detailRows: updatedRows });
-//     updateTotals(updatedRows);
-
+  updatedRows[index] = row;
+  updateState({ detailRows: updatedRows });
+  updateTotals(updatedRows);
 };
+
+
 
 
 
@@ -1297,7 +1282,7 @@ const handleCloseAccountModal = (selectedAccount) => {
 
         const specialAccounts = ['invAcct'];
         if (specialAccounts.includes(accountModalSource)) {
-          handleDetailChange(selectedRowIndex, accountModalSource, selectedAccount,false);
+          handleDetailChange(selectedRowIndex, "acctCode", selectedAccount,false);
         } else {
           handleDetailChangeGL(selectedRowIndex, 'acctCode', selectedAccount);
         }      
@@ -1338,9 +1323,9 @@ const handleCloseAccountModal = (selectedAccount) => {
   const handleCloseSlModalGL = async (selectedSl) => {
     if (selectedSl && selectedRowIndex !== null) {
 
-        if (selectedSl) {
-          handleDetailChangeGL(selectedRowIndex, 'slCode', selectedSl);
-        }
+      const updateFn = accountModalSource !== null ? handleDetailChange : handleDetailChangeGL;
+      updateFn(selectedRowIndex, 'slCode', selectedSl, false);
+
     }
     updateState({
         showSlModal: false,
@@ -1422,8 +1407,19 @@ const handleSaveAndPrint = async (documentID) => {
 
 
 
+  const handleCloseWarehouseLookup = (row) => {
+    if (!row) {
+      updateState({ warehouseLookupOpen: false });
+      return;
+    }
+  };
 
-
+  const handleCloseLocationLookup = (row) => {
+    if (!row) {
+      updateState({ locationLookupOpen: false });
+      return;
+    }
+  };
 
 
 
@@ -1472,6 +1468,46 @@ const handleCloseBranchModal = (selectedBranch) => {
     }
     updateState({ branchModalOpen: false });
   };
+
+
+
+  const handleCloseMSLookup = (selectedItems) => {
+  updateState({ msLookupModalOpen: false });
+
+  if (!selectedItems) return;
+
+  const itemsArray = Array.isArray(selectedItems) ? selectedItems : [selectedItems];
+  if (itemsArray.length === 0) return;
+
+  const newRows = itemsArray.map((item) => ({
+    itemCode: item?.itemCode ?? "",
+    itemName: item?.itemName ?? "",
+    categCode: item?.categCode ?? "",
+    uomCode: item?.uomCode ?? "",
+    quantity: formatNumber(0, 6),
+    unitCost: formatNumber(parseFormattedNumber(item?.unitCost ?? 0), 6),
+    amount: formatNumber(0, 2),
+    lotNo: item?.lotNo ?? "",
+    bbDate: item?.bbDate ? new Date(item.bbDate).toISOString().split("T")[0] : "",
+    qstatCode: item?.qstatCode ?? "",
+    whouseCode: item?.whouseCode ?? state.WHcode ?? "",
+    locCode: item?.locCode ?? state.locCode ?? "",
+    qtyHand: formatNumber(parseFormattedNumber(item?.qtyHand ?? 0), 6),
+    uniqueKey: item?.uniqueKey ?? "",
+    operation:  (selectedAJType === "IL" || selectedAJType === "IR") ? "S" : "A",
+    acctCode: "",
+    sltypeCode: "",
+    rcCode: "",
+    slCode: ""
+  }));
+
+
+setState((prev) => {
+    const updated = [...(prev.detailRows || []), ...newRows];
+    updateTotalsDisplay(0,0);
+    return { ...prev, detailRows: updated };
+  });
+};
 
 
 
@@ -1554,9 +1590,12 @@ return (
         </div>
 
         {/* SVI Header Form Section - Main Grid Container */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 rounded-lg relative" id="svi_hd">
-
-            <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"> {/* Nested grid for 3 columns */}
+       <div
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 rounded-lg relative"
+            id="pr_hd"
+          >
+            {/* Columns 1–3 (Header fields) */}
+            <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
                 {/* Column 1 */}
                 <div className="global-tran-textbox-group-div-ui">
@@ -1592,7 +1631,7 @@ return (
                     <div className="relative">
                         <input
                             type="text"
-                            id="ajNo"
+                            id="msajNo"
                             value={state.documentNo}
                             onChange={(e) => updateState({ documentNo: e.target.value })}
                             // onBlur={handleDocNoBlur}
@@ -1606,7 +1645,7 @@ return (
                             className={`peer global-tran-textbox-ui ${state.isDocNoDisabled ? 'bg-blue-100 cursor-not-allowed' : ''}`}
                             disabled={state.isDocNoDisabled}
                         />
-                        <label htmlFor="ajNo" className="global-tran-floating-label">
+                        <label htmlFor="msajNo" className="global-tran-floating-label">
                             MSAJ No.
                         </label>
                         <button
@@ -1625,13 +1664,13 @@ return (
                     {/* SVI Date Picker */}
                     <div className="relative">
                         <input type="date"
-                            id="ajDate"
+                            id="msajDate"
                             className="peer global-tran-textbox-ui"
                             value={documentDate}
                             onChange={(e) => updateState({ documentDate: e.target.value })} 
                             disabled={isFormDisabled} 
                         />
-                        <label htmlFor="ajDate" className="global-tran-floating-label">MSAJ Date</label>
+                        <label htmlFor="msajDate" className="global-tran-floating-label">MSAJ Date</label>
                     </div>
 
                    
@@ -1685,12 +1724,79 @@ return (
                 {/* Column 3 */}
                 <div className="global-tran-textbox-group-div-ui">
                    
+               <div className="relative group flex-[1.3]">
+                   <input
+                     type="text"
+                     id="WHcode"
+                     value={state.WHname || state.WHcode || ""}
+                     readOnly
+                     placeholder=" "
+                     className="peer global-tran-textbox-ui"
+                   />
+                   <label
+                     htmlFor="WHcode"
+                     className="global-tran-floating-label"
+                   >
+                     Warehouse <span className="text-red-500">*</span>
+                   </label>
+                   <button
+                     type="button"
+                     className={`global-tran-textbox-button-search-padding-ui ${
+                       isFetchDisabled
+                         ? "global-tran-textbox-button-search-disabled-ui"
+                         : "global-tran-textbox-button-search-enabled-ui"
+                     } global-tran-textbox-button-search-ui`}
+                     disabled={isFormDisabled}
+                     onClick={() =>
+                       !isFormDisabled &&
+                       updateState({ warehouseLookupOpen: true })
+                     }
+                   >
+                     <FontAwesomeIcon icon={faMagnifyingGlass} />
+                   </button>
+                 </div>
+ 
+                 <div className="relative group flex-[1.3]">
+                   <input
+                     type="text"
+                     id="locName"
+                     value={state.locName || state.locCode || ""}
+                     readOnly
+                     placeholder=" "
+                     className="peer global-tran-textbox-ui"
+                     onClick={() =>
+                       !isFormDisabled &&
+                       updateState({ locationLookupOpen: true })
+                     }
+                   />
+                   <label
+                     htmlFor="locName"
+                     className="global-tran-floating-label"
+                   >
+                     Location <span className="text-red-500">*</span>
+                   </label>
+                   <button
+                     type="button"
+                     className={`global-tran-textbox-button-search-padding-ui ${
+                       isFetchDisabled
+                         ? "global-tran-textbox-button-search-disabled-ui"
+                         : "global-tran-textbox-button-search-enabled-ui"
+                     } global-tran-textbox-button-search-ui`}
+                     disabled={isFormDisabled}
+                     onClick={() =>
+                       !isFormDisabled &&
+                       updateState({ locationLookupOpen: true })
+                     }
+                   >
+                     <FontAwesomeIcon icon={faMagnifyingGlass} />
+                   </button>
+                 </div>                  
         
                 </div>
 
                 {/* Remarks Section - Now inside the 3-column container, spanning all 3 */}
-                <div className="col-span-full">
-                    <div className="relative p-2"> 
+               <div className="col-span-full">
+                <div className="relative p-2">
                         <textarea
                             id="remarks"
                             placeholder=""
@@ -1771,7 +1877,8 @@ return (
               <th className="global-tran-th-ui"hidden={handleFieldBehavior("hiddenBBMode")}>SL Code</th>
               <th className="global-tran-th-ui">Qty On Hand</th>
               <th className="global-tran-th-ui hidden">Category</th>
-              <th className="global-tran-th-ui hidden">Unique Key</th>                          
+              <th className="global-tran-th-ui hidden">Unique Key</th>        
+              <th className="global-tran-th-ui hidden">Operation</th>                     
             {!isFormDisabled && (
               <th className="global-tran-th-ui sticky right-[43px] bg-blue-300 dark:bg-blue-900 z-30">
                 Add
@@ -1823,7 +1930,7 @@ return (
               <td className="global-tran-td-ui">
                   <input
                     type="text"
-                    className="w-[100px] global-tran-td-inputclass-ui"
+                    className="w-[200px] global-tran-td-inputclass-ui"
                     value={row.itemName || ""}
                     readOnly={isFormDisabled}
                     onChange={(e) => handleDetailChange(index, 'itemName', e.target.value)}
@@ -1837,7 +1944,7 @@ return (
               <td className="global-tran-td-ui">
                   <input
                     type="text"
-                    className="w-[100px] text-center global-tran-td-inputclass-ui"
+                    className="w-[50px] text-center global-tran-td-inputclass-ui"
                     value={row.uomCode || ""}
                     readOnly={isFormDisabled}
                     onChange={(e) => handleDetailChange(index, 'uomCode', e.target.value)}
@@ -1853,13 +1960,13 @@ return (
                         readOnly={isFormDisabled}
                         onChange={(e) => {
                             const inputValue = e.target.value;
-                            const sanitizedValue = inputValue.replace(/[^0-9.]/g, '');
-                            if (/^\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") {
+                             const sanitizedValue = inputValue.replace(/[^0-9.-]/g, '');
+                            if (/^-?\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") {
                                 handleDetailChange(index, "quantity", sanitizedValue, false);
                             }
                         }}                   
                         onFocus={(e) => {
-                            if (e.target.value === "0.00" || e.target.value === "0") {
+                            if (e.target.value === "0.00" || parseFormattedNumber(e.target.value) === 0) {
                               e.target.value = "";
                             }
                           }}                   
@@ -1940,7 +2047,7 @@ return (
                 <td className="global-tran-td-ui">
                     <input
                     type="text"
-                    className="w-[100px] global-tran-td-inputclass-ui"
+                    className="w-[200px] global-tran-td-inputclass-ui"
                     value={row.lotNo || ""}
                     readOnly={isFormDisabled}
                     onChange={(e) => handleDetailChange(index, "lotNo", e.target.value)}
@@ -1987,7 +2094,7 @@ return (
                 <td className="global-tran-td-ui">
                   <input
                     type="text"
-                    className="w-[200px] global-tran-td-inputclass-ui"
+                    className="w-[100px] global-tran-td-inputclass-ui"
                     value={row.whouseCode || ""}
                     readOnly
                   />
@@ -1997,7 +2104,7 @@ return (
                  <td className="global-tran-td-ui">
                   <input
                     type="text"
-                    className="w-[200px] global-tran-td-inputclass-ui"
+                    className="w-[100px] global-tran-td-inputclass-ui"
                     value={row.locCode || ""}
                     readOnly
                   />
@@ -2069,22 +2176,18 @@ return (
                               value={row.slCode || ""}
                               onChange={(e) => handleDetailChange(index, 'slCode', e.target.value)}
                               readOnly
-                          />
-
-                          {!isFormDisabled && (row.slCode === "REQ SL" || row.slCode) && ( 
+                          />                       
                               <FontAwesomeIcon
                                   icon={faMagnifyingGlass}
                                   className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                                  onClick={() => {
-                                      if (row.slCode === "REQ SL" || row.slCode) { 
+                                  onClick={() => {     
                                           updateState({
                                               selectedRowIndex: index,
                                               showSlModal: true,
+                                              accountModalSource: "slCode"
                                           });
-                                      }
                                   }}
-                              />
-                          )}
+                              />                       
                       </div>
                   </td>
                 
@@ -2094,7 +2197,7 @@ return (
                     <input
                     type="text"
                     className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 cursor-pointer"
-                    value={formatNumber(parseFormattedNumber(row.qtyHand)) || formatNumber(parseFormattedNumber(row.qtyHand)) || ""}
+                    value={row.qtyHand || ""}
                     readOnly
                     />
                 </td>
@@ -2115,6 +2218,17 @@ return (
                     type="text"
                     className="w-[200px] global-tran-td-inputclass-ui"
                     value={row.uniqueKey || ""}
+                    readOnly
+                  />
+                </td>
+
+
+
+                 <td className="global-tran-td-ui hidden">
+                  <input
+                    type="text"
+                    className="w-[200px] global-tran-td-inputclass-ui"
+                    value={row.operation || ""}
                     readOnly
                   />
                 </td>
@@ -2911,15 +3025,42 @@ return (
     {showAllTranDocNo && (
       <AllTranDocNo
         isOpen={showAllTranDocNo}
-        params={{branchCode,branchName,docType,documentTitle,fieldNo : "ajNo"}}
+        params={{branchCode,branchName,docType,documentTitle,fieldNo : "msajNo"}}
         onRetrieve={handleTranDocNoRetrieval}
         onResponse={{documentNo}}
         onSelected={handleTranDocNoSelection}
         onClose={() => updateState({ showAllTranDocNo: false })}
       />
     )} 
-   
 
+
+     {msLookupModalOpen && (
+        <MSInvLookup
+          isOpen={msLookupModalOpen}
+          onClose={handleCloseMSLookup}
+          userCode={userCode || "NSI"}
+          whouseCode={state.whouseCode || ""}
+          locCode={state.locCode || ""}
+          docType="MSAJ"
+          tranType={selectedAJType}
+          />
+        )}
+
+        {warehouseLookupOpen && (
+            <WarehouseLookupModal
+              isOpen={warehouseLookupOpen}
+              onClose={handleCloseWarehouseLookup}
+              filter="ActiveAll"
+            />
+          )}  
+   
+      {locationLookupOpen && (
+        <LocationLookupModal
+          isOpen={locationLookupOpen}
+          onClose={handleCloseLocationLookup}
+          filter="ActiveAll"
+        />
+      )}
 
       {showSpinner && <LoadingSpinner />}
     </div>

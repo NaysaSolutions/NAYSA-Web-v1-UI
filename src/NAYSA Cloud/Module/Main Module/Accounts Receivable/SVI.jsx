@@ -1518,6 +1518,7 @@ const handleCloseAccountModal = (selectedAccount) => {
 
 
 const handleTranDocNoRetrieval = async (data) => {
+
     await fetchTranData(data.docNo, branchCode, data.key);
     updateState({showAllTranDocNo: data.modalClose});
 };

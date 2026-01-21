@@ -14,6 +14,7 @@ const MSInvLookup = ({
   whouseCode = "",
   locCode = "",
   docType = "MSIS",
+  tranType ="",
   debug = true,
 }) => {
   const [rows, setRows] = useState([]);
@@ -30,6 +31,7 @@ const MSInvLookup = ({
     qstatCode: "",
     whouseCode: "",
     locCode: "",
+    tranType:"",
   });
 
   // selection
@@ -55,13 +57,12 @@ const MSInvLookup = ({
       setSelectedKeys(new Set());
 
       const payload = {
-        whouseCode: whouseCode || "",
-        locCode: locCode || "",
-        docType: docType || "MSIS",
-        userCode: userCode || "",
-        dt1: [],
-        mode: "Lookup",
-      };
+  whouseCode: whouseCode || "",
+  locCode: locCode || "",
+  docType: docType || "MSIS",
+  userCode: userCode || "",
+};
+
 
       try {
         log("MSInvLookup → API payload:", payload);
@@ -102,7 +103,7 @@ const MSInvLookup = ({
       isMounted = false;
       setModalReady(false);
     };
-  }, [isOpen, whouseCode, locCode, userCode, docType]);
+  }, [isOpen, whouseCode, locCode, userCode, docType, tranType]);
 
   // -------------------------
   // Helpers

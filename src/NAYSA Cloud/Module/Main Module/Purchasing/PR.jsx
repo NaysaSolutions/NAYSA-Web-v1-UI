@@ -1846,7 +1846,7 @@ const PR = () => {
                           <td className="global-tran-td-ui">
                             <input
                               type="text"
-                              className="w-[100px] global-tran-td-inputclass-ui"
+                              className="w-[100px] global-tran-td-inputclass-ui cursor-not-allowed"
                               value={row.invType || ""}
                               onChange={(e) =>
                                 handleDetailChange(
@@ -1863,7 +1863,7 @@ const PR = () => {
                           <td className="global-tran-td-ui">
                             <input
                               type="text"
-                              className="w-[120px] global-tran-td-inputclass-ui"
+                              className="w-[120px] global-tran-td-inputclass-ui cursor-not-allowed"
                               value={row.itemCode || ""}
                               onChange={(e) =>
                                 handleDetailChange(
@@ -1880,7 +1880,7 @@ const PR = () => {
                           <td className="global-tran-td-ui">
                             <input
                               type="text"
-                              className="w-[220px] global-tran-td-inputclass-ui"
+                              className="w-[220px] global-tran-td-inputclass-ui cursor-not-allowed"
                               value={row.itemName || ""}
                               onChange={(e) =>
                                 handleDetailChange(
@@ -1914,7 +1914,7 @@ const PR = () => {
                           <td className="global-tran-td-ui">
                             <input
                               type="text"
-                              className="w-[80px] global-tran-td-inputclass-ui"
+                              className="w-[80px] global-tran-td-inputclass-ui cursor-not-allowed"
                               value={row.uomCode || ""}
                               onChange={(e) =>
                                 handleDetailChange(
@@ -1929,20 +1929,14 @@ const PR = () => {
 
                           {/* Qty on Hand */}
                           <td className="global-tran-td-ui text-right">
-                            <input
-                              type="text"
-                              className="w-[120px] global-tran-td-inputclass-ui text-right"
-                              value={row.qtyOnHand || ""}
-                              onChange={(e) =>
-                                handleDetailChange(
-                                  index,
-                                  "qtyOnHand",
-                                  e.target.value
-                                )
-                              }
-                              disabled={isFormDisabled}
-                            />
-                          </td>
+  <input
+    type="text"
+    className="w-[120px] global-tran-td-inputclass-ui text-right bg-gray-100 cursor-not-allowed"
+    value={row.qtyOnHand ?? ""}
+    readOnly
+    tabIndex={-1}
+  />
+</td>
 
                           {/* Qty Needed */}
                           <td className="global-tran-td-ui text-right">
