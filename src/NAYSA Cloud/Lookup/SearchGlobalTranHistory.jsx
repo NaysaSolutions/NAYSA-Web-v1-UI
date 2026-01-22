@@ -26,6 +26,7 @@ import {
 import { useReturnToDate } from "@/NAYSA Cloud/Global/dates";
 import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
 import Header, { HeaderSpacer } from "@/NAYSA Cloud/Components/Header";
+import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 
 Modal.setAppElement("#root");
 
@@ -121,6 +122,7 @@ const AllTranHistory = (props) => {
   const navState = location.state || {};
   const didInitRef = useRef(false);
   const hydratedFromCacheRef = useRef(false);
+  const { currentUserRow } = useAuth();
 
   const {
     endpoint: endpointProp,
@@ -580,7 +582,7 @@ const AllTranHistory = (props) => {
 
     const payload = {
       ReportName: reportName,
-      UserCode: user?.USER_CODE,
+      UserCode: currentUserRow?.USER_CODE,
       Branch: branchCode || "",
       StartDate: start,
       EndDate: end,

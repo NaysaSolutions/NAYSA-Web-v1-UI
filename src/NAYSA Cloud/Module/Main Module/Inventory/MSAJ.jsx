@@ -21,13 +21,14 @@ import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
 import PostSVI from "../../../Module/Main Module/Accounts Receivable/PostSVI.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
-import MSInvLookup from "../../../Lookup/SearchMSInvLookup.jsx";
+import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
 import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
+import QstatLookupModal from "../../../Lookup/SearchQStatRef.jsx";
 
 
 // Configuration
-import { postRequest} from '../../../Configuration/BaseURL.jsx'
+import { postRequest,fetchDataJson} from '../../../Configuration/BaseURL.jsx'
 import { useReset } from "../../../Components/ResetContext";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import {
@@ -71,6 +72,11 @@ import {
 } from '@/NAYSA Cloud/Global/dates';
 
 import {
+  useSelectedHSColConfig,
+} from '@/NAYSA Cloud/Global/selectedData';
+
+
+import {
   useHandlePrint,
 } from '@/NAYSA Cloud/Global/report';
 
@@ -86,7 +92,7 @@ import {
 // Header
 import Header from '@/NAYSA Cloud/Components/Header';
 import { faAdd } from "@fortawesome/free-solid-svg-icons/faAdd";
-import { User } from "lucide-react";
+import { User, Warehouse } from "lucide-react";
 
 
 const MSAJ = () => {
@@ -96,6 +102,11 @@ const MSAJ = () => {
   const navigate = useNavigate();
   const location = useLocation(); 
   const [isViewDocument, setIsViewDocument] = useState(false);
+  const { companyInfo, currentUserRow } = useAuth();
+  const decQty = companyInfo?.itemDecqtyMS ?? 2;
+  const decUcost = companyInfo?.itemDecUcostMS ?? 6;
+
+
   useEffect(() => {
     const p = new URLSearchParams(location.search);
     if (p.get("viewDocument") === "true") {
@@ -172,6 +183,8 @@ const MSAJ = () => {
     //Detail 1-2
     detailRows  :[],
     detailRowsGL :[],
+    globalLookupRow:[],
+    globalLookupHeader:[],
 
    
     totalDebit:"0.00",
@@ -204,6 +217,7 @@ const MSAJ = () => {
     showSignatoryModal:false,
     showPostingModal:false,
     showAllTranDocNo:false,
+    showQstatModal:false,
     locationLookupOpen:false
    });
 
@@ -268,6 +282,8 @@ const MSAJ = () => {
   tblFieldArray,
   detailRows,
   detailRowsGL,
+  globalLookupRow,
+  globalLookupHeader,
   totalDebit,
   totalCredit,
   totalDebitFx1,
@@ -296,6 +312,7 @@ const MSAJ = () => {
   showSignatoryModal,
   showPostingModal,
   showAllTranDocNo,
+  showQstatModal,
   msLookupModalOpen,
   warehouseLookupOpen,
   locationLookupOpen
@@ -344,7 +361,7 @@ const MSAJ = () => {
 
   const updateTotalsDisplay = (quantity, amount) => {
     setTotals({
-          totalQuantity: formatNumber(quantity),
+          totalQuantity: formatNumber(quantity,decQty),
           totalAmount: formatNumber(amount),
       });
   };
@@ -584,9 +601,10 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
     // Format rows
     const retrievedDetailRows = (data.dt1 || []).map(item => ({
       ...item,
-      quantity: formatNumber(item.quantity),
-      unitCost: formatNumber(item.unitCost),
-      itemAmount: formatNumber(item.itemAmount),
+      quantity: formatNumber(item.quantity,decQty),
+      unitCost: formatNumber(item.unitCost,decUcost),
+      itemAmount: formatNumber(item.itemAmount,2),
+      qtyHand: formatNumber(item.qtyHand,decQty),
     }));
 
     const formattedGLRows = (data.dt2 || []).map(glRow => ({
@@ -640,45 +658,35 @@ const handleDocNoBlur = () => {
 };
 
 
+const handleActivityOption = async (action) => {
+  // Prevent execution if document is already processed
+  if (documentStatus !== '') return;
 
-
-
-
- const handleActivityOption = async (action) => {
-  if (action === "Upsert" && detailRowsGL.length === 0) {
-    updateState({ triggerGLEntries: true });
-    return;
-  }
-
-
-  if (documentStatus === '') {
-   
-  updateState({ isLoading: true });
-
+  // 1. Helper function for formatting payload 
+  // This is synchronous to prevent Babel 'await' errors during mapping
+  const getFormattedPayload = (targetGLRows) => {
     const {
-        branchCode,
-        documentNo,
-        documentID,
-        selectedAJType,    
-        refDocNo1,
-        refDocNo2,      
-        remarks,
-        userCode, 
-        detailRows,
-        detailRowsGL
+      branchCode,
+      documentNo,
+      documentID,
+      documentDate,
+      selectedAJType,
+      refDocNo1,
+      refDocNo2,
+      remarks,
+      userCode,
+      detailRows
     } = state;
 
-    updateState({ isLoading: true });
-
-    const glData = {
+    return {
       branchCode: branchCode,
       msajNo: documentNo || "",
       msajId: documentID || "",
       msajDate: documentDate,
       ajtranType: selectedAJType,
       refDocNo1: refDocNo1,
-      refDocNo2: refDocNo2, 
-      remarks: remarks|| "",
+      refDocNo2: refDocNo2,
+      remarks: remarks || "",
       userCode: userCode,
       dt1: detailRows.map((row, index) => ({
         lnNo: String(index + 1),
@@ -702,78 +710,86 @@ const handleDocNoBlur = () => {
         uniqueKey: row.uniqueKey || "",
         operation: row.operation || ""
       })),
-       dt2: detailRowsGL.map((entry, index) => ({
-          recNo: String(index + 1),
-          acctCode: entry.acctCode || "",
-          rcCode: entry.rcCode || "",
-          sltypeCode: entry.sltypeCode || "",
-          slCode: entry.slCode || "",
-          particular: entry.particular || "",
-          vatCode: entry.vatCode || "",
-          vatName: entry.vatName || "",
-          atcCode: entry.atcCode || "",
-          atcName: entry.atcName || "",
-          debit: parseFormattedNumber(entry.debit || 0),
-          credit: parseFormattedNumber(entry.credit || 0),
-          debitFx1: parseFormattedNumber(entry.debitFx1 || 0),
-          creditFx1: parseFormattedNumber(entry.creditFx1 || 0),
-          debitFx2: parseFormattedNumber(entry.debitFx2 || 0),
-          creditFx2: parseFormattedNumber(entry.creditFx2 || 0),
-          slRefNo: entry.slRefNo || "",
-          slRefDate: entry.slRefDate ? new Date(entry.slRefDate).toISOString().split("T")[0] : null,
-          remarks: entry.remarks || ""
-        }))
+      dt2: targetGLRows.map((entry, index) => ({
+        recNo: String(index + 1),
+        acctCode: entry.acctCode || "",
+        rcCode: entry.rcCode || "",
+        sltypeCode: entry.sltypeCode || "",
+        slCode: entry.slCode || "",
+        particular: entry.particular || "",
+        vatCode: entry.vatCode || "",
+        vatName: entry.vatName || "",
+        atcCode: entry.atcCode || "",
+        atcName: entry.atcName || "",
+        debit: parseFormattedNumber(entry.debit || 0),
+        credit: parseFormattedNumber(entry.credit || 0),
+        debitFx1: parseFormattedNumber(entry.debitFx1 || 0),
+        creditFx1: parseFormattedNumber(entry.creditFx1 || 0),
+        debitFx2: parseFormattedNumber(entry.debitFx2 || 0),
+        creditFx2: parseFormattedNumber(entry.creditFx2 || 0),
+        slRefNo: entry.slRefNo || "",
+        slRefDate: entry.slRefDate ? new Date(entry.slRefDate).toISOString().split("T")[0] : null,
+        remarks: entry.remarks || ""
+      }))
     };
+  };
 
+  updateState({ isLoading: true });
+
+  try {
+    let currentGL = state.detailRowsGL;
+
+    // --- STEP 1: AUTO-GENERATE IF UPSERTING WITH EMPTY GL ---
+    // This allows "Generate then Save" in one click
+    if (action === "Upsert" && currentGL.length === 0 && selectedAJType !== "BB") {
+      const genPayload = getFormattedPayload([]);
+      const newGlEntries = await useGenerateGLEntries(docType, genPayload);
+
+      if (newGlEntries && newGlEntries.length > 0) {
+        currentGL = newGlEntries;
+        updateState({ detailRowsGL: newGlEntries });
+      } else {
+        updateState({ isLoading: false });
+        console.warn("GL Generation failed. Upsert cancelled.");
+        return; 
+      }
+
+    }
+
+    // --- STEP 2: MANUAL GENERATE GL ---
     if (action === "GenerateGL") {
-        try {
-            const newGlEntries = await useGenerateGLEntries(docType, glData);
-
-            if (newGlEntries) {
-                updateState({ detailRowsGL: newGlEntries });
-            } else {
-                console.warn("GL entries generation failed or returned no data.");
-            }
-        } catch (error) {
-            console.error("Error during GL generation:", error);
-        } finally {
-            updateState({ isLoading: false });
-        }
+      const genPayload = getFormattedPayload(currentGL);
+      const newGlEntries = await useGenerateGLEntries(docType, genPayload);
+      if (newGlEntries) {
+        updateState({ detailRowsGL: newGlEntries });
+      }
     }
 
-
-
-
+    // --- STEP 3: UPSERT (SAVE) ---
     if (action === "Upsert") {
-        try {
+      // We use currentGL variable because state updates are async 
+      // and wouldn't be available yet if we just generated them.
+      const savePayload = getFormattedPayload(currentGL);
+      const response = await useTransactionUpsert(docType, savePayload, updateState, 'msajId', 'msajNo');
 
-          const response = await useTransactionUpsert(docType, glData, updateState, 'msajId', 'msajNo');
-          if (response) {
+      if (response) {
+        const isZero = Number(noReprints) === 0;
+        const onSaveAndPrint = isZero
+          ? () => updateState({ showSignatoryModal: true })
+          : () => handleSaveAndPrint(response.data[0].msajId);
 
-                const isZero = Number(noReprints) === 0;
-                const onSaveAndPrint =
-                  isZero
-                    ? () => updateState({ showSignatoryModal: true })                  
-                    : () => handleSaveAndPrint(response.data[0].msajId); 
-                useSwalshowSaveSuccessDialog(
-                  handleReset,          
-                  onSaveAndPrint       
-                );
-          }
-
-         
-           
-        } catch (error) {
-            console.error("Error during transaction upsert:", error);
-        } finally {
-            updateState({ isLoading: false});
-        }
-
-        updateState({isDocNoDisabled: true,isFetchDisabled: true,});
+        useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
+        updateState({ isDocNoDisabled: true, isFetchDisabled: true });
+      }
     }
+  } catch (error) {
+    console.error("Error in transaction flow:", error);
+  } finally {
+    updateState({ isLoading: false });
   }
-
 };
+
+
 
 
 
@@ -816,13 +832,14 @@ const handleGetItem = async () => {
   const handleAddRow = async () => {
   if (!selectedAJType) return;
 
+    await handleOpenMSLookup();
+    return;
 
-  const lookupTypes = ["IL", "IR", "CA"];
-  
-  if (lookupTypes.includes(selectedAJType)) {
-    updateState({ msLookupModalOpen: true });
-    return; 
-  }
+  // const lookupTypes = ["IL", "IR", "CA"];  
+  // if (lookupTypes.includes(selectedAJType)) { 
+  //   await handleOpenMSLookup();
+  //   return;
+  // }
 
 
   const newRow = {
@@ -989,12 +1006,11 @@ const handleCopy = async () => {
 const handleFieldBehavior = (option) => {
   switch (option) {
 
-    case "disableOnNonCheckPay":
-      // return (
-      //   isFormDisabled ||
-      //   selectedPayType !== "CR01" ||
-      //   selectedCheckType === "CR22"
-      // );
+    case "disableInput":
+     return (
+        selectedAJType === "IL" || 
+        (selectedAJType === "IR" && row.operation === "S")
+       )
 
     case "hiddenBBMode":
      return (
@@ -1096,6 +1112,110 @@ useEffect(() => {
 
 
 
+// const handleDetailChange = async (index, field, value, runCalculations = true) => {
+//   const updatedRows = [...detailRows];
+
+//   updatedRows[index] = {
+//     ...updatedRows[index],
+//     [field]: value,
+//   };
+
+//   const row = updatedRows[index];
+
+//   const autoFillBlanks = (fieldName, newValue, extraData = {}) => {
+//     if (index === 0) {
+//       updatedRows.forEach((r, i) => {
+//         if (i !== 0 && (!r[fieldName] || r[fieldName].toString().trim() === "")) {
+//           updatedRows[i] = {
+//             ...r,
+//             [fieldName]: newValue,
+//             ...extraData
+//           };
+//         }
+//       });
+//     }
+//   };
+
+//   if (field === 'acctCode') {
+//     row.acctCode = value.acctCode;
+//     autoFillBlanks('acctCode', value.acctCode);
+//   }
+
+//   if (field === 'rcCode') {
+//     row.rcCode = value.rcCode;
+//     autoFillBlanks('rcCode', value.rcCode);
+//   }
+
+//   if (field === 'slCode') {
+//     row.slCode = value.slCode;
+//     row.sltypeCode = value.sltypeCode;
+//     autoFillBlanks('slCode', value.slCode, { sltypeCode: value.sltypeCode });
+//   }
+
+//     if (field === 'whouseCode') {
+//     row.whouseCode = value.whCode;
+//     autoFillBlanks('whouseCode', value.whCode);
+//   }
+
+//   if (field === 'locCode') {
+//     row.locCode = value.locCode;
+//     autoFillBlanks('locCode', value.locCode);
+//   }
+
+  
+//   if (field === 'qstatCode') {
+//     row.qstatCode = value.qstatCode;
+//     autoFillBlanks('qstatCode', value.qstatCode);
+//   }
+
+
+
+  
+//    if (['bbDate'].includes(field)) {
+//         row[field] = value;
+//     }
+
+//   if (runCalculations) {
+//     const origQuantity = parseFormattedNumber(row.quantity) || 0;
+//     const origUnitCost = parseFormattedNumber(row.unitCost) || 0;
+//     const origQtyHand = parseFormattedNumber(row.qtyHand) || 0;
+//     const origOperation = row.operation;
+
+//     const recalcRow = async () => {
+//       let processedQty = Math.abs(origQuantity);
+
+//       if (origOperation === "S" && (selectedAJType === "IL" || selectedAJType === "IR")) {
+//         if (processedQty > origQtyHand) {
+//           useSwalErrorAlert('Exceeds Stock', `Quantity (${processedQty}) exceeds Quantity on Hand (${origQtyHand}). Value has been adjusted.`);
+//           processedQty = origQtyHand;
+//         }
+//         processedQty = processedQty * -1;
+//       } else {
+//         processedQty = Math.abs(processedQty);
+//       }
+
+//       const finalQtyForMath = (selectedAJType === "CA") ? 1 : processedQty;
+//       const calculatedAmount = +(finalQtyForMath * origUnitCost).toFixed(2);
+
+//       row.itemAmount = formatNumber(calculatedAmount);
+//       row.quantity = formatNumber(selectedAJType === "CA" ? 0 : processedQty, decQty);
+//       row.unitCost = formatNumber(origUnitCost, decUcost);
+//     };
+
+//     if (field === 'quantity' || field === 'unitCost') {
+//       await recalcRow();
+//     }
+//   }
+
+//   updatedRows[index] = row;
+//   updateState({ detailRows: updatedRows,
+//                 detailRowsGL :[],
+//    });
+//   updateTotals(updatedRows);
+// };
+
+
+
 const handleDetailChange = async (index, field, value, runCalculations = true) => {
   const updatedRows = [...detailRows];
 
@@ -1104,36 +1224,85 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
     [field]: value,
   };
 
-  const row = updatedRows[index];
 
-  const autoFillBlanks = (fieldName, newValue, extraData = {}) => {
+  const row = updatedRows[index];
+  const autoFillBlanks = async (fieldName, newValue, extraData = {}) => {
     if (index === 0) {
-      updatedRows.forEach((r, i) => {
-        if (i !== 0 && (!r[fieldName] || r[fieldName].toString().trim() === "")) {
-          updatedRows[i] = {
-            ...r,
-            [fieldName]: newValue,
-            ...extraData
-          };
+      const hasBlanks = updatedRows.some((r, i) => i !== 0 && (!r[fieldName] || r[fieldName].toString().trim() === ""));
+
+     const fieldLabels = {
+          acctCode: 'Account Code',
+          rcCode: 'RC Code',
+          slCode: 'SL Code',
+          whouseCode: 'Warehouse',
+          locCode: 'Location',
+          qstatCode: 'Quality Status'
+        };
+      
+      if (hasBlanks) {
+        const result = await Swal.fire({
+          title: 'Replicate Data?',
+          text: `Do you want to copy this ${fieldLabels[field] } to all blank rows?`,
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonColor: '#3085d6',
+          cancelButtonColor: '#d33',
+          confirmButtonText: 'Yes, copy it!',
+          cancelButtonText: 'No'
+        });
+
+        if (result.isConfirmed) {
+          updatedRows.forEach((r, i) => {
+            if (i !== 0 && (!r[fieldName] || r[fieldName].toString().trim() === "")) {
+              updatedRows[i] = {
+                ...r,
+                [fieldName]: newValue,
+                ...extraData
+              };
+            }
+          });
+          updateState({ detailRows: [...updatedRows] });
         }
-      });
+      }
     }
   };
 
+
+  // --- MODIFIED autoFillBlanks END ---
+
   if (field === 'acctCode') {
     row.acctCode = value.acctCode;
-    autoFillBlanks('acctCode', value.acctCode);
+    await autoFillBlanks('acctCode', value.acctCode);
   }
 
   if (field === 'rcCode') {
     row.rcCode = value.rcCode;
-    autoFillBlanks('rcCode', value.rcCode);
+    await autoFillBlanks('rcCode', value.rcCode);
   }
 
   if (field === 'slCode') {
     row.slCode = value.slCode;
     row.sltypeCode = value.sltypeCode;
-    autoFillBlanks('slCode', value.slCode, { sltypeCode: value.sltypeCode });
+    await autoFillBlanks('slCode', value.slCode, { sltypeCode: value.sltypeCode });
+  }
+
+  if (field === 'whouseCode') {
+    row.whouseCode = value.whCode;
+    await autoFillBlanks('whouseCode', value.whCode);
+  }
+
+  if (field === 'locCode') {
+    row.locCode = value.locCode;
+    await autoFillBlanks('locCode', value.locCode);
+  }
+
+  if (field === 'qstatCode') {
+    row.qstatCode = value.qstatCode;
+    await autoFillBlanks('qstatCode', value.qstatCode);
+  }
+
+  if (['bbDate'].includes(field)) {
+    row[field] = value;
   }
 
   if (runCalculations) {
@@ -1159,7 +1328,8 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
       const calculatedAmount = +(finalQtyForMath * origUnitCost).toFixed(2);
 
       row.itemAmount = formatNumber(calculatedAmount);
-      row.quantity = formatNumber(selectedAJType === "CA" ? 0 : processedQty, 6);
+      row.quantity = formatNumber(selectedAJType === "CA" ? 0 : processedQty, decQty);
+      row.unitCost = formatNumber(origUnitCost, decUcost);
     };
 
     if (field === 'quantity' || field === 'unitCost') {
@@ -1168,11 +1338,12 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
   }
 
   updatedRows[index] = row;
-  updateState({ detailRows: updatedRows });
+  updateState({ 
+    detailRows: updatedRows,
+    detailRowsGL: [],
+  });
   updateTotals(updatedRows);
 };
-
-
 
 
 
@@ -1392,7 +1563,6 @@ const handleCloseSignatory = async (mode) => {
 
 
 const handleSaveAndPrint = async (documentID) => {
-
     updateState({ showSpinner: true });
     await useHandlePrint(documentID, docType);
 
@@ -1408,18 +1578,45 @@ const handleSaveAndPrint = async (documentID) => {
 
 
   const handleCloseWarehouseLookup = (row) => {
-    if (!row) {
-      updateState({ warehouseLookupOpen: false });
-      return;
-    }
-  };
+  if (row) {
+    accountModalSource
+      ? handleDetailChange(selectedRowIndex, 'whouseCode', row, false)
+      : updateState({
+          WHcode: row.whCode,
+          WHname: row.whName,
+          locCode: "", 
+          locName: ""
+        });
+  }
+  updateState({ warehouseLookupOpen: false });
+};
 
-  const handleCloseLocationLookup = (row) => {
-    if (!row) {
-      updateState({ locationLookupOpen: false });
-      return;
-    }
-  };
+
+
+
+
+const handleCloseLocationLookup = (row) => {
+  if (row) {
+    accountModalSource
+      ? handleDetailChange(selectedRowIndex, 'locCode', row, false)
+      : updateState({ locCode: row.locCode, locName: row.locName });
+  }
+
+  updateState({ locationLookupOpen: false });
+};
+
+
+
+const handleCloseQStatLookup = (row) => {
+  if (row) {
+   handleDetailChange(selectedRowIndex, 'qstatCode', row, false)
+  }
+  updateState({ showQstatModal: false });
+};
+
+
+
+
 
 
 
@@ -1471,12 +1668,62 @@ const handleCloseBranchModal = (selectedBranch) => {
 
 
 
+
+  
+  const handleOpenMSLookup = async () => {
+    try {
+      updateState({ isLoading: true });
+  
+      const endpoint ="getInvLookupMS"
+      const response = await fetchDataJson(endpoint, { userCode, whouseCode :state.whouseCode || "", locCode: state.locCode || "", docType:"MSAJ" ,tranType :selectedAJType });
+      const custData = response?.data?.[0]?.result ? JSON.parse(response.data[0].result) : [];
+  
+
+      const lookupTypes = ["BB", "IG"];  
+      const colConfig = await useSelectedHSColConfig(lookupTypes.includes(selectedAJType) ? "AllMastItemLookup" : "getInvLookupMS");
+
+
+     if (custData.length === 0) {
+        useSwalErrorAlert("MS Location Balance","No records found")
+         updateState({ isLoading: false });
+        return; 
+      }
+  
+      updateState({ globalLookupRow: custData,
+                    globalLookupHeader:colConfig,
+                    msLookupModalOpen: true
+        });
+  
+    } catch (error) {
+      console.error("Failed to fetch Open AR Balance:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "Failed to fetch Open AR Balance.",
+      });
+      updateState({ 
+          globalLookupRow: [] ,
+          globalLookupHeader: [] });
+    }
+  
+     updateState({ isLoading: false });
+  };
+  
+  
+
+
+
+
+
+
+
+
   const handleCloseMSLookup = (selectedItems) => {
   updateState({ msLookupModalOpen: false });
 
   if (!selectedItems) return;
 
-  const itemsArray = Array.isArray(selectedItems) ? selectedItems : [selectedItems];
+  const itemsArray = Array.isArray(selectedItems.records) ? selectedItems.records : [selectedItems.records];
   if (itemsArray.length === 0) return;
 
   const newRows = itemsArray.map((item) => ({
@@ -1484,15 +1731,15 @@ const handleCloseBranchModal = (selectedBranch) => {
     itemName: item?.itemName ?? "",
     categCode: item?.categCode ?? "",
     uomCode: item?.uomCode ?? "",
-    quantity: formatNumber(0, 6),
-    unitCost: formatNumber(parseFormattedNumber(item?.unitCost ?? 0), 6),
+    quantity: formatNumber(0, decQty),
+    unitCost: formatNumber(parseFormattedNumber(item?.unitCost ?? 0), decUcost),
     amount: formatNumber(0, 2),
     lotNo: item?.lotNo ?? "",
     bbDate: item?.bbDate ? new Date(item.bbDate).toISOString().split("T")[0] : "",
     qstatCode: item?.qstatCode ?? "",
     whouseCode: item?.whouseCode ?? state.WHcode ?? "",
     locCode: item?.locCode ?? state.locCode ?? "",
-    qtyHand: formatNumber(parseFormattedNumber(item?.qtyHand ?? 0), 6),
+    qtyHand: formatNumber(parseFormattedNumber(item?.qtyHand ?? 0), decQty),
     uniqueKey: item?.uniqueKey ?? "",
     operation:  (selectedAJType === "IL" || selectedAJType === "IR") ? "S" : "A",
     acctCode: "",
@@ -1536,7 +1783,8 @@ return (
 
         activeTopTab={topTab} 
         showActions={topTab === "details"} 
-        showBIRForm={false}    
+        showBIRForm={false}   
+        showCopyForm ={false} 
         isViewDocument={isViewDocument}  
         onDetails={() => setTopTab("details")}
         onHistory={() => setTopTab("history")}
@@ -1907,18 +2155,7 @@ return (
                     className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
                     value={row.itemCode || ""}
                     readOnly
-                  />
-                  {!isFormDisabled && (
-                  <FontAwesomeIcon 
-                    icon={faMagnifyingGlass} 
-                    className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                    onClick={() => {
-                      updateState({ selectedRowIndex: index });
-                    //   updateState({ showBillCodeModal: true }); 
-                  
-                    }}
-                    
-                  />)}
+                  />                
                 </div>
               </td>
 
@@ -1927,7 +2164,7 @@ return (
               <td className="global-tran-td-ui">
                   <input
                     type="text"
-                    className="w-[200px] global-tran-td-inputclass-ui"
+                    className="w-[300px] global-tran-td-inputclass-ui"
                     value={row.itemName || ""}
                     readOnly={isFormDisabled}
                     onChange={(e) => handleDetailChange(index, 'itemName', e.target.value)}
@@ -1996,7 +2233,7 @@ return (
                         type="text"
                         className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
                         value={row.unitCost || ""}
-                        readOnly={isFormDisabled}
+                        readOnly={isFormDisabled || handleFieldBehavior("disableInput")}
                         onChange={(e) => {
                             const inputValue = e.target.value;
                             const sanitizedValue = inputValue.replace(/[^0-9.]/g, '');
@@ -2005,7 +2242,7 @@ return (
                             }
                         }}
                         onFocus={(e) => {
-                            if (e.target.value === "0.00" || e.target.value === "0") {
+                            if (e.target.value === "0.00" || parseFormattedNumber(e.target.value) === 0) {
                               e.target.value = "";
                             }
                           }}   
@@ -2046,19 +2283,19 @@ return (
                     type="text"
                     className="w-[200px] global-tran-td-inputclass-ui"
                     value={row.lotNo || ""}
-                    readOnly={isFormDisabled}
+                    readOnly={isFormDisabled || handleFieldBehavior("disableInput")}
                     onChange={(e) => handleDetailChange(index, "lotNo", e.target.value)}
                     maxLength={useGetFieldLength(tblFieldArray, "lot_no")}
                     />
                 </td>
-                
-                <td className="global-tran-td-ui">
+                          
+                 <td className="global-tran-td-ui">
                     <input
                       type="date"
                       className="w-[100px] global-tran-td-inputclass-ui"
                       value={row.bbDate || ""}
-                      readOnly={isFormDisabled}
-                      onChange={(e) => handleDetailChangeGL(index, 'bbDate', e.target.value)}
+                      readOnly={isFormDisabled || handleFieldBehavior("disableInput")}
+                      onChange={(e) => handleDetailChange(index, 'bbDate', e.target.value)}
                     />
                 </td>
 
@@ -2072,41 +2309,64 @@ return (
                       value={row.qstatCode || ""}
                       readOnly
                     />
-                    {!isFormDisabled && (
+                    {!isFormDisabled && row.operation !== "S" && (
                     <FontAwesomeIcon 
                       icon={faMagnifyingGlass} 
                       className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
                       onClick={() => {
-                    //   updateState({ selectedRowIndex: index,
-                    //                 showRcModal: true,
-                    //                 accountModalSource: "rcCode"}); 
+                      updateState({ selectedRowIndex: index,
+                                    showQstatModal: true}); 
                       }}
                     />)}
                   </div>
                 </td>
 
 
+                 <td className="global-tran-td-ui relative">
+                  <div className="flex items-center">
+                    <input
+                      type="text"
+                      className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                      value={row.whouseCode || ""}
+                      readOnly
+                    />
+                    {!isFormDisabled && row.operation !== "S" &&(
+                    <FontAwesomeIcon 
+                      icon={faMagnifyingGlass} 
+                      className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                      onClick={() => {
+                      updateState({ selectedRowIndex: index,
+                                    warehouseLookupOpen: true,
+                                    accountModalSource: "whouseCode"}); 
+                      }}
+                    />)}
+                  </div>
+                </td>   
 
-                
-                <td className="global-tran-td-ui">
-                  <input
-                    type="text"
-                    className="w-[100px] global-tran-td-inputclass-ui"
-                    value={row.whouseCode || ""}
-                    readOnly
-                  />
-                </td>
 
 
-                 <td className="global-tran-td-ui">
-                  <input
-                    type="text"
-                    className="w-[100px] global-tran-td-inputclass-ui"
-                    value={row.locCode || ""}
-                    readOnly
-                  />
-                </td>
-              
+                <td className="global-tran-td-ui relative">
+                  <div className="flex items-center">
+                    <input
+                      type="text"
+                      className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                      value={row.locCode || ""}
+                      readOnly
+                    />
+                    {!isFormDisabled && row.operation !== "S" &&(
+                    <FontAwesomeIcon 
+                      icon={faMagnifyingGlass} 
+                      className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                      onClick={() => {
+                      updateState({ selectedRowIndex: index,
+                                    locationLookupOpen: true,
+                                    accountModalSource: "locCode"}); 
+                      }}
+                    />)}
+                  </div>
+                </td>      
+
+             
    
                 <td className="global-tran-td-ui relative " hidden={handleFieldBehavior("hiddenBBMode")} >
                   <div className="flex items-center">
@@ -2116,7 +2376,7 @@ return (
                       value={row.acctCode || ""}
                       readOnly
                     />
-                    {!isFormDisabled && (
+                    {!isFormDisabled &&  (
                     <FontAwesomeIcon 
                       icon={faMagnifyingGlass} 
                       className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
@@ -2141,7 +2401,7 @@ return (
                       value={row.rcCode || ""}
                       readOnly
                     />
-                    {!isFormDisabled && (
+                    {!isFormDisabled &&  (
                     <FontAwesomeIcon 
                       icon={faMagnifyingGlass} 
                       className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
@@ -2173,7 +2433,8 @@ return (
                               value={row.slCode || ""}
                               onChange={(e) => handleDetailChange(index, 'slCode', e.target.value)}
                               readOnly
-                          />                       
+                          />   
+                              {!isFormDisabled &&  (                    
                               <FontAwesomeIcon
                                   icon={faMagnifyingGlass}
                                   className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
@@ -2183,9 +2444,9 @@ return (
                                               showSlModal: true,
                                               accountModalSource: "slCode"
                                           });
-                                  }}
-                              />                       
-                      </div>
+                                 }}
+                    />)}
+                  </div>
                   </td>
                 
 
@@ -3031,23 +3292,27 @@ return (
     )} 
 
 
-     {msLookupModalOpen && (
-        <MSInvLookup
-          isOpen={msLookupModalOpen}
-          onClose={handleCloseMSLookup}
-          userCode={userCode || "NSI"}
-          whouseCode={state.whouseCode || ""}
-          locCode={state.locCode || ""}
-          docType="MSAJ"
-          tranType={selectedAJType}
-          />
+
+      {msLookupModalOpen && (
+              <GlobalLookupModalv1
+                isOpen={msLookupModalOpen}
+                data={globalLookupRow}
+                btnCaption="Get Selected Items"
+                title="MS Location Balance"
+                endpoint={globalLookupHeader}
+                onClose={handleCloseMSLookup}
+                onCancel={() => updateState({ msLookupModalOpen: false })}
+              />
         )}
+        
+
 
         {warehouseLookupOpen && (
             <WarehouseLookupModal
               isOpen={warehouseLookupOpen}
               onClose={handleCloseWarehouseLookup}
               filter="ActiveAll"
+              source={accountModalSource}
             />
           )}  
    
@@ -3055,6 +3320,16 @@ return (
         <LocationLookupModal
           isOpen={locationLookupOpen}
           onClose={handleCloseLocationLookup}
+          source={accountModalSource}
+          filter="ActiveAll"
+        />
+      )}
+
+
+      {showQstatModal && (
+        <QstatLookupModal
+          isOpen={showQstatModal}
+          onClose={handleCloseQStatLookup}
           filter="ActiveAll"
         />
       )}
@@ -3066,9 +3341,9 @@ return (
     <div className={topTab === "history" ? "" : "hidden"}>
       <AllTranHistory
         showHeader={false}
-        endpoint="/getSVIHistory"
-        cacheKey={`SVI:${state.branchCode || ""}:${state.docNo || ""}`}  // ✅ per-transaction
-        activeTabKey="SVI_Summary"
+        endpoint="/getMSAJHistory"
+        cacheKey={`MSAJ:${state.branchCode || ""}:${state.docNo || ""}`}  // ✅ per-transaction
+        activeTabKey="MSAJ_Summary"
         branchCode={state.branchCode}
         startDate={state.fromDate}
         endDate={state.toDate}

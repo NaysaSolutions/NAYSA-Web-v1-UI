@@ -13,6 +13,7 @@ import {
   faFilePdf,
 } from "@fortawesome/free-solid-svg-icons";
 
+import { useTopDocDropDown } from "@/NAYSA Cloud/Global/top1RefTable";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import {
@@ -20,38 +21,42 @@ import {
   useSwalDeleteConfirm,
   useSwalDeleteSuccess,
   useSwalshowSaveSuccessDialog,
+  useSwalValidationAlert,
 } from "@/NAYSA Cloud/Global/behavior";
+
 import {
   reftables,
   reftablesPDFGuide,
   reftablesVideoGuide,
 } from "@/NAYSA Cloud/Global/reftable";
 
-// ✅ GLOBAL REGISTRATION INFO
 import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
 
-/**
- * NOTE (Aligned to your sproc_PHP_COAMast):
- * - Uses: acctCode, acctName, classCode, acctType, acctGroup, acctBalance, reqSL, reqRC, fsConsoCode, fsConsoName, oldCode, active
- * - Registration fields are NOT returned by your current Load/Get modes, so RegistrationInfo will stay blank
- *   until you add registered_by/registered_date/updated_by/updated_date to the SELECT.
- */
+// ✅ FieldRenderer (adjust path as needed)
+import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 
 const COAMast = () => {
   const { user } = useAuth();
 
   const docType = "COAMast";
   const documentTitle = reftables[docType];
-  // kept for consistency (in case you show these elsewhere)
   const pdfLink = reftablesPDFGuide[docType];
   const videoLink = reftablesVideoGuide[docType];
 
-  // --- helpers to keep UI values consistent with your sproc / DB ---
+  const showValidation = async (title, lines) => {
+    const msg = Array.isArray(lines) ? lines.join("\n") : String(lines || "");
+    return useSwalValidationAlert({
+      icon: "error",
+      title,
+      message: msg,
+    });
+  };
+
+
   const toUiBalance = (v) => {
     const x = String(v || "").toUpperCase();
     if (x === "DR") return "Debit";
     if (x === "CR") return "Credit";
-    // if already human readable
     if (String(v) === "Debit" || String(v) === "Credit") return v;
     return v || "";
   };
@@ -63,22 +68,21 @@ const COAMast = () => {
     return v || "";
   };
 
-  // --- FORM DATA (aligned to sproc) ---
   const [formData, setFormData] = useState({
     acctCode: "",
     acctName: "",
-    classCode: "", // Classification
+    classCode: "",
     acctType: "",
     acctGroup: "",
-    acctBalance: "", // UI: Debit/Credit | DB: DR/CR
+    acctBalance: "",
     reqSL: "N",
     reqRC: "N",
-    fsConsoCode: "", // sproc uses fsCode param but returns fsConsoCode
-    fsConsoName: "", // optional (from join)
+    fsConsoCode: "",
+    fsConsoName: "",
     oldCode: "",
     active: "Y",
 
-    // ⚠️ not in your sproc Load/Get/Upsert (kept only if you plan to extend sproc)
+    // UI-only (unless you extend sproc)
     contraAccount: "",
     reqBudget: "N",
   });
@@ -87,7 +91,6 @@ const COAMast = () => {
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
 
-  // ✅ always visible (right side column 3)
   const [registrationInfo, setRegistrationInfo] = useState({
     registeredBy: "",
     registeredDate: "",
@@ -102,7 +105,11 @@ const COAMast = () => {
   const [isOpenExport, setOpenExport] = useState(false);
   const exportRef = useRef(null);
 
-  const [sortConfig, setSortConfig] = useState({ key: "acctCode", direction: "asc" });
+  const [sortConfig, setSortConfig] = useState({
+    key: "acctCode",
+    direction: "asc",
+  });
+
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
@@ -120,6 +127,10 @@ const COAMast = () => {
     active: "",
   });
 
+  const [balanceTypes, setBalanceTypes] = useState([]);
+  const [accountGroups, setAccountGroups] = useState([]);
+  const [accountTypes, setAccountTypes] = useState([]);
+
   const filterInputClass =
     "w-full px-3 py-1 text-xs rounded-md border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-300";
 
@@ -136,12 +147,10 @@ const COAMast = () => {
       .toLowerCase()
       .includes(String(searchValue || "").toLowerCase());
 
-  // --- API parsing helpers (your API sometimes returns JSON string in data[0].result) ---
   const extractRowsFromResponse = (response) => {
     const payload = response?.data;
     if (!payload?.success) return [];
 
-    // common pattern: data[0].result is JSON string
     if (Array.isArray(payload.data) && payload.data[0]?.result) {
       try {
         return JSON.parse(payload.data[0].result) || [];
@@ -150,54 +159,142 @@ const COAMast = () => {
       }
     }
 
-    // fallback: already array
     if (Array.isArray(payload.data)) return payload.data;
-
     return [];
   };
 
+  const toYN = (v, defaultVal = "N") => {
+    const x = String(v ?? "").trim().toUpperCase();
+    if (x === "Y" || x === "YES" || x === "TRUE" || x === "1") return "Y";
+    if (x === "N" || x === "NO" || x === "FALSE" || x === "0") return "N";
+    return defaultVal;
+  };
+
+  const codeToName = (list, code) => {
+    const x = String(code ?? "").trim();
+    const found = (list || []).find((i) => String(i.code) === x);
+    return found?.name || x;
+  };
+
   const mapRowToUi = (a) => {
-    // support both old keys (fsConsCode) and sproc keys (fsConsoCode)
-    const fsConsoCode = a?.fsConsoCode ?? a?.fsConsCode ?? "";
-    const fsConsoName = a?.fsConsoName ?? a?.fsConsDesc ?? "";
+    const fsConsoCode = a?.fsConsoCode ?? a?.fsConsCode ?? a?.fsconso_code ?? "";
+    const fsConsoName = a?.fsConsoName ?? a?.fsConsDesc ?? a?.fsconso_name ?? "";
 
     return {
       acctCode: a?.acctCode ?? a?.acct_code ?? "",
       acctName: a?.acctName ?? a?.acct_name ?? "",
-      classCode: a?.classCode ?? a?.acctClassification ?? a?.class_code ?? "",
+      classCode: a?.classCode ?? a?.class_code ?? "",
       acctType: a?.acctType ?? a?.acct_type ?? "",
       acctGroup: a?.acctGroup ?? a?.acct_group ?? "",
       acctBalance: toUiBalance(a?.acctBalance ?? a?.acct_balance ?? ""),
-      reqSL: a?.reqSL ?? a?.req_sl ?? "N",
-      reqRC: a?.reqRC ?? a?.req_rc ?? "N",
+      reqSL: toYN(a?.reqSL ?? a?.req_sl ?? "N"),
+      reqRC: toYN(a?.reqRC ?? a?.req_rc ?? "N"),
       fsConsoCode,
       fsConsoName,
       oldCode: a?.oldCode ?? a?.old_code ?? "",
-      active: a?.active ?? a?.isActive ?? a?.ACTIVE ?? "Y",
+      active: toYN(a?.active ?? a?.isActive ?? a?.ACTIVE ?? "Y", "Y"),
 
-      // optional/future
-      contraAccount: a?.contraAccount ?? "",
-      reqBudget: a?.reqBudget ?? "N",
+      registeredBy: a?.registeredBy ?? a?.registered_by ?? "",
+      registeredDate: a?.registeredDate ?? a?.registered_date ?? "",
+      lastUpdatedBy: a?.lastUpdatedBy ?? a?.updated_by ?? "",
+      lastUpdatedDate: a?.lastUpdatedDate ?? a?.updated_date ?? "",
 
-      // registration (only if your sproc returns it)
-      registeredBy: a?.registeredBy ?? a?.REGISTERED_BY ?? "",
-      registeredDate: a?.registeredDate ?? a?.REGISTERED_DATE ?? "",
-      lastUpdatedBy: a?.lastUpdatedBy ?? a?.UPDATED_BY ?? "",
-      lastUpdatedDate: a?.lastUpdatedDate ?? a?.UPDATED_DATE ?? "",
     };
+  };
+
+  const normalizeDropdown = (items) =>
+    (items || [])
+      .map((x) => {
+        const rawCode =
+          x?.DROPDOWN_CODE ??
+          x?.dropdown_code ??
+          x?.dropdownCode ??
+          x?.CODE ??
+          x?.code ??
+          "";
+        const rawName =
+          x?.DROPDOWN_NAME ??
+          x?.dropdown_name ??
+          x?.dropdownName ??
+          x?.NAME ??
+          x?.name ??
+          "";
+
+        const u = String(rawCode || "").toUpperCase();
+        const uiCode = u === "DR" ? "Debit" : u === "CR" ? "Credit" : rawCode;
+        const uiName =
+          rawName || (u === "DR" ? "Debit" : u === "CR" ? "Credit" : "");
+
+        return { code: uiCode || "", name: uiName || "" };
+      })
+      .filter((x) => x.code || x.name);
+
+  const ACCT_TYPE_CODE = {
+    ASSET: "A",
+    LIABILITY: "L",
+    CAPITAL: "C",
+    INCOME: "I",
+    EXPENSE: "E",
+  };
+
+  const ACCT_GRP_CODE = {
+    "BALANCE SHEET": "B",
+    "INCOME STATEMENT": "I",
+  };
+
+  const normalizeAcctType = (item) => {
+    if (!item) return item;
+    const code = String(item.code || "").trim();
+    const name = String(item.name || "").trim();
+    if (code.length === 1) return { code, name };
+
+    const mapped = ACCT_TYPE_CODE[code.toUpperCase()] || ACCT_TYPE_CODE[name.toUpperCase()];
+    return mapped ? { code: mapped, name } : item;
+  };
+
+  const normalizeAcctGroup = (item) => {
+    if (!item) return item;
+    const code = String(item.code || "").trim();
+    const name = String(item.name || "").trim();
+    if (code.length === 1) return { code, name };
+
+    const mapped = ACCT_GRP_CODE[code.toUpperCase()] || ACCT_GRP_CODE[name.toUpperCase()];
+    return mapped ? { code: mapped, name } : item;
+  };
+
+  const latestDropdownReqRef = useRef(0);
+
+  const loadHSDropdowns = async () => {
+    const reqId = ++latestDropdownReqRef.current;
+
+    try {
+      const [bal, grp, typ] = await Promise.all([
+        useTopDocDropDown("COAMAST", "NBAL"),
+        useTopDocDropDown("COAMAST", "ACCT_TYPE"),
+        useTopDocDropDown("COAMAST", "ACCT_GRP"),
+      ]);
+
+      if (reqId !== latestDropdownReqRef.current) return;
+
+      setBalanceTypes(normalizeDropdown(bal));
+      setAccountTypes(normalizeDropdown(typ).map(normalizeAcctType));
+      setAccountGroups(normalizeDropdown(grp).map(normalizeAcctGroup));
+    } catch (err) {
+      console.error("Dropdown load failed", err);
+      if (reqId !== latestDropdownReqRef.current) return;
+
+      setBalanceTypes([]);
+      setAccountTypes([]);
+      setAccountGroups([]);
+    }
   };
 
   const fetchAccounts = async () => {
     setLoading(true);
     try {
-      // ⚠️ keep your existing endpoint; backend should map this to sproc mode 'Load'
-      const response = await apiClient.post("/lookupCOA", {
-        PARAMS: JSON.stringify({ search: "", page: 1, pageSize: 1000 }),
-      });
-
+      const response = await apiClient.get("/cOA");
       const rows = extractRowsFromResponse(response);
-      const mapped = rows.map((a) => mapRowToUi(a));
-      setAccounts(mapped);
+      setAccounts(rows.map((a) => mapRowToUi(a)));
     } catch (err) {
       console.error(err);
       await useSwalErrorAlert("Error", `Failed to fetch accounts: ${err.message}`);
@@ -210,18 +307,14 @@ const COAMast = () => {
   const getAccount = async (acctCode) => {
     setLoading(true);
     try {
-      // ⚠️ keep your existing endpoint; backend should map this to sproc mode 'Get'
       const response = await apiClient.post("/lookupCOA", {
         PARAMS: JSON.stringify({ search: "Single", acctCode }),
       });
 
       const rows = extractRowsFromResponse(response);
       const row = rows?.[0] ? mapRowToUi(rows[0]) : null;
-
       if (!row) throw new Error("Account not found");
 
-      // ✅ update registration info ALWAYS (column 3 stays visible)
-      // NOTE: will only populate if your sproc returns these fields
       setRegistrationInfo({
         registeredBy: row.registeredBy || "",
         registeredDate: row.registeredDate
@@ -233,7 +326,6 @@ const COAMast = () => {
           : "",
       });
 
-      // remove registration keys from form
       const { registeredBy, registeredDate, lastUpdatedBy, lastUpdatedDate, ...formOnly } = row;
       return formOnly;
     } catch (error) {
@@ -245,7 +337,6 @@ const COAMast = () => {
     }
   };
 
-  // close export on outside click
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (exportRef.current && !exportRef.current.contains(event.target)) setOpenExport(false);
@@ -254,7 +345,6 @@ const COAMast = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // ctrl+s save
   useEffect(() => {
     const onKey = (e) => {
       if (e.ctrlKey && e.key.toLowerCase() === "s") {
@@ -264,9 +354,9 @@ const COAMast = () => {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [saving, isEditing]); // eslint-disable-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saving, isEditing]);
 
-  // spinner delay
   useEffect(() => {
     let timer;
     if (loading) timer = setTimeout(() => setShowSpinner(true), 200);
@@ -276,6 +366,7 @@ const COAMast = () => {
 
   useEffect(() => {
     fetchAccounts();
+    loadHSDropdowns();
   }, []);
 
   const filtered = useMemo(() => {
@@ -334,10 +425,10 @@ const COAMast = () => {
       contraAccount: "",
       reqBudget: "N",
     });
+
     setSelectedAccount(null);
     setIsEditing(false);
 
-    // keep column 3 visible, just clear values
     setRegistrationInfo({
       registeredBy: "",
       registeredDate: "",
@@ -346,18 +437,40 @@ const COAMast = () => {
     });
   };
 
+  // ✅ Keep your original handler (used in some places)
   const handleFormChange = (e) => {
     const { name, value } = e.target;
-    setFormData((p) => ({ ...p, [name]: value }));
+
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+
+    // ✅ reset duplicate flag when Account Code changes
+    if (name === "acctCode") {
+      setIsDupCode(false);
+    }
   };
+
+
+  // ✅ Helper for FieldRenderer (since it returns value only)
+  const setField = (name, value) => setFormData((p) => ({ ...p, [name]: value }));
 
   const startNew = () => {
     resetForm();
     setIsEditing(true);
   };
 
+  const latestGetRef = useRef(0);
+
   const handleEditAccount = async (row) => {
+    const reqId = ++latestGetRef.current;
+    setSelectedAccount(row);
+
     const full = await getAccount(row.acctCode);
+
+    if (reqId !== latestGetRef.current) return;
+
     if (full) {
       setFormData(full);
       setSelectedAccount(full);
@@ -372,59 +485,131 @@ const COAMast = () => {
     }));
   };
 
+  const [isDupCode, setIsDupCode] = useState(false);
+
   const handleSaveAccount = async () => {
     setSaving(true);
 
-    if (!formData.acctCode || !formData.acctName || !formData.acctBalance) {
-      await useSwalErrorAlert(
-        "Error",
-        "Please fill in all required fields: Account Code, Account Name, and Balance Type."
-      );
-      setSaving(false);
-      return;
-    }
-
     try {
-      // IMPORTANT: follow sproc json keys (fsCode, active, userCode)
-      const payload = {
-        acctCode: formData.acctCode,
-        acctName: formData.acctName,
-        classCode: formData.classCode,
-        acctType: formData.acctType,
-        acctGroup: formData.acctGroup,
-        acctBalance: toDbBalance(formData.acctBalance),
-        reqSL: formData.reqSL,
-        reqRC: formData.reqRC,
-        fsCode: formData.fsConsoCode, // sproc expects $.json_data.fsCode
-        oldCode: formData.oldCode,
-        active: formData.active,
-        userCode: user?.USER_CODE || "ADMIN",
+      const missingFields = [];
 
-        // keep old keys too (safe if your API still expects these)
-        fsConsoCode: formData.fsConsoCode,
-      };
+      const acctCode = (formData.acctCode || "").trim();
+      const acctName = (formData.acctName || "").trim();
+      const acctBalance = (formData.acctBalance || "").trim();
 
-      // keep your endpoints as-is (backend must map to sproc Upsert)
-      const apiEndpoint = selectedAccount ? "/updateCOA" : "/createCOA";
-      const response = await apiClient.post(apiEndpoint, payload);
+      const classCode = (formData.classCode || "").trim();     // Account Classification
+      const acctType = (formData.acctType || "").trim();      // Account Type
+      const acctGroup = (formData.acctGroup || "").trim();     // Account Group
+      const reqSL = (formData.reqSL || "").trim();         // SL Required
+      const reqRC = (formData.reqRC || "").trim();         // RC Required
 
-      if (response.data.success) {
-        await useSwalshowSaveSuccessDialog(resetForm, () => {});
+      if (!acctCode) missingFields.push("Account Code");
+      if (!acctName) missingFields.push("Account Name");
+      if (!classCode) missingFields.push("Account Classification");
+      if (!acctType) missingFields.push("Account Type");
+      if (!acctGroup) missingFields.push("Account Group");
+      if (!acctBalance) missingFields.push("Balance Type");
+
+      // if you allow only Y/N, validate too
+      if (!reqSL) missingFields.push("SL Required (Y/N)");
+      else if (!["Y", "N"].includes(reqSL.toUpperCase()))
+        missingFields.push("SL Required (Y/N)");
+
+      if (!reqRC) missingFields.push("RC Required (Y/N)");
+      else if (!["Y", "N"].includes(reqRC.toUpperCase()))
+        missingFields.push("RC Required (Y/N)");
+
+      if (missingFields.length > 0) {
+        await showValidation(
+          "Missing Required Field(s)",
+          missingFields.map((f) => `• ${f}`)
+        );
+        setSaving(false);
+        return;
+      }
+
+      const isAdd = !selectedAccount;
+
+      // ✅ avoid double popup (already warned on blur)
+      if (isAdd && isDupCode) return;
+
+      // ✅ safety net (if blur didn't happen)
+      if (isAdd) {
+        const isDuplicate = accounts.some(
+          (a) =>
+            String(a?.acctCode || "")
+              .trim()
+              .toUpperCase() === acctCode.toUpperCase()
+        );
+
+        if (isDuplicate) {
+          setIsDupCode(true);
+          await showValidation("Duplicate Entry", ["Duplicate Code is not allowed."]);
+          return;
+        }
+      }
+
+      const response = await apiClient.post("/upsertCOA", {
+        json_data: JSON.stringify({
+          json_data: {
+            action: isAdd ? "ADD" : "EDIT",
+            acctCode,
+            acctName,
+            classCode: formData.classCode,
+            acctType: formData.acctType,
+            acctGroup: formData.acctGroup,
+            acctBalance: toDbBalance(acctBalance),
+            reqSL: formData.reqSL,
+            reqRC: formData.reqRC,
+            fsCode: formData.fsConsoCode,
+            oldCode: formData.oldCode,
+            active: formData.active,
+            userCode: user?.USER_CODE || "ADMIN",
+          },
+        }),
+      });
+
+      if (response?.data?.status === "success") {
+        await useSwalshowSaveSuccessDialog(resetForm, () => { });
         await fetchAccounts();
       } else {
-        await useSwalErrorAlert("Error", response.data.message || "Operation failed");
+        await useSwalErrorAlert("Save Failed", response?.data?.message || "Unable to save record.");
       }
     } catch (err) {
-      console.error(err);
-      await useSwalErrorAlert("Error", err.message || "Failed to save account");
+      const msg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.response?.data?.msg ||
+        err?.message ||
+        "Failed to save transaction.";
+
+      await useSwalValidationAlert({ icon: "error", title: "Save Failed", message: msg });
     } finally {
       setSaving(false);
     }
   };
 
+  const handleAcctCodeBlur = async () => {
+    const code = (formData.acctCode || "").trim();
+    if (!code) return;
+
+    const isAdd = !selectedAccount;
+    if (!isAdd) return;
+
+    const dup = accounts.some(
+      (a) => (a?.acctCode || "").trim().toUpperCase() === code.toUpperCase()
+    );
+
+    setIsDupCode(dup);
+
+    if (dup) {
+      await showValidation("Duplicate Entry", ["Duplicate Code is not allowed."]);
+    }
+  };
+
   const handleDeleteAccount = async () => {
     if (!selectedAccount?.acctCode) {
-      await useSwalErrorAlert("Error", "Please select an account to delete.");
+      await showValidation("Error", ["Please select an account to delete."]);
       return;
     }
 
@@ -438,22 +623,38 @@ const COAMast = () => {
 
     try {
       const response = await apiClient.post("/deleteCOA", {
-        acctCode: selectedAccount.acctCode,
-        USERID: user?.USER_CODE || "ADMIN",
+        json_data: JSON.stringify({
+          json_data: {
+            acctCode: selectedAccount.acctCode,
+            userCode: user?.USER_CODE || "ADMIN",
+          },
+        }),
       });
 
-      if (response.data.success) {
+      if (response?.data?.status === "success") {
         await useSwalDeleteSuccess();
         await fetchAccounts();
         resetForm();
       } else {
-        await useSwalErrorAlert("Error", response.data.message || "Failed to delete account.");
+        await showValidation("Error", [
+          response?.data?.message || "Failed to delete account.",
+        ]);
       }
-    } catch (error) {
-      console.error(error);
-      await useSwalErrorAlert("Error", "Failed to delete account.");
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.response?.data?.msg ||
+        err?.message ||
+        "Failed to delete account.";
+
+      await showValidation("Error", [msg]);
     }
   };
+
+
+
+
 
   const handleExport = (format) => {
     setOpenExport(false);
@@ -482,6 +683,27 @@ const COAMast = () => {
     }
   };
 
+  // ✅ FieldRenderer options
+  const optAcctType = useMemo(
+    () => accountTypes.map((x) => ({ value: x.code, label: x.name })),
+    [accountTypes]
+  );
+  const optAcctGroup = useMemo(
+    () => accountGroups.map((x) => ({ value: x.code, label: x.name })),
+    [accountGroups]
+  );
+  const optBalance = useMemo(
+    () => balanceTypes.map((x) => ({ value: x.code, label: x.name })),
+    [balanceTypes]
+  );
+  const optYN = useMemo(
+    () => [
+      { value: "N", label: "No" },
+      { value: "Y", label: "Yes" },
+    ],
+    []
+  );
+
   return (
     <div className="global-ref-main-div-ui mt-24">
       {(loading || saving) && showSpinner && <LoadingSpinner />}
@@ -502,9 +724,8 @@ const COAMast = () => {
 
           <button
             onClick={handleSaveAccount}
-            className={`bg-blue-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 ${
-              !isEditing || saving ? "opacity-50 cursor-not-allowed" : ""
-            }`}
+            className={`bg-blue-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 ${!isEditing || saving ? "opacity-50 cursor-not-allowed" : ""
+              }`}
             disabled={!isEditing || saving}
             title="Ctrl+S to Save"
           >
@@ -563,12 +784,12 @@ const COAMast = () => {
         </div>
       </div>
 
-      {/* FORM (3 columns based on your requested structure) */}
+      {/* FORM */}
       <div className="global-tran-tab-div-ui mt-5" style={{ minHeight: "calc(100vh - 170px)" }}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Column 1 */}
           <div className="global-ref-textbox-group-div-ui space-y-4">
-            {/* Account Code */}
+            {/* Account Code (kept original due to special styling + maxLength) */}
             <div className="relative">
               <input
                 type="text"
@@ -577,409 +798,206 @@ const COAMast = () => {
                 placeholder=" "
                 value={formData.acctCode}
                 onChange={handleFormChange}
+                onBlur={handleAcctCodeBlur}
                 disabled={isEditing && selectedAccount}
-                className={`peer global-ref-textbox-ui ${
-                  isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                } ${isEditing && selectedAccount ? "bg-blue-100 cursor-not-allowed" : ""}`}
+                className={`peer global-ref-textbox-ui ${isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
+                  } ${isEditing && selectedAccount ? "bg-blue-100 cursor-not-allowed" : ""}`}
                 maxLength={20}
               />
               <label
                 htmlFor="acctCode"
-                className={`global-ref-floating-label ${
-                  !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                }`}
+                className={`global-ref-floating-label ${!isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
+                  }`}
               >
                 <span className="global-ref-asterisk-ui">*</span> Account Code
               </label>
             </div>
 
             {/* Account Name */}
-            <div className="relative">
-              <input
-                type="text"
-                id="acctName"
-                name="acctName"
-                placeholder=" "
-                value={formData.acctName}
-                onChange={handleFormChange}
-                disabled={!isEditing}
-                className={`peer global-ref-textbox-ui ${
-                  isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                }`}
-                maxLength={100}
-              />
-              <label
-                htmlFor="acctName"
-                className={`global-ref-floating-label ${
-                  !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                }`}
-              >
-                <span className="global-ref-asterisk-ui">*</span> Account Name
-              </label>
-            </div>
+            <FieldRenderer
+              type="text"
+              name="acctName"
+              label={
+                <>
+                  <span className="global-ref-asterisk-ui">*</span> Account Name
+                </>
+              }
+              value={formData.acctName}
+              onChange={handleFormChange}
+              disabled={!isEditing}
+              required
+            />
+
 
             {/* Account Type | Account Group */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="relative">
-                <input
-                  type="text"
-                  id="acctType"
-                  name="acctType"
-                  placeholder=" "
-                  value={formData.acctType}
-                  onChange={handleFormChange}
-                  disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${
-                    isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                  }`}
-                />
-                <label
-                  htmlFor="acctType"
-                  className={`global-ref-floating-label ${
-                    !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                  }`}
-                >
-                  Account Type
-                </label>
-              </div>
+              <FieldRenderer
+                type="select"
+                name="acctType"
+                label={
+                  <>
+                    <span className="global-ref-asterisk-ui">*</span> Account Type
+                  </>
+                }
+                value={formData.acctType}
+                options={optAcctType}
+                onChange={handleFormChange}
+                disabled={!isEditing}
+                required
+              />
 
-              <div className="relative">
-                <input
-                  type="text"
-                  id="acctGroup"
-                  name="acctGroup"
-                  placeholder=" "
-                  value={formData.acctGroup}
-                  onChange={handleFormChange}
-                  disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${
-                    isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                  }`}
-                />
-                <label
-                  htmlFor="acctGroup"
-                  className={`global-ref-floating-label ${
-                    !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                  }`}
-                >
-                  Account Group
-                </label>
-              </div>
+              <FieldRenderer
+                type="select"
+                name="acctGroup"
+                label={
+                  <>
+                    <span className="global-ref-asterisk-ui">*</span> Account Group
+                  </>
+                }
+                value={formData.acctGroup}
+                options={optAcctGroup}
+                onChange={handleFormChange}
+                disabled={!isEditing}
+                required
+              />
+
             </div>
 
             {/* Balance Type | Active */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="relative">
-                <select
-                  id="acctBalance"
-                  name="acctBalance"
-                  value={formData.acctBalance}
-                  onChange={handleFormChange}
-                  disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${
-                    isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                  }`}
-                >
-                  <option value="">Select Balance Type</option>
-                  <option value="Debit">Debit</option>
-                  <option value="Credit">Credit</option>
-                </select>
-                <label
-                  htmlFor="acctBalance"
-                  className={`global-ref-floating-label ${
-                    !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                  }`}
-                >
-                  <span className="global-ref-asterisk-ui">*</span> Balance Type
-                </label>
-                <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
-                  <svg
-                    className="h-4 w-4 text-gray-500"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
+              <FieldRenderer
+                id="acctBalance"
+                label={
+                  <>
+                    <span className="global-ref-asterisk-ui">*</span> Account Balance
+                  </>
+                }
+                required
+                type="select"
+                value={formData.acctBalance || ""}
+                disabled={!isEditing}
+                options={optBalance}
+                onChange={(v) => setField("acctBalance", v)}
+              />
 
-              <div className="relative">
-                <select
-                  id="active"
-                  name="active"
-                  value={formData.active}
-                  onChange={handleFormChange}
-                  disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${
-                    isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                  }`}
-                >
-                  <option value="Y">Yes</option>
-                  <option value="N">No</option>
-                </select>
-                <label
-                  htmlFor="active"
-                  className={`global-ref-floating-label ${
-                    !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                  }`}
-                >
-                  Active
-                </label>
-                <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
-                  <svg
-                    className="h-4 w-4 text-gray-500"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
+              <FieldRenderer
+                id="active"
+                label="Active"
+                type="select"
+                value={formData.active}
+                disabled={!isEditing}
+                options={[
+                  { value: "Y", label: "Yes" },
+                  { value: "N", label: "No" },
+                ]}
+                onChange={(v) => setField("active", v)}
+              />
             </div>
           </div>
 
           {/* Column 2 */}
           <div className="global-ref-textbox-group-div-ui space-y-4">
-            {/* SL Required | RC Required | Budget Required (budget kept as UI-only unless you add it to sproc) */}
+            {/* SL Required | RC Required | Budget Required */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="relative">
-                <select
-                  id="reqSL"
-                  name="reqSL"
-                  value={formData.reqSL}
-                  onChange={handleFormChange}
-                  disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${
-                    isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                  }`}
-                >
-                  <option value="N">No</option>
-                  <option value="Y">Yes</option>
-                </select>
-                <label
-                  htmlFor="reqSL"
-                  className={`global-ref-floating-label ${
-                    !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                  }`}
-                >
-                  SL Required
-                </label>
-                <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
-                  <svg
-                    className="h-4 w-4 text-gray-500"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
-
-              <div className="relative">
-                <select
-                  id="reqRC"
-                  name="reqRC"
-                  value={formData.reqRC}
-                  onChange={handleFormChange}
-                  disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${
-                    isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                  }`}
-                >
-                  <option value="N">No</option>
-                  <option value="Y">Yes</option>
-                </select>
-                <label
-                  htmlFor="reqRC"
-                  className={`global-ref-floating-label ${
-                    !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                  }`}
-                >
-                  RC Required
-                </label>
-                <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
-                  <svg
-                    className="h-4 w-4 text-gray-500"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
-
-              <div className="relative">
-                <select
-                  id="reqBudget"
-                  name="reqBudget"
-                  value={formData.reqBudget}
-                  onChange={handleFormChange}
-                  disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${
-                    isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                  }`}
-                >
-                  <option value="N">No</option>
-                  <option value="Y">Yes</option>
-                </select>
-                <label
-                  htmlFor="reqBudget"
-                  className={`global-ref-floating-label ${
-                    !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                  }`}
-                >
-                  Budget Required
-                </label>
-                <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
-                  <svg
-                    className="h-4 w-4 text-gray-500"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            {/* Classification (classCode) */}
-            <div className="relative">
-              <input
-                type="text"
-                id="classCode"
-                name="classCode"
-                placeholder=" "
-                value={formData.classCode}
-                onChange={handleFormChange}
+              <FieldRenderer
+                id="reqSL"
+                label={
+                  <>
+                    <span className="global-ref-asterisk-ui">*</span> SL Required
+                  </>
+                }
+                type="select"
+                value={formData.reqSL}
                 disabled={!isEditing}
-                className={`peer global-ref-textbox-ui ${
-                  isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                }`}
+                options={optYN}
+                onChange={(v) => setField("reqSL", v)}
               />
-              <label
-                htmlFor="classCode"
-                className={`global-ref-floating-label ${
-                  !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                }`}
-              >
-                Classification
-              </label>
+              <FieldRenderer
+                id="reqRC"
+                label={
+                  <>
+                    <span className="global-ref-asterisk-ui">*</span> RC Required
+                  </>
+                }
+                type="select"
+                value={formData.reqRC}
+                disabled={!isEditing}
+                options={optYN}
+                onChange={(v) => setField("reqRC", v)}
+              />
+              <FieldRenderer
+                id="reqBudget"
+                label="Budget Required"
+                type="select"
+                value={formData.reqBudget}
+                disabled={!isEditing}
+                options={optYN}
+                onChange={(v) => setField("reqBudget", v)}
+              />
             </div>
 
-            {/* FS Code | Old Code | Contra Account */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="relative">
-                <input
-                  type="text"
-                  id="fsConsoCode"
-                  name="fsConsoCode"
-                  placeholder=" "
-                  value={formData.fsConsoCode}
-                  onChange={handleFormChange}
-                  disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${
-                    isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                  }`}
-                />
-                <label
-                  htmlFor="fsConsoCode"
-                  className={`global-ref-floating-label ${
-                    !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                  }`}
-                >
-                  FS Code
-                </label>
-              </div>
+            {/* Classification */}
+            <FieldRenderer
+              id="classCode"
+              label={
+                <>
+                  <span className="global-ref-asterisk-ui">*</span> Account Classification
+                </>
+              }
+              type="text"
+              value={formData.classCode}
+              disabled={!isEditing}
+              onChange={(v) => setField("classCode", v)}
+            />
 
-              <div className="relative">
-                <input
-                  type="text"
-                  id="oldCode"
-                  name="oldCode"
-                  placeholder=" "
-                  value={formData.oldCode}
-                  onChange={handleFormChange}
-                  disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${
-                    isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                  }`}
-                />
-                <label
-                  htmlFor="oldCode"
-                  className={`global-ref-floating-label ${
-                    !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                  }`}
-                >
-                  Old Code
-                </label>
-              </div>
-
-              <div className="relative">
-                <input
-                  type="text"
-                  id="contraAccount"
-                  name="contraAccount"
-                  placeholder=" "
-                  value={formData.contraAccount}
-                  onChange={handleFormChange}
-                  disabled={!isEditing}
-                  className={`peer global-ref-textbox-ui ${
-                    isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                  }`}
-                />
-                <label
-                  htmlFor="contraAccount"
-                  className={`global-ref-floating-label ${
-                    !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                  }`}
-                >
-                  Contra Account
-                </label>
-              </div>
-            </div>
-
-            {/* FS Description (fsConsoName) */}
-            <div className="relative">
-              <input
+            {/* FS Code | FS Description
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FieldRenderer
+                id="fsConsoCode"
+                label="FS Code"
                 type="text"
+                value={formData.fsConsoCode}
+                disabled={!isEditing}
+                onChange={(v) => setField("fsConsoCode", v)}
+              />
+              <FieldRenderer
                 id="fsConsoName"
-                name="fsConsoName"
-                placeholder=" "
+                label="FS Description"
+                type="text"
                 value={formData.fsConsoName}
-                onChange={handleFormChange}
                 disabled={!isEditing}
-                className={`peer global-ref-textbox-ui ${
-                  isEditing ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"
-                }`}
+                onChange={(v) => setField("fsConsoName", v)}
               />
-              <label
-                htmlFor="fsConsoName"
-                className={`global-ref-floating-label ${
-                  !isEditing ? "global-ref-label-disabled" : "global-ref-label-enabled"
-                }`}
-              >
-                FS Description
-              </label>
+            </div> */}
+
+            {/* Old Code | Contra Account */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FieldRenderer
+                id="oldCode"
+                label="Old Code"
+                type="text"
+                value={formData.oldCode}
+                disabled={!isEditing}
+                onChange={(v) => setField("oldCode", v)}
+              />
+              <FieldRenderer
+                id="contraAccount"
+                label="Contra Account"
+                type="text"
+                value={formData.contraAccount}
+                disabled={!isEditing}
+                onChange={(v) => setField("contraAccount", v)}
+              />
             </div>
           </div>
 
-          {/* Column 3 (registration info ALWAYS) */}
+          {/* Column 3 */}
           <div className="global-ref-textbox-group-div-ui">
             <RegistrationInfo data={registrationInfo} disabled={true} />
           </div>
         </div>
 
-        {/* TABLE (VendMast style) */}
+        {/* TABLE (unchanged) */}
         <div className="global-tran-table-main-div-ui mt-6">
           <div className="global-tran-table-main-sub-div-ui">
             <table className="global-tran-table-div-ui">
@@ -990,11 +1008,11 @@ const COAMast = () => {
                     "Account Name": "acctName",
                     "Account Type": "acctType",
                     "Account Group": "acctGroup",
-                    "Balance Type": "acctBalance",
+                    "Account Balance": "acctBalance",
                     "SL Required": "reqSL",
                     "RC Required": "reqRC",
-                    Classification: "classCode",
-                    "FS Code": "fsConsoCode",
+                    "Account Classification": "classCode",
+                    // "FS Code": "fsConsoCode",
                     "Old Code": "oldCode",
                     Active: "active",
                   }).map(([label, key]) => (
@@ -1025,6 +1043,7 @@ const COAMast = () => {
                       }}
                     />
                   </th>
+
                   <th className="global-tran-th-ui">
                     <input
                       className={filterInputClass}
@@ -1036,6 +1055,7 @@ const COAMast = () => {
                       }}
                     />
                   </th>
+
                   <th className="global-tran-th-ui">
                     <input
                       className={filterInputClass}
@@ -1047,6 +1067,7 @@ const COAMast = () => {
                       }}
                     />
                   </th>
+
                   <th className="global-tran-th-ui">
                     <input
                       className={filterInputClass}
@@ -1058,6 +1079,7 @@ const COAMast = () => {
                       }}
                     />
                   </th>
+
                   <th className="global-tran-th-ui">
                     <select
                       className={filterInputClass}
@@ -1072,6 +1094,7 @@ const COAMast = () => {
                       <option value="Credit">Credit</option>
                     </select>
                   </th>
+
                   <th className="global-tran-th-ui">
                     <select
                       className={filterInputClass}
@@ -1086,6 +1109,7 @@ const COAMast = () => {
                       <option value="No">No</option>
                     </select>
                   </th>
+
                   <th className="global-tran-th-ui">
                     <select
                       className={filterInputClass}
@@ -1100,6 +1124,7 @@ const COAMast = () => {
                       <option value="No">No</option>
                     </select>
                   </th>
+
                   <th className="global-tran-th-ui">
                     <input
                       className={filterInputClass}
@@ -1111,6 +1136,7 @@ const COAMast = () => {
                       }}
                     />
                   </th>
+
                   <th className="global-tran-th-ui">
                     <input
                       className={filterInputClass}
@@ -1122,6 +1148,7 @@ const COAMast = () => {
                       }}
                     />
                   </th>
+
                   <th className="global-tran-th-ui">
                     <input
                       className={filterInputClass}
@@ -1133,6 +1160,7 @@ const COAMast = () => {
                       }}
                     />
                   </th>
+
                   <th className="global-tran-th-ui">
                     <select
                       className={filterInputClass}
@@ -1147,6 +1175,7 @@ const COAMast = () => {
                       <option value="No">No</option>
                     </select>
                   </th>
+
                   <th className="global-tran-th-ui"></th>
                   <th className="global-tran-th-ui"></th>
                 </tr>
@@ -1166,31 +1195,28 @@ const COAMast = () => {
                     </td>
                   </tr>
                 ) : (
-                  pageRows.map((row, idx) => (
+                  pageRows.map((row) => (
                     <tr
-                      key={idx}
-                      className={`global-tran-tr-ui ${
-                        selectedAccount?.acctCode === row.acctCode ? "bg-blue-50" : ""
-                      }`}
-                      onClick={() => handleEditAccount(row)}
+                      key={row.acctCode}
+                      className={`global-tran-tr-ui ${selectedAccount?.acctCode === row.acctCode ? "bg-blue-50" : ""
+                        }`}
+                      onClick={() => setSelectedAccount(row)}
+                      onDoubleClick={() => handleEditAccount(row)}
                     >
                       <td className="global-tran-td-ui">{row.acctCode}</td>
                       <td className="global-tran-td-ui">{row.acctName}</td>
-                      <td className="global-tran-td-ui">{row.acctType}</td>
-                      <td className="global-tran-td-ui">{row.acctGroup}</td>
+                      <td className="global-tran-td-ui">{codeToName(accountTypes, row.acctType)}</td>
+                      <td className="global-tran-td-ui">{codeToName(accountGroups, row.acctGroup)}</td>
                       <td className="global-tran-td-ui">{row.acctBalance}</td>
                       <td className="global-tran-td-ui">{row.reqSL === "Y" ? "Yes" : "No"}</td>
                       <td className="global-tran-td-ui">{row.reqRC === "Y" ? "Yes" : "No"}</td>
                       <td className="global-tran-td-ui">{row.classCode}</td>
-                      <td className="global-tran-td-ui">{row.fsConsoCode}</td>
+                      {/* <td className="global-tran-td-ui">{row.fsConsoCode}</td> */}
                       <td className="global-tran-td-ui">{row.oldCode}</td>
                       <td className="global-tran-td-ui">
                         <span
-                          className={`inline-block rounded-full px-2 py-1 text-xs font-bold ${
-                            row.active === "Y"
-                              ? "bg-green-100 text-green-800"
-                              : "bg-red-100 text-red-800"
-                          }`}
+                          className={`inline-block rounded-full px-2 py-1 text-xs font-bold ${row.active === "Y" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                            }`}
                         >
                           {row.active === "Y" ? "Yes" : "No"}
                         </span>
