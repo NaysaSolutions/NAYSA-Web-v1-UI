@@ -210,7 +210,8 @@ specsTempText: "",
     msLookupModalOpen: false,
     tblFieldArray: [],
 
-    GLactiveTab: "invoice",          // same pattern as MSAJ (optional)
+    activeTab: "basic",
+      GLactiveTab: "invoice",          // same pattern as MSAJ (optional)
 detailRowsGL: [],                // DT2 rows
 
 // GL modal states
@@ -301,6 +302,7 @@ glRowIndex: -1,
     userCode,
     currRate,
     drno,
+  GLactiveTab,
 
     detailRows,
 
@@ -487,13 +489,22 @@ const vatRateMap = Object.fromEntries(vatRatePairs);
       const vatAmt = Number(r.VAT_AMOUNT ?? 0);
       const net = Number(r.NET_AMOUNT ?? gross - discAmt); // VAT may already be included depending on your design
 
+      const categ =
+  r.CATEG_CODE ??
+  r.categCode ??
+  r.categ_code ??
+  r.GROUP_ID ??
+  r.groupId ??
+  "";
+
       return {
         lN: Number(r.LINE_NO) || idx + 1,
 
         // internal
         invType: r.INV_TYPE || "",
         poStatus: r.PO_STATUS || "",
-        groupId: r.CATEG_CODE || r.GROUP_ID || "",
+        groupId: categ,
+  categCode: categ, 
 
         // item
         itemCode: r.ITEM_CODE || "",
@@ -783,7 +794,7 @@ vatRate: vatRateMap?.[r.VAT_CODE] !== undefined
 
   // ✅ Map RR dt1 -> your table expects rrQty field
   const retrievedDetailRows = (data.dt1 || []).map((item, idx) => ({
-    lN: item.lN ?? String(idx + 1),
+    lineNo: item.lN ?? String(idx + 1),
 
     // references
     prNo: item.prNo ?? "",
@@ -1152,7 +1163,11 @@ const diffGL = totalDebitGL - totalCreditGL;
   // ==========================
   // SAVE / UPSERT (PR + DT1)
   // ==========================
-  const handleActivityOption = async (action) => {
+ // ==========================
+// SAVE / UPSERT (MSRR + DT1 + DT2)
+// ==========================
+const handleActivityOption = async (action) => {
+  // If already posted/cancelled/finalized, do not allow save / generate
   if (documentStatus !== "") return;
 
   updateState({ isLoading: true });
@@ -1160,60 +1175,97 @@ const diffGL = totalDebitGL - totalCreditGL;
   try {
     const isNew = !state.documentID;
 
+    // Optional front-end guard: prevent save when GL is unbalanced
+    if (action === "Upsert") {
+      const totalDebit = (state.detailRowsGL || []).reduce(
+        (sum, r) => sum + parseFormattedNumber(r?.debit || 0),
+        0
+      );
+      const totalCredit = (state.detailRowsGL || []).reduce(
+        (sum, r) => sum + parseFormattedNumber(r?.credit || 0),
+        0
+      );
+
+      if (Number((totalDebit - totalCredit).toFixed(2)) !== 0) {
+        Swal.fire({
+          icon: "warning",
+          title: "Unbalanced Debit/Credit",
+          html: `Debit: <b>${formatNumber(totalDebit)}</b><br/>Credit: <b>${formatNumber(
+            totalCredit
+          )}</b><br/><br/>Please balance GL before saving.`,
+        });
+        return;
+      }
+    }
+
+    // Build payload (match your sproc params)
     const glData = {
       branchCode: state.branchCode,
 
+      // NEW vs EDIT
       rrNo: isNew ? "" : (state.documentNo || ""),
       rrHdId: isNew ? "" : (state.documentID || ""),
 
-      rrDate: header?.rr_date || state.rrDate || null,
+      rrDate: header?.rr_date || state.RRDate || new Date().toISOString().split("T")[0],
 
       poNo: state.poNo || "",
       vendCode: state.vendCode || "",
       vendName: state.vendName || "",
 
-      drNo: state.drNo || "",
+      drNo: state.drNo || state.drno || "",
       siNo: state.siNo || "",
-      siDate: header?.si_date || null,
+      siDate: null,
 
       currCode: state.currCode || "PHP",
-      currRate: parseFormattedNumber(state.currRate || 1),
+      currRate: Number(state.currRate || 1),
 
       whouseCode: state.WHcode || "",
       locCode: state.locCode || "",
 
       remarks: state.remarks || "",
-      userCode: state.userCode || user?.USER_CODE || "NSI",
+      userCode: state.userCode || "",
 
-      // ✅ DT1
-      dt1: (state.detailRows || []).map((row, idx) => ({
-        lN: String(row.lN ?? (idx + 1)),
-        invType: row.invType || "MS",
-        itemCode: row.itemCode || "",
-        itemName: row.itemName || "",
-        uomCode: row.uomCode || "",
-        rrQuantity: parseFormattedNumber(row.rrQty || 0),
-        unitCost: parseFormattedNumber(row.unitCost || 0),
-        grossAmount: parseFormattedNumber(row.grossAmount || 0),
-        discRate: parseFormattedNumber(row.discRate || 0),
-        discAmount: parseFormattedNumber(row.discAmount || 0),
-        netAmount: parseFormattedNumber(row.netAmount || 0),
-        vatCode: row.vatCode || "",
-        vatAmount: parseFormattedNumber(row.vatAmount || 0),
-        itemAmount: parseFormattedNumber(row.grossAmount || 0),
-        lotNo: row.lotNo || "",
-        bbDate: row.bbDate ? row.bbDate : null,
-        qstatCode: row.qcStatus || "",
-        rcCode: state.rcCode || row.rcCode || "",
-        whouseCode: state.WHcode || "",
-        locCode: state.locCode || "",
-        poNo: state.poNo || row.poNo || "",
-        poLineNo: row.poLineNo || "",
-        poBalance: parseFormattedNumber(row.poBalance || 0),
-        itemSpecs: row.itemSpecs || "",
+      // DT1
+      dt1: (state.detailRows || []).map((r, idx) => ({
+        lineNo: String(r.lineNo ?? idx + 1),
+
+        invType: r.invType || "MS",
+        itemNo: r.itemCode || r.itemNo || "",
+        itemCode: r.itemCode || "", // ok to keep for UI side; SP uses itemNo
+
+        rrQuantity: parseFormattedNumber(r.rrQty || 0),
+        quantity: parseFormattedNumber(r.rrQty || 0), // SP loads $.quantity
+        whCode: r.whCode || state.WHcode || "",
+        locCode: r.locCode || state.locCode || "",
+
+        itemName: r.itemName || "",
+        uomCode: r.uomCode || "",
+
+        unitCost: parseFormattedNumber(r.unitCost || r.unitCostFx || 0),
+        grossAmount: parseFormattedNumber(r.grossAmount || 0),
+        discRate: parseFormattedNumber(r.discRate || 0),
+        discAmount: parseFormattedNumber(r.discAmount || 0),
+        netAmount: parseFormattedNumber(r.netAmount || 0),
+
+        vatCode: r.vatCode || "",
+        vatAmount: parseFormattedNumber(r.vatAmount || 0),
+        itemAmount: parseFormattedNumber(r.itemAmount || r.grossAmount || 0),
+
+        lotNo: r.lotNo || "",
+        bbDate: r.bbDate || null,
+        qsCode: r.qsCode || "",
+
+        rcCode: r.rcCode || state.rcCode || "",
+
+        poNo: r.poNo || state.poNo || "",
+        poLineno: r.poLineno || r.poLineNo || "",
+        poBalance: parseFormattedNumber(r.poBalance || 0),
+
+        itemSpecs: r.itemSpecs || "",
+        categCode: r.categCode || "",
       })),
 
-      // ✅ DT2 (General Ledger)
+      // DT2 (GL)
       dt2: (state.detailRowsGL || []).map((r, i) => ({
         recNo: String(i + 1),
         acctCode: r.acctCode || "",
@@ -1230,20 +1282,26 @@ const diffGL = totalDebitGL - totalCreditGL;
         debitFx2: parseFormattedNumber(r.debitFx2 || 0),
         creditFx2: parseFormattedNumber(r.creditFx2 || 0),
         slRefNo: r.slRefNo || "",
-        slRefDate: r.slRefDate ? r.slRefDate : null,
+        slRefDate: r.slRefDate || null,
         remarks: r.remarks || "",
         dt1Lineno: r.dt1Lineno || "",
       })),
     };
 
+    // ================
+    // GENERATE GL
+    // ================
     if (action === "GenerateGL") {
       const newGlEntries = await useGenerateGLEntries(docType, glData);
       if (newGlEntries) updateState({ detailRowsGL: newGlEntries });
       return;
     }
 
+    // ================
+    // UPSERT / SAVE
+    // ================
     if (action === "Upsert") {
-      const response = await useTransactionUpsert(
+      const res = await useTransactionUpsert(
         docType,
         glData,
         updateState,
@@ -1251,19 +1309,66 @@ const diffGL = totalDebitGL - totalCreditGL;
         "rrNo"
       );
 
-      if (response) {
-        useSwalshowSaveSuccessDialog(handleReset, () =>
-          handleSaveAndPrint(response.data[0].rrHdId)
-        );
-        updateState({ isDocNoDisabled: true, isFetchDisabled: true });
+      // normalize row (supports: array, axios response, unwrapped response)
+      const row =
+        (Array.isArray(res) ? res?.[0] : null) ??
+        (Array.isArray(res?.data) ? res.data?.[0] : null) ??
+        (Array.isArray(res?.data?.data) ? res.data.data?.[0] : null) ??
+        null;
+
+      // handle SP validation pattern
+      if (row?.errorCount && Number(row.errorCount) > 0) {
+        Swal.fire({
+          icon: "warning",
+          title: "Validation",
+          html: String(row.errorMsg || "Please complete required fields.").replace(
+            /\r?\n/g,
+            "<br/>"
+          ),
+        });
+        return;
       }
+
+      // accept common key variants
+      const savedId = row?.rrHdId || row?.rrId || row?.rr_id || "";
+      const savedNo = row?.rrNo || row?.rr_no || "";
+
+      if (!savedId || !savedNo) {
+        console.error("MSRR Upsert response (no rrHdId/rrNo):", res);
+        Swal.fire({
+          icon: "error",
+          title: "Save Failed",
+          text: "Upsert did not return rrHdId / rrNo. Please check API response.",
+        });
+        return;
+      }
+
+      // reflect auto-generated RR No / RR ID in UI
+      updateState({
+        documentID: savedId,
+        documentNo: savedNo,
+        isDocNoDisabled: true,
+        isFetchDisabled: true,
+      });
+
+      // success + print
+      useSwalshowSaveSuccessDialog(handleReset, () =>
+        handleSaveAndPrint(savedId)
+      );
     }
   } catch (err) {
     console.error("MSRR action error:", err);
+    Swal.fire({
+      icon: "error",
+      title: "Error",
+      text: err?.message || "Something went wrong during the transaction.",
+    });
   } finally {
     updateState({ isLoading: false });
   }
 };
+
+
 
 const handleAddGLRow = () => {
   if (isFormDisabled) return;
@@ -1660,21 +1765,23 @@ const handleGLAmountChange = async (index, field, value) => {
 
       <div className="global-tran-headerToolbar-ui">
         <Header
-          docType={docType}
-          pdfLink={pdfLink}
-          videoLink={videoLink}
-          onPrint={handlePrint}
-          printData={printData}
-          onReset={handleReset}
-          onSave={() => handleActivityOption("Upsert")}
-          onPost={handlePost}
-          onCancel={handleCancel}
-          onCopy={handleCopy}
-          onAttach={handleAttach}
-          onHistory={() => setTopTab("history")}
-          isSaveDisabled={isSaveDisabled}
-          isResetDisabled={isResetDisabled}
-        />
+  docType={docType}
+  pdfLink={pdfLink}
+  videoLink={videoLink}
+  onPrint={handlePrint}
+  printData={printData}
+  onReset={handleReset}
+  onSave={() => handleActivityOption("Upsert")}
+  onGenerateGL={() => handleActivityOption("GenerateGL")}  
+  onPost={handlePost}
+  onCancel={handleCancel}
+  onCopy={handleCopy}
+  onAttach={handleAttach}
+  onHistory={() => setTopTab("history")}
+  isSaveDisabled={isSaveDisabled}
+  isResetDisabled={isResetDisabled}
+/>
+
       </div>
 
       <div className={topTab === "details" ? "" : "hidden"}>
@@ -2196,10 +2303,17 @@ const handleGLAmountChange = async (index, field, value) => {
         <div className="global-tran-tab-div-ui">
           <div className="global-tran-tab-nav-ui">
             <div className="flex flex-row sm:flex-row">
-              <span className="global-tran-tab-padding-ui global-tran-tab-text_active-ui">
-                Item Detail
-              </span>
-            </div>
+            <button
+              className={`global-tran-tab-padding-ui ${
+                GLactiveTab === 'invoice'
+                  ? 'global-tran-tab-text_active-ui'
+                  : 'global-tran-tab-text_inactive-ui'
+              }`}
+              // onClick={() => setGLActiveTab('invoice')}
+            >
+              Item Details
+            </button>
+          </div>
           </div>
 
           <div className="global-tran-table-main-div-ui">
@@ -2233,47 +2347,44 @@ const handleGLAmountChange = async (index, field, value) => {
                   </tr>
                 </thead>
 
-                <tbody>
-                  {detailRows.map((row, index) => (
+                <tbody className="relative">{detailRows.map((row, index) => (
                     <tr key={index} className="global-tran-tr-ui">
                       {/* LN */}
-                      <td className="global-tran-td-ui text-center">
-                        {index + 1}
-                      </td>
+                      <td className="global-tran-td-ui text-center">{index + 1}</td>
 
                       {/* Item Code */}
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[120px] global-tran-td-inputclass-ui"
-                          value={row.itemCode || ""}
-                          onChange={(e) =>
-                            handleDetailChange(
-                              index,
-                              "itemCode",
-                              e.target.value
-                            )
-                          }
-                          disabled={isFormDisabled}
-                        />
-                      </td>
+                      <td className="global-tran-td-ui relative">
+                                      <div className="flex items-center">
+                                        <input
+                                          type="text"
+                                          className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                                          value={row.itemCode || ""}
+                                          readOnly
+                                        />
+                                        {!isFormDisabled && (
+                                        <FontAwesomeIcon 
+                                          icon={faMagnifyingGlass} 
+                                          className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                                          onClick={() => {
+                                            updateState({ selectedRowIndex: index });
+                                          //   updateState({ showBillCodeModal: true }); 
+                                        
+                                          }}
+                                          
+                                        />)}
+                                      </div>
+                                    </td>
 
                       {/* Item Description */}
                       <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[220px] global-tran-td-inputclass-ui"
-                          value={row.itemName || ""}
-                          onChange={(e) =>
-                            handleDetailChange(
-                              index,
-                              "itemName",
-                              e.target.value
-                            )
-                          }
-                          disabled={isFormDisabled}
-                        />
-                      </td>
+                  <input
+                    type="text"
+                    className="w-[200px] global-tran-td-inputclass-ui"
+                    value={row.itemName || ""}
+                    readOnly={isFormDisabled}
+                    onChange={(e) => handleDetailChange(index, 'itemName', e.target.value)}
+                  />
+                </td>
 
                       {/* Specification */}
                       <td className="global-tran-td-ui">
@@ -2291,16 +2402,14 @@ const handleGLAmountChange = async (index, field, value) => {
 
                       {/* UOM */}
                       <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[80px] global-tran-td-inputclass-ui"
-                          value={row.uomCode || ""}
-                          onChange={(e) =>
-                            handleDetailChange(index, "uomCode", e.target.value)
-                          }
-                          disabled={isFormDisabled}
-                        />
-                      </td>
+                  <input
+                    type="text"
+                    className="w-[50px] text-center global-tran-td-inputclass-ui"
+                    value={row.uomCode || ""}
+                    readOnly={isFormDisabled}
+                    onChange={(e) => handleDetailChange(index, 'uomCode', e.target.value)}
+                  />
+                </td>
 
                       {/* RR Quantity */}
                       <td className="global-tran-td-ui text-right">
@@ -2308,11 +2417,39 @@ const handleGLAmountChange = async (index, field, value) => {
                           type="text"
                           className="w-[120px] global-tran-td-inputclass-ui text-right"
                           value={row.rrQty || ""}
-                          onChange={(e) =>
-                            handleDetailChange(index, "rrQty", e.target.value)
-                          }
                           disabled={isFormDisabled}
-                        />
+                          onChange={(e) => {
+                            const inputValue = e.target.value;
+                             const sanitizedValue = inputValue.replace(/[^0-9.-]/g, '');
+                            if (/^-?\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") {
+                                handleDetailChange(index, "rrQty", sanitizedValue, false);
+                            }
+                        }}                   
+                        onFocus={(e) => {
+                            if (e.target.value === "0.00" || parseFormattedNumber(e.target.value) === 0) {
+                              e.target.value = "";
+                            }
+                          }}                   
+                        onBlur={async (e) => {
+                            const value = e.target.value;
+                            const num = parseFormattedNumber(value);
+                            if (!isNaN(num)) {
+                                handleDetailChange(index, "rrQty", num, true);
+                            }
+                            setFocusedCell(null);
+                        }}
+                        onKeyDown={async (e) => {
+                            if (e.key === "Enter") {
+                                e.preventDefault();
+                                const value = e.target.value;
+                                const num = parseFormattedNumber(value);
+                                if (!isNaN(num)) {
+                                    handleDetailChange(index, "rrQty", num, true);
+                                }
+                                e.target.blur();
+                            }
+                        }}
+                    />
                       </td>
 
                       {/* Free Quantity */}
@@ -2321,36 +2458,88 @@ const handleGLAmountChange = async (index, field, value) => {
                           type="text"
                           className="w-[120px] global-tran-td-inputclass-ui text-right"
                           value={row.freeQty || ""}
-                          onChange={(e) =>
-                            handleDetailChange(index, "freeQty", e.target.value)
-                          }
                           disabled={isFormDisabled}
+                          onChange={(e) => {
+                            const inputValue = e.target.value;
+                             const sanitizedValue = inputValue.replace(/[^0-9.-]/g, '');
+                            if (/^-?\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") {
+                                handleDetailChange(index, "freeQty", sanitizedValue, false);
+                            }
+                        }}                   
+                        onFocus={(e) => {
+                            if (e.target.value === "0.00" || parseFormattedNumber(e.target.value) === 0) {
+                              e.target.value = "";
+                            }
+                          }}                   
+                        onBlur={async (e) => {
+                            const value = e.target.value;
+                            const num = parseFormattedNumber(value);
+                            if (!isNaN(num)) {
+                                handleDetailChange(index, "freeQty", num, true);
+                            }
+                            setFocusedCell(null);
+                        }}
+                        onKeyDown={async (e) => {
+                            if (e.key === "Enter") {
+                                e.preventDefault();
+                                const value = e.target.value;
+                                const num = parseFormattedNumber(value);
+                                if (!isNaN(num)) {
+                                    handleDetailChange(index, "freeQty", num, true);
+                                }
+                                e.target.blur();
+                            }
+                        }}
                         />
                       </td>
 
                       {/* Unit Cost */}
-                      <td className="global-tran-td-ui text-right">
-                        <input
-                          type="text"
-                          className="w-[120px] global-tran-td-inputclass-ui text-right"
-                          value={row.unitCost || ""}
-                          onChange={(e) =>
-                            handleDetailChange(
-                              index,
-                              "unitCost",
-                              e.target.value
-                            )
-                          }
-                          disabled={isFormDisabled}
-                        />
-                      </td>
+                      <td className="global-tran-td-ui">
+                    <input
+                        type="text"
+                        className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
+                        value={row.unitCost || ""}
+                        readOnly={isFormDisabled}
+                        onChange={(e) => {
+                            const inputValue = e.target.value;
+                            const sanitizedValue = inputValue.replace(/[^0-9.]/g, '');
+                            if (/^\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") {
+                                handleDetailChange(index, "unitCost", sanitizedValue, false);
+                            }
+                        }}
+                        onFocus={(e) => {
+                            if (e.target.value === "0.00" || e.target.value === "0") {
+                              e.target.value = "";
+                            }
+                          }}   
+                        onBlur={async (e) => {
+                            const value = e.target.value;
+                            const num = parseFormattedNumber(value);
+                            if (!isNaN(num)) {
+                                await handleDetailChange(index, "unitCost", num, true);
+                            }
+                            setFocusedCell(null);
+                        }}
+                        onKeyDown={async (e) => {
+                            if (e.key === "Enter") {
+                                e.preventDefault();
+                                const value = e.target.value;
+                                const num = parseFormattedNumber(value);
+                                if (!isNaN(num)) {
+                                    await handleDetailChange(index, "unitCost", num, true);
+                                }
+                                e.target.blur();
+                            }
+                        }}
+                    />
+                </td>
 
                       {/* Amount (GROSS_AMOUNT) */}
                       <td className="global-tran-td-ui text-right">
                         <input
                           type="text"
                           className="w-[140px] global-tran-td-inputclass-ui text-right"
-                          value={row.grossAmount || ""} // ✅ shows GROSS_AMOUNT
+                          value={formatNumber(parseFormattedNumber(row.grossAmount)) || ""}
                           onChange={(e) =>
                             handleDetailChange(
                               index,
@@ -2364,26 +2553,29 @@ const handleGLAmountChange = async (index, field, value) => {
 
                       {/* VAT Code (lookup) */}
                       <td className="global-tran-td-ui">
-                        <div className="relative">
+                      <div className="relative w-fit">
                           <input
-                            type="text"
-                            className="w-[90px] global-tran-td-inputclass-ui pr-10 cursor-pointer"
-                            value={row.vatCode || ""}
-                            readOnly
-                            onClick={() => handleOpenVatLookup(index)}
-                            disabled={isFormDisabled}
+                              type="text"
+                              className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
+                              value={row.vatCode || ""}
+                              onChange={(e) => handleDetailChangeGL(index, 'vatCode', e.target.value)}
+                              readOnly
                           />
-                          <button
-                            type="button"
-                            className="absolute inset-y-0 right-1 flex items-center px-2"
-                            onClick={() => handleOpenVatLookup(index)}
-                            disabled={isFormDisabled}
-                            tabIndex={-1}
-                          >
-                            <FontAwesomeIcon icon={faMagnifyingGlass} />
-                          </button>
+
+                          {!isFormDisabled && row.vatCode && row.vatCode.length > 0 && (
+                              <FontAwesomeIcon
+                                icon={faMagnifyingGlass}
+                                className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                                onClick={() => {
+                                  updateState({
+                                    selectedRowIndex: index,
+                                    showVatModal: true,
+                                  });
+                                }}
+                              />
+                            )}
                         </div>
-                      </td>
+                  </td>
 
                       {/* VAT Rate (from VAT lookup) */}
                       <td className="global-tran-td-ui text-right">
@@ -2400,15 +2592,8 @@ const handleGLAmountChange = async (index, field, value) => {
                       <td className="global-tran-td-ui text-right">
                         <input
                           type="text"
-                          className="w-[140px] global-tran-td-inputclass-ui text-right"
-                          value={row.vatAmount || ""}
-                          onChange={(e) =>
-                            handleDetailChange(
-                              index,
-                              "vatAmount",
-                              e.target.value
-                            )
-                          }
+                          className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 cursor-pointer"
+                          value={formatNumber(parseFormattedNumber(row.vatAmount)) || ""}
                           disabled={isFormDisabled}
                         />
                       </td>
@@ -2417,15 +2602,8 @@ const handleGLAmountChange = async (index, field, value) => {
                       <td className="global-tran-td-ui text-right">
                         <input
                           type="text"
-                          className="w-[140px] global-tran-td-inputclass-ui text-right"
-                          value={row.netAmount || ""}
-                          onChange={(e) =>
-                            handleDetailChange(
-                              index,
-                              "netAmount",
-                              e.target.value
-                            )
-                          }
+                          className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 cursor-pointer"
+                          value={formatNumber(parseFormattedNumber(row.netAmount)) || ""}
                           disabled={isFormDisabled}
                         />
                       </td>
