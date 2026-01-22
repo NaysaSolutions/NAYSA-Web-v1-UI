@@ -49,7 +49,7 @@ export const useSwalValidationAlert = ({ icon = "info", title = "", message = ""
         const body = popup.querySelector(".swal2-html-container");
         if (body) {
           body.style.fontSize = "13px";
-          body.style.textAlign = "left";
+          body.style.textAlign = "center";
           body.style.whiteSpace = "pre-wrap";
           body.style.maxHeight = "300px";
           body.style.overflowY = "auto";
