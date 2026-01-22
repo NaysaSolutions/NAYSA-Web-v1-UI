@@ -10,6 +10,8 @@ import SearchVATRef from "@/NAYSA Cloud/Lookup/SearchVATRef.jsx";
 import SearchCOAMast from "@/NAYSA Cloud/Lookup/SearchCOAMast.jsx";
 import SearchPayTermRef from "@/NAYSA Cloud/Lookup/SearchPayTermRef.jsx";
 import SearchCurrRef from "@/NAYSA Cloud/Lookup/SearchCurrRef.jsx";
+import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
+
 
 const SectionHeader = ({ title }) => (
   <div className="mb-3">
@@ -204,6 +206,7 @@ const PayeeSetupTab = forwardRef(
       if (isVendor) setIsVendLookupOpen(true);
       else setIsCustLookupOpen(true);
     };
+
 
     return (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start rounded-lg relative">
@@ -536,7 +539,7 @@ const PayeeSetupTab = forwardRef(
             />
 
             <FieldRenderer
-              label="Default Currency"
+              label="Currency"
               type="lookup"
               value={form.currCode || ""}
               onLookup={isDisabled ? undefined : () => setIsCurrLookupOpen(true)}
@@ -544,21 +547,26 @@ const PayeeSetupTab = forwardRef(
               disabled={isDisabled}
             />
 
-            
+
           </div>
         </Card>
 
         {/* CARD 4: REGISTRATION INFORMATION */}
         <Card className="border border-blue-500/30 p-4 rounded-lg shadow-xl self-start !h-fit !min-h-0">
           <SectionHeader title="Registration Information" />
+          <RegistrationInfo
+            layout="twoCols"
+            disabled={true}
+            data={{
+              registeredBy: form.registeredBy || form.registered_by || "",
+              registeredDate: form.registeredDate || form.registered_date || "",
+              lastUpdatedBy: form.updatedBy || form.updated_by || "",
+              lastUpdatedDate: form.updatedDate || form.updated_date || "",
+            }}
+          />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <FieldRenderer label="Registered By" type="text" value={form.registeredBy || form.registered_by || ""} readOnly disabled />
-            <FieldRenderer label="Registered Date" type="text" value={form.registeredDate || form.registered_date || ""} readOnly disabled />
-            <FieldRenderer label="Updated By" type="text" value={form.updatedBy || form.updated_by || ""} readOnly disabled />
-            <FieldRenderer label="Updated Date" type="text" value={form.updatedDate || form.updated_date || ""} readOnly disabled />
-          </div>
         </Card>
+
 
         {/* LOOKUP MODALS */}
         <SearchCusMast

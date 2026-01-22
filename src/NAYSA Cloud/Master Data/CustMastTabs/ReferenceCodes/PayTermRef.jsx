@@ -31,7 +31,8 @@ export default function PayTermRef() {
       loadEndpoint="/payterm"
       getEndpoint="/getPayterm"
       upsertEndpoint="/upsertPayterm"
-      getParamKey="PAYTERM_CODE"
+      deleteEndpoint="/deletePayterm"
+      getParamKey="paytermCode"
       codeLabel="Pay Term Code"
       nameLabel="Pay Term Name"
       emptyForm={emptyForm}
@@ -43,7 +44,7 @@ export default function PayTermRef() {
       extraDefault=""
       extraOptions={[
         { value: "Y", label: "Y" },
-        
+        { value: "", label: "" },
       ]}
 
       buildUpsertPayload={(form) => ({
