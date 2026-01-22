@@ -161,7 +161,7 @@ const MSAJ = () => {
 
     branchCode: "HO",
     branchName: "Head Office",
-    
+    itemSingleSelect:false,
 
     
     // Currency information
@@ -250,7 +250,7 @@ const MSAJ = () => {
   isResetDisabled,
   isFetchDisabled,
   triggerGLEntries,
-
+  itemSingleSelect,
 
 
 
@@ -474,6 +474,8 @@ useEffect(() => {
       detailRows: [],
       detailRowsGL:[],
       documentStatus:"",
+      itemSingleSelect:false,
+      selectedAJType:"",
       
       
       // UI state
@@ -620,7 +622,7 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
   
     // Update state with fetched data
     updateState({
-      documentStatus: data.sviStatus,
+      documentStatus: data.msajStatus,
       status: data.docStatus,
       noReprints:data.noReprints,
       documentID: data.msajId,
@@ -660,6 +662,7 @@ const handleDocNoBlur = () => {
 
 const handleActivityOption = async (action) => {
   // Prevent execution if document is already processed
+  console.log(documentStatus)
   if (documentStatus !== '') return;
 
   // 1. Helper function for formatting payload 
@@ -831,44 +834,20 @@ const handleGetItem = async () => {
 
   const handleAddRow = async () => {
   if (!selectedAJType) return;
-
-    await handleOpenMSLookup();
+    await handleOpenMSLookup(false);
     return;
-
-  // const lookupTypes = ["IL", "IR", "CA"];  
-  // if (lookupTypes.includes(selectedAJType)) { 
-  //   await handleOpenMSLookup();
-  //   return;
-  // }
-
-
-  const newRow = {
-    lnNo: detailRows.length + 1, 
-    itemCode: "",
-    itemName: "",
-    categCode: "",   
-    quantity: "1.00",
-    uomCode: "",
-    unitCost: "0.00",
-    itemAmount: "0.00",    
-    lotNo: "",  
-    qstatCode: "",  
-    bbDate: "",  
-    qtyHand: "0.00",    
-    whouseCode: "",   
-    locCode: "",  
-    acctCode: "",  
-    rcCode: "",  
-    sltypeCode: "",       
-    slCode: "",
-    uniqueKey: ""
-  };
-
-  updateState({
-    detailRows: [...detailRows, newRow]
-  });
 };
 
+
+
+
+  const handleAddItem = async (index) => {
+  if (!selectedAJType) return;
+
+    updateState({ selectedRowIndex: index}); 
+    await handleOpenMSLookup(true);
+    return;
+};
 
 
 
@@ -1005,12 +984,6 @@ const handleCopy = async () => {
 
 const handleFieldBehavior = (option) => {
   switch (option) {
-
-    case "disableInput":
-     return (
-        selectedAJType === "IL" || 
-        (selectedAJType === "IR" && row.operation === "S")
-       )
 
     case "hiddenBBMode":
      return (
@@ -1304,6 +1277,16 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
   if (['bbDate'].includes(field)) {
     row[field] = value;
   }
+
+
+ if (field === 'itemCode') {
+    row["itemCode"] = value.itemCode;
+    row["itemName"] = value.itemName;
+    row["uomCode"] = value.uomCode;
+    row["categCode"] = value.categCode;
+  }
+
+
 
   if (runCalculations) {
     const origQuantity = parseFormattedNumber(row.quantity) || 0;
@@ -1670,21 +1653,24 @@ const handleCloseBranchModal = (selectedBranch) => {
 
 
   
-  const handleOpenMSLookup = async () => {
+  const handleOpenMSLookup = async (itemSingleSelect) => {
     try {
-      updateState({ isLoading: true });
+
+      
+      updateState({ isLoading: true,
+                    itemSingleSelect : itemSingleSelect });
   
       const endpoint ="getInvLookupMS"
-      const response = await fetchDataJson(endpoint, { userCode, whouseCode :state.whouseCode || "", locCode: state.locCode || "", docType:"MSAJ" ,tranType :selectedAJType });
+      const response = await fetchDataJson(endpoint, { userCode, whouseCode :state.whouseCode || "", locCode: state.locCode || "", docType:"MSAJ" ,tranType :itemSingleSelect? "IRR" :selectedAJType });
       const custData = response?.data?.[0]?.result ? JSON.parse(response.data[0].result) : [];
   
 
       const lookupTypes = ["BB", "IG"];  
-      const colConfig = await useSelectedHSColConfig(lookupTypes.includes(selectedAJType) ? "AllMastItemLookup" : "getInvLookupMS");
+      const colConfig = await useSelectedHSColConfig((lookupTypes.includes(selectedAJType) || itemSingleSelect) ? "AllMastItemLookup" : "getInvLookupMS");
 
 
      if (custData.length === 0) {
-        useSwalErrorAlert("MS Location Balance","No records found")
+        useSwalErrorAlert(lookupTypes.includes(selectedAJType) ? "MS Master Data" : "MS Location Balance","No records found")
          updateState({ isLoading: false });
         return; 
       }
@@ -1694,19 +1680,14 @@ const handleCloseBranchModal = (selectedBranch) => {
                     msLookupModalOpen: true
         });
   
+
     } catch (error) {
-      console.error("Failed to fetch Open AR Balance:", error);
-      Swal.fire({
-        icon: "error",
-        title: "Error",
-        text: "Failed to fetch Open AR Balance.",
-      });
+      useSwalErrorAlert(lookupTypes.includes(selectedAJType) ? "MS Master Data" : "MS Location Balance","No records found")
       updateState({ 
           globalLookupRow: [] ,
-          globalLookupHeader: [] });
+          globalLookupHeader: [],
+          isLoading: false  });
     }
-  
-     updateState({ isLoading: false });
   };
   
   
@@ -1718,42 +1699,132 @@ const handleCloseBranchModal = (selectedBranch) => {
 
 
 
-  const handleCloseMSLookup = (selectedItems) => {
-  updateState({ msLookupModalOpen: false });
+//   const handleCloseMSLookup = (selectedItems) => {
+//   updateState({ msLookupModalOpen: false });
+
+//   if (!selectedItems) return;
+
+//   const itemsArray = Array.isArray(selectedItems.records) ? selectedItems.records : [selectedItems.records];
+//   if (itemsArray.length === 0) return;
+
+//   const newRows = itemsArray.map((item) => ({
+//     itemCode: item?.itemCode ?? "",
+//     itemName: item?.itemName ?? "",
+//     categCode: item?.categCode ?? "",
+//     uomCode: item?.uomCode ?? "",
+//     quantity: formatNumber(0, decQty),
+//     unitCost: formatNumber(parseFormattedNumber(item?.unitCost ?? 0), decUcost),
+//     amount: formatNumber(0, 2),
+//     lotNo: item?.lotNo ?? "",
+//     bbDate: item?.bbDate ? new Date(item.bbDate).toISOString().split("T")[0] : "",
+//     qstatCode: item?.qstatCode ?? "",
+//     whouseCode: item?.whouseCode ?? state.WHcode ?? "",
+//     locCode: item?.locCode ?? state.locCode ?? "",
+//     qtyHand: formatNumber(parseFormattedNumber(item?.qtyHand ?? 0), decQty),
+//     uniqueKey: item?.uniqueKey ?? "",
+//     operation:  (selectedAJType === "IL" || selectedAJType === "IR") ? "S" : "A",
+//     acctCode: "",
+//     sltypeCode: "",
+//     rcCode: "",
+//     slCode: ""
+//   }));
+
+
+// setState((prev) => {
+//     const updated = [...(prev.detailRows || []), ...newRows];
+//     updateTotalsDisplay(0,0);
+//     return { ...prev, detailRows: updated };
+//   });
+// };
+
+
+const handleCloseMSLookup = (selectedItems) => {
+  
 
   if (!selectedItems) return;
 
   const itemsArray = Array.isArray(selectedItems.records) ? selectedItems.records : [selectedItems.records];
   if (itemsArray.length === 0) return;
 
-  const newRows = itemsArray.map((item) => ({
-    itemCode: item?.itemCode ?? "",
-    itemName: item?.itemName ?? "",
-    categCode: item?.categCode ?? "",
-    uomCode: item?.uomCode ?? "",
-    quantity: formatNumber(0, decQty),
-    unitCost: formatNumber(parseFormattedNumber(item?.unitCost ?? 0), decUcost),
-    amount: formatNumber(0, 2),
-    lotNo: item?.lotNo ?? "",
-    bbDate: item?.bbDate ? new Date(item.bbDate).toISOString().split("T")[0] : "",
-    qstatCode: item?.qstatCode ?? "",
-    whouseCode: item?.whouseCode ?? state.WHcode ?? "",
-    locCode: item?.locCode ?? state.locCode ?? "",
-    qtyHand: formatNumber(parseFormattedNumber(item?.qtyHand ?? 0), decQty),
-    uniqueKey: item?.uniqueKey ?? "",
-    operation:  (selectedAJType === "IL" || selectedAJType === "IR") ? "S" : "A",
-    acctCode: "",
-    sltypeCode: "",
-    rcCode: "",
-    slCode: ""
-  }));
+  const newRows = itemsArray.flatMap((item) => {
+  const rawQtyHand = parseFormattedNumber(item?.qtyHand ?? 0);
+  const rawUnitCost = parseFormattedNumber(item?.unitCost ?? 0);
+  const originalKey = item?.uniqueKey ?? "";
 
 
-setState((prev) => {
+
+
+  if(itemSingleSelect && selectedAJType ==="IR"){
+    
+      handleDetailChange(selectedRowIndex, 'itemCode', item, false)
+      updateState({itemSingleSelect: false,msLookupModalOpen: false });
+      return[];
+  }
+
+
+  
+
+
+    // Base configuration shared by both rows
+    const baseRow = {
+      itemCode: item?.itemCode ?? "",
+      itemName: item?.itemName ?? "",
+      categCode: item?.categCode ?? "",
+      uomCode: item?.uomCode ?? "",
+      unitCost: formatNumber(rawUnitCost, decUcost),
+      amount: formatNumber(0, 2),
+      lotNo: item?.lotNo ?? "",
+      bbDate: item?.bbDate ? new Date(item.bbDate).toISOString().split("T")[0] : "",
+      qstatCode: item?.qstatCode ?? "",
+      whouseCode: item?.whouseCode ?? state.WHcode ?? "",
+      locCode: item?.locCode ?? state.locCode ?? "",
+      acctCode: "",
+      sltypeCode: "",
+      rcCode: "",
+      slCode: ""
+    };
+
+    if (selectedAJType === "IR") {
+      return [
+        // 1st Record: Has uniqueKey, Quantity is negative qtyHand
+        {
+          ...baseRow,
+          uniqueKey: originalKey,
+          quantity: formatNumber(rawQtyHand * -1, decQty),
+          qtyHand: formatNumber(rawQtyHand, decQty),
+          operation:"S"
+        },
+        // 2nd Record: No uniqueKey, Quantity is positive qtyHand
+        {
+          ...baseRow,
+          uniqueKey: "", // No value as requested
+          quantity: formatNumber(rawQtyHand, decQty),
+          qtyHand: formatNumber(0, decQty),
+          operation:"A"
+        }
+      ];
+    }
+
+    // Default logic for other types (Single row, original key)
+    return [
+      {
+        ...baseRow,
+        uniqueKey: originalKey,
+        qtyHand: formatNumber(rawQtyHand, decQty),
+        quantity: formatNumber(0, decQty),
+        operation: (selectedAJType === "IL") ? "S" : "A"
+      }
+    ];
+  });
+
+  setState((prev) => {
     const updated = [...(prev.detailRows || []), ...newRows];
-    updateTotalsDisplay(0,0);
+    updateTotalsDisplay(0, 0);
     return { ...prev, detailRows: updated };
   });
+
+
+   updateState({itemSingleSelect: false ,msLookupModalOpen: false });
 };
 
 
@@ -2158,8 +2229,17 @@ return (
                     className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
                     value={row.itemCode || ""}
                     readOnly
-                  />                
-                </div>
+                    onChange={(e) => handleDetailChange(index, 'itemCode', e.target.value)}
+                  />
+                    {!isFormDisabled && row.operation === "A" && selectedAJType ==="IR" && (
+                    <FontAwesomeIcon 
+                      icon={faMagnifyingGlass} 
+                      className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                      onClick={() => handleAddItem(index)}
+                    
+                      
+                    />)}
+                  </div>
               </td>
 
 
@@ -2169,7 +2249,7 @@ return (
                     type="text"
                     className="w-[300px] global-tran-td-inputclass-ui"
                     value={row.itemName || ""}
-                    readOnly={isFormDisabled}
+                    readOnly
                     onChange={(e) => handleDetailChange(index, 'itemName', e.target.value)}
                   />
                 </td>
@@ -2183,7 +2263,7 @@ return (
                     type="text"
                     className="w-[50px] text-center global-tran-td-inputclass-ui"
                     value={row.uomCode || ""}
-                    readOnly={isFormDisabled}
+                    readOnly
                     onChange={(e) => handleDetailChange(index, 'uomCode', e.target.value)}
                   />
                 </td>
@@ -2236,7 +2316,11 @@ return (
                         type="text"
                         className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
                         value={row.unitCost || ""}
-                        readOnly={isFormDisabled || handleFieldBehavior("disableInput")}
+                        readOnly={
+                                isFormDisabled || 
+                                (selectedAJType === "IL") || 
+                                (selectedAJType === "IR" && row.operation === "S")
+                              }
                         onChange={(e) => {
                             const inputValue = e.target.value;
                             const sanitizedValue = inputValue.replace(/[^0-9.]/g, '');
@@ -2286,7 +2370,11 @@ return (
                     type="text"
                     className="w-[200px] global-tran-td-inputclass-ui"
                     value={row.lotNo || ""}
-                    readOnly={isFormDisabled || handleFieldBehavior("disableInput")}
+                    readOnly={
+                                isFormDisabled || 
+                                (selectedAJType === "IL") || 
+                                (selectedAJType === "IR" && row.operation === "S")
+                              }
                     onChange={(e) => handleDetailChange(index, "lotNo", e.target.value)}
                     maxLength={useGetFieldLength(tblFieldArray, "lot_no")}
                     />
@@ -2297,7 +2385,11 @@ return (
                       type="date"
                       className="w-[100px] global-tran-td-inputclass-ui"
                       value={row.bbDate || ""}
-                      readOnly={isFormDisabled || handleFieldBehavior("disableInput")}
+                      readOnly={
+                                isFormDisabled || 
+                                (selectedAJType === "IL") || 
+                                (selectedAJType === "IR" && row.operation === "S")
+                              }
                       onChange={(e) => handleDetailChange(index, 'bbDate', e.target.value)}
                     />
                 </td>
@@ -3305,6 +3397,7 @@ return (
                 endpoint={globalLookupHeader}
                 onClose={handleCloseMSLookup}
                 onCancel={() => updateState({ msLookupModalOpen: false })}
+                singleSelect={itemSingleSelect}
               />
         )}
         
