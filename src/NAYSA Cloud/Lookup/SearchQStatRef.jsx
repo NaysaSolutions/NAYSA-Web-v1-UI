@@ -3,7 +3,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faTimes, faSpinner } from "@fortawesome/free-solid-svg-icons";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 
-const SearchQStatRef = ({ isOpen, onClose, customParam }) => {
+const QstatLookupModal = ({ isOpen, onClose, customParam }) => {
   const [rows, setRows] = useState([]);
   const [filtered, setFiltered] = useState([]);
   const [filters, setFilters] = useState({ qstatCode: "", qstatName: "" });
@@ -179,4 +179,4 @@ const SearchQStatRef = ({ isOpen, onClose, customParam }) => {
   );
 };
 
-export default SearchQStatRef;
+export default QstatLookupModal;

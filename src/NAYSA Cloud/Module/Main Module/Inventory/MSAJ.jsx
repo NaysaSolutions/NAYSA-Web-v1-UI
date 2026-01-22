@@ -24,6 +24,7 @@ import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
 import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
+import QstatLookupModal from "../../../Lookup/SearchQStatRef.jsx";
 
 
 // Configuration
@@ -91,7 +92,7 @@ import {
 // Header
 import Header from '@/NAYSA Cloud/Components/Header';
 import { faAdd } from "@fortawesome/free-solid-svg-icons/faAdd";
-import { User } from "lucide-react";
+import { User, Warehouse } from "lucide-react";
 
 
 const MSAJ = () => {
@@ -216,6 +217,7 @@ const MSAJ = () => {
     showSignatoryModal:false,
     showPostingModal:false,
     showAllTranDocNo:false,
+    showQstatModal:false,
     locationLookupOpen:false
    });
 
@@ -310,6 +312,7 @@ const MSAJ = () => {
   showSignatoryModal,
   showPostingModal,
   showAllTranDocNo,
+  showQstatModal,
   msLookupModalOpen,
   warehouseLookupOpen,
   locationLookupOpen
@@ -738,7 +741,7 @@ const handleActivityOption = async (action) => {
 
     // --- STEP 1: AUTO-GENERATE IF UPSERTING WITH EMPTY GL ---
     // This allows "Generate then Save" in one click
-    if (action === "Upsert" && currentGL.length === 0) {
+    if (action === "Upsert" && currentGL.length === 0 && selectedAJType !== "BB") {
       const genPayload = getFormattedPayload([]);
       const newGlEntries = await useGenerateGLEntries(docType, genPayload);
 
@@ -750,6 +753,7 @@ const handleActivityOption = async (action) => {
         console.warn("GL Generation failed. Upsert cancelled.");
         return; 
       }
+
     }
 
     // --- STEP 2: MANUAL GENERATE GL ---
@@ -1002,12 +1006,11 @@ const handleCopy = async () => {
 const handleFieldBehavior = (option) => {
   switch (option) {
 
-    case "disableOnNonCheckPay":
-      // return (
-      //   isFormDisabled ||
-      //   selectedPayType !== "CR01" ||
-      //   selectedCheckType === "CR22"
-      // );
+    case "disableInput":
+     return (
+        selectedAJType === "IL" || 
+        (selectedAJType === "IR" && row.operation === "S")
+       )
 
     case "hiddenBBMode":
      return (
@@ -1109,6 +1112,110 @@ useEffect(() => {
 
 
 
+// const handleDetailChange = async (index, field, value, runCalculations = true) => {
+//   const updatedRows = [...detailRows];
+
+//   updatedRows[index] = {
+//     ...updatedRows[index],
+//     [field]: value,
+//   };
+
+//   const row = updatedRows[index];
+
+//   const autoFillBlanks = (fieldName, newValue, extraData = {}) => {
+//     if (index === 0) {
+//       updatedRows.forEach((r, i) => {
+//         if (i !== 0 && (!r[fieldName] || r[fieldName].toString().trim() === "")) {
+//           updatedRows[i] = {
+//             ...r,
+//             [fieldName]: newValue,
+//             ...extraData
+//           };
+//         }
+//       });
+//     }
+//   };
+
+//   if (field === 'acctCode') {
+//     row.acctCode = value.acctCode;
+//     autoFillBlanks('acctCode', value.acctCode);
+//   }
+
+//   if (field === 'rcCode') {
+//     row.rcCode = value.rcCode;
+//     autoFillBlanks('rcCode', value.rcCode);
+//   }
+
+//   if (field === 'slCode') {
+//     row.slCode = value.slCode;
+//     row.sltypeCode = value.sltypeCode;
+//     autoFillBlanks('slCode', value.slCode, { sltypeCode: value.sltypeCode });
+//   }
+
+//     if (field === 'whouseCode') {
+//     row.whouseCode = value.whCode;
+//     autoFillBlanks('whouseCode', value.whCode);
+//   }
+
+//   if (field === 'locCode') {
+//     row.locCode = value.locCode;
+//     autoFillBlanks('locCode', value.locCode);
+//   }
+
+  
+//   if (field === 'qstatCode') {
+//     row.qstatCode = value.qstatCode;
+//     autoFillBlanks('qstatCode', value.qstatCode);
+//   }
+
+
+
+  
+//    if (['bbDate'].includes(field)) {
+//         row[field] = value;
+//     }
+
+//   if (runCalculations) {
+//     const origQuantity = parseFormattedNumber(row.quantity) || 0;
+//     const origUnitCost = parseFormattedNumber(row.unitCost) || 0;
+//     const origQtyHand = parseFormattedNumber(row.qtyHand) || 0;
+//     const origOperation = row.operation;
+
+//     const recalcRow = async () => {
+//       let processedQty = Math.abs(origQuantity);
+
+//       if (origOperation === "S" && (selectedAJType === "IL" || selectedAJType === "IR")) {
+//         if (processedQty > origQtyHand) {
+//           useSwalErrorAlert('Exceeds Stock', `Quantity (${processedQty}) exceeds Quantity on Hand (${origQtyHand}). Value has been adjusted.`);
+//           processedQty = origQtyHand;
+//         }
+//         processedQty = processedQty * -1;
+//       } else {
+//         processedQty = Math.abs(processedQty);
+//       }
+
+//       const finalQtyForMath = (selectedAJType === "CA") ? 1 : processedQty;
+//       const calculatedAmount = +(finalQtyForMath * origUnitCost).toFixed(2);
+
+//       row.itemAmount = formatNumber(calculatedAmount);
+//       row.quantity = formatNumber(selectedAJType === "CA" ? 0 : processedQty, decQty);
+//       row.unitCost = formatNumber(origUnitCost, decUcost);
+//     };
+
+//     if (field === 'quantity' || field === 'unitCost') {
+//       await recalcRow();
+//     }
+//   }
+
+//   updatedRows[index] = row;
+//   updateState({ detailRows: updatedRows,
+//                 detailRowsGL :[],
+//    });
+//   updateTotals(updatedRows);
+// };
+
+
+
 const handleDetailChange = async (index, field, value, runCalculations = true) => {
   const updatedRows = [...detailRows];
 
@@ -1117,43 +1224,86 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
     [field]: value,
   };
 
-  const row = updatedRows[index];
 
-  const autoFillBlanks = (fieldName, newValue, extraData = {}) => {
+  const row = updatedRows[index];
+  const autoFillBlanks = async (fieldName, newValue, extraData = {}) => {
     if (index === 0) {
-      updatedRows.forEach((r, i) => {
-        if (i !== 0 && (!r[fieldName] || r[fieldName].toString().trim() === "")) {
-          updatedRows[i] = {
-            ...r,
-            [fieldName]: newValue,
-            ...extraData
-          };
+      const hasBlanks = updatedRows.some((r, i) => i !== 0 && (!r[fieldName] || r[fieldName].toString().trim() === ""));
+
+     const fieldLabels = {
+          acctCode: 'Account Code',
+          rcCode: 'RC Code',
+          slCode: 'SL Code',
+          whouseCode: 'Warehouse',
+          locCode: 'Location',
+          qstatCode: 'Quality Status'
+        };
+      
+      if (hasBlanks) {
+        const result = await Swal.fire({
+          title: 'Replicate Data?',
+          text: `Do you want to copy this ${fieldLabels[field] } to all blank rows?`,
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonColor: '#3085d6',
+          cancelButtonColor: '#d33',
+          confirmButtonText: 'Yes, copy it!',
+          cancelButtonText: 'No'
+        });
+
+        if (result.isConfirmed) {
+          updatedRows.forEach((r, i) => {
+            if (i !== 0 && (!r[fieldName] || r[fieldName].toString().trim() === "")) {
+              updatedRows[i] = {
+                ...r,
+                [fieldName]: newValue,
+                ...extraData
+              };
+            }
+          });
+          updateState({ detailRows: [...updatedRows] });
         }
-      });
+      }
     }
   };
 
+
+  // --- MODIFIED autoFillBlanks END ---
+
   if (field === 'acctCode') {
     row.acctCode = value.acctCode;
-    autoFillBlanks('acctCode', value.acctCode);
+    await autoFillBlanks('acctCode', value.acctCode);
   }
 
   if (field === 'rcCode') {
     row.rcCode = value.rcCode;
-    autoFillBlanks('rcCode', value.rcCode);
+    await autoFillBlanks('rcCode', value.rcCode);
   }
 
   if (field === 'slCode') {
     row.slCode = value.slCode;
     row.sltypeCode = value.sltypeCode;
-    autoFillBlanks('slCode', value.slCode, { sltypeCode: value.sltypeCode });
+    await autoFillBlanks('slCode', value.slCode, { sltypeCode: value.sltypeCode });
   }
 
+  if (field === 'whouseCode') {
+    row.whouseCode = value.whCode;
+    await autoFillBlanks('whouseCode', value.whCode);
+  }
 
-  
-   if (['bbDate'].includes(field)) {
-        row[field] = value;
-    }
+  if (field === 'locCode') {
+    row.locCode = value.locCode;
+    await autoFillBlanks('locCode', value.locCode);
+  }
+
+  if (field === 'qstatCode') {
+    row.qstatCode = value.qstatCode;
+    await autoFillBlanks('qstatCode', value.qstatCode);
+  }
+
+  if (['bbDate'].includes(field)) {
+    row[field] = value;
+  }
 
   if (runCalculations) {
     const origQuantity = parseFormattedNumber(row.quantity) || 0;
@@ -1188,13 +1338,12 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
   }
 
   updatedRows[index] = row;
-  updateState({ detailRows: updatedRows,
-                detailRowsGL :[],
-   });
+  updateState({ 
+    detailRows: updatedRows,
+    detailRowsGL: [],
+  });
   updateTotals(updatedRows);
 };
-
-
 
 
 
@@ -1414,7 +1563,6 @@ const handleCloseSignatory = async (mode) => {
 
 
 const handleSaveAndPrint = async (documentID) => {
-
     updateState({ showSpinner: true });
     await useHandlePrint(documentID, docType);
 
@@ -1430,18 +1578,45 @@ const handleSaveAndPrint = async (documentID) => {
 
 
   const handleCloseWarehouseLookup = (row) => {
-    if (!row) {
-      updateState({ warehouseLookupOpen: false });
-      return;
-    }
-  };
+  if (row) {
+    accountModalSource
+      ? handleDetailChange(selectedRowIndex, 'whouseCode', row, false)
+      : updateState({
+          WHcode: row.whCode,
+          WHname: row.whName,
+          locCode: "", 
+          locName: ""
+        });
+  }
+  updateState({ warehouseLookupOpen: false });
+};
 
-  const handleCloseLocationLookup = (row) => {
-    if (!row) {
-      updateState({ locationLookupOpen: false });
-      return;
-    }
-  };
+
+
+
+
+const handleCloseLocationLookup = (row) => {
+  if (row) {
+    accountModalSource
+      ? handleDetailChange(selectedRowIndex, 'locCode', row, false)
+      : updateState({ locCode: row.locCode, locName: row.locName });
+  }
+
+  updateState({ locationLookupOpen: false });
+};
+
+
+
+const handleCloseQStatLookup = (row) => {
+  if (row) {
+   handleDetailChange(selectedRowIndex, 'qstatCode', row, false)
+  }
+  updateState({ showQstatModal: false });
+};
+
+
+
+
 
 
 
@@ -1608,7 +1783,8 @@ return (
 
         activeTopTab={topTab} 
         showActions={topTab === "details"} 
-        showBIRForm={false}    
+        showBIRForm={false}   
+        showCopyForm ={false} 
         isViewDocument={isViewDocument}  
         onDetails={() => setTopTab("details")}
         onHistory={() => setTopTab("history")}
@@ -1982,18 +2158,7 @@ return (
                     className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
                     value={row.itemCode || ""}
                     readOnly
-                  />
-                  {!isFormDisabled && (
-                  <FontAwesomeIcon 
-                    icon={faMagnifyingGlass} 
-                    className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                    onClick={() => {
-                      updateState({ selectedRowIndex: index });
-                    //   updateState({ showBillCodeModal: true }); 
-                  
-                    }}
-                    
-                  />)}
+                  />                
                 </div>
               </td>
 
@@ -2002,7 +2167,7 @@ return (
               <td className="global-tran-td-ui">
                   <input
                     type="text"
-                    className="w-[200px] global-tran-td-inputclass-ui"
+                    className="w-[300px] global-tran-td-inputclass-ui"
                     value={row.itemName || ""}
                     readOnly={isFormDisabled}
                     onChange={(e) => handleDetailChange(index, 'itemName', e.target.value)}
@@ -2071,7 +2236,7 @@ return (
                         type="text"
                         className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
                         value={row.unitCost || ""}
-                        readOnly={isFormDisabled}
+                        readOnly={isFormDisabled || handleFieldBehavior("disableInput")}
                         onChange={(e) => {
                             const inputValue = e.target.value;
                             const sanitizedValue = inputValue.replace(/[^0-9.]/g, '');
@@ -2121,7 +2286,7 @@ return (
                     type="text"
                     className="w-[200px] global-tran-td-inputclass-ui"
                     value={row.lotNo || ""}
-                    readOnly={isFormDisabled}
+                    readOnly={isFormDisabled || handleFieldBehavior("disableInput")}
                     onChange={(e) => handleDetailChange(index, "lotNo", e.target.value)}
                     maxLength={useGetFieldLength(tblFieldArray, "lot_no")}
                     />
@@ -2132,7 +2297,7 @@ return (
                       type="date"
                       className="w-[100px] global-tran-td-inputclass-ui"
                       value={row.bbDate || ""}
-                      readOnly={isFormDisabled}
+                      readOnly={isFormDisabled || handleFieldBehavior("disableInput")}
                       onChange={(e) => handleDetailChange(index, 'bbDate', e.target.value)}
                     />
                 </td>
@@ -2147,41 +2312,64 @@ return (
                       value={row.qstatCode || ""}
                       readOnly
                     />
-                    {!isFormDisabled && (
+                    {!isFormDisabled && row.operation !== "S" && (
                     <FontAwesomeIcon 
                       icon={faMagnifyingGlass} 
                       className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
                       onClick={() => {
-                    //   updateState({ selectedRowIndex: index,
-                    //                 showRcModal: true,
-                    //                 accountModalSource: "rcCode"}); 
+                      updateState({ selectedRowIndex: index,
+                                    showQstatModal: true}); 
                       }}
                     />)}
                   </div>
                 </td>
 
 
+                 <td className="global-tran-td-ui relative">
+                  <div className="flex items-center">
+                    <input
+                      type="text"
+                      className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                      value={row.whouseCode || ""}
+                      readOnly
+                    />
+                    {!isFormDisabled && row.operation !== "S" &&(
+                    <FontAwesomeIcon 
+                      icon={faMagnifyingGlass} 
+                      className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                      onClick={() => {
+                      updateState({ selectedRowIndex: index,
+                                    warehouseLookupOpen: true,
+                                    accountModalSource: "whouseCode"}); 
+                      }}
+                    />)}
+                  </div>
+                </td>   
 
-                
-                <td className="global-tran-td-ui">
-                  <input
-                    type="text"
-                    className="w-[100px] global-tran-td-inputclass-ui"
-                    value={row.whouseCode || ""}
-                    readOnly
-                  />
-                </td>
 
 
-                 <td className="global-tran-td-ui">
-                  <input
-                    type="text"
-                    className="w-[100px] global-tran-td-inputclass-ui"
-                    value={row.locCode || ""}
-                    readOnly
-                  />
-                </td>
-              
+                <td className="global-tran-td-ui relative">
+                  <div className="flex items-center">
+                    <input
+                      type="text"
+                      className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                      value={row.locCode || ""}
+                      readOnly
+                    />
+                    {!isFormDisabled && row.operation !== "S" &&(
+                    <FontAwesomeIcon 
+                      icon={faMagnifyingGlass} 
+                      className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                      onClick={() => {
+                      updateState({ selectedRowIndex: index,
+                                    locationLookupOpen: true,
+                                    accountModalSource: "locCode"}); 
+                      }}
+                    />)}
+                  </div>
+                </td>      
+
+             
    
                 <td className="global-tran-td-ui relative " hidden={handleFieldBehavior("hiddenBBMode")} >
                   <div className="flex items-center">
@@ -2191,7 +2379,7 @@ return (
                       value={row.acctCode || ""}
                       readOnly
                     />
-                    {!isFormDisabled && (
+                    {!isFormDisabled &&  (
                     <FontAwesomeIcon 
                       icon={faMagnifyingGlass} 
                       className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
@@ -2216,7 +2404,7 @@ return (
                       value={row.rcCode || ""}
                       readOnly
                     />
-                    {!isFormDisabled && (
+                    {!isFormDisabled &&  (
                     <FontAwesomeIcon 
                       icon={faMagnifyingGlass} 
                       className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
@@ -2248,7 +2436,8 @@ return (
                               value={row.slCode || ""}
                               onChange={(e) => handleDetailChange(index, 'slCode', e.target.value)}
                               readOnly
-                          />                       
+                          />   
+                              {!isFormDisabled &&  (                    
                               <FontAwesomeIcon
                                   icon={faMagnifyingGlass}
                                   className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
@@ -2258,9 +2447,9 @@ return (
                                               showSlModal: true,
                                               accountModalSource: "slCode"
                                           });
-                                  }}
-                              />                       
-                      </div>
+                                 }}
+                    />)}
+                  </div>
                   </td>
                 
 
@@ -3126,6 +3315,7 @@ return (
               isOpen={warehouseLookupOpen}
               onClose={handleCloseWarehouseLookup}
               filter="ActiveAll"
+              source={accountModalSource}
             />
           )}  
    
@@ -3133,6 +3323,16 @@ return (
         <LocationLookupModal
           isOpen={locationLookupOpen}
           onClose={handleCloseLocationLookup}
+          source={accountModalSource}
+          filter="ActiveAll"
+        />
+      )}
+
+
+      {showQstatModal && (
+        <QstatLookupModal
+          isOpen={showQstatModal}
+          onClose={handleCloseQStatLookup}
           filter="ActiveAll"
         />
       )}
@@ -3144,9 +3344,9 @@ return (
     <div className={topTab === "history" ? "" : "hidden"}>
       <AllTranHistory
         showHeader={false}
-        endpoint="/getSVIHistory"
-        cacheKey={`SVI:${state.branchCode || ""}:${state.docNo || ""}`}  // ✅ per-transaction
-        activeTabKey="SVI_Summary"
+        endpoint="/getMSAJHistory"
+        cacheKey={`MSAJ:${state.branchCode || ""}:${state.docNo || ""}`}  // ✅ per-transaction
+        activeTabKey="MSAJ_Summary"
         branchCode={state.branchCode}
         startDate={state.fromDate}
         endDate={state.toDate}

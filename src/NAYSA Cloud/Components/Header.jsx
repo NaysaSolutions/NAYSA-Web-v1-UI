@@ -18,6 +18,7 @@ const Header = ({
   // actions
   showActions = true,
   showBIRForm=true,
+  showCopyForm=true,
   isViewDocument=false,
 
   // action callbacks
@@ -112,9 +113,11 @@ const Header = ({
             <button onClick={handleReset} className="px-3 py-2 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-800 dark:hover:bg-blue-700">
               <FontAwesomeIcon icon={faUndo} /> <span className="hidden lg:inline ml-2">Reset</span>
             </button>
+             {showCopyForm && (
             <button onClick={handleCopy}  className="px-3 py-2 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-800 dark:hover:bg-blue-700">
               <FontAwesomeIcon icon={faCopy} /> <span className="hidden lg:inline ml-2">Copy</span>
             </button>
+                )}
             <button onClick={handlePrint} className="px-3 py-2 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-800 dark:hover:bg-blue-700">
               <FontAwesomeIcon icon={faPrint} /> <span className="hidden lg:inline ml-2">Print</span>
             </button>
