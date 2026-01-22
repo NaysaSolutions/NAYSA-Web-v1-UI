@@ -69,8 +69,6 @@ const PostSVI = ({ isOpen, onClose, userCode }) => {
     await useHandlePostTran(selectedData, userPw, "SVI", userCode, setLoading, onClose);
   };
 
-  
-
  
 const pickDocAndBranch = (row) => {
   if (!row) return { docNo: null, branchCode: null };
@@ -112,7 +110,7 @@ return (
       colConfigData={colConfigData}
       title="Post Service Invoice"
       userPassword={userPassword}
-      btnCaption="Ok"
+      btnCaption="Okay"
       onClose={onClose}
       onPost={handlePost}
       onViewDocument={handleViewDocument}

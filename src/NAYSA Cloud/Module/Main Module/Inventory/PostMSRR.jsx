@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { fetchDataJson } from "../../../Configuration/BaseURL.jsx";
 import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
 import GlobalGLPostingModalv1 from "../../../Lookup/SearchGlobalGLPostingv1.jsx";
+import { useHandlePostTran } from '@/NAYSA Cloud/Global/procedure';
 import { useSwalValidationAlert } from "@/NAYSA Cloud/Global/behavior";
 import ReactDOM from "react-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -24,12 +25,14 @@ const PostMSRR = ({ isOpen, onClose, userCode }) => {
       alertFired.current = false;
 
       try {
-        const endpoint = "/finalizeMSRR";
+        const endpoint = "postingMSRR";
         const response = await fetchDataJson(endpoint);
 
-        const rows = response?.data?.[0]?.result
-          ? JSON.parse(response.data[0].result)
-          : [];
+        const rows = Array.isArray(response?.data)
+  ? response.data
+  : response?.data?.[0]?.result
+    ? JSON.parse(response.data[0].result)
+    : [];
 
         if (rows.length === 0 && !alertFired.current) {
           useSwalValidationAlert({
@@ -63,60 +66,20 @@ const PostMSRR = ({ isOpen, onClose, userCode }) => {
     };
   }, [isOpen, onClose]);
 
-  const pickTranIdAndKeys = (row) => {
-    if (!row) return { tranId: null, rrNo: null, branchCode: null };
-    const tranId = row.rrId ?? row.rr_id ?? row.tranId ?? row.docId ?? row.rrNo ?? row.rr_no;
-    const rrNo = row.rrNo ?? row.rr_no ?? tranId;
-    const branchCode = row.branchCode ?? row.branch_code ?? null;
-    return { tranId, rrNo, branchCode };
-  };
+  const pickDocAndBranch = (row) => {
+  if (!row) return { docNo: null, branchCode: null };
+  const docNo = row.sviNo;
+  const branchCode = row.branchCode;
+  return { docNo, branchCode };
+};
 
-  const postOne = async (tranId, mode = "Finalize") => {
-    const res = await fetch(`${window.location.origin}/api/finalize`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tranId, mode, userCode }),
-      credentials: "include",
-    });
 
-    const json = await res.json();
-    if (!res.ok || json?.success === false) {
-      throw new Error(json?.message || "Posting failed.");
-    }
-    return json;
-  };
-
-  const handlePost = async (selectedData) => {
-    if (!selectedData || selectedData.length === 0) {
-      useSwalValidationAlert({
-        icon: "warning",
-        title: "No Selection",
-        message: "Please select at least one MSRR to post.",
-      });
-      return;
-    }
-
-    setLoading(true);
-    try {
-      for (const row of selectedData) {
-        const { tranId } = pickTranIdAndKeys(row);
-        if (!tranId) continue;
-        await postOne(tranId, "Finalize");
-      }
-      onClose?.();
-    } catch (e) {
-      useSwalValidationAlert({
-        icon: "error",
-        title: "Posting Error",
-        message: e?.message || "Failed to post MSRR.",
-      });
-    } finally {
-      setLoading(false);
-    }
+  const handlePost = async (selectedData, userPw) => {
+    await useHandlePostTran(selectedData, userPw, "MSRR", userCode, setLoading, onClose);
   };
 
   const handleViewDocument = (row) => {
-    const { rrNo, branchCode } = pickTranIdAndKeys(row);
+    const { rrNo, branchCode } = pickDocAndBranch(row);
 
     if (!rrNo || !branchCode) {
       useSwalValidationAlert({
@@ -143,7 +106,7 @@ const PostMSRR = ({ isOpen, onClose, userCode }) => {
           colConfigData={colConfigData}
           title="Post MS Receiving"
           userPassword={userPassword}
-          btnCaption="Ok"
+          btnCaption="Okay"
           onClose={onClose}
           onPost={handlePost}
           onViewDocument={handleViewDocument}
