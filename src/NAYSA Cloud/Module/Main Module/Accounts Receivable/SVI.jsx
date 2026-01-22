@@ -1894,7 +1894,7 @@ return (
                                 ? "global-tran-textbox-button-search-disabled-ui"
                                 : "global-tran-textbox-button-search-enabled-ui"
                             } global-tran-textbox-button-search-ui`}
-                            disabled
+                            disabled={isFormDisabled} 
                         >
                             <FontAwesomeIcon icon={faMagnifyingGlass} />
                         </button>

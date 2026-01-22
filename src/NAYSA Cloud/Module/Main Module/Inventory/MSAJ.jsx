@@ -24,6 +24,7 @@ import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
 import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
+import QstatLookupModal from "../../../Lookup/SearchQStatRef.jsx";
 
 
 // Configuration
@@ -91,7 +92,7 @@ import {
 // Header
 import Header from '@/NAYSA Cloud/Components/Header';
 import { faAdd } from "@fortawesome/free-solid-svg-icons/faAdd";
-import { User } from "lucide-react";
+import { User, Warehouse } from "lucide-react";
 
 
 const MSAJ = () => {
@@ -160,7 +161,7 @@ const MSAJ = () => {
 
     branchCode: "HO",
     branchName: "Head Office",
-    
+    itemSingleSelect:false,
 
     
     // Currency information
@@ -216,6 +217,7 @@ const MSAJ = () => {
     showSignatoryModal:false,
     showPostingModal:false,
     showAllTranDocNo:false,
+    showQstatModal:false,
     locationLookupOpen:false
    });
 
@@ -248,7 +250,7 @@ const MSAJ = () => {
   isResetDisabled,
   isFetchDisabled,
   triggerGLEntries,
-
+  itemSingleSelect,
 
 
 
@@ -310,6 +312,7 @@ const MSAJ = () => {
   showSignatoryModal,
   showPostingModal,
   showAllTranDocNo,
+  showQstatModal,
   msLookupModalOpen,
   warehouseLookupOpen,
   locationLookupOpen
@@ -471,6 +474,8 @@ useEffect(() => {
       detailRows: [],
       detailRowsGL:[],
       documentStatus:"",
+      itemSingleSelect:false,
+      selectedAJType:"",
       
       
       // UI state
@@ -617,7 +622,7 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
   
     // Update state with fetched data
     updateState({
-      documentStatus: data.sviStatus,
+      documentStatus: data.msajStatus,
       status: data.docStatus,
       noReprints:data.noReprints,
       documentID: data.msajId,
@@ -657,6 +662,7 @@ const handleDocNoBlur = () => {
 
 const handleActivityOption = async (action) => {
   // Prevent execution if document is already processed
+  console.log(documentStatus)
   if (documentStatus !== '') return;
 
   // 1. Helper function for formatting payload 
@@ -738,7 +744,7 @@ const handleActivityOption = async (action) => {
 
     // --- STEP 1: AUTO-GENERATE IF UPSERTING WITH EMPTY GL ---
     // This allows "Generate then Save" in one click
-    if (action === "Upsert" && currentGL.length === 0) {
+    if (action === "Upsert" && currentGL.length === 0 && selectedAJType !== "BB") {
       const genPayload = getFormattedPayload([]);
       const newGlEntries = await useGenerateGLEntries(docType, genPayload);
 
@@ -750,6 +756,7 @@ const handleActivityOption = async (action) => {
         console.warn("GL Generation failed. Upsert cancelled.");
         return; 
       }
+
     }
 
     // --- STEP 2: MANUAL GENERATE GL ---
@@ -827,44 +834,20 @@ const handleGetItem = async () => {
 
   const handleAddRow = async () => {
   if (!selectedAJType) return;
-
-    await handleOpenMSLookup();
+    await handleOpenMSLookup(false);
     return;
-
-  // const lookupTypes = ["IL", "IR", "CA"];  
-  // if (lookupTypes.includes(selectedAJType)) { 
-  //   await handleOpenMSLookup();
-  //   return;
-  // }
-
-
-  const newRow = {
-    lnNo: detailRows.length + 1, 
-    itemCode: "",
-    itemName: "",
-    categCode: "",   
-    quantity: "1.00",
-    uomCode: "",
-    unitCost: "0.00",
-    itemAmount: "0.00",    
-    lotNo: "",  
-    qstatCode: "",  
-    bbDate: "",  
-    qtyHand: "0.00",    
-    whouseCode: "",   
-    locCode: "",  
-    acctCode: "",  
-    rcCode: "",  
-    sltypeCode: "",       
-    slCode: "",
-    uniqueKey: ""
-  };
-
-  updateState({
-    detailRows: [...detailRows, newRow]
-  });
 };
 
+
+
+
+  const handleAddItem = async (index) => {
+  if (!selectedAJType) return;
+
+    updateState({ selectedRowIndex: index}); 
+    await handleOpenMSLookup(true);
+    return;
+};
 
 
 
@@ -1002,13 +985,6 @@ const handleCopy = async () => {
 const handleFieldBehavior = (option) => {
   switch (option) {
 
-    case "disableOnNonCheckPay":
-      // return (
-      //   isFormDisabled ||
-      //   selectedPayType !== "CR01" ||
-      //   selectedCheckType === "CR22"
-      // );
-
     case "hiddenBBMode":
      return (
         selectedAJType === "BB" 
@@ -1109,6 +1085,110 @@ useEffect(() => {
 
 
 
+// const handleDetailChange = async (index, field, value, runCalculations = true) => {
+//   const updatedRows = [...detailRows];
+
+//   updatedRows[index] = {
+//     ...updatedRows[index],
+//     [field]: value,
+//   };
+
+//   const row = updatedRows[index];
+
+//   const autoFillBlanks = (fieldName, newValue, extraData = {}) => {
+//     if (index === 0) {
+//       updatedRows.forEach((r, i) => {
+//         if (i !== 0 && (!r[fieldName] || r[fieldName].toString().trim() === "")) {
+//           updatedRows[i] = {
+//             ...r,
+//             [fieldName]: newValue,
+//             ...extraData
+//           };
+//         }
+//       });
+//     }
+//   };
+
+//   if (field === 'acctCode') {
+//     row.acctCode = value.acctCode;
+//     autoFillBlanks('acctCode', value.acctCode);
+//   }
+
+//   if (field === 'rcCode') {
+//     row.rcCode = value.rcCode;
+//     autoFillBlanks('rcCode', value.rcCode);
+//   }
+
+//   if (field === 'slCode') {
+//     row.slCode = value.slCode;
+//     row.sltypeCode = value.sltypeCode;
+//     autoFillBlanks('slCode', value.slCode, { sltypeCode: value.sltypeCode });
+//   }
+
+//     if (field === 'whouseCode') {
+//     row.whouseCode = value.whCode;
+//     autoFillBlanks('whouseCode', value.whCode);
+//   }
+
+//   if (field === 'locCode') {
+//     row.locCode = value.locCode;
+//     autoFillBlanks('locCode', value.locCode);
+//   }
+
+  
+//   if (field === 'qstatCode') {
+//     row.qstatCode = value.qstatCode;
+//     autoFillBlanks('qstatCode', value.qstatCode);
+//   }
+
+
+
+  
+//    if (['bbDate'].includes(field)) {
+//         row[field] = value;
+//     }
+
+//   if (runCalculations) {
+//     const origQuantity = parseFormattedNumber(row.quantity) || 0;
+//     const origUnitCost = parseFormattedNumber(row.unitCost) || 0;
+//     const origQtyHand = parseFormattedNumber(row.qtyHand) || 0;
+//     const origOperation = row.operation;
+
+//     const recalcRow = async () => {
+//       let processedQty = Math.abs(origQuantity);
+
+//       if (origOperation === "S" && (selectedAJType === "IL" || selectedAJType === "IR")) {
+//         if (processedQty > origQtyHand) {
+//           useSwalErrorAlert('Exceeds Stock', `Quantity (${processedQty}) exceeds Quantity on Hand (${origQtyHand}). Value has been adjusted.`);
+//           processedQty = origQtyHand;
+//         }
+//         processedQty = processedQty * -1;
+//       } else {
+//         processedQty = Math.abs(processedQty);
+//       }
+
+//       const finalQtyForMath = (selectedAJType === "CA") ? 1 : processedQty;
+//       const calculatedAmount = +(finalQtyForMath * origUnitCost).toFixed(2);
+
+//       row.itemAmount = formatNumber(calculatedAmount);
+//       row.quantity = formatNumber(selectedAJType === "CA" ? 0 : processedQty, decQty);
+//       row.unitCost = formatNumber(origUnitCost, decUcost);
+//     };
+
+//     if (field === 'quantity' || field === 'unitCost') {
+//       await recalcRow();
+//     }
+//   }
+
+//   updatedRows[index] = row;
+//   updateState({ detailRows: updatedRows,
+//                 detailRowsGL :[],
+//    });
+//   updateTotals(updatedRows);
+// };
+
+
+
 const handleDetailChange = async (index, field, value, runCalculations = true) => {
   const updatedRows = [...detailRows];
 
@@ -1117,43 +1197,96 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
     [field]: value,
   };
 
-  const row = updatedRows[index];
 
-  const autoFillBlanks = (fieldName, newValue, extraData = {}) => {
+  const row = updatedRows[index];
+  const autoFillBlanks = async (fieldName, newValue, extraData = {}) => {
     if (index === 0) {
-      updatedRows.forEach((r, i) => {
-        if (i !== 0 && (!r[fieldName] || r[fieldName].toString().trim() === "")) {
-          updatedRows[i] = {
-            ...r,
-            [fieldName]: newValue,
-            ...extraData
-          };
+      const hasBlanks = updatedRows.some((r, i) => i !== 0 && (!r[fieldName] || r[fieldName].toString().trim() === ""));
+
+     const fieldLabels = {
+          acctCode: 'Account Code',
+          rcCode: 'RC Code',
+          slCode: 'SL Code',
+          whouseCode: 'Warehouse',
+          locCode: 'Location',
+          qstatCode: 'Quality Status'
+        };
+      
+      if (hasBlanks) {
+        const result = await Swal.fire({
+          title: 'Replicate Data?',
+          text: `Do you want to copy this ${fieldLabels[field] } to all blank rows?`,
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonColor: '#3085d6',
+          cancelButtonColor: '#d33',
+          confirmButtonText: 'Yes, copy it!',
+          cancelButtonText: 'No'
+        });
+
+        if (result.isConfirmed) {
+          updatedRows.forEach((r, i) => {
+            if (i !== 0 && (!r[fieldName] || r[fieldName].toString().trim() === "")) {
+              updatedRows[i] = {
+                ...r,
+                [fieldName]: newValue,
+                ...extraData
+              };
+            }
+          });
+          updateState({ detailRows: [...updatedRows] });
         }
-      });
+      }
     }
   };
 
+
+  // --- MODIFIED autoFillBlanks END ---
+
   if (field === 'acctCode') {
     row.acctCode = value.acctCode;
-    autoFillBlanks('acctCode', value.acctCode);
+    await autoFillBlanks('acctCode', value.acctCode);
   }
 
   if (field === 'rcCode') {
     row.rcCode = value.rcCode;
-    autoFillBlanks('rcCode', value.rcCode);
+    await autoFillBlanks('rcCode', value.rcCode);
   }
 
   if (field === 'slCode') {
     row.slCode = value.slCode;
     row.sltypeCode = value.sltypeCode;
-    autoFillBlanks('slCode', value.slCode, { sltypeCode: value.sltypeCode });
+    await autoFillBlanks('slCode', value.slCode, { sltypeCode: value.sltypeCode });
+  }
+
+  if (field === 'whouseCode') {
+    row.whouseCode = value.whCode;
+    await autoFillBlanks('whouseCode', value.whCode);
+  }
+
+  if (field === 'locCode') {
+    row.locCode = value.locCode;
+    await autoFillBlanks('locCode', value.locCode);
+  }
+
+  if (field === 'qstatCode') {
+    row.qstatCode = value.qstatCode;
+    await autoFillBlanks('qstatCode', value.qstatCode);
+  }
+
+  if (['bbDate'].includes(field)) {
+    row[field] = value;
   }
 
 
-  
-   if (['bbDate'].includes(field)) {
-        row[field] = value;
-    }
+ if (field === 'itemCode') {
+    row["itemCode"] = value.itemCode;
+    row["itemName"] = value.itemName;
+    row["uomCode"] = value.uomCode;
+    row["categCode"] = value.categCode;
+  }
+
+
 
   if (runCalculations) {
     const origQuantity = parseFormattedNumber(row.quantity) || 0;
@@ -1188,13 +1321,12 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
   }
 
   updatedRows[index] = row;
-  updateState({ detailRows: updatedRows,
-                detailRowsGL :[],
-   });
+  updateState({ 
+    detailRows: updatedRows,
+    detailRowsGL: [],
+  });
   updateTotals(updatedRows);
 };
-
-
 
 
 
@@ -1414,7 +1546,6 @@ const handleCloseSignatory = async (mode) => {
 
 
 const handleSaveAndPrint = async (documentID) => {
-
     updateState({ showSpinner: true });
     await useHandlePrint(documentID, docType);
 
@@ -1430,18 +1561,45 @@ const handleSaveAndPrint = async (documentID) => {
 
 
   const handleCloseWarehouseLookup = (row) => {
-    if (!row) {
-      updateState({ warehouseLookupOpen: false });
-      return;
-    }
-  };
+  if (row) {
+    accountModalSource
+      ? handleDetailChange(selectedRowIndex, 'whouseCode', row, false)
+      : updateState({
+          WHcode: row.whCode,
+          WHname: row.whName,
+          locCode: "", 
+          locName: ""
+        });
+  }
+  updateState({ warehouseLookupOpen: false });
+};
 
-  const handleCloseLocationLookup = (row) => {
-    if (!row) {
-      updateState({ locationLookupOpen: false });
-      return;
-    }
-  };
+
+
+
+
+const handleCloseLocationLookup = (row) => {
+  if (row) {
+    accountModalSource
+      ? handleDetailChange(selectedRowIndex, 'locCode', row, false)
+      : updateState({ locCode: row.locCode, locName: row.locName });
+  }
+
+  updateState({ locationLookupOpen: false });
+};
+
+
+
+const handleCloseQStatLookup = (row) => {
+  if (row) {
+   handleDetailChange(selectedRowIndex, 'qstatCode', row, false)
+  }
+  updateState({ showQstatModal: false });
+};
+
+
+
+
 
 
 
@@ -1495,21 +1653,24 @@ const handleCloseBranchModal = (selectedBranch) => {
 
 
   
-  const handleOpenMSLookup = async () => {
+  const handleOpenMSLookup = async (itemSingleSelect) => {
     try {
-      updateState({ isLoading: true });
+
+      
+      updateState({ isLoading: true,
+                    itemSingleSelect : itemSingleSelect });
   
       const endpoint ="getInvLookupMS"
-      const response = await fetchDataJson(endpoint, { userCode, whouseCode :state.whouseCode || "", locCode: state.locCode || "", docType:"MSAJ" ,tranType :selectedAJType });
+      const response = await fetchDataJson(endpoint, { userCode, whouseCode :state.whouseCode || "", locCode: state.locCode || "", docType:"MSAJ" ,tranType :itemSingleSelect? "IRR" :selectedAJType });
       const custData = response?.data?.[0]?.result ? JSON.parse(response.data[0].result) : [];
   
 
       const lookupTypes = ["BB", "IG"];  
-      const colConfig = await useSelectedHSColConfig(lookupTypes.includes(selectedAJType) ? "AllMastItemLookup" : "getInvLookupMS");
+      const colConfig = await useSelectedHSColConfig((lookupTypes.includes(selectedAJType) || itemSingleSelect) ? "AllMastItemLookup" : "getInvLookupMS");
 
 
      if (custData.length === 0) {
-        useSwalErrorAlert("MS Location Balance","No records found")
+        useSwalErrorAlert(lookupTypes.includes(selectedAJType) ? "MS Master Data" : "MS Location Balance","No records found")
          updateState({ isLoading: false });
         return; 
       }
@@ -1519,19 +1680,14 @@ const handleCloseBranchModal = (selectedBranch) => {
                     msLookupModalOpen: true
         });
   
+
     } catch (error) {
-      console.error("Failed to fetch Open AR Balance:", error);
-      Swal.fire({
-        icon: "error",
-        title: "Error",
-        text: "Failed to fetch Open AR Balance.",
-      });
+      useSwalErrorAlert(lookupTypes.includes(selectedAJType) ? "MS Master Data" : "MS Location Balance","No records found")
       updateState({ 
           globalLookupRow: [] ,
-          globalLookupHeader: [] });
+          globalLookupHeader: [],
+          isLoading: false  });
     }
-  
-     updateState({ isLoading: false });
   };
   
   
@@ -1543,42 +1699,132 @@ const handleCloseBranchModal = (selectedBranch) => {
 
 
 
-  const handleCloseMSLookup = (selectedItems) => {
-  updateState({ msLookupModalOpen: false });
+//   const handleCloseMSLookup = (selectedItems) => {
+//   updateState({ msLookupModalOpen: false });
+
+//   if (!selectedItems) return;
+
+//   const itemsArray = Array.isArray(selectedItems.records) ? selectedItems.records : [selectedItems.records];
+//   if (itemsArray.length === 0) return;
+
+//   const newRows = itemsArray.map((item) => ({
+//     itemCode: item?.itemCode ?? "",
+//     itemName: item?.itemName ?? "",
+//     categCode: item?.categCode ?? "",
+//     uomCode: item?.uomCode ?? "",
+//     quantity: formatNumber(0, decQty),
+//     unitCost: formatNumber(parseFormattedNumber(item?.unitCost ?? 0), decUcost),
+//     amount: formatNumber(0, 2),
+//     lotNo: item?.lotNo ?? "",
+//     bbDate: item?.bbDate ? new Date(item.bbDate).toISOString().split("T")[0] : "",
+//     qstatCode: item?.qstatCode ?? "",
+//     whouseCode: item?.whouseCode ?? state.WHcode ?? "",
+//     locCode: item?.locCode ?? state.locCode ?? "",
+//     qtyHand: formatNumber(parseFormattedNumber(item?.qtyHand ?? 0), decQty),
+//     uniqueKey: item?.uniqueKey ?? "",
+//     operation:  (selectedAJType === "IL" || selectedAJType === "IR") ? "S" : "A",
+//     acctCode: "",
+//     sltypeCode: "",
+//     rcCode: "",
+//     slCode: ""
+//   }));
+
+
+// setState((prev) => {
+//     const updated = [...(prev.detailRows || []), ...newRows];
+//     updateTotalsDisplay(0,0);
+//     return { ...prev, detailRows: updated };
+//   });
+// };
+
+
+const handleCloseMSLookup = (selectedItems) => {
+  
 
   if (!selectedItems) return;
 
   const itemsArray = Array.isArray(selectedItems.records) ? selectedItems.records : [selectedItems.records];
   if (itemsArray.length === 0) return;
 
-  const newRows = itemsArray.map((item) => ({
-    itemCode: item?.itemCode ?? "",
-    itemName: item?.itemName ?? "",
-    categCode: item?.categCode ?? "",
-    uomCode: item?.uomCode ?? "",
-    quantity: formatNumber(0, decQty),
-    unitCost: formatNumber(parseFormattedNumber(item?.unitCost ?? 0), decUcost),
-    amount: formatNumber(0, 2),
-    lotNo: item?.lotNo ?? "",
-    bbDate: item?.bbDate ? new Date(item.bbDate).toISOString().split("T")[0] : "",
-    qstatCode: item?.qstatCode ?? "",
-    whouseCode: item?.whouseCode ?? state.WHcode ?? "",
-    locCode: item?.locCode ?? state.locCode ?? "",
-    qtyHand: formatNumber(parseFormattedNumber(item?.qtyHand ?? 0), decQty),
-    uniqueKey: item?.uniqueKey ?? "",
-    operation:  (selectedAJType === "IL" || selectedAJType === "IR") ? "S" : "A",
-    acctCode: "",
-    sltypeCode: "",
-    rcCode: "",
-    slCode: ""
-  }));
+  const newRows = itemsArray.flatMap((item) => {
+  const rawQtyHand = parseFormattedNumber(item?.qtyHand ?? 0);
+  const rawUnitCost = parseFormattedNumber(item?.unitCost ?? 0);
+  const originalKey = item?.uniqueKey ?? "";
 
 
-setState((prev) => {
+
+
+  if(itemSingleSelect && selectedAJType ==="IR"){
+    
+      handleDetailChange(selectedRowIndex, 'itemCode', item, false)
+      updateState({itemSingleSelect: false,msLookupModalOpen: false });
+      return[];
+  }
+
+
+  
+
+
+    // Base configuration shared by both rows
+    const baseRow = {
+      itemCode: item?.itemCode ?? "",
+      itemName: item?.itemName ?? "",
+      categCode: item?.categCode ?? "",
+      uomCode: item?.uomCode ?? "",
+      unitCost: formatNumber(rawUnitCost, decUcost),
+      amount: formatNumber(0, 2),
+      lotNo: item?.lotNo ?? "",
+      bbDate: item?.bbDate ? new Date(item.bbDate).toISOString().split("T")[0] : "",
+      qstatCode: item?.qstatCode ?? "",
+      whouseCode: item?.whouseCode ?? state.WHcode ?? "",
+      locCode: item?.locCode ?? state.locCode ?? "",
+      acctCode: "",
+      sltypeCode: "",
+      rcCode: "",
+      slCode: ""
+    };
+
+    if (selectedAJType === "IR") {
+      return [
+        // 1st Record: Has uniqueKey, Quantity is negative qtyHand
+        {
+          ...baseRow,
+          uniqueKey: originalKey,
+          quantity: formatNumber(rawQtyHand * -1, decQty),
+          qtyHand: formatNumber(rawQtyHand, decQty),
+          operation:"S"
+        },
+        // 2nd Record: No uniqueKey, Quantity is positive qtyHand
+        {
+          ...baseRow,
+          uniqueKey: "", // No value as requested
+          quantity: formatNumber(rawQtyHand, decQty),
+          qtyHand: formatNumber(0, decQty),
+          operation:"A"
+        }
+      ];
+    }
+
+    // Default logic for other types (Single row, original key)
+    return [
+      {
+        ...baseRow,
+        uniqueKey: originalKey,
+        qtyHand: formatNumber(rawQtyHand, decQty),
+        quantity: formatNumber(0, decQty),
+        operation: (selectedAJType === "IL") ? "S" : "A"
+      }
+    ];
+  });
+
+  setState((prev) => {
     const updated = [...(prev.detailRows || []), ...newRows];
-    updateTotalsDisplay(0,0);
+    updateTotalsDisplay(0, 0);
     return { ...prev, detailRows: updated };
   });
+
+
+   updateState({itemSingleSelect: false ,msLookupModalOpen: false });
 };
 
 
@@ -1608,7 +1854,8 @@ return (
 
         activeTopTab={topTab} 
         showActions={topTab === "details"} 
-        showBIRForm={false}    
+        showBIRForm={false}   
+        showCopyForm ={false} 
         isViewDocument={isViewDocument}  
         onDetails={() => setTopTab("details")}
         onHistory={() => setTopTab("history")}
@@ -1934,9 +2181,6 @@ return (
               <th className="global-tran-th-ui">UOM</th>
               <th className="global-tran-th-ui" hidden={handleFieldBehavior("hiddenCAMode")}>Quantity</th>
               <th className="global-tran-th-ui">{handleColumnLabel("UnitCost")}</th>
-
-
-
               <th className="global-tran-th-ui" hidden={handleFieldBehavior("hiddenCAMode")}>Amount</th>
               <th className="global-tran-th-ui">Lot No</th>
               <th className="global-tran-th-ui">BB Date</th>
@@ -1982,19 +2226,17 @@ return (
                     className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
                     value={row.itemCode || ""}
                     readOnly
+                    onChange={(e) => handleDetailChange(index, 'itemCode', e.target.value)}
                   />
-                  {!isFormDisabled && (
-                  <FontAwesomeIcon 
-                    icon={faMagnifyingGlass} 
-                    className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                    onClick={() => {
-                      updateState({ selectedRowIndex: index });
-                    //   updateState({ showBillCodeModal: true }); 
-                  
-                    }}
+                    {!isFormDisabled && row.operation === "A" && selectedAJType ==="IR" && (
+                    <FontAwesomeIcon 
+                      icon={faMagnifyingGlass} 
+                      className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                      onClick={() => handleAddItem(index)}
                     
-                  />)}
-                </div>
+                      
+                    />)}
+                  </div>
               </td>
 
 
@@ -2002,9 +2244,9 @@ return (
               <td className="global-tran-td-ui">
                   <input
                     type="text"
-                    className="w-[200px] global-tran-td-inputclass-ui"
+                    className="w-[300px] global-tran-td-inputclass-ui"
                     value={row.itemName || ""}
-                    readOnly={isFormDisabled}
+                    readOnly
                     onChange={(e) => handleDetailChange(index, 'itemName', e.target.value)}
                   />
                 </td>
@@ -2018,7 +2260,7 @@ return (
                     type="text"
                     className="w-[50px] text-center global-tran-td-inputclass-ui"
                     value={row.uomCode || ""}
-                    readOnly={isFormDisabled}
+                    readOnly
                     onChange={(e) => handleDetailChange(index, 'uomCode', e.target.value)}
                   />
                 </td>
@@ -2071,7 +2313,11 @@ return (
                         type="text"
                         className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
                         value={row.unitCost || ""}
-                        readOnly={isFormDisabled}
+                        readOnly={
+                                isFormDisabled || 
+                                (selectedAJType === "IL") || 
+                                (selectedAJType === "IR" && row.operation === "S")
+                              }
                         onChange={(e) => {
                             const inputValue = e.target.value;
                             const sanitizedValue = inputValue.replace(/[^0-9.]/g, '');
@@ -2121,7 +2367,11 @@ return (
                     type="text"
                     className="w-[200px] global-tran-td-inputclass-ui"
                     value={row.lotNo || ""}
-                    readOnly={isFormDisabled}
+                    readOnly={
+                                isFormDisabled || 
+                                (selectedAJType === "IL") || 
+                                (selectedAJType === "IR" && row.operation === "S")
+                              }
                     onChange={(e) => handleDetailChange(index, "lotNo", e.target.value)}
                     maxLength={useGetFieldLength(tblFieldArray, "lot_no")}
                     />
@@ -2132,7 +2382,11 @@ return (
                       type="date"
                       className="w-[100px] global-tran-td-inputclass-ui"
                       value={row.bbDate || ""}
-                      readOnly={isFormDisabled}
+                      readOnly={
+                                isFormDisabled || 
+                                (selectedAJType === "IL") || 
+                                (selectedAJType === "IR" && row.operation === "S")
+                              }
                       onChange={(e) => handleDetailChange(index, 'bbDate', e.target.value)}
                     />
                 </td>
@@ -2147,41 +2401,64 @@ return (
                       value={row.qstatCode || ""}
                       readOnly
                     />
-                    {!isFormDisabled && (
+                    {!isFormDisabled && row.operation !== "S" && (
                     <FontAwesomeIcon 
                       icon={faMagnifyingGlass} 
                       className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
                       onClick={() => {
-                    //   updateState({ selectedRowIndex: index,
-                    //                 showRcModal: true,
-                    //                 accountModalSource: "rcCode"}); 
+                      updateState({ selectedRowIndex: index,
+                                    showQstatModal: true}); 
                       }}
                     />)}
                   </div>
                 </td>
 
 
+                 <td className="global-tran-td-ui relative">
+                  <div className="flex items-center">
+                    <input
+                      type="text"
+                      className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                      value={row.whouseCode || ""}
+                      readOnly
+                    />
+                    {!isFormDisabled && row.operation !== "S" &&(
+                    <FontAwesomeIcon 
+                      icon={faMagnifyingGlass} 
+                      className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                      onClick={() => {
+                      updateState({ selectedRowIndex: index,
+                                    warehouseLookupOpen: true,
+                                    accountModalSource: "whouseCode"}); 
+                      }}
+                    />)}
+                  </div>
+                </td>   
 
-                
-                <td className="global-tran-td-ui">
-                  <input
-                    type="text"
-                    className="w-[100px] global-tran-td-inputclass-ui"
-                    value={row.whouseCode || ""}
-                    readOnly
-                  />
-                </td>
 
 
-                 <td className="global-tran-td-ui">
-                  <input
-                    type="text"
-                    className="w-[100px] global-tran-td-inputclass-ui"
-                    value={row.locCode || ""}
-                    readOnly
-                  />
-                </td>
-              
+                <td className="global-tran-td-ui relative">
+                  <div className="flex items-center">
+                    <input
+                      type="text"
+                      className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                      value={row.locCode || ""}
+                      readOnly
+                    />
+                    {!isFormDisabled && row.operation !== "S" &&(
+                    <FontAwesomeIcon 
+                      icon={faMagnifyingGlass} 
+                      className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                      onClick={() => {
+                      updateState({ selectedRowIndex: index,
+                                    locationLookupOpen: true,
+                                    accountModalSource: "locCode"}); 
+                      }}
+                    />)}
+                  </div>
+                </td>      
+
+             
    
                 <td className="global-tran-td-ui relative " hidden={handleFieldBehavior("hiddenBBMode")} >
                   <div className="flex items-center">
@@ -2191,7 +2468,7 @@ return (
                       value={row.acctCode || ""}
                       readOnly
                     />
-                    {!isFormDisabled && (
+                    {!isFormDisabled &&  (
                     <FontAwesomeIcon 
                       icon={faMagnifyingGlass} 
                       className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
@@ -2216,7 +2493,7 @@ return (
                       value={row.rcCode || ""}
                       readOnly
                     />
-                    {!isFormDisabled && (
+                    {!isFormDisabled &&  (
                     <FontAwesomeIcon 
                       icon={faMagnifyingGlass} 
                       className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
@@ -2248,7 +2525,8 @@ return (
                               value={row.slCode || ""}
                               onChange={(e) => handleDetailChange(index, 'slCode', e.target.value)}
                               readOnly
-                          />                       
+                          />   
+                              {!isFormDisabled &&  (                    
                               <FontAwesomeIcon
                                   icon={faMagnifyingGlass}
                                   className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
@@ -2258,9 +2536,9 @@ return (
                                               showSlModal: true,
                                               accountModalSource: "slCode"
                                           });
-                                  }}
-                              />                       
-                      </div>
+                                 }}
+                    />)}
+                  </div>
                   </td>
                 
 
@@ -3116,6 +3394,7 @@ return (
                 endpoint={globalLookupHeader}
                 onClose={handleCloseMSLookup}
                 onCancel={() => updateState({ msLookupModalOpen: false })}
+                singleSelect={itemSingleSelect}
               />
         )}
         
@@ -3126,6 +3405,7 @@ return (
               isOpen={warehouseLookupOpen}
               onClose={handleCloseWarehouseLookup}
               filter="ActiveAll"
+              source={accountModalSource}
             />
           )}  
    
@@ -3133,6 +3413,16 @@ return (
         <LocationLookupModal
           isOpen={locationLookupOpen}
           onClose={handleCloseLocationLookup}
+          source={accountModalSource}
+          filter="ActiveAll"
+        />
+      )}
+
+
+      {showQstatModal && (
+        <QstatLookupModal
+          isOpen={showQstatModal}
+          onClose={handleCloseQStatLookup}
           filter="ActiveAll"
         />
       )}
@@ -3144,9 +3434,9 @@ return (
     <div className={topTab === "history" ? "" : "hidden"}>
       <AllTranHistory
         showHeader={false}
-        endpoint="/getSVIHistory"
-        cacheKey={`SVI:${state.branchCode || ""}:${state.docNo || ""}`}  // ✅ per-transaction
-        activeTabKey="SVI_Summary"
+        endpoint="/getMSAJHistory"
+        cacheKey={`MSAJ:${state.branchCode || ""}:${state.docNo || ""}`}  // ✅ per-transaction
+        activeTabKey="MSAJ_Summary"
         branchCode={state.branchCode}
         startDate={state.fromDate}
         endDate={state.toDate}
