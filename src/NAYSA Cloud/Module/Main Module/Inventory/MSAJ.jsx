@@ -1862,9 +1862,6 @@ return (
               <th className="global-tran-th-ui">UOM</th>
               <th className="global-tran-th-ui" hidden={handleFieldBehavior("hiddenCAMode")}>Quantity</th>
               <th className="global-tran-th-ui">{handleColumnLabel("UnitCost")}</th>
-
-
-
               <th className="global-tran-th-ui" hidden={handleFieldBehavior("hiddenCAMode")}>Amount</th>
               <th className="global-tran-th-ui">Lot No</th>
               <th className="global-tran-th-ui">BB Date</th>
