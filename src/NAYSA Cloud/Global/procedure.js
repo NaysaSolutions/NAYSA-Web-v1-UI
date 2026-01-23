@@ -444,6 +444,7 @@ export const useHandlePostTran = async (selectedData, userPw,docCode,userCode,se
   setLoading(true);
 
   try {
+
     const payload = {
       userCode,
       userPassword: userPw,
@@ -456,6 +457,7 @@ export const useHandlePostTran = async (selectedData, userPw,docCode,userCode,se
       },
     };
 
+ 
     const { data: res } = await apiClient.post("/finalize"+docCode, payload);
 
     if (res?.success) {
