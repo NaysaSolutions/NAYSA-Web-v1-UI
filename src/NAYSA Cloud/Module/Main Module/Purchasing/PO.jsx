@@ -27,6 +27,7 @@ import PayeeMastLookupModal from "../../../Lookup/SearchVendMast";
 import PaytermLookupModal from "../../../Lookup/SearchPayTermRef.jsx";
 import SearchPROpenModal from "../../../Lookup/SearchOpenPRBalance.jsx";
 import VATLookupModal from "../../../Lookup/SearchVATRef.jsx";
+import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 
 // Configuration
 import { postRequest } from "../../../Configuration/BaseURL.jsx";
@@ -96,6 +97,10 @@ const PO = () => {
     status: "OPEN",
     currRate: "",
 
+    WHcode: "",
+    WHname: "",
+    warehouseLookupOpen: false,
+
     // UI state
     activeTab: "basic",
     isLoading: false,
@@ -109,12 +114,14 @@ const PO = () => {
     header: {
       po_date: new Date().toISOString().split("T")[0], // PO Date
       dateNeeded: new Date().toISOString().split("T")[0],
+      delDate: new Date().toISOString().split("T")[0],
     },
 
     dateNeeded: new Date().toISOString().split("T")[0],
 
     branchCode: "HO",
     branchName: "Head Office",
+    delAddress: "",
 
     // Responsibility Center / Requesting Dept
     reqRcCode: "",
@@ -226,6 +233,7 @@ const PO = () => {
     branchCode,
     branchName,
     payTerm,
+    delAddress,
 
     // Responsibility Center
     rcCode,
@@ -384,6 +392,52 @@ const PO = () => {
     });
   };
 
+  const openSpecsModal = (rowIndex) => {
+    if (isFormDisabled) return;
+
+    const current = detailRows?.[rowIndex]?.itemSpecs ?? "";
+    updateState({
+      specsModalOpen: true,
+      specsRowIndex: rowIndex,
+      specsTempText: current,
+    });
+  };
+
+  const closeSpecsModal = () => {
+    updateState({
+      specsModalOpen: false,
+      specsRowIndex: null,
+      specsTempText: "",
+    });
+  };
+
+  const saveSpecsModal = () => {
+    const idx = state.specsRowIndex;
+    if (idx === null || idx === undefined) return closeSpecsModal();
+
+    const updated = [...detailRows];
+    updated[idx] = {
+      ...updated[idx],
+      itemSpecs: state.specsTempText ?? "",
+    };
+
+    updateState({ detailRows: updated });
+    closeSpecsModal();
+  };
+
+  const handleCloseWarehouseLookup = (row) => {
+    if (!row) {
+      updateState({ warehouseLookupOpen: false });
+      return;
+    }
+
+    updateState({
+      warehouseLookupOpen: false,
+      WHcode: row?.whCode ?? "",
+      WHname: row?.whName ?? "",
+    });
+  };
+
   // ==========================
   // EFFECTS
   // ==========================
@@ -441,7 +495,12 @@ const PO = () => {
     const today = new Date().toISOString().split("T")[0];
 
     updateState({
-      header: { po_date: today },
+      header: {
+  po_date: today,
+  dateNeeded: today,
+  delDate: today,
+},
+dateNeeded: today,
       branchCode: "HO",
       branchName: "Head Office",
       cutoffCode: "",
@@ -451,7 +510,8 @@ const PO = () => {
       reqRcName: "",
       vendCode: "",
       vendNameHeader: "",
-      dateNeeded: today, // <-- DEFAULT TO TODAY
+      dateNeeded: today,
+      delDate: today,
       sourcePrNo: "",
       refPoNo1: "",
       refPrNo2: "",
@@ -564,6 +624,7 @@ const PO = () => {
     }
   };
 
+
   // ==========================
   // FETCH (GET) – PO HEADER + DT1
   // ==========================
@@ -588,6 +649,14 @@ const PO = () => {
         docType,
         "poNo",
       );
+
+      const today = new Date().toISOString().split("T")[0];
+
+const delDateForHeader = data.delDate
+  ? new Date(data.delDate).toISOString().split("T")[0]
+  : today;
+
+
 
       console.log("📄 PO PARSED DATA:", data);
 
@@ -660,7 +729,7 @@ const PO = () => {
           totalAmt: formatNumber(item.itemAmount ?? 0, 6),
           vatAmt: formatNumber(item.vatAmount ?? 0, 6),
           netAmt: formatNumber(item.netAmount ?? 0, 6),
-          vatCode: item.vatCode || "",
+          vatCode: item.vatCode || ""
         };
       });
 
@@ -679,9 +748,11 @@ const PO = () => {
         documentNo: data.poNo,
         branchCode: data.branchCode,
         header: {
-          po_date: poDateForHeader,
-          dateNeeded: dateNeededForHeader,
-        },
+  po_date: poDateForHeader,
+  dateNeeded: dateNeededForHeader,
+  delDate: delDateForHeader || dateNeededForHeader || new Date().toISOString().split("T")[0],
+},
+
         cutoffCode: data.cutoffCode || "",
         rcCode: data.rcCode || "",
         rcName: data.rcName || "",
@@ -721,6 +792,8 @@ const PO = () => {
         dateNeeded: data.delDate
           ? new Date(data.delDate).toISOString().split("T")[0]
           : "",
+          WHcode: data.whCode || "",
+WHname: data.whName || "",
       });
     } catch (error) {
       console.error("Error fetching transaction data:", error);
@@ -1124,8 +1197,8 @@ const PO = () => {
         vendCode: vendCode || "", // @_vendCode
         vendName: vendNameHeader || "", // @_vendName
         // Optional warehouse / address fields if you have them in state:
-        whCode: state.whCode || "", // @_whCode
-        whName: state.whName || "", // @_whName
+        whCode: state.WHcode || "", // @_whCode
+        whName: state.WHname || "", // @_whName
         address1: state.address1 || "", // @_address1
         address2: state.address2 || "", // @_address2
         address3: state.address3 || "", // @_address3
@@ -1133,7 +1206,7 @@ const PO = () => {
         paytermCode: state.paytermCode || "", // @_paytermCode
 
         poType: selectedPoType || "", // 🔹 @_poType
-        delDate: dateNeeded || null, // @_delDate
+        delDate: state.header?.delDate || state.dateNeeded || null,
 
         currCode: state.currCode || "PHP", // @_currCode
         currRate: parseFormattedNumber(state.currRate || "1"), // @_currRate
@@ -1665,7 +1738,7 @@ const PO = () => {
             id="pr_hd"
           >
             {/* Columns 1–3 (Header fields) */}
-            <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Column 1: Branch / PO No / PO Date */}
               <div className="global-tran-textbox-group-div-ui">
                 {/* Branch */}
@@ -1757,12 +1830,13 @@ const PO = () => {
                     id="PRDate"
                     className="peer global-tran-textbox-ui"
                     value={header.po_date}
-                    onChange={(e) =>
-                      setHeader((prev) => ({
-                        ...prev,
-                        po_date: e.target.value,
-                      }))
-                    }
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setHeader((prev) => ({ ...prev, po_date: v })); // keep if you still use local header
+                      updateState({
+                        header: { ...(state.header || {}), po_date: v },
+                      });
+                    }}
                     disabled={isFormDisabled}
                   />
                   <label
@@ -1787,7 +1861,7 @@ const PO = () => {
                     htmlFor="sourcePrNo"
                     className="global-tran-floating-label"
                   >
-                    PR No.
+                    Reference PR No.
                   </label>
                   <button
                     type="button"
@@ -2041,7 +2115,7 @@ const PO = () => {
                 {/* PO Status (just select UI) */}
                 <div className="relative">
                   <select
-                    id="poType"
+                    id="poStatus"
                     className="peer global-tran-textbox-ui"
                     value={selectedPoType}
                     onChange={handlePrTypeChange}
@@ -2052,7 +2126,7 @@ const PO = () => {
                     <option value="">Cancelled</option>
                   </select>
                   <label
-                    htmlFor="poType"
+                    htmlFor="poStatus"
                     className="global-tran-floating-label"
                   >
                     PO Status
@@ -2075,7 +2149,127 @@ const PO = () => {
                 </div>
               </div>
 
-              {/* Remarks (spans all 3 header columns) */}
+              {/* Column 4*/}
+              <div className="global-tran-textbox-group-div-ui">
+                {/* Currency + Rate */}
+                <div className="flex space-x-4">
+                  {/* Currency */}
+                  <div className="relative flex-grow w-2/3">
+                    <select
+                      id="poTypes"
+                      className="peer global-tran-textbox-ui"
+                      value={selectedPoType}
+                      onChange={handlePrTypeChange}
+                      disabled={isFormDisabled}
+                    >
+                      <option value="">Local</option>
+                      <option value="">Foreign</option>
+                    </select>
+                    <label
+                      htmlFor="poTypes"
+                      className="global-tran-floating-label"
+                    >
+                      PO Type
+                    </label>
+                    <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
+                      <svg
+                        className="h-4 w-4 text-gray-500"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M19 9l-7 7-7-7"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                {/* WareHouse  */}
+
+                <div className="relative group flex-[1.3]">
+                  <input
+                    type="text"
+                    id="WHcode"
+                    value={state.WHname || state.WHcode || ""}
+                    readOnly
+                    className="peer global-tran-textbox-ui"
+                  />
+                  <label
+                    htmlFor="WHcode"
+                    className="global-tran-floating-label"
+                  >
+                    Warehouse
+                  </label>
+                  <button
+                    type="button"
+                    className={`global-tran-textbox-button-search-padding-ui ${
+                      isFetchDisabled
+                        ? "global-tran-textbox-button-search-disabled-ui"
+                        : "global-tran-textbox-button-search-enabled-ui"
+                    } global-tran-textbox-button-search-ui`}
+                    disabled={isFormDisabled}
+                    onClick={() =>
+                      !isFormDisabled &&
+                      updateState({ warehouseLookupOpen: true })
+                    }
+                  >
+                    <FontAwesomeIcon icon={faMagnifyingGlass} />
+                  </button>
+                  <div></div>
+                </div>
+
+                {/* Delivery Address */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    id="attention"
+                    value={delAddress}
+                    placeholder=" "
+                    onChange={(e) =>
+                      updateState({ delAddress: e.target.value })
+                    }
+                    className="peer global-tran-textbox-ui"
+                    disabled={isFormDisabled}
+                  />
+                  <label
+                    htmlFor="delAddress"
+                    className="global-tran-floating-label"
+                  >
+                    Delivery Address
+                  </label>
+                </div>
+
+                <div className="relative group flex-[1.3]">
+                  <input
+                    type="date"
+                    id="delDate"
+                    value={state.header?.delDate || ""}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      updateState({
+                        header: { ...(state.header || {}), delDate: v },
+                        dateNeeded: v, // keep your existing usage consistent
+                      });
+                    }}
+                    placeholder=" "
+                    className="peer global-tran-textbox-ui"
+                    disabled={isFormDisabled}
+                  />
+                  <label
+                    htmlFor="delDate"
+                    className="global-tran-floating-label"
+                  >
+                    Delivery Date
+                  </label>
+                </div>
+              </div>
+
+              {/* Remarks */}
               <div className="col-span-full">
                 <div className="relative p-2">
                   <textarea
@@ -2219,20 +2413,15 @@ const PO = () => {
                         />
                       </td>
 
-                      {/* Specification */}
+                     {/* Specification */}
                       <td className="global-tran-td-ui">
                         <input
                           type="text"
-                          className="w-[220px] global-tran-td-inputclass-ui"
+                          className="w-[220px] global-tran-td-inputclass-ui cursor-pointer"
                           value={row.itemSpecs || ""}
-                          onChange={(e) =>
-                            handleDetailChange(
-                              index,
-                              "itemSpecs",
-                              e.target.value,
-                            )
-                          }
-                          disabled={isFormDisabled}
+                          readOnly
+                          onDoubleClick={() => openSpecsModal(index)}
+                          title="Double-click to edit specification"
                         />
                       </td>
 
@@ -2643,12 +2832,62 @@ const PO = () => {
         />
       )}
 
+      {state.warehouseLookupOpen && (
+        <WarehouseLookupModal
+          isOpen={state.warehouseLookupOpen}
+          onClose={handleCloseWarehouseLookup}
+          filter="ActiveAll"
+        />
+      )}
+
       {showCancelModal && (
         <CancelTranModal isOpen={showCancelModal} onClose={handleCloseCancel} />
       )}
 
       {showPostModal && (
         <PostTranModal isOpen={showPostModal} onClose={handleClosePost} />
+      )}
+
+      {state.specsModalOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl rounded-lg bg-white dark:bg-slate-800 shadow-xl border border-gray-200 dark:border-slate-700">
+            <div className="px-4 py-3 border-b border-gray-200 dark:border-slate-700">
+              <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                Specification
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Enter complete specification / scope of work.
+              </p>
+            </div>
+
+            <div className="p-4">
+              <textarea
+                className="w-full h-48 resize-none rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm text-gray-800 dark:text-gray-100 p-3 outline-none focus:ring-2 focus:ring-blue-400"
+                value={state.specsTempText || ""}
+                onChange={(e) => updateState({ specsTempText: e.target.value })}
+                autoFocus
+              />
+            </div>
+
+            <div className="px-4 py-3 border-t border-gray-200 dark:border-slate-700 flex justify-end gap-2">
+              <button
+                type="button"
+                className="px-3 py-2 text-xs font-medium rounded-md bg-gray-200 hover:bg-gray-300 dark:bg-slate-700 dark:hover:bg-slate-600"
+                onClick={closeSpecsModal}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                className="px-3 py-2 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                onClick={saveSpecsModal}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showAttachModal && (

@@ -61,7 +61,7 @@ const GlobalGLPostingModalv1 = ({
 
   const ACTION_COL_W = 70;
 
-  // ✅ IMPORTANT: robust row id (fixes "select 1 = select all")
+  // ✅ robust row id
   const getRowId = (row) =>
     row?.rrId ??
     row?.rr_id ??
@@ -99,7 +99,9 @@ const GlobalGLPostingModalv1 = ({
     setGlobalQuery("");
 
     setColumnConfig(Array.isArray(colConfigData) ? colConfigData : []);
-    const rows = Array.isArray(data) ? data.map((row, i) => ({ ...row, __idx: i })) : [];
+    const rows = Array.isArray(data)
+      ? data.map((row, i) => ({ ...row, __idx: i }))
+      : [];
     setRecords(rows);
     setFiltered([]);
   }, [data, colConfigData]);
@@ -111,9 +113,11 @@ const GlobalGLPostingModalv1 = ({
 
   const renderValue = (column, value, decimal = 2) => {
     if (!value && value !== 0) return "";
-    switch (column.renderType) {
+    switch (column?.renderType) {
       case "number": {
-        const digits = Number.isFinite(parseInt(decimal, 10)) ? parseInt(decimal, 10) : 2;
+        const digits = Number.isFinite(parseInt(decimal, 10))
+          ? parseInt(decimal, 10)
+          : 2;
         return formatNumber(value, digits);
       }
       case "date": {
@@ -129,56 +133,101 @@ const GlobalGLPostingModalv1 = ({
     }
   };
 
+  // ✅ sorting helpers
   const coerceForSort = (val, type) => {
     if (val == null) return null;
-    if (type === "number") return Number(String(val).replace(/,/g, ""));
+
+    if (type === "number") {
+      // strips commas + currency symbols safely
+      const s = String(val).replace(/[^0-9.-]/g, "");
+      const n = Number(s);
+      return Number.isFinite(n) ? n : null;
+    }
+
     if (type === "date") {
       const t = new Date(val).getTime();
-      return Number.isNaN(t) ? 0 : t;
+      return Number.isNaN(t) ? null : t;
     }
+
     return String(val).toLowerCase();
   };
+
   const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
   const debouncedFilters = useDebouncedValue(filters, 200);
   const debouncedGlobal = useDebouncedValue(globalQuery, 250);
 
+  // ✅ Filter + Global search + Sort (single pipeline)
   useEffect(() => {
     let current = records.slice();
 
+    // global search across visible columns
     if (debouncedGlobal?.trim()) {
       const q = debouncedGlobal.trim().toLowerCase();
-      const visibleKeys = visibleCols.map((c) => c.key);
+      const visibleKeys = visibleCols.map((c) => c.key).filter(Boolean);
+
       current = current.filter((row) =>
-        visibleKeys.some((k) => String(row[k] ?? "").toLowerCase().includes(q))
+        visibleKeys.some((k) => String(row?.[k] ?? "").toLowerCase().includes(q))
       );
     }
 
+    // per-column filters
     current = current.filter((item) =>
       Object.entries(debouncedFilters).every(([key, value]) => {
         if (!value) return true;
-        const itemValue = String(item[key] ?? "").toLowerCase().replace(/,/g, "");
+        const itemValue = String(item?.[key] ?? "")
+          .toLowerCase()
+          .replace(/,/g, "");
         const filterValue = String(value).toLowerCase().replace(/,/g, "");
         return itemValue.includes(filterValue);
       })
     );
 
+    // sorting (stable + blanks bottom)
     if (sortConfig?.key && sortConfig?.direction) {
       const col = columnConfig.find((c) => c.key === sortConfig.key);
       const type = col?.renderType || "string";
       const dir = sortConfig.direction === "asc" ? 1 : -1;
 
       current.sort((a, b) => {
-        const av = coerceForSort(a[sortConfig.key], type);
-        const bv = coerceForSort(b[sortConfig.key], type);
-        return dir * cmp(av, bv);
+        const avRaw = a?.[sortConfig.key];
+        const bvRaw = b?.[sortConfig.key];
+
+        const aBlank = avRaw == null || avRaw === "";
+        const bBlank = bvRaw == null || bvRaw === "";
+
+        // blanks always bottom
+        if (aBlank && bBlank) return (a.__idx ?? 0) - (b.__idx ?? 0);
+        if (aBlank) return 1;
+        if (bBlank) return -1;
+
+        const av = coerceForSort(avRaw, type);
+        const bv = coerceForSort(bvRaw, type);
+
+        // if coercion fails to null, treat as blank-ish
+        const avNull = av == null;
+        const bvNull = bv == null;
+        if (avNull && bvNull) return (a.__idx ?? 0) - (b.__idx ?? 0);
+        if (avNull) return 1;
+        if (bvNull) return -1;
+
+        const res = cmp(av, bv);
+        return res === 0 ? (a.__idx ?? 0) - (b.__idx ?? 0) : dir * res;
       });
     } else {
+      // default: original order
       current.sort((a, b) => (a.__idx ?? 0) - (b.__idx ?? 0));
     }
 
     setFiltered(current);
-  }, [records, debouncedFilters, sortConfig, columnConfig, debouncedGlobal, visibleCols]);
+  }, [
+    records,
+    debouncedFilters,
+    sortConfig,
+    columnConfig,
+    debouncedGlobal,
+    visibleCols,
+  ]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -214,14 +263,16 @@ const GlobalGLPostingModalv1 = ({
     const v = e.target.value;
     setFilters((prev) => ({ ...prev, [key]: v }));
   };
+
   const clearAllFilters = () => setFilters({});
 
-  // ✅ IMPORTANT: send selected ROWS (not groupId array)
   const handleGetSelected = () => {
     onPost?.(selected, userPassword);
   };
 
+  // ✅ all columns sortable
   const handleSort = (key) => {
+    if (!key) return; // safety
     setCurrentPage(1);
     setSortConfig((prev) => {
       if (prev.key !== key) return { key, direction: "asc" };
@@ -248,7 +299,7 @@ const GlobalGLPostingModalv1 = ({
     setSelected((prev) => {
       const exists = prev.some((s) => getRowId(s) === id);
       if (exists) return prev.filter((s) => getRowId(s) !== id);
-      return [...prev, row]; // preserve selection order
+      return [...prev, row];
     });
   };
 
@@ -256,7 +307,8 @@ const GlobalGLPostingModalv1 = ({
     if (filtered.length === 0) return;
 
     const allIds = filtered.map(getRowId).filter((x) => x != null);
-    const isAllSelected = allIds.length > 0 && allIds.every((id) => selectedIds.has(id));
+    const isAllSelected =
+      allIds.length > 0 && allIds.every((id) => selectedIds.has(id));
 
     if (isAllSelected) {
       setSelected((prev) => prev.filter((r) => !allIds.includes(getRowId(r))));
@@ -264,7 +316,7 @@ const GlobalGLPostingModalv1 = ({
       setSelected((prev) => {
         const map = new Map(prev.map((r) => [getRowId(r), r]));
         for (const r of filtered) map.set(getRowId(r), r);
-        return Array.from(map.values()); // keeps prior order then appends new unique
+        return Array.from(map.values());
       });
     }
   };
@@ -275,7 +327,7 @@ const GlobalGLPostingModalv1 = ({
   const paginatedData = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     return filtered.slice(startIndex, startIndex + itemsPerPage);
-  }, [filtered, currentPage, itemsPerPage]);
+  }, [filtered, currentPage]);
 
   const totalItems = filtered.length;
   const startItem = totalItems > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0;
@@ -286,9 +338,11 @@ const GlobalGLPostingModalv1 = ({
   const handleViewRow = (row) => onViewDocument?.(row);
 
   const isLoading =
-    !!remoteLoading || (Array.isArray(data) && data.length === 0 && !!remoteLoading);
+    !!remoteLoading ||
+    (Array.isArray(data) && data.length === 0 && !!remoteLoading);
 
-  const numberAlignClass = (col) => (col?.renderType === "number" ? "text-right tabular-nums" : "");
+  const numberAlignClass = (col) =>
+    col?.renderType === "number" ? "text-right tabular-nums" : "";
 
   const remarksCellClass = (col) => {
     const key = String(col?.key ?? "");
@@ -305,7 +359,7 @@ const GlobalGLPostingModalv1 = ({
     return { sticky: false, left: 0, maxWidth: undefined };
   };
 
-  // selected count vs filtered count based on ids (avoids undefined mismatch)
+  // selected count vs filtered count based on ids
   const filteredIds = useMemo(
     () => filtered.map(getRowId).filter((x) => x != null),
     [filtered]
@@ -326,7 +380,9 @@ const GlobalGLPostingModalv1 = ({
 
         <div className="border-b border-gray-100 bg-white/95 sticky top-0 z-20">
           <div className="flex items-center gap-3 px-4 py-3">
-            <h2 className="text-sm font-semibold text-blue-900 truncate">{title}</h2>
+            <h2 className="text-sm font-semibold text-blue-900 truncate">
+              {title}
+            </h2>
             <span className="ml-auto inline-flex items-center gap-2 text-xs px-2.5 py-1 rounded-full bg-blue-50 text-blue-700">
               <FontAwesomeIcon icon={faListCheck} />
               {selected.length} selected
@@ -445,12 +501,12 @@ const GlobalGLPostingModalv1 = ({
                         <th
                           key={column.key}
                           ref={(el) => {
-                            if (overallIndex < STICKY_COUNT) columnHeaderRefs.current[column.key] = el;
+                            if (overallIndex < STICKY_COUNT)
+                              columnHeaderRefs.current[column.key] = el;
                           }}
-                          onClick={() => column.sortable && handleSort(column.key)}
+                          onClick={() => handleSort(column.key)}
                           className={[
-                            "px-3 py-2 font-bold text-blue-900 select-none",
-                            column.sortable ? "cursor-pointer hover:bg-gray-200/50" : "",
+                            "px-3 py-2 font-bold text-blue-900 cursor-pointer select-none hover:bg-gray-200/50",
                             numberAlignClass(column),
                             remarksCellClass(column),
                             stickyHeaderClasses,
@@ -493,7 +549,12 @@ const GlobalGLPostingModalv1 = ({
                           stickyStyle.minWidth = 50;
                           stickyStyle.maxWidth = 50;
                         }
-                        return <td className="sticky bg-white z-[70] px-2 py-1" style={stickyStyle} />;
+                        return (
+                          <td
+                            className="sticky bg-white z-[70] px-2 py-1"
+                            style={stickyStyle}
+                          />
+                        );
                       })()}
 
                       {visibleCols.map((column, vIdx) => {

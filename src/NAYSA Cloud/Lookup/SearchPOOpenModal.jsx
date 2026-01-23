@@ -88,24 +88,28 @@ const SearchPOOpenModal = ({ isOpen, onClose, branchCode, poTranType }) => {
   };
 
   const handleGetSelected = () => {
-    const header = filtered[selectedHeaderIndex];
-    const selectedDetails = detailRows.filter((r) => r.isSelected);
+  const header = filtered[selectedHeaderIndex];
+  const selectedDetails = detailRows.filter((r) => r.isSelected);
 
-    if (!header) {
-      alert("Select a PO Header first");
-      return;
-    }
-    if (selectedDetails.length === 0) {
-      alert("Select at least one detail");
-      return;
-    }
+  if (!header) {
+    alert("Select a PO Header first");
+    return;
+  }
+  if (selectedDetails.length === 0) {
+    alert("Select at least one detail");
+    return;
+  }
 
-    // same shape as PR modal so PO.jsx can reuse logic
-    onClose({
-      header,
-      details: selectedDetails,
-    });
-  };
+  onClose({
+    header: {
+      ...header,
+      WhCode: header.WhCode ?? header.whCode ?? header.WH_CODE ?? "",
+      WhName: header.WhName ?? header.whName ?? header.WH_NAME ?? "",
+    },
+    details: selectedDetails,
+  });
+};
+
 
   // simple client-side filter (PO No / Vendor / Particulars)
   useEffect(() => {
