@@ -86,6 +86,8 @@ import {
   parseFormattedNumber,
   useSwalshowSaveSuccessDialog,
   useSwalErrorAlert,
+  useSwalInfoAlert,
+  useSwalValidationAlert
 } from '@/NAYSA Cloud/Global/behavior';
 
 
@@ -848,7 +850,25 @@ const handleGetItem = async () => {
 
 
   const handleAddRow = async () => {
-  if (!selectedAJType) return;
+
+    let errors = []; 
+    if (!WHCode) errors.push("- Header : Warehouse");
+    if (!selectedAJType) errors.push("- Header : Adjustment Type");
+
+
+    if (errors.length > 0) {
+      const errorMessage = "The Following Fields are Required:\n" + errors.join("\n");
+
+      useSwalValidationAlert({
+            icon: "error",
+            title: "Save Failed",
+            message: errorMessage 
+             });    
+             return null;
+    }
+
+
+
     await handleOpenMSLookup(false);
     return;
 };
@@ -1720,7 +1740,7 @@ const handleCloseBranchModal = (selectedBranch) => {
                     itemSingleSelect : itemSingleSelect });
   
       const endpoint ="getInvLookupMS"
-      const response = await fetchDataJson(endpoint, { userCode, whouseCode :state.whouseCode || "", locCode: LocCode || "", docType:"MSAJ" ,tranType :itemSingleSelect? "IRR" :selectedAJType });
+      const response = await fetchDataJson(endpoint, { userCode, whouseCode :WHCode || "", locCode: LocCode || "", docType:"MSAJ" ,tranType :itemSingleSelect? "IRR" :selectedAJType });
       const custData = response?.data?.[0]?.result ? JSON.parse(response.data[0].result) : [];
   
 
@@ -1729,7 +1749,7 @@ const handleCloseBranchModal = (selectedBranch) => {
 
 
      if (custData.length === 0) {
-        useSwalErrorAlert(lookupTypes.includes(selectedAJType) ? "MS Master Data" : "MS Location Balance","No records found")
+        useSwalInfoAlert(lookupTypes.includes(selectedAJType) ? "MS Master Data" : "MS Location Balance","No records found")
          updateState({ isLoading: false });
         return; 
       }
