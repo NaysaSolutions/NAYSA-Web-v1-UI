@@ -121,6 +121,37 @@ export const useSwalshowSaveSuccessDialog = (onConfirm, onPrint) => {
   });
 };
 
+export const useSwalshowSave = (onConfirm, onPrint) => {
+  Swal.fire({
+    title: "Record Saved.",
+    // text: "What would you like to do next?",
+    icon: "success",
+    showCancelButton: false,
+    showDenyButton: false,
+    confirmButtonColor: "#3085d6",
+    // denyButtonColor: "#6c757d",
+    // cancelButtonColor: "#28a745",
+    confirmButtonText: "Confirm",
+    // denyButtonText: "Print Preview",
+    // cancelButtonText: "Completed",
+    timer: 5000,
+    timerProgressBar: true
+  }).then((result) => {
+    if (result.isConfirmed && typeof onConfirm === "function") {
+      onConfirm();
+    } else if (result.isDenied && typeof onPrint === "function") {
+      onPrint();
+    } else if (
+      (result.dismiss === Swal.DismissReason.cancel || result.dismiss === Swal.DismissReason.timer) &&
+      typeof onComplete === "function"
+    ) {
+      Swal.close();
+    }
+  });
+};
+
+
+
 // Add these missing SweetAlert utility functions
 export const useSwalErrorAlert = (title = "Error!", message = "Something went wrong.") => {
   return Swal.fire({
@@ -185,6 +216,16 @@ export const useSwalDeleteSuccess = () => {
   return Swal.fire({
     title: "Deleted",
     text: "The item has been deleted.",
+    icon: "success",
+    customClass: {
+      popup: "rounded-xl shadow-2xl",
+    },
+  });
+};
+
+export const useSwalDeleteRecord = () => {
+  return Swal.fire({
+    title: "Record Deleted.",
     icon: "success",
     customClass: {
       popup: "rounded-xl shadow-2xl",

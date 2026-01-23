@@ -318,54 +318,48 @@ const VendMast = () => {
     await navOpen(masterRows[indexInRows + 1]?.vendCode);
   };
 
-  const goRecent = async () => {
-    const nextRecent = recentCodes.find(
-      (c) => c.toUpperCase() !== currentCode.toUpperCase()
-    );
-    if (!nextRecent) return;
-    await navOpen(nextRecent);
-  };
+
   /* ----------------------------------------------------- */
-const deleteVendor = async () => {
-  const code = String(form?.vendCode || form?.custCode || "").trim();
-  if (!code) {
-    Swal.fire("Required", "Please select a Payee to delete.", "warning");
-    return;
-  }
+  const deleteVendor = async () => {
+    const code = String(form?.vendCode || form?.custCode || "").trim();
+    if (!code) {
+      Swal.fire("Required", "Please select a Payee to delete.", "warning");
+      return;
+    }
 
-  const confirm = await Swal.fire({
-    title: "Delete Payee?",
-    text: `This will permanently delete Payee Code ${code}. This action cannot be undone.`,
-    icon: "warning",
-    showCancelButton: true,
-    confirmButtonText: "Yes, Delete",
-    cancelButtonText: "Cancel",
-    confirmButtonColor: "#dc2626",
-  });
-
-  if (!confirm.isConfirmed) return;
-
-  setIsLoading(true);
-  try {
-    await apiClient.post("/deletePayee", {
-      VEND_CODE: code,
+    const confirm = await Swal.fire({
+      title: "Delete Payee?",
+      text: `This will permanently delete Payee Code ${code}. This action cannot be undone.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, Delete",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#dc2626",
     });
 
-    Swal.fire("Deleted", "Payee has been deleted.", "success");
+    if (!confirm.isConfirmed) return;
 
-    setForm({ ...emptyForm });
-    setSelectedVendCode("");
-    setIsEditing(false);
-    setAttachmentRows([]);
+    setIsLoading(true);
+    try {
+      await apiClient.post("/deletePayee", {
+        VEND_CODE: code,
+      });
 
-    await loadMasterList();
-  } catch (e) {
-    console.error(e);
-    Swal.fire("Error", "Failed to delete payee.", "error");
-  } finally {
-    setIsLoading(false);
-  }
-};
+      Swal.fire("Deleted", "Payee has been deleted.", "success");
+
+      setForm({ ...emptyForm });
+      setSelectedVendCode("");
+      setIsEditing(false);
+      setAttachmentRows([]);
+
+      await loadMasterList();
+    } catch (e) {
+      console.error(e);
+      Swal.fire("Error", "Failed to delete payee.", "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
 
   const upsertVendor = async () => {
@@ -530,28 +524,25 @@ const deleteVendor = async () => {
   };
 
   const headerButtons = useMemo(() => {
-  if (activeTab !== "setup") return [];
+    if (activeTab !== "setup") return [];
 
-  const hasRecord =
-    String(form?.vendCode || form?.custCode || "").trim() && !form.__isNew;
+    const hasRecord =
+      String(form?.vendCode || form?.custCode || "").trim() && !form.__isNew;
 
-  return [
-    { key: "add", label: "Add", icon: faPlus, onClick: handleAdd, disabled: isLoading },
-    { key: "edit", label: "Edit", icon: faPenToSquare, onClick: handleEdit, disabled: isLoading },
-    { key: "save", label: "Save", icon: faSave, onClick: upsertVendor, disabled: isLoading || !isEditing },
-    {
-      key: "delete",
-      label: "Delete",
-      icon: faTrash,
-      onClick: deleteVendor,
-      disabled: isLoading || isEditing || !hasRecord,
-      className:
-        "bg-red-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-red-700 disabled:opacity-50",
-    },
-    { key: "reset", label: "Reset", icon: faUndo, onClick: handleResetSetup, disabled: isLoading },
-    { key: "attach", label: "Attach File", icon: faPaperclip, onClick: handleOpenAttach, disabled: isLoading },
-  ];
-}, [activeTab, isLoading, isEditing, form]);
+    const baseBtn =
+      "h-9 px-3 text-sm rounded-lg flex items-center gap-2 whitespace-nowrap disabled:opacity-50";
+
+    return [
+      { key: "add", label: "Add", icon: faPlus, onClick: handleAdd, disabled: isLoading },
+      { key: "edit", label: "Edit", icon: faPenToSquare, onClick: handleEdit, disabled: isLoading },
+      { key: "save", label: "Save", icon: faSave, onClick: upsertVendor, disabled: isLoading || !isEditing },
+      { key: "reset", label: "Reset", icon: faUndo, onClick: handleResetSetup, disabled: isLoading },
+      { key: "attach", label: "Attach File", icon: faPaperclip, onClick: handleOpenAttach, disabled: isLoading, variant: "ghost" },
+      { key: "delete", label: "Delete", icon: faTrash, onClick: deleteVendor, disabled: isLoading || isEditing || !hasRecord, variant: "danger" },
+    ];
+
+  }, [activeTab, isLoading, isEditing, form]);
+
 
   return (
     <div className="global-ref-main-div-ui mt-24">
@@ -560,7 +551,7 @@ const deleteVendor = async () => {
           <h1 className="global-ref-headertext-ui">Payee Master Data</h1>
         </div>
 
-        <div className="flex overflow-x-auto scrollbar-hide">
+        <div className="flex flex-wrap gap-1 overflow-x-hidden">
           {tabs.map((t) => (
             <button
               key={t.id}
@@ -581,10 +572,10 @@ const deleteVendor = async () => {
         <div className="flex gap-2 justify-center text-xs items-center">
           {/* ✅ NAVIGATOR */}
           {activeTab === "setup" && (
-            <div className="flex items-center gap-1 bg-white border border-blue-200 rounded-md px-2 py-1 shadow-sm">
+            <div className="flex items-center gap-1 bg-blue-600 border border-blue-300 rounded-md px-2 py-1 shadow-sm">
               <button
                 type="button"
-                className="px-2 py-1 rounded hover:bg-blue-50 disabled:opacity-40"
+                className="px-2 py-1 rounded text-white hover:bg-blue-700 disabled:opacity-40 disabled:text-white"
                 onClick={goFirst}
                 disabled={isLoading || masterRows.length === 0 || indexInRows <= 0}
                 title="First"
@@ -594,7 +585,7 @@ const deleteVendor = async () => {
 
               <button
                 type="button"
-                className="px-2 py-1 rounded hover:bg-blue-50 disabled:opacity-40"
+                className="px-2 py-1 rounded text-white hover:bg-blue-700 disabled:opacity-40 disabled:text-white"
                 onClick={goPrev}
                 disabled={isLoading || masterRows.length === 0 || indexInRows <= 0}
                 title="Previous"
@@ -602,13 +593,14 @@ const deleteVendor = async () => {
                 <FontAwesomeIcon icon={faChevronLeft} />
               </button>
 
-              <div className="px-2 text-xs text-gray-600 min-w-[90px] text-center">
+              <div className="px-2 py-1 rounded text-white font-bold hover:bg-blue-700 disabled:opacity-40 disabled:text-white"
+>
                 {indexInRows >= 0 ? `${indexInRows + 1} / ${masterRows.length}` : "— / —"}
               </div>
 
               <button
                 type="button"
-                className="px-2 py-1 rounded hover:bg-blue-50 disabled:opacity-40"
+                className="px-2 py-1 rounded text-white hover:bg-blue-700 disabled:opacity-40 disabled:text-white"
                 onClick={goNext}
                 disabled={
                   isLoading ||
@@ -623,7 +615,7 @@ const deleteVendor = async () => {
 
               <button
                 type="button"
-                className="px-2 py-1 rounded hover:bg-blue-50 disabled:opacity-40"
+                className="px-2 py-1 rounded text-white hover:bg-blue-700 disabled:opacity-40 disabled:text-white"
                 onClick={goLast}
                 disabled={
                   isLoading ||
@@ -636,15 +628,6 @@ const deleteVendor = async () => {
                 <FontAwesomeIcon icon={faForwardFast} />
               </button>
 
-              <button
-                type="button"
-                className="ml-1 px-2 py-1 rounded hover:bg-blue-50 disabled:opacity-40"
-                onClick={goRecent}
-                disabled={isLoading || recentCodes.length === 0}
-                title="Recent"
-              >
-                <FontAwesomeIcon icon={faClockRotateLeft} />
-              </button>
             </div>
           )}
 

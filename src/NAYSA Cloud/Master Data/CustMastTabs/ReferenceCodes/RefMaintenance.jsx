@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from "react";
-import Swal from "sweetalert2";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faPlus,
@@ -7,12 +6,21 @@ import {
   faUndo,
   faSearch,
   faList,
+  faTrashAlt,
 } from "@fortawesome/free-solid-svg-icons";
 
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer";
 import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
 import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo";
+
+import {
+  useSwalErrorAlert,
+  useSwalDeleteConfirm,
+  useSwalDeleteRecord,
+  useSwalshowSave,
+  useSwalValidationAlert,
+} from "@/NAYSA Cloud/Global/behavior";
 
 /* ---------- Small UI helpers ---------- */
 const SectionHeader = ({ title, subtitle }) => (
@@ -42,6 +50,15 @@ const parseSprocJsonResult = (rows) => {
   }
 };
 
+const showValidation = async (title, lines) => {
+  const msg = Array.isArray(lines) ? lines.join("\n") : String(lines || "");
+  return useSwalValidationAlert({
+    icon: "error",
+    title,
+    message: msg,
+  });
+};
+
 /**
  * Generic Reference Maintenance
  * - loadEndpoint: GET list
@@ -56,6 +73,7 @@ export default function RefMaintenance({
   subtitle,
   loadEndpoint,
   getEndpoint,
+  deleteEndpoint,
   upsertEndpoint,
   getParamKey,
   codeLabel = "Code",
@@ -101,7 +119,7 @@ export default function RefMaintenance({
       setRows(normalized);
     } catch (e) {
       console.error(e);
-      Swal.fire("Error", `Failed to load ${title}.`, "error");
+      await useSwalErrorAlert("Error", `Failed to load ${title}.`);
       setAllRows([]);
       setRows([]);
     } finally {
@@ -119,7 +137,12 @@ export default function RefMaintenance({
       const parsed = parseSprocJsonResult(res?.data?.data);
       const row = Array.isArray(parsed) ? parsed?.[0] : null;
 
-      if (!row) return Swal.fire("Info", `${title} not found.`, "info");
+      if (!row)
+        return useSwalValidationAlert({
+          icon: "info",
+          title: "Info",
+          message: `${title} not found.`,
+        });
 
       const normalized = mapRow ? mapRow(row) : row;
       setSelectedCode(normalized?.[codeKey] ?? code);
@@ -131,7 +154,7 @@ export default function RefMaintenance({
       setIsEditing(false);
     } catch (e) {
       console.error(e);
-      Swal.fire("Error", `Failed to fetch ${title}.`, "error");
+      await useSwalErrorAlert("Error", `Failed to fetch ${title}.`);
     } finally {
       setIsLoading(false);
     }
@@ -141,8 +164,10 @@ export default function RefMaintenance({
     const code = String(form?.[codeKey] ?? "").trim();
     const name = String(form?.[nameKey] ?? "").trim();
 
-    if (!code) return Swal.fire("Required", `${codeLabel} is required.`, "warning");
-    if (!name) return Swal.fire("Required", `${nameLabel} is required.`, "warning");
+    const missing = [];
+    if (!code) missing.push(`• ${codeLabel}`);
+    if (!name) missing.push(`• ${nameLabel}`);
+    if (missing.length) return showValidation("Missing Required Field(s)", missing);
 
     setIsLoading(true);
     try {
@@ -152,17 +177,19 @@ export default function RefMaintenance({
         json_data: JSON.stringify(payload),
       });
 
-      Swal.fire("Saved", `${title} saved successfully.`, "success");
+      await useSwalshowSave(() => {}, () => {});
       setSelectedCode(code);
       setIsEditing(false);
       await loadList();
     } catch (e) {
       console.error(e);
-      Swal.fire(
-        "Error",
-        e?.response?.data?.message || `Failed to save ${title}.`,
-        "error"
-      );
+      const msg =
+        e?.response?.data?.message ||
+        e?.response?.data?.error ||
+        e?.message ||
+        `Failed to save ${title}.`;
+
+      await showValidation("Save Failed", [msg]);
     } finally {
       setIsLoading(false);
     }
@@ -178,6 +205,44 @@ export default function RefMaintenance({
     setSelectedCode("");
     setForm({ ...(emptyForm || {}) });
     setIsEditing(false);
+  };
+
+ const deleteRecord = async () => {
+    const code = String(form?.[codeKey] ?? "").trim();
+    if (!code) return showValidation("Required", [`• ${codeLabel}`]);
+
+    const confirm = await useSwalDeleteConfirm(
+      `Delete this ${title}?`,
+      `Code: ${code} | Name: ${String(form?.[nameKey] ?? "").trim()}`,
+      "Yes, delete it"
+    );
+
+    if (!confirm?.isConfirmed) return;
+
+    setIsLoading(true);
+    try {
+      const payload = { [getParamKey]: code };
+
+      await apiClient.post(deleteEndpoint, {
+        json_data: JSON.stringify(payload),
+      });
+
+      await useSwalDeleteRecord();
+      setSelectedCode("");
+      setForm({ ...(emptyForm || {}) });
+      setIsEditing(false);
+      await loadList();
+    } catch (e) {
+      console.error(e);
+      const msg =
+        e?.response?.data?.message ||
+        e?.response?.data?.error ||
+        e?.message ||
+        `Failed to delete ${title}.`;
+      await showValidation("Delete Failed", [msg]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const applySearch = (q) => {
@@ -230,6 +295,7 @@ export default function RefMaintenance({
       { key: "add", label: "Add", icon: faPlus, onClick: addNew, disabled: isLoading },
       { key: "save", label: "Save", icon: faSave, onClick: save, disabled: isLoading },
       { key: "reset", label: "Reset", icon: faUndo, onClick: reset, disabled: isLoading },
+      { key: "delete", label: "Delete", icon: faTrashAlt, onClick: deleteRecord, disabled: isLoading, variant: "danger" },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [isLoading, form]
