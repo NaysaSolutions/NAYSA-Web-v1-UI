@@ -468,6 +468,15 @@ const MSRR = (item) => {
 
     const vendNameFromDetail = details?.[0]?.VEND_NAME ?? ""; // if you later include it
 
+    // ✅ warehouse from PO header (hidden but fetched)
+    const whCode = header?.WhCode ?? header?.WH_CODE ?? header?.whCode ?? "";
+    const whName = header?.WhName ?? header?.WH_NAME ?? header?.whName ?? "";
+
+    // ✅ fetch location by warehouse
+    const locRow = await fetchLocationByWarehouse(whCode);
+    const locCode = locRow?.locCode || "";
+    const locName = locRow?.locName || "";
+
     updateState({
       poLookupModalOpen: false,
       poNo: header?.PoNo || "",
@@ -479,6 +488,13 @@ const MSRR = (item) => {
         header?.VendCode ?? header?.Vend_Code ?? vendCodeFromDetail ?? "",
       vendName:
         header?.VendName ?? header?.Vend_Name ?? vendNameFromDetail ?? "",
+
+      WHcode: header?.WhCode ?? header?.WH_CODE ?? header?.whCode ?? "",
+      WHname: header?.WhName ?? header?.WH_NAME ?? header?.whName ?? "",
+
+      // ✅ set location in MSRR header
+      locCode,
+      locName,
     });
 
     // 2) map selected PO detail lines into MSRR detailRows
@@ -548,14 +564,43 @@ const MSRR = (item) => {
         lotNo: "",
         bbDate: "",
         qcStatus: "",
-        whName: state.WHname || "",
-        locName: state.locName || "",
+        whName: header?.WhName ?? header?.WH_NAME ?? header?.whName ?? "",
+        locName: locName, // ✅ use fetched location, not old state
         freeQty: "0.000000",
       };
     });
 
     updateState({ detailRows: newRows });
   };
+
+  const fetchLocationByWarehouse = async (whCode) => {
+    if (!whCode) return null;
+
+    const payload = { json_data: { whCode } };
+    const res = await postRequest("location/getByWarehouse", payload);
+
+    if (res?.success && Array.isArray(res.data) && res.data.length > 0) {
+      return res.data[0]; // { locCode, locName, ... }
+    }
+    return null;
+  };
+
+  useEffect(() => {
+  const whCode = state.WHcode;
+  if (!whCode) {
+    updateState({ locCode: "", locName: "" });
+    return;
+  }
+
+  (async () => {
+    const locRow = await fetchLocationByWarehouse(whCode);
+    updateState({
+      locCode: locRow?.locCode ?? "",
+      locName: locRow?.locName ?? "",
+    });
+  })();
+}, [state.WHcode]);
+
 
   const handleReset = () => {
     loadDocDropDown();

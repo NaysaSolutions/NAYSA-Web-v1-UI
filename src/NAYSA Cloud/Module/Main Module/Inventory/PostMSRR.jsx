@@ -68,7 +68,7 @@ const PostMSRR = ({ isOpen, onClose, userCode }) => {
 
   const pickDocAndBranch = (row) => {
   if (!row) return { docNo: null, branchCode: null };
-  const docNo = row.sviNo;
+  const docNo = row.rrNo;
   const branchCode = row.branchCode;
   return { docNo, branchCode };
 };
