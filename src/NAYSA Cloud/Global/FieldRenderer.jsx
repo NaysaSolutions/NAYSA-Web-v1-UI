@@ -50,7 +50,7 @@ const FieldRenderer = ({
   const renderLabel = () => (
     <label htmlFor={inputId} className={labelClass}>
       {/* ✅ asterisk on LEFT side */}
-      {required && <span className="global-ref-asterisk-ui mr-1"></span>}
+      {required && <span className="global-ref-asterisk-ui mr-1">*</span>}
       {label}
     </label>
   );
