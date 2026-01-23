@@ -87,7 +87,8 @@ import {
   useSwalshowSaveSuccessDialog,
   useSwalErrorAlert,
   useSwalInfoAlert,
-  useSwalValidationAlert
+  useSwalValidationAlert,
+  useSwalvalidateRequiredFields
 } from '@/NAYSA Cloud/Global/behavior';
 
 
@@ -472,9 +473,9 @@ useEffect(() => {
 
       updateState({
         
-      branchCode: "HO",
-      branchName: "Head Office",
-      userCode:user.USER_CODE,
+      branchCode: currentUserRow.branchCode,
+      branchName: currentUserRow.branchName,
+      userCode:currentUserRow.userCode,
       documentDate:useGetCurrentDay(),
 
       refDocNo1: "",
@@ -851,22 +852,12 @@ const handleGetItem = async () => {
 
   const handleAddRow = async () => {
 
-    let errors = []; 
-    if (!WHCode) errors.push("- Header : Warehouse");
-    if (!selectedAJType) errors.push("- Header : Adjustment Type");
-
-
-    if (errors.length > 0) {
-      const errorMessage = "The Following Fields are Required:\n" + errors.join("\n");
-
-      useSwalValidationAlert({
-            icon: "error",
-            title: "Save Failed",
-            message: errorMessage 
-             });    
-             return null;
-    }
-
+    const fieldsToCheck = {
+      "Header : Warehouse": WHCode,
+      "Header : Adjustment Type": selectedAJType,
+    };
+    const isValid = useSwalvalidateRequiredFields(fieldsToCheck, "Add Item");
+    if (!isValid) return;
 
 
     await handleOpenMSLookup(false);
@@ -1851,8 +1842,7 @@ const handleCloseMSLookup = (selectedItems) => {
       itemName: item?.itemName ?? "",
       categCode: item?.categCode ?? "",
       uomCode: item?.uomCode ?? "",
-      unitCost: formatNumber(rawUnitCost, decUcost),
-      amount: formatNumber(0, 2),
+      unitCost: formatNumber(rawUnitCost, decUcost),     
       lotNo: item?.lotNo ?? "",
       bbDate: item?.bbDate ? new Date(item.bbDate).toISOString().split("T")[0] : "",
       qstatCode: item?.qstatCode ?? "",
@@ -1872,6 +1862,7 @@ const handleCloseMSLookup = (selectedItems) => {
           uniqueKey: originalKey,
           quantity: formatNumber(rawQtyHand * -1, decQty),
           qtyHand: formatNumber(rawQtyHand, decQty),
+          amount: formatNumber((rawQtyHand * rawUnitCost)*-1, 2),
           operation:"S"
         },
         // 2nd Record: No uniqueKey, Quantity is positive qtyHand
@@ -1880,6 +1871,7 @@ const handleCloseMSLookup = (selectedItems) => {
           uniqueKey: "", // No value as requested
           quantity: formatNumber(rawQtyHand, decQty),
           qtyHand: formatNumber(0, decQty),
+          amount: formatNumber((rawQtyHand), 2),
           operation:"A"
         }
       ];
@@ -1892,6 +1884,7 @@ const handleCloseMSLookup = (selectedItems) => {
         uniqueKey: originalKey,
         qtyHand: formatNumber(rawQtyHand, decQty),
         quantity: formatNumber(0, decQty),
+        amount: formatNumber(0, 2),
         operation: (selectedAJType === "IL") ? "S" : "A"
       }
     ];
@@ -2243,7 +2236,7 @@ return (
               }`}
               // onClick={() => setGLActiveTab('invoice')}
             >
-              Invoice Details
+              Item Details
             </button>
           </div>
         </div>
@@ -2449,7 +2442,7 @@ return (
                     value={row.lotNo || ""}
                     readOnly={
                                 isFormDisabled || 
-                                (selectedAJType === "IL") || 
+                                (selectedAJType === "IL" || selectedAJType === "CA") || 
                                 (selectedAJType === "IR" && row.operation === "S")
                               }
                     onChange={(e) => handleDetailChange(index, "lotNo", e.target.value)}
@@ -2464,7 +2457,7 @@ return (
                       value={row.bbDate || ""}
                       readOnly={
                                 isFormDisabled || 
-                                (selectedAJType === "IL") || 
+                                (selectedAJType === "IL"  || selectedAJType === "CA") || 
                                 (selectedAJType === "IR" && row.operation === "S")
                               }
                       onChange={(e) => handleDetailChange(index, 'bbDate', e.target.value)}
@@ -2481,15 +2474,20 @@ return (
                       value={row.qstatCode || ""}
                       readOnly
                     />
-                    {!isFormDisabled && row.operation !== "S" && (
+                    
+                    {["BB", "IG", "IR"].includes(selectedAJType) && !isFormDisabled && row.operation !== "S" && (
                     <FontAwesomeIcon 
                       icon={faMagnifyingGlass} 
                       className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
                       onClick={() => {
-                      updateState({ selectedRowIndex: index,
-                                    showQstatModal: true}); 
+                        updateState({ 
+                          selectedRowIndex: index,
+                          showQstatModal: true
+                        }); 
                       }}
-                    />)}
+                    />
+                  )}
+
                   </div>
                 </td>
 
@@ -2502,16 +2500,21 @@ return (
                       value={row.whouseCode || ""}
                       readOnly
                     />
-                    {!isFormDisabled && row.operation !== "S" &&(
+
+                   {["BB", "IG", "IR"].includes(selectedAJType) && !isFormDisabled && row.operation !== "S" && (
                     <FontAwesomeIcon 
                       icon={faMagnifyingGlass} 
                       className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
                       onClick={() => {
-                      updateState({ selectedRowIndex: index,
-                                    warehouseLookupOpen: true,
-                                    accountModalSource: "whouseCode"}); 
+                        updateState({ 
+                          selectedRowIndex: index,
+                          warehouseLookupOpen: true,
+                          accountModalSource: "whouseCode"
+                        }); 
                       }}
-                    />)}
+                    />
+                  )}
+
                   </div>
                 </td>   
 
@@ -2525,17 +2528,21 @@ return (
                       value={row.locCode || ""}
                       readOnly
                     />
-                    {!isFormDisabled && row.operation !== "S" &&(
-                    <FontAwesomeIcon 
-                      icon={faMagnifyingGlass} 
-                      className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                      onClick={() => {
-                      updateState({ selectedRowIndex: index,
-                                    locationLookupOpen: true,
-                                    selectedWH:row.whouseCode,
-                                    accountModalSource: "locCode"}); 
-                      }}
-                    />)}
+                      {["BB", "IG", "IR"].includes(selectedAJType) && !isFormDisabled && row.operation !== "S" && (
+                      <FontAwesomeIcon 
+                        icon={faMagnifyingGlass} 
+                        className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                        onClick={() => {
+                          updateState({ 
+                            selectedRowIndex: index,
+                            locationLookupOpen: true,
+                            selectedWH: row.whouseCode,
+                            accountModalSource: "locCode"
+                          }); 
+                        }}
+                      />
+                    )}
+
                   </div>
                 </td>      
 
@@ -3485,7 +3492,7 @@ return (
             <WarehouseLookupModal
               isOpen={warehouseLookupOpen}
               onClose={handleCloseWarehouseLookup}
-              filter="ActiveAll"
+              filter={"ByBC" + branchCode}
               source={accountModalSource}
             />
           )}  

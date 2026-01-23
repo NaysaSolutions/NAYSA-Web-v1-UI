@@ -34,6 +34,8 @@ export const useSwalValidationAlert = ({ icon = "info", title = "", message = ""
   Swal.fire({
     icon,
     title,
+    timer: 3000,
+    timerProgressBar: true, 
     html: `<div style="text-align: left; padding: 0 10px;">${formattedMessage}</div>`,
     didOpen: () => {
       const popup = Swal.getPopup();
@@ -58,6 +60,30 @@ export const useSwalValidationAlert = ({ icon = "info", title = "", message = ""
     },
   });
 };
+
+
+
+export const useSwalvalidateRequiredFields = (fields, title) => {
+  let errors = [];
+  for (const [label, value] of Object.entries(fields)) {
+    if (!value || (Array.isArray(value) && value.length === 0)) {
+      errors.push(`- ${label}`);
+    }
+  }
+
+  if (errors.length > 0) {
+    const errorMessage = "The following fields are required:\n" + errors.join("\n");
+    useSwalValidationAlert({
+      icon: "info",
+      title: title,
+      message: errorMessage, 
+    });  
+    return false; 
+  }
+  return true; 
+};
+
+
 
 export const useSwalReturnSummary = ({ icon = "info", title = "", message = "" }) => {
   const formattedMessage = (message || "")

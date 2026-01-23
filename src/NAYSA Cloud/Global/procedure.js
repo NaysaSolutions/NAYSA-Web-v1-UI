@@ -119,7 +119,7 @@ export const useTransactionUpsert = async (docCode, glData, updateState, idKey, 
                 const wasNewDocCreated = !glData[idKey] && !!returnedId;
                 if (returnedErrorMsg && returnedErrorCount >0) {
                   useSwalValidationAlert({
-                        icon: "error",
+                        icon: "info",
                         title: "Save Failed",
                         message: returnedErrorMsg || "An error occurred while saving the Transaction"
                       });    
