@@ -1,172 +1,3 @@
-// import React, { useState, useEffect } from 'react';
-// import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-// import { faTimes } from '@fortawesome/free-solid-svg-icons';
-// import {fetchData} from '../Configuration/BaseURL';
-
-
-// const SLMastLookupModal = ({ isOpen, onClose, customParam }) => {
-//   const [sl, setSLs] = useState([]);
-//   const [filtered, setFiltered] = useState([]);
-//   const [filters, setFilters] = useState({ sltypeCode: '', slCode: '', slName: '' });
-//   const [loading, setLoading] = useState(false);
-
-//   useEffect(() => {
-//     if (isOpen) {
-//       setLoading(true);
-
-//       const params = {
-//         PARAMS: JSON.stringify({
-//           search: "",
-//           page: 1,
-//           pageSize: 10,
-//         }),
-//       };
-
-
-//       fetchData("/lookupSL", params)
-//       .then((result) => {
-//         if (result.success) {
-//           const resultData = JSON.parse(result.data[0].result);
-//           setSLs(resultData);
-//           setFiltered(resultData);
-//         } else {
-//           alert(result.message || "Failed to fetch SL");
-//         }
-//       })
-//       .catch((err) => {
-//         console.error("Failed to fetch SL:", err);
-//         alert(`Error: ${err.message}`);
-//       })
-//       .finally(() => {
-//         setLoading(false);
-//       });
-//   }
-
-//   }, [isOpen]);
-  
-
-//   useEffect(() => {
-//     const newFiltered = sl.filter(item =>
-//       (item.sltypeCode || '').toLowerCase().includes((filters.sltypeCode || '').toLowerCase()) &&
-//       (item.slCode || '').toLowerCase().includes((filters.slCode || '').toLowerCase()) &&
-//       (item.slName || '').toLowerCase().includes((filters.slName || '').toLowerCase())
-//     );
-//     setFiltered(newFiltered);
-//   }, [filters, sl]);
-
-//   const handleApply = (sl) => {
-//     onClose(sl);
-//   };
-
-  
-//   const handleFilterChange = (e, key) => {
-//     setFilters({ ...filters, [key]: e.target.value });
-//   };
-
-//   if (!isOpen) return null;
-
-//   return (
-//     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-//       <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-auto relative">
-//         {/* Close Icon */}
-//         <button
-//           onClick={() => onClose(null)}
-//           className="absolute top-3 right-3 text-red-500 hover:text-red-700"
-//         >
-//           <FontAwesomeIcon icon={faTimes} size="lg" />
-//         </button>
-
-//         <h2 className="text-lg font-semibold mb-4 uppercase">Select SL</h2>
-
-//         {loading ? (
-//           <div className="flex justify-center items-center h-32">
-//             <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-//           </div>
-//         ) : (
-//           <div className="overflow-x-auto max-h-[60vh] rounded">
-//             <table className="min-w-full border-collapse text-sm border border-gray-200">
-//               <thead className='text-gray-700 uppercase bg-gray-100 sticky top-0 z-10'>
-//                 <tr>
-//                   <th className="px-2 py-2 border">SL Type</th>
-//                   <th className="px-2 py-2 border">SL Code</th>
-//                   <th className="px-10 py-2 border">SL Name</th>
-//                   <th className="px-4 py-2 border">Action</th>
-//                 </tr>
-//                 <tr className="bg-white">
-//                   <th className="border px-4 py-1">
-//                     <input
-//                       type="text"
-//                       value={filters.sltypeCode}
-//                       onChange={(e) => handleFilterChange(e, 'sltypeCode')}
-//                       className="w-full border px-2 py-1 rounded text-sm"
-//                     />
-//                   </th>
-//                   <th className="border px-4 py-1">
-//                     <input
-//                       type="text"
-//                       value={filters.slCode}
-//                       onChange={(e) => handleFilterChange(e, 'slCode')}
-//                       className="w-full border px-2 py-1 rounded text-sm"
-//                     />
-//                   </th>
-//                   <th className="border px-4 py-1">
-//                     <input
-//                       type="text"
-//                       value={filters.slName}
-//                       onChange={(e) => handleFilterChange(e, 'slName')}
-//                       className="w-full border px-2 py-1 rounded text-sm"
-//                     />
-//                   </th>              
-//                   <th className="border px-4 py-1"></th>
-//                 </tr>
-//               </thead>
-//               <tbody className="divide-y divide-gray-200">
-//   {loading ? (
-//     <tr>
-//       <td colSpan="3" className="py-10 text-center">
-//         <div className="w-8 h-8 mx-auto border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-//         <div className="text-sm text-gray-500 mt-2">Loading SL...</div>
-//       </td>
-//     </tr>
-//   ) : filtered.length > 0 ? (
-//     filtered.map((sl, index) => (
-//       <tr key={index} className="bg-white hover:bg-gray-100 transition">
-//         <td className="px-4 py-2 border">{sl.sltypeCode}</td>
-//         <td className="px-4 py-2 border">{sl.slCode}</td>
-//         <td className="px-4 py-2 border">{sl.slName}</td>
-//         <td className="border px-4 py-2">
-//           <button
-//             onClick={() => handleApply(sl)}
-//             className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
-//           >
-//             Apply
-//           </button>
-//         </td>
-//       </tr>
-//     ))
-//   ) : (
-//     <tr>
-//       <td colSpan="3" className="px-4 py-6 text-center text-gray-500">
-//         No matching SL found.
-//       </td>
-//     </tr>
-//   )}
-// </tbody>
-
-//             </table>
-//             <div className="p-3 text-sm text-gray-600">
-//               Showing <strong>{filtered.length}</strong> of {sl.length} entries
-//             </div>
-//           </div>
-//         )}
-//       </div>
-//     </div>
-//   );
-// };
-
-// export default SLMastLookupModal;
-
-
 import React, { useState, useEffect } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTimes, faSpinner } from '@fortawesome/free-solid-svg-icons';
@@ -181,22 +12,21 @@ const SLMastLookupModal = ({ isOpen, onClose, customParam }) => {
 
     useEffect(() => {
         if (!isOpen) {
-            // Reset states when modal is closed, mirroring BranchLookupModal
             setSLs([]);
             setFiltered([]);
             setFilters({ sltypeCode: '', slCode: '', slName: '' });
             setError(null);
-            return; // Exit early if not open
+            return; 
         }
 
         setLoading(true);
-        setError(null); // Clear previous errors
+        setError(null); 
 
         const params = {
             PARAMS: JSON.stringify({
-                search: "",
+                search: "ActiveAll",
                 page: 1,
-                pageSize: 10, // Consider implementing pagination for large datasets
+                pageSize: 10, 
             }),
         };
 
@@ -205,10 +35,10 @@ const SLMastLookupModal = ({ isOpen, onClose, customParam }) => {
                 if (result.success) {
                     const slData = JSON.parse(result.data[0].result);
                     setSLs(slData);
-                    setFiltered(slData); // Initialize filtered with all data
+                    setFiltered(slData); 
                 } else {
                     setError(result.message || "Failed to fetch SL data.");
-                    setSLs([]); // Ensure state is empty if no data
+                    setSLs([]); 
                     setFiltered([]);
                 }
             })
@@ -219,7 +49,10 @@ const SLMastLookupModal = ({ isOpen, onClose, customParam }) => {
             .finally(() => {
                 setLoading(false);
             });
-    }, [isOpen, customParam]); // customParam added as dependency for consistency
+    }, [isOpen, customParam]); 
+
+
+
 
     useEffect(() => {
         const newFiltered = sl.filter(item =>
@@ -228,13 +61,12 @@ const SLMastLookupModal = ({ isOpen, onClose, customParam }) => {
             (item.slName || '').toLowerCase().includes((filters.slName || '').toLowerCase())
         );
         setFiltered(newFiltered);
-    }, [filters, sl]); // Depend on 'sl' (original data) for filtering
+    }, [filters, sl]); 
 
-    const handleApply = (selectedSL) => { 
-      console.log("SLMastLookupModal - Data being passed to onClose:", selectedSL);
-        
-        onClose(selectedSL); // Pass the selected SL object back
+    const handleApply = (selectedSL) => {        
+        onClose(selectedSL); 
     };
+
 
     const handleFilterChange = (e, key) => {
         setFilters({ ...filters, [key]: e.target.value });
@@ -269,13 +101,13 @@ const SLMastLookupModal = ({ isOpen, onClose, customParam }) => {
                         </div>
                     ) : (
                         <div className="overflow-auto max-h-[calc(90vh-120px)] custom-scrollbar">
-                            <table className="min-w-full divide-y divide-gray-100">
+                            <table className="w-full table-fixed divide-y divide-gray-100">
                                 <thead className="bg-gray-100 sticky top-0 z-10 shadow-sm">
                                     <tr>
-                                        <th className="px-4 py-2 text-left text-xs font-bold text-blue-900 tracking-wider cursor-pointer hover:bg-blue-100 transition-colors duration-200">SL Type</th>
-                                        <th className="px-4 py-2 text-left text-xs font-bold text-blue-900 tracking-wider cursor-pointer hover:bg-blue-100 transition-colors duration-200">SL Code</th>
-                                        <th className="px-4 py-2 text-left text-xs font-bold text-blue-900 tracking-wider cursor-pointer hover:bg-blue-100 transition-colors duration-200">SL Name</th>
-                                        <th className="px-4 py-2 text-left text-xs font-bold text-blue-900 tracking-wider cursor-pointer hover:bg-blue-100 transition-colors duration-200">Action</th>
+                                        <th className="w-[30px] px-4 py-2 text-left text-xs font-bold text-blue-900 tracking-wider cursor-pointer hover:bg-blue-100 transition-colors duration-200">SL Type</th>
+                                        <th className="w-[40px] px-4 py-2 text-left text-xs font-bold text-blue-900 tracking-wider cursor-pointer hover:bg-blue-100 transition-colors duration-200">SL Code</th>
+                                        <th className="w-[140px] px-4 py-2 text-left text-xs font-bold text-blue-900 tracking-wider cursor-pointer hover:bg-blue-100 transition-colors duration-200">SL Name</th>
+                                        <th className="w-[30px] px-4 py-2 text-left text-xs font-bold text-blue-900 tracking-wider cursor-pointer hover:bg-blue-100 transition-colors duration-200">Action</th>
                                     </tr>
                                     <tr className="bg-gray-100">
                                         <th className="px-3 py-1">

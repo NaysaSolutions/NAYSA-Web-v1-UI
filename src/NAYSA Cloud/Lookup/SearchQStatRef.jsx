@@ -102,10 +102,10 @@ const QstatLookupModal = ({ isOpen, onClose, customParam }) => {
               <thead className="bg-gray-100 sticky top-0">
                 <tr>
                   <th className="px-4 py-2 text-left font-bold text-blue-900">
-                    QStat Code
+                    Quality Status Code
                   </th>
                   <th className="px-4 py-2 text-left font-bold text-blue-900">
-                    QStat Name
+                    Quality Status Name
                   </th>
                   <th className="px-4 py-2 text-left font-bold text-blue-900">
                     Action

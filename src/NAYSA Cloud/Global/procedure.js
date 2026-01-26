@@ -445,18 +445,21 @@ export const useHandlePostTran = async (selectedData, userPw,docCode,userCode,se
 
   try {
 
+ 
+
     const payload = {
       userCode,
       userPassword: userPw,
       json_data: {
         userCode,
-        dt1: selectedData.map((groupId, idx) => ({
+        dt1: selectedData.map((item, idx) => ({
           lnNo: idx + 1, // number (safer for SQL)
-          groupId,
+          groupId: item.groupId
         })),
       },
     };
 
+    console.log(JSON.stringify(payload))
  
     const { data: res } = await apiClient.post("/finalize"+docCode, payload);
 
@@ -470,6 +473,8 @@ export const useHandlePostTran = async (selectedData, userPw,docCode,userCode,se
       onClose?.();
       return;
     }
+
+
 
     // 200 but success=false
     Swal.fire("Posting failed", res?.message ?? "Finalize failed.", "error");

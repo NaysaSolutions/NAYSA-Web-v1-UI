@@ -14,7 +14,12 @@ import {
   FiShield,
   FiSearch,
   FiSun,
-  FiMoon
+  FiMoon,
+  FiBox,
+  FiShoppingCart,
+  FiFileText,
+  FiList,
+  FiCircle
 } from "react-icons/fi";
 
 const iconMap = {
@@ -23,7 +28,9 @@ const iconMap = {
   "Accounts Payable": FiCreditCard,
   "Accounts Receivable": FiDollarSign,
   "Global Reference": FiGlobe,
-  "Application Security": FiShield
+  "Application Security": FiShield,
+  "Purchasing": FiShoppingCart,
+  "Inventory": FiBox
 };
 
 const highlightText = (text, searchTerm) => {

@@ -362,7 +362,7 @@ const MSAJ = () => {
 
   const [totals, setTotals] = useState({
   totalQuantity: '0.00',
-  totalAmount: '0.00',
+  totalItemAmount: '0.00',
   });
 
   const customParamMap = {
@@ -375,7 +375,7 @@ const MSAJ = () => {
   const updateTotalsDisplay = (quantity, amount) => {
     setTotals({
           totalQuantity: formatNumber(quantity,decQty),
-          totalAmount: formatNumber(amount),
+          totalItemAmount: formatNumber(amount),
       });
   };
 
@@ -708,6 +708,8 @@ const handleActivityOption = async (action) => {
       refDocNo1: refDocNo1,
       refDocNo2: refDocNo2,
       remarks: remarks || "",
+      whCode:WHCode||"",
+      locCode:LocCode || "",
       userCode: userCode,
       dt1: detailRows.map((row, index) => ({
         lnNo: String(index + 1),
@@ -2165,7 +2167,7 @@ return (
                      htmlFor="locName"
                      className="global-tran-floating-label"
                    >
-                     Location <span className="text-red-500">*</span>
+                     Location 
                    </label>
                    <button
                      type="button"
@@ -2288,15 +2290,17 @@ return (
             <tr key={index} className="global-tran-tr-ui">
               
               {/* LN */}
-              <td className="global-tran-td-ui text-center">{index + 1}</td>
-            
+              <td className={`global-tran-td-ui text-center ${row.quantity < 0 ? 'text-red-600' : ''}`}>
+              {index + 1}
+              </td>
+                        
 
             {/* Item Code */}
               <td className="global-tran-td-ui relative">
                 <div className="flex items-center">
                   <input
                     type="text"
-                    className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                    className={`w-[100px] global-tran-td-inputclass-ui  ${row.quantity < 0 ? 'text-red-600' : ''}`}
                     value={row.itemCode || ""}
                     readOnly
                     onChange={(e) => handleDetailChange(index, 'itemCode', e.target.value)}
@@ -2317,7 +2321,7 @@ return (
               <td className="global-tran-td-ui">
                   <input
                     type="text"
-                    className="w-[300px] global-tran-td-inputclass-ui"
+                    className={`w-[300px] global-tran-td-inputclass-ui ${row.quantity < 0 ? 'text-red-600' : ''}`}
                     value={row.itemName || ""}
                     readOnly
                     onChange={(e) => handleDetailChange(index, 'itemName', e.target.value)}
@@ -2331,7 +2335,7 @@ return (
               <td className="global-tran-td-ui">
                   <input
                     type="text"
-                    className="w-[50px] text-center global-tran-td-inputclass-ui"
+                    className={`w-[50px] global-tran-td-inputclass-ui text-center ${row.quantity < 0 ? 'text-red-600' : ''}`}
                     value={row.uomCode || ""}
                     readOnly
                     onChange={(e) => handleDetailChange(index, 'uomCode', e.target.value)}
@@ -2342,7 +2346,7 @@ return (
                  <td className="global-tran-td-ui" hidden={handleFieldBehavior("hiddenCAMode")} >
                     <input
                         type="text"
-                        className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
+                        className={`w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 ${row.quantity < 0 ? 'text-red-600' : ''}`}
                         value={row.quantity || ""}
                         readOnly={isFormDisabled}
                         onChange={(e) => {
@@ -2384,7 +2388,7 @@ return (
                 <td className="global-tran-td-ui">
                     <input
                         type="text"
-                        className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
+                        className={`w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 ${row.quantity < 0 ? 'text-red-600' : ''}`}
                         value={row.unitCost || ""}
                         readOnly={
                                 isFormDisabled || 
@@ -2429,7 +2433,7 @@ return (
                 <td className="global-tran-td-ui" hidden={handleFieldBehavior("hiddenCAMode")} >
                   <input
                     type="text"
-                    className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 cursor-pointer"
+                    className={`w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 cursor-pointer ${row.quantity < 0 ? 'text-red-600' : ''}`}
                     value={formatNumber(parseFormattedNumber(row.itemAmount)) || formatNumber(parseFormattedNumber(row.itemAmount)) || ""}
                     readOnly
                   />
@@ -2438,7 +2442,7 @@ return (
                 <td className="global-tran-td-ui">
                     <input
                     type="text"
-                    className="w-[200px] global-tran-td-inputclass-ui"
+                    className={`w-[200px] global-tran-td-inputclass-ui ${row.quantity < 0 ? 'text-red-600' : ''}`}
                     value={row.lotNo || ""}
                     readOnly={
                                 isFormDisabled || 
@@ -2453,7 +2457,7 @@ return (
                  <td className="global-tran-td-ui">
                     <input
                       type="date"
-                      className="w-[100px] global-tran-td-inputclass-ui"
+                      className={`w-[100px] global-tran-td-inputclass-ui text-center ${row.quantity < 0 ? 'text-red-600' : ''}`}
                       value={row.bbDate || ""}
                       readOnly={
                                 isFormDisabled || 
@@ -2470,7 +2474,7 @@ return (
                   <div className="flex items-center">
                     <input
                       type="text"
-                      className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                      className={`w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer ${row.quantity < 0 ? 'text-red-600' : ''}`}
                       value={row.qstatCode || ""}
                       readOnly
                     />
@@ -2496,7 +2500,7 @@ return (
                   <div className="flex items-center">
                     <input
                       type="text"
-                      className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                      className={`w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer ${row.quantity < 0 ? 'text-red-600' : ''}`}
                       value={row.whouseCode || ""}
                       readOnly
                     />
@@ -2524,7 +2528,7 @@ return (
                   <div className="flex items-center">
                     <input
                       type="text"
-                      className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                      className={`w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer ${row.quantity < 0 ? 'text-red-600' : ''}`}
                       value={row.locCode || ""}
                       readOnly
                     />
@@ -2552,7 +2556,7 @@ return (
                   <div className="flex items-center">
                     <input
                       type="text"
-                      className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                      className={`w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer ${row.quantity < 0 ? 'text-red-600' : ''}`}
                       value={row.acctCode || ""}
                       readOnly
                     />
@@ -2577,7 +2581,7 @@ return (
                   <div className="flex items-center">
                     <input
                       type="text"
-                      className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                      className={`w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer ${row.quantity < 0 ? 'text-red-600' : ''}`}
                       value={row.rcCode || ""}
                       readOnly
                     />
@@ -2609,7 +2613,7 @@ return (
                       <div className="relative w-fit">
                           <input
                               type="text"
-                              className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
+                              className={`w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer ${row.quantity < 0 ? 'text-red-600' : ''}`}
                               value={row.slCode || ""}
                               onChange={(e) => handleDetailChange(index, 'slCode', e.target.value)}
                               readOnly
@@ -2634,7 +2638,7 @@ return (
                  <td className="global-tran-td-ui">
                     <input
                     type="text"
-                    className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 cursor-pointer"
+                    className={`w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 cursor-pointer ${row.quantity < 0 ? 'text-red-600' : ''}`}
                     value={row.qtyHand || ""}
                     readOnly
                     />
@@ -2644,7 +2648,7 @@ return (
                  <td className="global-tran-td-ui hidden">
                   <input
                     type="text"
-                    className="w-[200px] global-tran-td-inputclass-ui"
+                   className={`w-[100px] global-tran-td-inputclass-ui ${row.quantity < 0 ? 'text-red-600' : ''}`}
                     value={row.categCode || ""}
                     readOnly
                   />
@@ -2798,7 +2802,7 @@ return (
                 <th className="global-tran-th-ui">LN</th>
                 <th className="global-tran-th-ui">Account Code</th>
                 <th className="global-tran-th-ui">RC Code</th>
-                <th className="global-tran-th-ui">SL Type Code</th>
+                <th className="global-tran-th-ui">SL Type</th>
                 <th className="global-tran-th-ui">SL Code</th>
                 <th className="global-tran-th-ui w-[2000px]">Particulars</th>
                 <th className="global-tran-th-ui">VAT Code</th>
@@ -2901,7 +2905,7 @@ return (
                   <td className="global-tran-td-ui">
                     <input
                       type="text"
-                      className="w-[100px] global-tran-td-inputclass-ui"
+                      className="w-[40px] global-tran-td-inputclass-ui"
                       value={row.sltypeCode || ""}
                       onChange={(e) => handleDetailChangeGL(index, 'sltypeCode', e.target.value)}
                     />
@@ -2941,7 +2945,7 @@ return (
                   <td className="global-tran-td-ui">
                           <input
                             type="text"
-                            className="w-[300px] global-tran-td-inputclass-ui"
+                            className="w-[400px] global-tran-td-inputclass-ui"
                             value={row.particular || ""}
                             onChange={(e) => handleDetailChange(index, 'particular', e.target.value)}
                           />
@@ -2952,7 +2956,7 @@ return (
                       <div className="relative w-fit">
                           <input
                               type="text"
-                              className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
+                              className="w-[50px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
                               value={row.vatCode || ""}
                               onChange={(e) => handleDetailChangeGL(index, 'vatCode', e.target.value)}
                               readOnly
@@ -2991,7 +2995,7 @@ return (
                       <div className="relative w-fit">
                           <input
                               type="text"
-                              className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
+                              className="w-[50px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
                               value={row.atcCode || ""}
                               onChange={(e) => handleDetailChangeGL(index, 'atcCode', e.target.value)}
                               readOnly
