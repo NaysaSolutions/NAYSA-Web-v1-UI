@@ -2,14 +2,32 @@ import React, { useMemo } from "react";
 import RefMaintenance from "@/NAYSA Cloud/Master Data/CustMastTabs/ReferenceCodes/RefMaintenance";
 
 const normalizePayTermRow = (x) => {
-  const raw = (x?.advances ?? "").toString().trim().toUpperCase();
+  const rawAdv = (x?.advances ?? "").toString().trim().toUpperCase();
+  const rawAct = (x?.active ?? "").toString().trim().toUpperCase();
+
   return {
     code: x?.paytermCode ?? x?.payterm_code ?? "",
     name: x?.paytermName ?? x?.payterm_name ?? "",
-    daysDue: x?.daysDue ?? x?.days_due ?? x?.dueDays ?? x?.due_days ?? 0,
+
+    // keep as string for inputs, but normalize from API
+    daysDue:
+      x?.daysDue ??
+      x?.days_due ??
+      x?.dueDays ??
+      x?.due_days ??
+      "",
 
     // ✅ only "Y" or ""
-    advances: raw === "Y" ? "Y" : "",
+    advances: rawAdv === "Y" ? "Y" : "",
+
+    // ✅ active defaults to "Y"
+    active: rawAct === "N" ? "N" : "Y",
+
+    // ✅ KEEP REGISTRATION FIELDS
+    registeredBy: x?.registeredBy ?? x?.registered_by ?? "",
+    registeredDate: x?.registeredDate ?? x?.registered_date ?? "",
+    lastUpdatedBy: x?.lastUpdatedBy ?? x?.updatedBy ?? x?.updated_by ?? "",
+    lastUpdatedDate: x?.lastUpdatedDate ?? x?.updatedDate ?? x?.updated_date ?? "",
   };
 };
 
@@ -18,8 +36,10 @@ export default function PayTermRef() {
     () => ({
       code: "",
       name: "",
-      daysDue: 0,
-      advances: "", // ✅ default blank (No)
+      daysDue: 0,     // keep string for input
+      advances: "",    // default blank
+      active: "Y",     // default active
+      // userCode will be injected by RefMaintenance (and/or on Add if you applied the fix)
     }),
     []
   );
@@ -38,7 +58,7 @@ export default function PayTermRef() {
       emptyForm={emptyForm}
       mapRow={normalizePayTermRow}
 
-      // ✅ AP Advances dropdown + column (Yes or blank only)
+      // AP Advances dropdown + column
       extraColLabel="AP Advances"
       extraKey="advances"
       extraDefault=""
@@ -47,16 +67,28 @@ export default function PayTermRef() {
         { value: "", label: "" },
       ]}
 
-      buildUpsertPayload={(form) => ({
-        json_data: {
-          paytermCode: form.code,
-          paytermName: form.name,
-          dueDays: Number(form.daysDue || 0),
+      // Active column + field
+      showActive={true}
+      activeLabel="Active"
+      activeKey="active"
+      activeDefault="Y"
+      activeOptions={[
+        { value: "Y", label: "Yes" },
+        { value: "N", label: "No" },
+      ]}
 
-          // ✅ send only "Y" or ""
+      buildUpsertPayload={(form) => {
+        const due = String(form.daysDue ?? "").trim();
+
+        return {
+          paytermCode: String(form.code ?? "").trim(),
+          paytermName: String(form.name ?? "").trim(),
+          dueDays: due === "" ? null : Number(due), // safe convert
           advances: (form.advances ?? "").toString().trim().toUpperCase() === "Y" ? "Y" : "",
-        },
-      })}
+          active: (form.active ?? "Y").toString().trim().toUpperCase() === "N" ? "N" : "Y",
+          userCode: form.userCode, // injected by RefMaintenance.save()
+        };
+      }}
     />
   );
 }
