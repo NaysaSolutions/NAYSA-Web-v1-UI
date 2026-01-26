@@ -1,5 +1,7 @@
 // src/NAYSA Cloud/Master Data/CustMastTabs/PayeeSetupTab.jsx
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faMagnifyingGlass } from "@fortawesome/free-solid-svg-icons";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer";
 
 import SearchCusMast from "@/NAYSA Cloud/Lookup/SearchCustMast.jsx";
@@ -20,7 +22,15 @@ const SectionHeader = ({ title }) => (
 );
 
 const Card = ({ children, className = "" }) => (
-  <div className={`global-tran-textbox-group-div-ui flex flex-col ${className}`}>
+  <div
+    className={[
+      "global-tran-textbox-group-div-ui flex flex-col",
+      "transition-all duration-150",
+      "focus-within:ring-2 focus-within:ring-blue-400/60 focus-within:shadow-2xl",
+      "focus-within:-translate-y-[1px]",
+      className,
+    ].join(" ")}
+  >
     {children}
   </div>
 );
@@ -155,6 +165,59 @@ const PayeeSetupTab = forwardRef(
       onChangeForm({ taxClass: v });
     };
 
+    /* ------------------------------------------------------------------
+       ✅ Auto-display rules for Registered Name / Business Name / Check Name
+       - Supplier (SU): encode Registered Name, auto-fill Business Name + Check Name (editable)
+       - Employee (EM): encode First/Middle/Last, auto-fill Registered Name + Business Name + Check Name
+         (Registered & Business are disabled; Check Name stays editable)
+    ------------------------------------------------------------------ */
+    const nameAutoRef = useRef({
+      businessLastAuto: "",
+      checkLastAuto: "",
+      businessTouched: false,
+      checkTouched: false,
+      lastSl: "",
+    });
+
+    const handleBusinessNameChange = (v) => {
+      nameAutoRef.current.businessTouched = true;
+      onChangeForm({ businessName: v });
+    };
+
+    const handleCheckNameChange = (v) => {
+      nameAutoRef.current.checkTouched = true;
+      onChangeForm({ checkName: v });
+    };
+
+    const applyAutoNames = (updates = {}, baseName = "") => {
+      const reg = String(baseName || "").trim();
+
+      const currentBusiness = form?.businessName ?? "";
+      const currentCheck = form?.checkName ?? "";
+
+      const businessWasAuto =
+        currentBusiness && currentBusiness === nameAutoRef.current.businessLastAuto;
+      const checkWasAuto =
+        currentCheck && currentCheck === nameAutoRef.current.checkLastAuto;
+
+      const businessEmpty = !String(currentBusiness || "").trim();
+      const checkEmpty = !String(currentCheck || "").trim();
+
+      // Auto business name if empty or previously auto-set AND user didn't manually touch it
+      if ((businessEmpty || businessWasAuto) && !nameAutoRef.current.businessTouched) {
+        updates.businessName = reg;
+        nameAutoRef.current.businessLastAuto = reg;
+      }
+
+      // Auto check name if empty or previously auto-set AND user didn't manually touch it
+      if ((checkEmpty || checkWasAuto) && !nameAutoRef.current.checkTouched) {
+        updates.checkName = reg;
+        nameAutoRef.current.checkLastAuto = reg;
+      }
+
+      return updates;
+    };
+
     useEffect(() => {
       if (!isEditing) return;
 
@@ -191,6 +254,23 @@ const PayeeSetupTab = forwardRef(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sl, isEditing]);
 
+
+    useEffect(() => {
+      if (!isEditing) return;
+
+      const slChanged = nameAutoRef.current.lastSl !== sl;
+      if (slChanged) {
+        // reset touch flags on SL change (fresh defaults)
+        nameAutoRef.current.businessTouched = false;
+        nameAutoRef.current.checkTouched = false;
+        nameAutoRef.current.businessLastAuto = "";
+        nameAutoRef.current.checkLastAuto = "";
+      }
+      nameAutoRef.current.lastSl = sl;
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sl, isEditing]);
+
+
     // Lookup modal states
     const [isCustLookupOpen, setIsCustLookupOpen] = useState(false);
     const [isVendLookupOpen, setIsVendLookupOpen] = useState(false);
@@ -201,11 +281,39 @@ const PayeeSetupTab = forwardRef(
     const [isPayTermLookupOpen, setIsPayTermLookupOpen] = useState(false);
     const [isCurrLookupOpen, setIsCurrLookupOpen] = useState(false);
 
+    useEffect(() => {
+      if (!isEditing) return;
+
+      // Employee: First/Middle/Last drives Registered/Business/Check Names
+      if (isEmployee) {
+        const reg = buildRegisteredName(form.firstName, form.middleName, form.lastName);
+        const updates = {};
+        if ((form[f.name] || "") !== reg) updates[f.name] = reg;
+
+        applyAutoNames(updates, reg);
+
+        if (Object.keys(updates).length) onChangeForm(updates);
+      }
+
+      // Supplier: if Registered Name is present, default Business & Check when blank
+      if (isSupplier) {
+        const reg = form[f.name] || "";
+        if (String(reg || "").trim()) {
+          const updates = {};
+          applyAutoNames(updates, reg);
+          if (Object.keys(updates).length) onChangeForm(updates);
+        }
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isEmployee, isSupplier, isEditing, form.firstName, form.middleName, form.lastName, form[f.name]]);
+
+
     const openPayeeLookup = () => {
-      if (isDisabled) return;
+      if (isLoading) return; // ✅ only block when loading
       if (isVendor) setIsVendLookupOpen(true);
       else setIsCustLookupOpen(true);
     };
+
 
 
     return (
@@ -238,14 +346,15 @@ const PayeeSetupTab = forwardRef(
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {/* Payee/Customer Code (kept as you currently designed: lookup + not editable) */}
+            {/* Payee/Customer Code (Lookup is clickable even in view mode) */}
             <FieldRenderer
               label={isVendor ? "Payee Code" : "Customer Code"}
               required
               type="lookup"
               value={form[f.code] || ""}
-              onLookup={isDisabled ? undefined : openPayeeLookup}
-              readOnly={true}
-              disabled={isDisabled}
+              onLookup={openPayeeLookup}   // ✅ always works
+              readOnly={true}              // ✅ can't type
+              disabled={isLoading}         // ✅ only disable when loading
             />
 
             <FieldRenderer
@@ -265,7 +374,16 @@ const PayeeSetupTab = forwardRef(
             required
             type="text"
             value={form[f.name] || ""}
-            onChange={(v) => onChangeForm({ [f.name]: v })}
+            onChange={(v) => {
+              const updates = { [f.name]: v };
+
+              // Supplier: Registered Name drives Business & Check Name (both still editable)
+              if (isSupplier) {
+                applyAutoNames(updates, v);
+              }
+
+              onChangeForm(updates);
+            }}
             readOnly={isReadOnly || isEmployee}
             disabled={isDisabled || isEmployee}
           />
@@ -275,21 +393,19 @@ const PayeeSetupTab = forwardRef(
             required
             type="text"
             value={form.businessName || ""}
-            onChange={(v) => onChangeForm({ businessName: v })}
+            onChange={handleBusinessNameChange}
+            readOnly={isReadOnly || isEmployee}
+            disabled={isDisabled || isEmployee}
+          />
+
+          <FieldRenderer
+            label="Check Name"
+            type="text"
+            value={form.checkName || ""}
+            onChange={handleCheckNameChange}
             readOnly={isReadOnly}
             disabled={isDisabled}
           />
-
-          {"checkName" in (form || {}) && (
-            <FieldRenderer
-              label="Check Name"
-              type="text"
-              value={form.checkName || ""}
-              onChange={(v) => onChangeForm({ checkName: v })}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-            />
-          )}
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <FieldRenderer
@@ -299,7 +415,9 @@ const PayeeSetupTab = forwardRef(
               onChange={(v) => {
                 const updates = { firstName: v };
                 if (isEmployee) {
-                  updates[f.name] = buildRegisteredName(v, form.middleName, form.lastName);
+                  const reg = buildRegisteredName(v, form.middleName, form.lastName);
+                  updates[f.name] = reg;
+                  applyAutoNames(updates, reg);
                 }
                 onChangeForm(updates);
               }}
@@ -314,7 +432,9 @@ const PayeeSetupTab = forwardRef(
               onChange={(v) => {
                 const updates = { middleName: v };
                 if (isEmployee) {
-                  updates[f.name] = buildRegisteredName(form.firstName, v, form.lastName);
+                  const reg = buildRegisteredName(form.firstName, v, form.lastName);
+                  updates[f.name] = reg;
+                  applyAutoNames(updates, reg);
                 }
                 onChangeForm(updates);
               }}
@@ -329,7 +449,9 @@ const PayeeSetupTab = forwardRef(
               onChange={(v) => {
                 const updates = { lastName: v };
                 if (isEmployee) {
-                  updates[f.name] = buildRegisteredName(form.firstName, form.middleName, v);
+                  const reg = buildRegisteredName(form.firstName, form.middleName, v);
+                  updates[f.name] = reg;
+                  applyAutoNames(updates, reg);
                 }
                 onChangeForm(updates);
               }}
@@ -424,26 +546,24 @@ const PayeeSetupTab = forwardRef(
             disabled={isDisabled}
           />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <FieldRenderer
-              label="Address 1"
-              required
-              type="text"
-              value={form[f.addr1] || ""}
-              onChange={(v) => onChangeForm({ [f.addr1]: v })}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-            />
+          <FieldRenderer
+            label="Address 1"
+            required
+            type="text"
+            value={form[f.addr1] || ""}
+            onChange={(v) => onChangeForm({ [f.addr1]: v })}
+            readOnly={isReadOnly}
+            disabled={isDisabled}
+          />
 
-            <FieldRenderer
-              label="Address 2"
-              type="text"
-              value={form[f.addr2] || ""}
-              onChange={(v) => onChangeForm({ [f.addr2]: v })}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-            />
-          </div>
+          <FieldRenderer
+            label="Address 2"
+            type="text"
+            value={form[f.addr2] || ""}
+            onChange={(v) => onChangeForm({ [f.addr2]: v })}
+            readOnly={isReadOnly}
+            disabled={isDisabled}
+          />
 
           <FieldRenderer
             label="Address 3"
@@ -552,7 +672,7 @@ const PayeeSetupTab = forwardRef(
         </Card>
 
         {/* CARD 4: REGISTRATION INFORMATION */}
-        <Card className="border border-blue-500/30 p-4 rounded-lg shadow-xl self-start !h-fit !min-h-0">
+        <Card className="border border-blue-500/30 p-4 rounded-lg shadow-xl self-stretch h-full">
           <SectionHeader title="Registration Information" />
           <RegistrationInfo
             layout="twoCols"
@@ -564,8 +684,8 @@ const PayeeSetupTab = forwardRef(
               lastUpdatedDate: form.updatedDate || form.updated_date || "",
             }}
           />
-
         </Card>
+ 
 
 
         {/* LOOKUP MODALS */}

@@ -1,4 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
+// import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
+
+import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faPlus,
@@ -7,6 +10,7 @@ import {
   faSearch,
   faList,
   faTrashAlt,
+  faPenToSquare,
 } from "@fortawesome/free-solid-svg-icons";
 
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
@@ -23,16 +27,12 @@ import {
 } from "@/NAYSA Cloud/Global/behavior";
 
 /* ---------- Small UI helpers ---------- */
-const SectionHeader = ({ title, subtitle }) => (
+const SectionHeader = ({ title }) => (
   <div className="mb-3">
     <div className="text-sm font-bold text-gray-800">{title}</div>
-    {/* {subtitle ? (
-      <div className="text-xs text-gray-500 mt-0.5 leading-4">{subtitle}</div>
-    ) : null} */}
   </div>
 );
 
-// keep your white-box fix here
 const Card = ({ children, className = "" }) => (
   <div className={`global-tran-textbox-group-div-ui self-start !h-fit ${className}`}>
     {children}
@@ -52,25 +52,11 @@ const parseSprocJsonResult = (rows) => {
 
 const showValidation = async (title, lines) => {
   const msg = Array.isArray(lines) ? lines.join("\n") : String(lines || "");
-  return useSwalValidationAlert({
-    icon: "error",
-    title,
-    message: msg,
-  });
+  return useSwalValidationAlert({ icon: "error", title, message: msg });
 };
 
-/**
- * Generic Reference Maintenance
- * - loadEndpoint: GET list
- * - getEndpoint: GET single (query param)
- * - getParamKey: param name e.g. "BILLTERM_CODE"
- * - upsertEndpoint: POST save (expects { json_data: JSON.stringify(payload) })
- * - mapRow: normalize row to {code,name,daysDue,advances,...}
- * - buildUpsertPayload: from form -> json_data payload object (before stringify wrapper)
- */
 export default function RefMaintenance({
   title,
-  subtitle,
   loadEndpoint,
   getEndpoint,
   deleteEndpoint,
@@ -85,13 +71,25 @@ export default function RefMaintenance({
   nameKey = "name",
   daysKey = "daysDue",
 
-  // ✅ NEW (optional) extra column
+  // optional extra column (ex: AP Advances)
   extraColLabel = null,
   extraKey = null,
-  extraOptions = null, // [{value,label},...]
-  extraDefault = "", // e.g. "N"
+  extraOptions = null,
+  extraDefault = "",
+
+  // Active field support
+  activeLabel = "Active",
+  activeKey = "active",
+  activeOptions = [
+    { value: "Y", label: "Yes" },
+    { value: "N", label: "No" },
+  ],
+  activeDefault = "Y",
+  showActive = true,
 }) {
   const [isLoading, setIsLoading] = useState(false);
+
+  // ✅ view mode by default
   const [isEditing, setIsEditing] = useState(false);
 
   const [search, setSearch] = useState("");
@@ -99,15 +97,65 @@ export default function RefMaintenance({
   const [rows, setRows] = useState([]);
 
   const [selectedCode, setSelectedCode] = useState("");
-  const [form, setForm] = useState({ ...(emptyForm || {}) });
+  // const [form, setForm] = useState({ ...(emptyForm || {}) });
 
-  // ✅ Pagination
+  const [form, setForm] = useState({ ...(emptyForm || {}) });
+const formRef = useRef(form);
+
+useEffect(() => {
+  formRef.current = form;
+}, [form]);
+
+
+  const { user } = useAuth();
+  // ✅ User code key differs per implementation; support common variants
+  const userCode =
+    user?.userCode ||
+    user?.user_code ||
+    user?.USER_CODE ||
+    user?.UserCode ||
+    user?.code ||
+    "";
+
+  // Contains filters
+  const [colFilters, setColFilters] = useState({
+    code: "",
+    name: "",
+    days: "",
+    extra: "",
+    active: "",
+  });
+
+  const updateColFilter = (key, value) =>
+    setColFilters((p) => ({ ...p, [key]: value }));
+
+  // Pagination
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
 
-  const updateForm = (patch) => setForm((p) => ({ ...p, ...patch }));
+  // const updateForm = (patch) => setForm((p) => ({ ...p, ...patch }));
+  const updateForm = (patch) => {
+  formRef.current = { ...(formRef.current || {}), ...patch };
+  setForm((p) => ({ ...p, ...patch }));
+};
 
-  const loadList = async () => {
+
+  // ✅ supports:
+  // - onChange(event)
+  // - onChange(value)
+  // - onChange(name, value)
+  const getVal = (a, b) => {
+    if (a?.target) return a.target.value;      // normal event
+    if (b !== undefined) return b;            // (name, value)
+    return a;                                 // direct value
+  };
+
+  const onFieldChange = (key) => (a, b) => updateForm({ [key]: getVal(a, b) });
+
+  const isAddMode = !selectedCode;
+  const fieldsDisabled = isLoading || !isEditing;
+
+  const loadList = useCallback(async () => {
     setIsLoading(true);
     try {
       const res = await apiClient.get(loadEndpoint);
@@ -125,89 +173,189 @@ export default function RefMaintenance({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [loadEndpoint, mapRow, title]);
 
-  const fetchOne = async (code) => {
-    if (!code) return;
-    setIsLoading(true);
-    try {
-      const res = await apiClient.get(getEndpoint, {
-        params: { [getParamKey]: code },
-      });
-      const parsed = parseSprocJsonResult(res?.data?.data);
-      const row = Array.isArray(parsed) ? parsed?.[0] : null;
+  const fetchOne = useCallback(
+    async (code) => {
+      if (!code) return;
 
-      if (!row)
-        return useSwalValidationAlert({
-          icon: "info",
-          title: "Info",
-          message: `${title} not found.`,
+      setIsLoading(true);
+      try {
+        const res = await apiClient.get(getEndpoint, {
+          params: { [getParamKey]: code },
         });
 
-      const normalized = mapRow ? mapRow(row) : row;
-      setSelectedCode(normalized?.[codeKey] ?? code);
+        const parsed = parseSprocJsonResult(res?.data?.data);
+        const row = Array.isArray(parsed) ? parsed?.[0] : null;
 
-      // ✅ IMPORTANT:
-      // Keep your current behavior: populate form with normalized row (includes reg fields if present)
-      setForm((p) => ({ ...(emptyForm || {}), ...p, ...normalized }));
+        if (!row) {
+          await useSwalValidationAlert({
+            icon: "info",
+            title: "Info",
+            message: `${title} not found.`,
+          });
+          return;
+        }
 
-      setIsEditing(false);
-    } catch (e) {
-      console.error(e);
-      await useSwalErrorAlert("Error", `Failed to fetch ${title}.`);
-    } finally {
-      setIsLoading(false);
-    }
+        const normalized = mapRow ? mapRow(row) : row;
+
+        setSelectedCode(normalized?.[codeKey] ?? code);
+
+        // ✅ store the FULL record so RegistrationInfo can read it
+        setForm((p) => ({
+          ...(emptyForm || {}),
+          ...p,
+          ...normalized,
+          ...(showActive
+            ? { [activeKey]: normalized?.[activeKey] ?? activeDefault }
+            : {}),
+        }));
+
+        // ✅ keep view mode
+        setIsEditing(false);
+      } catch (e) {
+        console.error(e);
+        await useSwalErrorAlert("Error", `Failed to fetch ${title}.`);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [
+      activeDefault,
+      activeKey,
+      codeKey,
+      emptyForm,
+      getEndpoint,
+      getParamKey,
+      mapRow,
+      showActive,
+      title,
+    ]
+  );
+
+  const isDuplicateCode = (code) => {
+    if (!code) return false;
+    return (allRows || []).some(
+      (r) =>
+        String(r?.[codeKey] ?? "").trim().toUpperCase() ===
+        String(code).trim().toUpperCase()
+    );
   };
 
   const save = async () => {
-    const code = String(form?.[codeKey] ?? "").trim();
-    const name = String(form?.[nameKey] ?? "").trim();
+  // if (!isEditing) return;
 
-    const missing = [];
-    if (!code) missing.push(`• ${codeLabel}`);
-    if (!name) missing.push(`• ${nameLabel}`);
-    if (missing.length) return showValidation("Missing Required Field(s)", missing);
+  // const code = String(form?.[codeKey] ?? "").trim();
+  // const name = String(form?.[nameKey] ?? "").trim();
 
-    setIsLoading(true);
-    try {
-      const payload = buildUpsertPayload(form);
+  // const code = form?.[codeKey];
+  // const name = form?.[nameKey];
 
-      await apiClient.post(upsertEndpoint, {
-        json_data: JSON.stringify(payload),
-      });
+  // const dueRaw = form?.[daysKey];
+  // const dueStr = String(dueRaw ?? "").trim();
+  // const dueNum = dueStr === "" ? null : Number(dueStr);
 
-      await useSwalshowSave(() => {}, () => {});
-      setSelectedCode(code);
-      setIsEditing(false);
-      await loadList();
-    } catch (e) {
-      console.error(e);
-      const msg =
-        e?.response?.data?.message ||
-        e?.response?.data?.error ||
-        e?.message ||
-        `Failed to save ${title}.`;
+  const f = formRef.current || {};
+  const code = String(f?.[codeKey] ?? "").trim();
+  const name = String(f?.[nameKey] ?? "").trim();
+  const dueRaw = f?.[daysKey];
+  const dueStr = String(dueRaw ?? "").trim();
+  const dueNum = dueStr === "" ? null : Number(dueStr);
 
-      await showValidation("Save Failed", [msg]);
-    } finally {
-      setIsLoading(false);
+
+  console.log({code, name, dueRaw, dueNum, userCode});
+
+  // const missing = [];
+  // if (!code) missing.push(`• ${codeLabel}`);
+  // if (!name) missing.push(`• ${nameLabel}`);
+  // if (!userCode) missing.push("• User Code");
+
+  // // ✅ allow 0, block empty/NaN/negative
+  // if (dueStr === "" || Number.isNaN(dueNum) || dueNum < 0) {
+  //   missing.push("• Due Days");
+  // }
+
+  // if (missing.length) return showValidation("Missing Required Field(s)", missing);
+  // console.log({missing});
+
+  // duplicate only on Add
+  if (isAddMode) {
+    if (isDuplicateCode(code)) {
+      return showValidation("Duplicate Record", [
+        `• ${codeLabel} already exists (${code}).`,
+      ]);
     }
-  };
+  }
+
+  setIsLoading(true);
+  try {
+    const payload = buildUpsertPayload({
+      ...form,
+      // ✅ FIX: use the real field value (keep it as entered)
+      [codeKey]: code,
+      [nameKey]: name,
+      [daysKey]: dueStr, // or dueNum, depending on your buildUpsertPayload
+      userCode,
+      ...(showActive
+        ? { [activeKey]: (form?.[activeKey] ?? activeDefault) || activeDefault }
+        : {}),
+    });
+
+    console.log({payload});
+
+    await apiClient.post(upsertEndpoint, {
+      json_data: JSON.stringify(payload),
+    });
+
+    await useSwalshowSave(() => {}, () => {});
+    setSelectedCode(code);
+    setIsEditing(false);
+
+    await loadList();
+    await fetchOne(code); // ✅ reload record so reg info updates immediately
+  } catch (e) {
+    console.error(e);
+    const msg =
+      e?.response?.data?.message ||
+      e?.response?.data?.error ||
+      e?.message ||
+      `Failed to save ${title}.`;
+
+    await showValidation("Save Failed", [msg]);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const addNew = () => {
     setSelectedCode("");
-    setForm({ ...(emptyForm || {}) });
+    setForm({
+      ...(emptyForm || {}),
+      [daysKey]: "",
+      userCode,
+      ...(extraKey ? { [extraKey]: extraDefault } : {}),
+      ...(showActive ? { [activeKey]: activeDefault } : {}),
+    });
+    setIsEditing(true);
+  };
+
+  const editSelected = () => {
+    if (!selectedCode) return showValidation("Required", ["• Select a record to edit"]);
     setIsEditing(true);
   };
 
   const reset = () => {
     setSelectedCode("");
-    setForm({ ...(emptyForm || {}) });
+    setForm({
+      ...(emptyForm || {}),
+      ...(showActive ? { [activeKey]: activeDefault } : {}),
+    });
     setIsEditing(false);
   };
 
- const deleteRecord = async () => {
+  const deleteRecord = async () => {
+    if (isEditing) return;
+
     const code = String(form?.[codeKey] ?? "").trim();
     if (!code) return showValidation("Required", [`• ${codeLabel}`]);
 
@@ -221,16 +369,12 @@ export default function RefMaintenance({
 
     setIsLoading(true);
     try {
-      const payload = { [getParamKey]: code };
-
       await apiClient.post(deleteEndpoint, {
-        json_data: JSON.stringify(payload),
+        json_data: JSON.stringify({ [getParamKey]: code }),
       });
 
       await useSwalDeleteRecord();
-      setSelectedCode("");
-      setForm({ ...(emptyForm || {}) });
-      setIsEditing(false);
+      reset();
       await loadList();
     } catch (e) {
       console.error(e);
@@ -260,82 +404,95 @@ export default function RefMaintenance({
 
   useEffect(() => {
     loadList();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadList]);
 
   useEffect(() => {
     applySearch(search);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, allRows]);
 
-  // ✅ Reset page when searching or changing page size
   useEffect(() => {
     setPage(1);
-  }, [search, pageSize]);
+  }, [search, pageSize, colFilters]);
 
-  // ✅ Pagination computations
-  const totalRows = rows?.length || 0;
+  // contains filtering
+  const filteredRows = useMemo(() => {
+    const codeF = String(colFilters.code || "").toLowerCase();
+    const nameF = String(colFilters.name || "").toLowerCase();
+    const daysF = String(colFilters.days || "").toLowerCase();
+    const extraF = String(colFilters.extra || "").toLowerCase();
+    const activeF = String(colFilters.active || "").toLowerCase();
 
-  const totalPages = useMemo(() => {
-    return Math.max(1, Math.ceil(totalRows / pageSize));
-  }, [totalRows, pageSize]);
+    return (rows || []).filter((r) => {
+      const codeV = String(r?.[codeKey] ?? "").toLowerCase();
+      const nameV = String(r?.[nameKey] ?? "").toLowerCase();
+      const daysV = String(r?.[daysKey] ?? "").toLowerCase();
+      const extraV = extraKey ? String(r?.[extraKey] ?? "").toLowerCase() : "";
+      const activeV = showActive ? String(r?.[activeKey] ?? "").toLowerCase() : "";
+
+      return (
+        (!codeF || codeV.includes(codeF)) &&
+        (!nameF || nameV.includes(nameF)) &&
+        (!daysF || daysV.includes(daysF)) &&
+        (!extraKey || !extraF || extraV.includes(extraF)) &&
+        (!showActive || !activeF || activeV.includes(activeF))
+      );
+    });
+  }, [rows, colFilters, codeKey, nameKey, daysKey, extraKey, activeKey, showActive]);
+
+  const totalRows = filteredRows.length;
+
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(totalRows / pageSize)),
+    [totalRows, pageSize]
+  );
 
   useEffect(() => {
-    // clamp page if rows shrink
     setPage((p) => Math.min(p, totalPages));
   }, [totalPages]);
 
   const pagedRows = useMemo(() => {
     const start = (page - 1) * pageSize;
-    return (rows || []).slice(start, start + pageSize);
-  }, [rows, page, pageSize]);
+    return filteredRows.slice(start, start + pageSize);
+  }, [filteredRows, page, pageSize]);
 
   const buttons = useMemo(
     () => [
       { key: "add", label: "Add", icon: faPlus, onClick: addNew, disabled: isLoading },
-      { key: "save", label: "Save", icon: faSave, onClick: save, disabled: isLoading },
+      {
+        key: "edit",
+        label: "Edit",
+        icon: faPenToSquare,
+        onClick: editSelected,
+        disabled: isLoading || !selectedCode || isEditing,
+      },
+      { key: "save", label: "Save", icon: faSave, onClick: save, disabled: isLoading || !isEditing },
       { key: "reset", label: "Reset", icon: faUndo, onClick: reset, disabled: isLoading },
-      { key: "delete", label: "Delete", icon: faTrashAlt, onClick: deleteRecord, disabled: isLoading, variant: "danger" },
+      {
+        key: "delete",
+        label: "Delete",
+        icon: faTrashAlt,
+        onClick: deleteRecord,
+        disabled: isLoading || isEditing,
+        variant: "danger",
+      },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isLoading, form]
+    [isLoading, isEditing, selectedCode]
   );
 
-  const normalizeRegistrationInfo = (x) => {
-    const v = x || {};
-    return {
-      registeredBy:
-        v.registeredBy ??
-        v.registered_by ??
-        v.createdBy ??
-        v.created_by ??
-        "",
-      registeredDate:
-        v.registeredDate ??
-        v.registered_date ??
-        v.createdDate ??
-        v.created_date ??
-        "",
-      lastUpdatedBy:
-        v.lastUpdatedBy ??
-        v.last_updated_by ??
-        v.updatedBy ??
-        v.updated_by ??
-        "",
-      lastUpdatedDate:
-        v.lastUpdatedDate ??
-        v.last_updated_date ??
-        v.updatedDate ??
-        v.updated_date ??
-        "",
-    };
-  };
-
-  // ✅ Use current form to display registration info
-  // (works whether data came from list-click or double-click fetchOne)
+  // ✅ RegistrationInfo expects these keys:
+  // registeredBy, registeredDate, lastUpdatedBy, lastUpdatedDate
   const registrationData = useMemo(() => {
-    return normalizeRegistrationInfo(form);
+    const v = form || {};
+    return {
+      registeredBy: v.registeredBy ?? v.registered_by ?? v.createdBy ?? v.created_by ?? "",
+      registeredDate: v.registeredDate ?? v.registered_date ?? v.createdDate ?? v.created_date ?? "",
+      lastUpdatedBy: v.lastUpdatedBy ?? v.last_updated_by ?? v.updatedBy ?? v.updated_by ?? "",
+      lastUpdatedDate: v.lastUpdatedDate ?? v.last_updated_date ?? v.updatedDate ?? v.updated_date ?? "",
+    };
   }, [form]);
+
+  const listColSpan = 3 + (extraKey ? 1 : 0) + (showActive ? 1 : 0);
 
   return (
     <>
@@ -344,10 +501,7 @@ export default function RefMaintenance({
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div className="flex items-center gap-2">
             <FontAwesomeIcon icon={faList} className="text-gray-500" />
-            <div>
-              <div className="text-sm font-bold text-gray-800">{title}</div>
-              {/* <div className="text-xs text-gray-500">{subtitle}</div> */}
-            </div>
+            <div className="text-sm font-bold text-gray-800">{title}</div>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
@@ -369,26 +523,33 @@ export default function RefMaintenance({
 
       {/* List + Form */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
-        {/* ✅ LEFT: FORM SIDE (NOW 2 CARDS: Basic + Registration) */}
+        {/* LEFT: FORM */}
         <div className="grid grid-cols-1 gap-3">
-          {/* BASIC INFORMATION */}
           <Card>
-            <SectionHeader
-              title="Basic Information"
-              subtitle={
-                isEditing ? "Edit mode enabled." : "View mode. Click Add to create or edit."
-              }
-            />
+            <SectionHeader title="Basic Information" />
 
             <div className="grid grid-cols-1 gap-3">
+              {/* Code enabled only when ADDING */}
               <FieldRenderer
                 label={codeLabel}
                 required
                 type="text"
                 value={form?.[codeKey] ?? ""}
-                onChange={(v) => updateForm({ [codeKey]: v })}
-                readOnly={!isEditing}
-                disabled={isLoading}
+                onChange={(a, b) => {
+                  const v = getVal(a, b);
+                  updateForm({ [codeKey]: v });
+
+                  if (isAddMode) {
+                    const c = String(v ?? "").trim();
+                    if (c && isDuplicateCode(c)) {
+                      showValidation("Duplicate Record", [
+                        `• ${codeLabel} already exists (${c}).`,
+                      ]);
+                    }
+                  }
+                }}
+                readOnly={!isEditing || !isAddMode}
+                disabled={isLoading || !isEditing || !isAddMode}
               />
 
               <FieldRenderer
@@ -396,39 +557,49 @@ export default function RefMaintenance({
                 required
                 type="text"
                 value={form?.[nameKey] ?? ""}
-                onChange={(v) => updateForm({ [nameKey]: v })}
+                onChange={onFieldChange(nameKey)}
                 readOnly={!isEditing}
-                disabled={isLoading}
+                disabled={fieldsDisabled}
               />
 
-              {/* Optional fields — only show if keys exist in form */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <FieldRenderer
                   label="Due Days"
                   required
                   type="number"
-                  value={form?.[daysKey] ?? 0}
-                  onChange={(v) => updateForm({ [daysKey]: v })}
+                  value={form?.[daysKey] ?? ""}
+                  onChange={onFieldChange(daysKey)}
                   readOnly={!isEditing}
-                  disabled={isLoading}
+                  disabled={fieldsDisabled}
                 />
 
                 {extraKey ? (
                   <FieldRenderer
-                    label={extraColLabel || "Extra"}
+                    label={extraColLabel || "AP Advances"}
                     type="select"
                     options={extraOptions || []}
                     value={(form?.[extraKey] ?? extraDefault) || extraDefault}
-                    onChange={(v) => updateForm({ [extraKey]: v })}
+                    onChange={onFieldChange(extraKey)}
                     readOnly={!isEditing}
-                    disabled={isLoading}
+                    disabled={fieldsDisabled}
+                  />
+                ) : null}
+
+                {showActive ? (
+                  <FieldRenderer
+                    label={activeLabel}
+                    type="select"
+                    options={activeOptions || []}
+                    value={(form?.[activeKey] ?? activeDefault) || activeDefault}
+                    onChange={onFieldChange(activeKey)}
+                    readOnly={!isEditing}
+                    disabled={fieldsDisabled}
                   />
                 ) : null}
               </div>
             </div>
           </Card>
 
-          {/* ✅ REGISTRATION INFORMATION (NEW CARD) */}
           <Card>
             <SectionHeader title="Registration Information" />
             <RegistrationInfo data={registrationData} disabled />
@@ -437,10 +608,7 @@ export default function RefMaintenance({
 
         {/* RIGHT: LIST */}
         <Card>
-          <SectionHeader
-            title="List"
-            subtitle="Click a row to view. Double-click to load details."
-          />
+          <SectionHeader title="List" />
 
           <div className="overflow-auto border border-gray-100 rounded-md">
             <table className="min-w-full text-xs">
@@ -450,28 +618,85 @@ export default function RefMaintenance({
                   <th className="text-left px-3 py-2 font-bold">Pay Term Name</th>
                   <th className="text-right px-3 py-2 font-bold">Due Days</th>
                   {extraKey ? (
-                    <th className="text-left px-3 py-2 font-bold">
-                      {extraColLabel || "Extra"}
+                    <th className="text-left px-3 py-2 font-bold">{extraColLabel || "AP Advances"}</th>
+                  ) : null}
+                  {showActive ? (
+                    <th className="text-left px-3 py-2 font-bold">{activeLabel}</th>
+                  ) : null}
+                </tr>
+
+                {/* Contains row */}
+                <tr className="border-t">
+                  <th className="px-2 py-1">
+                    <input
+                      className="global-tran-textbox-ui w-full text-xs"
+                      placeholder="Contains:"
+                      value={colFilters.code}
+                      onChange={(e) => updateColFilter("code", e.target.value)}
+                      disabled={isLoading}
+                    />
+                  </th>
+
+                  <th className="px-2 py-1">
+                    <input
+                      className="global-tran-textbox-ui w-full text-xs"
+                      placeholder="Contains:"
+                      value={colFilters.name}
+                      onChange={(e) => updateColFilter("name", e.target.value)}
+                      disabled={isLoading}
+                    />
+                  </th>
+
+                  <th className="px-2 py-1">
+                    <input
+                      className="global-tran-textbox-ui w-full text-xs text-right"
+                      placeholder="Contains:"
+                      value={colFilters.days}
+                      onChange={(e) => updateColFilter("days", e.target.value)}
+                      disabled={isLoading}
+                    />
+                  </th>
+
+                  {extraKey ? (
+                    <th className="px-2 py-1">
+                      <input
+                        className="global-tran-textbox-ui w-full text-xs"
+                        placeholder="Contains:"
+                        value={colFilters.extra}
+                        onChange={(e) => updateColFilter("extra", e.target.value)}
+                        disabled={isLoading}
+                      />
+                    </th>
+                  ) : null}
+
+                  {showActive ? (
+                    <th className="px-2 py-1">
+                      <input
+                        className="global-tran-textbox-ui w-full text-xs"
+                        placeholder="Contains:"
+                        value={colFilters.active}
+                        onChange={(e) => updateColFilter("active", e.target.value)}
+                        disabled={isLoading}
+                      />
                     </th>
                   ) : null}
                 </tr>
               </thead>
 
               <tbody>
-                {(pagedRows || []).map((r) => {
+                {pagedRows.map((r) => {
                   const code = r?.[codeKey] ?? "";
-                  const active = String(code) === String(selectedCode);
+                  const selected = String(code) === String(selectedCode);
 
                   return (
                     <tr
                       key={code || Math.random()}
-                      className={`cursor-pointer border-t ${
-                        active ? "bg-blue-50" : "hover:bg-gray-50"
-                      }`}
+                      className={`cursor-pointer border-t ${selected ? "bg-blue-50" : "hover:bg-gray-50"
+                        }`}
                       onClick={() => {
-                        setIsEditing(false);
                         setSelectedCode(code);
-                        setForm((p) => ({ ...p, ...r }));
+                        setIsEditing(false);
+                        fetchOne(code); // ✅ loads full record & registration fields
                       }}
                       onDoubleClick={() => fetchOne(code)}
                     >
@@ -482,29 +707,25 @@ export default function RefMaintenance({
                       <td className="px-3 py-2 text-right text-gray-700">
                         {Number(r?.[daysKey] ?? 0)}
                       </td>
+
                       {extraKey ? (
-                        <td className="px-3 py-2 text-gray-700">
-                          {(() => {
-                            const raw = (r?.[extraKey] ?? extraDefault) || extraDefault;
-                            const opt = (extraOptions || []).find(
-                              (o) =>
-                                String(o.value).toUpperCase() ===
-                                String(raw).toUpperCase()
-                            );
-                            return opt?.label ?? raw;
-                          })()}
+                        <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
+                          {String(r?.[extraKey] ?? extraDefault)}
+                        </td>
+                      ) : null}
+
+                      {showActive ? (
+                        <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
+                          {String(r?.[activeKey] ?? activeDefault)}
                         </td>
                       ) : null}
                     </tr>
                   );
                 })}
 
-                {!isLoading && (!rows || rows.length === 0) ? (
+                {!isLoading && filteredRows.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={extraKey ? 4 : 3}
-                      className="px-3 py-6 text-center text-gray-500"
-                    >
+                    <td colSpan={listColSpan} className="px-3 py-6 text-center text-gray-500">
                       No records found.
                     </td>
                   </tr>
@@ -513,7 +734,7 @@ export default function RefMaintenance({
             </table>
           </div>
 
-          {/* ✅ Pagination Controls */}
+          {/* Pagination */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-3">
             <div className="flex items-center gap-2 text-xs text-gray-600">
               <span>Rows per page:</span>
@@ -534,9 +755,9 @@ export default function RefMaintenance({
                 {totalRows === 0
                   ? "0–0 of 0"
                   : `${(page - 1) * pageSize + 1}–${Math.min(
-                      page * pageSize,
-                      totalRows
-                    )} of ${totalRows}`}
+                    page * pageSize,
+                    totalRows
+                  )} of ${totalRows}`}
               </span>
             </div>
 
