@@ -77,43 +77,45 @@ const formatCellValue = (value, config) => {
 };
 
 /* -------------- Column config loader -------------- */
-const getColumnConfig = async (groupId) => {
-  try {
-    const response = await useSelectedHSColConfig(groupId);
-    let config = [];
-    if (Array.isArray(response)) config = response;
-    else if (
-      response &&
-      response.success &&
-      response.data &&
-      response.data[0] &&
-      response.data[0].result
-    ) {
-      const parsed = JSON.parse(response.data[0].result || "[]");
-      config = Array.isArray(parsed) ? parsed : [];
-    } else if (response && Array.isArray(response.data)) {
-      config = response.data;
-    }
-    config = (config || []).map((c) => ({
-      key: c.key,
-      label:
-        c.label ||
-        String(c.key || "")
-          .replace(/_/g, " ")
-          .replace(/\b\w/g, (ch) => ch.toUpperCase()),
-      classNames: c.classNames || "text-left",
-      renderType: c.renderType || "text",
-      renderFormat: c.renderFormat || "",
-      roundingOff: typeof c.roundingOff === "number" ? c.roundingOff : undefined,
-      sortable: c.sortable !== false,
-      hidden: !!c.hidden
-    }));
-    return config;
-  } catch (err) {
-    console.error("❌ Column config fetch failed for", groupId, err);
-    return [];
-  }
-};
+
+// const getColumnConfig = async (groupId,UserCode) => {
+//   try {
+//     const { currentUserRow } = useAuth();
+//     const response = await useSelectedHSColConfig(groupId,currentUserRow.UserCode);
+//     let config = [];
+//     if (Array.isArray(response)) config = response;
+//     else if (
+//       response &&
+//       response.success &&
+//       response.data &&
+//       response.data[0] &&
+//       response.data[0].result
+//     ) {
+//       const parsed = JSON.parse(response.data[0].result || "[]");
+//       config = Array.isArray(parsed) ? parsed : [];
+//     } else if (response && Array.isArray(response.data)) {
+//       config = response.data;
+//     }
+//     config = (config || []).map((c) => ({
+//       key: c.key,
+//       label:
+//         c.label ||
+//         String(c.key || "")
+//           .replace(/_/g, " ")
+//           .replace(/\b\w/g, (ch) => ch.toUpperCase()),
+//       classNames: c.classNames || "text-left",
+//       renderType: c.renderType || "text",
+//       renderFormat: c.renderFormat || "",
+//       roundingOff: typeof c.roundingOff === "number" ? c.roundingOff : undefined,
+//       sortable: c.sortable !== false,
+//       hidden: !!c.hidden
+//     }));
+//     return config;
+//   } catch (err) {
+//     console.error("❌ Column config fetch failed for", groupId, err);
+//     return [];
+//   }
+// };
 
 /* ============================== Component =============================== */
 const AllTranHistory = (props) => {
@@ -174,6 +176,53 @@ const AllTranHistory = (props) => {
       (navState.branchCode !== undefined && navState.branchCode) ||
       ""
   );
+
+
+
+
+const getColumnConfig = async (groupId) => {
+  try {
+
+    const response = await useSelectedHSColConfig(groupId,currentUserRow.userCode);
+    let config = [];
+    if (Array.isArray(response)) config = response;
+    else if (
+      response &&
+      response.success &&
+      response.data &&
+      response.data[0] &&
+      response.data[0].result
+    ) {
+      const parsed = JSON.parse(response.data[0].result || "[]");
+      config = Array.isArray(parsed) ? parsed : [];
+    } else if (response && Array.isArray(response.data)) {
+      config = response.data;
+    }
+    config = (config || []).map((c) => ({
+      key: c.key,
+      label:
+        c.label ||
+        String(c.key || "")
+          .replace(/_/g, " ")
+          .replace(/\b\w/g, (ch) => ch.toUpperCase()),
+      classNames: c.classNames || "text-left",
+      renderType: c.renderType || "text",
+      renderFormat: c.renderFormat || "",
+      roundingOff: typeof c.roundingOff === "number" ? c.roundingOff : undefined,
+      sortable: c.sortable !== false,
+      hidden: !!c.hidden
+    }));
+    return config;
+  } catch (err) {
+    console.error("❌ Column config fetch failed for", groupId, err);
+    return [];
+  }
+};
+
+
+
+
+
 
   const initialDates = () => {
     if (startDateProp && endDateProp)
@@ -290,6 +339,8 @@ const AllTranHistory = (props) => {
     start && end ? `${format(start, "MM/dd/yyyy")} - ${format(end, "MM/dd/yyyy")}` : "";
 
   /* ---------------- columns for a tab ---------------- */
+
+
   const getColumnsForTab = useCallback(
     (tabKey) => {
       const dataForTab = tabData[tabKey] || [];
@@ -361,7 +412,8 @@ const AllTranHistory = (props) => {
       json_data: {
         startDate: format(startDate, "yyyy-MM-dd"),
         endDate: format(endDate, "yyyy-MM-dd"),
-        branchCode: branchCode
+        branchCode: branchCode,
+        userCode:currentUserRow.userCode
       }
     };
 
@@ -403,10 +455,9 @@ const AllTranHistory = (props) => {
       });
 
       const rootKeys = Object.keys(rootDataMap);
-
       const newTabConfigs = {};
       for (const key of rootKeys) {
-        newTabConfigs[key] = await getColumnConfig(key);
+      newTabConfigs[key] = await getColumnConfig(key);
       }
 
       setTabData(rootDataMap);

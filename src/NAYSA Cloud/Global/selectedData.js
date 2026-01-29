@@ -7,10 +7,17 @@ import Swal from 'sweetalert2';
 
 
 
-export const useSelectedHSColConfig = async (endpoint) => {
+export const useSelectedHSColConfig = async (endpoint,userCode) => {
   try {
 
-    const response = await fetchData("getHSColConfig", { endpoint: endpoint });
+
+    const payload ={
+      json_data :{
+      endpoint,userCode
+    }
+  }
+
+    const response = await fetchData("getHSColConfig", { json_data: JSON.stringify(payload) });
 
     if (response?.success && response.data?.[0]?.result) {
       return JSON.parse(response.data[0].result);
@@ -38,7 +45,6 @@ export const useSelectedOpenARBalance = async (glData,transactionType) => {
                       filterTranType: transactionType
      };
 
-     console.log(JSON.stringify(payload))
     const response = await fetchData("getSelectedARBalance", { json_data: JSON.stringify(payload) } );
 
     if (response?.success && response.data?.[0]?.result) {
