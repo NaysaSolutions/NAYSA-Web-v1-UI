@@ -179,7 +179,7 @@
 //       </div>
 
 //       {/* table */}
-      
+
 
 //         <div
 //           className="w-full overflow-auto rounded-md flex-1"
@@ -302,7 +302,7 @@
 //               Next
 //             </button>
 //           </div>
-     
+
 //       </div>
 //     </div>
 //   );
@@ -313,17 +313,18 @@
 //GLOBAL REPORT TABLE
 
 // src/NAYSA Cloud/Master Data/CustMastTabs/PayeeMasterDataTab.jsx
-import React, { useMemo, useEffect, useState } from "react";
+// src/NAYSA Cloud/Master Data/CustMastTabs/PayeeMasterDataTab.jsx
+import React, { useMemo, useEffect, useState, useCallback } from "react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faFilter,
   faUndo,
   faPrint,
   faFileExcel,
 } from "@fortawesome/free-solid-svg-icons";
-import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
+// import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
 import SearchGlobalReportTable from "@/NAYSA Cloud/Lookup/SearchGlobalReportTable.jsx";
-
-const text = (v) => (v === null || v === undefined ? "" : String(v));
+import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable";
 
 const pick = (obj, keys = []) => {
   for (const k of keys) {
@@ -381,6 +382,55 @@ const PayeeMasterDataTab = ({
     };
   }, [isCustomer]);
 
+  const getCode = useCallback(
+    (r) =>
+      pick(r, [
+        col.codeKey,
+        col.codeKey.toLowerCase(),
+        col.codeKey.toUpperCase(),
+        col.codeKey.replace(/[A-Z]/g, (m) => `_${m}`).toLowerCase(),
+      ]),
+    [col]
+  );
+
+  const getName = useCallback(
+    (r) =>
+      pick(r, [
+        col.nameKey,
+        col.nameKey.toLowerCase(),
+        col.nameKey.toUpperCase(),
+        col.nameKey.replace(/[A-Z]/g, (m) => `_${m}`).toLowerCase(),
+      ]),
+    [col]
+  );
+
+  const getZip = useCallback(
+    (r) =>
+      pick(r, [
+        col.zipKey,
+        col.zipKey.toLowerCase(),
+        col.zipKey.toUpperCase(),
+        col.zipKey.replace(/[A-Z]/g, (m) => `_${m}`).toLowerCase(),
+      ]),
+    [col]
+  );
+
+  const getTin = useCallback(
+    (r) =>
+      pick(r, [
+        col.tinKey,
+        col.tinKey.toLowerCase(),
+        col.tinKey.toUpperCase(),
+        col.tinKey.replace(/[A-Z]/g, (m) => `_${m}`).toLowerCase(),
+      ]),
+    [col]
+  );
+
+  // ✅ Auto-filter when subsidiaryType changes (NO local loading)
+  useEffect(() => {
+    if (typeof onFilter === "function") onFilter();
+  }, [subsidiaryType, onFilter]);
+
   const buttons = useMemo(
     () => [
       { key: "filter", label: "Filter", icon: faFilter, onClick: onFilter, disabled: isLoading },
@@ -391,44 +441,7 @@ const PayeeMasterDataTab = ({
     [isLoading, onFilter, onReset, onPrint, onExport]
   );
 
-  // rows per page (SearchGlobalReportTable handles paging internally)
-  const [pageSize, setPageSize] = useState(100);
-  useEffect(() => {
-    // reset to default page size behavior if you want per tab changes
-    // (optional) keep as-is
-  }, [subsidiaryType]);
-
-  const getCode = (r) =>
-    pick(r, [
-      col.codeKey,
-      col.codeKey.toLowerCase(),
-      col.codeKey.toUpperCase(),
-      col.codeKey.replace(/[A-Z]/g, (m) => `_${m}`).toLowerCase(), // vend_code / cust_code
-    ]);
-
-  const getName = (r) =>
-    pick(r, [
-      col.nameKey,
-      col.nameKey.toLowerCase(),
-      col.nameKey.toUpperCase(),
-      col.nameKey.replace(/[A-Z]/g, (m) => `_${m}`).toLowerCase(),
-    ]);
-
-  const getZip = (r) =>
-    pick(r, [
-      col.zipKey,
-      col.zipKey.toLowerCase(),
-      col.zipKey.toUpperCase(),
-      col.zipKey.replace(/[A-Z]/g, (m) => `_${m}`).toLowerCase(),
-    ]);
-
-  const getTin = (r) =>
-    pick(r, [
-      col.tinKey,
-      col.tinKey.toLowerCase(),
-      col.tinKey.toUpperCase(),
-      col.tinKey.replace(/[A-Z]/g, (m) => `_${m}`).toLowerCase(),
-    ]);
+  const [pageSize] = useState(100);
 
   const handleRowDblClick = (row) => {
     const code = getCode(row);
@@ -436,7 +449,6 @@ const PayeeMasterDataTab = ({
     onRowDoubleClick?.({ code, subsidiaryType });
   };
 
-  // ✅ Columns for SearchGlobalReportTable (dynamic labels/keys)
   const tableColumns = useMemo(() => {
     return [
       { key: col.codeKey, label: col.codeLabel, sortable: true, width: 160 },
@@ -445,48 +457,31 @@ const PayeeMasterDataTab = ({
       { key: "firstName", label: "First Name", sortable: true, width: 140 },
       { key: "middleName", label: "Middle Name", sortable: true, width: 140 },
       { key: "lastName", label: "Last Name", sortable: true, width: 140 },
+      { key: col.tinKey, label: "TIN", sortable: true, width: 140 },
       { key: "address", label: "Address", sortable: true, width: 320 },
       { key: col.zipKey, label: "ZIP Code", sortable: true, width: 110 },
-      { key: col.tinKey, label: "TIN", sortable: true, width: 140 },
-      { key: "branchCode", label: "Branchcode", sortable: true, width: 120 },
+      { key: "branchCode", label: "Branch Code", sortable: true, width: 120 },
     ];
   }, [col]);
 
-  /**
-   * ✅ Normalize rows so SearchGlobalReportTable can filter/sort consistently.
-   * We map source keys into the keys used by columns (custCode/custName OR vendCode/vendName etc.)
-   * while keeping the original row intact.
-   */
   const tableData = useMemo(() => {
     const list = Array.isArray(rows) ? rows : [];
-    return list.map((r) => {
-      const normalized = {
-        ...r,
+    return list.map((r) => ({
+      ...r,
+      [col.codeKey]: getCode(r),
+      [col.nameKey]: getName(r),
+      [col.zipKey]: getZip(r),
+      [col.tinKey]: getTin(r),
 
-        // ensure dynamic keys exist exactly as the table columns expect
-        [col.codeKey]: getCode(r),
-        [col.nameKey]: getName(r),
-        [col.zipKey]: getZip(r),
-        [col.tinKey]: getTin(r),
-
-        // standard fields (handle snake_case too)
-        taxClass: pick(r, ["taxClass", "tax_class"]),
-        firstName: pick(r, ["firstName", "first_name"]),
-        middleName: pick(r, ["middleName", "middle_name"]),
-        lastName: pick(r, ["lastName", "last_name"]),
-        address: pick(r, ["address", "addr"]),
-        branchCode: pick(r, ["branchCode", "branch_code"]),
-      };
-
-      return normalized;
-    });
+      taxClass: pick(r, ["taxClass", "tax_class"]),
+      firstName: pick(r, ["firstName", "first_name"]),
+      middleName: pick(r, ["middleName", "middle_name"]),
+      lastName: pick(r, ["lastName", "last_name"]),
+      address: pick(r, ["address", "addr"]),
+      branchCode: pick(r, ["branchCode", "branch_code"]),
+    }));
   }, [rows, col, getCode, getName, getZip, getTin]);
 
-  /**
-   * ✅ Keep using your parent-managed filters.
-   * We'll pass initialState to SearchGlobalReportTable
-   * and push changes back to parent via onStateChange.
-   */
   const initialState = useMemo(
     () => ({
       filters: filters || {},
@@ -495,7 +490,6 @@ const PayeeMasterDataTab = ({
       groupBy: [],
       userHiddenCols: [],
     }),
-    // re-init only when subsidiaryType changes (so it "feels" like your current behavior)
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [subsidiaryType]
   );
@@ -508,6 +502,8 @@ const PayeeMasterDataTab = ({
           <div className="text-xs font-bold text-gray-700 whitespace-nowrap">
             Subsidiary Type
           </div>
+
+          {/* ✅ no spinner + not disabled by local loading */}
           <select
             value={subsidiaryType}
             onChange={(e) => onChangeSubsidiaryType?.(e.target.value)}
@@ -521,42 +517,23 @@ const PayeeMasterDataTab = ({
           </select>
         </div>
 
-        <div className="ml-auto">
+        {/* <div className="ml-auto">
           <ButtonBar buttons={buttons} />
-        </div>
+        </div> */}
       </div>
 
-      {/* Rows per page */}
-      <div className="flex items-center justify-end gap-2 mb-2">
-        <div className="text-xs text-gray-600 whitespace-nowrap">Rows per page</div>
-        <select
-          className="global-tran-textbox-ui global-tran-textbox-enabled w-24"
-          value={pageSize}
-          disabled={isLoading}
-          onChange={(e) => setPageSize(Number(e.target.value || 100))}
-        >
-          {[10, 20, 50, 100].map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* ✅ CONSISTENT TABLE */}
+      {/* Table */}
       <div className="flex-1 min-h-0">
-        <SearchGlobalReportTable
+        {/* <SearchGlobalReportTable
           columns={tableColumns}
           data={tableData}
           itemsPerPage={pageSize}
           showFilters={true}
-          isLoading={isLoading}
-          rightActionLabel={null} // no action button
+          isLoading={isLoading}     // ✅ parent-only loading
+          rightActionLabel={null}
           onRowDoubleClick={(row) => handleRowDblClick(row)}
           onStateChange={(state) => {
-            // push filter values back to parent (so your Filter button logic still works)
             if (state?.filters && typeof onChangeFilter === "function") {
-              // sync only changed keys
               Object.entries(state.filters).forEach(([k, v]) => {
                 if ((filters?.[k] ?? "") !== (v ?? "")) onChangeFilter(k, v);
               });
@@ -564,6 +541,18 @@ const PayeeMasterDataTab = ({
           }}
           initialState={initialState}
           className="border border-gray-200 rounded-md"
+        /> */}
+
+        <SearchGlobalReferenceTable
+          columns={tableColumns}
+          data={rows}
+          itemsPerPage={50}
+          showFilters
+          rightActionLabel="View"
+          docType="VendMast"
+          onRowAction={(row) => console.log("view", row)}
+          onRowActionsClick={(row) => console.log("actions", row)}
+          onRowDoubleClick={(row) => handleRowDblClick(row)}
         />
       </div>
     </div>
@@ -571,3 +560,4 @@ const PayeeMasterDataTab = ({
 };
 
 export default PayeeMasterDataTab;
+

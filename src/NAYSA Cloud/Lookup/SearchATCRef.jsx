@@ -1,250 +1,275 @@
-import React, { useState, useEffect } from 'react';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTimes, faSort, faSortUp, faSortDown } from '@fortawesome/free-solid-svg-icons';
+import React, { useEffect, useMemo, useState } from "react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faTimes,
+  faSort,
+  faSortUp,
+  faSortDown,
+  faSpinner,
+} from "@fortawesome/free-solid-svg-icons";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
-
-
 
 const ATCLookupModal = ({ isOpen, onClose, customParam }) => {
   const [atcs, setAtcs] = useState([]);
   const [filtered, setFiltered] = useState([]);
+
   const [filters, setFilters] = useState({
-    atcCode: '',
-    atcDesc: '',
-    taxRate: '',
-    taxType: '',
+    atcCode: "",
+    atcName: "",
+    atcRate: "",
   });
+
   const [loading, setLoading] = useState(false);
-  const [sortConfig, setSortConfig] = useState({ key: '', direction: 'asc' });
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 50;
+  const [sortConfig, setSortConfig] = useState({ key: "", direction: "asc" });
+
+  // Resolve your customParam mapping (do not mutate props)
+  const paramToSend = useMemo(() => {
+    if (customParam === "apv_hd") return "ATC";
+    return customParam ?? "ActiveAll";
+  }, [customParam]);
 
   useEffect(() => {
-    if (isOpen) {
-      setLoading(true);
-
-      switch (customParam) {
-        case "apv_hd":
-          customParam = "ATC"; // Adjust based on actual parameter
-          break;
-        default:
-          break;
-      }
-
-      fetchData(currentPage);
-    }
-  }, [isOpen, customParam, currentPage]);
-
-
- const fetchData = async (page = 1) => {
-    setLoading(true);
-    try {
-      const { data: result } = await apiClient.post("/lookupATC", {
-        params: {
-          PARAMS: JSON.stringify({ search: customParam ?? "ActiveAll" }),
-          page,
-          itemsPerPage,
-        },
-      });
-
-      const atcData =
-        Array.isArray(result?.data) && result.data[0]?.result
-          ? JSON.parse(result.data[0].result)
-          : [];
-
-      setAtcs(atcData);
-      setFiltered(atcData);
-    } catch (err) {
-      console.error("Failed to fetch ATC:", err);
+    if (!isOpen) {
+      // Reset when closed (COA style)
       setAtcs([]);
       setFiltered([]);
-    } finally {
+      setFilters({ atcCode: "", atcName: "", atcRate: "" });
+      setSortConfig({ key: "", direction: "asc" });
       setLoading(false);
+      return;
     }
-  };
 
+    const fetchATC = async () => {
+      setLoading(true);
+      try {
+        const { data: result } = await apiClient.post("/lookupATC", {
+          params: {
+            PARAMS: JSON.stringify({ search: paramToSend }),
+            page: 1,
+            itemsPerPage: 1000, // fetch more and filter client-side like COA
+          },
+        });
 
-  const handleApply = (atc) => {
-    onClose(atc); // Pass the selected ATC back to the parent
-  };
+        const atcData =
+          Array.isArray(result?.data) && result.data[0]?.result
+            ? JSON.parse(result.data[0].result)
+            : [];
+
+        setAtcs(atcData);
+        setFiltered(atcData);
+      } catch (err) {
+        console.error("Failed to fetch ATC:", err);
+        setAtcs([]);
+        setFiltered([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchATC();
+  }, [isOpen, paramToSend]);
 
   useEffect(() => {
-    const newFiltered = atcs.filter(item =>
-      (item.atcCode || '').toLowerCase().includes((filters.atcCode || '').toLowerCase()) &&
-      (item.atcDesc || '').toLowerCase().includes((filters.atcDesc || '').toLowerCase()) &&
-      (item.taxRate || '').toLowerCase().includes((filters.taxRate || '').toLowerCase()) &&
-      (item.taxType || '').toLowerCase().includes((filters.taxType || '').toLowerCase())
-    );
+    let currentFiltered = [...atcs];
+
+    currentFiltered = currentFiltered.filter((item) => {
+      const atcCode = String(item?.atcCode ?? "").toLowerCase();
+      const atcName = String(item?.atcName ?? item?.atcDesc ?? "").toLowerCase();
+      const atcRate = String(item?.atcRate ?? item?.taxRate ?? "").toLowerCase();
+
+      return (
+        atcCode.includes(String(filters.atcCode ?? "").toLowerCase()) &&
+        atcName.includes(String(filters.atcName ?? "").toLowerCase()) &&
+        atcRate.includes(String(filters.atcRate ?? "").toLowerCase())
+      );
+    });
 
     if (sortConfig.key) {
-      newFiltered.sort((a, b) => {
-        if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
+      currentFiltered.sort((a, b) => {
+        const aValue = String(a?.[sortConfig.key] ?? "").toLowerCase();
+        const bValue = String(b?.[sortConfig.key] ?? "").toLowerCase();
+
+        if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1;
         return 0;
       });
     }
 
-    setFiltered(newFiltered);
-    console.log('Filtered ATC Data:', newFiltered);
+    setFiltered(currentFiltered);
   }, [filters, atcs, sortConfig]);
 
+  const handleApply = (atc) => {
+    onClose(atc);
+  };
+
   const handleFilterChange = (e, key) => {
-    setFilters({ ...filters, [key]: e.target.value });
+    setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   };
 
   const handleSort = (key) => {
-    let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
-    }
+    let direction = "asc";
+    if (sortConfig.key === key && sortConfig.direction === "asc") direction = "desc";
     setSortConfig({ key, direction });
   };
 
   const renderSortIcon = (column) => {
     if (sortConfig.key === column) {
-      return sortConfig.direction === 'asc' ? <FontAwesomeIcon icon={faSortUp} /> : <FontAwesomeIcon icon={faSortDown} />;
+      return sortConfig.direction === "asc" ? (
+        <FontAwesomeIcon icon={faSortUp} className="ml-1 text-blue-500" />
+      ) : (
+        <FontAwesomeIcon icon={faSortDown} className="ml-1 text-blue-500" />
+      );
     }
-    return <FontAwesomeIcon icon={faSort} />;
-  };
-
-  const handleNextPage = () => {
-    setCurrentPage(prevPage => prevPage + 1);
-  };
-
-  const handlePrevPage = () => {
-    setCurrentPage(prevPage => prevPage - 1);
-  };
-
-  const getPaginatedData = () => {
-    return filtered.slice(0, itemsPerPage); // Display only up to itemsPerPage
+    return <FontAwesomeIcon icon={faSort} className="ml-1 text-gray-400" />;
   };
 
   if (!isOpen) return null;
 
-  const paginatedData = getPaginatedData();
-
-  // Showing X of Y
-  const totalItems = filtered.length;
-  const itemsDisplayed = paginatedData.length;
-  const startItem = (currentPage - 1) * itemsPerPage + 1;
-  const endItem = Math.min(currentPage * itemsPerPage, totalItems);
-
   return (
-    <div className="global-lookup-main-div-ui">
-      <div className="global-lookup-div-ui max-w-2xl max-h-[100vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 sm:p-6 lg:p-8 animate-fade-in">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col relative overflow-hidden transform scale-95 animate-scale-in">
+        {/* Close */}
         <button
           onClick={() => onClose(null)}
-          className="global-lookup-button-close-ui"
+          className="absolute top-3 right-3 text-blue-500 hover:text-blue-700 transition duration-200 focus:outline-none p-1 rounded-full hover:bg-blue-100"
+          aria-label="Close modal"
         >
           <FontAwesomeIcon icon={faTimes} size="lg" />
         </button>
 
-        <h2 className="global-lookup-headertext-ui">Select ATC</h2>
+        <h2 className="text-sm font-semibold text-blue-800 p-3 border-b border-gray-100">
+          Select ATC
+        </h2>
 
-        {loading ? (
-          <div className="global-lookup-loading-main-div-ui">
-            <div className="global-lookup-loading-sub-div-ui"></div>
-          </div>
-        ) : (
-          <div className="global-lookup-table-main-div-ui max-h-[70vh] scroll-y-auto">
-            <table className="global-lookup-table-div-ui">
-              <thead className="global-lookup-thead-div-ui">
-                <tr className="global-lookup-tr-ui">
-                  <th className="global-lookup-th-ui w-24" onClick={() => handleSort('atcCode')}>
-                    ATC Code {renderSortIcon('atcCode')}
-                  </th>
-                  <th className="global-lookup-th-ui" onClick={() => handleSort('atcDesc')}>
-                    ATC Description {renderSortIcon('atcDesc')}
-                  </th>
-                  <th className="global-lookup-th- w-24" onClick={() => handleSort('taxRate')}>
-                    Tax Rate {renderSortIcon('taxRate')}
-                  </th>
-                  <th className="global-lookup-th-ui w-0">Action</th>
-                </tr>
-                <tr className="global-lookup-tr-ui">
-                  <th className="global-lookup-th-ui">
-                    <input
-                      type="text"
-                      value={filters.atcCode}
-                      onChange={(e) => handleFilterChange(e, 'atcCode')}
-                      className="global-lookup-filter-text-ui"
-                    />
-                  </th>
-                  <th className="global-lookup-th-ui">
-                    <input
-                      type="text"
-                      value={filters.atcName}
-                      onChange={(e) => handleFilterChange(e, 'atcDesc')}
-                      className="global-lookup-filter-text-ui"
-                    />
-                  </th>
-                  <th className="global-lookup-th-ui">
-                    <input
-                      type="text"
-                      value={filters.atcRate}
-                      onChange={(e) => handleFilterChange(e, 'taxRate')}
-                      className="global-lookup-filter-text-ui"
-                    />
-                  </th>
-                  <th className="global-lookup-th-ui"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {loading ? (
+        <div className="flex-grow overflow-hidden">
+          {loading ? (
+            <div className="flex items-center justify-center h-full min-h-[200px] text-blue-500">
+              <FontAwesomeIcon icon={faSpinner} spin size="2x" className="mr-3" />
+              <span>Loading ATC...</span>
+            </div>
+          ) : (
+            <div className="overflow-auto max-h-[calc(90vh-160px)] custom-scrollbar">
+              <table className="min-w-full divide-y divide-gray-100">
+                <thead className="bg-gray-100 sticky top-0 z-10 shadow-sm">
                   <tr>
-                    <td colSpan="5" className="py-10 text-center">
-                      <div className="w-8 h-8 mx-auto border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                      <div className="text-sm text-gray-500 mt-2">Loading ATCs...</div>
-                    </td>
+                    <th
+                      className="px-4 py-2 text-left text-xs font-bold text-blue-900 tracking-wider cursor-pointer hover:bg-blue-100 transition-colors duration-200"
+                      onClick={() => handleSort("atcCode")}
+                    >
+                      ATC Code {renderSortIcon("atcCode")}
+                    </th>
+                    <th
+                      className="px-4 py-2 text-left text-xs font-bold text-blue-900 tracking-wider cursor-pointer hover:bg-blue-100 transition-colors duration-200"
+                      onClick={() => handleSort("atcName")}
+                    >
+                      Description {renderSortIcon("atcName")}
+                    </th>
+                    <th
+                      className="px-4 py-2 text-left text-xs font-bold text-blue-900 tracking-wider cursor-pointer hover:bg-blue-100 transition-colors duration-200"
+                      onClick={() => handleSort("atcRate")}
+                    >
+                      Tax Rate {renderSortIcon("atcRate")}
+                    </th>
+                    <th className="px-4 py-2 text-left text-xs font-bold text-blue-900 tracking-wider">
+                      Action
+                    </th>
                   </tr>
-                ) : paginatedData.length > 0 ? (
-                  paginatedData.map((atc, index) => (
-                    <tr key={index} className="global-lookup-tr-ui">
-                      <td className="global-lookup-td-ui">{atc.atcCode}</td>
-                      <td className="global-lookup-td-ui">{atc.atcName}</td>
-                      <td className="global-lookup-td-ui text-right">{atc.atcRate}</td>
-                      <td className="global-lookup-td-ui">
-                        <button
-                          onClick={() => handleApply(atc)}
-                          className="global-lookup-apply-button-ui"
-                        >
-                          Apply
-                        </button>
+
+                  {/* Filter Row */}
+                  <tr className="bg-gray-100">
+                    <th className="px-3 py-1">
+                      <input
+                        type="text"
+                        value={filters.atcCode}
+                        onChange={(e) => handleFilterChange(e, "atcCode")}
+                        placeholder="Filter..."
+                        className="block w-full px-2 py-1 text-xs text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </th>
+                    <th className="px-3 py-1">
+                      <input
+                        type="text"
+                        value={filters.atcName}
+                        onChange={(e) => handleFilterChange(e, "atcName")}
+                        placeholder="Filter..."
+                        className="block w-full px-2 py-1 text-xs text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </th>
+                    <th className="px-3 py-1">
+                      <input
+                        type="text"
+                        value={filters.atcRate}
+                        onChange={(e) => handleFilterChange(e, "atcRate")}
+                        placeholder="Filter..."
+                        className="block w-full px-2 py-1 text-xs text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </th>
+                    <th className="px-3 py-1"></th>
+                  </tr>
+                </thead>
+
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filtered.length > 0 ? (
+                    filtered.map((atc, index) => (
+                      <tr
+                        key={index}
+                        className="hover:bg-blue-50 transition-colors duration-150 cursor-pointer text-xs"
+                        onClick={() => handleApply(atc)}
+                      >
+                        <td className="px-4 py-1 whitespace-nowrap">{atc.atcCode}</td>
+                        <td className="px-4 py-1 whitespace-nowrap">{atc.atcName ?? atc.atcDesc}</td>
+                        <td className="px-4 py-1 whitespace-nowrap text-right">
+                          {atc.atcRate ?? atc.taxRate}
+                        </td>
+                        <td className="px-4 py-1 whitespace-nowrap">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleApply(atc);
+                            }}
+                            className="px-6 py-1 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-150"
+                          >
+                            Apply
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="4" className="px-4 py-6 text-center text-gray-500 text-sm">
+                        No matching ATC found.
                       </td>
                     </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="5" className="global-lookup-td-ui">
-                      No matching ATCs found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
 
-        <div className="global-lookup-footer-div-ui">
-          <button
-            onClick={handlePrevPage}
-            disabled={currentPage === 1}
-            className="global-lookup-footer-button-prevnext-ui"
-          >
-            Previous
-          </button>
-          <div className="global-lookup-count-ui">
-            {startItem}-{endItem} of {totalItems}
-          </div>
-          <button
-            onClick={handleNextPage}
-            disabled={filtered.length <= currentPage * itemsPerPage}
-            className="global-lookup-footer-button-prevnext-ui"
-          >
-            Next
-          </button>
+        <div className="p-4 border-t border-gray-200 bg-gray-50 text-right text-xs text-gray-600">
+          Showing <span className="font-semibold">{filtered.length}</span> of{" "}
+          <span className="font-semibold">{atcs.length}</span> entries
         </div>
       </div>
+
+      <style jsx="true">{`
+        @keyframes fade-in {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes scale-in {
+          from { transform: scale(0.95); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+        .animate-fade-in { animation: fade-in 0.2s ease-out forwards; }
+        .animate-scale-in { animation: scale-in 0.3s ease-out forwards; }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #888; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #555; }
+      `}</style>
     </div>
   );
 };
