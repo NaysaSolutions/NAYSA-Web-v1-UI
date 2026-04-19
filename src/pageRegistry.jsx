@@ -84,6 +84,10 @@ import INTAXINQ from "./NAYSA Cloud/Query/INTAXInq/INTAXINQ.jsx";
 import OUTAXINQ from "./NAYSA Cloud/Query/OUTAXInq/OUTAXINQ.jsx";
 import AuditTrail from "./NAYSA Cloud/Query/AuditTrail/AuditTail.jsx";
 
+
+//Matrix
+import SalesPMCustomerItem from "./NAYSA Cloud/Matrix/SalesPMCustomerItem.jsx"
+
 // --- PRINTING / MODALS ---
 // import ARReportModal from "./NAYSA Cloud/Printing/ARReport.jsx";
 // import APReportModal from "./NAYSA Cloud/Printing/APReport.jsx";
@@ -283,6 +287,10 @@ export const pageRegistry = {
   PostMSAJ,
   MonthendGLProcessingModal,
   YearendGLProcessingModal,
+
+
+  //Matrix
+  SalesPMCustomerItem,
 
   // Printing
   // These keys now point to the Universal component but inject the specific module prop

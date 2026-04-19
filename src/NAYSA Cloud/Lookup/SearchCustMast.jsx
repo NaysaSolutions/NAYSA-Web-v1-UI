@@ -55,7 +55,7 @@ const CustomerMastLookupModal = ({ isOpen, onClose, customParam }) => {
                     searchMode: searchMode,
                 }
             };
-            
+            console.log(JSON.stringify(payload))
             const { data: result } = await apiClient.get("/lookupCustomer", {
                 params: { json_data: JSON.stringify(payload) },
             });
