@@ -9,11 +9,6 @@ import {
   faPlus,
   faSpinner,
   faSearch,
-  faTrashAlt,
-  faBoxOpen,
-  faWarehouse,
-  faTableCellsLarge,
-  faFileLines,
 } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
@@ -72,12 +67,8 @@ import {
   useSwalshowSaveSuccessDialog,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
-import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
-
 // Header
 import Header from "@/NAYSA Cloud/Components/Header";
-import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
-import DateFormatInput from '@/NAYSA Cloud/Global/DateFormatInput.jsx';
 
 const PO = () => {
   const loadedFromUrlRef = useRef(false);
@@ -342,9 +333,9 @@ const PO = () => {
     displayStatus,
   );
 
-  const DEC_QTY = 2;
-  const DEC_PRICE = 2;
-  const DEC_AMT = 2;
+    const DEC_QTY = 2;
+const DEC_PRICE = 2;
+const DEC_AMT = 2;
 
   // ===== Amount / VAT helpers (JO-style, adapted for PO) =====
   const computeVatFromInclusive = (vatRate, grossAmt) => {
@@ -378,15 +369,15 @@ const PO = () => {
     const net = baseAfterDisc - vatAmt;
 
     row.qtyOnHand = formatNumber(parseFormattedNumber(row.qtyOnHand) || 0, DEC_QTY);
-    row.qtyNeeded = formatNumber(parseFormattedNumber(row.qtyNeeded) || 0, DEC_QTY);
-    row.poQty     = formatNumber(parseFormattedNumber(row.poQty) || 0, DEC_QTY);
+row.qtyNeeded = formatNumber(parseFormattedNumber(row.qtyNeeded) || 0, DEC_QTY);
+row.poQty     = formatNumber(parseFormattedNumber(row.poQty) || 0, DEC_QTY);
 
-    row.unitPrice = formatNumber(parseFormattedNumber(row.unitPrice) || 0, DEC_PRICE);
+row.unitPrice = formatNumber(parseFormattedNumber(row.unitPrice) || 0, DEC_PRICE);
 
-    row.grossAmt  = formatNumber(parseFormattedNumber(row.grossAmt) || 0, DEC_AMT);
-    row.totalAmt  = formatNumber(parseFormattedNumber(row.totalAmt) || 0, DEC_AMT);
-    row.vatAmt    = formatNumber(parseFormattedNumber(row.vatAmt) || 0, DEC_AMT);
-    row.netAmt    = formatNumber(parseFormattedNumber(row.netAmt) || 0, DEC_AMT);
+row.grossAmt  = formatNumber(parseFormattedNumber(row.grossAmt) || 0, DEC_AMT);
+row.totalAmt  = formatNumber(parseFormattedNumber(row.totalAmt) || 0, DEC_AMT);
+row.vatAmt    = formatNumber(parseFormattedNumber(row.vatAmt) || 0, DEC_AMT);
+row.netAmt    = formatNumber(parseFormattedNumber(row.netAmt) || 0, DEC_AMT);
 
 
     return {
@@ -421,42 +412,6 @@ const PO = () => {
       totalNet: formatNumber(net || 0, 6),
     });
   };
-
-  const handleAddBlankRow = (index) => {
-    if (isFormDisabled) return;
-    const blankRow = {
-      invType: "",
-      groupId: "",
-      poStatus: "O",
-      itemCode: "",
-      itemName: "",
-      uomCode: "",
-      qtyOnHand: formatNumber(0, DEC_QTY),
-      qtyAlloc: formatNumber(0, DEC_QTY),
-      qtyNeeded: formatNumber(0, DEC_QTY),
-      uomCode2: "",
-      uomQty2: formatNumber(0, DEC_QTY),
-      dateNeeded: state.header?.delDate || new Date().toISOString().split("T")[0],
-      itemSpecs: "",
-      serviceCode: "",
-      serviceName: "",
-      poQty: formatNumber(0, DEC_QTY),
-      rrQty: formatNumber(0, DEC_QTY),
-      unitPrice: formatNumber(0, DEC_PRICE),
-      grossAmt: formatNumber(0, DEC_AMT),
-      discRate: formatNumber(0, DEC_AMT),
-      discAmt: formatNumber(0, DEC_AMT),
-      totalAmt: formatNumber(0, DEC_AMT),
-      vatCode: "",
-      vatAmt: formatNumber(0, DEC_AMT),
-      netAmt: formatNumber(0, DEC_AMT),
-    };
-    const updatedRows = [...detailRows];
-    updatedRows.splice(index + 1, 0, blankRow);
-    updateState({ detailRows: updatedRows });
-    updateTotalsDisplay(updatedRows);
-  };
-
 
   const openSpecsModal = (rowIndex) => {
     if (isFormDisabled) return;
@@ -535,6 +490,20 @@ const PO = () => {
     }
   }, [glCurrMode, glCurrDefault, currCode]);
 
+  const LoadingSpinner = () => (
+    <div className="global-tran-spinner-main-div-ui">
+      <div className="global-tran-spinner-sub-div-ui">
+        <FontAwesomeIcon
+          icon={faSpinner}
+          spin
+          size="2x"
+          className="text-blue-500 mb-2"
+        />
+        <p>Please wait...</p>
+      </div>
+    </div>
+  );
+
   // ==========================
   // INITIAL LOAD / RESET
   // ==========================
@@ -548,11 +517,11 @@ const PO = () => {
 
     updateState({
       header: {
-        po_date: today,
-        dateNeeded: today,
-        delDate: today,
-      },
-      dateNeeded: today,
+  po_date: today,
+  dateNeeded: today,
+  delDate: today,
+},
+dateNeeded: today,
       branchCode: "HO",
       branchName: "Head Office",
       cutoffCode: "",
@@ -704,9 +673,9 @@ const PO = () => {
 
       const today = new Date().toISOString().split("T")[0];
 
-      const delDateForHeader = data.delDate
-        ? new Date(data.delDate).toISOString().split("T")[0]
-        : today;
+const delDateForHeader = data.delDate
+  ? new Date(data.delDate).toISOString().split("T")[0]
+  : today;
 
 
 
@@ -801,10 +770,10 @@ const PO = () => {
         documentNo: data.poNo,
         branchCode: data.branchCode,
         header: {
-          po_date: poDateForHeader,
-          dateNeeded: dateNeededForHeader,
-          delDate: delDateForHeader || dateNeededForHeader || new Date().toISOString().split("T")[0],
-        },
+  po_date: poDateForHeader,
+  dateNeeded: dateNeededForHeader,
+  delDate: delDateForHeader || dateNeededForHeader || new Date().toISOString().split("T")[0],
+},
 
         cutoffCode: data.cutoffCode || "",
         rcCode: data.rcCode || "",
@@ -845,8 +814,8 @@ const PO = () => {
         dateNeeded: data.delDate
           ? new Date(data.delDate).toISOString().split("T")[0]
           : "",
-        WHcode: data.whCode || "",
-        WHname: data.whName || "",
+          WHcode: data.whCode || "",
+WHname: data.whName || "",
       });
     } catch (error) {
       console.error("Error fetching transaction data:", error);
@@ -947,6 +916,18 @@ const PO = () => {
   // ==========================
 
   const handleAddRowClick = () => {
+    // Block if RC or Requesting Dept is blank
+    if (!rcCode || !reqRcCode) {
+      Swal.fire({
+        icon: "warning",
+        title: "Required Header Fields",
+        text: "Please select both Responsibility Center and Requesting Dept before adding PO lines.",
+        timer: 2500,
+        showConfirmButton: false,
+      });
+      return;
+    }
+
     if (isFormDisabled) return;
 
     // Toggle dropdown
@@ -999,133 +980,132 @@ const PO = () => {
     setShowTypeDropdown(false);
   };
 
-
   const handleClosePROpenModal = (selection) => {
-    // Always close the modal
-    if (!selection) {
-      updateState({ prLookupModalOpen: false });
-      return;
-    }
+  // Always close the modal
+  if (!selection) {
+    updateState({ prLookupModalOpen: false });
+    return;
+  }
 
-    const header = selection?.header || {};
-    const details = Array.isArray(selection?.details) ? selection.details : [];
+  const header = selection?.header || {};
+  const details = Array.isArray(selection?.details) ? selection.details : [];
 
-    const prNo =
-      header?.PRNo ||
-      header?.prNo ||
-      header?.DocNo ||
-      header?.docNo ||
+  const prNo =
+    header?.PRNo ||
+    header?.prNo ||
+    header?.DocNo ||
+    header?.docNo ||
+    "";
+
+  const prId =
+    header?.PrId ||
+    header?.prId ||
+    "";
+
+  const refBC =
+    header?.BC ||
+    header?.branchCode ||
+    branchCode;
+
+  // Prefer groupId coming from DETAILS (once you add d.group_id AS GroupId in sproc_PHP_PR_Open Detail)
+  const pickedGroupId =
+    header?.groupId ||
+    header?.GroupId ||
+    details.find((d) => d?.groupId || d?.GroupId || d?.GROUP_ID)?.groupId ||
+    details.find((d) => d?.groupId || d?.GroupId || d?.GROUP_ID)?.GroupId ||
+    details.find((d) => d?.groupId || d?.GroupId || d?.GROUP_ID)?.GROUP_ID ||
+    state?.groupId ||
+    "";
+
+  const headerDateNeeded = header?.DateNeeded
+    ? String(header.DateNeeded).substring(0, 10)
+    : "";
+
+  const newDetailRows = details.map((d, i) => {
+    const qty = parseFloat(d?.QtyNeeded ?? 0) || 0;
+    const formattedQty = formatNumber(qty, 6);
+
+    const dateNeeded =
+      d?.DateNeeded
+        ? String(d.DateNeeded).substring(0, 10)
+        : headerDateNeeded;
+
+    const rowGroupId =
+      d?.groupId ||
+      d?.GroupId ||
+      d?.GROUP_ID ||
+      pickedGroupId ||
       "";
 
-    const prId =
-      header?.PrId ||
-      header?.prId ||
-      "";
+    return {
+      lN: i + 1,
 
-    const refBC =
-      header?.BC ||
-      header?.branchCode ||
-      branchCode;
+      // references
+      prNo: prNo || "",
+      prId: prId || "",
+      refBranchCode: refBC || branchCode,
 
-    // Prefer groupId coming from DETAILS (once you add d.group_id AS GroupId in sproc_PHP_PR_Open Detail)
-    const pickedGroupId =
-      header?.groupId ||
-      header?.GroupId ||
-      details.find((d) => d?.groupId || d?.GroupId || d?.GROUP_ID)?.groupId ||
-      details.find((d) => d?.groupId || d?.GroupId || d?.GROUP_ID)?.GroupId ||
-      details.find((d) => d?.groupId || d?.GroupId || d?.GROUP_ID)?.GROUP_ID ||
-      state?.groupId ||
-      "";
+      invType: d?.Type || "",
+      groupId: rowGroupId, // ✅ THIS WILL FLOW INTO PO_DT1.GROUP_ID
+      poStatus: status || "",
 
-    const headerDateNeeded = header?.DateNeeded
-      ? String(header.DateNeeded).substring(0, 10)
-      : "";
+      itemCode: d?.JobCode || "",
+      itemName: d?.ScopeOfWork || "",
+      uomCode: d?.UOM || "",
 
-    const newDetailRows = details.map((d, i) => {
-      const qty = parseFloat(d?.QtyNeeded ?? 0) || 0;
-      const formattedQty = formatNumber(qty, 6);
+      qtyOnHand: formatNumber(d?.qtyOnHand ?? 0, 6),
+      qtyAlloc: "0.000000",
+      qtyNeeded: formattedQty,
+      poQty: formattedQty,
+      rrQty: "0.000000",
 
-      const dateNeeded =
-        d?.DateNeeded
-          ? String(d.DateNeeded).substring(0, 10)
-          : headerDateNeeded;
+      uomCode2: "",
+      uomQty2: "0.000000",
+      dateNeeded,
 
-      const rowGroupId =
-        d?.groupId ||
-        d?.GroupId ||
-        d?.GROUP_ID ||
-        pickedGroupId ||
-        "";
+      itemSpecs: "",
+      serviceCode: "",
+      serviceName: "",
 
-      return {
-        lN: i + 1,
+      // monetary defaults
+      unitPrice: "0.000000",
+      grossAmt: "0.000000",
+      discRate: "0.000000",
+      discAmt: "0.000000",
+      totalAmt: "0.000000",
+      vatCode: "",
+      vatAmt: "0.000000",
+      netAmt: "0.000000",
+      vatRate: 0,
 
-        // references
-        prNo: prNo || "",
-        prId: prId || "",
-        refBranchCode: refBC || branchCode,
+      // optional (if you use PR balance column later)
+      prBalance: formattedQty,
+    };
+  });
 
-        invType: d?.Type || "",
-        groupId: rowGroupId, // ✅ THIS WILL FLOW INTO PO_DT1.GROUP_ID
-        poStatus: status || "",
+  updateTotalsDisplay(newDetailRows);
 
-        itemCode: d?.JobCode || "",
-        itemName: d?.ScopeOfWork || "",
-        uomCode: d?.UOM || "",
+  updateState({
+    prLookupModalOpen: false,
 
-        qtyOnHand: formatNumber(d?.qtyOnHand ?? 0, 6),
-        qtyAlloc: "0.000000",
-        qtyNeeded: formattedQty,
-        poQty: formattedQty,
-        rrQty: "0.000000",
+    // PR reference
+    sourcePrNo: prNo,
+    sourcePrId: prId,
+    groupId: pickedGroupId, // ✅ keep in header state too
 
-        uomCode2: "",
-        uomQty2: "0.000000",
-        dateNeeded,
+    branchCode: refBC || branchCode,
 
-        itemSpecs: "",
-        serviceCode: "",
-        serviceName: "",
+    // dept
+    rcCode: header?.rcCode || rcCode,
+    rcName: header?.rcName || rcName,
 
-        // monetary defaults
-        unitPrice: "0.000000",
-        grossAmt: "0.000000",
-        discRate: "0.000000",
-        discAmt: "0.000000",
-        totalAmt: "0.000000",
-        vatCode: "",
-        vatAmt: "0.000000",
-        netAmt: "0.000000",
-        vatRate: 0,
+    // requesting RC
+    reqRcCode: header?.ReqRcCode || reqRcCode,
+    reqRcName: header?.ReqRcName || reqRcName,
 
-        // optional (if you use PR balance column later)
-        prBalance: formattedQty,
-      };
-    });
-
-    updateTotalsDisplay(newDetailRows);
-
-    updateState({
-      prLookupModalOpen: false,
-
-      // PR reference
-      sourcePrNo: prNo,
-      sourcePrId: prId,
-      groupId: pickedGroupId, // ✅ keep in header state too
-
-      branchCode: refBC || branchCode,
-
-      // dept
-      rcCode: header?.rcCode || rcCode,
-      rcName: header?.rcName || rcName,
-
-      // requesting RC
-      reqRcCode: header?.ReqRcCode || reqRcCode,
-      reqRcName: header?.ReqRcName || reqRcName,
-
-      detailRows: newDetailRows,
-    });
-  };
+    detailRows: newDetailRows,
+  });
+};
 
 
 
@@ -1150,47 +1130,47 @@ const PO = () => {
 
 
 
-  const sanitizeNumeric = (v) => {
-    const raw = String(v ?? "");
-    const cleaned = raw.replace(/[^0-9.]/g, "");
-    const parts = cleaned.split(".");
-    return parts.length <= 1 ? cleaned : `${parts.shift()}.${parts.join("")}`;
-  };
+const sanitizeNumeric = (v) => {
+  const raw = String(v ?? "");
+  const cleaned = raw.replace(/[^0-9.]/g, "");
+  const parts = cleaned.split(".");
+  return parts.length <= 1 ? cleaned : `${parts.shift()}.${parts.join("")}`;
+};
 
-  const formatByField = (field, num) => {
-    if (!Number.isFinite(num)) return "";
-    if (["unitPrice"].includes(field)) return formatNumber(num, DEC_PRICE);
-    if (["qtyOnHand", "qtyNeeded", "poQty"].includes(field)) return formatNumber(num, DEC_QTY);
-    if (["grossAmt", "totalAmt", "vatAmt", "netAmt"].includes(field)) return formatNumber(num, DEC_AMT);
-    return formatNumber(num, 6); // fallback for other numerics
-  };
+const formatByField = (field, num) => {
+  if (!Number.isFinite(num)) return "";
+  if (["unitPrice"].includes(field)) return formatNumber(num, DEC_PRICE);
+  if (["qtyOnHand", "qtyNeeded", "poQty"].includes(field)) return formatNumber(num, DEC_QTY);
+  if (["grossAmt", "totalAmt", "vatAmt", "netAmt"].includes(field)) return formatNumber(num, DEC_AMT);
+  return formatNumber(num, 6); // fallback for other numerics
+};
 
-  const handleDetailChange = (index, field, value, commit = false) => {
-    const updatedRows = [...detailRows];
-    const row = { ...(updatedRows[index] || {}) };
+const handleDetailChange = (index, field, value, commit = false) => {
+  const updatedRows = [...detailRows];
+  const row = { ...(updatedRows[index] || {}) };
 
-    // fields you allow user to type into
-    const editableFields = ["unitPrice"]; // add others if needed later
+  // fields you allow user to type into
+  const editableFields = ["unitPrice"]; // add others if needed later
 
-    // If field is not editable, ignore changes (extra safety)
-    if (!editableFields.includes(field)) return;
+  // If field is not editable, ignore changes (extra safety)
+  if (!editableFields.includes(field)) return;
 
-    const sanitized = sanitizeNumeric(value);
+  const sanitized = sanitizeNumeric(value);
 
-    if (commit) {
-      const num = parseFormattedNumber(sanitized);
-      row[field] = formatByField(field, num);
-    } else {
-      row[field] = sanitized; // typing mode: don’t force decimals yet
-    }
+  if (commit) {
+    const num = parseFormattedNumber(sanitized);
+    row[field] = formatByField(field, num);
+  } else {
+    row[field] = sanitized; // typing mode: don’t force decimals yet
+  }
 
-    // IMPORTANT: your computed fields must be recalculated here
-    const recalculatedRow = recalcDetailRow(row); // keep your existing function
-    updatedRows[index] = recalculatedRow;
+  // IMPORTANT: your computed fields must be recalculated here
+  const recalculatedRow = recalcDetailRow(row); // keep your existing function
+  updatedRows[index] = recalculatedRow;
 
-    updateState({ detailRows: updatedRows });
-    updateTotalsDisplay(updatedRows);
-  };
+  updateState({ detailRows: updatedRows });
+  updateTotalsDisplay(updatedRows);
+};
 
 
   const handleCloseVATLookup = async (selectedVAT) => {
@@ -1463,32 +1443,32 @@ const PO = () => {
   // ==========================
 
   const cleanUrl = useCallback(() => {
-    window.history.replaceState({}, "", window.location.origin);
-  }, []);
+  window.history.replaceState({}, "", window.location.origin);
+}, []);
 
-  const handleHistoryRowPick = useCallback(
-    async (row) => {
-      const docNo = row?.docNo;
-      const branchCode = row?.branchCode;
-      if (!docNo || !branchCode) return;
+const handleHistoryRowPick = useCallback(
+  async (row) => {
+    const docNo = row?.docNo;
+    const branchCode = row?.branchCode;
+    if (!docNo || !branchCode) return;
 
-      await fetchTranData(docNo, branchCode); 
-      setTopTab("details");
-      cleanUrl(); // 
-    },
-    [fetchTranData, cleanUrl]
-  );
+    await fetchTranData(docNo, branchCode); 
+    setTopTab("details");
+    cleanUrl(); // 
+  },
+  [fetchTranData, cleanUrl]
+);
 
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const docNo = params.get("msajNo");
-    const branchCode = params.get("branchCode");
+useEffect(() => {
+  const params = new URLSearchParams(location.search);
+  const docNo = params.get("msajNo");
+  const branchCode = params.get("branchCode");
 
-    if (!loadedFromUrlRef.current && docNo && branchCode) {
-      loadedFromUrlRef.current = true;
-      handleHistoryRowPick({ docNo, branchCode });
-    }
-  }, [location.search, handleHistoryRowPick]);
+  if (!loadedFromUrlRef.current && docNo && branchCode) {
+    loadedFromUrlRef.current = true;
+    handleHistoryRowPick({ docNo, branchCode });
+  }
+}, [location.search, handleHistoryRowPick]);
 
   const printData = {
     pr_no: documentNo,
@@ -1773,20 +1753,24 @@ const PO = () => {
 
 
   const handleTranDocNoRetrieval = async (data) => {
-    await fetchTranData(data.docNo, data.branchCode || branchCode, data.key);
-    updateState({ showAllTranDocNo: data.modalClose });
-  };
+  await fetchTranData(data.docNo, data.branchCode || branchCode, data.key);
+  updateState({ showAllTranDocNo: data.modalClose });
+};
 
-  const handleTranDocNoSelection = async (data) => {
+
+
+const handleTranDocNoSelection = async (data) => {
+    
     handleReset();
     updateState({showAllTranDocNo: false, documentNo:data.docNo });
-  };
+};
 
-  const handleDocNoBlur = () => {
+const handleDocNoBlur = () => {
+
     if (!state.documentID && state.documentNo && state.branchCode) { 
         fetchTranData(state.documentNo,state.branchCode);
     }
-  };
+};
 
   // ==========================
   // RENDER
@@ -1810,19 +1794,8 @@ const PO = () => {
           onCopy={handleCopy}
           onAttach={handleAttach}
           onHistory={() => setTopTab("history")}
-          activeTopTab={topTab}
-          showActions={topTab === "details"}
-          showBIRForm={false}
-          showCopyForm={true}
-          onDetails={() => setTopTab("details")}
-          disableRouteNavigation={true}
-          detailsRoute="/page/PO"
-          isSaveDisabled={isSaveDisabled || isFormDisabled || ((detailRows?.length || 0) === 0)}
+          isSaveDisabled={isSaveDisabled}
           isResetDisabled={isResetDisabled}
-          isAttachDisabled={!documentID}
-          isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
-          isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
-          isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED" || displayStatus === "CLOSED"}
         />
       </div>
 
@@ -1868,246 +1841,520 @@ const PO = () => {
           >
             {/* Columns 1–3 (Header fields) */}
             <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Column 1: Branch / PO No / PO Date / Department */}
+              {/* Column 1: Branch / PO No / PO Date */}
               <div className="global-tran-textbox-group-div-ui">
                 {/* Branch */}
-                <FieldRenderer
-                  id="branchName"
-                  label="Branch"
-                  type="lookup"
-                  value={branchName || ""}
-                  disabled={state.isFetchDisabled || state.isDocNoDisabled || isFormDisabled}
-                  readOnly
-                  lookupDisabled={isFetchDisabled}
-                  onLookup={() => !isFormDisabled && updateState({ branchModalOpen: true })}
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    id="branchName"
+                    placeholder=" "
+                    value={branchName}
+                    readOnly
+                    onFocus={(e) => e.target.blur()}
+                    className="peer global-tran-textbox-ui cursor-pointer select-none"
+                  />
+                  <label
+                    htmlFor="branchName"
+                    className="global-tran-floating-label"
+                  >
+                    Branch
+                  </label>
+                  <button
+                    type="button"
+                    className={`global-tran-textbox-button-search-padding-ui ${
+                      isFetchDisabled
+                        ? "global-tran-textbox-button-search-disabled-ui"
+                        : "global-tran-textbox-button-search-enabled-ui"
+                    } global-tran-textbox-button-search-ui`}
+                    disabled={
+                      state.isFetchDisabled ||
+                      state.isDocNoDisabled ||
+                      isFormDisabled
+                    }
+                    onClick={() =>
+                      !isFormDisabled && updateState({ branchModalOpen: true })
+                    }
+                  >
+                    <FontAwesomeIcon icon={faMagnifyingGlass} />
+                  </button>
+                </div>
 
                 {/* PO No */}
-                <FieldRenderer
-                  id="poNo"
-                  label="PO No."
-                  type="lookup"
-                  value={state.documentNo || ""}
-                  disabled={state.isDocNoDisabled}
-                  onChange={(val) => updateState({ documentNo: val })}
-                  onLookup={() => updateState({ showAllTranDocNo: true })}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      handleDocNoBlur();
-                      e.preventDefault();
-                      document.getElementById("poDate")?.focus();
-                    }
-                  }}
-                />
+                <div className="relative">
+                        <input
+                            type="text"
+                            id="poNo"
+                            value={state.documentNo}
+                            onChange={(e) => updateState({ documentNo: e.target.value })}
+                            // onBlur={handleDocNoBlur}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                handleDocNoBlur();
+                                e.preventDefault(); 
+                                document.getElementById("poDate")?.focus();
+                              }}}
+                            placeholder=" "
+                            className={`peer global-tran-textbox-ui ${state.isDocNoDisabled ? 'bg-blue-100 cursor-not-allowed' : ''}`}
+                            disabled={state.isDocNoDisabled}
+                        />
+                        <label htmlFor="poNo" className="global-tran-floating-label">
+                    PO No.
+                  </label>
+                  <button
+                            className={`global-tran-textbox-button-search-padding-ui ${
+                                (state.isFetchDisabled || state.isDocNoDisabled)
+                                ? "global-tran-textbox-button-search-disabled-ui"
+                                : "global-tran-textbox-button-search-enabled-ui"
+                            } global-tran-textbox-button-search-ui`}
+                            // disabled={state.isFetchDisabled || state.isDocNoDisabled}
+                            onClick={() => {updateState({showAllTranDocNo:true})}}
+                        >
+                            <FontAwesomeIcon icon={faMagnifyingGlass} />
+                        </button>
+                </div>
 
                 {/* PO Date */}
-                <div className="relative w-full">
-                  <div
-                    className={`flex items-stretch global-ref-textbox-ui ${
-                      !isFormDisabled
-                        ? "global-ref-textbox-enabled"
-                        : "global-ref-textbox-disabled"
-                    }`}
+                <div className="relative">
+                  <input
+                    type="date"
+                    id="PRDate"
+                    className="peer global-tran-textbox-ui"
+                    value={header.po_date}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setHeader((prev) => ({ ...prev, po_date: v })); // keep if you still use local header
+                      updateState({
+                        header: { ...(state.header || {}), po_date: v },
+                      });
+                    }}
+                    disabled={isFormDisabled}
+                  />
+                  <label
+                    htmlFor="PRDate"
+                    className="global-tran-floating-label"
                   >
-                    <DateFormatInput
-                      id="poDate"
-                      className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
-                      value={header.po_date}
-                      disabled={isFormDisabled}
-                      updateState={(val) => {
-                        const v = typeof val === "string" ? val : val?.po_date ?? "";
-                        setHeader((prev) => ({ ...prev, po_date: v }));
-                        updateState({ header: { ...(state.header || {}), po_date: v } });
-                      }}
-                    />
-                  </div>
-                  <label htmlFor="poDate" className="global-ref-floating-label">
                     PO Date
                   </label>
                 </div>
-
-                {/* Department */}
-                <FieldRenderer
-                  id="rcName"
-                  label="Department"
-                  type="lookup"
-                  value={rcCode || ""}
-                  readOnly
-                  disabled={isFormDisabled}
-                  lookupDisabled={isFetchDisabled}
-                  onLookup={() =>
-                    !isFormDisabled &&
-                    updateState({
-                      rcLookupModalOpen: true,
-                      rcLookupContext: "rc",
-                    })
-                  }
-                />
+                {/* PR No. (Source PR for PO) */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    id="sourcePrNo"
+                    value={sourcePrNo}
+                    readOnly
+                    placeholder=" "
+                    className="peer global-tran-textbox-ui cursor-pointer select-none"
+                    onFocus={(e) => e.target.blur()}
+                  />
+                  <label
+                    htmlFor="sourcePrNo"
+                    className="global-tran-floating-label"
+                  >
+                    Reference PR No.
+                  </label>
+                  <button
+                    type="button"
+                    className={`global-tran-textbox-button-search-padding-ui ${
+                      isFormDisabled
+                        ? "global-tran-textbox-button-search-disabled-ui"
+                        : "global-tran-textbox-button-search-enabled-ui"
+                    } global-tran-textbox-button-search-ui`}
+                    disabled={isFormDisabled}
+                    onClick={() => updateState({ prLookupModalOpen: true })}
+                  >
+                    <FontAwesomeIcon icon={faMagnifyingGlass} />
+                  </button>
+                </div>
               </div>
 
-              {/* Column 2: Payee Code / Payee Name / Attention */}
+              {/* Column 2: Department / Payee / Attention */}
               <div className="global-tran-textbox-group-div-ui">
+                {/* Department */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    id="rcName"
+                    value={rcCode}
+                    readOnly
+                    placeholder=" "
+                    className="peer global-tran-textbox-ui"
+                  />
+                  <label
+                    htmlFor="rcName"
+                    className="global-tran-floating-label"
+                  >
+                    Department
+                  </label>
+                  <button
+                    type="button"
+                    className={`global-tran-textbox-button-search-padding-ui ${
+                      isFetchDisabled
+                        ? "global-tran-textbox-button-search-disabled-ui"
+                        : "global-tran-textbox-button-search-enabled-ui"
+                    } global-tran-textbox-button-search-ui`}
+                    disabled={isFormDisabled}
+                    onClick={() =>
+                      !isFormDisabled &&
+                      updateState({
+                        rcLookupModalOpen: true,
+                        rcLookupContext: "rc",
+                      })
+                    }
+                  >
+                    <FontAwesomeIcon icon={faMagnifyingGlass} />
+                  </button>
+                </div>
+
                 {/* Payee Code */}
-                <FieldRenderer
-                  id="vendCode"
-                  label="Payee Code *"
-                  type="lookup"
-                  value={vendCode || ""}
-                  readOnly
-                  disabled={isFormDisabled}
-                  lookupDisabled={isFetchDisabled}
-                  onLookup={() =>
-                    !isFormDisabled && updateState({ payeeModalOpen: true })
-                  }
-                />
+                <div className="relative group flex-[1.3]">
+                  <input
+                    type="text"
+                    id="vendCode"
+                    value={vendCode}
+                    readOnly
+                    placeholder=" "
+                    className="peer global-tran-textbox-ui"
+                  />
+                  <label
+                    htmlFor="vendCode"
+                    className="global-tran-floating-label"
+                  >
+                    Payee Code <span className="text-red-500">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    className={`global-tran-textbox-button-search-padding-ui ${
+                      isFetchDisabled
+                        ? "global-tran-textbox-button-search-disabled-ui"
+                        : "global-tran-textbox-button-search-enabled-ui"
+                    } global-tran-textbox-button-search-ui`}
+                    disabled={isFormDisabled}
+                    onClick={() =>
+                      !isFormDisabled &&
+                      updateState({
+                        payeeModalOpen: true,
+                      })
+                    }
+                  >
+                    <FontAwesomeIcon icon={faMagnifyingGlass} />
+                  </button>
+                </div>
 
                 {/* Payee Name */}
-                <FieldRenderer
-                  id="vendName"
-                  label="Payee Name *"
-                  type="text"
-                  value={vendNameHeader || ""}
-                  disabled={isFormDisabled}
-                  onChange={(val) => updateState({ vendNameHeader: val })}
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    id="vendName"
+                    value={vendNameHeader}
+                    placeholder=" "
+                    onChange={(e) =>
+                      updateState({ vendNameHeader: e.target.value })
+                    }
+                    className="peer global-tran-textbox-ui"
+                    disabled={isFormDisabled}
+                  />
+                  <label
+                    htmlFor="vendName"
+                    className="global-tran-floating-label"
+                  >
+                    Payee Name <span className="text-red-500">*</span>
+                  </label>
+                </div>
 
                 {/* Attention */}
-                <FieldRenderer
-                  id="attention"
-                  label="Attention"
-                  type="text"
-                  value={attention || ""}
-                  disabled={isFormDisabled}
-                  onChange={(val) => updateState({ attention: val })}
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    id="attention"
+                    value={attention}
+                    placeholder=" "
+                    onChange={(e) => updateState({ attention: e.target.value })}
+                    className="peer global-tran-textbox-ui"
+                    disabled={isFormDisabled}
+                  />
+                  <label
+                    htmlFor="attention"
+                    className="global-tran-floating-label"
+                  >
+                    Attention
+                  </label>
+                </div>
               </div>
 
               {/* Column 3: Currency / Rate / Payterm / Status */}
               <div className="global-tran-textbox-group-div-ui">
-                {/* Currency */}
-                <FieldRenderer
-                  id="currName"
-                  label="Currency"
-                  type="lookup"
-                  value={currName || ""}
-                  readOnly
-                  disabled={isFormDisabled}
-                  lookupDisabled={isFetchDisabled}
-                  onLookup={() => !isFormDisabled && updateState({ currencyModalOpen: true })}
-                />
+                {/* Currency + Rate */}
+                <div className="flex space-x-4">
+                  {/* Currency */}
+                  <div className="relative flex-grow w-2/3">
+                    <input
+                      type="text"
+                      id="currCode"
+                      value={currCode}
+                      className="peer global-tran-textbox-ui hidden"
+                      readOnly
+                    />
+                    <input
+                      type="text"
+                      id="currName"
+                      value={currName}
+                      className="peer global-tran-textbox-ui"
+                      readOnly
+                    />
+
+                    <label
+                      htmlFor="currCode"
+                      className="global-tran-floating-label"
+                    >
+                      Currency
+                    </label>
+                    <button
+                      onClick={() => {
+                        updateState({ currencyModalOpen: true });
+                      }}
+                      className={`global-tran-textbox-button-search-padding-ui ${
+                        isFetchDisabled
+                          ? "global-tran-textbox-button-search-disabled-ui"
+                          : "global-tran-textbox-button-search-enabled-ui"
+                      } global-tran-textbox-button-search-ui`}
+                      disabled={isFormDisabled}
+                    >
+                      <FontAwesomeIcon icon={faMagnifyingGlass} />
+                    </button>
+                  </div>
+                </div>
 
                 {/* Currency Rate */}
-                <FieldRenderer
-                  id="currRate"
-                  label="Currency Rate"
-                  type="text"
-                  value={currRate || ""}
-                  disabled={isFormDisabled || glCurrDefault === currCode}
-                  onChange={(val) => {
-                    const sanitizedValue = val.replace(/[^0-9.]/g, "");
-                    if (/^\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") {
-                      updateState({ currRate: sanitizedValue });
-                    }
-                  }}
-                  onBlur={handleCurrRateNoBlur}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      document.getElementById("refDocNo1")?.focus();
-                    }
-                  }}
-                />
+                <div className="relative flex-grow">
+                  <input
+                    type="text"
+                    id="currRate"
+                    value={currRate}
+                    onChange={(e) => {
+                      const inputValue = e.target.value;
+                      const sanitizedValue = inputValue.replace(/[^0-9.]/g, "");
+                      if (
+                        /^\d*\.?\d{0,2}$/.test(sanitizedValue) ||
+                        sanitizedValue === ""
+                      ) {
+                        updateState({ currRate: sanitizedValue });
+                      }
+                    }}
+                    onBlur={handleCurrRateNoBlur}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        document.getElementById("refDocNo1")?.focus();
+                      }
+                    }}
+                    onFocus={(e) => {
+                      if (parseFormattedNumber(e.target.value) === 0) {
+                        e.target.value = "";
+                      }
+                    }}
+                    placeholder=" "
+                    className="peer global-tran-textbox-ui text-right"
+                    disabled={isFormDisabled || glCurrDefault === currCode}
+                  />
+
+                  <label
+                    htmlFor="currName"
+                    className="global-tran-floating-label"
+                  >
+                    Currency Rate
+                  </label>
+                </div>
 
                 {/* Payterm */}
-                <FieldRenderer
-                  id="payTerm"
-                  label="Payterm *"
-                  type="lookup"
-                  value={paytermName || paytermCode || ""}
-                  readOnly
-                  disabled={isFormDisabled}
-                  lookupDisabled={isFetchDisabled}
-                  onLookup={() => !isFormDisabled && updateState({ showPaytermModal: true })}
-                />
+                <div className="relative group flex-[1.3]">
+                  <input
+                    type="text"
+                    id="payTerm"
+                    // show description first, fall back to code if no name
+                    value={paytermName || paytermCode}
+                    readOnly
+                    placeholder=" "
+                    className="peer global-tran-textbox-ui"
+                  />
+                  <label
+                    htmlFor="payTerm"
+                    className="global-tran-floating-label"
+                  >
+                    Payterm <span className="text-red-500">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    className={`global-tran-textbox-button-search-padding-ui ${
+                      isFetchDisabled
+                        ? "global-tran-textbox-button-search-disabled-ui"
+                        : "global-tran-textbox-button-search-enabled-ui"
+                    } global-tran-textbox-button-search-ui`}
+                    disabled={isFormDisabled}
+                    onClick={() =>
+                      !isFormDisabled &&
+                      updateState({
+                        showPaytermModal: true,
+                      })
+                    }
+                  >
+                    <FontAwesomeIcon icon={faMagnifyingGlass} />
+                  </button>
+                </div>
 
-                {/* PO Status */}
-                <FieldRenderer
-                  id="poStatus"
-                  label="PO Status"
-                  type="select"
-                  value={selectedPoType || ""}
-                  disabled={isFormDisabled}
-                  onChange={(val) => handlePrTypeChange({ target: { value: val } })}
-                  options={[
-                    { label: "Open", value: "O" },
-                    { label: "Closed", value: "C" },
-                    { label: "Cancelled", value: "X" },
-                  ]}
-                />
+                {/* PO Status (just select UI) */}
+                <div className="relative">
+                  <select
+                    id="poStatus"
+                    className="peer global-tran-textbox-ui"
+                    value={selectedPoType}
+                    onChange={handlePrTypeChange}
+                    disabled={isFormDisabled}
+                  >
+                    <option value="">Open</option>
+                    <option value="">Closed</option>
+                    <option value="">Cancelled</option>
+                  </select>
+                  <label
+                    htmlFor="poStatus"
+                    className="global-tran-floating-label"
+                  >
+                    PO Status
+                  </label>
+                  <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
+                    <svg
+                      className="h-4 w-4 text-gray-500"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M19 9l-7 7-7-7"
+                      />
+                    </svg>
+                  </div>
+                </div>
               </div>
 
               {/* Column 4*/}
               <div className="global-tran-textbox-group-div-ui">
-                {/* PO Type */}
-                <FieldRenderer
-                  id="poTypes"
-                  label="PO Type"
-                  type="select"
-                  value={selectedPoType || ""}
-                  disabled={isFormDisabled}
-                  onChange={(val) => handlePrTypeChange({ target: { value: val } })}
-                  options={poTypes.map((t) => ({
-                    label: t.DROPDOWN_NAME,
-                    value: t.DROPDOWN_CODE,
-                  }))}
-                />
+                {/* Currency + Rate */}
+                <div className="flex space-x-4">
+                  {/* Currency */}
+                  <div className="relative flex-grow w-2/3">
+                    <select
+                      id="poTypes"
+                      className="peer global-tran-textbox-ui"
+                      value={selectedPoType}
+                      onChange={handlePrTypeChange}
+                      disabled={isFormDisabled}
+                    >
+                      <option value="">Local</option>
+                      <option value="">Foreign</option>
+                    </select>
+                    <label
+                      htmlFor="poTypes"
+                      className="global-tran-floating-label"
+                    >
+                      PO Type
+                    </label>
+                    <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
+                      <svg
+                        className="h-4 w-4 text-gray-500"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M19 9l-7 7-7-7"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
 
-                {/* Warehouse */}
-                <FieldRenderer
-                  id="WHcode"
-                  label="Warehouse"
-                  type="lookup"
-                  value={state.WHname || state.WHcode || ""}
-                  readOnly
-                  disabled={isFormDisabled}
-                  lookupDisabled={isFetchDisabled}
-                  onLookup={() => !isFormDisabled && updateState({ warehouseLookupOpen: true })}
-                />
+                {/* WareHouse  */}
+
+                <div className="relative group flex-[1.3]">
+                  <input
+                    type="text"
+                    id="WHcode"
+                    value={state.WHname || state.WHcode || ""}
+                    readOnly
+                    className="peer global-tran-textbox-ui"
+                  />
+                  <label
+                    htmlFor="WHcode"
+                    className="global-tran-floating-label"
+                  >
+                    Warehouse
+                  </label>
+                  <button
+                    type="button"
+                    className={`global-tran-textbox-button-search-padding-ui ${
+                      isFetchDisabled
+                        ? "global-tran-textbox-button-search-disabled-ui"
+                        : "global-tran-textbox-button-search-enabled-ui"
+                    } global-tran-textbox-button-search-ui`}
+                    disabled={isFormDisabled}
+                    onClick={() =>
+                      !isFormDisabled &&
+                      updateState({ warehouseLookupOpen: true })
+                    }
+                  >
+                    <FontAwesomeIcon icon={faMagnifyingGlass} />
+                  </button>
+                  <div></div>
+                </div>
 
                 {/* Delivery Address */}
-                <FieldRenderer
-                  id="delAddress"
-                  label="Delivery Address"
-                  type="text"
-                  value={delAddress || ""}
-                  disabled={isFormDisabled}
-                  onChange={(val) => updateState({ delAddress: val })}
-                />
-
-                {/* Delivery Date */}
-                <div className="relative w-full">
-                  <div
-                    className={`flex items-stretch global-ref-textbox-ui ${
-                      !isFormDisabled
-                        ? "global-ref-textbox-enabled"
-                        : "global-ref-textbox-disabled"
-                    }`}
+                <div className="relative">
+                  <input
+                    type="text"
+                    id="attention"
+                    value={delAddress}
+                    placeholder=" "
+                    onChange={(e) =>
+                      updateState({ delAddress: e.target.value })
+                    }
+                    className="peer global-tran-textbox-ui"
+                    disabled={isFormDisabled}
+                  />
+                  <label
+                    htmlFor="delAddress"
+                    className="global-tran-floating-label"
                   >
-                    <DateFormatInput
-                      id="delDate"
-                      className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
-                      value={state.header?.delDate || ""}
-                      disabled={isFormDisabled}
-                      updateState={(val) => {
-                        const v = typeof val === "string" ? val : val?.delDate ?? "";
-                        updateState({
-                          header: { ...(state.header || {}), delDate: v },
-                          dateNeeded: v,
-                        });
-                      }}
-                    />
-                  </div>
-                  <label htmlFor="delDate" className="global-ref-floating-label">
+                    Delivery Address
+                  </label>
+                </div>
+
+                <div className="relative group flex-[1.3]">
+                  <input
+                    type="date"
+                    id="delDate"
+                    value={state.header?.delDate || ""}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      updateState({
+                        header: { ...(state.header || {}), delDate: v },
+                        dateNeeded: v, // keep your existing usage consistent
+                      });
+                    }}
+                    placeholder=" "
+                    className="peer global-tran-textbox-ui"
+                    disabled={isFormDisabled}
+                  />
+                  <label
+                    htmlFor="delDate"
+                    className="global-tran-floating-label"
+                  >
                     Delivery Date
                   </label>
                 </div>
@@ -2155,7 +2402,7 @@ const PO = () => {
                 <thead className="global-tran-thead-div-ui">
                   <tr>
                     <th className="global-tran-th-ui">LN</th>
-                    <th className="global-tran-th-ui">PO Status</th>
+                    <th className="global-tran-th-ui">PR Status</th>
                     <th className="global-tran-th-ui">Type</th>
                     <th className="global-tran-th-ui">Item Code</th>
                     <th className="global-tran-th-ui">Item Description</th>
@@ -2176,7 +2423,7 @@ const PO = () => {
                     <th className="global-tran-th-ui">RR Qty</th>
                     {!isFormDisabled && (
                       <th className="global-tran-th-ui sticky right-0 bg-blue-300 dark:bg-blue-900 z-30">
-                        Actions
+                        Delete
                       </th>
                     )}
                   </tr>
@@ -2285,24 +2532,24 @@ const PO = () => {
                       {/* Qty on Hand */}
                       <td className="global-tran-td-ui text-right">
                         <input
-                          type="text"
-                          className="global-tran-td-inputclass-ui text-right bg-gray-100 cursor-not-allowed"
-                          value={row.qtyOnHand || ""}
-                          readOnly
-                          tabIndex={-1}
-                        />
+  type="text"
+  className="global-tran-td-inputclass-ui text-right bg-gray-100 cursor-not-allowed"
+  value={row.qtyOnHand || ""}
+  readOnly
+  tabIndex={-1}
+/>
 
                       </td>
 
                       {/* Qty Needed */}
                       <td className="global-tran-td-ui text-right">
                         <input
-                          type="text"
-                          className="global-tran-td-inputclass-ui text-right bg-gray-100 cursor-not-allowed"
-                          value={row.qtyNeeded || ""}
-                          readOnly
-                          tabIndex={-1}
-                        />
+  type="text"
+  className="global-tran-td-inputclass-ui text-right bg-gray-100 cursor-not-allowed"
+  value={row.qtyNeeded || ""}
+  readOnly
+  tabIndex={-1}
+/>
 
                       </td>
 
@@ -2322,19 +2569,19 @@ const PO = () => {
                       {/* Unit Price */}
                        <td className="global-tran-td-ui text-right">
                       <input
-                        type="text"
-                        className="w-[120px] global-tran-td-inputclass-ui text-right"
-                        value={row.unitPrice || ""}
-                        onChange={(e) => handleDetailChange(index, "unitPrice", e.target.value, false)}
-                        onBlur={(e) => handleDetailChange(index, "unitPrice", e.target.value, true)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleDetailChange(index, "unitPrice", e.target.value, true);
-                          }
-                        }}
-                        disabled={isFormDisabled}
-                      />
+  type="text"
+  className="w-[120px] global-tran-td-inputclass-ui text-right"
+  value={row.unitPrice || ""}
+  onChange={(e) => handleDetailChange(index, "unitPrice", e.target.value, false)}
+  onBlur={(e) => handleDetailChange(index, "unitPrice", e.target.value, true)}
+  onKeyDown={(e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleDetailChange(index, "unitPrice", e.target.value, true);
+    }
+  }}
+  disabled={isFormDisabled}
+/>
                       </td>
 
                       {/* Gross Amt */}
@@ -2479,25 +2726,26 @@ const PO = () => {
                         />
                       </td>
 
-                      {/* Actions: Insert Row + Delete */}
+                      {showAllTranDocNo && (
+                                        <AllTranDocNo
+                                          isOpen={showAllTranDocNo}
+                                          params={{branchCode,branchName,docType,documentTitle,fieldNo : "msajNo"}}
+                                          onRetrieve={handleTranDocNoRetrieval}
+                                          onResponse={{documentNo}}
+                                          onSelected={handleTranDocNoSelection}
+                                          onClose={() => updateState({ showAllTranDocNo: false })}
+                                        />
+                                      )} 
+
+                      {/* Delete */}
                       {!isFormDisabled && (
                         <td className="global-tran-td-ui text-center sticky right-0">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              type="button"
-                              className="global-tran-td-button-add-ui"
-                              onClick={() => handleAddBlankRow(index)}
-                            >
-                              <FontAwesomeIcon icon={faPlus} />
-                            </button>
-                            <button
-                              type="button"
-                              className="global-tran-td-button-delete-ui"
-                              onClick={() => handleDeleteRow(index)}
-                            >
-                              <FontAwesomeIcon icon={faTrashAlt} />
-                            </button>
-                          </div>
+                          <button
+                            className="global-tran-td-button-delete-ui"
+                            onClick={() => handleDeleteRow(index)}
+                          >
+                            -
+                          </button>
                         </td>
                       )}
                     </tr>
@@ -2510,125 +2758,38 @@ const PO = () => {
           {/* Detail Footer: Add Button + Total */}
           <div className="global-tran-tab-footer-main-div-ui">
             <div className="global-tran-tab-footer-button-div-ui">
-              <div className="relative inline-block">
-
-                {/* Polished dropdown overlay */}
+              <div className="inline-block">
                 {showTypeDropdown && (
-                  <div className="absolute bottom-[110%] left-0 mb-3 z-[9999] w-[240px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur-sm dark:border-slate-700 dark:bg-slate-800">
-                    <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-700">
-                      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
-                        Add Item
-                      </div>
-                    </div>
-
-                    <div className="p-2">
-                      <button
-                        type="button"
-                        className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
-                        onClick={() => {
-                          setShowTypeDropdown(false);
-                          handleSelectTypeAndAddRow("FG");
-                        }}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
-                            <FontAwesomeIcon icon={faBoxOpen} />
-                          </span>
-                          <div className="flex flex-col items-start">
-                            <span>Finished Goods</span>
-                            <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
-                              Add FG item
-                            </span>
-                          </div>
-                        </div>
-                        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
-                          FG
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
-                        onClick={() => {
-                          setShowTypeDropdown(false);
-                          handleOpenMSLookup();
-                        }}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
-                            <FontAwesomeIcon icon={faTableCellsLarge} />
-                          </span>
-                          <div className="flex flex-col items-start">
-                            <span>Material Supplies</span>
-                            <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
-                              Add MS Item
-                            </span>
-                          </div>
-                        </div>
-                        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
-                          MS
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
-                        onClick={() => {
-                          setShowTypeDropdown(false);
-                          handleSelectTypeAndAddRow("RM");
-                        }}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
-                            <FontAwesomeIcon icon={faWarehouse} />
-                          </span>
-                          <div className="flex flex-col items-start">
-                            <span>Raw Material</span>
-                            <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
-                              Add RM Item
-                            </span>
-                          </div>
-                        </div>
-                        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
-                          RM
-                        </span>
-                      </button>
-
-                      <div className="my-2 border-t border-slate-100 dark:border-slate-700" />
-
-                      <button
-                        type="button"
-                        className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-blue-700 transition-all duration-150 hover:bg-blue-50 hover:text-blue-900 dark:text-blue-300 dark:hover:bg-slate-700"
-                        onClick={() => {
-                          setShowTypeDropdown(false);
-                          updateState({ prLookupModalOpen: true });
-                        }}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-slate-700 dark:text-blue-300">
-                            <FontAwesomeIcon icon={faFileLines} />
-                          </span>
-                          <div className="flex flex-col items-start">
-                            <span>Open Reference PR</span>
-                            <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
-                              Pull items from PR
-                            </span>
-                          </div>
-                        </div>
-                        <span className="rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-600 dark:bg-slate-700 dark:text-blue-300">
-                          PR
-                        </span>
-                      </button>
-
-                    </div>
+                  <div className="mb-2 bg-white dark:bg-slate-800 border rounded-md shadow-lg z-50 min-w-[140px]">
+                    <button
+                      type="button"
+                      className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700"
+                      onClick={() => handleSelectTypeAndAddRow("FG")}
+                    >
+                      FG
+                    </button>
+                    <button
+                      type="button"
+                      className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700"
+                      onClick={handleOpenMSLookup}
+                    >
+                      MS
+                    </button>
+                    <button
+                      type="button"
+                      className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700"
+                      onClick={() => handleSelectTypeAndAddRow("RM")}
+                    >
+                      RM
+                    </button>
                   </div>
                 )}
 
                 <button
                   onClick={handleAddRowClick}
-                  disabled={isFormDisabled}
+                  disabled={isFormDisabled || !rcCode || !reqRcCode}
                   className={`global-tran-tab-footer-button-add-ui ${
-                    isFormDisabled
+                    isFormDisabled || !rcCode || !reqRcCode
                       ? "opacity-50 cursor-not-allowed"
                       : ""
                   }`}
@@ -2858,17 +3019,6 @@ const PO = () => {
         <VATLookupModal
           isOpen={vatLookupModalOpen}
           onClose={handleCloseVATLookup}
-        />
-      )}
-
-      {showAllTranDocNo && (
-        <AllTranDocNo
-          isOpen={showAllTranDocNo}
-          params={{ branchCode, branchName, docType, documentTitle, fieldNo: "poNo" }}
-          onRetrieve={handleTranDocNoRetrieval}
-          onResponse={{ documentNo }}
-          onSelected={handleTranDocNoSelection}
-          onClose={() => updateState({ showAllTranDocNo: false })}
         />
       )}
 

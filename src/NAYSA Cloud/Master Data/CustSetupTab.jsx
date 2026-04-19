@@ -8,6 +8,9 @@ import SearchATCRef from "@/NAYSA Cloud/Lookup/SearchATCRef.jsx";
 import SearchVATRef from "@/NAYSA Cloud/Lookup/SearchVATRef.jsx";
 import SearchBillTermRef from "@/NAYSA Cloud/Lookup/SearchBillTermRef.jsx";
 import SearchCurrRef from "@/NAYSA Cloud/Lookup/SearchCurrRef.jsx";
+import CustTypeLookupModal from "@/NAYSA Cloud/Lookup/SearchCustType.jsx";
+import AreaLookupModal from "@/NAYSA Cloud/Lookup/SearchArea.jsx";
+import ZoneLookupModal from "@/NAYSA Cloud/Lookup/SearchZone.jsx";
 import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
 import {
   useFieldLenghtCheck,
@@ -99,7 +102,8 @@ const CustSetupTab = forwardRef(
 
     // --- 4. LOOKUP & OPTIONS ---
     const [lookups, setLookups] = useState({ 
-      cust: false, branch: false, atc: false, vat: false, billTerm: false, curr: false 
+      cust: false, branch: false, atc: false, vat: false, billTerm: false, curr: false,
+      custType: false, area: false, zone: false,
     });
     const toggleLookup = (key, val) => setLookups(prev => ({ ...prev, [key]: val }));
 
@@ -316,11 +320,12 @@ const CustSetupTab = forwardRef(
 
                   <FieldRenderer
                     label="Customer Type"
-                    type="select"
+                    type="lookup"
                     value={form?.customerType || ""}
-                    options={[]}
-                    onChange={(v) =>
-                      onChangeForm({ customerType: getValue(v) })
+                    onLookup={
+                      isDisabled
+                        ? undefined
+                        : () => toggleLookup("custType", true)
                     }
                     readOnly={isReadOnly}
                     disabled={isDisabled}
@@ -330,8 +335,11 @@ const CustSetupTab = forwardRef(
                     label="Area"
                     type="lookup"
                     value={form?.area || ""}
-                    options={[]}
-                    onChange={(v) => onChangeForm({ area: getValue(v) })}
+                    onLookup={
+                      isDisabled
+                        ? undefined
+                        : () => toggleLookup("area", true)
+                    }
                     readOnly={isReadOnly}
                     disabled={isDisabled}
                   />
@@ -340,8 +348,11 @@ const CustSetupTab = forwardRef(
                     label="Zone"
                     type="lookup"
                     value={form?.zone || ""}
-                    options={[]}
-                    onChange={(v) => onChangeForm({ zone: getValue(v) })}
+                    onLookup={
+                      isDisabled
+                        ? undefined
+                        : () => toggleLookup("zone", true)
+                    }
                     readOnly={isReadOnly}
                     disabled={isDisabled}
                   />
@@ -747,10 +758,45 @@ const CustSetupTab = forwardRef(
             });
           }}
         />
+        <CustTypeLookupModal
+          isOpen={lookups.custType}
+          onClose={(selected) => {
+            toggleLookup("custType", false);
+            if (!selected) return;
+            onChangeForm({
+              customerType: getValue(selected?.custTypeCode),
+              customerTypeName: getValue(selected?.custTypeName),
+            });
+          }}
+        />
+
+        <AreaLookupModal
+          isOpen={lookups.area}
+          onClose={(selected) => {
+            toggleLookup("area", false);
+            if (!selected) return;
+            onChangeForm({
+              area: getValue(selected?.areaCode),
+              areaName: getValue(selected?.areaName),
+            });
+          }}
+        />
+
+       <ZoneLookupModal
+          isOpen={lookups.zone}
+          onClose={(selected) => {
+            toggleLookup("zone", false);
+            if (!selected) return;
+            onChangeForm({
+              zone: getValue(selected?.zoneCode),
+              zoneName: getValue(selected?.zoneName),
+            });
+          }}
+        />
       </div>
-    );
-  }
-);
+    ); 
+  } 
+); 
 
 CustSetupTab.displayName = "CustSetupTab";
 export default CustSetupTab;

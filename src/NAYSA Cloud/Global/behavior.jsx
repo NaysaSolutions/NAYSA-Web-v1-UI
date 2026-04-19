@@ -963,59 +963,86 @@ export const useSwalHandleOpenSpecsModal = (
   placeHolderValue
 ) => {
   Swal.fire({
-    title: "",
+    title: "", 
     html: `
       <div style="
-        margin: -16px -16px 0 -16px;
         background: #f8faff;
-        padding: 12px 20px;
+        padding: 16px 20px;
         border-bottom: 1px solid #e2e8f0;
         text-align: left;
-        border-radius: 12px 12px 0 0;
         display: flex;
         align-items: center;
-        justify-content: space-between;
       ">
-        <div style="color: #1e40af; font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-          <div style="width: 3px; height: 14px; background: #3b82f6; border-radius: 2px;"></div>
+        <div style="color: #1e40af; font-size: 15px; font-weight: 700;">
           ${rowTitle || "Specification"}
         </div>
       </div>
     `,
     input: "textarea",
     inputValue: rowValue || "",
-    inputPlaceholder: placeHolderValue || "Enter details...",
+    inputPlaceholder: placeHolderValue || "Enter specification for this item...",
     showCloseButton: true,
     showCancelButton: false,
     confirmButtonText: "Apply",
-    width: 450, 
-    padding: "0 0 12px 0", 
+    width: 400, 
+    padding: "0", 
     background: "#ffffff",
     buttonsStyling: false,
     customClass: {
-      popup: "rounded-xl shadow-2xl border border-slate-200 overflow-hidden",
-      // Added -mt-1 to raise the X slightly, kept the slate hover effect
-      closeButton: "text-slate-400 hover:text-slate-600 focus:outline-none scale-75 -mt-1", 
+      popup: "rounded-xl shadow-2xl border border-slate-200 overflow-hidden", // 'overflow-hidden' clips the corners perfectly
+      closeButton: "text-slate-400 hover:text-slate-600 focus:outline-none transition-colors", 
       input: "m-0",
-      actions: "flex justify-center px-5 mt-2",
-      confirmButton: "bg-blue-600 hover:bg-blue-700 text-white px-12 py-2 rounded-lg text-sm font-bold transition-all active:scale-95 shadow-md shadow-blue-100",
+      actions: "flex justify-center px-5 mt-4 mb-4", 
+      confirmButton: "bg-blue-600 hover:bg-blue-700 text-white px-10 py-2 rounded-lg text-sm font-bold transition-all active:scale-95 shadow-md shadow-blue-100",
+      htmlContainer: "p-0 m-0", // Ensures no extra space around our custom header
     },
     inputAttributes: {
       style: `
-        width: calc(100% - 32px);
-        margin: 18px 16px 0 16px; /* Increased top margin to 18px */
-        min-height: 100px;
-        max-height: 200px;
-        padding: 10px;
+        width: calc(100% - 40px);
+        margin: 16px 20px 0 20px;
+        min-height: 80px;
+        max-height: 150px;
+        padding: 12px;
         border-radius: 8px;
         border: 1px solid #cbd5e1;
-        font-size: 14px;
-        line-height: 1.4;
+        font-size: 13px;
+        line-height: 1.5;
         color: #334155;
         box-sizing: border-box;
       `,
     },
     didOpen: () => {
+      const popup = Swal.getPopup();
+
+      // Hide the empty title wrappers to completely remove the white gap on top
+      const header = popup.querySelector('.swal2-header');
+      const title = popup.querySelector('.swal2-title');
+      if (title) title.style.display = 'none';
+      if (header) {
+        header.style.padding = '0';
+        header.style.minHeight = '0';
+        header.style.border = 'none';
+      }
+
+      // Precisely align the 'X' button with the "Specification" text
+      const closeBtn = popup.querySelector('.swal2-close');
+      if (closeBtn) {
+        closeBtn.style.position = 'absolute';
+        closeBtn.style.top = '14px'; // Pushed down to align perfectly with the text baseline
+        closeBtn.style.right = '20px'; // Matched with the 20px padding of the header
+        closeBtn.style.padding = '0'; // Strips SweetAlert's default padding
+        closeBtn.style.margin = '0';
+        closeBtn.style.width = '24px'; // Fixed bounding box
+        closeBtn.style.height = '24px';
+        closeBtn.style.fontSize = '24px'; 
+        closeBtn.style.lineHeight = '1';
+        closeBtn.style.display = 'flex';
+        closeBtn.style.alignItems = 'center';
+        closeBtn.style.justifyContent = 'center';
+        closeBtn.style.background = 'transparent';
+        closeBtn.style.color = '#94a3b8'; // Standard slate-400
+      }
+
       const input = Swal.getInput();
       if (input) {
         input.focus();
