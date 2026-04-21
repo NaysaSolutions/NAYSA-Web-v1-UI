@@ -1,14 +1,8 @@
 
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Save,
-  Undo2,
-  Search,
-  MoreVertical,
-  Trash2,
-  Pencil,
-} from "lucide-react";
+import { Save, Undo2, Search, MoreVertical, Trash2, Pencil } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faInfoCircle,
@@ -18,7 +12,6 @@ import {
   faCopy,
   faDownload,
   faUpload,
-  faHistory,
 } from "@fortawesome/free-solid-svg-icons";
 import Swal from "sweetalert2";
 import * as XLSX from "xlsx";
@@ -33,6 +26,7 @@ import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferen
 import CustomerMastLookupModal from "@/NAYSA Cloud/Lookup/SearchCustMast";
 import AreaLookupModal from "@/NAYSA Cloud/Lookup/SearchArea";
 import CustomerTypeLookupModal from "@/NAYSA Cloud/Lookup/SearchCustType";
+import ItemMastLookupModal from "@/NAYSA Cloud/Lookup/SearchItemMast";
 
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import { exportGenericQueryExcel } from "@/NAYSA Cloud/Global/report";
@@ -52,14 +46,21 @@ import {
 import { useformatToDatev2 } from "@/NAYSA Cloud/Global/dates";
 
 const DOC_TYPE = "SalesPMCustomerItem";
-const HISTORY_ENDPOINT = "/historyPriceMatrix";
 const DELETE_ENDPOINT = "/deletePriceMatrix";
+const HISTORY_BY_TYPE_ENDPOINT = "/historyPriceMatrix";
+const HISTORY_BY_ITEM_ENDPOINT = "/historyPriceMatrixperItem";
 
 const MATRIX_TYPE_OPTIONS = [
   { value: "PMCUST", label: "Per Customer" },
   { value: "PMAREA", label: "Per Area" },
   { value: "PMCHAIN", label: "Per Chain Customer" },
   { value: "PMCTYPE", label: "Per Customer Type" },
+];
+
+const TABS = [
+  { key: "details", label: "Matrix Details" },
+  { key: "historyType", label: "Matrix History per Type" },
+  { key: "historyItem", label: "Matrix History per Item" },
 ];
 
 const MATRIX_TYPE_META = {
@@ -107,6 +108,25 @@ const DEFAULT_HEADER = {
   registeredDate: "",
   lastUpdatedBy: "",
   lastUpdatedDate: "",
+};
+
+const DEFAULT_HISTORY_TYPE_FILTER = {
+  pmType: "PMCUST",
+  pmCode: "",
+  pmName: "",
+  startDate: "",
+  endDate: "",
+};
+
+const DEFAULT_HISTORY_ITEM_FILTER = {
+  pmType: "PMCUST",
+  itemCode: "",
+  itemName: "",
+  uomCode: "",
+  pmCode: "",
+  pmName: "",
+  startDate: "",
+  endDate: "",
 };
 
 const PRICE_KEYS = [
@@ -177,11 +197,8 @@ const safeObject = (value) => {
 };
 
 const stripCommas = (value) => String(value ?? "").replace(/,/g, "").trim();
-
-const toNumberText = (value) => {
-  if (value === null || value === undefined) return "";
-  return String(value);
-};
+const toNumberText = (value) =>
+  value === null || value === undefined ? "" : String(value);
 
 const extractResultPayload = (response) => {
   const raw =
@@ -250,10 +267,7 @@ const formatPlainDecimal = (value, decimals = 2) => {
   const text = stripCommas(value);
   const num = Number(text || 0);
 
-  if (Number.isNaN(num)) {
-    return Number(0).toFixed(decimals);
-  }
-
+  if (Number.isNaN(num)) return Number(0).toFixed(decimals);
   return num.toFixed(decimals);
 };
 
@@ -287,29 +301,108 @@ const toUploadNumber = (value, max = null) => {
 
   const num = Number(raw);
   if (Number.isNaN(num) || num < 0) return 0;
-
   if (max !== null && num > max) return max;
   return num;
 };
+
+const validateDateRange = (startDate, endDate) => {
+  if (!startDate || !endDate) return true;
+  return new Date(startDate) <= new Date(endDate);
+};
+
+const formatDateTimeCell = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleString("en-US", {
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+};
+
+const mapHistoryRows = (rawRows = [], pmType = "PMCUST") =>
+  safeArray(rawRows)
+    .map((item, index) => ({
+      id:
+        item.pmId ||
+        item.pm_id ||
+        `${item.itemCode || item.item_code || "ROW"}_${index}`,
+
+      pmId: item.pmId || item.pm_id || "",
+      pmType: item.pmType || item.pm_type || pmType,
+      pmCode: item.pmCode || item.pm_code || "",
+      pmName: item.pmName || item.pm_name || "",
+
+      itemCode: item.itemCode || item.item_code || "",
+      itemName: item.itemName || item.item_name || "",
+      uomCode: item.uomCode || item.uom_code || "",
+
+      sellingPrice:
+        item.sellingPrice ?? item.selling_price ?? 0,
+      discRate1:
+        item.discRate1 ?? item.disc_rate1 ?? 0,
+      discRate2:
+        item.discRate2 ?? item.disc_rate2 ?? 0,
+      discRate3:
+        item.discRate3 ?? item.disc_rate3 ?? 0,
+      discRate4:
+        item.discRate4 ?? item.disc_rate4 ?? 0,
+      discRate5:
+        item.discRate5 ?? item.disc_rate5 ?? 0,
+      discRate6:
+        item.discRate6 ?? item.disc_rate6 ?? 0,
+      discRate7:
+        item.discRate7 ?? item.disc_rate7 ?? 0,
+      discRate8:
+        item.discRate8 ?? item.disc_rate8 ?? 0,
+
+      effectivityDate: item.effectivityDate || item.effectivity_date || "",
+      registeredBy: item.registeredBy || item.registered_by || "",
+      registeredDate: item.registeredDate || item.registered_date || "",
+      updatedBy: item.updatedBy || item.updated_by || "",
+      updatedDate: item.updatedDate || item.updated_date || "",
+    }))
+    .filter(
+      (row) =>
+        String(row.pmId || "").trim() !== "" ||
+        String(row.itemCode || "").trim() !== "" ||
+        String(row.pmCode || "").trim() !== ""
+    );
 
 export default function SalesPMCustomerItem() {
   const { currentUserRow, companyInfo } = useAuth();
   const queryClient = useQueryClient();
 
+  const [activeTab, setActiveTab] = useState("details");
+
   const [header, setHeader] = useState(DEFAULT_HEADER);
   const [rows, setRows] = useState([]);
   const [selectedRow, setSelectedRow] = useState(null);
+
+  const [historyTypeFilter, setHistoryTypeFilter] = useState(
+    DEFAULT_HISTORY_TYPE_FILTER
+  );
+  const [historyTypeRows, setHistoryTypeRows] = useState([]);
+
+  const [historyItemFilter, setHistoryItemFilter] = useState(
+    DEFAULT_HISTORY_ITEM_FILTER
+  );
+  const [historyItemRows, setHistoryItemRows] = useState([]);
 
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showAreaModal, setShowAreaModal] = useState(false);
   const [showChainModal, setShowChainModal] = useState(false);
   const [showCustomerTypeModal, setShowCustomerTypeModal] = useState(false);
+  const [showItemModal, setShowItemModal] = useState(false);
 
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [historyRows, setHistoryRows] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyActionLoading, setHistoryActionLoading] = useState(false);
-
   const [uploadLoading, setUploadLoading] = useState(false);
   const [downloadLoading, setDownloadLoading] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -328,6 +421,10 @@ export default function SalesPMCustomerItem() {
   const rateDecimals = 2;
 
   const matrixMeta = MATRIX_TYPE_META[header.pmType] || MATRIX_TYPE_META.PMCUST;
+  const historyTypeMeta =
+    MATRIX_TYPE_META[historyTypeFilter.pmType] || MATRIX_TYPE_META.PMCUST;
+  const historyItemMeta =
+    MATRIX_TYPE_META[historyItemFilter.pmType] || MATRIX_TYPE_META.PMCUST;
   const pageHeaderTitle = matrixMeta.pageTitle || documentTitle;
 
   useEffect(() => {
@@ -345,35 +442,17 @@ export default function SalesPMCustomerItem() {
     };
 
     document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const setHeaderField = (key, value) => {
     setHeader((prev) => ({ ...prev, [key]: value }));
   };
 
-  const resetMatrixForType = (pmType) => {
-    setHeader({
-      ...DEFAULT_HEADER,
-      pmType,
-    });
-    setRows([]);
-    setSelectedRow(null);
-    setHistoryRows([]);
-    inputRefs.current = {};
-  };
-
-  const handleReset = () => {
-    resetMatrixForType("PMCUST");
-  };
-
   const getInputRefKey = (rowId, key) => `${rowId}__${key}`;
 
   const focusCell = (rowId, key) => {
     const refKey = getInputRefKey(rowId, key);
-
     setTimeout(() => {
       const input = inputRefs.current[refKey];
       if (input) {
@@ -381,6 +460,45 @@ export default function SalesPMCustomerItem() {
         input.select?.();
       }
     }, 0);
+  };
+
+  const clearDetailTable = () => {
+    setRows([]);
+    setSelectedRow(null);
+    inputRefs.current = {};
+  };
+
+  const resetMatrixForType = (pmType = "PMCUST") => {
+    setHeader({ ...DEFAULT_HEADER, pmType });
+    clearDetailTable();
+  };
+
+  const resetHistoryTypeSection = (pmType = historyTypeFilter.pmType || "PMCUST") => {
+    setHistoryTypeFilter({
+      ...DEFAULT_HISTORY_TYPE_FILTER,
+      pmType,
+    });
+    setHistoryTypeRows([]);
+  };
+
+  const resetHistoryItemSection = (pmType = historyItemFilter.pmType || "PMCUST") => {
+    setHistoryItemFilter({
+      ...DEFAULT_HISTORY_ITEM_FILTER,
+      pmType,
+    });
+    setHistoryItemRows([]);
+  };
+
+  const handleReset = () => {
+    resetMatrixForType("PMCUST");
+  };
+
+  const handleHistoryTypeReset = () => {
+    resetHistoryTypeSection(historyTypeFilter.pmType || "PMCUST");
+  };
+
+  const handleHistoryItemReset = () => {
+    resetHistoryItemSection(historyItemFilter.pmType || "PMCUST");
   };
 
   const mapDetailRows = (dt1) =>
@@ -426,15 +544,9 @@ export default function SalesPMCustomerItem() {
       registeredBy: parsed?.registeredBy || parsed?.registered_by || "",
       registeredDate: parsed?.registeredDate || parsed?.registered_date || "",
       lastUpdatedBy:
-        parsed?.lastUpdatedBy ||
-        parsed?.updatedBy ||
-        parsed?.updated_by ||
-        "",
+        parsed?.lastUpdatedBy || parsed?.updatedBy || parsed?.updated_by || "",
       lastUpdatedDate:
-        parsed?.lastUpdatedDate ||
-        parsed?.updatedDate ||
-        parsed?.updated_date ||
-        "",
+        parsed?.lastUpdatedDate || parsed?.updatedDate || parsed?.updated_date || "",
     };
   };
 
@@ -507,7 +619,6 @@ export default function SalesPMCustomerItem() {
       const response = await apiClient.post("/upsertPriceMatrix", payload);
       return response.data;
     },
-
     onSuccess: async (response) => {
       try {
         const rawResult = response?.data?.[0]?.result || "[]";
@@ -534,7 +645,6 @@ export default function SalesPMCustomerItem() {
         queryKey: ["salesPMCustomerItem"],
       });
     },
-
     onError: (error) => {
       useSwalErrorAlert(
         "Save Failed",
@@ -571,6 +681,24 @@ export default function SalesPMCustomerItem() {
     if (header.pmType === "PMCTYPE") return setShowCustomerTypeModal(true);
   };
 
+  const openHistoryTypeLookup = () => {
+    if (historyTypeFilter.pmType === "PMCUST") return setShowCustomerModal(true);
+    if (historyTypeFilter.pmType === "PMAREA") return setShowAreaModal(true);
+    if (historyTypeFilter.pmType === "PMCHAIN") return setShowChainModal(true);
+    if (historyTypeFilter.pmType === "PMCTYPE") return setShowCustomerTypeModal(true);
+  };
+
+  const openHistoryItemReferenceLookup = () => {
+    if (historyItemFilter.pmType === "PMCUST") return setShowCustomerModal(true);
+    if (historyItemFilter.pmType === "PMAREA") return setShowAreaModal(true);
+    if (historyItemFilter.pmType === "PMCHAIN") return setShowChainModal(true);
+    if (historyItemFilter.pmType === "PMCTYPE") return setShowCustomerTypeModal(true);
+  };
+
+  const openHistoryItemLookup = () => {
+    setShowItemModal(true);
+  };
+
   const handleMatrixTypeChange = async (eventOrValue) => {
     const newValue =
       typeof eventOrValue === "string"
@@ -601,88 +729,142 @@ export default function SalesPMCustomerItem() {
     });
 
     if (!result.isConfirmed) return;
-
     resetMatrixForType(newValue);
+  };
+
+  const handleHistoryTypePmTypeChange = (eventOrValue) => {
+    const newValue =
+      typeof eventOrValue === "string"
+        ? eventOrValue
+        : eventOrValue?.target?.value || "PMCUST";
+
+    setHistoryTypeFilter({
+      ...DEFAULT_HISTORY_TYPE_FILTER,
+      pmType: newValue,
+    });
+    setHistoryTypeRows([]);
+  };
+
+  const handleHistoryItemPmTypeChange = (eventOrValue) => {
+    const newValue =
+      typeof eventOrValue === "string"
+        ? eventOrValue
+        : eventOrValue?.target?.value || "PMCUST";
+
+    setHistoryItemFilter({
+      ...DEFAULT_HISTORY_ITEM_FILTER,
+      pmType: newValue,
+    });
+    setHistoryItemRows([]);
+  };
+
+  const getLookupCodeAndName = (selected, pmType) => {
+    if (pmType === "PMCUST" || pmType === "PMCHAIN") {
+      return {
+        pmCode:
+          selected?.custCode ||
+          selected?.cust_code ||
+          selected?.chainCode ||
+          selected?.chain_code ||
+          "",
+        pmName:
+          selected?.custName ||
+          selected?.cust_name ||
+          selected?.chainName ||
+          selected?.chain_name ||
+          "",
+      };
+    }
+
+    if (pmType === "PMAREA") {
+      return {
+        pmCode: selected?.areaCode || selected?.area_code || "",
+        pmName: selected?.areaName || selected?.area_name || "",
+      };
+    }
+
+    if (pmType === "PMCTYPE") {
+      return {
+        pmCode:
+          selected?.custTypeCode ||
+          selected?.cust_type_code ||
+          selected?.typeCode ||
+          selected?.type_code ||
+          "",
+        pmName:
+          selected?.custTypeName ||
+          selected?.cust_type_name ||
+          selected?.typeName ||
+          selected?.type_name ||
+          "",
+      };
+    }
+
+    return { pmCode: "", pmName: "" };
   };
 
   const applyLookupSelection = (selected, pmType) => {
     if (!selected) return;
+    const { pmCode, pmName } = getLookupCodeAndName(selected, pmType);
 
-    if (pmType === "PMCUST" || pmType === "PMCHAIN") {
-      const pmCode =
-        selected?.custCode ||
-        selected?.cust_code ||
-        selected?.chainCode ||
-        selected?.chain_code ||
-        "";
-      const pmName =
-        selected?.custName ||
-        selected?.cust_name ||
-        selected?.chainName ||
-        selected?.chain_name ||
-        "";
+    setHeader((prev) => ({
+      ...prev,
+      pmType,
+      pmId: "",
+      pmCode,
+      pmName,
+      effectivityDate: "",
+      registeredBy: "",
+      registeredDate: "",
+      lastUpdatedBy: "",
+      lastUpdatedDate: "",
+    }));
+  };
 
-      setHeader((prev) => ({
-        ...prev,
-        pmType,
-        pmId: "",
-        pmCode,
-        pmName,
-        effectivityDate: "",
-        registeredBy: "",
-        registeredDate: "",
-        lastUpdatedBy: "",
-        lastUpdatedDate: "",
-      }));
-      return;
-    }
+  const applyHistoryTypeLookupSelection = (selected, pmType) => {
+    if (!selected) return;
+    const { pmCode, pmName } = getLookupCodeAndName(selected, pmType);
 
-    if (pmType === "PMAREA") {
-      const pmCode = selected?.areaCode || selected?.area_code || "";
-      const pmName = selected?.areaName || selected?.area_name || "";
+    setHistoryTypeFilter((prev) => ({
+      ...prev,
+      pmType,
+      pmCode,
+      pmName,
+    }));
+    setHistoryTypeRows([]);
+  };
 
-      setHeader((prev) => ({
-        ...prev,
-        pmType,
-        pmId: "",
-        pmCode,
-        pmName,
-        effectivityDate: "",
-        registeredBy: "",
-        registeredDate: "",
-        lastUpdatedBy: "",
-        lastUpdatedDate: "",
-      }));
-      return;
-    }
+  const applyHistoryItemReferenceLookupSelection = (selected, pmType) => {
+    if (!selected) return;
+    const { pmCode, pmName } = getLookupCodeAndName(selected, pmType);
 
-    if (pmType === "PMCTYPE") {
-      const pmCode =
-        selected?.custTypeCode ||
-        selected?.cust_type_code ||
-        selected?.typeCode ||
-        selected?.type_code ||
-        "";
-      const pmName =
-        selected?.custTypeName ||
-        selected?.cust_type_name ||
-        selected?.typeName ||
-        selected?.type_name ||
-        "";
+    setHistoryItemFilter((prev) => ({
+      ...prev,
+      pmType,
+      pmCode,
+      pmName,
+    }));
+    setHistoryItemRows([]);
+  };
 
-      setHeader((prev) => ({
-        ...prev,
-        pmType,
-        pmId: "",
-        pmCode,
-        pmName,
-        effectivityDate: "",
-        registeredBy: "",
-        registeredDate: "",
-        lastUpdatedBy: "",
-        lastUpdatedDate: "",
-      }));
-    }
+  const applyHistoryItemLookupSelection = (selected) => {
+ 
+    if (!selected) return;
+
+     const itemsArray = Array.isArray(selected.records)
+    ? selected.records
+    : selected.records ? [selected.records] : [];
+
+     const singleItem = itemsArray[0]
+
+
+    setHistoryItemFilter((prev) => ({
+      ...prev,
+      itemCode: singleItem?.itemCode || "",
+      itemName: singleItem?.itemName || "",
+      uomCode: singleItem?.uomCode ||  "",
+    }));
+    setHistoryItemRows([]);
   };
 
   const updateRowField = (rowId, key, value) => {
@@ -694,12 +876,9 @@ export default function SalesPMCustomerItem() {
       prev.map((row) => {
         if (row.id !== rowId) return row;
         if (normalized === value && /-/.test(String(value ?? ""))) return row;
-        if (normalized === value && /[^\d.,]/.test(String(value ?? "")))
-          return row;
+        if (normalized === value && /[^\d.,]/.test(String(value ?? ""))) return row;
 
-        if (normalized === "") {
-          return { ...row, [key]: "" };
-        }
+        if (normalized === "") return { ...row, [key]: "" };
 
         const numericValue = Number(normalized);
         if (Number.isNaN(numericValue) || numericValue < 0) return row;
@@ -838,180 +1017,201 @@ export default function SalesPMCustomerItem() {
     );
   };
 
-const loadHistory = async () => {
-  const params = {
-    json_data: {
-      pmCode: header.pmCode || "",
-      pmType: header.pmType || "PMCUST",
-    },
-  };
-
-  const response = await apiClient.get(HISTORY_ENDPOINT, { params });
-  const parsedRows = extractResultArray(response);
-
-  const mappedRows = parsedRows
-    .map((item, index) => ({
-      id: item.pm_id || item.pmId || `${index}`,
-      pmId: item.pm_id || item.pmId || "",
-      pmType: item.pm_type || item.pmType || header.pmType || "PMCUST",
-      pmCode:item.pmCode || "",
-      pmName: item.pmName  || "",
-      effectivityDate: item.effectivity_date || item.effectivityDate || "",
-      registeredBy: item.registered_by || item.registeredBy || "",
-      registeredDate: item.registered_date || item.registeredDate || "",
-      updatedBy: item.updated_by || item.updatedBy || "",
-      updatedDate: item.updated_date || item.updatedDate || "",
-    }))
-    .filter(
-      (row) =>
-        String(row.pmId || "").trim() !== "" ||
-        String(row.pmCode || "").trim() !== "" ||
-        String(row.pmName || "").trim() !== ""
-    );
-
-  return mappedRows;
-};
-
- const handleHistory = async () => {
-  setHistoryLoading(true);
-
-  try {
-    const mapped = await loadHistory();
-    console.log(mapped)
-
-    if (!mapped.length) {
-      setHistoryRows([]);
-      setShowHistoryModal(false);
-
+  const handleHistoryTypeFind = async () => {
+    if (!validateDateRange(historyTypeFilter.startDate, historyTypeFilter.endDate)) {
       useSwalErrorAlert(
-        "No Records",
-        "No history records found."
+        "Invalid Date Range",
+        "Start Date must not be later than End Date."
       );
       return;
     }
 
-    setHistoryRows(mapped);
-    setShowHistoryModal(true);
-  } catch (error) {
-    setShowHistoryModal(false);
+    setHistoryLoading(true);
 
-    useSwalErrorAlert(
-      "History Failed",
-      error?.response?.data?.message ||
-        error?.message ||
-        "Failed to load history."
-    );
-  } finally {
-    setHistoryLoading(false);
-  }
-};
+    try {
+      const params = {
+        json_data: {
+          pmType: historyTypeFilter.pmType || "PMCUST",
+          pmCode: historyTypeFilter.pmCode || "",
+          pmName: historyTypeFilter.pmName || "",
+          startDate: historyTypeFilter.startDate || "",
+          endDate: historyTypeFilter.endDate || "",
+        },
+      };
 
-
-const handleHistoryEdit = async (row) => {
-  try {
-    const selectedHeader = {
-      pmId: row.pmId || "",
-      pmType: row.pmType || header.pmType || "PMCUST",
-      pmCode: row.pmCode || "",
-      pmName: row.pmName || "",
-      effectivityDate: useformatToDatev2(row.effectivityDate) || "",
-      registeredBy: row.registeredBy || "",
-      registeredDate: row.registeredDate || "",
-      lastUpdatedBy: row.updatedBy || "",
-      lastUpdatedDate: row.updatedDate || "",
-    };
-
-    const fetched = await fetchMatrix(selectedHeader);
-
-    setHeader((prev) => ({
-      ...prev,
-      ...selectedHeader,
-      pmId: fetched.pmId || selectedHeader.pmId || "",
-      registeredBy: fetched.registeredBy || selectedHeader.registeredBy || "",
-      registeredDate:
-        fetched.registeredDate || selectedHeader.registeredDate || "",
-      lastUpdatedBy:
-        fetched.lastUpdatedBy || selectedHeader.lastUpdatedBy || "",
-      lastUpdatedDate:
-        fetched.lastUpdatedDate || selectedHeader.lastUpdatedDate || "",
-    }));
-
-    setRows(fetched.rows || []);
-    setSelectedRow(null);
-  } catch (error) {
-    useSwalErrorAlert(
-      "Retrieve Failed",
-      error?.response?.data?.message ||
-        error?.message ||
-        "Failed to retrieve selected history record."
-    );
-  }
-};
- 
-
-const handleHistoryDelete = async (row) => {
-  const code = row?.pmCode || "";
-  const name = row?.pmName || "";
-  const effectivityDate = row?.effectivityDate || "";
-
-  const confirm = await useSwalDeleteConfirm(
-    "Delete Record?",
-    `Are you sure you want to delete Price Matrix "${code}"${
-      name ? ` - ${name}` : ""
-    }${effectivityDate ? ` with effectivity date "${effectivityDate}"` : ""}?`,
-    "Yes, delete it"
-  );
-
-  if (!confirm?.isConfirmed) return;
-
-  setHistoryActionLoading(true);
-
-  try {
-    const payload = {
-      json_data: {
-        pmId: row?.pmId || "",
-        pmCode: code,
-        pmType: header.pmType,
-        userCode: currentUserRow?.userCode || "ADMIN",
-      },
-    };
-
-    await apiClient.post(DELETE_ENDPOINT, payload);
-
-    useSwalSuccessAlert("Deleted", "Price matrix deleted successfully.");
-
-    if ((header.pmId || "") === (row?.pmId || "")) {
-      resetMatrixForType(header.pmType || "PMCUST");
-    }
-
-    setHistoryRows((prev) => {
-      const updatedRows = prev.filter(
-        (item) => String(item.pmId || "") !== String(row?.pmId || "")
+      console.log(JSON.stringify(params))
+      const response = await apiClient.get(HISTORY_BY_TYPE_ENDPOINT, { params });
+      const mappedRows = mapHistoryRows(
+        extractResultArray(response),
+        historyTypeFilter.pmType || "PMCUST"
       );
 
-      if (updatedRows.length === 0) {
-        setShowHistoryModal(false);
+      setHistoryTypeRows(mappedRows);
+
+      if (!mappedRows.length) {
+        useSwalErrorAlert("No Records", "No history records found.");
+      }
+    } catch (error) {
+      useSwalErrorAlert(
+        "History Failed",
+        error?.response?.data?.message ||
+          error?.message ||
+          "Failed to load history."
+      );
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const handleHistoryItemFind = async () => {
+    if (!validateDateRange(historyItemFilter.startDate, historyItemFilter.endDate)) {
+      useSwalErrorAlert(
+        "Invalid Date Range",
+        "Start Date must not be later than End Date."
+      );
+      return;
+    }
+
+    setHistoryLoading(true);
+
+    try {
+      const params = {
+        json_data: {
+          pmType: historyItemFilter.pmType || "PMCUST",
+          itemCode: historyItemFilter.itemCode || "",
+          pmCode: historyItemFilter.pmCode || "",
+          pmName: historyItemFilter.pmName || "",
+          startDate: historyItemFilter.startDate || "",
+          endDate: historyItemFilter.endDate || "",
+        },
+      };
+
+      console.log(JSON.stringify(params))
+      const response = await apiClient.get(HISTORY_BY_ITEM_ENDPOINT, { params });
+      const mappedRows = mapHistoryRows(
+        extractResultArray(response),
+        historyItemFilter.pmType || "PMCUST"
+      );
+
+      setHistoryItemRows(mappedRows);
+
+      if (!mappedRows.length) {
+        useSwalErrorAlert("No Records", "No history records found.");
+      }
+    } catch (error) {
+      useSwalErrorAlert(
+        "History Failed",
+        error?.response?.data?.message ||
+          error?.message ||
+          "Failed to load history."
+      );
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const handleHistoryEdit = async (row) => {
+    try {
+      const selectedHeader = {
+        pmId: row.pmId || "",
+        pmType: row.pmType || header.pmType || "PMCUST",
+        pmCode: row.pmCode || "",
+        pmName: row.pmName || "",
+        effectivityDate: useformatToDatev2(row.effectivityDate) || "",
+        registeredBy: row.registeredBy || "",
+        registeredDate: row.registeredDate || "",
+        lastUpdatedBy: row.updatedBy || "",
+        lastUpdatedDate: row.updatedDate || "",
+      };
+
+      const fetched = await fetchMatrix(selectedHeader);
+
+      setHeader((prev) => ({
+        ...prev,
+        ...selectedHeader,
+        pmId: fetched.pmId || selectedHeader.pmId || "",
+        registeredBy: fetched.registeredBy || selectedHeader.registeredBy || "",
+        registeredDate:
+          fetched.registeredDate || selectedHeader.registeredDate || "",
+        lastUpdatedBy:
+          fetched.lastUpdatedBy || selectedHeader.lastUpdatedBy || "",
+        lastUpdatedDate:
+          fetched.lastUpdatedDate || selectedHeader.lastUpdatedDate || "",
+      }));
+
+      setRows(fetched.rows || []);
+      setSelectedRow(null);
+      setActiveTab("details");
+    } catch (error) {
+      useSwalErrorAlert(
+        "Retrieve Failed",
+        error?.response?.data?.message ||
+          error?.message ||
+          "Failed to retrieve selected history record."
+      );
+    }
+  };
+
+  const handleHistoryDelete = async (row, source = "type") => {
+    const code = row?.pmCode || "";
+    const name = row?.pmName || "";
+    const effectivityDate = row?.effectivityDate || "";
+
+    const confirm = await useSwalDeleteConfirm(
+      "Delete Record?",
+      `Are you sure you want to delete Price Matrix "${code}"${
+        name ? ` - ${name}` : ""
+      }${effectivityDate ? ` with effectivity date "${effectivityDate}"` : ""}?`,
+      "Yes, delete it"
+    );
+
+    if (!confirm?.isConfirmed) return;
+
+    setHistoryActionLoading(true);
+
+    try {
+      const payload = {
+        json_data: {
+          pmId: row?.pmId || "",
+          pmCode: code,
+          pmType: row?.pmType || header.pmType,
+          userCode: currentUserRow?.userCode || "ADMIN",
+        },
+      };
+
+      await apiClient.post(DELETE_ENDPOINT, payload);
+
+      useSwalSuccessAlert("Deleted", "Price matrix deleted successfully.");
+
+      if ((header.pmId || "") === (row?.pmId || "")) {
+        resetMatrixForType(header.pmType || "PMCUST");
       }
 
-      return updatedRows;
-    });
+      if (source === "type") {
+        setHistoryTypeRows((prev) =>
+          prev.filter((item) => String(item.pmId || "") !== String(row?.pmId || ""))
+        );
+      } else {
+        setHistoryItemRows((prev) =>
+          prev.filter((item) => String(item.pmId || "") !== String(row?.pmId || ""))
+        );
+      }
 
-    await queryClient.invalidateQueries({
-      queryKey: ["salesPMCustomerItem"],
-    });
-  } catch (error) {
-    console.log("delete error response", error?.response?.data);
+      await queryClient.invalidateQueries({
+        queryKey: ["salesPMCustomerItem"],
+      });
+    } catch (error) {
+      useSwalErrorAlert(
+        "Delete Failed",
+        error?.response?.data?.message ||
+          error?.message ||
+          "Failed to delete price matrix."
+      );
+    } finally {
+      setHistoryActionLoading(false);
+    }
+  };
 
-    useSwalErrorAlert(
-      "Delete Failed",
-      error?.response?.data?.message ||
-        error?.message ||
-        "Failed to delete price matrix."
-    );
-  } finally {
-    setHistoryActionLoading(false);
-  }
-};
   const handleCustomExportExcel = async () => {
     if (!visibleRows.length) return;
 
@@ -1063,6 +1263,7 @@ const handleHistoryDelete = async (row) => {
     if (!fileName) return;
 
     setDownloadLoading(true);
+
     try {
       await exportGenericQueryExcel(
         exportData,
@@ -1079,10 +1280,7 @@ const handleHistoryDelete = async (row) => {
         companyInfo?.telNo
       );
 
-      useSwalSuccessAlert(
-        "Downloaded",
-        "Excel template downloaded successfully."
-      );
+      useSwalSuccessAlert("Downloaded", "Excel template downloaded successfully.");
     } catch (error) {
       useSwalErrorAlert(
         "Download Failed",
@@ -1299,11 +1497,8 @@ const handleHistoryDelete = async (row) => {
           <input
             ref={(element) => {
               const refKey = getInputRefKey(row.id, key);
-              if (element) {
-                inputRefs.current[refKey] = element;
-              } else {
-                delete inputRefs.current[refKey];
-              }
+              if (element) inputRefs.current[refKey] = element;
+              else delete inputRefs.current[refKey];
             }}
             type="text"
             value={row[key] ?? ""}
@@ -1320,34 +1515,116 @@ const handleHistoryDelete = async (row) => {
     [visibleRows, sellPriceDecimals]
   );
 
+  const buildHistoryColumns = (meta, source) => [
+    {
+    key: "__actions",
+    label: "",
+    sortable: false,
+    filterable: false,
+    width: 60,
+    className: "text-left",
+    render: (row) => (
+      <div className="flex items-center justify-start">
+        <button
+          type="button"
+          onClick={async (event) => {
+            event.stopPropagation();
+            setHistoryActionLoading(true);
+            try {
+              await handleHistoryEdit(row);
+              setActiveTab("details");
+            } finally {
+              setHistoryActionLoading(false);
+            }
+          }}
+          disabled={historyActionLoading}
+          className="flex h-7 w-7 items-center justify-center rounded-md border border-blue-100 bg-blue-50 text-blue-600 transition-colors hover:border-blue-600 hover:bg-blue-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          title="Edit"
+        >
+          <Pencil size={14} />
+        </button>
+      </div>
+    ),
+  },
+    {
+      key: "pmCode",
+      label: meta.codeLabel,
+      sortable: true,
+      width: 160,
+    },
+    {
+      key: "pmName",
+      label: meta.nameLabel,
+      sortable: true,
+      width: 240,
+    },
+    ...(source === "item"
+      ? [
+          { key: "itemCode", label: "Item Code", sortable: true, width: 140 },
+          { key: "itemName", label: "Item Name", sortable: true, width: 240 },
+          { key: "uomCode", label: "UOM", sortable: true, width: 100 },
+        ]
+      : []),
+    {
+      key: "effectivityDate",
+      label: "Effectivity Date",
+      sortable: true,
+      width: 140,
+    },
+    {
+      key: "registeredBy",
+      label: "Registered By",
+      sortable: true,
+      width: 140,
+    },
+    {
+      key: "registeredDate",
+      label: "Registered Date",
+      sortable: true,
+      width: 180,
+      render: (row) => formatDateTimeCell(row?.registeredDate),
+    },
+    {
+      key: "updatedBy",
+      label: "Updated By",
+      sortable: true,
+      width: 140,
+    },
+    {
+      key: "updatedDate",
+      label: "Updated Date",
+      sortable: true,
+      width: 180,
+      render: (row) => formatDateTimeCell(row?.updatedDate),
+    },
+  ];
 
-  const historyColumns = useMemo(
+ 
+const historyTypeColumns = useMemo(
   () => [
     {
       key: "__actions",
       label: "Action",
       sortable: false,
       filterable: false,
-      width: 150,
-      className: "text-center",
+      width: 120,
+      className: "text-left",
       render: (row) => (
-        <div className="flex items-center justify-center gap-2">
+        <div className="flex items-center justify-start gap-2">
           <button
             type="button"
             onClick={async (event) => {
               event.stopPropagation();
-
-              setShowHistoryModal(false);
               setHistoryActionLoading(true);
-
               try {
                 await handleHistoryEdit(row);
+                setActiveTab("details");
               } finally {
                 setHistoryActionLoading(false);
               }
             }}
             disabled={historyActionLoading}
-            className="flex h-7 items-center justify-center gap-1 rounded-md border border-blue-100 bg-blue-50 px-2 text-xs text-blue-600 transition-colors hover:border-blue-600 hover:bg-blue-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-blue-100 bg-blue-50 text-blue-600 transition-colors hover:border-blue-600 hover:bg-blue-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
             title="Edit"
           >
             <Pencil size={14} />
@@ -1357,10 +1634,10 @@ const handleHistoryDelete = async (row) => {
             type="button"
             onClick={(event) => {
               event.stopPropagation();
-              handleHistoryDelete(row);
+              handleHistoryDelete(row, "type");
             }}
             disabled={historyActionLoading}
-            className="flex h-7 items-center justify-center gap-1 rounded-md border border-red-100 bg-red-50 px-2 text-xs text-red-600 transition-colors hover:border-red-600 hover:bg-red-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-red-100 bg-red-50 text-red-600 transition-colors hover:border-red-600 hover:bg-red-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
             title="Delete"
           >
             <Trash2 size={14} />
@@ -1370,15 +1647,15 @@ const handleHistoryDelete = async (row) => {
     },
     {
       key: "pmCode",
-      label: matrixMeta.codeLabel,
+      label: historyTypeMeta.codeLabel,
       sortable: true,
-      width: 160,
+      width: 150,
     },
     {
       key: "pmName",
-      label: matrixMeta.nameLabel,
+      label: historyTypeMeta.nameLabel,
       sortable: true,
-      width: 240,
+      width: 220,
     },
     {
       key: "effectivityDate",
@@ -1397,23 +1674,7 @@ const handleHistoryDelete = async (row) => {
       label: "Registered Date",
       sortable: true,
       width: 180,
-      render: (row) => {
-        const value = row?.registeredDate;
-        if (!value) return "";
-
-        const date = new Date(value);
-        if (Number.isNaN(date.getTime())) return value;
-
-        return date.toLocaleString("en-US", {
-          month: "2-digit",
-          day: "2-digit",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-          hour12: true,
-        });
-      },
+      render: (row) => formatDateTimeCell(row?.registeredDate),
     },
     {
       key: "updatedBy",
@@ -1421,191 +1682,705 @@ const handleHistoryDelete = async (row) => {
       sortable: true,
       width: 140,
     },
-   {
-    key: "updatedDate",
-    label: "Updated Date",
-    sortable: true,
-    width: 180,
-    render: (row) => {
-      const value = row?.updatedDate;
-      if (!value) return "";
-
-      const date = new Date(value);
-      if (Number.isNaN(date.getTime())) return value;
-
-      return date.toLocaleString("en-US", {
-        month: "2-digit",
-        day: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: true,
-      });
+    {
+      key: "updatedDate",
+      label: "Updated Date",
+      sortable: true,
+      width: 180,
+      render: (row) => formatDateTimeCell(row?.updatedDate),
     },
-  },
   ],
-  [matrixMeta, historyActionLoading]
+  [historyActionLoading, historyTypeMeta]
 );
 
-  const headerButtons = (
-    <div className="flex flex-nowrap items-center justify-end gap-2 text-xs whitespace-nowrap">
-      <button
-        type="button"
-        onClick={handleFind}
-        disabled={!canFind || isPageLoading}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-[11px] font-medium text-white transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-3"
-        title="Find"
-      >
-        <Search size={14} />
-        <span className="ml-1 hidden sm:inline">Find</span>
-      </button>
+const historyItemColumns = useMemo(
+  () => [
+    {
+      key: "__actions",
+      label: "Action",
+      sortable: false,
+      filterable: false,
+      width: 80,
+      className: "text-left",
+      render: (row) => (
+        <div className="flex items-center justify-start gap-2">
+          <button
+            type="button"
+            onClick={async (event) => {
+              event.stopPropagation();
+              setHistoryActionLoading(true);
+              try {
+                await handleHistoryEdit(row);
+                setActiveTab("details");
+              } finally {
+                setHistoryActionLoading(false);
+              }
+            }}
+            disabled={historyActionLoading}
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-blue-100 bg-blue-50 text-blue-600 transition-colors hover:border-blue-600 hover:bg-blue-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            title="Edit"
+          >
+            <Pencil size={14} />
+          </button>
+        </div>
+      ),
+    },
+   {
+      key: "pmType",
+      label: "PM Type",
+      sortable: true,
+      width: 160,
+      render: (row) =>
+        MATRIX_TYPE_OPTIONS.find(
+          (option) => option.value === (row?.pmType || historyItemFilter.pmType || "PMCUST")
+        )?.label || "Per Customer",
+    },
+    {
+      key: "itemCode",
+      label: "Item Code",
+      sortable: true,
+      width: 130,
+    },
+    {
+      key: "itemName",
+      label: "Item Name",
+      sortable: true,
+      width: 220,
+    },
+    {
+      key: "uomCode",
+      label: "UOM",
+      sortable: true,
+      width: 90,
+    },
+    {
+      key: "pmCode",
+      label: historyItemMeta.codeLabel,
+      sortable: true,
+      width: 150,
+    },
+    {
+      key: "pmName",
+      label: historyItemMeta.nameLabel,
+      sortable: true,
+      width: 220,
+    },
+    {
+      key: "effectivityDate",
+      label: "Effectivity Date",
+      sortable: true,
+      width: 140,
+    },
+    {
+      key: "sellingPrice",
+      label: "Selling Price",
+      sortable: true,
+      width: 130,
+      className: "text-right",
+      render: (row) =>
+        formatNumberWithCommas(row?.sellingPrice ?? 0, sellPriceDecimals),
+    },
+    {
+      key: "discRate1",
+      label: "Discount Rate 1",
+      sortable: true,
+      width: 120,
+      className: "text-right",
+      render: (row) => formatPlainDecimal(row?.discRate1 ?? 0, rateDecimals),
+    },
+    {
+      key: "discRate2",
+      label: "Discount Rate 2",
+      sortable: true,
+      width: 120,
+      className: "text-right",
+      render: (row) => formatPlainDecimal(row?.discRate2 ?? 0, rateDecimals),
+    },
+    {
+      key: "discRate3",
+      label: "Discount Rate 3",
+      sortable: true,
+      width: 120,
+      className: "text-right",
+      render: (row) => formatPlainDecimal(row?.discRate3 ?? 0, rateDecimals),
+    },
+    {
+      key: "discRate4",
+      label: "Discount Rate 4",
+      sortable: true,
+      width: 120,
+      className: "text-right",
+      render: (row) => formatPlainDecimal(row?.discRate4 ?? 0, rateDecimals),
+    },
+    {
+      key: "discRate5",
+      label: "Discount Rate 5",
+      sortable: true,
+      width: 120,
+      className: "text-right",
+      render: (row) => formatPlainDecimal(row?.discRate5 ?? 0, rateDecimals),
+    },
+    {
+      key: "discRate6",
+      label: "Discount Rate 6",
+      sortable: true,
+      width: 120,
+      className: "text-right",
+      render: (row) => formatPlainDecimal(row?.discRate6 ?? 0, rateDecimals),
+    },
+    {
+      key: "discRate7",
+      label: "Discount Rate 7",
+      sortable: true,
+      width: 120,
+      className: "text-right",
+      render: (row) => formatPlainDecimal(row?.discRate7 ?? 0, rateDecimals),
+    },
+    {
+      key: "discRate8",
+      label: "Discount Rate 8",
+      sortable: true,
+      width: 120,
+      className: "text-right",
+      render: (row) => formatPlainDecimal(row?.discRate8 ?? 0, rateDecimals),
+    },
+    {
+      key: "registeredBy",
+      label: "Registered By",
+      sortable: true,
+      width: 140,
+    },
+    {
+      key: "registeredDate",
+      label: "Registered Date",
+      sortable: true,
+      width: 180,
+      render: (row) => formatDateTimeCell(row?.registeredDate),
+    },
+    {
+      key: "updatedBy",
+      label: "Updated By",
+      sortable: true,
+      width: 140,
+    },
+    {
+      key: "updatedDate",
+      label: "Updated Date",
+      sortable: true,
+      width: 180,
+      render: (row) => formatDateTimeCell(row?.updatedDate),
+    },
+  ],
+  [historyActionLoading, historyItemMeta, sellPriceDecimals, rateDecimals]
+);
 
-      <button
-        type="button"
-        onClick={() => saveMutation.mutate()}
-        disabled={!canSave || isPageLoading}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-[11px] font-medium text-white transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-3"
-        title="Save"
-      >
-        <Save size={14} />
-        <span className="ml-1 hidden sm:inline">Save</span>
-      </button>
 
+  const renderInfoButton = () => (
+    <div ref={guideRef} className="relative shrink-0">
       <button
         type="button"
-        onClick={handleReset}
+        onClick={() => setGuideOpen((prev) => !prev)}
         disabled={isPageLoading}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-[11px] font-medium text-white transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-3"
-        title="Reset"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-3"
+        title="Info"
       >
-        <Undo2 size={14} />
-        <span className="ml-1 hidden sm:inline">Reset</span>
+        <FontAwesomeIcon icon={faInfoCircle} className="text-[12px]" />
+        <span className="ml-1 hidden text-[11px] font-medium sm:inline">
+          Info
+        </span>
+        <FontAwesomeIcon
+          icon={faChevronDown}
+          className="hidden text-[10px] opacity-80 sm:inline"
+        />
       </button>
 
-     <div ref={optionsRef} className="relative shrink-0 overflow-visible">
+      {guideOpen && (
+        <div className="absolute right-0 z-[999] mt-2 w-52 overflow-hidden rounded-md bg-white shadow-xl ring-1 ring-black/10">
+          <button
+            type="button"
+            onClick={() => {
+              if (pdfLink) window.open(pdfLink, "_blank");
+              setGuideOpen(false);
+            }}
+            className="block w-full border-b border-gray-100 px-4 py-2 text-left text-xs hover:bg-blue-50"
+          >
+            <FontAwesomeIcon icon={faFilePdf} className="mr-2 text-red-500" />
+            PDF Guide
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (videoLink) window.open(videoLink, "_blank");
+              setGuideOpen(false);
+            }}
+            className="block w-full px-4 py-2 text-left text-xs hover:bg-blue-50"
+          >
+            <FontAwesomeIcon icon={faVideo} className="mr-2 text-blue-500" />
+            Video Guide
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderActionButtons = () => {
+    if (activeTab === "historyType") {
+      return (
+        <div className="flex flex-nowrap items-center justify-end gap-2 text-xs whitespace-nowrap">
+          <button
+            type="button"
+            onClick={handleHistoryTypeFind}
+            disabled={isPageLoading}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-[11px] font-medium text-white transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-3"
+            title="Find"
+          >
+            <Search size={14} />
+            <span className="ml-1 hidden sm:inline">Find</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleHistoryTypeReset}
+            disabled={isPageLoading}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-[11px] font-medium text-white transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-3"
+            title="Reset"
+          >
+            <Undo2 size={14} />
+            <span className="ml-1 hidden sm:inline">Reset</span>
+          </button>
+
+          {renderInfoButton()}
+        </div>
+      );
+    }
+
+    if (activeTab === "historyItem") {
+      return (
+        <div className="flex flex-nowrap items-center justify-end gap-2 text-xs whitespace-nowrap">
+          <button
+            type="button"
+            onClick={handleHistoryItemFind}
+            disabled={isPageLoading}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-[11px] font-medium text-white transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-3"
+            title="Find"
+          >
+            <Search size={14} />
+            <span className="ml-1 hidden sm:inline">Find</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleHistoryItemReset}
+            disabled={isPageLoading}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-[11px] font-medium text-white transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-3"
+            title="Reset"
+          >
+            <Undo2 size={14} />
+            <span className="ml-1 hidden sm:inline">Reset</span>
+          </button>
+
+          {renderInfoButton()}
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-nowrap items-center justify-end gap-2 text-xs whitespace-nowrap">
         <button
           type="button"
-          onClick={() => setOptionsOpen((prev) => !prev)}
-          disabled={isPageLoading}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-3"
-          title="Actions"
+          onClick={handleFind}
+          disabled={!canFind || isPageLoading || activeTab !== "details"}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-[11px] font-medium text-white transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-3"
+          title="Find"
         >
-          <MoreVertical size={14} />
-          <span className="ml-1 hidden text-[11px] font-medium sm:inline">
-            Actions
-          </span>
-          <FontAwesomeIcon
-            icon={faChevronDown}
-            className="hidden text-[10px] opacity-80 sm:inline"
-          />
+          <Search size={14} />
+          <span className="ml-1 hidden sm:inline">Find</span>
         </button>
 
-        {optionsOpen && (
-          <div className="absolute right-0 z-[99999] mt-2 w-56 overflow-hidden rounded-md bg-white shadow-xl ring-1 ring-black/10">
-            <button
-              type="button"
-              onClick={() => {
-                setOptionsOpen(false);
-                handleCopy();
-              }}
-              disabled={!canCopy || isPageLoading}
-              className="block w-full border-b border-gray-100 px-4 py-2 text-left text-xs hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <FontAwesomeIcon icon={faCopy} className="mr-2 text-blue-600" />
-              Copy Matrix
-            </button>
+        <button
+          type="button"
+          onClick={() => saveMutation.mutate()}
+          disabled={!canSave || isPageLoading || activeTab !== "details"}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-[11px] font-medium text-white transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-3"
+          title="Save"
+        >
+          <Save size={14} />
+          <span className="ml-1 hidden sm:inline">Save</span>
+        </button>
 
-            <button
-              type="button"
-              onClick={async () => {
-                setOptionsOpen(false);
-                await handleCustomExportExcel();
-              }}
-              disabled={!canDownload || isPageLoading}
-              className="block w-full border-b border-gray-100 px-4 py-2 text-left text-xs hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <FontAwesomeIcon icon={faDownload} className="mr-2 text-green-600" />
-              Download Excel Template
-            </button>
+        <button
+          type="button"
+          onClick={handleReset}
+          disabled={isPageLoading || activeTab !== "details"}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-[11px] font-medium text-white transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-3"
+          title="Reset"
+        >
+          <Undo2 size={14} />
+          <span className="ml-1 hidden sm:inline">Reset</span>
+        </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                setOptionsOpen(false);
-                triggerUploadBrowse();
-              }}
-              disabled={!canUpload || isPageLoading}
-              className="block w-full border-b border-gray-100 px-4 py-2 text-left text-xs hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <FontAwesomeIcon icon={faUpload} className="mr-2 text-blue-600" />
-              Upload Excel Template
-            </button>
+        <div ref={optionsRef} className="relative shrink-0 overflow-visible">
+          <button
+            type="button"
+            onClick={() => setOptionsOpen((prev) => !prev)}
+            disabled={isPageLoading || activeTab !== "details"}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-3"
+            title="Actions"
+          >
+            <MoreVertical size={14} />
+            <span className="ml-1 hidden text-[11px] font-medium sm:inline">
+              Actions
+            </span>
+            <FontAwesomeIcon
+              icon={faChevronDown}
+              className="hidden text-[10px] opacity-80 sm:inline"
+            />
+          </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                setOptionsOpen(false);
-                handleHistory();
-              }}
-              disabled={isPageLoading}
-              className="block w-full px-4 py-2 text-left text-xs hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <FontAwesomeIcon icon={faHistory} className="mr-2 text-purple-600" />
-              View History
-            </button>
-          </div>
-        )}
+          {optionsOpen && (
+            <div className="absolute right-0 z-[99999] mt-2 w-56 overflow-hidden rounded-md bg-white shadow-xl ring-1 ring-black/10">
+              <button
+                type="button"
+                onClick={() => {
+                  setOptionsOpen(false);
+                  handleCopy();
+                }}
+                disabled={!canCopy || isPageLoading}
+                className="block w-full border-b border-gray-100 px-4 py-2 text-left text-xs hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <FontAwesomeIcon icon={faCopy} className="mr-2 text-blue-600" />
+                Copy Matrix
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  setOptionsOpen(false);
+                  await handleCustomExportExcel();
+                }}
+                disabled={!canDownload || isPageLoading}
+                className="block w-full border-b border-gray-100 px-4 py-2 text-left text-xs hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <FontAwesomeIcon icon={faDownload} className="mr-2 text-green-600" />
+                Download Excel Template
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setOptionsOpen(false);
+                  triggerUploadBrowse();
+                }}
+                disabled={!canUpload || isPageLoading}
+                className="block w-full px-4 py-2 text-left text-xs hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <FontAwesomeIcon icon={faUpload} className="mr-2 text-blue-600" />
+                Upload Excel Template
+              </button>
+            </div>
+          )}
+        </div>
+
+        {renderInfoButton()}
       </div>
+    );
+  };
 
-      <div ref={guideRef} className="relative shrink-0">
-        <button
-          type="button"
-          onClick={() => setGuideOpen((prev) => !prev)}
-          disabled={isPageLoading}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-3"
-          title="Info"
-        >
-          <FontAwesomeIcon icon={faInfoCircle} className="text-[12px]" />
-          <span className="ml-1 hidden text-[11px] font-medium sm:inline">
-            Info
-          </span>
-          <FontAwesomeIcon
-            icon={faChevronDown}
-            className="hidden text-[10px] opacity-80 sm:inline"
-          />
-        </button>
-
-        {guideOpen && (
-          <div className="absolute right-0 z-[999] mt-2 w-52 overflow-hidden rounded-md bg-white shadow-xl ring-1 ring-black/10">
+  const renderCenteredHeaderTabs = () => (
+    <div className="w-full md:justify-center flex">
+      <div className="w-full md:w-auto">
+        <div className="flex flex-nowrap overflow-x-auto no-scrollbar border-b border-gray-200 dark:border-gray-700">
+          {TABS.map((tab) => (
             <button
+              key={tab.key}
               type="button"
-              onClick={() => {
-                if (pdfLink) window.open(pdfLink, "_blank");
-                setGuideOpen(false);
-              }}
-              className="block w-full border-b border-gray-100 px-4 py-2 text-left text-xs hover:bg-blue-50"
+              onClick={() => setActiveTab(tab.key)}
+              className={`shrink-0 whitespace-nowrap px-3 py-2 text-[12px] font-bold transition-all border-b-2 ${
+                activeTab === tab.key
+                  ? "border-blue-600 text-blue-600 bg-blue-50/50"
+                  : "border-transparent text-gray-500 hover:text-blue-500"
+              }`}
             >
-              <FontAwesomeIcon icon={faFilePdf} className="mr-2 text-red-500" />
-              PDF Guide
+              {tab.label}
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (videoLink) window.open(videoLink, "_blank");
-                setGuideOpen(false);
-              }}
-              className="block w-full px-4 py-2 text-left text-xs hover:bg-blue-50"
-            >
-              <FontAwesomeIcon icon={faVideo} className="mr-2 text-blue-500" />
-              Video Guide
-            </button>
-          </div>
-        )}
+          ))}
+        </div>
       </div>
     </div>
   );
 
+  const renderDateField = (id, value, onChange, label) => (
+    <div className="relative">
+      <div className="global-ref-textbox-ui">
+        <DateFormatInput
+          id={id}
+          name={id}
+          value={value || ""}
+          updateState={(patch) => {
+            const nextValue = patch?.[id] ?? patch?.target?.value ?? "";
+            onChange(nextValue);
+          }}
+          className="peer w-full bg-transparent pr-10 outline-none"
+        />
+      </div>
+      <label htmlFor={id} className="global-ref-floating-label">
+        {label}
+      </label>
+    </div>
+  );
+
+  const renderDetailsTab = () => (
+    <>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
+        <div className="rounded-xl border bg-white p-4 shadow-sm md:col-span-9">
+          <div className="mb-3 border-b pb-2">
+            <h3 className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">
+              {matrixMeta.infoTitle}
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <FieldRenderer
+              label="PM Type"
+              type="select"
+              value={header.pmType || "PMCUST"}
+              onChange={handleMatrixTypeChange}
+              options={MATRIX_TYPE_OPTIONS}
+              disabled={isPageLoading}
+              required
+            />
+
+            <FieldRenderer
+              label={matrixMeta.codeLabel}
+              type="lookup"
+              value={header.pmCode || ""}
+              onLookup={openReferenceLookup}
+              readOnly
+              required
+            />
+
+            <FieldRenderer
+              label={matrixMeta.nameLabel}
+              value={header.pmName || ""}
+              readOnly
+              disabled
+            />
+
+            {renderDateField(
+              "effectivityDate",
+              header.effectivityDate,
+              (value) => setHeaderField("effectivityDate", value),
+              "Effectivity Date"
+            )}
+          </div>
+        </div>
+
+        <div className="md:col-span-3">
+          <RegistrationInfo data={header} layout="minimize" />
+        </div>
+      </div>
+
+      <div className="global-tran-table-main-div-ui relative z-0 mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+        <SearchGlobalReferenceTable
+          docType={DOC_TYPE}
+          columns={tableColumns}
+          data={visibleRows}
+          itemsPerPage={200}
+          showFilters
+          selectedRow={selectedRow}
+          onRowClick={(row) => setSelectedRow(row)}
+          isLoading={detailQuery.isLoading || uploadLoading}
+          isFetching={detailQuery.isFetching || uploadLoading}
+        />
+      </div>
+    </>
+  );
+
+  const renderHistoryTypeTab = () => (
+    <>
+      <div className="rounded-xl border bg-white p-4 shadow-sm">
+        <div className="mb-3 border-b pb-2">
+          <h3 className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">
+            {historyTypeMeta.historyTitle}
+          </h3>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          <FieldRenderer
+            label="PM Type"
+            type="select"
+            value={historyTypeFilter.pmType || "PMCUST"}
+            onChange={handleHistoryTypePmTypeChange}
+            options={MATRIX_TYPE_OPTIONS}
+            disabled={isPageLoading}
+          />
+
+          <FieldRenderer
+            label={historyTypeMeta.codeLabel}
+            type="lookup"
+            value={historyTypeFilter.pmCode || ""}
+            onLookup={openHistoryTypeLookup}
+            readOnly
+          />
+
+          <FieldRenderer
+            label={historyTypeMeta.nameLabel}
+            value={historyTypeFilter.pmName || ""}
+            readOnly
+            disabled
+          />
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {renderDateField(
+              "historyTypeStartDate",
+              historyTypeFilter.startDate,
+              (value) =>
+                setHistoryTypeFilter((prev) => ({ ...prev, startDate: value })),
+              "Start Date"
+            )}
+
+            {renderDateField(
+              "historyTypeEndDate",
+              historyTypeFilter.endDate,
+              (value) =>
+                setHistoryTypeFilter((prev) => ({ ...prev, endDate: value })),
+              "End Date"
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="global-tran-table-main-div-ui relative z-0 mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+        <SearchGlobalReferenceTable
+          docType={`${DOC_TYPE}HistoryType`}
+          columns={historyTypeColumns}
+          data={historyTypeRows}
+          itemsPerPage={50}
+          showFilters
+          showGroupBy={true}
+          showGlobalSearch
+          selectedRow={null}
+          onRowClick={() => {}}
+          isLoading={historyLoading || historyActionLoading}
+          isFetching={historyLoading || historyActionLoading}
+        />
+      </div>
+    </>
+  );
+
+  const renderHistoryItemTab = () => (
+  <>
+    <div className="rounded-xl border bg-white p-4 shadow-sm">
+      <div className="mb-3 border-b pb-2">
+        <h3 className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">
+          {historyItemMeta.historyTitle} per Item
+        </h3>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4 md:grid-rows-3 md:items-start">
+        <div className="md:col-start-1 md:row-start-1">
+          <FieldRenderer
+            label="PM Type"
+            type="select"
+            value={historyItemFilter.pmType || "PMCUST"}
+            onChange={handleHistoryItemPmTypeChange}
+            options={MATRIX_TYPE_OPTIONS}
+            disabled={isPageLoading}
+          />
+        </div>
+
+        <div className="md:col-start-2 md:row-start-1">
+          <FieldRenderer
+            label="Item Code"
+            type="lookup"
+            value={historyItemFilter.itemCode || ""}
+            onLookup={openHistoryItemLookup}
+            readOnly
+          />
+        </div>
+
+        <div className="md:col-start-3 md:row-start-1">
+          <FieldRenderer
+            label="Customer Code"
+            type="lookup"
+            value={historyItemFilter.pmCode || ""}
+            onLookup={openHistoryItemReferenceLookup}
+            readOnly
+          />
+        </div>
+
+        <div className="md:col-start-4 md:row-start-1">
+          {renderDateField(
+            "historyItemStartDate",
+            historyItemFilter.startDate,
+            (value) =>
+              setHistoryItemFilter((prev) => ({
+                ...prev,
+                startDate: value,
+              })),
+            "Start Date"
+          )}
+        </div>
+
+        <div className="md:col-start-2 md:row-start-2">
+          <FieldRenderer
+            label="Item Name"
+            value={historyItemFilter.itemName || ""}
+            readOnly
+            disabled
+          />
+        </div>
+
+        <div className="md:col-start-3 md:row-start-2">
+          <FieldRenderer
+            label="Customer Name"
+            value={historyItemFilter.pmName || ""}
+            readOnly
+            disabled
+          />
+        </div>
+
+        <div className="md:col-start-4 md:row-start-2">
+          {renderDateField(
+            "historyItemEndDate",
+            historyItemFilter.endDate,
+            (value) =>
+              setHistoryItemFilter((prev) => ({
+                ...prev,
+                endDate: value,
+              })),
+            "End Date"
+          )}
+        </div>
+
+        <div className="md:col-start-2 md:row-start-3">
+          <FieldRenderer
+            label="UOM"
+            value={historyItemFilter.uomCode || ""}
+            readOnly
+            disabled
+          />
+        </div>
+      </div>
+    </div>
+
+    <div className="global-tran-table-main-div-ui relative z-0 mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      <SearchGlobalReferenceTable
+        docType={`${DOC_TYPE}HistoryItem`}
+        columns={historyItemColumns}
+        data={historyItemRows}
+        itemsPerPage={50}
+        showFilters
+        showGroupBy={true}
+        showGlobalSearch
+        selectedRow={null}
+        onRowClick={() => {}}
+        isLoading={historyLoading || historyActionLoading}
+        isFetching={historyLoading || historyActionLoading}
+      />
+    </div>
+  </>
+);
   return (
     <div className="global-ref-main-div-ui">
       <input
@@ -1620,111 +2395,61 @@ const handleHistoryDelete = async (row) => {
 
       <div className="global-ref-header-ui">
         <div className="w-full flex flex-col gap-3 md:grid md:grid-cols-3 md:items-center md:gap-0">
-          <div className="flex w-full md:w-auto md:justify-start">
-            <h1 className="global-ref-headertext-ui w-full truncate text-center md:w-auto md:text-left">
+          <div className="w-full md:w-auto md:justify-start flex">
+            <h1 className="global-ref-headertext-ui w-full md:w-auto truncate text-center md:text-left">
               {pageHeaderTitle}
             </h1>
           </div>
 
-          <div className="hidden justify-center md:flex" />
+          {renderCenteredHeaderTabs()}
 
-          <div className="flex w-full md:w-auto md:justify-end">
-            <div className="flex w-full flex-wrap items-center justify-center gap-2 md:w-auto md:justify-end">
-              {headerButtons}
+          <div className="w-full md:w-auto flex md:justify-end">
+            <div className="w-full md:w-auto flex items-center justify-center md:justify-end gap-2 flex-wrap">
+              {renderActionButtons()}
             </div>
           </div>
         </div>
       </div>
 
-    <div
-  className="global-tran-tab-div-ui px-3 pb-4 pt-32 sm:px-4 sm:pb-5 sm:pt-28 md:mt-24 md:p-6"
-  style={{ minHeight: "calc(100vh - 150px)" }}
->
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
-          <div className="rounded-xl border bg-white p-4 shadow-sm md:col-span-9">
-            <div className="mb-3 border-b pb-2">
-              <h3 className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">
-                {matrixMeta.infoTitle}
-              </h3>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-              <FieldRenderer
-                label="PM Type"
-                type="select"
-                value={header.pmType || "PMCUST"}
-                onChange={handleMatrixTypeChange}
-                options={MATRIX_TYPE_OPTIONS}
-                disabled={isPageLoading}
-                required
-              />
-
-              <FieldRenderer
-                label={matrixMeta.codeLabel}
-                type="lookup"
-                value={header.pmCode || ""}
-                onLookup={openReferenceLookup}
-                readOnly
-                required
-              />
-
-              <FieldRenderer
-                label={matrixMeta.nameLabel}
-                value={header.pmName || ""}
-                readOnly
-                disabled
-              />
-
-              <div className="relative">
-                <div className="global-ref-textbox-ui">
-                  <DateFormatInput
-                    id="effectivityDate"
-                    name="effectivityDate"
-                    value={header.effectivityDate || ""}
-                    updateState={(patch) => {
-                      const value =
-                        patch?.effectivityDate ?? patch?.target?.value ?? "";
-                      setHeaderField("effectivityDate", value);
-                    }}
-                    className="peer w-full bg-transparent pr-10 outline-none"
-                  />
-                </div>
-                <label
-                  htmlFor="effectivityDate"
-                  className="global-ref-floating-label"
-                >
-                  Effectivity Date
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div className="md:col-span-3">
-            <RegistrationInfo data={header} layout="minimize" />
-          </div>
-        </div>
-
-        <div className="global-tran-table-main-div-ui relative z-0 mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-          <SearchGlobalReferenceTable
-            docType={DOC_TYPE}
-            columns={tableColumns}
-            data={visibleRows}
-            itemsPerPage={200}
-            showFilters
-            selectedRow={selectedRow}
-            onRowClick={(row) => setSelectedRow(row)}
-            isLoading={detailQuery.isLoading || uploadLoading}
-            isFetching={detailQuery.isFetching || uploadLoading}
-          />
-        </div>
+      <div
+        className="global-tran-tab-div-ui px-3 pb-4 pt-44 sm:px-4 sm:pb-5 sm:pt-32 md:mt-24 md:p-6"
+        style={{ minHeight: "calc(100vh - 150px)" }}
+      >
+        {activeTab === "details" && renderDetailsTab()}
+        {activeTab === "historyType" && renderHistoryTypeTab()}
+        {activeTab === "historyItem" && renderHistoryItemTab()}
       </div>
 
       {showCustomerModal && (
         <CustomerMastLookupModal
           isOpen={showCustomerModal}
-          customParam="ActiveNonChain"
+          customParam={
+            activeTab === "details"
+              ? header.pmType === "PMCHAIN"
+                ? "ActiveChain"
+                : "ActiveNonChain"
+              : activeTab === "historyType"
+                ? historyTypeFilter.pmType === "PMCHAIN"
+                  ? "ActiveChain"
+                  : "ActiveNonChain"
+                : historyItemFilter.pmType === "PMCHAIN"
+                  ? "ActiveChain"
+                  : "ActiveNonChain"
+          }
           onClose={(selected) => {
-            if (selected) applyLookupSelection(selected, "PMCUST");
+            if (selected) {
+              if (activeTab === "historyType") {
+                applyHistoryTypeLookupSelection(selected, historyTypeFilter.pmType);
+              } else if (activeTab === "historyItem") {
+                applyHistoryItemReferenceLookupSelection(
+                  selected,
+                  historyItemFilter.pmType
+                );
+              } else {
+                applyLookupSelection(selected, header.pmType);
+              }
+            }
+
             setShowCustomerModal(false);
           }}
         />
@@ -1734,7 +2459,19 @@ const handleHistoryDelete = async (row) => {
         <AreaLookupModal
           isOpen={showAreaModal}
           onClose={(selected) => {
-            if (selected) applyLookupSelection(selected, "PMAREA");
+            if (selected) {
+              if (activeTab === "historyType") {
+                applyHistoryTypeLookupSelection(selected, historyTypeFilter.pmType);
+              } else if (activeTab === "historyItem") {
+                applyHistoryItemReferenceLookupSelection(
+                  selected,
+                  historyItemFilter.pmType
+                );
+              } else {
+                applyLookupSelection(selected, header.pmType);
+              }
+            }
+
             setShowAreaModal(false);
           }}
         />
@@ -1745,7 +2482,19 @@ const handleHistoryDelete = async (row) => {
           isOpen={showChainModal}
           customParam="ActiveChain"
           onClose={(selected) => {
-            if (selected) applyLookupSelection(selected, "PMCHAIN");
+            if (selected) {
+              if (activeTab === "historyType") {
+                applyHistoryTypeLookupSelection(selected, historyTypeFilter.pmType);
+              } else if (activeTab === "historyItem") {
+                applyHistoryItemReferenceLookupSelection(
+                  selected,
+                  historyItemFilter.pmType
+                );
+              } else {
+                applyLookupSelection(selected, header.pmType);
+              }
+            }
+
             setShowChainModal(false);
           }}
         />
@@ -1755,108 +2504,39 @@ const handleHistoryDelete = async (row) => {
         <CustomerTypeLookupModal
           isOpen={showCustomerTypeModal}
           onClose={(selected) => {
-            if (selected) applyLookupSelection(selected, "PMCTYPE");
+            if (selected) {
+              if (activeTab === "historyType") {
+                applyHistoryTypeLookupSelection(selected, historyTypeFilter.pmType);
+              } else if (activeTab === "historyItem") {
+                applyHistoryItemReferenceLookupSelection(
+                  selected,
+                  historyItemFilter.pmType
+                );
+              } else {
+                applyLookupSelection(selected, header.pmType);
+              }
+            }
+
             setShowCustomerTypeModal(false);
           }}
         />
       )}
 
-    {/* {showHistoryModal && (
-  <div className="fixed inset-0 z-[9999] bg-black/40">
-    <div className="flex h-screen w-screen items-center justify-center p-2 sm:p-4">
-      <div className="flex h-[96vh] w-[99vw] max-w-none flex-col overflow-hidden rounded-xl bg-white shadow-xl">
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-5 py-4">
-          <div>
-            <h2 className="text-base font-semibold text-slate-800">
-              {matrixMeta.historyTitle}
-            </h2>
-            <p className="text-xs text-slate-500">
-              Select Edit to retrieve the record or Delete to remove it.
-            </p>
-          </div>
+      {showItemModal && (
+        <ItemMastLookupModal
+          isOpen={showItemModal}
+          endpoint="getInvLookupFG"
+          onClose={(selected) => {
+            if (selected) {
+              applyHistoryItemLookupSelection(selected);
+            }
 
-          <button
-            type="button"
-            onClick={() => setShowHistoryModal(false)}
-            disabled={isPageLoading}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Close
-          </button>
-        </div>
-
-        <div className="flex flex-1 overflow-hidden p-2 sm:p-4">
-          <div className="h-full w-full overflow-hidden rounded-lg border border-slate-200">
-            <SearchGlobalReferenceTable
-              docType={`${DOC_TYPE}History`}
-              columns={historyColumns}
-              data={historyRows}
-              itemsPerPage={20}
-              showFilters
-              showGroupBy={true}
-              showGlobalSearch
-              tableSize="Full"
-              selectedRow={null}
-              onRowClick={() => {}}
-              isLoading={historyLoading || historyActionLoading}
-              isFetching={historyLoading || historyActionLoading}
-              className="w-full"
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-    )} */}
-
-    {showHistoryModal && (
-  <div className="fixed inset-0 z-[9999] bg-black/40">
-    <div className="flex h-screen w-screen items-center justify-center p-3 sm:p-4">
-      <div className="flex h-[92vh] w-[120vw] max-w-6xl flex-col overflow-hidden rounded-xl bg-white shadow-xl">
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
-          <div>
-            <h2 className="text-base font-semibold text-slate-800">
-              {matrixMeta.historyTitle}
-            </h2>
-            <p className="text-xs text-slate-500">
-              Select Edit to retrieve the record or Delete to remove it.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setShowHistoryModal(false)}
-            disabled={isPageLoading}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Close
-          </button>
-        </div>
-
-        <div className="flex flex-1 overflow-hidden p-3">
-          <div className="h-full w-full overflow-auto rounded-lg border border-slate-200">
-            <SearchGlobalReferenceTable
-              docType={`${DOC_TYPE}History`}
-              columns={historyColumns}
-              data={historyRows}
-              itemsPerPage={20}
-              showFilters
-              showGroupBy={true}
-              showGlobalSearch
-              tableSize="Half"
-              selectedRow={null}
-              onRowClick={() => {}}
-              isLoading={historyLoading || historyActionLoading}
-              isFetching={historyLoading || historyActionLoading}
-              className="w-full"
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
-
+            setShowItemModal(false);
+          }}
+          enableMultiSelect={false}
+          docType="MATRIX"
+        />
+      )}
     </div>
   );
 }

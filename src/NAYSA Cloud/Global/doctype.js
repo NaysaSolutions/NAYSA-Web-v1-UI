@@ -1,4 +1,5 @@
 export const docTypes = {
+  SO: "SO",
   SVI: "SVI",
   CV: "CV",
   JV: "JV",
@@ -37,6 +38,7 @@ export const docTypeNames = {
     // Accounts Receivable Module
     SI: "Sales Invoice Transaction",
     SVI: "Service Invoice Transaction",
+    SO: "Sales Order Transaction",
     ARDM: "AR Debit Memo Transaction",
     ARCM: "AR Credit Memo Transaction",
     CR: "Collection Receipt Transaction",
@@ -69,6 +71,7 @@ export const docTypeNames = {
     // Accounts Receivable Module
     SI: "Sales Invoice Transaction",
     SVI: "https://www.youtube.com/watch?v=x8CsG1pHSM8&ab_channel=Learn%40NAYSA",
+    SO: "Sales Order Transaction",
     ARDM: "AR Debit Memo Voucher Transaction",
     ARCM: "AR Credit Memo Voucher Transaction",
     CR: "Collection Receipt Transaction",
@@ -91,6 +94,7 @@ export const docTypeNames = {
     // Accounts Receivable Module
     SI: "Sales Invoice Transaction",
     SVI: "/public/Guide/NAYSA AR Billing Invoice.pdf",
+    SO: "Sales Order Transaction",
     ARDM: "AR Debit Memo Voucher Transaction",
     ARCM: "AR Credit Memo Voucher Transaction",
     CR: "Collection Receipt Transaction",
