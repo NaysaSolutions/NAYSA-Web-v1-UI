@@ -700,7 +700,7 @@ const ItemMastLookupModal = ({
   customParam = "ActiveAll",
   enableMultiSelect = false,
   onGetSelectedItems,
-  endpoint = "/getInvLookup",
+  endpoint = "/getInvLookupMS",
   docType=null,
   selectedItems: externalSelectedItems = [],
 }) => {
