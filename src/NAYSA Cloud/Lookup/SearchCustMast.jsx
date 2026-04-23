@@ -98,7 +98,7 @@ const CustomerMastLookupModal = ({ isOpen, onClose, customParam }) => {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 animate-fade-in font-sans">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/55 p-4 animate-fade-in font-sans backdrop-blur-[1px]">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl max-h-[85vh] flex flex-col relative overflow-hidden border border-slate-200">
                 
                 {/* Header */}

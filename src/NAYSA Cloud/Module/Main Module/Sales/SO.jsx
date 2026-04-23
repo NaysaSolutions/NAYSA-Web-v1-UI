@@ -13,6 +13,7 @@ import CustomerMastLookupModal from "../../../Lookup/SearchCustMast";
 import RCLookupModal from "../../../Lookup/SearchRCMast.jsx";
 import ItemMastLookupModal from "../../../Lookup/SearchItemMast.jsx";
 import BillTermLookupModal from "../../../Lookup/SearchBillTermRef.jsx";
+import SearchSalesRepRef from "../../../Lookup/SearchSalesRepRef.jsx";
 import CancelTranModal from "../../../Lookup/SearchCancelRef.jsx";
 import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
@@ -35,6 +36,7 @@ import {
   useTopBillTermRow,
   useTopForexRate,
   useTopCurrencyRow,
+  useTopSalesRepRow,
 } from '@/NAYSA Cloud/Global/top1RefTable';
 
 import {
@@ -61,8 +63,11 @@ import {
 import { 
   formatNumber,
   parseFormattedNumber,
+  useSwalConfirmAlert,
+  useSwalvalidateRequiredFields,
   useSwalshowSaveSuccessDialog,
-  useSwalSuccessAlert
+  useSwalSuccessAlert,
+  useSwalErrorAlert
 } from '@/NAYSA Cloud/Global/behavior.jsx';
 
 
@@ -75,6 +80,10 @@ const SO = () => {
 
   // View Document Const
   const loadedFromUrlRef = useRef(false);
+  const customerPoNoRef = useRef("");
+  const deliveryDateRef = useRef("");
+  const suppressDeliveryDatePromptRef = useRef(true);
+  const salesRepRef = useRef({ code: "", name: "" });
   const navigate = useNavigate();
   const location = useLocation(); 
   const { companyInfo, currentUserRow,getAllDropDown,refsLoaded,getAllTopHSDocRow } = useAuth();
@@ -91,7 +100,7 @@ const SO = () => {
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
   const { resetFlag } = useReset();
   const [focusedCell, setFocusedCell] = useState(null); // { index: number, field: string }
-  const docType = docTypes.SVI; 
+  const docType = docTypes.SO; 
   const hsDoc = getAllTopHSDocRow(docType);
   const pdfLink = docTypePDFGuide[docType];
   const videoLink = docTypeVideoGuide[docType];
@@ -105,7 +114,7 @@ const SO = () => {
     documentID: null,
     documentDate:useGetCurrentDayV2(),   
     documentNo: "",
-    documentStatus:"",
+    documentStatus:"O",
     status: "OPEN",
     noReprints:"0",
 
@@ -127,12 +136,10 @@ const SO = () => {
     // Customer information
     billToCustCode: "",
     billToCustName: "",
-    billToAddress1: "",
-    billToAddress2: "",
+    billToAddress: "",
     shipToCode: "",
     shipToName: "",
-    shipToAddress1: "",
-    shipToAddress2: "",
+    shipToAddress: "",
     contactPerson: "",
     customerPoNo: "",
     customerPoDate: null,
@@ -151,14 +158,12 @@ const SO = () => {
 
     //Other Header Info
     tblFieldArray :[],
-    soStatus: "OPEN",
+    soStatus: "O",
     salesType: "",
     salesTypeOptions: [],
     soStatusOptions: [],
     refDocNo1: "",
     refDocNo2: "",
-    fromDate: null,
-    toDate: null,
     remarks: "",
     billtermCode: "",
     billtermName: "",
@@ -176,6 +181,7 @@ const SO = () => {
     showRcModal:false,
     showBilltermModal:false,
     showItemModal:false,
+    showSalesRepModal:false,
 
     currencyModalOpen:false,
     branchModalOpen:false,
@@ -222,12 +228,10 @@ const SO = () => {
   branchName,
   billToCustCode,
   billToCustName,
-  billToAddress1,
-  billToAddress2,
+  billToAddress,
   shipToCode,
   shipToName,
-  shipToAddress1,
-  shipToAddress2,
+  shipToAddress,
   contactPerson,
   customerPoNo,
   customerPoDate,
@@ -245,8 +249,6 @@ const SO = () => {
   soStatusOptions,
   refDocNo1,
   refDocNo2,
-  fromDate,
-  toDate,
   remarks,
   billtermCode,
   billtermName,
@@ -266,6 +268,7 @@ const SO = () => {
   // Modals
   showRcModal,
   showItemModal,
+  showSalesRepModal,
   currencyModalOpen,
   branchModalOpen,
   custModalOpen,
@@ -297,12 +300,19 @@ const SO = () => {
   const isFormDisabled =
   isViewDocumentUrl ||
   ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+  const isHeaderSoStatusEditable = !!String(documentID || "").trim() && !isFormDisabled;
+  const totalDrQuantity = detailRows.reduce(
+    (total, row) => total + (parseFormattedNumber(row.drQuantity || 0) || 0),
+    0
+  );
+  const filteredHeaderSoStatusOptions =
+    totalDrQuantity > 0
+      ? soStatusOptions.filter((option) => ["O", "C"].includes(option.DROPDOWN_CODE))
+      : soStatusOptions;
 
   
 
   //Variables
-
-
   const [totals, setTotals] = useState({
   totalGrossAmount: '0.00',
   totalDiscountAmount: '0.00',
@@ -312,8 +322,21 @@ const SO = () => {
   const sellingPriceDecimals = Number(companyInfo?.item_decsellprice ?? 2);
   const quantityDecimals = Number(companyInfo?.itemDescQtyFG ?? 2);
   const isSellingPriceAndDiscountEditable = true;
-  const SO_DETAIL_INSERT_ENDPOINT = "addSODetail";
+  const discountLevel = 8// Math.min(Math.max(Number(companyInfo?.discountLevel ?? 8), 1), 8);
+  const showTotalDiscountColumn = discountLevel > 1;
+  const visibleDiscountRateFields = Array.from(
+    { length: discountLevel },
+    (_, index) => `discRate${index + 1}`
+  );
+  const visibleDiscountAmountFields = Array.from(
+    { length: discountLevel },
+    (_, index) => `discAmount${index + 1}`
+  );
+  const SO_PRICE_MATRIX_ENDPOINT = "getPriceMatrixItemPrice";
+  const SO_ALLOW_DUPLICATE_ITEMS = false;
   
+
+
 
 
   const updateTotalsDisplay = (grossAmt, discAmt, netDisc) => {
@@ -324,8 +347,103 @@ const SO = () => {
       });
   };
 
+  const combineAddressLines = (...lines) =>
+    lines
+      .map((line) => String(line || "").trim())
+      .filter(Boolean)
+      .join(" ");
 
+  const formatFetchedHeaderDate = (value) => {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
 
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+      const [month, day, year] = raw.split("/").map(Number);
+      const isValidMonth = month >= 1 && month <= 12;
+      const isValidDay = day >= 1 && day <= 31;
+      const isValidYear = year >= 1900 && year <= 2999;
+
+      if (isValidMonth && isValidDay && isValidYear) {
+        return raw;
+      }
+    }
+
+    if (/^(19|20)\d{2}-\d{2}-\d{2}(T.*)?$/.test(raw)) {
+      return useformatToDatev2(raw);
+    }
+
+    const digits = raw.replace(/\D/g, "");
+
+    if (digits.length === 8) {
+      const first4 = digits.slice(0, 4);
+      const middle2 = digits.slice(4, 6);
+      const last2 = digits.slice(6, 8);
+
+      if (/^(19|20)\d{2}$/.test(first4)) {
+        return `${middle2}/${last2}/${first4}`;
+      }
+
+      const month = digits.slice(0, 2);
+      const day = digits.slice(2, 4);
+      const year = digits.slice(4, 8);
+      return `${month}/${day}/${year}`;
+    }
+
+    return "";
+  };
+
+  const applyHeaderValueToDetailRows = (detailField, detailValue) => {
+    const updatedRows = detailRows.map((row) => ({
+      ...row,
+      [detailField]: detailValue,
+    }));
+
+    updateState({ detailRows: updatedRows });
+    updateTotals(updatedRows);
+  };
+
+  const confirmApplyHeaderValueToDetails = async ({
+    headerLabel,
+    detailField,
+    detailValue,
+  }) => {
+    if ((detailRows?.length || 0) === 0) {
+      return false;
+    }
+
+    const result = await useSwalConfirmAlert(
+      `Apply ${headerLabel} changes?`,
+      `SO Detail already has record(s).\nDo you want to apply the updated ${headerLabel} to all SO Detail rows?`,
+      "Yes"
+    );
+
+    if (result?.isConfirmed) {
+      applyHeaderValueToDetailRows(detailField, detailValue);
+      return true;
+    }
+
+    return false;
+  };
+
+  const handleHeaderCustomerPoBlur = async () => {
+    const currentValue = customerPoNo || "";
+    const currentPoDate = String(customerPoDate || "").trim();
+
+    if (currentValue && !currentPoDate) {
+      updateState({
+        customerPoDate: documentDate || useGetCurrentDayV2(),
+      });
+    }
+
+    if (currentValue !== customerPoNoRef.current) {
+      await confirmApplyHeaderValueToDetails({
+        headerLabel: "Customer PO No.",
+        detailField: "customerPoNo",
+        detailValue: currentValue,
+      });
+      customerPoNoRef.current = currentValue;
+    }
+  };
 
   useEffect(() => {
       if (resetFlag) {    
@@ -344,6 +462,38 @@ const SO = () => {
 
   useEffect(() => {
   }, [billToCustCode]);
+
+  useEffect(() => {
+    if (suppressDeliveryDatePromptRef.current) {
+      suppressDeliveryDatePromptRef.current = false;
+      deliveryDateRef.current = deliveryDate || "";
+      return;
+    }
+
+    const currentValue = deliveryDate || "";
+
+    if (currentValue === deliveryDateRef.current) {
+      return;
+    }
+
+    const isCompleteOrCleared =
+      currentValue === "" || /^\d{2}\/\d{2}\/\d{4}$/.test(currentValue);
+
+    if (!isCompleteOrCleared) {
+      return;
+    }
+
+    const run = async () => {
+      await confirmApplyHeaderValueToDetails({
+        headerLabel: "Delivery Date",
+        detailField: "delDate",
+        detailValue: currentValue,
+      });
+      deliveryDateRef.current = currentValue;
+    };
+
+    run();
+  }, [deliveryDate]);
 
  
   useEffect(() => {
@@ -389,22 +539,44 @@ useEffect(() => {
 
 useEffect(() => {
     if (!refsLoaded) return; 
-    const salesTypes = getAllDropDown("SOTRAN_TYPE", docType) || [];
+    const filteredTypes = getAllDropDown("SOTRAN_TYPE", docType) || [];
+    const defaultSoType =
+      filteredTypes.find((type) => type.DROPDOWN_CODE === "SO01")?.DROPDOWN_CODE ||
+      filteredTypes[0]?.DROPDOWN_CODE ||
+      "";
+    const mapHeaderSoStatus = (value) => {
+      const normalizedValue = String(value || "").toUpperCase();
+      if (normalizedValue === "OPEN" || normalizedValue === "O") return "O";
+      if (normalizedValue === "CANCELLED" || normalizedValue === "X") return "X";
+      if (normalizedValue === "CLOSED" || normalizedValue === "C") return "C";
+      return "O";
+    };
+
     updateState({
-      salesTypeOptions: salesTypes,
-      salesType: salesTypes[0]?.DROPDOWN_CODE || "",
+      salesTypeOptions: filteredTypes,
+      salesType: defaultSoType,
       soStatusOptions: [
-        { DROPDOWN_CODE: "OPEN", DROPDOWN_NAME: "Open" },
-        { DROPDOWN_CODE: "FINALIZED", DROPDOWN_NAME: "Finalized" },
-        { DROPDOWN_CODE: "CANCELLED", DROPDOWN_NAME: "Cancelled" },
-        { DROPDOWN_CODE: "CLOSED", DROPDOWN_NAME: "Closed" },
+        { DROPDOWN_CODE: "O", DROPDOWN_NAME: "Open" },
+        { DROPDOWN_CODE: "X", DROPDOWN_NAME: "Cancelled" },
+        { DROPDOWN_CODE: "C", DROPDOWN_NAME: "Closed" },
       ],
+      soStatus: mapHeaderSoStatus(state.soStatus),
     });
 }, [docType, refsLoaded]);
 
 
   
   const handleReset = () => {
+      const filteredTypes = getAllDropDown("SOTRAN_TYPE", docType) || [];
+      const defaultSoType =
+        filteredTypes.find((type) => type.DROPDOWN_CODE === "SO01")?.DROPDOWN_CODE ||
+        filteredTypes[0]?.DROPDOWN_CODE ||
+        "";
+
+      customerPoNoRef.current = "";
+      deliveryDateRef.current = "";
+      suppressDeliveryDatePromptRef.current = true;
+      salesRepRef.current = { code: "", name: "" };
 
    
       updateState({
@@ -419,19 +591,17 @@ useEffect(() => {
       currRate:formatNumber(companyInfo?.currRate||1,6) ,
       refDocNo1: "",
       refDocNo2:"",
-      fromDate:null,
-      toDate:null,
       remarks:"",
+      billtermCode:"",
+      billtermName:"",
       noReprints:"0",
 
       billToCustCode:"",
       billToCustName:"",
-      billToAddress1:"",
-      billToAddress2:"",
+      billToAddress:"",
       shipToCode:"",
       shipToName:"",
-      shipToAddress1:"",
-      shipToAddress2:"",
+      shipToAddress:"",
       contactPerson:"",
       customerPoNo:"",
       customerPoDate:null,
@@ -443,9 +613,9 @@ useEffect(() => {
       documentNo: "",
       documentID: "",
       detailRows: [],
-      documentStatus:"",
-      salesType:"",
-      soStatus:"OPEN",
+      documentStatus:"O",
+      salesType: defaultSoType,
+      soStatus:"O",
       
       
       // UI state
@@ -458,7 +628,7 @@ useEffect(() => {
 
     });
 
-      updateTotalsDisplay (0, 0, 0, 0, 0, 0)
+      updateTotalsDisplay(0, 0, 0, 0)
   };
 
    
@@ -494,10 +664,10 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
   updateState({ isLoading: true });
 
   try {
-    const data = await useFetchTranData(documentNo, branchCode,docType,"sviNo",direction);
+    const data = await useFetchTranData(documentNo, branchCode,docType,"soNo",direction);
 
 
-    if (!data?.sviId) {
+    if (!data?.soId) {
       Swal.fire({ icon: 'info', title: 'No Records Found', text: 'Transaction does not exist.' });
       return resetState();
     }
@@ -506,39 +676,50 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
     // Format rows
     const retrievedDetailRows = (data.dt1 || []).map(item => ({
       ...item,
-      quantity: formatNumber(item.quantity),
-      unitPrice: formatNumber(item.unitPrice),
+      soQuantity: formatNumber(item.soQuantity??0),
+      sellingPrice: formatNumber(item.sellingPrice??0),
       grossAmount: formatNumber(item.grossAmount),
-      discRate: formatNumber(item.discRate),
-      discAmount: formatNumber(item.discAmount),
-      netDisc: formatNumber(item.netDisc),
-      vatAmount: formatNumber(item.vatAmount),
-      atcAmount: formatNumber(item.atcAmount),
-      sviAmount: formatNumber(item.sviAmount),
+      discRate1: formatNumber(item.discRate1 ?? 0),
+      discRate2: formatNumber(item.discRate2 ?? 0),
+      discRate3: formatNumber(item.discRate3 ?? 0),
+      discRate4: formatNumber(item.discRate4 ?? 0),
+      discRate5: formatNumber(item.discRate5 ?? 0),
+      discRate6: formatNumber(item.discRate6 ?? 0),
+      discRate7: formatNumber(item.discRate7 ?? 0),
+      discRate8: formatNumber(item.discRate8 ?? 0),
+      discAmount1: formatNumber(item.discAmount1 ?? 0),
+      discAmount2: formatNumber(item.discAmount2 ?? 0),
+      discAmount3: formatNumber(item.discAmount3 ?? 0),
+      discAmount4: formatNumber(item.discAmount4 ?? 0),
+      discAmount5: formatNumber(item.discAmount5 ?? 0),
+      discAmount6: formatNumber(item.discAmount6 ?? 0),
+      discAmount7: formatNumber(item.discAmount7 ?? 0),
+      discAmount8: formatNumber(item.discAmount8 ?? 0),
+      totDiscount: formatNumber(item.totDiscount ?? 0),
+      netAmount: formatNumber(item.netAmount ?? 0),
+      drQuantity: formatNumber(item.drQuantity ?? 0, quantityDecimals),
+      siQuantity: formatNumber(item.siQuantity ?? 0, quantityDecimals),
+      delDate: useformatToDatev2(item.delDate),
     }));
 
     updateState({
-      documentStatus: data.sviStatus,
+      documentStatus: data.soStatus,
       status: data.docStatus,
       noReprints:data.noReprints,
-      documentID: data.sviId,
-      documentNo: data.sviNo,
+      documentID: data.soId,
+      documentNo: data.soNo,
       branchCode: data.branchCode,
       branchName:data.branchName,
-      documentDate: useformatToDatev2(data.sviDate),
-      salesType: data.svitranType,
+      documentDate: useformatToDatev2(data.soDate),
+      salesType: data.soTranType,
       billToCustCode: data.custCode,
       billToCustName: data.custName,
+      billToAddress: data.addr,
       contactPerson:data.attention,
-      shipToCode: data.shipToCode || data.custCode || "",
-      shipToName: data.shipToName || data.custName || "",
-      billToAddress1: data.billToAddress1 || data.address1 || "",
-      billToAddress2: data.billToAddress2 || data.address2 || "",
-      shipToAddress1: data.shipToAddress1 || data.deliveryAddress1 || data.address1 || "",
-      shipToAddress2: data.shipToAddress2 || data.deliveryAddress2 || data.address2 || "",
+      shipToCode: data.shipToCode,
+      shipToName: data.shipToName,
+      shipToAddress:data.shipToAddr,
       refDocNo1: data.refDocNo1,
-      fromDate:useformatToDatev2(data.fromDate),
-      toDate:useformatToDatev2(data.toDate),
       refDocNo2: data.refDocNo2,
       currCode: data.currCode,
       currName: data.currName,
@@ -546,18 +727,33 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       remarks: data.remarks,
       billtermCode: data.billtermCode,
       billtermName: data.billtermName,
-      customerPoNo: data.customerPoNo || data.custPoNo || "",
-      customerPoDate: useformatToDatev2(data.customerPoDate || data.custPoDate),
+      customerPoNo: data.customerPoNo ||  "",
+      customerPoDate: useformatToDatev2(data.customerPoDate),
       deliveryDate: useformatToDatev2(data.deliveryDate),
       rcCode: data.rcCode || "",
       rcName: data.rcName || "",
       salesRepCode: data.salesRepCode || "",
       salesRepName: data.salesRepName || "",
-      soStatus: data.soStatus || data.docStatus || "OPEN",
+      soStatus:
+        String(data.soStatus || "O").toUpperCase() === "OPEN"
+          ? "O"
+          : String(data.soStatus || "O").toUpperCase() === "CANCELLED"
+          ? "X"
+          : String(data.soStatus || "O").toUpperCase() === "CLOSED"
+          ? "C"
+          : String(data.soStatus ||  "O"),
       detailRows: retrievedDetailRows,
       isDocNoDisabled: true,
       isFetchDisabled: true,
     });
+
+    customerPoNoRef.current = data.customerPoNo ||"";
+    deliveryDateRef.current = formatFetchedHeaderDate(data.deliveryDate) || "";
+    suppressDeliveryDatePromptRef.current = true;
+    salesRepRef.current = {
+      code: data.salesRepCode || "",
+      name: data.salesRepName || "",
+    };
 
    
     updateTotals(retrievedDetailRows);
@@ -572,7 +768,7 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
 };
 
 
-const handleSviNoBlur = () => {
+const handlesoNoBlur = () => {
 
     if (!state.documentID && state.documentNo && state.branchCode) { 
         fetchTranData(state.documentNo,state.branchCode);
@@ -618,7 +814,7 @@ const handleActivityOption = async (action) => {
 
 
   
-  if (documentStatus === "") {
+  if (documentStatus === "O") {
     updateState({ isLoading: true });
 
 
@@ -630,10 +826,12 @@ const handleActivityOption = async (action) => {
         billtermCode,
         billToCustCode,
         billToCustName,
+        billToAddress,
+        shipToCode,
+        shipToName,
+        shipToAddress,
         refDocNo1,
         refDocNo2,
-        fromDate,
-        toDate,
         currCode,
         currRate,
         remarks,
@@ -643,6 +841,8 @@ const handleActivityOption = async (action) => {
         customerPoDate,
         deliveryDate,
         rcCode,
+        salesRepCode,
+        salesRepName,
         salesType,
         soStatus,
         detailRows,
@@ -650,18 +850,20 @@ const handleActivityOption = async (action) => {
 
       const buildSoData = () => ({
         branchCode: branchCode,
-        sviNo: documentNo || "",
-        sviId: documentID || "",
-        sviDate: documentDate,
-        svitranType: salesType,
+        soNo: documentNo || "",
+        soId: documentID || "",
+        soDate: documentDate,
+        sotranType: salesType,
         billtermCode: billtermCode,
         custCode: billToCustCode,
         custName: billToCustName,
+        billToAddress,
+        shipToCode,
+        shipToName,
+        shipToAddress,
         attention: contactPerson,
         refDocNo1: refDocNo1,
         refDocNo2: refDocNo2,
-        fromDate: fromDate,
-        toDate: toDate,
         currCode: currCode || "PHP",
         currRate: parseFormattedNumber(currRate),
         remarks: remarks || "",
@@ -670,6 +872,8 @@ const handleActivityOption = async (action) => {
         customerPoDate,
         deliveryDate,
         rcCode,
+        salesRepCode,
+        salesRepName,
         soStatus,
         dt1: detailRows.map((row, index) => ({
           lnNo: String(index + 1),
@@ -704,7 +908,7 @@ const handleActivityOption = async (action) => {
           netAmount: parseFormattedNumber(row.netAmount || 0),
           delDate: row.delDate || null,
           customerPoNo: row.customerPoNo || "",
-          repCode: row.repCode || "",
+          salesRepCode: row.salesRepCode || "",
           freeItem: row.freeItem || "",
           drQuantity: parseFormattedNumber(row.drQuantity || 0),
           siQuantity: parseFormattedNumber(row.siQuantity || 0),
@@ -712,18 +916,20 @@ const handleActivityOption = async (action) => {
         dt2: [],
       });
 
+     
+
       if (action === "Upsert") {
         const response = await useTransactionUpsert(
           docType,
           buildSoData(),
           updateState,
-          "sviId",
-          "sviNo"
+          "soId",
+          "soNo"
         );
 
         if (response) {
-          const responseDocNo =  response.data[0].sviNo;
-          const responseDocId =  response.data[0].sviId;
+          const responseDocNo =  response.data[0].soNo;
+          const responseDocId =  response.data[0].soId;
 
           await fetchTranData(responseDocNo,branchCode);
 
@@ -735,8 +941,8 @@ const handleActivityOption = async (action) => {
           useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);          
         }
         updateState({
-          documentNo: response?.data?.[0]?.sviNo || "",
-          documentID: response?.data?.[0]?.sviId || "",
+          documentNo: response?.data?.[0]?.soNo || "",
+          documentID: response?.data?.[0]?.soId || "",
           isDocNoDisabled: true,
           isFetchDisabled: true,
         });
@@ -784,9 +990,9 @@ const handleActivityOption = async (action) => {
       discAmount8: "0.00",
       totDiscount: "0.00",
       netAmount: "0.00",
-      delDate: "",
+      delDate: deliveryDate || "",
       customerPoNo: customerPoNo || "",
-      repCode: salesRepCode || "",
+      salesRepCode: salesRepCode || "",
       freeItem: "",
       drQuantity: Number(0).toFixed(quantityDecimals),
       siQuantity: Number(0).toFixed(quantityDecimals),
@@ -841,71 +1047,237 @@ const handleActivityOption = async (action) => {
     return selectedItems ? [selectedItems] : [];
   };
 
-  const parseInsertDetailResponse = (response) => {
-    const rawResult =
-      response?.data?.[0]?.result ??
-      response?.result ??
-      response?.data ??
-      [];
+  const normalizeItemCode = (itemCode) => String(itemCode || "").trim().toUpperCase();
 
-    if (Array.isArray(rawResult)) {
-      return rawResult;
+  const getFilteredDuplicateFreeItems = (records = [], currentRowIndex = null) => {
+    if (SO_ALLOW_DUPLICATE_ITEMS) {
+      return records;
     }
 
-    if (typeof rawResult === "string") {
+    const existingItemCodes = new Set(
+      detailRows
+        .filter((_, index) => index !== currentRowIndex)
+        .map((row) => normalizeItemCode(row?.itemCode))
+        .filter(Boolean)
+    );
+
+    const selectedItemCodes = new Set();
+    const skippedItemCodes = [];
+
+    const filteredRecords = records.filter((record) => {
+      const itemCode = normalizeItemCode(record?.itemCode);
+      if (!itemCode) {
+        return true;
+      }
+
+      if (existingItemCodes.has(itemCode) || selectedItemCodes.has(itemCode)) {
+        skippedItemCodes.push(itemCode);
+        return false;
+      }
+
+      selectedItemCodes.add(itemCode);
+      return true;
+    });
+
+    if (skippedItemCodes.length > 0) {
+      useSwalErrorAlert(
+        "Duplicate Item Not Allowed",
+        `These item(s) already exist in SO Detail: ${[...new Set(skippedItemCodes)].join(", ")}`
+      );
+    }
+
+    return filteredRecords;
+  };
+
+  const parsePriceMatrixResponse = (response) => {
+    const directResult =
+      response?.data?.[0]?.result ??
+      response?.result ??
+      response?.data?.result;
+
+    if (typeof directResult === "string") {
       try {
-        const parsed = JSON.parse(rawResult);
+        const parsed = JSON.parse(directResult);
         return Array.isArray(parsed) ? parsed : [];
       } catch (error) {
-        console.error("Error parsing inserted SO detail rows:", error);
+        console.error("Error parsing SO price matrix result:", error);
         return [];
       }
+    }
+
+    const rawData = response?.data ?? [];
+
+    if (Array.isArray(rawData)) {
+      return rawData;
+    }
+
+    if (Array.isArray(response)) {
+      return response;
     }
 
     return [];
   };
 
+  const fetchPriceMatrixRows = async (selectedRecords = []) => {
+    if (!Array.isArray(selectedRecords) || selectedRecords.length === 0) {
+      return [];
+    }
+
+    const payload = {
+      json_data: {
+        docDate: documentDate,
+        custCode: billToCustCode || "",
+        items: selectedRecords.map((item, index) => ({
+          sequence: index + 1,
+          itemCode: item?.itemCode || "",
+        })),
+      },
+    };
+
+    console.log( JSON.stringify(payload))
+
+    try {
+      updateState({ isLoading: true });
+      const response = await postRequest(
+        SO_PRICE_MATRIX_ENDPOINT,
+        JSON.stringify(payload)
+      );
+      return parsePriceMatrixResponse(response);
+    } catch (error) {
+      console.error("Error fetching SO price matrix:", error);
+      return [];
+    } finally {
+      updateState({ isLoading: false });
+    }
+  };
+
+
+
+
+  const getPriceMatrixRowForItem = (priceMatrixRows = [], item = {}, index = 0) => {
+    const itemCode = normalizeItemCode(item?.itemCode);
+    const getMatrixItemCode = (priceRow) =>
+      priceRow?.itemCode ??
+      "";
+
+    return (
+      priceMatrixRows.find(
+        (priceRow) => normalizeItemCode(getMatrixItemCode(priceRow)) === itemCode
+      ) ||
+      priceMatrixRows.find(
+        (priceRow) => Number(priceRow?.sequence) === index + 1
+      ) ||
+      {}
+    );
+  };
+
+  const calculateRowAmountsFromRates = (row) => {
+    const discountRateFields = visibleDiscountRateFields;
+    const discountAmountFields = visibleDiscountAmountFields;
+    const roundTo2 = (num) => Number((Number(num) || 0).toFixed(2));
+    const quantity = parseFormattedNumber(row.soQuantity || 0) || 0;
+    const sellingPrice = parseFormattedNumber(row.sellingPrice || 0) || 0;
+    const grossAmount = roundTo2(quantity * sellingPrice);
+    let runningBase = grossAmount;
+    let totalDiscount = 0;
+    const updatedAmounts = {};
+
+    discountRateFields.forEach((rateField, index) => {
+      const amountField = discountAmountFields[index];
+      const rateValue = parseFormattedNumber(row[rateField] || 0) || 0;
+      const discountAmount = roundTo2(runningBase * (rateValue * 0.01));
+
+      updatedAmounts[amountField] = formatNumber(discountAmount);
+      totalDiscount += discountAmount;
+      runningBase = roundTo2(runningBase - discountAmount);
+    });
+
+    return {
+      ...row,
+      grossAmount: formatNumber(grossAmount),
+      ...updatedAmounts,
+      totDiscount: formatNumber(totalDiscount),
+      netAmount: formatNumber(roundTo2(grossAmount - totalDiscount)),
+    };
+  };
+
+
+
+  const applyPriceMatrixToDetailRow = (baseRow, priceRow = {}) => {
+    if (baseRow.freeItem === "Y") {
+      return calculateRowAmountsFromRates({
+        ...baseRow,
+        sellingPrice: formatNumber(0, sellingPriceDecimals),
+        ...Object.fromEntries(
+          visibleDiscountRateFields.map((field) => [field, formatNumber(0)])
+        ),
+      });
+    }
+
+    const getPriceValue = () => priceRow?.sellingPrice ||0 
+    const getPmTypeValue = () => priceRow?.pmType||"";
+    const getPmIdValue = () =>   priceRow?.pmId ||"";
+    const getDiscountRateValue = (discountNo) =>  priceRow?.[`discRate${discountNo}`] ||0;
+    const updatedRow = {
+      ...baseRow,
+      pmType: getPmTypeValue() ?? baseRow.pmType ?? "",
+      pmId: getPmIdValue() ?? baseRow.pmId ?? "",
+      sellingPrice: formatNumber(
+        getPriceValue() ?? baseRow.sellingPrice ?? 0,
+        sellingPriceDecimals
+      ),
+    };
+
+    visibleDiscountRateFields.forEach((field, index) => {
+      updatedRow[field] = formatNumber(
+        getDiscountRateValue(index + 1) ?? baseRow[field] ?? 0
+      );
+    });
+
+    return calculateRowAmountsFromRates(updatedRow);
+  };
+
   const mapItemRecordToDetailRow = (item = {}) => createSODetailRow({
-    itemCode: item?.itemCode || item?.item_code || "",
-    itemName: item?.itemName || item?.item_name || "",
-    itemSpecs: item?.itemSpecs || item?.item_specs || "",
-    uomCode: item?.uomCode || item?.uom_code || "",
-    pmType: item?.pmType || item?.pm_type || "",
-    groupId: item?.groupId || item?.group_id || "",
-    pmId: item?.pmId || item?.pm_id || "",
+    itemCode: item?.itemCode || "",
+    itemName: item?.itemName || "",
+    itemSpecs: item?.itemSpecs || "",
+    uomCode: item?.uomCode || "",
+    pmType: item?.pmType || "",
+    groupId: "",
+    pmId: item?.pmId || "",
     soQuantity: formatNumber(
       item?.soQuantity ?? item?.quantity ?? item?.soQty ?? 0,
       quantityDecimals
     ),
     sellingPrice: formatNumber(
-      item?.sellingPrice ?? item?.unitPrice ?? item?.selling_price ?? 0,
+      item?.sellingPrice ?? item?.unitPrice ?? 0,
       sellingPriceDecimals
     ),
-    grossAmount: formatNumber(item?.grossAmount ?? item?.gross_amount ?? 0),
-    discRate1: formatNumber(item?.discRate1 ?? item?.disc_rate1 ?? 0),
-    discRate2: formatNumber(item?.discRate2 ?? item?.disc_rate2 ?? 0),
-    discRate3: formatNumber(item?.discRate3 ?? item?.disc_rate3 ?? 0),
-    discRate4: formatNumber(item?.discRate4 ?? item?.disc_rate4 ?? 0),
-    discRate5: formatNumber(item?.discRate5 ?? item?.disc_rate5 ?? 0),
-    discRate6: formatNumber(item?.discRate6 ?? item?.disc_rate6 ?? 0),
-    discRate7: formatNumber(item?.discRate7 ?? item?.disc_rate7 ?? 0),
-    discRate8: formatNumber(item?.discRate8 ?? item?.disc_rate8 ?? 0),
-    discAmount1: formatNumber(item?.discAmount1 ?? item?.disc_amount1 ?? 0),
-    discAmount2: formatNumber(item?.discAmount2 ?? item?.disc_amount2 ?? 0),
-    discAmount3: formatNumber(item?.discAmount3 ?? item?.disc_amount3 ?? 0),
-    discAmount4: formatNumber(item?.discAmount4 ?? item?.disc_amount4 ?? 0),
-    discAmount5: formatNumber(item?.discAmount5 ?? item?.disc_amount5 ?? 0),
-    discAmount6: formatNumber(item?.discAmount6 ?? item?.disc_amount6 ?? 0),
-    discAmount7: formatNumber(item?.discAmount7 ?? item?.disc_amount7 ?? 0),
-    discAmount8: formatNumber(item?.discAmount8 ?? item?.disc_amount8 ?? 0),
-    totDiscount: formatNumber(item?.totDiscount ?? item?.tot_discount ?? 0),
-    netAmount: formatNumber(item?.netAmount ?? item?.net_amount ?? 0),
-    delDate: item?.delDate || item?.del_date || "",
-    customerPoNo: item?.customerPoNo || item?.customer_po_no || customerPoNo || "",
-    repCode: item?.repCode || item?.rep_code || salesRepCode || "",
-    freeItem: item?.freeItem || item?.free_item || "",
-    drQuantity: formatNumber(item?.drQuantity ?? item?.dr_quantity ?? 0, quantityDecimals),
-    siQuantity: formatNumber(item?.siQuantity ?? item?.si_quantity ?? 0, quantityDecimals),
+    grossAmount: formatNumber(item?.grossAmount ?? 0),
+    discRate1: formatNumber(item?.discRate1 ?? 0),
+    discRate2: formatNumber(item?.discRate2 ?? 0),
+    discRate3: formatNumber(item?.discRate3 ?? 0),
+    discRate4: formatNumber(item?.discRate4 ?? 0),
+    discRate5: formatNumber(item?.discRate5 ?? 0),
+    discRate6: formatNumber(item?.discRate6 ?? 0),
+    discRate7: formatNumber(item?.discRate7 ?? 0),
+    discRate8: formatNumber(item?.discRate8 ?? 0),
+    discAmount1: formatNumber(item?.discAmount1 ?? 0),
+    discAmount2: formatNumber(item?.discAmount2 ?? 0),
+    discAmount3: formatNumber(item?.discAmount3 ?? 0),
+    discAmount4: formatNumber(item?.discAmount4 ?? 0),
+    discAmount5: formatNumber(item?.discAmount5 ?? 0),
+    discAmount6: formatNumber(item?.discAmount6 ?? 0),
+    discAmount7: formatNumber(item?.discAmount7 ?? 0),
+    discAmount8: formatNumber(item?.discAmount8 ?? 0),
+    totDiscount: formatNumber(item?.totDiscount ?? 0),
+    netAmount: formatNumber(item?.netAmount ?? 0),
+    delDate: item?.delDate || deliveryDate || "",
+    customerPoNo: item?.customerPoNo || customerPoNo || "",
+    salesRepCode: item?.salesRepCode || item?.repCode || salesRepCode || "",
+    freeItem: item?.freeItem || "",
+    drQuantity: formatNumber(item?.drQuantity ?? 0, quantityDecimals),
+    siQuantity: formatNumber(item?.siQuantity ?? 0, quantityDecimals),
   });
 
   const handleInsertSelectedItems = async (selectedRecords = []) => {
@@ -913,46 +1285,12 @@ const handleActivityOption = async (action) => {
       return;
     }
 
-    const itemSequence = selectedRecords.map((item, index) => ({
-      sequence: index + 1,
-      itemCode: item?.itemCode || "",
-      itemName: item?.itemName || "",
-      uomCode: item?.uomCode || "",
-      groupId: item?.groupId || "",
-    }));
-
-    const payload = {
-      json_data: {
-        branchCode,
-        custCode: billToCustCode || "",
-        currCode,
-        currRate: parseFormattedNumber(currRate),
-        svitranType: salesType,
-        sviDate: documentDate,
-        items: itemSequence,
-      },
-    };
-
-    console.log(JSON.stringify(payload))
-    let rowsFromResponse = [];
-
-    try {
-      updateState({ isLoading: true });
-      const response = await postRequest(
-        SO_DETAIL_INSERT_ENDPOINT,
-        JSON.stringify(payload)
-      );
-      rowsFromResponse = parseInsertDetailResponse(response);
-    } catch (error) {
-      console.error("Error inserting SO detail items:", error);
-    } finally {
-      updateState({ isLoading: false });
-    }
-
-    const rowsToInsert = (rowsFromResponse.length > 0
-      ? rowsFromResponse
-      : selectedRecords
-    ).map(mapItemRecordToDetailRow);
+    const priceMatrixRows = await fetchPriceMatrixRows(selectedRecords);
+    const rowsToInsert = selectedRecords.map((item, index) => {
+      const baseRow = mapItemRecordToDetailRow(item);
+      const priceRow = getPriceMatrixRowForItem(priceMatrixRows, item, index);
+      return applyPriceMatrixToDetailRow(baseRow, priceRow);
+    });
 
     insertDetailRows(rowsToInsert, insertAfterIndex);
   };
@@ -960,7 +1298,7 @@ const handleActivityOption = async (action) => {
 
 
 
-  const handleDeleteRow = async (index) => {
+const handleDeleteRow = async (index) => {
     const updatedRows = [...detailRows];
     updatedRows.splice(index, 1);
 
@@ -1006,6 +1344,25 @@ const handlePrint = async () => {
   }
 };
 
+  const handleOpenAddItemModal = () => {
+    const fieldsToCheck = {
+      "Header : Bill To Customer Code": billToCustCode,
+      "Header : Ship To Customer Code": shipToCode,
+      "Header : Billing Term": billtermCode,
+      "Header : Sales Rep": salesRepCode,
+    };
+
+    const isValid = useSwalvalidateRequiredFields(fieldsToCheck, "Add Item");
+    if (!isValid) return;
+
+    updateState({
+      showItemModal: true,
+      selectionContext: "multiAdd",
+      selectedRowIndex: null,
+      insertAfterIndex: null,
+    });
+  };
+
 
 
 
@@ -1022,7 +1379,7 @@ const handleCancel = async () => {
       }
 
 
-  if (documentID && (documentStatus === '')) {
+  if (documentID && (documentStatus === 'O')) {
     updateState({ showCancelModal: true });
   }
 };
@@ -1049,7 +1406,7 @@ const handleCopy = async () => {
     updateState({
       documentNo: "",
       documentID: "",
-      documentStatus: "",
+      documentStatus: "O",
       status: "OPEN",
       documentDate: useGetCurrentDayV2(),
       noReprints: "0",
@@ -1082,7 +1439,7 @@ const handleHistoryRowPick = useCallback(
 
 useEffect(() => {
   const params = new URLSearchParams(location.search);
-  const docNo = params.get("sviNo");
+  const docNo = params.get("soNo");
   const branchCode = params.get("branchCode");
 
   if (!loadedFromUrlRef.current && docNo && branchCode) {
@@ -1103,6 +1460,71 @@ useEffect(() => {
 
 
 
+
+
+  
+
+const handleTranDocNoRetrieval = async (data) => {
+
+    await fetchTranData(data.docNo, branchCode, data.key);
+    updateState({showAllTranDocNo: data.modalClose});
+};
+
+
+
+
+const handleTranDocNoSelection = async (data) => {
+    
+    handleReset();
+    updateState({showAllTranDocNo: false, documentNo:data.docNo });
+};
+
+
+
+
+const handleCloseCancel = async (confirmation) => {
+    if(confirmation && documentStatus !== "O" && documentID !== null ) {
+
+      const result = await useHandleCancel(docType,documentID,currentUserRow.userCode,confirmation.password,confirmation.reason,updateState);
+      if (result.success) 
+      {
+       useSwalSuccessAlert("Success","Cancellation Completed")  
+      }    
+     await fetchTranData(documentNo,branchCode);
+    }
+    updateState({showCancelModal: false});
+};
+
+
+
+const handleCloseSignatory = async (mode) => {
+  
+    updateState({ 
+        showSpinner: true,
+        showSignatoryModal: false,
+        noReprints: mode === "Final" ? 1 : 0, });
+    await useHandlePrint(documentID, docType, mode,userCode);
+
+    updateState({
+      showSpinner: false 
+    });
+
+};
+
+
+
+
+const handleSaveAndPrint = async (documentID) => {
+
+    updateState({ showSpinner: true });
+    await useHandlePrint(documentID, docType);
+
+    updateState({showSpinner: false});
+};
+
+
+
+
   const handleCloseCustModal = async (selectedData) => {
     if (!selectedData) {
         updateState({ custModalOpen: false });
@@ -1113,67 +1535,105 @@ useEffect(() => {
     updateState({ isLoading: true });
 
     try {
-        const address1 =
-          selectedData?.billAddress1 ||
-          selectedData?.custAddress1 ||
-          selectedData?.address1 ||
-          selectedData?.addr1 ||
-          "";
-        const address2 =
-          selectedData?.billAddress2 ||
-          selectedData?.custAddress2 ||
-          selectedData?.address2 ||
-          selectedData?.addr2 ||
-          "";
+        const address = selectedData?.addr ||  "";
         const custDetails = {
             custCode: selectedData?.custCode || '',
             custName: selectedData?.custName || '',
             currCode: selectedData?.currCode || '',
             attention: selectedData?.attention || '',
             billtermCode: selectedData?.billtermCode || '',
-            billtermName: selectedData?.billtermName || ''
+            billtermName: selectedData?.billtermName || '',
+            salesRepCode: selectedData?.salesRepCode || '',
+            salesRepName: selectedData?.salesRepName || ''
         };
         const isShipTo = modalContext === "shipTo";
+        const shouldSyncShipTo = !isShipTo && !String(shipToCode || "").trim();
+        const shouldSyncBillTo = isShipTo && !String(billToCustCode || "").trim();
         updateState(
           isShipTo
             ? {
                 shipToName: selectedData.custName,
                 shipToCode: selectedData.custCode,
-                shipToAddress1: address1,
-                shipToAddress2: address2,
+                shipToAddress: address,
+                ...(shouldSyncBillTo
+                  ? {
+                      billToCustName: selectedData.custName,
+                      billToCustCode: selectedData.custCode,
+                      billToAddress: address,
+                    }
+                  : {}),
                 custModalOpen: false,
                 modalContext: "",
               }
             : {
                 billToCustName: selectedData.custName,
                 billToCustCode: selectedData.custCode,
-                billToAddress1: address1,
-                billToAddress2: address2,
+                billToAddress: address,
+                ...(shouldSyncShipTo
+                  ? {
+                      shipToName: selectedData.custName,
+                      shipToCode: selectedData.custCode,
+                      shipToAddress: address,
+                    }
+                  : {}),
                 custModalOpen: false,
                 modalContext: "",
               }
         );
         
-        if (!selectedData.currCode) {
+        if (!selectedData.currCode || (!isShipTo && !custDetails.salesRepCode)) {
             const payload = { CUST_CODE: selectedData.custCode };
             const response = await postRequest("getCustomer", JSON.stringify(payload));
 
             if (response.success) {
-                const data = JSON.parse(response.data[0].result);
-                custDetails.currCode = data[0]?.currCode;
-                custDetails.attention = data[0]?.custContact;
-                custDetails.billtermCode = data[0]?.billtermCode;
-                custDetails.billtermName = data[0]?.billtermName;
+                const customerRow = JSON.parse(response.data[0].result)?.[0] || {};
+                custDetails.currCode = customerRow?.currCode || custDetails.currCode;
+                custDetails.attention = customerRow?.custContact || custDetails.attention;
+                custDetails.billtermCode = customerRow?.billtermCode || custDetails.billtermCode;
+                custDetails.billtermName = customerRow?.billtermName || custDetails.billtermName;
+                if (!isShipTo) {
+                  custDetails.salesRepCode =
+                    customerRow?.salesRepCode ||  custDetails.salesRepCode;
+                }
             } else {
                 console.warn("API call for getCustomer returned success: false", response.message);
             }
         }
 
+        if (!isShipTo && custDetails.salesRepCode) {
+            const salesRepRow = await useTopSalesRepRow(custDetails.salesRepCode);
+            custDetails.salesRepName =
+              salesRepRow?.salesRepName || custDetails.salesRepName;
+        }
+
         await Promise.all([
             handleSelectCurrency(custDetails.currCode),
             handleSelectBillTerm(custDetails.billtermCode),
-            updateState({ contactPerson: custDetails.attention })
+            updateState({
+              contactPerson: custDetails.attention,
+              ...(!isShipTo
+                ? {
+                    salesRepCode: custDetails.salesRepCode,
+                    salesRepName: custDetails.salesRepName,
+                  }
+                : {}),
+            })
         ]);
+
+        if (!isShipTo && custDetails.salesRepCode !== salesRepRef.current.code) {
+            await confirmApplyHeaderValueToDetails({
+              headerLabel: "Sales Rep",
+              detailField: "salesRepCode",
+              detailValue: custDetails.salesRepCode,
+            });
+        }
+
+        if (!isShipTo) {
+            salesRepRef.current = {
+              code: custDetails.salesRepCode,
+              name: custDetails.salesRepName,
+            };
+        }
 
     } catch (error) {
         console.error("Error fetching customer details:", error);
@@ -1219,6 +1679,57 @@ const handleCloseRcModal = async (selectedRc) => {
 
   updateState({
     showRcModal: false,
+    selectedRowIndex: null,
+    modalContext: "",
+  });
+};
+
+const handleCloseSalesRepModal = (selectedSalesRep) => {
+  if (modalContext === "headerSalesRep" && selectedSalesRep) {
+    const nextSalesRepCode = selectedSalesRep.salesRepCode || "";
+    const nextSalesRepName = selectedSalesRep.salesRepName || "";
+
+    updateState({
+      salesRepCode: nextSalesRepCode,
+      salesRepName: nextSalesRepName,
+      showSalesRepModal: false,
+      selectedRowIndex: null,
+      modalContext: "",
+    });
+
+    if (nextSalesRepCode !== salesRepRef.current.code) {
+      confirmApplyHeaderValueToDetails({
+        headerLabel: "Sales Rep",
+        detailField: "salesRepCode",
+        detailValue: nextSalesRepCode,
+      });
+    }
+
+    salesRepRef.current = {
+      code: nextSalesRepCode,
+      name: nextSalesRepName,
+    };
+    return;
+  }
+
+  if (modalContext === "detailSalesRep" && selectedRowIndex !== null && selectedSalesRep) {
+    const updatedRows = [...detailRows];
+    updatedRows[selectedRowIndex] = {
+      ...updatedRows[selectedRowIndex],
+      salesRepCode: selectedSalesRep.salesRepCode || "",
+    };
+
+    updateState({
+      detailRows: updatedRows,
+      showSalesRepModal: false,
+      selectedRowIndex: null,
+      modalContext: "",
+    });
+    return;
+  }
+
+  updateState({
+    showSalesRepModal: false,
     selectedRowIndex: null,
     modalContext: "",
   });
@@ -1276,27 +1787,43 @@ const handleCloseBillTermModal = async (selectedBillTerm) => {
 }
 
 
-const handleCloseItemModal = (selectedItems) => {
+const handleCloseItemModal = async (selectedItems) => {
   const records = normalizeItemModalRecords(selectedItems);
 
   if (selectionContext === "rowItemLookup" && selectedRowIndex !== null && records.length > 0) {
-    const selectedItem = records[0];
+    const [selectedItem] = getFilteredDuplicateFreeItems(records, selectedRowIndex);
+    if (!selectedItem) {
+      updateState({
+        showItemModal: false,
+        selectedRowIndex: null,
+        insertAfterIndex: null,
+        selectionContext: "",
+      });
+      return;
+    }
+    const priceMatrixRows = await fetchPriceMatrixRows([selectedItem]);
     const updatedRows = [...detailRows];
-    updatedRows[selectedRowIndex] = {
+    const baseRow = {
       ...updatedRows[selectedRowIndex],
       itemCode: selectedItem?.itemCode || "",
       itemName: selectedItem?.itemName || "",
       itemSpecs: selectedItem?.itemSpecs || updatedRows[selectedRowIndex]?.itemSpecs || "",
       uomCode: selectedItem?.uomCode || "",
       pmType: selectedItem?.pmType || updatedRows[selectedRowIndex]?.pmType || "",
-      groupId: selectedItem?.groupId || updatedRows[selectedRowIndex]?.groupId || "",
+      groupId: updatedRows[selectedRowIndex]?.groupId || "",
       pmId: selectedItem?.pmId || updatedRows[selectedRowIndex]?.pmId || "",
     };
+    const priceRow = getPriceMatrixRowForItem(priceMatrixRows, selectedItem);
+    updatedRows[selectedRowIndex] = applyPriceMatrixToDetailRow(baseRow, priceRow);
     updateState({ detailRows: updatedRows });
+    updateTotals(updatedRows);
   }
 
   if (selectionContext === "multiAdd" && records.length > 0) {
-    handleInsertSelectedItems(records);
+    const filteredRecords = getFilteredDuplicateFreeItems(records);
+    if (filteredRecords.length > 0) {
+      await handleInsertSelectedItems(filteredRecords);
+    }
   }
 
   updateState({
@@ -1355,6 +1882,45 @@ const handleSODetailRowChange = (index, field, value) => {
     ...discountAmountFields,
   ];
   const roundTo2 = (num) => Number((Number(num) || 0).toFixed(2));
+  const zeroValueByField = (targetField) => {
+    if (targetField === "sellingPrice") {
+      return formatNumber(0, sellingPriceDecimals);
+    }
+
+    if (targetField === "soQuantity" || targetField === "drQuantity" || targetField === "siQuantity") {
+      return formatNumber(0, quantityDecimals);
+    }
+
+    return formatNumber(0);
+  };
+
+  const buildFreeItemRow = (row, isFree) => {
+    if (!isFree) {
+      return {
+        ...row,
+        freeItem: "",
+      };
+    }
+
+    const zeroedRow = {
+      ...row,
+      freeItem: "Y",
+      sellingPrice: formatNumber(0, sellingPriceDecimals),
+      grossAmount: formatNumber(0),
+      totDiscount: formatNumber(0),
+      netAmount: formatNumber(0),
+    };
+
+    discountRateFields.forEach((discountField) => {
+      zeroedRow[discountField] = formatNumber(0);
+    });
+
+    discountAmountFields.forEach((discountField) => {
+      zeroedRow[discountField] = formatNumber(0);
+    });
+
+    return zeroedRow;
+  };
 
   const recalculateSODetailRow = (row, changedField) => {
     const quantity = parseFormattedNumber(row.soQuantity || 0) || 0;
@@ -1413,6 +1979,28 @@ const handleSODetailRowChange = (index, field, value) => {
     [field]: value,
   };
 
+  if (field === "freeItem") {
+    updatedRow = buildFreeItemRow(updatedRow, value === "Y");
+    updatedRows[index] = updatedRow;
+    updateState({ detailRows: updatedRows });
+    updateTotals(updatedRows);
+    return;
+  }
+
+  if (
+    updatedRows[index]?.freeItem === "Y" &&
+    ["sellingPrice", ...discountRateFields, ...discountAmountFields].includes(field)
+  ) {
+    updatedRow = {
+      ...updatedRows[index],
+      [field]: zeroValueByField(field),
+    };
+    updatedRows[index] = buildFreeItemRow(updatedRow, true);
+    updateState({ detailRows: updatedRows });
+    updateTotals(updatedRows);
+    return;
+  }
+
   if (calculationTriggerFields.includes(field)) {
     updatedRow = recalculateSODetailRow(updatedRow, field);
   }
@@ -1457,6 +2045,14 @@ const focusNextSODetailField = (currentIndex, field) => {
   requestAnimationFrame(() => {
     document.getElementById(`${field}-${nextIndex}`)?.focus();
   });
+};
+
+const handleEditableZeroClearOnFocus = (event, isEditable) => {
+  if (!isEditable) return;
+
+  if (parseFormattedNumber(event.target.value) === 0) {
+    event.target.value = "";
+  }
 };
 
 
@@ -1555,12 +2151,12 @@ return (
               value={state.documentNo || documentNo || ""}
               disabled={state.isDocNoDisabled}
               onChange={(val) => updateState({ documentNo: val })}
-              onBlur={handleSviNoBlur}
+              onBlur={handlesoNoBlur}
               onLookup={() => updateState({ showAllTranDocNo: true })}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
-                  handleSviNoBlur();
+                  handlesoNoBlur();
                   document.getElementById("documentDate")?.focus();
                 }
               }}
@@ -1617,12 +2213,12 @@ return (
             />
 
             <FieldRenderer
-              id="billToAddress1"
+              id="billToAddress"
               label="Bill To Address"
               type="text"
-              value={billToAddress1 || ""}
+              value={billToAddress || ""}
               disabled={isFormDisabled}
-              onChange={(val) => updateState({ billToAddress1: val })}
+              onChange={(val) => updateState({ billToAddress: val })}
             />
           </div>
 
@@ -1647,6 +2243,14 @@ return (
               value={customerPoNo || ""}
               disabled={isFormDisabled}
               onChange={(val) => updateState({ customerPoNo: val })}
+              onBlur={handleHeaderCustomerPoBlur}
+              onKeyDown={async (e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  await handleHeaderCustomerPoBlur();
+                  e.currentTarget?.blur();
+                }
+              }}
             />
 
             <div className="relative w-full">
@@ -1692,19 +2296,106 @@ return (
               readOnly
             />
 
-            <FieldRenderer
-              id="shipToAddress1"
-              label="Ship To Address"
-              type="lookup"
-              value={shipToAddress1 || ""}
-              disabled={isFormDisabled}
-              readOnly
-              lookupDisabled={isFetchDisabled}
-              onLookup={() => {}}
-            />
+            <div className="relative w-full">
+              <div className="relative flex items-center w-full">
+                <input
+                  id="shipToAddress"
+                  type="text"
+                  value={shipToAddress || ""}
+                  disabled={isFormDisabled}
+                  onChange={(e) => updateState({ shipToAddress: e.target.value })}
+                  className={`peer w-full h-8 sm:h-8 global-ref-textbox-ui !px-2 !font-normal rounded-lg pr-12 ${
+                    !isFormDisabled
+                      ? "global-ref-textbox-enabled"
+                      : "global-ref-textbox-disabled"
+                  } focus-visible:ring-0 focus-visible:ring-offset-0 border shadow-none transition-all`}
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    !isFormDisabled &&
+                    !isFetchDisabled &&
+                    updateState({ custModalOpen: true, modalContext: "shipTo" })
+                  }
+                  disabled={isFormDisabled || isFetchDisabled}
+                  title="Search"
+                  className={`absolute right-0 top-0 h-8 sm:h-8 w-10 flex items-center justify-center rounded-r-lg border border-l-0 transition-colors ${
+                    !isFormDisabled && !isFetchDisabled
+                      ? "bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white"
+                      : "bg-gray-100 text-gray-400"
+                  }`}
+                >
+                  <FontAwesomeIcon icon={faMagnifyingGlass} className="text-sm" />
+                </button>
+              </div>
+              <label
+                htmlFor="shipToAddress"
+                className={`global-ref-floating-label ${
+                  !isFormDisabled
+                    ? "global-ref-label-enabled"
+                    : "global-ref-label-disabled"
+                }`}
+              >
+                Ship To Address
+              </label>
+            </div>
           </div>
 
           <div className="global-tran-textbox-group-div-ui">
+
+            <div className="flex gap-4">
+              <input type="hidden" id="currCode" value={currCode || ""} readOnly />
+
+              <div className="flex-grow w-2/3">
+                <FieldRenderer
+                  id="currName"
+                  label="Currency"
+                  value={
+                    currCode
+                      ? `${currCode}${currName ? ` - ${currName}` : ""}`
+                      : ""
+                  }
+                  disabled
+                  readOnly
+                  type="text"
+                />
+              </div>
+
+              <div className="flex-grow">
+                <FieldRenderer
+                  id="currRate"
+                  label="Currency Rate"
+                  type="amount"
+                  value={currRate || ""}
+                  disabled={isFormDisabled || glCurrDefault === currCode}
+                  onChange={(val) => {
+                    const sanitizedValue = String(val).replace(/[^0-9.]/g, "");
+                    if (/^\d*\.?\d{0,6}$/.test(sanitizedValue) || sanitizedValue === "") {
+                      updateState({ currRate: sanitizedValue });
+                    }
+                  }}
+                  onBlur={handleCurrRateNoBlur}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      document.getElementById("refDocNo1")?.focus();
+                    }
+                  }}
+                  onFocus={(e) => {
+                    handleEditableZeroClearOnFocus(e, !isFormDisabled);
+                  }}
+                />
+              </div>
+            </div>
+
+            <FieldRenderer
+              id="contactPerson"
+              label="Contact Person"
+              type="text"
+              value={contactPerson || ""}
+              disabled={isFormDisabled}
+              onChange={(val) => updateState({ contactPerson: val })}
+            />
 
             <FieldRenderer
               id="billtermName"
@@ -1721,11 +2412,13 @@ return (
             <FieldRenderer
               id="salesRepName"
               label="Sales Rep"
+              required
               type="lookup"
               value={salesRepName || ""}
               disabled={isFormDisabled}
               readOnly
-              lookupDisabled
+              lookupDisabled={isFetchDisabled}
+              onLookup={() => updateState({ showSalesRepModal: true, modalContext: "headerSalesRep" })}
             />
 
             <FieldRenderer
@@ -1763,63 +2456,6 @@ return (
 
           <div className="global-tran-textbox-group-div-ui">
             <FieldRenderer
-              id="contactPerson"
-              label="Contact Person"
-              type="text"
-              value={contactPerson || ""}
-              disabled={isFormDisabled}
-              onChange={(val) => updateState({ contactPerson: val })}
-            />
-
-            <div className="flex gap-4">
-              <input type="hidden" id="currCode" value={currCode || ""} readOnly />
-
-              <div className="flex-grow w-2/3">
-                <FieldRenderer
-                  id="currName"
-                  label="Currency"
-                  value={
-                    currCode
-                      ? `${currCode}${currName ? ` - ${currName}` : ""}`
-                      : ""
-                  }
-                  disabled={isFormDisabled}
-                  readOnly
-                  type="lookup"
-                  onLookup={() => updateState({ currencyModalOpen: true })}
-                />
-              </div>
-
-              <div className="flex-grow">
-                <FieldRenderer
-                  id="currRate"
-                  label="Currency Rate"
-                  type="amount"
-                  value={currRate || ""}
-                  disabled={isFormDisabled || glCurrDefault === currCode}
-                  onChange={(val) => {
-                    const sanitizedValue = String(val).replace(/[^0-9.]/g, "");
-                    if (/^\d*\.?\d{0,6}$/.test(sanitizedValue) || sanitizedValue === "") {
-                      updateState({ currRate: sanitizedValue });
-                    }
-                  }}
-                  onBlur={handleCurrRateNoBlur}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      document.getElementById("refDocNo1")?.focus();
-                    }
-                  }}
-                  onFocus={(e) => {
-                    if (parseFormattedNumber(e.target.value) === 0) {
-                      e.target.value = "";
-                    }
-                  }}
-                />
-              </div>
-            </div>
-
-            <FieldRenderer
               id="refDocNo1"
               label="Ref SO No. 1"
               type="text"
@@ -1844,9 +2480,9 @@ return (
               label="SO Status"
               type="select"
               value={soStatus || ""}
-              disabled={isFormDisabled}
+              disabled={!isHeaderSoStatusEditable}
               onChange={(val) => updateState({ soStatus: val })}
-              options={soStatusOptions.map((t) => ({
+              options={filteredHeaderSoStatusOptions.map((t) => ({
                 label: t.DROPDOWN_NAME,
                 value: t.DROPDOWN_CODE,
               }))}
@@ -1912,23 +2548,19 @@ return (
               <th className="global-tran-th-ui">SO Quantity</th>
               <th className="global-tran-th-ui">Selling Price</th>
               <th className="global-tran-th-ui">Gross Amount</th>
-              <th className="global-tran-th-ui">Disc Rate 1</th>
-              <th className="global-tran-th-ui">Disc Rate 2</th>
-              <th className="global-tran-th-ui">Disc Rate 3</th>
-              <th className="global-tran-th-ui">Disc Rate 4</th>
-              <th className="global-tran-th-ui">Disc Rate 5</th>
-              <th className="global-tran-th-ui">Disc Rate 6</th>
-              <th className="global-tran-th-ui">Disc Rate 7</th>
-              <th className="global-tran-th-ui">Disc Rate 8</th>
-              <th className="global-tran-th-ui">Disc Amount 1</th>
-              <th className="global-tran-th-ui">Disc Amount 2</th>
-              <th className="global-tran-th-ui">Disc Amount 3</th>
-              <th className="global-tran-th-ui">Disc Amount 4</th>
-              <th className="global-tran-th-ui">Disc Amount 5</th>
-              <th className="global-tran-th-ui">Disc Amount 6</th>
-              <th className="global-tran-th-ui">Disc Amount 7</th>
-              <th className="global-tran-th-ui">Disc Amount 8</th>
-              <th className="global-tran-th-ui">Total Discount</th>
+              {visibleDiscountRateFields.map((field, index) => (
+                <th key={field} className="global-tran-th-ui">
+                  {discountLevel === 1 ? "Disc Rate" : `Disc Rate ${index + 1}`}
+                </th>
+              ))}
+              {visibleDiscountAmountFields.map((field, index) => (
+                <th key={field} className="global-tran-th-ui">
+                  {discountLevel === 1 ? "Disc Amount" : `Disc Amount ${index + 1}`}
+                </th>
+              ))}
+              {showTotalDiscountColumn && (
+                <th className="global-tran-th-ui">Total Discount</th>
+              )}
               <th className="global-tran-th-ui">Net Amount</th>
               <th className="global-tran-th-ui">Delivery Date</th>
               <th className="global-tran-th-ui">Customer PO No.</th>
@@ -1946,9 +2578,23 @@ return (
             </tr>
           </thead>
 
+          <tbody className="relative">{detailRows.map((row, index) => {
+            const isExistingDocument = !!documentID;
+            const isStatusLocked = !isExistingDocument || ["X", "C"].includes(row.soStat || "O");
+            const hasDrQuantity = parseFormattedNumber(row.drQuantity || 0) > 0;
+            const canDeleteRow = !hasDrQuantity && (row.soStat || "O") === "O";
+            const soStatusOptions = hasDrQuantity
+              ? [
+                  { value: "O", label: "Open" },
+                  { value: "C", label: "Closed" },
+                ]
+              : [
+                  { value: "O", label: "Open" },
+                  { value: "C", label: "Closed" },
+                  { value: "X", label: "Cancelled" },
+                ];
 
-
-          <tbody className="relative">{detailRows.map((row, index) => (
+            return (
             <tr key={index} className="global-tran-tr-ui">
               
               {/* LN */}
@@ -1956,14 +2602,16 @@ return (
               
               <td className="global-tran-td-ui">
                 <select
-                  className="w-[90px] global-tran-td-inputclass-ui text-center"
+                  className="w-[90px] global-tran-td-inputclass-ui text-left"
                   value={row.soStat || "O"}
-                  disabled={isFormDisabled}
+                  disabled={isFormDisabled || isStatusLocked}
                   onChange={(e) => handleSODetailRowChange(index, "soStat", e.target.value)}
                 >
-                  <option value="O">Open</option>
-                  <option value="C">Closed</option>
-                  <option value="X">Cancelled</option>
+                  {soStatusOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </td>
 
@@ -2020,6 +2668,21 @@ return (
                   readOnly={isFormDisabled}
                   onChange={(e) => handleSODetailRowChange(index, "uomCode", e.target.value)}
                 />
+                <input
+                  type="hidden"
+                  value={row.pmType || ""}
+                  readOnly
+                />
+                <input
+                  type="hidden"
+                  value={row.groupId || ""}
+                  readOnly
+                />
+                <input
+                  type="hidden"
+                  value={row.pmId || ""}
+                  readOnly
+                />
               </td>
 
               <td className="global-tran-td-ui">
@@ -2038,9 +2701,10 @@ return (
                     }
                   }}
                   onFocus={(e) => {
-                    if (parseFormattedNumber(e.target.value) === 0) {
-                      e.target.value = "";
-                    }
+                    handleEditableZeroClearOnFocus(
+                      e,
+                      !isFormDisabled
+                    );
                   }}
                   onBlur={(e) => {
                     const num = parseFormattedNumber(e.target.value);
@@ -2071,9 +2735,9 @@ return (
                   id={`sellingPrice-${index}`}
                   className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
                   value={row.sellingPrice || ""}
-                  readOnly={isFormDisabled || !isSellingPriceAndDiscountEditable}
+                  readOnly={isFormDisabled || !isSellingPriceAndDiscountEditable || row.freeItem === "Y"}
                   onChange={(e) => {
-                    if (!isSellingPriceAndDiscountEditable) return;
+                    if (!isSellingPriceAndDiscountEditable || row.freeItem === "Y") return;
                     const inputValue = e.target.value;
                     const sanitizedValue = inputValue.replace(/[^0-9.]/g, "");
                     const regex = new RegExp(`^\\d*\\.?\\d{0,${sellingPriceDecimals}}$`);
@@ -2082,9 +2746,10 @@ return (
                     }
                   }}
                   onFocus={(e) => {
-                    if (parseFormattedNumber(e.target.value) === 0) {
-                      e.target.value = "";
-                    }
+                    handleEditableZeroClearOnFocus(
+                      e,
+                      !isFormDisabled && isSellingPriceAndDiscountEditable && row.freeItem !== "Y"
+                    );
                   }}
                   onBlur={(e) => {
                     const num = parseFormattedNumber(e.target.value);
@@ -2119,16 +2784,16 @@ return (
                 />
               </td>
 
-              {["discRate1","discRate2","discRate3","discRate4","discRate5","discRate6","discRate7","discRate8"].map((field) => (
+              {visibleDiscountRateFields.map((field) => (
                 <td key={field} className="global-tran-td-ui">
                   <input
                     type="text"
                     id={`${field}-${index}`}
                     className="w-[90px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
                     value={row[field] || ""}
-                    readOnly={isFormDisabled || !isSellingPriceAndDiscountEditable}
+                    readOnly={isFormDisabled || !isSellingPriceAndDiscountEditable || row.freeItem === "Y"}
                     onChange={(e) => {
-                      if (!isSellingPriceAndDiscountEditable) return;
+                      if (!isSellingPriceAndDiscountEditable || row.freeItem === "Y") return;
                       const inputValue = e.target.value;
                       const sanitizedValue = inputValue.replace(/[^0-9.]/g, "");
                       const regex = /^\d*\.?\d{0,2}$/;
@@ -2137,9 +2802,10 @@ return (
                       }
                     }}
                     onFocus={(e) => {
-                      if (parseFormattedNumber(e.target.value) === 0) {
-                        e.target.value = "";
-                      }
+                      handleEditableZeroClearOnFocus(
+                        e,
+                        !isFormDisabled && isSellingPriceAndDiscountEditable && row.freeItem !== "Y"
+                      );
                     }}
                     onBlur={(e) => {
                       const num = parseFormattedNumber(e.target.value);
@@ -2165,16 +2831,16 @@ return (
                 </td>
               ))}
 
-              {["discAmount1","discAmount2","discAmount3","discAmount4","discAmount5","discAmount6","discAmount7","discAmount8"].map((field) => (
+              {visibleDiscountAmountFields.map((field) => (
                 <td key={field} className="global-tran-td-ui">
                   <input
                     type="text"
                     id={`${field}-${index}`}
                     className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
                     value={row[field] || ""}
-                    readOnly={isFormDisabled || !isSellingPriceAndDiscountEditable}
+                    readOnly={isFormDisabled || !isSellingPriceAndDiscountEditable || row.freeItem === "Y"}
                     onChange={(e) => {
-                      if (!isSellingPriceAndDiscountEditable) return;
+                      if (!isSellingPriceAndDiscountEditable || row.freeItem === "Y") return;
                       const inputValue = e.target.value;
                       const sanitizedValue = inputValue.replace(/[^0-9.]/g, "");
                       const regex = /^\d*\.?\d{0,2}$/;
@@ -2183,9 +2849,10 @@ return (
                       }
                     }}
                     onFocus={(e) => {
-                      if (parseFormattedNumber(e.target.value) === 0) {
-                        e.target.value = "";
-                      }
+                      handleEditableZeroClearOnFocus(
+                        e,
+                        !isFormDisabled && isSellingPriceAndDiscountEditable && row.freeItem !== "Y"
+                      );
                     }}
                     onBlur={(e) => {
                       const num = parseFormattedNumber(e.target.value);
@@ -2211,15 +2878,17 @@ return (
                 </td>
               ))}
 
-              <td className="global-tran-td-ui">
-                <input
-                  type="text"
-                  className="w-[110px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
-                  value={row.totDiscount || ""}
-                  readOnly={isFormDisabled}
-                  onChange={(e) => handleSODetailRowChange(index, "totDiscount", e.target.value)}
-                />
-              </td>
+              {showTotalDiscountColumn && (
+                <td className="global-tran-td-ui">
+                  <input
+                    type="text"
+                    className="w-[110px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
+                    value={row.totDiscount || ""}
+                    readOnly={isFormDisabled}
+                    onChange={(e) => handleSODetailRowChange(index, "totDiscount", e.target.value)}
+                  />
+                </td>
+              )}
 
               <td className="global-tran-td-ui">
                 <input
@@ -2236,7 +2905,7 @@ return (
                   id={`delDate${index}`}
                   value={row.delDate || ""}
                   disabled={isFormDisabled}
-                  className="w-[110px] global-tran-td-inputclass-ui text-center"
+                  className="w-[110px] global-tran-td-inputclass-ui pr-7 text-center"
                   updateState={(updates) => {
                     if (updates[`delDate${index}`] !== undefined) {
                       handleSODetailRowChange(index, "delDate", updates[`delDate${index}`]);
@@ -2267,28 +2936,44 @@ return (
                   <input
                     type="text"
                     className="w-[110px] pr-6 global-tran-td-inputclass-ui text-center cursor-pointer"
-                    value={row.repCode || ""}
+                    value={row.salesRepCode || ""}
                     readOnly
                   />
                   {!isFormDisabled && (
                     <FontAwesomeIcon
                       icon={faMagnifyingGlass}
                       className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                      onClick={() =>
+                        updateState({
+                          showSalesRepModal: true,
+                          selectedRowIndex: index,
+                          modalContext: "detailSalesRep",
+                        })
+                      }
                     />
                   )}
                 </div>
               </td>
 
               <td className="global-tran-td-ui">
-                <select
-                  className="w-[90px] global-tran-td-inputclass-ui text-center"
-                  value={row.freeItem || ""}
+                <button
+                  type="button"
+                  className={`w-[90px] h-7 rounded-full border text-[11px] font-semibold transition-colors ${
+                    row.freeItem === "Y"
+                      ? "border-blue-500 bg-blue-500/15 text-blue-700"
+                      : "border-slate-300 bg-white text-slate-600"
+                  } ${isFormDisabled ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}
                   disabled={isFormDisabled}
-                  onChange={(e) => handleSODetailRowChange(index, "freeItem", e.target.value)}
+                  onClick={() =>
+                    handleSODetailRowChange(
+                      index,
+                      "freeItem",
+                      row.freeItem === "Y" ? "" : "Y"
+                    )
+                  }
                 >
-                  <option value=""></option>
-                  <option value="Y">Yes</option>
-                </select>
+                  {row.freeItem === "Y" ? "Yes" : "No"}
+                </button>
               </td>
 
               <td className="global-tran-td-ui">
@@ -2341,6 +3026,7 @@ return (
                           type="button"
                           className="global-tran-td-button-delete-ui"
                           onClick={() => handleDeleteRow(index)}
+                          disabled={!canDeleteRow}
                         >
                           <FontAwesomeIcon icon={faTrashAlt} />
                         </button>
@@ -2350,7 +3036,8 @@ return (
 
                         
               </tr>
-            ))}
+            );
+          })}
           </tbody>
 
 
@@ -2367,14 +3054,7 @@ return (
     {/* Add Button */}
     <div className="global-tran-tab-footer-button-div-ui">
       <button
-        onClick={() =>
-          updateState({
-            showItemModal: true,
-            selectionContext: "multiAdd",
-            selectedRowIndex: null,
-            insertAfterIndex: null,
-          })
-        }
+        onClick={handleOpenAddItemModal}
         className="global-tran-tab-footer-button-add-ui"
         style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
       >
@@ -2399,14 +3079,42 @@ return (
           </div>
         )}
 
-        {/* Total Invoice Amount */}
+        {/* Total Gross Amount */}
         <div className="global-tran-tab-footer-total-label-ui">
-          Total Invoice Amount:
+          Total Gross Amount:
         </div>
-        <div id="totInvoiceAmount" className="global-tran-tab-footer-total-value-ui">
+        <div className="global-tran-tab-footer-total-value-ui">
+          {currRate === 1
+            ? totals.totalGrossAmount
+            : formatNumber(parseFormattedNumber(totals.totalGrossAmount) * currRate)}
+        </div>
+        {currRate > 1 && (
+          <div className="global-tran-tab-footer-total-value-ui">
+            {totals.totalGrossAmount}
+          </div>
+        )}
+
+        <div className="global-tran-tab-footer-total-label-ui">
+          Total Discount Amount:
+        </div>
+        <div className="global-tran-tab-footer-total-value-ui">
+          {currRate === 1
+            ? totals.totalDiscountAmount
+            : formatNumber(parseFormattedNumber(totals.totalDiscountAmount) * currRate)}
+        </div>
+        {currRate > 1 && (
+          <div className="global-tran-tab-footer-total-value-ui">
+            {totals.totalDiscountAmount}
+          </div>
+        )}
+
+        <div className="global-tran-tab-footer-total-label-ui">
+          Total Net Amount:
+        </div>
+        <div className="global-tran-tab-footer-total-value-ui">
           {currRate === 1
             ? totals.totalNetAmount
-            : formatNumber( parseFormattedNumber(totals.totalNetAmount)  * currRate)}
+            : formatNumber(parseFormattedNumber(totals.totalNetAmount) * currRate)}
         </div>
         {currRate > 1 && (
           <div className="global-tran-tab-footer-total-value-ui">
@@ -2470,6 +3178,14 @@ return (
         enableMultiSelect={selectionContext === "multiAdd"}
       />
     )}
+
+    {showSalesRepModal && (
+      <SearchSalesRepRef
+        isOpen={showSalesRepModal}
+        onClose={handleCloseSalesRepModal}
+      />
+    )}
+
     {/* RC Code Modal */}
     {showRcModal && (
       <RCLookupModal 
@@ -2516,7 +3232,7 @@ return (
     {showAllTranDocNo && (
       <AllTranDocNo
         isOpen={showAllTranDocNo}
-        params={{branchCode,branchName,docType,documentTitle,fieldNo : "sviNo"}}
+        params={{branchCode,branchName,docType,documentTitle,fieldNo : "soNo"}}
         onRetrieve={handleTranDocNoRetrieval}
         onResponse={{documentNo}}
         onSelected={handleTranDocNoSelection}
@@ -2532,15 +3248,12 @@ return (
   <AllTranHistory
     showHeader={false}
     isActive={topTab === "history"}
-    endpoint="/getSVIHistory"
-    cacheKey={`SVI:${state.branchCode || ""}:${state.fromDate || ""}:${state.toDate || ""}`}
-    activeTabKey="SVI_Summary"
+    endpoint="/getSOHistory"
+    cacheKey={`SO:${state.branchCode || ""}`}
+    activeTabKey="SO_Summary"
     branchCode={state.branchCode}
-    startDate={state.fromDate}
-    endDate={state.toDate}
     status={(() => {
       const s = (state.status || "").toUpperCase();
-      if (s === "FINALIZED") return "F";
       if (s === "CANCELLED") return "X";
       if (s === "CLOSED") return "C";
       if (s === "OPEN") return "";

@@ -75,6 +75,7 @@ export const useTransactionUpsert = async (docCode, glData, updateState, idKey, 
     try {
         updateState({ isLoading: true });
         const payload = { json_data: glData };
+        console.log(JSON.stringify(payload))
         const response = await postRequest("upsert" + docCode, JSON.stringify(payload));
 
         if (response?.status === 'success' && response.data && response.data.length > 0) {

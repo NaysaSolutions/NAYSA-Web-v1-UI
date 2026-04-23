@@ -163,11 +163,12 @@ const DateFormatInput = ({
   const { minYear, currentYear, maxYear } = getAllowedYearRange();
 
   const handleBlur = (e) => {
-    const isValid = usehandleDateBlur(value || "", fieldName, updateState);
+    const currentValue = e?.target?.value || value || "";
+    const isValid = usehandleDateBlur(currentValue, fieldName, updateState);
 
     if (onBlurCustom) {
       onBlurCustom(e, {
-        value: value || "",
+        value: currentValue,
         field: fieldName,
         isValid,
       });
