@@ -3,7 +3,6 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useQuery } from "@tanstack/react-query";
 import { postRequest } from "@/NAYSA Cloud/Configuration/BaseURL";
 import { exportGenericHistoryExcel, exportGenericQueryExcel } from "@/NAYSA Cloud/Global/report";
-import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 import {
   format,
@@ -61,6 +60,41 @@ Modal.setAppElement("#root");
 
 const ACTION_COL_WIDTH = 64;
 const MOBILE_MAX_COLUMNS = 100;
+
+const LoadingDots = ({ label = "Loading, please wait...", fullScreen = false }) => {
+  const dotSizeClass = fullScreen ? "h-2.5 w-2.5" : "h-1.5 w-1.5";
+  const dots = (
+    <div className={`flex items-center justify-center ${fullScreen ? "gap-1.5" : "gap-1"}`} aria-hidden="true">
+      {[0, 150, 300].map((delay) => (
+        <span
+          key={delay}
+          className={`${dotSizeClass} rounded-full bg-blue-600 animate-bounce`}
+          style={{ animationDelay: `${delay}ms` }}
+        />
+      ))}
+    </div>
+  );
+
+  if (!fullScreen) {
+    return (
+      <div className="flex items-center justify-center h-4 w-8" title={label}>
+        {dots}
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center animate-in fade-in duration-200">
+      <div className="absolute inset-0 bg-slate-900/10" />
+      <div className="relative flex flex-col items-center justify-center gap-3 px-6 py-5 rounded-2xl bg-white/85 backdrop-blur-md border border-white/40 shadow-2xl">
+        {dots}
+        <div className="text-xs sm:text-sm font-medium text-slate-700 tracking-wide text-center">
+          {label}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 /* ------------------ window-level cache (survives route swaps) ------------------ */
 function getGlobalCache() {
@@ -180,7 +214,7 @@ const AllTranHistory = (props) => {
     { value: "X", label: "CANCELLED" },
   ];
 
-  const restrictedTabs = ["JO_", "PO_", "PR_"];
+  const restrictedTabs = ["JO_", "PO_", "PR_","SO_"];
   const isRestricted = restrictedTabs.some((prefix) => activeTab?.includes(prefix));
 
   const statusOptions =
@@ -1909,9 +1943,9 @@ const handleExportConfirm = async (enteredFileName) => {
           </div>
         )}
 
-<div className="px-4 overflow-x-auto">
-  <div className="flex items-center justify-between gap-2 min-w-max">
-    <div className={`flex gap-1 whitespace-nowrap`}>
+<div className="px-4">
+  <div className="flex items-center justify-between gap-2">
+    <div className="flex gap-1 whitespace-nowrap overflow-x-auto min-w-0">
       {Object.keys(tabData).map((tabKey) => {
         const isTabActive = activeTab === tabKey;
         const tabLabel = tabKey.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -1945,35 +1979,15 @@ const handleExportConfirm = async (enteredFileName) => {
       })}
     </div>
 
-        <div className="flex items-center shrink-0 min-w-[28px] justify-end">
+        <div className="flex items-center shrink-0 min-w-[28px] justify-end gap-2">
           {refreshing && (
-            <svg
-              className="animate-spin h-4 w-4 text-blue-600"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              title="Refreshing..."
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              />
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-              />
-            </svg>
+            <LoadingDots label="Refreshing..." />
           )}
           </div>
         </div>
       </div>
 
-        <div className="bg-white shadow-md rounded-md overflow-hidden p-2 mt-0 mb-4 mx-4">
+        <div className="bg-white shadow-md rounded-md overflow-hidden px-2 pt-2 pb-0 mt-0 mb-4 mx-4">
           {activeTab && visibleCols.length > 0  && (
             <div className="p-1 bg-white rounded-md flex flex-col md:flex-row md:items-center md:justify-between gap-2 shrink-0 mb-0"
                  onDragOver={e => e.preventDefault()}
@@ -1995,9 +2009,29 @@ const handleExportConfirm = async (enteredFileName) => {
                 ))}
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap justify-end">
+              <div className="flex items-center gap-2 flex-nowrap justify-end w-full md:w-auto overflow-x-auto">
+                {groupBy.length > 0 && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <label className="inline-flex items-center cursor-pointer select-none h-8">
+                      <input type="checkbox" checked={allExpanded} onChange={() => toggleAllGroups(!allExpanded)} className="sr-only" />
+                      <div className={`relative rounded-full transition-colors duration-200 ${allExpanded ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-600"} w-24 h-8`}>
+                        <span className={`absolute rounded-full bg-white shadow-md transition-all duration-200 ${allExpanded ? "left-[66px]" : "left-[2px]"} top-[2px] w-7 h-7`} />
+                        <span className={`absolute inset-0 flex items-center font-medium pointer-events-none text-[11px] ${allExpanded ? "justify-start pl-4" : "justify-end pr-4"}`}>{allExpanded ? "Collapse" : "Expand"}</span>
+                      </div>
+                    </label>
+                    <button onClick={() => { setGroupByByTab(p => ({...p, [activeTab]: []})); setExpandedGroupsByTab(p => ({...p, [activeTab]: {}})); }} className="font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition h-8 text-xs px-3">
+                      <FontAwesomeIcon icon={faTimes} className="mr-1" /> Remove
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 min-w-0 flex-1 md:flex-none">
+                  <input type="text" value={globalSearch} onChange={e => setGlobalSearch(e.target.value)}
+                         placeholder="Quick Search..." className="w-full min-w-[120px] rounded-md border border-gray-300 focus:ring-1 focus:ring-blue-300 outline-none h-8 md:w-48 px-3 text-xs" />
+                </div>
+
                 {isMobile && (
-                  <div className="inline-flex overflow-hidden rounded-md border border-gray-300">
+                  <div className="inline-flex overflow-hidden rounded-md border border-gray-300 bg-white shadow-sm shrink-0">
                     <button
                       type="button"
                       onClick={() => setUseCardView(false)}
@@ -2017,26 +2051,6 @@ const handleExportConfirm = async (enteredFileName) => {
                   </div>
                 )}
 
-                {groupBy.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <label className="inline-flex items-center cursor-pointer select-none h-8">
-                      <input type="checkbox" checked={allExpanded} onChange={() => toggleAllGroups(!allExpanded)} className="sr-only" />
-                      <div className={`relative rounded-full transition-colors duration-200 ${allExpanded ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-600"} w-24 h-8`}>
-                        <span className={`absolute rounded-full bg-white shadow-md transition-all duration-200 ${allExpanded ? "left-[66px]" : "left-[2px]"} top-[2px] w-7 h-7`} />
-                        <span className={`absolute inset-0 flex items-center font-medium pointer-events-none text-[11px] ${allExpanded ? "justify-start pl-4" : "justify-end pr-4"}`}>{allExpanded ? "Collapse" : "Expand"}</span>
-                      </div>
-                    </label>
-                    <button onClick={() => { setGroupByByTab(p => ({...p, [activeTab]: []})); setExpandedGroupsByTab(p => ({...p, [activeTab]: {}})); }} className="font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition h-8 text-xs px-3">
-                      <FontAwesomeIcon icon={faTimes} className="mr-1" /> Remove
-                    </button>
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2 w-full md:w-auto">
-                  <input type="text" value={globalSearch} onChange={e => setGlobalSearch(e.target.value)}
-                         placeholder="Quick Search..." className="rounded-md border border-gray-300 focus:ring-1 focus:ring-blue-300 outline-none h-8 md:w-48 px-3 text-xs" />
-                </div>
-
                 {!isMobile && (
                   <label className="inline-flex items-center cursor-pointer select-none shrink-0 h-8">
                       <input type="checkbox" checked={autoFillGridState} onChange={() => setAutoFillGridState(!autoFillGridState)} className="sr-only" />
@@ -2047,9 +2061,9 @@ const handleExportConfirm = async (enteredFileName) => {
                   </label>
                 )}
 
-                <div className="relative" data-sgrt-export>
+                <div className="relative shrink-0" data-sgrt-export>
                   <button onClick={() => filteredData.length > 0 && setShowExportMenu(!showExportMenu)} disabled={filteredData.length === 0}
-                          className="text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 transition flex items-center justify-center h-8 px-3">
+                          className="text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 transition flex items-center justify-center h-8 px-3 whitespace-nowrap">
                     <FontAwesomeIcon icon={faFileExport} className="mr-1" /> Export
                   </button>
                  {showExportMenu && (
@@ -2101,8 +2115,8 @@ const handleExportConfirm = async (enteredFileName) => {
                   )}
                 </div>
 
-                <div className="relative" data-sgrt-cols>
-                  <button onClick={() => setShowColumnChooser(!showColumnChooser)} className="text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition flex items-center justify-center h-8 px-3">
+                <div className="relative shrink-0" data-sgrt-cols>
+                  <button onClick={() => setShowColumnChooser(!showColumnChooser)} className="text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition flex items-center justify-center h-8 px-3 whitespace-nowrap">
                     <FontAwesomeIcon icon={faColumns} className="mr-1" /> Columns
                   </button>
                   {showColumnChooser && (
@@ -2878,7 +2892,9 @@ const handleExportConfirm = async (enteredFileName) => {
         onConfirm={handleExportConfirm}
       />
 
-      {(loading || exporting) && <LoadingSpinner />}     
+      {(loading || exporting) && (
+        <LoadingDots label={exporting ? "Exporting, please wait..." : "Loading, please wait..."} fullScreen />
+      )}
     </>
   );
 };

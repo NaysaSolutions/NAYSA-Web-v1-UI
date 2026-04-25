@@ -154,6 +154,7 @@ const DateFormatInput = ({
   placeholder = "mm/dd/yyyy",
   onChangeCustom,
   onBlurCustom,
+  onKeyDownCustom,
   showCalendar = true,
   ...props
 }) => {
@@ -215,6 +216,13 @@ const DateFormatInput = ({
       if (onChangeCustom) {
         onChangeCustom("", fieldName, "");
       }
+    }
+
+    if (onKeyDownCustom) {
+      onKeyDownCustom(e, {
+        value: e?.currentTarget?.value || "",
+        field: fieldName,
+      });
     }
   };
 

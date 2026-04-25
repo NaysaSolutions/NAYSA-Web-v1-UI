@@ -558,10 +558,19 @@ const AllTranDocNo = ({
     (modalClose, key) => {
       if (mode !== "retrieve") return;
       const current = getCurrentDocNo();
+
+      const fetchedDocumentNo = String(onResponse?.documentNo ?? "").trim();
+      const isManualRetrieve = !key;
+
+      if (isManualRetrieve && current && current === fetchedDocumentNo) {
+        onClose?.();
+        return;
+      }
+
       onRetrieve?.({ docNo: current, key, modalClose });
       console.log(current);
     },
-    [mode, getCurrentDocNo, onRetrieve]
+    [mode, getCurrentDocNo, onRetrieve, onResponse, onClose]
   );
 
   const SelectDocument = useCallback(async () => {

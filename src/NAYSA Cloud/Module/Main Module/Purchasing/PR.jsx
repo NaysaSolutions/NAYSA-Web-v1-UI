@@ -65,6 +65,11 @@ import {
 } from '@/NAYSA Cloud/Global/dates';
 
 import DateFormatInput from '@/NAYSA Cloud/Global/DateFormatInput.jsx';
+import {
+  transactionActionsCellStyle,
+  transactionActionsHeaderStyle,
+  useResizableTableColumns,
+} from '@/NAYSA Cloud/Global/datatable.jsx';
 
 
 import { useHandlePrint } from "@/NAYSA Cloud/Global/report";
@@ -86,8 +91,28 @@ import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 // Header
 import Header from "@/NAYSA Cloud/Components/Header";
 
+const toDateInputValue = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (match) {
+    const [, mm, dd, yyyy] = match;
+    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+  }
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    const yyyy = parsed.getFullYear();
+    const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+    const dd = String(parsed.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  return "";
+};
+
   const PR = () => {
   const loadedFromUrlRef = useRef(false);
+  const detailRowsRef = useRef([]);
   const navigate = useNavigate();
   const location = useLocation(); 
   const [isViewDocument, setIsViewDocument] = useState(false);
@@ -285,6 +310,10 @@ import Header from "@/NAYSA Cloud/Components/Header";
     msLookupModalOpen,
   } = state;
 
+  useEffect(() => {
+    detailRowsRef.current = detailRows || [];
+  }, [detailRows]);
+
   const isJobOrder = selectedPrTranType === "PR02";
   const [focusedCell, setFocusedCell] = useState(null);
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
@@ -303,6 +332,55 @@ import Header from "@/NAYSA Cloud/Components/Header";
   const isFormDisabled = isViewDocumentUrl || ["FINALIZED", "CANCELLED", "CLOSED"].includes(
     displayStatus
   );
+
+  const prDetailColumnDefs = [
+    { key: "ln", label: "LN", width: 56 },
+    { key: "prStatus", label: "PR Status", width: 100 },
+    { key: "invType", label: "Type", width: 80 },
+    { key: "serviceCode", label: "Job Code", width: 120 },
+    { key: "serviceName", label: "Scope of Work", width: 300 },
+    { key: "itemCode", label: "Item Code", width: 120 },
+    { key: "itemName", label: "Item Description", width: 300 },
+    { key: "itemSpecs", label: "Specification", width: 300 },
+    { key: "uomCode", label: "UOM", width: 80 },
+    { key: "qtyOnHand", label: "Qty on Hand", width: 130 },
+    { key: "qtyNeeded", label: "Qty Needed", width: 130 },
+    { key: "dateNeeded", label: "Date Needed", width: 140 },
+    { key: "poQty", label: "PO Qty", width: 120 },
+    { key: "rrQty", label: "RR Qty", width: 120 },
+    { key: "joNo", label: "JO No.", width: 120 },
+  ];
+
+  const {
+    getColumnStyle: getPrDetailColumnStyle,
+    getFrozenColumnStyle: getPrDetailFrozenStyle,
+    getOrderedColumns: getOrderedPrDetailColumns,
+    getSortedRows: getSortedPrDetailRows,
+    clearAllSorting: clearPrDetailSorting,
+    clearZeroValueOnFocus: clearPrDetailZeroOnFocus,
+    focusNextRowInput: focusNextPrDetailRowInput,
+    renderHeaderContextMenu: renderPrDetailHeaderContextMenu,
+    renderResizableHeader: renderPrDetailHeader,
+  } = useResizableTableColumns(prDetailColumnDefs);
+
+  const orderedPrDetailColumns = getOrderedPrDetailColumns(prDetailColumnDefs);
+  const visiblePrDetailColumns = orderedPrDetailColumns.filter((column) => {
+    if (["serviceCode", "serviceName", "joNo"].includes(column.key)) return isJobOrder;
+    if (["itemCode", "itemName", "qtyOnHand", "poQty", "rrQty"].includes(column.key)) return !isJobOrder;
+    return true;
+  });
+  const getPrDetailFallbackWidth = (key) => prDetailColumnDefs.find((column) => column.key === key)?.width || 120;
+  const getPrDetailCellStyle = (key, fallbackWidth) => ({
+    ...getPrDetailColumnStyle(key, fallbackWidth),
+    ...getPrDetailFrozenStyle(key, visiblePrDetailColumns, fallbackWidth, { isHeader: false }),
+  });
+
+  const sortedPrDetailRows = getSortedPrDetailRows(
+    detailRows.map((row, originalIndex) => ({ row, originalIndex })),
+    (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? ""
+  );
+
+  const prDetailEnterNextRowZeroClearFields = ["qtyNeeded", "uomQty2"];
 
  const updateTotalsDisplay = (qtyNeeded) => {
   setTotals({ totalQtyNeeded: formatNumber(qtyNeeded, 2) });
@@ -385,6 +463,7 @@ useEffect(() => {
 
   const handleReset = () => {
 
+    clearPrDetailSorting();
     loadCompanyData();
 
     
@@ -751,7 +830,7 @@ const handleAddBlankRow = (index) => {
 
   // When user clicks the "Add Line" button
   // When user clicks the "Add Line" button
-  const handleAddRowClick = () => {
+  const handleAddRowClick = async () => {
 
       if (documentStatus !=="O"){
         return;
@@ -762,7 +841,7 @@ const handleAddBlankRow = (index) => {
           "Header : Requesting Department": reqRcCode,
           "Header : Remarks": remarks,
         };
-        const isValid = useSwalvalidateRequiredFields(fieldsToCheck, "Add Item");
+        const isValid = await useSwalvalidateRequiredFields(fieldsToCheck, "Add Item");
         if (!isValid) return;
         if (isFormDisabled) return;
 
@@ -1009,9 +1088,10 @@ const handleDeleteRow = (index) => {
 
 
 const finalizeUpdate = (index, row) => {
-  const updatedRows = [...detailRows];
+  const updatedRows = [...(detailRowsRef.current || detailRows || [])];
   updatedRows[index] = row;
 
+  detailRowsRef.current = updatedRows;
   updateState({ detailRows: updatedRows });
   const totalQty = updatedRows.reduce(
     (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
@@ -1023,7 +1103,7 @@ const finalizeUpdate = (index, row) => {
 
 
 const handleDetailChange = (index, field, value, runCalculations = false) => {
-  const updatedRows = [...detailRows];
+  const updatedRows = [...(detailRowsRef.current || detailRows || [])];
   const row = { ...(updatedRows[index] || {}) };
   const numericFields = ["qtyOnHand", "qtyAlloc", "qtyNeeded", "uomQty2", "poQty", "rrQty"];
 
@@ -1536,6 +1616,102 @@ const handleDocNoBlur = () => {
 
 const hasExistingPO = detailRows.some(row => (parseFloat(row.poQty) || 0) > 0);
 
+const renderPrDetailColumn = (columnKey, row, index) => {
+  const columnWidth = getPrDetailFallbackWidth(columnKey);
+  const style = getPrDetailCellStyle(columnKey, columnWidth);
+  const rowLocked = isFormDisabled || row.prStatus !== "O" || (parseFormattedNumber(row.poQty) || 0) > 0;
+
+  const focusNextDetailCell = (field) => {
+    focusNextPrDetailRowInput(index, field, {
+      rows: detailRowsRef.current || detailRows,
+      zeroClearFields: prDetailEnterNextRowZeroClearFields,
+      parseValue: parseFormattedNumber,
+      onClearNextValue: (nextIndex, nextField, value) => handleDetailChange(nextIndex, nextField, value, false),
+    });
+  };
+
+  const textInput = (field, options = {}) => (
+    <input type="text" id={`${field}-${index}`} className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? isFormDisabled} disabled={options.disabled ?? false} tabIndex={options.tabIndex} maxLength={options.maxLength} onChange={(e) => handleDetailChange(index, field, e.target.value, false)} onKeyDown={(e) => { if (e.key !== "Enter" || options.readOnly || options.disabled || isFormDisabled) return; e.preventDefault(); focusNextDetailCell(field); }} />
+  );
+
+  const commitQtyInputValue = (field, rawValue) => {
+    const num = parseFormattedNumber(rawValue);
+    if (isNaN(num)) return;
+
+    const formattedValue = formatNumber(num, decQty);
+    const updatedRows = [...(detailRowsRef.current || detailRows || [])];
+    updatedRows[index] = {
+      ...(updatedRows[index] || {}),
+      [field]: formattedValue,
+    };
+
+    detailRowsRef.current = updatedRows;
+    updateState({ detailRows: updatedRows });
+    updateTotals(updatedRows);
+    return formattedValue;
+  };
+
+  const qtyInput = (field, options = {}) => (
+    <input
+      type="text"
+      id={`${field}-${index}`}
+      className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
+      value={row[field] || ""}
+      readOnly={options.readOnly ?? isFormDisabled}
+      disabled={options.disabled ?? false}
+      onChange={(e) => {
+        const sanitizedValue = e.target.value.replace(/[^0-9.-]/g, "");
+        if (/^-?\d*\.?\d{0,6}$/.test(sanitizedValue) || sanitizedValue === "") {
+          handleDetailChange(index, field, sanitizedValue, false);
+        }
+      }}
+      onFocus={(e) =>
+        clearPrDetailZeroOnFocus(e, {
+          isEditable: !(options.readOnly ?? isFormDisabled) && !(options.disabled ?? false),
+          onClear: (value) => handleDetailChange(index, field, value, false),
+        })
+      }
+      onBlur={(e) => {
+        if ((options.readOnly ?? isFormDisabled) || (options.disabled ?? false)) return;
+        const formattedValue = commitQtyInputValue(field, e.currentTarget.value);
+        if (formattedValue !== undefined) e.currentTarget.value = formattedValue;
+        setFocusedCell(null);
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" || (options.readOnly ?? isFormDisabled) || (options.disabled ?? false)) return;
+        e.preventDefault();
+        const formattedValue = commitQtyInputValue(field, e.currentTarget.value);
+        if (formattedValue !== undefined) e.currentTarget.value = formattedValue;
+        window.setTimeout(() => focusNextDetailCell(field), 0);
+      }}
+    />
+  );
+
+  const lookupCell = (field, onClick, options = {}) => (
+    <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`${field}-${index}`} className={`w-full global-tran-td-inputclass-ui pr-6 ${options.className || ""}`.trim()} value={row[field] || ""} readOnly onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); focusNextDetailCell(field); }} />{!options.hideIcon && <FontAwesomeIcon icon={options.icon || faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={onClick} />}</div></td>
+  );
+
+  const detailColumnRenderers = {
+    ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
+    prStatus: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`prStatus-${index}`} className="w-full global-tran-td-inputclass-ui" value={row.prStatus || "O"} onChange={(e) => handleDetailChange(index, "prStatus", e.target.value)} disabled={isFormDisabled || !documentID?.length || row.prStatus !== "O" || row.joNo?.length} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("prStatus"); } }}><option value="O">Open</option><option value="C">Closed</option>{(!row.poQty || parseFloat(row.poQty) === 0) && <option value="X">Cancelled</option>}</select></td>,
+    invType: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`invType-${index}`} className="w-full global-tran-td-inputclass-ui bg-white outline-none" value={row.invType || ""} onChange={(e) => handleDetailChange(index, "invType", e.target.value)} disabled={isFormDisabled || (row.itemCode?.length > 0) || isJobOrder} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("invType"); } }}><option value="" disabled>Select</option>{isJobOrder ? <option value="JO">JO</option> : <><option value="MS">MS</option><option value="RM">RM</option><option value="FG">FG</option></>}</select></td>,
+    serviceCode: () => lookupCell("serviceCode", () => updateState({ showJobCodesModal: true, selectedRowIndex: index }), { hideIcon: isFormDisabled || row.prStatus !== "O" }),
+    serviceName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("serviceName", { readOnly: isFormDisabled })}</td>,
+    itemCode: () => lookupCell("itemCode", () => handleAddItem(index, "PR" + row.invType), { hideIcon: isFormDisabled || Number(row.poQty || 0) !== 0 || row.prStatus !== "O" || row.invType === "" || row.invType == null }),
+    itemName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("itemName", { disabled: isFormDisabled, className: "cursor-not-allowed" })}</td>,
+    itemSpecs: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`itemSpecs-${index}`} className="w-full global-tran-td-inputclass-ui pr-8" value={row.itemSpecs || ""} onChange={(e) => handleDetailChange(index, "itemSpecs", e.target.value)} readOnly={rowLocked} onKeyDown={(e) => { if (e.key !== "Enter" || rowLocked) return; e.preventDefault(); focusNextDetailCell("itemSpecs"); }} />{!isFormDisabled && row.prStatus === "O" && <FontAwesomeIcon icon={faSearch} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={() => useSwalHandleOpenSpecsModal(index, detailRows, handleDetailChange, row.itemSpecs, "Specification", "itemSpecs", `Enter specification for ${row.itemName || "this item"}...`)} />}</div></td>,
+    uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("uomCode", { readOnly: isFormDisabled || row.prStatus !== "O" || (parseFormattedNumber(row.poQty) || 0) > 0 || !isJobOrder })}</td>,
+    qtyOnHand: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{textInput("qtyOnHand", { readOnly: true, tabIndex: -1, className: "text-right cursor-not-allowed" })}</td>,
+    qtyNeeded: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{qtyInput("qtyNeeded", { readOnly: rowLocked })}</td>,
+    dateNeeded: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="date" id={`dateNeeded-${index}`} className="w-full global-tran-td-inputclass-ui text-center" value={toDateInputValue(row.dateNeeded)} onChange={(e) => handleDetailChange(index, "dateNeeded", e.target.value)} readOnly={rowLocked} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("dateNeeded"); } }} /></td>,
+    poQty: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{qtyInput("poQty", { disabled: isFormDisabled })}</td>,
+    rrQty: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{qtyInput("rrQty", { disabled: isFormDisabled })}</td>,
+    joNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("joNo", { readOnly: true, className: "cursor-not-allowed" })}</td>,
+  };
+
+  return detailColumnRenderers[columnKey]?.() ?? <td key={columnKey} className="global-tran-td-ui" style={style}>{String(row[columnKey] ?? "")}</td>;
+};
+
   // ==========================
   // RENDER
   // ==========================
@@ -1837,321 +2013,44 @@ const hasExistingPO = detailRows.some(row => (parseFloat(row.poQty) || 0) > 0);
           </div>
           <div className="global-tran-table-main-div-ui">
             <div className="global-tran-table-main-sub-div-ui">
-              <table className="min-w-full border-collapse">
+              <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
                 <thead className="global-tran-thead-div-ui">
                   <tr>
-                    <th className="global-tran-th-ui">LN</th>                   
-                    <th className="global-tran-th-ui">PR Status</th>
-                    <th className="global-tran-th-ui">Type</th>
-                    <th className={`global-tran-th-ui ${!isJobOrder ? 'hidden' : ''}`}>Job Code</th>
-                    <th className={`global-tran-th-ui ${!isJobOrder ? 'hidden' : ''}`}>Scope of Work</th>
-                    <th className={`global-tran-th-ui ${isJobOrder ? 'hidden' : ''}`}>Item Code</th>
-                    <th className={`global-tran-th-ui ${isJobOrder ? 'hidden' : ''}`}>Item Description</th>
-                    <th className="global-tran-th-ui">Specification</th>
-                    <th className="global-tran-th-ui">UOM</th>
-                    <th className={`global-tran-th-ui ${isJobOrder ? 'hidden' : ''}`}>Qty on Hand</th>
-                    <th className="global-tran-th-ui">Qty Needed</th>
-                    <th className="global-tran-th-ui">Date Needed</th>
-                    <th className={`global-tran-th-ui ${isJobOrder ? 'hidden' : ''}`}>PO Qty</th>
-                    <th className={`global-tran-th-ui ${isJobOrder ? 'hidden' : ''}`}>RR Qty</th>
-                    <th className={`global-tran-th-ui ${!isJobOrder ? 'hidden' : ''}`}>JO No.</th>
-                  
-                   {!isFormDisabled && (
-                    <th className="global-tran-th-ui sticky right-0 bg-blue-300 dark:bg-blue-900 z-30">
-                      Actions
-                    </th>
-                  )}
-
-                   
+                    {visiblePrDetailColumns.map((column) =>
+                      renderPrDetailHeader(column.label, column.key, column.width, {
+                        orderedColumns: visiblePrDetailColumns,
+                      })
+                    )}
+                    {!isFormDisabled && (
+                      <th className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900" style={transactionActionsHeaderStyle}>
+                        Actions
+                      </th>
+                    )}
                   </tr>
                 </thead>
 
-                <tbody>
-                  {detailRows.map((row, index) => (
-                    <tr key={index} className="global-tran-tr-ui">
-                      {/* LN */}
-                      <td className="global-tran-td-ui text-center">
-                        {index + 1}
-                      </td>
+                <tbody className="relative">
+                  {sortedPrDetailRows.map(({ row, originalIndex }) => (
+                    <tr key={originalIndex} className="global-tran-tr-ui">
+                      {visiblePrDetailColumns.map((column) => renderPrDetailColumn(column.key, row, originalIndex))}
+                      {!isFormDisabled && (
+                        <td className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black" style={transactionActionsCellStyle}>
+                          <div className="flex items-center justify-center gap-1">
+                            <button type="button" className="global-tran-td-button-add-ui" onClick={() => handleAddBlankRow(originalIndex)}>
+                              <FontAwesomeIcon icon={faPlus} />
+                            </button>
 
-                     
-                          {/* PR Status */}
-                          <td className="global-tran-td-ui">
-                          <select
-                            className="w-[80px] global-tran-td-inputclass-ui"
-                            value={row.prStatus || "O"}
-                            onChange={(e) => handleDetailChange(index, "prStatus", e.target.value)}
-                            disabled={isFormDisabled || !documentID?.length || row.prStatus !== "O" || row.joNo?.length }
-                          >
-                            <option value="O">Open</option>
-                            <option value="C">Closed</option>
-                            {(!row.poQty || parseFloat(row.poQty) === 0) && (
-                              <option value="X">Cancelled</option>
-                            )}
-                          </select>
-                        </td>
-                         {/* Type */}
-                          <td className="global-tran-td-ui">
-                            <select
-                              className="w-[60px] global-tran-td-inputclass-ui bg-white outline-none"
-                              value={row.invType || ""}
-                              onChange={(e) => handleDetailChange(index, "invType", e.target.value)}
-                              disabled={isFormDisabled || (row.itemCode?.length > 0)|| isJobOrder  }
-                           >
-                            <option value="" disabled>Select</option>
-                            {isJobOrder ? (
-                              <option value="JO">JO</option>
-                            ) : (
-                              <>
-                                <option value="MS">MS</option>
-                                <option value="RM">RM</option>
-                                <option value="FG">FG</option>
-                              </>
-                            )}
-                          </select>
-                          </td>
-                       
-
-
-
-                          {/* Job/Service Code */}
-                          <td className="global-tran-td-ui relative" hidden={!isJobOrder} >
-                            <div className="flex items-center">
-                              <input
-                                type="text"
-                                className={`w-[100px] global-tran-td-inputclass-ui`}
-                                value={row.serviceCode || ""}
-                                readOnly
-                                onChange={(e) => handleDetailChange(index, 'serviceCode', e.target.value)}
-                              />
-                                {!isFormDisabled &&  row.prStatus === "O" && (
-                                <FontAwesomeIcon 
-                                  icon={faMagnifyingGlass} 
-                                  className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                                  onClick={() => updateState({ showJobCodesModal: true, selectedRowIndex: index })}                                                             
-                                />)}
-                              </div>
-                          </td>
-
-
-
-                          {/* Job/Service Name */}
-                          <td className="global-tran-td-ui relative" hidden={!isJobOrder}>
-                            <input
-                              type="text"
-                              className="w-[300px] global-tran-td-inputclass-ui"
-                              value={row.serviceName || ""}
-                              onChange={(e) => handleDetailChange(index, "serviceName", e.target.value)}
-                              readOnly={isFormDisabled}
-                            />
-                          </td>
-
-
-                          
-                          {/* Item Code */}
-                          <td className="global-tran-td-ui relative" hidden={isJobOrder}>
-                            <div className="flex items-center">
-                              <input
-                                type="text"
-                                className={`w-[100px] global-tran-td-inputclass-ui`}
-                                value={row.itemCode || ""}
-                                readOnly
-                                onChange={(e) => handleDetailChange(index, 'itemCode', e.target.value)}
-                              />
-                                 {!isFormDisabled &&
-                                    Number(row.poQty || 0) === 0 &&
-                                    row.prStatus === "O" &&
-                                    row.invType !== "" &&
-                                    row.invType != null && (
-                                      <FontAwesomeIcon
-                                        icon={faMagnifyingGlass}
-                                        className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                                        onClick={() => handleAddItem(index, "PR" + row.invType)}
-                                      />
-                                    )}
-                              </div>
-                          </td>
-          
-
-
-                          {/* Item Description */}
-                          <td className="global-tran-td-ui" hidden={isJobOrder}>
-                            <input
-                              type="text"
-                              className="w-[300px] global-tran-td-inputclass-ui cursor-not-allowed"
-                              value={row.itemName || ""}
-                              onChange={(e) => handleDetailChange(index, "itemName", e.target.value)}
-                              disabled={isFormDisabled}
-                            />
-                          </td>
-
-                        
-                         {/* Specification */}
-                        <td className="global-tran-td-ui relative">
-                          <div className="flex items-center">
-                            <input
-                              type="text"
-                              className="w-[300px] global-tran-td-inputclass-ui pr-8"
-                              value={row.itemSpecs || ""}
-                              onChange={(e) => handleDetailChange(index, "itemSpecs", e.target.value)}
-                              readOnly={isFormDisabled || row.prStatus !== "O" || row.poQty > 0}
-                            />
-                            {!isFormDisabled && row.prStatus === "O" && (
-                              <FontAwesomeIcon 
-                                icon={faSearch} 
-                                className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                                onClick={() => useSwalHandleOpenSpecsModal(
-                                index, 
-                                detailRows, 
-                                handleDetailChange, 
-                                row.itemSpecs,    // rowValue                              
-                                'Specification', 
-                                'itemSpecs',     // rowTitle (the field key in your state)
-                                `Enter specification for ${row.itemName || 'this item'}...` // placeHolderValue
-                              )} 
-                              />
-                            )}
+                            <button type="button" className="global-tran-td-button-delete-ui" onClick={() => handleDeleteRow(originalIndex)}>
+                              <FontAwesomeIcon icon={faTrashAlt} />
+                            </button>
                           </div>
                         </td>
-
-
-
-
-                          {/* UOM */}
-                          <td className="global-tran-td-ui">
-                            <input
-                              type="text"
-                              className="w-[50px] global-tran-td-inputclass-ui"
-                              value={row.uomCode || ""}
-                              onChange={(e) => handleDetailChange(index, "uomCode", e.target.value)}
-                              readOnly={isFormDisabled || row.prStatus !== "O" || row.poQty > 0 || !isJobOrder }
-                            />
-                          </td>
-
-                          {/* Qty on Hand */}
-                          <td className="global-tran-td-ui text-right" hidden={isJobOrder}>
-                            <input
-                              type="text"
-                              className="w-[120px] global-tran-td-inputclass-ui text-right cursor-not-allowed"
-                              value={row.qtyOnHand ?? ""}
-                              readOnly
-                              tabIndex={-1}
-                            />
-                          </td>
-
-                          {/* Qty Needed */}
-                    <td className="global-tran-td-ui" >
-                    <input
-                        type="text"
-                        className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
-                        value={row.qtyNeeded || ""}
-                        readOnly={isFormDisabled || row.prStatus !== "O" || row.poQty > 0}
-                        onChange={(e) => {
-                            const inputValue = e.target.value;
-                             const sanitizedValue = inputValue.replace(/[^0-9.-]/g, '');
-                            if (/^-?\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") {
-                                handleDetailChange(index, "qtyNeeded", sanitizedValue, false);
-                            }
-                        }}                   
-                        onFocus={(e) => {
-                            if ((e.target.value === "0.00" || parseFormattedNumber(e.target.value) === 0) && row.prStatus ==="O" ) {
-                              e.target.value = "";
-                            }
-                          }}                   
-                        onBlur={async (e) => {
-                            const value = e.target.value;
-                            const num = parseFormattedNumber(value);
-                            if (!isNaN(num)) {
-                                 handleDetailChange(index, "qtyNeeded", num, true);
-                            }
-                            setFocusedCell(null);
-                        }}
-                        onKeyDown={async (e) => {
-                            if (e.key === "Enter") {
-                                e.preventDefault();
-                                const value = e.target.value;   
-                                const num = parseFormattedNumber(value);
-                                if (!isNaN(num)) {
-                                    await handleDetailChange(index, "qtyNeeded", num, true);
-                                }
-                                e.target.blur();
-                            }
-                        }}
-                        />
-                      </td>
-
-                          {/* Date Needed */}
-                          <td className="global-tran-td-ui">
-                            <input
-                              type="date"
-                              className="w-[130px] global-tran-td-inputclass-ui text-center" // Added text-center here
-                              value={row.dateNeeded || ""}
-                              onChange={(e) => handleDetailChange(index, "dateNeeded", e.target.value)}
-                              readOnly={isFormDisabled || row.prStatus !== "O" || row.poQty > 0}
-                            />
-                          </td>
-
-
-                          {/* PO Qty */}
-                          <td className="global-tran-td-ui text-right" hidden={isJobOrder}>
-                            <input
-                              type="text"
-                              className="w-[120px] global-tran-td-inputclass-ui text-right"
-                              value={row.poQty || ""}
-                              onChange={(e) => handleDetailChange(index, "poQty", e.target.value)}
-                              disabled={isFormDisabled}
-                            />
-                          </td>
-
-                          {/* RR Qty */}
-                          <td className="global-tran-td-ui text-right" hidden={isJobOrder}>
-                            <input
-                              type="text"
-                              className="w-[120px] global-tran-td-inputclass-ui text-right"
-                              value={row.rrQty || ""}
-                              onChange={(e) => handleDetailChange(index, "rrQty", e.target.value)}
-                              disabled={isFormDisabled}
-                            />
-                          </td>
-
-                          {/* JO No */}
-                          <td className="global-tran-td-ui" hidden={!isJobOrder}>
-                            <input
-                              type="text"
-                              className="w-[100px] global-tran-td-inputclass-ui cursor-not-allowed"
-                              value={row.joNo || ""}
-                              onChange={(e) => handleDetailChange(index, "joNo", e.target.value)}
-                              readOnly
-                            />
-                          </td>
-
-                        {!isFormDisabled && (
-                          <td className="global-tran-td-ui text-center sticky right-0">
-                            <div className="flex items-center justify-center gap-1">
-                              <button
-                                type="button"
-                                className="global-tran-td-button-add-ui"
-                                onClick={() => handleAddBlankRow(index)}
-                              >
-                                <FontAwesomeIcon icon={faPlus} />
-                              </button>
-
-                              <button
-                                type="button"
-                                className="global-tran-td-button-delete-ui"
-                                onClick={() => handleDeleteRow(index)}
-                              >
-                                <FontAwesomeIcon icon={faTrashAlt} />
-                              </button>
-                            </div>
-                          </td>
-                        )}
-                            
-
+                      )}
                     </tr>
                   ))}
                 </tbody>
               </table>
+              {renderPrDetailHeaderContextMenu?.()}
             </div>
           </div>
 

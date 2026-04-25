@@ -62,30 +62,10 @@ export const useSwalValidationAlert = ({ icon = "info", title = "", message = ""
 };
 
 
-
-// export const useSwalvalidateRequiredFields = (fields, title) => {
-//   let errors = [];
-//   for (const [label, value] of Object.entries(fields)) {
-//     if (!value || (Array.isArray(value) && value.length === 0)) {
-//       errors.push(`- ${label}`);
-//     }
-//   }
-
-//   if (errors.length > 0) {
-//     const errorMessage = "The following fields are required:\n" + errors.join("\n");
-//     useSwalValidationAlert({
-//       icon: "info",
-//       title: title,
-//       message: errorMessage, 
-//     });  
-//     return false; 
-//   }
-//   return true; 
-// };
-
-
-
-export const useSwalvalidateRequiredFields = (fields, title = "Required Fields") => {
+export const useSwalvalidateRequiredFields = async (
+  fields,
+  title = "Required Fields"
+) => {
   let errors = [];
 
   for (const [label, value] of Object.entries(fields)) {
@@ -99,9 +79,10 @@ export const useSwalvalidateRequiredFields = (fields, title = "Required Fields")
   }
 
   if (errors.length > 0) {
-    const errorMessage = "The following fields are required:\n" + errors.join("\n");
+    const errorMessage =
+      "The following fields are required:\n" + errors.join("\n");
 
-    return Swal.fire({
+    await Swal.fire({
       toast: true,
       position: "top-end",
       icon: undefined,
@@ -137,6 +118,7 @@ export const useSwalvalidateRequiredFields = (fields, title = "Required Fields")
       },
       didOpen: (toast) => {
         const popup = Swal.getPopup();
+
         if (popup) {
           popup.style.borderRadius = "10px";
 
@@ -158,12 +140,13 @@ export const useSwalvalidateRequiredFields = (fields, title = "Required Fields")
         toast.onmouseenter = Swal.stopTimer;
         toast.onmouseleave = Swal.resumeTimer;
       },
-    }).then(() => false);
+    });
+
+    return false;
   }
 
   return true;
 };
-
 
 export const useSwalReturnSummary = ({ icon = "info", title = "", message = "" }) => {
   const formattedMessage = (message || "")
