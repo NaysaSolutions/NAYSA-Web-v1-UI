@@ -2,17 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Save,
-  Undo2,
-  Search,
-  MoreVertical,
-  Plus,
-  Trash2,
-  Pencil,
-  Tags,
-  PackageSearch,
-} from "lucide-react";
+import { Save, Undo2, Search, MoreVertical, Trash2, Pencil } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faInfoCircle,
@@ -37,7 +27,6 @@ import CustomerMastLookupModal from "@/NAYSA Cloud/Lookup/SearchCustMast";
 import AreaLookupModal from "@/NAYSA Cloud/Lookup/SearchArea";
 import CustomerTypeLookupModal from "@/NAYSA Cloud/Lookup/SearchCustType";
 import ItemMastLookupModal from "@/NAYSA Cloud/Lookup/SearchItemMast";
-import SalesPMCustomerPriority from "./SalesPMCustomerPriority.jsx";
 
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import { exportGenericQueryExcel } from "@/NAYSA Cloud/Global/report";
@@ -70,13 +59,8 @@ const MATRIX_TYPE_OPTIONS = [
 
 const TABS = [
   { key: "details", label: "Matrix Details" },
-  { key: "history", label: "Matrix History" },
-  { key: "priority", label: "Matrix Priority" },
-];
-
-const HISTORY_TABS = [
-  { key: "historyType", label: "Matrix History per Type", icon: Tags },
-  { key: "historyItem", label: "Matrix History per Item", icon: PackageSearch },
+  { key: "historyType", label: "Matrix History per Type" },
+  { key: "historyItem", label: "Matrix History per Item" },
 ];
 
 const MATRIX_TYPE_META = {
@@ -396,7 +380,6 @@ export default function SalesPMCustomerItem() {
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState("details");
-  const [activeHistoryTab, setActiveHistoryTab] = useState("historyType");
 
   const [header, setHeader] = useState(DEFAULT_HEADER);
   const [rows, setRows] = useState([]);
@@ -429,7 +412,6 @@ export default function SalesPMCustomerItem() {
   const guideRef = useRef(null);
   const optionsRef = useRef(null);
   const uploadInputRef = useRef(null);
-  const priorityTabRef = useRef(null);
 
   const pdfLink = reftablesPDFGuide?.[DOC_TYPE];
   const videoLink = reftablesVideoGuide?.[DOC_TYPE];
@@ -444,9 +426,6 @@ export default function SalesPMCustomerItem() {
   const historyItemMeta =
     MATRIX_TYPE_META[historyItemFilter.pmType] || MATRIX_TYPE_META.PMCUST;
   const pageHeaderTitle = matrixMeta.pageTitle || documentTitle;
-  const isHistoryTabActive = activeTab === "history";
-  const isHistoryTypeActive = isHistoryTabActive && activeHistoryTab === "historyType";
-  const isHistoryItemActive = isHistoryTabActive && activeHistoryTab === "historyItem";
 
   useEffect(() => {
     document.title = pageHeaderTitle;
@@ -1945,37 +1924,7 @@ const historyItemColumns = useMemo(
   );
 
   const renderActionButtons = () => {
-    if (activeTab === "priority") {
-      return (
-        <div className="flex flex-nowrap items-center justify-end gap-2 text-xs whitespace-nowrap">
-          <button
-            type="button"
-            onClick={() => priorityTabRef.current?.openFind?.()}
-            disabled={isPageLoading}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-[11px] font-medium text-white transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-3"
-            title="Add"
-          >
-            <Plus size={14} />
-            <span className="ml-1 hidden sm:inline">Add</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => priorityTabRef.current?.resetFilters?.()}
-            disabled={isPageLoading}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-[11px] font-medium text-white transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-3"
-            title="Reset"
-          >
-            <Undo2 size={14} />
-            <span className="ml-1 hidden sm:inline">Reset</span>
-          </button>
-
-          {renderInfoButton()}
-        </div>
-      );
-    }
-
-    if (isHistoryTypeActive) {
+    if (activeTab === "historyType") {
       return (
         <div className="flex flex-nowrap items-center justify-end gap-2 text-xs whitespace-nowrap">
           <button
@@ -2005,7 +1954,7 @@ const historyItemColumns = useMemo(
       );
     }
 
-    if (isHistoryItemActive) {
+    if (activeTab === "historyItem") {
       return (
         <div className="flex flex-nowrap items-center justify-end gap-2 text-xs whitespace-nowrap">
           <button
@@ -2157,40 +2106,6 @@ const historyItemColumns = useMemo(
           ))}
         </div>
       </div>
-    </div>
-  );
-
-  const renderHistoryTabs = () => (
-    <div className="mb-4 flex flex-wrap items-center gap-3 border-b border-slate-200 pb-3">
-      {HISTORY_TABS.map((tab) => (
-        (() => {
-          const Icon = tab.icon;
-
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setActiveHistoryTab(tab.key)}
-              className={`group inline-flex items-center gap-2 rounded-lg border px-3.5 py-1.5 text-[12px] font-bold transition-all ${
-                activeHistoryTab === tab.key
-                  ? "border-blue-600 bg-blue-600 text-white shadow-sm"
-                  : "border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
-              }`}
-            >
-              <span
-                className={`flex h-5.5 w-5.5 items-center justify-center rounded-md transition-colors ${
-                  activeHistoryTab === tab.key
-                    ? "bg-white/15 text-white"
-                    : "bg-slate-100 text-slate-500 group-hover:bg-blue-100 group-hover:text-blue-600"
-                }`}
-              >
-                <Icon size={15} />
-              </span>
-              <span>{tab.label}</span>
-            </button>
-          );
-        })()
-      ))}
     </div>
   );
 
@@ -2467,14 +2382,6 @@ const historyItemColumns = useMemo(
     </div>
   </>
 );
-
-  const renderHistorySection = () => (
-    <>
-      {renderHistoryTabs()}
-      {activeHistoryTab === "historyType" && renderHistoryTypeTab()}
-      {activeHistoryTab === "historyItem" && renderHistoryItemTab()}
-    </>
-  );
   return (
     <div className="global-ref-main-div-ui">
       <input
@@ -2510,8 +2417,8 @@ const historyItemColumns = useMemo(
         style={{ minHeight: "calc(100vh - 150px)" }}
       >
         {activeTab === "details" && renderDetailsTab()}
-        {activeTab === "history" && renderHistorySection()}
-        {activeTab === "priority" && <SalesPMCustomerPriority ref={priorityTabRef} />}
+        {activeTab === "historyType" && renderHistoryTypeTab()}
+        {activeTab === "historyItem" && renderHistoryItemTab()}
       </div>
 
       {showCustomerModal && (
@@ -2522,7 +2429,7 @@ const historyItemColumns = useMemo(
               ? header.pmType === "PMCHAIN"
                 ? "ActiveChain"
                 : "ActiveNonChain"
-              : isHistoryTypeActive
+              : activeTab === "historyType"
                 ? historyTypeFilter.pmType === "PMCHAIN"
                   ? "ActiveChain"
                   : "ActiveNonChain"
@@ -2532,9 +2439,9 @@ const historyItemColumns = useMemo(
           }
           onClose={(selected) => {
             if (selected) {
-              if (isHistoryTypeActive) {
+              if (activeTab === "historyType") {
                 applyHistoryTypeLookupSelection(selected, historyTypeFilter.pmType);
-              } else if (isHistoryItemActive) {
+              } else if (activeTab === "historyItem") {
                 applyHistoryItemReferenceLookupSelection(
                   selected,
                   historyItemFilter.pmType
@@ -2554,9 +2461,9 @@ const historyItemColumns = useMemo(
           isOpen={showAreaModal}
           onClose={(selected) => {
             if (selected) {
-              if (isHistoryTypeActive) {
+              if (activeTab === "historyType") {
                 applyHistoryTypeLookupSelection(selected, historyTypeFilter.pmType);
-              } else if (isHistoryItemActive) {
+              } else if (activeTab === "historyItem") {
                 applyHistoryItemReferenceLookupSelection(
                   selected,
                   historyItemFilter.pmType
@@ -2577,9 +2484,9 @@ const historyItemColumns = useMemo(
           customParam="ActiveChain"
           onClose={(selected) => {
             if (selected) {
-              if (isHistoryTypeActive) {
+              if (activeTab === "historyType") {
                 applyHistoryTypeLookupSelection(selected, historyTypeFilter.pmType);
-              } else if (isHistoryItemActive) {
+              } else if (activeTab === "historyItem") {
                 applyHistoryItemReferenceLookupSelection(
                   selected,
                   historyItemFilter.pmType
@@ -2599,9 +2506,9 @@ const historyItemColumns = useMemo(
           isOpen={showCustomerTypeModal}
           onClose={(selected) => {
             if (selected) {
-              if (isHistoryTypeActive) {
+              if (activeTab === "historyType") {
                 applyHistoryTypeLookupSelection(selected, historyTypeFilter.pmType);
-              } else if (isHistoryItemActive) {
+              } else if (activeTab === "historyItem") {
                 applyHistoryItemReferenceLookupSelection(
                   selected,
                   historyItemFilter.pmType

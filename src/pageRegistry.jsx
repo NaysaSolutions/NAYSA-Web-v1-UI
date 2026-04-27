@@ -42,6 +42,9 @@ import BankMast from "./NAYSA Cloud/Master Data/BankMast.jsx";
 import RCMast from "./NAYSA Cloud/Master Data/RCMast.jsx";
 import SLMast from "./NAYSA Cloud/Master Data/SLMast.jsx";
 
+// --- SALES ---
+import SO from "./NAYSA Cloud/Module/Main Module/Sales/SO.jsx";
+
 // --- PURCHASING & INVENTORY ---
 import PR from "./NAYSA Cloud/Module/Main Module/Purchasing/PR.jsx";
 import PO from "./NAYSA Cloud/Module/Main Module/Purchasing/PO.jsx";
@@ -225,6 +228,9 @@ export const pageRegistry = {
   PR,
   PO,
   JO,
+
+  //Sales
+  SO,
 
   // Inventory
   MSRR,
