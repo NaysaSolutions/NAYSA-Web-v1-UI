@@ -52,7 +52,7 @@ const ReferenceCodesTab = forwardRef(({ variant = "customer", onStateChange }, r
       { id: "area", label: "Area Codes", icon: faMapPin },
       { id: "custtype", label: "Customer Types", icon: faUsers },
       { id: "billingterm", label: "Billing Terms", icon: faReceipt },
-      { id: "pricegroup", label: "Price Group", icon: faTags },
+      // { id: "pricegroup", label: "Price Group", icon: faTags },
     ];
 
     const vendorOnly = [

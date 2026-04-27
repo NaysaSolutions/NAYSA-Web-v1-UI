@@ -345,7 +345,7 @@ const PO = () => {
   } = state;
 
   const [header, setHeader] = useState({
-    po_date: new Date().toISOString().split("T")[0],
+    po_date: useGetCurrentDayV2(),
   });
 
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
@@ -465,7 +465,7 @@ const PO = () => {
       qtyNeeded: formatNumber(0, DEC_QTY),
       uomCode2: "",
       uomQty2: formatNumber(0, DEC_QTY),
-      dateNeeded: state.header?.delDate || new Date().toISOString().split("T")[0],
+      dateNeeded: state.header?.delDate || useGetCurrentDayV2(),
       itemSpecs: "",
       serviceCode: "",
       serviceName: "",
@@ -558,7 +558,13 @@ const PO = () => {
     loadDocControl();
     loadCompanyData();
 
-    const today = new Date().toISOString().split("T")[0];
+    const today = useGetCurrentDayV2();
+
+    setHeader({
+      po_date: today,
+      dateNeeded: today,
+      delDate: today,
+    });
 
     updateState({
       header: {
@@ -690,7 +696,7 @@ const PO = () => {
     }
   };
 
-  const fetchTranData = async (poNoParam, _branchCode) => {
+ const fetchTranData = async (poNoParam, _branchCode, key = "") => {
     const resetState = () => {
       updateState({
         documentNo: "",
@@ -704,9 +710,18 @@ const PO = () => {
     updateState({ isLoading: true });
 
     try {
-      const data = await useFetchTranData(poNoParam, _branchCode, docType, "poNo");
-      const today = new Date().toISOString().split("T")[0];
-      const delDateForHeader = data.delDate ? new Date(data.delDate).toISOString().split("T")[0] : today;
+      let formattedPoNo = poNoParam?.toString().trim() || "";
+      if (formattedPoNo && /^\d+$/.test(formattedPoNo)) {
+        formattedPoNo = formattedPoNo.padStart(8, '0');
+      }
+
+      const data = await useFetchTranData(
+        formattedPoNo,
+        _branchCode || branchCode,
+        docType,
+        "poNo",
+        key || ""
+      );
 
       if (!data?.poId) {
         Swal.fire({
@@ -719,14 +734,17 @@ const PO = () => {
 
       let poDateForHeader = "";
       if (data.poDate) {
-        const d = new Date(data.poDate);
-        poDateForHeader = isNaN(d) ? "" : d.toISOString().split("T")[0];
+        poDateForHeader = useformatToDatev2(data.poDate) || "";
       }
 
       let dateNeededForHeader = "";
       if (data.dateNeeded) {
-        const dn = new Date(data.dateNeeded);
-        dateNeededForHeader = isNaN(dn) ? "" : dn.toISOString().split("T")[0];
+        dateNeededForHeader = useformatToDatev2(data.dateNeeded) || "";
+      }
+
+      let delDateForHeader = "";
+      if (data.delDate) {
+        delDateForHeader = useformatToDatev2(data.delDate) || "";
       }
 
       const retrievedDetailRows = (data.dt1 || []).map((item) => {
@@ -748,7 +766,7 @@ const PO = () => {
           qtyNeeded: formatNumber(item.qtyNeeded ?? 0, 6),
           uomCode2: item.uomCode2 || "",
           uomQty2: formatNumber(item.uomQty2 ?? 0, 6),
-          dateNeeded: item.dateNeeded ? new Date(item.dateNeeded).toISOString().split("T")[0] : "",
+          dateNeeded: item.dateNeeded ? useformatToDatev2(item.dateNeeded) : "",
           itemSpecs: item.itemSpecs || "",
           serviceCode: item.serviceCode || "",
           serviceName: item.serviceName || "",
@@ -767,6 +785,12 @@ const PO = () => {
       updateTotalsDisplay(retrievedDetailRows);
       const firstPrNo = data?.dt1?.[0]?.prNo || "";
 
+      setHeader({
+        po_date: poDateForHeader,
+        dateNeeded: dateNeededForHeader,
+        delDate: delDateForHeader || dateNeededForHeader || useGetCurrentDayV2(),
+      });
+
       updateState({
         documentStatus: data.status,
         status: data.status,
@@ -778,7 +802,7 @@ const PO = () => {
         header: {
           po_date: poDateForHeader,
           dateNeeded: dateNeededForHeader,
-          delDate: delDateForHeader || dateNeededForHeader || new Date().toISOString().split("T")[0],
+          delDate: delDateForHeader || dateNeededForHeader || useGetCurrentDayV2(),
         },
         cutoffCode: data.cutoffCode || "",
         rcCode: data.rcCode || "",
@@ -836,7 +860,7 @@ const PO = () => {
   };
 
   const handleSelectTypeAndAddRow = (typeCode) => {
-    const today = header.po_date || new Date().toISOString().split("T")[0];
+    const today = header.po_date || useGetCurrentDayV2();
     const newRow = {
       invType: typeCode,
       groupId: "",
@@ -894,7 +918,12 @@ const PO = () => {
         return;
       }
 
-      custData = custData.map((row) => ({
+      // 🚀 NEW FIX: Filter the Summary Tab so Closed/Cancelled PRs don't even show up
+      custData = custData.filter((row) => {
+        const stat = String(row.Status || row.status || row.PR_STATUS || row.prStatus || "O").toUpperCase();
+        // Hide it if it's C, CLOSED, X, or CANCELLED
+        return stat !== "C" && stat !== "CLOSED" && stat !== "X" && stat !== "CANCELLED";
+      }).map((row) => ({
         ...row,
         groupId: row.GroupId || row.groupId || row.PrId || row.PRNo || row.prNo,
       }));
@@ -983,10 +1012,19 @@ const PO = () => {
             : "";
 
         return {
+          // lN: i + 1,
+          // prNo: summary?.PRNo || summary?.PrNo || summary?.prNo || "",
+          // prId: summary?.PrId || summary?.prId || "",
+          // refBranchCode: summary?.BC || summary?.BranchCode || branchCode,
+
+          // invType: d?.Type || d?.INV_TYPE || "",
+          // groupId: d?.GROUP_ID || d?.groupId || pickedGroupId || "",
+          // poStatus: "O",
           lN: i + 1,
-          prNo: summary?.PRNo || summary?.PrNo || summary?.prNo || "",
-          prId: summary?.PrId || summary?.prId || "",
-          refBranchCode: summary?.BC || summary?.BranchCode || branchCode,
+          // FIX: Check the detail row (d) first for its specific PRNo before using the summary's PRNo
+          prNo: d?.PRNo || d?.PrNo || d?.prNo || summary?.PRNo || summary?.PrNo || summary?.prNo || "",
+          prId: d?.PrId || d?.prId || summary?.PrId || summary?.prId || "",
+          refBranchCode: d?.BC || d?.BranchCode || summary?.BC || summary?.BranchCode || branchCode,
 
           invType: d?.Type || d?.INV_TYPE || "",
           groupId: d?.GROUP_ID || d?.groupId || pickedGroupId || "",
@@ -1118,7 +1156,7 @@ const PO = () => {
     );
 
     const processAddition = (itemsToAdd) => {
-      const today = header.po_date || new Date().toISOString().split("T")[0];
+      const today = header.po_date || useGetCurrentDayV2();
       const newRows = itemsToAdd.map((item) => ({
         invType: "MS",
         groupId: state.groupId || "",
@@ -1254,7 +1292,9 @@ const PO = () => {
   const handleDetailChange = (index, field, value, commit = false) => {
     const updatedRows = [...detailRows];
     const row = { ...(updatedRows[index] || {}) };
-    const editableFields = ["unitPrice"];
+    const editableFields = ["unitPrice", "qtyNeeded", "poQty"];
+
+    const nonNumericFields = ["invType", "prStatus", "poStatus", "itemName", "uomCode", "vatCode", "dateNeeded", "itemSpecs", "serviceCode", "serviceName"];
 
     if (field === 'itemCode' && typeof value === 'object' && value !== null) {
       row["itemCode"] = value.itemCode || "";
@@ -1262,7 +1302,7 @@ const PO = () => {
       row["uomCode"] = value.uomCode || value.uom || "";
       row["qtyOnHand"] = formatNumber(value.qtyHand ?? 0, 6);
       row["unitPrice"] = formatNumber(value.unitCost ?? 0, DEC_PRICE);
-    } else if (field === 'invType') {
+    } else if (nonNumericFields.includes(field)) {
       row[field] = value;
     } else {
       if (!editableFields.includes(field)) return;
@@ -1345,7 +1385,7 @@ const PO = () => {
         poId: documentID || "",
         groupId: state.groupId || "",
 
-        poDate: state.header?.po_date || new Date().toISOString().split("T")[0],
+        poDate: state.header?.po_date || useGetCurrentDayV2(),
         cutoffCode: cutoffCode || "", // @_cutoffCode
 
         rcCode: rcCode || "", // @_rcCode
@@ -1390,6 +1430,7 @@ const PO = () => {
           return {
             LINE_NO: row.lN || index + 1,
             PR_NO: row.prNo || sourcePrNo || null, // if you have per-line prNo, use it
+            PR_STATUS: row.prStatus === "CLOSED" ? "C" : row.prStatus === "CANCELLED" ? "X" : "O",
             PO_STATUS: row.poStatus || status || "",
             INV_TYPE: row.invType || "",
             GROUP_ID: row.groupId || state.groupId || "",
@@ -2334,12 +2375,20 @@ const PO = () => {
                       <td className="global-tran-td-ui text-right">
                         <input
                           type="text"
-                          className="global-tran-td-inputclass-ui text-right bg-gray-100 cursor-not-allowed"
+                          className={`global-tran-td-inputclass-ui text-right ${row.prNo ? "bg-gray-100 cursor-not-allowed" : ""}`}
                           value={row.qtyNeeded || ""}
-                          readOnly
-                          tabIndex={-1}
+                          readOnly={!!row.prNo}
+                          tabIndex={row.prNo ? -1 : undefined}
+                          onChange={(e) => !row.prNo && handleDetailChange(index, "qtyNeeded", e.target.value, false)}
+                          onBlur={(e) => !row.prNo && handleDetailChange(index, "qtyNeeded", e.target.value, true)}
+                          onKeyDown={(e) => {
+                            if (!row.prNo && e.key === "Enter") {
+                              e.preventDefault();
+                              handleDetailChange(index, "qtyNeeded", e.target.value, true);
+                            }
+                          }}
+                          disabled={isFormDisabled}
                         />
-
                       </td>
 
                       {/* PO Qty */}
@@ -2349,8 +2398,17 @@ const PO = () => {
                           className="w-[120px] global-tran-td-inputclass-ui text-right"
                           value={row.poQty || ""}
                           onChange={(e) =>
-                            handleDetailChange(index, "poQty", e.target.value)
+                            handleDetailChange(index, "poQty", e.target.value, false)
                           }
+                          onBlur={(e) =>
+                            handleDetailChange(index, "poQty", e.target.value, true)
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleDetailChange(index, "poQty", e.target.value, true);
+                            }
+                          }}
                           disabled={isFormDisabled}
                         />
                       </td>
@@ -2759,29 +2817,74 @@ const PO = () => {
           detailColumns={openPR_Col_Detail}
           summaryData={openPR_Data_Summary}
           tabTitles={["Open PR Summary", "Open PR Detail"]}
-          fetchDetailApi={(selectedIds) => {
-            const idString = Array.isArray(selectedIds)
-              ? selectedIds.join(",")
-              : selectedIds;
+          
+          fetchDetailApi={async (selectedIds) => {
+            // 1. Ensure we are working with an array of IDs
+            const idsArray = Array.isArray(selectedIds) ? selectedIds : [selectedIds];
 
-            return postRequest("getPROpen", {
-              json_data: {
-                mode: "Detail",
-                branchCode: branchCode,
-                prId: idString,
-                prTranType: null,
-              },
-            }).then((res) => {
-              let detailData = res?.data ?? [];
+            try {
+              // 2. Create an API request for EACH selected PR
+              const fetchPromises = idsArray.map((id) =>
+                postRequest("getPROpen", {
+                  json_data: {
+                    mode: "Detail",
+                    branchCode: branchCode,
+                    prId: id, // Send a single ID per request
+                    prTranType: null,
+                  },
+                })
+              );
 
-              detailData = detailData.map((d) => ({
-                ...d,
-                groupId: d.GroupId || d.groupId || d.PrId || d.PRNo || Math.random().toString(),
-              }));
+              // 3. Wait for all the individual requests to finish
+              const responses = await Promise.all(fetchPromises);
 
-              return { success: !!res?.success, data: detailData };
-            });
+              // 4. Combine the items from all responses into one big array
+              let combinedDetailData = [];
+
+              responses.forEach((res, index) => {
+                if (res?.success && Array.isArray(res?.data)) {
+                  
+                  // 🚀 NEW FIX: Smarter filter to catch "CLOSED" and "CANCELLED"
+                  const activeItems = res.data.filter((d) => {
+                    const status = String(
+                      d.PR_STATUS || d.pr_status || d.prStatus || d.Status || d.status || "O"
+                    ).toUpperCase();
+
+                    // Safely parse amounts
+                    const qtyNeeded = parseFloat(d.QTY_NEEDED ?? d.QtyNeeded ?? d.qty_needed ?? d.Qty ?? d.QTY ?? 0);
+                    const poQty = parseFloat(d.PO_QTY ?? d.PoQty ?? d.po_qty ?? d.poQty ?? 0);
+                    const explicitBalance = parseFloat(d.QTY_BALANCE ?? d.QtyBalance ?? d.qty_balance ?? d.qtyBalance ?? -1);
+
+                    // If the database gives us a balance, use it. Otherwise, subtract what was ordered from what was needed.
+                    const balance = explicitBalance !== -1 ? explicitBalance : (qtyNeeded - poQty);
+
+                    // Explicitly block Closed and Cancelled statuses
+                    const isClosed = status === "C" || status === "CLOSED";
+                    const isCancelled = status === "X" || status === "CANCELLED";
+
+                    // Only keep the item if it is NOT closed/cancelled and still has a balance
+                    return !isClosed && !isCancelled && balance > 0;
+                  });
+
+                  const mappedData = activeItems.map((d, rowIdx) => ({
+                    ...d,
+                    // Give each row a truly unique groupId so the checkboxes work correctly in the Detail grid
+                    groupId: d.GroupId || d.groupId || `${idsArray[index]}_${d.LN || rowIdx}`,
+                    // Preserve the parent PR reference on the detail row
+                    PRNo: d.PRNo || d.PrNo || d.prNo || idsArray[index]
+                  }));
+                  
+                  combinedDetailData = [...combinedDetailData, ...mappedData];
+                }
+              });
+
+              return { success: true, data: combinedDetailData };
+            } catch (error) {
+              console.error("Error fetching multiple PR details:", error);
+              return { success: false, data: [] };
+            }
           }}
+
           onCancel={() => updateState({ showOpenPRModal: false })}
           onClose={handleClosePROpenModal}
         />
