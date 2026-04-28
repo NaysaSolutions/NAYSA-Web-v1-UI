@@ -72,7 +72,6 @@ const PayeeSetupTab = forwardRef(
   ) => {
     useImperativeHandle(ref, () => ({}));
 
-    // --- 1. DEFINE CONSTANTS ---
     const isNewRecord = form.__isNew;
     const isReadOnly = !isEditing;
     const isDisabled = isReadOnly || isLoading;
@@ -96,7 +95,7 @@ const PayeeSetupTab = forwardRef(
       return n || fallback;
     };
 
-    // --- 2. UNLOCKING LOGIC ---
+  // --- 2. UNLOCKING LOGIC ---
     const isManualMode = useMemo(() => {
       const mode = normalizeUpper(generationMode || "Manual");
       return mode === "MANUAL" || mode === "M";
@@ -110,21 +109,32 @@ const PayeeSetupTab = forwardRef(
         const input = overrideRef.current.querySelector("input");
         if (input) {
           if (canType) {
-            // UNLOCK for Manual + New Record
+            // 1. Fetch exact database length (usually 20 or 50)
+            const maxLen = getLen("vend_code", 20); 
+            
             input.removeAttribute("readonly");
-            input.onclick = (e) => e.stopPropagation(); // Prevents click from opening lookup
+            input.setAttribute("maxlength", maxLen); // 2. Force DOM attribute limit
+            
+            input.onclick = (e) => e.stopPropagation(); 
             input.oninput = (e) => {
-              onChangeForm({ vendCode: e.target.value, custCode: e.target.value });
+              let val = e.target.value;
+              
+              // 3. Force truncate on paste or rapid typing
+              if (val.length > maxLen) {
+                  val = val.substring(0, maxLen);
+                  e.target.value = val;
+              }
+              
+              onChangeForm({ vendCode: val, custCode: val });
             };
           } else {
-            // LOCK for Auto or Retrieved Records
             input.setAttribute("readonly", "true");
             input.onclick = null;
             input.oninput = null;
           }
         }
       }
-    }, [canType, isNewRecord, onChangeForm]);
+    }, [canType, isNewRecord, onChangeForm, tblFieldArray]);
 
     const sl = useMemo(
       () => normalizeUpper(form?.sltypeCode || "SU"),
@@ -141,7 +151,10 @@ const PayeeSetupTab = forwardRef(
     const isIndividualTaxClass = taxClass === "WI";
 
     const isTinRequired = !isIndividualTaxClass;
-    const shouldAutoNameFromParts = isEmployee;
+    
+    // FIX: Include Individual Tax Class so it automatically builds from parts
+    const shouldAutoNameFromParts = isEmployee || isIndividualTaxClass;
+    
     const shouldDisableBusinessName = isEmployee;
     const shouldLockNameParts = isSupplier && !isIndividualTaxClass;
 
@@ -353,8 +366,14 @@ const PayeeSetupTab = forwardRef(
 
         const updates = {};
 
+        // Forcefully overwrite Registered Name to match the individual's parts
         if ((form[f.name] || "") !== reg) updates[f.name] = reg;
-        if ((form.businessName || "") !== reg) updates.businessName = reg;
+        
+        // Aggressively bind Business Name only for Employees. 
+        // For WI (Individuals), allow applyAutoNames to handle it so users can set custom DTI Trade Names.
+        if (isEmployee) {
+          if ((form.businessName || "") !== reg) updates.businessName = reg;
+        }
 
         applyAutoNames(updates, reg);
 
@@ -372,6 +391,7 @@ const PayeeSetupTab = forwardRef(
       }
     }, [
       shouldAutoNameFromParts,
+      isEmployee,
       isSupplier,
       isIndividualTaxClass,
       isEditing,
@@ -518,7 +538,7 @@ const PayeeSetupTab = forwardRef(
                       form.lastName
                     );
                     updates[f.name] = reg;
-                    updates.businessName = reg;
+                    if (isEmployee) updates.businessName = reg;
                     applyAutoNames(updates, reg);
                   }
 
@@ -544,7 +564,7 @@ const PayeeSetupTab = forwardRef(
                       form.lastName
                     );
                     updates[f.name] = reg;
-                    updates.businessName = reg;
+                    if (isEmployee) updates.businessName = reg;
                     applyAutoNames(updates, reg);
                   }
 
@@ -571,7 +591,7 @@ const PayeeSetupTab = forwardRef(
                       value
                     );
                     updates[f.name] = reg;
-                    updates.businessName = reg;
+                    if (isEmployee) updates.businessName = reg;
                     applyAutoNames(updates, reg);
                   }
 

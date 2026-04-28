@@ -57,18 +57,25 @@ const SearchSalesRepRef = ({ isOpen, onClose }) => {
     refetch,
   } = useQuery({
     queryKey: ["lookupsalesRep"],
+    queryKey: ["lookupsalesRep"],
     queryFn: async () => {
       const { data: result } = await apiClient.get("/salesRep");
+
+      // FIX 1: Access the 'result' property of the first row
+      // Most of your SPROCs return a single row with a "result" column containing the JSON.
       const rawData = result?.data?.[0]?.result || result?.data || "[]";
+
       const parsedData = Array.isArray(rawData) ? rawData : JSON.parse(rawData);
 
       return parsedData.map((item) => ({
         ...item,
+        // FIX 2: Added support for the ALL-CAPS keys shown in your SQL screenshot
         salesRepCode: item.salesRepCode ?? item.SALESREP_CODE ?? item.sales_rep_code ?? "",
         salesRepName: item.salesRepName ?? item.SALESREP_NAME ?? item.sales_rep_name ?? "",
       }));
     },
     enabled: isOpen,
+    staleTime: 1000 * 60 * 5,
     staleTime: 1000 * 60 * 5,
     placeholderData: keepPreviousData,
   });
@@ -124,6 +131,7 @@ const SearchSalesRepRef = ({ isOpen, onClose }) => {
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 animate-fade-in">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[60vh] flex flex-col relative overflow-hidden transform animate-scale-in border border-slate-200">
 
+
         {/* Header */}
         <div className="flex items-center justify-between p-2 border-b bg-slate-100">
           <div className="flex items-center gap-3">
@@ -172,6 +180,7 @@ const SearchSalesRepRef = ({ isOpen, onClose }) => {
                 <tr>
                   {[
                     { label: "Sales Rep Code", key: "salesRepCode" },
+                    { label: "Sales Rep Name", key: "salesRepName" },
                     { label: "Sales Rep Name", key: "salesRepName" },
                   ].map((col) => (
                     <th key={col.key} className="px-4 py-2 text-left border-b border-slate-200">
