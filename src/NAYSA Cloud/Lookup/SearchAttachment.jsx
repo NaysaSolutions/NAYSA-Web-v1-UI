@@ -28,7 +28,18 @@ import {
 
 const SearchAttachment = ({ isOpen, onClose, params }) => {
   // Destructure dynamic labels and values from params (Title removed from UI)
-  const { DocumentID, CodeLabel, Code, NameLabel, Name } = params || {};
+  const {
+    DocumentID,
+    DocumentNo,
+    DocumentName,
+    CodeLabel,
+    Code,
+    NameLabel,
+    Name,
+  } = params || {};
+
+  const finalCode = DocumentNo || Code || "N/A";
+  const finalName = DocumentName || Name || "N/A";
   
   const [files, setFiles] = useState([]);
   const [isFetching, setIsFetching] = useState(false);
@@ -188,11 +199,11 @@ const SearchAttachment = ({ isOpen, onClose, params }) => {
         <div className="p-4 m-4 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-700 text-sm rounded-lg grid sm:grid-cols-2 gap-4 shadow-sm">
           <p className="flex flex-col">
             <span className="font-bold text-[10px] text-gray-500 uppercase tracking-widest">{CodeLabel || "Document No"}</span>
-            <span className="text-blue-700 dark:text-blue-400 font-semibold">{Code || "N/A"}</span>
+            <span className="text-blue-700 dark:text-blue-400 font-semibold">{finalCode}</span>
           </p>
           <p className="flex flex-col">
             <span className="font-bold text-[10px] text-gray-500 uppercase tracking-widest">{NameLabel || "Name"}</span>
-            <span className="text-blue-700 dark:text-blue-400 font-semibold">{Name || "N/A"}</span>
+            <span className="text-blue-700 dark:text-blue-400 font-semibold">{finalName}</span>
           </p>
         </div>
 

@@ -86,6 +86,7 @@ const SO = () => {
   // View Document Const
   const loadedFromUrlRef = useRef(false);
   const customerPoNoRef = useRef("");
+  const originalSOQuantityRef = useRef({});
   const skipNextCustomerPoBlurRef = useRef(false);
   const deliveryDateRef = useRef("");
   const suppressDeliveryDatePromptRef = useRef(true);
@@ -324,6 +325,8 @@ const SO = () => {
   totalDiscountAmount: '0.00',
   totalNetAmount: '0.00',
   });
+
+
 
   
   // Company defaults
@@ -897,8 +900,8 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
     // Format rows
     const retrievedDetailRows = (data.dt1 || []).map(item => ({
       ...item,
-      soQuantity: formatNumber(item.soQuantity??0),
-      sellingPrice: formatNumber(item.sellingPrice??0),
+      soQuantity: formatNumber(item.soQuantity ?? 0,quantityDecimals),
+      sellingPrice: formatNumber(item.sellingPrice??0,sellingPriceDecimals),
       grossAmount: formatNumber(item.grossAmount),
       discRate1: formatNumber(item.discRate1 ?? 0),
       discRate2: formatNumber(item.discRate2 ?? 0),
@@ -2152,6 +2155,35 @@ const handleSelectBillTerm = async (billtermCode) => {
 
 
 
+const validateSOQuantity = (index, inputValue) => {
+  const row = detailRowsRef.current[index];
+  const drQty = parseFormattedNumber(row?.drQuantity || 0) || 0;
+  const soQty = parseFormattedNumber(inputValue || 0) || 0;
+  const rowStatus = String(row?.soStat || "").toUpperCase();
+
+  if (drQty > 0 && rowStatus === "O" && soQty < drQty) {
+    const originalValue = originalSOQuantityRef.current[index] ?? row?.soQuantity ?? formatNumber(0, quantityDecimals);
+
+    useSwalErrorAlert("Invalid Quantity", "SO Quantity must be greater than or equal to DR Quantity.");
+
+    const updatedRows = [...detailRowsRef.current];
+    updatedRows[index] = {
+      ...updatedRows[index],
+      soQuantity: originalValue,
+    };
+
+    detailRowsRef.current = updatedRows;
+    updateState({ detailRows: updatedRows });
+    updateTotals(updatedRows);
+
+    return false;
+  }
+
+  delete originalSOQuantityRef.current[index];
+  return true;
+};
+
+
 const handleSODetailRowChange = (index, field, value) => {
   const discountRateFields = [
     "discRate1",
@@ -2277,6 +2309,10 @@ const handleSODetailRowChange = (index, field, value) => {
     [field]: value,
   };
 
+
+
+
+
   if (field === "delDate" && value && isDateEarlierThanDocumentDate(value)) {
     clearHeaderAndDetailDeliveryDates({ showAlert: true });
     return;
@@ -2338,6 +2374,9 @@ const enterNextRowZeroClearFields = [
 const renderSODetailCell = (columnKey, row, index, soStatusOptions) => {
   const columnWidth = getDetailColumnFallbackWidth(columnKey);
   const style = getDetailCellStyle(columnKey, columnWidth);
+  const isRowWithDR = (parseFormattedNumber(row.drQuantity || 0) || 0) > 0;
+  const canSearchItem = !isRowWithDR;
+  const canEditDetailAfterDR = !isRowWithDR;
   const detailModalHandlers = {
     itemCode: () => updateState({ selectedRowIndex: index, selectionContext: "rowItemLookup", insertAfterIndex: null, showItemModal: true }),
     salesRepCode: () => updateState({ showSalesRepModal: true, selectedRowIndex: index, modalContext: "detailSalesRep" }),
@@ -2388,49 +2427,91 @@ const renderSODetailCell = (columnKey, row, index, soStatusOptions) => {
   );
 
   // Shared numeric input with formatting, zero-clear, and Enter-down support.
+  // const numericInput = (field, options = {}) => (
+  //   <input
+  //     type="text"
+  //     id={`${field}-${index}`}
+  //     className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
+  //     value={row[field] || ""}
+  //     readOnly={options.readOnly ?? isFormDisabled}
+  //     onChange={(e) => {
+  //       if (options.readOnly || options.blocked?.()) return;
+  //       const sanitizedValue = e.target.value.replace(/[^0-9.]/g, "");
+  //       const regex = options.regex || /^\d*\.?\d{0,2}$/;
+  //       if (regex.test(sanitizedValue) || sanitizedValue === "") {
+  //         handleSODetailRowChange(index, field, sanitizedValue);
+  //       }
+  //     }}
+  //     onFocus={(e) => {
+  //       clearSoDetailZeroOnFocus(e, {
+  //         isEditable: !(options.readOnly ?? isFormDisabled) && !options.blocked?.(),
+  //         onClear: (value) => handleSODetailRowChange(index, field, value),
+  //       });
+  //     }}
+  //     onBlur={(e) => {
+  //       if (options.readOnly || options.blocked?.()) return;
+  //       const num = parseFormattedNumber(e.target.value);
+  //       handleSODetailRowChange(
+  //         index,
+  //         field,
+  //         Number.isFinite(num) ? formatNumber(num, options.decimals) : formatNumber(0, options.decimals)
+  //       );
+  //     }}
+  //     onKeyDown={(e) => {
+  //       if (e.key !== "Enter" || options.readOnly || options.blocked?.()) return;
+  //       e.preventDefault();
+  //       const num = parseFormattedNumber(e.target.value);
+  //       handleSODetailRowChange(
+  //         index,
+  //         field,
+  //         Number.isFinite(num) ? formatNumber(num, options.decimals) : formatNumber(0, options.decimals)
+  //       );
+  //       focusNextDetailCell(field);
+  //     }}
+  //   />
+  // );
+
   const numericInput = (field, options = {}) => (
-    <input
-      type="text"
-      id={`${field}-${index}`}
-      className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
-      value={row[field] || ""}
-      readOnly={options.readOnly ?? isFormDisabled}
-      onChange={(e) => {
-        if (options.readOnly || options.blocked?.()) return;
-        const sanitizedValue = e.target.value.replace(/[^0-9.]/g, "");
-        const regex = options.regex || /^\d*\.?\d{0,2}$/;
-        if (regex.test(sanitizedValue) || sanitizedValue === "") {
-          handleSODetailRowChange(index, field, sanitizedValue);
-        }
-      }}
+  <input
+    type="text"
+    id={`${field}-${index}`}
+    className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
+    value={row[field] || ""}
+    readOnly={options.readOnly ?? isFormDisabled}
+    onChange={(e) => {
+      if (options.readOnly || options.blocked?.()) return;
+      const sanitizedValue = e.target.value.replace(/[^0-9.]/g, "");
+      const regex = options.regex || /^\d*\.?\d{0,2}$/;
+      if (regex.test(sanitizedValue) || sanitizedValue === "") {
+        handleSODetailRowChange(index, field, sanitizedValue);
+      }
+    }}
       onFocus={(e) => {
-        clearSoDetailZeroOnFocus(e, {
-          isEditable: !(options.readOnly ?? isFormDisabled) && !options.blocked?.(),
-          onClear: (value) => handleSODetailRowChange(index, field, value),
-        });
-      }}
-      onBlur={(e) => {
-        if (options.readOnly || options.blocked?.()) return;
-        const num = parseFormattedNumber(e.target.value);
-        handleSODetailRowChange(
-          index,
-          field,
-          Number.isFinite(num) ? formatNumber(num, options.decimals) : formatNumber(0, options.decimals)
-        );
-      }}
-      onKeyDown={(e) => {
-        if (e.key !== "Enter" || options.readOnly || options.blocked?.()) return;
-        e.preventDefault();
-        const num = parseFormattedNumber(e.target.value);
-        handleSODetailRowChange(
-          index,
-          field,
-          Number.isFinite(num) ? formatNumber(num, options.decimals) : formatNumber(0, options.decimals)
-        );
-        focusNextDetailCell(field);
-      }}
-    />
-  );
+      options.onFocus?.(e);
+      clearSoDetailZeroOnFocus(e, {
+        isEditable: !(options.readOnly ?? isFormDisabled) && !options.blocked?.(),
+        onClear: (value) => handleSODetailRowChange(index, field, value),
+      });
+    }}
+    onBlur={(e) => {
+      if (options.readOnly || options.blocked?.()) return;
+      if (typeof options.onBlur === "function" && options.onBlur(e) === false) return;
+
+      const num = parseFormattedNumber(e.target.value);
+      handleSODetailRowChange(index, field, Number.isFinite(num) ? formatNumber(num, options.decimals) : formatNumber(0, options.decimals));
+    }}
+    onKeyDown={(e) => {
+      if (e.key !== "Enter" || options.readOnly || options.blocked?.()) return;
+      e.preventDefault();
+
+      if (typeof options.onKeyDown === "function" && options.onKeyDown(e) === false) return;
+
+      const num = parseFormattedNumber(e.target.value);
+      handleSODetailRowChange(index, field, Number.isFinite(num) ? formatNumber(num, options.decimals) : formatNumber(0, options.decimals));
+      focusNextDetailCell(field);
+    }}
+  />
+);
 
   // Read-only amount display used by calculated amount columns.
   const readonlyAmountInput = (field) => (
@@ -2445,20 +2526,20 @@ const renderSODetailCell = (columnKey, row, index, soStatusOptions) => {
 
   const detailColumnRenderers = {
     ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
-    soStat: () => { const isStatusLocked = !documentID || ["X", "C"].includes(row.soStat || "O"); return <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`soStat-${index}`} className="w-full global-tran-td-inputclass-ui text-left" value={row.soStat || "O"} disabled={isFormDisabled || isStatusLocked} onChange={(e) => handleSODetailRowChange(index, "soStat", e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled || isStatusLocked) return; e.preventDefault(); focusNextDetailCell("soStat"); }}>{soStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></td>; },
-    itemCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}><div className="relative w-full">{lookupInput(columnKey)}{!isFormDisabled && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={detailModalHandlers[columnKey]} />}</div></td>,
+    soStat: () => { const isStatusLocked = !documentID || ["X", "C"].includes(row.soStat || "O"); return <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`soStat-${index}`} className="w-full global-tran-td-inputclass-ui text-left" value={row.soStat || "O"} disabled={isFormDisabled || isStatusLocked} onChange={(e) => handleSODetailRowChange(index, "soStat", e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled || isStatusLocked) return; e.preventDefault(); focusNextDetailCell("soStat"); }}>{soStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></td>; }, 
+    itemCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}><div className="flex items-center gap-1"><input type="text" value={row.itemCode || ""} readOnly className="w-full h-7 text-xs bg-transparent focus:outline-none focus:ring-0" />{canSearchItem && <button type="button" className="text-blue-600 hover:text-blue-800" onClick={() => updateState({ selectedRowIndex: index, selectionContext: "rowItemLookup", insertAfterIndex: null, showItemModal: true })}><FontAwesomeIcon icon={faSearch} /></button>}</div></td>, 
     itemName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey)}</td>,
     itemSpecs: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey)}</td>,
     uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { className: "text-center" })}<input type="hidden" value={row.pmType || ""} readOnly /><input type="hidden" value={row.groupId || ""} readOnly /><input type="hidden" value={row.pmId || ""} readOnly /></td>,
-    soQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`) })}</td>,
+    soQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), onFocus: () => { originalSOQuantityRef.current[index] = row.soQuantity; }, onBlur: (e) => validateSOQuantity(index, e.target.value), onKeyDown: (e) => validateSOQuantity(index, e.target.value) })}</td>,
     sellingPrice: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: sellingPriceDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${sellingPriceDecimals}}$`), blocked: () => !isSellingPriceAndDiscountEditable || row.freeItem === "Y", readOnly: isFormDisabled || !isSellingPriceAndDiscountEditable || row.freeItem === "Y" })}</td>,
     grossAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
     totDiscount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
     netAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
-    delDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><DateFormatInput id={`delDate${index}`} value={row.delDate || ""} disabled={isFormDisabled} className="w-full global-tran-td-inputclass-ui text-center pr-7" updateState={(updates) => { if (updates[`delDate${index}`] !== undefined) handleSODetailRowChange(index, "delDate", updates[`delDate${index}`]); }} onKeyDownCustom={(e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); focusNextDetailCell("delDate"); }} /></td>,
-    customerPoNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey)}</td>,
-    salesRepCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}><div className="relative w-full">{lookupInput(columnKey)}{!isFormDisabled && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={detailModalHandlers[columnKey]} />}</div></td>,
-    freeItem: () => <td key={columnKey} className="global-tran-td-ui" style={style}><button type="button" className={`w-full h-7 rounded-full border text-[11px] font-semibold transition-colors ${row.freeItem === "Y" ? "border-blue-500 bg-blue-500/15 text-blue-700" : "border-slate-300 bg-white text-slate-600"} ${isFormDisabled ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`} disabled={isFormDisabled} onClick={() => handleSODetailRowChange(index, "freeItem", row.freeItem === "Y" ? "" : "Y")}>{row.freeItem === "Y" ? "Yes" : "No"}</button></td>,
+    delDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><DateFormatInput value={row.delDate || ""} disabled={isFormDisabled || isRowWithDR} onChange={(value) => handleSODetailRowChange(index, "delDate", value)} className="w-full h-7 text-xs bg-transparent focus:outline-none focus:ring-0" /></td>, 
+    customerPoNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { readOnly: isFormDisabled || isRowWithDR })}</td>,
+    salesRepCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}><div className="flex items-center gap-1"><input type="text" value={row.salesRepCode || ""} readOnly className="w-full h-7 text-xs bg-transparent focus:outline-none focus:ring-0" />{canEditDetailAfterDR && <button type="button" className="text-blue-600 hover:text-blue-800" onClick={() => updateState({ showSalesRepModal: true, selectedRowIndex: index, modalContext: "detailSalesRep" })}><FontAwesomeIcon icon={faSearch} /></button>}</div></td>,
+    freeItem: () => <td key={columnKey} className="global-tran-td-ui" style={style}><button type="button" className={`w-full h-7 rounded-full border text-[11px] font-semibold transition-colors ${row.freeItem === "Y" ? "border-blue-500 bg-blue-500/15 text-blue-700" : "border-slate-300 bg-white text-slate-600"} ${isFormDisabled || isRowWithDR ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`} disabled={isFormDisabled || isRowWithDR} onClick={() => handleSODetailRowChange(index, "freeItem", row.freeItem === "Y" ? "" : "Y")}>{row.freeItem === "Y" ? "Yes" : "No"}</button></td>,
     drQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`) })}</td>,
     siQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`) })}</td>,
   };
@@ -2505,7 +2586,7 @@ return (
         isAttachDisabled={!documentID}
         isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
         isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
-        isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED"|| displayStatus === "CLOSED"}
+        isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED"|| displayStatus === "CLOSED" || totalDrQuantity > 0}
       />
       </div>
 
@@ -3042,6 +3123,8 @@ return (
 
 
 
+    {topTab === "details" && (
+    <>
     {/* Invoice Details Footer */}
     <div className="global-tran-tab-footer-main-div-ui">
 
@@ -3121,6 +3204,8 @@ return (
 
 
     </div>
+    </>
+    )}
 
     </div>
 
