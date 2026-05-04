@@ -36,6 +36,7 @@ const SearchAttachment = ({ isOpen, onClose, params }) => {
     Code,
     NameLabel,
     Name,
+    viewOnly = false,
   } = params || {};
 
   const finalCode = DocumentNo || Code || "N/A";
@@ -177,7 +178,7 @@ const SearchAttachment = ({ isOpen, onClose, params }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50 p-4 sm:p-0">
+    <div className="fixed inset-0 z-[10020] flex items-center justify-center bg-black bg-opacity-50 p-4 sm:p-0">
       <div className="bg-white dark:bg-gray-800 w-full max-w-4xl mx-auto rounded-lg shadow-2xl overflow-hidden transform transition-all sm:my-8 sm:align-middle">
         
         {/* Header */}
@@ -218,7 +219,9 @@ const SearchAttachment = ({ isOpen, onClose, params }) => {
             <div className="flex flex-col items-center justify-center h-full text-gray-400 text-center py-10 border-2 border-dashed border-gray-200 rounded-lg bg-gray-50">
               <FontAwesomeIcon icon={faFile} size="3x" className="mb-3 text-gray-300" />
               <p className="font-medium text-gray-500">No attachments found.</p>
-              <p className="text-xs mt-1">Click "Add File" below to upload documents.</p>
+              {!viewOnly && (
+                <p className="text-xs mt-1">Click "Add File" below to upload documents.</p>
+              )}
             </div>
           ) : (
             <div className="max-h-[300px] mt-0 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
@@ -253,14 +256,16 @@ const SearchAttachment = ({ isOpen, onClose, params }) => {
                         >
                           <FontAwesomeIcon icon={downloadingId === item.id ? faSpinner : faDownload} spin={downloadingId === item.id} />
                         </button>
-                        <button
-                          onClick={() => handleDelete(item.id, item.fileName)}
-                          title="Delete"
-                          disabled={deletingId === item.id}
-                          className="text-red-500 hover:text-red-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <FontAwesomeIcon icon={deletingId === item.id ? faSpinner : faTrash} spin={deletingId === item.id} />
-                        </button>
+                        {!viewOnly && (
+                          <button
+                            onClick={() => handleDelete(item.id, item.fileName)}
+                            title="Delete"
+                            disabled={deletingId === item.id}
+                            className="text-red-500 hover:text-red-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <FontAwesomeIcon icon={deletingId === item.id ? faSpinner : faTrash} spin={deletingId === item.id} />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -273,23 +278,27 @@ const SearchAttachment = ({ isOpen, onClose, params }) => {
         {/* Footer */}
         <div className="flex justify-end p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
           <div className="flex space-x-2">
-            <label
-              htmlFor="fileInput"
-              className={`flex items-center space-x-2 px-5 py-2 rounded-lg cursor-pointer transition-colors duration-200 font-bold text-xs uppercase tracking-wider
-                ${isUploading ? 'bg-gray-400 text-gray-800 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'}`}
-            >
-              <FontAwesomeIcon icon={isUploading ? faSpinner : faPlus} spin={isUploading} />
-              <span>{isUploading ? 'Uploading...' : 'Add File'}</span>
-            </label>
-            <input
-              type="file"
-              multiple
-              accept=".pdf,.jpg,.jpeg,.png"
-              id="fileInput"
-              className="hidden"
-              onChange={handleFileChange}
-              disabled={isUploading}
-            />
+            {!viewOnly && (
+              <>
+                <label
+                  htmlFor="fileInput"
+                  className={`flex items-center space-x-2 px-5 py-2 rounded-lg cursor-pointer transition-colors duration-200 font-bold text-xs uppercase tracking-wider
+                    ${isUploading ? 'bg-gray-400 text-gray-800 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'}`}
+                >
+                  <FontAwesomeIcon icon={isUploading ? faSpinner : faPlus} spin={isUploading} />
+                  <span>{isUploading ? 'Uploading...' : 'Add File'}</span>
+                </label>
+                <input
+                  type="file"
+                  multiple
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  id="fileInput"
+                  className="hidden"
+                  onChange={handleFileChange}
+                  disabled={isUploading}
+                />
+              </>
+            )}
             <button
               onClick={handleDownloadAll}
               disabled={files.length === 0}

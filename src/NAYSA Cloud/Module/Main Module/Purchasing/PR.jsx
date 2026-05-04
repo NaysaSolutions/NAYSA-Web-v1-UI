@@ -231,7 +231,7 @@ const toDateInputValue = (value) => {
     showJobCodesModal:false,
     rcLookupModalOpen: false,
     rcLookupContext: "", 
-    msLookupModalOpen: false,
+    itemLookupModalOpen: false,
   });
 
   const updateState = (updates) => {
@@ -307,7 +307,7 @@ const toDateInputValue = (value) => {
 
     rcLookupModalOpen,
     rcLookupContext,
-    msLookupModalOpen,
+    itemLookupModalOpen,
   } = state;
 
   useEffect(() => {
@@ -503,7 +503,7 @@ useEffect(() => {
       detailRows: [],
       rcLookupModalOpen: false,
       rcLookupContext: "",
-      msLookupModalOpen: false,
+      itemLookupModalOpen: false,
     });
 
     updateTotalsDisplay(0);
@@ -677,9 +677,59 @@ const handleCloseJobCodesLookup = (selectedItems) => {
 };
 
 
-const handleCloseMSLookup = (selectedItems) => {
+const getItemLookupConfig = (lookupDocType) => {
+  const normalizedDocType = String(lookupDocType || "").toUpperCase();
+  const invType = normalizedDocType.endsWith("FG")
+    ? "FG"
+    : normalizedDocType.endsWith("RM")
+      ? "RM"
+      : "MS";
+
+  return {
+    invType,
+    endpoint: `getInvLookup${invType}`,
+  };
+};
+
+const applyBranchBalanceToItems = async (items, invType) => {
+  if (!Array.isArray(items) || items.length === 0) return [];
+
+  const balancePayload = {
+    branchCode,
+    prNo: documentNo || "",
+    prId: documentID || "",
+    userCode,
+    dt1: items.map((item, index) => ({
+      lnNo: index + 1,
+      invType,
+      itemCode: item?.itemCode || "",
+      itemName: item?.itemName || "",
+      uomCode: item?.uomCode || "",
+    })),
+  };
+
+  const balanceRows = await useSelectedIteBranchBalance(balancePayload);
+  if (!Array.isArray(balanceRows)) {
+    return items.map((item) => ({ ...item, qtyHand: 0 }));
+  }
+
+  return items.map((item) => {
+    const match = balanceRows.find(
+      (balance) =>
+        balance?.itemCode === item?.itemCode &&
+        balance?.invType === invType
+    );
+
+    return {
+      ...item,
+      qtyHand: match ? match.quantity : 0,
+    };
+  });
+};
+
+const handleCloseItemLookup = async (selectedItems) => {
   if (!selectedItems) {
-    updateState({ msLookupModalOpen: false });
+    updateState({ itemLookupModalOpen: false });
     return;
   }
 
@@ -688,29 +738,43 @@ const handleCloseMSLookup = (selectedItems) => {
     : selectedItems.records ? [selectedItems.records] : [];
 
   if (itemsArray.length === 0) {
-    updateState({ msLookupModalOpen: false });
+    updateState({ itemLookupModalOpen: false });
     return;
   }
 
-  // Per Item Selection
-  console.log(itemSingleSelect)
+  const { invType: lookupInvType } = getItemLookupConfig(selectedDocType);
+  const isDuplicateLookupItem = (newItem) =>
+    detailRows.some(
+      (existingRow) =>
+        existingRow.itemCode === newItem.itemCode &&
+        existingRow.invType === lookupInvType
+    );
+
   if (itemSingleSelect) {
     const singleItem = itemsArray[0];
-    const isDuplicate = detailRows.some(row => row.itemCode === singleItem.itemCode);
+    const isDuplicate = isDuplicateLookupItem(singleItem);
+    const applySingleItem = async () => {
+      updateState({ isLoading: true });
+      const [itemWithBalance] = await applyBranchBalanceToItems([singleItem], lookupInvType);
+      handleDetailChange(selectedRowIndex, 'itemCode', itemWithBalance || singleItem, false);
+      updateState({
+        itemSingleSelect: false,
+        itemLookupModalOpen: false,
+        isLoading: false,
+      });
+    };
 
     if (isDuplicate) {
       useSwalConfirmAlert(
         "Duplicate Item Detected",
         "This item is already in the list. Do you want to select it anyway?"
-      ).then((result) => {
+      ).then(async (result) => {
         if (result.isConfirmed) {
-          handleDetailChange(selectedRowIndex, 'itemCode', singleItem, false);
-          updateState({ itemSingleSelect: false, msLookupModalOpen: false });
+          await applySingleItem();
         }
       });
     } else {
-      handleDetailChange(selectedRowIndex, 'itemCode', singleItem, false);
-      updateState({ itemSingleSelect: false, msLookupModalOpen: false });
+      await applySingleItem();
     }
     return;
   }
@@ -719,12 +783,14 @@ const handleCloseMSLookup = (selectedItems) => {
 
   // Multiple Item Selection
   const duplicateItems = itemsArray.filter(newItem => 
-    detailRows.some(existingRow => existingRow.itemCode === newItem.itemCode)
+    isDuplicateLookupItem(newItem)
   );
 
-  const processAddition = (itemsToAdd) => {
-    const newRows = itemsToAdd.map((item) => ({
-      invType: "MS",
+  const processAddition = async (itemsToAdd) => {
+    updateState({ isLoading: true });
+    const itemsWithBalance = await applyBranchBalanceToItems(itemsToAdd, lookupInvType);
+    const newRows = itemsWithBalance.map((item) => ({
+      invType: lookupInvType,
       groupId: "",
       prStatus: "O",
       itemCode: item?.itemCode || "",
@@ -745,8 +811,9 @@ const handleCloseMSLookup = (selectedItems) => {
 
     updateState({
       detailRows: [...detailRows, ...newRows],
-      msLookupModalOpen: false,
-      itemSingleSelect: false
+      itemLookupModalOpen: false,
+      itemSingleSelect: false,
+      isLoading: false,
     });
   };
 
@@ -754,23 +821,23 @@ const handleCloseMSLookup = (selectedItems) => {
     useSwalConfirmAlert(
       "Duplicate Items Detected",
       "Some items are already in the list. Do you want to add them anyway?"
-    ).then((result) => {
+    ).then(async (result) => {
       if (result.isConfirmed) {
-        processAddition(itemsArray);
+        await processAddition(itemsArray);
       } else {
         const uniqueOnly = itemsArray.filter(newItem => 
-          !detailRows.some(existingRow => existingRow.itemCode === newItem.itemCode)
+          !isDuplicateLookupItem(newItem)
         );
         
         if (uniqueOnly.length > 0) {
-          processAddition(uniqueOnly);
+          await processAddition(uniqueOnly);
         } else {
-          updateState({ msLookupModalOpen: false });
+          updateState({ itemLookupModalOpen: false });
         }
       }
     });
   } else {
-    processAddition(itemsArray);
+    await processAddition(itemsArray);
   }
 };
 
@@ -952,10 +1019,10 @@ const handleScanItem = async (scannedValue) => {
 };
 
 
-  // const handleOpenMSLookup = () => {
+  // const handleOpenItemLookup = () => {
   //   if (isFormDisabled) return;
   //   setShowTypeDropdown(false);
-  //   updateState({ msLookupModalOpen: true });
+  //   updateState({ itemLookupModalOpen: true });
   // };
 
   
@@ -964,42 +1031,28 @@ const handleScanItem = async (scannedValue) => {
       updateState({ selectedRowIndex: index,
                     itemSingleSelect:true,
       }); 
-      await handleOpenMSLookup(true,invType);
+      await handleOpenItemLookup(true,invType);
       return;
   };
 
 
   
-    const handleOpenMSLookup = async (itemSingleSelect, docType) => {
+    const handleOpenItemLookup = async (itemSingleSelect, docType) => {
       try {
+        const { endpoint: itemLookupEndPoint } = getItemLookupConfig(docType);
   
         setShowTypeDropdown(false);
         updateState({ isLoading: true,
                       itemSingleSelect : itemSingleSelect,
-                      itemLookupEndPoint : "getInvLookupMS",
+                      itemLookupEndPoint,
                       selectedDocType: docType});
     
-        // const endpoint ="getInvLookupMS"
-
         
-
-        // const response = await fetchDataJson(endpoint, { userCode, docType, branchCode });
-        // const custData = response?.data?.[0]?.result ? JSON.parse(response.data[0].result) : [];
-    
-  
-        // const colConfig = await useSelectedHSColConfig("AllMastItemLookup");
-  
-  
-      //  if (custData.length === 0) {
-      //     useSwalInfoAlert("MS Master Data" ,"No records found")
-      //      updateState({ isLoading: false });
-      //     return; 
-      //   }
     
         updateState({ 
                       // globalLookupRow: custData,
                       // globalLookupHeader:colConfig,
-                      msLookupModalOpen: true,
+                      itemLookupModalOpen: true,
                       isLoading: false
           });
     
@@ -2077,7 +2130,7 @@ const renderPrDetailColumn = (columnKey, row, index) => {
             className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
             onClick={() => {
               setShowTypeDropdown(false);
-              handleSelectTypeAndAddRow("FG");
+              handleOpenItemLookup(false, "PRFG");
             }}
           >
             <div className="flex items-center gap-3">
@@ -2101,7 +2154,7 @@ const renderPrDetailColumn = (columnKey, row, index) => {
             className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
             onClick={() => {
               setShowTypeDropdown(false);
-              handleOpenMSLookup(false, "PRMS");
+              handleOpenItemLookup(false, "PRMS");
             }}
           >
             <div className="flex items-center gap-3">
@@ -2125,7 +2178,7 @@ const renderPrDetailColumn = (columnKey, row, index) => {
             className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
             onClick={() => {
               setShowTypeDropdown(false);
-              handleSelectTypeAndAddRow("RM");
+              handleOpenItemLookup(false, "PRRM");
             }}
           >
             <div className="flex items-center gap-3">
@@ -2333,12 +2386,12 @@ const renderPrDetailColumn = (columnKey, row, index) => {
 
 
 
-         {msLookupModalOpen && (
+         {itemLookupModalOpen && (
         <ItemMastLookupModal
-        isOpen={msLookupModalOpen}
+        isOpen={itemLookupModalOpen}
         endpoint={itemLookupEndPoint}
-        onClose={handleCloseMSLookup}
-        onCancel={() => updateState({ msLookupModalOpen: false })}
+        onClose={handleCloseItemLookup}
+        onCancel={() => updateState({ itemLookupModalOpen: false })}
         enableMultiSelect={!itemSingleSelect}
         docType={selectedDocType}
          />

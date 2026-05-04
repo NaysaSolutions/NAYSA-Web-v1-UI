@@ -764,6 +764,7 @@ import ApproveUser from "@/NAYSA Cloud/Authentication/ApproveUser.jsx";
 import BiometricSettingsPage from "./NAYSA Cloud/Authentication/BiometricSettingsPage.jsx";
 import AuthProvider, { useAuth } from "./NAYSA Cloud/Authentication/AuthContext.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
+import ElectronScannerPage from "@/NAYSA Cloud/Electron/ElectronScannerPage.jsx";
 
 const queryClient = new QueryClient();
 
@@ -846,6 +847,7 @@ const AppContent = () => {
   const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const isElectronScannerRoute = location.pathname === "/electron-scanner";
 
   const [menuItems, setMenuItems] = useState(
     () => JSON.parse(sessionStorage.getItem("menuItems")) || []
@@ -998,6 +1000,10 @@ const AppContent = () => {
     },
     [location.pathname, navigate]
   );
+
+  if (isElectronScannerRoute) {
+    return <ElectronScannerPage />;
+  }
 
   if (loading) {
     return (
