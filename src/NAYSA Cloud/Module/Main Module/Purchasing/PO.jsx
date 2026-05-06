@@ -77,7 +77,9 @@ import {
   parseFormattedNumber,
   useSwalshowSaveSuccessDialog,
   useSwalInfoAlert,
-  useSwalSuccessAlert
+  useSwalSuccessAlert,
+  useSwalErrorAlert,
+  useSwalHandleOpenSpecsModal
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
 import { useSelectedHSColConfig } from '@/NAYSA Cloud/Global/selectedData';
@@ -488,33 +490,37 @@ const PO = () => {
 
   const openSpecsModal = (rowIndex) => {
     if (isFormDisabled) return;
-    const current = detailRows?.[rowIndex]?.itemSpecs ?? "";
-    updateState({
-      specsModalOpen: true,
-      specsRowIndex: rowIndex,
-      specsTempText: current,
-    });
+
+    useSwalHandleOpenSpecsModal(
+      rowIndex,
+      detailRows,
+      handleDetailChange,
+      detailRows?.[rowIndex]?.itemSpecs || "",
+      "Specification",
+      "itemSpecs",
+      "Enter specification for this item..."
+    );
   };
 
-  const closeSpecsModal = () => {
-    updateState({
-      specsModalOpen: false,
-      specsRowIndex: null,
-      specsTempText: "",
-    });
-  };
+  // const closeSpecsModal = () => {
+  //   updateState({
+  //     specsModalOpen: false,
+  //     specsRowIndex: null,
+  //     specsTempText: "",
+  //   });
+  // };
 
-  const saveSpecsModal = () => {
-    const idx = state.specsRowIndex;
-    if (idx === null || idx === undefined) return closeSpecsModal();
-    const updated = [...detailRows];
-    updated[idx] = {
-      ...updated[idx],
-      itemSpecs: state.specsTempText ?? "",
-    };
-    updateState({ detailRows: updated });
-    closeSpecsModal();
-  };
+  // const saveSpecsModal = () => {
+  //   const idx = state.specsRowIndex;
+  //   if (idx === null || idx === undefined) return closeSpecsModal();
+  //   const updated = [...detailRows];
+  //   updated[idx] = {
+  //     ...updated[idx],
+  //     itemSpecs: state.specsTempText ?? "",
+  //   };
+  //   updateState({ detailRows: updated });
+  //   closeSpecsModal();
+  // };
 
   const handleCloseWarehouseLookup = (row) => {
     if (!row) {
@@ -696,7 +702,7 @@ const PO = () => {
     }
   };
 
- const fetchTranData = async (poNoParam, _branchCode, key = "") => {
+  const fetchTranData = async (poNoParam, _branchCode, key = "") => {
     const resetState = () => {
       updateState({
         documentNo: "",
@@ -792,35 +798,58 @@ const PO = () => {
       });
 
       updateState({
-        documentStatus: data.status,
-        status: data.status,
-        originalDocStatus: data.status,
-        documentID: data.poId,
+        documentStatus: data.status || "O",
+        status: data.status || "O",
+        originalDocStatus: data.status || "O",
+
+        documentID: data.poId || "",
         groupId: data.groupId || "",
-        documentNo: data.poNo,
-        branchCode: data.branchCode,
+        documentNo: data.poNo || "",
+        branchCode: data.branchCode || branchCode,
+
         header: {
-          po_date: poDateForHeader,
-          dateNeeded: dateNeededForHeader,
-          delDate: delDateForHeader || dateNeededForHeader || useGetCurrentDayV2(),
+          po_date: poDateForHeader || "",
+          dateNeeded: dateNeededForHeader || "",
+          delDate:
+            delDateForHeader ||
+            dateNeededForHeader ||
+            useGetCurrentDayV2(),
         },
+
         cutoffCode: data.cutoffCode || "",
         rcCode: data.rcCode || "",
         rcName: data.rcName || "",
+
         selectedPoTranType: data.poTranType || "",
         selectedPoType: data.poType || "",
+
         dateNeeded: dateNeededForHeader,
         refPoNo1: data.refPoNo1 || "",
         refPrNo2: data.refPrNo2 || "",
         remarks: data.remarks || "",
         poCancelled: data.poCancelled || "",
         noReprints: data.noReprints ?? "0",
+
         detailRows: retrievedDetailRows,
+
         isDocNoDisabled: true,
         isFetchDisabled: true,
+
         vendCode: data.vendCode || "",
         vendNameHeader: data.vendName || "",
+
+        // Payterm
         paytermCode: data.paytermCode || "",
+        paytermName: data.paytermName || data.paytermCode || "",
+
+        // Warehouse
+        WHcode: data.whCode || "",
+        WHname: data.whName || "",
+
+        // Currency
+        currCode: data.currCode || "",
+        currRate: formatNumber(data.currRate || 1, 6),
+
         sourcePrNo: firstPrNo,
       });
     } catch (error) {
@@ -829,7 +858,7 @@ const PO = () => {
         icon: "error",
         title: "Fetch Error",
         text: error.message,
-      });
+      });                                                                                                                                                                                                                                                   
       resetState();
     } finally {
       updateState({ isLoading: false });
@@ -854,8 +883,33 @@ const PO = () => {
   const handlePrTranTypeChange = (e) => updateState({ selectedPoTranType: e.target.value });
   const handlePrTypeChange = (e) => updateState({ selectedPoType: e.target.value });
 
+  const validateBeforeAddingItem = () => {
+    let errorMsg = "";
+
+    if (!rcCode || String(rcCode).trim() === "") {
+      errorMsg += " - Header - Department\n";
+    }
+
+    if (!vendCode || String(vendCode).trim() === "") {
+      errorMsg += " - Header - Payee Code\n";
+    }
+
+    if (errorMsg !== "") {
+      useSwalErrorAlert(
+        "Validation Failed",
+        `The following fields are required :\n\n${errorMsg}`
+      );
+      return false;
+    }
+
+    return true;
+  };
+
   const handleAddRowClick = () => {
     if (isFormDisabled) return;
+
+    if (!validateBeforeAddingItem()) return;
+
     setShowTypeDropdown((prev) => !prev);
   };
 
@@ -900,60 +954,56 @@ const PO = () => {
     try {
       updateState({ isLoading: true });
 
+      const endpoint = "getPROpen";
       const payload = {
         json_data: {
           mode: "Header",
           branchCode: branchCode,
-          prTranType: null, // or "PR01" if you want to filter
+          prTranType: null,
         },
       };
 
-      const response = await postRequest("getPROpen", payload);
+      const response = await postRequest(endpoint, payload);
 
-      let custData = response?.data ?? [];
+      // 1. Bulletproof data extraction 
+      // (Handles standard arrays OR JSON stringified 'result' wrappers from SQL)
+      const rawData = response?.data?.[0]?.result
+        ? JSON.parse(response.data[0].result)
+        : (response?.data || []);
 
-      if (!response?.success || !Array.isArray(custData) || custData.length === 0) {
+      if (!Array.isArray(rawData) || rawData.length === 0) {
         useSwalInfoAlert("Open Purchase Requisition", "No records found");
         updateState({ isLoading: false });
         return;
       }
 
-      // 🚀 NEW FIX: Filter the Summary Tab so Closed/Cancelled PRs don't even show up
-      custData = custData.filter((row) => {
-        const stat = String(row.Status || row.status || row.PR_STATUS || row.prStatus || "O").toUpperCase();
-        // Hide it if it's C, CLOSED, X, or CANCELLED
+      // 2. Map data and bridge the ALL_CAPS SQL gap to PascalCase UI gap
+      const custData = rawData.filter((row) => {
+        const stat = String(row.PR_STATUS || row.Status || row.status || row.prStatus || "O").toUpperCase();
         return stat !== "C" && stat !== "CLOSED" && stat !== "X" && stat !== "CANCELLED";
       }).map((row) => ({
         ...row,
-        groupId: row.GroupId || row.groupId || row.PrId || row.PRNo || row.prNo,
+        // 🔧 FIX: Map standard SQL ALL_CAPS returns to the PascalCase keys the UI grid expects
+        prNo: row.PR_NO || row.PRNo || row.prNo,
+        prDate: row.PR_DATE || row.PRDate || row.prDate,
+        dateNeeded: row.DATE_NEEDED || row.DateNeeded || row.dateNeeded,
+        prType: row.PR_TYPE || row.PRType || row.prType,
+        refNo: row.REF_NO || row.RefNo || row.refNo,
+        reqRcCode: row.REQ_RC_CODE || row.REQ_DEPT || row.ReqRcCode || row.reqRcCode || row.reqDept,
+        particulars: row.PARTICULARS || row.Particulars || row.particulars,
+        preparedBy: row.PREPARED_BY || row.PreparedBy || row.preparedBy,
+        dateStamp: row.DATE_STAMP || row.DateStamp || row.dateStamp,
+        timeStamp: row.TIME_STAMP || row.TimeStamp || row.timeStamp,
+
+        // Ensure a unique ID for selection
+        groupId: row.PR_ID || row.PrId || row.PR_NO || row.PRNo || row.prNo || row.GROUP_ID || row.groupId,
       }));
 
-      let colConfig = [];
-      let colConfig_detail = [];
+      const colConfig = await useSelectedHSColConfig("getPROpen", userCode);
+      const colConfig_detail = await useSelectedHSColConfig("getPROpen_Detail", userCode);
 
-      try {
-        colConfig = await useSelectedHSColConfig("getPROpen");
-        if (!colConfig || colConfig.length === 0) throw new Error("Empty config");
-      } catch {
-        colConfig = [
-          { key: "PRNo", label: "PR No.", hidden: 0 },
-          { key: "PRDate", label: "PR Date", hidden: 0 },
-          { key: "DateNeeded", label: "Date Needed", hidden: 0 },
-          { key: "ReqRcCode", label: "Requesting Dept", hidden: 0 },
-        ];
-      }
-
-      try {
-        colConfig_detail = await useSelectedHSColConfig("getPROpen_Detail");
-        if (!colConfig_detail || colConfig_detail.length === 0) throw new Error("Empty config");
-      } catch {
-        colConfig_detail = [
-          { key: "PRNo", label: "PR No.", hidden: 0 },
-          { key: "JobCode", label: "Item Code", hidden: 0 },
-          { key: "ScopeOfWork", label: "Description", hidden: 0 },
-          { key: "QtyNeeded", label: "Qty", hidden: 0 },
-          { key: "UOM", label: "UOM", hidden: 0 },
-        ];
+      if (!colConfig?.length || !colConfig_detail?.length) {
+        console.warn("Warning: Column config returned empty. Double check hscolconfig table mapping.");
       }
 
       updateState({
@@ -963,20 +1013,101 @@ const PO = () => {
         showOpenPRModal: true,
         isLoading: false,
       });
+
     } catch (error) {
       console.error("PR Open Fetch Error:", error);
-      console.log("error response:", error?.response?.data);
-      console.log("error status:", error?.response?.status);
-
       useSwalInfoAlert("Open Purchase Requisition", "Error in Fetching Record");
-      updateState({
-        openPR_Data_Summary: [],
-        openPR_Col_Summary: [],
-        openPR_Col_Detail: [],
-        isLoading: false,
-      });
+      updateState({ isLoading: false });
     }
   };
+  // const handleOpenPRLookup = async () => {
+  //   try {
+  //     updateState({ isLoading: true });
+
+  //     const payload = {
+  //       json_data: {
+  //         mode: "Header",
+  //         branchCode: branchCode,
+  //         prTranType: null, // or "PR01" if you want to filter
+  //       },
+  //     };
+
+  //     const response = await postRequest("getPROpen", payload);
+
+  //     let custData = response?.data ?? [];
+
+  //     if (!response?.success || !Array.isArray(custData) || custData.length === 0) {
+  //       useSwalInfoAlert("Open Purchase Requisition", "No records found");
+  //       updateState({ isLoading: false });
+  //       return;
+  //     }
+
+  //     // 🚀 NEW FIX: Filter the Summary Tab so Closed/Cancelled PRs don't even show up
+  //     custData = custData.filter((row) => {
+  //       const stat = String(row.Status || row.status || row.PR_STATUS || row.prStatus || "O").toUpperCase();
+  //       // Hide it if it's C, CLOSED, X, or CANCELLED
+  //       return stat !== "C" && stat !== "CLOSED" && stat !== "X" && stat !== "CANCELLED";
+  //     }).map((row) => ({
+  //       ...row,
+  //       groupId: row.GroupId || row.groupId || row.PrId || row.PRNo || row.prNo,
+  //     }));
+
+  //     let colConfig = [];
+  //     let colConfig_detail = [];
+
+  //     try {
+  //       colConfig = await useSelectedHSColConfig("getPROpen");
+  //       if (!colConfig || colConfig.length === 0) throw new Error("Empty config");
+  //     } catch {
+  //       // 🚀 RESTORE ALL COLUMNS HERE
+  //       colConfig = [
+  //         { key: "PRNo", label: "PR No.", hidden: 0 },
+  //         { key: "PRDate", label: "PR Date", hidden: 0 },
+  //         { key: "DateNeeded", label: "Date Needed", hidden: 0 },
+  //         { key: "PRType", label: "PR Type", hidden: 0 },
+  //         { key: "RefNo", label: "Ref No.", hidden: 0 },
+  //         { key: "ReqRcCode", label: "Requesting Department", hidden: 0 },
+  //         { key: "Particulars", label: "Particulars", hidden: 0 },
+  //         { key: "PreparedBy", label: "Prepared By", hidden: 0 },
+  //         { key: "DateStamp", label: "Date Stamp", hidden: 0 },
+  //         { key: "TimeStamp", label: "Time Stamp", hidden: 0 },
+  //       ];
+  //     }
+
+  //     try {  
+  //       colConfig_detail = await useSelectedHSColConfig("getPROpen_Detail");
+  //       if (!colConfig_detail || colConfig_detail.length === 0) throw new Error("Empty config");
+  //     } catch {
+  //       colConfig_detail = [
+  //         { key: "PRNo", label: "PR No.", hidden: 0 },
+  //         { key: "JobCode", label: "Item Code", hidden: 0 },
+  //         { key: "ScopeOfWork", label: "Description", hidden: 0 },
+  //         { key: "QtyNeeded", label: "Qty", hidden: 0 },
+  //         { key: "UOM", label: "UOM", hidden: 0 },
+  //       ];
+  //     }
+
+  //     updateState({
+  //       openPR_Data_Summary: custData,
+  //       openPR_Col_Summary: colConfig,
+  //       openPR_Col_Detail: colConfig_detail,
+  //       showOpenPRModal: true,
+  //       isLoading: false,
+  //     });
+  //   } catch (error) {
+  //     console.error("PR Open Fetch Error:", error);
+  //     console.log("error response:", error?.response?.data);
+  //     console.log("error status:", error?.response?.status);
+
+  //     useSwalInfoAlert("Open Purchase Requisition", "Error in Fetching Record");
+  //     updateState({
+  //       openPR_Data_Summary: [],
+  //       openPR_Col_Summary: [],
+  //       openPR_Col_Detail: [],
+  //       isLoading: false,
+  //     });
+  //   }
+  // };
 
   const handleClosePROpenModal = async (selection) => {
     if (!selection || !selection.details || selection.details.length === 0) {
@@ -1001,8 +1132,30 @@ const PO = () => {
         summary?.PrDate ||
         "";
 
+      const payeeDefaultVatCode = state.vendVatCode || vendVatCode || "";
+
+      let payeeVatRate = 0;
+
+      if (payeeDefaultVatCode) {
+        try {
+          const vatRow = await useTopVatRow(payeeDefaultVatCode);
+          payeeVatRate = parseFormattedNumber(vatRow?.vatRate ?? 0);
+        } catch (err) {
+          console.error("Error fetching payee default VAT rate:", err);
+        }
+      }
+
+
       const newDetailRows = selection.details.map((d, i) => {
-        const qty = parseFloat(d?.QtyNeeded ?? d?.QTY_NEEDED ?? d?.QTY_BALANCE ?? d?.qtyBalance ?? 0) || 0;
+        const qty =
+          parseFloat(
+            d?.QtyNeeded ??
+            d?.QTY_NEEDED ??
+            d?.QTY_BALANCE ??
+            d?.qtyBalance ??
+            0
+          ) || 0;
+
         const formattedQty = formatNumber(qty, 6);
 
         const dateNeeded = d?.DateNeeded || d?.DATE_NEEDED
@@ -1011,20 +1164,31 @@ const PO = () => {
             ? String(headerDateNeeded).substring(0, 10)
             : "";
 
-        return {
-          // lN: i + 1,
-          // prNo: summary?.PRNo || summary?.PrNo || summary?.prNo || "",
-          // prId: summary?.PrId || summary?.prId || "",
-          // refBranchCode: summary?.BC || summary?.BranchCode || branchCode,
-
-          // invType: d?.Type || d?.INV_TYPE || "",
-          // groupId: d?.GROUP_ID || d?.groupId || pickedGroupId || "",
-          // poStatus: "O",
+        const row = {
           lN: i + 1,
-          // FIX: Check the detail row (d) first for its specific PRNo before using the summary's PRNo
-          prNo: d?.PRNo || d?.PrNo || d?.prNo || summary?.PRNo || summary?.PrNo || summary?.prNo || "",
-          prId: d?.PrId || d?.prId || summary?.PrId || summary?.prId || "",
-          refBranchCode: d?.BC || d?.BranchCode || summary?.BC || summary?.BranchCode || branchCode,
+
+          prNo:
+            d?.PRNo ||
+            d?.PrNo ||
+            d?.prNo ||
+            summary?.PRNo ||
+            summary?.PrNo ||
+            summary?.prNo ||
+            "",
+
+          prId:
+            d?.PrId ||
+            d?.prId ||
+            summary?.PrId ||
+            summary?.prId ||
+            "",
+
+          refBranchCode:
+            d?.BC ||
+            d?.BranchCode ||
+            summary?.BC ||
+            summary?.BranchCode ||
+            branchCode,
 
           invType: d?.Type || d?.INV_TYPE || "",
           groupId: d?.GROUP_ID || d?.groupId || pickedGroupId || "",
@@ -1043,44 +1207,56 @@ const PO = () => {
           uomCode2: d?.UOM_CODE2 || "",
           uomQty2: formatNumber(d?.UOM_QTY2 ?? 0, 6),
           dateNeeded,
+
           itemSpecs: d?.ITEM_SPECS || d?.Specification || "",
           serviceCode: "",
           serviceName: "",
 
-          unitPrice: formatNumber(d?.UNIT_COST ?? d?.unitCost ?? 0, 6),
+          unitPrice: formatNumber(d?.UNIT_COST ?? d?.unitCost ?? 0, DEC_PRICE),
           grossAmt: formatNumber(d?.GROSS_AMOUNT ?? d?.grossAmt ?? 0, 6),
           discRate: formatNumber(d?.DISC_RATE ?? d?.discRate ?? 0, 6),
           discAmt: formatNumber(d?.DISC_AMOUNT ?? d?.discAmt ?? 0, 6),
           totalAmt: formatNumber(d?.ITEM_AMOUNT ?? d?.itemAmount ?? 0, 6),
-          vatCode: d?.VAT_CODE || d?.vatCode || "",
-          vatAmt: formatNumber(d?.VAT_AMOUNT ?? d?.vatAmt ?? 0, 6),
+
+          // VAT Code from selected Payee default setup
+          vatCode: payeeDefaultVatCode || "",
+          vatRate: payeeVatRate || 0,
+
+          vatAmt: formatNumber(0, 6),
           netAmt: formatNumber(d?.NET_AMOUNT ?? d?.netAmt ?? 0, 6),
-          vatRate: 0,
+
           prBalance: formattedQty,
         };
+
+        return recalcDetailRow(row);
       });
+
+      const updatedRows = [...(detailRows || []), ...newDetailRows];
 
       updateState({
-        sourcePrNo: summary?.PRNo || summary?.PrNo || summary?.prNo || "",
-        sourcePrId: summary?.PrId || summary?.prId || "",
-        groupId: pickedGroupId,
-        branchCode: summary?.BC || summary?.BranchCode || branchCode,
-        rcCode: summary?.RcCode || summary?.rcCode || rcCode,
-        rcName: summary?.RcName || summary?.rcName || rcName,
-        reqRcCode: summary?.ReqRcCode || summary?.reqRcCode || reqRcCode,
-        reqRcName: summary?.ReqRcName || summary?.reqRcName || reqRcName,
-        detailRows: newDetailRows,
+        detailRows: updatedRows,
+        sourcePrNo: newDetailRows?.[0]?.prNo || sourcePrNo || "",
+        showOpenPRModal: false,
+        isLoading: false,
       });
 
-      updateTotalsDisplay(newDetailRows);
+      updateTotalsDisplay(updatedRows);
     } catch (error) {
-      console.error("PR Open Lookup Error:", error);
-    } finally {
+      console.error("Error processing selected PR:", error);
+      useSwalErrorAlert(
+        "Open Purchase Requisition",
+        "Error while applying selected PR details."
+      );
       updateState({ isLoading: false });
     }
   };
 
   const handleOpenMSLookup = async (itemSingleSelectParam, docTypeParam) => {
+    if (!validatePayeeBeforeAdding()) {
+      setShowTypeDropdown(false);
+      return;
+    }
+
     try {
       setShowTypeDropdown(false);
       updateState({
@@ -1097,6 +1273,8 @@ const PO = () => {
   };
 
   const handleAddItem = async (index, invType) => {
+    if (!validateBeforeAddingItem()) return;
+
     updateState({ selectedRowIndex: index, itemSingleSelect: true });
     await handleOpenMSLookup(true, invType);
   };
@@ -1221,6 +1399,15 @@ const PO = () => {
     }
   };
 
+  const handleOpenVATLookup = (rowIndex) => {
+    if (isFormDisabled) return;
+
+    updateState({
+      vatLookupModalOpen: true,
+      selectedRowIndex: rowIndex,
+    });
+  };
+
   const handleCloseVATLookup = async (selectedVAT) => {
     // Closed the modal without choosing anything
     if (!selectedVAT || selectedRowIndex == null) {
@@ -1308,8 +1495,24 @@ const PO = () => {
       if (!editableFields.includes(field)) return;
 
       const sanitized = sanitizeNumeric(value);
+
       if (commit) {
-        const num = parseFormattedNumber(sanitized);
+        let num = parseFormattedNumber(sanitized);
+
+        // 🚀 NEW: Inline Validation & Auto-Revert on input blur/enter
+        if (field === "poQty" && row.prNo) {
+          const maxQtyNeeded = parseFormattedNumber(row.qtyNeeded || 0);
+
+          if (num > maxQtyNeeded) {
+            useSwalErrorAlert(
+              "Invalid Quantity",
+              `PO Quantity cannot exceed the requested Qty Needed.`
+            );
+            // 🔧 FIX: Force the number back to the maximum allowed value
+            num = maxQtyNeeded;
+          }
+        }
+
         row[field] = formatByField(field, num);
       } else {
         row[field] = sanitized;
@@ -1322,7 +1525,6 @@ const PO = () => {
     updateState({ detailRows: updatedRows });
     updateTotalsDisplay(updatedRows);
   };
-
   // ==========================
   // SAVE / UPSERT
   // ==========================
@@ -1332,12 +1534,32 @@ const PO = () => {
   const handleActivityOption = async (action) => {
     // If already posted/cancelled/finalized, do not allow save
     const stat = String(state.status || "").toUpperCase(); // this holds "O" from API
-    const locked = ["FINALIZED", "CANCELLED", "CLOSED", "F", "X", "C"].includes(
-      stat,
-    );
+    const locked = ["FINALIZED", "CANCELLED", "CLOSED", "F", "X", "C"].includes(stat);
     if (locked) return;
 
     if (action !== "Upsert") return;
+
+    // 🚀 NEW: Frontend Validation for PO Qty vs Qty Needed
+    const overQtyIndex = state.detailRows.findIndex((row) => {
+      // Only validate rows that are pulled from a PR
+      if (row.prNo) {
+        const currentPoQty = parseFormattedNumber(row.poQty || 0);
+        const maxQtyNeeded = parseFormattedNumber(row.qtyNeeded || 0);
+
+        // Return true if it violates the rule
+        return currentPoQty > maxQtyNeeded;
+      }
+      return false;
+    });
+
+    if (overQtyIndex !== -1) {
+      const offendingRow = state.detailRows[overQtyIndex];
+      useSwalErrorAlert(
+        "Validation Error",
+        `PO Quantity exceeds Qty Needed on Line ${overQtyIndex + 1} (Item: ${offendingRow.itemCode}).`
+      );
+      return;
+    }
 
     updateState({ isLoading: true });
 
@@ -1424,48 +1646,48 @@ const PO = () => {
 
         // Detail rows
         dt1: detailRows.map((row, index) => {
+          // You perfectly defined these variables here...
           const poQty = parseFormattedNumber(row.poQty || row.qtyNeeded || 0);
           const unitCost = parseFormattedNumber(row.unitPrice || 0);
 
           return {
-            LINE_NO: row.lN || index + 1,
-            PR_NO: row.prNo || sourcePrNo || null, // if you have per-line prNo, use it
-            PR_STATUS: row.prStatus === "CLOSED" ? "C" : row.prStatus === "CANCELLED" ? "X" : "O",
-            PO_STATUS: row.poStatus || status || "",
+            LINE_NO: index + 1,
+            PR_NO: row.prNo || "",
+            PR_STATUS: row.prStatus || "",
+            PO_STATUS: row.poStatus || "O",
             INV_TYPE: row.invType || "",
-            GROUP_ID: row.groupId || state.groupId || "",
-
+            GROUP_ID: row.groupId || "",
             ITEM_CODE: row.itemCode || "",
             ITEM_NAME: row.itemName || "",
             UOM_CODE: row.uomCode || "",
 
-            // ✅ REQUIRED BY SPROC:
-            PO_QUANTITY: poQty, // <-- was PO_QTY
-            CURR_CODE: state.currCode || "PHP", // <-- add this (or row.currCode if per line)
-            DEL_DATE: row.dateNeeded || state.dateNeeded || null, // <-- was DATE_NEEDED
+            // 🔧 FIX: Actually use the 'poQty' variable you defined above
+            PO_QUANTITY: poQty,
 
             UOM_CODE2: row.uomCode2 || "",
             UOM_QTY2: parseFormattedNumber(row.uomQty2 || 0),
+            CURR_CODE: row.currCode || "",
 
+            // 🔧 FIX: Actually use the 'unitCost' variable you defined above
             UNIT_COST: unitCost,
-            FX_AMOUNT: null, // optional
 
+            FX_AMOUNT: parseFormattedNumber(row.fxAmount || 0),
+
+            // 🔧 FIX: Map to the exact abbreviated keys used in your React state
             GROSS_AMOUNT: parseFormattedNumber(row.grossAmt || 0),
             DISC_RATE: parseFormattedNumber(row.discRate || 0),
             DISC_AMOUNT: parseFormattedNumber(row.discAmt || 0),
             NET_AMOUNT: parseFormattedNumber(row.netAmt || 0),
-
             VAT_CODE: row.vatCode || "",
             VAT_AMOUNT: parseFormattedNumber(row.vatAmt || 0),
             ITEM_AMOUNT: parseFormattedNumber(row.totalAmt || 0),
 
             ITEM_SPECS: row.itemSpecs || "",
+            DEL_DATE: row.delDate || null,
             RR_QTY: parseFormattedNumber(row.rrQty || 0),
-
-            // optional:
-            PR_BALANCE: null,
-            REF_BRANCHCODE: state.branchCode || null,
-            CATEG_CODE: row.groupId || null,
+            PR_BALANCE: poQty, // Set initial PR balance to the PO quantity
+            REF_BRANCHCODE: row.refBranchCode || "",
+            CATEG_CODE: row.categCode || ""
           };
         }),
       };
@@ -1844,14 +2066,59 @@ const PO = () => {
   };
 
 
-  const handleTranDocNoRetrieval = async (data) => {
-    await fetchTranData(data.docNo, data.branchCode || branchCode, data.key);
-    updateState({ showAllTranDocNo: data.modalClose });
+  useEffect(() => {
+    const handleF1Lookup = (e) => {
+      if (e.key === "F1") {
+        e.preventDefault();
+        updateState({ showAllTranDocNo: true });
+      }
+    };
+
+    window.addEventListener("keydown", handleF1Lookup);
+    return () => window.removeEventListener("keydown", handleF1Lookup);
+  }, []);
+
+  const handleTranDocNoRetrieval = async (data = {}) => {
+    const selectedDocNo =
+      data.docNo ||
+      data.documentNo ||
+      state.documentNo ||
+      documentNo ||
+      "";
+
+    const selectedBranchCode =
+      data.branchCode ||
+      state.branchCode ||
+      branchCode ||
+      "";
+
+    const direction =
+      data.key ||
+      data.direction ||
+      data.action ||
+      "";
+
+    await fetchTranData(selectedDocNo, selectedBranchCode, direction);
+
+    updateState({
+      showAllTranDocNo: data.modalClose ?? false,
+    });
   };
 
-  const handleTranDocNoSelection = async (data) => {
+  const handleTranDocNoSelection = async (data = {}) => {
+    const selectedDocNo = data.docNo || data.documentNo || "";
+    const selectedBranchCode = data.branchCode || state.branchCode || branchCode || "";
+
     handleReset();
-    updateState({ showAllTranDocNo: false, documentNo: data.docNo });
+
+    updateState({
+      showAllTranDocNo: false,
+      documentNo: selectedDocNo,
+    });
+
+    if (selectedDocNo) {
+      await fetchTranData(selectedDocNo, selectedBranchCode);
+    }
   };
 
   const handleDocNoBlur = () => {
@@ -2003,6 +2270,7 @@ const PO = () => {
                   label="Department"
                   type="lookup"
                   value={rcCode || ""}
+                  required
                   readOnly
                   disabled={isFormDisabled}
                   lookupDisabled={isFetchDisabled}
@@ -2108,13 +2376,14 @@ const PO = () => {
                   id="poStatus"
                   label="PO Status"
                   type="select"
-                  value={selectedPoType || ""}
+                  value={status || "O"}
                   disabled={isFormDisabled}
-                  onChange={(val) => handlePrTypeChange({ target: { value: val } })}
+                  onChange={(val) => updateState({ status: val })}
                   options={[
                     { label: "Open", value: "O" },
                     { label: "Closed", value: "C" },
                     { label: "Cancelled", value: "X" },
+                    { label: "Finalized", value: "F" },
                   ]}
                 />
               </div>
@@ -2228,24 +2497,23 @@ const PO = () => {
                   <tr>
                     <th className="global-tran-th-ui">LN</th>
                     <th className="global-tran-th-ui">PO Status</th>
+                    <th className="global-tran-th-ui">PR No.</th>
                     <th className="global-tran-th-ui">Type</th>
                     <th className="global-tran-th-ui">Item Code</th>
                     <th className="global-tran-th-ui">Item Description</th>
                     <th className="global-tran-th-ui">Specification</th>
                     <th className="global-tran-th-ui">UOM</th>
-                    <th className="global-tran-th-ui">Qty on Hand</th>
-                    <th className="global-tran-th-ui">Qty Needed</th>
-                    <th className="global-tran-th-ui">PO Qty</th>
+                    <th className="global-tran-th-ui">PO Quantity</th>
                     <th className="global-tran-th-ui">Unit Price</th>
-                    <th className="global-tran-th-ui">Gross Amt</th>
-                    <th className="global-tran-th-ui">Disc Rate</th>
-                    <th className="global-tran-th-ui">Disc Amt</th>
-                    <th className="global-tran-th-ui">Total Amt</th>
+                    <th className="global-tran-th-ui">Gross Amount</th>
+                    <th className="global-tran-th-ui">Discount Rate</th>
+                    <th className="global-tran-th-ui">Discount Amount</th>
+                    <th className="global-tran-th-ui">Total Amount</th>
                     <th className="global-tran-th-ui">VAT Code</th>
-                    <th className="global-tran-th-ui">VAT Amt</th>
-                    <th className="global-tran-th-ui">Net Amt</th>
-                    <th className="global-tran-th-ui">Date Needed</th>
-                    <th className="global-tran-th-ui">RR Qty</th>
+                    <th className="global-tran-th-ui">VAT Amount</th>
+                    <th className="global-tran-th-ui">Net Amount</th>
+                    <th className="global-tran-th-ui">Delivery Date</th>
+                    <th className="global-tran-th-ui">RR Quantity</th>
                     {!isFormDisabled && (
                       <th className="global-tran-th-ui sticky right-0 bg-blue-300 dark:bg-blue-900 z-30">
                         Actions
@@ -2262,7 +2530,7 @@ const PO = () => {
                         {index + 1}
                       </td>
 
-                      {/* PR Status */}
+                      {/* PO Status */}
                       <td className="global-tran-td-ui">
                         <select
                           className="w-[120px] global-tran-td-inputclass-ui"
@@ -2280,6 +2548,17 @@ const PO = () => {
                           <option value="CLOSED">Closed</option>
                           <option value="CANCELLED">Cancelled</option>
                         </select>
+                      </td>
+
+                      {/* PR No. */}
+                      <td className="global-tran-td-ui">
+                        <input
+                          type="text"
+                          className="w-[120px] global-tran-td-inputclass-ui bg-gray-100 cursor-not-allowed"
+                          value={row.prNo || ""}
+                          readOnly
+                          tabIndex={-1}
+                        />
                       </td>
 
                       {/* Type */}
@@ -2335,15 +2614,27 @@ const PO = () => {
                       </td>
 
                       {/* Specification */}
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[220px] global-tran-td-inputclass-ui cursor-pointer"
-                          value={row.itemSpecs || ""}
-                          readOnly
-                          onDoubleClick={() => openSpecsModal(index)}
-                          title="Double-click to edit specification"
-                        />
+                      <td className="global-tran-td-ui relative">
+                        <div className="flex items-center">
+                          <input
+                            type="text"
+                            className="w-[220px] global-tran-td-inputclass-ui cursor-pointer pr-6"
+                            value={row.itemSpecs || ""}
+                            readOnly
+                            onDoubleClick={() => openSpecsModal(index)}
+                            title="Double-click to edit specification"
+                            disabled={isFormDisabled}
+                          />
+
+                          {!isFormDisabled && (
+                            <FontAwesomeIcon
+                              icon={faMagnifyingGlass}
+                              className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                              onClick={() => openSpecsModal(index)}
+                              title="Open Specification"
+                            />
+                          )}
+                        </div>
                       </td>
 
                       {/* UOM */}
@@ -2359,37 +2650,6 @@ const PO = () => {
                         />
                       </td>
 
-                      {/* Qty on Hand */}
-                      <td className="global-tran-td-ui text-right">
-                        <input
-                          type="text"
-                          className="global-tran-td-inputclass-ui text-right bg-gray-100 cursor-not-allowed"
-                          value={row.qtyOnHand || ""}
-                          readOnly
-                          tabIndex={-1}
-                        />
-
-                      </td>
-
-                      {/* Qty Needed */}
-                      <td className="global-tran-td-ui text-right">
-                        <input
-                          type="text"
-                          className={`global-tran-td-inputclass-ui text-right ${row.prNo ? "bg-gray-100 cursor-not-allowed" : ""}`}
-                          value={row.qtyNeeded || ""}
-                          readOnly={!!row.prNo}
-                          tabIndex={row.prNo ? -1 : undefined}
-                          onChange={(e) => !row.prNo && handleDetailChange(index, "qtyNeeded", e.target.value, false)}
-                          onBlur={(e) => !row.prNo && handleDetailChange(index, "qtyNeeded", e.target.value, true)}
-                          onKeyDown={(e) => {
-                            if (!row.prNo && e.key === "Enter") {
-                              e.preventDefault();
-                              handleDetailChange(index, "qtyNeeded", e.target.value, true);
-                            }
-                          }}
-                          disabled={isFormDisabled}
-                        />
-                      </td>
 
                       {/* PO Qty */}
                       <td className="global-tran-td-ui text-right">
@@ -2496,23 +2756,40 @@ const PO = () => {
                       </td>
 
                       {/* VAT Code */}
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[80px] global-tran-td-inputclass-ui"
-                          value={row.vatCode || ""}
-                          onChange={(e) =>
-                            handleDetailChange(index, "vatCode", e.target.value)
-                          }
-                          onDoubleClick={() => {
-                            if (isFormDisabled) return;
-                            updateState({
-                              vatLookupModalOpen: true,
-                              selectedRowIndex: index,
-                            });
-                          }}
-                          disabled={isFormDisabled}
-                        />
+                      <td className="global-tran-td-ui relative">
+                        <div className="flex items-center">
+                          <input
+                            type="text"
+                            className="w-[80px] global-tran-td-inputclass-ui pr-6"
+                            value={row.vatCode || ""}
+                            onChange={(e) =>
+                              handleDetailChange(index, "vatCode", e.target.value)
+                            }
+                            onDoubleClick={() => {
+                              if (isFormDisabled) return;
+                              updateState({
+                                vatLookupModalOpen: true,
+                                selectedRowIndex: index,
+                              });
+                            }}
+                            title="Double-click to select VAT Code"
+                            disabled={isFormDisabled}
+                          />
+
+                          {!isFormDisabled && (
+                            <FontAwesomeIcon
+                              icon={faMagnifyingGlass}
+                              className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                              onClick={() => {
+                                updateState({
+                                  vatLookupModalOpen: true,
+                                  selectedRowIndex: index,
+                                });
+                              }}
+                              title="Select VAT Code"
+                            />
+                          )}
+                        </div>
                       </td>
 
                       {/* VAT Amt */}
@@ -2811,80 +3088,74 @@ const PO = () => {
         <GlobalCombinedLookup
           isOpen={showOpenPRModal}
           title="Open Purchase Requisition"
-          summarySelectionMode="single"
+          summarySelectionMode="multiple"
           detailSelectionMode="multiple"
-          summaryColumns={openPR_Col_Summary}
-          detailColumns={openPR_Col_Detail}
-          summaryData={openPR_Data_Summary}
+          summaryColumns={openPR_Col_Summary} // FIXED
+          detailColumns={openPR_Col_Detail}   // FIXED
+          summaryData={openPR_Data_Summary}   // FIXED
           tabTitles={["Open PR Summary", "Open PR Detail"]}
-          
+
+          // 🚀 NEW: Using Promise.all to fetch multiple PR details simultaneously
           fetchDetailApi={async (selectedIds) => {
-            // 1. Ensure we are working with an array of IDs
+            // 1. Ensure selectedIds is treated as an array
             const idsArray = Array.isArray(selectedIds) ? selectedIds : [selectedIds];
 
             try {
-              // 2. Create an API request for EACH selected PR
-              const fetchPromises = idsArray.map((id) =>
-                postRequest("getPROpen", {
+              // 2. Fetch details for EACH PR concurrently
+              // This bypasses the SQL limitation of not understanding comma-separated strings
+              const fetchPromises = idsArray.map(async (singleId) => {
+                const payload = {
                   json_data: {
                     mode: "Detail",
-                    branchCode: branchCode,
-                    prId: id, // Send a single ID per request
-                    prTranType: null,
-                  },
-                })
-              );
+                    prId: singleId
+                  }
+                };
 
-              // 3. Wait for all the individual requests to finish
-              const responses = await Promise.all(fetchPromises);
-
-              // 4. Combine the items from all responses into one big array
-              let combinedDetailData = [];
-
-              responses.forEach((res, index) => {
-                if (res?.success && Array.isArray(res?.data)) {
-                  
-                  // 🚀 NEW FIX: Smarter filter to catch "CLOSED" and "CANCELLED"
-                  const activeItems = res.data.filter((d) => {
-                    const status = String(
-                      d.PR_STATUS || d.pr_status || d.prStatus || d.Status || d.status || "O"
-                    ).toUpperCase();
-
-                    // Safely parse amounts
-                    const qtyNeeded = parseFloat(d.QTY_NEEDED ?? d.QtyNeeded ?? d.qty_needed ?? d.Qty ?? d.QTY ?? 0);
-                    const poQty = parseFloat(d.PO_QTY ?? d.PoQty ?? d.po_qty ?? d.poQty ?? 0);
-                    const explicitBalance = parseFloat(d.QTY_BALANCE ?? d.QtyBalance ?? d.qty_balance ?? d.qtyBalance ?? -1);
-
-                    // If the database gives us a balance, use it. Otherwise, subtract what was ordered from what was needed.
-                    const balance = explicitBalance !== -1 ? explicitBalance : (qtyNeeded - poQty);
-
-                    // Explicitly block Closed and Cancelled statuses
-                    const isClosed = status === "C" || status === "CLOSED";
-                    const isCancelled = status === "X" || status === "CANCELLED";
-
-                    // Only keep the item if it is NOT closed/cancelled and still has a balance
-                    return !isClosed && !isCancelled && balance > 0;
-                  });
-
-                  const mappedData = activeItems.map((d, rowIdx) => ({
-                    ...d,
-                    // Give each row a truly unique groupId so the checkboxes work correctly in the Detail grid
-                    groupId: d.GroupId || d.groupId || `${idsArray[index]}_${d.LN || rowIdx}`,
-                    // Preserve the parent PR reference on the detail row
-                    PRNo: d.PRNo || d.PrNo || d.prNo || idsArray[index]
-                  }));
-                  
-                  combinedDetailData = [...combinedDetailData, ...mappedData];
-                }
+                const res = await postRequest("getPROpen", payload);
+                const rawData = res?.data?.[0]?.result ? JSON.parse(res.data[0].result) : (res?.data || res);
+                return Array.isArray(rawData) ? rawData : [];
               });
 
-              return { success: true, data: combinedDetailData };
+              // Wait for all requests to finish, then combine them into one flat array
+              const allResults = await Promise.all(fetchPromises);
+              const combinedDataArray = allResults.flat();
+
+              // 3. Apply your "Smarter Filter" to ensure no closed/zero-balance items appear
+              const filteredData = combinedDataArray.filter((d) => {
+                const status = String(d.PR_STATUS || d.pr_status || d.prStatus || d.Status || d.status || "O").toUpperCase();
+                const qtyNeeded = parseFloat(d.QTY_NEEDED ?? d.QtyNeeded ?? d.qty_needed ?? d.Qty ?? d.QTY ?? 0);
+                const poQty = parseFloat(d.PO_QTY ?? d.PoQty ?? d.po_qty ?? d.poQty ?? 0);
+                const explicitBalance = parseFloat(d.QTY_BALANCE ?? d.QtyBalance ?? d.qty_balance ?? d.qty_balance ?? -1);
+
+                const balance = explicitBalance !== -1 ? explicitBalance : (qtyNeeded - poQty);
+                const isClosed = status === "C" || status === "CLOSED";
+                const isCancelled = status === "X" || status === "CANCELLED";
+
+                return !isClosed && !isCancelled && balance > 0;
+              }).map((d, index) => {
+                // Extract keys first so we can safely combine them for the unique ID
+                const mappedPrNo = d.PR_NO || d.PRNo || d.prNo || "";
+                const mappedJobCode = d.JOB_CODE || d.JobCode || d.ITEM_CODE || d.ItemCode || d.jobCode || d.itemCode || "";
+
+                return {
+                  ...d,
+                  prNo: mappedPrNo,
+                  jobCode: mappedJobCode,
+                  scopeOfWork: d.SCOPE_OF_WORK || d.ScopeOfWork || d.ITEM_NAME || d.ItemName || d.scopeOfWork || d.itemName || d.Description || d.description,
+                  qtyNeeded: d.QTY_NEEDED || d.QtyNeeded || d.qtyNeeded || d.QTY || d.Qty || d.qty,
+                  uom: d.UOM_CODE || d.UOMCode || d.UOM || d.uomCode || d.uom || d.Uom,
+
+                  // 🔧 FIX: Guarantee a completely unique ID for every single detail row
+                  groupId: `${mappedPrNo}_${mappedJobCode}_${index}`
+                };
+              });
+
+              return { success: true, data: filteredData };
             } catch (error) {
-              console.error("Error fetching multiple PR details:", error);
+              console.error("Error fetching consolidated PR details:", error);
               return { success: false, data: [] };
             }
           }}
-
           onCancel={() => updateState({ showOpenPRModal: false })}
           onClose={handleClosePROpenModal}
         />
@@ -2949,47 +3220,7 @@ const PO = () => {
         <PostTranModal isOpen={showPostModal} onClose={handleClosePost} />
       )}
 
-      {state.specsModalOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-2xl rounded-lg bg-white dark:bg-slate-800 shadow-xl border border-gray-200 dark:border-slate-700">
-            <div className="px-4 py-3 border-b border-gray-200 dark:border-slate-700">
-              <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">
-                Specification
-              </h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Enter complete specification / scope of work.
-              </p>
-            </div>
 
-            <div className="p-4">
-              <textarea
-                className="w-full h-48 resize-none rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm text-gray-800 dark:text-gray-100 p-3 outline-none focus:ring-2 focus:ring-blue-400"
-                value={state.specsTempText || ""}
-                onChange={(e) => updateState({ specsTempText: e.target.value })}
-                autoFocus
-              />
-            </div>
-
-            <div className="px-4 py-3 border-t border-gray-200 dark:border-slate-700 flex justify-end gap-2">
-              <button
-                type="button"
-                className="px-3 py-2 text-xs font-medium rounded-md bg-gray-200 hover:bg-gray-300 dark:bg-slate-700 dark:hover:bg-slate-600"
-                onClick={closeSpecsModal}
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                className="px-3 py-2 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700"
-                onClick={saveSpecsModal}
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showAttachModal && (
         <AttachDocumentModal
