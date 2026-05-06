@@ -311,6 +311,31 @@ export async function useTopBillTermRow(billtermCode) {
 
 
 
+export async function useTopSalesRepRow(salesRepCode) {
+  if (!salesRepCode) return null;
+
+  try {
+    const response = await fetchData("getsalesRep", { salesRepCode: salesRepCode });
+    if (!response?.success) return null;
+
+    const rawResult = response?.data?.[0]?.result;
+    if (!rawResult) return null;
+
+    const responseData = JSON.parse(rawResult);
+    if (!Array.isArray(responseData)) return null;
+
+    return responseData.length > 0 ? responseData[0] : null;
+  } catch (error) {
+    console.error("Error fetching Sales Rep row:", error);
+    return null;
+  }
+}
+
+
+
+
+
+
 // export async function useTopRCRow(rcCode) {
 //   if (!rcCode) return null;
 

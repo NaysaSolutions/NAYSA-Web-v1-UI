@@ -3,7 +3,6 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useQuery } from "@tanstack/react-query";
 import { postRequest } from "@/NAYSA Cloud/Configuration/BaseURL";
 import { exportGenericHistoryExcel, exportGenericQueryExcel } from "@/NAYSA Cloud/Global/report";
-import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 import {
   format,
@@ -44,6 +43,7 @@ import {
   faFileCsv,
   faTable,
   faThLarge,
+  faBook,
 } from "@fortawesome/free-solid-svg-icons";
 import { useSwalErrorAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 
@@ -61,6 +61,41 @@ Modal.setAppElement("#root");
 
 const ACTION_COL_WIDTH = 64;
 const MOBILE_MAX_COLUMNS = 100;
+
+const LoadingDots = ({ label = "Loading, please wait...", fullScreen = false }) => {
+  const dotSizeClass = fullScreen ? "h-2.5 w-2.5" : "h-1.5 w-1.5";
+  const dots = (
+    <div className={`flex items-center justify-center ${fullScreen ? "gap-1.5" : "gap-1"}`} aria-hidden="true">
+      {[0, 150, 300].map((delay) => (
+        <span
+          key={delay}
+          className={`${dotSizeClass} rounded-full bg-blue-600 animate-bounce`}
+          style={{ animationDelay: `${delay}ms` }}
+        />
+      ))}
+    </div>
+  );
+
+  if (!fullScreen) {
+    return (
+      <div className="flex items-center justify-center h-4 w-8" title={label}>
+        {dots}
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center animate-in fade-in duration-200">
+      <div className="absolute inset-0 bg-slate-900/10" />
+      <div className="relative flex flex-col items-center justify-center gap-3 px-6 py-5 rounded-2xl bg-white/85 backdrop-blur-md border border-white/40 shadow-2xl">
+        {dots}
+        <div className="text-xs sm:text-sm font-medium text-slate-700 tracking-wide text-center">
+          {label}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 /* ------------------ window-level cache (survives route swaps) ------------------ */
 function getGlobalCache() {
@@ -98,7 +133,7 @@ const formatCellValue = (value, config) => {
 
     case "status": {
       const map = {
-        C: { text: "CANCELLED", color: "text-red-600" },
+        C: { text: "CLOSED", color: "text-blue-800" },
         F: { text: "FINALIZED", color: "text-blue-800" },
         X: { text: "CANCELLED", color: "text-red-600" },
         "": { text: "OPEN", color: "text-black" },
@@ -180,7 +215,7 @@ const AllTranHistory = (props) => {
     { value: "X", label: "CANCELLED" },
   ];
 
-  const restrictedTabs = ["JO_", "PO_", "PR_"];
+  const restrictedTabs = ["JO_", "PO_", "PR_","SO_"];
   const isRestricted = restrictedTabs.some((prefix) => activeTab?.includes(prefix));
 
   const statusOptions =
@@ -541,7 +576,7 @@ const AllTranHistory = (props) => {
     wasActiveRef.current = isActive;
   }, [isActive, refetch]);
 
-  const loading = isLoading;
+  const loading = isLoading || (isFetching && (!activeTab || Object.keys(tabData).length === 0));
   const refreshing = isFetching && !isLoading;
 
   /* ---------------- apply query result ---------------- */
@@ -819,7 +854,7 @@ const AllTranHistory = (props) => {
 
 
   /* ---------------- grouping / totals helpers ---------------- */
-  const totalExemptions = ["rate", "percent", "ratio", "id", "code"];
+  const totalExemptions = ["rate", "percent", "ratio", "id", "code", "lnno"];
 
   const shouldSumColumn = useCallback((col) => {
     const noTotalKeys = ["unitcost", "currrate", "unitprice", "runbal"];
@@ -1056,14 +1091,14 @@ const AllTranHistory = (props) => {
   };
 
   const getRowClassByStatus = (row) => {
-    const statusFieldCandidates = ["C", "doc_stat", "docStatus", "status", "stat"];
+    const statusFieldCandidates = ["C", "doc_stat", "docStatus", "status", "stat","docStat"];
     const rowStatus =
       statusFieldCandidates
         .map((f) => (row[f] !== undefined ? String(row[f]) : undefined))
         .find((v) => v !== undefined) ?? "";
 
-    if (rowStatus === "X" || rowStatus === "C") return "text-red-600";
-    if (rowStatus === "F") return "text-blue-700";
+    if (rowStatus === "X" ) return "text-red-600";
+    if (rowStatus === "F" || rowStatus === "C") return "text-blue-700";
     return "";
   };
 
@@ -1887,19 +1922,19 @@ const handleExportConfirm = async (enteredFileName) => {
 
             <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-2 w-full md:w-auto mt-auto">
               <button
-                className="flex items-center justify-center bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-semibold hover:bg-blue-700 shadow-md w-full"
+                className="inline-flex h-[35px] min-w-[96px] items-center justify-center gap-2 rounded-md bg-blue-500 px-4 text-sm font-medium leading-none text-white shadow-sm transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 w-full md:w-auto"
                 onClick={handleApplyFilter}
                 disabled={loading || exporting}
               >
-                <FontAwesomeIcon icon={faFilter} className="mr-2" />
+                <FontAwesomeIcon icon={faFilter} className="text-[13px]" />
                 {loading ? "Loading..." : "Filter"}
               </button>
                   <button
-                className="flex items-center justify-center bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-semibold hover:bg-blue-700 shadow-md w-full"
+                className="inline-flex h-[35px] min-w-[96px] items-center justify-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-medium leading-none text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 w-full md:w-auto"
                 onClick={handleResetUI}
                 disabled={loading || exporting}
               >
-                <FontAwesomeIcon icon={faRedo} className="mr-2" />
+                <FontAwesomeIcon icon={faRedo} className="text-[13px]" />
                 <span className="truncate">Reset</span>
               </button>
             </div>
@@ -1909,12 +1944,21 @@ const handleExportConfirm = async (enteredFileName) => {
           </div>
         )}
 
-<div className="px-4 overflow-x-auto">
-  <div className="flex items-center justify-between gap-2 min-w-max">
-    <div className={`flex gap-1 whitespace-nowrap`}>
+<div className="px-4">
+  <div className="flex items-center justify-between gap-2">
+    <div className="flex gap-1 whitespace-nowrap overflow-x-auto min-w-0">
       {Object.keys(tabData).map((tabKey) => {
         const isTabActive = activeTab === tabKey;
         const tabLabel = tabKey.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+        const normalizedTabKey = String(tabKey).toLowerCase();
+        const tabIcon =
+          normalizedTabKey.includes("gl") ||
+          normalizedTabKey.includes("ledger") ||
+          normalizedTabKey.includes("journal")
+            ? faBook
+            : normalizedTabKey.includes("detail")
+            ? faList
+            : faTable;
 
         return (
           <button
@@ -1934,10 +1978,11 @@ const handleExportConfirm = async (enteredFileName) => {
             }}
           >
             <span
-              className={`block w-full text-center ${
+              className={`flex w-full items-center justify-center gap-2 ${
                 isMobile ? "text-[12px] leading-none" : "text-sm"
               } truncate`}
             >
+              <FontAwesomeIcon icon={tabIcon} className={isMobile ? "text-[11px]" : "text-[13px]"} />
               {tabLabel}
             </span>
           </button>
@@ -1945,35 +1990,15 @@ const handleExportConfirm = async (enteredFileName) => {
       })}
     </div>
 
-        <div className="flex items-center shrink-0 min-w-[28px] justify-end">
+        <div className="flex items-center shrink-0 min-w-[28px] justify-end gap-2">
           {refreshing && (
-            <svg
-              className="animate-spin h-4 w-4 text-blue-600"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              title="Refreshing..."
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              />
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-              />
-            </svg>
+            <LoadingDots label="Refreshing..." />
           )}
           </div>
         </div>
       </div>
 
-        <div className="bg-white shadow-md rounded-md overflow-hidden p-2 mt-0 mb-4 mx-4">
+        <div className="bg-white shadow-md rounded-md overflow-visible px-2 pt-2 pb-0 mt-0 mb-4 mx-4">
           {activeTab && visibleCols.length > 0  && (
             <div className="p-1 bg-white rounded-md flex flex-col md:flex-row md:items-center md:justify-between gap-2 shrink-0 mb-0"
                  onDragOver={e => e.preventDefault()}
@@ -1988,16 +2013,36 @@ const handleExportConfirm = async (enteredFileName) => {
                 {groupBy.map(gKey => (
                   <div key={gKey} className="flex items-center bg-blue-100 text-blue-800 rounded border border-blue-200 text-xs px-2 py-1">
                     {baseColumns.find(c => c.key === gKey)?.label}
-                    <button onClick={() => handleRemoveGroupedColumn(gKey)} className="ml-2 text-blue-600 hover:text-red-600">
+                    <button type="button" onClick={() => handleRemoveGroupedColumn(gKey)} className="ml-2 text-blue-600 hover:text-red-600">
                       <FontAwesomeIcon icon={faTimes} />
                     </button>
                   </div>
                 ))}
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap justify-end">
+              <div className="flex items-center gap-2 flex-wrap justify-end w-full md:w-auto overflow-visible">
+                {groupBy.length > 0 && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <label className="inline-flex items-center cursor-pointer select-none h-8">
+                      <input type="checkbox" checked={allExpanded} onChange={() => toggleAllGroups(!allExpanded)} className="sr-only" />
+                      <div className={`relative rounded-full transition-colors duration-200 ${allExpanded ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-600"} w-24 h-8`}>
+                        <span className={`absolute rounded-full bg-white shadow-md transition-all duration-200 ${allExpanded ? "left-[66px]" : "left-[2px]"} top-[2px] w-7 h-7`} />
+                        <span className={`absolute inset-0 flex items-center font-medium pointer-events-none text-[11px] ${allExpanded ? "justify-start pl-4" : "justify-end pr-4"}`}>{allExpanded ? "Collapse" : "Expand"}</span>
+                      </div>
+                    </label>
+                    <button type="button" onClick={() => { setGroupByByTab(p => ({...p, [activeTab]: []})); setExpandedGroupsByTab(p => ({...p, [activeTab]: {}})); }} className="font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition h-8 text-xs px-3">
+                      <FontAwesomeIcon icon={faTimes} className="mr-1" /> Remove
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 min-w-0 flex-1 md:flex-none">
+                  <input type="text" value={globalSearch} onChange={e => setGlobalSearch(e.target.value)}
+                         placeholder="Quick Search..." className="w-full min-w-[120px] rounded-md border border-gray-300 focus:ring-1 focus:ring-blue-300 outline-none h-8 md:w-48 px-3 text-xs" />
+                </div>
+
                 {isMobile && (
-                  <div className="inline-flex overflow-hidden rounded-md border border-gray-300">
+                  <div className="inline-flex overflow-hidden rounded-md border border-gray-300 bg-white shadow-sm shrink-0">
                     <button
                       type="button"
                       onClick={() => setUseCardView(false)}
@@ -2017,26 +2062,6 @@ const handleExportConfirm = async (enteredFileName) => {
                   </div>
                 )}
 
-                {groupBy.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <label className="inline-flex items-center cursor-pointer select-none h-8">
-                      <input type="checkbox" checked={allExpanded} onChange={() => toggleAllGroups(!allExpanded)} className="sr-only" />
-                      <div className={`relative rounded-full transition-colors duration-200 ${allExpanded ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-600"} w-24 h-8`}>
-                        <span className={`absolute rounded-full bg-white shadow-md transition-all duration-200 ${allExpanded ? "left-[66px]" : "left-[2px]"} top-[2px] w-7 h-7`} />
-                        <span className={`absolute inset-0 flex items-center font-medium pointer-events-none text-[11px] ${allExpanded ? "justify-start pl-4" : "justify-end pr-4"}`}>{allExpanded ? "Collapse" : "Expand"}</span>
-                      </div>
-                    </label>
-                    <button onClick={() => { setGroupByByTab(p => ({...p, [activeTab]: []})); setExpandedGroupsByTab(p => ({...p, [activeTab]: {}})); }} className="font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition h-8 text-xs px-3">
-                      <FontAwesomeIcon icon={faTimes} className="mr-1" /> Remove
-                    </button>
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2 w-full md:w-auto">
-                  <input type="text" value={globalSearch} onChange={e => setGlobalSearch(e.target.value)}
-                         placeholder="Quick Search..." className="rounded-md border border-gray-300 focus:ring-1 focus:ring-blue-300 outline-none h-8 md:w-48 px-3 text-xs" />
-                </div>
-
                 {!isMobile && (
                   <label className="inline-flex items-center cursor-pointer select-none shrink-0 h-8">
                       <input type="checkbox" checked={autoFillGridState} onChange={() => setAutoFillGridState(!autoFillGridState)} className="sr-only" />
@@ -2047,14 +2072,15 @@ const handleExportConfirm = async (enteredFileName) => {
                   </label>
                 )}
 
-                <div className="relative" data-sgrt-export>
-                  <button onClick={() => filteredData.length > 0 && setShowExportMenu(!showExportMenu)} disabled={filteredData.length === 0}
-                          className="text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 transition flex items-center justify-center h-8 px-3">
+                <div className="relative shrink-0" data-sgrt-export>
+                  <button type="button" onClick={() => filteredData.length > 0 && setShowExportMenu(!showExportMenu)} disabled={filteredData.length === 0}
+                          className="text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 transition flex items-center justify-center h-8 px-3 whitespace-nowrap">
                     <FontAwesomeIcon icon={faFileExport} className="mr-1" /> Export
                   </button>
                  {showExportMenu && (
                     <div className="absolute right-0 mt-1 min-w-[120px] rounded-lg shadow-lg bg-white ring-1 ring-black/10 z-[60] overflow-hidden py-1">
                       <button
+                        type="button"
                         onClick={() => {
                           setShowExportMenu(false);
                           openExportModal("excel");
@@ -2066,6 +2092,7 @@ const handleExportConfirm = async (enteredFileName) => {
                       </button>
 
                       <button
+                        type="button"
                         onClick={() => {
                           setShowExportMenu(false);
                           openExportModal("csv");
@@ -2077,6 +2104,7 @@ const handleExportConfirm = async (enteredFileName) => {
                       </button>
 
                       <button
+                        type="button"
                         onClick={() => {
                           setShowExportMenu(false);
                           openExportModal("pdf");
@@ -2088,6 +2116,7 @@ const handleExportConfirm = async (enteredFileName) => {
                       </button>
 
                       <button
+                        type="button"
                         onClick={() => {
                           setShowExportMenu(false);
                           openExportModal("image");
@@ -2101,16 +2130,16 @@ const handleExportConfirm = async (enteredFileName) => {
                   )}
                 </div>
 
-                <div className="relative" data-sgrt-cols>
-                  <button onClick={() => setShowColumnChooser(!showColumnChooser)} className="text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition flex items-center justify-center h-8 px-3">
+                <div className="relative shrink-0" data-sgrt-cols>
+                  <button type="button" onClick={() => setShowColumnChooser(!showColumnChooser)} className="text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition flex items-center justify-center h-8 px-3 whitespace-nowrap">
                     <FontAwesomeIcon icon={faColumns} className="mr-1" /> Columns
                   </button>
                   {showColumnChooser && (
-                    <div className="absolute right-0 mt-1 bg-white border rounded shadow-lg p-2 max-h-64 overflow-auto z-50 min-w-[200px]">
+                    <div className="absolute right-0 mt-1 bg-white border rounded shadow-lg p-2 max-h-64 overflow-auto z-[60] min-w-[200px]">
                       <div className="flex items-center justify-between text-[11px] font-semibold mb-1 border-b pb-1">
                         <span>Show / Hide Columns</span>
                         <label className="flex items-center gap-1 text-[11px] cursor-pointer">
-                          <label className="flex items-center gap-1 text-[11px] cursor-pointer"><input type="checkbox" checked={allChecked} onChange={(e) => { if (!e.target.checked) { useSwalErrorAlert("Minimum columns required", "Please retain at least 2 columns."); return; } setUserHiddenColsByTab((p) => ({ ...p, [activeTab]: [] })); }} /> Select All</label>
+                          <input type="checkbox" checked={allChecked} onChange={(e) => { if (!e.target.checked) { useSwalErrorAlert("Minimum columns required", "Please retain at least 2 columns."); return; } setUserHiddenColsByTab((p) => ({ ...p, [activeTab]: [] })); }} /> Select All
                         </label>
                       </div>
                       {orderedCols.filter((col) => !col.hidden && !groupBy.includes(col.key)).map(col => (
@@ -2878,7 +2907,9 @@ const handleExportConfirm = async (enteredFileName) => {
         onConfirm={handleExportConfirm}
       />
 
-      {(loading || exporting) && <LoadingSpinner />}     
+      {(loading || exporting) && (
+        <LoadingDots label={exporting ? "Exporting, please wait..." : "Loading, please wait..."} fullScreen />
+      )}
     </>
   );
 };

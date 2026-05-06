@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Swal from "sweetalert2";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
+import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -27,17 +28,22 @@ import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import RCLookupModal from "../../../Lookup/SearchRCMast.jsx";
-import MSLookupModal from "../../../Lookup/SearchMSMast.jsx";
+import ItemMastLookupModal from "../../../Lookup/SearchItemMast.jsx";
 import PayeeMastLookupModal from "../../../Lookup/SearchVendMast";
 import PaytermLookupModal from "../../../Lookup/SearchPayTermRef.jsx";
-import SearchPROpenModal from "../../../Lookup/SearchOpenPRBalance.jsx";
+import GlobalCombinedLookup from "../../../Lookup/SearchGlobalCombinedLookup.jsx";
 import VATLookupModal from "../../../Lookup/SearchVATRef.jsx";
 import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 
 // Configuration
-import { postRequest } from "../../../Configuration/BaseURL.jsx";
+import apiClient from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
+import { postRequest, fetchDataJson } from "../../../Configuration/BaseURL.jsx";
 import { useReset } from "../../../Components/ResetContext";
+import {
+  useGetCurrentDayV2,
+  useformatToDatev2
+} from '@/NAYSA Cloud/Global/dates';
 
 import {
   docTypeNames,
@@ -70,7 +76,11 @@ import {
   formatNumber,
   parseFormattedNumber,
   useSwalshowSaveSuccessDialog,
+  useSwalInfoAlert,
+  useSwalSuccessAlert
 } from "@/NAYSA Cloud/Global/behavior.jsx";
+
+import { useSelectedHSColConfig } from '@/NAYSA Cloud/Global/selectedData';
 
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
@@ -82,8 +92,19 @@ import DateFormatInput from '@/NAYSA Cloud/Global/DateFormatInput.jsx';
 const PO = () => {
   const loadedFromUrlRef = useRef(false);
   const navigate = useNavigate();
-
+  const { currentUserRow } = useAuth();
   const { resetFlag } = useReset();
+  const location = useLocation();
+  const [isViewDocument, setIsViewDocument] = useState(false);
+
+  useEffect(() => {
+    const p = new URLSearchParams(location.search);
+    if (p.get("viewDocument") === "true") {
+      setIsViewDocument(true);
+    }
+  }, []);
+
+  const isViewDocumentUrl = isViewDocument;
 
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
 
@@ -105,6 +126,7 @@ const PO = () => {
     documentNo: "",
     documentStatus: "",
     status: "OPEN",
+    originalDocStatus: "O",
     currRate: "",
 
     WHcode: "",
@@ -120,14 +142,15 @@ const PO = () => {
     isResetDisabled: false,
     isFetchDisabled: true,
 
-    // Header information
-    header: {
-      po_date: new Date().toISOString().split("T")[0], // PO Date
-      dateNeeded: new Date().toISOString().split("T")[0],
-      delDate: new Date().toISOString().split("T")[0],
-    },
+    // PR Style Lookup Logic Variables
+    itemSingleSelect: false,
+    itemLookupEndPoint: "",
+    selectedDocType: "",
 
-    dateNeeded: new Date().toISOString().split("T")[0],
+    poDate: useGetCurrentDayV2(),
+    delDate: useGetCurrentDayV2(),
+
+    dateNeeded: useGetCurrentDayV2(),
 
     branchCode: "HO",
     branchName: "Head Office",
@@ -140,7 +163,7 @@ const PO = () => {
     currName: "",
     attention: "",
 
-    // legacy fields – keep but we’ll actually use vendCode / vendName
+    // legacy fields
     vendCOde: "",
     vendName: "",
 
@@ -155,10 +178,10 @@ const PO = () => {
     selectedPoType: "",
     cutoffCode: "",
     rcCode: "",
-    rcName: "", // responsibility center name for display
+    rcName: "",
     requestDept: "",
     vendCode: "",
-    vendNameHeader: "", // internal holder if needed
+    vendNameHeader: "",
     refPoNo1: "",
     refPrNo2: "",
     remarks: "",
@@ -168,11 +191,10 @@ const PO = () => {
     poCancelled: "",
     poNo: "",
     payTerm: "",
-    userCode: "NSI",
+    userCode: "",
     selectedPOStatus: "",
     vendVatCode: "",
     groupId: "",
-
 
     // New for JO-like functions
     paytermCode: "",
@@ -181,7 +203,7 @@ const PO = () => {
     showPaytermModal: false,
     vatLookupModalOpen: false,
     payeeLookupOpen: false,
-    showAllTranDocNo:false,
+    showAllTranDocNo: false,
 
     // Detail lines
     detailRows: [],
@@ -198,8 +220,11 @@ const PO = () => {
     showAttachModal: false,
     showSignatoryModal: false,
     showPostModal: false,
-    sourcePrNo: "", // selected PR No from modal
-    prLookupModalOpen: false,
+    sourcePrNo: "",
+    showOpenPRModal: false,
+    openPR_Data_Summary: [],
+    openPR_Col_Summary: [],
+    openPR_Col_Detail: [],
 
     // RC Lookup modal (table)
     rcLookupModalOpen: false,
@@ -231,6 +256,10 @@ const PO = () => {
     isFetchDisabled,
     poNo,
     selectedPOType,
+
+    itemSingleSelect,
+    itemLookupEndPoint,
+    selectedDocType,
 
     glCurrMode,
     glCurrDefault,
@@ -303,6 +332,10 @@ const PO = () => {
     showSignatoryModal,
     showPostModal,
     vatLookupModalOpen,
+    showOpenPRModal,
+    openPR_Data_Summary,
+    openPR_Col_Summary,
+    openPR_Col_Detail,
 
     // RC Lookup
     rcLookupModalOpen,
@@ -312,7 +345,7 @@ const PO = () => {
   } = state;
 
   const [header, setHeader] = useState({
-    po_date: new Date().toISOString().split("T")[0],
+    po_date: useGetCurrentDayV2(),
   });
 
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
@@ -324,36 +357,46 @@ const PO = () => {
     totalNet: "0.000000",
   });
 
-  // PO.jsx
   const docType = docTypes?.PO || "PO";
 
   const pdfLink = docTypePDFGuide[docType];
   const videoLink = docTypeVideoGuide[docType];
   const documentTitle = docTypeNames[docType] || "Purchase Order";
+  // Helper to map single characters to full words
+  const getFullStatus = (s) => {
+    const map = {
+      O: "OPEN",
+      C: "CLOSED",
+      X: "CANCELLED",
+      F: "FINALIZED",
+    };
+    return map[s?.toUpperCase()] || s || "OPEN";
+  };
 
-  const displayStatus = status || "OPEN";
+  const displayStatus = getFullStatus(status);
+
   const statusMap = {
     FINALIZED: "global-tran-stat-text-finalized-ui",
     CANCELLED: "global-tran-stat-text-closed-ui",
-    CLOSED: "global-tran-stat-text-closed-ui",
+    CLOSED: "global-tran-stat-text-finalized-ui",
   };
+
   const statusColor = statusMap[displayStatus] || "";
-  const isFormDisabled = ["FINALIZED", "CANCELLED", "CLOSED"].includes(
-    displayStatus,
+  const isFormDisabled = isViewDocumentUrl || ["FINALIZED", "CANCELLED", "CLOSED"].includes(
+    displayStatus
   );
 
   const DEC_QTY = 2;
   const DEC_PRICE = 2;
   const DEC_AMT = 2;
 
-  // ===== Amount / VAT helpers (JO-style, adapted for PO) =====
   const computeVatFromInclusive = (vatRate, grossAmt) => {
-    const rate = parseFormattedNumber(vatRate || 0); // % (e.g. 12)
-    const gross = parseFormattedNumber(grossAmt || 0); // VAT-inclusive
+    const rate = parseFormattedNumber(vatRate || 0);
+    const gross = parseFormattedNumber(grossAmt || 0);
 
     if (!rate || !gross) return 0;
 
-    const r = rate * 0.01; // to decimal
+    const r = rate * 0.01;
     return (gross * r) / (1 + r);
   };
 
@@ -362,32 +405,22 @@ const PO = () => {
     const unitPrice = parseFormattedNumber(row.unitPrice || 0);
     const vatRate = row.vatRate ?? 0;
 
-    // 1) Gross = Quantity × Unit Price
     const gross = qty * unitPrice;
-
-    // 2) Discount
-    const discRate = parseFormattedNumber(row.discRate || 0); // %
+    const discRate = parseFormattedNumber(row.discRate || 0);
     const discAmt = gross * (discRate / 100);
-
-    const baseAfterDisc = gross - discAmt; // still VAT-inclusive
-
-    // 3) VAT amount using inclusive price method
+    const baseAfterDisc = gross - discAmt;
     const vatAmt = computeVatFromInclusive(vatRate, baseAfterDisc);
-
-    // 4) Net = base - VAT
     const net = baseAfterDisc - vatAmt;
 
     row.qtyOnHand = formatNumber(parseFormattedNumber(row.qtyOnHand) || 0, DEC_QTY);
     row.qtyNeeded = formatNumber(parseFormattedNumber(row.qtyNeeded) || 0, DEC_QTY);
-    row.poQty     = formatNumber(parseFormattedNumber(row.poQty) || 0, DEC_QTY);
-
+    row.poQty = formatNumber(parseFormattedNumber(row.poQty) || 0, DEC_QTY);
     row.unitPrice = formatNumber(parseFormattedNumber(row.unitPrice) || 0, DEC_PRICE);
 
-    row.grossAmt  = formatNumber(parseFormattedNumber(row.grossAmt) || 0, DEC_AMT);
-    row.totalAmt  = formatNumber(parseFormattedNumber(row.totalAmt) || 0, DEC_AMT);
-    row.vatAmt    = formatNumber(parseFormattedNumber(row.vatAmt) || 0, DEC_AMT);
-    row.netAmt    = formatNumber(parseFormattedNumber(row.netAmt) || 0, DEC_AMT);
-
+    row.grossAmt = formatNumber(parseFormattedNumber(row.grossAmt) || 0, DEC_AMT);
+    row.totalAmt = formatNumber(parseFormattedNumber(row.totalAmt) || 0, DEC_AMT);
+    row.vatAmt = formatNumber(parseFormattedNumber(row.vatAmt) || 0, DEC_AMT);
+    row.netAmt = formatNumber(parseFormattedNumber(row.netAmt) || 0, DEC_AMT);
 
     return {
       ...row,
@@ -401,11 +434,7 @@ const PO = () => {
 
   const updateTotalsDisplay = (rows) => {
     const arr = rows || [];
-
-    let qtyNeeded = 0;
-    let gross = 0;
-    let vat = 0;
-    let net = 0;
+    let qtyNeeded = 0, gross = 0, vat = 0, net = 0;
 
     arr.forEach((r) => {
       qtyNeeded += parseFormattedNumber(r.qtyNeeded || 0);
@@ -436,7 +465,7 @@ const PO = () => {
       qtyNeeded: formatNumber(0, DEC_QTY),
       uomCode2: "",
       uomQty2: formatNumber(0, DEC_QTY),
-      dateNeeded: state.header?.delDate || new Date().toISOString().split("T")[0],
+      dateNeeded: state.header?.delDate || useGetCurrentDayV2(),
       itemSpecs: "",
       serviceCode: "",
       serviceName: "",
@@ -457,10 +486,8 @@ const PO = () => {
     updateTotalsDisplay(updatedRows);
   };
 
-
   const openSpecsModal = (rowIndex) => {
     if (isFormDisabled) return;
-
     const current = detailRows?.[rowIndex]?.itemSpecs ?? "";
     updateState({
       specsModalOpen: true,
@@ -480,13 +507,11 @@ const PO = () => {
   const saveSpecsModal = () => {
     const idx = state.specsRowIndex;
     if (idx === null || idx === undefined) return closeSpecsModal();
-
     const updated = [...detailRows];
     updated[idx] = {
       ...updated[idx],
       itemSpecs: state.specsTempText ?? "",
     };
-
     updateState({ detailRows: updated });
     closeSpecsModal();
   };
@@ -496,7 +521,6 @@ const PO = () => {
       updateState({ warehouseLookupOpen: false });
       return;
     }
-
     updateState({
       warehouseLookupOpen: false,
       WHcode: row?.whCode ?? "",
@@ -504,14 +528,8 @@ const PO = () => {
     });
   };
 
-  // ==========================
-  // EFFECTS
-  // ==========================
-
   useEffect(() => {
-    if (resetFlag) {
-      handleReset();
-    }
+    if (resetFlag) handleReset();
     let timer;
     if (isLoading) {
       timer = setTimeout(() => updateState({ showSpinner: true }), 200);
@@ -535,16 +553,18 @@ const PO = () => {
     }
   }, [glCurrMode, glCurrDefault, currCode]);
 
-  // ==========================
-  // INITIAL LOAD / RESET
-  // ==========================
-
   const handleReset = () => {
     loadDocDropDown();
     loadDocControl();
     loadCompanyData();
 
-    const today = new Date().toISOString().split("T")[0];
+    const today = useGetCurrentDayV2();
+
+    setHeader({
+      po_date: today,
+      dateNeeded: today,
+      delDate: today,
+    });
 
     updateState({
       header: {
@@ -579,14 +599,19 @@ const PO = () => {
       isResetDisabled: false,
       isFetchDisabled: false,
       status: "OPEN",
+      originalDocStatus: "O",
       noReprints: "0",
       poCancelled: "",
       detailRows: [],
       rcLookupModalOpen: false,
       rcLookupContext: "",
       msLookupModalOpen: false,
+      itemSingleSelect: false,
+      itemLookupEndPoint: "",
+      selectedDocType: "",
       paytermCode: "",
       paytermName: "",
+      showOpenPRModal: false,
     });
 
     updateTotalsDisplay([]);
@@ -639,14 +664,9 @@ const PO = () => {
     }
   };
 
-  const loadCurrencyMode = (
-    mode = glCurrMode,
-    defaultCurr = glCurrDefault,
-    curr = currCode,
-  ) => {
+  const loadCurrencyMode = (mode = glCurrMode, defaultCurr = glCurrDefault, curr = currCode) => {
     const calcWithCurr3 = mode === "T";
-    const calcWithCurr2 =
-      (mode === "M" && defaultCurr !== curr) || mode === "D" || calcWithCurr3;
+    const calcWithCurr2 = (mode === "M" && defaultCurr !== curr) || mode === "D" || calcWithCurr3;
 
     updateState({
       glCurrMode: mode,
@@ -676,12 +696,7 @@ const PO = () => {
     }
   };
 
-
-  // ==========================
-  // FETCH (GET) – PO HEADER + DT1
-  // ==========================
-
-  const fetchTranData = async (poNoParam, _branchCode) => {
+ const fetchTranData = async (poNoParam, _branchCode, key = "") => {
     const resetState = () => {
       updateState({
         documentNo: "",
@@ -695,22 +710,18 @@ const PO = () => {
     updateState({ isLoading: true });
 
     try {
+      let formattedPoNo = poNoParam?.toString().trim() || "";
+      if (formattedPoNo && /^\d+$/.test(formattedPoNo)) {
+        formattedPoNo = formattedPoNo.padStart(8, '0');
+      }
+
       const data = await useFetchTranData(
-        poNoParam,
-        _branchCode,
+        formattedPoNo,
+        _branchCode || branchCode,
         docType,
         "poNo",
+        key || ""
       );
-
-      const today = new Date().toISOString().split("T")[0];
-
-      const delDateForHeader = data.delDate
-        ? new Date(data.delDate).toISOString().split("T")[0]
-        : today;
-
-
-
-      console.log("📄 PO PARSED DATA:", data);
 
       if (!data?.poId) {
         Swal.fire({
@@ -723,31 +734,23 @@ const PO = () => {
 
       let poDateForHeader = "";
       if (data.poDate) {
-        const d = new Date(data.poDate);
-        poDateForHeader = isNaN(d) ? "" : d.toISOString().split("T")[0];
+        poDateForHeader = useformatToDatev2(data.poDate) || "";
       }
 
-      // normalize header-level dateNeeded
       let dateNeededForHeader = "";
       if (data.dateNeeded) {
-        const dn = new Date(data.dateNeeded);
-        dateNeededForHeader = isNaN(dn) ? "" : dn.toISOString().split("T")[0];
+        dateNeededForHeader = useformatToDatev2(data.dateNeeded) || "";
+      }
+
+      let delDateForHeader = "";
+      if (data.delDate) {
+        delDateForHeader = useformatToDatev2(data.delDate) || "";
       }
 
       const retrievedDetailRows = (data.dt1 || []).map((item) => {
-        // ✅ Qty comes from poQuantity; if null, derive from grossAmount / unitCost
         const unitCost = Number(item.unitCost ?? 0) || 0;
         const grossAmt = Number(item.grossAmount ?? 0) || 0;
-
-        const qty =
-          Number(item.poQuantity ?? 0) ||
-          0 ||
-          (unitCost > 0 ? grossAmt / unitCost : 0);
-
-        const dateNeeded =
-          item.delDate || data.delDate
-            ? new Date(item.delDate || data.delDate).toISOString().split("T")[0]
-            : "";
+        const qty = Number(item.poQuantity ?? 0) || 0 || (unitCost > 0 ? grossAmt / unitCost : 0);
 
         return {
           ...item,
@@ -763,20 +766,14 @@ const PO = () => {
           qtyNeeded: formatNumber(item.qtyNeeded ?? 0, 6),
           uomCode2: item.uomCode2 || "",
           uomQty2: formatNumber(item.uomQty2 ?? 0, 6),
-          dateNeeded: item.dateNeeded
-            ? new Date(item.dateNeeded).toISOString().split("T")[0]
-            : "",
+          dateNeeded: item.dateNeeded ? useformatToDatev2(item.dateNeeded) : "",
           itemSpecs: item.itemSpecs || "",
           serviceCode: item.serviceCode || "",
           serviceName: item.serviceName || "",
-          // ✅ Qty Needed + PO Qty should match
           qtyNeeded: formatNumber(qty, 6),
           poQty: formatNumber(qty, 6),
           rrQty: formatNumber(item.rrQty ?? 0, 6),
-
-          // NEW amount fields (default to 0 if not present)
           unitPrice: formatNumber(item.unitCost ?? 0, 6),
-          // ✅ Amount fields (use the API’s names)
           grossAmt: formatNumber(item.grossAmount ?? 0, 6),
           totalAmt: formatNumber(item.itemAmount ?? 0, 6),
           vatAmt: formatNumber(item.vatAmount ?? 0, 6),
@@ -785,17 +782,19 @@ const PO = () => {
         };
       });
 
-      const totalQty = retrievedDetailRows.reduce(
-        (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
-        0,
-      );
       updateTotalsDisplay(retrievedDetailRows);
-
       const firstPrNo = data?.dt1?.[0]?.prNo || "";
+
+      setHeader({
+        po_date: poDateForHeader,
+        dateNeeded: dateNeededForHeader,
+        delDate: delDateForHeader || dateNeededForHeader || useGetCurrentDayV2(),
+      });
 
       updateState({
         documentStatus: data.status,
         status: data.status,
+        originalDocStatus: data.status,
         documentID: data.poId,
         groupId: data.groupId || "",
         documentNo: data.poNo,
@@ -803,9 +802,8 @@ const PO = () => {
         header: {
           po_date: poDateForHeader,
           dateNeeded: dateNeededForHeader,
-          delDate: delDateForHeader || dateNeededForHeader || new Date().toISOString().split("T")[0],
+          delDate: delDateForHeader || dateNeededForHeader || useGetCurrentDayV2(),
         },
-
         cutoffCode: data.cutoffCode || "",
         rcCode: data.rcCode || "",
         rcName: data.rcName || "",
@@ -820,33 +818,10 @@ const PO = () => {
         detailRows: retrievedDetailRows,
         isDocNoDisabled: true,
         isFetchDisabled: true,
-
         vendCode: data.vendCode || "",
         vendNameHeader: data.vendName || "",
-
-        // ✅ Payterm
         paytermCode: data.paytermCode || "",
-
-        // ✅ PR No in header (comes from dt1)
         sourcePrNo: firstPrNo,
-
-        // ✅ Department (you already have rcCode; if your UI shows dept name, your API currently returns rcCode only)
-        rcCode: data.rcCode || "",
-
-        // ✅ Correct ref keys (your API uses refpoNo1/refpoNo2)
-        refPoNo1: data.refpoNo1 || "",
-        refPrNo2: data.refpoNo2 || "",
-
-        // ✅ Correct PO keys (you’re currently using PR keys)
-        selectedPoTranType: data.poTranType || "",
-        selectedPoType: data.poType || "",
-
-        // ✅ Date needed for header is delDate in your API
-        dateNeeded: data.delDate
-          ? new Date(data.delDate).toISOString().split("T")[0]
-          : "",
-        WHcode: data.whCode || "",
-        WHname: data.whName || "",
       });
     } catch (error) {
       console.error("Error fetching transaction data:", error);
@@ -861,105 +836,35 @@ const PO = () => {
     }
   };
 
-  const handleCloseMSLookup = (selectedItem) => {
-    if (!selectedItem) {
-      updateState({ msLookupModalOpen: false });
-      return;
-    }
-
-    const today = header.po_date || new Date().toISOString().split("T")[0];
-
-    const newRow = {
-      invType: "MS",
-      groupId: state.groupId || "",
-      poStatus: status || "",
-      itemCode: selectedItem.itemCode || "",
-      itemName: selectedItem.itemName || "",
-      uomCode: selectedItem.uom || "",
-      qtyOnHand: formatNumber(selectedItem.qtyHand ?? 0, 6),
-      qtyAlloc: "0.000000",
-      qtyNeeded: "0.000000",
-      uomCode2: "",
-      uomQty2: "0.000000",
-      dateNeeded: today,
-      itemSpecs: "",
-      serviceCode: "",
-      serviceName: "",
-      poQty: "0.000000",
-      rrQty: "0.000000",
-
-      // NEW
-      unitPrice: "0.000000",
-      grossAmt: "0.000000",
-      discRate: "0.000000",
-      discAmt: "0.000000",
-      totalAmt: "0.000000",
-      vatCode: "",
-      vatAmt: "0.000000",
-      netAmt: "0.000000",
-      vatRate: 0,
-    };
-
-    const updatedRows = [...detailRows, newRow];
-    updateState({
-      detailRows: updatedRows,
-      msLookupModalOpen: false,
-    });
-
-    const totalQty = updatedRows.reduce(
-      (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
-      0,
-    );
-    updateTotalsDisplay(updatedRows);
-  };
-
   const handlePrNoBlur = () => {
     if (!state.documentID && state.documentNo && state.branchCode) {
       fetchTranData(state.documentNo, state.branchCode);
     }
   };
 
-  // ==========================
-  // HEADER EVENTS
-  // ==========================
-
   const handleCurrRateNoBlur = (e) => {
     const num = formatNumber(e.target.value, 6);
     updateState({
       currRate: isNaN(num) ? "0.000000" : num,
-      withCurr2:
-        (glCurrMode === "M" && glCurrDefault !== currCode) ||
-        glCurrMode === "D",
+      withCurr2: (glCurrMode === "M" && glCurrDefault !== currCode) || glCurrMode === "D",
       withCurr3: glCurrMode === "T",
     });
   };
 
-  const handlePrTranTypeChange = (e) => {
-    updateState({ selectedPoTranType: e.target.value });
-  };
-
-  const handlePrTypeChange = (e) => {
-    updateState({ selectedPoType: e.target.value });
-  };
-
-  // ==========================
-  // DETAIL HANDLERS
-  // ==========================
+  const handlePrTranTypeChange = (e) => updateState({ selectedPoTranType: e.target.value });
+  const handlePrTypeChange = (e) => updateState({ selectedPoType: e.target.value });
 
   const handleAddRowClick = () => {
     if (isFormDisabled) return;
-
-    // Toggle dropdown
     setShowTypeDropdown((prev) => !prev);
   };
 
   const handleSelectTypeAndAddRow = (typeCode) => {
-    const today = header.po_date || new Date().toISOString().split("T")[0];
-
+    const today = header.po_date || useGetCurrentDayV2();
     const newRow = {
       invType: typeCode,
       groupId: "",
-      poStatus: status || "",
+      poStatus: status || "O",
       itemCode: "",
       itemName: "",
       uomCode: "",
@@ -974,8 +879,6 @@ const PO = () => {
       serviceName: "",
       poQty: "0.000000",
       rrQty: "0.000000",
-
-      // NEW
       unitPrice: "0.000000",
       grossAmt: "0.000000",
       discRate: "0.000000",
@@ -989,106 +892,290 @@ const PO = () => {
 
     const updatedRows = [...detailRows, newRow];
     updateState({ detailRows: updatedRows });
-
-    const totalQty = updatedRows.reduce(
-      (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
-      0,
-    );
     updateTotalsDisplay(updatedRows);
-
     setShowTypeDropdown(false);
   };
 
+  const handleOpenPRLookup = async () => {
+    try {
+      updateState({ isLoading: true });
 
-  const handleClosePROpenModal = (selection) => {
-    // Always close the modal
-    if (!selection) {
-      updateState({ prLookupModalOpen: false });
+      const payload = {
+        json_data: {
+          mode: "Header",
+          branchCode: branchCode,
+          prTranType: null, // or "PR01" if you want to filter
+        },
+      };
+
+      const response = await postRequest("getPROpen", payload);
+
+      let custData = response?.data ?? [];
+
+      if (!response?.success || !Array.isArray(custData) || custData.length === 0) {
+        useSwalInfoAlert("Open Purchase Requisition", "No records found");
+        updateState({ isLoading: false });
+        return;
+      }
+
+      // 🚀 NEW FIX: Filter the Summary Tab so Closed/Cancelled PRs don't even show up
+      custData = custData.filter((row) => {
+        const stat = String(row.Status || row.status || row.PR_STATUS || row.prStatus || "O").toUpperCase();
+        // Hide it if it's C, CLOSED, X, or CANCELLED
+        return stat !== "C" && stat !== "CLOSED" && stat !== "X" && stat !== "CANCELLED";
+      }).map((row) => ({
+        ...row,
+        groupId: row.GroupId || row.groupId || row.PrId || row.PRNo || row.prNo,
+      }));
+
+      let colConfig = [];
+      let colConfig_detail = [];
+
+      try {
+        colConfig = await useSelectedHSColConfig("getPROpen");
+        if (!colConfig || colConfig.length === 0) throw new Error("Empty config");
+      } catch {
+        colConfig = [
+          { key: "PRNo", label: "PR No.", hidden: 0 },
+          { key: "PRDate", label: "PR Date", hidden: 0 },
+          { key: "DateNeeded", label: "Date Needed", hidden: 0 },
+          { key: "ReqRcCode", label: "Requesting Dept", hidden: 0 },
+        ];
+      }
+
+      try {
+        colConfig_detail = await useSelectedHSColConfig("getPROpen_Detail");
+        if (!colConfig_detail || colConfig_detail.length === 0) throw new Error("Empty config");
+      } catch {
+        colConfig_detail = [
+          { key: "PRNo", label: "PR No.", hidden: 0 },
+          { key: "JobCode", label: "Item Code", hidden: 0 },
+          { key: "ScopeOfWork", label: "Description", hidden: 0 },
+          { key: "QtyNeeded", label: "Qty", hidden: 0 },
+          { key: "UOM", label: "UOM", hidden: 0 },
+        ];
+      }
+
+      updateState({
+        openPR_Data_Summary: custData,
+        openPR_Col_Summary: colConfig,
+        openPR_Col_Detail: colConfig_detail,
+        showOpenPRModal: true,
+        isLoading: false,
+      });
+    } catch (error) {
+      console.error("PR Open Fetch Error:", error);
+      console.log("error response:", error?.response?.data);
+      console.log("error status:", error?.response?.status);
+
+      useSwalInfoAlert("Open Purchase Requisition", "Error in Fetching Record");
+      updateState({
+        openPR_Data_Summary: [],
+        openPR_Col_Summary: [],
+        openPR_Col_Detail: [],
+        isLoading: false,
+      });
+    }
+  };
+
+  const handleClosePROpenModal = async (selection) => {
+    if (!selection || !selection.details || selection.details.length === 0) {
+      updateState({ showOpenPRModal: false });
       return;
     }
 
-    const header = selection?.header || {};
-    const details = Array.isArray(selection?.details) ? selection.details : [];
+    updateState({ isLoading: true, showOpenPRModal: false });
 
-    const prNo =
-      header?.PRNo ||
-      header?.prNo ||
-      header?.DocNo ||
-      header?.docNo ||
-      "";
+    try {
+      const summary = selection.summary?.[0] || {};
 
-    const prId =
-      header?.PrId ||
-      header?.prId ||
-      "";
-
-    const refBC =
-      header?.BC ||
-      header?.branchCode ||
-      branchCode;
-
-    // Prefer groupId coming from DETAILS (once you add d.group_id AS GroupId in sproc_PHP_PR_Open Detail)
-    const pickedGroupId =
-      header?.groupId ||
-      header?.GroupId ||
-      details.find((d) => d?.groupId || d?.GroupId || d?.GROUP_ID)?.groupId ||
-      details.find((d) => d?.groupId || d?.GroupId || d?.GROUP_ID)?.GroupId ||
-      details.find((d) => d?.groupId || d?.GroupId || d?.GROUP_ID)?.GROUP_ID ||
-      state?.groupId ||
-      "";
-
-    const headerDateNeeded = header?.DateNeeded
-      ? String(header.DateNeeded).substring(0, 10)
-      : "";
-
-    const newDetailRows = details.map((d, i) => {
-      const qty = parseFloat(d?.QtyNeeded ?? 0) || 0;
-      const formattedQty = formatNumber(qty, 6);
-
-      const dateNeeded =
-        d?.DateNeeded
-          ? String(d.DateNeeded).substring(0, 10)
-          : headerDateNeeded;
-
-      const rowGroupId =
-        d?.groupId ||
-        d?.GroupId ||
-        d?.GROUP_ID ||
-        pickedGroupId ||
+      const pickedGroupId =
+        summary?.GroupId ||
+        summary?.groupId ||
+        state?.groupId ||
         "";
 
-      return {
-        lN: i + 1,
+      const headerDateNeeded =
+        summary?.DateNeeded ||
+        summary?.DelDate ||
+        summary?.PrDate ||
+        "";
 
-        // references
-        prNo: prNo || "",
-        prId: prId || "",
-        refBranchCode: refBC || branchCode,
+      const newDetailRows = selection.details.map((d, i) => {
+        const qty = parseFloat(d?.QtyNeeded ?? d?.QTY_NEEDED ?? d?.QTY_BALANCE ?? d?.qtyBalance ?? 0) || 0;
+        const formattedQty = formatNumber(qty, 6);
 
-        invType: d?.Type || "",
-        groupId: rowGroupId, // ✅ THIS WILL FLOW INTO PO_DT1.GROUP_ID
-        poStatus: status || "",
+        const dateNeeded = d?.DateNeeded || d?.DATE_NEEDED
+          ? String(d?.DateNeeded || d?.DATE_NEEDED).substring(0, 10)
+          : headerDateNeeded
+            ? String(headerDateNeeded).substring(0, 10)
+            : "";
 
-        itemCode: d?.JobCode || "",
-        itemName: d?.ScopeOfWork || "",
-        uomCode: d?.UOM || "",
+        return {
+          // lN: i + 1,
+          // prNo: summary?.PRNo || summary?.PrNo || summary?.prNo || "",
+          // prId: summary?.PrId || summary?.prId || "",
+          // refBranchCode: summary?.BC || summary?.BranchCode || branchCode,
 
-        qtyOnHand: formatNumber(d?.qtyOnHand ?? 0, 6),
+          // invType: d?.Type || d?.INV_TYPE || "",
+          // groupId: d?.GROUP_ID || d?.groupId || pickedGroupId || "",
+          // poStatus: "O",
+          lN: i + 1,
+          // FIX: Check the detail row (d) first for its specific PRNo before using the summary's PRNo
+          prNo: d?.PRNo || d?.PrNo || d?.prNo || summary?.PRNo || summary?.PrNo || summary?.prNo || "",
+          prId: d?.PrId || d?.prId || summary?.PrId || summary?.prId || "",
+          refBranchCode: d?.BC || d?.BranchCode || summary?.BC || summary?.BranchCode || branchCode,
+
+          invType: d?.Type || d?.INV_TYPE || "",
+          groupId: d?.GROUP_ID || d?.groupId || pickedGroupId || "",
+          poStatus: "O",
+
+          itemCode: d?.JobCode || d?.ITEM_CODE || "",
+          itemName: d?.ScopeOfWork || d?.ITEM_NAME || "",
+          uomCode: d?.UOM || d?.UOM_CODE || "",
+
+          qtyOnHand: formatNumber(d?.qtyOnHand ?? d?.QTY_ONHAND ?? 0, 6),
+          qtyAlloc: "0.000000",
+          qtyNeeded: formattedQty,
+          poQty: formattedQty,
+          rrQty: formatNumber(d?.RR_QTY ?? 0, 6),
+
+          uomCode2: d?.UOM_CODE2 || "",
+          uomQty2: formatNumber(d?.UOM_QTY2 ?? 0, 6),
+          dateNeeded,
+          itemSpecs: d?.ITEM_SPECS || d?.Specification || "",
+          serviceCode: "",
+          serviceName: "",
+
+          unitPrice: formatNumber(d?.UNIT_COST ?? d?.unitCost ?? 0, 6),
+          grossAmt: formatNumber(d?.GROSS_AMOUNT ?? d?.grossAmt ?? 0, 6),
+          discRate: formatNumber(d?.DISC_RATE ?? d?.discRate ?? 0, 6),
+          discAmt: formatNumber(d?.DISC_AMOUNT ?? d?.discAmt ?? 0, 6),
+          totalAmt: formatNumber(d?.ITEM_AMOUNT ?? d?.itemAmount ?? 0, 6),
+          vatCode: d?.VAT_CODE || d?.vatCode || "",
+          vatAmt: formatNumber(d?.VAT_AMOUNT ?? d?.vatAmt ?? 0, 6),
+          netAmt: formatNumber(d?.NET_AMOUNT ?? d?.netAmt ?? 0, 6),
+          vatRate: 0,
+          prBalance: formattedQty,
+        };
+      });
+
+      updateState({
+        sourcePrNo: summary?.PRNo || summary?.PrNo || summary?.prNo || "",
+        sourcePrId: summary?.PrId || summary?.prId || "",
+        groupId: pickedGroupId,
+        branchCode: summary?.BC || summary?.BranchCode || branchCode,
+        rcCode: summary?.RcCode || summary?.rcCode || rcCode,
+        rcName: summary?.RcName || summary?.rcName || rcName,
+        reqRcCode: summary?.ReqRcCode || summary?.reqRcCode || reqRcCode,
+        reqRcName: summary?.ReqRcName || summary?.reqRcName || reqRcName,
+        detailRows: newDetailRows,
+      });
+
+      updateTotalsDisplay(newDetailRows);
+    } catch (error) {
+      console.error("PR Open Lookup Error:", error);
+    } finally {
+      updateState({ isLoading: false });
+    }
+  };
+
+  const handleOpenMSLookup = async (itemSingleSelectParam, docTypeParam) => {
+    try {
+      setShowTypeDropdown(false);
+      updateState({
+        isLoading: true,
+        itemSingleSelect: itemSingleSelectParam,
+        itemLookupEndPoint: "getInvLookupMS",
+        selectedDocType: docTypeParam
+      });
+      updateState({ msLookupModalOpen: true, isLoading: false });
+    } catch (error) {
+      console.log(error);
+      updateState({ isLoading: false });
+    }
+  };
+
+  const handleAddItem = async (index, invType) => {
+    updateState({ selectedRowIndex: index, itemSingleSelect: true });
+    await handleOpenMSLookup(true, invType);
+  };
+
+  const handleCloseMSLookup = (selectedItems) => {
+    if (!selectedItems) {
+      updateState({ msLookupModalOpen: false });
+      return;
+    }
+
+    const itemsArray = Array.isArray(selectedItems.records)
+      ? selectedItems.records
+      : selectedItems.records ? [selectedItems.records] : [];
+
+    if (itemsArray.length === 0) {
+      updateState({ msLookupModalOpen: false });
+      return;
+    }
+
+    if (state.itemSingleSelect && state.selectedRowIndex !== null) {
+      const singleItem = itemsArray[0];
+      const isDuplicate = detailRows.some(row => row.itemCode === singleItem.itemCode);
+
+      const applySingleItem = () => {
+        const updatedRows = [...detailRows];
+        updatedRows[state.selectedRowIndex] = {
+          ...updatedRows[state.selectedRowIndex],
+          itemCode: singleItem.itemCode || "",
+          itemName: singleItem.itemName || "",
+          uomCode: singleItem.uomCode || singleItem.uom || "",
+          qtyOnHand: formatNumber(singleItem.qtyHand ?? 0, 6),
+          unitPrice: formatNumber(singleItem.unitCost ?? 0, DEC_PRICE)
+        };
+        updateState({ detailRows: updatedRows, itemSingleSelect: false, msLookupModalOpen: false });
+        updateTotalsDisplay(updatedRows);
+      };
+
+      if (isDuplicate) {
+        Swal.fire({
+          title: "Duplicate Item Detected",
+          text: "This item is already in the list. Do you want to select it anyway?",
+          icon: "warning",
+          showCancelButton: true,
+          confirmButtonText: "Yes"
+        }).then((result) => {
+          if (result.isConfirmed) applySingleItem();
+        });
+      } else {
+        applySingleItem();
+      }
+      return;
+    }
+
+    // Multiple Item Selection
+    const duplicateItems = itemsArray.filter(newItem =>
+      detailRows.some(existingRow => existingRow.itemCode === newItem.itemCode)
+    );
+
+    const processAddition = (itemsToAdd) => {
+      const today = header.po_date || useGetCurrentDayV2();
+      const newRows = itemsToAdd.map((item) => ({
+        invType: "MS",
+        groupId: state.groupId || "",
+        poStatus: status || "O",
+        itemCode: item?.itemCode || "",
+        itemName: item?.itemName || "",
+        uomCode: item?.uomCode || item?.uom || "",
+        qtyOnHand: formatNumber(item?.qtyHand ?? 0, 6),
         qtyAlloc: "0.000000",
-        qtyNeeded: formattedQty,
-        poQty: formattedQty,
-        rrQty: "0.000000",
-
+        qtyNeeded: "0.000000",
         uomCode2: "",
         uomQty2: "0.000000",
-        dateNeeded,
-
+        dateNeeded: today,
         itemSpecs: "",
         serviceCode: "",
         serviceName: "",
-
-        // monetary defaults
-        unitPrice: "0.000000",
+        poQty: "0.000000",
+        rrQty: "0.000000",
+        unitPrice: formatNumber(item?.unitCost ?? 0, DEC_PRICE),
         grossAmt: "0.000000",
         discRate: "0.000000",
         discAmt: "0.000000",
@@ -1097,101 +1184,42 @@ const PO = () => {
         vatAmt: "0.000000",
         netAmt: "0.000000",
         vatRate: 0,
+      }));
 
-        // optional (if you use PR balance column later)
-        prBalance: formattedQty,
-      };
-    });
+      const updatedRows = [...detailRows, ...newRows];
+      updateState({
+        detailRows: updatedRows,
+        msLookupModalOpen: false,
+        itemSingleSelect: false
+      });
+      updateTotalsDisplay(updatedRows);
+    };
 
-    updateTotalsDisplay(newDetailRows);
-
-    updateState({
-      prLookupModalOpen: false,
-
-      // PR reference
-      sourcePrNo: prNo,
-      sourcePrId: prId,
-      groupId: pickedGroupId, // ✅ keep in header state too
-
-      branchCode: refBC || branchCode,
-
-      // dept
-      rcCode: header?.rcCode || rcCode,
-      rcName: header?.rcName || rcName,
-
-      // requesting RC
-      reqRcCode: header?.ReqRcCode || reqRcCode,
-      reqRcName: header?.ReqRcName || reqRcName,
-
-      detailRows: newDetailRows,
-    });
-  };
-
-
-
-  const handleOpenMSLookup = () => {
-    if (isFormDisabled) return;
-    setShowTypeDropdown(false);
-    updateState({ msLookupModalOpen: true });
-  };
-
-  const handleDeleteRow = (index) => {
-    const updatedRows = [...detailRows];
-    updatedRows.splice(index, 1);
-
-    updateState({ detailRows: updatedRows });
-
-    const totalQty = updatedRows.reduce(
-      (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
-      0,
-    );
-    updateTotalsDisplay(updatedRows);
-  };
-
-
-
-  const sanitizeNumeric = (v) => {
-    const raw = String(v ?? "");
-    const cleaned = raw.replace(/[^0-9.]/g, "");
-    const parts = cleaned.split(".");
-    return parts.length <= 1 ? cleaned : `${parts.shift()}.${parts.join("")}`;
-  };
-
-  const formatByField = (field, num) => {
-    if (!Number.isFinite(num)) return "";
-    if (["unitPrice"].includes(field)) return formatNumber(num, DEC_PRICE);
-    if (["qtyOnHand", "qtyNeeded", "poQty"].includes(field)) return formatNumber(num, DEC_QTY);
-    if (["grossAmt", "totalAmt", "vatAmt", "netAmt"].includes(field)) return formatNumber(num, DEC_AMT);
-    return formatNumber(num, 6); // fallback for other numerics
-  };
-
-  const handleDetailChange = (index, field, value, commit = false) => {
-    const updatedRows = [...detailRows];
-    const row = { ...(updatedRows[index] || {}) };
-
-    // fields you allow user to type into
-    const editableFields = ["unitPrice"]; // add others if needed later
-
-    // If field is not editable, ignore changes (extra safety)
-    if (!editableFields.includes(field)) return;
-
-    const sanitized = sanitizeNumeric(value);
-
-    if (commit) {
-      const num = parseFormattedNumber(sanitized);
-      row[field] = formatByField(field, num);
+    if (duplicateItems.length > 0) {
+      Swal.fire({
+        title: "Duplicate Items Detected",
+        text: "Some items are already in the list. Do you want to add them anyway?",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "Yes"
+      }).then((result) => {
+        if (result.isConfirmed) {
+          processAddition(itemsArray);
+        } else {
+          const uniqueOnly = itemsArray.filter(newItem =>
+            !detailRows.some(existingRow => existingRow.itemCode === newItem.itemCode)
+          );
+          if (uniqueOnly.length > 0) {
+            processAddition(uniqueOnly);
+          } else {
+            updateState({ msLookupModalOpen: false });
+          }
+        }
+      });
     } else {
-      row[field] = sanitized; // typing mode: don’t force decimals yet
+      processAddition(itemsArray);
     }
-
-    // IMPORTANT: your computed fields must be recalculated here
-    const recalculatedRow = recalcDetailRow(row); // keep your existing function
-    updatedRows[index] = recalculatedRow;
-
-    updateState({ detailRows: updatedRows });
-    updateTotalsDisplay(updatedRows);
   };
-
 
   const handleCloseVATLookup = async (selectedVAT) => {
     // Closed the modal without choosing anything
@@ -1237,6 +1265,62 @@ const PO = () => {
       selectedRowIndex: null,
       detailRows: updatedRows,
     });
+  };
+
+  const handleDeleteRow = (index) => {
+    const updatedRows = [...detailRows];
+    updatedRows.splice(index, 1);
+    updateState({ detailRows: updatedRows });
+    updateTotalsDisplay(updatedRows);
+  };
+
+  const sanitizeNumeric = (v) => {
+    const raw = String(v ?? "");
+    const cleaned = raw.replace(/[^0-9.]/g, "");
+    const parts = cleaned.split(".");
+    return parts.length <= 1 ? cleaned : `${parts.shift()}.${parts.join("")}`;
+  };
+
+  const formatByField = (field, num) => {
+    if (!Number.isFinite(num)) return "";
+    if (["unitPrice"].includes(field)) return formatNumber(num, DEC_PRICE);
+    if (["qtyOnHand", "qtyNeeded", "poQty"].includes(field)) return formatNumber(num, DEC_QTY);
+    if (["grossAmt", "totalAmt", "vatAmt", "netAmt"].includes(field)) return formatNumber(num, DEC_AMT);
+    return formatNumber(num, 6);
+  };
+
+  const handleDetailChange = (index, field, value, commit = false) => {
+    const updatedRows = [...detailRows];
+    const row = { ...(updatedRows[index] || {}) };
+    const editableFields = ["unitPrice", "qtyNeeded", "poQty"];
+
+    const nonNumericFields = ["invType", "prStatus", "poStatus", "itemName", "uomCode", "vatCode", "dateNeeded", "itemSpecs", "serviceCode", "serviceName"];
+
+    if (field === 'itemCode' && typeof value === 'object' && value !== null) {
+      row["itemCode"] = value.itemCode || "";
+      row["itemName"] = value.itemName || "";
+      row["uomCode"] = value.uomCode || value.uom || "";
+      row["qtyOnHand"] = formatNumber(value.qtyHand ?? 0, 6);
+      row["unitPrice"] = formatNumber(value.unitCost ?? 0, DEC_PRICE);
+    } else if (nonNumericFields.includes(field)) {
+      row[field] = value;
+    } else {
+      if (!editableFields.includes(field)) return;
+
+      const sanitized = sanitizeNumeric(value);
+      if (commit) {
+        const num = parseFormattedNumber(sanitized);
+        row[field] = formatByField(field, num);
+      } else {
+        row[field] = sanitized;
+      }
+    }
+
+    const recalculatedRow = recalcDetailRow(row);
+    updatedRows[index] = recalculatedRow;
+
+    updateState({ detailRows: updatedRows });
+    updateTotalsDisplay(updatedRows);
   };
 
   // ==========================
@@ -1301,7 +1385,7 @@ const PO = () => {
         poId: documentID || "",
         groupId: state.groupId || "",
 
-        poDate: header?.po_date, // maps to @_poDate
+        poDate: state.header?.po_date || useGetCurrentDayV2(),
         cutoffCode: cutoffCode || "", // @_cutoffCode
 
         rcCode: rcCode || "", // @_rcCode
@@ -1336,7 +1420,7 @@ const PO = () => {
         status: status || "", // @_poStatus
         poCancelled: poCancelled || "", // @_poCancelled
         noReprints: Number(noReprints || 0), // @_noReprints
-        userCode: userCode || user?.USER_CODE || "NSI", // @_userCode
+        userCode: state.userCode || currentUserRow?.userCode,
 
         // Detail rows
         dt1: detailRows.map((row, index) => {
@@ -1346,6 +1430,7 @@ const PO = () => {
           return {
             LINE_NO: row.lN || index + 1,
             PR_NO: row.prNo || sourcePrNo || null, // if you have per-line prNo, use it
+            PR_STATUS: row.prStatus === "CLOSED" ? "C" : row.prStatus === "CANCELLED" ? "X" : "O",
             PO_STATUS: row.poStatus || status || "",
             INV_TYPE: row.invType || "",
             GROUP_ID: row.groupId || state.groupId || "",
@@ -1430,7 +1515,8 @@ const PO = () => {
   };
 
   const handleCancel = async () => {
-    if (documentID && documentStatus === "") {
+    // JO Logic: Allow cancellation if ID exists and status is "O" or empty
+    if (documentID && (documentStatus === "O" || documentStatus === "")) {
       updateState({ showCancelModal: true });
     }
   };
@@ -1472,7 +1558,7 @@ const PO = () => {
       const branchCode = row?.branchCode;
       if (!docNo || !branchCode) return;
 
-      await fetchTranData(docNo, branchCode); 
+      await fetchTranData(docNo, branchCode);
       setTopTab("details");
       cleanUrl(); // 
     },
@@ -1501,46 +1587,37 @@ const PO = () => {
   // ==========================
 
   const handleCloseCancel = async (confirmation) => {
-    if (confirmation && documentStatus !== "OPEN" && documentID !== null) {
+    // Verify original status was "Open" before calling the API
+    if (confirmation && state.originalDocStatus === "O" && documentID !== null) {
+
+      // 1. Safely extract the password and reason
+      const pwd = confirmation?.password || confirmation?.userPassword || "";
+      const rsn = confirmation?.reason || "";
+
+      // 2. Prevent sending to backend if password wasn't captured
+      if (!pwd) {
+        useSwalInfoAlert("Required", "Password was not captured. Please try again.");
+        return;
+      }
+
+      // 3. Ensure we use the REAL user code, never the hardcoded "NSI"
+      const activeUserCode = currentUserRow?.userCode || state.userCode;
+
       const result = await useHandleCancel(
         docType,
         documentID,
-        userCode || "NSI",
-        confirmation.reason,
-        updateState,
+        activeUserCode, // Dynamic user
+        pwd,            // Extracted password
+        rsn,            // Extracted reason
+        updateState
       );
 
-      if (result.success) {
-        Swal.fire({
-          icon: "success",
-          title: "Success",
-          text: result.message,
-        });
+      if (result && result.success) {
+        useSwalSuccessAlert("Success", "Cancellation Completed");
+        await fetchTranData(documentNo, branchCode);
       }
-
-      await fetchTranData(documentNo, branchCode);
     }
     updateState({ showCancelModal: false });
-  };
-
-  const handleClosePost = async () => {
-    if (documentStatus !== "OPEN" && documentID !== null) {
-      const result = await useHandlePost(
-        docType,
-        documentID,
-        userCode,
-        updateState,
-      );
-      if (result.success) {
-        Swal.fire({
-          icon: "success",
-          title: "Success",
-          text: result.message,
-        });
-      }
-      await fetchTranData(documentNo, branchCode);
-    }
-    updateState({ showPostModal: false });
   };
 
   const handleCloseSignatory = async (mode) => {
@@ -1617,60 +1694,61 @@ const PO = () => {
     try {
       let newVendCode = selectedData?.vendCode || "";
       let newVendName = selectedData?.vendName || "";
-
-      // ✅ vendor vat code from lookup row
       let vendVatCodeToUse = selectedData?.vatCode || "";
-
-      // currency: from row → current currCode → default
       let currCodeToUse = selectedData?.currCode || currCode || glCurrDefault;
-
-      // payterm: start from lookup row if it has one
       let paytermCodeToUse = selectedData?.paytermCode || "";
 
-      // If vendor has no currency/payterm/vatCode in lookup row, query getVendMast
       if (
         (!selectedData.currCode || !paytermCodeToUse || !vendVatCodeToUse) &&
         newVendCode
       ) {
         try {
-          const vendResponse = await postRequest("getVendMast", {
-            VEND_CODE: newVendCode,
+          const { data: vendResponse } = await apiClient.get("/getVendMast", {
+            params: {
+              VEND_CODE: newVendCode,
+            },
+            headers: {
+              "X-Company-DB": "NS2",
+            },
+            withCredentials: true,
           });
+          let vendData = vendResponse ?? [];
 
-          if (vendResponse.success && vendResponse.data?.[0]?.result) {
-            const vendData = JSON.parse(vendResponse.data[0].result);
-            const vendRow = vendData[0] || {};
+          if (vendData?.[0]?.result) {
+            vendData = JSON.parse(vendData[0].result);
+          }
 
-            if (!selectedData.currCode && vendRow.currCode)
-              currCodeToUse = vendRow.currCode;
-            if (!paytermCodeToUse && vendRow.paytermCode)
-              paytermCodeToUse = vendRow.paytermCode;
+          const vendRow = Array.isArray(vendData) ? vendData[0] || {} : vendData || {};
 
-            // ✅ grab vatCode from vendor master if missing
-            if (!vendVatCodeToUse && vendRow.vatCode)
-              vendVatCodeToUse = vendRow.vatCode;
+          if (!selectedData.currCode && vendRow.currCode) {
+            currCodeToUse = vendRow.currCode;
+          }
+
+          if (!paytermCodeToUse && vendRow.paytermCode) {
+            paytermCodeToUse = vendRow.paytermCode;
+          }
+
+          if (!vendVatCodeToUse && vendRow.vatCode) {
+            vendVatCodeToUse = vendRow.vatCode;
           }
         } catch (err) {
           console.error("Error getting vendor master:", err);
+          console.log("Vendor master response:", err?.response?.data);
         }
       }
 
-      // ✅ Apply payee in header
       updateState({
         vendCode: newVendCode,
         vendNameHeader: newVendName,
-        vendVatCode: vendVatCodeToUse || "", // ✅ store vendor VAT in state
+        vendVatCode: vendVatCodeToUse || "",
       });
 
-      // ✅ Apply currency
       await handleSelectCurrency(currCodeToUse);
 
-      // ✅ Auto-apply payterm
       if (paytermCodeToUse) {
         await handleSelectPayTerm(paytermCodeToUse);
       }
 
-      // ✅ If vendor has VAT code: apply to ALL existing detail rows + compute VAT
       if (vendVatCodeToUse) {
         let vatRate = 0;
 
@@ -1681,7 +1759,6 @@ const PO = () => {
           console.error("Error fetching VAT row:", err);
         }
 
-        // apply + recalc rows
         const updatedRows = (detailRows || []).map((r) => {
           const row = {
             ...r,
@@ -1699,11 +1776,6 @@ const PO = () => {
     } finally {
       updateState({ isLoading: false });
     }
-  };
-
-  const handlePOStatChange = (e) => {
-    const selectedType = e.target.value;
-    updateState({ selectedJVType: selectedType });
   };
 
   const handleCloseCurrencyModal = async (selectedCurrency) => {
@@ -1779,12 +1851,12 @@ const PO = () => {
 
   const handleTranDocNoSelection = async (data) => {
     handleReset();
-    updateState({showAllTranDocNo: false, documentNo:data.docNo });
+    updateState({ showAllTranDocNo: false, documentNo: data.docNo });
   };
 
   const handleDocNoBlur = () => {
-    if (!state.documentID && state.documentNo && state.branchCode) { 
-        fetchTranData(state.documentNo,state.branchCode);
+    if (!state.documentID && state.documentNo && state.branchCode) {
+      fetchTranData(state.documentNo, state.branchCode);
     }
   };
 
@@ -1814,6 +1886,7 @@ const PO = () => {
           showActions={topTab === "details"}
           showBIRForm={false}
           showCopyForm={true}
+          isViewDocument={isViewDocument}
           onDetails={() => setTopTab("details")}
           disableRouteNavigation={true}
           detailsRoute="/page/PO"
@@ -1850,11 +1923,10 @@ const PO = () => {
           {/* Tab Navigation */}
           <div className="global-tran-header-tab-div-ui">
             <button
-              className={`global-tran-tab-padding-ui ${
-                activeTab === "basic"
-                  ? "global-tran-tab-text_active-ui"
-                  : "global-tran-tab-text_inactive-ui"
-              }`}
+              className={`global-tran-tab-padding-ui ${activeTab === "basic"
+                ? "global-tran-tab-text_active-ui"
+                : "global-tran-tab-text_inactive-ui"
+                }`}
               onClick={() => updateState({ activeTab: "basic" })}
             >
               Basic Information
@@ -1903,11 +1975,10 @@ const PO = () => {
                 {/* PO Date */}
                 <div className="relative w-full">
                   <div
-                    className={`flex items-stretch global-ref-textbox-ui ${
-                      !isFormDisabled
-                        ? "global-ref-textbox-enabled"
-                        : "global-ref-textbox-disabled"
-                    }`}
+                    className={`flex items-stretch global-ref-textbox-ui ${!isFormDisabled
+                      ? "global-ref-textbox-enabled"
+                      : "global-ref-textbox-disabled"
+                      }`}
                   >
                     <DateFormatInput
                       id="poDate"
@@ -1950,7 +2021,8 @@ const PO = () => {
                 {/* Payee Code */}
                 <FieldRenderer
                   id="vendCode"
-                  label="Payee Code *"
+                  label="Payee Code"
+                  required
                   type="lookup"
                   value={vendCode || ""}
                   readOnly
@@ -1964,7 +2036,8 @@ const PO = () => {
                 {/* Payee Name */}
                 <FieldRenderer
                   id="vendName"
-                  label="Payee Name *"
+                  label="Payee Name"
+                  required
                   type="text"
                   value={vendNameHeader || ""}
                   disabled={isFormDisabled}
@@ -2087,11 +2160,10 @@ const PO = () => {
                 {/* Delivery Date */}
                 <div className="relative w-full">
                   <div
-                    className={`flex items-stretch global-ref-textbox-ui ${
-                      !isFormDisabled
-                        ? "global-ref-textbox-enabled"
-                        : "global-ref-textbox-disabled"
-                    }`}
+                    className={`flex items-stretch global-ref-textbox-ui ${!isFormDisabled
+                      ? "global-ref-textbox-enabled"
+                      : "global-ref-textbox-disabled"
+                      }`}
                   >
                     <DateFormatInput
                       id="delDate"
@@ -2212,32 +2284,37 @@ const PO = () => {
 
                       {/* Type */}
                       <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[100px] global-tran-td-inputclass-ui"
+                        <select
+                          className="w-[80px] global-tran-td-inputclass-ui bg-white outline-none"
                           value={row.invType || ""}
-                          onChange={(e) =>
-                            handleDetailChange(index, "invType", e.target.value)
-                          }
-                          disabled={isFormDisabled}
-                        />
+                          onChange={(e) => handleDetailChange(index, "invType", e.target.value)}
+                          disabled={isFormDisabled || (row.itemCode?.length > 0)}
+                        >
+                          <option value="" disabled>Select</option>
+                          <option value="MS">MS</option>
+                          <option value="RM">RM</option>
+                          <option value="FG">FG</option>
+                        </select>
                       </td>
 
                       {/* Item Code */}
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[120px] global-tran-td-inputclass-ui"
-                          value={row.itemCode || ""}
-                          onChange={(e) =>
-                            handleDetailChange(
-                              index,
-                              "itemCode",
-                              e.target.value,
-                            )
-                          }
-                          disabled={isFormDisabled}
-                        />
+                      <td className="global-tran-td-ui relative">
+                        <div className="flex items-center">
+                          <input
+                            type="text"
+                            className="w-[120px] global-tran-td-inputclass-ui pr-6"
+                            value={row.itemCode || ""}
+                            onChange={(e) => handleDetailChange(index, "itemCode", e.target.value)}
+                            disabled={isFormDisabled}
+                          />
+                          {!isFormDisabled && row.invType && (
+                            <FontAwesomeIcon
+                              icon={faMagnifyingGlass}
+                              className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                              onClick={() => handleAddItem(index, "PO" + row.invType)}
+                            />
+                          )}
+                        </div>
                       </td>
 
                       {/* Item Description */}
@@ -2257,7 +2334,7 @@ const PO = () => {
                         />
                       </td>
 
-                     {/* Specification */}
+                      {/* Specification */}
                       <td className="global-tran-td-ui">
                         <input
                           type="text"
@@ -2298,12 +2375,20 @@ const PO = () => {
                       <td className="global-tran-td-ui text-right">
                         <input
                           type="text"
-                          className="global-tran-td-inputclass-ui text-right bg-gray-100 cursor-not-allowed"
+                          className={`global-tran-td-inputclass-ui text-right ${row.prNo ? "bg-gray-100 cursor-not-allowed" : ""}`}
                           value={row.qtyNeeded || ""}
-                          readOnly
-                          tabIndex={-1}
+                          readOnly={!!row.prNo}
+                          tabIndex={row.prNo ? -1 : undefined}
+                          onChange={(e) => !row.prNo && handleDetailChange(index, "qtyNeeded", e.target.value, false)}
+                          onBlur={(e) => !row.prNo && handleDetailChange(index, "qtyNeeded", e.target.value, true)}
+                          onKeyDown={(e) => {
+                            if (!row.prNo && e.key === "Enter") {
+                              e.preventDefault();
+                              handleDetailChange(index, "qtyNeeded", e.target.value, true);
+                            }
+                          }}
+                          disabled={isFormDisabled}
                         />
-
                       </td>
 
                       {/* PO Qty */}
@@ -2313,28 +2398,37 @@ const PO = () => {
                           className="w-[120px] global-tran-td-inputclass-ui text-right"
                           value={row.poQty || ""}
                           onChange={(e) =>
-                            handleDetailChange(index, "poQty", e.target.value)
+                            handleDetailChange(index, "poQty", e.target.value, false)
                           }
+                          onBlur={(e) =>
+                            handleDetailChange(index, "poQty", e.target.value, true)
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleDetailChange(index, "poQty", e.target.value, true);
+                            }
+                          }}
                           disabled={isFormDisabled}
                         />
                       </td>
 
                       {/* Unit Price */}
-                       <td className="global-tran-td-ui text-right">
-                      <input
-                        type="text"
-                        className="w-[120px] global-tran-td-inputclass-ui text-right"
-                        value={row.unitPrice || ""}
-                        onChange={(e) => handleDetailChange(index, "unitPrice", e.target.value, false)}
-                        onBlur={(e) => handleDetailChange(index, "unitPrice", e.target.value, true)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleDetailChange(index, "unitPrice", e.target.value, true);
-                          }
-                        }}
-                        disabled={isFormDisabled}
-                      />
+                      <td className="global-tran-td-ui text-right">
+                        <input
+                          type="text"
+                          className="w-[120px] global-tran-td-inputclass-ui text-right"
+                          value={row.unitPrice || ""}
+                          onChange={(e) => handleDetailChange(index, "unitPrice", e.target.value, false)}
+                          onBlur={(e) => handleDetailChange(index, "unitPrice", e.target.value, true)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleDetailChange(index, "unitPrice", e.target.value, true);
+                            }
+                          }}
+                          disabled={isFormDisabled}
+                        />
                       </td>
 
                       {/* Gross Amt */}
@@ -2434,7 +2528,7 @@ const PO = () => {
                         />
                       </td>
 
-                      
+
 
                       {/* Net Amt */}
                       <td className="global-tran-td-ui text-right">
@@ -2551,7 +2645,7 @@ const PO = () => {
                         className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
                         onClick={() => {
                           setShowTypeDropdown(false);
-                          handleOpenMSLookup();
+                          handleOpenMSLookup(false, "POMS");
                         }}
                       >
                         <div className="flex items-center gap-3">
@@ -2601,7 +2695,7 @@ const PO = () => {
                         className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-blue-700 transition-all duration-150 hover:bg-blue-50 hover:text-blue-900 dark:text-blue-300 dark:hover:bg-slate-700"
                         onClick={() => {
                           setShowTypeDropdown(false);
-                          updateState({ prLookupModalOpen: true });
+                          handleOpenPRLookup();
                         }}
                       >
                         <div className="flex items-center gap-3">
@@ -2627,11 +2721,10 @@ const PO = () => {
                 <button
                   onClick={handleAddRowClick}
                   disabled={isFormDisabled}
-                  className={`global-tran-tab-footer-button-add-ui ${
-                    isFormDisabled
-                      ? "opacity-50 cursor-not-allowed"
-                      : ""
-                  }`}
+                  className={`global-tran-tab-footer-button-add-ui ${isFormDisabled
+                    ? "opacity-50 cursor-not-allowed"
+                    : ""
+                    }`}
                   style={{
                     visibility: isFormDisabled ? "hidden" : "visible",
                   }}
@@ -2714,12 +2807,86 @@ const PO = () => {
         />
       )}
 
-      {state.prLookupModalOpen && (
-        <SearchPROpenModal
-          isOpen={state.prLookupModalOpen}
+      {showOpenPRModal && (
+        <GlobalCombinedLookup
+          isOpen={showOpenPRModal}
+          title="Open Purchase Requisition"
+          summarySelectionMode="single"
+          detailSelectionMode="multiple"
+          summaryColumns={openPR_Col_Summary}
+          detailColumns={openPR_Col_Detail}
+          summaryData={openPR_Data_Summary}
+          tabTitles={["Open PR Summary", "Open PR Detail"]}
+          
+          fetchDetailApi={async (selectedIds) => {
+            // 1. Ensure we are working with an array of IDs
+            const idsArray = Array.isArray(selectedIds) ? selectedIds : [selectedIds];
+
+            try {
+              // 2. Create an API request for EACH selected PR
+              const fetchPromises = idsArray.map((id) =>
+                postRequest("getPROpen", {
+                  json_data: {
+                    mode: "Detail",
+                    branchCode: branchCode,
+                    prId: id, // Send a single ID per request
+                    prTranType: null,
+                  },
+                })
+              );
+
+              // 3. Wait for all the individual requests to finish
+              const responses = await Promise.all(fetchPromises);
+
+              // 4. Combine the items from all responses into one big array
+              let combinedDetailData = [];
+
+              responses.forEach((res, index) => {
+                if (res?.success && Array.isArray(res?.data)) {
+                  
+                  // 🚀 NEW FIX: Smarter filter to catch "CLOSED" and "CANCELLED"
+                  const activeItems = res.data.filter((d) => {
+                    const status = String(
+                      d.PR_STATUS || d.pr_status || d.prStatus || d.Status || d.status || "O"
+                    ).toUpperCase();
+
+                    // Safely parse amounts
+                    const qtyNeeded = parseFloat(d.QTY_NEEDED ?? d.QtyNeeded ?? d.qty_needed ?? d.Qty ?? d.QTY ?? 0);
+                    const poQty = parseFloat(d.PO_QTY ?? d.PoQty ?? d.po_qty ?? d.poQty ?? 0);
+                    const explicitBalance = parseFloat(d.QTY_BALANCE ?? d.QtyBalance ?? d.qty_balance ?? d.qtyBalance ?? -1);
+
+                    // If the database gives us a balance, use it. Otherwise, subtract what was ordered from what was needed.
+                    const balance = explicitBalance !== -1 ? explicitBalance : (qtyNeeded - poQty);
+
+                    // Explicitly block Closed and Cancelled statuses
+                    const isClosed = status === "C" || status === "CLOSED";
+                    const isCancelled = status === "X" || status === "CANCELLED";
+
+                    // Only keep the item if it is NOT closed/cancelled and still has a balance
+                    return !isClosed && !isCancelled && balance > 0;
+                  });
+
+                  const mappedData = activeItems.map((d, rowIdx) => ({
+                    ...d,
+                    // Give each row a truly unique groupId so the checkboxes work correctly in the Detail grid
+                    groupId: d.GroupId || d.groupId || `${idsArray[index]}_${d.LN || rowIdx}`,
+                    // Preserve the parent PR reference on the detail row
+                    PRNo: d.PRNo || d.PrNo || d.prNo || idsArray[index]
+                  }));
+                  
+                  combinedDetailData = [...combinedDetailData, ...mappedData];
+                }
+              });
+
+              return { success: true, data: combinedDetailData };
+            } catch (error) {
+              console.error("Error fetching multiple PR details:", error);
+              return { success: false, data: [] };
+            }
+          }}
+
+          onCancel={() => updateState({ showOpenPRModal: false })}
           onClose={handleClosePROpenModal}
-          branchCode={branchCode}
-          prTranType="PR01"
         />
       )}
 
@@ -2847,10 +3014,13 @@ const PO = () => {
       )}
 
       {msLookupModalOpen && (
-        <MSLookupModal
+        <ItemMastLookupModal
           isOpen={msLookupModalOpen}
+          endpoint={itemLookupEndPoint}
           onClose={handleCloseMSLookup}
-          customParam={null}
+          onCancel={() => updateState({ msLookupModalOpen: false })}
+          enableMultiSelect={!itemSingleSelect}
+          docType={selectedDocType}
         />
       )}
 

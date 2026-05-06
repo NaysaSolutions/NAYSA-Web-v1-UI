@@ -92,8 +92,6 @@ body {
     dark:text-gray-200;
   }
 
-
-
   /* TRANSACTION TABS UI */
 
   .global-tran-header-tab-div-ui {
@@ -1075,6 +1073,10 @@ body {
 
 .toast-smooth-out {
   animation: toastSlideOut 0.15s ease-in forwards;
+}
+
+.swal-sonner-info-toast-progress {
+  background: #3b82f6 !important;
 }
 
 @keyframes toastSlideIn {
