@@ -12,7 +12,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faPlus, faSave, faUndo, faEdit, faTrashAlt, faInfoCircle, faChevronDown, faFilePdf, faVideo } from "@fortawesome/free-solid-svg-icons";
 import { reftables, reftablesPDFGuide, reftablesVideoGuide } from "@/NAYSA Cloud/Global/reftable";
 import { useTopDocDropDown } from "@/NAYSA Cloud/Global/top1RefTable";
-import { useSwalErrorAlert, useSwalSuccessAlert, useSwalErrorAlertAPI, useSwalDeleteConfirm, useSwalDeleteRecord } from "@/NAYSA Cloud/Global/behavior.jsx";
+import { useSwalErrorAlert, useSwalSuccessAlert, useSwalErrorAlertAPI, useSwalDeleteConfirm, useSwalDeleteRecord, useSwalProceedConfirm  } from "@/NAYSA Cloud/Global/behavior.jsx";
 import { useFieldLenghtCheck, useGetFieldLength,} from '@/NAYSA Cloud/Global/procedure';
 import { Plus, Trash2 } from "lucide-react";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
@@ -56,6 +56,8 @@ const COAMast = () => {
   const [activeTab, setActiveTab] = useState("coa");
   const [isLoading, setIsLoading] = useState(false);
   const [tblFieldArray, setTblFieldArray] = useState([]);
+  const formTopRef = useRef(null);
+  const allowedDuplicateAcctNameRef = useRef("");
 
   const coaTabs = [
     { id: "coa", label: "Chart of Accounts" },
@@ -133,8 +135,60 @@ const COAMast = () => {
     },
   });
 
+  const normalizeText = (value) => String(value || "").trim().replace(/\s+/g, " ").toUpperCase();
+
+  const findDuplicateAcctName = (acctName = formData.acctName) => {
+    const normalizedName = normalizeText(acctName);
+
+    if (!normalizedName) return null;
+
+    return accounts.find((account) => {
+      const sameName = normalizeText(account?.acctName) === normalizedName;
+      const sameCode = normalizeText(account?.acctCode) === normalizeText(selectedAcctCode || formData.acctCode);
+
+      return sameName && !sameCode;
+    });
+  };
+
+  const confirmDuplicateAcctName = async (acctName = formData.acctName) => {
+    const duplicateRecord = findDuplicateAcctName(acctName);
+
+    if (!duplicateRecord) return true;
+
+    const normalizedName = normalizeText(acctName);
+
+    if (allowedDuplicateAcctNameRef.current === normalizedName) return true;
+
+    const result = await useSwalProceedConfirm(
+      "Duplicate Account Name",
+      `Account Name ${acctName} already exists in Account Code ${duplicateRecord.acctCode}.\n\nDo you want to proceed?`,
+      "Yes, Proceed"
+    );
+
+    if (result.isConfirmed) {
+      allowedDuplicateAcctNameRef.current = normalizedName;
+      return true;
+    }
+
+    allowedDuplicateAcctNameRef.current = "";
+    updateForm({ acctName: "" });
+    return false;
+  };
+
+  const handleAcctNameChange = (value) => {
+    allowedDuplicateAcctNameRef.current = "";
+    updateForm({ acctName: value });
+  };
+
+  const handleAcctNameBlur = async () => {
+    if (!isEditing || !formData.acctName) return;
+    await confirmDuplicateAcctName(formData.acctName);
+  };
+
   // --- ACTIONS ---
-  const handleSave = () => {
+  const handleSave = async () => {
+    const canProceed = await confirmDuplicateAcctName(formData.acctName);
+    if (!canProceed) return;
   
     const payload = {
       json_data: JSON.stringify({
@@ -154,6 +208,7 @@ const COAMast = () => {
   
 
   const resetForm = () => {
+    allowedDuplicateAcctNameRef.current = "";
     setFormData(INITIAL_FORM);
     setRegistrationInfo(INITIAL_REG);
     setSelectedAcctCode(null);
@@ -186,6 +241,16 @@ const COAMast = () => {
 
     setIsEditing(true);
     setIsMobileActionSheetOpen(false); // close sheet after action
+
+    if (isMobile) {
+      setTimeout(() => {
+        formTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 200);
+    }
+
+    //     if (formTopRef.current) {
+    //   formTopRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // }
 
   };  
 
@@ -334,7 +399,7 @@ const columns = useMemo(() => [
   ),
 },
 
-  { key: "acctCode", label: "Account Code", sortable: true, width: 120 },
+  { key: "acctCode", label: "Account Code", sortable: true, width: 100 },
   { key: "acctName", label: "Account Name", sortable: true, width: 150 },
 
   {
@@ -352,7 +417,7 @@ const columns = useMemo(() => [
     key: "acctGroup",
     label: "Account Group",
     sortable: true,
-    width: 80 ,
+    width: 100 ,
     render: (row) => {
       const match = dropdowns?.grp?.find((d) => d.DROPDOWN_CODE === row.acctGroup);
       return match ? match.DROPDOWN_NAME : row.acctGroup;
@@ -361,9 +426,9 @@ const columns = useMemo(() => [
 
   {
     key: "acctBalance",
-    label: "Balance",
+    label: "Normal Balance",
     sortable: true,
-    width: 90 ,
+    width: 80 ,
     render: (row) => {
       const match = dropdowns?.bal?.find((d) => d.DROPDOWN_CODE === row.acctBalance);
       return match ? match.DROPDOWN_NAME : row.acctBalance;
@@ -389,7 +454,7 @@ const columns = useMemo(() => [
   {
     key: "classCode",
     label: "Classification",
-    width: 150 ,
+    width: 100 ,
     sortable: true,
     render: (row) => {
       const match = dropdowns?.cls?.find((d) => d.DROPDOWN_CODE === row.classCode);
@@ -591,7 +656,7 @@ const columns = useMemo(() => [
       {/* Main Content */}
       {activeTab === "coa" && (
         <>
-          <div className="mt-40 sm:mt-24 flex flex-col lg:flex-row lg:items-stretch gap-2">
+          <div ref={formTopRef} className="mt-40 sm:mt-24 flex flex-col lg:flex-row lg:items-stretch gap-2">
            
             {/* LEFT DIV: Main Form Fields (Takes 75% of width on large screens) */}
             <div className="flex-1 bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
@@ -626,7 +691,8 @@ const columns = useMemo(() => [
                   type="text"
                   value={formData.acctName}
                   disabled={!isEditing}
-                  onChange={(v) => updateForm({ acctName: v })}
+                  onChange={handleAcctNameChange}
+                  onBlur={handleAcctNameBlur}
                   maxLength={getMax("ACCT_NAME")}
                 />
 
@@ -662,7 +728,7 @@ const columns = useMemo(() => [
               <div className="space-y-6">
                 <div className="grid grid-cols-2 gap-3">
                   <FieldRenderer
-                    label="Balance"
+                    label="Normal Balance"
                     required
                     type="select"
                     value={formData.acctBalance}
@@ -809,9 +875,10 @@ const columns = useMemo(() => [
           onClick={(e) => {
             e.stopPropagation();
             if (isMobile) {
-              openMobileActionSheet(row);
+              closeMobileActionSheet();
+              handleDelete(selectedMobileRow);
             } else {
-              handleDelete(row);
+              handleDelete(selectedMobileRow);
             }
           }}
           className="global-ref-td-button-delete-ui-mobile"

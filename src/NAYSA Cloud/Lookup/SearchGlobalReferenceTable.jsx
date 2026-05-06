@@ -448,8 +448,8 @@ const SearchGlobalReferenceTable = forwardRef(
     }, [data, filters, globalSearch, visibleCols, sortConfig, columns]);
 
     const autoColWidths = useMemo(() => {
-      const MIN = 60;
-      const MAX = 400;
+      const MIN = 40;
+      const MAX = 180;
       const SAMPLE = 80;
 
       const sampleRows = (
@@ -1654,7 +1654,7 @@ const handleConfirmExport = async (fileName) => {
                     className={`w-full text-xs font-medium text-white bg-blue-600 border border-slate-300 rounded-md hover:bg-slate-50 hover:text-blue-600 active:scale-[0.98] transition flex items-center justify-center ${
                       tableSize === "Half" ? "h-7 px-2 py-1" : "h-8 px-3 py-2"
                     }`}
-                    title="Refresh Data"
+                    title="Sync Data"
                   >
                     <FontAwesomeIcon
                       icon={faSyncAlt}
@@ -1664,7 +1664,7 @@ const handleConfirmExport = async (fileName) => {
                     <span
                       className={` ${tableSize === "Half" ? "inline lg:hidden" : "hidden lg:inline"}`}
                     >
-                      Refresh
+                      Sync
                     </span>
                   </button>
                 </div>

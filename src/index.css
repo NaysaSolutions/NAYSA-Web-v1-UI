@@ -592,7 +592,7 @@ body {
   }
 
   .global-lookup-td-ui {
-  @apply text-[10px] sm:text-[10px] lg:text-[11px] text-gray-700 px-2 py-1 sm:px-3 sm:py-1.5 
+  @apply text-[10px] sm:text-[11px] lg:text-[12px] text-gray-700 px-2 py-1 sm:px-3 sm:py-1.5 
          break-all whitespace-normal overflow-hidden dark:text-white;
 }
 
