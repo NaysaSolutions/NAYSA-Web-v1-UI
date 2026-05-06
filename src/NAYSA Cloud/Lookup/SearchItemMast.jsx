@@ -707,12 +707,16 @@ const ItemMastLookupModal = ({
   const { companyInfo, currentUserRow } = useAuth();
 
   const visibleColumns = useMemo(() => {
+    const normalizedDocType = String(docType || "").toUpperCase();
+    const hideQtyHandDocTypes = new Set(["PRMS", "PRRM", "PRFG", "FGRM"]);
+
     return usageColumnConfig.filter((col) => {
       if (Number(col.hidden)) return false;
+      if (col.key === "qtyHand" && hideQtyHandDocTypes.has(normalizedDocType)) return false;
       if (col.key === "unitCost" && currentUserRow?.view_costamt !== "Y") return false;
       return true;
     });
-  }, [currentUserRow?.view_costamt]);
+  }, [currentUserRow?.view_costamt, docType]);
 
   const initialFilters = useMemo(() => createFilterObject(visibleColumns), [visibleColumns]);
 
@@ -960,9 +964,9 @@ const ItemMastLookupModal = ({
 
     if (normalizedDocType === "PRMS") {
       qtyDecimals = Number(companyInfo?.itemDecqtyPur ?? 2);
-    } else if (normalizedDocType.startsWith("FG")) {
+    } else if (normalizedDocType.startsWith("FG") || normalizedDocType.endsWith("FG")) {
       qtyDecimals = Number(companyInfo?.itemDescQtyFG ?? 2);
-    } else if (normalizedDocType.startsWith("RM")) {
+    } else if (normalizedDocType.startsWith("RM") || normalizedDocType.endsWith("RM")) {
       qtyDecimals = Number(companyInfo?.itemDescQtyRM ?? 2);
     } else if (normalizedDocType.startsWith("MS")) {
       qtyDecimals = Number(companyInfo?.itemDecqtyMS ?? 2);

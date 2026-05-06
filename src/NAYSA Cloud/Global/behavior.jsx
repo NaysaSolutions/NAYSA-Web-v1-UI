@@ -304,6 +304,7 @@ export const useSwalshowSave = (onConfirm, onPrint) => {
 
 
 
+
 export const useSwalErrorAlert = (
   title = "Error!",
   message = "Something went wrong.",
@@ -583,26 +584,79 @@ export const useSwalWarningAlert = (title = "Warning!", message = "Please check 
 };
 
 
+export const useSwalInfoAlert = (
+  title = "Info",
+  message = "Something to note.",
+  fixedMsg = ""
+) => {
 
-export const useSwalInfoAlert = (title = "No data", message = "There is no data to export.") => {
+  if (fixedMsg === "endingCutoff") {
+    title = "Invalid cut-off range";
+    message = "Ending Cut-off must not be earlier than Starting Cut-off.";
+  }
+
   return Swal.fire({
-    icon: "info",
-    title,
-    text: message,
-    timer: 3000,
+    toast: true,
+    position: "top-end",
+    icon: undefined,
+    title: "",
+    html: `
+      <div class="swal-sonner-error-toast-wrap">
+        <div class="swal-sonner-error-toast-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"></circle>
+            <path d="M12 8v4"></path>
+            <path d="M12 16h.01"></path>
+          </svg>
+        </div>
+
+        <div class="swal-sonner-error-toast-content">
+          <div class="swal-sonner-error-toast-title">${title}</div>
+          ${
+            message
+              ? `<div class="swal-sonner-error-toast-message">${String(message).replace(/\n/g, "<br/>")}</div>`
+              : ""
+          }
+        </div>
+      </div>
+    `,
+    showConfirmButton: false,
+    showCloseButton: true,
+    timer: 4000,
     timerProgressBar: true,
-    showConfirmButton: true, 
-    confirmButtonColor: "#3085d6", // Standard blue for Info alerts
+    width: 320,
+    padding: "0",
+    background: "#ffffff",
     customClass: {
-      popup: "rounded-xl shadow-2xl",
+      popup: "swal-sonner-error-toast-popup",
+      htmlContainer: "swal-sonner-error-toast-html",
+      closeButton: "swal-sonner-error-toast-close",
+      timerProgressBar: "swal-sonner-info-toast-progress", // 👈 NEW CLASS
     },
     didOpen: (toast) => {
+      const popup = Swal.getPopup();
+      if (popup) {
+        popup.style.borderRadius = "10px";
+
+        const titleEl = popup.querySelector(".swal-sonner-error-toast-title");
+        const messageEl = popup.querySelector(".swal-sonner-error-toast-message");
+
+        if (titleEl) {
+          titleEl.style.fontSize = "13px";
+          titleEl.style.fontWeight = "700";
+        }
+        if (messageEl) {
+          messageEl.style.fontSize = "11px";
+          messageEl.style.lineHeight = "1.4";
+          messageEl.style.marginTop = "2px";
+        }
+      }
+
       toast.onmouseenter = Swal.stopTimer;
       toast.onmouseleave = Swal.resumeTimer;
-    }
+    },
   });
 };
-
 
 
 export const useSwalDeleteConfirm = async (
@@ -661,6 +715,130 @@ export const useSwalDeleteConfirm = async (
     },
   });
 };
+
+
+
+export const useSwalProceedConfirm = async (
+  title = "Confirm Logout",
+  text = "Are you sure you want to logout?",
+  confirmText = "Yes, logout!"
+) => {
+  return await Swal.fire({
+    title: "",
+    html: `
+      <style>
+        .swal-proceed-wrap {
+          text-align: center;
+          padding: 30px 24px 12px;
+          font-family: Inter, system-ui, -apple-system, sans-serif;
+        }
+
+        .swal-proceed-icon {
+          width: 72px;
+          height: 72px;
+          margin: 0 auto 18px;
+        }
+
+        .swal-proceed-icon svg {
+          width: 100%;
+          height: 100%;
+        }
+
+        .swal-proceed-title {
+          font-size: 20px;
+          font-weight: 600;
+          color: #1f2937;
+          margin-bottom: 6px;
+        }
+
+        .swal-proceed-text {
+          font-size: 14px;
+          color: #6b7280;
+          margin-bottom: 22px;
+        }
+
+        .swal-proceed-actions {
+          display: flex;
+          justify-content: center;
+          gap: 14px;
+          padding: 0 20px 22px;
+        }
+
+        .swal-proceed-confirm {
+          background: #ef4444;
+          color: #fff;
+          padding: 12px 22px;
+          border-radius: 10px;
+          border: none;
+          font-size: 14px;
+          font-weight: 600;
+          min-width: 120px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .swal-proceed-confirm:hover {
+          background: #dc2626;
+        }
+
+        .swal-proceed-cancel {
+          background: #6b7280;
+          color: #fff;
+          padding: 12px 22px;
+          border-radius: 10px;
+          border: none;
+          font-size: 14px;
+          font-weight: 500;
+          min-width: 110px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .swal-proceed-cancel:hover {
+          background: #4b5563;
+        }
+      </style>
+
+      <div class="swal-proceed-wrap">
+        <div class="swal-proceed-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#f4a261" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <!-- outer circle -->
+            <circle cx="12" cy="12" r="9"></circle>
+            <!-- question mark -->
+            <path d="M9.75 9a2.25 2.25 0 1 1 4.5 1.2c-.7.8-1.75 1.2-1.75 2.8"></path>
+            <circle cx="12" cy="16.8" r="0.7" fill="#f4a261" stroke="none"></circle>
+          </svg>
+        </div>
+
+        <div class="swal-proceed-title">${title}</div>
+        <div class="swal-proceed-text">${String(text).replace(/\n/g, "<br/>")}</div>
+      </div>
+    `,
+    showCancelButton: true,
+    confirmButtonText: confirmText,
+    cancelButtonText: "Cancel",
+    buttonsStyling: false,
+
+    width: 360,
+    padding: "0",
+    background: "#ffffff",
+
+    customClass: {
+      actions: "swal-proceed-actions",
+      confirmButton: "swal-proceed-confirm",
+      cancelButton: "swal-proceed-cancel",
+    },
+
+    didOpen: () => {
+      const popup = Swal.getPopup();
+      if (popup) {
+        popup.style.borderRadius = "18px";
+        popup.style.boxShadow = "0 10px 25px rgba(0,0,0,0.12)";
+      }
+    },
+  });
+};
+
 
 export const useSwalDeleteSuccess = () => {
   return Swal.fire({

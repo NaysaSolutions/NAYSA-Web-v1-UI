@@ -44,9 +44,11 @@ import SLMast from "./NAYSA Cloud/Master Data/SLMast.jsx";
 
 // --- SALES ---
 import SO from "./NAYSA Cloud/Module/Main Module/Sales/SO.jsx";
+import DR from "./NAYSA Cloud/Module/Main Module/Sales/DR.jsx";
 
 // --- PURCHASING & INVENTORY ---
 import PR from "./NAYSA Cloud/Module/Main Module/Purchasing/PR.jsx";
+import PRApprovalModal from "./NAYSA Cloud/Approval/PRApprovalModal.jsx";
 import PO from "./NAYSA Cloud/Module/Main Module/Purchasing/PO.jsx";
 import JO from "./NAYSA Cloud/Module/Main Module/Purchasing/JO.jsx";
 import MSRR from "./NAYSA Cloud/Module/Main Module/Inventory/MSRR.jsx";
@@ -86,6 +88,7 @@ import CWTMonitoring from "./NAYSA Cloud/Query/CWTInq/CWTMonitoring.jsx";
 import INTAXINQ from "./NAYSA Cloud/Query/INTAXInq/INTAXINQ.jsx";
 import OUTAXINQ from "./NAYSA Cloud/Query/OUTAXInq/OUTAXINQ.jsx";
 import AuditTrail from "./NAYSA Cloud/Query/AuditTrail/AuditTail.jsx";
+import MSINQ from "./NAYSA Cloud/Query/INVInq/MSStockCard.jsx";
 
 
 //Matrix
@@ -205,6 +208,7 @@ import SalesPMCustomerItem from "./NAYSA Cloud/Matrix/SalesPMCustomerItem.jsx"
 // import UniversalReportModal from "./NAYSA Cloud/Printing/UniversalReport"
 import UniversalReportModal from "./NAYSA Cloud/Printing/UniversalReportModal.jsx";
 
+
 // ... ensure all other components (SVI, SOA, etc.) are imported above ...
 
 export const pageRegistry = {
@@ -226,11 +230,13 @@ export const pageRegistry = {
 
   // Purchasing
   PR,
+  PRApprovalModal,
   PO,
   JO,
 
   //Sales
   SO,
+  DR,
 
   // Inventory
   MSRR,
@@ -260,6 +266,7 @@ export const pageRegistry = {
   CheckRL,
   GLINQ,
   AuditTrail,
+  MSINQ,
 
   // Global Reference
   Company,

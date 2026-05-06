@@ -33,7 +33,7 @@ import BarcodeQrReaderModal from "../../../Lookup/SearchGlobalQRBarCodeReader.js
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 
 // Configuration
-import {  apiClient,fetchDataJson } from "../../../Configuration/BaseURL.jsx";
+import {  apiClient,fetchDataJson, postRequest } from "../../../Configuration/BaseURL.jsx";
 import { useReset } from "../../../Components/ResetContext";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 
@@ -81,6 +81,7 @@ import {
   useSwalvalidateRequiredFields,
   useSwalInfoAlert,
   useSwalConfirmAlert,
+  useSwalProceedConfirm,
   useSwalHandleOpenSpecsModal,
   useSwalSuccessAlert,
   useSwalErrorAlert,
@@ -161,6 +162,7 @@ const toDateInputValue = (value) => {
     documentNo: "",
     documentStatus: "",
     status: "",
+    appLevel:0,
     originalDocStatus:"O",
 
     // UI state
@@ -231,7 +233,7 @@ const toDateInputValue = (value) => {
     showJobCodesModal:false,
     rcLookupModalOpen: false,
     rcLookupContext: "", 
-    msLookupModalOpen: false,
+    itemLookupModalOpen: false,
   });
 
   const updateState = (updates) => {
@@ -248,6 +250,7 @@ const toDateInputValue = (value) => {
     documentStatus,
     documentNo,
     status,
+    appLevel,
     originalDocStatus,
 
     activeTab,
@@ -307,7 +310,7 @@ const toDateInputValue = (value) => {
 
     rcLookupModalOpen,
     rcLookupContext,
-    msLookupModalOpen,
+    itemLookupModalOpen,
   } = state;
 
   useEffect(() => {
@@ -329,9 +332,28 @@ const toDateInputValue = (value) => {
     CLOSED: "global-tran-stat-text-finalized-ui",
   };
   const statusColor = statusMap[displayStatus] || "";
+  const maxApprovalLevel = Number(currentUserRow?.prMaxAppLevel || 0);
+  const currentApprovalLevel = Number(appLevel ?? 0);
+  const approvalStatusHiddenStatuses = ["CANCELLED", "POSTED", "FINALIZED", "CLOSED"];
+  const showApprovalStatus =
+    !!documentID &&
+    maxApprovalLevel > 0 &&
+    !approvalStatusHiddenStatuses.includes(String(displayStatus || "").toUpperCase());
+  const approvalStatus = (() => {
+    if (!showApprovalStatus) return "";
+    if (currentApprovalLevel === -1) return "Disapproved Transaction";
+    if (currentApprovalLevel >= maxApprovalLevel) return "Approved Transaction";
+    return `Awaiting for L${currentApprovalLevel + 1} Approval`;
+  })();
+  const approvalStatusColor =
+    currentApprovalLevel === -1
+      ? "text-rose-500 dark:text-rose-400 animate-pulse"
+      : statusColor;
   const isFormDisabled = isViewDocumentUrl || ["FINALIZED", "CANCELLED", "CLOSED"].includes(
     displayStatus
   );
+
+
 
   const prDetailColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
@@ -466,6 +488,8 @@ useEffect(() => {
     clearPrDetailSorting();
     loadCompanyData();
 
+   
+
     
     updateState({
       branchCode: currentUserRow?.branchCode||"",
@@ -503,7 +527,7 @@ useEffect(() => {
       detailRows: [],
       rcLookupModalOpen: false,
       rcLookupContext: "",
-      msLookupModalOpen: false,
+      itemLookupModalOpen: false,
     });
 
     updateTotalsDisplay(0);
@@ -594,6 +618,7 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
 
       documentStatus: data.prHStatus,
       status: data.prStatus,
+      appLevel: data.appLevel,
       originalDocStatus:data.prHStatus,
       documentID: data.prId,
       documentNo: data.prNo,
@@ -677,9 +702,59 @@ const handleCloseJobCodesLookup = (selectedItems) => {
 };
 
 
-const handleCloseMSLookup = (selectedItems) => {
+const getItemLookupConfig = (lookupDocType) => {
+  const normalizedDocType = String(lookupDocType || "").toUpperCase();
+  const invType = normalizedDocType.endsWith("FG")
+    ? "FG"
+    : normalizedDocType.endsWith("RM")
+      ? "RM"
+      : "MS";
+
+  return {
+    invType,
+    endpoint: `getInvLookup${invType}`,
+  };
+};
+
+const applyBranchBalanceToItems = async (items, invType) => {
+  if (!Array.isArray(items) || items.length === 0) return [];
+
+  const balancePayload = {
+    branchCode,
+    prNo: documentNo || "",
+    prId: documentID || "",
+    userCode,
+    dt1: items.map((item, index) => ({
+      lnNo: index + 1,
+      invType,
+      itemCode: item?.itemCode || "",
+      itemName: item?.itemName || "",
+      uomCode: item?.uomCode || "",
+    })),
+  };
+
+  const balanceRows = await useSelectedIteBranchBalance(balancePayload);
+  if (!Array.isArray(balanceRows)) {
+    return items.map((item) => ({ ...item, qtyHand: 0 }));
+  }
+
+  return items.map((item) => {
+    const match = balanceRows.find(
+      (balance) =>
+        balance?.itemCode === item?.itemCode &&
+        balance?.invType === invType
+    );
+
+    return {
+      ...item,
+      qtyHand: match ? match.quantity : 0,
+    };
+  });
+};
+
+const handleCloseItemLookup = async (selectedItems) => {
   if (!selectedItems) {
-    updateState({ msLookupModalOpen: false });
+    updateState({ itemLookupModalOpen: false });
     return;
   }
 
@@ -688,29 +763,43 @@ const handleCloseMSLookup = (selectedItems) => {
     : selectedItems.records ? [selectedItems.records] : [];
 
   if (itemsArray.length === 0) {
-    updateState({ msLookupModalOpen: false });
+    updateState({ itemLookupModalOpen: false });
     return;
   }
 
-  // Per Item Selection
-  console.log(itemSingleSelect)
+  const { invType: lookupInvType } = getItemLookupConfig(selectedDocType);
+  const isDuplicateLookupItem = (newItem) =>
+    detailRows.some(
+      (existingRow) =>
+        existingRow.itemCode === newItem.itemCode &&
+        existingRow.invType === lookupInvType
+    );
+
   if (itemSingleSelect) {
     const singleItem = itemsArray[0];
-    const isDuplicate = detailRows.some(row => row.itemCode === singleItem.itemCode);
+    const isDuplicate = isDuplicateLookupItem(singleItem);
+    const applySingleItem = async () => {
+      updateState({ isLoading: true });
+      const [itemWithBalance] = await applyBranchBalanceToItems([singleItem], lookupInvType);
+      handleDetailChange(selectedRowIndex, 'itemCode', itemWithBalance || singleItem, false);
+      updateState({
+        itemSingleSelect: false,
+        itemLookupModalOpen: false,
+        isLoading: false,
+      });
+    };
 
     if (isDuplicate) {
       useSwalConfirmAlert(
         "Duplicate Item Detected",
         "This item is already in the list. Do you want to select it anyway?"
-      ).then((result) => {
+      ).then(async (result) => {
         if (result.isConfirmed) {
-          handleDetailChange(selectedRowIndex, 'itemCode', singleItem, false);
-          updateState({ itemSingleSelect: false, msLookupModalOpen: false });
+          await applySingleItem();
         }
       });
     } else {
-      handleDetailChange(selectedRowIndex, 'itemCode', singleItem, false);
-      updateState({ itemSingleSelect: false, msLookupModalOpen: false });
+      await applySingleItem();
     }
     return;
   }
@@ -719,12 +808,14 @@ const handleCloseMSLookup = (selectedItems) => {
 
   // Multiple Item Selection
   const duplicateItems = itemsArray.filter(newItem => 
-    detailRows.some(existingRow => existingRow.itemCode === newItem.itemCode)
+    isDuplicateLookupItem(newItem)
   );
 
-  const processAddition = (itemsToAdd) => {
-    const newRows = itemsToAdd.map((item) => ({
-      invType: "MS",
+  const processAddition = async (itemsToAdd) => {
+    updateState({ isLoading: true });
+    const itemsWithBalance = await applyBranchBalanceToItems(itemsToAdd, lookupInvType);
+    const newRows = itemsWithBalance.map((item) => ({
+      invType: lookupInvType,
       groupId: "",
       prStatus: "O",
       itemCode: item?.itemCode || "",
@@ -745,8 +836,9 @@ const handleCloseMSLookup = (selectedItems) => {
 
     updateState({
       detailRows: [...detailRows, ...newRows],
-      msLookupModalOpen: false,
-      itemSingleSelect: false
+      itemLookupModalOpen: false,
+      itemSingleSelect: false,
+      isLoading: false,
     });
   };
 
@@ -754,23 +846,23 @@ const handleCloseMSLookup = (selectedItems) => {
     useSwalConfirmAlert(
       "Duplicate Items Detected",
       "Some items are already in the list. Do you want to add them anyway?"
-    ).then((result) => {
+    ).then(async (result) => {
       if (result.isConfirmed) {
-        processAddition(itemsArray);
+        await processAddition(itemsArray);
       } else {
         const uniqueOnly = itemsArray.filter(newItem => 
-          !detailRows.some(existingRow => existingRow.itemCode === newItem.itemCode)
+          !isDuplicateLookupItem(newItem)
         );
         
         if (uniqueOnly.length > 0) {
-          processAddition(uniqueOnly);
+          await processAddition(uniqueOnly);
         } else {
-          updateState({ msLookupModalOpen: false });
+          updateState({ itemLookupModalOpen: false });
         }
       }
     });
   } else {
-    processAddition(itemsArray);
+    await processAddition(itemsArray);
   }
 };
 
@@ -952,10 +1044,10 @@ const handleScanItem = async (scannedValue) => {
 };
 
 
-  // const handleOpenMSLookup = () => {
+  // const handleOpenItemLookup = () => {
   //   if (isFormDisabled) return;
   //   setShowTypeDropdown(false);
-  //   updateState({ msLookupModalOpen: true });
+  //   updateState({ itemLookupModalOpen: true });
   // };
 
   
@@ -964,42 +1056,28 @@ const handleScanItem = async (scannedValue) => {
       updateState({ selectedRowIndex: index,
                     itemSingleSelect:true,
       }); 
-      await handleOpenMSLookup(true,invType);
+      await handleOpenItemLookup(true,invType);
       return;
   };
 
 
   
-    const handleOpenMSLookup = async (itemSingleSelect, docType) => {
+    const handleOpenItemLookup = async (itemSingleSelect, docType) => {
       try {
+        const { endpoint: itemLookupEndPoint } = getItemLookupConfig(docType);
   
         setShowTypeDropdown(false);
         updateState({ isLoading: true,
                       itemSingleSelect : itemSingleSelect,
-                      itemLookupEndPoint : "getInvLookupMS",
+                      itemLookupEndPoint,
                       selectedDocType: docType});
     
-        // const endpoint ="getInvLookupMS"
-
         
-
-        // const response = await fetchDataJson(endpoint, { userCode, docType, branchCode });
-        // const custData = response?.data?.[0]?.result ? JSON.parse(response.data[0].result) : [];
-    
-  
-        // const colConfig = await useSelectedHSColConfig("AllMastItemLookup");
-  
-  
-      //  if (custData.length === 0) {
-      //     useSwalInfoAlert("MS Master Data" ,"No records found")
-      //      updateState({ isLoading: false });
-      //     return; 
-      //   }
     
         updateState({ 
                       // globalLookupRow: custData,
                       // globalLookupHeader:colConfig,
-                      msLookupModalOpen: true,
+                      itemLookupModalOpen: true,
                       isLoading: false
           });
     
@@ -1408,6 +1486,55 @@ const handleHeaderStatusChange = (value) => {
 
 
 
+  const handleNotify = async () => {
+    if (!documentID) return;
+
+    const confirm = await useSwalProceedConfirm(
+      "Notify Approver?",
+      `Do you want to notify the 1st Level Approver for PR ${documentNo || documentID}?`,
+      "Yes, notify",
+    );
+
+    if (!confirm?.isConfirmed) return;
+
+    updateState({ showSpinner: true });
+
+    try {
+      const payload = {
+        json_data: {
+          tranIds: String(documentID),
+          userCode,
+          userName: currentUserRow?.userName || "",
+          appLevel: currentUserRow?.prAppLevel || "",
+          mode: "Notify",
+          reason: "",
+          url: `${window.location.origin}/?page=PRApprovalModal`,
+        },
+      };
+
+      await postRequest("approvePR", payload);
+
+      await useSwalSuccessAlert(
+        "PR Notified",
+        `PR ${documentNo || documentID} has been notified to its Approver.`,
+      );
+
+      if (Number(appLevel) === -1 && documentNo && branchCode) {
+        await fetchTranData(documentNo, branchCode);
+      }
+    } catch (error) {
+      console.error("Notify PR approver failed:", error);
+      useSwalErrorAlert(
+        "PR Notify",
+        error?.response?.data?.message ||
+          error?.response?.data?.error ||
+          error?.message ||
+          "Unable to notify the PR approver.",
+      );
+    } finally {
+      updateState({ showSpinner: false });
+    }
+  };
 
 
 
@@ -1734,9 +1861,12 @@ const renderPrDetailColumn = (columnKey, row, index) => {
           onCopy={handleCopy} 
           onAttach={handleAttach}
           onUpload={handleUpload}
+          onNotify={handleNotify} 
 
           activeTopTab={topTab} 
           showActions={topTab === "details"} 
+          showNotify={hsDoc?.doc_app === "Y"}
+
           showBIRForm={false}   
           showCopyForm ={true} 
           showUpload ={true} 
@@ -1749,7 +1879,8 @@ const renderPrDetailColumn = (columnKey, row, index) => {
           isSaveDisabled={state.isSaveDisabled || isFormDisabled ||  ((detailRows?.length || 0)=== 0)} 
           isResetDisabled={state.isResetDisabled}
           isAttachDisabled={!documentID}
-          isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
+          isNotifyDisabled={!documentID || displayStatus === "CANCELLED"}
+          isPrintDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "CLOSED" || hasExistingPO || displayStatus === "APPROVED" }
           isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
           isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED"|| displayStatus === "CLOSED" || hasExistingPO }
 
@@ -1766,7 +1897,17 @@ const renderPrDetailColumn = (columnKey, row, index) => {
         <div className={`global-tran-headertext-div-ui ${isViewDocument ? "max-md:!mb-1" : ""}`}>
           <h1 className="global-tran-headertext-ui">{documentTitle}</h1>
         </div>
-        <div className={`global-tran-headerstat-div-ui ${isViewDocument ? "max-md:!mt-0" : ""}`}>
+        <div
+          className={`global-tran-headerstat-div-ui ${
+            showApprovalStatus ? "max-sm:!flex-row max-sm:!items-start max-sm:!justify-center max-sm:!gap-x-6" : ""
+          } ${isViewDocument ? "max-md:!mt-0" : ""}`}
+        >
+          {showApprovalStatus && (
+            <div>
+              <p className="global-tran-headerstat-text-ui">Approval Status</p>
+              <h1 className={`global-tran-stat-text-ui ${approvalStatusColor}`}>{approvalStatus}</h1>
+            </div>
+          )}
           <div>
             <p className="global-tran-headerstat-text-ui">Transaction Status</p>
             <h1 className={`global-tran-stat-text-ui ${statusColor}`}>{displayStatus}</h1>
@@ -2077,7 +2218,7 @@ const renderPrDetailColumn = (columnKey, row, index) => {
             className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
             onClick={() => {
               setShowTypeDropdown(false);
-              handleSelectTypeAndAddRow("FG");
+              handleOpenItemLookup(false, "PRFG");
             }}
           >
             <div className="flex items-center gap-3">
@@ -2101,7 +2242,7 @@ const renderPrDetailColumn = (columnKey, row, index) => {
             className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
             onClick={() => {
               setShowTypeDropdown(false);
-              handleOpenMSLookup(false, "PRMS");
+              handleOpenItemLookup(false, "PRMS");
             }}
           >
             <div className="flex items-center gap-3">
@@ -2125,7 +2266,7 @@ const renderPrDetailColumn = (columnKey, row, index) => {
             className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
             onClick={() => {
               setShowTypeDropdown(false);
-              handleSelectTypeAndAddRow("RM");
+              handleOpenItemLookup(false, "PRRM");
             }}
           >
             <div className="flex items-center gap-3">
@@ -2333,12 +2474,12 @@ const renderPrDetailColumn = (columnKey, row, index) => {
 
 
 
-         {msLookupModalOpen && (
+         {itemLookupModalOpen && (
         <ItemMastLookupModal
-        isOpen={msLookupModalOpen}
+        isOpen={itemLookupModalOpen}
         endpoint={itemLookupEndPoint}
-        onClose={handleCloseMSLookup}
-        onCancel={() => updateState({ msLookupModalOpen: false })}
+        onClose={handleCloseItemLookup}
+        onCancel={() => updateState({ itemLookupModalOpen: false })}
         enableMultiSelect={!itemSingleSelect}
         docType={selectedDocType}
          />

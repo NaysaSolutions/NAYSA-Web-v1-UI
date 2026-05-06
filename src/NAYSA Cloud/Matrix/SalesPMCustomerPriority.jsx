@@ -6,6 +6,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { GripVertical, Search, Settings, Trash2 } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -44,6 +45,9 @@ const EMPTY_RULE = {
 
 const getMatrixTypeLabel = (pmType) =>
   MATRIX_TYPE_OPTIONS.find((item) => item.value === pmType)?.label || pmType;
+
+const renderModalPortal = (children) =>
+  typeof document === "undefined" ? children : createPortal(children, document.body);
 
 const normalizeRules = (rules = []) =>
   rules.map((item, index) => ({
@@ -687,8 +691,9 @@ const SalesPMCustomerPriority = forwardRef((props, ref) => {
         />
       </div>
 
-      {showModal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-[1px]">
+      {showModal &&
+        renderModalPortal(
+        <div className="fixed inset-0 z-[1000001] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-[1px]">
           <div
             className="flex max-h-[90vh] w-[480px] max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
           >
@@ -916,10 +921,11 @@ const SalesPMCustomerPriority = forwardRef((props, ref) => {
             </div>
           </div>
         </div>
-      )}
+        )}
 
-      {showGeneralModal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-[1px]">
+      {showGeneralModal &&
+        renderModalPortal(
+        <div className="fixed inset-0 z-[1000001] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-[1px]">
       <div className="flex max-h-[90vh] w-[480px] max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
         <div className="border-b border-slate-200 bg-white px-4 py-3">
             <div className="flex items-start justify-between gap-3">
@@ -1110,7 +1116,7 @@ const SalesPMCustomerPriority = forwardRef((props, ref) => {
             </div>
           </div>
         </div>
-      )}
+        )}
 
       {showCustomerLookup && (
         <CustomerMastLookupModal

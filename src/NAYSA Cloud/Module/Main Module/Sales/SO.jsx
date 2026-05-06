@@ -865,7 +865,7 @@ useEffect(() => {
 
         try {
           const hdtblcol_result = await useFieldLenghtCheck(
-            "svi_hd,svi_dt1,svi_dt2"
+            "so_hd,so_dt1"
           );
 
           if (hdtblcol_result) {
@@ -1604,7 +1604,7 @@ const handlePrint = async () => {
   }
 };
 
-  const handleOpenAddItemModal = () => {
+  const handleOpenAddItemModal =  async() => {
     const fieldsToCheck = {
       "Header : Bill To Customer Code": billToCustCode,
       "Header : Ship To Customer Code": shipToCode,
@@ -1612,7 +1612,7 @@ const handlePrint = async () => {
       "Header : Sales Rep": salesRepCode,
     };
 
-    const isValid = useSwalvalidateRequiredFields(fieldsToCheck, "Add Item");
+    const isValid = await useSwalvalidateRequiredFields(fieldsToCheck, "Add Item");
     if (!isValid) return;
 
     updateState({
@@ -1671,6 +1671,9 @@ const handleCopy = async () => {
       customerPoNo: "",
       drQuantity: formatNumber(0, quantityDecimals),
       siQuantity: formatNumber(0, quantityDecimals),
+      groupId: "",
+      pmId: "",
+      pmType: "",
     }));
 
     customerPoNoRef.current = "";
@@ -1682,6 +1685,7 @@ const handleCopy = async () => {
       documentID: "",
       documentStatus: "O",
       status: "OPEN",
+      soStatus: "O",
       documentDate: nextDocumentDate,
       customerPoNo: "",
       customerPoDate: null,
@@ -2536,7 +2540,7 @@ const renderSODetailCell = (columnKey, row, index, soStatusOptions) => {
     grossAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
     totDiscount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
     netAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
-    delDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><DateFormatInput value={row.delDate || ""} disabled={isFormDisabled || isRowWithDR} onChange={(value) => handleSODetailRowChange(index, "delDate", value)} className="w-full h-7 text-xs bg-transparent focus:outline-none focus:ring-0" /></td>, 
+    delDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><DateFormatInput id={`delDate-${index}`} name="delDate" value={row.delDate || ""} disabled={isFormDisabled || isRowWithDR} updateState={(updates) => handleSODetailRowChange(index, "delDate", updates.delDate || "")} className="w-full h-7 text-xs bg-transparent focus:outline-none focus:ring-0" /></td>, 
     customerPoNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { readOnly: isFormDisabled || isRowWithDR })}</td>,
     salesRepCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}><div className="flex items-center gap-1"><input type="text" value={row.salesRepCode || ""} readOnly className="w-full h-7 text-xs bg-transparent focus:outline-none focus:ring-0" />{canEditDetailAfterDR && <button type="button" className="text-blue-600 hover:text-blue-800" onClick={() => updateState({ showSalesRepModal: true, selectedRowIndex: index, modalContext: "detailSalesRep" })}><FontAwesomeIcon icon={faSearch} /></button>}</div></td>,
     freeItem: () => <td key={columnKey} className="global-tran-td-ui" style={style}><button type="button" className={`w-full h-7 rounded-full border text-[11px] font-semibold transition-colors ${row.freeItem === "Y" ? "border-blue-500 bg-blue-500/15 text-blue-700" : "border-slate-300 bg-white text-slate-600"} ${isFormDisabled || isRowWithDR ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`} disabled={isFormDisabled || isRowWithDR} onClick={() => handleSODetailRowChange(index, "freeItem", row.freeItem === "Y" ? "" : "Y")}>{row.freeItem === "Y" ? "Yes" : "No"}</button></td>,
@@ -2579,7 +2583,7 @@ return (
         onHistory={() => setTopTab("history")}
         disableRouteNavigation={true}
 
-        detailsRoute="/page/SVI"
+        detailsRoute="/page/DR"
 
         isSaveDisabled={state.isSaveDisabled || isFormDisabled || (detailRows?.length || 0) === 0}
         isResetDisabled={state.isResetDisabled}
@@ -2591,7 +2595,10 @@ return (
       </div>
 
 
-      <div className={topTab === "details" ? "" : "hidden"}>
+      <div
+        className={topTab === "details" ? "" : "hidden"}
+        style={{ display: topTab === "details" ? undefined : "none" }}
+      >
 
 
 
@@ -2618,7 +2625,7 @@ return (
                 ? "global-tran-tab-text_active-ui"
                 : "global-tran-tab-text_inactive-ui"
             }`}
-            onClick={() => setActiveTab("basic")}
+            onClick={() => updateState({ activeTab: "basic" })}
           >
             Basic Information
           </button>
@@ -3324,7 +3331,10 @@ return (
 
       {showSpinner && <LoadingSpinner />}
     </div>
-  <div className={topTab === "history" ? "" : "hidden"}>
+  <div
+    className={topTab === "history" ? "" : "hidden"}
+    style={{ display: topTab === "history" ? undefined : "none" }}
+  >
   <AllTranHistory
     showHeader={false}
     isActive={topTab === "history"}

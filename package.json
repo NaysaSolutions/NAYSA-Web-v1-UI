@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "electron": "wait-on http://localhost:5173 && electron \"src/NAYSA Cloud/Electron/main.cjs\"",
+    "electron:dev": "concurrently -k \"npm run dev\" \"npm run electron\"",
+    "electron:scanner": "concurrently -k \"npm run dev\" \"npm run electron\"",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -43,6 +46,7 @@
     "lodash": "^4.17.23",
     "lucide-react": "^0.475.0",
     "motion": "^12.38.0",
+    "pdfjs-dist": "^3.11.174",
     "pdfjs-dist-viewer-min": "^3.11.174",
     "react": "^18.3.1",
     "react-datepicker": "^7.6.0",
@@ -51,7 +55,7 @@
     "react-icons": "^5.5.0",
     "react-modal": "^3.16.1",
     "react-number-format": "^5.4.5",
-    "react-pdf": "^10.1.0",
+    "react-pdf": "^7.7.3",
     "react-router-dom": "^6.30.0",
     "react-webcam": "^7.2.0",
     "react-zxing": "^2.1.0",
@@ -60,6 +64,7 @@
     "sweetalert2": "^11.17.2",
     "tailwind-merge": "^3.5.0",
     "tailwindcss-animate": "^1.0.7",
+    "tesseract.js": "^7.0.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
@@ -68,6 +73,8 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
     "autoprefixer": "^10.4.20",
+    "concurrently": "^9.2.1",
+    "electron": "^41.5.0",
     "eslint": "^9.13.0",
     "eslint-plugin-react": "^7.37.1",
     "eslint-plugin-react-hooks": "^5.0.0",
@@ -75,6 +82,7 @@
     "globals": "^15.11.0",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",
-    "vite": "^5.4.9"
+    "vite": "^5.4.9",
+    "wait-on": "^9.0.5"
   }
 }

@@ -2371,7 +2371,7 @@ const renderMsajGlColumn = (columnKey, row, index) => {
 };
 
 return (
-
+<>
 <div className="global-tran-main-div-ui">
 
       {showSpinner && <LoadingSpinner />}
@@ -2575,10 +2575,11 @@ return (
             </div>
           </div>
         </div>
+      </div>
 
 
           {/* APV Detail Section */}
-          <div id="apv_dtl" className="global-tran-tab-div-ui">
+          <div id="apv_dtl" className="global-tran-tab-div-ui mt-3">
 
           {/* Tab Navigation */}
           <div className="global-tran-tab-nav-ui">
@@ -2691,7 +2692,7 @@ return (
 
     
         {/* General Ledger Button */}
-        <div className="global-tran-tab-div-ui" hidden={handleFieldBehavior("hiddenBBMode")}>
+        <div className="global-tran-tab-div-ui mt-3" hidden={handleFieldBehavior("hiddenBBMode")}>
 
           {/* Tab Navigation */}
           <div className="global-tran-tab-nav-ui">
@@ -2810,10 +2811,6 @@ return (
 
       </div>
 
-      
-
-    </div>
-
 
 
 
@@ -2902,25 +2899,6 @@ return (
         onClose={handleCloseCancel}
       />
     )}
-
-
-
-    {showAttachModal && (
-      <AttachDocumentModal
-        isOpen={showAttachModal}
-        params={{
-          DocumentID: documentID,
-          DocumentName: documentName,
-          BranchName: branchName,
-          DocumentNo: documentNo,
-        }}
-        onClose={() => updateState({ showAttachModal: false })}
-      />
-    )}
-
-
-
-
 
     {showSignatoryModal && (
       <DocumentSignatories
@@ -3031,6 +3009,20 @@ return (
 
 
 </div>
+
+  {showAttachModal && (
+    <AttachDocumentModal
+      isOpen={showAttachModal}
+      params={{
+        DocumentID: documentID,
+        DocumentName: documentName,
+        BranchName: branchName,
+        DocumentNo: documentNo,
+      }}
+      onClose={() => updateState({ showAttachModal: false })}
+    />
+  )}
+</>
 );
 // End of Return
 
