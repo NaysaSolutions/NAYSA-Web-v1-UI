@@ -51,6 +51,7 @@ const GlobalLookupModalv1 = ({
   onSelectionChange,
   onSelectionReset,
   singleSelect = false,
+  modalMaxWidthClass = "max-w-8xl",
 }) => {
   const [records, setRecords] = useState([]);
   const [filtered, setFiltered] = useState([]);
@@ -1056,7 +1057,7 @@ const handleExportExcelClick = async () => {
       <div
         ref={modalKeyScopeRef}
         tabIndex={0}
-        className="bg-white rounded-xl shadow-2xl w-full max-w-8xl max-h-[90vh] flex flex-col relative overflow-hidden transform scale-95 animate-scale-in outline-none border border-slate-200"
+        className={`bg-white rounded-xl shadow-2xl w-full ${modalMaxWidthClass} max-h-[90vh] flex flex-col relative overflow-hidden transform scale-95 animate-scale-in outline-none border border-slate-200`}
         role="dialog"
         aria-modal="true"
       >

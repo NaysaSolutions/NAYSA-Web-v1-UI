@@ -1685,6 +1685,7 @@ const handleCopy = async () => {
       documentID: "",
       documentStatus: "O",
       status: "OPEN",
+      soStatus: "O",
       documentDate: nextDocumentDate,
       customerPoNo: "",
       customerPoDate: null,

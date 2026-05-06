@@ -11,6 +11,10 @@ import { useReturnToDate } from "@/NAYSA Cloud/Global/dates";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import AttachDocumentModal from "@/NAYSA Cloud/Lookup/SearchAttachment.jsx";
 import {
+  useSwalErrorAlert,
+  useSwalProceedConfirm,
+} from "@/NAYSA Cloud/Global/behavior.jsx";
+import {
   CheckCircle2,
   Eye,
   Maximize2,
@@ -42,9 +46,89 @@ const MAX_MANUAL_COLUMN_WIDTH = 520;
 const CHAR_WIDTH = 7;
 const ACTION_COL_WIDTH = 150;
 const FROZEN_DETAIL_COLUMN_COUNT = 1;
+const MOBILE_DETAIL_LIMIT = 8;
 
 const fieldClassName =
   "h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-[12px] text-slate-800 outline-none";
+
+const DisapprovalReasonModal = ({
+  isOpen,
+  rows = [],
+  reason,
+  isProcessing,
+  onReasonChange,
+  onCancel,
+  onSubmit,
+}) => {
+  if (!isOpen) return null;
+
+  const disapprovalCount = rows.length;
+
+  return (
+    <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-gray-900/60 p-4">
+      <div className="w-full max-w-md overflow-hidden rounded-xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between bg-white px-6 pb-2 pt-5">
+          <h2 className="text-lg font-black tracking-tight text-gray-900">
+            Disapprove Document
+          </h2>
+
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={isProcessing}
+            className="text-gray-400 transition-colors hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <XCircle size={20} />
+          </button>
+        </div>
+
+        <div className="space-y-4 px-6 pb-6 pt-2">
+          <div className="flex items-start gap-3 rounded-r-md border-l-4 border-red-500 bg-red-50 p-3">
+            <XCircle className="mt-0.5 shrink-0 text-red-500" size={20} />
+            <p className="text-sm font-medium leading-snug text-red-800">
+              Provide the reason for disapproving {disapprovalCount} selected
+              transaction{disapprovalCount > 1 ? "s" : ""}.
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-semibold text-gray-700">
+              Reason for Disapproval
+            </label>
+            <textarea
+              value={reason}
+              onChange={(event) => onReasonChange(event.target.value)}
+              placeholder="Explain why you are disapproving this document..."
+              rows={3}
+              disabled={isProcessing}
+              className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 disabled:cursor-not-allowed disabled:bg-gray-100"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-gray-100 bg-gray-50 px-6 py-4">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={isProcessing}
+            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={isProcessing}
+            className="rounded-lg border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Disapprove
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const isDocNoColumn = (key) => String(key || "").toLowerCase() === "docno";
 const isBoldValueColumn = (key) =>
@@ -171,6 +255,7 @@ const GlobalApprovalModal = forwardRef(
       transactionLabel = "Transaction",
       documentName = transactionLabel,
       approverName = "",
+      approverImageSrc = "",
       approvalLevel = "",
       department = "",
       detailColumns = DEFAULT_DETAIL_COLUMNS,
@@ -197,10 +282,14 @@ const GlobalApprovalModal = forwardRef(
     const [internalOpen, setInternalOpen] = useState(false);
     const [isMinimized, setIsMinimized] = useState(false);
     const [isMaximized, setIsMaximized] = useState(false);
+    const [approverImageFailed, setApproverImageFailed] = useState(false);
     const [filters, setFilters] = useState({});
     const [quickSearch, setQuickSearch] = useState("");
     const [localRows, setLocalRows] = useState([]);
     const [selectedRowKeys, setSelectedRowKeys] = useState(() => new Set());
+    const [expandedMobileRowKeys, setExpandedMobileRowKeys] = useState(() => new Set());
+    const [pendingDisapprovalRows, setPendingDisapprovalRows] = useState([]);
+    const [disapprovalReason, setDisapprovalReason] = useState("");
     const [attachParams, setAttachParams] = useState(null);
     const [columnOrder, setColumnOrder] = useState([]);
     const [manualColumnWidths, setManualColumnWidths] = useState({});
@@ -217,12 +306,19 @@ const GlobalApprovalModal = forwardRef(
     });
 
     const open = isOpen ?? internalOpen;
+    const showApproverImage = Boolean(approverImageSrc) && !approverImageFailed;
 
     useEffect(() => {
       if (open) return;
       setIsMinimized(false);
       setIsMaximized(false);
+      setPendingDisapprovalRows([]);
+      setDisapprovalReason("");
     }, [open]);
+
+    useEffect(() => {
+      setApproverImageFailed(false);
+    }, [approverImageSrc]);
 
     useImperativeHandle(ref, () => ({
       open: () => setInternalOpen(true),
@@ -295,6 +391,7 @@ const GlobalApprovalModal = forwardRef(
 
     useEffect(() => {
       setLocalRows(Array.isArray(detailRows) ? detailRows : []);
+      setExpandedMobileRowKeys(new Set());
     }, [detailRows]);
 
     const rows = localRows;
@@ -453,6 +550,15 @@ const GlobalApprovalModal = forwardRef(
       });
     };
 
+    const handleToggleMobileDetails = (rowKey) => {
+      setExpandedMobileRowKeys((prev) => {
+        const next = new Set(prev);
+        if (next.has(rowKey)) next.delete(rowKey);
+        else next.add(rowKey);
+        return next;
+      });
+    };
+
     const handleResetTable = () => {
       setFilters({});
       setQuickSearch("");
@@ -532,13 +638,30 @@ const GlobalApprovalModal = forwardRef(
       onApprove?.(row);
     };
 
-    const handleRowDisapprove = (row) => {
-      if (onRowDisapprove) {
-        onRowDisapprove(row);
-        return;
-      }
+    const openDisapprovalModal = async (targetRows) => {
+      const rowsToDisapprove = Array.isArray(targetRows)
+        ? targetRows.filter(Boolean)
+        : [targetRows].filter(Boolean);
 
-      onReject?.(row);
+      if (!rowsToDisapprove.length) return;
+
+      const disapprovalCount = rowsToDisapprove.length;
+      const confirm = await useSwalProceedConfirm(
+        `Disapprove ${documentName}?`,
+        `Disapprove ${disapprovalCount} selected transaction${
+          disapprovalCount > 1 ? "s" : ""
+        }?`,
+        "Yes, disapprove",
+      );
+
+      if (!confirm?.isConfirmed) return;
+
+      setPendingDisapprovalRows(rowsToDisapprove);
+      setDisapprovalReason("");
+    };
+
+    const handleRowDisapprove = (row) => {
+      openDisapprovalModal(row);
     };
 
     const handleApproveSelected = () => {
@@ -555,12 +678,49 @@ const GlobalApprovalModal = forwardRef(
     const handleRejectSelected = () => {
       if (!selectedRows.length) return;
 
-      if (onRejectSelected) {
-        onRejectSelected(selectedRows);
+      openDisapprovalModal(selectedRows);
+    };
+
+    const handleCloseDisapprovalModal = () => {
+      if (isProcessing) return;
+
+      setPendingDisapprovalRows([]);
+      setDisapprovalReason("");
+    };
+
+    const handleSubmitDisapproval = async () => {
+      const trimmedReason = disapprovalReason.trim();
+
+      if (!trimmedReason) {
+        useSwalErrorAlert(
+          "Required Fields",
+          "Reason for disapproval is required.",
+        );
         return;
       }
 
-      selectedRows.forEach((row) => handleRowDisapprove(row));
+      const rowsToDisapprove = pendingDisapprovalRows;
+      setPendingDisapprovalRows([]);
+      setDisapprovalReason("");
+
+      let result;
+
+      if (onRejectSelected) {
+        result = await onRejectSelected(rowsToDisapprove, trimmedReason);
+      } else if (onRowDisapprove) {
+        result = await onRowDisapprove(
+          rowsToDisapprove.length === 1
+            ? rowsToDisapprove[0]
+            : rowsToDisapprove,
+          trimmedReason,
+        );
+      } else if (onReject) {
+        result = await Promise.all(
+          rowsToDisapprove.map((row) => onReject(row, trimmedReason)),
+        );
+      }
+
+      if (result === false) return;
     };
 
     const handleViewDocument = (row) => {
@@ -645,24 +805,35 @@ const GlobalApprovalModal = forwardRef(
       <>
         <div
           className={`fixed inset-0 z-[9999] bg-transparent ${
-            isMaximized ? "p-0" : "p-4"
+            isMaximized ? "p-0" : "p-2 md:p-4"
           } flex items-center justify-center`}
           onMouseDown={() => {
             if (closeOnBackdrop) handleClose();
           }}
         >
           <div
-            className={`flex flex-col overflow-hidden border border-slate-200 bg-white shadow-xl ${
+            className={`relative flex flex-col overflow-hidden border border-slate-200 bg-white shadow-xl ${
               isMaximized
                 ? "h-[100dvh] w-screen rounded-none"
-                : "h-[92vh] w-full max-w-[1400px] rounded-2xl"
+                : "h-[96dvh] w-full max-w-[1400px] rounded-xl md:h-[92vh] md:rounded-2xl"
             }`}
             onMouseDown={(event) => event.stopPropagation()}
           >
-          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-100 py-1">
+          {isProcessing && (
+            <div className="absolute inset-0 z-[120] flex flex-col items-center justify-center bg-white/45 backdrop-blur-[1px]">
+              <div className="rounded-xl border border-slate-200 bg-white/95 px-5 py-4 text-center shadow-xl">
+                <LoadingSpinner />
+                <div className="mt-2 text-[12px] font-semibold text-slate-700">
+                  Processing approval...
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-100 py-0.5 md:py-1">
             <div className="flex min-w-0 items-center gap-2 pl-2 sm:pl-3">
               <div className="min-w-0">
-                <h2 className="global-lookup-headertext-ui truncate">{title}</h2>
+                <h2 className="global-lookup-headertext-ui truncate !text-[15px] md:!text-[18px]">{title}</h2>
               </div>
             </div>
 
@@ -671,7 +842,7 @@ const GlobalApprovalModal = forwardRef(
                 type="button"
                 onClick={() => setIsMinimized(true)}
                 disabled={isProcessing}
-                className="p-2 text-slate-400 transition-colors hover:text-blue-600 disabled:opacity-50"
+                className="p-1.5 text-slate-400 transition-colors hover:text-blue-600 disabled:opacity-50 md:p-2"
                 title="Minimize"
               >
                 <FontAwesomeIcon icon={faMinus} />
@@ -681,7 +852,7 @@ const GlobalApprovalModal = forwardRef(
                 type="button"
                 onClick={() => setIsMaximized((prev) => !prev)}
                 disabled={isProcessing}
-                className="p-2 text-slate-400 transition-colors hover:text-blue-600 disabled:opacity-50"
+                className="p-1.5 text-slate-400 transition-colors hover:text-blue-600 disabled:opacity-50 md:p-2"
                 title={isMaximized ? "Restore" : "Maximize"}
               >
                 {isMaximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
@@ -691,7 +862,7 @@ const GlobalApprovalModal = forwardRef(
                 type="button"
                 onClick={handleClose}
                 disabled={isProcessing}
-                className="p-2 text-slate-400 transition-colors hover:text-red-600 disabled:opacity-50"
+                className="p-1.5 text-slate-400 transition-colors hover:text-red-600 disabled:opacity-50 md:p-2"
                 title="Close"
               >
                 <FontAwesomeIcon icon={faXmark} />
@@ -699,63 +870,84 @@ const GlobalApprovalModal = forwardRef(
             </div>
           </div>
 
-          <div className="flex flex-1 flex-col overflow-hidden px-4 py-3">
-            <section className="mb-4">
-              <div className="grid grid-cols-1 items-center gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:grid-cols-[minmax(240px,1.35fr)_repeat(4,minmax(120px,1fr))]">
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-                    <UserCircle size={30} strokeWidth={1.8} />
+          <div className="flex flex-1 flex-col overflow-hidden px-2 py-2 md:px-4 md:py-3">
+            <section className="mb-2 md:mb-4">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-2 rounded-lg border border-slate-200 bg-white px-2.5 py-2 shadow-sm md:grid-cols-[minmax(240px,1.35fr)_repeat(4,minmax(120px,1fr))] md:gap-4 md:rounded-xl md:px-4 md:py-3">
+                <div className="flex min-w-0 items-center gap-2 md:order-1 md:gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-blue-100 bg-blue-50 text-blue-600 md:h-10 md:w-10">
+                    {showApproverImage ? (
+                      <img
+                        src={approverImageSrc}
+                        alt={approverName ? `${approverName} profile` : "Approver profile"}
+                        className="h-full w-full object-cover"
+                        onError={() => setApproverImageFailed(true)}
+                      />
+                    ) : (
+                      <UserCircle
+                        size={22}
+                        strokeWidth={1.8}
+                        className="md:h-[30px] md:w-[30px]"
+                      />
+                    )}
                   </div>
                   <div className="min-w-0">
-                    <div className="truncate text-[13px] font-bold text-slate-900">
+                    <div className="truncate text-[11px] font-bold text-slate-900 md:text-[13px]">
                       {approverName || ""}
                     </div>
-                    <div className="text-[11px] font-semibold text-slate-500">
+                    <div className="text-[9px] font-semibold text-slate-500 md:text-[11px]">
                       Approver
                     </div>
                   </div>
                 </div>
 
-                <div className="border-slate-200 md:border-l md:pl-5">
-                  <div className="text-[11px] font-semibold text-slate-500">Level</div>
-                  <div className="truncate text-[12px] font-bold text-slate-900">
-                    {approvalLevel || ""}
+                <div className="border-slate-200 text-right md:order-4 md:border-l md:pl-5">
+                  <div className="text-[9px] font-semibold text-slate-500 md:text-[11px]">Total PRs</div>
+                  <div className="text-[16px] font-bold leading-tight text-slate-900 md:text-[20px]">{statusCounts.total}</div>
+                </div>
+
+                <div className="border-slate-200 text-right md:order-5 md:border-l md:pl-5">
+                  <div className="text-[9px] font-semibold text-slate-500 md:text-[11px]">Selected</div>
+                  <div className="text-[16px] font-bold leading-tight text-blue-700 md:text-[20px]">{selectedRows.length}</div>
+                </div>
+
+                <div className="col-span-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 md:order-2 md:col-span-1 md:block md:border-l md:border-t-0 md:pl-5 md:pt-0">
+                  <div className="min-w-0">
+                    <div className="text-[9px] font-semibold text-slate-500 md:text-[11px]">Level</div>
+                    <div className="truncate text-[11px] font-bold text-slate-900 md:text-[12px]">
+                      {approvalLevel || ""}
+                    </div>
+                  </div>
+                  <div className="min-w-0 md:hidden">
+                    <div className="text-[9px] font-semibold text-slate-500">Department</div>
+                    <div className="truncate text-[11px] font-bold text-slate-900">
+                      {department || ""}
+                    </div>
                   </div>
                 </div>
 
-                <div className="border-slate-200 md:border-l md:pl-5">
+                <div className="hidden min-w-0 border-slate-200 md:order-3 md:block md:border-l md:pl-5">
                   <div className="text-[11px] font-semibold text-slate-500">Department</div>
                   <div className="truncate text-[12px] font-bold text-slate-900">
                     {department || ""}
                   </div>
                 </div>
-
-                <div className="border-slate-200 text-right md:border-l md:pl-5">
-                  <div className="text-[11px] font-semibold text-slate-500">Total PRs</div>
-                  <div className="text-[20px] font-bold leading-tight text-slate-900">{statusCounts.total}</div>
-                </div>
-
-                <div className="border-slate-200 text-right md:border-l md:pl-5">
-                  <div className="text-[11px] font-semibold text-slate-500">Selected</div>
-                  <div className="text-[20px] font-bold leading-tight text-blue-700">{selectedRows.length}</div>
-                </div>
               </div>
             </section>
 
-            <section className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <section className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-slate-200 bg-white md:rounded-xl">
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-3 py-2">
-                  <div className="relative min-w-[240px] flex-1 max-w-[420px]">
+                <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-2 py-1.5 md:gap-3 md:px-3 md:py-2">
+                  <div className="relative min-w-[170px] flex-1 max-w-[420px]">
                     <input
                       type="text"
                       value={quickSearch}
                       onChange={(event) => setQuickSearch(event.target.value)}
-                      className="h-8 w-full rounded-lg border border-slate-300 bg-white pl-8 pr-3 text-[12px] font-semibold text-slate-700 outline-none transition-all placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                      className="h-7 w-full rounded-md border border-slate-300 bg-white pl-7 pr-2 text-[11px] font-semibold text-slate-700 outline-none transition-all placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 md:h-8 md:rounded-lg md:pl-8 md:pr-3 md:text-[12px]"
                       placeholder="Quick Search..."
                     />
                     <Search
-                      className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
-                      size={14}
+                      className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 md:left-2.5"
+                      size={13}
                     />
                   </div>
 
@@ -763,36 +955,193 @@ const GlobalApprovalModal = forwardRef(
                     type="button"
                     onClick={handleResetTable}
                     disabled={isProcessing}
-                    className="inline-flex h-8 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-[12px] font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 md:h-8 md:gap-2 md:rounded-lg md:px-3 md:text-[12px]"
                   >
-                    <RotateCcw size={14} />
-                    Reset
+                    <RotateCcw size={13} />
+                    <span className="hidden sm:inline">Reset</span>
                   </button>
 
-                  <div className="ml-auto flex items-center gap-2">
+                  <div className="flex w-full items-center gap-1.5 md:ml-auto md:w-auto md:gap-2">
+                    <label className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 md:hidden">
+                      <input
+                        type="checkbox"
+                        checked={allFilteredRowsSelected}
+                        onChange={handleToggleSelectAll}
+                        disabled={isProcessing || !filteredRows.length}
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-40"
+                      />
+                      Select All
+                    </label>
+
                     <button
                       type="button"
                       onClick={handleApproveSelected}
                       disabled={isProcessing || !selectedRows.length}
-                      className="inline-flex h-8 items-center gap-2 rounded-lg border border-blue-600 bg-blue-600 px-3 text-[12px] font-bold text-white transition-colors hover:border-blue-700 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="ml-auto inline-flex h-7 items-center gap-1.5 rounded-md border border-blue-600 bg-blue-600 px-2 text-[10px] font-bold text-white transition-colors hover:border-blue-700 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40 md:ml-0 md:h-8 md:gap-2 md:rounded-lg md:px-3 md:text-[12px]"
                     >
-                      <CheckCircle2 size={14} strokeWidth={1.8} />
-                      Approve Selected
+                      <CheckCircle2 size={13} strokeWidth={1.8} />
+                      <span className="md:hidden">Approve All</span>
+                      <span className="hidden md:inline">Approve Selected</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={handleRejectSelected}
                       disabled={isProcessing || !selectedRows.length}
-                      className="inline-flex h-8 items-center gap-2 rounded-lg border border-red-500 bg-red-500 px-3 text-[12px] font-bold text-white transition-colors hover:border-red-600 hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="inline-flex h-7 items-center gap-1.5 rounded-md border border-red-500 bg-red-500 px-2 text-[10px] font-bold text-white transition-colors hover:border-red-600 hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-40 md:h-8 md:gap-2 md:rounded-lg md:px-3 md:text-[12px]"
                     >
-                      <XCircle size={14} strokeWidth={1.8} />
-                      Reject Selected
+                      <XCircle size={13} strokeWidth={1.8} />
+                      <span className="md:hidden">Disapprove All</span>
+                      <span className="hidden md:inline">Disapprove Selected</span>
                     </button>
                   </div>
                 </div>
+              <div className="min-h-0 min-w-0 flex-1 overflow-auto bg-slate-50 p-2 md:hidden">
+                {isDetailLoading ? (
+                  <div className="flex min-h-[220px] items-center justify-center">
+                    <LoadingSpinner />
+                  </div>
+                ) : filteredRows.length ? (
+                  <div className="space-y-2">
+                    {filteredRows.map((row, rowIndex) => {
+                      const sourceIndex = rows.indexOf(row);
+                      const selectionIndex = sourceIndex >= 0 ? sourceIndex : rowIndex;
+                      const rowKey = getRowKey(row, selectionIndex);
+                      const selected = selectedRowKeys.has(rowKey);
+                      const primaryColumn =
+                        columns.find((column) => isDocNoColumn(column.key)) ||
+                        columns[0];
+                      const secondaryColumns = columns.filter(
+                        (column) => column.key !== primaryColumn?.key,
+                      );
+                      const isMobileDetailsExpanded = expandedMobileRowKeys.has(rowKey);
+                      const visibleSecondaryColumns = isMobileDetailsExpanded
+                        ? secondaryColumns
+                        : secondaryColumns.slice(0, MOBILE_DETAIL_LIMIT);
+                      const hiddenSecondaryColumnCount =
+                        secondaryColumns.length - visibleSecondaryColumns.length;
+
+                      return (
+                        <article
+                          key={rowKey}
+                          className="rounded-md border border-slate-200 bg-white p-2 shadow-sm"
+                        >
+                          <div className="flex items-start gap-2">
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={() => handleToggleRowSelection(row, selectionIndex)}
+                              disabled={isProcessing}
+                              className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-40"
+                              aria-label="Select row"
+                            />
+
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[9px] font-semibold uppercase text-slate-500">
+                                {primaryColumn?.label || documentName}
+                              </div>
+                              <div className="truncate text-[12px] font-normal text-slate-900">
+                                {primaryColumn
+                                  ? formatCellValue(row?.[primaryColumn.key], primaryColumn)
+                                  : documentName}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-2 divide-y divide-slate-100 border-t border-slate-100">
+                            {visibleSecondaryColumns.map((column) => (
+                              <div
+                                key={column.key}
+                                className="grid min-w-0 grid-cols-[42%_minmax(0,1fr)] items-center gap-2 py-1"
+                              >
+                                <div className="truncate text-[9px] font-semibold text-slate-500">
+                                  {column.label}
+                                </div>
+                                <div
+                                  className={`truncate text-[10px] font-normal text-slate-800 ${
+                                    column.align === "right" ? "text-right tabular-nums" : ""
+                                  }`}
+                                >
+                                  {formatCellValue(row?.[column.key], column)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {secondaryColumns.length > MOBILE_DETAIL_LIMIT && (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleMobileDetails(rowKey)}
+                              className="mt-1.5 text-[10px] font-semibold text-blue-600 hover:text-blue-700"
+                            >
+                              {isMobileDetailsExpanded
+                                ? "See less"
+                                : `See more (${hiddenSecondaryColumnCount})`}
+                            </button>
+                          )}
+
+                          <div className="mt-2 grid grid-cols-4 gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleRowApprove(row)}
+                              disabled={isProcessing}
+                              className="inline-flex h-9 flex-col items-center justify-center gap-0.5 rounded border border-emerald-200 bg-emerald-50 text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+                              title="Approve"
+                              aria-label="Approve"
+                            >
+                              <CheckCircle2 size={13} strokeWidth={1.8} />
+                              <span className="text-[8px] font-semibold leading-none">Approve</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleRowDisapprove(row)}
+                              disabled={isProcessing}
+                              className="inline-flex h-9 flex-col items-center justify-center gap-0.5 rounded border border-red-200 bg-red-50 text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+                              title="Disapprove"
+                              aria-label="Disapprove"
+                            >
+                              <XCircle size={13} strokeWidth={1.8} />
+                              <span className="text-[8px] font-semibold leading-none">Disapprove</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleViewDocument(row)}
+                              disabled={isProcessing}
+                              className="inline-flex h-9 flex-col items-center justify-center gap-0.5 rounded border border-blue-200 bg-blue-50 text-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+                              title="View Document"
+                              aria-label="View Document"
+                            >
+                              <Eye size={13} strokeWidth={1.8} />
+                              <span className="text-[8px] font-semibold leading-none">View</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleViewAttachment(row)}
+                              disabled={isProcessing}
+                              className="inline-flex h-9 flex-col items-center justify-center gap-0.5 rounded border border-amber-200 bg-amber-50 text-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
+                              title="View Attachment"
+                              aria-label="View Attachment"
+                            >
+                              <Paperclip size={13} strokeWidth={1.8} />
+                              <span className="text-[8px] font-semibold leading-none">Attach</span>
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="px-3 py-10 text-center text-[12px] text-slate-500">
+                    No approval detail available.
+                  </div>
+                )}
+              </div>
+
               <div
-                className="relative min-h-0 min-w-0 flex-1 overflow-auto"
+                className="relative hidden min-h-0 min-w-0 flex-1 overflow-auto md:block"
               >
                 <table
                   className="table-fixed border-separate border-spacing-0 text-[11px]"
@@ -1082,6 +1431,16 @@ const GlobalApprovalModal = forwardRef(
             onClose={() => setAttachParams(null)}
           />
         )}
+
+        <DisapprovalReasonModal
+          isOpen={Boolean(pendingDisapprovalRows.length)}
+          rows={pendingDisapprovalRows}
+          reason={disapprovalReason}
+          isProcessing={isProcessing}
+          onReasonChange={setDisapprovalReason}
+          onCancel={handleCloseDisapprovalModal}
+          onSubmit={handleSubmitDisapproval}
+        />
       </>
     );
   },

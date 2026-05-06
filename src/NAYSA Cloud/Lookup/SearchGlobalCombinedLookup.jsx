@@ -170,6 +170,7 @@ const GlobalCombinedLookup = ({
           onSelectionReset={resetLoadedDetails}
           onClose={handleSummaryAction}
           onCancel={onCancel}
+          modalMaxWidthClass="max-w-[86rem]"
         />
       </div>
 
@@ -210,6 +211,7 @@ const GlobalCombinedLookup = ({
           });
         }}
           onCancel={onCancel}
+          modalMaxWidthClass="max-w-[86rem]"
         />
       </div>
 

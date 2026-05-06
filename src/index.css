@@ -1077,6 +1077,10 @@ body {
   animation: toastSlideOut 0.15s ease-in forwards;
 }
 
+.swal-sonner-info-toast-progress {
+  background: #3b82f6 !important;
+}
+
 @keyframes toastSlideIn {
   from {
     opacity: 0;

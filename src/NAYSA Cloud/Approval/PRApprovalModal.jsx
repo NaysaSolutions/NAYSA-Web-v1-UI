@@ -1,12 +1,53 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fetchData } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { apiClient, fetchData, postRequest } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
-import { useSwalErrorAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
+import {
+  useSwalProceedConfirm,
+  useSwalErrorAlert,
+  useSwalInfoAlert,
+  useSwalSuccessAlert
+} from "@/NAYSA Cloud/Global/behavior.jsx";
+import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import GlobalApprovalModal from "@/NAYSA Cloud/Approval/GlobaApprovalModal.jsx";
 
 const ENDPOINT = "getPRApproval";
+const APPROVE_ENDPOINT = "approvePR";
 const EMPTY_PARAMS = {};
+
+const getDirectProfileImage = (row) =>
+  row?.profileImageUrl ||
+  row?.PROFILE_IMAGE_URL ||
+  row?.profileImage ||
+  row?.PROFILE_IMAGE ||
+  row?.profilePhoto ||
+  row?.PROFILE_PHOTO ||
+  row?.userPhoto ||
+  row?.USER_PHOTO ||
+  row?.photo ||
+  row?.PHOTO ||
+  row?.picture ||
+  row?.PICTURE ||
+  "";
+
+const buildProfileImageUrl = (userCode, directImageSrc = "") => {
+  if (directImageSrc) return directImageSrc;
+  if (!userCode) return "";
+
+  const apiBaseUrl = (apiClient?.defaults?.baseURL || "").replace(/\/$/, "");
+  if (!apiBaseUrl) return "";
+
+  const companyDb =
+    apiClient?.defaults?.headers?.common?.["X-Company-DB"] || "";
+  const params = new URLSearchParams();
+
+  if (companyDb) params.set("company", companyDb);
+  params.set("t", Date.now().toString());
+
+  return `${apiBaseUrl}/user/profile-image/${encodeURIComponent(
+    userCode,
+  )}?${params.toString()}`;
+};
 
 const getColumnSearchText = (column) =>
   [
@@ -49,19 +90,96 @@ const shouldHideApprovalInfoColumn = (column, approvalLevel) => {
 const parseApprovalRows = (response) => {
   const rawResult = response?.data?.[0]?.result;
 
+  let rows = [];
+
   if (rawResult) {
     const parsed = typeof rawResult === "string" ? JSON.parse(rawResult) : rawResult;
-    if (Array.isArray(parsed)) return parsed?.[0]?.dt1 ?? parsed;
-    return parsed?.dt1 ?? parsed?.data ?? [];
+
+    if (Array.isArray(parsed)) {
+      rows = parsed?.[0]?.dt1 ?? parsed;
+    } else {
+      rows = parsed?.dt1 ?? parsed?.data ?? [];
+    }
+  } else {
+    rows = Array.isArray(response?.data) ? response.data : [];
   }
 
-  return Array.isArray(response?.data) ? response.data : [];
+  return Array.isArray(rows)
+    ? rows.filter((row) => row && Object.keys(row).length > 0 && row.tranId)
+    : [];
+};
+
+const buildApprovePayload = (
+  rows,
+  userCode,
+  userName,
+  appLevel,
+  mode = "Approved",
+  reason = "",
+) => ({
+  tranIds: rows.map((row) => row?.tranId).filter(Boolean).join(","),
+  userCode,
+  userName,
+  appLevel,
+  mode,
+  reason,
+  url: `${window.location.origin}/?page=PRApprovalModal`,
+});
+
+const getPRDisplayNo = (row, index) =>
+  String(
+    row?.docNo ||
+      row?.prNo ||
+      row?.PR_NO ||
+      row?.documentNo ||
+      row?.tranNo ||
+      row?.tranId ||
+      `PR ${index + 1}`,
+  );
+
+const buildApprovedPRMessage = (approvalRows) => {
+  const limit = 5;
+
+  const visibleRows = approvalRows.slice(0, limit);
+
+  const approvedList = visibleRows
+    .map((row, index) => `${index + 1}. ${getPRDisplayNo(row, index)}`)
+    .join("\n");
+
+  const remainingCount = approvalRows.length - limit;
+
+  const moreText =
+    approvalRows.length > limit ? `\n...and +${remainingCount} more` : "";
+
+  return `The following PR${
+    approvalRows.length > 1 ? "s have" : " has"
+  } been approved:\n${approvedList}${moreText}`;
+};
+
+const buildDisapprovedPRMessage = (approvalRows) => {
+  const limit = 5;
+
+  const visibleRows = approvalRows.slice(0, limit);
+
+  const disapprovedList = visibleRows
+    .map((row, index) => `${index + 1}. ${getPRDisplayNo(row, index)}`)
+    .join("\n");
+
+  const remainingCount = approvalRows.length - limit;
+
+  const moreText =
+    approvalRows.length > limit ? `\n...and +${remainingCount} more` : "";
+
+  return `The following PR${
+    approvalRows.length > 1 ? "s have" : " has"
+  } been disapproved:\n${disapprovedList}${moreText}`;
 };
 
 const PRApprovalModal = ({
   isOpen,
   approverName,
   department,
+  userCode,
   params = EMPTY_PARAMS,
   detailRows,
   detailColumns,
@@ -70,13 +188,20 @@ const PRApprovalModal = ({
   onDataLoaded,
   onViewDocument,
   onViewAttachment,
+  onClose,
   ...modalProps
 }) => {
   const { currentUserRow } = useAuth();
   const loadedColumnsRef = useRef(false);
+  const noApprovalAlertShownRef = useRef(false);
   const [columns, setColumns] = useState([]);
   const [rows, setRows] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
+  const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
+
+  const resolvedUserCode = userCode || currentUserRow?.userCode || "";
+  const resolvedUserName = currentUserRow?.userName || "";
 
   const requestParams = params || EMPTY_PARAMS;
   const requestParamsKey = useMemo(
@@ -84,9 +209,13 @@ const PRApprovalModal = ({
     [requestParams],
   );
   const resolvedColumns = Array.isArray(detailColumns) ? detailColumns : columns;
-  const effectiveApproverName = approverName || currentUserRow?.userName || "";
-  const effectiveDepartment = department || currentUserRow?.rcName || "";
-  const approvalLevel = currentUserRow?.prAppLevel || "";
+  const effectiveApproverName = approverName || currentUserRow?.userName ||  "";
+  const effectiveApproverImageSrc = useMemo(
+    () => buildProfileImageUrl(resolvedUserCode, getDirectProfileImage(currentUserRow)),
+    [currentUserRow, resolvedUserCode],
+  );
+  const effectiveDepartment = department || currentUserRow?.rcName ||  "";
+  const approvalLevel = currentUserRow?.prAppLevel ||  "";
   const effectiveColumns = useMemo(
     () =>
       resolvedColumns.filter(
@@ -110,28 +239,69 @@ const PRApprovalModal = ({
 
   const fetchApprovalRows = useCallback(
     async () => {
+      if (!resolvedUserCode) {
+        return { approvalRows: [], response: null };
+      }
+
+      const payload = {
+        json_data: {
+          userCode: resolvedUserCode,
+        }
+      };
+
       const response = await fetchData(ENDPOINT, {
-        PARAMS: requestParamsKey,
+        PARAMS: JSON.stringify(payload),
       });
 
       const approvalRows = parseApprovalRows(response);
       return { approvalRows, response };
     },
-    [requestParamsKey],
+    [resolvedUserCode, requestParamsKey],
   );
 
-  const reloadApprovalRows = useCallback(async () => {
+  const showNoApprovalAvailableAlert = useCallback(() => {
+    if (noApprovalAlertShownRef.current) return;
+
+    noApprovalAlertShownRef.current = true;
+    useSwalInfoAlert(
+      "PR Approval",
+      "There is no PR for approval available.",
+    );
+    onClose?.();
+  }, [onClose]);
+
+  const reloadApprovalRows = useCallback(async ({ showLoading = true } = {}) => {
     if (Array.isArray(detailRows)) {
       setRows(detailRows);
-      return;
+      if (detailRows.length) {
+        noApprovalAlertShownRef.current = false;
+        setIsInitialLoadComplete(true);
+      } else {
+        setIsInitialLoadComplete(false);
+        showNoApprovalAvailableAlert();
+      }
+      return detailRows;
     }
 
-    setIsLoading(true);
+    if (!resolvedUserCode) {
+      return [];
+    }
+
+    if (showLoading) setIsLoading(true);
 
     try {
       const { approvalRows, response } = await fetchApprovalRows();
-      setRows(Array.isArray(approvalRows) ? approvalRows : []);
+      const nextRows = Array.isArray(approvalRows) ? approvalRows : [];
+      setRows(nextRows);
       onDataLoaded?.(approvalRows, response);
+      if (nextRows.length) {
+        noApprovalAlertShownRef.current = false;
+        setIsInitialLoadComplete(true);
+      } else {
+        setIsInitialLoadComplete(false);
+        showNoApprovalAvailableAlert();
+      }
+      return nextRows;
     } catch (error) {
       console.error("Reload PR approval failed:", error);
       setRows([]);
@@ -141,18 +311,132 @@ const PRApprovalModal = ({
           error?.message ||
           "Unable to reload PR approval detail.",
       );
+      return [];
     } finally {
-      setIsLoading(false);
+      if (showLoading) setIsLoading(false);
     }
-  }, [detailRows, fetchApprovalRows, onDataLoaded]);
+  }, [detailRows, fetchApprovalRows, onDataLoaded, resolvedUserCode, showNoApprovalAvailableAlert]);
+
+  const handleApproveRows = useCallback(
+    async (approvalRows) => {
+      const targetRows = Array.isArray(approvalRows)
+        ? approvalRows
+        : [approvalRows].filter(Boolean);
+      const approvalCount = targetRows.length;
+      const payload = buildApprovePayload(
+        targetRows,
+        resolvedUserCode,
+        resolvedUserName,
+        approvalLevel,
+        "Approved",
+      );
+
+      if (!payload.tranIds) return;
+
+      const confirm = await useSwalProceedConfirm(
+        "Approve PR?",
+        `Approve ${approvalCount} selected transaction${
+          approvalCount > 1 ? "s" : ""
+        }?`,
+        "Yes, approve",
+      );
+
+      if (!confirm?.isConfirmed) return;
+
+      setIsApproving(true);
+
+      try {
+        const finalPayload = {
+          json_data: payload
+        };
+
+        await postRequest(APPROVE_ENDPOINT, finalPayload);
+
+        await useSwalSuccessAlert(
+          "PR Approved",
+          buildApprovedPRMessage(targetRows),
+        );
+        await reloadApprovalRows({ showLoading: false });
+      } catch (error) {
+        console.error("Approve PR failed:", error);
+        useSwalErrorAlert(
+          "PR Approval",
+          error?.response?.data?.message ||
+            error?.message ||
+            "Unable to approve selected PR transaction.",
+        );
+      } finally {
+        setIsApproving(false);
+      }
+    },
+    [approvalLevel, reloadApprovalRows, resolvedUserCode, resolvedUserName],
+  );
+
+  const handleDisapproveRows = useCallback(
+    async (approvalRows, reason) => {
+      const targetRows = Array.isArray(approvalRows)
+        ? approvalRows
+        : [approvalRows].filter(Boolean);
+      const trimmedReason = String(reason || "").trim();
+      const payload = buildApprovePayload(
+        targetRows,
+        resolvedUserCode,
+        resolvedUserName,
+        approvalLevel,
+        "Disapprove",
+        trimmedReason,
+      );
+
+      if (!payload.tranIds || !trimmedReason) return false;
+
+      setIsApproving(true);
+
+      try {
+        const finalPayload = {
+          json_data: payload
+        };
+
+        console.log("Disapprove payload:", JSON.stringify(finalPayload));
+        await postRequest(APPROVE_ENDPOINT, finalPayload);
+
+        await useSwalSuccessAlert(
+          "PR Disapproved",
+          buildDisapprovedPRMessage(targetRows),
+        );
+        await reloadApprovalRows({ showLoading: false });
+        return true;
+      } catch (error) {
+        console.error("Disapprove PR failed:", error);
+        useSwalErrorAlert(
+          "PR Approval",
+          error?.response?.data?.message ||
+            error?.message ||
+            "Unable to disapprove selected PR transaction.",
+        );
+        return false;
+      } finally {
+        setIsApproving(false);
+      }
+    },
+    [approvalLevel, reloadApprovalRows, resolvedUserCode, resolvedUserName],
+  );
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      noApprovalAlertShownRef.current = false;
+      setIsInitialLoadComplete(false);
+      setRows([]);
+      return;
+    }
+
+    if (!resolvedUserCode) return;
 
     let alive = true;
 
     (async () => {
       setIsLoading(true);
+      setIsInitialLoadComplete(false);
+      setRows([]);
 
       try {
         await loadColumns();
@@ -161,17 +445,31 @@ const PRApprovalModal = ({
 
         if (Array.isArray(detailRows)) {
           setRows(detailRows);
+          if (detailRows.length) {
+            noApprovalAlertShownRef.current = false;
+            setIsInitialLoadComplete(true);
+          } else {
+            showNoApprovalAvailableAlert();
+          }
           return;
         }
 
         const { approvalRows, response } = await fetchApprovalRows();
         if (!alive) return;
-        setRows(Array.isArray(approvalRows) ? approvalRows : []);
+        const nextRows = Array.isArray(approvalRows) ? approvalRows : [];
+        setRows(nextRows);
         onDataLoaded?.(approvalRows, response);
+        if (nextRows.length) {
+          noApprovalAlertShownRef.current = false;
+          setIsInitialLoadComplete(true);
+        } else {
+          showNoApprovalAvailableAlert();
+        }
       } catch (error) {
         console.error("Fetch PR approval failed:", error);
         if (alive) {
           setRows([]);
+          setIsInitialLoadComplete(true);
           useSwalErrorAlert(
             "PR Approval",
             error?.response?.data?.message ||
@@ -187,24 +485,47 @@ const PRApprovalModal = ({
     return () => {
       alive = false;
     };
-  }, [isOpen, detailRows, fetchApprovalRows, loadColumns]);
+  }, [
+    isOpen,
+    resolvedUserCode,
+    detailRows,
+    fetchApprovalRows,
+    loadColumns,
+    onDataLoaded,
+    showNoApprovalAvailableAlert,
+  ]);
+
+  if (!isOpen) return null;
+
+  if (noApprovalAlertShownRef.current && !rows.length) return null;
+
+  if (!resolvedUserCode || !isInitialLoadComplete || (isLoading && !rows.length)) {
+    return <LoadingSpinner />;
+  }
 
   return (
     <GlobalApprovalModal
       {...modalProps}
       isOpen={isOpen}
+      onClose={onClose}
       title={transactionLabel}
       transactionLabel={transactionLabel}
       documentName={documentName}
       approverName={effectiveApproverName}
+      approverImageSrc={effectiveApproverImageSrc}
       approvalLevel={approvalLevel}
       department={effectiveDepartment}
       detailColumns={effectiveColumns}
       detailRows={rows}
       isDetailLoading={isLoading}
+      isProcessing={isApproving}
       onViewDocument={onViewDocument}
       onViewAttachment={onViewAttachment}
       onReloadRecords={reloadApprovalRows}
+      onRowApprove={handleApproveRows}
+      onRowDisapprove={handleDisapproveRows}
+      onApproveSelected={handleApproveRows}
+      onRejectSelected={handleDisapproveRows}
     />
   );
 };

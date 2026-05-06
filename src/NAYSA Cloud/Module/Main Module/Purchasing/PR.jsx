@@ -33,7 +33,7 @@ import BarcodeQrReaderModal from "../../../Lookup/SearchGlobalQRBarCodeReader.js
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 
 // Configuration
-import {  apiClient,fetchDataJson } from "../../../Configuration/BaseURL.jsx";
+import {  apiClient,fetchDataJson, postRequest } from "../../../Configuration/BaseURL.jsx";
 import { useReset } from "../../../Components/ResetContext";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 
@@ -81,6 +81,7 @@ import {
   useSwalvalidateRequiredFields,
   useSwalInfoAlert,
   useSwalConfirmAlert,
+  useSwalProceedConfirm,
   useSwalHandleOpenSpecsModal,
   useSwalSuccessAlert,
   useSwalErrorAlert,
@@ -161,6 +162,7 @@ const toDateInputValue = (value) => {
     documentNo: "",
     documentStatus: "",
     status: "",
+    appLevel:0,
     originalDocStatus:"O",
 
     // UI state
@@ -248,6 +250,7 @@ const toDateInputValue = (value) => {
     documentStatus,
     documentNo,
     status,
+    appLevel,
     originalDocStatus,
 
     activeTab,
@@ -329,9 +332,24 @@ const toDateInputValue = (value) => {
     CLOSED: "global-tran-stat-text-finalized-ui",
   };
   const statusColor = statusMap[displayStatus] || "";
+  const maxApprovalLevel = Number(currentUserRow?.prMaxAppLevel || 0);
+  const currentApprovalLevel = Number(appLevel ?? 0);
+  const approvalStatusHiddenStatuses = ["CANCELLED", "POSTED", "FINALIZED", "CLOSED"];
+  const showApprovalStatus =
+    !!documentID &&
+    maxApprovalLevel > 0 &&
+    !approvalStatusHiddenStatuses.includes(String(displayStatus || "").toUpperCase());
+  const approvalStatus = (() => {
+    if (!showApprovalStatus) return "";
+    if (currentApprovalLevel === -1) return "Disapproved Transaction";
+    if (currentApprovalLevel >= maxApprovalLevel) return "Approved Transaction";
+    return `Awaiting for L${currentApprovalLevel + 1} Approval`;
+  })();
   const isFormDisabled = isViewDocumentUrl || ["FINALIZED", "CANCELLED", "CLOSED"].includes(
     displayStatus
   );
+
+
 
   const prDetailColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
@@ -466,6 +484,8 @@ useEffect(() => {
     clearPrDetailSorting();
     loadCompanyData();
 
+   
+
     
     updateState({
       branchCode: currentUserRow?.branchCode||"",
@@ -594,6 +614,7 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
 
       documentStatus: data.prHStatus,
       status: data.prStatus,
+      appLevel: data.appLevel,
       originalDocStatus:data.prHStatus,
       documentID: data.prId,
       documentNo: data.prNo,
@@ -1461,6 +1482,55 @@ const handleHeaderStatusChange = (value) => {
 
 
 
+  const handleNotify = async () => {
+    if (!documentID) return;
+
+    const confirm = await useSwalProceedConfirm(
+      "Notify Approver?",
+      `Do you want to notify the 1st Level Approver for PR ${documentNo || documentID}?`,
+      "Yes, notify",
+    );
+
+    if (!confirm?.isConfirmed) return;
+
+    updateState({ showSpinner: true });
+
+    try {
+      const payload = {
+        json_data: {
+          tranIds: String(documentID),
+          userCode,
+          userName: currentUserRow?.userName || "",
+          appLevel: currentUserRow?.prAppLevel || "",
+          mode: "Notify",
+          reason: "",
+          url: `${window.location.origin}/?page=PRApprovalModal`,
+        },
+      };
+
+      await postRequest("approvePR", payload);
+
+      await useSwalSuccessAlert(
+        "PR Notified",
+        `PR ${documentNo || documentID} has been notified to its Approver.`,
+      );
+
+      if (Number(appLevel) === -1 && documentNo && branchCode) {
+        await fetchTranData(documentNo, branchCode);
+      }
+    } catch (error) {
+      console.error("Notify PR approver failed:", error);
+      useSwalErrorAlert(
+        "PR Notify",
+        error?.response?.data?.message ||
+          error?.response?.data?.error ||
+          error?.message ||
+          "Unable to notify the PR approver.",
+      );
+    } finally {
+      updateState({ showSpinner: false });
+    }
+  };
 
 
 
@@ -1787,9 +1857,12 @@ const renderPrDetailColumn = (columnKey, row, index) => {
           onCopy={handleCopy} 
           onAttach={handleAttach}
           onUpload={handleUpload}
+          onNotify={handleNotify} 
 
           activeTopTab={topTab} 
           showActions={topTab === "details"} 
+          showNotify={hsDoc?.doc_app === "Y"}
+
           showBIRForm={false}   
           showCopyForm ={true} 
           showUpload ={true} 
@@ -1802,7 +1875,8 @@ const renderPrDetailColumn = (columnKey, row, index) => {
           isSaveDisabled={state.isSaveDisabled || isFormDisabled ||  ((detailRows?.length || 0)=== 0)} 
           isResetDisabled={state.isResetDisabled}
           isAttachDisabled={!documentID}
-          isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
+          isNotifyDisabled={!documentID || displayStatus === "CANCELLED"}
+          isPrintDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "CLOSED" || hasExistingPO || displayStatus === "APPROVED" }
           isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
           isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED"|| displayStatus === "CLOSED" || hasExistingPO }
 
@@ -1819,7 +1893,17 @@ const renderPrDetailColumn = (columnKey, row, index) => {
         <div className={`global-tran-headertext-div-ui ${isViewDocument ? "max-md:!mb-1" : ""}`}>
           <h1 className="global-tran-headertext-ui">{documentTitle}</h1>
         </div>
-        <div className={`global-tran-headerstat-div-ui ${isViewDocument ? "max-md:!mt-0" : ""}`}>
+        <div
+          className={`global-tran-headerstat-div-ui ${
+            showApprovalStatus ? "max-sm:!flex-row max-sm:!items-start max-sm:!justify-center max-sm:!gap-x-6" : ""
+          } ${isViewDocument ? "max-md:!mt-0" : ""}`}
+        >
+          {showApprovalStatus && (
+            <div>
+              <p className="global-tran-headerstat-text-ui">Approval Status</p>
+              <h1 className={`global-tran-stat-text-ui ${statusColor}`}>{approvalStatus}</h1>
+            </div>
+          )}
           <div>
             <p className="global-tran-headerstat-text-ui">Transaction Status</p>
             <h1 className={`global-tran-stat-text-ui ${statusColor}`}>{displayStatus}</h1>
