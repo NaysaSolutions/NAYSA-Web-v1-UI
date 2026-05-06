@@ -345,6 +345,10 @@ const toDateInputValue = (value) => {
     if (currentApprovalLevel >= maxApprovalLevel) return "Approved Transaction";
     return `Awaiting for L${currentApprovalLevel + 1} Approval`;
   })();
+  const approvalStatusColor =
+    currentApprovalLevel === -1
+      ? "text-rose-500 dark:text-rose-400 animate-pulse"
+      : statusColor;
   const isFormDisabled = isViewDocumentUrl || ["FINALIZED", "CANCELLED", "CLOSED"].includes(
     displayStatus
   );
@@ -1901,7 +1905,7 @@ const renderPrDetailColumn = (columnKey, row, index) => {
           {showApprovalStatus && (
             <div>
               <p className="global-tran-headerstat-text-ui">Approval Status</p>
-              <h1 className={`global-tran-stat-text-ui ${statusColor}`}>{approvalStatus}</h1>
+              <h1 className={`global-tran-stat-text-ui ${approvalStatusColor}`}>{approvalStatus}</h1>
             </div>
           )}
           <div>

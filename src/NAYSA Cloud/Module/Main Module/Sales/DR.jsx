@@ -1040,7 +1040,7 @@ const handleActivityOption = async (action) => {
   };
 
   const getOpenSOShipToAddress = (records = []) => {
-    const addressKeys = "shipto_addr"
+    const addressKeys = ["shipto_addr", "shipToAddr", "shipToAddress", "shipToAddr1"];
     const source = (records || []).find((record) =>
       addressKeys.some((key) => String(record?.[key] || "").trim())
     );
