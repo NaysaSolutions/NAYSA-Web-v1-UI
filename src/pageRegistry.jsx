@@ -83,6 +83,7 @@ import CWTMonitoring from "./NAYSA Cloud/Query/CWTInq/CWTMonitoring.jsx";
 import INTAXINQ from "./NAYSA Cloud/Query/INTAXInq/INTAXINQ.jsx";
 import OUTAXINQ from "./NAYSA Cloud/Query/OUTAXInq/OUTAXINQ.jsx";
 import AuditTrail from "./NAYSA Cloud/Query/AuditTrail/AuditTail.jsx";
+import MSINQ from "./NAYSA Cloud/Query/INVInq/MSStockCard.jsx";
 
 // --- PRINTING / MODALS ---
 // import ARReportModal from "./NAYSA Cloud/Printing/ARReport.jsx";
@@ -250,6 +251,7 @@ export const pageRegistry = {
   CheckRL,
   GLINQ,
   AuditTrail,
+  MSINQ,
 
   // Global Reference
   Company,

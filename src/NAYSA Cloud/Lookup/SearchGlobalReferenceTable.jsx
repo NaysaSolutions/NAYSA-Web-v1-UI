@@ -813,36 +813,44 @@ const SearchGlobalReferenceTable = forwardRef(
       allGroupKeys.every((key) => expandedGroups[key]);
 
     useEffect(() => {
-      if (isMobile || effectiveGroupBy.length === 0) {
-        prevGroupKeysRef.current = [];
-        setExpandedGroups({});
-        setCurrentPage(1);
-        return;
-      }
+  if (isMobile || effectiveGroupBy.length === 0) {
+    prevGroupKeysRef.current = [];
 
-      setExpandedGroups((prev) => {
-        const prevKeys = prevGroupKeysRef.current || [];
-        const wasAllExpanded =
-          prevKeys.length > 0 && prevKeys.every((key) => prev[key]);
+    setExpandedGroups((prev) => {
+      if (!prev || Object.keys(prev).length === 0) return prev;
+      return {};
+    });
 
-        let nextState = {};
+    setCurrentPage((prev) => (prev === 1 ? prev : 1));
+    return;
+  }
 
-        if (wasAllExpanded) {
-          nextState = Object.fromEntries(
-            allGroupKeys.map((key) => [key, true]),
-          );
-        } else {
-          nextState = Object.fromEntries(
-            allGroupKeys.filter((key) => prev[key]).map((key) => [key, true]),
-          );
-        }
+  setExpandedGroups((prev) => {
+    const prevKeys = prevGroupKeysRef.current || [];
+    const wasAllExpanded =
+      prevKeys.length > 0 && prevKeys.every((key) => prev[key]);
 
-        prevGroupKeysRef.current = allGroupKeys;
-        return nextState;
-      });
+    let nextState = {};
 
-      setCurrentPage(1);
-    }, [isMobile, effectiveGroupBy, allGroupKeys]);
+    if (wasAllExpanded) {
+      nextState = Object.fromEntries(allGroupKeys.map((key) => [key, true]));
+    } else {
+      nextState = Object.fromEntries(
+        allGroupKeys.filter((key) => prev[key]).map((key) => [key, true])
+      );
+    }
+
+    prevGroupKeysRef.current = allGroupKeys;
+
+    const prevJson = JSON.stringify(prev || {});
+    const nextJson = JSON.stringify(nextState);
+    if (prevJson === nextJson) return prev;
+
+    return nextState;
+  });
+
+  setCurrentPage((prev) => (prev === 1 ? prev : 1));
+}, [isMobile, effectiveGroupBy, allGroupKeys]);
 
     const toggleGroup = (node) => {
       const uniqueId = getGroupNodeId(node);
@@ -1954,7 +1962,7 @@ const handleConfirmExport = async (fileName) => {
                   </tr>
 
                   {showFilters && hasOriginalData && (
-                    <tr className="sticky top-[34px] z-20 bg-white">
+                    <tr className="sticky top-[30px] z-20 bg-white">
                       {visibleCols.map((col, index) => {
                         const isStickyLeft = index < 3;
                         const leftOffset = getStickyLeftOffset(index);
