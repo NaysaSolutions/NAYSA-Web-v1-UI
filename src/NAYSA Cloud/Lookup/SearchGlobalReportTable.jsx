@@ -1005,7 +1005,8 @@ const SearchGlobalReportTable = forwardRef(
         <div
           className="p-2 rounded-md flex flex-col md:flex-row md:items-center md:justify-between gap-2"
           onDragOver={(e) => e.preventDefault()}
-          onDrop={() => {
+          onDrop={(e) => {
+            e.preventDefault();
             if (!draggedCol) return;
             setGroupBy((p) => {
               const current = p.filter(
@@ -1750,6 +1751,7 @@ const SearchGlobalReportTable = forwardRef(
                         onDragStart={(e) => {
                           if (autoFillGridState) return;
                           setDraggedCol(col.key);
+                          e.dataTransfer.setData("text/plain", col.key);
                           e.dataTransfer.effectAllowed = "move";
                         }}
                         onDragOver={(e) => {
