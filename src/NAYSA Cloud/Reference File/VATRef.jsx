@@ -352,7 +352,7 @@ const VATRef = () => {
       {
         key: "__actions",
         label: <span className="hidden md:inline">Actions</span>,
-        width: 50,
+        width: 90,
         render: (row) => (
           <div className="flex gap-2 justify-center w-full">
             <button
@@ -389,8 +389,8 @@ const VATRef = () => {
           </div>
         ),
       },
-      { key: "vatCode", label: "VAT Code", sortable: true },
-      { key: "vatName", label: "VAT Name", sortable: true },
+      { key: "vatCode", label: "VAT Code", sortable: true, width: 120 },
+      { key: "vatName", label: "VAT Name", sortable: true, width: 300 },
       {
         key: "vatType",
         label: "VAT Type",
