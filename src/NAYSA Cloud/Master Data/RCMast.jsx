@@ -300,7 +300,7 @@ const RCMast = () => {
       {
         key: "__actions",
         label: <span className="hidden md:inline">Actions</span>,
-        width: 50,
+        width: 90,
         render: (row) => (
           <div className="flex gap-2 justify-center w-full">
             <button
@@ -337,12 +337,13 @@ const RCMast = () => {
           </div>
         ),
       },
-      { key: "rcCode", label: "RC Code", sortable: true },
-      { key: "rcName", label: "RC Name", sortable: true },
+      { key: "rcCode", label: "RC Code", sortable: true, width: 120 },
+      { key: "rcName", label: "RC Name", sortable: true, width: 350, maxWidth: 350 },
       {
         key: "rcTypeCode",
         label: "RC Type",
         sortable: true,
+        width: 200,
         render: (row) => (
           <div className="whitespace-nowrap">
             {row.rcTypeCode
@@ -354,12 +355,14 @@ const RCMast = () => {
       {
         key: "rcGroup",
         label: "RC Group",
+        width: 120,
         render: (row) => (row.rcGroup === "Y" ? "Yes" : "No"),
       },
-      { key: "groupCode", label: "Group Code", sortable: true },
+      { key: "groupCode", label: "Group Code", sortable: true, width: 200, },
       {
         key: "active",
         label: "Active",
+        width: 120,
         render: (row) => (row.active === "Y" ? "Yes" : "No"),
       },
     ],
