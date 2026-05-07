@@ -1,3 +1,4 @@
+// src/NAYSA Cloud/Master Data/CustMastTabs/ReferenceCodesTab.jsx
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useState, useRef } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -5,6 +6,7 @@ import {
   faMapMarkedAlt,
   faMapPin,
   faUsers,
+  faBuilding,
   faTags,
   faReceipt,
   faFileInvoiceDollar,
@@ -12,51 +14,52 @@ import {
   faChevronRight,
 } from "@fortawesome/free-solid-svg-icons";
 
+// ✅ Per-reference JSX (new)
 import PayTermRef from "@/NAYSA Cloud/Master Data/CustMastTabs/ReferenceCodes/PayTermRef";
 import BillTermRef from "@/NAYSA Cloud/Master Data/CustMastTabs/ReferenceCodes/BillTermRef";
-import SalesRep from "@/NAYSA Cloud/Master Data/CustMastTabs/ReferenceCodes/SalesRep";
-import ZoneRef from "@/NAYSA Cloud/Master Data/CustMastTabs/ReferenceCodes/ZoneRef";
-import AreaRef from "@/NAYSA Cloud/Master Data/CustMastTabs/ReferenceCodes/AreaRef";
-import CustTypeRef from "@/NAYSA Cloud/Master Data/CustMastTabs/ReferenceCodes/CustTypeRef";
-
+import SalesRep from "@/NAYSA Cloud/Reference File/SalesRep.jsx";
 /* ===================== UI helpers ===================== */
 const SectionHeader = ({ title, subtitle }) => (
   <div className="mb-3">
     <div className="text-sm font-bold text-gray-800">{title}</div>
-    {subtitle ? (
-      <div className="text-xs text-gray-500 mt-0.5 leading-4">{subtitle}</div>
-    ) : null}
+    {subtitle ? <div className="text-xs text-gray-500 mt-0.5 leading-4">{subtitle}</div> : null}
   </div>
 );
 
+// ✅ Prevent the "white box" from stretching
 const Card = ({ children, className = "" }) => (
   <div className={`global-tran-textbox-group-div-ui self-start !h-fit ${className}`}>
     {children}
   </div>
 );
 
+
 const ReferenceCodesTab = forwardRef(({ variant = "customer", onStateChange }, ref) => {
   const payTermRef = useRef(null);
-  const billTermRef = useRef(null);
-  const zoneRef = useRef(null); 
-  const areaRef = useRef(null);
-  const custTypeRef = useRef(null);
-  const salesRepRef = useRef(null);
+  useImperativeHandle(ref, () => ({
+  add: () => payTermRef.current?.add?.(),
+  save: () => payTermRef.current?.save?.(),
+  reset: () => payTermRef.current?.reset?.(),
+}));
 
   const [collapseNav, setCollapseNav] = useState(false);
 
   const refTabs = useMemo(() => {
+    // Customer = full list
     const full = [
       { id: "salesrep", label: "Agent Codes", icon: faUserTie },
       { id: "zone", label: "Zone Codes", icon: faMapMarkedAlt },
       { id: "area", label: "Area Codes", icon: faMapPin },
       { id: "custtype", label: "Customer Types", icon: faUsers },
       { id: "billingterm", label: "Billing Terms", icon: faReceipt },
-      // { id: "pricegroup", label: "Price Group", icon: faTags },
+      { id: "pricegroup", label: "Price Group", icon: faTags },
+
     ];
 
+    // Vendor = only terms (plus anything you want vendor to maintain)
     const vendorOnly = [
       { id: "payterm", label: "Payment Terms", icon: faFileInvoiceDollar },
+
     ];
 
     return variant === "vendor" ? vendorOnly : full;
@@ -65,65 +68,24 @@ const ReferenceCodesTab = forwardRef(({ variant = "customer", onStateChange }, r
   const [activeRefTab, setActiveRefTab] = useState(refTabs?.[0]?.id || "payterm");
 
   useEffect(() => {
+    // if variant switches and current tab no longer exists, reset to first available
     if (!refTabs.some((t) => t.id === activeRefTab)) {
       setActiveRefTab(refTabs?.[0]?.id || "payterm");
     }
-  }, [refTabs, activeRefTab]);
-
-  useImperativeHandle(ref, () => ({
-    add: () => {
-      if (activeRefTab === "payterm") payTermRef.current?.add?.();
-      if (activeRefTab === "billingterm") billTermRef.current?.add?.();
-      if (activeRefTab === "zone") zoneRef.current?.add?.(); 
-      if (activeRefTab === "area") areaRef.current?.add?.();
-      if (activeRefTab === "custtype") custTypeRef.current?.add?.();
-      if (activeRefTab === "salesrep") salesRepRef.current?.add?.();
-    },
-    save: () => {
-      if (activeRefTab === "payterm") payTermRef.current?.save?.();
-      if (activeRefTab === "billingterm") billTermRef.current?.save?.();
-      if (activeRefTab === "zone") zoneRef.current?.save?.();
-      if (activeRefTab === "area") areaRef.current?.save?.();
-      if (activeRefTab === "custtype") custTypeRef.current?.save?.();
-      if (activeRefTab === "salesrep") salesRepRef.current?.save?.();
-    },
-    reset: () => {
-      if (activeRefTab === "payterm") payTermRef.current?.reset?.();
-      if (activeRefTab === "billingterm") billTermRef.current?.reset?.();
-      if (activeRefTab === "zone") zoneRef.current?.reset?.(); 
-      if (activeRefTab === "area") areaRef.current?.reset?.();
-      if (activeRefTab === "custtype") custTypeRef.current?.reset?.();
-      if (activeRefTab === "salesrep") salesRepRef.current?.reset?.();
-    },
-  }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refTabs]);
 
   const activeLabel = refTabs.find((t) => t.id === activeRefTab)?.label || "Reference";
 
   const renderRight = () => {
+    // ✅ Wired tabs
     if (activeRefTab === "payterm") {
       return <PayTermRef ref={payTermRef} onStateChange={onStateChange} />;
     }
+    if (activeRefTab === "billingterm") return <BillTermRef />;
+    if (activeRefTab === "salesrep") return <SalesRep />;
 
-    if (activeRefTab === "billingterm") {
-      return <BillTermRef ref={billTermRef} onStateChange={onStateChange} />;
-    }
-
-    if (activeRefTab === "zone") {
-      return <ZoneRef ref={zoneRef} onStateChange={onStateChange} />;
-    }
-
-    if (activeRefTab === "area") {
-      return <AreaRef ref={areaRef} onStateChange={onStateChange} />;
-    }
-
-    if (activeRefTab === "custtype") {
-      return <CustTypeRef ref={custTypeRef} onStateChange={onStateChange} />;
-    }
-
-    if (activeRefTab === "salesrep") {
-      return <SalesRep ref={salesRepRef} onStateChange={onStateChange} />;
-    }
-
+    // ✅ Placeholders (until you wire API)
     return (
       <Card>
         <SectionHeader
@@ -135,6 +97,7 @@ const ReferenceCodesTab = forwardRef(({ variant = "customer", onStateChange }, r
   };
 
   return (
+    // ✅ FLEX layout so collapse works properly (grid col-span won't animate reliably)
     <div className="flex flex-col lg:flex-row gap-3 rounded-lg relative items-start">
       {/* LEFT NAV */}
       <div

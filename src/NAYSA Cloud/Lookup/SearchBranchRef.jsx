@@ -27,7 +27,7 @@ const BranchLookupModal = ({
   isOpen,
   onClose,
   customParam = "",
-  title = "Search Branch Code",
+  title = "Search Branch Codes",
   withPagination = false, // New parameter: defaults to false
 }) => {
   const [filters, setFilters] = useState({

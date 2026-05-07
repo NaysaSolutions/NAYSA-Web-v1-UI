@@ -8,7 +8,6 @@ import SearchATCRef from "@/NAYSA Cloud/Lookup/SearchATCRef.jsx";
 import SearchVATRef from "@/NAYSA Cloud/Lookup/SearchVATRef.jsx";
 import SearchBillTermRef from "@/NAYSA Cloud/Lookup/SearchBillTermRef.jsx";
 import SearchCurrRef from "@/NAYSA Cloud/Lookup/SearchCurrRef.jsx";
-import SearchSalesRepRef from "@/NAYSA Cloud/Lookup/SearchSalesRepRef.jsx";
 import CustTypeLookupModal from "@/NAYSA Cloud/Lookup/SearchCustType.jsx";
 import AreaLookupModal from "@/NAYSA Cloud/Lookup/SearchArea.jsx";
 import ZoneLookupModal from "@/NAYSA Cloud/Lookup/SearchZone.jsx";
@@ -76,7 +75,7 @@ const CustSetupTab = forwardRef(
 
     const taxClass = useMemo(() => normalizeUpper(form?.taxClass || ""), [form?.taxClass]);
     const isIndividual = taxClass === "WI";
-
+    
     const buildRegisteredName = (fn, mn, ln) => {
       return [fn, mn, ln].map((v) => String(v ?? "").trim()).filter(Boolean).join(" ");
     };
@@ -88,23 +87,23 @@ const CustSetupTab = forwardRef(
       if (!isEditing || !isIndividual) return;
 
       const reg = buildRegisteredName(form.firstName, form.middleName, form.lastName);
-
+      
       if (reg && (form.custName || "") !== reg) {
         const updates = { custName: reg };
-
+        
         // Auto-sync Business Name if not manually touched
         if (!nameAutoRef.current.businessTouched || !form.businessName) {
           updates.businessName = reg;
         }
-
+        
         onChangeForm(updates);
       }
     }, [isEditing, isIndividual, form.firstName, form.middleName, form.lastName]);
 
     // --- 4. LOOKUP & OPTIONS ---
-    const [lookups, setLookups] = useState({
+    const [lookups, setLookups] = useState({ 
       cust: false, branch: false, atc: false, vat: false, billTerm: false, curr: false,
-      custType: false, area: false, zone: false, salesRep: false,
+      custType: false, area: false, zone: false,
     });
     const toggleLookup = (key, val) => setLookups(prev => ({ ...prev, [key]: val }));
 
@@ -135,60 +134,60 @@ const CustSetupTab = forwardRef(
               <FieldRenderer label="Tax Rate Class" required type="select" value={taxClass} options={mappedTaxClassOptions} onChange={(v) => onChangeForm({ taxClass: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} />
             </div>
 
-            <FieldRenderer
-              label="Registered Name"
-              required
-              type="text"
-              value={form?.custName || ""}
-              onChange={(v) => onChangeForm({ custName: getValue(v) })}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-              maxLength={getLen("cust_name", 150)}
+            <FieldRenderer 
+              label="Registered Name" 
+              required 
+              type="text" 
+              value={form?.custName || ""} 
+              onChange={(v) => onChangeForm({ custName: getValue(v) })} 
+              readOnly={isReadOnly} 
+              disabled={isDisabled} 
+              maxLength={getLen("cust_name", 150)} 
             />
 
-            <FieldRenderer
-              label="Business Name"
-              required={!isIndividual}
-              type="text"
-              value={form?.businessName || ""}
-              onChange={(v) => {
-                nameAutoRef.current.businessTouched = true;
-                onChangeForm({ businessName: getValue(v) });
-              }}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-              maxLength={getLen("business_name", 150)}
+            <FieldRenderer 
+              label="Business Name" 
+              required={!isIndividual} 
+              type="text" 
+              value={form?.businessName || ""} 
+              onChange={(v) => { 
+                nameAutoRef.current.businessTouched = true; 
+                onChangeForm({ businessName: getValue(v) }); 
+              }} 
+              readOnly={isReadOnly} 
+              disabled={isDisabled} 
+              maxLength={getLen("business_name", 150)} 
             />
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5">
-              <FieldRenderer
-                label="First Name"
-                required={isIndividual}
-                type="text"
-                value={form?.firstName || ""}
-                onChange={(v) => onChangeForm({ firstName: getValue(v) })}
-                readOnly={isReadOnly || !isIndividual}
-                disabled={isDisabled || !isIndividual}
-                maxLength={getLen("first_name", 100)}
+              <FieldRenderer 
+                label="First Name" 
+                required={isIndividual} 
+                type="text" 
+                value={form?.firstName || ""} 
+                onChange={(v) => onChangeForm({ firstName: getValue(v) })} 
+                readOnly={isReadOnly || !isIndividual} 
+                disabled={isDisabled || !isIndividual} 
+                maxLength={getLen("first_name", 100)} 
               />
-              <FieldRenderer
-                label="Middle Name"
-                type="text"
-                value={form?.middleName || ""}
-                onChange={(v) => onChangeForm({ middleName: getValue(v) })}
-                readOnly={isReadOnly || !isIndividual}
-                disabled={isDisabled || !isIndividual}
-                maxLength={getLen("middle_name", 100)}
+              <FieldRenderer 
+                label="Middle Name" 
+                type="text" 
+                value={form?.middleName || ""} 
+                onChange={(v) => onChangeForm({ middleName: getValue(v) })} 
+                readOnly={isReadOnly || !isIndividual} 
+                disabled={isDisabled || !isIndividual} 
+                maxLength={getLen("middle_name", 100)} 
               />
-              <FieldRenderer
-                label="Last Name"
-                required={isIndividual}
-                type="text"
-                value={form?.lastName || ""}
-                onChange={(v) => onChangeForm({ lastName: getValue(v) })}
-                readOnly={isReadOnly || !isIndividual}
-                disabled={isDisabled || !isIndividual}
-                maxLength={getLen("last_name", 100)}
+              <FieldRenderer 
+                label="Last Name" 
+                required={isIndividual} 
+                type="text" 
+                value={form?.lastName || ""} 
+                onChange={(v) => onChangeForm({ lastName: getValue(v) })} 
+                readOnly={isReadOnly || !isIndividual} 
+                disabled={isDisabled || !isIndividual} 
+                maxLength={getLen("last_name", 100)} 
               />
             </div>
 
@@ -300,356 +299,356 @@ const CustSetupTab = forwardRef(
               {/* Content area */}
               <div className="flex-1 p-5 md:p-7 space-y-5 md:space-y-6 min-w-0">
 
-                {salesTab === "sales" && (
-                  <>
-                    <SectionHeader title="SALES INFORMATION" />
+            {salesTab === "sales" && (
+              <>
+                <SectionHeader title="SALES INFORMATION" />
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-                      <FieldRenderer
-                        label="Sales Rep."
-                        required
-                        type="lookup"
-                        value={form?.salesRep || ""} // Ensure this matches your form key
-                        onLookup={
-                          isDisabled
-                            ? undefined
-                            : () => toggleLookup("salesRep", true)
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+                  <FieldRenderer
+                    label="Sales Rep."
+                    required
+                    type="lookup"
+                    value={form?.salesRep || ""}
+                    onLookup={
+                      isDisabled
+                        ? undefined
+                        : () => toggleLookup("salesRep", true)
+                    }
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                  />
 
-                      <FieldRenderer
-                        label="Customer Type"
-                        type="lookup"
-                        value={form?.customerType || ""}
-                        onLookup={
-                          isDisabled
-                            ? undefined
-                            : () => toggleLookup("custType", true)
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
+                  <FieldRenderer
+                    label="Customer Type"
+                    type="lookup"
+                    value={form?.customerType || ""}
+                    onLookup={
+                      isDisabled
+                        ? undefined
+                        : () => toggleLookup("custType", true)
+                    }
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                  />
 
-                      <FieldRenderer
-                        label="Area"
-                        type="lookup"
-                        value={form?.area || ""}
-                        onLookup={
-                          isDisabled
-                            ? undefined
-                            : () => toggleLookup("area", true)
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
+                  <FieldRenderer
+                    label="Area"
+                    type="lookup"
+                    value={form?.area || ""}
+                    onLookup={
+                      isDisabled
+                        ? undefined
+                        : () => toggleLookup("area", true)
+                    }
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                  />
 
-                      <FieldRenderer
-                        label="Zone"
-                        type="lookup"
-                        value={form?.zone || ""}
-                        onLookup={
-                          isDisabled
-                            ? undefined
-                            : () => toggleLookup("zone", true)
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
+                  <FieldRenderer
+                    label="Zone"
+                    type="lookup"
+                    value={form?.zone || ""}
+                    onLookup={
+                      isDisabled
+                        ? undefined
+                        : () => toggleLookup("zone", true)
+                    }
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                  />
 
-                      <FieldRenderer
-                        label="Chain Flag"
-                        type="select"
-                        value={form?.chainFlag || ""}
-                        options={[]}
-                        onChange={(v) => onChangeForm({ chainFlag: getValue(v) })}
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
+                  <FieldRenderer
+                    label="Chain Flag"
+                    type="select"
+                    value={form?.chainFlag || ""}
+                    options={[]}
+                    onChange={(v) => onChangeForm({ chainFlag: getValue(v) })}
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                  />
 
-                      <FieldRenderer
-                        label="Customer Since"
-                        type="date"
-                        value={form?.custSince || form?.customerSince || ""}
-                        onChange={(v) => {
-                          const value = getValue(v);
-                          onChangeForm({ custSince: value, customerSince: value });
-                        }}
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
+                  <FieldRenderer
+                    label="Customer Since"
+                    type="date"
+                    value={form?.custSince || form?.customerSince || ""}
+                    onChange={(v) => {
+                      const value = getValue(v);
+                      onChangeForm({ custSince: value, customerSince: value });
+                    }}
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                  />
 
-                      <FieldRenderer
-                        label="Chain Code"
-                        type="lookup"
-                        value={form?.chainCode || ""}
-                        onLookup={
-                          isDisabled ? undefined : () => toggleLookup("chain", true)
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
+                  <FieldRenderer
+                    label="Chain Code"
+                    type="lookup"
+                    value={form?.chainCode || ""}
+                    onLookup={
+                      isDisabled ? undefined : () => toggleLookup("chain", true)
+                    }
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                  />
 
-                      <FieldRenderer
-                        label="Chain Customer"
-                        type="lookup"
-                        value={form?.chainCustomer || ""}
-                        onLookup={
-                          isDisabled
-                            ? undefined
-                            : () => toggleLookup("chainCust", true)
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
+                  <FieldRenderer
+                    label="Chain Customer"
+                    type="lookup"
+                    value={form?.chainCustomer || ""}
+                    onLookup={
+                      isDisabled
+                        ? undefined
+                        : () => toggleLookup("chainCust", true)
+                    }
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                  />
 
-                      <div className="md:col-span-2">
-                        <FieldRenderer
-                          label="Shipping Lines"
-                          type="select"
-                          value={form?.shippingLines || ""}
-                          options={[]}
-                          onChange={(v) =>
-                            onChangeForm({ shippingLines: getValue(v) })
-                          }
-                          readOnly={isReadOnly}
-                          disabled={isDisabled}
-                        />
-                      </div>
+                  <div className="md:col-span-2">
+                    <FieldRenderer
+                      label="Shipping Lines"
+                      type="select"
+                      value={form?.shippingLines || ""}
+                      options={[]}
+                      onChange={(v) =>
+                        onChangeForm({ shippingLines: getValue(v) })
+                      }
+                      readOnly={isReadOnly}
+                      disabled={isDisabled}
+                    />
+                  </div>
 
-                      <FieldRenderer
-                        label="Source"
-                        required
-                        type="select"
-                        value={form?.source || ""}
-                        options={sourceOptions}
-                        onChange={(v) => onChangeForm({ source: getValue(v) })}
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
+                  <FieldRenderer
+                    label="Source"
+                    required
+                    type="select"
+                    value={form?.source || ""}
+                    options={sourceOptions}
+                    onChange={(v) => onChangeForm({ source: getValue(v) })}
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                  />
 
-                      <FieldRenderer
-                        label="Currency"
-                        type="lookup"
-                        value={form?.currCode || ""}
-                        onLookup={
-                          isDisabled ? undefined : () => toggleLookup("curr", true)
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
+                  <FieldRenderer
+                    label="Currency"
+                    type="lookup"
+                    value={form?.currCode || ""}
+                    onLookup={
+                      isDisabled ? undefined : () => toggleLookup("curr", true)
+                    }
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                  />
 
-                      <FieldRenderer
-                        label="Price Group"
-                        type="select"
-                        value={form?.priceGroup || ""}
-                        options={[]}
-                        onChange={(v) =>
-                          onChangeForm({ priceGroup: getValue(v) })
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
+                  <FieldRenderer
+                    label="Price Group"
+                    type="select"
+                    value={form?.priceGroup || ""}
+                    options={[]}
+                    onChange={(v) =>
+                      onChangeForm({ priceGroup: getValue(v) })
+                    }
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                  />
 
-                      <FieldRenderer
-                        label="Direct SI/DR WH"
-                        type="lookup"
-                        value={form?.directWarehouse || ""}
-                        onLookup={
-                          isDisabled
-                            ? undefined
-                            : () => toggleLookup("warehouse", true)
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
-                    </div>
+                  <FieldRenderer
+                    label="Direct SI/DR WH"
+                    type="lookup"
+                    value={form?.directWarehouse || ""}
+                    onLookup={
+                      isDisabled
+                        ? undefined
+                        : () => toggleLookup("warehouse", true)
+                    }
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                  />
+                </div>
 
-                    <SectionHeader title="ACCOUNTING INFORMATION" />
+                <SectionHeader title="ACCOUNTING INFORMATION" />
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-                      <FieldRenderer
-                        label="TIN"
-                        required
-                        type="text"
-                        value={form?.custTin || ""}
-                        onChange={(v) => onChangeForm({ custTin: getValue(v) })}
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                        maxLength={getLen("cust_tin", 50)}
-                      />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+                  <FieldRenderer
+                    label="TIN"
+                    required
+                    type="text"
+                    value={form?.custTin || ""}
+                    onChange={(v) => onChangeForm({ custTin: getValue(v) })}
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                    maxLength={getLen("cust_tin", 50)}
+                  />
 
-                      <FieldRenderer
-                        label="ATC Code"
-                        type="lookup"
-                        value={form?.atcCode || ""}
-                        onLookup={
-                          isDisabled ? undefined : () => toggleLookup("atc", true)
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
-                    </div>
+                  <FieldRenderer
+                    label="ATC Code"
+                    type="lookup"
+                    value={form?.atcCode || ""}
+                    onLookup={
+                      isDisabled ? undefined : () => toggleLookup("atc", true)
+                    }
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                  />
+                </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-                      <FieldRenderer
-                        label="VAT Code"
-                        required
-                        type="lookup"
-                        value={form?.vatCode || ""}
-                        onLookup={
-                          isDisabled ? undefined : () => toggleLookup("vat", true)
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+                  <FieldRenderer
+                    label="VAT Code"
+                    required
+                    type="lookup"
+                    value={form?.vatCode || ""}
+                    onLookup={
+                      isDisabled ? undefined : () => toggleLookup("vat", true)
+                    }
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                  />
 
-                      <FieldRenderer
-                        label="Billing Terms"
-                        required
-                        type="lookup"
-                        value={form?.billtermCode || ""}
-                        onLookup={
-                          isDisabled
-                            ? undefined
-                            : () => toggleLookup("billTerm", true)
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                        maxLength={getLen("billterm_code", 20)}
-                      />
-                    </div>
+                  <FieldRenderer
+                    label="Billing Terms"
+                    required
+                    type="lookup"
+                    value={form?.billtermCode || ""}
+                    onLookup={
+                      isDisabled
+                        ? undefined
+                        : () => toggleLookup("billTerm", true)
+                    }
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                    maxLength={getLen("billterm_code", 20)}
+                  />
+                </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-                      <FieldRenderer
-                        label="Business Style"
-                        type="select"
-                        value={form?.businessStyle || ""}
-                        options={[]}
-                        onChange={(v) =>
-                          onChangeForm({ businessStyle: getValue(v) })
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
-                    </div>
-                  </>
-                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+                  <FieldRenderer
+                    label="Business Style"
+                    type="select"
+                    value={form?.businessStyle || ""}
+                    options={[]}
+                    onChange={(v) =>
+                      onChangeForm({ businessStyle: getValue(v) })
+                    }
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                  />
+                </div>
+              </>
+            )}
 
-                {salesTab === "other1" && (
-                  <>
-                    <SectionHeader title="C&C INFORMATION" />
+            {salesTab === "other1" && (
+              <>
+                <SectionHeader title="C&C INFORMATION" />
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-                      <FieldRenderer
-                        label="Credit Investigator"
-                        type="text"
-                        value={form?.creditInvestigator || ""}
-                        onChange={(v) =>
-                          onChangeForm({ creditInvestigator: getValue(v) })
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+                  <FieldRenderer
+                    label="Credit Investigator"
+                    type="text"
+                    value={form?.creditInvestigator || ""}
+                    onChange={(v) =>
+                      onChangeForm({ creditInvestigator: getValue(v) })
+                    }
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                  />
 
-                      <FieldRenderer
-                        label="Credit Limit"
-                        type="number"
-                        value={form?.creditLimit || "0"}
-                        onChange={(v) =>
-                          onChangeForm({ creditLimit: getValue(v) })
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
+                  <FieldRenderer
+                    label="Credit Limit"
+                    type="number"
+                    value={form?.creditLimit || "0"}
+                    onChange={(v) =>
+                      onChangeForm({ creditLimit: getValue(v) })
+                    }
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                  />
 
-                      <FieldRenderer
-                        label="Total AR"
-                        type="number"
-                        value={form?.totalAR || ""}
-                        onChange={(v) => onChangeForm({ totalAR: getValue(v) })}
-                        readOnly={true}
-                        disabled={true}
-                      />
+                  <FieldRenderer
+                    label="Total AR"
+                    type="number"
+                    value={form?.totalAR || ""}
+                    onChange={(v) => onChangeForm({ totalAR: getValue(v) })}
+                    readOnly={true}
+                    disabled={true}
+                  />
 
-                      <FieldRenderer
-                        label="Credit Balance"
-                        type="number"
-                        value={form?.creditBalance || "0"}
-                        onChange={(v) =>
-                          onChangeForm({ creditBalance: getValue(v) })
-                        }
-                        readOnly={true}
-                        disabled={true}
-                      />
-                    </div>
-                  </>
-                )}
+                  <FieldRenderer
+                    label="Credit Balance"
+                    type="number"
+                    value={form?.creditBalance || "0"}
+                    onChange={(v) =>
+                      onChangeForm({ creditBalance: getValue(v) })
+                    }
+                    readOnly={true}
+                    disabled={true}
+                  />
+                </div>
+              </>
+            )}
 
-                {salesTab === "other2" && (
-                  <>
-                    <SectionHeader title="TAX CERTIFICATE SIGNATORY" />
+            {salesTab === "other2" && (
+              <>
+                <SectionHeader title="TAX CERTIFICATE SIGNATORY" />
 
-                    <div className="space-y-4 md:space-y-5">
-                      <FieldRenderer
-                        label="Name"
-                        type="text"
-                        value={form?.taxSignatoryName || ""}
-                        onChange={(v) =>
-                          onChangeForm({ taxSignatoryName: getValue(v) })
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
+                <div className="space-y-4 md:space-y-5">
+                  <FieldRenderer
+                    label="Name"
+                    type="text"
+                    value={form?.taxSignatoryName || ""}
+                    onChange={(v) =>
+                      onChangeForm({ taxSignatoryName: getValue(v) })
+                    }
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                  />
 
-                      <FieldRenderer
-                        label="TIN"
-                        type="text"
-                        value={form?.taxSignatoryTin || ""}
-                        onChange={(v) =>
-                          onChangeForm({ taxSignatoryTin: getValue(v) })
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
+                  <FieldRenderer
+                    label="TIN"
+                    type="text"
+                    value={form?.taxSignatoryTin || ""}
+                    onChange={(v) =>
+                      onChangeForm({ taxSignatoryTin: getValue(v) })
+                    }
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                  />
 
-                      <FieldRenderer
-                        label="Position"
-                        type="text"
-                        value={form?.taxSignatoryPosition || ""}
-                        onChange={(v) =>
-                          onChangeForm({ taxSignatoryPosition: getValue(v) })
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
+                  <FieldRenderer
+                    label="Position"
+                    type="text"
+                    value={form?.taxSignatoryPosition || ""}
+                    onChange={(v) =>
+                      onChangeForm({ taxSignatoryPosition: getValue(v) })
+                    }
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                  />
 
-                      <FieldRenderer
-                        label="Email Address"
-                        type="text"
-                        value={form?.taxSignatoryEmail || ""}
-                        onChange={(v) =>
-                          onChangeForm({ taxSignatoryEmail: getValue(v) })
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
+                  <FieldRenderer
+                    label="Email Address"
+                    type="text"
+                    value={form?.taxSignatoryEmail || ""}
+                    onChange={(v) =>
+                      onChangeForm({ taxSignatoryEmail: getValue(v) })
+                    }
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                  />
 
-                      <FieldRenderer
-                        label="ZIP Code"
-                        type="text"
-                        value={form?.taxSignatoryZip || ""}
-                        onChange={(v) =>
-                          onChangeForm({ taxSignatoryZip: getValue(v) })
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
-                    </div>
-                  </>
-                )}
-              </div>{/* end content area */}
+                  <FieldRenderer
+                    label="ZIP Code"
+                    type="text"
+                    value={form?.taxSignatoryZip || ""}
+                    onChange={(v) =>
+                      onChangeForm({ taxSignatoryZip: getValue(v) })
+                    }
+                    readOnly={isReadOnly}
+                    disabled={isDisabled}
+                  />
+                </div>
+              </>
+            )}
+            </div>{/* end content area */}
             </div>{/* end flex row */}
           </Card>
 
@@ -783,22 +782,7 @@ const CustSetupTab = forwardRef(
           }}
         />
 
-        <SearchSalesRepRef
-          isOpen={lookups.salesRep}
-          onClose={(selected) => {
-            toggleLookup("salesRep", false);
-            if (!selected) return;
-
-            // Updates the form with the selected Sales Rep code
-            onChangeForm({
-              salesRep: getValue(selected?.salesRepCode),
-              // If you also track the name for display purposes elsewhere:
-              salesRepName: getValue(selected?.salesRepName),
-            });
-          }}
-        />
-
-        <ZoneLookupModal
+       <ZoneLookupModal
           isOpen={lookups.zone}
           onClose={(selected) => {
             toggleLookup("zone", false);
@@ -810,9 +794,9 @@ const CustSetupTab = forwardRef(
           }}
         />
       </div>
-    );
-  }
-);
+    ); 
+  } 
+); 
 
 CustSetupTab.displayName = "CustSetupTab";
 export default CustSetupTab;

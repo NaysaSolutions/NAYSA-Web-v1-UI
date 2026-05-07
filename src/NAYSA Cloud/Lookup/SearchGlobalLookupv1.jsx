@@ -26,7 +26,6 @@ import {
   faFilePdf,
   faFileImage,
   faColumns,
-  faSearch,
 } from "@fortawesome/free-solid-svg-icons";
 import { formatNumber,useSwalErrorAlert } from "../Global/behavior.jsx";
 import { exportGenericQueryExcel } from "@/NAYSA Cloud/Global/report";
@@ -37,9 +36,6 @@ import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 
 
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
-const MAX_AUTO_WIDTH_CHARS = 40;
-const MAX_COLUMN_WIDTH_PX = 520;
-const RIGHT_EDGE_GUTTER_PX = 24;
 const GlobalLookupModalv1 = ({
   isOpen,
   onClose,
@@ -48,16 +44,12 @@ const GlobalLookupModalv1 = ({
   data,
   title,
   btnCaption,
-  onSelectionChange,
-  onSelectionReset,
   singleSelect = false,
-  modalMaxWidthClass = "max-w-8xl",
 }) => {
   const [records, setRecords] = useState([]);
   const [filtered, setFiltered] = useState([]);
   const [selected, setSelected] = useState([]); // selection order preserved by push/remove
   const [filters, setFilters] = useState({});
-  const [globalSearch, setGlobalSearch] = useState("");
   const [columnConfig, setColumnConfig] = useState([]);
   const [loading, setLoading] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: "", direction: "asc" });
@@ -206,7 +198,6 @@ const GlobalLookupModalv1 = ({
 
   const clearFilters = () => {
     setFilters({});
-    setGlobalSearch("");
     setCurrentPage(1);
     setHighlightIndex(0);
   };
@@ -214,11 +205,6 @@ const GlobalLookupModalv1 = ({
   const clearSelection = () => {
     setSelected([]);
   };
-
-  useEffect(() => {
-    if (!isOpen || typeof onSelectionChange !== "function") return;
-    onSelectionChange(selected);
-  }, [isOpen, selected, onSelectionChange]);
 
   const handleSort = (key, sortable = true) => {
     if (!sortable) return;
@@ -243,28 +229,25 @@ const GlobalLookupModalv1 = ({
   const toggleSelect = (row) => {
     setSelected((prev) => {
       const exists = prev.some((s) => s.groupId === row.groupId);
-      const nextSelected = singleSelect
-        ? exists ? [] : [row]
-        : exists
-          ? prev.filter((s) => s.groupId !== row.groupId)
-          : [...prev, row];
 
-      if (typeof onSelectionReset === "function") {
-        onSelectionReset(nextSelected);
+      if (singleSelect) {
+        return exists ? [] : [row];
       }
 
-      return nextSelected;
+      if (exists) {
+        // remove (keeps other selection order)
+        return prev.filter((s) => s.groupId !== row.groupId);
+      }
+      // append to end => selection order preserved
+      return [...prev, row];
     });
   };
 
   const toggleSelectAll = () => {
     setSelected((prev) => {
-      const nextSelected = prev.length === filtered.length ? [] : [...filtered];
-      if (typeof onSelectionReset === "function") {
-        onSelectionReset(nextSelected);
-      }
+      if (prev.length === filtered.length) return [];
       // select all in current filtered order
-      return nextSelected;
+      return [...filtered];
     });
   };
 
@@ -304,28 +287,22 @@ const GlobalLookupModalv1 = ({
       const next = {};
       const bodyFont = "12px Arial";
       const headerFont = "12px Arial";
-      const maxAutoWidth = Math.min(
-        measureTextWidth("W".repeat(MAX_AUTO_WIDTH_CHARS), bodyFont) + 50,
-        MAX_COLUMN_WIDTH_PX
-      );
-      const getMeasureText = (value) =>
-        String(value ?? "").slice(0, MAX_AUTO_WIDTH_CHARS);
 
       cols.forEach((col) => {
         if (col.hidden) return;
 
-        const headerW = measureTextWidth(getMeasureText(col.label ?? col.key ?? ""), headerFont);
+        const headerW = measureTextWidth(col.label ?? col.key ?? "", headerFont);
         let maxW = headerW;
 
         for (let i = 0; i < sample.length; i++) {
           const raw = sample[i]?.[col.key];
           const display = renderValue(col, raw, Number(col.roundingOff));
-          const w = measureTextWidth(getMeasureText(display), bodyFont);
+          const w = measureTextWidth(display, bodyFont);
           if (w > maxW) maxW = w;
         }
 
         const padded = maxW + 32 + 18; // padding + sort icon
-        next[col.key] = clamp(Math.ceil(padded), 90, maxAutoWidth);
+        next[col.key] = clamp(Math.ceil(padded), 90, 520);
       });
 
       return next;
@@ -426,7 +403,7 @@ const baseVisibleCols = useMemo(() => {
     if (!key) return;
 
     const delta = e.clientX - startX;
-    const nextW = clamp(startWidth + delta, 70, MAX_COLUMN_WIDTH_PX);
+    const nextW = clamp(startWidth + delta, 70, 900);
     setColWidths((prev) => ({ ...prev, [key]: nextW }));
   }, []);
 
@@ -465,7 +442,6 @@ const baseVisibleCols = useMemo(() => {
       setFiltered([]);
       setSelected([]);
       setFilters({});
-      setGlobalSearch("");
       setColumnConfig([]);
       setSortConfig({ key: "", direction: "asc" });
       setCurrentPage(1);
@@ -508,7 +484,6 @@ const baseVisibleCols = useMemo(() => {
   // filter/sort
   useEffect(() => {
     let currentFiltered = [...records];
-    const quickSearch = String(globalSearch || "").trim().toLowerCase().replace(/,/g, "");
 
     currentFiltered = currentFiltered.filter((item) =>
       Object.entries(filters).every(([key, value]) => {
@@ -518,17 +493,6 @@ const baseVisibleCols = useMemo(() => {
         return itemValue.includes(filterValue);
       })
     );
-
-    if (quickSearch) {
-      const searchableCols = orderedVisibleCols.length ? orderedVisibleCols : baseVisibleCols;
-      currentFiltered = currentFiltered.filter((item) =>
-        searchableCols.some((col) => {
-          const raw = item?.[col.key];
-          const display = renderValue(col, raw, Number(col.roundingOff));
-          return String(display ?? "").toLowerCase().replace(/,/g, "").includes(quickSearch);
-        })
-      );
-    }
 
     if (sortConfig?.key) {
       currentFiltered.sort((a, b) => {
@@ -541,7 +505,7 @@ const baseVisibleCols = useMemo(() => {
     }
 
     setFiltered(currentFiltered);
-  }, [records, filters, globalSearch, sortConfig, orderedVisibleCols, baseVisibleCols]);
+  }, [records, filters, sortConfig]);
 
   // =========================
   // Grouping
@@ -652,7 +616,7 @@ const baseVisibleCols = useMemo(() => {
       (acc, c) => acc + (colWidths[c.key] || 150),
       0
     );
-    return sum + (singleSelect ? 0 : selectColWidth) + RIGHT_EDGE_GUTTER_PX;
+    return sum + (singleSelect ? 0 : selectColWidth);
   }, [orderedVisibleCols, colWidths, singleSelect]);
   
   const fitFactor = useMemo(() => {
@@ -1047,7 +1011,7 @@ const handleExportExcelClick = async () => {
     willChange: "transform",
   };
 
-  const getColW = (key) => clamp(colWidths[key] || 150, 70, MAX_COLUMN_WIDTH_PX) * fitFactor;
+  const getColW = (key) => (colWidths[key] || 150) * fitFactor;
 
   return (
     <div
@@ -1057,25 +1021,22 @@ const handleExportExcelClick = async () => {
       <div
         ref={modalKeyScopeRef}
         tabIndex={0}
-        className={`bg-white rounded-xl shadow-2xl w-full ${modalMaxWidthClass} max-h-[90vh] flex flex-col relative overflow-hidden transform scale-95 animate-scale-in outline-none border border-slate-200`}
+        className="bg-white rounded-lg shadow-xl w-full max-w-8xl max-h-[90vh] flex flex-col relative overflow-hidden transform scale-95 animate-scale-in outline-none"
         role="dialog"
         aria-modal="true"
       >
-        <div className="flex items-center justify-between bg-slate-100 border-b border-slate-200 py-2">
-          <div className="flex items-center gap-2 pl-2 sm:pl-3">
-            <div className="global-lookup-headertext-ui">
-              {title}
-            </div>
-          </div>
+        {/* Close */}
+        <button
+          onClick={() => onCancel?.()}
+          className="absolute top-3 right-3 text-blue-500 hover:text-blue-700 transition duration-200 focus:outline-none p-1 rounded-full hover:bg-blue-100"
+          aria-label="Close modal"
+        >
+          <FontAwesomeIcon icon={faTimes} size="lg" />
+        </button>
 
-          <button
-            onClick={() => onCancel?.()}
-            className="p-2 text-slate-400 hover:text-red-600 transition-colors"
-            aria-label="Close modal"
-          >
-            <FontAwesomeIcon icon={faTimes} size="lg" />
-          </button>
-        </div>
+        <h2 className="text-sm font-semibold text-blue-800 p-3 border-b border-gray-100">
+          {title}
+        </h2>
 
         <div className="flex-grow overflow-hidden flex flex-col">
           {loading ? (
@@ -1158,45 +1119,13 @@ const handleExportExcelClick = async () => {
                       </>
                     )}
 
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={globalSearch}
-                        onChange={(e) => {
-                          setGlobalSearch(e.target.value);
-                          setCurrentPage(1);
-                          setHighlightIndex(0);
-                        }}
-                        placeholder="Quick Search..."
-                        className="h-8 w-48 rounded-md border border-slate-200 bg-white pl-8 pr-7 text-xs font-semibold text-slate-700 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                      />
-                      <FontAwesomeIcon
-                        icon={faSearch}
-                        className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]"
-                      />
-                      {globalSearch && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setGlobalSearch("");
-                            setCurrentPage(1);
-                            setHighlightIndex(0);
-                          }}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
-                          title="Clear quick search"
-                        >
-                          <FontAwesomeIcon icon={faTimes} className="text-[10px]" />
-                        </button>
-                      )}
-                    </div>
-
                     {/* Export dropdown */}
                     <div className="relative">
                       <button
                         type="button"
                         onClick={() => hasDataFiltered && setShowExportMenu((prev) => !prev)}
                         disabled={!hasDataFiltered}
-                        className="h-8 text-xs bg-white border px-2 rounded hover:bg-gray-100 disabled:opacity-50"
+                        className="text-xs bg-white border px-2 py-1 rounded hover:bg-gray-100 disabled:opacity-50"
                         title="Export options"
                       >
                         <FontAwesomeIcon icon={faFileExport} className="text-blue-600 mr-1" />
@@ -1264,7 +1193,7 @@ const handleExportExcelClick = async () => {
                       <button
                         type="button"
                         onClick={() => setShowColumnChooser((prev) => !prev)}
-                        className="h-8 text-xs bg-white border px-2 rounded hover:bg-gray-100"
+                        className="text-xs bg-white border px-2 py-1 rounded hover:bg-gray-100"
                         title="Show/Hide columns"
                       >
                         <FontAwesomeIcon icon={faColumns} className="text-green-600" /> Columns
@@ -1333,15 +1262,15 @@ const handleExportExcelClick = async () => {
               {/* =========================
                   FROZEN HEADER (ALWAYS VISIBLE)
                  ========================= */}
-              <div className="border-b border-slate-200 bg-slate-200">
+              <div className="border-b border-gray-200 bg-gray-100">
                 <div ref={tableViewportRef} style={viewportStyle}>
                   <div style={trackStyle}>
-                    <table className="w-full table-fixed divide-y divide-gray-100">
+                    <table className="w-full divide-y divide-gray-100">
                       <thead>
-                        <tr className="bg-slate-200">
+                        <tr className="bg-gray-100">
                           {!singleSelect && (
                             <th
-                              className="global-lookup-th-ui"
+                              className="px-2 py-2 text-center text-xs font-bold text-blue-900"
                               style={{ width: effectiveSelectColWidth, minWidth: effectiveSelectColWidth  }}
                             >
                               Select
@@ -1365,19 +1294,14 @@ const handleExportExcelClick = async () => {
                                   onDropHeaderToGroup(column.key);
                                 }}
                                 onClick={() => handleSort(column.key, sortable)}
-                                className={`global-lookup-th-ui relative bg-slate-200 ${
+                                className={`relative px-4 py-2 text-xs font-bold text-blue-900 bg-gray-100 ${
                                   column.className || ""
                                 } ${sortable ? "cursor-pointer" : "cursor-default"}`}
                                 style={{ width: w, minWidth: 70, maxWidth: 900 }}
                                 title="Drag to reorder columns | Double-click to Group By this column"
                               >
-                                <div className="flex min-w-0 items-center justify-center gap-3 whitespace-nowrap select-none group">
-                                  <span className="global-lookup-th-text-ui truncate">
-                                    {column.label}
-                                  </span>
-                                  <span className="mb-1 text-[10px] opacity-30 group-hover:opacity-100">
-                                    {renderSortIcon(column.key)}
-                                  </span>
+                                <div className="flex items-center gap-1 whitespace-nowrap select-none">
+                                  {column.label} {renderSortIcon(column.key)}
                                 </div>
 
                                 {/* Resize handle */}
@@ -1389,18 +1313,13 @@ const handleExportExcelClick = async () => {
                               </th>
                             );
                           })}
-                          <th
-                            className="bg-slate-200"
-                            style={{ width: RIGHT_EDGE_GUTTER_PX, minWidth: RIGHT_EDGE_GUTTER_PX }}
-                            aria-hidden="true"
-                          />
                         </tr>
 
                         {/* Filter row */}
-                        <tr className="bg-slate-200">
+                        <tr className="bg-white">
                           {!singleSelect && (
                             <td
-                              className="bg-slate-200"
+                              className="bg-white"
                               style={{ width: effectiveSelectColWidth, minWidth: effectiveSelectColWidth  }}
                             />
                           )}
@@ -1409,27 +1328,19 @@ const handleExportExcelClick = async () => {
                             return (
                               <td
                                 key={column.key}
-                                className="px-2 py-1 bg-slate-200"
+                                className="px-2 py-1 bg-white"
                                 style={{ width: w, minWidth: 70, maxWidth: 900 }}
                               >
-                                <div className="relative">
-                                  <input
-                                    type="text"
-                                    value={filters[column.key] || ""}
-                                    onChange={(e) => handleFilterChange(e, column.key)}
-                                    className="global-lookup-filter-text-ui"
-                                    placeholder="Filter..."
-                                  />
-                                  <FontAwesomeIcon icon={faSearch} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
-                                </div>
+                                <input
+                                  type="text"
+                                  value={filters[column.key] || ""}
+                                  onChange={(e) => handleFilterChange(e, column.key)}
+                                  className="w-full border rounded px-2 py-1 text-xs"
+                                  placeholder="Filter..."
+                                />
                               </td>
                             );
                           })}
-                          <td
-                            className="bg-slate-200"
-                            style={{ width: RIGHT_EDGE_GUTTER_PX, minWidth: RIGHT_EDGE_GUTTER_PX }}
-                            aria-hidden="true"
-                          />
                         </tr>
                       </thead>
                     </table>
@@ -1447,8 +1358,8 @@ const handleExportExcelClick = async () => {
               >
                 <div ref={tableViewportRef} style={viewportStyle}>
                   <div style={trackStyle}>
-                    <table className="w-full table-fixed divide-y divide-gray-100">
-                      <tbody className="bg-white divide-y divide-slate-100">
+                    <table className="w-full divide-y divide-gray-100">
+                      <tbody className="bg-white divide-y divide-gray-200">
                         {paginatedData.length > 0 ? (
                           paginatedData.map((row, idx) => {
                             // Group header row
@@ -1457,7 +1368,7 @@ const handleExportExcelClick = async () => {
                               const isExpanded = expandedGroups[uniqueId];
 
                               const colSpan =
-                                orderedVisibleCols.length + (singleSelect ? 0 : 1) + 1;
+                                orderedVisibleCols.length + (singleSelect ? 0 : 1);
 
                               return (
                                 <tr
@@ -1467,7 +1378,7 @@ const handleExportExcelClick = async () => {
                                 >
                                  <td
                                       colSpan={colSpan}
-                                      className="px-2 py-2 text-xs font-semibold border-b border-gray-300 text-blue-900 whitespace-nowrap overflow-hidden"
+                                      className="px-2 py-2 text-xs font-semibold border-b border-gray-300 text-blue-900 whitespace-nowrap"
                                     >
                                     <div
                                       className="flex items-center"
@@ -1493,6 +1404,7 @@ const handleExportExcelClick = async () => {
                             // normal row
                             const dataRows = paginatedData.filter((r) => !r?.isGroup);
                             const dataIndex = dataRows.indexOf(row);
+                            const isHighlighted = dataIndex === highlightIndex;
                             const isChecked = selected.some((s) => s.groupId === row.groupId);
 
                             return (
@@ -1502,8 +1414,8 @@ const handleExportExcelClick = async () => {
                                   if (dataIndex >= 0) rowRefs.current[dataIndex] = el;
                                 }}
                                 className={`text-xs ${
-                                  isChecked ? "bg-blue-100" : "hover:bg-blue-100"
-                                }`}
+                                  isChecked ? "bg-blue-100" : "hover:bg-blue-30"
+                                } ${isHighlighted ? "ring-1 ring-blue-300" : ""}`}
                                 onMouseEnter={() => {
                                   if (dataIndex >= 0) setHighlightIndex(dataIndex);
                                 }}
@@ -1544,7 +1456,7 @@ const handleExportExcelClick = async () => {
                                   return (
                                     <td
                                       key={column.key}
-                                      className={`global-lookup-td-ui ${column.classNames || ""} overflow-hidden truncate whitespace-nowrap`}
+                                      className={`px-4 py-1 ${column.classNames || ""} truncate`}
                                       style={{ width: w, minWidth: 70, maxWidth: 900 }}
                                       title={String(cellValue ?? "")}
                                     >
@@ -1552,18 +1464,13 @@ const handleExportExcelClick = async () => {
                                     </td>
                                   );
                                 })}
-                                <td
-                                  className=""
-                                  style={{ width: RIGHT_EDGE_GUTTER_PX, minWidth: RIGHT_EDGE_GUTTER_PX }}
-                                  aria-hidden="true"
-                                />
                               </tr>
                             );
                           })
                         ) : (
                           <tr>
                             <td
-                              colSpan={orderedVisibleCols.length + (singleSelect ? 0 : 1) + 1}
+                              colSpan={orderedVisibleCols.length + (singleSelect ? 0 : 1)}
                               className="px-4 py-6 text-center text-gray-500 text-lg"
                             >
                               No matching records found.
@@ -1690,10 +1597,11 @@ const handleExportExcelClick = async () => {
             </button>
           </div>
 
+          <div className="font-semibold">
+            Showing {totalItems ? startItem : 0}-{endItem} of {totalItems} entries
+          </div>
+
           <div className="flex items-center gap-2">
-            <div className="font-semibold">
-              Showing {totalItems ? startItem : 0}-{endItem} of {totalItems} entries
-            </div>
             <button
               onClick={handlePrevPage}
               disabled={safePage === 1}

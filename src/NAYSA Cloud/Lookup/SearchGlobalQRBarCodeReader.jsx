@@ -88,7 +88,6 @@
 //   const quaggaRef = useRef(null);
 //   const isMountedRef = useRef(false);
 //   const liveScanBusyRef = useRef(false);
-//   const successAudioRef = useRef(null);
 
 //   const hints = useMemo(
 //     () => [
@@ -104,19 +103,6 @@
 //     isMountedRef.current = true;
 //     return () => {
 //       isMountedRef.current = false;
-//     };
-//   }, []);
-
-//   useEffect(() => {
-//     const audio = new Audio("/sounds/scan-success.mp3");
-//     audio.preload = "auto";
-//     successAudioRef.current = audio;
-
-//     return () => {
-//       if (successAudioRef.current) {
-//         successAudioRef.current.pause();
-//         successAudioRef.current = null;
-//       }
 //     };
 //   }, []);
 
@@ -176,16 +162,6 @@
 
 //   const normalizeText = (value) => String(value || "").trim();
 
-//   const playSuccessSound = async () => {
-//     try {
-//       if (!successAudioRef.current) return;
-//       successAudioRef.current.currentTime = 0;
-//       await successAudioRef.current.play();
-//     } catch {
-//       // ignore play interruption/autoplay errors
-//     }
-//   };
-
 //   const handleDetected = (text, meta = {}) => {
 //     const clean = normalizeText(text);
 //     if (!clean) return;
@@ -198,8 +174,6 @@
 //     safeSetState(setErrorText, "");
 //     safeSetState(setDetectedType, meta?.type || "");
 //     safeSetState(setDetectedEngine, meta?.engine || "");
-
-//     playSuccessSound();
 
 //     if (meta?.summary) {
 //       safeSetState(setFolderScanSummary, meta.summary);
@@ -500,16 +474,11 @@
 //     if (!value) return false;
 
 //     if (fmt.includes("ean_13") || fmt === "ean") {
-//       return (
-//         /^\d{13}$/.test(value) &&
-//         calcEAN13Checksum(value) === Number(value[12])
-//       );
+//       return /^\d{13}$/.test(value) && calcEAN13Checksum(value) === Number(value[12]);
 //     }
 
 //     if (fmt.includes("ean_8")) {
-//       return (
-//         /^\d{8}$/.test(value) && calcEAN8Checksum(value) === Number(value[7])
-//       );
+//       return /^\d{8}$/.test(value) && calcEAN8Checksum(value) === Number(value[7]);
 //     }
 
 //     if (fmt.includes("upc")) {
@@ -572,10 +541,7 @@
 //     }
 //   };
 
-//   const buildQrVariants = (
-//     baseCanvas,
-//     { includeRotations = false, liveMode = false } = {}
-//   ) => {
+//   const buildQrVariants = (baseCanvas, { includeRotations = false, liveMode = false } = {}) => {
 //     const variants = [];
 //     const add = (canvas) => {
 //       if (canvas) variants.push(canvas);
@@ -613,10 +579,7 @@
 //     return variants;
 //   };
 
-//   const buildBarcodeVariants = (
-//     baseCanvas,
-//     { includeRotations = false, liveMode = false } = {}
-//   ) => {
+//   const buildBarcodeVariants = (baseCanvas, { includeRotations = false, liveMode = false } = {}) => {
 //     const variants = [];
 //     const add = (canvas) => {
 //       if (canvas) variants.push(canvas);
@@ -678,10 +641,7 @@
 //     const top = ranked[0];
 //     if (!top) return null;
 
-//     if (
-//       top.count >= requiredMatches ||
-//       (requiredMatches === 1 && top.count >= 1)
-//     ) {
+//     if (top.count >= requiredMatches || (requiredMatches === 1 && top.count >= 1)) {
 //       return {
 //         ...top.best,
 //         confidence: `consensus:${top.count}`,
@@ -752,10 +712,7 @@
 //     baseCanvas,
 //     { includeRotations = false, liveMode = false, requiredMatches = 2 } = {}
 //   ) => {
-//     const variants = buildQrVariants(baseCanvas, {
-//       includeRotations,
-//       liveMode,
-//     });
+//     const variants = buildQrVariants(baseCanvas, { includeRotations, liveMode });
 //     const hits = [];
 
 //     for (const canvas of variants) {
@@ -772,10 +729,7 @@
 //     baseCanvas,
 //     { includeRotations = false, liveMode = false, requiredMatches = 2 } = {}
 //   ) => {
-//     const variants = buildBarcodeVariants(baseCanvas, {
-//       includeRotations,
-//       liveMode,
-//     });
+//     const variants = buildBarcodeVariants(baseCanvas, { includeRotations, liveMode });
 //     const hits = [];
 
 //     for (const canvas of variants) {
@@ -792,8 +746,7 @@
 //       if (
 //         nonLocated?.text &&
 //         isValidBarcodeByFormat(nonLocated.text, nonLocated.format) &&
-//         (typeof nonLocated.errorScore !== "number" ||
-//           nonLocated.errorScore <= 0.25)
+//         (typeof nonLocated.errorScore !== "number" || nonLocated.errorScore <= 0.25)
 //       ) {
 //         hits.push(nonLocated);
 //       }
@@ -849,18 +802,18 @@
 //   };
 
 //   const handleReset = () => {
-//     setResult("");
-//     setErrorText("");
-//     setLastScanned("");
-//     setCapturedPreview("");
-//     setFolderScanSummary("");
-//     setProcessingLabel("");
-//     setIsProcessingImage(false);
-//     setDetectedType("");
-//     setDetectedEngine("");
-//     lastScanRef.current = "";
-//     setStatus("scanning");
-//   };
+//         setResult("");
+//         setErrorText("");
+//         setLastScanned("");
+//         setCapturedPreview("");
+//         setFolderScanSummary("");
+//         setProcessingLabel("");
+//         setIsProcessingImage(false);
+//         setDetectedType("");
+//         setDetectedEngine("");
+//         lastScanRef.current = "";
+//         setStatus("scanning");
+//         };
 
 //   const handleUseResult = () => {
 //     if (!result) return;
@@ -904,9 +857,7 @@
 //           confidence: decoded.confidence || "",
 //         });
 //       } else {
-//         setErrorText(
-//           "No trustworthy QR code or barcode value found in captured image."
-//         );
+//         setErrorText("No trustworthy QR code or barcode value found in captured image.");
 //       }
 //     } catch (err) {
 //       setErrorText(String(err?.message || err || "Failed to capture image."));
@@ -965,9 +916,7 @@
 //           confidence: decoded.confidence || "",
 //         });
 //       } else {
-//         setErrorText(
-//           `No trustworthy QR code or barcode value found in "${file.name}".`
-//         );
+//         setErrorText(`No trustworthy QR code or barcode value found in "${file.name}".`);
 //       }
 //     } catch (err) {
 //       setErrorText(String(err?.message || err || "Failed to read image file."));
@@ -999,9 +948,7 @@
 
 //       for (let i = 0; i < imageFiles.length; i++) {
 //         const file = imageFiles[i];
-//         setProcessingLabel(
-//           `Scanning folder images... (${i + 1}/${imageFiles.length})`
-//         );
+//         setProcessingLabel(`Scanning folder images... (${i + 1}/${imageFiles.length})`);
 
 //         try {
 //           const canvas = await fileToCanvas(file);
@@ -1048,9 +995,7 @@
 //         );
 //       }
 //     } catch (err) {
-//       setErrorText(
-//         String(err?.message || err || "Failed to scan selected folder.")
-//       );
+//       setErrorText(String(err?.message || err || "Failed to scan selected folder."));
 //     } finally {
 //       setIsProcessingImage(false);
 //       setProcessingLabel("");
@@ -1058,306 +1003,276 @@
 //   };
 
 //   const showBottomPanel = !!(
-//     result ||
-//     errorText ||
-//     processingLabel ||
-//     folderScanSummary
-//   );
+//   result ||
+//   errorText ||
+//   processingLabel ||
+//   folderScanSummary
+// );
+
+
 
 //   if (!isOpen) return null;
 
-//   return (
-//     <AnimatePresence>
+// return (
+//   <AnimatePresence>
+//     <motion.div
+//       className="fixed inset-0 z-[100] flex items-end justify-center bg-black/70 backdrop-blur-md sm:items-center sm:p-4"
+//       initial={{ opacity: 0 }}
+//       animate={{ opacity: 1 }}
+//       exit={{ opacity: 0 }}
+//       onClick={onClose}
+//     >
 //       <motion.div
-//         className="fixed inset-0 z-[100] flex items-end justify-center bg-black/70 backdrop-blur-md sm:items-center sm:p-4"
-//         initial={{ opacity: 0 }}
-//         animate={{ opacity: 1 }}
-//         exit={{ opacity: 0 }}
-//         onClick={onClose}
+//         className="relative h-[100dvh] w-full bg-black sm:h-[88vh] sm:max-h-[860px] sm:w-[min(92vw,760px)] sm:rounded-[34px] sm:border sm:border-white/10 sm:bg-black sm:shadow-[0_30px_80px_rgba(0,0,0,0.45)]"
+//         initial={{ opacity: 0, y: 20, scale: 0.98 }}
+//         animate={{ opacity: 1, y: 0, scale: 1 }}
+//         exit={{ opacity: 0, y: 12, scale: 0.98 }}
+//         transition={{ duration: 0.22 }}
+//         onClick={(e) => e.stopPropagation()}
 //       >
-//         <motion.div
-//           className="relative h-[100dvh] w-full bg-black sm:h-[88vh] sm:max-h-[860px] sm:w-[min(92vw,760px)] sm:rounded-[34px] sm:border sm:border-white/10 sm:bg-black sm:shadow-[0_30px_80px_rgba(0,0,0,0.45)]"
-//           initial={{ opacity: 0, y: 20, scale: 0.98 }}
-//           animate={{ opacity: 1, y: 0, scale: 1 }}
-//           exit={{ opacity: 0, y: 12, scale: 0.98 }}
-//           transition={{ duration: 0.22 }}
-//           onClick={(e) => e.stopPropagation()}
-//         >
-//           <input
-//             ref={fileInputRef}
-//             type="file"
-//             accept="image/*"
-//             className="hidden"
-//             onChange={handleFileSelection}
+//         <input
+//           ref={fileInputRef}
+//           type="file"
+//           accept="image/*"
+//           className="hidden"
+//           onChange={handleFileSelection}
+//         />
+
+//         <input
+//           ref={folderInputRef}
+//           type="file"
+//           accept="image/*"
+//           multiple
+//           className="hidden"
+//           onChange={handleFolderSelection}
+//         />
+
+//         <div className="absolute inset-0 overflow-hidden sm:rounded-[34px]">
+//           <video
+//             ref={videoRef}
+//             className="absolute inset-0 h-full w-full object-cover"
+//             muted
+//             playsInline
+//             autoPlay
 //           />
 
-//           <input
-//             ref={folderInputRef}
-//             type="file"
-//             accept="image/*"
-//             multiple
-//             className="hidden"
-//             onChange={handleFolderSelection}
-//           />
+//           <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/10 to-black/70 sm:from-black/42 sm:via-black/8 sm:to-black/68" />
+//         </div>
 
-//           <div className="absolute inset-0 overflow-hidden sm:rounded-[34px]">
-//             <video
-//               ref={videoRef}
-//               className="absolute inset-0 h-full w-full object-cover"
-//               muted
-//               playsInline
-//               autoPlay
-//             />
+//         <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 -translate-y-10 sm:-translate-y-8">
+//           <div className="relative h-[48vw] w-[48vw] min-h-[205px] min-w-[205px] max-h-[280px] max-w-[280px] rounded-[28px] border border-white/15 bg-transparent shadow-[0_0_0_9999px_rgba(0,0,0,0.24)] sm:h-[310px] sm:w-[310px]">
+//             <div className="absolute left-0 top-0 h-10 w-10 rounded-tl-[28px] border-l-4 border-t-4 border-white" />
+//             <div className="absolute right-0 top-0 h-10 w-10 rounded-tr-[28px] border-r-4 border-t-4 border-white" />
+//             <div className="absolute bottom-0 left-0 h-10 w-10 rounded-bl-[28px] border-b-4 border-l-4 border-white" />
+//             <div className="absolute bottom-0 right-0 h-10 w-10 rounded-br-[28px] border-b-4 border-r-4 border-white" />
 
-//             <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/10 to-black/70 sm:from-black/42 sm:via-black/8 sm:to-black/68" />
+//             {status === "scanning" && !isProcessingImage && (
+//               <motion.div
+//                 className="absolute left-4 right-4 top-4 h-0.5 rounded-full bg-white shadow-[0_0_18px_rgba(255,255,255,0.95)]"
+//                 animate={{ y: [0, 210, 0] }}
+//                 transition={{
+//                   duration: 2,
+//                   repeat: Infinity,
+//                   ease: "easeInOut",
+//                 }}
+//               />
+//             )}
 //           </div>
+//         </div>
 
-//           <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 -translate-y-10 sm:-translate-y-8">
-//             <div className="relative h-[48vw] w-[48vw] min-h-[205px] min-w-[205px] max-h-[280px] max-w-[280px] rounded-[28px] border border-white/15 bg-transparent shadow-[0_0_0_9999px_rgba(0,0,0,0.24)] sm:h-[310px] sm:w-[310px]">
-             
-//                 {isProcessingImage && (
-//                     <div className="absolute inset-0 flex items-center justify-center rounded-[28px] bg-black/28 backdrop-blur-[2px]">
-//                       <div className="flex flex-col items-center gap-3">
-//                         <motion.div
-//                           className="h-12 w-12 rounded-full border-2 border-white/20 border-t-white"
-//                           animate={{ rotate: 360 }}
-//                           transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }}
-//                         />
-//                         <div className="text-center text-xs font-medium text-white/90">
-//                           {processingLabel || "Processing image..."}
-//                         </div>
-//                       </div>
-//                     </div>
-//                   )}
-
-
-         
-//               <div className="absolute left-0 top-0 h-10 w-10 rounded-tl-[28px] border-l-4 border-t-4 border-white" />
-//               <div className="absolute right-0 top-0 h-10 w-10 rounded-tr-[28px] border-r-4 border-t-4 border-white" />
-//               <div className="absolute bottom-0 left-0 h-10 w-10 rounded-bl-[28px] border-b-4 border-l-4 border-white" />
-//               <div className="absolute bottom-0 right-0 h-10 w-10 rounded-br-[28px] border-b-4 border-r-4 border-white" />
-
-//               {status === "scanning" && !isProcessingImage && (
-//                 <motion.div
-//                   className="absolute left-4 right-4 top-4 h-0.5 rounded-full bg-white shadow-[0_0_18px_rgba(255,255,255,0.95)]"
-//                   animate={{ y: [0, 210, 0] }}
-//                   transition={{
-//                     duration: 2,
-//                     repeat: Infinity,
-//                     ease: "easeInOut",
-//                   }}
-//                 />
-//               )}
-//             </div>
-//           </div>
-
-//           <div className="absolute inset-x-0 top-0 z-10 p-4 sm:p-5">
-//             <div className="mx-auto flex w-full items-start justify-between">
-//               <div className="max-w-[78%] rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-white backdrop-blur-xl">
-//                 <div className="flex items-center gap-2">
-//                   <ScanLine size={16} className="text-white/85" />
-//                   <h2 className="truncate text-sm font-semibold sm:text-base">
-//                     {title}
-//                   </h2>
-//                 </div>
-//                 <p className="mt-1 text-[11px] text-white/70 sm:text-xs">
-//                   Powered by NAYSA
-//                 </p>
+//         <div className="absolute inset-x-0 top-0 z-10 p-4 sm:p-5">
+//           <div className="mx-auto flex w-full items-start justify-between">
+//             <div className="max-w-[78%] rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-white backdrop-blur-xl">
+//               <div className="flex items-center gap-2">
+//                 <ScanLine size={16} className="text-white/85" />
+//                 <h2 className="truncate text-sm font-semibold sm:text-base">
+//                   {title}
+//                 </h2>
 //               </div>
-
-//               <button
-//                 ref={closeBtnRef}
-//                 type="button"
-//                 onClick={onClose}
-//                 className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/12 bg-white/8 text-white backdrop-blur-xl transition hover:bg-white/12 sm:border-white/15 sm:bg-white/10 sm:hover:bg-white/15"
-//                 aria-label="Close scanner"
-//               >
-//                 <X size={18} />
-//               </button>
+//               <p className="mt-1 text-[11px] text-white/70 sm:text-xs">
+//                 Powered by NAYSA
+//               </p>
 //             </div>
+
+//             <button
+//               ref={closeBtnRef}
+//               type="button"
+//               onClick={onClose}
+//               className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/12 bg-white/8 text-white backdrop-blur-xl transition hover:bg-white/12 sm:border-white/15 sm:bg-white/10 sm:hover:bg-white/15"
+//               aria-label="Close scanner"
+//             >
+//               <X size={18} />
+//             </button>
 //           </div>
+//         </div>
 
-//           <div className="absolute inset-x-0 top-[88px] z-10 px-4 sm:px-5">
-//             <div className="mx-auto flex flex-wrap items-center gap-2">
-//               <div className="rounded-full border border-white/10 bg-black/24 px-3 py-1.5 text-[11px] text-white/88 backdrop-blur-xl sm:bg-black/30">
-//                 {isProcessingImage
-//                   ? "Processing image..."
-//                   : status === "paused"
-//                   ? "Camera paused"
-//                   : status === "success"
-//                   ? "Code detected"
-//                   : cameraReady
-//                   ? "Scanning..."
-//                   : "Preparing camera..."}
-//               </div>
-
-//               {(detectedType || detectedEngine) && (
-//                 <div className="flex flex-wrap gap-2">
-//                   {detectedType === "qr" && (
-//                     <div className="inline-flex items-center gap-1 rounded-full border border-blue-300/20 bg-blue-400/12 px-3 py-1.5 text-[11px] text-blue-100 backdrop-blur-xl sm:bg-blue-400/15">
-//                       <QrCode size={12} />
-//                       QR
-//                     </div>
-//                   )}
-
-//                   {detectedType === "barcode" && (
-//                     <div className="inline-flex items-center gap-1 rounded-full border border-violet-300/20 bg-violet-400/12 px-3 py-1.5 text-[11px] text-violet-100 backdrop-blur-xl sm:bg-violet-400/15">
-//                       <Barcode size={12} />
-//                       Barcode
-//                     </div>
-//                   )}
-//                 </div>
-//               )}
+//         <div className="absolute inset-x-0 top-[88px] z-10 px-4 sm:px-5">
+//           <div className="mx-auto flex flex-wrap items-center gap-2">
+//             <div className="rounded-full border border-white/10 bg-black/24 px-3 py-1.5 text-[11px] text-white/88 backdrop-blur-xl sm:bg-black/30">
+//               {isProcessingImage
+//                 ? "Processing image..."
+//                 : status === "paused"
+//                 ? "Camera paused"
+//                 : status === "success"
+//                 ? "Code detected"
+//                 : cameraReady
+//                 ? "Scanning..."
+//                 : "Preparing camera..."}
 //             </div>
-//           </div>
 
-//           {capturedPreview && (
-//             <div className="absolute right-4 top-[138px] z-10 sm:right-5 sm:top-[145px]">
-//               <div className="overflow-hidden rounded-2xl border border-white/12 bg-white/8 shadow-xl backdrop-blur-xl sm:border-white/15 sm:bg-white/10">
-//                 <img
-//                   src={capturedPreview}
-//                   alt="Captured preview"
-//                   className="h-14 w-14 object-cover sm:h-20 sm:w-20"
-//                 />
-//               </div>
-//             </div>
-//           )}
+//             {/* <div className="rounded-full border border-white/10 bg-black/24 px-3 py-1.5 text-[11px] text-white/80 backdrop-blur-xl sm:bg-black/30">
+//               QR + Barcode
+//             </div> */}
 
-//           {showBottomPanel && (
-//             <div className="absolute inset-x-0 bottom-[208px] z-10 px-3 sm:bottom-[108px] sm:px-5">
-//               <div className="mx-auto">
-//                 <div className="rounded-2xl border border-white/10 bg-black/30 p-3 text-white shadow-2xl backdrop-blur-2xl sm:rounded-[24px] sm:bg-black/35 sm:p-4">
-//                   <div className="mb-2 flex items-center gap-2">
-//                     <CheckCircle2
-//                       size={16}
-//                       className={result ? "text-emerald-300" : "text-white/40"}
-//                     />
-//                     <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/60">
-//                       Detected value
-//                     </span>
+//             {(detectedType || detectedEngine) && (
+//               <div className="flex flex-wrap gap-2">
+//                 {detectedType === "qr" && (
+//                   <div className="inline-flex items-center gap-1 rounded-full border border-blue-300/20 bg-blue-400/12 px-3 py-1.5 text-[11px] text-blue-100 backdrop-blur-xl sm:bg-blue-400/15">
+//                     <QrCode size={12} />
+//                     QR
 //                   </div>
+//                 )}
 
-//                   {!!result && (
-//                     <div className="max-h-[60px] overflow-y-auto break-all text-[13px] font-medium text-white sm:max-h-[88px] sm:text-base">
-//                       {result}
-//                     </div>
-//                   )}
+//                 {detectedType === "barcode" && (
+//                   <div className="inline-flex items-center gap-1 rounded-full border border-violet-300/20 bg-violet-400/12 px-3 py-1.5 text-[11px] text-violet-100 backdrop-blur-xl sm:bg-violet-400/15">
+//                     <Barcode size={12} />
+//                     Barcode
+//                   </div>
+//                 )}
 
-//                   {/* {!!processingLabel && (
-//                     <div className="mt-2 flex items-center gap-2 rounded-2xl border border-white/10 bg-white/8 px-3 py-2 text-[12px] text-white/85">
-//                       <Loader2 size={14} className="animate-spin" />
-//                       {processingLabel}
-//                     </div>
-//                   )} */}
-
-//                   {!!processingLabel && (
-//                     <div className="mt-2 overflow-hidden rounded-2xl border border-white/10 bg-white/8">
-//                       <div className="flex items-center gap-2 px-3 py-2 text-[12px] text-white/85">
-//                         <Loader2 size={14} className="animate-spin" />
-//                         <span>{processingLabel}</span>
-//                         <span className="ml-auto flex items-center gap-1">
-//                           <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-white/70 [animation-delay:-0.2s]" />
-//                           <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-white/70 [animation-delay:-0.1s]" />
-//                           <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-white/70" />
-//                         </span>
-//                       </div>
-
-//                       <motion.div
-//                         className="h-[2px] w-full bg-gradient-to-r from-transparent via-white/70 to-transparent"
-//                         animate={{ x: ["-100%", "100%"] }}
-//                         transition={{ duration: 1.1, repeat: Infinity, ease: "linear" }}
-//                       />
-//                     </div>
-//                   )}
-
-//                   {!!folderScanSummary && (
-//                     <div className="mt-2 rounded-2xl border border-blue-300/15 bg-blue-400/10 px-3 py-2 text-[12px] text-blue-100">
-//                       {folderScanSummary}
-//                     </div>
-//                   )}
-
-//                   {!!errorText && (
-//                     <div className="mt-2 rounded-2xl border border-amber-300/15 bg-amber-400/10 px-3 py-2 text-[12px] text-amber-100">
-//                       {errorText}
-//                     </div>
-//                   )}
-//                 </div>
+//                 {/* {!!detectedEngine && (
+//                   <div className="rounded-full border border-white/10 bg-black/24 px-3 py-1.5 text-[11px] text-white/75 backdrop-blur-xl sm:bg-black/30">
+//                     {detectedEngine}
+//                   </div>
+//                 )} */}
 //               </div>
+//             )}
+//           </div>
+//         </div>
+
+//         {capturedPreview && (
+//           <div className="absolute right-4 top-[138px] z-10 sm:right-5 sm:top-[145px]">
+//             <div className="overflow-hidden rounded-2xl border border-white/12 bg-white/8 shadow-xl backdrop-blur-xl sm:border-white/15 sm:bg-white/10">
+//               <img
+//                 src={capturedPreview}
+//                 alt="Captured preview"
+//                 className="h-14 w-14 object-cover sm:h-20 sm:w-20"
+//               />
 //             </div>
-//           )}
+//           </div>
+//         )}
 
-//           <div className="absolute inset-x-0 bottom-0 z-20 px-3 pb-[max(env(safe-area-inset-bottom),12px)] pt-3 sm:px-5">
-//             <div className="mx-auto">
-//               <div className="rounded-[28px] border border-white/10 bg-black/22 p-3 shadow-2xl backdrop-blur-2xl sm:bg-black/35">
-//                 <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-//                   <GlassIconButton
-//                     label={status === "paused" ? "Resume" : "Pause"}
-//                     icon={
-//                       status === "paused" ? (
-//                         <Camera size={18} />
-//                       ) : (
-//                         <CameraOff size={18} />
-//                       )
-//                     }
-//                     onClick={handlePauseResume}
-//                     disabled={isProcessingImage}
-//                     active={status === "paused"}
-//                   />
+//       {showBottomPanel && (
+//   <div className="absolute inset-x-0 bottom-[208px] z-10 px-3 sm:bottom-[108px] sm:px-5">
+//     <div className="mx-auto">
+//       <div className="rounded-2xl border border-white/10 bg-black/30 p-3 text-white shadow-2xl backdrop-blur-2xl sm:rounded-[24px] sm:bg-black/35 sm:p-4">
+//         <div className="mb-2 flex items-center gap-2">
+//           <CheckCircle2
+//             size={16}
+//             className={result ? "text-emerald-300" : "text-white/40"}
+//           />
+//           <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/60">
+//             Detected value
+//           </span>
+//         </div>
 
-//                   <GlassIconButton
-//                     label="Capture"
-//                     icon={<CameraIcon size={18} />}
-//                     onClick={handleCaptureAndRead}
-//                     disabled={isProcessingImage}
-//                   />
+//         {!!result && (
+//           <div className="max-h-[60px] overflow-y-auto break-all text-[13px] font-medium text-white sm:max-h-[88px] sm:text-base">
+//             {result}
+//           </div>
+//         )}
 
-//                   <GlassIconButton
-//                     label="Image"
-//                     icon={<ImagePlus size={18} />}
-//                     onClick={handlePickFileClick}
-//                     disabled={isProcessingImage}
-//                   />
+//         {!!processingLabel && (
+//           <div className="mt-2 flex items-center gap-2 rounded-2xl border border-white/10 bg-white/8 px-3 py-2 text-[12px] text-white/85">
+//             <Loader2 size={14} className="animate-spin" />
+//             {processingLabel}
+//           </div>
+//         )}
 
-//                   <GlassIconButton
-//                     label="Folder"
-//                     icon={<FolderOpen size={18} />}
-//                     onClick={handlePickFolderClick}
-//                     disabled={isProcessingImage}
-//                   />
+//         {!!folderScanSummary && (
+//           <div className="mt-2 rounded-2xl border border-blue-300/15 bg-blue-400/10 px-3 py-2 text-[12px] text-blue-100">
+//             {folderScanSummary}
+//           </div>
+//         )}
 
-//                   <GlassIconButton
-//                     label="Reset"
-//                     icon={<RotateCcw size={18} />}
-//                     onClick={handleReset}
-//                   />
+//         {!!errorText && (
+//           <div className="mt-2 rounded-2xl border border-amber-300/15 bg-amber-400/10 px-3 py-2 text-[12px] text-amber-100">
+//             {errorText}
+//           </div>
+//         )}
+//       </div>
+//     </div>
+//   </div>
+// )}
+//         <div className="absolute inset-x-0 bottom-0 z-20 px-3 pb-[max(env(safe-area-inset-bottom),12px)] pt-3 sm:px-5">
+//           <div className="mx-auto">
+//             <div className="rounded-[28px] border border-white/10 bg-black/22 p-3 shadow-2xl backdrop-blur-2xl sm:bg-black/35">
+//               <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+//                 <GlassIconButton
+//                   label={status === "paused" ? "Resume" : "Pause"}
+//                   icon={
+//                     status === "paused" ? (
+//                       <Camera size={18} />
+//                     ) : (
+//                       <CameraOff size={18} />
+//                     )
+//                   }
+//                   onClick={handlePauseResume}
+//                   disabled={isProcessingImage}
+//                   active={status === "paused"}
+//                 />
 
-//                   <GlassIconButton
-//                     label="Use"
-//                     icon={<CheckCircle2 size={18} />}
-//                     onClick={handleUseResult}
-//                     disabled={!result}
-//                     active={!!result}
-//                   />
-//                 </div>
+//                 <GlassIconButton
+//                   label="Capture"
+//                   icon={<CameraIcon size={18} />}
+//                   onClick={handleCaptureAndRead}
+//                   disabled={isProcessingImage}
+//                 />
+
+//                 <GlassIconButton
+//                   label="Image"
+//                   icon={<ImagePlus size={18} />}
+//                   onClick={handlePickFileClick}
+//                   disabled={isProcessingImage}
+//                 />
+
+//                 <GlassIconButton
+//                   label="Folder"
+//                   icon={<FolderOpen size={18} />}
+//                   onClick={handlePickFolderClick}
+//                   disabled={isProcessingImage}
+//                 />
+
+//                 <GlassIconButton
+//                   label="Reset"
+//                   icon={<RotateCcw size={18} />}
+//                   onClick={handleReset}
+//                 />
+
+//                 <GlassIconButton
+//                   label="Use"
+//                   icon={<CheckCircle2 size={18} />}
+//                   onClick={handleUseResult}
+//                   disabled={!result}
+//                   active={!!result}
+//                 />
 //               </div>
 //             </div>
 //           </div>
-//         </motion.div>
+//         </div>
 //       </motion.div>
-//     </AnimatePresence>
-//   );
+//     </motion.div>
+//   </AnimatePresence>
+// );
 // };
 
 // export default BarcodeQrReaderModal;
 
 
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+
+
+
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   X,
@@ -2202,21 +2117,6 @@ const BarcodeQrReaderModal = ({
       reader.readAsDataURL(file);
     });
 
-  const waitForPaint = () =>
-    new Promise((resolve) => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(resolve);
-      });
-    });
-
-  const handleCloseModal = useCallback(() => {
-    stopScanningLoop();
-    stopCamera();
-    setIsProcessingImage(false);
-    setProcessingLabel("");
-    onClose?.();
-  }, [onClose]);
-
   const handlePauseResume = () => {
     if (isProcessingImage) return;
     setStatus((prev) => (prev === "paused" ? "scanning" : "paused"));
@@ -2245,23 +2145,15 @@ const BarcodeQrReaderModal = ({
         engine: detectedEngine,
       });
     }
-    handleCloseModal();
+    onClose?.();
   };
 
   const handleCaptureAndRead = async () => {
-    if (isProcessingImage) return;
-
     try {
       setErrorText("");
       setFolderScanSummary("");
-      setResult("");
-      setDetectedType("");
-      setDetectedEngine("");
-
-      setProcessingLabel("Processing capture...");
+      setProcessingLabel("Capturing image...");
       setIsProcessingImage(true);
-
-      await waitForPaint();
 
       const frameCanvas = captureVideoFrame(videoRef.current);
       if (!frameCanvas) {
@@ -2455,7 +2347,7 @@ const BarcodeQrReaderModal = ({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        onClick={handleCloseModal}
+        onClick={onClose}
       >
         <motion.div
           className="relative h-[100dvh] w-full bg-black sm:h-[88vh] sm:max-h-[860px] sm:w-[min(92vw,760px)] sm:rounded-[34px] sm:border sm:border-white/10 sm:bg-black sm:shadow-[0_30px_80px_rgba(0,0,0,0.45)]"
@@ -2496,25 +2388,24 @@ const BarcodeQrReaderModal = ({
 
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 -translate-y-10 sm:-translate-y-8">
             <div className="relative h-[48vw] w-[48vw] min-h-[205px] min-w-[205px] max-h-[280px] max-w-[280px] rounded-[28px] border border-white/15 bg-transparent shadow-[0_0_0_9999px_rgba(0,0,0,0.24)] sm:h-[310px] sm:w-[310px]">
-              {isProcessingImage && (
-                <div className="absolute inset-0 flex items-center justify-center rounded-[28px] bg-black/28 backdrop-blur-[2px]">
-                  <div className="flex flex-col items-center gap-3">
-                    <motion.div
-                      className="h-12 w-12 rounded-full border-2 border-white/20 border-t-white"
-                      animate={{ rotate: 360 }}
-                      transition={{
-                        duration: 0.9,
-                        repeat: Infinity,
-                        ease: "linear",
-                      }}
-                    />
-                    <div className="text-center text-xs font-medium text-white/90">
-                      {processingLabel || "Processing image..."}
+             
+                {isProcessingImage && (
+                    <div className="absolute inset-0 flex items-center justify-center rounded-[28px] bg-black/28 backdrop-blur-[2px]">
+                      <div className="flex flex-col items-center gap-3">
+                        <motion.div
+                          className="h-12 w-12 rounded-full border-2 border-white/20 border-t-white"
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }}
+                        />
+                        <div className="text-center text-xs font-medium text-white/90">
+                          {processingLabel || "Processing image..."}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              )}
+                  )}
 
+
+         
               <div className="absolute left-0 top-0 h-10 w-10 rounded-tl-[28px] border-l-4 border-t-4 border-white" />
               <div className="absolute right-0 top-0 h-10 w-10 rounded-tr-[28px] border-r-4 border-t-4 border-white" />
               <div className="absolute bottom-0 left-0 h-10 w-10 rounded-bl-[28px] border-b-4 border-l-4 border-white" />
@@ -2551,7 +2442,7 @@ const BarcodeQrReaderModal = ({
               <button
                 ref={closeBtnRef}
                 type="button"
-                onClick={handleCloseModal}
+                onClick={onClose}
                 className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/12 bg-white/8 text-white backdrop-blur-xl transition hover:bg-white/12 sm:border-white/15 sm:bg-white/10 sm:hover:bg-white/15"
                 aria-label="Close scanner"
               >
@@ -2626,6 +2517,13 @@ const BarcodeQrReaderModal = ({
                     </div>
                   )}
 
+                  {/* {!!processingLabel && (
+                    <div className="mt-2 flex items-center gap-2 rounded-2xl border border-white/10 bg-white/8 px-3 py-2 text-[12px] text-white/85">
+                      <Loader2 size={14} className="animate-spin" />
+                      {processingLabel}
+                    </div>
+                  )} */}
+
                   {!!processingLabel && (
                     <div className="mt-2 overflow-hidden rounded-2xl border border-white/10 bg-white/8">
                       <div className="flex items-center gap-2 px-3 py-2 text-[12px] text-white/85">
@@ -2641,11 +2539,7 @@ const BarcodeQrReaderModal = ({
                       <motion.div
                         className="h-[2px] w-full bg-gradient-to-r from-transparent via-white/70 to-transparent"
                         animate={{ x: ["-100%", "100%"] }}
-                        transition={{
-                          duration: 1.1,
-                          repeat: Infinity,
-                          ease: "linear",
-                        }}
+                        transition={{ duration: 1.1, repeat: Infinity, ease: "linear" }}
                       />
                     </div>
                   )}

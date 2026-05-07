@@ -4062,7 +4062,6 @@ const checkDuplicateCheckNo = async (checkNo, docId) => {
     isOpen={showAccountModal}
     onClose={handleCloseAccountModal}
     source={accountModalSource}
-    customParam="ActiveAll"
   />
  )}
 

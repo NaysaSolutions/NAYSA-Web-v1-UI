@@ -1,12 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
-import { fetchDataJson } from '../../../Configuration/BaseURL.jsx';
-import { useSelectedHSColConfig } from '@/NAYSA Cloud/Global/selectedData';
+import { useState, useEffect, useRef } from "react";
+import { fetchDataJson } from "../../../Configuration/BaseURL.jsx";
+import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
 import GlobalGLPostingModalv1 from "../../../Lookup/SearchGlobalGLPostingv1.jsx";
-import { useSwalValidationAlert } from '@/NAYSA Cloud/Global/behavior';
+import { useSwalValidationAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 import { useHandlePostTran } from '@/NAYSA Cloud/Global/procedure';
-import ReactDOM from 'react-dom';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faSpinner } from '@fortawesome/free-solid-svg-icons';
+import ReactDOM from "react-dom";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faSpinner } from "@fortawesome/free-solid-svg-icons";
 
 const PostMSRTV = ({ isOpen, onClose, userCode }) => {
   const [data, setData] = useState([]);
@@ -29,11 +29,18 @@ const PostMSRTV = ({ isOpen, onClose, userCode }) => {
       try {
         const endpoint = "postingMSRTV";
         const response = await fetchDataJson(endpoint);
-        const custData = response?.data?.[0]?.result
+        // const rows = Array.isArray(response?.data)
+        // ? response.data
+        // : response?.data?.[0]?.result
+        //   ? JSON.parse(response.data[0].result)
+        //   : [];
+        const rows = response?.data?.[0]?.result
           ? JSON.parse(response.data[0].result)
           : [];
-        console.log(custData)
-        if (custData.length === 0 && !alertFired.current) {
+          
+          console.log("Fetched MSRTV Data:", rows);
+
+        if (rows.length === 0 && !alertFired.current) {
           useSwalValidationAlert({
             icon: "info",
             title: "No Records Found",
@@ -46,7 +53,7 @@ const PostMSRTV = ({ isOpen, onClose, userCode }) => {
         const colConfig = await useSelectedHSColConfig(endpoint);
 
         if (isMounted) {
-          setData(custData);
+          setData(rows);
           setcolConfigData(colConfig);
           setModalReady(true);
         }
@@ -65,12 +72,7 @@ const PostMSRTV = ({ isOpen, onClose, userCode }) => {
     };
   }, [isOpen, onClose]);
 
-  const handlePost = async (selectedData, userPw) => {
-    await useHandlePostTran(selectedData, userPw, "MSAJ", userCode, setLoading, onClose);
-  };
-
- 
-const pickDocAndBranch = (row) => {
+  const pickDocAndBranch = (row) => {
   if (!row) return { docNo: null, branchCode: null };
   const docNo = row.rtvNo;
   const branchCode = row.branchCode;
@@ -78,19 +80,23 @@ const pickDocAndBranch = (row) => {
 };
 
 
-const handleViewDocument = (row) => {
+  const handlePost = async (selectedData, userPw) => {
+    await useHandlePostTran(selectedData, userPw, "MSRTV", userCode, setLoading, onClose);
+  };
 
-  const { docNo, branchCode } = pickDocAndBranch(row);
-  if (!docNo || !branchCode) {
-    useSwalValidationAlert({
-      icon: "warning",
-      title: "Missing keys",
-      message: "Cannot determine Document No Column Index"
-    });
-    return;
-  }
+  const handleViewDocument = (row) => {
+    const { rtvNo, branchCode } = pickDocAndBranch(row);
 
-    const MSRTV_VIEW_URL = "/tran/MSRTV";
+    if (!rtvNo || !branchCode) {
+      useSwalValidationAlert({
+        icon: "warning",
+        title: "Missing keys",
+        message: "Cannot determine MSRTV keys for viewing.",
+      });
+      return;
+    }
+
+    const MSRTV_VIEW_URL = "/inventory/transactions/msrtv";
     const url =
       `${window.location.origin}${MSRTV_VIEW_URL}` +
       `?rtvNo=${encodeURIComponent(rtvNo)}&branchCode=${encodeURIComponent(branchCode)}`;

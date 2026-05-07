@@ -72,6 +72,7 @@ const PayeeSetupTab = forwardRef(
   ) => {
     useImperativeHandle(ref, () => ({}));
 
+    // --- 1. DEFINE CONSTANTS ---
     const isNewRecord = form.__isNew;
     const isReadOnly = !isEditing;
     const isDisabled = isReadOnly || isLoading;
@@ -95,7 +96,7 @@ const PayeeSetupTab = forwardRef(
       return n || fallback;
     };
 
-    // --- UNLOCKING LOGIC ---
+    // --- 2. UNLOCKING LOGIC ---
     const isManualMode = useMemo(() => {
       const mode = normalizeUpper(generationMode || "Manual");
       return mode === "MANUAL" || mode === "M";
@@ -109,30 +110,21 @@ const PayeeSetupTab = forwardRef(
         const input = overrideRef.current.querySelector("input");
         if (input) {
           if (canType) {
-            const maxLen = getLen("vend_code", 20);
-
+            // UNLOCK for Manual + New Record
             input.removeAttribute("readonly");
-            input.setAttribute("maxlength", maxLen);
-
-            input.onclick = (e) => e.stopPropagation();
+            input.onclick = (e) => e.stopPropagation(); // Prevents click from opening lookup
             input.oninput = (e) => {
-              let val = e.target.value;
-
-              if (val.length > maxLen) {
-                val = val.substring(0, maxLen);
-                e.target.value = val;
-              }
-
-              onChangeForm({ vendCode: val, custCode: val });
+              onChangeForm({ vendCode: e.target.value, custCode: e.target.value });
             };
           } else {
+            // LOCK for Auto or Retrieved Records
             input.setAttribute("readonly", "true");
             input.onclick = null;
             input.oninput = null;
           }
         }
       }
-    }, [canType, isNewRecord, onChangeForm, tblFieldArray]);
+    }, [canType, isNewRecord, onChangeForm]);
 
     const sl = useMemo(
       () => normalizeUpper(form?.sltypeCode || "SU"),
@@ -148,13 +140,8 @@ const PayeeSetupTab = forwardRef(
     const isSupplier = sl === "SU";
     const isIndividualTaxClass = taxClass === "WI";
 
-    // TIN is required for all SL Types except Employee.
-    // This only controls the red required indicator in the UI.
-    // The save validation message still comes from your original backend/Swal flow.
-    const isTinRequired = !isEmployee;
-
-    const shouldAutoNameFromParts = isEmployee || isIndividualTaxClass;
-
+    const isTinRequired = !isIndividualTaxClass;
+    const shouldAutoNameFromParts = isEmployee;
     const shouldDisableBusinessName = isEmployee;
     const shouldLockNameParts = isSupplier && !isIndividualTaxClass;
 
@@ -247,12 +234,6 @@ const PayeeSetupTab = forwardRef(
         .join(" ");
     };
 
-    const normalizeNameCompare = (v) =>
-      String(v ?? "")
-        .replace(/\s+/g, " ")
-        .trim()
-        .toUpperCase();
-
     const taxAutoRef = useRef({
       lastAutoValue: "",
       userTouched: false,
@@ -262,10 +243,8 @@ const PayeeSetupTab = forwardRef(
     const nameAutoRef = useRef({
       businessLastAuto: "",
       checkLastAuto: "",
-      registeredLastAuto: "",
       businessTouched: false,
       checkTouched: false,
-      registeredTouched: false,
       lastSl: "",
     });
 
@@ -307,55 +286,9 @@ const PayeeSetupTab = forwardRef(
         (businessEmpty || businessWasAuto) &&
         !nameAutoRef.current.businessTouched
       ) {
-        if (currentBusiness !== reg) updates.businessName = reg;
-        nameAutoRef.current.businessLastAuto = reg;
-      }
-
-      if ((checkEmpty || checkWasAuto) && !nameAutoRef.current.checkTouched) {
-        if (currentCheck !== reg) updates.checkName = reg;
-        nameAutoRef.current.checkLastAuto = reg;
-      }
-
-      return updates;
-    };
-
-    const updateNamesFromParts = (fn, mn, ln) => {
-      const reg = buildRegisteredName(fn, mn, ln);
-      const updates = {};
-
-      const currentRegName = form[f.name] || "";
-
-      // Registered Name should always follow First/Middle/Last Name in Individual mode.
-      if (currentRegName !== reg) {
-        updates[f.name] = reg;
-      }
-      nameAutoRef.current.registeredLastAuto = reg;
-
-      // Business Name should only be auto-filled when blank or still equal to the old auto-generated name.
-      // This prevents overwriting a business name that the user intentionally edited.
-      const currentBusiness = form.businessName || "";
-      const businessEmpty = !String(currentBusiness).trim();
-      const businessWasAuto =
-        normalizeNameCompare(currentBusiness) ===
-          normalizeNameCompare(nameAutoRef.current.businessLastAuto) ||
-        normalizeNameCompare(currentBusiness) === normalizeNameCompare(currentRegName);
-
-      if (
-        (businessEmpty || businessWasAuto) &&
-        !nameAutoRef.current.businessTouched
-      ) {
         updates.businessName = reg;
         nameAutoRef.current.businessLastAuto = reg;
       }
-
-      // Check Name should also follow First/Middle/Last Name when it is still the auto-generated value.
-      // This fixes the issue where editing Last Name updates Registered Name but leaves Check Name unchanged.
-      const currentCheck = form.checkName || "";
-      const checkEmpty = !String(currentCheck).trim();
-      const checkWasAuto =
-        normalizeNameCompare(currentCheck) ===
-          normalizeNameCompare(nameAutoRef.current.checkLastAuto) ||
-        normalizeNameCompare(currentCheck) === normalizeNameCompare(currentRegName);
 
       if ((checkEmpty || checkWasAuto) && !nameAutoRef.current.checkTouched) {
         updates.checkName = reg;
@@ -402,10 +335,8 @@ const PayeeSetupTab = forwardRef(
       if (slChanged) {
         nameAutoRef.current.businessTouched = false;
         nameAutoRef.current.checkTouched = false;
-        nameAutoRef.current.registeredTouched = false;
         nameAutoRef.current.businessLastAuto = "";
         nameAutoRef.current.checkLastAuto = "";
-        nameAutoRef.current.registeredLastAuto = "";
       }
       nameAutoRef.current.lastSl = sl;
     }, [sl, isEditing]);
@@ -414,11 +345,19 @@ const PayeeSetupTab = forwardRef(
       if (!isEditing) return;
 
       if (shouldAutoNameFromParts) {
-        const updates = updateNamesFromParts(
+        const reg = buildRegisteredName(
           form.firstName,
           form.middleName,
           form.lastName
         );
+
+        const updates = {};
+
+        if ((form[f.name] || "") !== reg) updates[f.name] = reg;
+        if ((form.businessName || "") !== reg) updates.businessName = reg;
+
+        applyAutoNames(updates, reg);
+
         if (Object.keys(updates).length) onChangeForm(updates);
         return;
       }
@@ -433,7 +372,6 @@ const PayeeSetupTab = forwardRef(
       }
     }, [
       shouldAutoNameFromParts,
-      isEmployee,
       isSupplier,
       isIndividualTaxClass,
       isEditing,
@@ -459,6 +397,7 @@ const PayeeSetupTab = forwardRef(
       if (isLoading) return;
       setIsVendLookupOpen(true);
     };
+
 
     return (
       <>
@@ -489,32 +428,24 @@ const PayeeSetupTab = forwardRef(
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div
-                ref={overrideRef}
-                className={`w-full ${
-                  !canType
-                    ? "[&>div]:!bg-[#F1F5F9] [&_input]:!bg-transparent [&_input]:!pointer-events-none [&_input]:!text-slate-600 [&_button]:!text-slate-400 [&_label]:!bg-[#F1F5F9]"
-                    : ""
-                }`}
+              <div 
+                  ref={overrideRef}
+                  className={`w-full ${!canType ? "[&>div]:!bg-[#F1F5F9] [&_input]:!bg-transparent [&_input]:!pointer-events-none [&_input]:!text-slate-600 [&_button]:!text-slate-400 [&_label]:!bg-[#F1F5F9]" : ""}`}
               >
-                <FieldRenderer
-                  label="Payee Code"
-                  required
-                  type="lookup"
-                  value={form[f.code] || ""}
-                  onChange={
-                    canType
-                      ? (v) => {
+                  <FieldRenderer
+                      label="Payee Code"
+                      required
+                      type="lookup" 
+                      value={form[f.code] || ""}
+                      onChange={canType ? (v) => {
                           const val = getValue(v);
                           onChangeForm({ [f.code]: val, custCode: val });
-                        }
-                      : undefined
-                  }
-                  onLookup={canType ? undefined : openPayeeLookup}
-                  readOnly={!canType}
-                  disabled={isLoading}
-                  maxLength={getLen(col.code, 20)}
-                />
+                      } : undefined}
+                      onLookup={canType ? undefined : openPayeeLookup}
+                      readOnly={!canType}
+                      disabled={isLoading}
+                      maxLength={getLen(col.code, 20)}
+                  />
               </div>
 
               <FieldRenderer
@@ -536,7 +467,6 @@ const PayeeSetupTab = forwardRef(
               value={form[f.name] || ""}
               onChange={(v) => {
                 const value = getValue(v);
-                nameAutoRef.current.registeredTouched = true;
                 const updates = { [f.name]: value };
 
                 if (isSupplier && !isIndividualTaxClass) {
@@ -582,12 +512,14 @@ const PayeeSetupTab = forwardRef(
                   const updates = { firstName: value };
 
                   if (shouldAutoNameFromParts) {
-                    const partsUpdates = updateNamesFromParts(
+                    const reg = buildRegisteredName(
                       value,
                       form.middleName,
                       form.lastName
                     );
-                    Object.assign(updates, partsUpdates);
+                    updates[f.name] = reg;
+                    updates.businessName = reg;
+                    applyAutoNames(updates, reg);
                   }
 
                   onChangeForm(updates);
@@ -606,12 +538,14 @@ const PayeeSetupTab = forwardRef(
                   const updates = { middleName: value };
 
                   if (shouldAutoNameFromParts) {
-                    const partsUpdates = updateNamesFromParts(
+                    const reg = buildRegisteredName(
                       form.firstName,
                       value,
                       form.lastName
                     );
-                    Object.assign(updates, partsUpdates);
+                    updates[f.name] = reg;
+                    updates.businessName = reg;
+                    applyAutoNames(updates, reg);
                   }
 
                   onChangeForm(updates);
@@ -631,12 +565,14 @@ const PayeeSetupTab = forwardRef(
                   const updates = { lastName: value };
 
                   if (shouldAutoNameFromParts) {
-                    const partsUpdates = updateNamesFromParts(
+                    const reg = buildRegisteredName(
                       form.firstName,
                       form.middleName,
                       value
                     );
-                    Object.assign(updates, partsUpdates);
+                    updates[f.name] = reg;
+                    updates.businessName = reg;
+                    applyAutoNames(updates, reg);
                   }
 
                   onChangeForm(updates);
@@ -840,7 +776,7 @@ const PayeeSetupTab = forwardRef(
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mt-2">
               <FieldRenderer
-                label="Default Payment Term"
+                label="Default Payment Terms"
                 required
                 type="lookup"
                 value={form.paytermCode || ""}

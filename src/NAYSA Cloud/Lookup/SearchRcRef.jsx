@@ -85,7 +85,7 @@ const SearchRcRef = ({
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4 animate-fade-in backdrop-blur-[1px]">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col relative overflow-hidden transform animate-scale-in border border-slate-200">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-xl max-h-[80vh] flex flex-col relative overflow-hidden transform animate-scale-in border border-slate-200">
         
         {/* Header Section */}
         <div className="flex items-center justify-between p-2 bg-slate-100 dark:bg-gray-900 border-b border-slate-200 dark:border-gray-700">
@@ -130,8 +130,8 @@ const SearchRcRef = ({
             <table className="min-w-full">
               <thead className="sticky top-0 z-10 bg-slate-200 dark:bg-gray-700">
                 <tr>
-                  <th className="px-4 py-2 text-left">
-                    <label className="block text-[13px] font-bold text-slate-600 dark:text-gray-300 propercase mb-1">
+                  <th className="global-lookup-th-ui">
+                    <label className="block text-[13px] font-bold text-slate-600 dark:text-gray-300 propercase mb-1 w-[90px]">
                       RC Type Code
                     </label>
                     <input
@@ -142,9 +142,9 @@ const SearchRcRef = ({
                       className="w-full px-2 py-1 text-xs border rounded bg-white dark:bg-gray-800 outline-none focus:ring-2 focus:ring-blue-500/20"
                     />
                   </th>
-                  <th className="px-4 py-2 text-left">
-                    <label className="block text-[13px] font-bold text-slate-600 dark:text-gray-300 propercase mb-1">
-                      Description
+                  <th className="global-lookup-th-ui">
+                    <label className="block text-[13px] font-bold text-slate-600 dark:text-gray-300 propercase mb-1 whitespace-nowrap">
+                      RC Type Name
                     </label>
                     <input
                       type="text"
@@ -166,10 +166,10 @@ const SearchRcRef = ({
                       onClick={() => onClose(item)}
                       className="group hover:bg-blue-50 dark:hover:bg-blue-900/30 cursor-pointer transition-colors"
                     >
-                      <td className="px-4 py-2 text-xs font-bold text-slate-700 dark:text-blue-400 w-[150px]">
+                      <td className="global-lookup-td-ui font-bold">
                         {item.rcTypeCode}
                       </td>
-                      <td className="px-4 py-2 text-xs text-slate-600 dark:text-gray-300 whitespace-nowrap">
+                      <td className="global-lookup-td-ui">
                         {item.rcTypeName}
                       </td>
                     </tr>

@@ -193,30 +193,38 @@ const RcRef = forwardRef(
     );
 
     // --- MUTATIONS ---
-    const saveMutation = useMutation({
-      mutationFn: async (payload) => {
-        return apiClient.post("/upsertRcType", {
-          json_data: JSON.stringify(payload),
-        });
-      },
-      onSuccess: (response) => {
-        const sqlRow = response?.data?.data?.[0] || {};
-        const errorcount = Number(sqlRow.errorcount ?? sqlRow.ERRORCOUNT ?? 0);
-        const errormsg = String(sqlRow.errormsg ?? sqlRow.ERRORMSG ?? "");
-
-        if (errorcount > 0) {
-          swalErrorAlert("Error", errormsg);
-          return;
-        }
-
-        queryClient.invalidateQueries({ queryKey: ["rcTypeList"] });
-        swalSuccessAlert("Success!", "Record saved successfully.");
-        handleReset();
-      },
-      onError: (error) => {
-        swalErrorAlertAPI("System Error", error);
-      },
+   const saveMutation = useMutation({
+  mutationFn: async (payload) => {
+    return apiClient.post("/upsertRcType", {
+      json_data: JSON.stringify(payload),
     });
+  },
+  onSuccess: (response) => {
+    const sqlRow = response?.data?.data?.[0] || {};
+    const errorcount = Number(sqlRow.errorcount ?? sqlRow.ERRORCOUNT ?? 0);
+    const errormsg = String(sqlRow.errormsg ?? sqlRow.ERRORMSG ?? "");
+
+    if (errorcount > 0) {
+      swalErrorAlert("Error", errormsg);
+
+      // CLEAR THE CODE IF SPROC RETURNS DUPLICATE ERROR
+     if (
+  errormsg.toLowerCase().includes("duplicate") ||
+  errormsg.toLowerCase().includes("already in use")
+) {
+  setField("rcTypeCode", "");
+  setIsDupCode(true);
+  setTimeout(() => codeInputRef.current?.focus?.(), 0);
+}
+      return;
+    }
+
+    queryClient.invalidateQueries({ queryKey: ["rcTypeList"] });
+    swalSuccessAlert("Success!", "Record saved successfully.");
+    handleReset();
+  },
+  // ... rest of mutation[cite: 2]
+});
 
     const deleteMutation = useMutation({
       mutationFn: async (rcTypeCode) => {
@@ -321,6 +329,7 @@ const RcRef = forwardRef(
           .toUpperCase(),
         rcTypeName: String(form.rcTypeName || "").trim(),
         userCode: user?.USER_CODE || "ADMIN",
+         isEdit: form.__existing ? 1 : 0,
       };
 
       if (!payload.rcTypeCode || !payload.rcTypeName) {

@@ -6,8 +6,7 @@ import { useSwalValidationAlert } from '@/NAYSA Cloud/Global/behavior';
 import { useHandlePostTran } from '@/NAYSA Cloud/Global/procedure';
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
-const PostJV = ({ isOpen, onClose, userCode, branchCode }) => {
-// const PostJV = ({ isOpen, onClose, userCode }) => {
+const PostJV = ({ isOpen, onClose, userCode }) => {
   const [data, setData] = useState([]);
   const [colConfigData, setcolConfigData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -26,6 +25,8 @@ const PostJV = ({ isOpen, onClose, userCode, branchCode }) => {
       try {
         const endpoint = "postingJV";
         const response = await fetchDataJson(endpoint);
+        
+        // Ensure we parse the result correctly as done in PostSVI
         const custData = response?.data?.[0]?.result
           ? JSON.parse(response.data[0].result)
           : [];
@@ -66,36 +67,38 @@ const PostJV = ({ isOpen, onClose, userCode, branchCode }) => {
     await useHandlePostTran(selectedData, userPw, "JV", userCode, setLoading, onClose);
   };
 
+  // Updated to match the reliable mapping structure in PostSVI[cite: 1]
   const pickDocAndBranch = (row) => {
     if (!row) return { docNo: null, branchCode: null };
-    const docNo = row.jvNo;
+    // Ensure these keys (jvNo, branchCode) match exactly what your SQL JSON returns
+    const docNo = row.jvNo; 
     const branchCode = row.branchCode;
     return { docNo, branchCode };
   };
 
   const handleViewDocument = (row) => {
     const { docNo, branchCode } = pickDocAndBranch(row);
+    
     if (!docNo || !branchCode) {
-      useSwalValidationAlert({
-        icon: "warning",
-        title: "Missing keys",
-        message: "Cannot determine Document No Column Index"
-      });
-      return;
-    }
+    useSwalValidationAlert({
+      icon: "warning",
+      title: "Navigation Error",
+      message: `Required keys missing. DocNo: ${docNo}, Branch: ${branchCode}`
+    });
+    return;
+  }
 
     const JV_VIEW_URL = "/page/JV";
-    const url =
-      `${window.location.origin}${JV_VIEW_URL}` +
-      `?jvNo=${encodeURIComponent(docNo)}` +
-      `&branchCode=${encodeURIComponent(branchCode)}` +
-      `&viewDocument=true`;
-    window.open(url, "_blank", "noopener,noreferrer");
-  };
+  const url =
+    `${window.location.origin}${JV_VIEW_URL}` +
+    `?jvNo=${encodeURIComponent(docNo)}` +
+    `&branchCode=${encodeURIComponent(branchCode)}` +
+    `&viewDocument=true`;
+  window.open(url, "_blank", "noopener,noreferrer");
+};
 
   return (
     <>
-      {/* Mount the modal only when ready */}
       {modalReady && (
         <GlobalGLPostingModalv1
           data={data}
@@ -109,7 +112,6 @@ const PostJV = ({ isOpen, onClose, userCode, branchCode }) => {
           remoteLoading={loading}
         />
       )}
-
       {loading && <LoadingSpinner />}
     </>
   );

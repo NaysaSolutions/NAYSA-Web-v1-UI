@@ -46,9 +46,12 @@ import {
 import {
   useTopForexRate,
   useTopCurrencyRow,
+  useTopHSOption,
   useTopDocControlRow,
   useTopPayTermRow,
+  useTopVatRow,
   useTopPayeeRow,
+  useTopVatAmount
 } from "@/NAYSA Cloud/Global/top1RefTable";
 
 import {
@@ -68,11 +71,6 @@ import {
 } from '@/NAYSA Cloud/Global/dates';
 
 import DateFormatInput from '@/NAYSA Cloud/Global/DateFormatInput.jsx';
-import {
-  transactionActionsCellStyle,
-  transactionActionsHeaderStyle,
-  useResizableTableColumns,
-} from '@/NAYSA Cloud/Global/datatable.jsx';
 
 import { useHandlePrint } from "@/NAYSA Cloud/Global/report";
 import {
@@ -96,32 +94,12 @@ import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 // Header
 import Header from "@/NAYSA Cloud/Components/Header";
 
-const toDateInputValue = (value) => {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-    const match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (match) {
-    const [, mm, dd, yyyy] = match;
-    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
-  }
-  const parsed = new Date(raw);
-  if (!Number.isNaN(parsed.getTime())) {
-    const yyyy = parsed.getFullYear();
-    const mm = String(parsed.getMonth() + 1).padStart(2, "0");
-    const dd = String(parsed.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  }
-  return "";
-};
-
 const JO = () => {
    const loadedFromUrlRef = useRef(false);
-   const detailRowsRef = useRef([]);
     const navigate = useNavigate();
     const location = useLocation(); 
     const [isViewDocument, setIsViewDocument] = useState(false);
-    const { companyInfo, currentUserRow,getAllDropDown,refsLoaded ,getAllTopATCRow, getAllTopVatRow,getAllTopVatAmount,getAllTopATCAmount,getAllTopHSDocRow } = useAuth();
+    const { companyInfo, currentUserRow,getAllDropDown,refsLoaded ,getAllTopHSDocRow} = useAuth();
     const decUPrice = companyInfo?.pur_decuprice ?? 2;
   
   
@@ -321,12 +299,6 @@ const JO = () => {
     rcLookupModalOpen,
   } = state;
 
-  const [showTypeDropdown, setShowTypeDropdown] = useState(false);
-
-  useEffect(() => {
-    detailRowsRef.current = detailRows || [];
-  }, [detailRows]);
-
 
   const [totals, setTotals] = useState({
     totalGross: "0.00",
@@ -348,55 +320,8 @@ const JO = () => {
     displayStatus
   );
 
-
-
-  const joDetailColumnDefs = [
-    { key: "ln", label: "LN", width: 56 },
-    { key: "jobCode", label: "Job Code", width: 120 },
-    { key: "scopeOfWork", label: "Scope of Work", width: 320 },
-    { key: "specification", label: "Specification", width: 320 },
-    { key: "quantity", label: "Quantity", width: 130 },
-    { key: "unitPrice", label: "Unit Price", width: 130 },
-    { key: "uomCode", label: "UOM", width: 90 },
-    { key: "grossAmt", label: "Gross Amount", width: 140 },
-    { key: "discRate", label: "Disc Rate", width: 120 },
-    { key: "discAmt", label: "Disc Amount", width: 140 },
-    { key: "totalAmt", label: "Total Amount", width: 140 },
-    { key: "vatCode", label: "VAT Code", width: 120 },
-    { key: "vatName", label: "VAT Name", width: 220 },
-    { key: "vatAmt", label: "VAT Amount", width: 140 },
-    { key: "netAmt", label: "Net Amount", width: 140 },
-    { key: "deliveryDate", label: "Delivery Date", width: 140 },
-  ];
-
-  const {
-    getColumnStyle: getJoDetailColumnStyle,
-    getFrozenColumnStyle: getJoDetailFrozenStyle,
-    getOrderedColumns: getOrderedJoDetailColumns,
-    getSortedRows: getSortedJoDetailRows,
-    clearAllSorting: clearJoDetailSorting,
-    clearZeroValueOnFocus: clearJoDetailZeroOnFocus,
-    focusNextRowInput: focusNextJoDetailRowInput,
-    renderHeaderContextMenu: renderJoDetailHeaderContextMenu,
-    renderResizableHeader: renderJoDetailHeader,
-  } = useResizableTableColumns(joDetailColumnDefs);
-
-  const orderedJoDetailColumns = getOrderedJoDetailColumns(joDetailColumnDefs);
-  const getJoDetailFallbackWidth = (key) => joDetailColumnDefs.find((column) => column.key === key)?.width || 120;
-  const getJoDetailCellStyle = (key, fallbackWidth) => ({
-    ...getJoDetailColumnStyle(key, fallbackWidth),
-    ...getJoDetailFrozenStyle(key, orderedJoDetailColumns, fallbackWidth, { isHeader: false }),
-  });
-
-  const sortedJoDetailRows = getSortedJoDetailRows(
-    detailRows.map((row, originalIndex) => ({ row, originalIndex })),
-    (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? ""
-  );
-
-  const joDetailEnterNextRowZeroClearFields = ["quantity", "unitPrice", "discRate", "discAmt"];
-
   const updateTotalsDisplay = (rows) => {
-    const arr = Array.isArray(rows) ? rows : [];
+    const arr = rows || [];
 
     let gross = 0;
     let vat = 0;
@@ -494,7 +419,7 @@ useEffect(() => {
   // ==========================
 
   const handleReset = () => {
-    clearJoDetailSorting();
+   
 
     updateState({
       branchCode: currentUserRow?.branchCode||"",
@@ -586,7 +511,7 @@ const handleClosePayeeModal = async (selectedData) => {
     const updatedRows = await Promise.all(
       detailRows.map(async (row) => {
         const total = parseFormattedNumber(row.totalAmt) || 0;
-        const vAmt = newVatCode ? getAllTopVatAmount(newVatCode, total) : 0;
+        const vAmt = newVatCode ? await useTopVatAmount(newVatCode, total) : 0;
         const net = +(total - vAmt).toFixed(2);
 
         return {
@@ -826,12 +751,13 @@ const handleAddRow = async (index) => {
 
 const handleAddRowClick = async () => {
   const fields = { "Header : Department": rcName, "Header : Payee": payeeCode };
-  if (! await useSwalvalidateRequiredFields(fields, "Add Item") || isFormDisabled) return;
+  if (!useSwalvalidateRequiredFields(fields, "Add Item") || isFormDisabled) return;
 
   try {
     const updatedRows = await insertNewRow();
     
-    updateTotalsDisplay(updatedRows);
+    const netTotal = updatedRows.reduce((acc, r) => acc + (parseFormattedNumber(r.netAmt) || 0), 0);
+    updateTotalsDisplay(netTotal);
     setShowTypeDropdown(false);
   } catch (error) {
     console.error(error);
@@ -882,8 +808,8 @@ const handleDeleteRow = (index) => {
 
 
  const handleDetailChange = async (index, field, value, runCalculations = true) => {
-  const updatedRows = [...(detailRowsRef.current || detailRows || [])];
-  let row = { ...(updatedRows[index] || {}), [field]: value };
+  const updatedRows = [...detailRows];
+  let row = { ...updatedRows[index], [field]: value };
 
   if (field === 'vatCode') {
     row.vatCode = value.vatCode;
@@ -918,7 +844,7 @@ const handleDeleteRow = (index) => {
     
     // Kunin ang pinakabagong vatCode para sa recalculation
     const vCode = row.vatCode || "";
-    const vAmt = vCode ? getAllTopVatAmount(vCode, total)  : 0;
+    const vAmt = vCode ? await useTopVatAmount(vCode, total) : 0;
     const net = +(total - vAmt).toFixed(2);
 
     row = {
@@ -935,7 +861,6 @@ const handleDeleteRow = (index) => {
   }
 
   updatedRows[index] = row;
-  detailRowsRef.current = updatedRows;
   updateState({ detailRows: updatedRows });
   updateTotalsDisplay(updatedRows);
 };
@@ -1153,7 +1078,7 @@ const handleCopy = async () => {
 
 
   // ==========================
-  // HISTORY â€“ URL PARAM HANDLING
+  // HISTORY – URL PARAM HANDLING
   // ==========================
 
   
@@ -1302,7 +1227,7 @@ const handleCloseJobCodesLookup = (selectedItems) => {
   
   const handleCloseVATLookup = async (selectedVat) => {
   if (selectedVat && selectedRowIndex !== null) {
-    const result = getAllTopVatRow(selectedVat.vatCode);
+    const result = await useTopVatRow(selectedVat.vatCode);
     if (result) handleDetailChange(selectedRowIndex, 'vatCode', result, true);
   }
 
@@ -1455,154 +1380,6 @@ const handleClosePRLookup = async (selection) => {
   }
 };
 
-
-
-const renderJoDetailColumn = (columnKey, row, index) => {
-  const columnWidth = getJoDetailFallbackWidth(columnKey);
-  const style = getJoDetailCellStyle(columnKey, columnWidth);
-
-  const focusNextDetailCell = (field) => {
-    focusNextJoDetailRowInput(index, field, {
-      rows: detailRowsRef.current || detailRows,
-      zeroClearFields: joDetailEnterNextRowZeroClearFields,
-      parseValue: parseFormattedNumber,
-      onClearNextValue: (nextIndex, nextField, value) => handleDetailChange(nextIndex, nextField, value, false),
-    });
-  };
-
-
-  const isReadOnly = (field) => {
-    if (isFormDisabled) return true;
-    if (["totalAmt", "vatAmt", "netAmt"].includes(field)) return true;
-    return false;
-  };
-
-  const textInput = (field, options = {}) => (
-    <input
-      type="text"
-      id={`${field}-${index}`}
-      className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()}
-      value={row[field] || ""}
-      readOnly={options.readOnly ?? isReadOnly(field)}
-      disabled={options.disabled ?? false}
-      maxLength={options.maxLength}
-      onChange={(e) => handleDetailChange(index, field, e.target.value, false)}
-      onKeyDown={(e) => {
-        if (e.key !== "Enter" || options.readOnly || options.disabled || isFormDisabled) return;
-        e.preventDefault();
-        focusNextDetailCell(field);
-      }}
-    />
-  );
-
-  const amountInput = (field, options = {}) => {
-    const decimalPlaces = options.decimals ?? 2;
-    const readOnly = options.readOnly ?? isFormDisabled;
-
-    return (
-      <input
-        type="text"
-        id={`${field}-${index}`}
-        className={`w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 ${options.className || ""}`.trim()}
-        value={row[field] || ""}
-        readOnly={readOnly}
-        onChange={(e) => {
-          const sanitizedValue = e.target.value.replace(/[^0-9.-]/g, "");
-          const rgx = decimalPlaces === 0 ? /^-?\d*$/ : new RegExp(`^-?\\d*\\.?\\d{0,${decimalPlaces}}$`);
-          if (rgx.test(sanitizedValue) || sanitizedValue === "") {
-            handleDetailChange(index, field, sanitizedValue, false);
-          }
-        }}
-        onFocus={(e) =>
-          clearJoDetailZeroOnFocus(e, {
-            isEditable: !readOnly,
-            onClear: (value) => handleDetailChange(index, field, value, false),
-          })
-        }
-        onBlur={async (e) => {
-          if (readOnly) return;
-          const rawValue = String(e.target.value ?? "").trim();
-          if (rawValue === "") {
-            await handleDetailChange(index, field, "", false);
-            return;
-          }
-
-          let num = parseFormattedNumber(rawValue);
-
-          if (field === "discRate" && num > 99.99) {
-            useSwalInfoAlert("Invalid Discount Rate", "Discount Rate must not be more than 99.99%");
-            num = 0;
-          }
-
-          if (field === "discAmt") {
-            const gross = parseFormattedNumber(row.grossAmt) || 0;
-            if (num > gross) {
-              useSwalInfoAlert("Invalid Discount", "Discount amount cannot be greater than the Gross Amount.");
-              num = 0;
-            }
-          }
-
-          if (isNaN(num) || num < 0) num = 0;
-          await handleDetailChange(index, field, num, true);
-        }}
-        onKeyDown={async (e) => {
-          if (e.key !== "Enter" || readOnly) return;
-          e.preventDefault();
-
-          let num = parseFormattedNumber(e.target.value);
-
-          if (field === "discRate" && num > 99.99) {
-            useSwalInfoAlert("Invalid Discount Rate", "Discount Rate must not be more than 99.99%");
-            num = 0;
-          }
-
-          if (field === "discAmt") {
-            const gross = parseFormattedNumber(row.grossAmt) || 0;
-            if (num > gross) {
-              useSwalInfoAlert("Invalid Discount", "Discount amount cannot be greater than the Gross Amount.");
-              num = 0;
-            }
-          }
-
-          if (isNaN(num) || num < 0) num = 0;
-
-          await handleDetailChange(index, field, num, true);
-          focusNextJoDetailRowInput(index, field, {
-            rows: detailRowsRef.current || detailRows,
-            zeroClearFields: joDetailEnterNextRowZeroClearFields,
-            parseValue: parseFormattedNumber,
-            onClearNextValue: (nextIndex, nextField, value) => handleDetailChange(nextIndex, nextField, value, false),
-          });
-        }}
-      />
-    );
-  };
-
-  const readonlyAmount = (field) => (
-    <input type="text" className="w-full global-tran-td-inputclass-ui text-right" value={row[field] || ""} readOnly />
-  );
-
-  const detailColumnRenderers = {
-    ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
-    jobCode: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`jobCode-${index}`} className="w-full global-tran-td-inputclass-ui pr-6" value={row.jobCode || ""} readOnly onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("jobCode"); } }} />{!isFormDisabled && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={() => updateState({ showJobCodesModal: true, selectedRowIndex: index })} />}</div></td>,
-    scopeOfWork: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`scopeOfWork-${index}`} className="w-full global-tran-td-inputclass-ui pr-8" value={row.scopeOfWork || ""} readOnly={isFormDisabled} onChange={(e) => handleDetailChange(index, "scopeOfWork", e.target.value, false)} onKeyDown={(e) => { if (e.key === "Enter" && !isFormDisabled) { e.preventDefault(); focusNextDetailCell("scopeOfWork"); } }} />{!isFormDisabled && <FontAwesomeIcon icon={faSearch} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={() => useSwalHandleOpenSpecsModal(index, detailRows, handleDetailChange, row.scopeOfWork, "Scope of Work", "scopeOfWork", `Enter scope of work for ${row.jobCode || "this item"}...`)} />}</div></td>,
-    specification: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`specification-${index}`} className="w-full global-tran-td-inputclass-ui pr-8" value={row.specification || ""} readOnly={isFormDisabled} onChange={(e) => handleDetailChange(index, "specification", e.target.value, false)} onKeyDown={(e) => { if (e.key === "Enter" && !isFormDisabled) { e.preventDefault(); focusNextDetailCell("specification"); } }} />{!isFormDisabled && <FontAwesomeIcon icon={faSearch} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={() => useSwalHandleOpenSpecsModal(index, detailRows, handleDetailChange, row.specification, "Specification", "specification", `Enter specification for ${row.jobCode || "this item"}...`)} />}</div></td>,
-    quantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("quantity", { decimals: 2 })}</td>,
-    unitPrice: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("unitPrice", { decimals: decUPrice })}</td>,
-    uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("uomCode", { readOnly: isFormDisabled, maxLength: useGetFieldLength(tblFieldArray, "uom_code") })}</td>,
-    grossAmt: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{readonlyAmount("grossAmt")}</td>,
-    discRate: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("discRate", { decimals: 2, readOnly: isFormDisabled || parseFormattedNumber(row.grossAmt) === 0 })}</td>,
-    discAmt: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("discAmt", { decimals: 2, readOnly: isFormDisabled || parseFormattedNumber(row.grossAmt) === 0 })}</td>,
-    totalAmt: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{readonlyAmount("totalAmt")}</td>,
-    vatCode: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`vatCode-${index}`} className="w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer" value={row.vatCode || ""} readOnly onKeyDown={(e) => { if (e.key === "Enter" && !isFormDisabled) { e.preventDefault(); focusNextDetailCell("vatCode"); } }} />{!isFormDisabled && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={() => updateState({ selectedRowIndex: index, vatLookupModalOpen: true })} />}</div></td>,
-    vatName: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full global-tran-td-inputclass-ui" value={row.vatName || ""} readOnly /></td>,
-    vatAmt: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{readonlyAmount("vatAmt")}</td>,
-    netAmt: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{readonlyAmount("netAmt")}</td>,
-    deliveryDate: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}><input type="date" id={`deliveryDate-${index}`} className="w-full global-tran-td-inputclass-ui text-center" value={toDateInputValue(row.deliveryDate)} readOnly={isFormDisabled} onChange={(e) => handleDetailChange(index, "deliveryDate", e.target.value, false)} onKeyDown={(e) => { if (e.key === "Enter" && !isFormDisabled) { e.preventDefault(); focusNextDetailCell("deliveryDate"); } }} /></td>,
-  };
-
-  return detailColumnRenderers[columnKey]?.() ?? <td key={columnKey} className="global-tran-td-ui" style={style}>{String(row[columnKey] ?? "")}</td>;
-};
 
 
 
@@ -1890,44 +1667,437 @@ const renderJoDetailColumn = (columnKey, row, index) => {
 
           <div className="global-tran-table-main-div-ui">
             <div className="global-tran-table-main-sub-div-ui">
-              <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
+              <table className="min-w-full border-collapse">
                 <thead className="global-tran-thead-div-ui">
                   <tr>
-                    {orderedJoDetailColumns.map((column) =>
-                      renderJoDetailHeader(column.label, column.key, column.width, {
-                        orderedColumns: orderedJoDetailColumns,
-                      })
-                    )}
+                    <th className="global-tran-th-ui">LN</th>
+                    <th className="global-tran-th-ui">Job Code</th>
+                    <th className="global-tran-th-ui">Scope of Work</th>
+                    <th className="global-tran-th-ui">Specification</th>
+                    <th className="global-tran-th-ui">Quantity</th>
+                    <th className="global-tran-th-ui">Unit Price</th>
+                    <th className="global-tran-th-ui">UOM</th>
+                    <th className="global-tran-th-ui">Gross Amount</th>
+                    <th className="global-tran-th-ui">Disc Rate</th>
+                    <th className="global-tran-th-ui">Disc Amount</th>
+                    <th className="global-tran-th-ui">Total Amount</th>
+                    <th className="global-tran-th-ui">VAT Code</th>
+                    <th className="global-tran-th-ui">VAT Name</th>
+                    <th className="global-tran-th-ui">VAT Amount</th>
+                    <th className="global-tran-th-ui">Net Amount</th>
+                    <th className="global-tran-th-ui">Delivery Date</th>
+                    <th className="hidden">Group ID</th>
+                    
                     {!isFormDisabled && (
-                      <th
-                        className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900"
-                        style={transactionActionsHeaderStyle}
-                      >
+                      <th className="global-tran-th-ui sticky right-0 bg-blue-300 dark:bg-blue-900 z-30">
                         Actions
                       </th>
                     )}
+
+                   
                   </tr>
                 </thead>
-                <tbody className="relative">
-                  {sortedJoDetailRows.map(({ row, originalIndex }) => (
-                    <tr key={originalIndex} className="global-tran-tr-ui">
-                      {orderedJoDetailColumns.map((column) => renderJoDetailColumn(column.key, row, originalIndex))}
-                      {!isFormDisabled && (
-                        <td
-                          className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black"
-                          style={transactionActionsCellStyle}
-                        >
-                          <div className="flex items-center justify-center gap-1">
-                            <button type="button" className="global-tran-td-button-add-ui" onClick={() => handleAddRow(originalIndex)}><FontAwesomeIcon icon={faPlus} /></button>
-                            <button type="button" className="global-tran-td-button-delete-ui" onClick={() => handleDeleteRow(originalIndex)}><FontAwesomeIcon icon={faTrashAlt} /></button>
+
+                <tbody>
+                  {detailRows.map((row, index) => (
+                    <tr key={index} className="global-tran-tr-ui">
+                      {/* LN */}
+                      <td className="global-tran-td-ui text-center">
+                        {index + 1}
+                      </td>
+
+                      {/* Job Code */}
+                       <td className="global-tran-td-ui relative" >
+                            <div className="flex items-center">
+                              <input
+                                type="text"
+                                className={`w-[100px] global-tran-td-inputclass-ui`}
+                                value={row.jobCode || ""}
+                                readOnly
+                                onChange={(e) => handleDetailChange(index, 'jobCode', e.target.value,false)}
+                              />
+                                {!isFormDisabled && (
+                                <FontAwesomeIcon 
+                                  icon={faMagnifyingGlass} 
+                                  className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                                  onClick={() => updateState({ showJobCodesModal: true, selectedRowIndex: index })}                                                             
+                                />)}
+                              </div>
+                          </td>
+
+                      {/* Scope of Work */}
+                      {/* <td className="global-tran-td-ui">
+                        <input
+                          type="text"
+                          className="w-[220px] global-tran-td-inputclass-ui"
+                          value={row.scopeOfWork || ""}
+                          onChange={(e) =>
+                            handleDetailChange(
+                              index,
+                              "scopeOfWork",
+                              e.target.value
+                            )
+                          }
+                          disabled={isFormDisabled}
+                        />
+                      </td> */}
+
+                       <td className="global-tran-td-ui relative">
+                          <div className="flex items-center">
+                            <input
+                              type="text"
+                              className="w-[300px] global-tran-td-inputclass-ui pr-8"
+                              value={row.scopeOfWork || ""}
+                              onChange={(e) => handleDetailChange(index, "scopeOfWork", e.target.value,false)}
+                              readOnly={isFormDisabled}
+                            />
+                            {!isFormDisabled  && (
+                              <FontAwesomeIcon 
+                                icon={faSearch} 
+                                className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                                onClick={() => useSwalHandleOpenSpecsModal(
+                                index, 
+                                detailRows, 
+                                handleDetailChange, 
+                                row.scopeOfWork,    // rowValue                            
+                                'Scope of Work',
+                                'scopeOfWork',    // rowTitle (the field key in your state)
+                                `Enter scope of work for ${row.jobCode || 'this item'}...` // placeHolderValue
+                              )} 
+                              />
+                            )}
                           </div>
                         </td>
-                      )}
+
+
+                        <td className="global-tran-td-ui relative">
+                          <div className="flex items-center">
+                            <input
+                              type="text"
+                              className="w-[300px] global-tran-td-inputclass-ui pr-8"
+                              value={row.specification || ""}
+                              onChange={(e) => handleDetailChange(index, "specification", e.target.value,false)}
+                              readOnly={isFormDisabled }
+                            />
+                            {!isFormDisabled && (
+                              <FontAwesomeIcon 
+                                icon={faSearch} 
+                                className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                                onClick={() => useSwalHandleOpenSpecsModal(
+                                index, 
+                                detailRows, 
+                                handleDetailChange, 
+                                row.specification,  
+                                'Specification',    // rowValue
+                                'specification',                                   // rowTitle (the field key in your state)
+                                `Enter specification for ${row.jobCode || 'this item'}...` // placeHolderValue
+                              )} 
+                              />
+                            )}
+                          </div>
+                        </td>
+                     
+
+                      {/* Quantity */}
+                      <td className="global-tran-td-ui" >
+                    <input
+                        type="text"
+                        className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
+                        value={row.quantity || ""}
+                        readOnly={isFormDisabled}
+                        onChange={(e) => {
+                                const inputValue = e.target.value;
+                                const sanitizedValue = inputValue.replace(/[^0-9.-]/g, '');
+                                if (/^-?\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") {
+                                    handleDetailChange(index, "quantity", sanitizedValue, false);
+                                }
+                            }}                  
+                        onFocus={(e) => {
+                            if ((e.target.value === "0.00" || parseFormattedNumber(e.target.value) === 0)) {
+                              e.target.value = "";
+                            }
+                          }}                   
+                       onBlur={(e) => {
+                          const num = parseFormattedNumber(e.target.value);
+                          if (!isNaN(num)) handleDetailChange(index, "quantity", num,true);
+                        }}
+                        onKeyDown={async (e) => {
+                            if (e.key === "Enter") {
+                                e.preventDefault();
+                                const value = e.target.value;   
+                                const num = parseFormattedNumber(value);
+                                if (!isNaN(num)) {
+                                    await handleDetailChange(index, "quantity", num,true);
+                                }
+                                e.target.blur();
+                            }
+                        }}
+                        />
+                      </td>
+
+
+                    <td className="global-tran-td-ui" >
+                    <input
+                        type="text"
+                        className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
+                        value={row.unitPrice || ""}
+                        readOnly={isFormDisabled}
+                        onChange={(e) => {
+                            const inputValue = e.target.value;
+                             const sanitizedValue = inputValue.replace(/[^0-9.-]/g, '');
+                            if (/^-?\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") {
+                                handleDetailChange(index, "unitPrice", sanitizedValue,false);
+                            }
+                        }}                   
+                        onFocus={(e) => {
+                            if ((e.target.value === "0.00" || parseFormattedNumber(e.target.value) === 0)) {
+                              e.target.value = "";
+                            }
+                          }}                   
+                        onBlur={(e) => {
+                          const num = parseFormattedNumber(e.target.value);
+                          if (!isNaN(num)) handleDetailChange(index, "unitPrice", num, true);
+                        }}
+                        onKeyDown={async (e) => {
+                            if (e.key === "Enter") {
+                                e.preventDefault();
+                                const value = e.target.value;   
+                                const num = parseFormattedNumber(value);
+                                if (!isNaN(num)) {
+                                    await handleDetailChange(index, "unitPrice", num, true);
+                                }
+                                e.target.blur();
+                            }
+                        }}
+                        />
+                      </td>
+
+                      
+
+                      {/* UOM */}
+                      <td className="global-tran-td-ui">
+                        <input
+                          type="text"
+                          className="w-[80px] global-tran-td-inputclass-ui"
+                          value={row.uomCode || ""}
+                          onChange={(e) =>
+                            handleDetailChange(index, "uomCode", e.target.value,false)
+                          }
+                          disabled={isFormDisabled}
+                          maxLength={useGetFieldLength(tblFieldArray, "uom_code")} 
+
+                        />
+                      </td>
+
+                      {/* Gross Amt */}
+                       <td className="global-tran-td-ui text-right">
+                      <input
+                        type="text"
+                        className="w-[110px] global-tran-td-inputclass-ui text-right"
+                        value={row.grossAmt || ""}
+                        onChange={(e) => handleDetailChange(index, "grossAmt", e.target.value,false)}
+                        disabled={isFormDisabled}
+                      />
+                      </td>
+
+                      {/* Disc Rate */}
+                     <td className="global-tran-td-ui">
+                    <input
+                      type="text"
+                      className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
+                      value={row.discRate || ""}
+                      readOnly={isFormDisabled || parseFormattedNumber(row.grossAmt)===0 }
+                      onChange={(e) => {
+                          const val = e.target.value.replace(/[^0-9.-]/g, '');
+                          if (/^-?\d*\.?\d{0,2}$/.test(val) || val === "") {
+                            // While typing, we allow the input so the user can finish their thought
+                            handleDetailChange(index, "discRate", val, false);
+                          }
+                        }}
+                        onFocus={(e) => {
+                          if (parseFormattedNumber(e.target.value) === 0) {
+                            handleDetailChange(index, "discRate", "", false);
+                          }
+                        }}
+                        onBlur={async (e) => {
+                          let num = parseFormattedNumber(e.target.value);
+
+                          if (num > 99.99) {
+                            useSwalInfoAlert('Invalid Discount Rate','Discount Rate must not be more than 99.99%')                       
+                            num = 0;
+                          }
+
+                          if (isNaN(num) || num < 0) {
+                            num = 0;
+                          }
+                          
+                          handleDetailChange(index, "discRate", num, true);
+                        }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          e.target.blur();
+                        }
+                      }}
+                    />
+                  </td>
+
+                  
+                    {/* Disc Amt */}
+                    <td className="global-tran-td-ui">
+                      <input
+                        type="text"
+                        className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
+                        value={row.discAmt || ""}
+                        readOnly={isFormDisabled ||  parseFormattedNumber(row.grossAmt)===0 }
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/[^0-9.-]/g, '');
+                          if (/^-?\d*\.?\d{0,2}$/.test(val) || val === "") {
+                            handleDetailChange(index, "discAmt", val, false);
+                          }
+                        }}
+                        onFocus={() => {
+                          if (parseFormattedNumber(row.discAmt) === 0) {
+                            handleDetailChange(index, "discAmt", "", false);
+                          }
+                        }}
+                        onBlur={async (e) => {
+                          const num = parseFormattedNumber(e.target.value);
+                          const gross = parseFormattedNumber(row.grossAmt) || 0;
+
+                          if (num > gross) {
+                            useSwalInfoAlert('Invalid Discount','Discount amount cannot be greater than the Gross Amount.')                       
+                            handleDetailChange(index, "discAmt", 0, true);
+                          } else {
+                            const finalNum = isNaN(num) || num < 0 ? 0 : num;
+                            handleDetailChange(index, "discAmt", finalNum, true);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            e.target.blur();
+                          }
+                        }}
+                      />
+                    </td>                   
+
+                    {/* Total Amt (Net of Discount) */}
+                    <td className="global-tran-td-ui">
+                      <input
+                        type="text"
+                        className="w-[110px] h-7 text-xs bg-gray-50 text-right"
+                        value={row.totalAmt || ""}
+                        readOnly
+                      />
+                    </td>
+
+
+                      {/* VAT Code */}
+                      <td className="global-tran-td-ui relative">
+                      <div className="flex items-center">
+                        <input
+                          type="text"
+                          className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                          value={row.vatCode || ""}
+                          readOnly
+                        />
+                        {!isFormDisabled && (
+                        <FontAwesomeIcon 
+                          icon={faMagnifyingGlass} 
+                          className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                          onClick={() => {
+                            updateState({ selectedRowIndex: index,
+                                          vatLookupModalOpen: true}); 
+                          }}
+                        />)}
+                      </div>
+                     </td>
+
+
+                     <td className="global-tran-td-ui">
+                      <input
+                          type="text"
+                          className="w-[200px] global-tran-td-inputclass-ui"
+                          value={row.vatName || ""}
+                          readOnly
+                      />
+                    </td>
+
+
+                      {/* VAT Amt */}
+                      <td className="global-tran-td-ui text-right">
+                        <input
+                          type="text"
+                          className="w-[110px] global-tran-td-inputclass-ui text-right"
+                          value={row.vatAmt || ""}
+                          onChange={(e) =>
+                            handleDetailChange(index, "vatAmt", e.target.value)
+                          }
+                          disabled={isFormDisabled}
+                        />
+                      </td>
+
+
+                      {/* Net Amt */}
+                      <td className="global-tran-td-ui text-right">
+                        <input
+                          type="text"
+                          className="w-[110px] global-tran-td-inputclass-ui text-right"
+                          value={row.netAmt || ""}
+                          onChange={(e) =>
+                            handleDetailChange(index, "netAmt", e.target.value)
+                          }
+                          disabled={isFormDisabled}
+                        />
+                      </td>
+
+                      {/* Delivery Date */}
+                      <td className="global-tran-td-ui text-center">
+                        <input
+                          type="date"
+                          className="w-[130px] global-tran-td-inputclass-ui text-center"
+                          value={row.deliveryDate || ""}
+                          onChange={(e) => handleDetailChange(index, "deliveryDate", e.target.value)}
+                          disabled={isFormDisabled}
+                        />
+                      </td>
+
+
+                       <td className="hidden">
+                        <input 
+                          value={row.groupId || ""} 
+                          onChange={(e) => handleDetailChange(index, "groupId", e.target.value)} 
+                        />
+                      </td>
+
+                   
+                      {!isFormDisabled && (
+                          <td className="global-tran-td-ui text-center sticky right-0">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                className="global-tran-td-button-add-ui"
+                                onClick={() => handleAddRow(index)}
+                              >
+                                <FontAwesomeIcon icon={faPlus} />
+                              </button>
+
+                              <button
+                                type="button"
+                                className="global-tran-td-button-delete-ui"
+                                onClick={() => handleDeleteRow(index)}
+                              >
+                                <FontAwesomeIcon icon={faTrashAlt} />
+                              </button>
+                            </div>
+                          </td>
+                        )}
+
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {renderJoDetailHeaderContextMenu?.()}
             </div>
           </div>
 

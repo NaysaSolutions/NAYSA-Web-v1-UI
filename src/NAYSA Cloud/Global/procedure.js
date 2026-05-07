@@ -4,25 +4,7 @@ import { useSwalValidationAlert, useSwalErrorAlert} from '@/NAYSA Cloud/Global/b
 import Swal from 'sweetalert2';
 import { parseFormattedNumber } from './behavior';
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
-import {
-  useGetCurrentDayV2,
-  useformatToDatev2
-} from '@/NAYSA Cloud/Global/dates';
 
-
-
-
-export const formatDateToMMDDYYYY = (value) => {
-  if (!value) return "";
-
-  const raw = String(value).trim();
-  const datePart = raw.includes("T") ? raw.split("T")[0] : raw;
-
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return "";
-
-  const [year, month, day] = datePart.split("-");
-  return `${month}/${day}/${year}`;
-};
 
 
 
@@ -30,7 +12,7 @@ export const formatDateToMMDDYYYY = (value) => {
 export const useGenerateGLEntries = async (docCode, glData) => {
     const payload = { json_data: glData };
 
-    console.log(JSON.stringify(payload));
+    console.log(JSON.stringify(payload))
 
     try {
         const response = await postRequest("generateGL" + docCode, JSON.stringify(payload));
@@ -66,26 +48,18 @@ export const useGenerateGLEntries = async (docCode, glData) => {
                 throw new Error("Failed to parse GL entries.");
             }
 
-            console.log(glEntries)
-           return glEntries.map((entry, idx) => {
-          const rawSlRefDate = entry.slRefDate ?? "";
-
-          return {
-              ...entry,
-              id: idx + 1,
-
-              debit: formatNumber(entry.debit),
-              credit: formatNumber(entry.credit),
-              debitFx1: formatNumber(entry.debitFx1),
-              creditFx1: formatNumber(entry.creditFx1),
-              debitFx2: formatNumber(entry.debitFx2),
-              creditFx2: formatNumber(entry.creditFx2),
-
-              slRefDate: rawSlRefDate
-                  ? formatDateToMMDDYYYY(rawSlRefDate)
-                  : "",
-          };
-          });
+            return glEntries.map((entry, idx) => ({
+                id: idx + 1,
+                ...entry,
+                debit: formatNumber(entry.debit),
+                credit: formatNumber(entry.credit),
+                debitFx1: formatNumber(entry.debitFx1),
+                creditFx1: formatNumber(entry.creditFx1),
+                debitFx2: formatNumber(entry.debitFx2),
+                creditFx2: formatNumber(entry.creditFx2),
+                slRefNo: entry.slrefNo || entry.slRefNo || "",
+                slrefDate: entry.slrefDate || entry.slRefDate || "",
+            }));
         }
         return null;
     } catch (error) {
@@ -101,7 +75,6 @@ export const useTransactionUpsert = async (docCode, glData, updateState, idKey, 
     try {
         updateState({ isLoading: true });
         const payload = { json_data: glData };
-        console.log(JSON.stringify(payload))
         const response = await postRequest("upsert" + docCode, JSON.stringify(payload));
 
         if (response?.status === 'success' && response.data && response.data.length > 0) {

@@ -26,10 +26,6 @@ export const parseAndFormat = (value, decimals = 2) => {
   return formatNumber(parseFormattedNumber(value), decimals);
 };
 
-
-
-
-
 export const useSwalValidationAlert = ({ icon = "info", title = "", message = "" }) => {
   const formattedMessage = (message || "")
     .toString()
@@ -67,8 +63,6 @@ export const useSwalValidationAlert = ({ icon = "info", title = "", message = ""
 
 
 
-
-
 export const useSwalvalidateRequiredFields = (fields, title) => {
   let errors = [];
   for (const [label, value] of Object.entries(fields)) {
@@ -88,9 +82,6 @@ export const useSwalvalidateRequiredFields = (fields, title) => {
   }
   return true; 
 };
-
-
-
 
 
 
@@ -187,7 +178,63 @@ export const useSwalshowSave = (onConfirm, onPrint) => {
 
 
 
+// // Add these missing SweetAlert utility functions
+// export const useSwalErrorAlert = (title = "Error!", message = "Something went wrong.") => {
+//   return Swal.fire({
+//     icon: "error",
+//     title,
+//     text: message,
+//     timer: 3000, // Time in milliseconds
+//     timerProgressBar: true, // Optional: Shows a visual countdown bar
+//     customClass: {
+//       popup: "rounded-xl shadow-2xl",
+//     },
+//     // Optional: ensures the timer stops if the user hovers over the alert
+//     didOpen: (toast) => {
+//       toast.onmouseenter = Swal.stopTimer;
+//       toast.onmouseleave = Swal.resumeTimer;
+//     }
+//   });
+// };
 
+// export const useSwalErrorAlert = (title = "Error!", message = "Something went wrong.") => {
+  
+//   const formattedMessage = message.replace(/^(.+)/, '<strong style="display: block; font-size: 14px; color: #1f2937; margin-bottom: [-10px];">$1</strong>');
+//   const BreakMsg = formattedMessage.replace(/\n/g, "<br/>");
+
+//   return Swal.fire({
+//     icon: "error",
+//     // title: title, // Use the actual title field for the bold line
+//     html: `
+//       <div style="text-align: left; font-size: 13px; line-height: 1.5; color: #3d444d; margin-top: 4px;">
+//         ${BreakMsg}
+//       </div>
+//     `,
+//     width: '280px', 
+//     padding: '0.25rem', 
+//     showConfirmButton: true,
+//     confirmButtonColor: '#ef4444',
+//     confirmButtonText: 'OK',
+//     timer: 7000,
+//     timerProgressBar: true,
+//     customClass: {
+//       popup: "rounded-xl shadow-xl border border-gray-50",
+//       title: "text-sm font-bold m-0 p-0 mt-[-10px] text-gray-800", 
+//       confirmButton: "px-4 py-1.5 rounded-md font-medium text-xs",
+//       actions: "mt-2 mb-2" 
+//     },
+//     didOpen: (toast) => {
+//       const icon = Swal.getIcon();
+//       if (icon) {
+//         icon.style.transform = 'scale(0.55)'; // Slightly smaller icon
+//         icon.style.marginBottom = '-20px';   // Pulls title closer to icon
+//         icon.style.marginTop = '2px';      // Reduces top white space
+//       }
+//       toast.onmouseenter = Swal.stopTimer;
+//       toast.onmouseleave = Swal.resumeTimer;
+//     }
+//   });
+// };
 
 
 
@@ -251,9 +298,6 @@ export const useSwalErrorAlert = (
 };
 
 
-
-
-
 export const useSwalErrorAlertAPI = (
   title = "Error!",
   message = "Something went wrong."
@@ -306,6 +350,23 @@ export const useSwalErrorAlertAPI = (
 
 
 
+// export const useSwalSuccessAlert = (title = "Success!", message = "Operation completed successfully!") => {
+//   return Swal.fire({
+//     icon: "success",
+//     title,
+//     text: message,
+//     timer: 3000,
+//     timerProgressBar: true,
+//     showConfirmButton: false, // Often used with timers to make it feel like a "toast"
+//     customClass: {
+//       popup: "rounded-xl shadow-2xl",
+//     },
+//     didOpen: (toast) => {
+//       toast.onmouseenter = Swal.stopTimer;
+//       toast.onmouseleave = Swal.resumeTimer;
+//     }
+//   });
+// };
 
 export const useSwalSuccessAlert = (
   title = "Success!",
@@ -353,10 +414,6 @@ export const useSwalSuccessAlert = (
 };
 
 
-
-
-
-
 export const useSwalWarningAlert = (title = "Warning!", message = "Please check your input.") => {
   return Swal.fire({
     icon: "warning",
@@ -375,8 +432,6 @@ export const useSwalWarningAlert = (title = "Warning!", message = "Please check 
     }
   });
 };
-
-
 
 
 
@@ -400,9 +455,19 @@ export const useSwalInfoAlert = (title = "No data", message = "There is no data 
 };
 
 
-
-
-
+// export const useSwalDeleteConfirm = async (title = "Delete this item?", text = "", confirmText = "Yes, delete it") => {
+//   return await Swal.fire({
+//     title,
+//     text,
+//     icon: "warning",
+//     showCancelButton: true,
+//     confirmButtonColor: "#dc2626",
+//     confirmButtonText: confirmText,
+//     customClass: {
+//       popup: "rounded-xl shadow-2xl",
+//     },
+//   });
+// };
 
 export const useSwalDeleteConfirm = async (
   title = "Delete this item?",
@@ -447,10 +512,6 @@ export const useSwalDeleteConfirm = async (
   });
 };
 
-
-
-
-
 export const useSwalDeleteSuccess = () => {
   return Swal.fire({
     title: "Deleted",
@@ -462,8 +523,15 @@ export const useSwalDeleteSuccess = () => {
   });
 };
 
-
-
+// export const useSwalDeleteRecord = () => {
+//   return Swal.fire({
+//     title: "Record Deleted.",
+//     icon: "success",
+//     customClass: {
+//       popup: "rounded-xl shadow-2xl",
+//     },
+//   });
+// };
 
 export const useSwalDeleteRecord = (
   title = "Deleted!",
@@ -530,7 +598,6 @@ export const useSwalConfirmAlert = (title = "Are you sure?", message = "") => {
     },
   });
 };
-
 
 
 

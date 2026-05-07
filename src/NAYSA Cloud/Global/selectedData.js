@@ -126,30 +126,12 @@ export const useSelectedIteBranchBalance = async (data) => {
     const payload = { json_data: data };
 
     const response = await postRequest("getBranchItemBalance", JSON.stringify(payload));
-    const rawResult = response?.data?.[0]?.result;
-    const message = String(response?.message || "").toLowerCase();
-
-    if (!response || message.includes("no records")) {
-      return [];
-    }
-
-    if (response?.status === "success") {
-      if (!rawResult) return [];
-
-      const parsed = typeof rawResult === "string" ? JSON.parse(rawResult) : rawResult;
-      return Array.isArray(parsed) ? parsed : [];
-    }
-
-    if (!response?.data?.length) {
-      return [];
+    if (response?.status === "success" && response.data?.[0]?.result) {
+      return JSON.parse(response.data[0].result); 
     }
 
     throw new Error(response?.message || "No records found.");
   } catch (error) {
-    if (String(error?.message || "").toLowerCase().includes("no records")) {
-      return [];
-    }
-
     console.error("Error in GetItemBranchBalance:", error);
     Swal.fire({
       icon: "error",

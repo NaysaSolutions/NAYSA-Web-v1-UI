@@ -182,18 +182,20 @@ const RCMast = () => {
   });
 
   // --- ACTIONS ---
-  const handleSave = () => {
-    const payload = {
-      json_data: JSON.stringify({
-        json_data: {
-          ...form,
-          action: selectedRcCode ? "EDIT" : "ADD",
-          userCode: user?.USER_CODE || "ADMIN",
-        },
-      }),
-    };
-    saveRC(payload);
+ const handleSave = () => {
+  const payload = {
+    json_data: JSON.stringify({
+      json_data: {
+        ...form,
+        action: selectedRcCode ? "EDIT" : "ADD",
+        originalRcCode: selectedRcCode || "",
+        userCode: user?.USER_CODE || "ADMIN",
+      },
+    }),
   };
+
+  saveRC(payload);
+};
 
   const resetForm = () => {
     setForm(INITIAL_FORM);
@@ -269,31 +271,33 @@ const RCMast = () => {
     }
   };
 
-  const handleCheckDuplicate = async (code) => {
-    if (isEditing && selectedRcCode) return;
-    if (!code) return;
+const handleCheckDuplicate = async (code) => {
+  if (!code) return;
 
-    try {
-      const payload = { rcCode: code };
-      const response = await apiClient.post("/checkDuplicateRCMast", {
-        json_data: payload,
-      });
+  // allow same code during edit
+  if (isEditing && selectedRcCode && code === selectedRcCode) return;
 
-      const sqlRow = response?.data?.data?.[0];
-      const rawJsonString = sqlRow?.result;
-      const parsedData = JSON.parse(rawJsonString || '{"result":"0"}');
+  try {
+    const payload = { rcCode: code };
+    const response = await apiClient.post("/checkDuplicateRCMast", {
+      json_data: payload,
+    });
 
-      if (parsedData.result === "1") {
-        updateForm({ rcCode: "" });
-        return useSwalErrorAlert(
-          "Duplicate RC Code",
-          `The code '${code}' is already in use.`,
-        );
-      }
-    } catch (error) {
-      console.error("Duplicate Check Error:", error);
+    const sqlRow = response?.data?.data?.[0];
+    const rawJsonString = sqlRow?.result;
+    const parsedData = JSON.parse(rawJsonString || '{"result":"0"}');
+
+    if (parsedData.result === "1") {
+      updateForm({ rcCode: "" });
+      return useSwalErrorAlert(
+        "Duplicate RC Code",
+        `The code '${code}' is already in use.`,
+      );
     }
-  };
+  } catch (error) {
+    console.error("Duplicate Check Error:", error);
+  }
+};
 
   const columns = useMemo(
     () => [

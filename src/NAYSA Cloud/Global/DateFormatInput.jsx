@@ -154,7 +154,6 @@ const DateFormatInput = ({
   placeholder = "mm/dd/yyyy",
   onChangeCustom,
   onBlurCustom,
-  onKeyDownCustom,
   showCalendar = true,
   ...props
 }) => {
@@ -164,12 +163,11 @@ const DateFormatInput = ({
   const { minYear, currentYear, maxYear } = getAllowedYearRange();
 
   const handleBlur = (e) => {
-    const currentValue = e?.target?.value || value || "";
-    const isValid = usehandleDateBlur(currentValue, fieldName, updateState);
+    const isValid = usehandleDateBlur(value || "", fieldName, updateState);
 
     if (onBlurCustom) {
       onBlurCustom(e, {
-        value: currentValue,
+        value: value || "",
         field: fieldName,
         isValid,
       });
@@ -216,13 +214,6 @@ const DateFormatInput = ({
       if (onChangeCustom) {
         onChangeCustom("", fieldName, "");
       }
-    }
-
-    if (onKeyDownCustom) {
-      onKeyDownCustom(e, {
-        value: e?.currentTarget?.value || "",
-        field: fieldName,
-      });
     }
   };
 

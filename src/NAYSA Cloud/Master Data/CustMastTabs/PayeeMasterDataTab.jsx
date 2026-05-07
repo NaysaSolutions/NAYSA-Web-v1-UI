@@ -1,3 +1,4 @@
+
 // import React, { useMemo, useEffect, useState, useCallback } from "react";
 // import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 // import { faFilter, faUndo, faTimes, faUser } from "@fortawesome/free-solid-svg-icons";
@@ -24,6 +25,7 @@
 // const SLTYPE_OPTIONS = [
 //   { value: "", label: "" },
 //   { value: "AG", label: "AGENCY" },
+//   { value: "CU", label: "CUSTOMER" },
 //   { value: "EM", label: "EMPLOYEE" },
 //   { value: "OT", label: "OTHERS" },
 //   { value: "SU", label: "SUPPLIER" },
@@ -32,7 +34,7 @@
 
 // const PayeeMasterDataTab = ({
 //   isLoading = false,
-//   subsidiaryType = "", // AG | EM | OT | SU | TN
+//   subsidiaryType = "", // AG | CU | EM | OT | SU | TN
 //   onChangeSubsidiaryType,
 //   filters = {},
 //   onChangeFilter,
@@ -43,25 +45,37 @@
 //   activeTab,
 // }) => {
 //   const slType = normalizeUpper(subsidiaryType);
+//   const isCustomer = slType === "CU";
 
-//   // Payee only
-//   const docType = "VendMast";
+//   // ✅ doctype must follow type so table behaves correctly
+//   const docType = isCustomer ? "CustMast" : "VendMast";
 
-//   // prevent showing all rows until user loads
+//   // ✅ prevent showing all rows until user loads
 //   const [hasLoaded, setHasLoaded] = useState(false);
 
 //   // Search state
 //   const [searchTerm, setSearchTerm] = useState("");
-//   const [searchMode, setSearchMode] = useState("part"); // default = Contains
+//   const [searchMode, setSearchMode] = useState("start"); // "start" or "part"
 
-//   // when switching subsidiary type, do not auto-load; clear view and search
+//   // when switching subsidiary type, DO NOT auto-load; clear view and search
 //   useEffect(() => {
 //     setHasLoaded(false);
 //     setSearchTerm("");
-//     setSearchMode("part");
 //   }, [subsidiaryType]);
 
 //   const col = useMemo(() => {
+//     if (isCustomer) {
+//       return {
+//         codeLabel: "Customer Code",   // Label for Customer Code
+//         nameLabel: "Customer Name",   // Label for Customer Name
+//         codeKey: "custCode",          // Column key for Customer Code
+//         nameKey: "custName",          // Column key for Customer Name
+//         zipKey: "custZip",
+//         tinKey: "custTin",
+//       };
+//     }
+
+//     // If not a customer, return vendor-related columns
 //     return {
 //       codeLabel: "Payee Code",
 //       nameLabel: "Payee Name",
@@ -70,7 +84,7 @@
 //       zipKey: "vendZip",
 //       tinKey: "vendTin",
 //     };
-//   }, []);
+//   }, [isCustomer]);  // Ensure this updates when `isCustomer` changes
 
 //   const getCode = useCallback((r) => pickAnyCase(r, col.codeKey), [col]);
 //   const getName = useCallback((r) => pickAnyCase(r, col.nameKey), [col]);
@@ -84,8 +98,7 @@
 
 //   const handleReset = useCallback(() => {
 //     setSearchTerm("");
-//     setSearchMode("part");
-//     setHasLoaded(false);
+//     setHasLoaded(false);          // ✅ hides list again after reset
 //     onReset?.();
 //   }, [onReset]);
 
@@ -93,29 +106,25 @@
 //     (row) => {
 //       const code = getCode(row);
 //       if (!code) return;
-//       onRowDoubleClick?.({ code, subsidiaryType: slType });
+//       onRowDoubleClick?.({ code, subsidiaryType });
 //     },
-//     [getCode, onRowDoubleClick, slType]
+//     [getCode, onRowDoubleClick, subsidiaryType]
 //   );
 
-//   const tableColumns = useMemo(
-//     () => [
-//       { key: col.codeKey, label: "Payee Code", sortable: true, width: 130 },
-//       { key: col.nameKey, label: "Payee Name", sortable: true, width: 260 },
-//       { key: "taxClass", label: "Tax Class", sortable: true, width: 110 },
-//       { key: "firstName", label: "First Name", sortable: true, width: 140 },
-//       { key: "middleName", label: "Middle Name", sortable: true, width: 140 },
-//       { key: "lastName", label: "Last Name", sortable: true, width: 140 },
-//       { key: col.tinKey, label: "TIN", sortable: true, width: 150 },
-//       { key: "address", label: "Address", sortable: true, width: 200 },
-//       { key: "branchCode", label: "Branch", sortable: true, width: 100 },
-//     ],
-//     [col]
-//   );
+//   const tableColumns = useMemo(() => [
+//     { key: col.codeKey, label: col.codeLabel, sortable: true, width: 160 },
+//     { key: col.nameKey, label: col.nameLabel, sortable: true, width: 260 },
+//     { key: "taxClass", label: "Tax Rate Class", sortable: true, width: 140 },
+//     { key: "firstName", label: "First Name", sortable: true, width: 140 },
+//     { key: "middleName", label: "Middle Name", sortable: true, width: 140 },
+//     { key: "lastName", label: "Last Name", sortable: true, width: 140 },
+//     { key: col.tinKey, label: "TIN", sortable: true, width: 140 },
+//     { key: "address", label: "Address", sortable: true, width: 320 },
+//     { key: "branchCode", label: "Branch Code", sortable: true, width: 120 },
+//   ], [col]);
 
 //   const tableDataRaw = useMemo(() => {
 //     const list = Array.isArray(rows) ? rows : [];
-
 //     return list.map((r) => ({
 //       ...r,
 //       [col.codeKey]: getCode(r),
@@ -127,26 +136,30 @@
 //       firstName: pick(r, ["firstName", "first_name"]),
 //       middleName: pick(r, ["middleName", "middle_name"]),
 //       lastName: pick(r, ["lastName", "last_name"]),
-//       address: pick(r, ["address", "addr", "vendAddr1", "vend_addr1"]),
+//       address: pick(r, ["address", "addr", "custAddr1", "vendAddr1", "cust_addr1", "vend_addr1"]),
 //       branchCode: pick(r, ["branchCode", "branch_code"]),
 //     }));
 //   }, [rows, col, getCode, getName, getZip, getTin]);
 
 //   const tableData = useMemo(() => {
+//     // ✅ if not loaded yet, show nothing
 //     if (!hasLoaded) return [];
 
 //     const q = String(searchTerm || "").trim().toLowerCase();
 //     if (!q) return tableDataRaw;
 
 //     const keysToSearch = tableColumns.map((c) => c.key);
-
 //     return tableDataRaw.filter((r) =>
 //       keysToSearch.some((k) => {
 //         const cell = String(r?.[k] ?? "").toLowerCase();
-//         return searchMode === "start" ? cell.startsWith(q) : cell.includes(q);
+//         if (searchMode === "start") {
+//           return cell.startsWith(q); // "Starts with" search mode
+//         }
+//         return cell.includes(q); // "Contains" search mode
 //       })
 //     );
 //   }, [hasLoaded, searchTerm, tableDataRaw, tableColumns, searchMode]);
+
 
 //   return (
 //     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
@@ -162,7 +175,7 @@
 //           >
 //             {SLTYPE_OPTIONS.map((o) => (
 //               <option key={o.value} value={o.value}>
-//                 {o.label}
+
 //               </option>
 //             ))}
 //           </select>
@@ -175,15 +188,14 @@
 //           </span>
 //           <input
 //             type="text"
-//             placeholder="Search Payee Name..."
-//             className="block w-full pl-10 pr-10 py-2 text-sm bg-white border-2 border-blue-500 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-300 transition-all"
+//             placeholder={activeTab === "master" ? "Search Customer Name..." : "Search Payee Name..."}
+//             className="block w-full pl-10 pr-10 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-400 outline-none transition-all"
 //             value={searchTerm}
 //             onChange={(e) => setSearchTerm(e.target.value)}
 //             onKeyDown={(e) => e.key === "Enter" && handleLoad()}
 //           />
 //           {searchTerm && (
 //             <button
-//               type="button"
 //               onClick={() => setSearchTerm("")}
 //               className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-red-500 transition-colors"
 //             >
@@ -192,7 +204,7 @@
 //           )}
 //         </div>
 
-//         {/* Search Modes */}
+//         {/* Search Modes (Starts with / Contains) */}
 //         <div className="flex items-center gap-3 px-3 border-l border-gray-300">
 //           <label className="flex items-center gap-1.5 cursor-pointer">
 //             <input
@@ -253,7 +265,6 @@
 //         rightActionLabel="View"
 //         docType={docType}
 //         onRowDoubleClick={handleRowDblClick}
-//         autoFillGrid={false}
 //       />
 //     </div>
 //   );
@@ -309,16 +320,18 @@ const PayeeMasterDataTab = ({
   // Payee only
   const docType = "VendMast";
 
+  // prevent showing all rows until user loads
+  const [hasLoaded, setHasLoaded] = useState(false);
+
   // Search state
   const [searchTerm, setSearchTerm] = useState("");
   const [searchMode, setSearchMode] = useState("part"); // default = Contains
 
-  // Clear search and trigger parent filter when switching subsidiary type
+  // when switching subsidiary type, do not auto-load; clear view and search
   useEffect(() => {
+    setHasLoaded(false);
     setSearchTerm("");
     setSearchMode("part");
-    onFilter?.(); // Automatically apply filters for the new subsidiary type
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subsidiaryType]);
 
   const col = useMemo(() => {
@@ -338,12 +351,14 @@ const PayeeMasterDataTab = ({
   const getTin = useCallback((r) => pickAnyCase(r, col.tinKey), [col]);
 
   const handleLoad = useCallback(() => {
+    setHasLoaded(true);
     onFilter?.();
   }, [onFilter]);
 
   const handleReset = useCallback(() => {
     setSearchTerm("");
     setSearchMode("part");
+    setHasLoaded(false);
     onReset?.();
   }, [onReset]);
 
@@ -390,8 +405,9 @@ const PayeeMasterDataTab = ({
     }));
   }, [rows, col, getCode, getName, getZip, getTin]);
 
-  // 1. Filter the massive list based on the search box
-  const tableDataFiltered = useMemo(() => {
+  const tableData = useMemo(() => {
+    if (!hasLoaded) return [];
+
     const q = String(searchTerm || "").trim().toLowerCase();
     if (!q) return tableDataRaw;
 
@@ -403,12 +419,7 @@ const PayeeMasterDataTab = ({
         return searchMode === "start" ? cell.startsWith(q) : cell.includes(q);
       })
     );
-  }, [searchTerm, tableDataRaw, tableColumns, searchMode]);
-
-  // 2. Slice the rendered data to a maximum of 100 rows to prevent the browser from freezing.
-  const tableData = useMemo(() => {
-      return tableDataFiltered.slice(0, 100);
-  }, [tableDataFiltered]);
+  }, [hasLoaded, searchTerm, tableDataRaw, tableColumns, searchMode]);
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
@@ -441,6 +452,7 @@ const PayeeMasterDataTab = ({
             className="block w-full pl-10 pr-10 py-2 text-sm bg-white border-2 border-blue-500 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-300 transition-all"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleLoad()}
           />
           {searchTerm && (
             <button
@@ -481,13 +493,6 @@ const PayeeMasterDataTab = ({
 
         {/* Buttons */}
         <div className="flex items-center gap-2">
-          {/* Visual Indicator of sliced limit */}
-          {tableDataFiltered.length > 100 && (
-             <span className="text-[11px] text-red-500 font-bold mr-2 animate-pulse uppercase tracking-wider">
-                Showing top 100 of {tableDataFiltered.length} records
-             </span>
-          )}
-
           <button
             type="button"
             onClick={handleLoad}
