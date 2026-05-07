@@ -390,7 +390,7 @@ const VATRef = () => {
         ),
       },
       { key: "vatCode", label: "VAT Code", sortable: true, width: 120 },
-      { key: "vatName", label: "VAT Name", sortable: true, width: 300 },
+      { key: "vatName", label: "VAT Name", sortable: true, width: 300, maxWidth: 300 },
       {
         key: "vatType",
         label: "VAT Type",

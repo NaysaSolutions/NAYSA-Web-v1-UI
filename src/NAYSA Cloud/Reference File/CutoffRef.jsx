@@ -469,7 +469,7 @@ const CutoffRef = () => {
       {
         key: "__actions",
         label: <span className="hidden md:inline">Actions</span>,
-        width: 50,
+        width: 90,
         render: (row) => (
           <div className="flex gap-2 justify-center w-full">
             <button
@@ -506,8 +506,8 @@ const CutoffRef = () => {
           </div>
         ),
       },
-      { key: "cutoffCode", label: "Cut Off Code", sortable: true },
-      { key: "cutoffName", label: "Cut Off Name", sortable: true },
+      { key: "cutoffCode", label: "Cut Off Code", sortable: true, width: 120 },
+      { key: "cutoffName", label: "Cut Off Name", sortable: true, width: 185, maxWidth: 185 },
       {
         key: "fromDate",
         label: "Start Date",

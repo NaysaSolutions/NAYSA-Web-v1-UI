@@ -474,6 +474,7 @@ const RcRef = forwardRef(
           key: "rcTypeName",
           label: "RC Type Name",
           width: 450,
+          maxWidth: 450,
           sortable: true,
           // Fixed width removed to prevent mobile overflow clipping
           render: (row) => (
