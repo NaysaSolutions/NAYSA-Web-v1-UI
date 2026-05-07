@@ -94,6 +94,7 @@ import MSINQ from "./NAYSA Cloud/Query/INVInq/MSStockCard.jsx";
 
 
 //Matrix
+import PRInquiry from "./NAYSA Cloud/Module/Main Module/Purchasing/PRInquiry.jsx";
 import SalesPMCustomerItem from "./NAYSA Cloud/Matrix/SalesPMCustomerItem.jsx"
 import PRInq from "./NAYSA Cloud/Module/Main Module/Purchasing/PRInq.jsx";
 import POInq from "./NAYSA Cloud/Module/Main Module/Purchasing/POInquiry.jsx";
@@ -310,11 +311,12 @@ export const pageRegistry = {
   //Matrix
   SalesPMCustomerItem,
 
-  PRInq,
-  POInq,
+  // Purchasing Inquiry (Unified/Merged)
+  PRInquiry: PRInquiry, 
+  PRInq: PRInquiry,     
+  POInq: POInq,         
 
-  // Printing
-  // These keys now point to the Universal component but inject the specific module prop
+  // Printing (Universal Modal Mapping)
   APReportModal: (props) => <UniversalReportModal {...props} module="AP" />,
   VIReportModal: (props) => <UniversalReportModal {...props} module="VI" />,
   EWTReportModal: (props) => <UniversalReportModal {...props} module="EWT" />,

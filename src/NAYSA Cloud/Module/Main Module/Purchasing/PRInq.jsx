@@ -30,6 +30,7 @@ import PayeeMastLookupModal from "../../../Lookup/SearchVendMast";
 import RCLookupModal from "../../../Lookup/SearchRCMast.jsx";
 import MSLookupModal from "../../../Lookup/SearchMSMast.jsx";
 
+
 // ── static stage field labels only ───────────────────────────────────────────
 const stageDetails = {
   pr: {
