@@ -1417,7 +1417,7 @@ const AllTranHistory = (props) => {
   }
 
   const exportName =
-    historyExportNameProp ??
+    activeTab ??
     (location.state && location.state.historyExportName) ??
     "Transaction History";
 

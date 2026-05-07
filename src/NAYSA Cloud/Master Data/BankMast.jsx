@@ -381,7 +381,7 @@ const BankMast = () => {
         key: "__actions",
         label: <span className="hidden md:inline">Actions</span>,
         sortable: false,
-        width: 50,
+        width: 100,
         render: (row) => (
           <div className="flex gap-2 justify-center w-full">
             <button
@@ -419,27 +419,28 @@ const BankMast = () => {
           </div>
         ),
       },
-      { key: "bankCode", label: "Bank Code", sortable: true, width: 100 },
-      { key: "bankTypeCode", label: "Bank Type", sortable: true, width: 150 },
-      { key: "acctCode", label: "Account Code", sortable: true, width: 100 },
-      { key: "acctName", label: "Account Name", sortable: true, width: 150 },
-      { key: "bankAcctNo", label: "Bank Account No.", sortable: true, width: 100 },
-      { key: "bankAcctType", label: "Account Type", sortable: true, width: 100 },
-      { key: "autoCk", label: "Auto Generated", sortable: true, width: 80 },
-      { key: "startCheckNo", label: "Start Check No.", sortable: true, width: 100 },
-      { key: "lastCheckNo", label: "Last Check No.", sortable: true, width: 100 },
-      { key: "currCode", label: "Currency", sortable: true, width: 80 },
-      { key: "bankBranch", label: "Branch", sortable: true, width: 80 },
+      { key: "bankCode", label: "Bank Code", sortable: true, width: 100, minWidth: 100, requiredVisible: true },
+      { key: "bankTypeCode", label: "Bank Type", sortable: true, width: 150, minWidth: 150, requiredVisible: true },
+      { key: "acctCode", label: "Account Code", sortable: true, width: 150, minWidth: 150 },
+      { key: "acctName", label: "Account Name", sortable: true, width: 150, minWidth: 150, maxWidth: 300 },
+      { key: "bankAcctNo", label: "Bank Account No.", sortable: true, width: 150, minWidth: 150 },
+      { key: "bankAcctType", label: "Account Type", sortable: true, width: 150, minWidth: 150 },
+      { key: "autoCk", label: "Auto Generated", sortable: true, width: 150, minWidth: 150},
+      { key: "startCheckNo", label: "Start Check No.", sortable: true, width: 150, minWidth: 150 },
+      { key: "lastCheckNo", label: "Last Check No.", sortable: true, width: 150, minWidth: 150 },
+      { key: "currCode", label: "Currency", sortable: true, width: 100, minWidth: 100 },
+      { key: "bankBranch", label: "Branch", sortable: true, width: 80, minWidth: 80 },
       {
         key: "fullAddress",
         label: "Address",
         sortable: false,
         render: (row) => `${row.bankAddr1 || ""} ${row.bankAddr2 || ""}`.trim(),
-        width: 250
+        width: 250,
+        minWidth: 100
       },
-      { key: "bankContact", label: "Contact Person", sortable: true, width: 100 },
-      { key: "bankTelNo", label: "Contact No.", sortable: true, width: 100 },
-      { key: "bankPosition", label: "Position", sortable: true, width: 100 },
+      { key: "bankContact", label: "Contact Person", sortable: true, width: 150, minWidth: 150 },
+      { key: "bankTelNo", label: "Contact No.", sortable: true, width: 120, minWidth: 120 },
+      { key: "bankPosition", label: "Position", sortable: true, width: 100, minWidth: 100 },
     ],
     [isMobile] // Added isMobile to dependencies so the Action button triggers update correctly
   );
