@@ -45,6 +45,8 @@ import SLMast from "./NAYSA Cloud/Master Data/SLMast.jsx";
 // --- SALES ---
 import SO from "./NAYSA Cloud/Module/Main Module/Sales/SO.jsx";
 import DR from "./NAYSA Cloud/Module/Main Module/Sales/DR.jsx";
+import SI from "./NAYSA Cloud/Module/Main Module/Sales/SI.jsx";
+
 
 // --- PURCHASING & INVENTORY ---
 import PR from "./NAYSA Cloud/Module/Main Module/Purchasing/PR.jsx";
@@ -92,6 +94,8 @@ import AuditTrail from "./NAYSA Cloud/Query/AuditTrail/AuditTail.jsx";
 
 //Matrix
 import SalesPMCustomerItem from "./NAYSA Cloud/Matrix/SalesPMCustomerItem.jsx"
+import PRInq from "./NAYSA Cloud/Module/Main Module/Purchasing/PRInq.jsx";
+import POInq from "./NAYSA Cloud/Module/Main Module/Purchasing/POInquiry.jsx";
 
 // --- PRINTING / MODALS ---
 // import ARReportModal from "./NAYSA Cloud/Printing/ARReport.jsx";
@@ -236,6 +240,7 @@ export const pageRegistry = {
   //Sales
   SO,
   DR,
+  SI,
 
   // Inventory
   MSRR,
@@ -302,6 +307,9 @@ export const pageRegistry = {
 
   //Matrix
   SalesPMCustomerItem,
+
+  PRInq,
+  POInq,
 
   // Printing
   // These keys now point to the Universal component but inject the specific module prop
