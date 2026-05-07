@@ -3,7 +3,6 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useQuery } from "@tanstack/react-query";
 import { postRequest } from "@/NAYSA Cloud/Configuration/BaseURL";
 import { exportGenericHistoryExcel, exportGenericQueryExcel } from "@/NAYSA Cloud/Global/report";
-import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 import {
   format,
@@ -44,6 +43,9 @@ import {
   faFileCsv,
   faTable,
   faThLarge,
+  faBook,
+  faSearch,
+  faGripVertical,
 } from "@fortawesome/free-solid-svg-icons";
 import { useSwalErrorAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 
@@ -61,6 +63,41 @@ Modal.setAppElement("#root");
 
 const ACTION_COL_WIDTH = 64;
 const MOBILE_MAX_COLUMNS = 100;
+
+const LoadingDots = ({ label = "Loading, please wait...", fullScreen = false }) => {
+  const dotSizeClass = fullScreen ? "h-2.5 w-2.5" : "h-1.5 w-1.5";
+  const dots = (
+    <div className={`flex items-center justify-center ${fullScreen ? "gap-1.5" : "gap-1"}`} aria-hidden="true">
+      {[0, 150, 300].map((delay) => (
+        <span
+          key={delay}
+          className={`${dotSizeClass} rounded-full bg-blue-600 animate-bounce`}
+          style={{ animationDelay: `${delay}ms` }}
+        />
+      ))}
+    </div>
+  );
+
+  if (!fullScreen) {
+    return (
+      <div className="flex items-center justify-center h-4 w-8" title={label}>
+        {dots}
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center animate-in fade-in duration-200">
+      <div className="absolute inset-0 bg-slate-900/10" />
+      <div className="relative flex flex-col items-center justify-center gap-3 px-6 py-5 rounded-2xl bg-white/85 backdrop-blur-md border border-white/40 shadow-2xl">
+        {dots}
+        <div className="text-xs sm:text-sm font-medium text-slate-700 tracking-wide text-center">
+          {label}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 /* ------------------ window-level cache (survives route swaps) ------------------ */
 function getGlobalCache() {
@@ -98,7 +135,7 @@ const formatCellValue = (value, config) => {
 
     case "status": {
       const map = {
-        C: { text: "CANCELLED", color: "text-red-600" },
+        C: { text: "CLOSED", color: "text-blue-800" },
         F: { text: "FINALIZED", color: "text-blue-800" },
         X: { text: "CANCELLED", color: "text-red-600" },
         "": { text: "OPEN", color: "text-black" },
@@ -180,7 +217,7 @@ const AllTranHistory = (props) => {
     { value: "X", label: "CANCELLED" },
   ];
 
-  const restrictedTabs = ["JO_", "PO_", "PR_"];
+  const restrictedTabs = ["JO_", "PO_", "PR_","SO_"];
   const isRestricted = restrictedTabs.some((prefix) => activeTab?.includes(prefix));
 
   const statusOptions =
@@ -269,10 +306,13 @@ const AllTranHistory = (props) => {
   const [columnOrderByTab, setColumnOrderByTab] = useState({});
   const [groupByByTab, setGroupByByTab] = useState({});
   const [expandedGroupsByTab, setExpandedGroupsByTab] = useState({});
+  const [autoExpandGroupsByTab, setAutoExpandGroupsByTab] = useState({});
   const [draggedCol, setDraggedCol] = useState(null);
   const [colWidthsByTab, setColWidthsByTab] = useState({});
   const [userHiddenColsByTab, setUserHiddenColsByTab] = useState({});
   const [showColumnChooser, setShowColumnChooser] = useState(false);
+  const [columnChooserSearch, setColumnChooserSearch] = useState("");
+  const [columnChooserDraftHidden, setColumnChooserDraftHidden] = useState([]);
   const [showExportMenu, setShowExportMenu] = useState(false);
 
   // New features mirrored from ReportTable
@@ -383,6 +423,7 @@ const AllTranHistory = (props) => {
       setColumnOrderByTab(snap.columnOrderByTab || {});
       setGroupByByTab(snap.groupByByTab || {});
       setExpandedGroupsByTab(snap.expandedGroupsByTab || {});
+      setAutoExpandGroupsByTab(snap.autoExpandGroupsByTab || {});
       setColWidthsByTab(snap.colWidthsByTab || {});
       setUserHiddenColsByTab(snap.userHiddenColsByTab || {});
     } else {
@@ -405,6 +446,7 @@ const AllTranHistory = (props) => {
       columnOrderByTab,
       groupByByTab,
       expandedGroupsByTab,
+      autoExpandGroupsByTab,
       colWidthsByTab,
       userHiddenColsByTab,
     };
@@ -421,6 +463,7 @@ const AllTranHistory = (props) => {
     columnOrderByTab,
     groupByByTab,
     expandedGroupsByTab,
+    autoExpandGroupsByTab,
     colWidthsByTab,
     userHiddenColsByTab,
   ]);
@@ -541,7 +584,7 @@ const AllTranHistory = (props) => {
     wasActiveRef.current = isActive;
   }, [isActive, refetch]);
 
-  const loading = isLoading;
+  const loading = isLoading || (isFetching && (!activeTab || Object.keys(tabData).length === 0));
   const refreshing = isFetching && !isLoading;
 
   /* ---------------- apply query result ---------------- */
@@ -593,6 +636,11 @@ const AllTranHistory = (props) => {
     setExpandedGroupsByTab((prev) => {
       if (Object.keys(prev).length) return prev;
       return initialExpanded;
+    });
+
+    setAutoExpandGroupsByTab((prev) => {
+      if (Object.keys(prev).length) return prev;
+      return {};
     });
 
     setColWidthsByTab((prev) => {
@@ -676,11 +724,33 @@ const AllTranHistory = (props) => {
     }));
   }, [activeTab, baseColumns]);
 
-  const groupBy = groupByByTab[activeTab] || [];
+  const rawGroupBy = groupByByTab[activeTab] || [];
+  const baseColumnKeys = useMemo(
+    () => new Set(baseColumns.map((col) => col.key)),
+    [baseColumns]
+  );
+  const groupBy = useMemo(
+    () =>
+      rawGroupBy.filter(
+        (key, index, arr) => baseColumnKeys.has(key) && arr.indexOf(key) === index
+      ),
+    [rawGroupBy, baseColumnKeys]
+  );
   const expandedGroups = expandedGroupsByTab[activeTab] || {};
   const colWidths = colWidthsByTab[activeTab] || {};
   const userHiddenCols = userHiddenColsByTab[activeTab] || [];
   const columnOrder = columnOrderByTab[activeTab] || baseColumns.map((c) => c.key);
+  const groupingRenderKey = `${activeTab || "no-tab"}:${groupBy.join("|") || "ungrouped"}`;
+  const autoExpandGroups = !!autoExpandGroupsByTab[activeTab];
+  const activeTabLabel = useMemo(
+    () =>
+      activeTab
+        ? String(activeTab)
+            .replace(/_/g, " ")
+            .replace(/\b\w/g, (c) => c.toUpperCase())
+        : "Columns",
+    [activeTab]
+  );
 
   const orderedCols = useMemo(() => {
     if (!baseColumns.length) return [];
@@ -694,9 +764,43 @@ const AllTranHistory = (props) => {
     );
   }, [orderedCols, userHiddenCols, groupBy]);
 
-    const renderVisibleCols = useMemo(() => {
+  const renderVisibleCols = useMemo(() => {
       return visibleCols;
     }, [visibleCols]);
+
+  const chooserColumns = useMemo(
+    () => orderedCols.filter((col) => !col.hidden && !groupBy.includes(col.key)),
+    [orderedCols, groupBy]
+  );
+
+  const protectedColumnKeys = useMemo(
+    () => chooserColumns.slice(0, 2).map((col) => col.key),
+    [chooserColumns]
+  );
+
+  const draftVisibleChooserColumnCount = useMemo(
+    () => chooserColumns.filter((col) => !columnChooserDraftHidden.includes(col.key)).length,
+    [chooserColumns, columnChooserDraftHidden]
+  );
+
+  const filteredChooserColumns = useMemo(() => {
+    const q = String(columnChooserSearch || "").trim().toLowerCase();
+    if (!q) return chooserColumns;
+    return chooserColumns.filter((col) =>
+      String(col.label || col.key || "").toLowerCase().includes(q)
+    );
+  }, [chooserColumns, columnChooserSearch]);
+
+  useEffect(() => {
+    if (!activeTab || protectedColumnKeys.length === 0) return;
+
+    setUserHiddenColsByTab((prev) => {
+      const current = prev[activeTab] || [];
+      const nextHidden = current.filter((key) => !protectedColumnKeys.includes(key));
+      if (nextHidden.length === current.length) return prev;
+      return { ...prev, [activeTab]: nextHidden };
+    });
+  }, [activeTab, protectedColumnKeys]);
 
   const primaryCardCol = useMemo(() => {
     if (!visibleCols.length) return null;
@@ -819,7 +923,7 @@ const AllTranHistory = (props) => {
 
 
   /* ---------------- grouping / totals helpers ---------------- */
-  const totalExemptions = ["rate", "percent", "ratio", "id", "code"];
+  const totalExemptions = ["rate", "percent", "ratio", "id", "code", "lnno"];
 
   const shouldSumColumn = useCallback((col) => {
     const noTotalKeys = ["unitcost", "currrate", "unitprice", "runbal"];
@@ -888,7 +992,7 @@ const AllTranHistory = (props) => {
         if (node.isGroup) {
           list.push(node);
           const uniqueId = `${node.key}-${node.value}-${node.level}`;
-          if (expandedGroups[uniqueId]) {
+          if (autoExpandGroups || expandedGroups[uniqueId]) {
             if (node.level === groupBy.length - 1) list = list.concat(node.children);
             else list = list.concat(processRenderList(node.children));
 
@@ -906,11 +1010,11 @@ const AllTranHistory = (props) => {
       });
       return list;
     },
-    [expandedGroups, groupBy.length, baseColumns]
+    [autoExpandGroups, expandedGroups, groupBy.length, baseColumns]
   );
 
   const groupedStructure = useMemo(() => {
-    if (groupBy.length === 0) return filteredData;
+    if (groupBy.length === 0) return [];
     return groupData(filteredData);
   }, [filteredData, groupBy, groupData]);
 
@@ -940,14 +1044,18 @@ const AllTranHistory = (props) => {
     };
 
     return expandAll(groupedStructure);
-  }, [groupBy.length, filteredData, groupedStructure, baseColumns]);
+  }, [groupBy, filteredData, groupedStructure, baseColumns]);
 
   const displayRows = useMemo(() => {
     if (groupBy.length === 0) return filteredData;
     return processRenderList(groupedStructure);
-  }, [groupBy.length, filteredData, processRenderList, groupedStructure]);
+  }, [groupBy, filteredData, processRenderList, groupedStructure]);
 
   const grandTotals = useMemo(() => calculateAggregates(filteredData), [filteredData, calculateAggregates]);
+  const hasGrandTotalColumns = useMemo(
+    () => visibleCols.some((col) => grandTotals[col.key] !== undefined),
+    [visibleCols, grandTotals]
+  );
 
   const allGroupKeys = useMemo(() => {
     if (!activeTab || groupBy.length === 0) return [];
@@ -964,7 +1072,7 @@ const AllTranHistory = (props) => {
     return keys;
   }, [activeTab, groupBy, groupedStructure]);
 
-  const allExpanded = allGroupKeys.length > 0 && allGroupKeys.every(k => expandedGroups[k]);
+  const allExpanded = groupBy.length > 0 && (autoExpandGroups || (allGroupKeys.length > 0 && allGroupKeys.every(k => expandedGroups[k])));
 
 
   /* ---------------- handlers ---------------- */
@@ -1009,6 +1117,7 @@ const AllTranHistory = (props) => {
     setShowExportMenu(false);
     setGroupByByTab({});
     setExpandedGroupsByTab({});
+    setAutoExpandGroupsByTab({});
     setColumnOrderByTab({});
     setColWidthsByTab({});
     setUserHiddenColsByTab({});
@@ -1035,6 +1144,7 @@ const AllTranHistory = (props) => {
     setStatus("All");
     setGroupByByTab((prev) => ({ ...prev, [activeTab]: [] }));
     setExpandedGroupsByTab((prev) => ({ ...prev, [activeTab]: {} }));
+    setAutoExpandGroupsByTab((prev) => ({ ...prev, [activeTab]: false }));
     setUserHiddenColsByTab((prev) => ({ ...prev, [activeTab]: [] }));
     setColWidthsByTab((prev) => ({ ...prev, [activeTab]: {} }));
     setGlobalSearch("");
@@ -1056,14 +1166,14 @@ const AllTranHistory = (props) => {
   };
 
   const getRowClassByStatus = (row) => {
-    const statusFieldCandidates = ["C", "doc_stat", "docStatus", "status", "stat"];
+    const statusFieldCandidates = ["C", "doc_stat", "docStatus", "status", "stat","docStat"];
     const rowStatus =
       statusFieldCandidates
         .map((f) => (row[f] !== undefined ? String(row[f]) : undefined))
         .find((v) => v !== undefined) ?? "";
 
-    if (rowStatus === "X" || rowStatus === "C") return "text-red-600";
-    if (rowStatus === "F") return "text-blue-700";
+    if (rowStatus === "X" ) return "text-red-600";
+    if (rowStatus === "F" || rowStatus === "C") return "text-blue-700";
     return "";
   };
 
@@ -1097,11 +1207,21 @@ const AllTranHistory = (props) => {
 
     if (isDropZone) {
       if (!groupBy.includes(draggedCol)) {
-        setGroupByByTab((prev) => ({
-          ...prev,
-          [activeTab]: [...(prev[activeTab] || []), draggedCol],
-        }));
-        setExpandedGroupsByTab((prev) => ({ ...prev, [activeTab]: {} }));
+        setGroupByByTab((prev) => {
+          const currentGroups = (prev[activeTab] || []).filter(
+            (key, index, arr) => baseColumnKeys.has(key) && arr.indexOf(key) === index
+          );
+
+          return {
+            ...prev,
+            [activeTab]: currentGroups.includes(draggedCol)
+              ? currentGroups
+              : [...currentGroups, draggedCol],
+          };
+        });
+        if (!autoExpandGroups) {
+          setExpandedGroupsByTab((prev) => ({ ...prev, [activeTab]: {} }));
+        }
       }
     } else {
       if (groupBy.includes(draggedCol)) return;
@@ -1126,6 +1246,7 @@ const AllTranHistory = (props) => {
 
   const toggleGroup = (node) => {
     const uniqueId = `${node.key}-${node.value}-${node.level}`;
+    setAutoExpandGroupsByTab((prev) => ({ ...prev, [activeTab]: false }));
     setExpandedGroupsByTab((prev) => ({
       ...prev,
       [activeTab]: {
@@ -1137,6 +1258,7 @@ const AllTranHistory = (props) => {
 
   const toggleAllGroups = (expand) => {
     if (!activeTab) return;
+    setAutoExpandGroupsByTab((prev) => ({ ...prev, [activeTab]: expand }));
     if (!expand) {
       setExpandedGroupsByTab((prev) => ({ ...prev, [activeTab]: {} }));
       return;
@@ -1159,35 +1281,37 @@ const AllTranHistory = (props) => {
     }));
   };
 
-  const handleRemoveGroupedColumn = (gKey) => {
+  const clearActiveGrouping = useCallback(() => {
     if (!activeTab) return;
 
-    const nextGroups = (groupByByTab[activeTab] || []).filter((k) => k !== gKey);
-
-    if (nextGroups.length === 0) {
-      setGroupByByTab((prev) => ({
-        ...prev,
-        [activeTab]: [],
-      }));
-
+    setGroupByByTab((prev) => ({
+      ...prev,
+      [activeTab]: [],
+    }));
+    if (!autoExpandGroups) {
       setExpandedGroupsByTab((prev) => ({
         ...prev,
         [activeTab]: {},
       }));
-
-      setDraggedCol(null);
-      return;
     }
+    setDraggedCol(null);
+  }, [activeTab]);
+
+  const handleRemoveGroupedColumn = (gKey) => {
+    if (!activeTab) return;
 
     setGroupByByTab((prev) => ({
       ...prev,
-      [activeTab]: nextGroups,
+      [activeTab]: (prev[activeTab] || []).filter((k) => k !== gKey),
     }));
 
-    setExpandedGroupsByTab((prev) => ({
-      ...prev,
-      [activeTab]: {},
-    }));
+    if (!autoExpandGroups) {
+      setExpandedGroupsByTab((prev) => ({
+        ...prev,
+        [activeTab]: {},
+      }));
+    }
+    setDraggedCol(null);
   };
 
   const handleMouseMove = useCallback(
@@ -1510,15 +1634,68 @@ const handleExportConfirm = async (enteredFileName) => {
 
   const commonCellClass = "px-2 py-1 border whitespace-nowrap";
 
-  const allChooserKeys = visibleCols
-    .concat(
-      orderedCols.filter(
-        (c) => !c.hidden && !groupBy.includes(c.key) && !visibleCols.some((vc) => vc.key === c.key)
-      )
-    )
-    .map((c) => c.key);
+  const allChecked = chooserColumns.every((col) => !columnChooserDraftHidden.includes(col.key));
 
-  const allChecked = userHiddenCols.length === 0;
+  const handleToggleColumnChooser = () => {
+    if (showColumnChooser) {
+      setShowColumnChooser(false);
+      return;
+    }
+
+    setColumnChooserSearch("");
+    setColumnChooserDraftHidden(userHiddenCols);
+    setShowColumnChooser(true);
+  };
+
+  const handleCloseColumnChooser = () => {
+    setShowColumnChooser(false);
+    setColumnChooserSearch("");
+    setColumnChooserDraftHidden([]);
+  };
+
+  const handleToggleAllColumns = (checked) => {
+    if (!activeTab) return;
+
+    if (checked) {
+      setColumnChooserDraftHidden([]);
+      return;
+    }
+
+    const protectedKeys = new Set(protectedColumnKeys);
+    const nextHidden = chooserColumns
+      .filter((col) => !protectedKeys.has(col.key))
+      .map((col) => col.key);
+
+    setColumnChooserDraftHidden(nextHidden);
+  };
+
+  const handleToggleColumnVisibility = (colKey, checked) => {
+    if (!activeTab) return;
+
+    if (!checked && (protectedColumnKeys.includes(colKey) || draftVisibleChooserColumnCount <= 2)) {
+      useSwalErrorAlert("Minimum columns required", "Please retain at least 2 columns.");
+      return;
+    }
+
+    setColumnChooserDraftHidden((current) => {
+      if (checked) {
+        return current.filter((key) => key !== colKey);
+      }
+
+      return current.includes(colKey) ? current : [...current, colKey];
+    });
+  };
+
+  const handleApplyColumnChooser = () => {
+    if (!activeTab) return;
+    setUserHiddenColsByTab((prev) => ({ ...prev, [activeTab]: columnChooserDraftHidden }));
+    handleCloseColumnChooser();
+  };
+
+  const handleResetColumnChooser = () => {
+    setColumnChooserDraftHidden(userHiddenCols);
+    setColumnChooserSearch("");
+  };
 
   /* ---------------- mobile card renderers ---------------- */
   const renderMobileCard = useCallback(
@@ -1591,7 +1768,7 @@ const handleExportConfirm = async (enteredFileName) => {
   const renderMobileGroupRow = useCallback(
     (row, idx) => {
       const uniqueId = `${row.key}-${row.value}-${row.level}`;
-      const isExpanded = expandedGroups[uniqueId];
+      const isExpanded = autoExpandGroups || expandedGroups[uniqueId];
 
       return (
         <button
@@ -1616,7 +1793,7 @@ const handleExportConfirm = async (enteredFileName) => {
         </button>
       );
     },
-    [expandedGroups, baseColumns]
+    [autoExpandGroups, expandedGroups, baseColumns]
   );
 
   const renderMobileSubtotalCard = useCallback(
@@ -1887,19 +2064,19 @@ const handleExportConfirm = async (enteredFileName) => {
 
             <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-2 w-full md:w-auto mt-auto">
               <button
-                className="flex items-center justify-center bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-semibold hover:bg-blue-700 shadow-md w-full"
+                className="inline-flex h-[35px] min-w-[96px] items-center justify-center gap-2 rounded-md bg-blue-500 px-4 text-sm font-medium leading-none text-white shadow-sm transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 w-full md:w-auto"
                 onClick={handleApplyFilter}
                 disabled={loading || exporting}
               >
-                <FontAwesomeIcon icon={faFilter} className="mr-2" />
+                <FontAwesomeIcon icon={faFilter} className="text-[13px]" />
                 {loading ? "Loading..." : "Filter"}
               </button>
                   <button
-                className="flex items-center justify-center bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-semibold hover:bg-blue-700 shadow-md w-full"
+                className="inline-flex h-[35px] min-w-[96px] items-center justify-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-medium leading-none text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 w-full md:w-auto"
                 onClick={handleResetUI}
                 disabled={loading || exporting}
               >
-                <FontAwesomeIcon icon={faRedo} className="mr-2" />
+                <FontAwesomeIcon icon={faRedo} className="text-[13px]" />
                 <span className="truncate">Reset</span>
               </button>
             </div>
@@ -1909,12 +2086,21 @@ const handleExportConfirm = async (enteredFileName) => {
           </div>
         )}
 
-<div className="px-4 overflow-x-auto">
-  <div className="flex items-center justify-between gap-2 min-w-max">
-    <div className={`flex gap-1 whitespace-nowrap`}>
+<div className="px-4">
+  <div className="flex items-center justify-between gap-2">
+    <div className="flex gap-1 whitespace-nowrap overflow-x-auto min-w-0">
       {Object.keys(tabData).map((tabKey) => {
         const isTabActive = activeTab === tabKey;
         const tabLabel = tabKey.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+        const normalizedTabKey = String(tabKey).toLowerCase();
+        const tabIcon =
+          normalizedTabKey.includes("gl") ||
+          normalizedTabKey.includes("ledger") ||
+          normalizedTabKey.includes("journal")
+            ? faBook
+            : normalizedTabKey.includes("detail")
+            ? faList
+            : faTable;
 
         return (
           <button
@@ -1934,10 +2120,11 @@ const handleExportConfirm = async (enteredFileName) => {
             }}
           >
             <span
-              className={`block w-full text-center ${
+              className={`flex w-full items-center justify-center gap-2 ${
                 isMobile ? "text-[12px] leading-none" : "text-sm"
               } truncate`}
             >
+              <FontAwesomeIcon icon={tabIcon} className={isMobile ? "text-[11px]" : "text-[13px]"} />
               {tabLabel}
             </span>
           </button>
@@ -1945,35 +2132,15 @@ const handleExportConfirm = async (enteredFileName) => {
       })}
     </div>
 
-        <div className="flex items-center shrink-0 min-w-[28px] justify-end">
+        <div className="flex items-center shrink-0 min-w-[28px] justify-end gap-2">
           {refreshing && (
-            <svg
-              className="animate-spin h-4 w-4 text-blue-600"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              title="Refreshing..."
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              />
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-              />
-            </svg>
+            <LoadingDots label="Refreshing..." />
           )}
           </div>
         </div>
       </div>
 
-        <div className="bg-white shadow-md rounded-md overflow-hidden p-2 mt-0 mb-4 mx-4">
+        <div className="bg-white shadow-md rounded-md overflow-visible px-2 pt-2 pb-0 mt-0 mb-4 mx-4">
           {activeTab && visibleCols.length > 0  && (
             <div className="p-1 bg-white rounded-md flex flex-col md:flex-row md:items-center md:justify-between gap-2 shrink-0 mb-0"
                  onDragOver={e => e.preventDefault()}
@@ -1988,16 +2155,36 @@ const handleExportConfirm = async (enteredFileName) => {
                 {groupBy.map(gKey => (
                   <div key={gKey} className="flex items-center bg-blue-100 text-blue-800 rounded border border-blue-200 text-xs px-2 py-1">
                     {baseColumns.find(c => c.key === gKey)?.label}
-                    <button onClick={() => handleRemoveGroupedColumn(gKey)} className="ml-2 text-blue-600 hover:text-red-600">
+                    <button type="button" onClick={() => handleRemoveGroupedColumn(gKey)} className="ml-2 text-blue-600 hover:text-red-600">
                       <FontAwesomeIcon icon={faTimes} />
                     </button>
                   </div>
                 ))}
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap justify-end">
+              <div className="flex items-center gap-2 flex-wrap justify-end w-full md:w-auto overflow-visible">
+                {groupBy.length > 0 && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <label className="inline-flex items-center cursor-pointer select-none h-8">
+                      <input type="checkbox" checked={allExpanded} onChange={() => toggleAllGroups(!allExpanded)} className="sr-only" />
+                      <div className={`relative rounded-full transition-colors duration-200 ${allExpanded ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-600"} w-24 h-8`}>
+                        <span className={`absolute rounded-full bg-white shadow-md transition-all duration-200 ${allExpanded ? "left-[66px]" : "left-[2px]"} top-[2px] w-7 h-7`} />
+                        <span className={`absolute inset-0 flex items-center font-medium pointer-events-none text-[11px] ${allExpanded ? "justify-start pl-4" : "justify-end pr-4"}`}>{allExpanded ? "Collapse" : "Expand"}</span>
+                      </div>
+                    </label>
+                    <button type="button" onClick={clearActiveGrouping} className="font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition h-8 text-xs px-3">
+                      <FontAwesomeIcon icon={faTimes} className="mr-1" /> Remove
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 min-w-0 flex-1 md:flex-none">
+                  <input type="text" value={globalSearch} onChange={e => setGlobalSearch(e.target.value)}
+                         placeholder="Quick Search..." className="w-full min-w-[120px] rounded-md border border-gray-300 focus:ring-1 focus:ring-blue-300 outline-none h-8 md:w-48 px-3 text-xs" />
+                </div>
+
                 {isMobile && (
-                  <div className="inline-flex overflow-hidden rounded-md border border-gray-300">
+                  <div className="inline-flex overflow-hidden rounded-md border border-gray-300 bg-white shadow-sm shrink-0">
                     <button
                       type="button"
                       onClick={() => setUseCardView(false)}
@@ -2017,26 +2204,6 @@ const handleExportConfirm = async (enteredFileName) => {
                   </div>
                 )}
 
-                {groupBy.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <label className="inline-flex items-center cursor-pointer select-none h-8">
-                      <input type="checkbox" checked={allExpanded} onChange={() => toggleAllGroups(!allExpanded)} className="sr-only" />
-                      <div className={`relative rounded-full transition-colors duration-200 ${allExpanded ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-600"} w-24 h-8`}>
-                        <span className={`absolute rounded-full bg-white shadow-md transition-all duration-200 ${allExpanded ? "left-[66px]" : "left-[2px]"} top-[2px] w-7 h-7`} />
-                        <span className={`absolute inset-0 flex items-center font-medium pointer-events-none text-[11px] ${allExpanded ? "justify-start pl-4" : "justify-end pr-4"}`}>{allExpanded ? "Collapse" : "Expand"}</span>
-                      </div>
-                    </label>
-                    <button onClick={() => { setGroupByByTab(p => ({...p, [activeTab]: []})); setExpandedGroupsByTab(p => ({...p, [activeTab]: {}})); }} className="font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition h-8 text-xs px-3">
-                      <FontAwesomeIcon icon={faTimes} className="mr-1" /> Remove
-                    </button>
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2 w-full md:w-auto">
-                  <input type="text" value={globalSearch} onChange={e => setGlobalSearch(e.target.value)}
-                         placeholder="Quick Search..." className="rounded-md border border-gray-300 focus:ring-1 focus:ring-blue-300 outline-none h-8 md:w-48 px-3 text-xs" />
-                </div>
-
                 {!isMobile && (
                   <label className="inline-flex items-center cursor-pointer select-none shrink-0 h-8">
                       <input type="checkbox" checked={autoFillGridState} onChange={() => setAutoFillGridState(!autoFillGridState)} className="sr-only" />
@@ -2047,14 +2214,15 @@ const handleExportConfirm = async (enteredFileName) => {
                   </label>
                 )}
 
-                <div className="relative" data-sgrt-export>
-                  <button onClick={() => filteredData.length > 0 && setShowExportMenu(!showExportMenu)} disabled={filteredData.length === 0}
-                          className="text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 transition flex items-center justify-center h-8 px-3">
+                <div className="relative shrink-0" data-sgrt-export>
+                  <button type="button" onClick={() => filteredData.length > 0 && setShowExportMenu(!showExportMenu)} disabled={filteredData.length === 0}
+                          className="text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 transition flex items-center justify-center h-8 px-3 whitespace-nowrap">
                     <FontAwesomeIcon icon={faFileExport} className="mr-1" /> Export
                   </button>
                  {showExportMenu && (
                     <div className="absolute right-0 mt-1 min-w-[120px] rounded-lg shadow-lg bg-white ring-1 ring-black/10 z-[60] overflow-hidden py-1">
                       <button
+                        type="button"
                         onClick={() => {
                           setShowExportMenu(false);
                           openExportModal("excel");
@@ -2066,6 +2234,7 @@ const handleExportConfirm = async (enteredFileName) => {
                       </button>
 
                       <button
+                        type="button"
                         onClick={() => {
                           setShowExportMenu(false);
                           openExportModal("csv");
@@ -2077,6 +2246,7 @@ const handleExportConfirm = async (enteredFileName) => {
                       </button>
 
                       <button
+                        type="button"
                         onClick={() => {
                           setShowExportMenu(false);
                           openExportModal("pdf");
@@ -2088,6 +2258,7 @@ const handleExportConfirm = async (enteredFileName) => {
                       </button>
 
                       <button
+                        type="button"
                         onClick={() => {
                           setShowExportMenu(false);
                           openExportModal("image");
@@ -2101,30 +2272,124 @@ const handleExportConfirm = async (enteredFileName) => {
                   )}
                 </div>
 
-                <div className="relative" data-sgrt-cols>
-                  <button onClick={() => setShowColumnChooser(!showColumnChooser)} className="text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition flex items-center justify-center h-8 px-3">
+                <div className="relative shrink-0" data-sgrt-cols>
+                  <button type="button" onClick={handleToggleColumnChooser} className="text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition flex items-center justify-center h-8 px-3 whitespace-nowrap">
                     <FontAwesomeIcon icon={faColumns} className="mr-1" /> Columns
                   </button>
                   {showColumnChooser && (
-                    <div className="absolute right-0 mt-1 bg-white border rounded shadow-lg p-2 max-h-64 overflow-auto z-50 min-w-[200px]">
-                      <div className="flex items-center justify-between text-[11px] font-semibold mb-1 border-b pb-1">
-                        <span>Show / Hide Columns</span>
-                        <label className="flex items-center gap-1 text-[11px] cursor-pointer">
-                          <label className="flex items-center gap-1 text-[11px] cursor-pointer"><input type="checkbox" checked={allChecked} onChange={(e) => { if (!e.target.checked) { useSwalErrorAlert("Minimum columns required", "Please retain at least 2 columns."); return; } setUserHiddenColsByTab((p) => ({ ...p, [activeTab]: [] })); }} /> Select All</label>
-                        </label>
+                    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/45 px-3 py-3">
+                      <div
+                        data-sgrt-cols
+                        className="flex max-h-[60vh] w-full max-w-[480px] flex-col overflow-hidden rounded-md bg-white shadow-2xl ring-1 ring-black/10"
+                      >
+                        <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-3 py-2">
+                          <div className="min-w-0">
+                            <h2 className="text-sm font-bold text-slate-900">
+                              Manage Columns - {activeTabLabel}
+                            </h2>
+                            <p className="mt-0.5 text-[11px] text-slate-500">
+                              Choose the columns to display in the table.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            className="h-6 w-6 shrink-0 text-slate-500 hover:text-red-600"
+                            onClick={handleCloseColumnChooser}
+                            title="Close"
+                          >
+                            <FontAwesomeIcon icon={faTimes} className="text-sm" />
+                          </button>
+                        </div>
+
+                        <div className="border-b border-gray-200 px-3 py-2">
+                          <div className="flex flex-col gap-2">
+                            <div className="relative min-w-0 flex-1">
+                              <FontAwesomeIcon
+                                icon={faSearch}
+                                className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400"
+                              />
+                              <input
+                                type="text"
+                                value={columnChooserSearch}
+                                onChange={(e) => setColumnChooserSearch(e.target.value)}
+                                placeholder="Search columns..."
+                                className="h-7 w-full rounded-md border border-gray-300 pl-9 pr-2 text-[11px] outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div className="flex items-center gap-2 overflow-x-auto">
+                              <label className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-1 text-[11px] text-slate-800 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  className="h-3 w-3 accent-blue-600"
+                                  checked={allChecked}
+                                  onChange={(e) => handleToggleAllColumns(e.target.checked)}
+                                />
+                                {allChecked ? `UnSelect All (${chooserColumns.length})` : `Select All (${chooserColumns.length})`}
+                              </label>
+                              <div className="h-5 shrink-0 border-l border-gray-300" />
+                              <button
+                                type="button"
+                                className="h-7 shrink-0 px-1.5 text-[11px] font-medium text-blue-600 hover:text-blue-700"
+                                onClick={handleResetColumnChooser}
+                              >
+                                Reset
+                              </button>
+                              <button
+                                type="button"
+                                className="h-7 shrink-0 rounded-md border border-gray-300 px-2 text-[11px] font-medium text-slate-600 hover:bg-gray-50"
+                                onClick={() => {
+                                  setColumnChooserDraftHidden([]);
+                                  setColumnChooserSearch("");
+                                }}
+                              >
+                                Restore Default
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="min-h-0 flex-1 overflow-auto px-3 py-2 custom-scrollbar">
+                          <div className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
+                            {filteredChooserColumns.map((col) => (
+                              <label
+                                key={col.key}
+                                className="flex h-7 items-center gap-1.5 rounded border border-gray-200 bg-white px-2 text-[11px] text-slate-800 shadow-sm cursor-pointer select-none hover:bg-blue-50"
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="h-3 w-3 shrink-0 accent-blue-600"
+                                  checked={!columnChooserDraftHidden.includes(col.key)}
+                                  onChange={(e) => handleToggleColumnVisibility(col.key, e.target.checked)}
+                                />
+                                <span className="min-w-0 flex-1 truncate">{col.label}</span>
+                                <FontAwesomeIcon icon={faGripVertical} className="text-[11px] text-slate-300" />
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-2 border-t border-gray-200 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="text-[11px] text-slate-500">
+                            Showing {filteredChooserColumns.length === 0 ? 0 : 1}-{filteredChooserColumns.length} of {chooserColumns.length} columns
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              className="h-7 min-w-[72px] rounded-md border border-gray-300 px-3 text-[11px] font-medium text-slate-600 hover:bg-gray-50"
+                              onClick={handleCloseColumnChooser}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              className="h-7 min-w-[72px] rounded-md bg-blue-600 px-3 text-[11px] font-medium text-white hover:bg-blue-700"
+                              onClick={handleApplyColumnChooser}
+                            >
+                              Apply
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                      {orderedCols.filter((col) => !col.hidden && !groupBy.includes(col.key)).map(col => (
-                        <label key={col.key} className="flex items-center text-[11px] gap-2 mb-1 cursor-pointer">
-                          <input type="checkbox" checked={!userHiddenCols.includes(col.key)} onChange={(e) => {
-                            const checked = e.target.checked;
-                            setUserHiddenColsByTab(p => {
-                              const current = p[activeTab] || [];
-                              return { ...p, [activeTab]: checked ? current.filter(k => k !== col.key) : [...current, col.key] };
-                            });
-                          }} />
-                          <span className="truncate">{col.label}</span>
-                        </label>
-                      ))}
                     </div>
                   )}
                 </div>
@@ -2175,6 +2440,7 @@ const handleExportConfirm = async (enteredFileName) => {
                 )}
 
                <table
+                    key={groupingRenderKey}
                     className={`global-tran-table-div-ui w-full text-center ${autoFillGridState ? "table-fixed" : "min-w-[1200px] table-auto"}`}
                   >
                   <thead className="text-[11px] font-bold sticky top-0 z-30">
@@ -2277,7 +2543,7 @@ const handleExportConfirm = async (enteredFileName) => {
                         {displayRows.map((row, idx) => {
                           if (groupBy.length > 0 && row.isGroup) {
                             const uniqueId = `${row.key}-${row.value}-${row.level}`;
-                            const isExpanded = expandedGroups[uniqueId];
+                            const isExpanded = autoExpandGroups || expandedGroups[uniqueId];
                             return (
                               <tr
                                 key={`g-${uniqueId}`}
@@ -2427,7 +2693,7 @@ const handleExportConfirm = async (enteredFileName) => {
                     )}
                   </tbody>
 
-                  {filteredData.length > 0 && (
+                  {filteredData.length > 0 && hasGrandTotalColumns && (
                     <tfoot className="sticky bottom-0 z-30 shadow-[0_-4px_6px_rgba(0,0,0,0.05)] bg-blue-100 font-bold border-t border-blue-400">
                       <tr>
                         <td className="sticky left-0 bg-blue-100 border-r border-gray-300 z-40" />
@@ -2546,20 +2812,22 @@ const handleExportConfirm = async (enteredFileName) => {
               })}
             </tbody>
 
-            <tfoot>
-              <tr>
-                {visibleCols.map((col, i) => (
-                  <td
-                    key={col.key}
-                    className="border px-2 py-1 font-bold bg-gray-100 align-top"
-                    style={{ maxWidth: 150, whiteSpace: "normal", wordBreak: "break-word" }}
-                  >
-                    {i === 0 && (groupBy.length > 0 ? "Grand Total" : "Total")}
-                    {grandTotals[col.key] !== undefined ? ` ${formatCellValue(grandTotals[col.key], col)}` : ""}
-                  </td>
-                ))}
-              </tr>
-            </tfoot>
+            {hasGrandTotalColumns && (
+              <tfoot>
+                <tr>
+                  {visibleCols.map((col, i) => (
+                    <td
+                      key={col.key}
+                      className="border px-2 py-1 font-bold bg-gray-100 align-top"
+                      style={{ maxWidth: 150, whiteSpace: "normal", wordBreak: "break-word" }}
+                    >
+                      {i === 0 && (groupBy.length > 0 ? "Grand Total" : "Total")}
+                      {grandTotals[col.key] !== undefined ? ` ${formatCellValue(grandTotals[col.key], col)}` : ""}
+                    </td>
+                  ))}
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       )}
@@ -2878,7 +3146,9 @@ const handleExportConfirm = async (enteredFileName) => {
         onConfirm={handleExportConfirm}
       />
 
-      {(loading || exporting) && <LoadingSpinner />}     
+      {(loading || exporting) && (
+        <LoadingDots label={exporting ? "Exporting, please wait..." : "Loading, please wait..."} fullScreen />
+      )}
     </>
   );
 };

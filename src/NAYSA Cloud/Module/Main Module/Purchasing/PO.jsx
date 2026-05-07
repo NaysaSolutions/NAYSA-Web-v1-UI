@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Swal from "sweetalert2";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -27,17 +28,22 @@ import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import RCLookupModal from "../../../Lookup/SearchRCMast.jsx";
-import MSLookupModal from "../../../Lookup/SearchMSMast.jsx";
+import ItemMastLookupModal from "../../../Lookup/SearchItemMast.jsx";
 import PayeeMastLookupModal from "../../../Lookup/SearchVendMast";
 import PaytermLookupModal from "../../../Lookup/SearchPayTermRef.jsx";
-import SearchPROpenModal from "../../../Lookup/SearchOpenPRBalance.jsx";
+import GlobalCombinedLookup from "../../../Lookup/SearchGlobalCombinedLookup.jsx";
 import VATLookupModal from "../../../Lookup/SearchVATRef.jsx";
 import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 
 // Configuration
-import { postRequest } from "../../../Configuration/BaseURL.jsx";
+import apiClient from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
+import { postRequest, fetchDataJson } from "../../../Configuration/BaseURL.jsx";
 import { useReset } from "../../../Components/ResetContext";
+import {
+  useGetCurrentDayV2,
+  useformatToDatev2
+} from '@/NAYSA Cloud/Global/dates';
 
 import {
   docTypeNames,
@@ -70,7 +76,13 @@ import {
   formatNumber,
   parseFormattedNumber,
   useSwalshowSaveSuccessDialog,
+  useSwalInfoAlert,
+  useSwalSuccessAlert,
+  useSwalErrorAlert,
+  useSwalHandleOpenSpecsModal
 } from "@/NAYSA Cloud/Global/behavior.jsx";
+
+import { useSelectedHSColConfig } from '@/NAYSA Cloud/Global/selectedData';
 
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
@@ -82,9 +94,19 @@ import DateFormatInput from '@/NAYSA Cloud/Global/DateFormatInput.jsx';
 const PO = () => {
   const loadedFromUrlRef = useRef(false);
   const navigate = useNavigate();
-  const location = useLocation();
-
+  const { currentUserRow } = useAuth();
   const { resetFlag } = useReset();
+  const location = useLocation();
+  const [isViewDocument, setIsViewDocument] = useState(false);
+
+  useEffect(() => {
+    const p = new URLSearchParams(location.search);
+    if (p.get("viewDocument") === "true") {
+      setIsViewDocument(true);
+    }
+  }, []);
+
+  const isViewDocumentUrl = isViewDocument;
 
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
 
@@ -106,6 +128,7 @@ const PO = () => {
     documentNo: "",
     documentStatus: "",
     status: "OPEN",
+    originalDocStatus: "O",
     currRate: "",
 
     WHcode: "",
@@ -121,14 +144,15 @@ const PO = () => {
     isResetDisabled: false,
     isFetchDisabled: true,
 
-    // Header information
-    header: {
-      po_date: new Date().toISOString().split("T")[0], // PO Date
-      dateNeeded: new Date().toISOString().split("T")[0],
-      delDate: new Date().toISOString().split("T")[0],
-    },
+    // PR Style Lookup Logic Variables
+    itemSingleSelect: false,
+    itemLookupEndPoint: "",
+    selectedDocType: "",
 
-    dateNeeded: new Date().toISOString().split("T")[0],
+    poDate: useGetCurrentDayV2(),
+    delDate: useGetCurrentDayV2(),
+
+    dateNeeded: useGetCurrentDayV2(),
 
     branchCode: "HO",
     branchName: "Head Office",
@@ -141,7 +165,7 @@ const PO = () => {
     currName: "",
     attention: "",
 
-    // legacy fields – keep but we’ll actually use vendCode / vendName
+    // legacy fields
     vendCOde: "",
     vendName: "",
 
@@ -156,10 +180,10 @@ const PO = () => {
     selectedPoType: "",
     cutoffCode: "",
     rcCode: "",
-    rcName: "", // responsibility center name for display
+    rcName: "",
     requestDept: "",
     vendCode: "",
-    vendNameHeader: "", // internal holder if needed
+    vendNameHeader: "",
     refPoNo1: "",
     refPrNo2: "",
     remarks: "",
@@ -169,11 +193,10 @@ const PO = () => {
     poCancelled: "",
     poNo: "",
     payTerm: "",
-    userCode: "NSI",
+    userCode: "",
     selectedPOStatus: "",
     vendVatCode: "",
     groupId: "",
-
 
     // New for JO-like functions
     paytermCode: "",
@@ -182,7 +205,7 @@ const PO = () => {
     showPaytermModal: false,
     vatLookupModalOpen: false,
     payeeLookupOpen: false,
-    showAllTranDocNo:false,
+    showAllTranDocNo: false,
 
     // Detail lines
     detailRows: [],
@@ -199,8 +222,11 @@ const PO = () => {
     showAttachModal: false,
     showSignatoryModal: false,
     showPostModal: false,
-    sourcePrNo: "", // selected PR No from modal
-    prLookupModalOpen: false,
+    sourcePrNo: "",
+    showOpenPRModal: false,
+    openPR_Data_Summary: [],
+    openPR_Col_Summary: [],
+    openPR_Col_Detail: [],
 
     // RC Lookup modal (table)
     rcLookupModalOpen: false,
@@ -232,6 +258,10 @@ const PO = () => {
     isFetchDisabled,
     poNo,
     selectedPOType,
+
+    itemSingleSelect,
+    itemLookupEndPoint,
+    selectedDocType,
 
     glCurrMode,
     glCurrDefault,
@@ -304,6 +334,10 @@ const PO = () => {
     showSignatoryModal,
     showPostModal,
     vatLookupModalOpen,
+    showOpenPRModal,
+    openPR_Data_Summary,
+    openPR_Col_Summary,
+    openPR_Col_Detail,
 
     // RC Lookup
     rcLookupModalOpen,
@@ -313,7 +347,7 @@ const PO = () => {
   } = state;
 
   const [header, setHeader] = useState({
-    po_date: new Date().toISOString().split("T")[0],
+    po_date: useGetCurrentDayV2(),
   });
 
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
@@ -325,38 +359,46 @@ const PO = () => {
     totalNet: "0.000000",
   });
 
-  // PO.jsx
   const docType = docTypes?.PO || "PO";
 
   const pdfLink = docTypePDFGuide[docType];
   const videoLink = docTypeVideoGuide[docType];
   const documentTitle = docTypeNames[docType] || "Purchase Order";
+  // Helper to map single characters to full words
+  const getFullStatus = (s) => {
+    const map = {
+      O: "OPEN",
+      C: "CLOSED",
+      X: "CANCELLED",
+      F: "FINALIZED",
+    };
+    return map[s?.toUpperCase()] || s || "OPEN";
+  };
 
-  const displayStatus = status || "OPEN";
+  const displayStatus = getFullStatus(status);
+
   const statusMap = {
     FINALIZED: "global-tran-stat-text-finalized-ui",
     CANCELLED: "global-tran-stat-text-closed-ui",
-    CLOSED: "global-tran-stat-text-closed-ui",
+    CLOSED: "global-tran-stat-text-finalized-ui",
   };
+
   const statusColor = statusMap[displayStatus] || "";
-  const urlParams = new URLSearchParams(location.search);
-  const isViewOnly = urlParams.get("viewOnly") === "Y";
-  const isFormDisabled =
-    isViewOnly ||
-    ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+  const isFormDisabled = isViewDocumentUrl || ["FINALIZED", "CANCELLED", "CLOSED"].includes(
+    displayStatus
+  );
 
   const DEC_QTY = 2;
   const DEC_PRICE = 2;
   const DEC_AMT = 2;
 
-  // ===== Amount / VAT helpers (JO-style, adapted for PO) =====
   const computeVatFromInclusive = (vatRate, grossAmt) => {
-    const rate = parseFormattedNumber(vatRate || 0); // % (e.g. 12)
-    const gross = parseFormattedNumber(grossAmt || 0); // VAT-inclusive
+    const rate = parseFormattedNumber(vatRate || 0);
+    const gross = parseFormattedNumber(grossAmt || 0);
 
     if (!rate || !gross) return 0;
 
-    const r = rate * 0.01; // to decimal
+    const r = rate * 0.01;
     return (gross * r) / (1 + r);
   };
 
@@ -365,32 +407,22 @@ const PO = () => {
     const unitPrice = parseFormattedNumber(row.unitPrice || 0);
     const vatRate = row.vatRate ?? 0;
 
-    // 1) Gross = Quantity × Unit Price
     const gross = qty * unitPrice;
-
-    // 2) Discount
-    const discRate = parseFormattedNumber(row.discRate || 0); // %
+    const discRate = parseFormattedNumber(row.discRate || 0);
     const discAmt = gross * (discRate / 100);
-
-    const baseAfterDisc = gross - discAmt; // still VAT-inclusive
-
-    // 3) VAT amount using inclusive price method
+    const baseAfterDisc = gross - discAmt;
     const vatAmt = computeVatFromInclusive(vatRate, baseAfterDisc);
-
-    // 4) Net = base - VAT
     const net = baseAfterDisc - vatAmt;
 
     row.qtyOnHand = formatNumber(parseFormattedNumber(row.qtyOnHand) || 0, DEC_QTY);
     row.qtyNeeded = formatNumber(parseFormattedNumber(row.qtyNeeded) || 0, DEC_QTY);
-    row.poQty     = formatNumber(parseFormattedNumber(row.poQty) || 0, DEC_QTY);
-
+    row.poQty = formatNumber(parseFormattedNumber(row.poQty) || 0, DEC_QTY);
     row.unitPrice = formatNumber(parseFormattedNumber(row.unitPrice) || 0, DEC_PRICE);
 
-    row.grossAmt  = formatNumber(parseFormattedNumber(row.grossAmt) || 0, DEC_AMT);
-    row.totalAmt  = formatNumber(parseFormattedNumber(row.totalAmt) || 0, DEC_AMT);
-    row.vatAmt    = formatNumber(parseFormattedNumber(row.vatAmt) || 0, DEC_AMT);
-    row.netAmt    = formatNumber(parseFormattedNumber(row.netAmt) || 0, DEC_AMT);
-
+    row.grossAmt = formatNumber(parseFormattedNumber(row.grossAmt) || 0, DEC_AMT);
+    row.totalAmt = formatNumber(parseFormattedNumber(row.totalAmt) || 0, DEC_AMT);
+    row.vatAmt = formatNumber(parseFormattedNumber(row.vatAmt) || 0, DEC_AMT);
+    row.netAmt = formatNumber(parseFormattedNumber(row.netAmt) || 0, DEC_AMT);
 
     return {
       ...row,
@@ -404,11 +436,7 @@ const PO = () => {
 
   const updateTotalsDisplay = (rows) => {
     const arr = rows || [];
-
-    let qtyNeeded = 0;
-    let gross = 0;
-    let vat = 0;
-    let net = 0;
+    let qtyNeeded = 0, gross = 0, vat = 0, net = 0;
 
     arr.forEach((r) => {
       qtyNeeded += parseFormattedNumber(r.qtyNeeded || 0);
@@ -439,7 +467,7 @@ const PO = () => {
       qtyNeeded: formatNumber(0, DEC_QTY),
       uomCode2: "",
       uomQty2: formatNumber(0, DEC_QTY),
-      dateNeeded: state.header?.delDate || new Date().toISOString().split("T")[0],
+      dateNeeded: state.header?.delDate || useGetCurrentDayV2(),
       itemSpecs: "",
       serviceCode: "",
       serviceName: "",
@@ -460,48 +488,45 @@ const PO = () => {
     updateTotalsDisplay(updatedRows);
   };
 
-
   const openSpecsModal = (rowIndex) => {
     if (isFormDisabled) return;
 
-    const current = detailRows?.[rowIndex]?.itemSpecs ?? "";
-    updateState({
-      specsModalOpen: true,
-      specsRowIndex: rowIndex,
-      specsTempText: current,
-    });
+    useSwalHandleOpenSpecsModal(
+      rowIndex,
+      detailRows,
+      handleDetailChange,
+      detailRows?.[rowIndex]?.itemSpecs || "",
+      "Specification",
+      "itemSpecs",
+      "Enter specification for this item..."
+    );
   };
 
-  const closeSpecsModal = () => {
-    updateState({
-      specsModalOpen: false,
-      specsRowIndex: null,
-      specsTempText: "",
-    });
-  };
+  // const closeSpecsModal = () => {
+  //   updateState({
+  //     specsModalOpen: false,
+  //     specsRowIndex: null,
+  //     specsTempText: "",
+  //   });
+  // };
 
-  const saveSpecsModal = () => {
-    if (isFormDisabled) return closeSpecsModal();
-
-    const idx = state.specsRowIndex;
-    if (idx === null || idx === undefined) return closeSpecsModal();
-
-    const updated = [...detailRows];
-    updated[idx] = {
-      ...updated[idx],
-      itemSpecs: state.specsTempText ?? "",
-    };
-
-    updateState({ detailRows: updated });
-    closeSpecsModal();
-  };
+  // const saveSpecsModal = () => {
+  //   const idx = state.specsRowIndex;
+  //   if (idx === null || idx === undefined) return closeSpecsModal();
+  //   const updated = [...detailRows];
+  //   updated[idx] = {
+  //     ...updated[idx],
+  //     itemSpecs: state.specsTempText ?? "",
+  //   };
+  //   updateState({ detailRows: updated });
+  //   closeSpecsModal();
+  // };
 
   const handleCloseWarehouseLookup = (row) => {
     if (!row) {
       updateState({ warehouseLookupOpen: false });
       return;
     }
-
     updateState({
       warehouseLookupOpen: false,
       WHcode: row?.whCode ?? "",
@@ -509,14 +534,8 @@ const PO = () => {
     });
   };
 
-  // ==========================
-  // EFFECTS
-  // ==========================
-
   useEffect(() => {
-    if (resetFlag) {
-      handleReset();
-    }
+    if (resetFlag) handleReset();
     let timer;
     if (isLoading) {
       timer = setTimeout(() => updateState({ showSpinner: true }), 200);
@@ -531,12 +550,6 @@ const PO = () => {
   }, [state.documentID]);
 
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const docNo = params.get("poNo");
-    const branchCodeParam = params.get("branchCode");
-
-    if (docNo && branchCodeParam) return;
-
     handleReset();
   }, []);
 
@@ -546,16 +559,18 @@ const PO = () => {
     }
   }, [glCurrMode, glCurrDefault, currCode]);
 
-  // ==========================
-  // INITIAL LOAD / RESET
-  // ==========================
-
   const handleReset = () => {
     loadDocDropDown();
     loadDocControl();
     loadCompanyData();
 
-    const today = new Date().toISOString().split("T")[0];
+    const today = useGetCurrentDayV2();
+
+    setHeader({
+      po_date: today,
+      dateNeeded: today,
+      delDate: today,
+    });
 
     updateState({
       header: {
@@ -590,14 +605,19 @@ const PO = () => {
       isResetDisabled: false,
       isFetchDisabled: false,
       status: "OPEN",
+      originalDocStatus: "O",
       noReprints: "0",
       poCancelled: "",
       detailRows: [],
       rcLookupModalOpen: false,
       rcLookupContext: "",
       msLookupModalOpen: false,
+      itemSingleSelect: false,
+      itemLookupEndPoint: "",
+      selectedDocType: "",
       paytermCode: "",
       paytermName: "",
+      showOpenPRModal: false,
     });
 
     updateTotalsDisplay([]);
@@ -650,14 +670,9 @@ const PO = () => {
     }
   };
 
-  const loadCurrencyMode = (
-    mode = glCurrMode,
-    defaultCurr = glCurrDefault,
-    curr = currCode,
-  ) => {
+  const loadCurrencyMode = (mode = glCurrMode, defaultCurr = glCurrDefault, curr = currCode) => {
     const calcWithCurr3 = mode === "T";
-    const calcWithCurr2 =
-      (mode === "M" && defaultCurr !== curr) || mode === "D" || calcWithCurr3;
+    const calcWithCurr2 = (mode === "M" && defaultCurr !== curr) || mode === "D" || calcWithCurr3;
 
     updateState({
       glCurrMode: mode,
@@ -687,12 +702,7 @@ const PO = () => {
     }
   };
 
-
-  // ==========================
-  // FETCH (GET) – PO HEADER + DT1
-  // ==========================
-
-  const fetchTranData = async (poNoParam, _branchCode) => {
+  const fetchTranData = async (poNoParam, _branchCode, key = "") => {
     const resetState = () => {
       updateState({
         documentNo: "",
@@ -706,22 +716,18 @@ const PO = () => {
     updateState({ isLoading: true });
 
     try {
+      let formattedPoNo = poNoParam?.toString().trim() || "";
+      if (formattedPoNo && /^\d+$/.test(formattedPoNo)) {
+        formattedPoNo = formattedPoNo.padStart(8, '0');
+      }
+
       const data = await useFetchTranData(
-        poNoParam,
-        _branchCode,
+        formattedPoNo,
+        _branchCode || branchCode,
         docType,
         "poNo",
+        key || ""
       );
-
-      const today = new Date().toISOString().split("T")[0];
-
-      const delDateForHeader = data.delDate
-        ? new Date(data.delDate).toISOString().split("T")[0]
-        : today;
-
-
-
-      console.log("📄 PO PARSED DATA:", data);
 
       if (!data?.poId) {
         Swal.fire({
@@ -734,31 +740,23 @@ const PO = () => {
 
       let poDateForHeader = "";
       if (data.poDate) {
-        const d = new Date(data.poDate);
-        poDateForHeader = isNaN(d) ? "" : d.toISOString().split("T")[0];
+        poDateForHeader = useformatToDatev2(data.poDate) || "";
       }
 
-      // normalize header-level dateNeeded
       let dateNeededForHeader = "";
       if (data.dateNeeded) {
-        const dn = new Date(data.dateNeeded);
-        dateNeededForHeader = isNaN(dn) ? "" : dn.toISOString().split("T")[0];
+        dateNeededForHeader = useformatToDatev2(data.dateNeeded) || "";
+      }
+
+      let delDateForHeader = "";
+      if (data.delDate) {
+        delDateForHeader = useformatToDatev2(data.delDate) || "";
       }
 
       const retrievedDetailRows = (data.dt1 || []).map((item) => {
-        // ✅ Qty comes from poQuantity; if null, derive from grossAmount / unitCost
         const unitCost = Number(item.unitCost ?? 0) || 0;
         const grossAmt = Number(item.grossAmount ?? 0) || 0;
-
-        const qty =
-          Number(item.poQuantity ?? 0) ||
-          0 ||
-          (unitCost > 0 ? grossAmt / unitCost : 0);
-
-        const dateNeeded =
-          item.delDate || data.delDate
-            ? new Date(item.delDate || data.delDate).toISOString().split("T")[0]
-            : "";
+        const qty = Number(item.poQuantity ?? 0) || 0 || (unitCost > 0 ? grossAmt / unitCost : 0);
 
         return {
           ...item,
@@ -774,20 +772,14 @@ const PO = () => {
           qtyNeeded: formatNumber(item.qtyNeeded ?? 0, 6),
           uomCode2: item.uomCode2 || "",
           uomQty2: formatNumber(item.uomQty2 ?? 0, 6),
-          dateNeeded: item.dateNeeded
-            ? new Date(item.dateNeeded).toISOString().split("T")[0]
-            : "",
+          dateNeeded: item.dateNeeded ? useformatToDatev2(item.dateNeeded) : "",
           itemSpecs: item.itemSpecs || "",
           serviceCode: item.serviceCode || "",
           serviceName: item.serviceName || "",
-          // ✅ Qty Needed + PO Qty should match
           qtyNeeded: formatNumber(qty, 6),
           poQty: formatNumber(qty, 6),
           rrQty: formatNumber(item.rrQty ?? 0, 6),
-
-          // NEW amount fields (default to 0 if not present)
           unitPrice: formatNumber(item.unitCost ?? 0, 6),
-          // ✅ Amount fields (use the API’s names)
           grossAmt: formatNumber(item.grossAmount ?? 0, 6),
           totalAmt: formatNumber(item.itemAmount ?? 0, 6),
           vatAmt: formatNumber(item.vatAmount ?? 0, 6),
@@ -796,68 +788,69 @@ const PO = () => {
         };
       });
 
-      const totalQty = retrievedDetailRows.reduce(
-        (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
-        0,
-      );
       updateTotalsDisplay(retrievedDetailRows);
-
       const firstPrNo = data?.dt1?.[0]?.prNo || "";
 
+      setHeader({
+        po_date: poDateForHeader,
+        dateNeeded: dateNeededForHeader,
+        delDate: delDateForHeader || dateNeededForHeader || useGetCurrentDayV2(),
+      });
+
       updateState({
-        documentStatus: data.status,
-        status: data.status,
-        documentID: data.poId,
+        documentStatus: data.status || "O",
+        status: data.status || "O",
+        originalDocStatus: data.status || "O",
+
+        documentID: data.poId || "",
         groupId: data.groupId || "",
-        documentNo: data.poNo,
-        branchCode: data.branchCode,
+        documentNo: data.poNo || "",
+        branchCode: data.branchCode || branchCode,
+
         header: {
-          po_date: poDateForHeader,
-          dateNeeded: dateNeededForHeader,
-          delDate: delDateForHeader || dateNeededForHeader || new Date().toISOString().split("T")[0],
+          po_date: poDateForHeader || "",
+          dateNeeded: dateNeededForHeader || "",
+          delDate:
+            delDateForHeader ||
+            dateNeededForHeader ||
+            useGetCurrentDayV2(),
         },
 
         cutoffCode: data.cutoffCode || "",
         rcCode: data.rcCode || "",
         rcName: data.rcName || "",
+
         selectedPoTranType: data.poTranType || "",
         selectedPoType: data.poType || "",
+
         dateNeeded: dateNeededForHeader,
         refPoNo1: data.refPoNo1 || "",
         refPrNo2: data.refPrNo2 || "",
         remarks: data.remarks || "",
         poCancelled: data.poCancelled || "",
         noReprints: data.noReprints ?? "0",
+
         detailRows: retrievedDetailRows,
+
         isDocNoDisabled: true,
         isFetchDisabled: true,
 
         vendCode: data.vendCode || "",
         vendNameHeader: data.vendName || "",
 
-        // ✅ Payterm
+        // Payterm
         paytermCode: data.paytermCode || "",
+        paytermName: data.paytermName || data.paytermCode || "",
 
-        // ✅ PR No in header (comes from dt1)
-        sourcePrNo: firstPrNo,
-
-        // ✅ Department (you already have rcCode; if your UI shows dept name, your API currently returns rcCode only)
-        rcCode: data.rcCode || "",
-
-        // ✅ Correct ref keys (your API uses refpoNo1/refpoNo2)
-        refPoNo1: data.refpoNo1 || "",
-        refPrNo2: data.refpoNo2 || "",
-
-        // ✅ Correct PO keys (you’re currently using PR keys)
-        selectedPoTranType: data.poTranType || "",
-        selectedPoType: data.poType || "",
-
-        // ✅ Date needed for header is delDate in your API
-        dateNeeded: data.delDate
-          ? new Date(data.delDate).toISOString().split("T")[0]
-          : "",
+        // Warehouse
         WHcode: data.whCode || "",
         WHname: data.whName || "",
+
+        // Currency
+        currCode: data.currCode || "",
+        currRate: formatNumber(data.currRate || 1, 6),
+
+        sourcePrNo: firstPrNo,
       });
     } catch (error) {
       console.error("Error fetching transaction data:", error);
@@ -865,63 +858,11 @@ const PO = () => {
         icon: "error",
         title: "Fetch Error",
         text: error.message,
-      });
+      });                                                                                                                                                                                                                                                   
       resetState();
     } finally {
       updateState({ isLoading: false });
     }
-  };
-
-  const handleCloseMSLookup = (selectedItem) => {
-    if (!selectedItem) {
-      updateState({ msLookupModalOpen: false });
-      return;
-    }
-
-    const today = header.po_date || new Date().toISOString().split("T")[0];
-
-    const newRow = {
-      invType: "MS",
-      groupId: state.groupId || "",
-      poStatus: status || "",
-      itemCode: selectedItem.itemCode || "",
-      itemName: selectedItem.itemName || "",
-      uomCode: selectedItem.uom || "",
-      qtyOnHand: formatNumber(selectedItem.qtyHand ?? 0, 6),
-      qtyAlloc: "0.000000",
-      qtyNeeded: "0.000000",
-      uomCode2: "",
-      uomQty2: "0.000000",
-      dateNeeded: today,
-      itemSpecs: "",
-      serviceCode: "",
-      serviceName: "",
-      poQty: "0.000000",
-      rrQty: "0.000000",
-
-      // NEW
-      unitPrice: "0.000000",
-      grossAmt: "0.000000",
-      discRate: "0.000000",
-      discAmt: "0.000000",
-      totalAmt: "0.000000",
-      vatCode: "",
-      vatAmt: "0.000000",
-      netAmt: "0.000000",
-      vatRate: 0,
-    };
-
-    const updatedRows = [...detailRows, newRow];
-    updateState({
-      detailRows: updatedRows,
-      msLookupModalOpen: false,
-    });
-
-    const totalQty = updatedRows.reduce(
-      (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
-      0,
-    );
-    updateTotalsDisplay(updatedRows);
   };
 
   const handlePrNoBlur = () => {
@@ -930,49 +871,54 @@ const PO = () => {
     }
   };
 
-  // ==========================
-  // HEADER EVENTS
-  // ==========================
-
   const handleCurrRateNoBlur = (e) => {
     const num = formatNumber(e.target.value, 6);
     updateState({
       currRate: isNaN(num) ? "0.000000" : num,
-      withCurr2:
-        (glCurrMode === "M" && glCurrDefault !== currCode) ||
-        glCurrMode === "D",
+      withCurr2: (glCurrMode === "M" && glCurrDefault !== currCode) || glCurrMode === "D",
       withCurr3: glCurrMode === "T",
     });
   };
 
-  const handlePrTranTypeChange = (e) => {
-    updateState({ selectedPoTranType: e.target.value });
-  };
+  const handlePrTranTypeChange = (e) => updateState({ selectedPoTranType: e.target.value });
+  const handlePrTypeChange = (e) => updateState({ selectedPoType: e.target.value });
 
-  const handlePrTypeChange = (e) => {
-    updateState({ selectedPoType: e.target.value });
-  };
+  const validateBeforeAddingItem = () => {
+    let errorMsg = "";
 
-  // ==========================
-  // DETAIL HANDLERS
-  // ==========================
+    if (!rcCode || String(rcCode).trim() === "") {
+      errorMsg += " - Header - Department\n";
+    }
+
+    if (!vendCode || String(vendCode).trim() === "") {
+      errorMsg += " - Header - Payee Code\n";
+    }
+
+    if (errorMsg !== "") {
+      useSwalErrorAlert(
+        "Validation Failed",
+        `The following fields are required :\n\n${errorMsg}`
+      );
+      return false;
+    }
+
+    return true;
+  };
 
   const handleAddRowClick = () => {
     if (isFormDisabled) return;
 
-    // Toggle dropdown
+    if (!validateBeforeAddingItem()) return;
+
     setShowTypeDropdown((prev) => !prev);
   };
 
   const handleSelectTypeAndAddRow = (typeCode) => {
-    if (isFormDisabled) return;
-
-    const today = header.po_date || new Date().toISOString().split("T")[0];
-
+    const today = header.po_date || useGetCurrentDayV2();
     const newRow = {
       invType: typeCode,
       groupId: "",
-      poStatus: status || "",
+      poStatus: status || "O",
       itemCode: "",
       itemName: "",
       uomCode: "",
@@ -987,8 +933,6 @@ const PO = () => {
       serviceName: "",
       poQty: "0.000000",
       rrQty: "0.000000",
-
-      // NEW
       unitPrice: "0.000000",
       grossAmt: "0.000000",
       discRate: "0.000000",
@@ -1002,111 +946,414 @@ const PO = () => {
 
     const updatedRows = [...detailRows, newRow];
     updateState({ detailRows: updatedRows });
-
-    const totalQty = updatedRows.reduce(
-      (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
-      0,
-    );
     updateTotalsDisplay(updatedRows);
-
     setShowTypeDropdown(false);
   };
 
+  const handleOpenPRLookup = async () => {
+    try {
+      updateState({ isLoading: true });
 
-  const handleClosePROpenModal = (selection) => {
-    if (isFormDisabled) {
-      updateState({ prLookupModalOpen: false });
+      const endpoint = "getPROpen";
+      const payload = {
+        json_data: {
+          mode: "Header",
+          branchCode: branchCode,
+          prTranType: null,
+        },
+      };
+
+      const response = await postRequest(endpoint, payload);
+
+      // 1. Bulletproof data extraction 
+      // (Handles standard arrays OR JSON stringified 'result' wrappers from SQL)
+      const rawData = response?.data?.[0]?.result
+        ? JSON.parse(response.data[0].result)
+        : (response?.data || []);
+
+      if (!Array.isArray(rawData) || rawData.length === 0) {
+        useSwalInfoAlert("Open Purchase Requisition", "No records found");
+        updateState({ isLoading: false });
+        return;
+      }
+
+      // 2. Map data and bridge the ALL_CAPS SQL gap to PascalCase UI gap
+      const custData = rawData.filter((row) => {
+        const stat = String(row.PR_STATUS || row.Status || row.status || row.prStatus || "O").toUpperCase();
+        return stat !== "C" && stat !== "CLOSED" && stat !== "X" && stat !== "CANCELLED";
+      }).map((row) => ({
+        ...row,
+        // 🔧 FIX: Map standard SQL ALL_CAPS returns to the PascalCase keys the UI grid expects
+        prNo: row.PR_NO || row.PRNo || row.prNo,
+        prDate: row.PR_DATE || row.PRDate || row.prDate,
+        dateNeeded: row.DATE_NEEDED || row.DateNeeded || row.dateNeeded,
+        prType: row.PR_TYPE || row.PRType || row.prType,
+        refNo: row.REF_NO || row.RefNo || row.refNo,
+        reqRcCode: row.REQ_RC_CODE || row.REQ_DEPT || row.ReqRcCode || row.reqRcCode || row.reqDept,
+        particulars: row.PARTICULARS || row.Particulars || row.particulars,
+        preparedBy: row.PREPARED_BY || row.PreparedBy || row.preparedBy,
+        dateStamp: row.DATE_STAMP || row.DateStamp || row.dateStamp,
+        timeStamp: row.TIME_STAMP || row.TimeStamp || row.timeStamp,
+
+        // Ensure a unique ID for selection
+        groupId: row.PR_ID || row.PrId || row.PR_NO || row.PRNo || row.prNo || row.GROUP_ID || row.groupId,
+      }));
+
+      const colConfig = await useSelectedHSColConfig("getPROpen", userCode);
+      const colConfig_detail = await useSelectedHSColConfig("getPROpen_Detail", userCode);
+
+      if (!colConfig?.length || !colConfig_detail?.length) {
+        console.warn("Warning: Column config returned empty. Double check hscolconfig table mapping.");
+      }
+
+      updateState({
+        openPR_Data_Summary: custData,
+        openPR_Col_Summary: colConfig,
+        openPR_Col_Detail: colConfig_detail,
+        showOpenPRModal: true,
+        isLoading: false,
+      });
+
+    } catch (error) {
+      console.error("PR Open Fetch Error:", error);
+      useSwalInfoAlert("Open Purchase Requisition", "Error in Fetching Record");
+      updateState({ isLoading: false });
+    }
+  };
+  // const handleOpenPRLookup = async () => {
+  //   try {
+  //     updateState({ isLoading: true });
+
+  //     const payload = {
+  //       json_data: {
+  //         mode: "Header",
+  //         branchCode: branchCode,
+  //         prTranType: null, // or "PR01" if you want to filter
+  //       },
+  //     };
+
+  //     const response = await postRequest("getPROpen", payload);
+
+  //     let custData = response?.data ?? [];
+
+  //     if (!response?.success || !Array.isArray(custData) || custData.length === 0) {
+  //       useSwalInfoAlert("Open Purchase Requisition", "No records found");
+  //       updateState({ isLoading: false });
+  //       return;
+  //     }
+
+  //     // 🚀 NEW FIX: Filter the Summary Tab so Closed/Cancelled PRs don't even show up
+  //     custData = custData.filter((row) => {
+  //       const stat = String(row.Status || row.status || row.PR_STATUS || row.prStatus || "O").toUpperCase();
+  //       // Hide it if it's C, CLOSED, X, or CANCELLED
+  //       return stat !== "C" && stat !== "CLOSED" && stat !== "X" && stat !== "CANCELLED";
+  //     }).map((row) => ({
+  //       ...row,
+  //       groupId: row.GroupId || row.groupId || row.PrId || row.PRNo || row.prNo,
+  //     }));
+
+  //     let colConfig = [];
+  //     let colConfig_detail = [];
+
+  //     try {
+  //       colConfig = await useSelectedHSColConfig("getPROpen");
+  //       if (!colConfig || colConfig.length === 0) throw new Error("Empty config");
+  //     } catch {
+  //       // 🚀 RESTORE ALL COLUMNS HERE
+  //       colConfig = [
+  //         { key: "PRNo", label: "PR No.", hidden: 0 },
+  //         { key: "PRDate", label: "PR Date", hidden: 0 },
+  //         { key: "DateNeeded", label: "Date Needed", hidden: 0 },
+  //         { key: "PRType", label: "PR Type", hidden: 0 },
+  //         { key: "RefNo", label: "Ref No.", hidden: 0 },
+  //         { key: "ReqRcCode", label: "Requesting Department", hidden: 0 },
+  //         { key: "Particulars", label: "Particulars", hidden: 0 },
+  //         { key: "PreparedBy", label: "Prepared By", hidden: 0 },
+  //         { key: "DateStamp", label: "Date Stamp", hidden: 0 },
+  //         { key: "TimeStamp", label: "Time Stamp", hidden: 0 },
+  //       ];
+  //     }
+
+  //     try {  
+  //       colConfig_detail = await useSelectedHSColConfig("getPROpen_Detail");
+  //       if (!colConfig_detail || colConfig_detail.length === 0) throw new Error("Empty config");
+  //     } catch {
+  //       colConfig_detail = [
+  //         { key: "PRNo", label: "PR No.", hidden: 0 },
+  //         { key: "JobCode", label: "Item Code", hidden: 0 },
+  //         { key: "ScopeOfWork", label: "Description", hidden: 0 },
+  //         { key: "QtyNeeded", label: "Qty", hidden: 0 },
+  //         { key: "UOM", label: "UOM", hidden: 0 },
+  //       ];
+  //     }
+
+  //     updateState({
+  //       openPR_Data_Summary: custData,
+  //       openPR_Col_Summary: colConfig,
+  //       openPR_Col_Detail: colConfig_detail,
+  //       showOpenPRModal: true,
+  //       isLoading: false,
+  //     });
+  //   } catch (error) {
+  //     console.error("PR Open Fetch Error:", error);
+  //     console.log("error response:", error?.response?.data);
+  //     console.log("error status:", error?.response?.status);
+
+  //     useSwalInfoAlert("Open Purchase Requisition", "Error in Fetching Record");
+  //     updateState({
+  //       openPR_Data_Summary: [],
+  //       openPR_Col_Summary: [],
+  //       openPR_Col_Detail: [],
+  //       isLoading: false,
+  //     });
+  //   }
+  // };
+
+  const handleClosePROpenModal = async (selection) => {
+    if (!selection || !selection.details || selection.details.length === 0) {
+      updateState({ showOpenPRModal: false });
       return;
     }
 
-    // Always close the modal
-    if (!selection) {
-      updateState({ prLookupModalOpen: false });
-      return;
-    }
+    updateState({ isLoading: true, showOpenPRModal: false });
 
-    const header = selection?.header || {};
-    const details = Array.isArray(selection?.details) ? selection.details : [];
+    try {
+      const summary = selection.summary?.[0] || {};
 
-    const prNo =
-      header?.PRNo ||
-      header?.prNo ||
-      header?.DocNo ||
-      header?.docNo ||
-      "";
-
-    const prId =
-      header?.PrId ||
-      header?.prId ||
-      "";
-
-    const refBC =
-      header?.BC ||
-      header?.branchCode ||
-      branchCode;
-
-    // Prefer groupId coming from DETAILS (once you add d.group_id AS GroupId in sproc_PHP_PR_Open Detail)
-    const pickedGroupId =
-      header?.groupId ||
-      header?.GroupId ||
-      details.find((d) => d?.groupId || d?.GroupId || d?.GROUP_ID)?.groupId ||
-      details.find((d) => d?.groupId || d?.GroupId || d?.GROUP_ID)?.GroupId ||
-      details.find((d) => d?.groupId || d?.GroupId || d?.GROUP_ID)?.GROUP_ID ||
-      state?.groupId ||
-      "";
-
-    const headerDateNeeded = header?.DateNeeded
-      ? String(header.DateNeeded).substring(0, 10)
-      : "";
-
-    const newDetailRows = details.map((d, i) => {
-      const qty = parseFloat(d?.QtyNeeded ?? 0) || 0;
-      const formattedQty = formatNumber(qty, 6);
-
-      const dateNeeded =
-        d?.DateNeeded
-          ? String(d.DateNeeded).substring(0, 10)
-          : headerDateNeeded;
-
-      const rowGroupId =
-        d?.groupId ||
-        d?.GroupId ||
-        d?.GROUP_ID ||
-        pickedGroupId ||
+      const pickedGroupId =
+        summary?.GroupId ||
+        summary?.groupId ||
+        state?.groupId ||
         "";
 
-      return {
-        lN: i + 1,
+      const headerDateNeeded =
+        summary?.DateNeeded ||
+        summary?.DelDate ||
+        summary?.PrDate ||
+        "";
 
-        // references
-        prNo: prNo || "",
-        prId: prId || "",
-        refBranchCode: refBC || branchCode,
+      const payeeDefaultVatCode = state.vendVatCode || vendVatCode || "";
 
-        invType: d?.Type || "",
-        groupId: rowGroupId, // ✅ THIS WILL FLOW INTO PO_DT1.GROUP_ID
-        poStatus: status || "",
+      let payeeVatRate = 0;
 
-        itemCode: d?.JobCode || "",
-        itemName: d?.ScopeOfWork || "",
-        uomCode: d?.UOM || "",
+      if (payeeDefaultVatCode) {
+        try {
+          const vatRow = await useTopVatRow(payeeDefaultVatCode);
+          payeeVatRate = parseFormattedNumber(vatRow?.vatRate ?? 0);
+        } catch (err) {
+          console.error("Error fetching payee default VAT rate:", err);
+        }
+      }
 
-        qtyOnHand: formatNumber(d?.qtyOnHand ?? 0, 6),
+
+      const newDetailRows = selection.details.map((d, i) => {
+        const qty =
+          parseFloat(
+            d?.QtyNeeded ??
+            d?.QTY_NEEDED ??
+            d?.QTY_BALANCE ??
+            d?.qtyBalance ??
+            0
+          ) || 0;
+
+        const formattedQty = formatNumber(qty, 6);
+
+        const dateNeeded = d?.DateNeeded || d?.DATE_NEEDED
+          ? String(d?.DateNeeded || d?.DATE_NEEDED).substring(0, 10)
+          : headerDateNeeded
+            ? String(headerDateNeeded).substring(0, 10)
+            : "";
+
+        const row = {
+          lN: i + 1,
+
+          prNo:
+            d?.PRNo ||
+            d?.PrNo ||
+            d?.prNo ||
+            summary?.PRNo ||
+            summary?.PrNo ||
+            summary?.prNo ||
+            "",
+
+          prId:
+            d?.PrId ||
+            d?.prId ||
+            summary?.PrId ||
+            summary?.prId ||
+            "",
+
+          refBranchCode:
+            d?.BC ||
+            d?.BranchCode ||
+            summary?.BC ||
+            summary?.BranchCode ||
+            branchCode,
+
+          invType: d?.Type || d?.INV_TYPE || "",
+          groupId: d?.GROUP_ID || d?.groupId || pickedGroupId || "",
+          poStatus: "O",
+
+          itemCode: d?.JobCode || d?.ITEM_CODE || "",
+          itemName: d?.ScopeOfWork || d?.ITEM_NAME || "",
+          uomCode: d?.UOM || d?.UOM_CODE || "",
+
+          qtyOnHand: formatNumber(d?.qtyOnHand ?? d?.QTY_ONHAND ?? 0, 6),
+          qtyAlloc: "0.000000",
+          qtyNeeded: formattedQty,
+          poQty: formattedQty,
+          rrQty: formatNumber(d?.RR_QTY ?? 0, 6),
+
+          uomCode2: d?.UOM_CODE2 || "",
+          uomQty2: formatNumber(d?.UOM_QTY2 ?? 0, 6),
+          dateNeeded,
+
+          itemSpecs: d?.ITEM_SPECS || d?.Specification || "",
+          serviceCode: "",
+          serviceName: "",
+
+          unitPrice: formatNumber(d?.UNIT_COST ?? d?.unitCost ?? 0, DEC_PRICE),
+          grossAmt: formatNumber(d?.GROSS_AMOUNT ?? d?.grossAmt ?? 0, 6),
+          discRate: formatNumber(d?.DISC_RATE ?? d?.discRate ?? 0, 6),
+          discAmt: formatNumber(d?.DISC_AMOUNT ?? d?.discAmt ?? 0, 6),
+          totalAmt: formatNumber(d?.ITEM_AMOUNT ?? d?.itemAmount ?? 0, 6),
+
+          // VAT Code from selected Payee default setup
+          vatCode: payeeDefaultVatCode || "",
+          vatRate: payeeVatRate || 0,
+
+          vatAmt: formatNumber(0, 6),
+          netAmt: formatNumber(d?.NET_AMOUNT ?? d?.netAmt ?? 0, 6),
+
+          prBalance: formattedQty,
+        };
+
+        return recalcDetailRow(row);
+      });
+
+      const updatedRows = [...(detailRows || []), ...newDetailRows];
+
+      updateState({
+        detailRows: updatedRows,
+        sourcePrNo: newDetailRows?.[0]?.prNo || sourcePrNo || "",
+        showOpenPRModal: false,
+        isLoading: false,
+      });
+
+      updateTotalsDisplay(updatedRows);
+    } catch (error) {
+      console.error("Error processing selected PR:", error);
+      useSwalErrorAlert(
+        "Open Purchase Requisition",
+        "Error while applying selected PR details."
+      );
+      updateState({ isLoading: false });
+    }
+  };
+
+  const handleOpenMSLookup = async (itemSingleSelectParam, docTypeParam) => {
+    if (!validatePayeeBeforeAdding()) {
+      setShowTypeDropdown(false);
+      return;
+    }
+
+    try {
+      setShowTypeDropdown(false);
+      updateState({
+        isLoading: true,
+        itemSingleSelect: itemSingleSelectParam,
+        itemLookupEndPoint: "getInvLookupMS",
+        selectedDocType: docTypeParam
+      });
+      updateState({ msLookupModalOpen: true, isLoading: false });
+    } catch (error) {
+      console.log(error);
+      updateState({ isLoading: false });
+    }
+  };
+
+  const handleAddItem = async (index, invType) => {
+    if (!validateBeforeAddingItem()) return;
+
+    updateState({ selectedRowIndex: index, itemSingleSelect: true });
+    await handleOpenMSLookup(true, invType);
+  };
+
+  const handleCloseMSLookup = (selectedItems) => {
+    if (!selectedItems) {
+      updateState({ msLookupModalOpen: false });
+      return;
+    }
+
+    const itemsArray = Array.isArray(selectedItems.records)
+      ? selectedItems.records
+      : selectedItems.records ? [selectedItems.records] : [];
+
+    if (itemsArray.length === 0) {
+      updateState({ msLookupModalOpen: false });
+      return;
+    }
+
+    if (state.itemSingleSelect && state.selectedRowIndex !== null) {
+      const singleItem = itemsArray[0];
+      const isDuplicate = detailRows.some(row => row.itemCode === singleItem.itemCode);
+
+      const applySingleItem = () => {
+        const updatedRows = [...detailRows];
+        updatedRows[state.selectedRowIndex] = {
+          ...updatedRows[state.selectedRowIndex],
+          itemCode: singleItem.itemCode || "",
+          itemName: singleItem.itemName || "",
+          uomCode: singleItem.uomCode || singleItem.uom || "",
+          qtyOnHand: formatNumber(singleItem.qtyHand ?? 0, 6),
+          unitPrice: formatNumber(singleItem.unitCost ?? 0, DEC_PRICE)
+        };
+        updateState({ detailRows: updatedRows, itemSingleSelect: false, msLookupModalOpen: false });
+        updateTotalsDisplay(updatedRows);
+      };
+
+      if (isDuplicate) {
+        Swal.fire({
+          title: "Duplicate Item Detected",
+          text: "This item is already in the list. Do you want to select it anyway?",
+          icon: "warning",
+          showCancelButton: true,
+          confirmButtonText: "Yes"
+        }).then((result) => {
+          if (result.isConfirmed) applySingleItem();
+        });
+      } else {
+        applySingleItem();
+      }
+      return;
+    }
+
+    // Multiple Item Selection
+    const duplicateItems = itemsArray.filter(newItem =>
+      detailRows.some(existingRow => existingRow.itemCode === newItem.itemCode)
+    );
+
+    const processAddition = (itemsToAdd) => {
+      const today = header.po_date || useGetCurrentDayV2();
+      const newRows = itemsToAdd.map((item) => ({
+        invType: "MS",
+        groupId: state.groupId || "",
+        poStatus: status || "O",
+        itemCode: item?.itemCode || "",
+        itemName: item?.itemName || "",
+        uomCode: item?.uomCode || item?.uom || "",
+        qtyOnHand: formatNumber(item?.qtyHand ?? 0, 6),
         qtyAlloc: "0.000000",
-        qtyNeeded: formattedQty,
-        poQty: formattedQty,
-        rrQty: "0.000000",
-
+        qtyNeeded: "0.000000",
         uomCode2: "",
         uomQty2: "0.000000",
-        dateNeeded,
-
+        dateNeeded: today,
         itemSpecs: "",
         serviceCode: "",
         serviceName: "",
-
-        // monetary defaults
-        unitPrice: "0.000000",
+        poQty: "0.000000",
+        rrQty: "0.000000",
+        unitPrice: formatNumber(item?.unitCost ?? 0, DEC_PRICE),
         grossAmt: "0.000000",
         discRate: "0.000000",
         discAmt: "0.000000",
@@ -1115,105 +1362,51 @@ const PO = () => {
         vatAmt: "0.000000",
         netAmt: "0.000000",
         vatRate: 0,
+      }));
 
-        // optional (if you use PR balance column later)
-        prBalance: formattedQty,
-      };
-    });
+      const updatedRows = [...detailRows, ...newRows];
+      updateState({
+        detailRows: updatedRows,
+        msLookupModalOpen: false,
+        itemSingleSelect: false
+      });
+      updateTotalsDisplay(updatedRows);
+    };
 
-    updateTotalsDisplay(newDetailRows);
+    if (duplicateItems.length > 0) {
+      Swal.fire({
+        title: "Duplicate Items Detected",
+        text: "Some items are already in the list. Do you want to add them anyway?",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "Yes"
+      }).then((result) => {
+        if (result.isConfirmed) {
+          processAddition(itemsArray);
+        } else {
+          const uniqueOnly = itemsArray.filter(newItem =>
+            !detailRows.some(existingRow => existingRow.itemCode === newItem.itemCode)
+          );
+          if (uniqueOnly.length > 0) {
+            processAddition(uniqueOnly);
+          } else {
+            updateState({ msLookupModalOpen: false });
+          }
+        }
+      });
+    } else {
+      processAddition(itemsArray);
+    }
+  };
+
+  const handleOpenVATLookup = (rowIndex) => {
+    if (isFormDisabled) return;
 
     updateState({
-      prLookupModalOpen: false,
-
-      // PR reference
-      sourcePrNo: prNo,
-      sourcePrId: prId,
-      groupId: pickedGroupId, // ✅ keep in header state too
-
-      branchCode: refBC || branchCode,
-
-      // dept
-      rcCode: header?.rcCode || rcCode,
-      rcName: header?.rcName || rcName,
-
-      // requesting RC
-      reqRcCode: header?.ReqRcCode || reqRcCode,
-      reqRcName: header?.ReqRcName || reqRcName,
-
-      detailRows: newDetailRows,
+      vatLookupModalOpen: true,
+      selectedRowIndex: rowIndex,
     });
   };
-
-
-
-  const handleOpenMSLookup = () => {
-    if (isFormDisabled) return;
-    setShowTypeDropdown(false);
-    updateState({ msLookupModalOpen: true });
-  };
-
-  const handleDeleteRow = (index) => {
-    if (isFormDisabled) return;
-
-    const updatedRows = [...detailRows];
-    updatedRows.splice(index, 1);
-
-    updateState({ detailRows: updatedRows });
-
-    const totalQty = updatedRows.reduce(
-      (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
-      0,
-    );
-    updateTotalsDisplay(updatedRows);
-  };
-
-
-
-  const sanitizeNumeric = (v) => {
-    const raw = String(v ?? "");
-    const cleaned = raw.replace(/[^0-9.]/g, "");
-    const parts = cleaned.split(".");
-    return parts.length <= 1 ? cleaned : `${parts.shift()}.${parts.join("")}`;
-  };
-
-  const formatByField = (field, num) => {
-    if (!Number.isFinite(num)) return "";
-    if (["unitPrice"].includes(field)) return formatNumber(num, DEC_PRICE);
-    if (["qtyOnHand", "qtyNeeded", "poQty"].includes(field)) return formatNumber(num, DEC_QTY);
-    if (["grossAmt", "totalAmt", "vatAmt", "netAmt"].includes(field)) return formatNumber(num, DEC_AMT);
-    return formatNumber(num, 6); // fallback for other numerics
-  };
-
-  const handleDetailChange = (index, field, value, commit = false) => {
-    if (isFormDisabled) return;
-
-    const updatedRows = [...detailRows];
-    const row = { ...(updatedRows[index] || {}) };
-
-    // fields you allow user to type into
-    const editableFields = ["unitPrice"]; // add others if needed later
-
-    // If field is not editable, ignore changes (extra safety)
-    if (!editableFields.includes(field)) return;
-
-    const sanitized = sanitizeNumeric(value);
-
-    if (commit) {
-      const num = parseFormattedNumber(sanitized);
-      row[field] = formatByField(field, num);
-    } else {
-      row[field] = sanitized; // typing mode: don’t force decimals yet
-    }
-
-    // IMPORTANT: your computed fields must be recalculated here
-    const recalculatedRow = recalcDetailRow(row); // keep your existing function
-    updatedRows[index] = recalculatedRow;
-
-    updateState({ detailRows: updatedRows });
-    updateTotalsDisplay(updatedRows);
-  };
-
 
   const handleCloseVATLookup = async (selectedVAT) => {
     // Closed the modal without choosing anything
@@ -1261,6 +1454,77 @@ const PO = () => {
     });
   };
 
+  const handleDeleteRow = (index) => {
+    const updatedRows = [...detailRows];
+    updatedRows.splice(index, 1);
+    updateState({ detailRows: updatedRows });
+    updateTotalsDisplay(updatedRows);
+  };
+
+  const sanitizeNumeric = (v) => {
+    const raw = String(v ?? "");
+    const cleaned = raw.replace(/[^0-9.]/g, "");
+    const parts = cleaned.split(".");
+    return parts.length <= 1 ? cleaned : `${parts.shift()}.${parts.join("")}`;
+  };
+
+  const formatByField = (field, num) => {
+    if (!Number.isFinite(num)) return "";
+    if (["unitPrice"].includes(field)) return formatNumber(num, DEC_PRICE);
+    if (["qtyOnHand", "qtyNeeded", "poQty"].includes(field)) return formatNumber(num, DEC_QTY);
+    if (["grossAmt", "totalAmt", "vatAmt", "netAmt"].includes(field)) return formatNumber(num, DEC_AMT);
+    return formatNumber(num, 6);
+  };
+
+  const handleDetailChange = (index, field, value, commit = false) => {
+    const updatedRows = [...detailRows];
+    const row = { ...(updatedRows[index] || {}) };
+    const editableFields = ["unitPrice", "qtyNeeded", "poQty"];
+
+    const nonNumericFields = ["invType", "prStatus", "poStatus", "itemName", "uomCode", "vatCode", "dateNeeded", "itemSpecs", "serviceCode", "serviceName"];
+
+    if (field === 'itemCode' && typeof value === 'object' && value !== null) {
+      row["itemCode"] = value.itemCode || "";
+      row["itemName"] = value.itemName || "";
+      row["uomCode"] = value.uomCode || value.uom || "";
+      row["qtyOnHand"] = formatNumber(value.qtyHand ?? 0, 6);
+      row["unitPrice"] = formatNumber(value.unitCost ?? 0, DEC_PRICE);
+    } else if (nonNumericFields.includes(field)) {
+      row[field] = value;
+    } else {
+      if (!editableFields.includes(field)) return;
+
+      const sanitized = sanitizeNumeric(value);
+
+      if (commit) {
+        let num = parseFormattedNumber(sanitized);
+
+        // 🚀 NEW: Inline Validation & Auto-Revert on input blur/enter
+        if (field === "poQty" && row.prNo) {
+          const maxQtyNeeded = parseFormattedNumber(row.qtyNeeded || 0);
+
+          if (num > maxQtyNeeded) {
+            useSwalErrorAlert(
+              "Invalid Quantity",
+              `PO Quantity cannot exceed the requested Qty Needed.`
+            );
+            // 🔧 FIX: Force the number back to the maximum allowed value
+            num = maxQtyNeeded;
+          }
+        }
+
+        row[field] = formatByField(field, num);
+      } else {
+        row[field] = sanitized;
+      }
+    }
+
+    const recalculatedRow = recalcDetailRow(row);
+    updatedRows[index] = recalculatedRow;
+
+    updateState({ detailRows: updatedRows });
+    updateTotalsDisplay(updatedRows);
+  };
   // ==========================
   // SAVE / UPSERT
   // ==========================
@@ -1268,16 +1532,34 @@ const PO = () => {
   // SAVE / UPSERT
   // ==========================
   const handleActivityOption = async (action) => {
-    if (isViewOnly) return;
-
     // If already posted/cancelled/finalized, do not allow save
     const stat = String(state.status || "").toUpperCase(); // this holds "O" from API
-    const locked = ["FINALIZED", "CANCELLED", "CLOSED", "F", "X", "C"].includes(
-      stat,
-    );
+    const locked = ["FINALIZED", "CANCELLED", "CLOSED", "F", "X", "C"].includes(stat);
     if (locked) return;
 
     if (action !== "Upsert") return;
+
+    // 🚀 NEW: Frontend Validation for PO Qty vs Qty Needed
+    const overQtyIndex = state.detailRows.findIndex((row) => {
+      // Only validate rows that are pulled from a PR
+      if (row.prNo) {
+        const currentPoQty = parseFormattedNumber(row.poQty || 0);
+        const maxQtyNeeded = parseFormattedNumber(row.qtyNeeded || 0);
+
+        // Return true if it violates the rule
+        return currentPoQty > maxQtyNeeded;
+      }
+      return false;
+    });
+
+    if (overQtyIndex !== -1) {
+      const offendingRow = state.detailRows[overQtyIndex];
+      useSwalErrorAlert(
+        "Validation Error",
+        `PO Quantity exceeds Qty Needed on Line ${overQtyIndex + 1} (Item: ${offendingRow.itemCode}).`
+      );
+      return;
+    }
 
     updateState({ isLoading: true });
 
@@ -1325,7 +1607,7 @@ const PO = () => {
         poId: documentID || "",
         groupId: state.groupId || "",
 
-        poDate: header?.po_date, // maps to @_poDate
+        poDate: state.header?.po_date || useGetCurrentDayV2(),
         cutoffCode: cutoffCode || "", // @_cutoffCode
 
         rcCode: rcCode || "", // @_rcCode
@@ -1360,51 +1642,52 @@ const PO = () => {
         status: status || "", // @_poStatus
         poCancelled: poCancelled || "", // @_poCancelled
         noReprints: Number(noReprints || 0), // @_noReprints
-        userCode: userCode || user?.USER_CODE || "NSI", // @_userCode
+        userCode: state.userCode || currentUserRow?.userCode,
 
         // Detail rows
         dt1: detailRows.map((row, index) => {
+          // You perfectly defined these variables here...
           const poQty = parseFormattedNumber(row.poQty || row.qtyNeeded || 0);
           const unitCost = parseFormattedNumber(row.unitPrice || 0);
 
           return {
-            LINE_NO: row.lN || index + 1,
-            PR_NO: row.prNo || sourcePrNo || null, // if you have per-line prNo, use it
-            PO_STATUS: row.poStatus || status || "",
+            LINE_NO: index + 1,
+            PR_NO: row.prNo || "",
+            PR_STATUS: row.prStatus || "",
+            PO_STATUS: row.poStatus || "O",
             INV_TYPE: row.invType || "",
-            GROUP_ID: row.groupId || state.groupId || "",
-
+            GROUP_ID: row.groupId || "",
             ITEM_CODE: row.itemCode || "",
             ITEM_NAME: row.itemName || "",
             UOM_CODE: row.uomCode || "",
 
-            // ✅ REQUIRED BY SPROC:
-            PO_QUANTITY: poQty, // <-- was PO_QTY
-            CURR_CODE: state.currCode || "PHP", // <-- add this (or row.currCode if per line)
-            DEL_DATE: row.dateNeeded || state.dateNeeded || null, // <-- was DATE_NEEDED
+            // 🔧 FIX: Actually use the 'poQty' variable you defined above
+            PO_QUANTITY: poQty,
 
             UOM_CODE2: row.uomCode2 || "",
             UOM_QTY2: parseFormattedNumber(row.uomQty2 || 0),
+            CURR_CODE: row.currCode || "",
 
+            // 🔧 FIX: Actually use the 'unitCost' variable you defined above
             UNIT_COST: unitCost,
-            FX_AMOUNT: null, // optional
 
+            FX_AMOUNT: parseFormattedNumber(row.fxAmount || 0),
+
+            // 🔧 FIX: Map to the exact abbreviated keys used in your React state
             GROSS_AMOUNT: parseFormattedNumber(row.grossAmt || 0),
             DISC_RATE: parseFormattedNumber(row.discRate || 0),
             DISC_AMOUNT: parseFormattedNumber(row.discAmt || 0),
             NET_AMOUNT: parseFormattedNumber(row.netAmt || 0),
-
             VAT_CODE: row.vatCode || "",
             VAT_AMOUNT: parseFormattedNumber(row.vatAmt || 0),
             ITEM_AMOUNT: parseFormattedNumber(row.totalAmt || 0),
 
             ITEM_SPECS: row.itemSpecs || "",
+            DEL_DATE: row.delDate || null,
             RR_QTY: parseFormattedNumber(row.rrQty || 0),
-
-            // optional:
-            PR_BALANCE: null,
-            REF_BRANCHCODE: state.branchCode || null,
-            CATEG_CODE: row.groupId || null,
+            PR_BALANCE: poQty, // Set initial PR balance to the PO quantity
+            REF_BRANCHCODE: row.refBranchCode || "",
+            CATEG_CODE: row.categCode || ""
           };
         }),
       };
@@ -1454,30 +1737,23 @@ const PO = () => {
   };
 
   const handleCancel = async () => {
-    if (isViewOnly) return;
-
-    if (documentID && documentStatus === "") {
+    // JO Logic: Allow cancellation if ID exists and status is "O" or empty
+    if (documentID && (documentStatus === "O" || documentStatus === "")) {
       updateState({ showCancelModal: true });
     }
   };
 
   const handlePost = async () => {
-    if (isViewOnly) return;
-
     if (documentID && documentStatus === "") {
       updateState({ showPostModal: true });
     }
   };
 
   const handleAttach = async () => {
-    if (isViewOnly) return;
-
     updateState({ showAttachModal: true });
   };
 
   const handleCopy = async () => {
-    if (isViewOnly) return;
-
     if (detailRows.length === 0) return;
 
     if (documentID) {
@@ -1495,7 +1771,7 @@ const PO = () => {
   // ==========================
 
   const cleanUrl = useCallback(() => {
-    window.history.replaceState({}, "", window.location.pathname);
+    window.history.replaceState({}, "", window.location.origin);
   }, []);
 
   const handleHistoryRowPick = useCallback(
@@ -1504,7 +1780,7 @@ const PO = () => {
       const branchCode = row?.branchCode;
       if (!docNo || !branchCode) return;
 
-      await fetchTranData(docNo, branchCode); 
+      await fetchTranData(docNo, branchCode);
       setTopTab("details");
       cleanUrl(); // 
     },
@@ -1513,15 +1789,14 @@ const PO = () => {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const docNo = params.get("poNo");
-    const branchCodeParam = params.get("branchCode");
+    const docNo = params.get("msajNo");
+    const branchCode = params.get("branchCode");
 
-    if (!loadedFromUrlRef.current && docNo && branchCodeParam) {
+    if (!loadedFromUrlRef.current && docNo && branchCode) {
       loadedFromUrlRef.current = true;
-      fetchTranData(docNo, branchCodeParam);
-      setTopTab("details");
+      handleHistoryRowPick({ docNo, branchCode });
     }
-  }, [location.search]);
+  }, [location.search, handleHistoryRowPick]);
 
   const printData = {
     pr_no: documentNo,
@@ -1534,46 +1809,37 @@ const PO = () => {
   // ==========================
 
   const handleCloseCancel = async (confirmation) => {
-    if (confirmation && documentStatus !== "OPEN" && documentID !== null) {
+    // Verify original status was "Open" before calling the API
+    if (confirmation && state.originalDocStatus === "O" && documentID !== null) {
+
+      // 1. Safely extract the password and reason
+      const pwd = confirmation?.password || confirmation?.userPassword || "";
+      const rsn = confirmation?.reason || "";
+
+      // 2. Prevent sending to backend if password wasn't captured
+      if (!pwd) {
+        useSwalInfoAlert("Required", "Password was not captured. Please try again.");
+        return;
+      }
+
+      // 3. Ensure we use the REAL user code, never the hardcoded "NSI"
+      const activeUserCode = currentUserRow?.userCode || state.userCode;
+
       const result = await useHandleCancel(
         docType,
         documentID,
-        userCode || "NSI",
-        confirmation.reason,
-        updateState,
+        activeUserCode, // Dynamic user
+        pwd,            // Extracted password
+        rsn,            // Extracted reason
+        updateState
       );
 
-      if (result.success) {
-        Swal.fire({
-          icon: "success",
-          title: "Success",
-          text: result.message,
-        });
+      if (result && result.success) {
+        useSwalSuccessAlert("Success", "Cancellation Completed");
+        await fetchTranData(documentNo, branchCode);
       }
-
-      await fetchTranData(documentNo, branchCode);
     }
     updateState({ showCancelModal: false });
-  };
-
-  const handleClosePost = async () => {
-    if (documentStatus !== "OPEN" && documentID !== null) {
-      const result = await useHandlePost(
-        docType,
-        documentID,
-        userCode,
-        updateState,
-      );
-      if (result.success) {
-        Swal.fire({
-          icon: "success",
-          title: "Success",
-          text: result.message,
-        });
-      }
-      await fetchTranData(documentNo, branchCode);
-    }
-    updateState({ showPostModal: false });
   };
 
   const handleCloseSignatory = async (mode) => {
@@ -1650,60 +1916,61 @@ const PO = () => {
     try {
       let newVendCode = selectedData?.vendCode || "";
       let newVendName = selectedData?.vendName || "";
-
-      // ✅ vendor vat code from lookup row
       let vendVatCodeToUse = selectedData?.vatCode || "";
-
-      // currency: from row → current currCode → default
       let currCodeToUse = selectedData?.currCode || currCode || glCurrDefault;
-
-      // payterm: start from lookup row if it has one
       let paytermCodeToUse = selectedData?.paytermCode || "";
 
-      // If vendor has no currency/payterm/vatCode in lookup row, query getVendMast
       if (
         (!selectedData.currCode || !paytermCodeToUse || !vendVatCodeToUse) &&
         newVendCode
       ) {
         try {
-          const vendResponse = await postRequest("getVendMast", {
-            VEND_CODE: newVendCode,
+          const { data: vendResponse } = await apiClient.get("/getVendMast", {
+            params: {
+              VEND_CODE: newVendCode,
+            },
+            headers: {
+              "X-Company-DB": "NS2",
+            },
+            withCredentials: true,
           });
+          let vendData = vendResponse ?? [];
 
-          if (vendResponse.success && vendResponse.data?.[0]?.result) {
-            const vendData = JSON.parse(vendResponse.data[0].result);
-            const vendRow = vendData[0] || {};
+          if (vendData?.[0]?.result) {
+            vendData = JSON.parse(vendData[0].result);
+          }
 
-            if (!selectedData.currCode && vendRow.currCode)
-              currCodeToUse = vendRow.currCode;
-            if (!paytermCodeToUse && vendRow.paytermCode)
-              paytermCodeToUse = vendRow.paytermCode;
+          const vendRow = Array.isArray(vendData) ? vendData[0] || {} : vendData || {};
 
-            // ✅ grab vatCode from vendor master if missing
-            if (!vendVatCodeToUse && vendRow.vatCode)
-              vendVatCodeToUse = vendRow.vatCode;
+          if (!selectedData.currCode && vendRow.currCode) {
+            currCodeToUse = vendRow.currCode;
+          }
+
+          if (!paytermCodeToUse && vendRow.paytermCode) {
+            paytermCodeToUse = vendRow.paytermCode;
+          }
+
+          if (!vendVatCodeToUse && vendRow.vatCode) {
+            vendVatCodeToUse = vendRow.vatCode;
           }
         } catch (err) {
           console.error("Error getting vendor master:", err);
+          console.log("Vendor master response:", err?.response?.data);
         }
       }
 
-      // ✅ Apply payee in header
       updateState({
         vendCode: newVendCode,
         vendNameHeader: newVendName,
-        vendVatCode: vendVatCodeToUse || "", // ✅ store vendor VAT in state
+        vendVatCode: vendVatCodeToUse || "",
       });
 
-      // ✅ Apply currency
       await handleSelectCurrency(currCodeToUse);
 
-      // ✅ Auto-apply payterm
       if (paytermCodeToUse) {
         await handleSelectPayTerm(paytermCodeToUse);
       }
 
-      // ✅ If vendor has VAT code: apply to ALL existing detail rows + compute VAT
       if (vendVatCodeToUse) {
         let vatRate = 0;
 
@@ -1714,7 +1981,6 @@ const PO = () => {
           console.error("Error fetching VAT row:", err);
         }
 
-        // apply + recalc rows
         const updatedRows = (detailRows || []).map((r) => {
           const row = {
             ...r,
@@ -1732,11 +1998,6 @@ const PO = () => {
     } finally {
       updateState({ isLoading: false });
     }
-  };
-
-  const handlePOStatChange = (e) => {
-    const selectedType = e.target.value;
-    updateState({ selectedJVType: selectedType });
   };
 
   const handleCloseCurrencyModal = async (selectedCurrency) => {
@@ -1805,19 +2066,64 @@ const PO = () => {
   };
 
 
-  const handleTranDocNoRetrieval = async (data) => {
-    await fetchTranData(data.docNo, data.branchCode || branchCode, data.key);
-    updateState({ showAllTranDocNo: data.modalClose });
+  useEffect(() => {
+    const handleF1Lookup = (e) => {
+      if (e.key === "F1") {
+        e.preventDefault();
+        updateState({ showAllTranDocNo: true });
+      }
+    };
+
+    window.addEventListener("keydown", handleF1Lookup);
+    return () => window.removeEventListener("keydown", handleF1Lookup);
+  }, []);
+
+  const handleTranDocNoRetrieval = async (data = {}) => {
+    const selectedDocNo =
+      data.docNo ||
+      data.documentNo ||
+      state.documentNo ||
+      documentNo ||
+      "";
+
+    const selectedBranchCode =
+      data.branchCode ||
+      state.branchCode ||
+      branchCode ||
+      "";
+
+    const direction =
+      data.key ||
+      data.direction ||
+      data.action ||
+      "";
+
+    await fetchTranData(selectedDocNo, selectedBranchCode, direction);
+
+    updateState({
+      showAllTranDocNo: data.modalClose ?? false,
+    });
   };
 
-  const handleTranDocNoSelection = async (data) => {
+  const handleTranDocNoSelection = async (data = {}) => {
+    const selectedDocNo = data.docNo || data.documentNo || "";
+    const selectedBranchCode = data.branchCode || state.branchCode || branchCode || "";
+
     handleReset();
-    updateState({showAllTranDocNo: false, documentNo:data.docNo });
+
+    updateState({
+      showAllTranDocNo: false,
+      documentNo: selectedDocNo,
+    });
+
+    if (selectedDocNo) {
+      await fetchTranData(selectedDocNo, selectedBranchCode);
+    }
   };
 
   const handleDocNoBlur = () => {
-    if (!state.documentID && state.documentNo && state.branchCode) { 
-        fetchTranData(state.documentNo,state.branchCode);
+    if (!state.documentID && state.documentNo && state.branchCode) {
+      fetchTranData(state.documentNo, state.branchCode);
     }
   };
 
@@ -1847,15 +2153,16 @@ const PO = () => {
           showActions={topTab === "details"}
           showBIRForm={false}
           showCopyForm={true}
+          isViewDocument={isViewDocument}
           onDetails={() => setTopTab("details")}
           disableRouteNavigation={true}
           detailsRoute="/page/PO"
           isSaveDisabled={isSaveDisabled || isFormDisabled || ((detailRows?.length || 0) === 0)}
           isResetDisabled={isResetDisabled}
-          isAttachDisabled={isViewOnly || !documentID}
+          isAttachDisabled={!documentID}
           isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
-          isCopyDisabled={isViewOnly || !documentID || displayStatus === "CANCELLED"}
-          isCancelDisabled={isViewOnly || !documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED" || displayStatus === "CLOSED"}
+          isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
+          isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED" || displayStatus === "CLOSED"}
         />
       </div>
 
@@ -1883,11 +2190,10 @@ const PO = () => {
           {/* Tab Navigation */}
           <div className="global-tran-header-tab-div-ui">
             <button
-              className={`global-tran-tab-padding-ui ${
-                activeTab === "basic"
-                  ? "global-tran-tab-text_active-ui"
-                  : "global-tran-tab-text_inactive-ui"
-              }`}
+              className={`global-tran-tab-padding-ui ${activeTab === "basic"
+                ? "global-tran-tab-text_active-ui"
+                : "global-tran-tab-text_inactive-ui"
+                }`}
               onClick={() => updateState({ activeTab: "basic" })}
             >
               Basic Information
@@ -1936,11 +2242,10 @@ const PO = () => {
                 {/* PO Date */}
                 <div className="relative w-full">
                   <div
-                    className={`flex items-stretch global-ref-textbox-ui ${
-                      !isFormDisabled
-                        ? "global-ref-textbox-enabled"
-                        : "global-ref-textbox-disabled"
-                    }`}
+                    className={`flex items-stretch global-ref-textbox-ui ${!isFormDisabled
+                      ? "global-ref-textbox-enabled"
+                      : "global-ref-textbox-disabled"
+                      }`}
                   >
                     <DateFormatInput
                       id="poDate"
@@ -1965,6 +2270,7 @@ const PO = () => {
                   label="Department"
                   type="lookup"
                   value={rcCode || ""}
+                  required
                   readOnly
                   disabled={isFormDisabled}
                   lookupDisabled={isFetchDisabled}
@@ -1983,7 +2289,8 @@ const PO = () => {
                 {/* Payee Code */}
                 <FieldRenderer
                   id="vendCode"
-                  label="Payee Code *"
+                  label="Payee Code"
+                  required
                   type="lookup"
                   value={vendCode || ""}
                   readOnly
@@ -1997,7 +2304,8 @@ const PO = () => {
                 {/* Payee Name */}
                 <FieldRenderer
                   id="vendName"
-                  label="Payee Name *"
+                  label="Payee Name"
+                  required
                   type="text"
                   value={vendNameHeader || ""}
                   disabled={isFormDisabled}
@@ -2068,13 +2376,14 @@ const PO = () => {
                   id="poStatus"
                   label="PO Status"
                   type="select"
-                  value={selectedPoType || ""}
+                  value={status || "O"}
                   disabled={isFormDisabled}
-                  onChange={(val) => handlePrTypeChange({ target: { value: val } })}
+                  onChange={(val) => updateState({ status: val })}
                   options={[
                     { label: "Open", value: "O" },
                     { label: "Closed", value: "C" },
                     { label: "Cancelled", value: "X" },
+                    { label: "Finalized", value: "F" },
                   ]}
                 />
               </div>
@@ -2120,11 +2429,10 @@ const PO = () => {
                 {/* Delivery Date */}
                 <div className="relative w-full">
                   <div
-                    className={`flex items-stretch global-ref-textbox-ui ${
-                      !isFormDisabled
-                        ? "global-ref-textbox-enabled"
-                        : "global-ref-textbox-disabled"
-                    }`}
+                    className={`flex items-stretch global-ref-textbox-ui ${!isFormDisabled
+                      ? "global-ref-textbox-enabled"
+                      : "global-ref-textbox-disabled"
+                      }`}
                   >
                     <DateFormatInput
                       id="delDate"
@@ -2189,24 +2497,23 @@ const PO = () => {
                   <tr>
                     <th className="global-tran-th-ui">LN</th>
                     <th className="global-tran-th-ui">PO Status</th>
+                    <th className="global-tran-th-ui">PR No.</th>
                     <th className="global-tran-th-ui">Type</th>
                     <th className="global-tran-th-ui">Item Code</th>
                     <th className="global-tran-th-ui">Item Description</th>
                     <th className="global-tran-th-ui">Specification</th>
                     <th className="global-tran-th-ui">UOM</th>
-                    <th className="global-tran-th-ui">Qty on Hand</th>
-                    <th className="global-tran-th-ui">Qty Needed</th>
-                    <th className="global-tran-th-ui">PO Qty</th>
+                    <th className="global-tran-th-ui">PO Quantity</th>
                     <th className="global-tran-th-ui">Unit Price</th>
-                    <th className="global-tran-th-ui">Gross Amt</th>
-                    <th className="global-tran-th-ui">Disc Rate</th>
-                    <th className="global-tran-th-ui">Disc Amt</th>
-                    <th className="global-tran-th-ui">Total Amt</th>
+                    <th className="global-tran-th-ui">Gross Amount</th>
+                    <th className="global-tran-th-ui">Discount Rate</th>
+                    <th className="global-tran-th-ui">Discount Amount</th>
+                    <th className="global-tran-th-ui">Total Amount</th>
                     <th className="global-tran-th-ui">VAT Code</th>
-                    <th className="global-tran-th-ui">VAT Amt</th>
-                    <th className="global-tran-th-ui">Net Amt</th>
-                    <th className="global-tran-th-ui">Date Needed</th>
-                    <th className="global-tran-th-ui">RR Qty</th>
+                    <th className="global-tran-th-ui">VAT Amount</th>
+                    <th className="global-tran-th-ui">Net Amount</th>
+                    <th className="global-tran-th-ui">Delivery Date</th>
+                    <th className="global-tran-th-ui">RR Quantity</th>
                     {!isFormDisabled && (
                       <th className="global-tran-th-ui sticky right-0 bg-blue-300 dark:bg-blue-900 z-30">
                         Actions
@@ -2223,7 +2530,7 @@ const PO = () => {
                         {index + 1}
                       </td>
 
-                      {/* PR Status */}
+                      {/* PO Status */}
                       <td className="global-tran-td-ui">
                         <select
                           className="w-[120px] global-tran-td-inputclass-ui"
@@ -2243,34 +2550,50 @@ const PO = () => {
                         </select>
                       </td>
 
-                      {/* Type */}
+                      {/* PR No. */}
                       <td className="global-tran-td-ui">
                         <input
                           type="text"
-                          className="w-[100px] global-tran-td-inputclass-ui"
-                          value={row.invType || ""}
-                          onChange={(e) =>
-                            handleDetailChange(index, "invType", e.target.value)
-                          }
-                          disabled={isFormDisabled}
+                          className="w-[120px] global-tran-td-inputclass-ui bg-gray-100 cursor-not-allowed"
+                          value={row.prNo || ""}
+                          readOnly
+                          tabIndex={-1}
                         />
                       </td>
 
-                      {/* Item Code */}
+                      {/* Type */}
                       <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[120px] global-tran-td-inputclass-ui"
-                          value={row.itemCode || ""}
-                          onChange={(e) =>
-                            handleDetailChange(
-                              index,
-                              "itemCode",
-                              e.target.value,
-                            )
-                          }
-                          disabled={isFormDisabled}
-                        />
+                        <select
+                          className="w-[80px] global-tran-td-inputclass-ui bg-white outline-none"
+                          value={row.invType || ""}
+                          onChange={(e) => handleDetailChange(index, "invType", e.target.value)}
+                          disabled={isFormDisabled || (row.itemCode?.length > 0)}
+                        >
+                          <option value="" disabled>Select</option>
+                          <option value="MS">MS</option>
+                          <option value="RM">RM</option>
+                          <option value="FG">FG</option>
+                        </select>
+                      </td>
+
+                      {/* Item Code */}
+                      <td className="global-tran-td-ui relative">
+                        <div className="flex items-center">
+                          <input
+                            type="text"
+                            className="w-[120px] global-tran-td-inputclass-ui pr-6"
+                            value={row.itemCode || ""}
+                            onChange={(e) => handleDetailChange(index, "itemCode", e.target.value)}
+                            disabled={isFormDisabled}
+                          />
+                          {!isFormDisabled && row.invType && (
+                            <FontAwesomeIcon
+                              icon={faMagnifyingGlass}
+                              className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                              onClick={() => handleAddItem(index, "PO" + row.invType)}
+                            />
+                          )}
+                        </div>
                       </td>
 
                       {/* Item Description */}
@@ -2290,16 +2613,28 @@ const PO = () => {
                         />
                       </td>
 
-                     {/* Specification */}
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[220px] global-tran-td-inputclass-ui cursor-pointer"
-                          value={row.itemSpecs || ""}
-                          readOnly
-                          onDoubleClick={() => openSpecsModal(index)}
-                          title="Double-click to edit specification"
-                        />
+                      {/* Specification */}
+                      <td className="global-tran-td-ui relative">
+                        <div className="flex items-center">
+                          <input
+                            type="text"
+                            className="w-[220px] global-tran-td-inputclass-ui cursor-pointer pr-6"
+                            value={row.itemSpecs || ""}
+                            readOnly
+                            onDoubleClick={() => openSpecsModal(index)}
+                            title="Double-click to edit specification"
+                            disabled={isFormDisabled}
+                          />
+
+                          {!isFormDisabled && (
+                            <FontAwesomeIcon
+                              icon={faMagnifyingGlass}
+                              className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                              onClick={() => openSpecsModal(index)}
+                              title="Open Specification"
+                            />
+                          )}
+                        </div>
                       </td>
 
                       {/* UOM */}
@@ -2315,29 +2650,6 @@ const PO = () => {
                         />
                       </td>
 
-                      {/* Qty on Hand */}
-                      <td className="global-tran-td-ui text-right">
-                        <input
-                          type="text"
-                          className="global-tran-td-inputclass-ui text-right bg-gray-100 cursor-not-allowed"
-                          value={row.qtyOnHand || ""}
-                          readOnly
-                          tabIndex={-1}
-                        />
-
-                      </td>
-
-                      {/* Qty Needed */}
-                      <td className="global-tran-td-ui text-right">
-                        <input
-                          type="text"
-                          className="global-tran-td-inputclass-ui text-right bg-gray-100 cursor-not-allowed"
-                          value={row.qtyNeeded || ""}
-                          readOnly
-                          tabIndex={-1}
-                        />
-
-                      </td>
 
                       {/* PO Qty */}
                       <td className="global-tran-td-ui text-right">
@@ -2346,28 +2658,37 @@ const PO = () => {
                           className="w-[120px] global-tran-td-inputclass-ui text-right"
                           value={row.poQty || ""}
                           onChange={(e) =>
-                            handleDetailChange(index, "poQty", e.target.value)
+                            handleDetailChange(index, "poQty", e.target.value, false)
                           }
+                          onBlur={(e) =>
+                            handleDetailChange(index, "poQty", e.target.value, true)
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleDetailChange(index, "poQty", e.target.value, true);
+                            }
+                          }}
                           disabled={isFormDisabled}
                         />
                       </td>
 
                       {/* Unit Price */}
-                       <td className="global-tran-td-ui text-right">
-                      <input
-                        type="text"
-                        className="w-[120px] global-tran-td-inputclass-ui text-right"
-                        value={row.unitPrice || ""}
-                        onChange={(e) => handleDetailChange(index, "unitPrice", e.target.value, false)}
-                        onBlur={(e) => handleDetailChange(index, "unitPrice", e.target.value, true)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleDetailChange(index, "unitPrice", e.target.value, true);
-                          }
-                        }}
-                        disabled={isFormDisabled}
-                      />
+                      <td className="global-tran-td-ui text-right">
+                        <input
+                          type="text"
+                          className="w-[120px] global-tran-td-inputclass-ui text-right"
+                          value={row.unitPrice || ""}
+                          onChange={(e) => handleDetailChange(index, "unitPrice", e.target.value, false)}
+                          onBlur={(e) => handleDetailChange(index, "unitPrice", e.target.value, true)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleDetailChange(index, "unitPrice", e.target.value, true);
+                            }
+                          }}
+                          disabled={isFormDisabled}
+                        />
                       </td>
 
                       {/* Gross Amt */}
@@ -2435,23 +2756,40 @@ const PO = () => {
                       </td>
 
                       {/* VAT Code */}
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[80px] global-tran-td-inputclass-ui"
-                          value={row.vatCode || ""}
-                          onChange={(e) =>
-                            handleDetailChange(index, "vatCode", e.target.value)
-                          }
-                          onDoubleClick={() => {
-                            if (isFormDisabled) return;
-                            updateState({
-                              vatLookupModalOpen: true,
-                              selectedRowIndex: index,
-                            });
-                          }}
-                          disabled={isFormDisabled}
-                        />
+                      <td className="global-tran-td-ui relative">
+                        <div className="flex items-center">
+                          <input
+                            type="text"
+                            className="w-[80px] global-tran-td-inputclass-ui pr-6"
+                            value={row.vatCode || ""}
+                            onChange={(e) =>
+                              handleDetailChange(index, "vatCode", e.target.value)
+                            }
+                            onDoubleClick={() => {
+                              if (isFormDisabled) return;
+                              updateState({
+                                vatLookupModalOpen: true,
+                                selectedRowIndex: index,
+                              });
+                            }}
+                            title="Double-click to select VAT Code"
+                            disabled={isFormDisabled}
+                          />
+
+                          {!isFormDisabled && (
+                            <FontAwesomeIcon
+                              icon={faMagnifyingGlass}
+                              className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                              onClick={() => {
+                                updateState({
+                                  vatLookupModalOpen: true,
+                                  selectedRowIndex: index,
+                                });
+                              }}
+                              title="Select VAT Code"
+                            />
+                          )}
+                        </div>
                       </td>
 
                       {/* VAT Amt */}
@@ -2467,7 +2805,7 @@ const PO = () => {
                         />
                       </td>
 
-                      
+
 
                       {/* Net Amt */}
                       <td className="global-tran-td-ui text-right">
@@ -2584,7 +2922,7 @@ const PO = () => {
                         className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
                         onClick={() => {
                           setShowTypeDropdown(false);
-                          handleOpenMSLookup();
+                          handleOpenMSLookup(false, "POMS");
                         }}
                       >
                         <div className="flex items-center gap-3">
@@ -2633,9 +2971,8 @@ const PO = () => {
                         type="button"
                         className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-blue-700 transition-all duration-150 hover:bg-blue-50 hover:text-blue-900 dark:text-blue-300 dark:hover:bg-slate-700"
                         onClick={() => {
-                          if (isFormDisabled) return;
                           setShowTypeDropdown(false);
-                          updateState({ prLookupModalOpen: true });
+                          handleOpenPRLookup();
                         }}
                       >
                         <div className="flex items-center gap-3">
@@ -2661,11 +2998,10 @@ const PO = () => {
                 <button
                   onClick={handleAddRowClick}
                   disabled={isFormDisabled}
-                  className={`global-tran-tab-footer-button-add-ui ${
-                    isFormDisabled
-                      ? "opacity-50 cursor-not-allowed"
-                      : ""
-                  }`}
+                  className={`global-tran-tab-footer-button-add-ui ${isFormDisabled
+                    ? "opacity-50 cursor-not-allowed"
+                    : ""
+                    }`}
                   style={{
                     visibility: isFormDisabled ? "hidden" : "visible",
                   }}
@@ -2748,12 +3084,80 @@ const PO = () => {
         />
       )}
 
-      {state.prLookupModalOpen && (
-        <SearchPROpenModal
-          isOpen={state.prLookupModalOpen}
+      {showOpenPRModal && (
+        <GlobalCombinedLookup
+          isOpen={showOpenPRModal}
+          title="Open Purchase Requisition"
+          summarySelectionMode="multiple"
+          detailSelectionMode="multiple"
+          summaryColumns={openPR_Col_Summary} // FIXED
+          detailColumns={openPR_Col_Detail}   // FIXED
+          summaryData={openPR_Data_Summary}   // FIXED
+          tabTitles={["Open PR Summary", "Open PR Detail"]}
+
+          // 🚀 NEW: Using Promise.all to fetch multiple PR details simultaneously
+          fetchDetailApi={async (selectedIds) => {
+            // 1. Ensure selectedIds is treated as an array
+            const idsArray = Array.isArray(selectedIds) ? selectedIds : [selectedIds];
+
+            try {
+              // 2. Fetch details for EACH PR concurrently
+              // This bypasses the SQL limitation of not understanding comma-separated strings
+              const fetchPromises = idsArray.map(async (singleId) => {
+                const payload = {
+                  json_data: {
+                    mode: "Detail",
+                    prId: singleId
+                  }
+                };
+
+                const res = await postRequest("getPROpen", payload);
+                const rawData = res?.data?.[0]?.result ? JSON.parse(res.data[0].result) : (res?.data || res);
+                return Array.isArray(rawData) ? rawData : [];
+              });
+
+              // Wait for all requests to finish, then combine them into one flat array
+              const allResults = await Promise.all(fetchPromises);
+              const combinedDataArray = allResults.flat();
+
+              // 3. Apply your "Smarter Filter" to ensure no closed/zero-balance items appear
+              const filteredData = combinedDataArray.filter((d) => {
+                const status = String(d.PR_STATUS || d.pr_status || d.prStatus || d.Status || d.status || "O").toUpperCase();
+                const qtyNeeded = parseFloat(d.QTY_NEEDED ?? d.QtyNeeded ?? d.qty_needed ?? d.Qty ?? d.QTY ?? 0);
+                const poQty = parseFloat(d.PO_QTY ?? d.PoQty ?? d.po_qty ?? d.poQty ?? 0);
+                const explicitBalance = parseFloat(d.QTY_BALANCE ?? d.QtyBalance ?? d.qty_balance ?? d.qty_balance ?? -1);
+
+                const balance = explicitBalance !== -1 ? explicitBalance : (qtyNeeded - poQty);
+                const isClosed = status === "C" || status === "CLOSED";
+                const isCancelled = status === "X" || status === "CANCELLED";
+
+                return !isClosed && !isCancelled && balance > 0;
+              }).map((d, index) => {
+                // Extract keys first so we can safely combine them for the unique ID
+                const mappedPrNo = d.PR_NO || d.PRNo || d.prNo || "";
+                const mappedJobCode = d.JOB_CODE || d.JobCode || d.ITEM_CODE || d.ItemCode || d.jobCode || d.itemCode || "";
+
+                return {
+                  ...d,
+                  prNo: mappedPrNo,
+                  jobCode: mappedJobCode,
+                  scopeOfWork: d.SCOPE_OF_WORK || d.ScopeOfWork || d.ITEM_NAME || d.ItemName || d.scopeOfWork || d.itemName || d.Description || d.description,
+                  qtyNeeded: d.QTY_NEEDED || d.QtyNeeded || d.qtyNeeded || d.QTY || d.Qty || d.qty,
+                  uom: d.UOM_CODE || d.UOMCode || d.UOM || d.uomCode || d.uom || d.Uom,
+
+                  // 🔧 FIX: Guarantee a completely unique ID for every single detail row
+                  groupId: `${mappedPrNo}_${mappedJobCode}_${index}`
+                };
+              });
+
+              return { success: true, data: filteredData };
+            } catch (error) {
+              console.error("Error fetching consolidated PR details:", error);
+              return { success: false, data: [] };
+            }
+          }}
+          onCancel={() => updateState({ showOpenPRModal: false })}
           onClose={handleClosePROpenModal}
-          branchCode={branchCode}
-          prTranType="PR01"
         />
       )}
 
@@ -2816,47 +3220,7 @@ const PO = () => {
         <PostTranModal isOpen={showPostModal} onClose={handleClosePost} />
       )}
 
-      {state.specsModalOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-2xl rounded-lg bg-white dark:bg-slate-800 shadow-xl border border-gray-200 dark:border-slate-700">
-            <div className="px-4 py-3 border-b border-gray-200 dark:border-slate-700">
-              <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">
-                Specification
-              </h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Enter complete specification / scope of work.
-              </p>
-            </div>
 
-            <div className="p-4">
-              <textarea
-                className="w-full h-48 resize-none rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm text-gray-800 dark:text-gray-100 p-3 outline-none focus:ring-2 focus:ring-blue-400"
-                value={state.specsTempText || ""}
-                onChange={(e) => updateState({ specsTempText: e.target.value })}
-                autoFocus
-              />
-            </div>
-
-            <div className="px-4 py-3 border-t border-gray-200 dark:border-slate-700 flex justify-end gap-2">
-              <button
-                type="button"
-                className="px-3 py-2 text-xs font-medium rounded-md bg-gray-200 hover:bg-gray-300 dark:bg-slate-700 dark:hover:bg-slate-600"
-                onClick={closeSpecsModal}
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                className="px-3 py-2 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700"
-                onClick={saveSpecsModal}
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showAttachModal && (
         <AttachDocumentModal
@@ -2881,10 +3245,13 @@ const PO = () => {
       )}
 
       {msLookupModalOpen && (
-        <MSLookupModal
+        <ItemMastLookupModal
           isOpen={msLookupModalOpen}
+          endpoint={itemLookupEndPoint}
           onClose={handleCloseMSLookup}
-          customParam={null}
+          onCancel={() => updateState({ msLookupModalOpen: false })}
+          enableMultiSelect={!itemSingleSelect}
+          docType={selectedDocType}
         />
       )}
 

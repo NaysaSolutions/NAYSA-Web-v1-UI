@@ -14,6 +14,8 @@ import {
   faPaperclip,
   faExclamationTriangle,
   faFileImport,
+  faBell,
+  faEllipsisH,
 } from "@fortawesome/free-solid-svg-icons";
 import { useNavigate, useLocation } from "react-router-dom";
 // import { useReset } from "./ResetContext"; // if you need it, keep; otherwise remove
@@ -33,12 +35,14 @@ const Header = ({
   isViewDocument = false,
   showPost = false,
   showUpload = false,
+  showNotify = false,
   isPrintDisabled = false,
   isSaveDisabled = false,   
   isCopyDisabled = false,   
   isAttachDisabled = false, 
   isCancelDisabled = false,
   isResetDisabled = false, 
+  isNotifyDisabled = false,
 
 
   // action callbacks
@@ -53,13 +57,16 @@ const Header = ({
   onCopy,
   onAttach,
   onUpload,
+  onNotify,
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
   // const { triggerReset } = useReset();
 
   const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
   const guideDropdownRef = useRef(null);
+  const moreDropdownRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -68,6 +75,13 @@ const Header = ({
         !guideDropdownRef.current.contains(e.target)
       ) {
         setIsGuideOpen(false);
+      }
+
+      if (
+        moreDropdownRef.current &&
+        !moreDropdownRef.current.contains(e.target)
+      ) {
+        setIsMoreOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -111,6 +125,28 @@ const Header = ({
   };
   const handlePrint = () => onPrint?.(printData);
   const handleUpload = () => onUpload?.();
+  const handleNotify = () => onNotify?.();
+  const closeMoreMenu = () => setIsMoreOpen(false);
+
+  const mobileLabelClass = "block text-[8px] leading-none lg:hidden";
+  const desktopLabelClass = "hidden lg:inline lg:ml-2";
+  const getBlueButtonClass = (disabled = false) =>
+    `inline-flex min-w-[36px] flex-col items-center justify-center gap-0.5 px-2 py-1.5 text-[10px] font-medium rounded-md text-white transition-all duration-200 lg:flex-row lg:px-3 lg:py-2 lg:text-xs ${
+      disabled
+        ? "bg-blue-600 dark:bg-blue-800 opacity-65 cursor-not-allowed"
+        : "bg-blue-600 hover:bg-blue-700 dark:bg-blue-800 dark:hover:bg-blue-700"
+    }`;
+  const greenButtonClass =
+    "inline-flex min-w-[36px] flex-col items-center justify-center gap-0.5 px-2 py-1.5 text-[10px] font-medium rounded-md bg-green-600 text-white transition-all duration-200 hover:bg-green-700 lg:flex-row lg:px-3 lg:py-2 lg:text-xs dark:bg-green-700 dark:hover:bg-green-600";
+  const getRedButtonClass = (disabled = false) =>
+    `inline-flex min-w-[36px] flex-col items-center justify-center gap-0.5 px-2 py-1.5 text-[10px] font-medium rounded-md text-white transition-all duration-200 lg:flex-row lg:px-3 lg:py-2 lg:text-xs ${
+      disabled
+        ? "bg-red-600 dark:bg-red-800 opacity-50 cursor-not-allowed"
+        : "bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600"
+    }`;
+  const mobileMoreItemClass =
+    "flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-200 dark:hover:bg-gray-600";
+  const showMobileMore = showUpload || showNotify || true;
 
   return (
     <div className="fixed top-[50px] left-0 w-full z-30 bg-white shadow-md dark:bg-gray-800">
@@ -152,97 +188,81 @@ const Header = ({
             <button
               onClick={handleSave}
               disabled={isSaveDisabled}
-              className={`px-3 py-2 text-xs font-medium rounded-md text-white transition-all duration-200 ${
-                isSaveDisabled
-                  ? "bg-blue-600 dark:bg-blue-800 opacity-65 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-700 dark:bg-blue-800 dark:hover:bg-blue-700"
-              }`}
+              className={getBlueButtonClass(isSaveDisabled)}
             >
               <FontAwesomeIcon icon={faSave} />{" "}
-              <span className="hidden lg:inline ml-2">Save</span>
+              <span className={mobileLabelClass}>Save</span>
+              <span className={desktopLabelClass}>Save</span>
             </button>
             <button
               onClick={handleReset}
               disabled={isResetDisabled}
-              className={`px-3 py-2 text-xs font-medium rounded-md text-white transition-all duration-200 ${
-                isResetDisabled
-                  ? "bg-blue-600 dark:bg-blue-800 opacity-65 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-700 dark:bg-blue-800 dark:hover:bg-blue-700"
-              }`}
+              className={getBlueButtonClass(isResetDisabled)}
             >
               <FontAwesomeIcon icon={faUndo} />{" "}
-              <span className="hidden lg:inline ml-2">Reset</span>
+              <span className={mobileLabelClass}>Reset</span>
+              <span className={desktopLabelClass}>Reset</span>
             </button>
             {showCopyForm && (
               <button
                 onClick={handleCopy}
                 disabled={isCopyDisabled}
-                className={`px-3 py-2 text-xs font-medium rounded-md text-white transition-all duration-200 ${
-                  isCopyDisabled
-                    ? "bg-blue-600 dark:bg-blue-800 opacity-65 cursor-not-allowed"
-                    : "bg-blue-600 hover:bg-blue-700 dark:bg-blue-800 dark:hover:bg-blue-700"
-                }`}
+                className={getBlueButtonClass(isCopyDisabled)}
               >
                 <FontAwesomeIcon icon={faCopy} />{" "}
-                <span className="hidden lg:inline ml-2">Copy</span>
+                <span className={mobileLabelClass}>Copy</span>
+                <span className={desktopLabelClass}>Copy</span>
               </button>
             )}
             <button 
               onClick={handlePrint} 
               disabled={isPrintDisabled}
-              className={`px-3 py-2 text-xs font-medium rounded-md text-white transition-all duration-200 ${
-                isPrintDisabled 
-                  // Removed blur-[2px], kept opacity and cursor-not-allowed
-                  ? "bg-blue-600 dark:bg-blue-800 opacity-65 cursor-not-allowed" 
-                  : "bg-blue-600 hover:bg-blue-700 dark:bg-blue-800 dark:hover:bg-blue-700"
-              }`}
+              className={getBlueButtonClass(isPrintDisabled)}
             >
-              <FontAwesomeIcon icon={faPrint} /> <span className="hidden lg:inline ml-2">Print</span>
+              <FontAwesomeIcon icon={faPrint} />
+              <span className={mobileLabelClass}>Print</span>
+              <span className={desktopLabelClass}>Print</span>
             </button>
            {showBIRForm && (
               <button 
                 onClick={handlePrint} 
                 disabled={isPrintDisabled}
-                className={`px-3 py-2 text-xs font-medium rounded-md text-white transition-all duration-200 ${
-                  isPrintDisabled 
-                    // Removed blur-[2px], kept opacity and cursor-not-allowed
-                    ? "bg-blue-600 dark:bg-blue-800 opacity-65 cursor-not-allowed" 
-                    : "bg-blue-600 hover:bg-blue-700 dark:bg-blue-800 dark:hover:bg-blue-700"
-                }`}
+                className={getBlueButtonClass(isPrintDisabled)}
               >
-                <FontAwesomeIcon icon={faPrint} /> <span className="hidden lg:inline ml-2">BIR Form</span>
+                <FontAwesomeIcon icon={faPrint} />
+                <span className={mobileLabelClass}>BIR</span>
+                <span className={desktopLabelClass}>BIR Form</span>
               </button>
             )}
             <button
               onClick={handleAttach}
               disabled={isAttachDisabled}
-              className={`px-3 py-2 text-xs font-medium rounded-md text-white transition-all duration-200 ${
-                isAttachDisabled
-                  ? "bg-blue-600 dark:bg-blue-800 opacity-65 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-700 dark:bg-blue-800 dark:hover:bg-blue-700"
-              }`}
+              className={getBlueButtonClass(isAttachDisabled)}
             >
               <FontAwesomeIcon icon={faPaperclip} />{" "}
-              <span className="hidden lg:inline ml-2">Attach</span>
+              <span className={mobileLabelClass}>Attach</span>
+              <span className={desktopLabelClass}>Attach</span>
             </button>
 
             {showUpload && (
               <button
                 onClick={handleUpload}
-                className="px-3 py-2 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-800 dark:hover:bg-blue-700"
+                className={`${getBlueButtonClass(false)} max-lg:hidden`}
               >
                 <FontAwesomeIcon icon={faFileImport} />{" "}
-                <span className="hidden lg:inline ml-2">Upload</span>
+                <span className={mobileLabelClass}>Upload</span>
+                <span className={desktopLabelClass}>Upload</span>
               </button>
             )}
 
-            <div className="relative" ref={guideDropdownRef}>
+            <div className="relative max-lg:hidden" ref={guideDropdownRef}>
               <button
                 onClick={() => setIsGuideOpen(!isGuideOpen)}
-                className="px-3 py-2 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-800 dark:hover:bg-blue-700"
+                className={getBlueButtonClass(false)}
               >
                 <FontAwesomeIcon icon={faInfoCircle} />{" "}
-                <span className="hidden lg:inline ml-2">Guide</span>
+                <span className={mobileLabelClass}>Guide</span>
+                <span className={desktopLabelClass}>Guide</span>
               </button>
               {isGuideOpen && (
                 <div className="absolute right-0 mt-2 w-40 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-gray-700 dark:ring-gray-600">
@@ -275,23 +295,100 @@ const Header = ({
             {showPost && (
               <button
                 onClick={handlePost}
-                className="px-3 py-2 text-xs font-medium rounded-md bg-green-600 text-white hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600"
+                className={greenButtonClass}
               >
                 <FontAwesomeIcon icon={faExclamationTriangle} />{" "}
-                <span className="hidden lg:inline ml-2">Post</span>
+                <span className={mobileLabelClass}>Post</span>
+                <span className={desktopLabelClass}>Post</span>
               </button>
+            )}
+            {showNotify && (
+              <button
+                onClick={handleNotify}
+                disabled={isNotifyDisabled}
+                className={`${getBlueButtonClass(isNotifyDisabled)} max-lg:hidden`}
+              >
+                <FontAwesomeIcon icon={faBell} />{" "}
+                <span className={mobileLabelClass}>Notify</span>
+                <span className={desktopLabelClass}>Notify</span>
+              </button>
+            )}
+            {showMobileMore && (
+              <div className="relative lg:hidden" ref={moreDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsMoreOpen((prev) => !prev)}
+                  className={getBlueButtonClass(false)}
+                >
+                  <FontAwesomeIcon icon={faEllipsisH} />{" "}
+                  <span className={mobileLabelClass}>More</span>
+                </button>
+
+                {isMoreOpen && (
+                  <div className="absolute right-0 top-full z-[70] mt-2 w-36 overflow-hidden rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-gray-700 dark:ring-gray-600">
+                    {showUpload && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          closeMoreMenu();
+                          handleUpload();
+                        }}
+                        className={mobileMoreItemClass}
+                      >
+                        <FontAwesomeIcon icon={faFileImport} />
+                        Upload
+                      </button>
+                    )}
+                    {showNotify && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          closeMoreMenu();
+                          handleNotify();
+                        }}
+                        disabled={isNotifyDisabled}
+                        className={mobileMoreItemClass}
+                      >
+                        <FontAwesomeIcon icon={faBell} />
+                        Notify
+                      </button>
+                    )}
+                    <div className="mt-1 border-t border-slate-100 pt-1 dark:border-gray-600">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          closeMoreMenu();
+                          handlePDFGuide();
+                        }}
+                        className={mobileMoreItemClass}
+                      >
+                        <FontAwesomeIcon icon={faFilePdf} />
+                        PDF Guide
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          closeMoreMenu();
+                          handleVideoGuide();
+                        }}
+                        className={mobileMoreItemClass}
+                      >
+                        <FontAwesomeIcon icon={faVideo} />
+                        Video Guide
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
            <button
               onClick={handleCancel}
               disabled={isCancelDisabled}
-              className={`px-3 py-2 text-xs font-medium rounded-md text-white transition-all duration-200 ${
-                isCancelDisabled
-                  ? "bg-red-600 dark:bg-red-800 opacity-50 cursor-not-allowed" // Note: Cancel uses red
-                  : "bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600"
-              }`}
+              className={getRedButtonClass(isCancelDisabled)}
             >
               <FontAwesomeIcon icon={faTimesCircle} />{" "}
-              <span className="hidden lg:inline ml-2">Cancel</span>
+              <span className={mobileLabelClass}>Cancel</span>
+              <span className={desktopLabelClass}>Cancel</span>
             </button>
           </div>
         )}

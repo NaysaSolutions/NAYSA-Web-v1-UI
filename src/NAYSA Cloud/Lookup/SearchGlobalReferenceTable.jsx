@@ -334,7 +334,64 @@ const SearchGlobalReferenceTable = forwardRef(
       return s.length * 7 + 40;
     };
 
-    const headerCellWrap = "w-full min-w-0 whitespace-normal break-words";
+    const headerCellWrap = "w-full min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]";
+
+    // Columns that must stay visible in the Show/Hide Columns chooser.
+    // You can also set requiredVisible: true in any column definition.
+    const isRequiredVisibleColumn = (col) => {
+      const key = String(col?.key || "").toLowerCase();
+      return (
+        key === "__actions" ||
+        key === "acctcode" ||
+        col?.requiredVisible === true
+      );
+    };
+
+    // Pin exactly the first 3 visible columns by default.
+    // Long values are still controlled by maxWidth + word wrapping,
+    // so pinned columns will not overlap the next column.
+    const PINNED_COLUMN_COUNT = 3;
+
+    const isPinnedColumn = (col, index = -1) => {
+      if (!col) return false;
+
+      // Explicit column settings still have priority.
+      if (col?.pinned === false) return false;
+      if (col?.pinned === true) return true;
+
+      return index >= 0 && index < PINNED_COLUMN_COUNT;
+    };
+
+    const getStickyLeftOffset = (colIndex) => {
+      if (colIndex <= 0) return 0;
+
+      let offset = 0;
+      for (let i = 0; i < colIndex; i++) {
+        const prevCol = visibleCols[i];
+        if (prevCol && isPinnedColumn(prevCol, i)) {
+          offset += getColWidth(prevCol);
+        }
+      }
+      return offset;
+    };
+
+    const cellTextWrapClass =
+      "w-full min-w-0 whitespace-normal break-words [overflow-wrap:anywhere] overflow-hidden";
+
+    const getWidthStyle = (col, isManual = false) => {
+      const colWidth = getColWidth(col);
+      const minWidth = Number(col.minWidth) || colWidth;
+      const maxWidth = Number(col.maxWidth) || colWidth;
+
+      if (autoFillGrid && !isManual && !col.width && !col.maxWidth) return {};
+
+      return {
+        width: `${colWidth}px`,
+        minWidth: `${minWidth}px`,
+        maxWidth: `${maxWidth}px`,
+      };
+    };
+
     const hasActionCol = useMemo(
       () => visibleCols.some((c) => isActionColumn(c)),
       [visibleCols],
@@ -448,8 +505,8 @@ const SearchGlobalReferenceTable = forwardRef(
     }, [data, filters, globalSearch, visibleCols, sortConfig, columns]);
 
     const autoColWidths = useMemo(() => {
-      const MIN = 60;
-      const MAX = 400;
+      const MIN = 40;
+      const DEFAULT_MAX = 180;
       const SAMPLE = 80;
 
       const sampleRows = (
@@ -477,7 +534,8 @@ const SearchGlobalReferenceTable = forwardRef(
         const colBase = Number(col.width);
         if (Number.isFinite(colBase)) w = Math.max(w, colBase);
 
-        out[col.key] = clamp(w, MIN, MAX);
+        const colMax = Number(col.maxWidth) || Number(col.width) || DEFAULT_MAX;
+        out[col.key] = clamp(w, MIN, colMax);
       });
 
       return out;
@@ -491,17 +549,6 @@ const SearchGlobalReferenceTable = forwardRef(
 
       if (isManual && manualWidth) return manualWidth;
       return autoWidth || defaultWidth;
-    };
-
-    const getStickyLeftOffset = (index) => {
-      if (index <= 0) return 0;
-
-      let offset = 0;
-      for (let i = 0; i < index; i++) {
-        const prevCol = visibleCols[i];
-        offset += prevCol ? getColWidth(prevCol) : 140;
-      }
-      return offset;
     };
 
     const shouldSumColumn = (col) => {
@@ -813,36 +860,44 @@ const SearchGlobalReferenceTable = forwardRef(
       allGroupKeys.every((key) => expandedGroups[key]);
 
     useEffect(() => {
-      if (isMobile || effectiveGroupBy.length === 0) {
-        prevGroupKeysRef.current = [];
-        setExpandedGroups({});
-        setCurrentPage(1);
-        return;
-      }
+  if (isMobile || effectiveGroupBy.length === 0) {
+    prevGroupKeysRef.current = [];
 
-      setExpandedGroups((prev) => {
-        const prevKeys = prevGroupKeysRef.current || [];
-        const wasAllExpanded =
-          prevKeys.length > 0 && prevKeys.every((key) => prev[key]);
+    setExpandedGroups((prev) => {
+      if (!prev || Object.keys(prev).length === 0) return prev;
+      return {};
+    });
 
-        let nextState = {};
+    setCurrentPage((prev) => (prev === 1 ? prev : 1));
+    return;
+  }
 
-        if (wasAllExpanded) {
-          nextState = Object.fromEntries(
-            allGroupKeys.map((key) => [key, true]),
-          );
-        } else {
-          nextState = Object.fromEntries(
-            allGroupKeys.filter((key) => prev[key]).map((key) => [key, true]),
-          );
-        }
+  setExpandedGroups((prev) => {
+    const prevKeys = prevGroupKeysRef.current || [];
+    const wasAllExpanded =
+      prevKeys.length > 0 && prevKeys.every((key) => prev[key]);
 
-        prevGroupKeysRef.current = allGroupKeys;
-        return nextState;
-      });
+    let nextState = {};
 
-      setCurrentPage(1);
-    }, [isMobile, effectiveGroupBy, allGroupKeys]);
+    if (wasAllExpanded) {
+      nextState = Object.fromEntries(allGroupKeys.map((key) => [key, true]));
+    } else {
+      nextState = Object.fromEntries(
+        allGroupKeys.filter((key) => prev[key]).map((key) => [key, true])
+      );
+    }
+
+    prevGroupKeysRef.current = allGroupKeys;
+
+    const prevJson = JSON.stringify(prev || {});
+    const nextJson = JSON.stringify(nextState);
+    if (prevJson === nextJson) return prev;
+
+    return nextState;
+  });
+
+  setCurrentPage((prev) => (prev === 1 ? prev : 1));
+}, [isMobile, effectiveGroupBy, allGroupKeys]);
 
     const toggleGroup = (node) => {
       const uniqueId = getGroupNodeId(node);
@@ -1307,13 +1362,27 @@ const handleConfirmExport = async (fileName) => {
   }
 };
 
-    const allChooserKeys = baseVisibleColumns.map((c) => c.key);
-    const allChecked = userHiddenCols.length === 0;
-    const toggleSelectAll = () => {
-      if (allChecked) {
-        return;
-      }
-      setUserHiddenCols([]);
+    const chooserColumns = baseVisibleColumns;
+    const hideableChooserKeys = chooserColumns
+      .filter((c) => !isRequiredVisibleColumn(c))
+      .map((c) => c.key);
+
+    const allChecked = hideableChooserKeys.every(
+      (key) => !userHiddenCols.includes(key),
+    );
+
+    const toggleSelectAll = (e) => {
+      const checked = e.target.checked;
+
+      setUserHiddenCols((prev) => {
+        const protectedHidden = prev.filter(
+          (key) => !hideableChooserKeys.includes(key),
+        );
+
+        if (checked) return protectedHidden;
+
+        return [...new Set([...protectedHidden, ...hideableChooserKeys])];
+      });
     };
 
     const handleRowOpen = (row) => {
@@ -1646,7 +1715,7 @@ const handleConfirmExport = async (fileName) => {
                     className={`w-full text-xs font-medium text-white bg-blue-600 border border-slate-300 rounded-md hover:bg-slate-50 hover:text-blue-600 active:scale-[0.98] transition flex items-center justify-center ${
                       tableSize === "Half" ? "h-7 px-2 py-1" : "h-8 px-3 py-2"
                     }`}
-                    title="Refresh Data"
+                    title="Sync Data"
                   >
                     <FontAwesomeIcon
                       icon={faSyncAlt}
@@ -1656,7 +1725,7 @@ const handleConfirmExport = async (fileName) => {
                     <span
                       className={` ${tableSize === "Half" ? "inline lg:hidden" : "hidden lg:inline"}`}
                     >
-                      Refresh
+                      Sync
                     </span>
                   </button>
                 </div>
@@ -1805,16 +1874,26 @@ const handleConfirmExport = async (fileName) => {
                       </label>
                     </div>
 
-                    {baseVisibleColumns.map((col) => (
+                    {chooserColumns.map((col) => (
                       <label
                         key={col.key}
-                        className="flex items-center text-[11px] gap-2 mb-1"
+                        className={`flex items-center text-[11px] gap-2 mb-1 ${
+                          isRequiredVisibleColumn(col)
+                            ? "opacity-60 cursor-not-allowed"
+                            : ""
+                        }`}
                       >
                         <input
                           type="checkbox"
                           className="h-3 w-3"
-                          checked={!userHiddenCols.includes(col.key)}
+                          checked={
+                            isRequiredVisibleColumn(col) ||
+                            !userHiddenCols.includes(col.key)
+                          }
+                          disabled={isRequiredVisibleColumn(col)}
                           onChange={(e) => {
+                            if (isRequiredVisibleColumn(col)) return;
+
                             const checked = e.target.checked;
 
                             setUserHiddenCols((prev) => {
@@ -1822,16 +1901,9 @@ const handleConfirmExport = async (fileName) => {
                                 return prev.filter((k) => k !== col.key);
                               }
 
-                              const currentlyVisibleCount =
-                                baseVisibleColumns.filter(
-                                  (c) => !prev.includes(c.key),
-                                ).length;
-
-                              if (currentlyVisibleCount <= 1) {
-                                return prev;
-                              }
-
-                              return [...prev, col.key];
+                              return prev.includes(col.key)
+                                ? prev
+                                : [...prev, col.key];
                             });
                           }}
                         />
@@ -1857,7 +1929,7 @@ const handleConfirmExport = async (fileName) => {
               ref={scrollRef}
               className={`flex-1 border border-gray-200 rounded-sm relative custom-scrollbar ${
                 autoFillGrid
-                  ? "overflow-y-auto overflow-x-hidden"
+                  ? "overflow-x-auto overflow-y-auto"
                   : "overflow-auto"
               }`}
             >
@@ -1875,9 +1947,8 @@ const handleConfirmExport = async (fileName) => {
                 <thead className="global-tran-thead-div-ui text-[11px] sticky top-0 z-30 bg-white">
                   <tr>
                     {visibleCols.map((col, index) => {
-                      const isStickyLeft = index < 3;
+                      const isStickyLeft = isPinnedColumn(col, index);
                       const leftOffset = getStickyLeftOffset(index);
-                      const colWidth = getColWidth(col);
                       const isManual = manualResizedCols[col.key];
                       const actionCol = isActionColumn(col);
 
@@ -1913,13 +1984,7 @@ const handleConfirmExport = async (fileName) => {
                                 : ""
                           }
                           style={{
-                            ...(autoFillGrid && !isManual && !col.width
-                              ? {}
-                              : {
-                                  width: `${colWidth}px`,
-                                  minWidth: `${colWidth}px`,
-                                  maxWidth: `${colWidth}px`,
-                                }),
+                            ...getWidthStyle(col, isManual),
                             left: isStickyLeft ? `${leftOffset}px` : undefined,
                           }}
                         >
@@ -1954,12 +2019,11 @@ const handleConfirmExport = async (fileName) => {
                   </tr>
 
                   {showFilters && hasOriginalData && (
-                    <tr className="sticky top-[34px] z-20 bg-white">
+                    <tr className="sticky top-[30px] z-20 bg-white">
                       {visibleCols.map((col, index) => {
-                        const isStickyLeft = index < 3;
+                        const isStickyLeft = isPinnedColumn(col, index);
                         const leftOffset = getStickyLeftOffset(index);
-                        const colWidth = getColWidth(col);
-                        const isManual = manualResizedCols[col.key];
+                          const isManual = manualResizedCols[col.key];
                         const actionCol = isActionColumn(col);
 
                         return (
@@ -1969,13 +2033,7 @@ const handleConfirmExport = async (fileName) => {
                               isStickyLeft ? "sticky z-30" : ""
                             }`}
                             style={{
-                              ...(autoFillGrid && !isManual
-                                ? {}
-                                : {
-                                    width: `${colWidth}px`,
-                                    minWidth: `${colWidth}px`,
-                                    maxWidth: `${colWidth}px`,
-                                  }),
+                              ...getWidthStyle(col, isManual),
                               left: isStickyLeft
                                 ? `${leftOffset}px`
                                 : undefined,
@@ -2079,7 +2137,7 @@ const handleConfirmExport = async (fileName) => {
                           }}
                         >
                           {visibleCols.map((col, index) => {
-                            const isStickyLeft = index < 3;
+                            const isStickyLeft = isPinnedColumn(col, index);
                             const leftOffset = getStickyLeftOffset(index);
 
                             return (
@@ -2091,16 +2149,11 @@ const handleConfirmExport = async (fileName) => {
                                     : ""
                                 } ${col.className || ""}`}
                                 style={{
-                                  width: getColWidth(col),
-                                  minWidth: col.width
-                                    ? col.width
-                                    : autoFillGrid
-                                      ? 120
-                                      : 90,
+                                  ...getWidthStyle(col, manualResizedCols[col.key]),
                                   left: isStickyLeft ? leftOffset : undefined,
                                 }}
                               >
-                                <div className="w-full whitespace-normal break-words">
+                                <div className={cellTextWrapClass} title={getCellDisplayText(row, col)}>
                                   {typeof col.render === "function"
                                     ? col.render(row)
                                     : formatValue(row[col.key], col)}

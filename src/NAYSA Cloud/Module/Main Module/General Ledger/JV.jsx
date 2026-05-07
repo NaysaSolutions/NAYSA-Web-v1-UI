@@ -446,8 +446,8 @@ const JV = () => {
 
       if (docControlReq) {
         stateUpdates.documentName = docControlReq.docName;
-        stateUpdates.documentSeries = docControlReq.docSeries || docControlReq.docName;
-       stateUpdates.documentDocLen = docControlReq.docLen || 8;
+        stateUpdates.documentSeries = docControlReq.docName;
+        stateUpdates.documentDocLen = docControlReq.docName;
       }
       if (hsOptionReq) {
         stateUpdates.glCurrMode = hsOptionReq.glCurrMode;
@@ -972,8 +972,8 @@ const JV = () => {
     }
     Swal.fire({
       icon: "success",
-      title: "Copy Completed",
-      text: "Update the required details before saving as a new Transaction",
+      title: "Transaction Copied",
+      text: "Identifiers cleared. You can now modify and save this as a new JV.",
       timer: 2000,
       showConfirmButton: false,
     });
@@ -1491,10 +1491,7 @@ const JV = () => {
   };
 
 const handleTranDocNoRetrieval = async (data) => {
-  // Defensive check: if the modal loses track of the docNo, fallback to the state's current documentNo
-  const targetDocNo = data.docNo || state.documentNo; 
-  
-  await fetchTranData(targetDocNo, data.branchCode || branchCode, data.key);
+  await fetchTranData(data.docNo, data.branchCode || branchCode, data.key);
   updateState({ showAllTranDocNo: data.modalClose });
 };
 
@@ -2579,7 +2576,6 @@ const handleTranDocNoSelection = async (data) => {
             isOpen={showAccountModal}
             onClose={handleCloseAccountModal}
             source={accountModalSource}
-            customParam="ActiveAll"
           />
         )}
 
@@ -2668,7 +2664,6 @@ const handleTranDocNoSelection = async (data) => {
               docType,
               documentTitle,
               fieldNo: "jvNo",
-              documentNo: documentNo,
             }}
            onRetrieve={handleTranDocNoRetrieval}
     onResponse={{ documentNo: documentNo }} // Pass current docNo

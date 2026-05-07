@@ -1,5 +1,5 @@
 import React from "react";
-import { Search } from "lucide-react";
+import { Search, X } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import {
@@ -19,9 +19,11 @@ const FieldRenderer = ({
   value,
   onChange,
   onLookup,
+  onClear,
   onBlur,
   onKeyDown,
   disabled,
+  lookupDisabled = false,
   options = [],
   readOnly = false,
   placeholder = " ",
@@ -33,6 +35,7 @@ const FieldRenderer = ({
 }) => {
   const isAudit = variant === "audit";
   const isEnabled = !disabled || isAudit;
+  const lookupActionDisabled = disabled || lookupDisabled || isAudit;
 
   const labelText = typeof label === "string" ? label : "";
   const idSource = id || name || labelText;
@@ -93,19 +96,41 @@ const FieldRenderer = ({
             value={getDisplayValue(value, "lookup")}
             readOnly
             placeholder={placeholder}
-            className={`${sharedClasses} cursor-pointer pr-12`}
-            onClick={() => !disabled && !isAudit && onLookup?.()}
+            className={`${sharedClasses} cursor-pointer ${onClear ? "pr-20" : "pr-12"}`}
+            onClick={() => !lookupActionDisabled && onLookup?.()}
           />
+          {onClear && getDisplayValue(value, "lookup") && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!lookupActionDisabled) onClear();
+              }}
+              disabled={lookupActionDisabled}
+              title="Clear"
+              className={`
+                absolute right-10 top-0 h-8 sm:h-8 w-8 flex items-center justify-center
+                border border-l-0 transition-colors
+                ${
+                  !lookupActionDisabled
+                    ? "bg-white text-slate-400 hover:bg-red-50 hover:text-red-600"
+                    : "bg-gray-100 text-gray-300"
+                }
+              `}
+            >
+              <X className="h-3.5 w-3.5" strokeWidth={3} />
+            </button>
+          )}
           <button
             type="button"
-            onClick={() => !disabled && !isAudit && onLookup?.()}
-            disabled={disabled || isAudit}
+            onClick={() => !lookupActionDisabled && onLookup?.()}
+            disabled={lookupActionDisabled}
             title="Search"
             className={`
               absolute right-0 top-0 h-8 sm:h-8 w-10 flex items-center justify-center
               rounded-r-lg border border-l-0 transition-colors
               ${
-                !disabled && !isAudit
+                !lookupActionDisabled
                   ? "bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white"
                   : "bg-gray-100 text-gray-400"
               }

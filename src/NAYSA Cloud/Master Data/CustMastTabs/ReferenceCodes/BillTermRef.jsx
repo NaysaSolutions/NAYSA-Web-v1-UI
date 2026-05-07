@@ -1,538 +1,367 @@
-import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import {
-  faPlus,
-  faSave,
-  faUndo,
-  faList,
-  faTrashAlt,
-  faPenToSquare,
-} from "@fortawesome/free-solid-svg-icons";
+import React, {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Edit, Trash2 } from "lucide-react";
+import Swal from "sweetalert2";
 
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
-import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer";
-import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
-import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo";
-import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable";
-
+import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import {
   useSwalErrorAlert,
+  useSwalSuccessAlert,
   useSwalDeleteConfirm,
   useSwalDeleteRecord,
-  useSwalshowSave,
-  useSwalValidationAlert,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
-import {
-  useGlobalDeleteRefTable
-} from "@/NAYSA Cloud/Global/reftable";
+import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
+import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable.jsx";
+import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
 
 /* ================= HELPERS ================= */
 
 const Card = ({ children }) => (
-  <div className="global-tran-textbox-group-div-ui self-start !h-fit">{children}</div>
+  <div className="global-tran-textbox-group-div-ui self-start !h-fit w-full">
+    {children}
+  </div>
 );
 
 const SectionHeader = ({ title }) => (
   <div className="mb-3">
-    <div className="text-sm font-bold text-gray-800">{title}</div>
+    <div className="text-[10px] font-bold text-slate-500 tracking-widest border-b pb-2 uppercase">
+      {title}
+    </div>
   </div>
 );
 
-const parseSprocJsonResult = (rows) => {
-  if (!rows || !rows.length) return null;
-  const r = rows[0]?.result;
-  if (!r) return null;
-  try {
-    return JSON.parse(r);
-  } catch {
-    return null;
+const extractRows = (payload) => {
+  const res =
+    payload?.data?.data?.[0]?.result ??
+    payload?.data?.result ??
+    payload?.data?.data;
+
+  if (!res) return [];
+  if (Array.isArray(res)) return res;
+
+  if (typeof res === "string") {
+    try {
+      return JSON.parse(res) || [];
+    } catch {
+      return [];
+    }
   }
+
+  return [];
 };
+
+const DEFAULT_FORM = {
+  billtermCode: "",
+  billtermName: "",
+  daysDue: 0,
+  registeredBy: "",
+  registeredDate: "",
+  lastUpdatedBy: "",
+  lastUpdatedDate: "",
+  __existing: false,
+};
+
+const normalizeRecord = (record) => ({
+  billtermCode: record?.billtermCode ?? record?.billterm_code ?? record?.code ?? "",
+  billtermName: record?.billtermName ?? record?.billterm_name ?? record?.name ?? "",
+  daysDue: record?.daysDue ?? record?.days_due ?? record?.dueDays ?? 0,
+  registeredBy: record?.registeredBy ?? "",
+  registeredDate: record?.registeredDate ?? "",
+  lastUpdatedBy: record?.lastUpdatedBy ?? "",
+  lastUpdatedDate: record?.lastUpdatedDate ?? "",
+  __existing: false,
+});
 
 /* ================= COMPONENT ================= */
 
-export default function BillTermRef() {
-  const title = "Billing Terms";
+const BillTermRef = forwardRef(({ onStateChange }, ref) => {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
+  // Set to "Full" to match your wide screenshot proportions
+  const tableSize = "Half";
 
-  const userCode =
-    user?.userCode || user?.user_code || user?.USER_CODE || user?.UserCode || user?.code || "";
+  const userCode = user?.USER_CODE || user?.userCode || user?.user_code || user?.code || "ADMIN";
 
-  const emptyForm = {
-    code: "",
-    name: "",
-    daysDue: "",
-    advances: "",
-    active: "Y",
-  };
+  const codeInputRef = useRef(null);
+  const enterValidatedRef = useRef(false);
 
-  const [form, setForm] = useState(emptyForm);
-  const formRef = useRef(form);
-  const [rows, setRows] = useState([]);
-  const [allRows, setAllRows] = useState([]);
-  const [selectedCode, setSelectedCode] = useState("");
+  const [form, setForm] = useState(DEFAULT_FORM);
+  const [selectedRow, setSelectedRow] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isDupCode, setIsDupCode] = useState(false);
   const [search, setSearch] = useState("");
 
+  const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
-
-
-
-  const [isDupCode, setIsDupCode] = useState(false);
-
-  const codeInputRef = useRef(null); // to refocus after clearing
-  const dupAlertingRef = useRef(false);
-
-  const isDuplicateLocal = (code) => {
-    const c = String(code || "").trim().toUpperCase();
-    if (!c) return false;
-
-    return allRows.some(
-      (r) => String(r?.code || "").trim().toUpperCase() === c
-    );
-  };
-
-  const showValidation = async (title, lines) => {
-    const msg = Array.isArray(lines) ? lines.join("\n") : String(lines || "");
-    return useSwalValidationAlert({
-      icon: "error",
-      title,
-      message: msg,
-    });
-  };
-
-  const checkDuplicate = async (code) => {
-    const c = (code || "").trim();
-    if (!c) return false;
-
-    const res = await apiClient.post("/checkDuplicateBillterm", {
-      json_data: { billtermCode: c },
-    });
-
-    const raw =
-      res?.data?.data?.[0]?.result ??
-      res?.data?.data?.[0]?.[""] ??
-      '{"result":"0"}';
-
-    const parsed = JSON.parse(raw);
-    return parsed.result === "1";
-  };
-
-
-  const handleBillTermCodeBlur = async (e) => {
-    // ✅ If blur happens right after Enter, skip blur validation
-    if (e?.type === "blur" && e?.relatedTarget === null) {
-      // still allow normal blur (mouse click, tab out, etc.)
-    }
-
-    // ✅ If this is blur but Enter was just pressed, ignore it
-    if (e?.type === "blur" && e?.target?.dataset?.enterValidated === "1") {
-      e.target.dataset.enterValidated = "0";
-      return;
-    }
-
-    // ✅ Only handle Enter on keydown
-    if (e?.type === "keydown") {
-      if (e.key !== "Enter") return;
-      e.preventDefault();
-      e.target.dataset.enterValidated = "1"; // mark Enter validation happened
-    }
-
-    const code = (form.code || "").trim();
-    if (!code) return;
-
-    const isAddMode = !selectedCode;
-    if (!isAddMode || !isEditing) return;
-
-    try {
-      const dup = await checkDuplicate(code);
-      setIsDupCode(dup);
-
-      if (dup) {
-        await showValidation("Duplicate Entry", ["Duplicate Code is not allowed."]);
-        updateForm({ code: "" });
-        setIsDupCode(false);
-        setTimeout(() => codeInputRef.current?.focus?.(), 0);
-        return;
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-
-  useEffect(() => {
-    formRef.current = form;
-  }, [form]);
-
-  const updateForm = (patch) => {
-    formRef.current = { ...formRef.current, ...patch };
-    setForm((p) => ({ ...p, ...patch }));
-  };
-
-  /* ================= NORMALIZER ================= */
-
-  const normalizeRow = (x) => ({
-    code: x?.billtermCode ?? x?.billterm_code ?? "",
-    name: x?.billtermName ?? x?.billterm_name ?? "",
-    daysDue: x?.daysDue ?? x?.days_due ?? 0,
-    advances: x?.advances === "Y" ? "Y" : "",
-    active: x?.active === "N" ? "N" : "Y",
-    registeredBy: x?.registeredBy ?? "",
-    registeredDate: x?.registeredDate ?? "",
-    lastUpdatedBy: x?.lastUpdatedBy ?? "",
-    lastUpdatedDate: x?.lastUpdatedDate ?? "",
-  });
+  const resetForm = useCallback((next = DEFAULT_FORM) => {
+    setForm(next);
+  }, []);
 
   /* ================= LOAD LIST ================= */
 
-  const loadList = useCallback(async () => {
-    try {
-      setIsLoading(true);
-
+  const billtermListQuery = useQuery({
+    queryKey: ["billtermList"],
+    queryFn: async () => {
       const res = await apiClient.get("/billterm");
+      const rows = extractRows(res);
+      return Array.isArray(rows) ? rows.map(normalizeRecord) : [];
+    },
+  });
 
-      const raw = Array.isArray(res.data?.data)
-        ? parseSprocJsonResult(res.data.data) || []
-        : [];
+  const billterms = useMemo(() => billtermListQuery.data || [], [billtermListQuery.data]);
+  const isInitialLoading = billtermListQuery.isLoading;
 
-      const normalized = raw.map(normalizeRow);
+  /* ================= DUPLICATE CHECK ================= */
 
-      setRows(normalized);
-      setAllRows(normalized);
-    } catch (err) {
-      console.error(err);
-      useSwalErrorAlert("Error", "Failed to load Billing Terms.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  /* ================= FETCH ONE ================= */
-
-  const fetchOne = async (code) => {
-    if (!code) return;
-
-    try {
-      // setIsLoading(true);
-
-      const res = await apiClient.get("/getBillterm", {
-        params: { BILLTERM_CODE: code },
-      });
-
-      const parsed = parseSprocJsonResult(res?.data?.data);
-      const row = parsed?.[0];
-
-      if (!row) return;
-
-      const normalized = normalizeRow(row);
-
-      setForm(normalized);
-      setSelectedCode(normalized.code);
-      setIsDupCode(false);
-    } catch (e) {
-      console.error(e);
-      await useSwalErrorAlert("Error", "Failed to fetch record.");
-    } finally {
-      setIsLoading(false);
-    }
+  const checkDuplicate = async (billtermCode) => {
+    const c = String(billtermCode || "").trim();
+    if (!c) return false;
+    const res = await apiClient.post("/checkDuplicateBillterm", { json_data: { billtermCode: c } });
+    const raw = res?.data?.data?.[0]?.result ?? '{"result":"0"}';
+    return String(JSON.parse(raw)?.result) === "1";
   };
 
+  const checkInUsed = async (billtermCode) => {
+    const c = String(billtermCode || "").trim();
+    if (!c) return false;
+    try {
+      const res = await apiClient.post("/checkInUsedBillterm", { json_data: { billtermCode: c } });
+      const raw = res?.data?.data?.[0]?.result ?? '{"result":"0"}';
+      return String(JSON.parse(raw)?.result) === "1";
+    } catch { return false; }
+  };
 
+  /* ================= VALIDATE CODE ================= */
+
+  const handleCodeValidate = async (arg) => {
+    const isEvent = arg && typeof arg === "object" && "type" in arg;
+    if (isEvent && arg.key === "Enter") enterValidatedRef.current = true;
+    if (isEvent && arg.type === "blur" && enterValidatedRef.current) {
+      enterValidatedRef.current = false;
+      return;
+    }
+    const code = String(form.billtermCode || "").trim();
+    if (!code || !isEditing || form.__existing) return;
+    if (await checkDuplicate(code)) {
+      setIsDupCode(true);
+      await useSwalErrorAlert("Duplicate Entry", `Code "${code}" already exists.`);
+      setField("billtermCode", "");
+      setTimeout(() => codeInputRef.current?.focus(), 0);
+    } else { setIsDupCode(false); }
+  };
 
   /* ================= SAVE ================= */
-  const save = async () => {
-    const f = form;
 
-    // ✅ still ok to block only on pure duplicate in ADD mode (optional)
-    const isAddMode = !selectedCode;
-    if (isAddMode) {
-      const dup = await checkDuplicate(f.code);
-      setIsDupCode(dup);
-      if (dup) {
-        await showValidation("Duplicate Entry", ["Duplicate Billing Term Code is not allowed."]);
-        updateForm({ code: "" });
-        setIsDupCode(false);
-        return;
-      }
-    }
-
-    
-    const payload = {
-      json_data: {
-        billtermCode: String(f.code ?? "").trim(),
-        billtermName: String(f.name ?? "").trim(),
-        dueDays: String(f.daysDue ?? "").trim() === "" ? null : Number(f.daysDue),
-        userCode,
-      },
-    };
-
-    try {
-      const resp = await apiClient.post("/upsertBillterm", {
-        json_data: JSON.stringify(payload),
+  const saveMutation = useMutation({
+    mutationFn: async (payload) => {
+      return apiClient.post("/upsertBillterm", {
+        json_data: JSON.stringify({
+          json_data: {
+            billtermCode: payload.billtermCode,
+            billtermName: payload.billtermName,
+            dueDays: payload.dueDays,
+            userCode: payload.userCode,
+          },
+        }),
       });
-
-      // ✅ SQL-driven validation
-      if (Number(resp?.data?.errorcount || 0) > 0) {
-        await showValidation("Save Failed", [resp?.data?.errormsg || "Validation error."]);
-        return;
-      }
-
-      await useSwalshowSave();
-      setIsEditing(false);
-
-      const updatedRow = {
-        code: payload.json_data.billtermCode,
-        name: payload.json_data.billtermName,
-        daysDue: payload.json_data.dueDays ?? "",
-        advances: f.advances ?? "",
-        active: f.active ?? "Y",
-        lastUpdatedBy: userCode,
-        lastUpdatedDate: new Date().toISOString(),
-      };
-
-      // ✅ Update list immediately (NO reload)
-      setAllRows((prevAll) => {
-        const exists = prevAll.some((r) => r.code === updatedRow.code);
-        const nextAll = exists
-          ? prevAll.map((r) => (r.code === updatedRow.code ? { ...r, ...updatedRow } : r))
-          : [...prevAll, updatedRow];
-
-        nextAll.sort((a, b) =>
-          String(a.code).localeCompare(String(b.code), undefined, { numeric: true })
-        );
-
-        const s = (search || "").trim().toLowerCase();
-        setRows(
-          !s
-            ? nextAll
-            : nextAll.filter(
-              (r) =>
-                String(r.code || "").toLowerCase().includes(s) ||
-                String(r.name || "").toLowerCase().includes(s)
-            )
-        );
-
-        return nextAll;
-      });
-
-      setSelectedCode(updatedRow.code);
-      setForm((prev) => ({ ...prev, ...updatedRow }));
-      setIsDupCode(false);
-    } catch (e) {
-      console.error(e);
-      await useSwalErrorAlert("Error", "Failed to save record.");
-    }
-  };
-  useEffect(() => {
-    loadList();
-  }, [loadList]);
-
-  useEffect(() => {
-    if (!search) return setRows(allRows);
-
-    const s = search.toLowerCase();
-    setRows(
-      allRows.filter(
-        (r) => r.code.toLowerCase().includes(s) || r.name.toLowerCase().includes(s)
-      )
-    );
-  }, [search, allRows]);
-
-  /* ================= BUTTONS ================= */
-
-  const buttons = [
-    {
-      key: "add", label: "Add", icon: faPlus, onClick: () => {
-        setForm(emptyForm);
-        setSelectedCode("");
-        setIsEditing(true);
-        setIsDupCode(false);
-      }
     },
-    { key: "save", label: "Save", icon: faSave, onClick: save, disabled: !isEditing || isDupCode },
-    {
-      key: "reset",
-      label: "Reset",
-      icon: faUndo,
-      onClick: () => {
-        setForm(emptyForm);
-        setSelectedCode("");
-        setIsEditing(false);
-        setIsDupCode(false);
-      },
-    }
-  ];
+    onSuccess: async (response) => {
+      const row = response?.data || {};
+      if (Number(row?.errorcount ?? 0) > 0) {
+        await useSwalErrorAlert("Validation Error", row?.errormsg || "Save failed.");
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: ["billtermList"] });
+      await useSwalSuccessAlert("Success!", "Billing Term saved.");
+      setIsEditing(false);
+      setSelectedRow(null);
+      setIsDupCode(false);
+      resetForm(DEFAULT_FORM);
+    },
+  });
 
-  const columns = useMemo(
+  const handleSave = useCallback(() => {
+    if (!isEditing || saveMutation.isPending) return;
+    saveMutation.mutate({
+      billtermCode: String(form.billtermCode || "").trim().toUpperCase(),
+      billtermName: String(form.billtermName || "").trim(),
+      dueDays: form.daysDue === "" ? 0 : Number(form.daysDue),
+      userCode,
+    });
+  }, [form, isEditing, saveMutation, userCode]);
+
+  /* ================= DELETE ================= */
+
+  const deleteMutation = useMutation({
+    mutationFn: async (code) => apiClient.post("/deleteBillterm", { json_data: { billtermCode: code, userCode } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["billtermList"] });
+      useSwalDeleteRecord("Deleted", "Record has been removed.");
+      resetForm(DEFAULT_FORM);
+      setIsEditing(false);
+      setSelectedRow(null);
+    },
+  });
+
+  const handleDelete = useCallback(async (row) => {
+    const code = row?.billtermCode;
+    if (!code) return;
+    if (await checkInUsed(code)) return useSwalErrorAlert("In Use", "Record is currently in use.");
+    const confirm = await useSwalDeleteConfirm("Delete?", `Remove "${code}"?`);
+    if (confirm?.isConfirmed) deleteMutation.mutate(code);
+  }, [deleteMutation]);
+
+  /* ================= EDIT ================= */
+
+  const handleEdit = async (row) => {
+    try {
+      const res = await apiClient.get("/getBillterm", { params: { BILLTERM_CODE: row.billtermCode } });
+      const record = extractRows(res)?.[0];
+      if (!record) return;
+      setForm({ ...DEFAULT_FORM, ...normalizeRecord(record), __existing: true });
+      setIsEditing(true);
+      setSelectedRow(row);
+      setIsDupCode(false);
+    } catch { Swal.fire("Error", "Could not fetch record", "error"); }
+  };
+
+  /* ================= TABLE ================= */
+
+  const tableColumns = useMemo(
     () => [
-      { key: "code", label: "Billing Term Code", sortable: true },
-      { key: "name", label: "Billing Term Name", sortable: true },
+      {
+        key: "__actions",
+        label: "Actions",
+        width: 60, // Compact for the half-width view
+        render: (row) => (
+          <div className="flex items-center justify-center gap-1">
+            <button
+              onClick={(e) => { e.stopPropagation(); handleEdit(row); }}
+              className="p-1 rounded-md bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+            >
+              <Edit size={14} />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleDelete(row); }}
+              className="p-1 rounded-md bg-red-50 text-red-600 border border-red-200 hover:bg-red-600 hover:text-white transition-all shadow-sm"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        ),
+      },
+      {
+        key: "billtermCode",
+        label: "Code",
+        sortable: true,
+        width: 80, // Balanced for half-width
+        className: "font-bold text-slate-700 uppercase"
+      },
+      {
+        key: "billtermName",
+        label: "Name",
+        sortable: true,
+        width: 100, // Adjusted to fit next to the form
+        className: "whitespace-normal break-words",
+      },
       {
         key: "daysDue",
         label: "Due Days",
         sortable: true,
-        renderType: "number",
-        render: (row) => {
-          const v = row?.daysDue;
-          if (v === null || v === undefined || v === "") return "";
-          const n = Number(v);
-          return Number.isFinite(n) ? String(Math.trunc(n)) : "";
-        },
-      },
-      { key: "active", label: "Active" },
-      {
-        key: "action",
-        label: "Actions",
-        render: (row) => (
-          <div className="flex gap-3 items-center justify-center">
-
-            {/* EDIT ICON */}
-            <FontAwesomeIcon
-              icon={faPenToSquare}
-              className="cursor-pointer text-blue-600 hover:text-blue-800"
-              onClick={() => {
-                fetchOne(row.code);
-                setIsEditing(true);
-              }}
-              title="Edit"
-            />
-
-            <FontAwesomeIcon
-              icon={faTrashAlt}
-              className="cursor-pointer text-red-600 hover:text-red-800"
-              title="Delete"
-              onClick={async () => {
-                await useGlobalDeleteRefTable({
-                  rowParam: row,
-                  selectedAccount: form,
-                  tblCode: "Billterm",
-                  idKey: "code",
-                  fieldcaption: "Billing Term",
-
-                  payload: {
-                    json_data: {
-                      billtermCode: row.code,
-                      userCode: userCode,
-                    },
-                  },
-
-                  onSuccess: async () => {
-                    setRows(prev => prev.filter(r => r.code !== row.code));
-                    setAllRows(prev => prev.filter(r => r.code !== row.code));
-                  },
-                  onReset: () => {
-                    if (selectedCode === row.code) {
-                      setForm(emptyForm);
-                      setSelectedCode("");
-                    }
-                  },
-                });
-              }}
-            />
-
-          </div>
-        ),
+        width: 80,
+        className: "text-center font-medium",
+        render: (row) => <span>{row?.daysDue ?? 0}</span>,
       },
     ],
-    [selectedCode, loadList]
+    [handleEdit, handleDelete]
   );
-  /* ================= UI ================= */
+
+  const tableData = useMemo(() =>
+    billterms.filter(row => {
+      const s = search.toLowerCase();
+      return String(row?.billtermCode || "").toLowerCase().includes(s) || String(row?.billtermName || "").toLowerCase().includes(s);
+    }), [billterms, search]);
+
+  /* ================= STATE & EXPOSURE ================= */
+
+  useEffect(() => {
+    if (onStateChange) onStateChange({ isEditing, canSave: isEditing && !isDupCode && !saveMutation.isPending });
+  }, [isEditing, isDupCode, saveMutation.isPending, onStateChange]);
+
+  useImperativeHandle(ref, () => ({
+    add: () => { setIsEditing(true); setSelectedRow(null); setIsDupCode(false); resetForm(DEFAULT_FORM); setTimeout(() => codeInputRef.current?.focus(), 0); },
+    save: handleSave,
+    reset: () => { resetForm(DEFAULT_FORM); setIsEditing(false); setSelectedRow(null); setIsDupCode(false); },
+  }));
 
   return (
-    <>
-      <Card>
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <FontAwesomeIcon icon={faList} />
-            <div className="font-bold">{title}</div>
-          </div>
-
-          <div className="flex gap-3 items-center">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search..."
-              className="global-tran-textbox-ui w-[250px]"
-            />
-            <ButtonBar buttons={buttons} />
-          </div>
-        </div>
-      </Card>
-
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-
-        {/* FORM */}
+    // Uses a 12-column grid to allow a wider table on the right
+    <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 w-full"> 
+      
+      {/* LEFT SIDE: FORM (Now taking only 4/12 of the width) */}
+      <div className="xl:col-span-4"> 
         <Card>
           <SectionHeader title="Basic Information" />
-          <FieldRenderer
-            label="Billing Term Code"
-            type="text"
-            value={form.code}
-            inputRef={codeInputRef}
-            onChange={(v) => {
-              updateForm({ code: v });
-              setIsDupCode(false);
-            }}
-            onBlur={handleBillTermCodeBlur}
-            onKeyDown={handleBillTermCodeBlur}
-            disabled={!isEditing || selectedCode !== ""}
-          />
-
-          <FieldRenderer
-            label="Billing Term Name"
-            type="text"
-            value={form.name}
-            onChange={(v) => updateForm({ name: v })}
-            disabled={!isEditing}
-          />
-
-          <FieldRenderer
-            label="Due Days"
-            type="number"
-            value={form.daysDue}
-            onChange={(v) => updateForm({ daysDue: v })}
-            disabled={!isEditing}
-          />
-
-          <FieldRenderer
-            label="Active"
-            type="select"
-            options={[
-              { value: "Y", label: "Yes" },
-              { value: "N", label: "No" },
-            ]}
-            value={form.active}
-            onChange={(v) => updateForm({ active: v })}
-            disabled={!isEditing}
-          />
-
-          <SectionHeader title="Registration Information" />
-          <RegistrationInfo data={form} disabled />
+          <div className="space-y-4">
+            <FieldRenderer
+              label="Billing Term Code"
+              required
+              value={form.billtermCode}
+              inputRef={codeInputRef}
+              maxLength={5}
+              onChange={(v) => setField("billtermCode", String(v ?? "").toUpperCase())}
+              onBlur={handleCodeValidate}
+              disabled={!isEditing || form.__existing}
+            />
+            <FieldRenderer
+              label="Billing Term Name"
+              required
+              value={form.billtermName}
+              maxLength={50}
+              onChange={(v) => setField("billtermName", v ?? "")}
+              disabled={!isEditing}
+            />
+            <FieldRenderer
+              label="Due Days"
+              type="number"
+              value={form.daysDue}
+              onChange={(v) => setField("daysDue", v ?? "")}
+              disabled={!isEditing}
+            />
+            <RegistrationInfo data={form} layout="stacked" />
+          </div>
         </Card>
-
-        {/* LIST */}
-        <div>
-          <h2 className="text-base font-semibold mb-4">List</h2>
-
-          <SearchGlobalReferenceTable
-            columns={columns}
-            data={rows}
-            docType="BILLTERM"
-            isLoading={isLoading}
-            showFilters={true}
-            itemsPerPage={20}
-            onRowDoubleClick={async (row) => {
-              await fetchOne(row.code);
-              setIsEditing(true);
-            }}
-          />
-        </div>
       </div>
-    </>
+
+      {/* RIGHT SIDE: LIST (Now taking 8/12 of the width - MAXIMUM SIDE-BY-SIDE WIDTH) */}
+      <div className="xl:col-span-8 bg-white rounded-lg p-3 shadow-sm border border-gray-100 w-full overflow-hidden">
+        <SearchGlobalReferenceTable
+          columns={tableColumns}
+          data={tableData}
+          isLoading={isInitialLoading}
+          docType="Billing Terms"
+          itemsPerPage={10}
+          onRowDoubleClick={handleEdit}
+          onRowClick={(row) => setSelectedRow(row)}
+          showFilters
+          tableSize="Full" // Ensure internal table logic uses the extra space
+          autoFillGrid={true}
+        />
+      </div>
+    </div>
   );
-}
+});
+
+BillTermRef.displayName = "BillTermRef";
+export default BillTermRef;

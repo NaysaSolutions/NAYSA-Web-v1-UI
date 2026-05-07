@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useLayoutEffect,
+  useCallback,
 } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -11,6 +12,8 @@ import {
   faSort,
   faSortUp,
   faSortDown,
+  faMinus,
+  faXmark,
   faFilterCircleXmark,
   faMagnifyingGlass,
   faCircleExclamation,
@@ -24,6 +27,7 @@ import {
   formatNumber,
   useSwalErrorAlert,
 } from "../Global/behavior.jsx";
+import { Maximize2, Minimize2 } from "lucide-react";
 
 function useDebouncedValue(value, delay = 250) {
   const [debounced, setDebounced] = useState(value);
@@ -57,15 +61,21 @@ const GlobalGLPostingModalv1 = ({
   const [enableGlobalSearch, setEnableGlobalSearch] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [mobileViewMode, setMobileViewMode] = useState("card");
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
 
   const firstFocusableRef = useRef(null);
-  const STICKY_COUNT = 6;
+  const STICKY_COUNT = 3;
   const selectHeaderRef = useRef(null);
   const viewHeaderRef = useRef(null);
   const columnHeaderRefs = useRef({});
   const [stickyLefts, setStickyLefts] = useState([]);
   const [resizeTick, setResizeTick] = useState(0);
   const ACTION_COL_W = 70;
+  const SELECT_COL_W = 54;
+  const MIN_DATA_COL_W = 110;
+  const MAX_DATA_COL_W = 200;
+  const CHAR_WIDTH = 7;
 
   const getRowId = (row) =>
     row?.rrId ?? row?.rr_id ?? row?.docId ?? row?.groupId ?? row?.tranId ?? row?.__idx;
@@ -76,14 +86,18 @@ const GlobalGLPostingModalv1 = ({
     return s;
   }, [selected]);
 
-
+  const handleClose = useCallback(() => {
+    setIsMinimized(false);
+    setIsMaximized(false);
+    onClose?.();
+  }, [onClose]);
 
 useEffect(() => {
   firstFocusableRef.current?.focus();
-  const onKey = (e) => { if (e.key === "Escape") onClose?.(); };
+  const onKey = (e) => { if (e.key === "Escape") handleClose(); };
   window.addEventListener("keydown", onKey);
   return () => window.removeEventListener("keydown", onKey);
-}, [onClose]);
+}, [handleClose]);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -177,6 +191,23 @@ useEffect(() => {
   const startItem = totalItems > 0 ? 1 : 0;
   const endItem = totalItems;
   const activeFilterChips = Object.entries(filters).filter(([, v]) => v);
+  const columnWidths = useMemo(() => {
+    return visibleCols.reduce((widths, col) => {
+      const values = displayData.map((row) =>
+        renderValue(col, row?.[col.key], col.roundingOff),
+      );
+      const longest = [col.label || col.key || "", ...values]
+        .map((value) => String(value ?? "").length)
+        .reduce((max, length) => Math.max(max, length), 0);
+      const preferredWidth = longest * CHAR_WIDTH + 44;
+
+      widths[col.key] = Math.min(
+        MAX_DATA_COL_W,
+        Math.max(MIN_DATA_COL_W, preferredWidth),
+      );
+      return widths;
+    }, {});
+  }, [displayData, visibleCols]);
 
   const handleFilterChange = (e, key) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const clearAllFilters = () => setFilters({});
@@ -243,14 +274,54 @@ useEffect(() => {
       }
     });
     setStickyLefts(lefts);
-  }, [visibleCols, showFilters, resizeTick, filtered.length]);
+  }, [visibleCols, showFilters, resizeTick, filtered.length, columnWidths]);
 
-  const stickyMeta = (idx) => idx < STICKY_COUNT ? { sticky: true, left: stickyLefts[idx] ?? 0, maxWidth: idx > 1 ? 200 : undefined } : { sticky: false };
+  const stickyMeta = (idx) => idx < STICKY_COUNT ? { sticky: true, left: stickyLefts[idx] ?? 0 } : { sticky: false };
   const allFilteredSelected = filtered.length > 0 && filtered.every((r) => selectedIds.has(getRowId(r)));
 
+  if (isMinimized) {
+    return (
+      <div className="fixed inset-0 z-[9999] bg-transparent">
+        <div className="absolute bottom-4 right-4 flex max-w-[calc(100vw-24px)] items-center gap-2 rounded-2xl border border-slate-200 bg-white/95 px-3 py-2 text-xs text-slate-700 shadow-2xl shadow-slate-900/20 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:shadow-slate-900/25">
+          <div className="min-w-0">
+            <div className="max-w-[260px] truncate font-semibold text-slate-800">
+              {title}
+            </div>
+            <div className="truncate text-[10px] text-slate-500">
+              Select transaction entries to post
+            </div>
+          </div>
+
+          <div className="ml-2 flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setIsMinimized(false)}
+              className="h-7 rounded-lg border border-slate-300 bg-white px-3 text-[11px] font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+            >
+              Restore
+            </button>
+
+            <button
+              type="button"
+              onClick={handleClose}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-500 shadow-sm hover:bg-rose-50 hover:text-rose-600"
+              title="Close"
+            >
+              <FontAwesomeIcon icon={faXmark} />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 lg:p-8">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[1150px] max-h-[80vh] flex flex-col relative overflow-hidden">
+    <div className={`fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 ${isMaximized ? "p-0" : "p-2 sm:p-4"}`}>
+      <div className={`bg-white shadow-2xl flex flex-col relative overflow-hidden border border-slate-200 ${
+        isMaximized
+          ? "h-screen w-screen rounded-none"
+          : "h-[88vh] w-[95vw] max-w-[1440px] rounded-xl"
+      }`}>
         
         {/* INLINE LOADING OVERLAY (PREVENTS BLACK BACKGROUND) */}
         {isLoading && (
@@ -263,20 +334,50 @@ useEffect(() => {
         )}
 
         <div className="sticky top-0 z-20">
-          <div className=" text-slate-800 px-3 sm:px-5 py-3 bg-slate-100 border-b border-slate-200 ">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-  
-                  <h2 className="global-lookup-headertext-ui text-[19px]">{title}</h2>
-                </div>
-                <p className="text-[9px] sm:text-xs text-slate-700 mt-0.5">Select transaction entries to post and review before proceeding.</p>
+          <div className="flex items-center justify-between bg-slate-100 border-b border-slate-200 px-3 sm:px-5 py-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h2 className="global-lookup-headertext-ui text-[19px] truncate">{title}</h2>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="inline-flex items-center gap-2 text-xs px-2.5 py-1 rounded-full bg-white/70 text-blue-700 border border-blue-300">
-                  <FontAwesomeIcon icon={faListCheck} /> {selected.length} selected
-                </span>
-                <button onClick={onClose} className="rounded-md p-1 hover:bg-white/40"><FontAwesomeIcon icon={faTimes} /></button>
+              <p className="text-[9px] sm:text-xs text-slate-700 mt-0.5 truncate">Select transaction entries to post and review before proceeding.</p>
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0">
+              <span className="inline-flex items-center gap-2 text-xs px-2.5 py-1 rounded-full bg-white/70 text-blue-700 border border-blue-300">
+                <FontAwesomeIcon icon={faListCheck} /> {selected.length} selected
+              </span>
+
+              <div className="flex items-center gap-1">
+                {!isMobile && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setIsMinimized(true)}
+                      className="p-2 text-slate-400 transition-colors hover:text-blue-600"
+                      title="Minimize"
+                    >
+                      <FontAwesomeIcon icon={faMinus} />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsMaximized((prev) => !prev)}
+                      className="p-2 text-slate-400 transition-colors hover:text-blue-600"
+                      title={isMaximized ? "Restore" : "Maximize"}
+                    >
+                      {isMaximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                    </button>
+                  </>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  className="p-2 text-slate-400 transition-colors hover:text-red-600"
+                  title="Close"
+                >
+                  <FontAwesomeIcon icon={faXmark} />
+                </button>
               </div>
             </div>
           </div>
@@ -301,7 +402,7 @@ useEffect(() => {
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-hidden bg-white">
           {isMobile && mobileViewMode === "card" ? (
             <div className="overflow-auto h-full px-3 py-3 space-y-3 custom-scrollbar">
               {displayData.length > 0 ? displayData.map((row, rIdx) => (
@@ -322,30 +423,35 @@ useEffect(() => {
               )) : <div className="py-10 text-center text-gray-500">No records found.</div>}
             </div>
           ) : (
-            <div className="w-full overflow-auto h-full custom-scrollbar">
-              <table className="min-w-full border-separate border-spacing-0">
-                <thead className="sticky top-0 z-[80]">
-                  <tr className="bg-gray-100 whitespace-nowrap text-[10px] sm:text-[11px]">
-                    <th ref={viewHeaderRef} className="sticky left-0 bg-slate-200 z-[70] px-3 py-2 font-bold global-lookup-th-ui border-b border-r" style={{ width: ACTION_COL_W }}>View</th>
-                    <th ref={selectHeaderRef} className="sticky bg-slate-200 z-[70] px-2 py-2 text-center font-bold global-lookup-th-ui border-b" style={{ left: stickyLefts[1], width: 50 }}>Select</th>
+            <div className="h-full w-full overflow-auto custom-scrollbar">
+              <table className="min-w-max border-separate border-spacing-0">
+                <thead className="sticky top-0 z-[80] bg-slate-200">
+                  <tr className="bg-slate-200 whitespace-nowrap text-[10px] sm:text-[11px]">
+                    <th ref={viewHeaderRef} className="sticky left-0 bg-slate-200 z-[70] px-3 py-2 font-bold global-lookup-th-ui border-b border-r" style={{ width: ACTION_COL_W, minWidth: ACTION_COL_W, maxWidth: ACTION_COL_W }}>View</th>
+                    <th ref={selectHeaderRef} className="sticky bg-slate-200 z-[70] px-2 py-2 text-center font-bold global-lookup-th-ui border-b" style={{ left: stickyLefts[1], width: SELECT_COL_W, minWidth: SELECT_COL_W, maxWidth: SELECT_COL_W }}>Select</th>
                     {visibleCols.map((col, vIdx) => {
                       const meta = stickyMeta(vIdx + 2);
+                      const width = columnWidths[col.key] ?? MIN_DATA_COL_W;
                       return (
-                        <th key={col.key} ref={(el) => { if (meta.sticky) columnHeaderRefs.current[col.key] = el; }} onClick={() => handleSort(col.key)} className={`px-3 py-2 font-bold text-black cursor-pointer border-b global-lookup-th-ui ${meta.sticky ? "sticky z-[60] bg-slate-200" : ""} ${col.renderType === "number" ? "text-right bg-slate-200" : "bg-slate-200"}`} style={{ left: meta.left, maxWidth: meta.maxWidth }}>
-                          <span className="inline-flex items-center">{col.label} {renderSortIcon(col.key)}</span>
+                        <th key={col.key} ref={(el) => { if (meta.sticky) columnHeaderRefs.current[col.key] = el; }} onClick={() => handleSort(col.key)} className={`px-3 py-2 font-bold text-black cursor-pointer border-b global-lookup-th-ui ${meta.sticky ? "sticky z-[60] bg-slate-200" : "bg-slate-200"} ${col.renderType === "number" ? "text-right" : ""}`} style={{ left: meta.left, width, minWidth: width, maxWidth: width }}>
+                          <span className="inline-flex items-center global-lookup-th-text-ui">{col.label} {renderSortIcon(col.key)}</span>
                         </th>
                       );
                     })}
                   </tr>
                   {!isMobile && showFilters && (
-                    <tr className="bg-white text-[10px]">
-                      <td className="sticky left-0 bg-white z-[70] border-b border-r"></td>
-                      <td className="sticky bg-white z-[70] border-b" style={{ left: stickyLefts[1] }}></td>
+                    <tr className="bg-slate-200 text-[10px]">
+                      <td className="sticky left-0 bg-slate-200 z-[70] border-b border-r"></td>
+                      <td className="sticky bg-slate-200 z-[70] border-b" style={{ left: stickyLefts[1], width: SELECT_COL_W, minWidth: SELECT_COL_W, maxWidth: SELECT_COL_W }}></td>
                       {visibleCols.map((col, vIdx) => {
                         const meta = stickyMeta(vIdx + 2);
+                        const width = columnWidths[col.key] ?? MIN_DATA_COL_W;
                         return (
-                          <td key={col.key} className={`px-2 py-1 border-b ${meta.sticky ? "sticky z-[60] bg-white" : ""}`} style={{ left: meta.left, maxWidth: meta.maxWidth }}>
-                            <input type="text" value={filters[col.key] || ""} onChange={(e) => handleFilterChange(e, col.key)} placeholder="Filter..." className="w-full border rounded px-2 py-1 text-[10px]" />
+                          <td key={col.key} className={`px-2 py-1 border-b ${meta.sticky ? "sticky z-[60] bg-slate-200" : "bg-slate-200"}`} style={{ left: meta.left, width, minWidth: width, maxWidth: width }}>
+                            <div className="relative">
+                              <input type="text" value={filters[col.key] || ""} onChange={(e) => handleFilterChange(e, col.key)} placeholder="Filter..." className="global-lookup-filter-text-ui" />
+                              <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
+                            </div>
                           </td>
                         );
                       })}
@@ -355,16 +461,17 @@ useEffect(() => {
                 <tbody className="bg-white">
                   {displayData.length > 0 ? displayData.map((row, rIdx) => (
                     <tr key={getRowId(row) ?? rIdx} onDoubleClick={() => handleViewRow(row)} className={`text-[10px] sm:text-[11px] hover:bg-blue-50 ${rIdx % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
-                      <td className="sticky left-0 z-[30] px-2 py-[6px] text-center border-r bg-inherit">
+                      <td className="sticky left-0 z-[30] px-2 py-[6px] text-center border-r bg-inherit" style={{ width: ACTION_COL_W, minWidth: ACTION_COL_W, maxWidth: ACTION_COL_W }}>
                         <button onClick={(e) => { e.stopPropagation(); handleViewRow(row); }} className="px-2 py-0.5 bg-blue-500 text-white rounded"><FontAwesomeIcon icon={faEye} /></button>
                       </td>
-                      <td className="sticky z-[30] text-center bg-inherit" style={{ left: stickyLefts[1] }}>
+                      <td className="sticky z-[30] text-center bg-inherit" style={{ left: stickyLefts[1], width: SELECT_COL_W, minWidth: SELECT_COL_W, maxWidth: SELECT_COL_W }}>
                         <input type="checkbox" checked={selectedIds.has(getRowId(row))} onChange={() => toggleSelect(row)} className="h-4 w-4 text-blue-600 rounded" />
                       </td>
                       {visibleCols.map((col, vIdx) => {
                         const meta = stickyMeta(vIdx + 2);
+                        const width = columnWidths[col.key] ?? MIN_DATA_COL_W;
                         return (
-                          <td key={col.key} className={`px-5 py-[5px] truncate ${meta.sticky ? "sticky z-[20] bg-inherit" : ""} ${col.renderType === "number" ? "text-right" : ""}`} style={{ left: meta.left, maxWidth: meta.maxWidth }}>
+                          <td key={col.key} className={`px-3 py-[5px] truncate ${meta.sticky ? "sticky z-[20] bg-inherit" : ""} ${col.renderType === "number" ? "text-right" : ""}`} style={{ left: meta.left, width, minWidth: width, maxWidth: width }}>
                             {renderValue(col, row[col.key], col.roundingOff)}
                           </td>
                         );
@@ -393,7 +500,7 @@ useEffect(() => {
                   <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-1.5 text-gray-400"><FontAwesomeIcon icon={showPassword ? faEyeSlash : faEye} /></button>
                 </div>
                 <button disabled={selected.length === 0} onClick={handleGetSelected} className="px-4 py-1.5 bg-blue-600 text-white rounded-md disabled:opacity-50 hover:bg-blue-700 transition">{btnCaption} {selected.length ? `(${selected.length})` : ""}</button>
-                <button onClick={onClose} className="px-4 py-1.5 bg-gray-100 text-gray-800 border rounded-md hover:bg-gray-200">Cancel</button>
+                <button onClick={handleClose} className="px-4 py-1.5 bg-gray-100 text-gray-800 border rounded-md hover:bg-gray-200">Cancel</button>
               </div>
             </div>
             <div className="flex items-start gap-2 max-w-[500px] bg-red-50 p-2 rounded-lg border border-red-100">
