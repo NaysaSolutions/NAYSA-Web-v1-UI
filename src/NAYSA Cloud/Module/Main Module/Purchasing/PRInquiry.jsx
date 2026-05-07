@@ -17,16 +17,12 @@ import {
 import { fetchData } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
-import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
-import { formatNumber } from "@/NAYSA Cloud/Global/behavior.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import SearchGlobalReportTable from "@/NAYSA Cloud/Lookup/SearchGlobalReportTable.jsx";
 import BranchLookupModal from "@/NAYSA Cloud/Lookup/SearchBranchRef";
-import PayeeMastLookupModal from "@/NAYSA Cloud/Lookup/SearchVendMast";
 import RCLookupModal from "@/NAYSA Cloud/Lookup/SearchRCMast.jsx";
 import MSLookupModal from "@/NAYSA Cloud/Lookup/SearchMSMast.jsx";
 
-// Import the Tracker component logic
 import PRInq from "./PRInq";
 
 const ENDPOINT = "getPRInquiry";
@@ -35,14 +31,6 @@ const TABS = [
   { key: "inquiry", label: "PR Inquiry", icon: faList },
   { key: "tracker", label: "PR Tracker", icon: faRoute },
 ];
-
-function getGlobalCache() {
-  if (typeof window !== "undefined") {
-    if (!window.__NAYSA_PRINQ_CACHE__) window.__NAYSA_PRINQ_CACHE__ = {};
-    return window.__NAYSA_PRINQ_CACHE__;
-  }
-  return {};
-}
 
 const safeArray = (value) => (Array.isArray(value) ? value : []);
 
@@ -55,7 +43,6 @@ const joinCodeName = (code, name) => {
 };
 
 const getToday = () => new Date().toISOString().split("T")[0];
-
 const getThreeMonthsAgo = () => {
   const date = new Date();
   date.setMonth(date.getMonth() - 3);
@@ -68,92 +55,83 @@ const dateToCutoff = (dateText) =>
 const formatDateDisplay = (value) => {
   if (!value) return "";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
 };
 
-const formatAmount = (value) =>
-  Number(value || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-const normalizeAmount = (value) => Number(String(value ?? 0).replace(/,/g, "")) || 0;
-
+// Column Configuration - Added Item Code
 const defaultPRColumns = [
   { key: "prNo", label: "PR Number", visible: true, type: "text" },
   { key: "prDate", label: "PR Date", visible: true, type: "date" },
   { key: "branch", label: "Branch", visible: true, type: "text" },
-  { key: "rcCode", label: "Department", visible: true, type: "text" },
+  { key: "itemCode", label: "Item Code", visible: true, type: "text" },
+  { key: "itemName", label: "Item Description", visible: true, type: "text" },
   { key: "status", label: "Status", visible: true, type: "text" },
-  { key: "totalAmount", label: "Amount", visible: true, type: "amount" },
-  { key: "preparedBy", label: "Prepared By", visible: true, type: "text" },
+  { key: "prQuantity", label: "PR Qty", visible: true, type: "number" },
+  { key: "poQty", label: "PO/JO Qty", visible: true, type: "number" },
+  { key: "rrQty", label: "RR Qty", visible: true, type: "number" },
 ];
 
-/**
- * Normalizes API rows for the Inquiry Table
- */
 const normalizePRDetailRows = (rows = []) => {
-  return safeArray(rows).map((item, index) => {
-    const prNo = item.prNo || item.pr_no || "";
-    const prDate = formatDateDisplay(item.prDate || item.pr_date || "");
-    const netAmount = item.netAmount ?? item.net_amt ?? item.gross_amount ?? 0;
-
-    return {
-      ...item,
-      id: `${item.branch_code}-${prNo}-${index}`,
-      prNo,
-      prDate,
-      branch: item.branchCode || item.branch_code || "",
-      rcCode: item.rcCode || item.rc_code || "",
-      status: item.prStatusDesc || item.pr_status || "Posted",
-      totalAmount: normalizeAmount(netAmount),
-      preparedBy: item.preparedBy || item.prepared_by || "—",
-    };
-  });
+  return safeArray(rows).map((item, index) => ({
+    ...item,
+    id: `${item.branchCode}-${item.prNo}-${index}`,
+    prDate: formatDateDisplay(item.prDate),
+    branch: item.branchCode || "",
+    status: item.prStatusDesc || "Open",
+    itemCode: item.itemCode || "", //
+    itemName: item.itemName || "", 
+    prQuantity: Number(item.prQuantity || 0),
+    poQty: Number(item.poQty || 0),
+    rrQty: Number(item.rrQty || 0),
+  }));
 };
 
 export default function PRInquiry() {
   const navigate = useNavigate();
   const { currentUserRow } = useAuth();
-  const baseKey = "PR_INQUIRY";
 
   const [activeTab, setActiveTab] = useState("inquiry");
-  const [selectedPR, setSelectedPR] = useState(null);
   const [showLookup, setShowLookup] = useState(null);
 
   const [state, setState] = useState(() => ({
     branchCode: currentUserRow?.branchCode || "",
     branchName: currentUserRow?.branchName || "Head Office",
-    supplierCode: "",
-    supplierName: "",
     statusFilter: "All",
     invType: "All",
-    itemCode: "",
-    itemName: "",
+    selectedItems: [], 
     rcCode: "",
     rcName: "",
     fromDate: getThreeMonthsAgo(),
     toDate: getToday(),
     prInquiryData: [],
-    columnConfig: [],
     isLoading: false,
   }));
 
   const updateState = (u) => setState((p) => ({ ...p, ...u }));
 
-  // Tab configurations
-  const activeTabLabel = TABS.find((t) => t.key === activeTab)?.label || "PR Inquiry";
+  const getItemsDisplayText = () => {
+    if (state.selectedItems.length === 0) return "";
+    if (state.selectedItems.length === 1) {
+      return joinCodeName(state.selectedItems[0].code, state.selectedItems[0].name);
+    }
+    return `${state.selectedItems.length} Items Selected`;
+  };
 
   const fetchRecord = useCallback(async () => {
     updateState({ isLoading: true });
     try {
+      // Maps to Sproc codes: O=Open, C=Closed, X=Cancelled
+      const statusMap = { "All": "", "Open": "O", "Closed": "C", "Cancelled": "X" };
+      const itemCodesStr = state.selectedItems.map(i => i.code).join(',');
+
       const response = await fetchData(ENDPOINT, {
         json_data: {
           branchCode: state.branchCode,
-          itemCode: state.itemCode,
-          prStatus: state.statusFilter === "All" ? "" : state.statusFilter,
+          itemCode: itemCodesStr, 
+          prStatus: statusMap[state.statusFilter] || "", 
           startingCutoff: dateToCutoff(state.fromDate),
           endingCutoff: dateToCutoff(state.toDate),
           rcCode: state.rcCode,
-          vendCode: state.supplierCode,
           invType: state.invType === "All" ? "" : state.invType,
         },
       });
@@ -171,34 +149,29 @@ export default function PRInquiry() {
 
   const handleReset = () => {
     updateState({
-      supplierCode: "", supplierName: "",
-      itemCode: "", itemName: "",
-      rcCode: "", rcName: "",
-      statusFilter: "All",
-      fromDate: getThreeMonthsAgo(),
-      toDate: getToday(),
+      selectedItems: [], rcCode: "", rcName: "",
+      statusFilter: "All", invType: "All",
+      fromDate: getThreeMonthsAgo(), toDate: getToday(),
       prInquiryData: []
     });
   };
 
   const handleViewDocument = (row) => {
-    const prNo = row?.prNo || row?.pr_no || "";
-    const branch = row?.branch || row?.branch_code || state.branchCode;
-    navigate(`/page/PR?prNo=${encodeURIComponent(prNo)}&branchCode=${encodeURIComponent(branch)}&viewOnly=Y`);
+   navigate(`/page/PR?prNo=${encodeURIComponent(row.prNo)}&branchCode=${encodeURIComponent(row.branchCode)}&viewOnly=Y`);
   };
 
   return (
     <div className="global-ref-main-div-ui">
       {state.isLoading && <LoadingSpinner />}
 
-      {/* HEADER SECTION */}
       <div className="global-ref-header-ui">
         <div className="w-full flex flex-col gap-3 md:grid md:grid-cols-3 md:items-center">
-          <h1 className="global-ref-headertext-ui truncate">{activeTabLabel}</h1>
+          <h1 className="global-ref-headertext-ui truncate">
+            {TABS.find(t => t.key === activeTab)?.label}
+          </h1>
 
-          {/* TAB NAVIGATION */}
           <div className="flex justify-center">
-            <div className="flex border-b border-gray-200 dark:border-gray-700">
+            <div className="flex border-b border-gray-200">
               {TABS.map((tab) => (
                 <button
                   key={tab.key}
@@ -214,7 +187,6 @@ export default function PRInquiry() {
             </div>
           </div>
 
-          {/* ACTIONS */}
           <div className="flex justify-end gap-2">
             {activeTab === "inquiry" && (
               <>
@@ -233,75 +205,86 @@ export default function PRInquiry() {
       <div className="mt-44 sm:mt-24 px-0">
         {activeTab === "inquiry" ? (
           <>
-            {/* FILTERS */}
             <div className="global-tran-tab-div-ui">
-              <div className="bg-white rounded-2xl shadow-sm border p-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                <FieldRenderer
-                  type="lookup" label="Branch" value={state.branchName}
-                  onLookup={() => setShowLookup("branch")}
-                />
-                <FieldRenderer
-                  type="lookup" label="Supplier" value={joinCodeName(state.supplierCode, state.supplierName)}
-                  onLookup={() => setShowLookup("supplier")}
-                />
-                <div className="relative">
-                  <select
-                    value={state.statusFilter}
-                    onChange={(e) => updateState({ statusFilter: e.target.value })}
-                    className="peer global-tran-textbox-ui"
-                  >
-                    <option value="All">All</option>
-                    <option value="Posted">Posted</option>
-                    <option value="Open">Open</option>
-                  </select>
-                  <label className="global-tran-floating-label">Status</label>
+              <div className="bg-white rounded-2xl shadow-sm border p-4 flex flex-col gap-4">
+                
+                {/* ROW 1: Branch, Department, Inventory Type, From Date */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                  <div className="md:col-span-3">
+                    <FieldRenderer type="lookup" label="Branch" value={state.branchName} onLookup={() => setShowLookup("branch")} />
+                  </div>
+                  <div className="md:col-span-4"> 
+                    <FieldRenderer type="lookup" label="Department" value={joinCodeName(state.rcCode, state.rcName)} onLookup={() => setShowLookup("rc")} />
+                  </div>
+                  <div className="md:col-span-2 relative">
+                    <select value={state.invType} onChange={(e) => updateState({ invType: e.target.value })} className="peer global-tran-textbox-ui">
+                      <option value="All">All Types</option>
+                      <option value="FG">FG</option>
+                      <option value="MS">MS</option>
+                      <option value="RM">RM</option>
+                    </select>
+                    <label className="global-tran-floating-label">Inv Type</label>
+                  </div>
+                  <div className="md:col-span-3">
+                    <FieldRenderer type="date" label="From" value={state.fromDate} onChange={(e) => updateState({ fromDate: e.target.value })} />
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <FieldRenderer
-                    type="date" label="From" value={state.fromDate}
-                    onChange={(e) => updateState({ fromDate: e.target.value })}
-                  />
-                  <FieldRenderer
-                    type="date" label="To" value={state.toDate}
-                    onChange={(e) => updateState({ toDate: e.target.value })}
-                  />
+
+                {/* ROW 2: Status, Item (Multiple Select), To Date */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                  <div className="md:col-span-2 relative">
+                    <select value={state.statusFilter} onChange={(e) => updateState({ statusFilter: e.target.value })} className="peer global-tran-textbox-ui">
+                      <option value="All">All Status</option>
+                      <option value="Open">Open</option>
+                      <option value="Closed">Closed</option>
+                      <option value="Cancelled">Cancelled</option>
+                    </select>
+                    <label className="global-tran-floating-label">Status</label>
+                  </div>
+
+                  <div className="md:col-span-7">
+                    <FieldRenderer type="lookup" label="Item" value={getItemsDisplayText()} onLookup={() => setShowLookup("item")} />
+                  </div>
+
+                  <div className="md:col-span-3">
+                    <FieldRenderer type="date" label="To" value={state.toDate} onChange={(e) => updateState({ toDate: e.target.value })} />
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* TABLE */}
             <div className="global-tran-tab-div-ui mt-4">
-              <div className="global-tran-table-main-div-ui">
-                <SearchGlobalReportTable
-                  columns={defaultPRColumns}
-                  data={state.prInquiryData}
-                  onRowAction={handleViewDocument}
-                  rightActionLabel="View"
+              <div className="global-tran-table-main-div-ui overflow-x-auto">
+                <SearchGlobalReportTable 
+                  columns={defaultPRColumns} 
+                  data={state.prInquiryData} 
+                  onRowAction={handleViewDocument} 
+                  rightActionLabel="View" 
                 />
               </div>
             </div>
           </>
         ) : (
-          /* TRACKER TAB */
           <PRInq />
         )}
       </div>
 
-      {/* LOOKUP MODALS */}
-      {showLookup === "branch" && (
-        <BranchLookupModal
-          isOpen onClose={(b) => {
-            if (b) updateState({ branchCode: b.branchCode, branchName: b.branchName });
-            setShowLookup(null);
-          }}
-        />
-      )}
-      {showLookup === "supplier" && (
-        <PayeeMastLookupModal
-          isOpen onClose={(s) => {
-            if (s) updateState({ supplierCode: s.vendCode, supplierName: s.vendName });
-            setShowLookup(null);
-          }}
+      {showLookup === "branch" && <BranchLookupModal isOpen onClose={(b) => { if (b) updateState({ branchCode: b.branchCode, branchName: b.branchName }); setShowLookup(null); }} />}
+      {showLookup === "rc" && <RCLookupModal isOpen onClose={(r) => { if (r) updateState({ rcCode: r.rcCode, rcName: r.rcName }); setShowLookup(null); }} />}
+      {showLookup === "item" && (
+        <MSLookupModal 
+          isOpen 
+          onClose={(selected) => { 
+            if (selected) {
+              const items = Array.isArray(selected) ? selected : [selected];
+              const normalizedItems = items.map(i => ({
+                code: i.itemCode || i.item_code || "",
+                name: i.itemDesc || i.item_name || i.itemName || ""
+              }));
+              updateState({ selectedItems: normalizedItems }); 
+            }
+            setShowLookup(null); 
+          }} 
         />
       )}
     </div>

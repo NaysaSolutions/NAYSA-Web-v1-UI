@@ -797,7 +797,7 @@ export default function PRInq() {
 
   const routeMap = {
     pr: { path: "/page/PR", param: "prNo", value: row.prNo },
-    po: { path: "/page/PO", param: "poNo", value: row.poNo },
+    po: { path: "/page/PO", param: "msajNo", value: row.poNo },
     rr: { path: "/page/RR", param: "rrNo", value: row.rrNo },
     apv: { path: "/page/APV", param: "apvNo", value: row.apvNo },
     cv: { path: "/page/CV", param: "cvNo", value: row.cvNo },
@@ -820,7 +820,8 @@ export default function PRInq() {
   }
 
   navigate(
-    `${config.path}?${config.param}=${encodeURIComponent(docNo)}&branchCode=${encodeURIComponent(branchCode)}&viewOnly=Y&source=flowProgress`,
+    `${config.path}?${config.param}=${encodeURIComponent(docNo)}&branchCode=${encodeURIComponent(branchCode)}&viewDocument=true&viewOnly=Y&source=flowProgress`
+  
   );
 };
 
