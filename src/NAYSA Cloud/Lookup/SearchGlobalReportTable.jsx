@@ -27,6 +27,8 @@ import {
   faPenToSquare,
   faTable,
   faIdCard,
+  faSearch,
+  faGripVertical,
 } from "@fortawesome/free-solid-svg-icons";
 
 import {
@@ -121,6 +123,9 @@ const SearchGlobalReportTable = forwardRef(
     const [columnOrder, setColumnOrder] = useState([]);
     const [groupBy, setGroupBy] = useState(() => initialState?.groupBy || []);
     const [expandedGroups, setExpandedGroups] = useState({});
+    const [autoExpandGroups, setAutoExpandGroups] = useState(
+      () => !!initialState?.autoExpandGroups,
+    );
     const [draggedCol, setDraggedCol] = useState(null);
 
     const [colWidths, setColWidths] = useState({});
@@ -128,6 +133,8 @@ const SearchGlobalReportTable = forwardRef(
       () => initialState?.userHiddenCols || [],
     );
     const [showColumnChooser, setShowColumnChooser] = useState(false);
+    const [columnChooserSearch, setColumnChooserSearch] = useState("");
+    const [columnChooserDraftHidden, setColumnChooserDraftHidden] = useState([]);
     const [showExportMenu, setShowExportMenu] = useState(false);
 
     const [exportModal, setExportModal] = useState({
@@ -180,6 +187,7 @@ const SearchGlobalReportTable = forwardRef(
         sortConfig,
         currentPage,
         groupBy,
+        autoExpandGroups,
         userHiddenCols,
         itemsPerPage: rowsPerPage,
         globalSearch,
@@ -190,6 +198,7 @@ const SearchGlobalReportTable = forwardRef(
       sortConfig,
       currentPage,
       groupBy,
+      autoExpandGroups,
       userHiddenCols,
       rowsPerPage,
       globalSearch,
@@ -256,6 +265,20 @@ const SearchGlobalReportTable = forwardRef(
       [orderedCols],
     );
 
+    const baseColumnKeys = useMemo(
+      () => new Set(baseVisibleColumns.map((col) => col.key)),
+      [baseVisibleColumns],
+    );
+
+    useEffect(() => {
+      setGroupBy((prev) => {
+        const next = prev.filter(
+          (key, index, arr) => baseColumnKeys.has(key) && arr.indexOf(key) === index,
+        );
+        return next.length === prev.length ? prev : next;
+      });
+    }, [baseColumnKeys]);
+
     const visibleCols = useMemo(
       () =>
         baseVisibleColumns.filter(
@@ -263,6 +286,37 @@ const SearchGlobalReportTable = forwardRef(
         ),
       [baseVisibleColumns, userHiddenCols, groupBy],
     );
+
+    const chooserColumns = useMemo(
+      () => baseVisibleColumns.filter((col) => !groupBy.includes(col.key)),
+      [baseVisibleColumns, groupBy],
+    );
+
+    const protectedColumnKeys = useMemo(
+      () => chooserColumns.slice(0, 2).map((col) => col.key),
+      [chooserColumns],
+    );
+
+    const draftVisibleChooserColumnCount = useMemo(
+      () => chooserColumns.filter((col) => !columnChooserDraftHidden.includes(col.key)).length,
+      [chooserColumns, columnChooserDraftHidden],
+    );
+
+    const filteredChooserColumns = useMemo(() => {
+      const q = String(columnChooserSearch || "").trim().toLowerCase();
+      if (!q) return chooserColumns;
+      return chooserColumns.filter((col) =>
+        String(col.label || col.key || "").toLowerCase().includes(q),
+      );
+    }, [chooserColumns, columnChooserSearch]);
+
+    const allColumnsChecked = chooserColumns.every(
+      (col) => !columnChooserDraftHidden.includes(col.key),
+    );
+
+    const columnChooserTitle = String(docType || "Report")
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
 
     const hasActionCol = Boolean(onRowAction || rightActionLabel);
 
@@ -387,7 +441,7 @@ const SearchGlobalReportTable = forwardRef(
           list.push(node);
           const uniqueId = `${node.key}:${node.value}:${node.level}`;
 
-          if (expandedGroups[uniqueId]) {
+          if (autoExpandGroups || expandedGroups[uniqueId]) {
             list = list.concat(
               node.level === groupBy.length - 1
                 ? node.children
@@ -463,6 +517,7 @@ const SearchGlobalReportTable = forwardRef(
       rowsPerPage,
       filteredData,
       groupedStructure,
+      autoExpandGroups,
       expandedGroups,
       groupBy,
       pagination,
@@ -471,6 +526,11 @@ const SearchGlobalReportTable = forwardRef(
     const grandTotals = useMemo(
       () => calculateAggregates(filteredData),
       [filteredData, visibleCols],
+    );
+
+    const hasGrandTotalColumns = useMemo(
+      () => visibleCols.some((col) => grandTotals[col.key] !== undefined),
+      [visibleCols, grandTotals],
     );
 
     const allGroupKeys = useMemo(() => {
@@ -489,7 +549,10 @@ const SearchGlobalReportTable = forwardRef(
     }, [groupedStructure, groupBy]);
 
     const allExpanded =
-      allGroupKeys.length > 0 && allGroupKeys.every((k) => expandedGroups[k]);
+      groupBy.length > 0 &&
+      (autoExpandGroups ||
+        (allGroupKeys.length > 0 && allGroupKeys.every((k) => expandedGroups[k])));
+    const groupingRenderKey = `${groupBy.join("|") || "ungrouped"}:${autoExpandGroups ? "expanded" : "manual"}`;
 
     const getColumnMinWidth = (col) =>
       Number(col?.minWidth) || DEFAULT_MIN_COL_WIDTH;
@@ -854,12 +917,64 @@ const SearchGlobalReportTable = forwardRef(
       return row?.id ?? row?.tranID ?? row?.documentNo ?? row?.code ?? idx;
     };
 
+    const openColumnChooser = () => {
+      setColumnChooserSearch("");
+      setColumnChooserDraftHidden(userHiddenCols);
+      setShowColumnChooser(true);
+    };
+
+    const closeColumnChooser = () => {
+      setShowColumnChooser(false);
+      setColumnChooserSearch("");
+      setColumnChooserDraftHidden([]);
+    };
+
+    const toggleAllColumns = (checked) => {
+      if (checked) {
+        setColumnChooserDraftHidden([]);
+        return;
+      }
+
+      const protectedKeys = new Set(protectedColumnKeys);
+      setColumnChooserDraftHidden(
+        chooserColumns
+          .filter((col) => !protectedKeys.has(col.key))
+          .map((col) => col.key),
+      );
+    };
+
+    const toggleColumnVisibility = (colKey, checked) => {
+      if (!checked && (protectedColumnKeys.includes(colKey) || draftVisibleChooserColumnCount <= 2)) {
+        useSwalErrorAlert(
+          "Minimum columns required",
+          "Please retain at least 2 columns.",
+        );
+        return;
+      }
+
+      setColumnChooserDraftHidden((current) => {
+        if (checked) return current.filter((key) => key !== colKey);
+        return current.includes(colKey) ? current : [...current, colKey];
+      });
+    };
+
+    const applyColumnChooser = () => {
+      setUserHiddenCols(columnChooserDraftHidden);
+      closeColumnChooser();
+    };
+
+    const resetColumnChooser = () => {
+      setColumnChooserDraftHidden(userHiddenCols);
+      setColumnChooserSearch("");
+    };
+
     useImperativeHandle(ref, () => ({
       getState: () => ({
         filters,
         sortConfig,
         currentPage: safePage,
         groupBy,
+        autoExpandGroups,
         userHiddenCols,
         globalSearch,
         mobileViewMode,
@@ -868,6 +983,7 @@ const SearchGlobalReportTable = forwardRef(
         setFilters({});
         setGroupBy([]);
         setExpandedGroups({});
+        setAutoExpandGroups(false);
         setGlobalSearch("");
         setCurrentPage(1);
         setUserHiddenCols([]);
@@ -891,7 +1007,13 @@ const SearchGlobalReportTable = forwardRef(
           onDragOver={(e) => e.preventDefault()}
           onDrop={() => {
             if (!draggedCol) return;
-            setGroupBy((p) => (p.includes(draggedCol) ? p : [...p, draggedCol]));
+            setGroupBy((p) => {
+              const current = p.filter(
+                (key, index, arr) => baseColumnKeys.has(key) && arr.indexOf(key) === index,
+              );
+              return current.includes(draggedCol) ? current : [...current, draggedCol];
+            });
+            if (!autoExpandGroups) setExpandedGroups({});
             setDraggedCol(null);
           }}
         >
@@ -920,7 +1042,11 @@ const SearchGlobalReportTable = forwardRef(
               >
                 {columns.find((c) => c.key === gKey)?.label}
                 <button
-                  onClick={() => setGroupBy((p) => p.filter((k) => k !== gKey))}
+                  onClick={() => {
+                    setGroupBy((p) => p.filter((k) => k !== gKey));
+                    if (!autoExpandGroups) setExpandedGroups({});
+                    setDraggedCol(null);
+                  }}
                   className="ml-2 text-blue-600 hover:text-red-600"
                 >
                   <FontAwesomeIcon icon={faTimes} />
@@ -946,13 +1072,15 @@ const SearchGlobalReportTable = forwardRef(
                   <input
                     type="checkbox"
                     checked={allExpanded}
-                    onChange={() =>
+                    onChange={() => {
+                      const expand = !allExpanded;
+                      setAutoExpandGroups(expand);
                       setExpandedGroups(
-                        allExpanded
-                          ? {}
-                          : Object.fromEntries(allGroupKeys.map((k) => [k, true])),
-                      )
-                    }
+                        expand
+                          ? Object.fromEntries(allGroupKeys.map((k) => [k, true]))
+                          : {},
+                      );
+                    }}
                     className="sr-only"
                   />
                   <div
@@ -986,7 +1114,11 @@ const SearchGlobalReportTable = forwardRef(
                 </label>
 
                 <button
-                  onClick={() => setGroupBy([])}
+                  onClick={() => {
+                    setGroupBy([]);
+                    if (!autoExpandGroups) setExpandedGroups({});
+                    setDraggedCol(null);
+                  }}
                   className={`font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition ${
                     tableSize === "Half"
                       ? "h-7 text-[10px] px-2"
@@ -1089,58 +1221,12 @@ const SearchGlobalReportTable = forwardRef(
                 <div className="relative" data-sgrt-cols>
                   <button
                     disabled={filteredData.length === 0}
-                    onClick={() => setShowColumnChooser(!showColumnChooser)}
+                    onClick={openColumnChooser}
                     className="w-full h-9 px-2 text-[11px] font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition flex items-center justify-center"
                   >
                     <FontAwesomeIcon icon={faColumns} className="mr-1" />
                     Columns
                   </button>
-
-                  {showColumnChooser && (
-                    <div className="absolute right-0 mt-1 bg-white border rounded shadow-lg p-2 max-h-64 overflow-auto z-[70] min-w-[200px]">
-                      <div className="flex items-center justify-between text-[11px] font-semibold mb-1 border-b pb-1">
-                        <span>Show / Hide Columns</span>
-                        <label className="flex items-center gap-1 text-[11px] cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={userHiddenCols.length === 0}
-                            onChange={(e) => {
-                              if (!e.target.checked) {
-                                useSwalErrorAlert(
-                                  "Not allowed",
-                                  "At least 1 column must remain visible.",
-                                );
-                                return;
-                              }
-
-                              setUserHiddenCols([]);
-                            }}
-                          />
-                          Select All
-                        </label>
-                      </div>
-
-                      {baseVisibleColumns.map((col) => (
-                        <label
-                          key={col.key}
-                          className="flex items-center text-[11px] gap-2 mb-1 cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={!userHiddenCols.includes(col.key)}
-                            onChange={(e) =>
-                              setUserHiddenCols((p) =>
-                                e.target.checked
-                                  ? p.filter((k) => k !== col.key)
-                                  : [...p, col.key],
-                              )
-                            }
-                          />
-                          <span className="truncate">{col.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
                 </div>
 
                 <div className="flex rounded-md overflow-hidden border border-gray-300 bg-white min-w-0">
@@ -1293,7 +1379,7 @@ const SearchGlobalReportTable = forwardRef(
                 <div className="relative" data-sgrt-cols>
                   <button
                     disabled={filteredData.length === 0}
-                    onClick={() => setShowColumnChooser(!showColumnChooser)}
+                    onClick={openColumnChooser}
                     className={`text-xs font-medium text-white bg-blue-600 rounded-md transition flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed ${
                       tableSize === "Half" ? "h-7 px-2" : "h-8 px-3"
                     }`}
@@ -1301,57 +1387,136 @@ const SearchGlobalReportTable = forwardRef(
                     <FontAwesomeIcon icon={faColumns} className="mr-1" />
                     Columns
                   </button>
-
-                  {showColumnChooser && (
-                    <div className="absolute right-0 mt-1 bg-white border rounded shadow-lg p-2 max-h-64 overflow-auto z-50 min-w-[200px]">
-                      <div className="flex items-center justify-between text-[11px] font-semibold mb-1 border-b pb-1">
-                        <span>Show / Hide Columns</span>
-                        <label className="flex items-center gap-1 text-[11px] cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={userHiddenCols.length === 0}
-                            onChange={(e) => {
-                              if (!e.target.checked) {
-                                useSwalErrorAlert(
-                                  "Not allowed",
-                                  "At least 1 column must remain visible.",
-                                );
-                                return;
-                              }
-
-                              setUserHiddenCols([]);
-                            }}
-                          />
-                          Select All
-                        </label>
-                      </div>
-
-                      {baseVisibleColumns.map((col) => (
-                        <label
-                          key={col.key}
-                          className="flex items-center text-[11px] gap-2 mb-1 cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={!userHiddenCols.includes(col.key)}
-                            onChange={(e) =>
-                              setUserHiddenCols((p) =>
-                                e.target.checked
-                                  ? p.filter((k) => k !== col.key)
-                                  : [...p, col.key],
-                              )
-                            }
-                          />
-                          <span className="truncate">{col.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </>
             )}
           </div>
         </div>
+
+        {showColumnChooser && (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/45 px-3 py-3">
+            <div
+              data-sgrt-cols
+              className="flex max-h-[60vh] w-full max-w-[480px] flex-col overflow-hidden rounded-md bg-white shadow-2xl ring-1 ring-black/10"
+            >
+              <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-3 py-2">
+                <div className="min-w-0">
+                  <h2 className="text-sm font-bold text-slate-900">
+                    Manage Columns - {columnChooserTitle}
+                  </h2>
+                  <p className="mt-0.5 text-[11px] text-slate-500">
+                    Choose the columns to display in the table.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="h-6 w-6 shrink-0 text-slate-500 hover:text-red-600"
+                  onClick={closeColumnChooser}
+                  title="Close"
+                >
+                  <FontAwesomeIcon icon={faTimes} className="text-sm" />
+                </button>
+              </div>
+
+              <div className="border-b border-gray-200 px-3 py-2">
+                <div className="flex flex-col gap-2">
+                  <div className="relative min-w-0 flex-1">
+                    <FontAwesomeIcon
+                      icon={faSearch}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400"
+                    />
+                    <input
+                      type="text"
+                      value={columnChooserSearch}
+                      onChange={(e) => setColumnChooserSearch(e.target.value)}
+                      placeholder="Search columns..."
+                      className="h-7 w-full rounded-md border border-gray-300 pl-9 pr-2 text-[11px] outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 overflow-x-auto">
+                    <label className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-1 text-[11px] text-slate-800 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        className="h-3 w-3 accent-blue-600"
+                        checked={allColumnsChecked}
+                        onChange={(e) => toggleAllColumns(e.target.checked)}
+                      />
+                      {allColumnsChecked
+                        ? `UnSelect All (${chooserColumns.length})`
+                        : `Select All (${chooserColumns.length})`}
+                    </label>
+                    <div className="h-5 shrink-0 border-l border-gray-300" />
+                    <button
+                      type="button"
+                      className="h-7 shrink-0 px-1.5 text-[11px] font-medium text-blue-600 hover:text-blue-700"
+                      onClick={resetColumnChooser}
+                    >
+                      Reset
+                    </button>
+                    <button
+                      type="button"
+                      className="h-7 shrink-0 rounded-md border border-gray-300 px-2 text-[11px] font-medium text-slate-600 hover:bg-gray-50"
+                      onClick={() => {
+                        setColumnChooserDraftHidden([]);
+                        setColumnChooserSearch("");
+                      }}
+                    >
+                      Restore Default
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-auto px-3 py-2 custom-scrollbar">
+                <div className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
+                  {filteredChooserColumns.map((col) => (
+                    <label
+                      key={col.key}
+                      className="flex h-7 items-center gap-1.5 rounded border border-gray-200 bg-white px-2 text-[11px] text-slate-800 shadow-sm cursor-pointer select-none hover:bg-blue-50"
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-3 w-3 shrink-0 accent-blue-600"
+                        checked={!columnChooserDraftHidden.includes(col.key)}
+                        onChange={(e) =>
+                          toggleColumnVisibility(col.key, e.target.checked)
+                        }
+                      />
+                      <span className="min-w-0 flex-1 truncate">{col.label}</span>
+                      <FontAwesomeIcon
+                        icon={faGripVertical}
+                        className="text-[11px] text-slate-300"
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 border-t border-gray-200 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-[11px] text-slate-500">
+                  Showing {filteredChooserColumns.length === 0 ? 0 : 1}-
+                  {filteredChooserColumns.length} of {chooserColumns.length} columns
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    className="h-7 min-w-[72px] rounded-md border border-gray-300 px-3 text-[11px] font-medium text-slate-600 hover:bg-gray-50"
+                    onClick={closeColumnChooser}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="h-7 min-w-[72px] rounded-md bg-blue-600 px-3 text-[11px] font-medium text-white hover:bg-blue-700"
+                    onClick={applyColumnChooser}
+                  >
+                    Apply
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="global-tran-table-main-sub-div-ui flex flex-col flex-1 relative bg-gray-50 border border-gray-200 rounded-sm h-50 max-h-[600px]">
           {!areColumnsReady ? (
@@ -1367,16 +1532,17 @@ const SearchGlobalReportTable = forwardRef(
                     <div
                       key={uid}
                       className="rounded-lg border bg-gray-100 p-3 cursor-pointer"
-                      onClick={() =>
+                      onClick={() => {
+                        setAutoExpandGroups(false);
                         setExpandedGroups((p) => ({
                           ...p,
                           [uid]: !p[uid],
-                        }))
-                      }
+                        }));
+                      }}
                     >
                       <div className="flex items-center text-xs font-bold text-blue-900">
                         <FontAwesomeIcon
-                          icon={expandedGroups[uid] ? faChevronDown : faChevronRight}
+                          icon={autoExpandGroups || expandedGroups[uid] ? faChevronDown : faChevronRight}
                           className="mr-2"
                         />
                         {columns.find((c) => c.key === row.key)?.label}: {row.value} (
@@ -1551,6 +1717,7 @@ const SearchGlobalReportTable = forwardRef(
               }`}
             >
               <table
+                key={groupingRenderKey}
                 className={`global-tran-table-div-ui border-collapse ${
                   autoFillGridState ? "w-full table-fixed" : "min-w-max table-auto"
                 }`}
@@ -1681,12 +1848,13 @@ const SearchGlobalReportTable = forwardRef(
                         <tr
                           key={uid}
                           className="bg-gray-100 border-b cursor-pointer hover:bg-gray-200 transition-colors"
-                          onClick={() =>
+                          onClick={() => {
+                            setAutoExpandGroups(false);
                             setExpandedGroups((p) => ({
                               ...p,
                               [uid]: !p[uid],
-                            }))
-                          }
+                            }));
+                          }}
                         >
                           <td
                             colSpan={visibleCols.length + (hasActionCol ? 1 : 0)}
@@ -1697,7 +1865,7 @@ const SearchGlobalReportTable = forwardRef(
                               style={{ paddingLeft: row.level * 20 }}
                             >
                               <FontAwesomeIcon
-                                icon={expandedGroups[uid] ? faChevronDown : faChevronRight}
+                                icon={autoExpandGroups || expandedGroups[uid] ? faChevronDown : faChevronRight}
                                 className="mr-2 text-gray-500"
                               />
                               <span className="text-gray-600 font-normal">
@@ -1827,7 +1995,7 @@ const SearchGlobalReportTable = forwardRef(
                   })}
                 </tbody>
 
-                {filteredData.length > 0 && (
+                {filteredData.length > 0 && hasGrandTotalColumns && (
                   <tfoot className="sticky bottom-0 z-10 shadow-[0_-4px_6px_rgba(0,0,0,0.05)] bg-blue-100 font-bold border-t border-blue-400">
                     <tr>
                       {hasActionCol && (
@@ -1960,17 +2128,19 @@ const SearchGlobalReportTable = forwardRef(
                 </tr>
               ))}
 
-              <tr className="bg-gray-50 font-bold">
-                {visibleCols.map((col, i) => (
-                  <td key={col.key} className="border p-1 text-[10px]">
-                    {i === 0
-                      ? "Grand Total"
-                      : grandTotals[col.key] !== undefined
-                        ? formatValue(grandTotals[col.key], col)
-                        : ""}
-                  </td>
-                ))}
-              </tr>
+              {hasGrandTotalColumns && (
+                <tr className="bg-gray-50 font-bold">
+                  {visibleCols.map((col, i) => (
+                    <td key={col.key} className="border p-1 text-[10px]">
+                      {i === 0
+                        ? "Grand Total"
+                        : grandTotals[col.key] !== undefined
+                          ? formatValue(grandTotals[col.key], col)
+                          : ""}
+                    </td>
+                  ))}
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

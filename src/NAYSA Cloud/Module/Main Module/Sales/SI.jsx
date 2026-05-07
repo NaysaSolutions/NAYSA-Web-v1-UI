@@ -1,0 +1,3431 @@
+import { useState, useEffect,useRef,useCallback } from "react";
+import Swal from 'sweetalert2';
+import { useNavigate,useLocation  } from "react-router-dom";
+
+// UI
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faFolderOpen, faSpinner,faSearch } from "@fortawesome/free-solid-svg-icons";
+
+// Lookup/Modal
+import BranchLookupModal from "../../../Lookup/SearchBranchRef";
+import CurrLookupModal from "../../../Lookup/SearchCurrRef.jsx";
+import CustomerMastLookupModal from "../../../Lookup/SearchCustMast";
+import COAMastLookupModal from "../../../Lookup/SearchCOAMast.jsx";
+import RCLookupModal from "../../../Lookup/SearchRCMast.jsx";
+import ItemMastLookupModal from "../../../Lookup/SearchItemMast.jsx";
+import ATCLookupModal from "../../../Lookup/SearchATCRef.jsx";
+import VATLookupModal from "../../../Lookup/SearchVATRef.jsx";
+import SLMastLookupModal from "../../../Lookup/SearchSLMast.jsx";
+import BillTermLookupModal from "../../../Lookup/SearchBillTermRef.jsx";
+import SearchSalesRepRef from "../../../Lookup/SearchSalesRepRef.jsx";
+import CancelTranModal from "../../../Lookup/SearchCancelRef.jsx";
+import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
+import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
+import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
+import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
+import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
+
+// Configuration
+import { apiClient, postRequest} from '../../../Configuration/BaseURL.jsx'
+import { useReset } from "../../../Components/ResetContext";
+import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
+import {
+  glAccountFilter,
+  docTypes,
+  docTypeVideoGuide,
+  docTypePDFGuide,
+} from '@/NAYSA Cloud/Global/doctype';
+
+import {
+  useTopRCRow,
+  useTopBillTermRow,
+  useTopForexRate,
+  useTopCurrencyRow,
+  useTopSalesRepRow,
+} from '@/NAYSA Cloud/Global/top1RefTable';
+
+import {
+  useUpdateRowGLEntries,
+  useTransactionUpsert,
+  useGenerateGLEntries,
+  useUpdateRowEditEntries,
+  useFetchTranData,
+  useHandleCancel,
+  useFieldLenghtCheck,
+  useGetFieldLength,
+} from '@/NAYSA Cloud/Global/procedure';
+
+import {
+  useGetCurrentDayV2,
+  useformatToDatev2
+} from '@/NAYSA Cloud/Global/dates';
+
+import DateFormatInput from '@/NAYSA Cloud/Global/DateFormatInput.jsx';
+import {
+  transactionActionsCellStyle,
+  transactionActionsHeaderStyle,
+  useResizableTableColumns,
+} from '@/NAYSA Cloud/Global/datatable.jsx';
+
+import {
+  useHandlePrint,
+} from '@/NAYSA Cloud/Global/report';
+
+import {
+  formatNumber,
+  parseFormattedNumber,
+  useSwalConfirmAlert,
+  useSwalvalidateRequiredFields,
+  useSwalshowSaveSuccessDialog,
+  useSwalSuccessAlert,
+  useSwalErrorAlert
+} from '@/NAYSA Cloud/Global/behavior.jsx';
+
+import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
+
+// Header
+import Header from '@/NAYSA Cloud/Components/Header';
+const SI = () => {
+
+  // View Document Const
+  const loadedFromUrlRef = useRef(false);
+  const originalSOQuantityRef = useRef({});
+  const detailRowsRef = useRef([]);
+  const detailRowsGLRef = useRef([]);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { companyInfo, currentUserRow,getAllDropDown,refsLoaded,getAllTopATCRow,getAllTopVatRow,getAllTopHSDocRow } = useAuth();
+  const [isViewDocument, setIsViewDocument] = useState(false);
+  useEffect(() => {
+    const p = new URLSearchParams(location.search);
+    if (p.get("viewDocument") === "true") {
+      setIsViewDocument(true);
+    }
+    }, []);
+
+  const isViewDocumentUrl = isViewDocument;
+
+  const [topTab, setTopTab] = useState("details"); // "details" | "history"
+  const { resetFlag } = useReset();
+  const [focusedCell, setFocusedCell] = useState(null); // { index: number, field: string }
+  const docType = docTypes.SI;
+  const hsDoc = getAllTopHSDocRow(docType) || {};
+  const pdfLink = docTypePDFGuide[docType];
+  const videoLink = docTypeVideoGuide[docType];
+  const documentTitle = hsDoc.docName + ' Transaction';
+
+  const [state, setState] = useState({
+    // Document information
+    documentName: hsDoc?.docName||"",
+    documentSeries: hsDoc?.docSeries||"Auto",
+    documentDocLen: hsDoc?.docLength||8,
+    documentID: null,
+    documentDate:useGetCurrentDayV2(),
+    documentNo: "",
+    documentStatus:"O",
+    status: "OPEN",
+    noReprints:"0",
+
+    // UI state
+    activeTab: "basic",
+    GLactiveTab: "invoice",
+    isLoading: false,
+    showSpinner: false,
+    triggerGLEntries:false,
+    isDocNoDisabled: false,
+    isSaveDisabled: false,
+    isResetDisabled: false,
+    isFetchDisabled: false,
+
+    branchCode: currentUserRow?.branchCode||"",
+    branchName: currentUserRow?.branchName||"",
+
+    // Customer information
+    // Customer information
+    billToCustCode: "",
+    billToCustName: "",
+    contactPerson: "",
+    customerPoNo: "",
+    atcCode: "",
+    atcName: "",
+    vatCode: "",
+    vatName: "",
+
+    // Currency information
+    currCode: companyInfo?.currCode||"",
+    currName: companyInfo?.currName||"",
+    currRate: formatNumber(companyInfo?.currRate||1,6),
+    defaultCurrRate:formatNumber(companyInfo?.currRate||1,6),
+
+    //Other Header Info
+    tblFieldArray :[],
+    siStatus: "O",
+    siTranType: "",
+    siTranTypeOptions: [],
+    siStatusOptions: [],
+    refSiNo1: "",
+    refSiNo2: "",
+    remarks: "",
+    billtermCode: "",
+    billtermName: "",
+    dueDate: "",
+    daysDue: "",
+    userCode: currentUserRow?.userCode||"",
+
+    //Detail 1-2
+    detailRows  :[],
+    detailRowsGL :[],
+
+    totalDebit:"0.00",
+    totalCredit:"0.00",
+    totalDebitFx1:"0.00",
+    totalCreditFx1:"0.00",
+    totalDebitFx2:"0.00",
+    totalCreditFx2:"0.00",
+
+    // Modal states
+    modalContext: '',
+    selectionContext: '',
+    selectedRowIndex: null,
+    accountModalSource: null,
+    showAccountModal:false,
+    insertAfterIndex: null,    
+    showRcModal:false,
+    showSlModal:false,
+    showBilltermModal:false,
+    showItemModal:false,    
+    showATCModal:false,
+    showVatModal:false,
+
+    currencyModalOpen:false,
+    branchModalOpen:false,
+    custModalOpen:false,
+    billtermModalOpen:false,
+    showCancelModal:false,
+    showAttachModal:false,
+    showSignatoryModal:false,
+    showAllTranDocNo:false
+   });
+
+  const updateState = (updates) => {
+      setState(prev => ({ ...prev, ...updates }));
+    };
+
+  const {
+  // Document info
+  documentName,
+  documentSeries,
+  documentDocLen,
+  documentID,
+  documentStatus,
+  documentNo,
+  documentDate,
+  status,
+  userCode,
+  noReprints,
+
+  // Tabs & loading
+  activeTab,
+  GLactiveTab,
+  isLoading,
+  showSpinner,
+  triggerGLEntries,
+
+  // UI states / disable flags
+  isDocNoDisabled,
+  isSaveDisabled,
+  isResetDisabled,
+  isFetchDisabled,
+  defaultCurrRate,
+
+  // Transaction Header
+  branchCode,
+  branchName,
+  billToCustCode,
+  billToCustName,
+  customerPoNo,
+  atcCode,
+  atcName,
+  vatCode,
+  vatName,
+  currCode,
+  currName,
+  currRate,
+  siTranType,
+  siTranTypeOptions = [],
+  siStatus,
+  siStatusOptions = [],
+  refSiNo1,
+  refSiNo2,
+  remarks,
+  billtermCode,
+  billtermName,
+  dueDate,
+  daysDue,
+
+  // Transaction details
+  tblFieldArray,
+  detailRows,
+  detailRowsGL,
+  totalDebit,
+  totalCredit,
+  totalDebitFx1,
+  totalCreditFx1,
+  totalDebitFx2,
+  totalCreditFx2,
+
+  // Contexts
+  modalContext,
+  selectionContext,
+  selectedRowIndex,
+  accountModalSource,
+  insertAfterIndex,
+
+  // Modals
+  showAccountModal,
+  showRcModal,
+  showSlModal,
+  showItemModal,
+  currencyModalOpen,
+  branchModalOpen,
+  custModalOpen,
+  billtermModalOpen,
+  showCancelModal,
+  showAttachModal,
+  showSignatoryModal,
+  showAllTranDocNo,
+  showATCModal,
+  showVatModal
+
+  } = state;
+
+  useEffect(() => {
+    detailRowsRef.current = detailRows || [];
+    detailRowsGLRef.current = detailRowsGL || [];
+  }, [detailRows, detailRowsGL]);
+
+  //Status Global Setup
+  const displayStatus = status || 'OPEN';
+  const statusMap = {
+    FINALIZED: "global-tran-stat-text-finalized-ui",
+    CANCELLED: "global-tran-stat-text-closed-ui",
+    CLOSED: "global-tran-stat-text-closed-ui",
+  };
+
+  const statusColor = statusMap[displayStatus] || "";
+  const isFormDisabled = isViewDocumentUrl || ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);  
+  const isHeaderSiStatusEditable = !!String(documentID || "").trim() && !isFormDisabled;
+  const isPosted = displayStatus === "FINALIZED";
+  const totalSiQuantity = detailRows.reduce((total, row) => total + (parseFormattedNumber(row.siQuantity || 0) || 0),0);
+
+  const filteredHeaderSiStatusOptions =
+    !isPosted && totalSiQuantity > 0
+      ? (siStatusOptions || []).filter(
+          (option) =>
+            ["O", "C"].includes(option.DROPDOWN_CODE) ||            
+            option.DROPDOWN_CODE === siStatus
+        )
+      : siStatusOptions;
+
+  //Variables
+  const [totals, setTotals] = useState({
+  totalGrossAmount: '0.00',
+  totalDiscountAmount: '0.00',
+  totalVatAmount: '0.00',
+  totalAtcAmount: '0.00',
+  totalSalesAmount: '0.00',
+  totalNetAmount: '0.00',
+  totalAmountDue: '0.00',
+  });
+
+  const customParamMap = {
+    acctCode: glAccountFilter.ActiveAll,
+  };
+  const customParam = customParamMap[accountModalSource] || null;
+
+  const getGLTotalsState = (rows) => {
+    const sourceRows = Array.isArray(rows) ? rows : [];
+    const debitSum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.debit) || 0), 0);
+    const creditSum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.credit) || 0), 0);
+    const debitFx1Sum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.debitFx1) || 0), 0);
+    const creditFx1Sum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.creditFx1) || 0), 0);
+    const debitFx2Sum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.debitFx2) || 0), 0);
+    const creditFx2Sum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.creditFx2) || 0), 0);
+
+    return {
+      totalDebit: formatNumber(debitSum),
+      totalCredit: formatNumber(creditSum),
+      totalDebitFx1: formatNumber(debitFx1Sum),
+      totalCreditFx1: formatNumber(creditFx1Sum),
+      totalDebitFx2: formatNumber(debitFx2Sum),
+      totalCreditFx2: formatNumber(creditFx2Sum),
+    };
+  };
+
+  useEffect(() => {
+    updateState(getGLTotalsState(detailRowsGL));
+  }, [detailRowsGL]);
+
+  
+  // Company defaults
+  const glCurrDefault = companyInfo?.currCode || "";
+  const sellingPriceDecimals = Number(companyInfo?.item_decsellprice ?? 2);
+  const quantityDecimals = Number(companyInfo?.itemDescQtyFG ?? 2);
+
+  // Company sales settings
+  const siDiscountMode = String(companyInfo?.siDiscountMode || "").toUpperCase();
+  const siAllowDuplicateItem = String(
+    companyInfo?.salesAllowDuplicateItem || ""
+  ).toUpperCase();
+
+  // Derived UI flags
+  const isUnitPriceAndDiscountEditable = siDiscountMode === "MANUAL";
+  const SO_ALLOW_DUPLICATE_ITEMS = siAllowDuplicateItem === "E";
+
+  // Discount configuration
+  const discountLevel = Math.min(
+    Math.max(Number(companyInfo?.salesDiscLevel ?? 8), 1),
+    8
+  );
+  const showTotalDiscountColumn = discountLevel > 1;
+  const visibleDiscountRateFields = Array.from(
+    { length: discountLevel },
+    (_, index) => `discRate${index + 1}`
+  );
+  const visibleDiscountAmountFields = Array.from(
+    { length: discountLevel },
+    (_, index) => `discAmount${index + 1}`
+  );
+
+  const detailColumnDefs = [
+    { key: "ln", label: "LN", width: 56 },
+    { key: "siStat", label: "SI Status", width: 110 },
+    { key: "itemCode", label: "Item Code", width: 140 },
+    { key: "itemName", label: "Item Name", width: 240 },
+    { key: "itemSpecs", label: "Specification", width: 240 },
+    { key: "uomCode", label: "UOM", width: 100 },
+    { key: "siQuantity", label: "SI Quantity", width: 120 },
+    { key: "unitPrice", label: "Unit Price", width: 130 },
+    { key: "grossAmount", label: "Gross Amount", width: 130 },
+    { key: "vatAmount", label: "VAT Amount", width: 130 },
+    { key: "atcAmount", label: "ATC Amount", width: 130 },
+    { key: "grossAmount", label: "Gross Amount", width: 130 },
+    ...visibleDiscountRateFields.map((field, index) => ({
+      key: field,
+      label: discountLevel === 1 ? "Disc Rate" : `Disc Rate ${index + 1}`,
+      width: 110,
+    })),
+    ...visibleDiscountAmountFields.map((field, index) => ({
+      key: field,
+      label: discountLevel === 1 ? "Disc Amount" : `Disc Amount ${index + 1}`,
+      width: 120,
+    })),
+    ...(showTotalDiscountColumn
+      ? [{ key: "totDiscount", label: "Total Discount", width: 130 }]
+      : []),
+    { key: "netAmount", label: "Net Amount", width: 130 },    
+    { key: "amountDue", label: "Amount Due", width: 130 },
+    { key: "freeItem", label: "Free Item", width: 110 },
+    { key: "drQuantity", label: "DR Quantity", width: 120 },
+    { key: "siQuantity", label: "SI Quantity", width: 120 }, // This is the SI quantity, not the linked SI quantity
+    { key: "linkedSiQuantity", label: "Linked SI Quantity", width: 120 }, // Renamed to avoid confusion
+  ];
+  const {
+    getColumnStyle: getDetailColumnStyle,
+    getFrozenColumnStyle,
+    getOrderedColumns: getOrderedSoDetailColumns,
+    getSortedRows: getSortedSoDetailRows,
+    setColumnOrder: setSoDetailColumnOrder,
+    clearAllSorting: clearSoDetailSorting,
+    clearZeroValueOnFocus: clearSoDetailZeroOnFocus,
+    focusNextRowInput: focusNextSoDetailRowInput,
+    renderHeaderContextMenu: renderSoDetailHeaderContextMenu,
+    renderResizableHeader: renderSiDetailHeader,
+  } = useResizableTableColumns(detailColumnDefs);
+  const orderedDetailColumns = getOrderedSoDetailColumns(detailColumnDefs);
+  const getDetailColumnFallbackWidth = (key) =>
+    detailColumnDefs.find((column) => column.key === key)?.width || 120;
+  const getDetailCellStyle = (key, fallbackWidth) => ({
+    ...getDetailColumnStyle(key, fallbackWidth),
+    ...getFrozenColumnStyle(key, orderedDetailColumns, fallbackWidth, {
+      isHeader: false,
+    }),
+  });
+  useEffect(() => {
+    setSoDetailColumnOrder(detailColumnDefs.map((column) => column.key));
+  }, [setSoDetailColumnOrder, discountLevel]);
+  const sortedDetailRows = getSortedSoDetailRows(
+    detailRows.map((row, originalIndex) => ({ row, originalIndex })),
+    (entry, sortKey) => {
+      if (sortKey === "ln") {
+        return entry.originalIndex + 1;
+      }
+
+      return entry.row?.[sortKey] ?? "";
+    }
+  );
+
+  const withCurr2 = (companyInfo?.glCurrMode === "M" && glCurrDefault !== currCode) || companyInfo?.glCurrMode === "D";
+  const withCurr3 = companyInfo?.glCurrMode === "T";
+  const glCurrGlobal2 = companyInfo?.glCurrGlobal2 || "";
+  const glCurrGlobal3 = companyInfo?.glCurrGlobal3 || "";
+
+  const siGlColumnDefs = [
+    { key: "ln", label: "LN", width: 56 },
+    { key: "acctCode", label: "Account Code", width: 120 },
+    { key: "rcCode", label: "RC Code", width: 120 },
+    { key: "sltypeCode", label: "SL Type Code", width: 120 },
+    { key: "slCode", label: "SL Code", width: 120 },
+    { key: "particular", label: "Particulars", width: 320 },
+    { key: "vatCode", label: "VAT Code", width: 120 },
+    { key: "vatName", label: "VAT Name", width: 220 },
+    { key: "atcCode", label: "ATC", width: 120 },
+    { key: "atcName", label: "ATC Name", width: 220 },
+    { key: "debit", label: `Debit (${glCurrDefault})`, width: 140 },
+    { key: "credit", label: `Credit (${glCurrDefault})`, width: 140 },
+    ...(withCurr2 ? [
+      { key: "debitFx1", label: `Debit (${withCurr3 ? glCurrGlobal2 : currCode})`, width: 140 },
+      { key: "creditFx1", label: `Credit (${withCurr3 ? glCurrGlobal2 : currCode})`, width: 140 },
+    ] : []),
+    ...(withCurr3 ? [
+      { key: "debitFx2", label: `Debit (${glCurrGlobal3})`, width: 140 },
+      { key: "creditFx2", label: `Credit (${glCurrGlobal3})`, width: 140 },
+    ] : []),
+    { key: "slRefNo", label: "SL Ref. No.", width: 120 },
+    { key: "slRefDate", label: "SL Ref. Date", width: 120 },
+    { key: "remarks", label: "Remarks", width: 140 },
+  ];
+  const {
+    getColumnStyle: getSiGlColumnStyle,
+    getFrozenColumnStyle: getSiGlFrozenStyle,
+    getOrderedColumns: getOrderedSiGlColumns,
+    getSortedRows: getSortedSiGlRows,
+    setColumnOrder: setSiGlColumnOrder,
+    clearZeroValueOnFocus: clearSiGlZeroOnFocus,
+    focusNextRowInput: focusNextSiGlRowInput,
+    renderHeaderContextMenu: renderSiGlHeaderContextMenu,
+    renderResizableHeader: renderSiGlHeader,
+  } = useResizableTableColumns(siGlColumnDefs);
+  const orderedSiGlColumns = getOrderedSiGlColumns(siGlColumnDefs);
+  const getSiGlFallbackWidth = (key) =>
+    siGlColumnDefs.find((column) => column.key === key)?.width || 120;
+  const getSiGlCellStyle = (key, fallbackWidth) => ({
+    ...getSiGlColumnStyle(key, fallbackWidth),
+    ...getSiGlFrozenStyle(key, orderedSiGlColumns, fallbackWidth, {
+      isHeader: false,
+    }),
+  });
+  useEffect(() => {
+    setSiGlColumnOrder(siGlColumnDefs.map((column) => column.key));
+  }, [setSiGlColumnOrder, withCurr2, withCurr3, glCurrDefault, currCode, glCurrGlobal2, glCurrGlobal3]);
+  const sortedSiGlRows = getSortedSiGlRows(
+    detailRowsGL.map((row, originalIndex) => ({ row, originalIndex })),
+    (entry, sortKey) => {
+      if (sortKey === "ln") return entry.originalIndex + 1;
+      return entry.row?.[sortKey] ?? "";
+    }
+  );
+  const siGlEnterNextRowZeroClearFields = [
+    "debit",
+    "credit",
+    "debitFx1",
+    "creditFx1",
+    "debitFx2",
+    "creditFx2",
+  ];
+
+  const setGLActiveTab = (tab) => updateState({ GLactiveTab: tab });
+
+  const calculateDueDate = (startDate, daysDue) => {
+    if (!startDate || daysDue === "" || daysDue === null || daysDue === undefined || isNaN(daysDue)) return "";
+    try {
+      const date = new Date(startDate);
+      date.setDate(date.getDate() + parseInt(daysDue, 10));
+      return date.toISOString().split("T")[0];
+    } catch (error) {
+      console.error("Error calculating due date:", error);
+      return "";
+    }
+  };
+
+  useEffect(() => {
+    if (!billtermCode) return;
+    if (daysDue === "" || daysDue === null || daysDue === undefined) return;
+    const nextDueDate = calculateDueDate(documentDate, daysDue);
+    updateState({ dueDate: nextDueDate });
+  }, [documentDate, daysDue, billtermCode]);
+
+  // API endpoints
+  const SI_PRICE_MATRIX_ENDPOINT = "getPriceMatrixItemPrice"; // Assuming SI also uses price matrix
+  const SI_DUPLICATE_PO_ENDPOINT = "/checkSIDuplicatePO"; // Assuming SI also has duplicate PO check
+
+  const updateTotalsDisplay = (grossAmt, discAmt, vatAmt, atcAmt, salesAmt, netAmt, amountDue) => {
+    setTotals({
+          totalGrossAmount: formatNumber(grossAmt),
+          totalDiscountAmount: formatNumber(discAmt),
+          totalVatAmount: formatNumber(vatAmt),
+          totalAtcAmount: formatNumber(atcAmt),
+          totalSalesAmount: formatNumber(salesAmt),
+          totalNetAmount: formatNumber(netAmt),
+          totalAmountDue: formatNumber(amountDue),
+      });
+  };
+
+  const formatFetchedHeaderDate = (value) => {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+      const [month, day, year] = raw.split("/").map(Number);
+      const isValidMonth = month >= 1 && month <= 12;
+      const isValidDay = day >= 1 && day <= 31;
+      const isValidYear = year >= 1900 && year <= 2999;
+
+      if (isValidMonth && isValidDay && isValidYear) {
+        return raw;
+      }
+    }
+
+    if (/^(19|20)\d{2}-\d{2}-\d{2}(T.*)?$/.test(raw)) {
+      return useformatToDatev2(raw);
+    }
+
+    const digits = raw.replace(/\D/g, "");
+
+    if (digits.length === 8) {
+      const first4 = digits.slice(0, 4);
+      const middle2 = digits.slice(4, 6);
+      const last2 = digits.slice(6, 8);
+
+      if (/^(19|20)\d{2}$/.test(first4)) {
+        return `${middle2}/${last2}/${first4}`;
+      }
+
+      const month = digits.slice(0, 2);
+      const day = digits.slice(2, 4);
+      const year = digits.slice(4, 8);
+      return `${month}/${day}/${year}`;
+    }
+
+    return "";
+  };
+
+  const parseComparableDate = (value) => {
+    const formattedValue = formatFetchedHeaderDate(value);
+
+    if (!formattedValue || !/^\d{2}\/\d{2}\/\d{4}$/.test(formattedValue)) {
+      return null;
+    }
+
+    const [month, day, year] = formattedValue.split("/").map(Number);
+    const parsedDate = new Date(year, month - 1, day);
+
+    if (
+      parsedDate.getFullYear() !== year ||
+      parsedDate.getMonth() !== month - 1 ||
+      parsedDate.getDate() !== day
+    ) {
+      return null;
+    }
+
+    return parsedDate;
+  };
+
+  const isDateEarlierThanSiDate = (value) => {
+    const candidateDate = parseComparableDate(value);
+    const soDate = parseComparableDate(documentDate);
+
+    if (!candidateDate || !soDate) {
+      return false;
+    }
+
+    return candidateDate < soDate;
+  };
+
+  const clearHeaderAndDetailDates = ({ showAlert = false } = {}) => {
+    const updatedRows = detailRows.map((row) => ({
+      ...row,
+      // No delivery date in SI details, assuming SI date is the main date
+    }));
+
+    if (showAlert) {
+      useSwalErrorAlert(
+        "Invalid Date",
+        "Date must not be earlier than SI Date."
+      );
+    }
+  };
+
+  const parseDuplicatePOCheckResult = (response) => {
+    const rawResult =
+      response?.data?.data?.[0]?.result ??
+      response?.data?.[0]?.result ??
+      response?.data?.result ??
+      response?.result ??
+      '{"result":"0"}';
+
+    try {
+      const parsed =
+        typeof rawResult === "string" ? JSON.parse(rawResult) : rawResult;
+      return String(parsed?.result || "0") === "1";
+    } catch {
+      return String(response?.data?.result || response?.result || "0") === "1";
+    }
+  };
+
+  const checkDuplicateSiNo = async (siNoValue) => {
+    const trimmedSiNo = String(siNoValue || "").trim();
+    const trimmedCustCode = String(billToCustCode || "").trim();
+
+    if (!trimmedSiNo || !trimmedCustCode) {
+      return false;
+    }
+
+    const params = {
+      json_data: {
+        siNo: trimmedSiNo,
+        custCode: trimmedCustCode,
+      },
+    };
+
+    try {
+      const response = await apiClient.get(SI_DUPLICATE_PO_ENDPOINT, { params });
+      return parseDuplicatePOCheckResult(response);
+    } catch (error) {
+      console.error("Error checking duplicate SO customer PO:", error);
+      return false;
+    }
+  };
+
+  const applyHeaderValueToDetailRows = (detailField, detailValue) => {
+    const updatedRows = detailRows.map((row) => ({
+      ...row,
+      [detailField]: detailValue,
+    }));
+
+    updateState({ detailRows: updatedRows });
+    updateTotals(updatedRows);
+  };
+
+  const confirmApplyHeaderValueToDetails = async ({
+    headerLabel,
+    detailField,
+    detailValue,
+  }) => {
+    if ((detailRows?.length || 0) === 0) {
+      return false;
+    }
+
+    const result = await useSwalConfirmAlert(
+      `Apply ${headerLabel} changes?`,
+      `SO Detail already has record(s).\nDo you want to apply the updated ${headerLabel} to all SO Detail rows?`,
+      "Yes"
+    );
+
+    if (result?.isConfirmed) {
+      applyHeaderValueToDetailRows(detailField, detailValue);
+      return true;
+    }
+
+    return false;
+  };
+
+  useEffect(() => {
+      if (resetFlag) {
+        handleReset();
+      }
+      let timer;
+      if (isLoading) {
+        timer = setTimeout(() => updateState({ showSpinner: true }), 200);
+      } else {
+        updateState({ showSpinner: false });
+      }
+      return () => clearTimeout(timer);
+  }, [resetFlag, isLoading]);
+
+  useEffect(() => {
+  }, [billToCustCode]);
+
+  useEffect(() => {
+    if (billToCustName?.currCode && detailRows.length > 0) {
+      const updatedRows = detailRows.map(row => ({
+        ...row,
+        currency: billToCustName.currCode
+      }));
+       updateState({ detailRows: updatedRows });
+    }
+  }, [billToCustName?.currCode]);
+
+  useEffect(() => {
+      updateState({isDocNoDisabled: !!state.documentID });
+  }, [state.documentID]);
+
+const isInitialMount = useRef(true);
+
+useEffect(() => {
+  if (isInitialMount.current) {
+    handleReset();
+    loadCompanyData();
+    isInitialMount.current = false;
+  }
+}, []);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "F1") { e.preventDefault(); updateState({showAllTranDocNo:true}); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+useEffect(() => {
+    if (!refsLoaded) return;
+    const filteredTypes = getAllDropDown("SITRAN_TYPE", docType) || [];
+    const defaultSiType =
+      filteredTypes.find((type) => type.DROPDOWN_CODE === "SI01")?.DROPDOWN_CODE ||
+      filteredTypes[0]?.DROPDOWN_CODE ||
+      "";
+    const mapHeaderSiStatus = (value) => {
+      const normalizedValue = String(value || "").toUpperCase();
+      if (normalizedValue === "OPEN" || normalizedValue === "O") return "O";
+      if (normalizedValue === "CANCELLED" || normalizedValue === "X") return "X";
+      if (normalizedValue === "CLOSED" || normalizedValue === "C") return "C";
+      return "O";
+    };
+    updateState({
+      siTranTypeOptions: filteredTypes,
+      siTranType: defaultSiType,
+      siStatusOptions: [{ DROPDOWN_CODE: "O", DROPDOWN_NAME: "Open" }, { DROPDOWN_CODE: "X", DROPDOWN_NAME: "Cancelled" }, { DROPDOWN_CODE: "C", DROPDOWN_NAME: "Closed" }],
+      siStatus: mapHeaderSiStatus(state.siStatus),
+    });
+}, [docType, refsLoaded]);
+
+  const handleReset = () => {
+      clearSoDetailSorting();
+      const filteredTypes = getAllDropDown("SITRAN_TYPE", docType) || [];
+      const defaultSiType =
+        filteredTypes.find((type) => type.DROPDOWN_CODE === "SI01")?.DROPDOWN_CODE ||
+        filteredTypes[0]?.DROPDOWN_CODE ||
+        "";
+
+      updateState({
+
+      branchCode: currentUserRow?.branchCode||"",
+      branchName: currentUserRow?.branchName||"",
+      userCode:currentUserRow?.userCode||"",
+      documentDate:useGetCurrentDayV2(),
+      currCode:companyInfo?.currCode||"",
+      glCurrDefault:companyInfo?.currCode||"",
+      currName:companyInfo?.currName||"",
+      currRate:formatNumber(companyInfo?.currRate||1,6),
+      refSiNo1: "",
+      refSiNo2: "",
+      remarks:"",
+      billtermCode:"",
+      billtermName:"",
+      dueDate: "",
+      daysDue: "",
+      noReprints:"0",
+      billToCustCode:"",
+      billToCustName:"",
+      contactPerson: "",
+      atcCode: "",
+      atcName: "",
+      vatCode: "",
+      vatName: "",
+      documentNo: "",
+      documentID: "",
+      detailRows: [],
+      detailRowsGL: [],
+      ...getGLTotalsState([]),
+      documentStatus:"O",      
+      siTranType: defaultSiType,
+      siStatus:"O",
+
+      // UI state
+      activeTab: "basic",
+      isDocNoDisabled: false,
+      isSaveDisabled: false,
+      isResetDisabled: false,
+      isFetchDisabled: false,
+      status: "Open",
+      // Modal states
+      showRcModal: false,
+      showAccountModal: false,
+      showSlModal: false,
+    });
+
+    updateTotalsDisplay(0, 0, 0, 0, 0, 0, 0);
+  };
+
+    const loadCompanyData = async () => {
+        updateState({ isLoading: true });
+
+        try {
+          const hdtblcol_result = await useFieldLenghtCheck(
+            "si_hd,si_dt1"
+          );
+
+          if (hdtblcol_result) {
+            updateState({ tblFieldArray: hdtblcol_result });
+          }
+        } catch (err) {
+          console.error("Error fetching data:", err);
+        } finally {
+          updateState({ isLoading: false });
+        }
+      };
+
+const fetchTranData = async (documentNo, branchCode, direction='') => {
+  const resetState = () => {
+    updateState({documentNo:'', documentID: '', isDocNoDisabled: false, isFetchDisabled: false });
+    updateTotals([]);
+  };
+
+  updateState({ isLoading: true });
+  
+  try {
+    const data = await useFetchTranData(documentNo, branchCode, docType, "siNo", direction);
+
+    if (!data?.soId) {
+      Swal.fire({ icon: 'info', title: 'No Records Found', text: 'Transaction does not exist.' });
+      return resetState();
+    }
+
+    // Format rows
+    const retrievedDetailRows = (data.dt1 || []).map(item => ({
+      ...item,
+      siQuantity: formatNumber(item.siQuantity ?? 0,quantityDecimals),
+      unitPrice: formatNumber(item.unitPrice??0,sellingPriceDecimals),
+      grossAmount: formatNumber(item.grossAmount),
+      discRate1: formatNumber(item.discRate1 ?? 0),
+      discRate2: formatNumber(item.discRate2 ?? 0),
+      discRate3: formatNumber(item.discRate3 ?? 0),
+      discRate4: formatNumber(item.discRate4 ?? 0),
+      discRate5: formatNumber(item.discRate5 ?? 0),
+      discRate6: formatNumber(item.discRate6 ?? 0),
+      discRate7: formatNumber(item.discRate7 ?? 0),
+      discRate8: formatNumber(item.discRate8 ?? 0),
+      discAmount1: formatNumber(item.discAmount1 ?? 0),
+      discAmount2: formatNumber(item.discAmount2 ?? 0),
+      discAmount3: formatNumber(item.discAmount3 ?? 0),
+      discAmount4: formatNumber(item.discAmount4 ?? 0),
+      discAmount5: formatNumber(item.discAmount5 ?? 0),
+      discAmount6: formatNumber(item.discAmount6 ?? 0),
+      discAmount7: formatNumber(item.discAmount7 ?? 0),
+      discAmount8: formatNumber(item.discAmount8 ?? 0),
+      totDiscount: formatNumber(item.totDiscount ?? 0),      
+      vatAmount: formatNumber(item.vatAmount ?? 0),
+      atcAmount: formatNumber(item.atcAmount ?? 0),
+      amountDue: formatNumber(item.amountDue ?? 0),
+      netAmount: formatNumber(item.netAmount ?? 0),
+      drQuantity: formatNumber(item.drQuantity ?? 0, quantityDecimals),
+      linkedSiQuantity: formatNumber(item.siQuantity ?? 0, quantityDecimals), // Renamed to avoid confusion
+    }));
+
+    const formattedGLRows = (data.dt2 || []).map(glRow => ({
+      ...glRow,
+      debit: formatNumber(glRow.debit),
+      credit: formatNumber(glRow.credit),
+      debitFx1: formatNumber(glRow.debitFx1),
+      creditFx1: formatNumber(glRow.creditFx1),
+      debitFx2: formatNumber(glRow.debitFx2),
+      creditFx2: formatNumber(glRow.creditFx2),
+      slRefDate: useformatToDatev2(glRow.slRefDate),
+    }));
+
+    updateState({
+      documentStatus: data.siStatus,
+      status: data.docStatus,
+      noReprints:data.noReprints,
+      documentID: data.siId,
+      documentNo: data.siNo,
+      branchCode: data.branchCode,
+      branchName:data.branchName,
+      documentDate: useformatToDatev2(data.siDate),
+      siTranType: data.siTranType,
+      billToCustCode: data.custCode,
+      billToCustName: data.custName,
+      atcCode: data.atcCode || "",
+      atcName: data.atcName || "",
+      vatCode: data.vatCode || "",
+      vatName: data.vatName || "",
+      billtermCode: data.billtermCode,
+      billtermName: data.billtermName,
+      dueDate: data.dueDate ? useformatToDatev2(data.dueDate) : "",
+      currCode: data.currCode,
+      currName: data.currName,
+      currRate: formatNumber(data.currRate, 6),
+      siStatus:
+        String(data.siStatus || "O").toUpperCase() === "OPEN"
+          ? "O"
+          : String(data.siStatus || "O").toUpperCase() === "CANCELLED"
+          ? "X"
+          : String(data.siStatus || "O").toUpperCase() === "CLOSED"
+          ? "C"
+          : String(data.siStatus || "O"),
+      detailRows: retrievedDetailRows,
+      detailRowsGL: formattedGLRows,
+      isDocNoDisabled: true,
+      isFetchDisabled: true,
+    });
+
+    updateTotals(retrievedDetailRows);
+
+  } catch (error) {
+    console.error("Error fetching transaction data:", error);
+    Swal.fire({ icon: 'error', title: 'Fetch Error', text: error.message });
+    resetState();
+  } finally {
+    updateState({ isLoading: false });
+  }
+};
+
+const handlesiNoBlur = () => {
+
+    if (!state.documentID && state.documentNo && state.branchCode) {
+        fetchTranData(state.documentNo, state.branchCode);
+    }
+};
+
+const handleCurrRateNoBlur = (e) => {
+
+  const num = formatNumber(e.target.value, 6);
+  updateState({
+        currRate: isNaN(num) ? "0.000000" : num
+        })
+
+};
+
+const moveFocusBeforeSave = async () => {
+  document.activeElement?.blur?.();
+  return true;
+};
+
+const handleActivityOption = async (action) => {
+   if ((detailRows?.length || 0) + (detailRowsGL?.length || 0) === 0) {
+    return;
+  }
+
+  if (action === "Upsert") {
+   await moveFocusBeforeSave();
+  }
+
+  if (documentStatus === "O") { // Assuming SI also has an 'O' status for open
+    updateState({ isLoading: true });
+
+    try {
+        const {
+        branchCode,
+        documentNo,
+        documentID,
+        billtermCode,
+        billToCustCode,
+        billToCustName,
+        refSiNo1,
+        refSiNo2,
+        currCode,
+        currRate,
+        remarks,
+        dueDate,
+        userCode,
+        contactPerson,
+        customerPoNo,
+        siTranType,
+        siStatus,
+        detailRows,
+        detailRowsGL,
+      } = state;
+
+      let finalDetailRowsGL = [...detailRowsGL];
+
+      const buildSoData = (glRows = finalDetailRowsGL) => ({
+        branchCode: branchCode,
+        soNo: documentNo || "",
+        soId: documentID || "",
+        soDate: documentDate,
+        sotranType: siTranType,
+        billtermCode: billtermCode,
+        custCode: billToCustCode,
+        custName: billToCustName,
+        attention: contactPerson,
+        refDocNo1: refSiNo1,
+        refDocNo2: refSiNo2,
+        currCode: currCode || "PHP",
+        currRate: parseFormattedNumber(currRate),
+        dueDate: dueDate || "",
+        remarks: remarks || "",
+        userCode: userCode,
+        customerPoNo: customerPoNo || '',
+        soStatus: siStatus || 'O',
+        dt1: detailRows.map((row, index) => ({
+          lnNo: String(index + 1),
+          soStat: row.soStat || "O",
+          itemCode: row.itemCode || "",
+          itemName: row.itemName || "",
+          itemSpecs: row.itemSpecs || "",
+          uomCode: row.uomCode || "",
+          pmType: row.pmType || "",
+          groupId: row.groupId || "",
+          pmId: row.pmId || "",
+          siQuantity: parseFormattedNumber(row.siQuantity || 0),
+          unitPrice: parseFormattedNumber(row.unitPrice || 0),
+          grossAmount: parseFormattedNumber(row.grossAmount || 0),
+          discRate1: parseFormattedNumber(row.discRate1 || 0),
+          discRate2: parseFormattedNumber(row.discRate2 || 0),
+          discRate3: parseFormattedNumber(row.discRate3 || 0),
+          discRate4: parseFormattedNumber(row.discRate4 || 0),
+          discRate5: parseFormattedNumber(row.discRate5 || 0),
+          discRate6: parseFormattedNumber(row.discRate6 || 0),
+          discRate7: parseFormattedNumber(row.discRate7 || 0),
+          discRate8: parseFormattedNumber(row.discRate8 || 0),
+          discAmount1: parseFormattedNumber(row.discAmount1 || 0),
+          discAmount2: parseFormattedNumber(row.discAmount2 || 0),
+          discAmount3: parseFormattedNumber(row.discAmount3 || 0),
+          discAmount4: parseFormattedNumber(row.discAmount4 || 0),
+          discAmount5: parseFormattedNumber(row.discAmount5 || 0),
+          discAmount6: parseFormattedNumber(row.discAmount6 || 0),
+          discAmount7: parseFormattedNumber(row.discAmount7 || 0),
+          discAmount8: parseFormattedNumber(row.discAmount8 || 0),
+          totDiscount: parseFormattedNumber(row.totDiscount || 0),          
+          vatAmount: parseFormattedNumber(row.vatAmount || 0),
+          atcAmount: parseFormattedNumber(row.atcAmount || 0),
+          amountDue: parseFormattedNumber(row.amountDue || 0),
+          netAmount: parseFormattedNumber(row.netAmount || 0),
+          // No delivery date, customer PO, sales rep in SI details
+          freeItem: row.freeItem || "",
+          drQuantity: parseFormattedNumber(row.drQuantity || 0),
+          siQuantity: parseFormattedNumber(row.siQuantity || 0),
+        })),
+        dt2: glRows.map((entry, index) => ({
+          recNo: String(index + 1),
+          acctCode: entry.acctCode || "",
+          rcCode: entry.rcCode || "",
+          sltypeCode: entry.sltypeCode || "",
+          slCode: entry.slCode || "",
+          particular: entry.particular || "",
+          vatCode: entry.vatCode || "",
+          vatName: entry.vatName || "",
+          atcCode: entry.atcCode || "",
+          atcName: entry.atcName || "",
+          debit: parseFormattedNumber(entry.debit || 0),
+          credit: parseFormattedNumber(entry.credit || 0),
+          debitFx1: parseFormattedNumber(entry.debitFx1 || 0),
+          creditFx1: parseFormattedNumber(entry.creditFx1 || 0),
+          debitFx2: parseFormattedNumber(entry.debitFx2 || 0),
+          creditFx2: parseFormattedNumber(entry.creditFx2 || 0),
+          slRefNo: entry.slRefNo || "",
+          slRefDate: entry.slRefDate || null,
+          remarks: entry.remarks || "",
+          dt1Lineno: entry.dt1Lineno || "",
+        })),
+      });
+
+      if (action === "GenerateGL") {
+        try {
+          updateState({ detailRowsGL: [], isGeneratingGL: true });
+          const newGlEntries = await useGenerateGLEntries(
+            docType,
+            buildSoData([])
+          );
+
+          updateState({
+            detailRowsGL: newGlEntries && newGlEntries.length > 0 ? newGlEntries : [],
+            isGeneratingGL: false,
+          });
+        } catch (error) {
+          updateState({ detailRowsGL: [], isGeneratingGL: false });
+          console.error(error);
+        }
+        return;
+      }
+
+      if (action === "Upsert") {
+        if (finalDetailRowsGL.length === 0) {
+          const newGlEntries = await useGenerateGLEntries(
+            docType,
+            buildSoData([])
+          );
+
+          if (!newGlEntries || newGlEntries.length === 0) {
+            console.warn("GL entries generation failed or returned no data.");
+            return;
+          }
+
+          finalDetailRowsGL = newGlEntries;
+          updateState({ detailRowsGL: newGlEntries });
+        }
+
+        const response = await useTransactionUpsert(
+          docType,
+          buildSoData(finalDetailRowsGL),
+          updateState,          
+          "siId",
+          "siNo"
+        );
+
+        if (response) {
+          const responseDocNo =  response.data[0].siNo;
+          const responseDocId =  response.data[0].siId;
+
+          await fetchTranData(responseDocNo,branchCode);
+
+          const isZero = Number(noReprints) === 0;
+          const onSaveAndPrint = isZero
+            ? () => updateState({ showSignatoryModal: true })
+            : () => handleSaveAndPrint(responseDocId);
+
+          useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
+        }
+        updateState({
+          documentNo: response?.data?.[0]?.siNo || "",
+          documentID: response?.data?.[0]?.siId || "",
+          isDocNoDisabled: true,
+          isFetchDisabled: true,
+        });
+      }
+    } catch (error) {
+      console.error(`Error during ${action}:`, error);
+    } finally {
+      updateState({ isLoading: false });
+    }
+  }
+};
+
+  const createSIDetailRow = (overrides = {}) => ({
+      lnNo: "",
+      siStat: "O",
+      itemCode: "",
+      itemName: "",
+      itemSpecs: "",
+      uomCode: "",
+      pmType: "",
+      groupId: "",
+      pmId: "",
+      siQuantity: Number(0).toFixed(quantityDecimals),
+      unitPrice: Number(0).toFixed(sellingPriceDecimals),
+      vatAmount: "0.00",
+      atcAmount: "0.00",
+      amountDue: "0.00",
+      grossAmount: "0.00",
+      discRate1: "0.00",
+      discRate2: "0.00",
+      discRate3: "0.00",
+      discRate4: "0.00",
+      discRate5: "0.00",
+      discRate6: "0.00",
+      discRate7: "0.00",
+      discRate8: "0.00",
+      discAmount1: "0.00",
+      discAmount2: "0.00",
+      discAmount3: "0.00",
+      discAmount4: "0.00",
+      discAmount5: "0.00",
+      discAmount6: "0.00",
+      discAmount7: "0.00",
+      discAmount8: "0.00",
+      totDiscount: "0.00",      
+      netAmount: "0.00",      
+      // No delivery date, customer PO, sales rep in SI details
+      freeItem: "",
+      drQuantity: Number(0).toFixed(quantityDecimals),
+      siQuantity: Number(0).toFixed(quantityDecimals),
+      ...overrides,
+    });
+
+  const insertDetailRows = (rowsToInsert = [], insertIndex = null) => {
+    if (!Array.isArray(rowsToInsert) || rowsToInsert.length === 0) {
+      return;
+    }
+
+    const updatedRows = [...detailRows];
+    const normalizedInsertRows = rowsToInsert.map((row) => createSIDetailRow(row));
+
+    if (insertIndex !== null && insertIndex >= 0) {
+      updatedRows.splice(insertIndex + 1, 0, ...normalizedInsertRows);
+    } else {
+      updatedRows.push(...normalizedInsertRows);
+    }
+
+    const normalizedRows = updatedRows.map((row, index) => ({
+      ...row,
+      lnNo: String(index + 1),
+    }));
+
+    updateState({
+      detailRows: normalizedRows,
+    });
+    updateTotals(normalizedRows);
+
+    setTimeout(() => {
+      const tableContainer = document.querySelector(".max-h-\\[430px\\]");
+      if (!tableContainer) return;
+
+      if (insertIndex === null || insertIndex >= detailRows.length - 1) {
+        tableContainer.scrollTop = tableContainer.scrollHeight;
+      }
+    }, 100);
+  };
+
+  const handleInsertBlankRow = (insertIndex = null) => {
+    insertDetailRows([createSIDetailRow()], insertIndex);
+  };
+
+  const normalizeItemModalRecords = (selectedItems) => {
+    if (Array.isArray(selectedItems?.records)) {
+      return selectedItems.records;
+    }
+    if (selectedItems?.records) {
+      return [selectedItems.records];
+    }
+    return selectedItems ? [selectedItems] : [];
+  };
+
+  const normalizeItemCode = (itemCode) => String(itemCode || "").trim().toUpperCase();
+
+  const getFilteredDuplicateFreeItems = (records = [], currentRowIndex = null) => {
+    if (SI_ALLOW_DUPLICATE_ITEMS) {
+      return records;
+    }
+
+    const existingItemCodes = new Set(
+      detailRows
+        .filter((_, index) => index !== currentRowIndex)
+        .map((row) => normalizeItemCode(row?.itemCode))
+        .filter(Boolean)
+    );
+
+    const selectedItemCodes = new Set();
+    const skippedItemCodes = [];
+    const filteredRecords = records.filter((record) => {
+      const itemCode = normalizeItemCode(record?.itemCode);
+      if (!itemCode) {
+        return true;
+      }
+
+      if (existingItemCodes.has(itemCode) || selectedItemCodes.has(itemCode)) {
+        skippedItemCodes.push(itemCode);
+        return false;
+      }
+
+      selectedItemCodes.add(itemCode);
+      return true;
+    });
+
+    if (skippedItemCodes.length > 0) {
+      useSwalErrorAlert(
+        "Duplicate Item Not Allowed",
+        `These item(s) already exist in SI Detail: ${[...new Set(skippedItemCodes)].join(", ")}`
+      );
+    }
+
+    return filteredRecords;
+  };
+
+  const parsePriceMatrixResponse = (response) => {
+    const directResult =
+      response?.data?.[0]?.result ??
+      response?.result ??
+      response?.data?.result;
+
+    if (typeof directResult === "string") {
+      try {
+        const parsed = JSON.parse(directResult);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (error) {
+        console.error("Error parsing SO price matrix result:", error);
+        return [];
+      }
+    }
+
+    const rawData = response?.data ?? [];
+
+    if (Array.isArray(rawData)) {
+      return rawData;
+    }
+
+    if (Array.isArray(response)) {
+      return response;
+    }
+
+    return [];
+  };
+
+  const fetchPriceMatrixRows = async (
+    selectedRecords = [],
+    { custCode = billToCustCode || "", docDate = documentDate } = {}
+  ) => {
+    if (!Array.isArray(selectedRecords) || selectedRecords.length === 0) {
+      return [];
+    }
+
+    const payload = {
+      json_data: {
+        docDate,
+        custCode,
+        items: selectedRecords.map((item, index) => ({
+          sequence: index + 1,
+          itemCode: item?.itemCode || "",
+        })),
+      },
+    };
+
+    try {
+      updateState({ isLoading: true });
+      const response = await postRequest(
+        SI_PRICE_MATRIX_ENDPOINT,
+        JSON.stringify(payload)
+      );
+      return parsePriceMatrixResponse(response);
+    } catch (error) {
+      console.error("Error fetching SO price matrix:", error);
+      return [];
+    } finally {
+      updateState({ isLoading: false });
+    }
+  };
+
+  const refreshDetailRowsFromPriceMatrix = async ({ // Assuming SI also uses price matrix
+    custCode = billToCustCode || "",
+    rows = detailRows,
+    docDate = documentDate,
+  } = {}) => {
+    if (!Array.isArray(rows) || rows.length === 0 || !custCode) {
+      return;
+    }
+
+    const selectedRecords = rows.map((row, index) => ({
+      sequence: index + 1,
+      itemCode: row?.itemCode || "",
+    }));
+    const priceMatrixRows = await fetchPriceMatrixRows(selectedRecords, {
+      custCode,
+      docDate,
+    });
+    const updatedRows = rows.map((row, index) =>
+      applyPriceMatrixToDetailRow(
+        row,
+        getPriceMatrixRowForItem(priceMatrixRows, row, index)
+      )
+    );
+
+    updateState({ detailRows: updatedRows });
+    updateTotals(updatedRows);
+  };
+
+  const getPriceMatrixRowForItem = (priceMatrixRows = [], item = {}, index = 0) => { // Assuming SI also uses price matrix
+    const itemCode = normalizeItemCode(item?.itemCode);
+    const getMatrixItemCode = (priceRow) =>
+      priceRow?.itemCode ??
+      "";
+
+    return (
+      priceMatrixRows.find(
+        (priceRow) => normalizeItemCode(getMatrixItemCode(priceRow)) === itemCode
+      ) ||
+      priceMatrixRows.find(
+        (priceRow) => Number(priceRow?.sequence) === index + 1
+      ) ||
+      {}
+    );
+  };
+
+  const calculateRowAmountsFromRates = (row) => {
+    const discountRateFields = visibleDiscountRateFields;
+    const discountAmountFields = visibleDiscountAmountFields;
+    const roundTo2 = (num) => Number((Number(num) || 0).toFixed(2));
+    const quantity = parseFormattedNumber(row.soQuantity || 0) || 0;
+    const sellingPrice = parseFormattedNumber(row.sellingPrice || 0) || 0;
+    const grossAmount = roundTo2(quantity * sellingPrice);
+    let runningBase = grossAmount;
+    let totalDiscount = 0;
+    const updatedAmounts = {};
+
+    discountRateFields.forEach((rateField, index) => {
+      const amountField = discountAmountFields[index];
+      const rateValue = parseFormattedNumber(row[rateField] || 0) || 0;
+      const discountAmount = roundTo2(runningBase * (rateValue * 0.01));
+
+      updatedAmounts[amountField] = formatNumber(discountAmount);
+      totalDiscount += discountAmount;
+      runningBase = roundTo2(runningBase - discountAmount);
+    });
+
+    return {
+      ...row,
+      grossAmount: formatNumber(grossAmount),
+      ...updatedAmounts,
+      totDiscount: formatNumber(totalDiscount),
+      netAmount: formatNumber(roundTo2(grossAmount - totalDiscount)), // Net amount after discount
+      vatAmount: formatNumber(roundTo2((grossAmount - totalDiscount) * vatRate)), // VAT on net amount
+      atcAmount: formatNumber(roundTo2((grossAmount - totalDiscount) * atcRate)), // ATC on net amount
+      amountDue: formatNumber(roundTo2((grossAmount - totalDiscount) + ((grossAmount - totalDiscount) * vatRate) - ((grossAmount - totalDiscount) * atcRate))), // Amount due
+    };
+  };
+
+  const applyPriceMatrixToDetailRow = (baseRow, priceRow = {}) => {
+    if (baseRow.freeItem === "Y") {
+      return calculateRowAmountsFromRates({
+        ...baseRow,
+        unitPrice: formatNumber(0, sellingPriceDecimals),
+        ...Object.fromEntries(
+          visibleDiscountRateFields.map((field) => [field, formatNumber(0)])
+        ),
+      });
+    }
+
+    const getPriceValue = () => priceRow?.sellingPrice ||0
+    const getPmTypeValue = () => priceRow?.pmType||"";
+    const getPmIdValue = () =>   priceRow?.pmId ||"";
+    const getDiscountRateValue = (discountNo) =>  priceRow?.[`discRate${discountNo}`] ||0;
+    const updatedRow = {
+      ...baseRow,
+      pmType: getPmTypeValue() ?? baseRow.pmType ?? "",
+      pmId: getPmIdValue() ?? baseRow.pmId ?? "",
+      unitPrice: formatNumber(
+        getPriceValue() ?? baseRow.sellingPrice ?? 0,
+        sellingPriceDecimals
+      ),
+    };
+
+    visibleDiscountRateFields.forEach((field, index) => {
+      updatedRow[field] = formatNumber(
+        getDiscountRateValue(index + 1) ?? baseRow[field] ?? 0
+      );
+    });
+
+    return calculateRowAmountsFromRates(updatedRow);
+  };
+
+  const mapItemRecordToDetailRow = (item = {}) => createSODetailRow({
+    itemCode: item?.itemCode || "",
+    itemName: item?.itemName || "",
+    itemSpecs: item?.itemSpecs || "",
+    uomCode: item?.uomCode || "",
+    pmType: item?.pmType || "",
+    groupId: "",
+    pmId: item?.pmId || "",
+    soQuantity: formatNumber(
+      item?.soQuantity ?? item?.quantity ?? item?.soQty ?? 0,
+      quantityDecimals
+    ),
+    sellingPrice: formatNumber(
+      item?.sellingPrice ?? item?.unitPrice ?? 0,
+      sellingPriceDecimals
+    ),
+    grossAmount: formatNumber(item?.grossAmount ?? 0),
+    discRate1: formatNumber(item?.discRate1 ?? 0),
+    discRate2: formatNumber(item?.discRate2 ?? 0),
+    discRate3: formatNumber(item?.discRate3 ?? 0),
+    discRate4: formatNumber(item?.discRate4 ?? 0),
+    discRate5: formatNumber(item?.discRate5 ?? 0),
+    discRate6: formatNumber(item?.discRate6 ?? 0),
+    discRate7: formatNumber(item?.discRate7 ?? 0),
+    discRate8: formatNumber(item?.discRate8 ?? 0),
+    discAmount1: formatNumber(item?.discAmount1 ?? 0),
+    discAmount2: formatNumber(item?.discAmount2 ?? 0),
+    discAmount3: formatNumber(item?.discAmount3 ?? 0),
+    discAmount4: formatNumber(item?.discAmount4 ?? 0),
+    discAmount5: formatNumber(item?.discAmount5 ?? 0),
+    discAmount6: formatNumber(item?.discAmount6 ?? 0),
+    discAmount7: formatNumber(item?.discAmount7 ?? 0),
+    discAmount8: formatNumber(item?.discAmount8 ?? 0),
+    totDiscount: formatNumber(item?.totDiscount ?? 0),    
+    vatAmount: formatNumber(item?.vatAmount ?? 0),
+    atcAmount: formatNumber(item?.atcAmount ?? 0),
+    amountDue: formatNumber(item?.amountDue ?? 0),
+    netAmount: formatNumber(item?.netAmount ?? 0),
+    // No delivery date, customer PO, sales rep in SI details
+    freeItem: item?.freeItem || "",
+    drQuantity: formatNumber(item?.drQuantity ?? 0, quantityDecimals),
+    siQuantity: formatNumber(item?.siQuantity ?? 0, quantityDecimals),
+  });
+
+  const handleInsertSelectedItems = async (selectedRecords = []) => {
+    if (!Array.isArray(selectedRecords) || selectedRecords.length === 0) {
+      return;
+    }
+
+    const priceMatrixRows = await fetchPriceMatrixRows(selectedRecords); // Assuming SI also uses price matrix
+    const rowsToInsert = selectedRecords.map((item, index) => {
+      const baseRow = mapItemRecordToDetailRow(item);
+      const priceRow = getPriceMatrixRowForItem(priceMatrixRows, item, index);
+      return applyPriceMatrixToDetailRow(baseRow, priceRow);
+    });
+
+    insertDetailRows(rowsToInsert, insertAfterIndex);
+  };
+
+const handleDeleteRow = async (index) => {
+    const updatedRows = [...detailRows];
+    updatedRows.splice(index, 1);
+
+    updateState({
+        detailRows: updatedRows,
+        detailRowsGL: [] });
+    updateTotals(updatedRows);
+
+  };
+
+const handleAddRowGL = (index = null) => {
+  const newRow = {
+    acctCode: "",
+    rcCode: "",
+    sltypeCode: "CU",
+    slCode: "",
+    particular: "",
+    vatCode: "",
+    vatName: "",
+    atcCode: "",
+    atcName: "",
+    debit: "0.00",
+    credit: "0.00",
+    debitFx1: "0.00",
+    creditFx1: "0.00",
+    debitFx2: "0.00",
+    creditFx2: "0.00",
+    slRefNo: "",
+    slRefDate: "",
+    remarks: "",
+  };
+
+  const updatedRows = [...detailRowsGL];
+  if (index !== null && index >= 0) {
+    updatedRows.splice(index + 1, 0, newRow);
+  } else {
+    updatedRows.push(newRow);
+  }
+
+  updateState({
+    detailRowsGL: updatedRows,
+    ...getGLTotalsState(updatedRows),
+  });
+};
+
+const handleDeleteRowGL = (index) => {
+  const updatedRows = [...detailRowsGL];
+  updatedRows.splice(index, 1);
+  updateState({
+    detailRowsGL: updatedRows,
+    ...getGLTotalsState(updatedRows),
+  });
+};
+
+const handleDetailChangeGL = async (index, field, value) => {
+  const updatedRowsGL = [...(detailRowsGLRef.current || [])];
+  let row = { ...updatedRowsGL[index] };
+
+  if (["acctCode", "slCode", "rcCode", "sltypeCode", "vatCode", "atcCode"].includes(field)) {
+    const data = await useUpdateRowGLEntries(row, field, value, billToCustCode, docType);
+    if (data) {
+      row.acctCode = data.acctCode;
+      row.sltypeCode = data.sltypeCode;
+      row.slCode = data.slCode;
+      row.rcCode = data.rcCode;
+      row.vatCode = data.vatCode;
+      row.vatName = data.vatName;
+      row.atcCode = data.atcCode;
+      row.atcName = data.atcName;
+      row.particular = data.particular;
+    }
+  }
+
+  if (["debit", "credit", "debitFx1", "creditFx1", "debitFx2", "creditFx2"].includes(field)) {
+    row[field] = value;
+    const parsedValue = parseFormattedNumber(value);
+    const pairs = {
+      debit: "credit",
+      credit: "debit",
+      debitFx1: "creditFx1",
+      creditFx1: "debitFx1",
+      debitFx2: "creditFx2",
+      creditFx2: "debitFx2",
+    };
+
+    if (parsedValue > 0 && pairs[field]) {
+      row[pairs[field]] = "0.00";
+    }
+  }
+
+  if (["slRefNo", "slRefDate", "remarks", "particular", "atcName", "sltypeCode"].includes(field)) {
+    row[field] = value;
+  }
+
+  updatedRowsGL[index] = row;
+  updateState({
+    detailRowsGL: updatedRowsGL,
+    ...getGLTotalsState(updatedRowsGL),
+  });
+};
+
+const handleBlurGL = async (index, field, value, autoCompute = false) => {
+  const updatedRowsGL = [...(detailRowsGLRef.current || [])];
+  const row = { ...updatedRowsGL[index] };
+  const parsedValue = parseFormattedNumber(value);
+  row[field] = formatNumber(parsedValue);
+
+  if (autoCompute && (withCurr2 || withCurr3)) {
+    if (["debit", "credit", "debitFx1", "creditFx1", "debitFx2", "creditFx2"].includes(field)) {
+      const data = await useUpdateRowEditEntries(row, field, value, currCode, currRate, documentDate);
+      if (data) {
+        row.debit = formatNumber(data.debit);
+        row.credit = formatNumber(data.credit);
+        row.debitFx1 = formatNumber(data.debitFx1);
+        row.creditFx1 = formatNumber(data.creditFx1);
+        row.debitFx2 = formatNumber(data.debitFx2);
+        row.creditFx2 = formatNumber(data.creditFx2);
+      }
+    }
+  } else {
+    const pairs = [
+      ["debit", "credit"],
+      ["debitFx1", "creditFx1"],
+      ["debitFx2", "creditFx2"],
+    ];
+
+    pairs.forEach(([a, b]) => {
+      if (field === a && parsedValue > 0) {
+        row[b] = formatNumber(0);
+      } else if (field === b && parsedValue > 0) {
+        row[a] = formatNumber(0);
+      }
+    });
+  }
+
+  updatedRowsGL[index] = row;
+  updateState({
+    detailRowsGL: updatedRowsGL,
+    ...getGLTotalsState(updatedRowsGL),
+  });
+};
+
+const handlePrint = async () => {
+ if (!detailRows || detailRows.length === 0) {
+      return; // Assuming SI also requires detail rows to print
+      }
+  if (documentID) {
+    updateState({ showSignatoryModal: true });
+  }
+};
+
+  const handleOpenAddItemModal =  async() => {
+    const fieldsToCheck = { // Adjusted required fields for SI
+      "Header : Bill To Customer Code": billToCustCode,
+      "Header : Billing Term": billtermCode,      
+    };
+
+    const isValid = await useSwalvalidateRequiredFields(fieldsToCheck, "Add Item");
+    if (!isValid) return;
+
+    updateState({
+      showItemModal: true,
+      selectionContext: "multiAdd",
+      selectedRowIndex: null,
+      insertAfterIndex: null,
+    });
+  };
+
+const handleCancel = async () => {
+ if (!detailRows || detailRows.length === 0) {
+      return; // Assuming SI also requires detail rows to cancel
+      }
+
+  if (documentID && (documentStatus === 'O')) {
+    updateState({ showCancelModal: true });
+  }
+};
+
+const handleAttach = async () => {
+  if (documentID ) {
+    updateState({ showAttachModal: true });
+   }
+};
+
+const handleCopy = async () => {
+  if (!detailRows || detailRows.length === 0) {
+    return;
+  }  
+  if (documentID) {
+    const nextDocumentDate = useGetCurrentDayV2();
+    const copiedDetailRows = detailRows.map((row) => ({
+      ...row,
+      siStat: "O",      
+      drQuantity: formatNumber(0, quantityDecimals),
+      siQuantity: formatNumber(0, quantityDecimals),
+      groupId: "",
+      pmId: "",
+      pmType: "",
+    }));
+    
+    updateState({
+      documentNo: "",
+      documentID: "",
+      documentStatus: "O",
+      status: "OPEN",
+      siStatus: "O",
+      documentDate: nextDocumentDate,
+      refSiNo1: "",
+      refSiNo2: "",
+      noReprints: "0",
+      detailRows: copiedDetailRows,
+    });
+  }
+};
+
+//  ** View Document and Transaction History Retrieval ***
+const cleanUrl = useCallback(() => {
+  window.history.replaceState({}, "", window.location.origin);
+}, []);
+
+const handleHistoryRowPick = useCallback(
+  async (row) => {
+    const docNo = row?.docNo;
+    const branchCode = row?.branchCode;
+    if (!docNo || !branchCode) return;
+  
+    await fetchTranData(docNo, branchCode);
+    setTopTab("details");
+    cleanUrl(); //
+  },
+  [fetchTranData, cleanUrl]
+);
+
+useEffect(() => {
+  const params = new URLSearchParams(location.search);
+  const docNo = params.get("soNo");
+  const branchCode = params.get("branchCode");
+  
+  if (!loadedFromUrlRef.current && docNo && branchCode) {
+    loadedFromUrlRef.current = true;
+    handleHistoryRowPick({ docNo, branchCode });
+  }
+}, [location.search, handleHistoryRowPick]);
+
+  const printData = {
+    apv_no: documentNo,
+    branch: branchCode,
+    doc_id: docType,
+  };
+
+const handleTranDocNoRetrieval = async (data) => {
+
+    await fetchTranData(data.docNo, branchCode, data.key);
+    updateState({showAllTranDocNo: data.modalClose});
+};
+
+const handleTranDocNoSelection = async (data) => {
+
+    handleReset();
+    updateState({showAllTranDocNo: false, documentNo:data.docNo });
+};
+
+const handleCloseCancel = async (confirmation) => {
+    if(confirmation && documentStatus === "O" && documentID !== null ) {
+      
+      const result = await useHandleCancel(docType,documentID,currentUserRow.userCode,confirmation.password,confirmation.reason,updateState);
+      if (result.success)
+      {
+       useSwalSuccessAlert("Success","Cancellation Completed")
+      }
+     await fetchTranData(documentNo,branchCode);
+    }
+    updateState({showCancelModal: false});
+};
+
+const handleCloseSignatory = async (mode) => {
+
+    updateState({
+        showSpinner: true,
+        showSignatoryModal: false,
+        noReprints: mode === "Final" ? 1 : 0, });
+    await useHandlePrint(documentID, docType, mode,userCode);
+
+    updateState({
+      showSpinner: false
+    });
+
+};
+
+const handleSaveAndPrint = async (documentID) => {
+
+    updateState({ showSpinner: true });
+    await useHandlePrint(documentID, docType);
+
+    updateState({showSpinner: false});
+};
+
+  const handleCloseCustModal = async (selectedData) => {
+    if (!selectedData) {
+        updateState({ custModalOpen: false });
+        return;
+    }
+
+    updateState({ custModalOpen: false });
+    updateState({ isLoading: true });
+
+    try {
+        const address = selectedData?.addr || "";
+        const custDetails = {            custCode: selectedData?.custCode || '',
+            custName: selectedData?.custName || '',
+            currCode: selectedData?.currCode || '',
+            attention: selectedData?.attention || '',
+            billtermCode: selectedData?.billtermCode || '',
+            billtermName: selectedData?.billtermName || '',
+        };
+        const nextBillToCustCode = selectedData?.custCode || "";
+        const shouldRepriceDetailRows =
+          detailRows.length > 0 &&
+          String(nextBillToCustCode).trim() !== "" &&
+          String(nextBillToCustCode).trim() !== String(billToCustCode || "").trim();
+        updateState(
+            {
+                billToCustName: selectedData.custName,
+                billToCustCode: selectedData.custCode,
+                custModalOpen: false,
+                modalContext: "",
+            }
+        );
+
+        if (!selectedData.currCode) {
+            const payload = { CUST_CODE: selectedData.custCode };
+            const response = await postRequest("getCustomer", JSON.stringify(payload));
+
+            if (response.success) {
+                const customerRow = JSON.parse(response.data[0].result)?.[0] || {};
+                custDetails.currCode = customerRow?.currCode || custDetails.currCode;
+                custDetails.attention = customerRow?.custContact || custDetails.attention;
+                custDetails.billtermCode = customerRow?.billtermCode || custDetails.billtermCode;
+                custDetails.billtermName = customerRow?.billtermName || custDetails.billtermName;
+            } else {
+                console.warn("API call for getCustomer returned success: false", response.message);
+            }
+        }
+
+        await Promise.all([
+            handleSelectCurrency(custDetails.currCode),
+            handleSelectBillTerm(custDetails.billtermCode),
+            updateState({
+            contactPerson: custDetails.attention,
+          })
+        ]);
+
+        if (shouldRepriceDetailRows) {
+            await refreshDetailRowsFromPriceMatrix({
+              custCode: nextBillToCustCode,
+            });
+        }
+
+    } catch (error) {
+        console.error("Error fetching customer details:", error);
+    } finally {
+       updateState({ isLoading: false });
+    }
+};
+
+  const updateTotals = (rows) => {
+    let totalGrossAmt = 0;
+    let totalDiscAmt = 0;
+    let totalVatAmt = 0;
+    let totalAtcAmt = 0;
+    let totalSalesAmt = 0;
+    let totalNetAmt = 0;
+    let totalAmountDue = 0;
+
+    rows.forEach(row => {
+      totalGrossAmt += parseFormattedNumber(row.grossAmount || 0) || 0;
+      totalDiscAmt += parseFormattedNumber(row.totDiscount || 0) || 0;
+      totalVatAmt += parseFormattedNumber(row.vatAmount || 0) || 0;
+      totalAtcAmt += parseFormattedNumber(row.atcAmount || 0) || 0;
+      totalNetAmt += parseFormattedNumber(row.netAmount || 0) || 0;
+      totalAmountDue += parseFormattedNumber(row.amountDue || 0) || 0;
+    });
+
+    totalSalesAmt = totalNetAmt + totalVatAmt; // Assuming Sales Amount = Net Amount + VAT Amount
+
+    updateTotalsDisplay(totalGrossAmt, totalDiscAmt, totalVatAmt, totalAtcAmt, totalSalesAmt, totalNetAmt, totalAmountDue);
+  };
+
+  // Removed handleCloseRcModal and handleCloseSalesRepModal as they are not in the SI header
+
+const handleCloseRcModal = async (selectedRc) => {
+  if (modalContext === "headerRc" && selectedRc) {
+    updateState({
+      rcCode: selectedRc.rcCode || "",
+      rcName: selectedRc.rcName || "",
+      showRcModal: false,
+      selectedRowIndex: null,
+      modalContext: "",
+    });
+    return;
+  }
+
+  if (modalContext === "glRC" && selectedRc && selectedRowIndex !== null) {
+    const result = await useTopRCRow(selectedRc.rcCode);
+    if (result) {
+      handleDetailChangeGL(selectedRowIndex, "rcCode", result);
+    }
+  }
+
+  updateState({
+    showRcModal: false,
+    selectedRowIndex: null,
+    modalContext: "",
+  });
+};
+
+const handleCloseATCModal = (selectedATC) => {
+  if (!selectedATC) {
+    updateState({ showATCModal: false, selectedRowIndex: null, modalContext: "" });
+    return;
+  }
+
+  if (modalContext === "detailATC" && selectedRowIndex !== null) {
+    const updatedRows = [...detailRows];
+    updatedRows[selectedRowIndex] = {
+      ...updatedRows[selectedRowIndex],
+      atcCode: selectedATC.atcCode || "",
+    };
+
+    updateState({
+      detailRows: updatedRows,
+      showATCModal: false,
+      selectedRowIndex: null,
+      modalContext: "",
+    });
+    return;
+  }
+
+  if (modalContext === "glATC" && selectedRowIndex !== null) {
+    const result = getAllTopATCRow(selectedATC.atcCode);
+    if (result) {
+      handleDetailChangeGL(selectedRowIndex, "atcCode", result);
+    }
+
+    updateState({
+      showATCModal: false,
+      selectedRowIndex: null,
+      modalContext: "",
+    });
+    return;
+  }
+
+  updateState({ 
+    atcCode: selectedATC.atcCode || "",
+    atcName: selectedATC.atcName || "",
+    showATCModal: false,
+    selectedRowIndex: null,
+    modalContext: "",
+  });
+};
+
+const handleCloseVatModal = (selectedVat) => {
+  if (!selectedVat) {
+    updateState({ showVatModal: false, selectedRowIndex: null, modalContext: "" });
+    return;
+  }
+
+  if (modalContext === "glVAT" && selectedRowIndex !== null) {
+    const result = getAllTopVatRow(selectedVat.vatCode);
+    if (result) {
+      handleDetailChangeGL(selectedRowIndex, "vatCode", result);
+    }
+
+    updateState({
+      showVatModal: false,
+      selectedRowIndex: null,
+      modalContext: "",
+    });
+    return;
+  }
+
+  updateState({
+    vatCode: selectedVat.vatCode || "",
+    vatName: selectedVat.vatName || "",
+    showVatModal: false,
+    selectedRowIndex: null,
+    modalContext: "",
+  });
+};
+
+const handleCloseAccountModal = (selectedAccount) => {
+  if (selectedAccount && selectedRowIndex !== null) {
+    handleDetailChangeGL(selectedRowIndex, "acctCode", selectedAccount);
+  }
+
+  updateState({
+    showAccountModal: false,
+    selectedRowIndex: null,
+    accountModalSource: null,
+  });
+};
+
+const handleCloseSlModalGL = (selectedSl) => {
+  if (selectedSl && selectedRowIndex !== null) {
+    handleDetailChangeGL(selectedRowIndex, "slCode", selectedSl);
+  }
+
+  updateState({
+    showSlModal: false,
+    selectedRowIndex: null,
+  });
+};
+
+const handleCloseBranchModal = (selectedBranch) => {
+    if (selectedBranch) {
+      updateState({
+      branchCode: selectedBranch.branchCode,
+      branchName:selectedBranch.branchName
+      })
+    }
+    updateState({ branchModalOpen: false });
+  };
+
+  const handleCloseCurrencyModal = async (selectedCurrency) => {
+    if (selectedCurrency) {
+    handleSelectCurrency(selectedCurrency.currCode);
+  };
+    updateState({ currencyModalOpen: false });
+  }
+
+  const handleSelectCurrency = async (currCode) => {
+    if (currCode) {
+
+     const result = await useTopCurrencyRow(currCode);
+      if (result) {
+        const rate = currCode === glCurrDefault
+          ? defaultCurrRate
+          : await useTopForexRate(currCode, documentDate);
+        
+        updateState({
+          currCode: result.currCode,
+          currName: result.currName,
+          currRate: formatNumber(parseFormattedNumber(rate),6)
+        });
+      }
+    }
+  };
+
+const handleCloseBillTermModal = async (selectedBillTerm) => {
+    if (selectedBillTerm) {
+    handleSelectBillTerm(selectedBillTerm.billtermCode);
+  };
+    updateState({ billtermModalOpen: false });
+}
+
+const handleCloseItemModal = async (selectedItems) => {
+  const records = normalizeItemModalRecords(selectedItems);
+  
+  if (selectionContext === "rowItemLookup" && selectedRowIndex !== null && records.length > 0) {
+    const [selectedItem] = getFilteredDuplicateFreeItems(records, selectedRowIndex);
+    if (!selectedItem) {
+      updateState({
+        showItemModal: false,
+        selectedRowIndex: null,
+        insertAfterIndex: null,
+        selectionContext: "",
+      });
+      return;
+    }
+    const priceMatrixRows = await fetchPriceMatrixRows([selectedItem]);
+    const updatedRows = [...detailRows];
+    const baseRow = {
+      ...updatedRows[selectedRowIndex],
+      itemCode: selectedItem?.itemCode || "",
+      itemName: selectedItem?.itemName || "",
+      itemSpecs: selectedItem?.itemSpecs || updatedRows[selectedRowIndex]?.itemSpecs || "",
+      uomCode: selectedItem?.uomCode || "",
+      pmType: selectedItem?.pmType || updatedRows[selectedRowIndex]?.pmType || "",
+      groupId: updatedRows[selectedRowIndex]?.groupId || "",
+      pmId: selectedItem?.pmId || updatedRows[selectedRowIndex]?.pmId || "",
+    };
+    const priceRow = getPriceMatrixRowForItem(priceMatrixRows, selectedItem);
+    updatedRows[selectedRowIndex] = applyPriceMatrixToDetailRow(baseRow, priceRow);
+    updateState({ detailRows: updatedRows });
+    updateTotals(updatedRows);
+  }
+
+  if (selectionContext === "multiAdd" && records.length > 0) {
+    const filteredRecords = getFilteredDuplicateFreeItems(records);
+    if (filteredRecords.length > 0) {
+      await handleInsertSelectedItems(filteredRecords);
+    }
+  }
+
+  updateState({
+    showItemModal: false,
+    selectedRowIndex: null,
+    insertAfterIndex: null,
+    selectionContext: "",
+  });
+};
+
+const handleSelectBillTerm = async (billtermCode) => {
+    if (billtermCode) {
+
+     const result = await useTopBillTermRow(billtermCode);
+      if (result) {
+      updateState({
+        billtermCode:result.billtermCode,
+        billtermName:result.billtermName,
+        daysDue: result.daysDue,
+        dueDate: calculateDueDate(documentDate, result.daysDue),
+        })
+      }
+    }
+  };
+
+const validateSIQuantity = (index, inputValue) => {
+  const row = detailRowsRef.current[index];
+  const drQty = parseFormattedNumber(row?.drQuantity || 0) || 0;
+  const siQty = parseFormattedNumber(inputValue || 0) || 0;
+  const rowStatus = String(row?.siStat || "").toUpperCase();
+
+  if (drQty > 0 && rowStatus === "O" && siQty < drQty) {
+    const originalValue = row?.siQuantity ?? formatNumber(0, quantityDecimals);
+
+    useSwalErrorAlert("Invalid Quantity", "SI Quantity must be greater than or equal to DR Quantity.");
+    
+    const updatedRows = [...detailRowsRef.current];
+    updatedRows[index] = {
+      ...updatedRows[index],
+      siQuantity: originalValue,
+    };
+
+    detailRowsRef.current = updatedRows;
+    updateState({ detailRows: updatedRows });
+    updateTotals(updatedRows);
+
+    return false;
+  }
+
+  delete originalSOQuantityRef.current[index];
+  return true;
+};
+
+const handleSODetailRowChange = (index, field, value) => {
+  const discountRateFields = [
+    "discRate1",
+    "discRate2",
+    "discRate3",
+    "discRate4",
+    "discRate5",
+    "discRate6",
+    "discRate7",
+    "discRate8",
+  ];
+  const discountAmountFields = [
+    "discAmount1",
+    "discAmount2",
+    "discAmount3",
+    "discAmount4",
+    "discAmount5",
+    "discAmount6",
+    "discAmount7",
+    "discAmount8",
+  ];
+  const calculationTriggerFields = [
+    "siQuantity",
+    "unitPrice",
+    ...discountRateFields,
+    ...discountAmountFields,
+  ];
+  const roundTo2 = (num) => Number((Number(num) || 0).toFixed(2));
+  const vatRate = 0.12; // Example VAT rate, should come from config
+  const atcRate = 0.02; // Example ATC rate, should come from config
+
+  const zeroValueByField = (targetField) => {
+    if (targetField === "unitPrice") {
+      return formatNumber(0, sellingPriceDecimals);
+    }
+
+    return formatNumber(0);
+  };
+
+  const buildFreeItemRow = (row, isFree) => {
+    if (!isFree) {
+      return {
+        ...row,
+        freeItem: "",
+      };
+    }
+
+    const zeroedRow = {
+      ...row,
+      freeItem: "Y",
+      unitPrice: formatNumber(0, sellingPriceDecimals),
+      grossAmount: formatNumber(0),
+      totDiscount: formatNumber(0),
+      netAmount: formatNumber(0),
+    };
+
+    discountRateFields.forEach((discountField) => {
+      zeroedRow[discountField] = formatNumber(0);
+    });
+
+    discountAmountFields.forEach((discountField) => {
+      zeroedRow[discountField] = formatNumber(0);
+    });
+
+    return zeroedRow;
+  };
+
+  const recalculateSODetailRow = (row, changedField) => {
+    const quantity = parseFormattedNumber(row.siQuantity || 0) || 0;
+    const unitPrice = parseFormattedNumber(row.unitPrice || 0) || 0;
+    const grossAmount = roundTo2(quantity * unitPrice);
+    
+    let runningBase = grossAmount;
+    let totalDiscount = 0;
+    const updatedDiscountAmounts = {};
+    const updatedDiscountRates = {};
+
+    if (discountAmountFields.includes(changedField)) {
+      discountAmountFields.forEach((amountField, index) => {
+        const discountNo = index + 1;
+        const rateField = `discRate${discountNo}`;
+        const discountAmount = roundTo2(parseFormattedNumber(row[amountField] || 0));
+        const discountRate =
+          runningBase !== 0 ? roundTo2((discountAmount / runningBase) * 100) : 0;
+
+        updatedDiscountAmounts[amountField] =
+          amountField === changedField ? row[amountField] : formatNumber(discountAmount);
+        updatedDiscountRates[rateField] = formatNumber(discountRate);
+        totalDiscount += discountAmount;
+        runningBase = roundTo2(runningBase - discountAmount);
+      });
+    } else {
+      discountRateFields.forEach((rateField, index) => {
+        const discountNo = index + 1;
+        const amountField = `discAmount${discountNo}`;
+        const rateValue = parseFormattedNumber(row[rateField] || 0) || 0;
+        const discountAmount = roundTo2(runningBase * (rateValue * 0.01));
+
+        updatedDiscountRates[rateField] =
+          rateField === changedField ? row[rateField] : formatNumber(rateValue);
+        updatedDiscountAmounts[amountField] = formatNumber(discountAmount);
+        totalDiscount += discountAmount;
+        runningBase = roundTo2(runningBase - discountAmount);
+      });
+    }
+
+    const netAmount = roundTo2(grossAmount - totalDiscount);
+    const vatAmount = roundTo2(netAmount * vatRate);
+    const atcAmount = roundTo2(netAmount * atcRate);
+    const amountDue = roundTo2(netAmount + vatAmount - atcAmount);
+
+    return {
+      ...row,
+      grossAmount: formatNumber(grossAmount),
+      vatAmount: formatNumber(vatAmount),
+      atcAmount: formatNumber(atcAmount),
+      ...updatedDiscountRates,
+      ...updatedDiscountAmounts,
+      totDiscount: formatNumber(totalDiscount),
+      netAmount: formatNumber(netAmount),
+    };
+  };
+
+  const updatedRows = [...(detailRowsRef.current || [])];
+  let updatedRow = {
+    ...updatedRows[index],
+    [field]: value,
+  };
+
+  if (field === "documentDate" && value && isDateEarlierThanSiDate(value)) {
+    clearHeaderAndDetailDates({ showAlert: true });
+    return;
+  }
+  if (field === "siDate" && value && isDateEarlierThanSiDate(value)) {
+    clearHeaderAndDetailDates({ showAlert: true });
+  }
+
+  if (field === "freeItem") {
+    updatedRow = buildFreeItemRow(updatedRow, value === "Y");
+    updatedRows[index] = updatedRow;
+    updateState({ detailRows: updatedRows });
+    updateTotals(updatedRows);
+    return;
+  }
+
+  if (
+    updatedRows[index]?.freeItem === "Y" &&
+    ["unitPrice", ...discountRateFields, ...discountAmountFields].includes(field)
+  ) {
+    updatedRow = {
+      ...updatedRows[index],
+      [field]: zeroValueByField(field),
+    };
+    updatedRows[index] = buildFreeItemRow(updatedRow, true);
+    updateState({ detailRows: updatedRows });
+    updateTotals(updatedRows);
+    return;
+  }
+
+  if (calculationTriggerFields.includes(field)) {
+    updatedRow = recalculateSODetailRow(updatedRow, field);
+  }
+
+  updatedRows[index] = updatedRow;
+
+  updateState({ detailRows: updatedRows });
+  updateTotals(updatedRows);
+};
+
+const enterNextRowZeroClearFields = [
+  "siQuantity",
+  "unitPrice",
+  "discRate1",
+  "discRate2",
+  "discRate3",
+  "discRate4",
+  "discRate5",
+  "discRate6",
+  "discRate7",
+  "discRate8",
+  "discAmount1",
+  "discAmount2",
+  "discAmount3",
+  "discAmount4",
+  "discAmount5",
+  "discAmount6",
+  "discAmount7",
+  "discAmount8",
+];
+
+const renderSIDetailCell = (columnKey, row, index, siStatusOptions) => {
+  const columnWidth = getDetailColumnFallbackWidth(columnKey);
+  const style = getDetailCellStyle(columnKey, columnWidth);
+  const isRowWithDR = (parseFormattedNumber(row.drQuantity || 0) || 0) > 0;
+  const canSearchItem = !isRowWithDR; // Can't change item if it's from a DR
+  const canEditDetailAfterDR = !isRowWithDR; // Can't edit most fields if it's from a DR
+  
+  // Removed salesRepCode from detailModalHandlers
+  // Added ATC lookup for detail rows if needed, but not explicitly requested for details.
+  // For now, only itemCode lookup is kept.
+  
+  // Moves focus to the same editable column in the next visible row.
+  const focusNextDetailCell = (field) => {
+    focusNextSoDetailRowInput(index, field, {
+      rows: detailRows,
+      zeroClearFields: enterNextRowZeroClearFields,
+      parseValue: parseFormattedNumber,
+      onClearNextValue: (nextIndex, nextField, value) =>
+        handleSIDetailRowChange(nextIndex, nextField, value),
+    });
+  };
+
+  // Shared text input for editable detail columns.
+  const textInput = (field, options = {}) => (
+    <input
+      type="text"
+      id={`${field}-${index}`}
+      className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()}
+      value={row[field] || ""}
+      readOnly={options.readOnly ?? isFormDisabled}
+      onChange={(e) => handleSODetailRowChange(index, field, e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" || options.readOnly || isFormDisabled) return;
+        e.preventDefault();
+        focusNextDetailCell(field);
+      }}
+    />
+  );
+
+  // Shared read-only lookup input; the icon beside it opens the related modal.
+  const lookupInput = (field, options = {}) => (
+    <input
+      type="text"
+      id={`${field}-${index}`}
+      className={`w-full pr-6 global-tran-td-inputclass-ui text-center cursor-pointer ${options.className || ""}`.trim()}
+      value={row[field] || ""}
+      readOnly
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" || isFormDisabled) return;
+        e.preventDefault();
+        focusNextDetailCell(field);
+      }}
+    />
+  );
+
+  const numericInput = (field, options = {}) => (
+  <input
+    type="text"
+    id={`${field}-${index}`}
+    className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
+    value={row[field] || ""}
+    readOnly={options.readOnly ?? isFormDisabled}
+    onChange={(e) => {
+      if (options.readOnly || options.blocked?.()) return;
+      const sanitizedValue = e.target.value.replace(/[^0-9.]/g, "");
+      const regex = options.regex || /^\d*\.?\d{0,2}$/;
+      if (regex.test(sanitizedValue) || sanitizedValue === "") {
+        handleSIDetailRowChange(index, field, sanitizedValue);
+      }
+    }}
+      onFocus={(e) => {
+      options.onFocus?.(e);
+      clearSoDetailZeroOnFocus(e, {
+        isEditable: !(options.readOnly ?? isFormDisabled) && !options.blocked?.(),
+        onClear: (value) => handleSODetailRowChange(index, field, value),
+      });
+    }}
+    onBlur={(e) => {
+      if (options.readOnly || options.blocked?.()) return;
+      if (typeof options.onBlur === "function" && options.onBlur(e) === false) return;
+
+      const num = parseFormattedNumber(e.target.value);
+      handleSODetailRowChange(index, field, Number.isFinite(num) ? formatNumber(num, options.decimals) : formatNumber(0, options.decimals));
+    }}
+    onKeyDown={(e) => {
+      if (e.key !== "Enter" || options.readOnly || options.blocked?.()) return;
+      e.preventDefault();
+
+      if (typeof options.onKeyDown === "function" && options.onKeyDown(e) === false) return;
+
+      const num = parseFormattedNumber(e.target.value);
+      handleSODetailRowChange(index, field, Number.isFinite(num) ? formatNumber(num, options.decimals) : formatNumber(0, options.decimals));
+      focusNextDetailCell(field);
+    }}
+  />
+);
+
+  // Read-only amount display used by calculated amount columns.
+  const readonlyAmountInput = (field) => (
+    <input
+      type="text"
+      className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
+      value={row[field] || ""}
+      readOnly={true} // Always read-only for calculated fields
+      // onChange={(e) => handleSODetailRowChange(index, field, e.target.value)} // No onChange for read-only
+    />
+  );
+
+  const detailColumnRenderers = {
+    ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
+    siStat: () => { const isStatusLocked = !documentID || ["X", "C"].includes(row.siStat || "O"); return <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`siStat-${index}`} className="w-full global-tran-td-inputclass-ui text-left" value={row.siStat || "O"} disabled={isFormDisabled || isStatusLocked} onChange={(e) => handleSIDetailRowChange(index, "siStat", e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled || isStatusLocked) return; e.preventDefault(); focusNextDetailCell("siStat"); }}>{siStatusOptions.map((option) => <option key={option.DROPDOWN_CODE} value={option.DROPDOWN_CODE}>{option.DROPDOWN_NAME}</option>)}</select></td>; }, 
+    itemCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}><div className="flex items-center gap-1"><input type="text" value={row.itemCode || ""} readOnly className="w-full h-7 text-xs bg-transparent focus:outline-none focus:ring-0" />{canSearchItem && <button type="button" className="text-blue-600 hover:text-blue-800" onClick={() => updateState({ selectedRowIndex: index, selectionContext: "rowItemLookup", insertAfterIndex: null, showItemModal: true })}><FontAwesomeIcon icon={faSearch} /></button>}</div></td>, 
+    itemName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey)}</td>,
+    itemSpecs: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey)}</td>,
+    uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { className: "text-center" })}<input type="hidden" value={row.pmType || ""} readOnly /><input type="hidden" value={row.groupId || ""} readOnly /><input type="hidden" value={row.pmId || ""} readOnly /></td>,
+    siQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), onBlur: (e) => validateSIQuantity(index, e.target.value), onKeyDown: (e) => validateSIQuantity(index, e.target.value) })}</td>,
+    unitPrice: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: sellingPriceDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${sellingPriceDecimals}}$`), blocked: () => !isUnitPriceAndDiscountEditable || row.freeItem === "Y", readOnly: isFormDisabled || !isUnitPriceAndDiscountEditable || row.freeItem === "Y" })}</td>,
+    grossAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
+    vatAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>, // New field
+    atcAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>, // New field
+    netAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
+    amountDue: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>, // New field
+    freeItem: () => <td key={columnKey} className="global-tran-td-ui" style={style}><button type="button" className={`w-full h-7 rounded-full border text-[11px] font-semibold transition-colors ${row.freeItem === "Y" ? "border-blue-500 bg-blue-500/15 text-blue-700" : "border-slate-300 bg-white text-slate-600"} ${isFormDisabled || isRowWithDR ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`} disabled={isFormDisabled || isRowWithDR} onClick={() => handleSIDetailRowChange(index, "freeItem", row.freeItem === "Y" ? "" : "Y")}>{row.freeItem === "Y" ? "Yes" : "No"}</button></td>,
+    drQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), readOnly: true })}</td>, // Read-only as it comes from DR
+    linkedSiQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), readOnly: true })}</td>, // Read-only as it comes from linked SI
+  };
+
+  if (visibleDiscountRateFields.includes(columnKey) || visibleDiscountAmountFields.includes(columnKey)) {
+    detailColumnRenderers[columnKey] = () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { blocked: () => !isUnitPriceAndDiscountEditable || row.freeItem === "Y", readOnly: isFormDisabled || !isUnitPriceAndDiscountEditable || row.freeItem === "Y" })}</td>;
+  }
+
+  return detailColumnRenderers[columnKey]?.() ?? null;
+};
+
+const renderSiGlCell = (columnKey, row, index) => {
+  const columnWidth = getSiGlFallbackWidth(columnKey);
+  const style = getSiGlCellStyle(columnKey, columnWidth);
+  const glModalHandlers = {
+    acctCode: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "acctCode" }),
+    rcCode: () => updateState({ selectedRowIndex: index, showRcModal: true, modalContext: "glRC" }),
+    slCode: () => updateState({ selectedRowIndex: index, showSlModal: true }),
+    vatCode: () => updateState({ selectedRowIndex: index, showVatModal: true, modalContext: "glVAT" }),
+    atcCode: () => updateState({ selectedRowIndex: index, showATCModal: true, modalContext: "glATC" }),
+  };
+
+  const focusNextGlCell = (field) => {
+    focusNextSiGlRowInput(index, field, {
+      rows: detailRowsGL,
+      zeroClearFields: siGlEnterNextRowZeroClearFields,
+      parseValue: parseFormattedNumber,
+      onClearNextValue: (nextIndex, nextField, value) => handleDetailChangeGL(nextIndex, nextField, value),
+    });
+  };
+
+  const glTextInput = (field, options = {}) => (
+    <input
+      type="text"
+      id={`${field}-${index}`}
+      className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()}
+      value={row[field] || ""}
+      readOnly={options.readOnly ?? isFormDisabled}
+      maxLength={options.maxLength}
+      onChange={(e) => handleDetailChangeGL(index, field, e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" || options.readOnly || isFormDisabled) return;
+        e.preventDefault();
+        focusNextGlCell(field);
+      }}
+    />
+  );
+
+  const glLookupInput = (field, options = {}) => (
+    <input
+      type="text"
+      id={`${field}-${index}`}
+      className={`w-full pr-6 global-tran-td-inputclass-ui cursor-pointer ${options.className || ""}`.trim()}
+      value={row[field] || ""}
+      readOnly={options.readOnly}
+      onChange={(e) => handleDetailChangeGL(index, field, e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" || isFormDisabled) return;
+        e.preventDefault();
+        focusNextGlCell(field);
+      }}
+    />
+  );
+
+  const glAmountInput = (field) => (
+    <input
+      type="text"
+      id={`${field}-${index}`}
+      className="w-full global-tran-td-inputclass-ui text-right"
+      value={row[field] || ""}
+      readOnly={isFormDisabled}
+      onChange={(e) => {
+        const sanitizedValue = e.target.value.replace(/[^0-9.]/g, "");
+        if (/^\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") {
+          handleDetailChangeGL(index, field, sanitizedValue);
+        }
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        handleBlurGL(index, field, e.target.value, true);
+        focusNextSiGlRowInput(index, field, {
+          rows: detailRowsGL,
+          zeroClearFields: siGlEnterNextRowZeroClearFields,
+          parseValue: parseFormattedNumber,
+          onClearNextValue: (nextIndex, nextField, value) => handleDetailChangeGL(nextIndex, nextField, value),
+        });
+      }}
+      onFocus={(e) => clearSiGlZeroOnFocus(e, { isEditable: !isFormDisabled, onClear: (value) => handleDetailChangeGL(index, field, value) })}
+      onBlur={(e) => {
+        if (isFormDisabled) return;
+        handleBlurGL(index, field, e.target.value);
+      }}
+    />
+  );
+
+  const glColumnRenderers = {
+    ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
+    acctCode: () => { const showLookupIcon = !isFormDisabled; return <td key={columnKey} className="global-tran-td-ui" style={style}><div className="relative w-full">{glLookupInput(columnKey, { readOnly: false })}{showLookupIcon && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={glModalHandlers[columnKey]} />}</div></td>; },
+    rcCode: () => { const hasLookupValue = Boolean(String(row[columnKey] || "").trim()); const showLookupIcon = !isFormDisabled && hasLookupValue; return <td key={columnKey} className="global-tran-td-ui" style={style}><div className="relative w-full">{glLookupInput(columnKey, { readOnly: true })}{showLookupIcon && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={glModalHandlers[columnKey]} />}</div></td>; },
+    slCode: () => { const hasLookupValue = Boolean(String(row[columnKey] || "").trim()); const showLookupIcon = !isFormDisabled && hasLookupValue; return <td key={columnKey} className="global-tran-td-ui" style={style}><div className="relative w-full">{glLookupInput(columnKey, { readOnly: true })}{showLookupIcon && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={glModalHandlers[columnKey]} />}</div></td>; },
+    vatCode: () => { const hasLookupValue = Boolean(String(row[columnKey] || "").trim()); const showLookupIcon = !isFormDisabled && hasLookupValue; return <td key={columnKey} className="global-tran-td-ui" style={style}><div className="relative w-full">{glLookupInput(columnKey, { readOnly: true })}{showLookupIcon && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={glModalHandlers[columnKey]} />}</div></td>; },
+    atcCode: () => { const hasLookupValue = Boolean(String(row[columnKey] || "").trim()); const showLookupIcon = !isFormDisabled && hasLookupValue; return <td key={columnKey} className="global-tran-td-ui" style={style}><div className="relative w-full">{glLookupInput(columnKey, { readOnly: true })}{showLookupIcon && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={glModalHandlers[columnKey]} />}</div></td>; },
+    sltypeCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{glTextInput(columnKey)}</td>,
+    slRefNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{glTextInput(columnKey, { maxLength: useGetFieldLength(tblFieldArray, "slref_no") })}</td>,
+    remarks: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{glTextInput(columnKey, { maxLength: useGetFieldLength(tblFieldArray, "remarks") })}</td>,
+    particular: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{glTextInput("particular")}</td>,
+    atcName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{glTextInput("atcName")}</td>,
+    vatName: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full global-tran-td-inputclass-ui" value={row.vatName || ""} readOnly /></td>,
+    debit: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{glAmountInput(columnKey)}</td>,
+    credit: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{glAmountInput(columnKey)}</td>,
+    debitFx1: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{glAmountInput(columnKey)}</td>,
+    creditFx1: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{glAmountInput(columnKey)}</td>,
+    debitFx2: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{glAmountInput(columnKey)}</td>,
+    creditFx2: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{glAmountInput(columnKey)}</td>,
+    slRefDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><DateFormatInput id={`slRefDate${index}`} value={row.slRefDate || ""} disabled={isFormDisabled} className="w-full global-tran-td-inputclass-ui text-center pr-7" updateState={(updates) => { if (updates[`slRefDate${index}`] !== undefined) handleDetailChangeGL(index, "slRefDate", updates[`slRefDate${index}`], false); }} onKeyDownCustom={(e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); focusNextGlCell("slRefDate"); }} /></td>,
+  };
+
+  return glColumnRenderers[columnKey]?.() ?? null;
+};
+
+return (
+<>
+<div className="global-tran-main-div-ui">
+
+      {showSpinner && <LoadingSpinner />}
+
+      <div className="global-tran-headerToolbar-ui">
+      <Header
+        docType={docType}
+        pdfLink={pdfLink}
+        videoLink={videoLink}
+        onPrint={handlePrint}
+        printData={printData}
+        onReset={handleReset}
+        onSave={() => handleActivityOption("Upsert")}
+        onCancel={handleCancel}
+        onCopy={handleCopy}
+        onAttach={handleAttach}
+
+        activeTopTab={topTab}
+        showActions={topTab === "details"}
+        showBIRForm={false}
+        isViewDocument={isViewDocument}
+        onDetails={() => setTopTab("details")}
+        onHistory={() => setTopTab("history")}
+        disableRouteNavigation={true}
+
+        detailsRoute="/page/DR"
+
+        isSaveDisabled={state.isSaveDisabled || isFormDisabled || ((detailRows?.length || 0) + (detailRowsGL?.length || 0) === 0)}
+        isResetDisabled={state.isResetDisabled}
+        isAttachDisabled={!documentID}
+        isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
+        isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
+        isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED"|| displayStatus === "CLOSED" || totalSiQuantity > 0}
+      />
+      </div>
+
+      <div
+        className={topTab === "details" ? "" : "hidden"}
+        style={{ display: topTab === "details" ? undefined : "none" }}
+      >
+
+      {/* Page title and subheading */}
+      <div className={`global-tran-header-ui ${isViewDocument ? "max-md:!mt-12 max-md:!pt-2 max-md:!pb-2" : ""}`}>
+        <div className={`global-tran-headertext-div-ui ${isViewDocument ? "max-md:!mb-1" : ""}`}>
+          <h1 className="global-tran-headertext-ui">{documentTitle}</h1>
+        </div>
+        <div className={`global-tran-headerstat-div-ui ${isViewDocument ? "max-md:!mt-0" : ""}`}>
+          <div>
+            <p className="global-tran-headerstat-text-ui">Transaction Status</p>
+            <h1 className={`global-tran-stat-text-ui ${statusColor}`}>{displayStatus}</h1>
+          </div>
+        </div>
+      </div>
+
+      {/* Form Layout with Tabs */}
+      <div className={`global-tran-header-div-ui ${isViewDocument ? "max-md:!mt-10 max-md:!pt-0 max-md:!pb-0" : ""}`}>
+        {/* Tab Navigation */}
+        <div className={`global-tran-header-tab-div-ui ${isViewDocument ? "max-md:!mt-0 max-md:!pt-0 max-md:!pb-4 max-md:!mb-4 max-md:!justify-start max-md:!text-left" : ""}`}>
+          <button
+            className={`global-tran-tab-padding-ui ${
+              activeTab === "basic"
+                ? "global-tran-tab-text_active-ui"
+                : "global-tran-tab-text_inactive-ui"
+            }`}
+            onClick={() => updateState({ activeTab: "basic" })}
+          >
+            Basic Information
+          </button>
+          {/* Provision for Other Tabs */}
+        </div>
+
+        {/* SI Header Form Section - Main Grid Container */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 rounded-lg relative" id="so_hd">
+
+          <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="global-tran-textbox-group-div-ui">
+            <FieldRenderer
+              id="branchName"
+              label="Branch"
+              type="lookup"
+              value={branchName || ""}
+              disabled={state.isFetchDisabled || state.isDocNoDisabled || isFormDisabled}
+              onLookup={() => updateState({ branchModalOpen: true })}
+            />
+
+            <FieldRenderer
+              id="siNo"
+              label="SI No."
+              type="lookup"
+              value={state.documentNo || documentNo || ""}
+              disabled={state.isDocNoDisabled}
+              onChange={(val) => updateState({ documentNo: val })}
+              onBlur={handlesiNoBlur}
+              onLookup={() => updateState({ showAllTranDocNo: true })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handlesoNoBlur();
+                  document.getElementById("documentDate")?.focus();
+                }
+              }}
+            />
+
+            <div className="relative w-full">
+              <div
+                className={`flex items-stretch global-ref-textbox-ui ${
+                  !isFormDisabled
+                    ? "global-ref-textbox-enabled"
+                    : "global-ref-textbox-disabled"
+                }`}
+              >
+                <DateFormatInput
+                  id="documentDate"
+                  className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
+                  value={documentDate}
+                  disabled={isFormDisabled}
+                  updateState={updateState}
+                />
+              </div>
+              <label
+                htmlFor="documentDate"
+                className={`global-ref-floating-label ${
+                  !isFormDisabled
+                    ? "global-ref-label-enabled"
+                    : "global-ref-label-disabled"
+                }`}
+              >
+                SI Date
+              </label>
+            </div>
+
+            <FieldRenderer
+              id="billToCustCode"
+              label="Bill To Customer Code"
+              required
+              type="lookup"
+              value={billToCustCode || ""}
+              disabled={isFormDisabled}
+              readOnly
+              lookupDisabled={isFetchDisabled}
+              onLookup={() => updateState({ custModalOpen: true, modalContext: "billTo" })}
+            />
+
+            <FieldRenderer
+              id="billToCustName"
+              label="Bill To Customer Name"
+              required
+              type="text"
+              value={billToCustName || ""}
+              disabled
+              readOnly
+            />
+          </div>
+
+          <div className="global-tran-textbox-group-div-ui">
+            <FieldRenderer
+              id="siTranType"
+              label="SI Type"
+              type="select"
+              value={siTranType || ""}
+              disabled={isFormDisabled}
+              onChange={(val) => updateState({ siTranType: val })}
+              options={(siTranTypeOptions || []).map((t) => ({
+                label: t.DROPDOWN_NAME,
+                value: t.DROPDOWN_CODE,
+              }))}
+            />
+
+            <FieldRenderer
+              id="atcName"
+              label="ATC (Goods)"
+              type="lookup"
+              value={atcName || ""}
+              disabled={isFormDisabled}
+              readOnly
+              lookupDisabled={isFetchDisabled}
+              onLookup={() => updateState({ showATCModal: true })}
+            />
+
+            <FieldRenderer
+              id="vatName"
+              label="VAT"
+              type="lookup"
+              value={vatName || ""}
+              disabled={isFormDisabled}
+              readOnly
+              lookupDisabled={isFetchDisabled}
+              onLookup={() => updateState({ showVatModal: true })}
+            />
+          </div>
+
+          <div className="global-tran-textbox-group-div-ui">
+            <FieldRenderer
+              id="billtermName"
+              label="Billing Term"
+              required
+              type="lookup"
+              value={billtermName || ""}
+              disabled={isFormDisabled}
+              readOnly
+              lookupDisabled={isFetchDisabled}
+              onLookup={() => updateState({ billtermModalOpen: true })}
+            />
+
+            <FieldRenderer
+              id="dueDate"
+              label="Due Date"
+              type="date"
+              value={dueDate || ""}
+              disabled
+              readOnly
+            />
+
+            <FieldRenderer
+              id="refSiNo1"
+              label="Ref SI No. 1"
+              type="text"
+              value={refSiNo1 || ""}
+              disabled={isFormDisabled}
+              onChange={(val) => updateState({ refSiNo1: val })}
+              maxLength={useGetFieldLength(tblFieldArray, "refsvi_no1")}
+            />
+
+            <FieldRenderer
+              id="refSiNo2"
+              label="Ref SI No. 2"
+              type="text"
+              value={refSiNo2 || ""}
+              disabled={isFormDisabled}
+              onChange={(val) => updateState({ refSiNo2: val })}
+              maxLength={useGetFieldLength(tblFieldArray, "refsvi_no2")}
+            />
+          </div>
+
+          <div className="col-span-full">
+            <div className="relative p-2">
+              <textarea
+                id="remarks"
+                placeholder=""
+                rows={6}
+                className="peer global-tran-textbox-remarks-ui pt-2"
+                value={remarks}
+                onChange={(e) => updateState({ remarks: e.target.value })}
+                disabled={isFormDisabled}
+                maxLength={useGetFieldLength(tblFieldArray, "remarks")}
+              />
+              <label
+                htmlFor="remarks"
+                className="global-tran-floating-label-remarks"
+              >
+                Remarks
+              </label>
+            </div>
+          </div>
+          </div>
+
+          <div className="global-tran-textbox-group-div-ui">
+            <div className="flex gap-4">
+              <input type="hidden" id="currCode" value={currCode || ""} readOnly />
+
+              <div className="flex-grow w-2/3">
+                <FieldRenderer
+                  id="currName"
+                  label="Currency"
+                  value={
+                    currCode
+                      ? `${currCode}${currName ? ` - ${currName}` : ""}`
+                      : ""
+                  }
+                  disabled
+                  readOnly
+                  type="text"
+                />
+              </div>
+
+              <div className="flex-grow">
+                <FieldRenderer
+                  id="currRate"
+                  label="Currency Rate"
+                  type="amount"
+                  value={currRate || ""}
+                  disabled={isFormDisabled || glCurrDefault === currCode}
+                  onChange={(val) => {
+                    const sanitizedValue = String(val).replace(/[^0-9.]/g, "");
+                    if (/^\d*\.?\d{0,6}$/.test(sanitizedValue) || sanitizedValue === "") {
+                      updateState({ currRate: sanitizedValue });
+                    }
+                  }}
+                  onBlur={handleCurrRateNoBlur}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      document.getElementById("refDocNo1")?.focus();
+                    }
+                  }}
+                  onFocus={(e) => {
+                    if (!isFormDisabled && parseFormattedNumber(e.target.value) === 0) {
+                      updateState({ currRate: "" });
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            <FieldRenderer
+              id="totalGrossAmount"
+              label="Gross Amount"
+              type="amount"
+              value={totals.totalGrossAmount || ""}
+              disabled
+            />
+
+            <FieldRenderer
+              id="totalDiscountAmount"
+              label="Discount Amount"
+              type="amount"
+              value={totals.totalDiscountAmount || ""}
+              disabled
+              readOnly
+            />
+
+            <FieldRenderer
+              id="totalNetAmount"
+              label="Net Amount"
+              type="amount"
+              value={totals.totalNetAmount || ""}
+              disabled
+              readOnly
+            />
+
+            <FieldRenderer
+              id="totalVatAmount"
+              label="VAT Amount"
+              type="amount"
+              value={totals.totalVatAmount || ""}
+              disabled
+              readOnly
+            />
+
+            <FieldRenderer
+              id="totalSalesAmount"
+              label="Sales Amount"
+              type="amount"
+              value={totals.totalSalesAmount || ""}
+              disabled
+              readOnly
+            />
+
+            <FieldRenderer
+              id="totalAtcAmount"
+              label="ATC Amount"
+              type="amount"
+              value={totals.totalAtcAmount || ""}
+              disabled
+              readOnly
+            />
+
+            <FieldRenderer
+              id="totalAmountDue"
+              label="Amount Due"
+              type="amount"
+              value={totals.totalAmountDue || ""}
+              disabled
+              readOnly
+            />
+          </div>
+        </div>
+
+    </div>
+    </div>
+
+          {/* APV Detail Section */}
+          <div id="apv_dtl" className="global-tran-tab-div-ui">
+
+          {/* Tab Navigation */}
+          <div className="global-tran-tab-nav-ui">
+
+          {/* Tabs */}
+          <div className="flex flex-row sm:flex-row">
+            <button
+              className="global-tran-tab-padding-ui global-tran-tab-text_active-ui"
+            > {/* This is correct */}
+              SI Details
+            </button>
+          </div>
+        </div>
+
+      {/* Invoice Details Button */}
+
+      <div className="global-tran-table-main-div-ui">
+      <div className="global-tran-table-main-sub-div-ui">
+        <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
+          <thead className="global-tran-thead-div-ui">
+            <tr>
+              {orderedDetailColumns.map((column) =>
+                renderSiDetailHeader(column.label, column.key, column.width, {
+                  orderedColumns: orderedDetailColumns,
+                })
+              )}
+
+                {!isFormDisabled && (
+                  <th
+                    className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900"
+                    style={transactionActionsHeaderStyle}
+                  >
+                    Actions
+                  </th>
+                )}
+
+            </tr>
+          </thead>
+
+          <tbody className="relative">{sortedDetailRows.map(({ row, originalIndex }) => {
+            const hasDrQuantity = parseFormattedNumber(row.drQuantity || 0) > 0;
+            const canDeleteRow = !hasDrQuantity && (row.siStat || "O") === "O";
+            const siStatusOptions = hasDrQuantity
+              ? [
+                  { value: "O", label: "Open" },
+                  { value: "C", label: "Closed" },
+                ]
+              : [
+                  { value: "O", label: "Open" },
+                  { value: "C", label: "Closed" },
+                  { value: "X", label: "Cancelled" },
+                ];
+
+            return (
+            <tr key={originalIndex} className="global-tran-tr-ui">
+              {orderedDetailColumns.map((column) =>
+                renderSIDetailCell(column.key, row, originalIndex, siStatusOptions)
+              )}
+
+               {!isFormDisabled && (
+                    <td
+                      className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black"
+                      style={transactionActionsCellStyle}
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          type="button"
+                          className="global-tran-td-button-add-ui"
+                          onClick={() => handleInsertBlankRow(originalIndex)}
+                        >
+                          <FontAwesomeIcon icon={faPlus} />
+                        </button>
+
+                        <button
+                          type="button"
+                          className="global-tran-td-button-delete-ui"
+                          onClick={() => handleDeleteRow(originalIndex)}
+                          disabled={!canDeleteRow}
+                        >
+                          <FontAwesomeIcon icon={faTrashAlt} />
+                        </button>
+                      </div>
+                    </td>
+                  )}
+
+              </tr>
+            );
+          })}
+          </tbody>
+
+        </table>
+        {renderSoDetailHeaderContextMenu()}
+      </div>
+      </div>
+
+    {topTab === "details" && (
+    <>
+    {/* Invoice Details Footer */}
+    <div className="global-tran-tab-footer-main-div-ui">
+
+    {/* Add Button */}
+    <div className="global-tran-tab-footer-button-div-ui">
+      <button
+        onClick={handleOpenAddItemModal}
+        className="global-tran-tab-footer-button-add-ui"
+        style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
+      >
+        <FontAwesomeIcon icon={faPlus} className="mr-2" />Add
+      </button>
+    </div>
+
+      
+    </div>
+    </>
+    )}
+
+    </div>
+
+    {/* General Ledger Section */}
+    <div className="global-tran-tab-div-ui">
+      <div className="global-tran-tab-nav-ui">
+        <div className="flex flex-row sm:flex-row">
+          <button
+            className={`global-tran-tab-padding-ui ${
+              GLactiveTab === "invoice"
+                ? "global-tran-tab-text_active-ui"
+                : "global-tran-tab-text_inactive-ui"
+            }`}
+            onClick={() => setGLActiveTab("invoice")}
+          >
+            General Ledger
+          </button>
+        </div>
+
+        <div className="flex justify-end">
+          <button
+            onClick={() => handleActivityOption("GenerateGL")}
+            className="global-tran-button-generateGL"
+            disabled={isLoading}
+            style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
+          >
+            {isLoading ? "Generating..." : "Generate GL Entries"}
+          </button>
+        </div>
+      </div>
+
+      <div className="global-tran-table-main-div-ui">
+        <div className="global-tran-table-main-sub-div-ui">
+          <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
+            <thead className="global-tran-thead-div-ui">
+              <tr>
+                {orderedSiGlColumns.map((column) =>
+                  renderSiGlHeader(column.label, column.key, column.width, {
+                    orderedColumns: orderedSiGlColumns,
+                  })
+                )}
+                {!isFormDisabled && (
+                  <th
+                    className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900"
+                    style={transactionActionsHeaderStyle}
+                  >
+                    Actions
+                  </th>
+                )}
+              </tr>
+            </thead>
+            <tbody className="relative">
+              {sortedSiGlRows.map(({ row, originalIndex }) => (
+                <tr key={originalIndex} className="global-tran-tr-ui">
+                  {orderedSiGlColumns.map((column) =>
+                    renderSiGlCell(column.key, row, originalIndex)
+                  )}
+
+                  {!isFormDisabled && (
+                    <td
+                      className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black"
+                      style={transactionActionsCellStyle}
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          type="button"
+                          className="global-tran-td-button-add-ui"
+                          onClick={() => handleAddRowGL(originalIndex)}
+                        >
+                          <FontAwesomeIcon icon={faPlus} />
+                        </button>
+
+                        <button
+                          type="button"
+                          className="global-tran-td-button-delete-ui"
+                          onClick={() => handleDeleteRowGL(originalIndex)}
+                        >
+                          <FontAwesomeIcon icon={faTrashAlt} />
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {renderSiGlHeaderContextMenu()}
+        </div>
+      </div>
+
+      <div className="global-tran-tab-footer-main-div-ui">
+        <div className="global-tran-tab-footer-button-div-ui">
+          <button
+            onClick={() => handleAddRowGL()}
+            className="global-tran-tab-footer-button-add-ui"
+            style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
+          >
+            <FontAwesomeIcon icon={faPlus} className="mr-2" />Add
+          </button>
+        </div>
+
+        <div className="global-tran-tab-footer-total-main-div-ui">
+          <>
+            <div className="global-tran-tab-footer-total-div-ui">
+              <label htmlFor="TotalDebit" className="global-tran-tab-footer-total-label-ui">
+                Total Debit ({glCurrDefault}):
+              </label>
+              <label htmlFor="TotalDebit" className="global-tran-tab-footer-total-value-ui">
+                {totalDebit}
+              </label>
+            </div>
+
+            <div className="global-tran-tab-footer-total-div-ui">
+              <label htmlFor="TotalCredit" className="global-tran-tab-footer-total-label-ui">
+                Total Credit ({glCurrDefault}):
+              </label>
+              <label htmlFor="TotalCredit" className="global-tran-tab-footer-total-value-ui">
+                {totalCredit}
+              </label>
+            </div>
+          </>
+
+          {glCurrDefault !== currCode && (
+            <div className="global-tran-tab-footer-total-main-div-ui">
+              <div className="global-tran-tab-footer-total-div-ui">
+                <label htmlFor="TotalDebitFx" className="global-tran-tab-footer-total-label-ui">
+                  Total Debit ({currCode}):
+                </label>
+                <label htmlFor="TotalDebitFx" className="global-tran-tab-footer-total-value-ui">
+                  {totalDebitFx1}
+                </label>
+              </div>
+
+              <div className="global-tran-tab-footer-total-div-ui">
+                <label htmlFor="TotalCreditFx" className="global-tran-tab-footer-total-label-ui">
+                  Total Credit ({currCode}):
+                </label>
+                <label htmlFor="TotalCreditFx" className="global-tran-tab-footer-total-value-ui">
+                  {totalCreditFx1}
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+
+    {branchModalOpen && (
+            <BranchLookupModal
+              isOpen={branchModalOpen}
+              onClose={handleCloseBranchModal}
+            />
+          )}
+
+    {currencyModalOpen && (
+            <CurrLookupModal
+              isOpen={currencyModalOpen}
+              onClose={handleCloseCurrencyModal}
+            />
+          )}
+
+    {billtermModalOpen && (
+      <BillTermLookupModal
+          isOpen={billtermModalOpen}
+          onClose={handleCloseBillTermModal}
+        />
+    )}
+
+    {custModalOpen && (
+      <CustomerMastLookupModal
+        isOpen={custModalOpen}
+        onClose={handleCloseCustModal}
+      />
+    )}
+
+    {showAccountModal && (
+      <COAMastLookupModal
+        isOpen={showAccountModal}
+        onClose={handleCloseAccountModal}
+        source={accountModalSource}
+        customParam={customParam}
+      />
+    )}
+
+    {showSlModal && (
+      <SLMastLookupModal
+        isOpen={showSlModal}
+        onClose={handleCloseSlModalGL}
+      />
+    )}
+
+    {showItemModal && (
+      <ItemMastLookupModal
+        isOpen={showItemModal}
+        endpoint="getInvLookupFG"
+        docType="SO"
+        onClose={handleCloseItemModal}
+        onCancel={() =>
+          updateState({
+            showItemModal: false,
+            selectedRowIndex: null,
+            insertAfterIndex: null,
+            selectionContext: "",
+          })
+        }
+        enableMultiSelect={selectionContext === "multiAdd"}
+      />
+    )}
+
+    {showATCModal && (
+      <ATCLookupModal
+        isOpen={showATCModal}
+        onClose={handleCloseATCModal}
+      />
+    )}
+
+    {showVatModal && (
+      <VATLookupModal
+        isOpen={showVatModal}
+        onClose={handleCloseVatModal}
+      />
+    )}
+
+    {/* Removed RC Code Modal and Sales Rep Modal */}
+    {showRcModal && (
+      <RCLookupModal
+        isOpen={showRcModal}
+        onClose={handleCloseRcModal}
+      />
+    )}
+
+    {/* Cancellation Modal */}
+    {showCancelModal && (
+      <CancelTranModal
+        isOpen={showCancelModal}
+        onClose={handleCloseCancel}
+      />
+    )}
+
+    {showAttachModal && (
+      <AttachDocumentModal
+        isOpen={showAttachModal}
+        params={{
+          DocumentID: documentID,
+          DocumentName: documentName,
+          BranchName: branchName,
+          DocumentNo: documentNo,
+        }}
+        onClose={() => updateState({ showAttachModal: false })}
+      />
+    )}
+
+    {showSignatoryModal && (
+      <DocumentSignatories
+        isOpen={showSignatoryModal}
+        params={{noReprints,documentID,docType}}
+        onClose={handleCloseSignatory}
+        onCancel={() => updateState({ showSignatoryModal: false })}
+      />
+    )}
+    {showAllTranDocNo && (
+      <AllTranDocNo
+        isOpen={showAllTranDocNo}
+        params={{branchCode,branchName,docType,documentTitle,fieldNo : "siNo"}}
+        onRetrieve={handleTranDocNoRetrieval}
+        onResponse={{documentNo}}
+        onSelected={handleTranDocNoSelection}
+        onClose={() => updateState({ showAllTranDocNo: false })}
+      />
+    )}
+
+      {showSpinner && <LoadingSpinner />}
+    </div>
+  <div
+    className={topTab === "history" ? "" : "hidden"}
+    style={{ display: topTab === "history" ? undefined : "none" }}
+  >
+  <AllTranHistory
+    showHeader={false}
+    isActive={topTab === "history"}
+    endpoint="/getSIHistory"
+    cacheKey={`SI:${state.branchCode || ""}`}
+    activeTabKey="SI_Summary"
+    branchCode={state.branchCode}
+    status={(() => {
+      const s = (state.status || "").toUpperCase();
+      if (s === "CANCELLED") return "X";
+      if (s === "CLOSED") return "C";
+      if (s === "OPEN") return "";
+      return "All";
+    })()}
+    onRowDoubleClick={handleHistoryRowPick}
+    historyExportName={`${documentTitle} History`}
+  />
+</div>
+
+</>
+);
+// End of Return
+
+};
+
+export default SI;

@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   Eye,
   Maximize2,
+  MessageSquare,
   Minimize2,
   Paperclip,
   RotateCcw,
@@ -44,8 +45,8 @@ const MIN_COLUMN_WIDTH = 80;
 const MAX_AUTO_COLUMN_WIDTH = 260;
 const MAX_MANUAL_COLUMN_WIDTH = 520;
 const CHAR_WIDTH = 7;
-const ACTION_COL_WIDTH = 150;
-const FROZEN_DETAIL_COLUMN_COUNT = 1;
+const ACTION_COL_WIDTH = 184;
+const FROZEN_DETAIL_COLUMN_COUNT = 2;
 const MOBILE_DETAIL_LIMIT = 8;
 
 const fieldClassName =
@@ -56,20 +57,43 @@ const DisapprovalReasonModal = ({
   rows = [],
   reason,
   isProcessing,
+  title = "Disapprove Document",
+  description,
+  fieldLabel = "Reason for Disapproval",
+  placeholder = "Explain why you are disapproving this document...",
+  submitLabel = "Disapprove",
+  variant = "danger",
   onReasonChange,
   onCancel,
   onSubmit,
 }) => {
   if (!isOpen) return null;
 
-  const disapprovalCount = rows.length;
+  const rowCount = rows.length;
+  const isDanger = variant === "danger";
+  const NoticeIcon = isDanger ? XCircle : MessageSquare;
+  const noticeClasses = isDanger
+    ? "border-red-500 bg-red-50 text-red-800"
+    : "border-blue-500 bg-blue-50 text-blue-800";
+  const iconClassName = isDanger ? "text-red-500" : "text-blue-500";
+  const focusClassName = isDanger
+    ? "focus:border-red-500 focus:ring-red-500/20"
+    : "focus:border-blue-500 focus:ring-blue-500/20";
+  const submitClassName = isDanger
+    ? "bg-red-600 hover:bg-red-700"
+    : "bg-blue-600 hover:bg-blue-700";
+  const summary =
+    description ||
+    `Provide the reason for disapproving ${rowCount} selected transaction${
+      rowCount > 1 ? "s" : ""
+    }.`;
 
   return (
     <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-gray-900/60 p-4">
       <div className="w-full max-w-md overflow-hidden rounded-xl bg-white shadow-2xl">
         <div className="flex items-center justify-between bg-white px-6 pb-2 pt-5">
           <h2 className="text-lg font-black tracking-tight text-gray-900">
-            Disapprove Document
+            {title}
           </h2>
 
           <button
@@ -83,25 +107,24 @@ const DisapprovalReasonModal = ({
         </div>
 
         <div className="space-y-4 px-6 pb-6 pt-2">
-          <div className="flex items-start gap-3 rounded-r-md border-l-4 border-red-500 bg-red-50 p-3">
-            <XCircle className="mt-0.5 shrink-0 text-red-500" size={20} />
-            <p className="text-sm font-medium leading-snug text-red-800">
-              Provide the reason for disapproving {disapprovalCount} selected
-              transaction{disapprovalCount > 1 ? "s" : ""}.
+          <div className={`flex items-start gap-3 rounded-r-md border-l-4 p-3 ${noticeClasses}`}>
+            <NoticeIcon className={`mt-0.5 shrink-0 ${iconClassName}`} size={20} />
+            <p className="text-left text-sm font-medium leading-snug">
+              {summary}
             </p>
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-semibold text-gray-700">
-              Reason for Disapproval
+            <label className="mb-1 block text-left text-sm font-semibold text-gray-700">
+              {fieldLabel}
             </label>
             <textarea
               value={reason}
               onChange={(event) => onReasonChange(event.target.value)}
-              placeholder="Explain why you are disapproving this document..."
+              placeholder={placeholder}
               rows={3}
               disabled={isProcessing}
-              className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 disabled:cursor-not-allowed disabled:bg-gray-100"
+              className={`w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-left text-sm shadow-sm focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-gray-100 ${focusClassName}`}
             />
           </div>
         </div>
@@ -120,9 +143,9 @@ const DisapprovalReasonModal = ({
             type="button"
             onClick={onSubmit}
             disabled={isProcessing}
-            className="rounded-lg border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+            className={`rounded-lg border border-transparent px-4 py-2 text-sm font-medium text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-40 ${submitClassName}`}
           >
-            Disapprove
+            {submitLabel}
           </button>
         </div>
       </div>
@@ -145,6 +168,25 @@ const getRowKey = (row, index) =>
       row?.PR_NO ||
       index,
   );
+
+const getDocumentNo = (row) =>
+  String(
+    row?.documentNo ||
+      row?.docNo ||
+      row?.prNo ||
+      row?.PR_NO ||
+      row?.tranNo ||
+      row?.tranId ||
+      "",
+  ).trim();
+
+const getRowsDocumentLabel = (rows) => {
+  const targetRows = Array.isArray(rows) ? rows.filter(Boolean) : [];
+
+  if (targetRows.length > 1) return "Various";
+
+  return getDocumentNo(targetRows[0]) || "-";
+};
 
 const getRowStatus = (row) =>
   String(
@@ -263,12 +305,15 @@ const GlobalApprovalModal = forwardRef(
       isDetailLoading = false,
       onRowApprove,
       onRowDisapprove,
+      onRowComment,
       onViewDocument,
       onViewAttachment,
       onApprove,
       onReject,
+      onComment,
       onApproveSelected,
       onRejectSelected,
+      onCommentSelected,
       onReloadRecords,
       onReturn,
       onDetailChange,
@@ -290,6 +335,8 @@ const GlobalApprovalModal = forwardRef(
     const [expandedMobileRowKeys, setExpandedMobileRowKeys] = useState(() => new Set());
     const [pendingDisapprovalRows, setPendingDisapprovalRows] = useState([]);
     const [disapprovalReason, setDisapprovalReason] = useState("");
+    const [pendingCommentRows, setPendingCommentRows] = useState([]);
+    const [approverNote, setApproverNote] = useState("");
     const [attachParams, setAttachParams] = useState(null);
     const [columnOrder, setColumnOrder] = useState([]);
     const [manualColumnWidths, setManualColumnWidths] = useState({});
@@ -314,6 +361,8 @@ const GlobalApprovalModal = forwardRef(
       setIsMaximized(false);
       setPendingDisapprovalRows([]);
       setDisapprovalReason("");
+      setPendingCommentRows([]);
+      setApproverNote("");
     }, [open]);
 
     useEffect(() => {
@@ -664,6 +713,25 @@ const GlobalApprovalModal = forwardRef(
       openDisapprovalModal(row);
     };
 
+    const openCommentModal = (targetRows) => {
+      const rowsToComment = Array.isArray(targetRows)
+        ? targetRows.filter(Boolean)
+        : [targetRows].filter(Boolean);
+
+      if (!rowsToComment.length) return;
+
+      setPendingCommentRows(rowsToComment);
+      setApproverNote("");
+    };
+
+    const handleRowComment = (row, rowIndex) => {
+      const rowKey = getRowKey(row, rowIndex);
+      const shouldUseSelectedRows =
+        selectedRows.length > 1 && selectedRowKeys.has(rowKey);
+
+      openCommentModal(shouldUseSelectedRows ? selectedRows : row);
+    };
+
     const handleApproveSelected = () => {
       if (!selectedRows.length) return;
 
@@ -686,6 +754,13 @@ const GlobalApprovalModal = forwardRef(
 
       setPendingDisapprovalRows([]);
       setDisapprovalReason("");
+    };
+
+    const handleCloseCommentModal = () => {
+      if (isProcessing) return;
+
+      setPendingCommentRows([]);
+      setApproverNote("");
     };
 
     const handleSubmitDisapproval = async () => {
@@ -717,6 +792,39 @@ const GlobalApprovalModal = forwardRef(
       } else if (onReject) {
         result = await Promise.all(
           rowsToDisapprove.map((row) => onReject(row, trimmedReason)),
+        );
+      }
+
+      if (result === false) return;
+    };
+
+    const handleSubmitComment = async () => {
+      const trimmedNote = approverNote.trim();
+
+      if (!trimmedNote) {
+        useSwalErrorAlert(
+          "Required Fields",
+          "Approver's note is required.",
+        );
+        return;
+      }
+
+      const rowsToComment = pendingCommentRows;
+      setPendingCommentRows([]);
+      setApproverNote("");
+
+      let result;
+
+      if (onCommentSelected) {
+        result = await onCommentSelected(rowsToComment, trimmedNote);
+      } else if (onRowComment) {
+        result = await onRowComment(
+          rowsToComment.length === 1 ? rowsToComment[0] : rowsToComment,
+          trimmedNote,
+        );
+      } else if (onComment) {
+        result = await Promise.all(
+          rowsToComment.map((row) => onComment(row, trimmedNote)),
         );
       }
 
@@ -1080,7 +1188,7 @@ const GlobalApprovalModal = forwardRef(
                             </button>
                           )}
 
-                          <div className="mt-2 grid grid-cols-4 gap-1.5">
+                          <div className="mt-2 grid grid-cols-5 gap-1.5">
                             <button
                               type="button"
                               onClick={() => handleRowApprove(row)}
@@ -1127,6 +1235,18 @@ const GlobalApprovalModal = forwardRef(
                             >
                               <Paperclip size={13} strokeWidth={1.8} />
                               <span className="text-[8px] font-semibold leading-none">Attach</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleRowComment(row, selectionIndex)}
+                              disabled={isProcessing}
+                              className="inline-flex h-9 flex-col items-center justify-center gap-0.5 rounded border border-blue-200 bg-blue-50 text-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+                              title="Approver's Note"
+                              aria-label="Approver's Note"
+                            >
+                              <MessageSquare size={13} strokeWidth={1.8} />
+                              <span className="text-[8px] font-semibold leading-none">Note</span>
                             </button>
                           </div>
                         </article>
@@ -1240,7 +1360,11 @@ const GlobalApprovalModal = forwardRef(
                             minWidth: ACTION_COL_WIDTH,
                             maxWidth: ACTION_COL_WIDTH,
                           }}
-                        />
+                        >
+                          <div className="translate-x-1 truncate whitespace-nowrap text-center text-[8px] font-semibold leading-5 text-slate-600">
+                            Approve | Disapprove | View | Attachment | Note
+                          </div>
+                        </th>
                       )}
                       {columns.map((column, columnIndex) => {
                         const isFrozenColumn = columnIndex < FROZEN_DETAIL_COLUMN_COUNT;
@@ -1284,14 +1408,16 @@ const GlobalApprovalModal = forwardRef(
                         const sourceIndex = rows.indexOf(row);
                         const selectionIndex = sourceIndex >= 0 ? sourceIndex : rowIndex;
                         const rowKey = getRowKey(row, selectionIndex);
+                        const rowBackgroundClass =
+                          rowIndex % 2 === 0 ? "bg-white" : "bg-slate-50";
 
                         return (
                         <tr
                           key={rowKey}
-                          className="group border-b border-slate-200 bg-white hover:bg-blue-100"
+                          className={`group border-b border-slate-200 ${rowBackgroundClass} hover:bg-blue-100`}
                         >
                           <td
-                            className="sticky z-10 border-b border-r border-slate-200 bg-white px-0.5 py-0.5 text-center shadow-[4px_0_6px_-6px_rgba(15,23,42,0.35)] group-hover:bg-blue-100"
+                            className={`sticky z-10 border-b border-r border-slate-200 px-0.5 py-0.5 text-center shadow-[4px_0_6px_-6px_rgba(15,23,42,0.35)] group-hover:bg-blue-100 ${rowBackgroundClass}`}
                             style={{
                               left: 0,
                               width: ACTION_COL_WIDTH,
@@ -1299,7 +1425,7 @@ const GlobalApprovalModal = forwardRef(
                               maxWidth: ACTION_COL_WIDTH,
                             }}
                           >
-                            <div className="grid grid-cols-[22px_repeat(2,28px)_4px_repeat(2,28px)] items-center justify-start gap-0.5">
+                            <div className="grid grid-cols-[22px_repeat(5,28px)] items-center justify-center gap-1">
                               <input
                                 type="checkbox"
                                 checked={selectedRowKeys.has(rowKey)}
@@ -1337,8 +1463,6 @@ const GlobalApprovalModal = forwardRef(
                                 <XCircle size={15} strokeWidth={1.8} />
                               </button>
 
-                              <span className="h-4 w-px bg-slate-200" />
-
                               <button
                                 type="button"
                                 onClick={(event) => {
@@ -1366,6 +1490,20 @@ const GlobalApprovalModal = forwardRef(
                               >
                                 <Paperclip size={15} strokeWidth={1.8} />
                               </button>
+
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleRowComment(row, selectionIndex);
+                                }}
+                                disabled={isProcessing}
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-blue-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+                                title="Approver's Note"
+                                aria-label="Approver's Note"
+                              >
+                                <MessageSquare size={15} strokeWidth={1.8} />
+                              </button>
                             </div>
                           </td>
                           {columns.map((column, columnIndex) => {
@@ -1384,7 +1522,7 @@ const GlobalApprovalModal = forwardRef(
                                   : ""
                               } ${
                                 isFrozenColumn
-                                  ? "sticky z-10 border-r border-slate-200 bg-white group-hover:bg-blue-100"
+                                  ? `sticky z-10 border-r border-slate-200 group-hover:bg-blue-100 ${rowBackgroundClass}`
                                   : ""
                               }`}
                               style={{
@@ -1440,6 +1578,22 @@ const GlobalApprovalModal = forwardRef(
           onReasonChange={setDisapprovalReason}
           onCancel={handleCloseDisapprovalModal}
           onSubmit={handleSubmitDisapproval}
+        />
+
+        <DisapprovalReasonModal
+          isOpen={Boolean(pendingCommentRows.length)}
+          rows={pendingCommentRows}
+          reason={approverNote}
+          isProcessing={isProcessing}
+          title="Approver's Note"
+          description={`Document No.: ${getRowsDocumentLabel(pendingCommentRows)}`}
+          fieldLabel="Approver's Note"
+          placeholder="Enter approver's note or comment..."
+          submitLabel="Apply"
+          variant="note"
+          onReasonChange={setApproverNote}
+          onCancel={handleCloseCommentModal}
+          onSubmit={handleSubmitComment}
         />
       </>
     );

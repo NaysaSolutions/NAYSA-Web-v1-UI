@@ -3,6 +3,7 @@ import DR from "../Module/Main Module/Sales/DR";
 export const docTypes = {
   SO: "SO",
   DR: "DR",
+  SI: "SI", 
   SVI: "SVI",
   CV: "CV",
   JV: "JV",

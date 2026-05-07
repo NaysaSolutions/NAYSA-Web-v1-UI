@@ -175,6 +175,25 @@ const buildDisapprovedPRMessage = (approvalRows) => {
   } been disapproved:\n${disapprovedList}${moreText}`;
 };
 
+const buildCommentedPRMessage = (approvalRows) => {
+  const limit = 5;
+
+  const visibleRows = approvalRows.slice(0, limit);
+
+  const commentedList = visibleRows
+    .map((row, index) => `${index + 1}. ${getPRDisplayNo(row, index)}`)
+    .join("\n");
+
+  const remainingCount = approvalRows.length - limit;
+
+  const moreText =
+    approvalRows.length > limit ? `\n...and +${remainingCount} more` : "";
+
+  return `Approver's note has been applied to the following PR${
+    approvalRows.length > 1 ? "s" : ""
+  }:\n${commentedList}${moreText}`;
+};
+
 const PRApprovalModal = ({
   isOpen,
   approverName,
@@ -350,6 +369,7 @@ const PRApprovalModal = ({
           json_data: payload
         };
 
+          //console.log("Approve payload:", JSON.stringify(finalPayload));
         await postRequest(APPROVE_ENDPOINT, finalPayload);
 
         await useSwalSuccessAlert(
@@ -396,7 +416,7 @@ const PRApprovalModal = ({
           json_data: payload
         };
 
-        console.log("Disapprove payload:", JSON.stringify(finalPayload));
+        //console.log("Disapprove payload:", JSON.stringify(finalPayload));
         await postRequest(APPROVE_ENDPOINT, finalPayload);
 
         await useSwalSuccessAlert(
@@ -412,6 +432,54 @@ const PRApprovalModal = ({
           error?.response?.data?.message ||
             error?.message ||
             "Unable to disapprove selected PR transaction.",
+        );
+        return false;
+      } finally {
+        setIsApproving(false);
+      }
+    },
+    [approvalLevel, reloadApprovalRows, resolvedUserCode, resolvedUserName],
+  );
+
+  const handleCommentRows = useCallback(
+    async (approvalRows, note) => {
+      const targetRows = Array.isArray(approvalRows)
+        ? approvalRows
+        : [approvalRows].filter(Boolean);
+      const trimmedNote = String(note || "").trim();
+      const payload = buildApprovePayload(
+        targetRows,
+        resolvedUserCode,
+        resolvedUserName,
+        approvalLevel,
+        "Comment",
+        trimmedNote,
+      );
+
+      if (!payload.tranIds || !trimmedNote) return false;
+
+      setIsApproving(true);
+
+      try {
+        const finalPayload = {
+          json_data: payload
+        };
+        //console.log("Comment payload:", JSON.stringify(finalPayload));
+        await postRequest(APPROVE_ENDPOINT, finalPayload);
+
+        await useSwalSuccessAlert(
+          "Approver's Note Applied",
+          buildCommentedPRMessage(targetRows),
+        );
+        await reloadApprovalRows({ showLoading: false });
+        return true;
+      } catch (error) {
+        console.error("Apply PR approver note failed:", error);
+        useSwalErrorAlert(
+          "PR Approval",
+          error?.response?.data?.message ||
+            error?.message ||
+            "Unable to apply approver's note to selected PR transaction.",
         );
         return false;
       } finally {
@@ -524,8 +592,10 @@ const PRApprovalModal = ({
       onReloadRecords={reloadApprovalRows}
       onRowApprove={handleApproveRows}
       onRowDisapprove={handleDisapproveRows}
+      onRowComment={handleCommentRows}
       onApproveSelected={handleApproveRows}
       onRejectSelected={handleDisapproveRows}
+      onCommentSelected={handleCommentRows}
     />
   );
 };

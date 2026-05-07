@@ -31,6 +31,7 @@ import JobCodeLookupModal from "../../../Lookup/SearchJobCodesRef.jsx";
 import ExcelBatchUploadModal from "../../../Lookup/SearchGlobalExcelBatchUpload.jsx";
 import BarcodeQrReaderModal from "../../../Lookup/SearchGlobalQRBarCodeReader.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
+import GlobalApprovalStatus from "@/NAYSA Cloud/Approval/GlobalApprovalStatus.jsx";
 
 // Configuration
 import {  apiClient,fetchDataJson, postRequest } from "../../../Configuration/BaseURL.jsx";
@@ -214,6 +215,7 @@ const toDateInputValue = (value) => {
 
     // Detail lines (PR dt1)
     detailRows: [],
+    detailRowsApp: [],
     globalLookupRow:[],
     globalLookupHeader:[],
 
@@ -230,6 +232,7 @@ const toDateInputValue = (value) => {
     showUploadModal:false,
     showSignatoryModal: false,
     showPostModal: false,
+    showApprovalStatusModal: false,
     showJobCodesModal:false,
     rcLookupModalOpen: false,
     rcLookupContext: "", 
@@ -296,6 +299,7 @@ const toDateInputValue = (value) => {
 
     
     detailRows,
+    detailRowsApp,
     globalLookupRow,
     globalLookupHeader,
 
@@ -306,6 +310,7 @@ const toDateInputValue = (value) => {
     showSignatoryModal,
     showPostModal,
     showUploadModal,
+    showApprovalStatusModal,
     showScannerOpen,
 
     rcLookupModalOpen,
@@ -525,9 +530,11 @@ useEffect(() => {
       noReprints: "",
       prCancelled: "",
       detailRows: [],
+      detailRowsApp: [],
       rcLookupModalOpen: false,
       rcLookupContext: "",
       itemLookupModalOpen: false,
+      showApprovalStatusModal: false,
     });
 
     updateTotalsDisplay(0);
@@ -583,7 +590,14 @@ useEffect(() => {
 
 const fetchTranData = async (documentNo, branchCode,direction='') => {
   const resetState = () => {
-    updateState({documentNo:'', documentID: '', isDocNoDisabled: false, isFetchDisabled: false });
+    updateState({
+      documentNo:'',
+      documentID: '',
+      detailRowsApp: [],
+      showApprovalStatusModal: false,
+      isDocNoDisabled: false,
+      isFetchDisabled: false
+    });
     updateTotals([]);
   };
 
@@ -608,6 +622,11 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       poQty: formatNumber(item.poQty,decQty),
       rrQty: formatNumber(item.rrQty,decQty),
     }));
+    const retrievedApprovalRows = Array.isArray(data.dtApp)
+      ? data.dtApp
+      : data.dtApp
+        ? [data.dtApp]
+        : [];
 
    
 
@@ -638,6 +657,7 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       prCancelled: data.prCancelled ,
       noReprints: data.noReprints,
       detailRows: retrievedDetailRows,
+      detailRowsApp: retrievedApprovalRows,
 
       isDocNoDisabled: true,
       isFetchDisabled: true,
@@ -1903,9 +1923,17 @@ const renderPrDetailColumn = (columnKey, row, index) => {
           } ${isViewDocument ? "max-md:!mt-0" : ""}`}
         >
           {showApprovalStatus && (
-            <div>
-              <p className="global-tran-headerstat-text-ui">Approval Status</p>
-              <h1 className={`global-tran-stat-text-ui ${approvalStatusColor}`}>{approvalStatus}</h1>
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => updateState({ showApprovalStatusModal: true })}
+                className="global-tran-headerstat-text-ui mx-auto block cursor-pointer rounded px-1 text-center transition-colors hover:bg-sky-50 hover:text-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                title="View Approval Status"
+                aria-label="View Approval Status"
+              >
+                Approval Status
+              </button>
+              <h1 className={`global-tran-stat-text-ui text-center ${approvalStatusColor}`}>{approvalStatus}</h1>
             </div>
           )}
           <div>
@@ -2471,6 +2499,18 @@ const renderPrDetailColumn = (columnKey, row, index) => {
           onCancel={() => updateState({ showSignatoryModal: false })}
         />
       )}
+
+      <GlobalApprovalStatus
+        isOpen={showApprovalStatusModal}
+        onClose={() => updateState({ showApprovalStatusModal: false })}
+        docType={docType}
+        docNo={documentNo}
+        docDate={documentDate}
+        status={approvalStatus}
+        remarks={remarks}
+        maxAppLevel={currentUserRow?.prMaxAppLevel}
+        data={detailRowsApp?.[0] || {}}
+      />
 
 
 
