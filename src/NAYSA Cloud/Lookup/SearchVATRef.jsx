@@ -142,7 +142,7 @@ const VATLookupModal = ({ isOpen, onClose, customParam }) => {
           <div className="flex items-center gap-3">
             <div className="relative">
               <h2 className="text-md font-bold text-blue-800 tracking-tight propercase pl-2">
-                Select VAT
+                Search VAT Code
               </h2>
               <div className="absolute -top-1 -right-4 flex h-2 w-2">
                 <span

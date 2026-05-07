@@ -202,8 +202,8 @@ const COAMastLookupModal = ({
                     { label: "Account Code", key: "acctCode", width: "w-[130px]" },
                     { label: "Account Name", key: "acctName" },
                     { label: "Normal Balance", key: "acctBalance", width: "w-[100px]" },
-                    { label: "Required SL", key: "reqSL", width: "w-[100px]" },
-                    { label: "Required RC", key: "reqRC", width: "w-[100px]" },
+                    { label: "SL Required", key: "reqSL", width: "w-[100px]" },
+                    { label: "RC Required", key: "reqRC", width: "w-[100px]" },
                   ].map((col) => (
                     <th key={col.key} className={`global-lookup-th-ui ${col.width}`}>
                       <div

@@ -57,15 +57,15 @@ const EMPTY_ROW = {
   bottomLine: "",
   currSign: "N",
 
-  // acctCode: "",
-  // acctName: "",
+  acctCode: "",
+  acctName: "",
 
-  // glRetEarn: "",
-  // glRetEarnName: "",
-  // fsRetEarn: "",
-  // fsRetEarnName: "",
-  // fsNetIncome: "",
-  // fsNetIncomeName: "",
+  glRetEarn: "",
+  glRetEarnName: "",
+  fsRetEarn: "",
+  fsRetEarnName: "",
+  fsNetIncome: "",
+  fsNetIncomeName: "",
 
   registeredBy: "",
   registeredDate: "",
@@ -105,6 +105,15 @@ const FSConsolidation = forwardRef(function FSConsolidation(
     lastUpdatedDate: "",
   });
 
+  const [retainedSetup, setRetainedSetup] = useState({
+    glRetEarn: "",
+    glRetEarnName: "",
+    fsRetEarn: "",
+    fsRetEarnName: "",
+    fsNetIncome: "",
+    fsNetIncomeName: "",
+  });
+
   const [modals, setModals] = useState({
     coa: false,
     glRetEarn: false,
@@ -113,6 +122,62 @@ const FSConsolidation = forwardRef(function FSConsolidation(
   });
 
   const userCode = user?.USER_CODE || "ADMIN";
+
+  const getRowKey = (row) => row?.__tempId || row?.fsConsoCode || "";
+
+  const getBlankRegistrationInfo = () => ({
+    registeredBy: "",
+    registeredDate: "",
+    lastUpdatedBy: "",
+    lastUpdatedDate: "",
+  });
+
+  const getRetainedSetupFromRow = (row = {}) => ({
+    glRetEarn: row?.glRetEarn || "",
+    glRetEarnName: row?.glRetEarnName || "",
+    fsRetEarn: row?.fsRetEarn || "",
+    fsRetEarnName: row?.fsRetEarnName || "",
+    fsNetIncome: row?.fsNetIncome || "",
+    fsNetIncomeName: row?.fsNetIncomeName || "",
+  });
+
+  const getMergedRetainedSetup = (row = {}) => {
+    const rowSetup = getRetainedSetupFromRow(row);
+    return {
+      glRetEarn: rowSetup.glRetEarn || retainedSetup.glRetEarn,
+      glRetEarnName: rowSetup.glRetEarnName || retainedSetup.glRetEarnName,
+      fsRetEarn: rowSetup.fsRetEarn || retainedSetup.fsRetEarn,
+      fsRetEarnName: rowSetup.fsRetEarnName || retainedSetup.fsRetEarnName,
+      fsNetIncome: rowSetup.fsNetIncome || retainedSetup.fsNetIncome,
+      fsNetIncomeName: rowSetup.fsNetIncomeName || retainedSetup.fsNetIncomeName,
+    };
+  };
+
+  const getRegistrationInfoFromRow = (row) => ({
+    registeredBy: row?.registeredBy || "",
+    registeredDate: row?.registeredDate || "",
+    lastUpdatedBy: row?.lastUpdatedBy || "",
+    lastUpdatedDate: row?.lastUpdatedDate || "",
+  });
+
+  const selectRowByKey = (rowKey, sourceRows = rows) => {
+    const nextRow = sourceRows.find((r) => getRowKey(r) === rowKey) || null;
+    setSelectedRow(rowKey || null);
+    setRegistrationInfo(
+      nextRow ? getRegistrationInfoFromRow(nextRow) : getBlankRegistrationInfo()
+    );
+  };
+
+  const getNextRowKeyAfterDelete = (deletedRow, sourceRows = rows) => {
+    const deletedKey = getRowKey(deletedRow);
+    const deletedIndex = sourceRows.findIndex((r) => getRowKey(r) === deletedKey);
+    const remainingRows = sourceRows.filter((r) => getRowKey(r) !== deletedKey);
+
+    if (!remainingRows.length) return "";
+
+    const nextIndex = Math.min(Math.max(deletedIndex, 0), remainingRows.length - 1);
+    return getRowKey(remainingRows[nextIndex]);
+  };
 
   const toggleModal = (name, isOpen) =>
     setModals((prev) => ({ ...prev, [name]: isOpen }));
@@ -139,31 +204,41 @@ const FSConsolidation = forwardRef(function FSConsolidation(
       bottomLine: row.bottomLine ? String(row.bottomLine).toUpperCase() : "",
       currSign: String(row.currSign || "N").toUpperCase() === "Y" ? "Y" : "N",
 
-      // acctCode: row.acctCode ?? "",
-      // acctName: row.acctName ?? "",
+      acctCode: row.acctCode ?? "",
+      acctName: row.acctName ?? "",
 
-      // glRetEarn: row.glRetEarn ?? "",
-      // glRetEarnName: row.glRetEarnName ?? "",
-      // fsRetEarn: row.fsRetEarn ?? "",
-      // fsRetEarnName: row.fsRetEarnName ?? "",
-      // fsNetIncome: row.fsNetIncome ?? "",
-      // fsNetIncomeName: row.fsNetIncomeName ?? "",
+      glRetEarn: row.glRetEarn ?? "",
+      glRetEarnName: row.glRetEarnName ?? "",
+      fsRetEarn: row.fsRetEarn ?? "",
+      fsRetEarnName: row.fsRetEarnName ?? "",
+      fsNetIncome: row.fsNetIncome ?? "",
+      fsNetIncomeName: row.fsNetIncomeName ?? "",
 
       __isNew: false,
       __isDirty: false,
     }));
 
+    const firstRetainedSetup = normalized.find(
+      (row) => row.glRetEarn || row.fsRetEarn || row.fsNetIncome
+    );
+
+    if (firstRetainedSetup) {
+      setRetainedSetup(getRetainedSetupFromRow(firstRetainedSetup));
+    }
+
     setRows(normalized);
 
-    if (normalized.length > 0 && !selectedRow) {
-      const firstKey = normalized[0].fsConsoCode || normalized[0].__tempId;
-      setSelectedRow(firstKey);
-      setRegistrationInfo({
-        registeredBy: normalized[0].registeredBy || "",
-        registeredDate: normalized[0].registeredDate || "",
-        lastUpdatedBy: normalized[0].lastUpdatedBy || "",
-        lastUpdatedDate: normalized[0].lastUpdatedDate || "",
-      });
+    if (normalized.length > 0) {
+      const selectedStillExists = normalized.some((row) => getRowKey(row) === selectedRow);
+
+      if (!selectedRow || !selectedStillExists) {
+        const firstKey = getRowKey(normalized[0]);
+        setSelectedRow(firstKey);
+        setRegistrationInfo(getRegistrationInfoFromRow(normalized[0]));
+      }
+    } else {
+      setSelectedRow(null);
+      setRegistrationInfo(getBlankRegistrationInfo());
     }
   }, [fsconso]);
 
@@ -193,14 +268,9 @@ const FSConsolidation = forwardRef(function FSConsolidation(
   });
 
   const handleRowSelect = (row) => {
-    const rowKey = row.fsConsoCode || row.__tempId;
+    const rowKey = getRowKey(row);
     setSelectedRow(rowKey);
-    setRegistrationInfo({
-      registeredBy: row.registeredBy || "",
-      registeredDate: row.registeredDate || "",
-      lastUpdatedBy: row.lastUpdatedBy || "",
-      lastUpdatedDate: row.lastUpdatedDate || "",
-    });
+    setRegistrationInfo(getRegistrationInfoFromRow(row));
   };
 
   const openRegistrationModal = (row) => {
@@ -216,7 +286,7 @@ const FSConsolidation = forwardRef(function FSConsolidation(
   const updateRow = (rowKey, field, value) => {
     setRows((prev) =>
       prev.map((row) => {
-        const key = row.fsConsoCode || row.__tempId;
+        const key = getRowKey(row);
         if (key !== rowKey) return row;
         return {
           ...row,
@@ -227,20 +297,29 @@ const FSConsolidation = forwardRef(function FSConsolidation(
     );
   };
 
-  const addRow = () => {
+  const addRow = (sourceRow = null) => {
     const tempId = `NEW-${Date.now()}`;
     const newRow = {
       ...EMPTY_ROW,
+      ...getMergedRetainedSetup(sourceRow),
       __tempId: tempId,
     };
-    setRows((prev) => [newRow, ...prev]);
-    setSelectedRow(tempId);
-    setRegistrationInfo({
-      registeredBy: "",
-      registeredDate: "",
-      lastUpdatedBy: "",
-      lastUpdatedDate: "",
+
+    setRows((prev) => {
+      if (!sourceRow) return [newRow, ...prev];
+
+      const sourceKey = getRowKey(sourceRow);
+      const sourceIndex = prev.findIndex((row) => getRowKey(row) === sourceKey);
+
+      if (sourceIndex < 0) return [newRow, ...prev];
+
+      const updatedRows = [...prev];
+      updatedRows.splice(sourceIndex + 1, 0, newRow);
+      return updatedRows;
     });
+
+    setSelectedRow(tempId);
+    setRegistrationInfo(getBlankRegistrationInfo());
   };
 
   const resetTable = () => {
@@ -270,10 +349,18 @@ const FSConsolidation = forwardRef(function FSConsolidation(
       __isDirty: false,
     }));
 
+    const firstRetainedSetup = normalized.find(
+      (row) => row.glRetEarn || row.fsRetEarn || row.fsNetIncome
+    );
+
+    if (firstRetainedSetup) {
+      setRetainedSetup(getRetainedSetupFromRow(firstRetainedSetup));
+    }
+
     setRows(normalized);
 
     if (normalized.length > 0) {
-      const firstKey = normalized[0].fsConsoCode || normalized[0].__tempId;
+      const firstKey = getRowKey(normalized[0]);
       setSelectedRow(firstKey);
       setRegistrationInfo({
         registeredBy: normalized[0].registeredBy || "",
@@ -324,6 +411,35 @@ const FSConsolidation = forwardRef(function FSConsolidation(
     const parsedData = JSON.parse(rawJsonString || '{"result":"0"}');
 
     return parsedData.result === "1";
+  };
+
+  const validateDuplicateFSConsoCodeOnLeave = async (row) => {
+    const rowKey = getRowKey(row);
+    const fsConsoCode = String(row.fsConsoCode || "").trim().toUpperCase();
+
+    if (!row.__isNew || !fsConsoCode) return true;
+
+    const duplicateInGrid = rows.some(
+      (item) =>
+        getRowKey(item) !== rowKey &&
+        String(item.fsConsoCode || "").trim().toUpperCase() === fsConsoCode
+    );
+
+    let duplicateInDatabase = false;
+
+    if (!duplicateInGrid) {
+      duplicateInDatabase = await checkDuplicate({ ...row, fsConsoCode });
+    }
+
+    if (!duplicateInGrid && !duplicateInDatabase) return true;
+
+    useSwalErrorAlert(
+      "Duplicate Code",
+      `FS Conso Code already exists: ${fsConsoCode}`
+    );
+
+    updateRow(rowKey, "fsConsoCode", "");
+    return false;
   };
 
   const saveOneRow = async (row) => {
@@ -415,18 +531,17 @@ const FSConsolidation = forwardRef(function FSConsolidation(
 
   const handleDelete = async (row) => {
     try {
-      if (row.__isNew) {
-        setRows((prev) =>
-          prev.filter(
-            (r) =>
-              (r.fsConsoCode || r.__tempId) !==
-              (row.fsConsoCode || row.__tempId)
-          )
-        );
+      const deletedKey = getRowKey(row);
+      const nextRowKey = getNextRowKeyAfterDelete(row);
+      const remainingRows = rows.filter((r) => getRowKey(r) !== deletedKey);
 
-        if ((row.fsConsoCode || row.__tempId) === selectedRow) {
-          setSelectedRow(null);
+      if (row.__isNew) {
+        setRows(remainingRows);
+
+        if (deletedKey === selectedRow) {
+          selectRowByKey(nextRowKey, remainingRows);
         }
+
         return;
       }
 
@@ -456,6 +571,12 @@ const FSConsolidation = forwardRef(function FSConsolidation(
       if (!confirm.isConfirmed) return;
 
       await deleteFSConso(payload);
+
+      setRows(remainingRows);
+
+      if (deletedKey === selectedRow) {
+        selectRowByKey(nextRowKey, remainingRows);
+      }
     } catch (error) {
       useSwalErrorAlertAPI("System Error", error);
     }
@@ -485,14 +606,36 @@ const FSConsolidation = forwardRef(function FSConsolidation(
   }, [rows]);
 
   const selectedRowData = useMemo(() => {
-    return rows.find((r) => (r.fsConsoCode || r.__tempId) === selectedRow) || null;
+    return rows.find((r) => getRowKey(r) === selectedRow) || null;
   }, [rows, selectedRow]);
+
+  const selectedRetainedSetup = useMemo(() => {
+    return getMergedRetainedSetup(selectedRowData || {});
+  }, [selectedRowData, retainedSetup]);
 
   const updateSelectedRowField = (field, value) => {
     if (!selectedRowData) return;
-    const rowKey = selectedRowData.fsConsoCode || selectedRowData.__tempId;
+    const rowKey = getRowKey(selectedRowData);
     updateRow(rowKey, field, value);
   };
+
+  const updateRetainedSetupForAllRows = (values) => {
+    setRetainedSetup((prev) => ({ ...prev, ...values }));
+    setRows((prev) =>
+      prev.map((row) => ({
+        ...row,
+        ...values,
+        __isDirty: true,
+      }))
+    );
+  };
+
+  const tableRows = useMemo(() => {
+    return rows.map((row) => ({
+      ...row,
+      __rowKey: getRowKey(row),
+    }));
+  }, [rows]);
 
   const columns = useMemo(
     () => [
@@ -506,7 +649,7 @@ const FSConsolidation = forwardRef(function FSConsolidation(
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                addRow();
+                addRow(row);
               }}
               className="global-ref-td-button-edit-ui"
               title="Add"
@@ -553,7 +696,7 @@ const FSConsolidation = forwardRef(function FSConsolidation(
             ? "Income Statement"
             : "",
         render: (row) => {
-          const rowKey = row.fsConsoCode || row.__tempId;
+          const rowKey = getRowKey(row);
           return (
             <select
               className="w-full min-w-[120px] rounded-md border border-gray-300 px-2 py-1 text-[11px] bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
@@ -573,7 +716,7 @@ const FSConsolidation = forwardRef(function FSConsolidation(
         width: 150,
         sortable: true,
         render: (row) => {
-          const rowKey = row.fsConsoCode || row.__tempId;
+          const rowKey = getRowKey(row);
           return (
             <input
               className="w-full min-w-[110px] rounded-md border border-gray-300 px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-blue-400"
@@ -583,6 +726,7 @@ const FSConsolidation = forwardRef(function FSConsolidation(
               onChange={(e) =>
                 updateRow(rowKey, "fsConsoCode", (e.target.value || "").toUpperCase())
               }
+              onBlur={() => validateDuplicateFSConsoCodeOnLeave(row)}
             />
           );
         },
@@ -593,7 +737,7 @@ const FSConsolidation = forwardRef(function FSConsolidation(
         width: 350,
         sortable: true,
         render: (row) => {
-          const rowKey = row.fsConsoCode || row.__tempId;
+          const rowKey = getRowKey(row);
           return (
             <input
               className="w-full min-w-[100px] rounded-md border border-gray-300 px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-blue-400"
@@ -610,7 +754,7 @@ const FSConsolidation = forwardRef(function FSConsolidation(
         width: 150,
         sortable: true,
         render: (row) => {
-          const rowKey = row.fsConsoCode || row.__tempId;
+          const rowKey = getRowKey(row);
           return (
             <input
               className="w-full rounded-md border border-gray-300 px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-blue-400"
@@ -633,7 +777,7 @@ const FSConsolidation = forwardRef(function FSConsolidation(
             ? "Subtracted"
             : "",
         render: (row) => {
-          const rowKey = row.fsConsoCode || row.__tempId;
+          const rowKey = getRowKey(row);
           return (
             <select
               className="w-full rounded-md border border-gray-300 px-2 py-1 text-[11px] bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
@@ -655,7 +799,7 @@ const FSConsolidation = forwardRef(function FSConsolidation(
       //   autoWidthValue: (row) =>
       //     row.topLine === "S" ? "Single" : row.topLine === "D" ? "Double" : "",
       //   render: (row) => {
-      //     const rowKey = row.fsConsoCode || row.__tempId;
+      //     const rowKey = getRowKey(row);
       //     return (
       //       <select
       //         className="w-full rounded-md border border-gray-300 px-2 py-1 text-[11px] bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
@@ -677,7 +821,7 @@ const FSConsolidation = forwardRef(function FSConsolidation(
         autoWidthValue: (row) =>
           row.bottomLine === "S" ? "Single" : row.bottomLine === "D" ? "Double" : "",
         render: (row) => {
-          const rowKey = row.fsConsoCode || row.__tempId;
+          const rowKey = getRowKey(row);
           return (
             <select
               className="w-full rounded-md border border-gray-300 px-2 py-1 text-[11px] bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
@@ -699,7 +843,7 @@ const FSConsolidation = forwardRef(function FSConsolidation(
         autoWidthValue: (row) =>
           row.currSign === "Y" ? "Yes" : row.currSign === "N" ? "No" : "",
         render: (row) => {
-          const rowKey = row.fsConsoCode || row.__tempId;
+          const rowKey = getRowKey(row);
           return (
             <select
               className="w-full rounded-md border border-gray-300 px-2 py-1 text-[11px] bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
@@ -823,8 +967,8 @@ const FSConsolidation = forwardRef(function FSConsolidation(
   label="GL Retained Earnings"
   type="lookup"
   value={
-    selectedRowData?.glRetEarn
-      ? `(${selectedRowData.glRetEarn}) - ${selectedRowData.glRetEarnName || ""}`
+    selectedRetainedSetup?.glRetEarn
+      ? `(${selectedRetainedSetup.glRetEarn}) - ${selectedRetainedSetup.glRetEarnName || ""}`
       : ""
   }
   onLookup={() => {
@@ -838,8 +982,8 @@ const FSConsolidation = forwardRef(function FSConsolidation(
   label="FS Retained Earnings"
   type="lookup"
   value={
-    selectedRowData?.fsRetEarn
-      ? `(${selectedRowData.fsRetEarn}) - ${selectedRowData.fsRetEarnName || ""}`
+    selectedRetainedSetup?.fsRetEarn
+      ? `(${selectedRetainedSetup.fsRetEarn}) - ${selectedRetainedSetup.fsRetEarnName || ""}`
       : ""
   }
   onLookup={() => {
@@ -853,8 +997,8 @@ const FSConsolidation = forwardRef(function FSConsolidation(
   label="FS Net Income"
   type="lookup"
   value={
-    selectedRowData?.fsNetIncome
-      ? `(${selectedRowData.fsNetIncome}) - ${selectedRowData.fsNetIncomeName || ""}`
+    selectedRetainedSetup?.fsNetIncome
+      ? `(${selectedRetainedSetup.fsNetIncome}) - ${selectedRetainedSetup.fsNetIncomeName || ""}`
       : ""
   }
   onLookup={() => {
@@ -870,14 +1014,14 @@ const FSConsolidation = forwardRef(function FSConsolidation(
           <SearchGlobalReferenceTable
             docType={DOC_TYPE}
             columns={columns}
-            data={rows}
+            data={tableRows}
             isLoading={isListLoading}
             itemsPerPage={500}
             showFilters={true}
             onRowDoubleClick={handleRowSelect}
             onRowClick={handleRowSelect}
             selectedRowKey={selectedRow}
-            rowKeyField="fsConsoCode"
+            rowKeyField="__rowKey"
             // autoFillGrid="True"
           />
         </div>
@@ -904,8 +1048,10 @@ const FSConsolidation = forwardRef(function FSConsolidation(
   onClose={(v) => {
     toggleModal("glRetEarn", false);
     if (!v || !selectedRowData) return;
-    updateSelectedRowField("glRetEarn", v.acctCode || "");
-    updateSelectedRowField("glRetEarnName", v.acctName || "");
+    updateRetainedSetupForAllRows({
+      glRetEarn: v.acctCode || "",
+      glRetEarnName: v.acctName || "",
+    });
   }}
 />
 
@@ -915,8 +1061,10 @@ const FSConsolidation = forwardRef(function FSConsolidation(
   onClose={(v) => {
     toggleModal("fsRetEarn", false);
     if (!v || !selectedRowData) return;
-    updateSelectedRowField("fsRetEarn", v.fsConsoCode || "");
-    updateSelectedRowField("fsRetEarnName", v.fsConsoName || "");
+    updateRetainedSetupForAllRows({
+      fsRetEarn: v.fsConsoCode || "",
+      fsRetEarnName: v.fsConsoName || "",
+    });
   }}
 />
 
@@ -926,8 +1074,10 @@ const FSConsolidation = forwardRef(function FSConsolidation(
   onClose={(v) => {
     toggleModal("fsNetIncome", false);
     if (!v || !selectedRowData) return;
-    updateSelectedRowField("fsNetIncome", v.fsConsoCode || "");
-    updateSelectedRowField("fsNetIncomeName", v.fsConsoName || "");
+    updateRetainedSetupForAllRows({
+      fsNetIncome: v.fsConsoCode || "",
+      fsNetIncomeName: v.fsConsoName || "",
+    });
   }}
 />
 

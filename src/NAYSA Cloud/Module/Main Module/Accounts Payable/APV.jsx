@@ -78,6 +78,7 @@ import { useHandlePrint } from "@/NAYSA Cloud/Global/report";
 import {
   formatNumber,
   parseFormattedNumber,
+  useSwalHandleOpenSpecsModal,
   useSwalshowSaveSuccessDialog,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
@@ -90,6 +91,62 @@ import DateFormatInput from "@/NAYSA Cloud/Global/DateFormatInput.jsx";
 
 // Header
 import Header from "@/NAYSA Cloud/Components/Header";
+
+const formatSlrefDateInput = (value) => {
+  const cleaned = String(value || "").replace(/\D/g, "").slice(0, 8);
+
+  if (cleaned.length <= 2) return cleaned;
+  if (cleaned.length <= 4) return `${cleaned.slice(0, 2)}/${cleaned.slice(2)}`;
+
+  return `${cleaned.slice(0, 2)}/${cleaned.slice(2, 4)}/${cleaned.slice(4)}`;
+};
+
+const normalizeSlrefDate = (value) => {
+  if (!value) return "";
+
+  const raw = String(value).trim();
+  const datePart = raw.includes("T") ? raw.split("T")[0] : raw;
+  let month = "";
+  let day = "";
+  let year = "";
+
+  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(datePart)) {
+    [year, month, day] = datePart.split("-");
+  } else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(raw)) {
+    [month, day, year] = raw.split("/");
+  } else {
+    const formatted = formatSlrefDateInput(raw);
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(formatted)) {
+      [month, day, year] = formatted.split("/");
+    }
+  }
+
+  const mm = String(month).padStart(2, "0");
+  const dd = String(day).padStart(2, "0");
+  const yyyy = String(year);
+
+  if (!/^\d{2}$/.test(mm) || !/^\d{2}$/.test(dd) || !/^\d{4}$/.test(yyyy)) {
+    return "";
+  }
+
+  const m = Number(mm);
+  const d = Number(dd);
+  const y = Number(yyyy);
+  const parsed = new Date(y, m - 1, d);
+
+  if (
+    m < 1 ||
+    m > 12 ||
+    d < 1 ||
+    parsed.getFullYear() !== y ||
+    parsed.getMonth() !== m - 1 ||
+    parsed.getDate() !== d
+  ) {
+    return "";
+  }
+
+  return `${mm}/${dd}/${yyyy}`;
+};
 
 const APV = () => {
   // View Document Const
@@ -657,6 +714,15 @@ const APV = () => {
 
         return {
           ...item,
+          rrNo: item.rrNo || item.rr_no || item.RR_NO || item.msrrNo || item.MSRR_NO || "",
+          poNo:
+            item.poNo ||
+            item.po_no ||
+            item.PO_NO ||
+            item.joNo ||
+            item.jo_no ||
+            item.JO_NO ||
+            "",
           origAmount: formatNumber(item.origAmount),
           currRate: formatNumber(item.currRate),
           siAmount: formatNumber(item.siAmount),
@@ -685,6 +751,7 @@ const APV = () => {
           creditFx1: formatNumber(glRow.creditFx1),
           debitFx2: formatNumber(glRow.debitFx2),
           creditFx2: formatNumber(glRow.creditFx2),
+          slrefDate: normalizeSlrefDate(glRow.slrefDate),
         };
       });
 
@@ -901,6 +968,135 @@ const APV = () => {
     return Math.abs(debitTotal - creditTotal) < 0.01;
   };
 
+  const normalizeInvoiceNo = (value) =>
+    String(value || "").trim().toUpperCase();
+
+  const findDuplicateInvoiceInRows = (rows) => {
+    const seen = new Map();
+
+    for (const [index, row] of rows.entries()) {
+      const invoiceNo = normalizeInvoiceNo(row.siNo);
+      if (!invoiceNo) continue;
+
+      if (seen.has(invoiceNo)) {
+        return {
+          invoiceNo: row.siNo,
+          firstRow: seen.get(invoiceNo) + 1,
+          duplicateRow: index + 1,
+        };
+      }
+
+      seen.set(invoiceNo, index);
+    }
+
+    return null;
+  };
+
+  const parseApiResultRows = (response) => {
+    const rawResult = response?.data?.[0]?.result;
+    if (!rawResult) return [];
+
+    try {
+      const parsed = JSON.parse(rawResult);
+      return Array.isArray(parsed) ? parsed : [parsed];
+    } catch (error) {
+      console.error("Failed to parse APV duplicate invoice result:", error);
+      return [];
+    }
+  };
+
+  const getTransactionId = (record) =>
+    String(
+      record?.apvId ||
+        record?.APV_ID ||
+        record?.documentID ||
+        record?.documentId ||
+        "",
+    );
+
+  const recordHasInvoiceNo = (record, invoiceNo) => {
+    const normalizedInvoiceNo = normalizeInvoiceNo(invoiceNo);
+    const detailRows =
+      (Array.isArray(record?.dt1) && record.dt1) ||
+      (Array.isArray(record?.DT1) && record.DT1) ||
+      (Array.isArray(record?.details) && record.details) ||
+      [];
+
+    return (
+      normalizeInvoiceNo(record?.siNo) === normalizedInvoiceNo ||
+      normalizeInvoiceNo(record?.SI_NO) === normalizedInvoiceNo ||
+      normalizeInvoiceNo(record?.si_no) === normalizedInvoiceNo ||
+      detailRows.some(
+        (detailRow) =>
+          normalizeInvoiceNo(detailRow?.siNo) === normalizedInvoiceNo ||
+          normalizeInvoiceNo(detailRow?.SI_NO) === normalizedInvoiceNo ||
+          normalizeInvoiceNo(detailRow?.si_no) === normalizedInvoiceNo,
+      )
+    );
+  };
+
+  const validateInvoiceNoAvailability = async () => {
+    if (!fieldVisibility.invoiceDetails) return true;
+
+    const duplicateInRows = findDuplicateInvoiceInRows(detailRows);
+    if (duplicateInRows) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Duplicate Invoice No.",
+        text: `Invoice No. ${duplicateInRows.invoiceNo} is repeated in rows ${duplicateInRows.firstRow} and ${duplicateInRows.duplicateRow}.`,
+        confirmButtonText: "OK",
+        confirmButtonColor: "#3085d6",
+      });
+      return false;
+    }
+
+    const invoiceRows = detailRows
+      .map((row) => normalizeInvoiceNo(row.siNo))
+      .filter(Boolean);
+    const uniqueInvoiceNos = [...new Set(invoiceRows)];
+
+    for (const invoiceNo of uniqueInvoiceNos) {
+      try {
+        const response = await fetchData(`get${docType}`, {
+          siNo: invoiceNo,
+          vendCode: vendCode || "",
+          branchCode: branchCode || "",
+        });
+
+        if (!response?.success) continue;
+
+        const matchedRecord = parseApiResultRows(response).find((record) => {
+          const isCurrentDocument =
+            documentID && getTransactionId(record) === String(documentID);
+          return !isCurrentDocument && recordHasInvoiceNo(record, invoiceNo);
+        });
+
+        if (matchedRecord) {
+          await Swal.fire({
+            icon: "warning",
+            title: "Invoice No. Already Used",
+            text: `Invoice No. ${invoiceNo} is already used in APV No. ${matchedRecord.apvNo || matchedRecord.APV_NO || "another transaction"}.`,
+            confirmButtonText: "OK",
+            confirmButtonColor: "#3085d6",
+          });
+          return false;
+        }
+      } catch (error) {
+        console.error("Error validating duplicate invoice number:", error);
+        await Swal.fire({
+          icon: "error",
+          title: "Invoice Validation Error",
+          text: "Could not validate the Invoice No. Please try saving again.",
+          confirmButtonText: "OK",
+          confirmButtonColor: "#3085d6",
+        });
+        return false;
+      }
+    }
+
+    return true;
+  };
+
   // Add this function to show the unbalanced warning
   const showUnbalancedWarning = () => {
     Swal.fire({
@@ -920,119 +1116,190 @@ const APV = () => {
   };
 
   const handleActivityOption = async (action) => {
-    // 1. Ensure focus is moved out of any active grid cell to capture the final value in state
-    const remarksEl = document.getElementById("remarks");
-    if (remarksEl) remarksEl.focus();
+  const remarksEl = document.getElementById("remarks");
+  if (remarksEl) remarksEl.focus();
 
-    // 2. Validate empty GL before Upsert (Logic used in SVI)
-    if (action === "Upsert" && detailRowsGL.length === 0) {
-      updateState({ triggerGLEntries: true });
+  if (action === "Upsert" && detailRowsGL.length === 0) {
+    updateState({ triggerGLEntries: true });
+    return;
+  }
+
+  if (action === "Upsert") {
+    const invalidSlrefDateRow = detailRowsGL.findIndex((entry) => {
+      const value = String(entry?.slrefDate || "").trim();
+      return value && !normalizeSlrefDate(value);
+    });
+
+    if (invalidSlrefDateRow >= 0) {
+      Swal.fire({
+        icon: "error",
+        title: "Invalid SL Reference Date",
+        text: `GL row ${invalidSlrefDateRow + 1} must use a valid date in MM/DD/YYYY format.`,
+        confirmButtonText: "OK",
+        confirmButtonColor: "#3085d6",
+      });
       return;
     }
+  }
 
-    // 3. Prevent actions on finalized/cancelled documents
-    if (documentStatus === "" || documentStatus === "OPEN") {
-      updateState({ isLoading: true });
+  if (action === "Upsert") {
+    const canSaveInvoiceNos = await validateInvoiceNoAvailability();
+    if (!canSaveInvoiceNos) return;
+  }
 
-      // Prepare data structure strictly matching sproc_PHP_APV params
-      const glData = {
-        branchCode: branchCode,
-        apvNo: documentNo || "",
-        apvId: documentID || "",
-        apvDate: header.apv_date,
-        apvtranType: selectedApType,
-        tranMode: "M",
-        acctCode: apAccountCode, // Linked AP Account Code
-        vendCode: vendCode,
-        vendName: vendName?.vendName || "",
-        refapvNo1: header.refDocNo1 || "",
-        refapvNo2: header.refDocNo2 || "",
-        currCode: currencyCode || "PHP",
-        currRate: parseFormattedNumber(currencyRate) || 1,
-        remarks: header.remarks || "",
-        userCode: user?.USER_CODE || "NSI",
-        // Detail mapping (Invoice Details)
-        dt1: detailRows.map((row, index) => ({
-          lnNo: String(index + 1),
-          invType: row.invType,
-          siNo: row.siNo,
-          siDate: row.siDate,
-          amount: parseFormattedNumber(row.amount),
-          siAmount: parseFormattedNumber(row.siAmount),
-          debitAcct: row.debitAcct,
-          vatAcct: row.vatAcct,
-          sltypeCode: row.sltypeCode,
-          slCode: row.slCode,
-          slName: row.slName,
-          rcCode: row.rcCode,
-          vatCode: row.vatCode,
-          vatAmount: parseFormattedNumber(row.vatAmount),
-          atcCode: row.atcCode,
-          atcAmount: parseFormattedNumber(row.atcAmount),
-          paytermCode: row.paytermCode,
-          dueDate: row.dueDate,
-        })),
-        // GL mapping
-        dt2: detailRowsGL.map((entry, index) => ({
-          recNo: String(index + 1),
-          acctCode: entry.acctCode,
-          rcCode: entry.rcCode,
-          sltypeCode: entry.sltypeCode,
-          slCode: entry.slCode,
-          particular: entry.particular,
-          debit: parseFormattedNumber(entry.debit),
-          credit: parseFormattedNumber(entry.credit),
-          debitFx1: parseFormattedNumber(entry.debitFx1),
-          creditFx1: parseFormattedNumber(entry.creditFx1),
-          slrefNo: entry.slRefNo,
-          slrefDate: entry.slrefDate,
-          dt1Lineno: entry.dt1Lineno || "",
-        })),
-      };
+  if (documentStatus === "" || documentStatus === "OPEN") {
+    updateState({ isLoading: true });
 
-      try {
-        if (action === "GenerateGL") {
-          const newGlEntries = await useGenerateGLEntries(docType, glData);
-          if (newGlEntries) {
-            // Simply set the new entries directly without syncing
-            updateState({ detailRowsGL: newGlEntries });
+    const glData = {
+      branchCode: branchCode,
+      apvNo: documentNo || "",
+      apvId: documentID || "",
+      apvDate: header.apv_date,
+      apvtranType: selectedApType,
+      tranMode: "M",
+      acctCode: apAccountCode,
+      vendCode: vendCode,
+      vendName: vendName?.vendName || "",
+      refapvNo1: header.refDocNo1 || "",
+      refapvNo2: header.refDocNo2 || "",
+      currCode: currencyCode || "PHP",
+      currRate: parseFormattedNumber(currencyRate) || 1,
+      remarks: header.remarks || "",
+      userCode: user?.USER_CODE || "NSI",
+      dt1: detailRows.map((row, index) => ({
+        lnNo: String(index + 1),
+        invType: row.invType,
+        rrNo: row.rrNo || "",
+        poNo: row.poNo || "",
+        siNo: row.siNo,
+        siDate: row.siDate,
+        amount: parseFormattedNumber(row.amount),
+        siAmount: parseFormattedNumber(row.siAmount),
+        debitAcct: row.debitAcct,
+        vatAcct: row.vatAcct,
+        sltypeCode: row.sltypeCode,
+        slCode: row.slCode,
+        slName: row.slName,
+        rcCode: row.rcCode,
+        vatCode: row.vatCode,
+        vatAmount: parseFormattedNumber(row.vatAmount),
+        atcCode: row.atcCode,
+        atcAmount: parseFormattedNumber(row.atcAmount),
+        paytermCode: row.paytermCode,
+        dueDate: row.dueDate,
+      })),
+      dt2: detailRowsGL.map((entry, index) => ({
+        recNo: String(index + 1),
+        acctCode: entry.acctCode,
+        rcCode: entry.rcCode,
+        sltypeCode: entry.sltypeCode,
+        slCode: entry.slCode,
+        particular: entry.particular,
+        debit: parseFormattedNumber(entry.debit),
+        credit: parseFormattedNumber(entry.credit),
+        debitFx1: parseFormattedNumber(entry.debitFx1),
+        creditFx1: parseFormattedNumber(entry.creditFx1),
+        slrefNo: entry.slRefNo,
+        slrefDate: normalizeSlrefDate(entry.slrefDate),
+        dt1Lineno: entry.dt1Lineno || "",
+      })),
+    };
+
+    try {
+      if (action === "GenerateGL") {
+        let finalGlEntries = [];
+
+        if (selectedApType === "APV02") {
+          // --- NON-PURCHASES GENERATION ---
+          
+          // 1. Blank Row for Expense side
+          const blankRow = {
+            acctCode: "",
+            rcCode: "",
+            rcName: "",
+            sltypeCode: "",
+            slCode: "",
+            slName: "",
+            particular: "",
+            debit: "0.00",
+            credit: "0.00",
+            slRefNo: "",
+            slrefDate: "",
+            remarks: header.remarks || "",
+            REQ_RC: "N",
+            REQ_SL: "N",
+          };
+
+          // 2. Pre-filled AP Account Row (Matching your Invoice Details logic)
+          const vName = vendName?.vendName || "";
+          
+          // standardizing requirement check for AP Account
+          // AP accounts usually require SL (Vendor)
+          const apRow = {
+            acctCode: apAccountCode || "",
+            rcCode: "", 
+            rcName: "",
+            sltypeCode: "VE",
+            // If vendor is missing in header, show "REQ SL" immediately
+            slCode: vendCode || "REQ SL", 
+            slName: vName,
+            particular: `Accounts Payable${vName ? ' / ' + vName : ''}`,
+            debit: "0.00",
+            credit: "0.00",
+            slRefNo: "",
+            slrefDate: "",
+            remarks: header.remarks || "",
+            REQ_RC: "N",
+            REQ_SL: "Y", // Force requirement for AP line
+          };
+
+          finalGlEntries = [blankRow, apRow];
+        } else {
+          // Standard Generation from SPROC
+          const generatedEntries = await useGenerateGLEntries(docType, glData);
+          if (generatedEntries) {
+            finalGlEntries = generatedEntries.map(entry => {
+              // Standardizing flags (Logic from your handleDetailChange)
+              const rawRc = entry.rcReq || entry.REQ_RC || entry.REQRC || "N";
+              const rawSl = entry.slReq || entry.REQ_SL || entry.REQSL || "N";
+              
+              const isRcRequired = rawRc === "Y" || rawRc === "Yes";
+              const isSlRequired = rawSl === "Y" || rawSl === "Yes";
+
+              return {
+                ...entry,
+                REQ_RC: isRcRequired ? "Y" : "N",
+                REQ_SL: isSlRequired ? "Y" : "N",
+                slrefDate: normalizeSlrefDate(entry.slrefDate),
+                // Set the placeholder text if required but code is empty
+                rcCode: (isRcRequired && (!entry.rcCode || entry.rcCode === "")) ? "REQ RC" : entry.rcCode,
+                slCode: (isSlRequired && (!entry.slCode || entry.slCode === "")) ? "REQ SL" : entry.slCode,
+              };
+            });
           }
         }
 
-        if (action === "Upsert") {
-          // useTransactionUpsert will automatically trigger useSwalValidationAlert
-          // if the SPROC returns an errorMsg or errorCount > 0
-          const response = await useTransactionUpsert(
-            docType,
-            glData,
-            updateState,
-            "apvId",
-            "apvNo",
-          );
-
-          if (response && response.status === "success") {
-            // Double check if SPROC sent back a validation fail inside the successful HTTP response
-            const resultData = response.data[0];
-            if (!resultData.errorMsg) {
-              useSwalshowSaveSuccessDialog(handleReset, () =>
-                handleSaveAndPrint(resultData.apvId),
-              );
-              updateState({
-                isDocNoDisabled: true,
-                isFetchDisabled: true,
-                documentStatus: resultData.docStatus || "OPEN",
-                status: resultData.docStatus || "OPEN",
-              });
-            }
-          }
-        }
-      } catch (error) {
-        console.error(`APV ${action} Error:`, error);
-      } finally {
-        updateState({ isLoading: false });
+        updateState({ detailRowsGL: finalGlEntries });
       }
+
+      if (action === "Upsert") {
+        const response = await useTransactionUpsert(docType, glData, updateState, "apvId", "apvNo");
+        if (response?.status === "success" && !response.data[0].errorMsg) {
+          useSwalshowSaveSuccessDialog(handleReset, () => handleSaveAndPrint(response.data[0].apvId));
+          updateState({ 
+            isDocNoDisabled: true, 
+            isFetchDisabled: true, 
+            documentStatus: response.data[0].docStatus || "OPEN" 
+          });
+        }
+      }
+    } catch (error) {
+      console.error(`APV ${action} Error:`, error);
+    } finally {
+      updateState({ isLoading: false });
     }
-  };
+  }
+};
 
   //   const syncGLReferenceFromInvoiceDetails = useCallback(
   //     (invoiceRows, glRows) => {
@@ -1836,7 +2103,7 @@ const APV = () => {
       }
     }
 
-    if (["slRefNo", "slRefDate", "remarks"].includes(field)) {
+    if (["slRefNo", "slrefDate", "remarks"].includes(field)) {
       row[field] = value;
     }
 
@@ -1845,6 +2112,49 @@ const APV = () => {
 
     // Update state with the modified array
     updateState({ detailRowsGL: currentRows });
+  };
+
+  const handleSlrefDateChange = (index, value) => {
+    handleDetailChangeGL(index, "slrefDate", formatSlrefDateInput(value));
+  };
+
+  const handleSlrefDateBlur = (index, value) => {
+    const trimmed = String(value || "").trim();
+
+    if (!trimmed) {
+      handleDetailChangeGL(index, "slrefDate", "");
+      return;
+    }
+
+    const normalized = normalizeSlrefDate(trimmed);
+
+    if (!normalized) {
+      handleDetailChangeGL(index, "slrefDate", "");
+      Swal.fire({
+        icon: "error",
+        title: "Invalid SL Reference Date",
+        text: "Please enter a valid date in MM/DD/YYYY format.",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#3085d6",
+      });
+      return;
+    }
+
+    handleDetailChangeGL(index, "slrefDate", normalized);
+  };
+
+  const openGLRemarksModal = (index) => {
+    if (isFormDisabled) return;
+
+    useSwalHandleOpenSpecsModal(
+      index,
+      detailRowsGL,
+      handleDetailChangeGL,
+      detailRowsGL?.[index]?.remarks || header.remarks || "",
+      "Remarks",
+      "remarks",
+      "Enter remarks for this GL entry..."
+    );
   };
 
   const handleCloseAccountModal = (selectedAccount) => {
@@ -2297,31 +2607,33 @@ const APV = () => {
     }
   };
 
-  // ATC Name double-click handler
-  const handleAtcNameDoubleClick = (index) => {
-    const updatedRows = [...detailRows];
-    updatedRows[index] = {
-      ...updatedRows[index],
-      atcCode: "",
-      atcName: "",
-      atcAmount: "0.00",
-    };
-    updateState({ detailRows: updatedRows });
-    updateTotals(updatedRows);
+  // VAT Name double-click handler to clear selection
+const handleVatNameDoubleClick = (index) => {
+  const updatedRows = [...detailRows];
+  // Reset VAT related fields for this row
+  updatedRows[index] = {
+    ...updatedRows[index],
+    vatCode: "",
+    vatName: "",
+    vatAmount: "0.00",
   };
+  updateState({ detailRows: updatedRows });
+  updateTotals(updatedRows); // Recalculate totals after clearing
+};
 
-  // VAT Name double-click handler
-  const handleVatNameDoubleClick = (index) => {
-    const updatedRows = [...detailRows];
-    updatedRows[index] = {
-      ...updatedRows[index],
-      vatCode: "",
-      vatName: "",
-      vatAmount: "0.00",
-    };
-    updateState({ detailRows: updatedRows });
-    updateTotals(updatedRows);
+// ATC Name double-click handler to clear selection
+const handleAtcNameDoubleClick = (index) => {
+  const updatedRows = [...detailRows];
+  // Reset ATC related fields for this row
+  updatedRows[index] = {
+    ...updatedRows[index],
+    atcCode: "",
+    atcName: "",
+    atcAmount: "0.00",
   };
+  updateState({ detailRows: updatedRows });
+  updateTotals(updatedRows); // Recalculate totals after clearing
+};
 
   // RC Name double-click handler
   const handleRcNameDoubleClick = (index) => {
@@ -2937,8 +3249,9 @@ const APV = () => {
                                   e.target.value === "0.00" ||
                                   e.target.value === "0"
                                 ) {
-                                  e.target.value = "";
+                                  handleDetailChange(index, "amount", "", false);
                                 }
+                                setTimeout(() => e.target.select(), 0);
                               }}
                               onBlur={async (e) => {
                                 if (isFormDisabled) return;
@@ -3123,6 +3436,8 @@ const APV = () => {
                               className="w-[250px] global-tran-td-inputclass-ui"
                               value={row.vatName || ""}
                               readOnly
+                              disabled={isFormDisabled}
+                              onDoubleClick={() => handleVatNameDoubleClick(index)}
                             />
                           </td>
 
@@ -3176,6 +3491,8 @@ const APV = () => {
                               className="w-[250px] global-tran-td-inputclass-ui"
                               value={row.atcName || ""}
                               readOnly
+                              disabled={isFormDisabled}
+                              onDoubleClick={() => handleAtcNameDoubleClick(index)}
                             />
                           </td>
 
@@ -3396,7 +3713,7 @@ const APV = () => {
                     <th className="global-tran-th-ui">Particulars</th>
                     <th className="global-tran-th-ui">VAT Code</th>
                     <th className="global-tran-th-ui">VAT Name</th>
-                    <th className="global-tran-th-ui">ATC Code</th>
+                    <th className="global-tran-th-ui">ATC</th>
                     <th className="global-tran-th-ui ">ATC Name</th>
 
                     <th className="global-tran-th-ui">
@@ -4013,41 +4330,50 @@ const APV = () => {
 
                       <td className="global-tran-td-ui">
                         <div className="w-[110px]">
-                          <DateFormatInput
+                          <input
+                            type="text"
                             id={`slrefDate_${index}`}
                             value={row.slrefDate || ""}
                             disabled={isFormDisabled}
+                            placeholder="MM/DD/YYYY"
+                            maxLength={10}
                             className="w-[100px] global-tran-td-inputclass-ui text-center pr-7"
-                            updateState={(updates) => {
-                              if (updates[`slrefDate_${index}`] !== undefined) {
-                                handleDetailChangeGL(
-                                  index,
-                                  "slrefDate",
-                                  updates[`slrefDate_${index}`],
-                                );
-                              }
-                            }}
+                            onChange={(e) =>
+                              handleSlrefDateChange(index, e.target.value)
+                            }
+                            onBlur={(e) =>
+                              handleSlrefDateBlur(index, e.target.value)
+                            }
                           />
                         </div>
                       </td>
 
                       <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[100px] global-tran-td-inputclass-ui"
-                          value={row.remarks || header.remarks || ""}
-                          style={{
-                            width: `${(row.particular?.length || 1) * 8}px`,
-                          }}
-                          onChange={(e) =>
-                            handleDetailChangeGL(
-                              index,
-                              "remarks",
-                              e.target.value,
-                            )
-                          }
-                          disabled={isFormDisabled}
-                        />
+                        <div className="relative flex w-[220px] items-center">
+                          <input
+                            type="text"
+                            className="w-full truncate pr-8 global-tran-td-inputclass-ui cursor-pointer"
+                            value={row.remarks || header.remarks || ""}
+                            onChange={(e) =>
+                              handleDetailChangeGL(
+                                index,
+                                "remarks",
+                                e.target.value,
+                              )
+                            }
+                            onDoubleClick={() => openGLRemarksModal(index)}
+                            title={row.remarks || header.remarks || "Open remarks"}
+                            disabled={isFormDisabled}
+                          />
+                          {!isFormDisabled && (
+                            <FontAwesomeIcon
+                              icon={faMagnifyingGlass}
+                              className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                              onClick={() => openGLRemarksModal(index)}
+                              title="Open Remarks"
+                            />
+                          )}
+                        </div>
                       </td>
 
                       {!isFormDisabled && (
@@ -4156,7 +4482,7 @@ const APV = () => {
             isOpen={showAccountModal}
             onClose={handleCloseAccountModal}
             source={accountModalSource}
-            customParam={accountModalSource === "apAccount" ? "APGL" : ""}
+            customParam={accountModalSource === "apAccount" ? "APGL" : "ActiveAll"}
           />
         )}
 

@@ -729,7 +729,7 @@ export const useSwalProceedConfirm = async (
       <style>
         .swal-proceed-wrap {
           text-align: center;
-          padding: 30px 24px 12px;
+          padding: 24px 24px 12px;
           font-family: Inter, system-ui, -apple-system, sans-serif;
         }
 
@@ -748,13 +748,13 @@ export const useSwalProceedConfirm = async (
           font-size: 20px;
           font-weight: 600;
           color: #1f2937;
-          margin-bottom: 6px;
+          margin-bottom: 10px;
         }
 
         .swal-proceed-text {
           font-size: 14px;
           color: #6b7280;
-          margin-bottom: 22px;
+          margin-bottom: 6px;
         }
 
         .swal-proceed-actions {
