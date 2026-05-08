@@ -455,7 +455,8 @@ const BankRef = forwardRef(
           key: "__actions",
           label: <span className="hidden md:inline">Actions</span>,
           sortable: false,
-          width: 140,
+          width: 100,
+          minWidth: 100, 
           render: (row) => (
             <div className="flex items-center justify-center gap-2">
               <button
@@ -497,14 +498,18 @@ const BankRef = forwardRef(
           key: "bankTypeCode",
           label: "Bank Type Code",
           sortable: true,
-          width: 140,
+          width: 150,
+          minWidth: 150, 
+          requiredVisible: true,
           render: (row) => row?.bankTypeCode,
         },
         {
           key: "bankTypeName",
           label: "Bank Type Name",
           sortable: true,
-          width: 360,
+          width: 300,
+          minWidth: 150, 
+          requiredVisible: true,
           render: (row) => row?.bankTypeName,
         },
       ],
