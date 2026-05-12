@@ -1371,18 +1371,25 @@ useEffect(() => {
     updateState({ isLoading: true });
 
     try {
+        const selectedAtcCode = selectedData?.atcCode || "";
+        const selectedAtcRow = getAllTopATCRow(selectedAtcCode);
+        const selectedAtcName = selectedAtcRow?.atcName || selectedData?.atcName || "";
         const custDetails = {
             custCode: selectedData?.custCode || '',
             custName: selectedData?.custName || '',
             currCode: selectedData?.currCode || '',
             attention: selectedData?.attention || '',
             billtermCode: selectedData?.billtermCode || '',
-            billtermName: selectedData?.billtermName || ''
+            billtermName: selectedData?.billtermName || '',
+            atcCode: selectedAtcCode,
+            atcName: selectedAtcName
         };
 
         updateState({
             custName: selectedData.custName,
-            custCode: selectedData.custCode
+            custCode: selectedData.custCode,
+            atcCode: selectedAtcCode,
+            atcName: selectedAtcName
         });
         
         if (!selectedData.currCode) {
@@ -1395,15 +1402,25 @@ useEffect(() => {
                 custDetails.attention = data[0]?.custContact;
                 custDetails.billtermCode = data[0]?.billtermCode;
                 custDetails.billtermName = data[0]?.billtermName;
+                custDetails.atcCode = data[0]?.atcCode || custDetails.atcCode;
+                const customerAtcRow = getAllTopATCRow(custDetails.atcCode);
+                custDetails.atcName = customerAtcRow?.atcName || data[0]?.atcName || custDetails.atcName;
             } else {
                 console.warn("API call for getCustomer returned success: false", response.message);
             }
         }
 
+        const custAtcRow = getAllTopATCRow(custDetails.atcCode);
+        custDetails.atcName = custAtcRow?.atcName || custDetails.atcName;
+
         await Promise.all([
             handleSelectCurrency(custDetails.currCode),
             handleSelectBillTerm(custDetails.billtermCode),
-            updateState({ attention: custDetails.attention })
+            updateState({
+              attention: custDetails.attention,
+              atcCode: custDetails.atcCode,
+              atcName: custDetails.atcName
+            })
         ]);
 
     } catch (error) {
@@ -2611,7 +2628,7 @@ return (
                     
                 {!isFormDisabled && (
                   <th
-                    className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900"
+                    className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900"
                     style={transactionActionsHeaderStyle}
                   >
                     Actions
@@ -2811,7 +2828,7 @@ return (
                 )}
                 {!isFormDisabled && (
                   <th
-                    className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900"
+                    className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900"
                     style={transactionActionsHeaderStyle}
                   >
                     Actions

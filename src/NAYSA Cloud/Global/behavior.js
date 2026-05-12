@@ -189,66 +189,86 @@ export const useSwalshowSave = (onConfirm, onPrint) => {
 
 
 
-
-
 export const useSwalErrorAlert = (
   title = "Error!",
-  message = "Something went wrong."
-) => {
-  const formattedMessage = String(message).replace(
-    /^(.+)/,
-    `<div style="font-weight:700; font-size:clamp(10px, 1.2vw, 14px); color:#111827; margin-bottom: -10px;">$1</div>`
-  );
+  message = "Something went wrong.",
+  fixedMsg= ""
 
-  const breakMsg = formattedMessage.replace(/\n/g, "<br/>");
+) => {
+
+  if (fixedMsg === "endingCutoff") {
+    title = "Invalid cut-off range";
+    message = "Ending Cut-off must not be earlier than Starting Cut-off.";
+  }
 
   return Swal.fire({
     toast: true,
     position: "top-end",
-    icon: "error",
-
+    icon: undefined,
+    title: "",
     html: `
-      <div style="text-align:left; font-size:clamp(10px, 1.2vw, 14px); line-height:1.45; color:#374151;">
-        ${breakMsg}
+      <div class="swal-sonner-error-toast-wrap">
+        <div class="swal-sonner-error-toast-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"></circle>
+            <path d="M12 8v4"></path>
+            <path d="M12 16h.01"></path>
+          </svg>
+        </div>
+
+        <div class="swal-sonner-error-toast-content">
+          <div class="swal-sonner-error-toast-title">${title}</div>
+          ${
+            message
+              ? `<div class="swal-sonner-error-toast-message">${String(message).replace(/\n/g, "<br/>")}</div>`
+              : ""
+          }
+        </div>
       </div>
     `,
-
     showConfirmButton: false,
     showCloseButton: true,
-    timer: 3000,
+    timer: 4000,
     timerProgressBar: true,
-
-    width: 400,
-    padding: "12px 14px",
-
-    // ✅ avoid focus “jump”
-    // focusConfirm: false,
-    // focusCancel: false,
-    // returnFocus: false,
-
-    // ✅ smooth entrance (no shake / no zoom)
-    showClass: {popup: "swal2-show toast-smooth-in",},
-    hideClass: {popup: "swal2-hide toast-smooth-out",},
-
+    width: 320, // Reduced width (from 400)
+    padding: "0",
+    background: "#ffffff",
     customClass: {
-      // ✅ translucent + glass
-      popup: "toast-glass rounded-xl shadow-lg border border-white/20",
-      htmlContainer: "m-0 p-0",
-      closeButton: "text-gray-700/70 hover:text-gray-900",
-      timerProgressBar: "rounded-b-xl",
+      popup: "swal-sonner-error-toast-popup",
+      htmlContainer: "swal-sonner-error-toast-html",
+      closeButton: "swal-sonner-error-toast-close",
+      timerProgressBar: "swal-sonner-error-toast-progress",
     },
-
     didOpen: (toast) => {
-      const icon = Swal.getIcon();
-      if (icon) {
-        icon.style.transform = "scale(0.9)";
-        icon.style.margin = "0 0px 0 0";
+      const popup = Swal.getPopup();
+      if (popup) {
+        popup.style.borderRadius = "10px"; // Sharper corners for a smaller look
+        
+        // Target specific text elements to shrink them
+        const titleEl = popup.querySelector(".swal-sonner-error-toast-title");
+        const messageEl = popup.querySelector(".swal-sonner-error-toast-message");
+        
+        if (titleEl) {
+           titleEl.style.fontSize = "13px"; // Smaller Title
+           titleEl.style.fontWeight = "700";
+        }
+        if (messageEl) {
+           messageEl.style.fontSize = "11px"; // Much smaller body text
+           messageEl.style.lineHeight = "1.4";
+           messageEl.style.marginTop = "2px";
+        }
       }
+       if (fixedMsg === "endingCutoff") {
+    title = "Invalid cut-off range";
+    message = "Ending Cut-off must not be earlier than Starting Cut-off.";
+  }
       toast.onmouseenter = Swal.stopTimer;
       toast.onmouseleave = Swal.resumeTimer;
     },
   });
 };
+
+
 
 
 

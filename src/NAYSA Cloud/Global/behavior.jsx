@@ -304,7 +304,6 @@ export const useSwalshowSave = (onConfirm, onPrint) => {
 
 
 
-
 export const useSwalErrorAlert = (
   title = "Error!",
   message = "Something went wrong.",
@@ -1031,6 +1030,8 @@ export const useSwalConfirmAlert = (title = "Are you sure?", message = "") => {
     },
   });
 };
+
+
 
 
 
