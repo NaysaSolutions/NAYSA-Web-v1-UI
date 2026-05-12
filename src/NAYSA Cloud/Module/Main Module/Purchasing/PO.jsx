@@ -711,6 +711,9 @@ const PO = () => {
     return Boolean(detailDate && baseDate && detailDate < baseDate);
   };
 
+  const currentDeliveryFallbackDate = useGetCurrentDayV2();
+  const getDefaultDeliveryDate = () => poDate || currentDeliveryFallbackDate;
+
   const getInvTypeFromDocType = (lookupDocType) => {
     const normalized = String(lookupDocType || "").toUpperCase();
     if (normalized.endsWith("FG")) return "FG";
@@ -788,6 +791,7 @@ const PO = () => {
 
   const handleAddBlankRow = (index) => {
     if (isFormDisabled) return;
+    const today = getDefaultDeliveryDate();
     const blankRow = {
       invType: "",
       groupId: "",
@@ -800,7 +804,7 @@ const PO = () => {
       prBalance: formatNumber(0, decQty),
       uomCode2: "",
       uomQty2: formatNumber(0, decQty),
-      dateNeeded: state.header?.delDate || "",
+      dateNeeded: state.header?.delDate || today,
       itemSpecs: "",
       serviceCode: "",
       serviceName: "",
@@ -898,8 +902,18 @@ const PO = () => {
 
     if (!isCompleteOrCleared) return;
 
-    if (currentValue && isDeliveryDateEarlierThanPoDate(currentValue)) {
-      applyHeaderAndDetailDeliveryDate(poDate || useGetCurrentDayV2(), {
+    if (!currentValue) {
+      applyHeaderAndDetailDeliveryDate(getDefaultDeliveryDate(), {
+        showAlert: true,
+        updateAllDetails: true,
+        alertMessage:
+          "Delivery Date is required. Delivery Date has been adjusted to match the PO Date.",
+      });
+      return;
+    }
+
+    if (isDeliveryDateEarlierThanPoDate(currentValue)) {
+      applyHeaderAndDetailDeliveryDate(getDefaultDeliveryDate(), {
         showAlert: true,
       });
       return;
@@ -937,7 +951,7 @@ const PO = () => {
   }, [delDate]);
 
   useEffect(() => {
-    const newPoDate = poDate || useGetCurrentDayV2();
+    const newPoDate = getDefaultDeliveryDate();
     const shouldUpdateHeaderDeliveryDate =
       delDate && isDeliveryDateEarlierThanPoDate(delDate);
 
@@ -1504,7 +1518,14 @@ const PO = () => {
     return candidateDate < basePoDate;
   };
 
-  const applyHeaderAndDetailDeliveryDate = (nextDeliveryDate, { showAlert = false } = {}) => {
+  const applyHeaderAndDetailDeliveryDate = (
+    nextDeliveryDate,
+    {
+      showAlert = false,
+      updateAllDetails = false,
+      alertMessage = "Delivery Date cannot be earlier than the PO Date. Delivery Date has been adjusted to match the PO Date.",
+    } = {}
+  ) => {
     const normalizedDeliveryDate =
       formatFetchedHeaderDate(nextDeliveryDate) ||
       nextDeliveryDate ||
@@ -1513,16 +1534,16 @@ const PO = () => {
     if (showAlert) {
       useSwalErrorAlert(
         "Invalid Delivery Date",
-        "Delivery Date cannot be earlier than the PO Date. Delivery Date has been adjusted to match the PO Date."
+        alertMessage
       );
     }
 
     const updatedRows = (detailRows || []).map((row) => ({
       ...row,
       dateNeeded:
-        row?.dateNeeded && isDeliveryDateEarlierThanPoDate(row.dateNeeded)
+        updateAllDetails || !row?.dateNeeded || isDeliveryDateEarlierThanPoDate(row.dateNeeded)
           ? normalizedDeliveryDate
-          : row.dateNeeded || "",
+          : row.dateNeeded,
     }));
 
     detailRowsRef.current = updatedRows;
@@ -1575,7 +1596,7 @@ const PO = () => {
   };
 
   const handleSelectTypeAndAddRow = (typeCode) => {
-    const today = poDate || useGetCurrentDayV2();
+    const today = getDefaultDeliveryDate();
     const newRow = {
       invType: typeCode,
       groupId: "",
@@ -1588,7 +1609,7 @@ const PO = () => {
       prBalance: formatNumber(0, decQty),
       uomCode2: "",
       uomQty2: formatNumber(0, decQty),
-      dateNeeded: delDate || "",
+      dateNeeded: delDate || today,
       itemSpecs: "",
       serviceCode: "",
       serviceName: "",
@@ -1798,7 +1819,7 @@ const PO = () => {
         const rowDateNeeded =
           relatedSummary?.dateNeeded
             ? useformatToDatev2(relatedSummary.dateNeeded)
-            : delDate || dateNeeded || "";
+            : delDate || dateNeeded || getDefaultDeliveryDate();
 
         const row = {
           lN: (detailRows?.length || 0) + i + 1,
@@ -1964,7 +1985,7 @@ const PO = () => {
     );
 
     const processAddition = (itemsToAdd) => {
-      const today = poDate || useGetCurrentDayV2();
+      const today = getDefaultDeliveryDate();
       const payeeVatRow = getPoGoodsVatRow(vendVatCode);
       const defaultVatCode = payeeVatRow?.vatCode || vendVatCode || "";
       const defaultVatName = payeeVatRow?.vatName || vendVatName || "";
@@ -1981,7 +2002,7 @@ const PO = () => {
         prBalance: formatNumber(0, decQty),
         uomCode2: "",
         uomQty2: formatNumber(0, decQty),
-        dateNeeded: delDate || "",
+        dateNeeded: delDate || today,
         itemSpecs: "",
         serviceCode: "",
         serviceName: "",
@@ -2230,9 +2251,12 @@ const PO = () => {
 
       row.poStatus = value || "O";
     } else if (field === "dateNeeded") {
-      if (isDateBeforePoDate(value)) {
+      if (!value) {
+        useSwalErrorAlert("Invalid Delivery Date", "Delivery Date is required. Delivery Date has been adjusted to match the PO Date.");
+        row.dateNeeded = getDefaultDeliveryDate();
+      } else if (isDateBeforePoDate(value)) {
         useSwalErrorAlert("Invalid Delivery Date", "Delivery Date cannot be before the PO Date.");
-        row.dateNeeded = poDate || useGetCurrentDayV2();
+        row.dateNeeded = getDefaultDeliveryDate();
       } else {
         row.dateNeeded = value;
       }
@@ -2327,17 +2351,40 @@ const handleActivityOption = async (action) => {
       detailRows,
     } = state;
 
-    const poGrossAmount = detailRows.reduce(
+    const normalizedDeliveryDate = state.delDate || getDefaultDeliveryDate();
+    const rowsForSave = (detailRows || []).map((row) => ({
+      ...row,
+      dateNeeded: row.dateNeeded || normalizedDeliveryDate,
+    }));
+    const deliveryDateWasAdjusted =
+      !state.delDate ||
+      rowsForSave.some((row, index) => row.dateNeeded !== (detailRows || [])[index]?.dateNeeded);
+
+    if (deliveryDateWasAdjusted) {
+      useSwalErrorAlert(
+        "Invalid Delivery Date",
+        "Delivery Date is required. Delivery Date has been adjusted to match the PO Date."
+      );
+      detailRowsRef.current = rowsForSave;
+      updateState({
+        delDate: normalizedDeliveryDate,
+        dateNeeded: normalizedDeliveryDate,
+        header: { ...(state.header || {}), delDate: normalizedDeliveryDate },
+        detailRows: rowsForSave,
+      });
+    }
+
+    const poGrossAmount = rowsForSave.reduce(
       (sum, row) => sum + (parseFormattedNumber(row.grossAmt || 0) || 0),
       0
     );
 
-    const poDiscountAmount = detailRows.reduce(
+    const poDiscountAmount = rowsForSave.reduce(
       (sum, row) => sum + (parseFormattedNumber(row.discAmt || 0) || 0),
       0
     );
 
-    const poVatAmount = detailRows.reduce(
+    const poVatAmount = rowsForSave.reduce(
       (sum, row) => sum + (parseFormattedNumber(row.vatAmt || 0) || 0),
       0
     );
@@ -2361,7 +2408,7 @@ const handleActivityOption = async (action) => {
       vendContact: state.vendContact || "",
       paytermCode: state.paytermCode || "",
       poType: selectedPoType || "",
-      delDate: state.delDate || null,
+      delDate: normalizedDeliveryDate,
       currCode: state.currCode || "PHP",
       currRate: parseFormattedNumber(state.currRate || "1"),
       refPoNo1: refPoNo1 || "",
@@ -2375,7 +2422,7 @@ const handleActivityOption = async (action) => {
       poStatus: status || "O",
       userCode: currentUserRow?.userCode,
 
-      dt1: detailRows.map((row, index) => ({
+      dt1: rowsForSave.map((row, index) => ({
         poId: documentID || "",
         prId: row.prId || "",
         groupId: row.groupId || "",

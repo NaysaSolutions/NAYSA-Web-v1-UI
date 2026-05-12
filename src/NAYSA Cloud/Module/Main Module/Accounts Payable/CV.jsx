@@ -24,6 +24,7 @@ import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
+import CheckPrintPreviewModal from "../../../Lookup/SearchCheckPrinting.jsx";
 
 
 // Configuration
@@ -107,6 +108,7 @@ const CV = () => {
    const location = useLocation(); 
    const { companyInfo, currentUserRow,getAllDropDown,refsLoaded ,getAllTopATCRow, getAllTopVatRow,getAllTopVatAmount,getAllTopATCAmount,getAllTopHSDocRow } = useAuth();
    const [isViewDocument, setIsViewDocument] = useState(false);
+   const [showCheckPreview, setShowCheckPreview] = useState(false);
    useEffect(() => {
      const p = new URLSearchParams(location.search);
      if (p.get("viewDocument") === "true") {
@@ -193,6 +195,7 @@ const CV = () => {
     bankAcctName: "",
     bankAcctNo: "",
     checkNo: "",
+    amtInWords: "",
     checkDate: useGetCurrentDayV2(), 
     selectedWithAPV : "Y",
     selectedCvType : "APV01",
@@ -305,6 +308,8 @@ const CV = () => {
   bankAcctNo,
   checkNo,
   checkDate,
+  amtInWords,
+  currAmount,
 
   selectedWithAPV,
   selectedPayType,
@@ -757,7 +762,7 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       documentNo: data.cvNo,
       branchCode: data.branchCode,
       branchName: data.branchName,
-      
+      amtInWords: data.amtInWords,
       documentDate: useformatToDatev2(data.cvDate),
       selectedCvType: data.cvtranType,
       selectedWithAPV: data.withAPV,
@@ -1205,7 +1210,8 @@ const handlePrint = async () => {
       return;
       }
   if (documentID) {
-    updateState({ showSignatoryModal: true });
+    setShowCheckPreview(true);
+    // updateState({ showSignatoryModal: true });
   }
 };
 
@@ -4194,6 +4200,21 @@ const checkDuplicateCheckNo = async (checkNo, docId) => {
     onClose={() => updateState({ showAllTranDocNo: false })}
   />
 )} 
+
+
+<CheckPrintPreviewModal
+  open={showCheckPreview}
+  onClose={() => setShowCheckPreview(false)}
+  bankCode={bankCode}
+  checkData={{
+    bankCode,
+    checkDate,
+    amountInWords: amtInWords,
+    payeeName: vendName,
+    checkAmount: currAmount,
+    cvNo: documentNo,
+  }}
+/>
 
 
 {/* Global Spinner */}

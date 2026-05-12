@@ -400,6 +400,7 @@ const JO = () => {
   ];
 
   const {
+    autoResizeRows: autoResizeJoDetailRows,
     getColumnStyle: getJoDetailColumnStyle,
     getFrozenColumnStyle: getJoDetailFrozenStyle,
     getOrderedColumns: getOrderedJoDetailColumns,
@@ -1683,11 +1684,64 @@ const renderJoDetailColumn = (columnKey, row, index) => {
     <input type="text" className="w-full global-tran-td-inputclass-ui text-right" value={row[field] || ""} readOnly />
   );
 
+  const modalTextCell = (field, modalTitle, placeholder) => {
+    const value = row[field] || "";
+    const lineCount = Math.max(1, String(value).split(/\r\n|\r|\n/).length);
+
+    return (
+      <td key={columnKey} className="global-tran-td-ui relative align-top" style={style}>
+        <div className={`flex ${autoResizeJoDetailRows ? "items-start" : "items-center"}`}>
+          {autoResizeJoDetailRows ? (
+            <textarea
+              id={`${field}-${index}`}
+              className="w-full min-h-[28px] resize-none bg-transparent py-1 pr-8 text-xs leading-4 whitespace-pre-wrap break-words focus:outline-none focus:ring-0"
+              value={value}
+              rows={lineCount}
+              readOnly={isFormDisabled}
+              onChange={(e) => handleDetailChange(index, field, e.target.value, false)}
+            />
+          ) : (
+            <input
+              type="text"
+              id={`${field}-${index}`}
+              className="w-full global-tran-td-inputclass-ui pr-8"
+              value={value}
+              readOnly={isFormDisabled}
+              onChange={(e) => handleDetailChange(index, field, e.target.value, false)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" || isFormDisabled) return;
+                e.preventDefault();
+                focusNextDetailCell(field);
+              }}
+            />
+          )}
+          {!isFormDisabled && (
+            <FontAwesomeIcon
+              icon={faSearch}
+              className="absolute right-2 top-1.5 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+              onClick={() =>
+                useSwalHandleOpenSpecsModal(
+                  index,
+                  detailRows,
+                  handleDetailChange,
+                  value,
+                  modalTitle,
+                  field,
+                  placeholder
+                )
+              }
+            />
+          )}
+        </div>
+      </td>
+    );
+  };
+
   const detailColumnRenderers = {
     ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
     jobCode: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`jobCode-${index}`} className="w-full global-tran-td-inputclass-ui pr-6" value={row.jobCode || ""} readOnly onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("jobCode"); } }} />{!isFormDisabled && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={() => updateState({ showJobCodesModal: true, selectedRowIndex: index })} />}</div></td>,
-    scopeOfWork: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`scopeOfWork-${index}`} className="w-full global-tran-td-inputclass-ui pr-8" value={row.scopeOfWork || ""} readOnly={isFormDisabled} onChange={(e) => handleDetailChange(index, "scopeOfWork", e.target.value, false)} onKeyDown={(e) => { if (e.key === "Enter" && !isFormDisabled) { e.preventDefault(); focusNextDetailCell("scopeOfWork"); } }} />{!isFormDisabled && <FontAwesomeIcon icon={faSearch} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={() => useSwalHandleOpenSpecsModal(index, detailRows, handleDetailChange, row.scopeOfWork, "Scope of Work", "scopeOfWork", `Enter scope of work for ${row.jobCode || "this item"}...`)} />}</div></td>,
-    specification: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`specification-${index}`} className="w-full global-tran-td-inputclass-ui pr-8" value={row.specification || ""} readOnly={isFormDisabled} onChange={(e) => handleDetailChange(index, "specification", e.target.value, false)} onKeyDown={(e) => { if (e.key === "Enter" && !isFormDisabled) { e.preventDefault(); focusNextDetailCell("specification"); } }} />{!isFormDisabled && <FontAwesomeIcon icon={faSearch} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={() => useSwalHandleOpenSpecsModal(index, detailRows, handleDetailChange, row.specification, "Specification", "specification", `Enter specification for ${row.jobCode || "this item"}...`)} />}</div></td>,
+    scopeOfWork: () => modalTextCell("scopeOfWork", "Scope of Work", `Enter scope of work for ${row.jobCode || "this item"}...`),
+    specification: () => modalTextCell("specification", "Specification", `Enter specification for ${row.jobCode || "this item"}...`),
     quantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("quantity", { decimals: 2 })}</td>,
     unitPrice: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("unitPrice", { decimals: decUPrice })}</td>,
     uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("uomCode", { readOnly: isFormDisabled, maxLength: useGetFieldLength(tblFieldArray, "uom_code") })}</td>,

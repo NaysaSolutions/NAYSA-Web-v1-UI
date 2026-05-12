@@ -412,6 +412,7 @@ const isDateBeforeDate = (value, baseValue) => {
   ];
 
   const {
+    autoResizeRows: autoResizePrDetailRows,
     getColumnStyle: getPrDetailColumnStyle,
     getFrozenColumnStyle: getPrDetailFrozenStyle,
     getOrderedColumns: getOrderedPrDetailColumns,
@@ -1924,6 +1925,60 @@ const renderPrDetailColumn = (columnKey, row, index) => {
     <input type="text" id={`${field}-${index}`} className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? isFormDisabled} disabled={options.disabled ?? false} tabIndex={options.tabIndex} maxLength={options.maxLength} onChange={(e) => handleDetailChange(index, field, e.target.value, false)} onKeyDown={(e) => { if (e.key !== "Enter" || options.readOnly || options.disabled || isFormDisabled) return; e.preventDefault(); focusNextDetailCell(field); }} />
   );
 
+  const modalTextCell = (field, modalTitle, placeholder) => {
+    const value = row[field] || "";
+    const lineCount = Math.max(1, String(value).split(/\r\n|\r|\n/).length);
+    const canOpenModal = !isFormDisabled && row.prStatus === "O";
+
+    return (
+      <td key={columnKey} className="global-tran-td-ui relative align-top" style={style}>
+        <div className={`flex ${autoResizePrDetailRows ? "items-start" : "items-center"}`}>
+          {autoResizePrDetailRows ? (
+            <textarea
+              id={`${field}-${index}`}
+              className="w-full min-h-[28px] resize-none bg-transparent py-1 pr-8 text-xs leading-4 whitespace-pre-wrap break-words focus:outline-none focus:ring-0"
+              value={value}
+              rows={lineCount}
+              readOnly={rowLocked}
+              onChange={(e) => handleDetailChange(index, field, e.target.value, false)}
+            />
+          ) : (
+            <input
+              type="text"
+              id={`${field}-${index}`}
+              className="w-full global-tran-td-inputclass-ui pr-8"
+              value={value}
+              onChange={(e) => handleDetailChange(index, field, e.target.value, false)}
+              readOnly={rowLocked}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" || rowLocked) return;
+                e.preventDefault();
+                focusNextDetailCell(field);
+              }}
+            />
+          )}
+          {canOpenModal && (
+            <FontAwesomeIcon
+              icon={faSearch}
+              className="absolute right-2 top-1.5 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+              onClick={() =>
+                useSwalHandleOpenSpecsModal(
+                  index,
+                  detailRows,
+                  handleDetailChange,
+                  value,
+                  modalTitle,
+                  field,
+                  placeholder
+                )
+              }
+            />
+          )}
+        </div>
+      </td>
+    );
+  };
+
   const commitQtyInputValue = (field, rawValue) => {
     let num = parseFormattedNumber(rawValue);
     if (isNaN(num)) return;
@@ -1992,10 +2047,10 @@ const renderPrDetailColumn = (columnKey, row, index) => {
     prStatus: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`prStatus-${index}`} className="w-full global-tran-td-inputclass-ui" value={row.prStatus || "O"} onChange={(e) => handleDetailChange(index, "prStatus", e.target.value)} disabled={isDocumentLocked || !documentID?.length || row.prStatus !== "O" || row.joNo?.length} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("prStatus"); } }}><option value="O">Open</option><option value="C">Closed</option>{(!row.poQty || parseFloat(row.poQty) === 0) && <option value="X">Cancelled</option>}</select></td>,
     invType: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`invType-${index}`} className="w-full global-tran-td-inputclass-ui bg-white outline-none" value={row.invType || ""} onChange={(e) => handleDetailChange(index, "invType", e.target.value)} disabled={isFormDisabled || (row.itemCode?.length > 0) || isJobOrder} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("invType"); } }}><option value="" disabled>Select</option>{isJobOrder ? <option value="JO">JO</option> : <><option value="MS">MS</option><option value="RM">RM</option><option value="FG">FG</option></>}</select></td>,
     serviceCode: () => lookupCell("serviceCode", () => updateState({ showJobCodesModal: true, selectedRowIndex: index }), { hideIcon: isFormDisabled || row.prStatus !== "O" }),
-    serviceName: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`serviceName-${index}`} className="w-full global-tran-td-inputclass-ui pr-8" value={row.serviceName || ""} onChange={(e) => handleDetailChange(index, "serviceName", e.target.value)} readOnly={rowLocked} onKeyDown={(e) => { if (e.key !== "Enter" || rowLocked) return; e.preventDefault(); focusNextDetailCell("serviceName"); }} />{!isFormDisabled && row.prStatus === "O" && <FontAwesomeIcon icon={faSearch} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={() => useSwalHandleOpenSpecsModal(index, detailRows, handleDetailChange, row.serviceName, "Scope of Work", "serviceName", "Enter scope of work...")} />}</div></td>,
+    serviceName: () => modalTextCell("serviceName", "Scope of Work", "Enter scope of work..."),
     itemCode: () => lookupCell("itemCode", () => handleAddItem(index, "PR" + row.invType), { hideIcon: isFormDisabled || Number(row.poQty || 0) !== 0 || row.prStatus !== "O" || row.invType === "" || row.invType == null }),
     itemName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("itemName", { disabled: isFormDisabled, className: "cursor-not-allowed" })}</td>,
-    itemSpecs: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`itemSpecs-${index}`} className="w-full global-tran-td-inputclass-ui pr-8" value={row.itemSpecs || ""} onChange={(e) => handleDetailChange(index, "itemSpecs", e.target.value)} readOnly={rowLocked} onKeyDown={(e) => { if (e.key !== "Enter" || rowLocked) return; e.preventDefault(); focusNextDetailCell("itemSpecs"); }} />{!isFormDisabled && row.prStatus === "O" && <FontAwesomeIcon icon={faSearch} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={() => useSwalHandleOpenSpecsModal(index, detailRows, handleDetailChange, row.itemSpecs, "Specification", "itemSpecs", `Enter specification for ${row.itemName || "this item"}...`)} />}</div></td>,
+    itemSpecs: () => modalTextCell("itemSpecs", "Specification", `Enter specification for ${row.itemName || "this item"}...`),
     uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("uomCode", { readOnly: isFormDisabled || row.prStatus !== "O" || (parseFormattedNumber(row.poQty) || 0) > 0 || !isJobOrder })}</td>,
     qtyOnHand: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{textInput("qtyOnHand", { readOnly: true, tabIndex: -1, className: "text-right cursor-not-allowed" })}</td>,
     qtyNeeded: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{qtyInput("qtyNeeded", { readOnly: rowLocked })}</td>,

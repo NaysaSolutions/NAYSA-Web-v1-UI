@@ -98,6 +98,7 @@ import MSINQ from "./NAYSA Cloud/Query/INVInq/MSStockCard.jsx";
 
 //Matrix
 import SalesPMCustomerItem from "./NAYSA Cloud/Matrix/SalesPMCustomerItem.jsx"
+import CheckTemplateSetup from "./NAYSA Cloud/Matrix/CheckTemplateSetup.jsx"
 import PRInq from "./NAYSA Cloud/Module/Main Module/Purchasing/PRInq.jsx";
 import POInq from "./NAYSA Cloud/Module/Main Module/Purchasing/POInquiry.jsx";
 
@@ -234,6 +235,7 @@ export const pageRegistry = {
   PCV,
   CV,
   CVHistory,
+  CheckTemplateSetup,
 
   // Purchasing
   PR,
