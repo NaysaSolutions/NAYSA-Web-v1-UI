@@ -93,6 +93,7 @@ import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 // Header
 import Header from "@/NAYSA Cloud/Components/Header";
 
+
 const toDateInputValue = (value) => {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -112,9 +113,36 @@ const toDateInputValue = (value) => {
   return "";
 };
 
+const addDaysToDateValue = (value, days) => {
+  const normalized = toDateInputValue(value);
+  if (!normalized) return "";
+
+  const parsed = new Date(`${normalized}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return "";
+
+  parsed.setDate(parsed.getDate() + days);
+
+  const yyyy = parsed.getFullYear();
+  const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+  const dd = String(parsed.getDate()).padStart(2, "0");
+
+  return `${mm}/${dd}/${yyyy}`;
+};
+
+const isDateBeforeDate = (value, baseValue) => {
+  const normalizedValue = toDateInputValue(value);
+  const normalizedBase = toDateInputValue(baseValue);
+
+  return Boolean(normalizedValue && normalizedBase && normalizedValue < normalizedBase);
+};
+
+
+
   const PR = () => {
   const loadedFromUrlRef = useRef(false);
   const detailRowsRef = useRef([]);
+  const headerDateNeededRef = useRef("");
+  const suppressHeaderDateNeededPromptRef = useRef(true);
   const navigate = useNavigate();
   const location = useLocation(); 
   const [isViewDocument, setIsViewDocument] = useState(false);
@@ -140,6 +168,7 @@ const toDateInputValue = (value) => {
   const pdfLink = docTypePDFGuide[docType];
   const videoLink = docTypeVideoGuide[docType];
   const documentTitle = hsDoc.docName + ' Transaction';
+  const defaultHeaderDateNeeded = addDaysToDateValue(useGetCurrentDayV2(), 1);
 
   const [state, setState] = useState({
     // HS Option / Currency
@@ -158,8 +187,8 @@ const toDateInputValue = (value) => {
     documentDocLen: hsDoc?.docLength||8,
     documentID: null,
     documentDate:useGetCurrentDayV2(),  
-    dateNeeded:useGetCurrentDayV2(),  
-    headerDateNeeded:useGetCurrentDayV2(),  
+    dateNeeded:defaultHeaderDateNeeded,  
+    headerDateNeeded:defaultHeaderDateNeeded,  
     documentNo: "",
     documentStatus: "",
     status: "",
@@ -339,7 +368,7 @@ const toDateInputValue = (value) => {
   const statusColor = statusMap[displayStatus] || "";
   const maxApprovalLevel = Number(currentUserRow?.prMaxAppLevel || 0);
   const currentApprovalLevel = Number(appLevel ?? 0);
-  const approvalStatusHiddenStatuses = ["CANCELLED", "POSTED", "FINALIZED", "CLOSED"];
+  const approvalStatusHiddenStatuses = ["CANCELLED", "POSTED", "FINALIZED" ];
   const showApprovalStatus =
     !!documentID &&
     maxApprovalLevel > 0 &&
@@ -354,9 +383,13 @@ const toDateInputValue = (value) => {
     currentApprovalLevel === -1
       ? "text-rose-500 dark:text-rose-400 animate-pulse"
       : statusColor;
-  const isFormDisabled = isViewDocumentUrl || ["FINALIZED", "CANCELLED", "CLOSED"].includes(
+  const isDocumentLocked = isViewDocumentUrl || ["FINALIZED", "CANCELLED", "CLOSED"].includes(
     displayStatus
   );
+  const isApprovalLocked =
+    currentApprovalLevel > 0 &&
+    currentApprovalLevel <= maxApprovalLevel;
+  const isFormDisabled = isDocumentLocked || isApprovalLocked;
 
 
 
@@ -454,6 +487,87 @@ useEffect(() => {
     }
   }, [glCurrMode, glCurrDefault, currCode]);
 
+  useEffect(() => {
+    if (suppressHeaderDateNeededPromptRef.current) {
+      suppressHeaderDateNeededPromptRef.current = false;
+      headerDateNeededRef.current = headerDateNeeded || "";
+      return;
+    }
+
+    const currentValue = headerDateNeeded || "";
+
+    if (currentValue === headerDateNeededRef.current) return;
+
+    const isCompleteOrCleared =
+      currentValue === "" || /^\d{2}\/\d{2}\/\d{4}$/.test(currentValue);
+
+    if (!isCompleteOrCleared) return;
+
+    if (currentValue && isDateBeforeDate(currentValue, documentDate)) {
+      const fallbackDate = documentDate || useGetCurrentDayV2();
+      const updatedRows = (detailRows || []).map((row) => ({
+        ...row,
+        dateNeeded: fallbackDate,
+      }));
+
+      detailRowsRef.current = updatedRows;
+      headerDateNeededRef.current = fallbackDate;
+      suppressHeaderDateNeededPromptRef.current = true;
+      updateState({
+        headerDateNeeded: fallbackDate,
+        dateNeeded: fallbackDate,
+        detailRows: updatedRows,
+      });
+      useSwalErrorAlert(
+        "Invalid Date Needed",
+        "Date Needed cannot be earlier than the PR Date."
+      );
+      return;
+    }
+
+    const run = async () => {
+      const nextState = { dateNeeded: currentValue };
+
+      if ((detailRows?.length || 0) > 0) {
+        const result = await useSwalConfirmAlert(
+          "Apply Date Needed changes?",
+          "PR Detail already has record(s).\nDo you want to apply the updated Date Needed to all PR Detail rows?",
+          "Yes"
+        );
+
+        if (result?.isConfirmed) {
+          const updatedRows = (detailRows || []).map((row) => ({
+            ...row,
+            dateNeeded: currentValue,
+          }));
+
+          detailRowsRef.current = updatedRows;
+          nextState.detailRows = updatedRows;
+        }
+      }
+
+      headerDateNeededRef.current = currentValue;
+      updateState(nextState);
+    };
+
+    run();
+  }, [headerDateNeeded]);
+
+  useEffect(() => {
+    if (!documentDate) return;
+
+    if (headerDateNeeded && !isDateBeforeDate(headerDateNeeded, documentDate)) return;
+
+    const nextDateNeeded = addDaysToDateValue(documentDate, 1) || documentDate;
+    headerDateNeededRef.current = nextDateNeeded;
+    suppressHeaderDateNeededPromptRef.current = true;
+
+    updateState({
+      headerDateNeeded: nextDateNeeded,
+      dateNeeded: nextDateNeeded,
+    });
+  }, [documentDate]);
+
 
 
   
@@ -492,23 +606,25 @@ useEffect(() => {
 
     clearPrDetailSorting();
     loadCompanyData();
-
-   
+    const today = useGetCurrentDayV2();
+    const nextDateNeeded = addDaysToDateValue(today, 1);
+    headerDateNeededRef.current = nextDateNeeded;
+    suppressHeaderDateNeededPromptRef.current = true;
 
     
     updateState({
       branchCode: currentUserRow?.branchCode||"",
       branchName: currentUserRow?.branchName||"",
       userCode:currentUserRow?.userCode||"",
-      headerDateNeeded:useGetCurrentDayV2(),
-      documentDate:useGetCurrentDayV2(),
+      headerDateNeeded:nextDateNeeded,
+      documentDate:today,
       documentStatus:"O",
       cutoffCode: "",
       rcCode: "",
       rcName: "",
       reqRcCode: "",
       reqRcName: "",
-      dateNeeded: useGetCurrentDayV2(),
+      dateNeeded: nextDateNeeded,
       selectedPrTranType:"PR01",
       selectedPrType:"PR11",
       
@@ -621,6 +737,7 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       qtyNeeded: formatNumber(item.qtyNeeded,decQty),
       poQty: formatNumber(item.poQty,decQty),
       rrQty: formatNumber(item.rrQty,decQty),
+      dateNeeded: item.dateNeeded ? useformatToDatev2(item.dateNeeded) : "",
     }));
     const retrievedApprovalRows = Array.isArray(data.dtApp)
       ? data.dtApp
@@ -633,6 +750,10 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
   
     // Update state with fetched data
 
+    const fetchedDateNeeded = useformatToDatev2(data.dateNeeded);
+    headerDateNeededRef.current = fetchedDateNeeded;
+    suppressHeaderDateNeededPromptRef.current = true;
+
     updateState({
 
       documentStatus: data.prHStatus,
@@ -644,7 +765,8 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       branchCode: data.branchCode,
       BranchName:data.branchName,
       documentDate: useformatToDatev2(data.prDate),
-      headerDateNeeded:useformatToDatev2(data.dateNeeded),
+      headerDateNeeded:fetchedDateNeeded,
+      dateNeeded:fetchedDateNeeded,
       rcCode: data.rcCode,
       rcName: data.rcName,
       reqRcCode: data.reqRcCode,
@@ -1042,8 +1164,8 @@ const handleScanItem = async (scannedValue) => {
       uomQty2: matchedItem.uomQty2 || "0.000000",
       dateNeeded: headerDateNeeded,
       itemSpecs: matchedItem.itemSpecs || "",
-      poQty: matchedItem.poQty || "0.000000",
-      rrQty: matchedItem.rrQty || "0.000000",
+      poQty: formatNumber(matchedItem.poQuantity, decQty),
+      rrQty: formatNumber(matchedItem.rrQuantity, decQty),
       joNo: "",
     };
 
@@ -1208,10 +1330,13 @@ const handleDetailChange = (index, field, value, runCalculations = false) => {
   // --- 1. Handle Numeric Fields ---
   if (numericFields.includes(field)) {
     const raw = value === null || value === undefined ? "" : String(value);
-    const sanitized = raw.replace(/[^0-9.-]/g, ""); 
+    const sanitized = field === "qtyNeeded"
+      ? raw.replace(/[^0-9.]/g, "")
+      : raw.replace(/[^0-9.-]/g, ""); 
 
     if (runCalculations) {
-      const num = parseFormattedNumber(sanitized);
+      let num = parseFormattedNumber(sanitized);
+      if (field === "qtyNeeded" && Number.isFinite(num) && num < 0) num = 0;
       row[field] = Number.isFinite(num)
         ? formatNumber(num, field === "qtyNeeded" ? decQty : 2)
         : "";
@@ -1229,7 +1354,17 @@ const handleDetailChange = (index, field, value, runCalculations = false) => {
 
 
 
-if (field !== 'itemCode' && field !== 'serviceCode' && !numericFields.includes(field) && field !== 'prStatus') {
+if (field === "dateNeeded") {
+  if (value && isDateBeforeDate(value, documentDate)) {
+    row.dateNeeded = documentDate || useGetCurrentDayV2();
+    useSwalErrorAlert(
+      "Invalid Date Needed",
+      "Date Needed cannot be earlier than the PR Date."
+    );
+  } else {
+    row.dateNeeded = value;
+  }
+} else if (field !== 'itemCode' && field !== 'serviceCode' && !numericFields.includes(field) && field !== 'prStatus') {
   row[field] = value;
 }
 
@@ -1564,6 +1699,9 @@ const handleHeaderStatusChange = (value) => {
 
   const qtyHandDetail = !isJobOrder ? await handleActivityOption('onCopy') : [];
 
+  const commonDate = useGetCurrentDayV2();
+  const copiedDateNeeded = addDaysToDateValue(commonDate, 1);
+
   const updatedRows = detailRows.map((row) => {
     const match = !isJobOrder && qtyHandDetail?.find(
       (item) => item.itemCode === row.itemCode && item.invType === row.invType
@@ -1577,12 +1715,13 @@ const handleHeaderStatusChange = (value) => {
       qtyOnHand: formatNumber(match ? match.quantity : 0, decQty),
       qtyAlloc: formatNumber(0, decQty),
       groupId: "",
-      dateNeeded: useGetCurrentDayV2()
+      dateNeeded: copiedDateNeeded
     };
   });
 
   if (documentID) {
-    const commonDate = useGetCurrentDayV2();
+    headerDateNeededRef.current = copiedDateNeeded;
+    suppressHeaderDateNeededPromptRef.current = true;
     
     updateState({
       documentNo: "",
@@ -1591,8 +1730,12 @@ const handleHeaderStatusChange = (value) => {
       status: "",
       originalDocStatus: "O",
       documentDate: commonDate,
-      headerDateNeeded: commonDate,
+      headerDateNeeded: copiedDateNeeded,
+      dateNeeded: copiedDateNeeded,
       detailRows: updatedRows,
+      isFetchDisabled: false,
+      isFormDisabled: false,
+      appLevel: 0,
     });
 
     const totalQty = updatedRows.reduce(
@@ -1782,8 +1925,9 @@ const renderPrDetailColumn = (columnKey, row, index) => {
   );
 
   const commitQtyInputValue = (field, rawValue) => {
-    const num = parseFormattedNumber(rawValue);
+    let num = parseFormattedNumber(rawValue);
     if (isNaN(num)) return;
+    if (field === "qtyNeeded" && num < 0) num = 0;
 
     const formattedValue = formatNumber(num, decQty);
     const updatedRows = [...(detailRowsRef.current || detailRows || [])];
@@ -1807,8 +1951,13 @@ const renderPrDetailColumn = (columnKey, row, index) => {
       readOnly={options.readOnly ?? isFormDisabled}
       disabled={options.disabled ?? false}
       onChange={(e) => {
-        const sanitizedValue = e.target.value.replace(/[^0-9.-]/g, "");
-        if (/^-?\d*\.?\d{0,6}$/.test(sanitizedValue) || sanitizedValue === "") {
+        const sanitizedValue = field === "qtyNeeded"
+          ? e.target.value.replace(/[^0-9.]/g, "")
+          : e.target.value.replace(/[^0-9.-]/g, "");
+        const validPattern = field === "qtyNeeded"
+          ? /^\d*\.?\d{0,6}$/
+          : /^-?\d*\.?\d{0,6}$/;
+        if (validPattern.test(sanitizedValue) || sanitizedValue === "") {
           handleDetailChange(index, field, sanitizedValue, false);
         }
       }}
@@ -1840,19 +1989,19 @@ const renderPrDetailColumn = (columnKey, row, index) => {
 
   const detailColumnRenderers = {
     ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
-    prStatus: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`prStatus-${index}`} className="w-full global-tran-td-inputclass-ui" value={row.prStatus || "O"} onChange={(e) => handleDetailChange(index, "prStatus", e.target.value)} disabled={isFormDisabled || !documentID?.length || row.prStatus !== "O" || row.joNo?.length} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("prStatus"); } }}><option value="O">Open</option><option value="C">Closed</option>{(!row.poQty || parseFloat(row.poQty) === 0) && <option value="X">Cancelled</option>}</select></td>,
+    prStatus: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`prStatus-${index}`} className="w-full global-tran-td-inputclass-ui" value={row.prStatus || "O"} onChange={(e) => handleDetailChange(index, "prStatus", e.target.value)} disabled={isDocumentLocked || !documentID?.length || row.prStatus !== "O" || row.joNo?.length} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("prStatus"); } }}><option value="O">Open</option><option value="C">Closed</option>{(!row.poQty || parseFloat(row.poQty) === 0) && <option value="X">Cancelled</option>}</select></td>,
     invType: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`invType-${index}`} className="w-full global-tran-td-inputclass-ui bg-white outline-none" value={row.invType || ""} onChange={(e) => handleDetailChange(index, "invType", e.target.value)} disabled={isFormDisabled || (row.itemCode?.length > 0) || isJobOrder} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("invType"); } }}><option value="" disabled>Select</option>{isJobOrder ? <option value="JO">JO</option> : <><option value="MS">MS</option><option value="RM">RM</option><option value="FG">FG</option></>}</select></td>,
     serviceCode: () => lookupCell("serviceCode", () => updateState({ showJobCodesModal: true, selectedRowIndex: index }), { hideIcon: isFormDisabled || row.prStatus !== "O" }),
-    serviceName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("serviceName", { readOnly: isFormDisabled })}</td>,
+    serviceName: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`serviceName-${index}`} className="w-full global-tran-td-inputclass-ui pr-8" value={row.serviceName || ""} onChange={(e) => handleDetailChange(index, "serviceName", e.target.value)} readOnly={rowLocked} onKeyDown={(e) => { if (e.key !== "Enter" || rowLocked) return; e.preventDefault(); focusNextDetailCell("serviceName"); }} />{!isFormDisabled && row.prStatus === "O" && <FontAwesomeIcon icon={faSearch} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={() => useSwalHandleOpenSpecsModal(index, detailRows, handleDetailChange, row.serviceName, "Scope of Work", "serviceName", "Enter scope of work...")} />}</div></td>,
     itemCode: () => lookupCell("itemCode", () => handleAddItem(index, "PR" + row.invType), { hideIcon: isFormDisabled || Number(row.poQty || 0) !== 0 || row.prStatus !== "O" || row.invType === "" || row.invType == null }),
     itemName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("itemName", { disabled: isFormDisabled, className: "cursor-not-allowed" })}</td>,
     itemSpecs: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`itemSpecs-${index}`} className="w-full global-tran-td-inputclass-ui pr-8" value={row.itemSpecs || ""} onChange={(e) => handleDetailChange(index, "itemSpecs", e.target.value)} readOnly={rowLocked} onKeyDown={(e) => { if (e.key !== "Enter" || rowLocked) return; e.preventDefault(); focusNextDetailCell("itemSpecs"); }} />{!isFormDisabled && row.prStatus === "O" && <FontAwesomeIcon icon={faSearch} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={() => useSwalHandleOpenSpecsModal(index, detailRows, handleDetailChange, row.itemSpecs, "Specification", "itemSpecs", `Enter specification for ${row.itemName || "this item"}...`)} />}</div></td>,
     uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("uomCode", { readOnly: isFormDisabled || row.prStatus !== "O" || (parseFormattedNumber(row.poQty) || 0) > 0 || !isJobOrder })}</td>,
     qtyOnHand: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{textInput("qtyOnHand", { readOnly: true, tabIndex: -1, className: "text-right cursor-not-allowed" })}</td>,
     qtyNeeded: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{qtyInput("qtyNeeded", { readOnly: rowLocked })}</td>,
-    dateNeeded: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="date" id={`dateNeeded-${index}`} className="w-full global-tran-td-inputclass-ui text-center" value={toDateInputValue(row.dateNeeded)} onChange={(e) => handleDetailChange(index, "dateNeeded", e.target.value)} readOnly={rowLocked} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("dateNeeded"); } }} /></td>,
-    poQty: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{qtyInput("poQty", { disabled: isFormDisabled })}</td>,
-    rrQty: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{qtyInput("rrQty", { disabled: isFormDisabled })}</td>,
+    dateNeeded: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="date" id={`dateNeeded-${index}`} className="w-full global-tran-td-inputclass-ui text-center" value={toDateInputValue(row.dateNeeded)} min={toDateInputValue(documentDate)} onChange={(e) => handleDetailChange(index, "dateNeeded", e.target.value)} readOnly={rowLocked} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("dateNeeded"); } }} /></td>,
+    poQty: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{qtyInput("poQty", { readOnly: true, disabled: isFormDisabled })}</td>,
+    rrQty: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{qtyInput("rrQty", { readOnly: true, disabled: isFormDisabled })}</td>,
     joNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("joNo", { readOnly: true, className: "cursor-not-allowed" })}</td>,
   };
 
@@ -1885,7 +2034,7 @@ const renderPrDetailColumn = (columnKey, row, index) => {
 
           activeTopTab={topTab} 
           showActions={topTab === "details"} 
-          showNotify={hsDoc?.doc_app === "Y"}
+          showNotify={hsDoc?.docApp === "Y" && approvalStatus !== "Approved Transaction"}
 
           showBIRForm={false}   
           showCopyForm ={true} 
@@ -1896,10 +2045,10 @@ const renderPrDetailColumn = (columnKey, row, index) => {
           disableRouteNavigation={true}         
           detailsRoute="/page/PR"
 
-          isSaveDisabled={state.isSaveDisabled || isFormDisabled ||  ((detailRows?.length || 0)=== 0)} 
+          isSaveDisabled={state.isSaveDisabled || isDocumentLocked ||  ((detailRows?.length || 0)=== 0)} 
           isResetDisabled={state.isResetDisabled}
           isAttachDisabled={!documentID}
-          isNotifyDisabled={!documentID || displayStatus === "CANCELLED"}
+          isNotifyDisabled={!documentID || displayStatus === "CANCELLED" || approvalStatus === "Approved Transaction"}
           isPrintDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "CLOSED" || hasExistingPO || displayStatus === "APPROVED" }
           isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
           isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED"|| displayStatus === "CLOSED" || hasExistingPO }
@@ -2130,7 +2279,7 @@ const renderPrDetailColumn = (columnKey, row, index) => {
                   label="PR Status"
                   type="select"
                   value={documentStatus || "O"}
-                  disabled={isFormDisabled || !documentID?.length || documentStatus !== "O"}
+                  disabled={isDocumentLocked || !documentID?.length || documentStatus !== "O"}
                   onChange={(val) => handleHeaderStatusChange(val)}
                   options={[
                     { label: "Open", value: "O" },
@@ -2191,7 +2340,7 @@ const renderPrDetailColumn = (columnKey, row, index) => {
                       })
                     )}
                     {!isFormDisabled && (
-                      <th className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900" style={transactionActionsHeaderStyle}>
+                      <th className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>
                         Actions
                       </th>
                     )}
@@ -2391,14 +2540,7 @@ const renderPrDetailColumn = (columnKey, row, index) => {
          branchCode={state.branchCode}
          startDate={state.fromDate}
          endDate={state.toDate}
-         status={(() => {
-           const s = (state.status || "").toUpperCase();
-           if (s === "FINALIZED") return "F";
-           if (s === "CANCELLED") return "X";
-           if (s === "CLOSED") return "C";
-           if (s === "OPEN") return "";
-           return "All";
-         })()}
+         status="All"
          onRowDoubleClick={handleHistoryRowPick}
          historyExportName={`${documentTitle} History`}
        />

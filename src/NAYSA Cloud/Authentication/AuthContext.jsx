@@ -737,20 +737,69 @@ export default function AuthProvider({ children }) {
 
   const getAllTopHSDocRow = useCallback(
     (docCode) => {
-      if (!Array.isArray(allHSDoc) || !docCode) return null;
+      if (!Array.isArray(allHSDoc)) return null;
+
+      if (docCode === 'All') {
+        return allHSDoc;
+      }
+
+      if (!docCode) return null;
+
       return allHSDoc.find((item) => item?.docCode === docCode) || null;
     },
     [allHSDoc]
   );
 
 
-  const getAllTopVatRow = useCallback(
-    (vatCode) => {
-      if (!Array.isArray(allVATList) || !vatCode) return null;
-      return allVATList.find((item) => item?.vatCode === vatCode) || null;
+ const getAllTopVatRow = useCallback(
+  (vatCode) => {
+    if (!Array.isArray(allVATList)) return vatCode === "All" ? [] : null;
+
+    if (vatCode === "All") return allVATList;
+
+    if (!vatCode) return null;
+
+    return allVATList.find((item) => item?.vatCode === vatCode) || null;
+  },
+  [allVATList]
+);
+
+  const getReplacementVatRow = useCallback(
+    (
+      vatCode,
+      vatType = "",
+      fromVatClass = "G",
+      toVatClass = "S",
+      vatCategory = ""
+    ) => {
+      const vatRow = getAllTopVatRow(vatCode);
+      if (!vatRow) return null;
+
+      if (
+        vatRow.vatClass === fromVatClass &&
+        Number(vatRow.vatRate || 0) > 0 &&
+        vatRow.vatType === vatType
+      ) {
+        const allVatRows = getAllTopVatRow("All");
+
+        if (!Array.isArray(allVatRows)) return vatRow;
+
+        return (
+          allVatRows.find(
+            (item) =>
+              item?.vatClass === toVatClass &&
+              Number(item?.vatRate || 0) > 0 &&
+              item?.vatType === vatType &&
+              (!vatCategory || item?.vatCategory === vatCategory)
+          ) || vatRow
+        );
+      }
+
+      return vatRow;
     },
-    [allVATList]
+    [getAllTopVatRow]
   );
+
 
   const getAllTopATCRow = useCallback(
     (atcCode) => {
@@ -804,6 +853,7 @@ export default function AuthProvider({ children }) {
       getAllDropDown,
       getAllTopATCRow,
       getAllTopVatRow,
+      getReplacementVatRow,
       getAllTopVatAmount,
       getAllTopATCAmount,
       getAllTopHSDocRow,
@@ -822,6 +872,7 @@ export default function AuthProvider({ children }) {
       getAllDropDown,
       getAllTopATCRow,
       getAllTopVatRow,
+      getReplacementVatRow,
       getAllTopVatAmount,
       getAllTopATCAmount,
       getAllTopHSDocRow,

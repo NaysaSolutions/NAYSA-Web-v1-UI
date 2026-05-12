@@ -584,7 +584,7 @@ const AppContent = () => {
     const params = new URLSearchParams(location.search);
     const page = params.get("page");
 
-    if (page !== "PRApprovalModal") return;
+    if (!["PRApprovalModal", "JOApprovalModal"].includes(page)) return;
 
     if (!user) {
       sessionStorage.setItem("pendingModalFromUrl", page);

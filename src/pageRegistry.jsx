@@ -51,6 +51,9 @@ import SI from "./NAYSA Cloud/Module/Main Module/Sales/SI.jsx";
 // --- PURCHASING & INVENTORY ---
 import PR from "./NAYSA Cloud/Module/Main Module/Purchasing/PR.jsx";
 import PRApprovalModal from "./NAYSA Cloud/Approval/PRApprovalModal.jsx";
+import JOApprovalModal from "./NAYSA Cloud/Approval/JOApprovalModal.jsx";
+import POApprovalModal from "./NAYSA Cloud/Approval/POApprovalModal.jsx";
+import ApprovalMatrixModal from "./NAYSA Cloud/Approval/GlobalApprovalMatrix.jsx";
 import PO from "./NAYSA Cloud/Module/Main Module/Purchasing/PO.jsx";
 import JO from "./NAYSA Cloud/Module/Main Module/Purchasing/JO.jsx";
 import MSRR from "./NAYSA Cloud/Module/Main Module/Inventory/MSRR.jsx";
@@ -235,6 +238,9 @@ export const pageRegistry = {
   // Purchasing
   PR,
   PRApprovalModal,
+  JOApprovalModal,
+  POApprovalModal,
+  ApprovalMatrixModal,
   PO,
   JO,
 

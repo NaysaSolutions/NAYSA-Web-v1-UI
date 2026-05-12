@@ -1445,13 +1445,15 @@ const handleActivityOption = async (action) => {
 
 
 
+  const toFormattedAmountNumber = (value, decimals = 2) =>
+    parseFormattedNumber(formatNumber(value, decimals)) || 0;
+
   const calculateRowAmountsFromRates = (row) => {
     const discountRateFields = visibleDiscountRateFields;
     const discountAmountFields = visibleDiscountAmountFields;
-    const roundTo2 = (num) => Number((Number(num) || 0).toFixed(2));
     const quantity = parseFormattedNumber(row.soQuantity || 0) || 0;
     const sellingPrice = parseFormattedNumber(row.sellingPrice || 0) || 0;
-    const grossAmount = roundTo2(quantity * sellingPrice);
+    const grossAmount = toFormattedAmountNumber(quantity * sellingPrice);
     let runningBase = grossAmount;
     let totalDiscount = 0;
     const updatedAmounts = {};
@@ -1459,11 +1461,11 @@ const handleActivityOption = async (action) => {
     discountRateFields.forEach((rateField, index) => {
       const amountField = discountAmountFields[index];
       const rateValue = parseFormattedNumber(row[rateField] || 0) || 0;
-      const discountAmount = roundTo2(runningBase * (rateValue * 0.01));
+      const discountAmount = toFormattedAmountNumber(runningBase * (rateValue * 0.01));
 
       updatedAmounts[amountField] = formatNumber(discountAmount);
       totalDiscount += discountAmount;
-      runningBase = roundTo2(runningBase - discountAmount);
+      runningBase = toFormattedAmountNumber(runningBase - discountAmount);
     });
 
     return {
@@ -1471,7 +1473,7 @@ const handleActivityOption = async (action) => {
       grossAmount: formatNumber(grossAmount),
       ...updatedAmounts,
       totDiscount: formatNumber(totalDiscount),
-      netAmount: formatNumber(roundTo2(grossAmount - totalDiscount)),
+      netAmount: formatNumber(toFormattedAmountNumber(grossAmount - totalDiscount)),
     };
   };
 
@@ -2215,7 +2217,6 @@ const handleSODetailRowChange = (index, field, value) => {
     ...discountRateFields,
     ...discountAmountFields,
   ];
-  const roundTo2 = (num) => Number((Number(num) || 0).toFixed(2));
   const zeroValueByField = (targetField) => {
     if (targetField === "sellingPrice") {
       return formatNumber(0, sellingPriceDecimals);
@@ -2259,7 +2260,7 @@ const handleSODetailRowChange = (index, field, value) => {
   const recalculateSODetailRow = (row, changedField) => {
     const quantity = parseFormattedNumber(row.soQuantity || 0) || 0;
     const sellingPrice = parseFormattedNumber(row.sellingPrice || 0) || 0;
-    const grossAmount = roundTo2(quantity * sellingPrice);
+    const grossAmount = toFormattedAmountNumber(quantity * sellingPrice);
 
     let runningBase = grossAmount;
     let totalDiscount = 0;
@@ -2270,32 +2271,32 @@ const handleSODetailRowChange = (index, field, value) => {
       discountAmountFields.forEach((amountField, index) => {
         const discountNo = index + 1;
         const rateField = `discRate${discountNo}`;
-        const discountAmount = roundTo2(parseFormattedNumber(row[amountField] || 0));
+        const discountAmount = toFormattedAmountNumber(parseFormattedNumber(row[amountField] || 0));
         const discountRate =
-          runningBase !== 0 ? roundTo2((discountAmount / runningBase) * 100) : 0;
+          runningBase !== 0 ? toFormattedAmountNumber((discountAmount / runningBase) * 100) : 0;
 
         updatedDiscountAmounts[amountField] =
           amountField === changedField ? row[amountField] : formatNumber(discountAmount);
         updatedDiscountRates[rateField] = formatNumber(discountRate);
         totalDiscount += discountAmount;
-        runningBase = roundTo2(runningBase - discountAmount);
+        runningBase = toFormattedAmountNumber(runningBase - discountAmount);
       });
     } else {
       discountRateFields.forEach((rateField, index) => {
         const discountNo = index + 1;
         const amountField = `discAmount${discountNo}`;
         const rateValue = parseFormattedNumber(row[rateField] || 0) || 0;
-        const discountAmount = roundTo2(runningBase * (rateValue * 0.01));
+        const discountAmount = toFormattedAmountNumber(runningBase * (rateValue * 0.01));
 
         updatedDiscountRates[rateField] =
           rateField === changedField ? row[rateField] : formatNumber(rateValue);
         updatedDiscountAmounts[amountField] = formatNumber(discountAmount);
         totalDiscount += discountAmount;
-        runningBase = roundTo2(runningBase - discountAmount);
+        runningBase = toFormattedAmountNumber(runningBase - discountAmount);
       });
     }
 
-    const netAmount = roundTo2(grossAmount - totalDiscount);
+    const netAmount = toFormattedAmountNumber(grossAmount - totalDiscount);
 
     return {
       ...row,
@@ -3059,7 +3060,7 @@ return (
 
                 {!isFormDisabled && (
                   <th
-                    className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900"
+                    className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900"
                     style={transactionActionsHeaderStyle}
                   >
                     Actions
