@@ -185,7 +185,7 @@ const SearchAttachment = ({ isOpen, onClose, params }) => {
         <div className="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-800">
           <div className="flex items-center space-x-3 text-gray-800 dark:text-gray-100">
             <FontAwesomeIcon icon={faPaperclip} className="text-blue-600 text-lg" />
-            <p className="font-bold text-lg">Attach Documents</p>
+            <p className="font-bold text-lg">Document Attachments</p>
           </div>
           <button
             onClick={onClose}
@@ -199,11 +199,11 @@ const SearchAttachment = ({ isOpen, onClose, params }) => {
         {/* Transaction Info (Payee Code & Payee Name ONLY) */}
         <div className="p-4 m-4 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-700 text-sm rounded-lg grid sm:grid-cols-2 gap-4 shadow-sm">
           <p className="flex flex-col">
-            <span className="font-bold text-[10px] text-gray-500 uppercase tracking-widest">{CodeLabel || "Document No"}</span>
+            <span className="font-bold text-[10px] text-gray-500 uppercase tracking-widest">{CodeLabel || "Document No."}</span>
             <span className="text-blue-700 dark:text-blue-400 font-semibold">{finalCode}</span>
           </p>
           <p className="flex flex-col">
-            <span className="font-bold text-[10px] text-gray-500 uppercase tracking-widest">{NameLabel || "Name"}</span>
+            <span className="font-bold text-[10px] text-gray-500 uppercase tracking-widest">{NameLabel || "Document Name"}</span>
             <span className="text-blue-700 dark:text-blue-400 font-semibold">{finalName}</span>
           </p>
         </div>

@@ -2783,8 +2783,7 @@ export const transactionActionsHeaderStyle = {
   backgroundClip: "padding-box",
   borderLeft: "1px solid rgba(148, 163, 184, 0.45)",
   boxShadow: "-8px 0 14px -12px rgba(15, 23, 42, 0.35)",
-  backgroundImage:
-    "linear-gradient(to left, rgba(255,255,255,0.10), rgba(255,255,255,0.00))",
+  backgroundImage: "none",
 };
 
 export const transactionActionsCellStyle = {
@@ -2795,8 +2794,7 @@ export const transactionActionsCellStyle = {
   backgroundClip: "padding-box",
   borderLeft: "1px solid rgba(148, 163, 184, 0.35)",
   boxShadow: "-8px 0 14px -12px rgba(15, 23, 42, 0.28)",
-  backgroundImage:
-    "linear-gradient(to left, rgba(148,163,184,0.08), rgba(148,163,184,0.00))",
+  backgroundImage: "none",
 };
 
 export const useResizableTableColumns = (columns = []) => {

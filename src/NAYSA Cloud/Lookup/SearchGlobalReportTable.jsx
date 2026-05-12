@@ -612,6 +612,8 @@ const SearchGlobalReportTable = forwardRef(
     const moveColumn = (fromKey, toKey) => {
       if (!fromKey || !toKey || fromKey === toKey) return;
 
+      setAutoFillGridState(false);
+
       setColumnOrder((prev) => {
         const current = prev.length
           ? [...prev]
@@ -712,7 +714,6 @@ const SearchGlobalReportTable = forwardRef(
 
       if (containerWidth > 0 && tableWidth > 0 && tableWidth < containerWidth) {
         if (!autoFitTriggeredRef.current) {
-          setAutoFillGridState(true);
           autoFitTriggeredRef.current = true;
         }
       } else {
@@ -734,7 +735,7 @@ const SearchGlobalReportTable = forwardRef(
     }, [columns]);
 
     const startResizing = (e, key) => {
-      if (autoFillGridState) return;
+      setAutoFillGridState(false);
 
       e.preventDefault();
       const startX = e.clientX;
@@ -1008,6 +1009,7 @@ const SearchGlobalReportTable = forwardRef(
           onDrop={(e) => {
             e.preventDefault();
             if (!draggedCol) return;
+            setAutoFillGridState(false);
             setGroupBy((p) => {
               const current = p.filter(
                 (key, index, arr) => baseColumnKeys.has(key) && arr.indexOf(key) === index,

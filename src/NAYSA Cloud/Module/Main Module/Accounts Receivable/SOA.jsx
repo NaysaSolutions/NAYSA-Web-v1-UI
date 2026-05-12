@@ -2510,7 +2510,7 @@ const handleCloseBillTermModal = async (selectedBillTerm) => {
               )}
               {!isFormDisabled && (
                 <th
-                  className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900"
+                  className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900"
                   style={{
                     width: "110px",
                     minWidth: "110px",
@@ -2723,7 +2723,7 @@ const handleCloseBillTermModal = async (selectedBillTerm) => {
                 )}
                 {!isFormDisabled && (
                   <th
-                    className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900"
+                    className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900"
                     style={{
                       width: "110px",
                       minWidth: "110px",

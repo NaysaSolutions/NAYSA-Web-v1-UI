@@ -2344,7 +2344,7 @@ const renderArdmGlColumn = (columnKey, row, index) => {
                 })
               )}
               {!isFormDisabled && (
-                <th className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900"
+                <th className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900"
                     style={transactionActionsHeaderStyle}
                   >
                     Actions
@@ -2491,7 +2491,7 @@ const renderArdmGlColumn = (columnKey, row, index) => {
                   })
                 )}
                 {!isFormDisabled && (
-                  <th className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900"
+                  <th className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900"
                     style={transactionActionsHeaderStyle}
                   >
                     Actions
