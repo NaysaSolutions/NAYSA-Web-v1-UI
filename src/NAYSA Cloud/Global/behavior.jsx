@@ -304,7 +304,6 @@ export const useSwalshowSave = (onConfirm, onPrint) => {
 
 
 
-
 export const useSwalErrorAlert = (
   title = "Error!",
   message = "Something went wrong.",
@@ -1034,6 +1033,8 @@ export const useSwalConfirmAlert = (title = "Are you sure?", message = "") => {
 
 
 
+
+
 export const useSwalHandleOpenSpecsModal = (
   index,
   detailRows,
@@ -1044,12 +1045,12 @@ export const useSwalHandleOpenSpecsModal = (
   placeHolderValue
 ) => {
   Swal.fire({
-    title: "", 
+    title: "",
     html: `
       <div style="
         background: #f8faff;
         padding: 16px 20px;
-        border-bottom: 1px solid #e2e8f0;
+        border-bottom: 1px solid #dbeafe;
         text-align: left;
         display: flex;
         align-items: center;
@@ -1065,70 +1066,113 @@ export const useSwalHandleOpenSpecsModal = (
     showCloseButton: true,
     showCancelButton: false,
     confirmButtonText: "Apply",
-    width: 400, 
-    padding: "0", 
+    width: 400,
+    padding: "0",
     background: "#ffffff",
     buttonsStyling: false,
     customClass: {
-      popup: "rounded-xl shadow-2xl border border-slate-200 overflow-hidden", // 'overflow-hidden' clips the corners perfectly
-      closeButton: "text-slate-400 hover:text-slate-600 focus:outline-none transition-colors", 
+      popup: "rounded-xl shadow-2xl border border-slate-200 overflow-hidden",
+      closeButton:
+        "text-slate-400 hover:text-slate-600 focus:outline-none transition-colors",
       input: "m-0",
-      actions: "flex justify-center px-5 mt-4 mb-4", 
-      confirmButton: "bg-blue-600 hover:bg-blue-700 text-white px-10 py-2 rounded-lg text-sm font-bold transition-all active:scale-95 shadow-md shadow-blue-100",
-      htmlContainer: "p-0 m-0", // Ensures no extra space around our custom header
+      actions: "flex justify-center px-5 mt-4 mb-4",
+      confirmButton:
+        "bg-blue-600 hover:bg-blue-700 text-white px-8 py-2 rounded-lg text-sm font-semibold transition-all active:scale-95 shadow-md shadow-blue-100",
+      htmlContainer: "p-0 m-0",
     },
     inputAttributes: {
       style: `
         width: calc(100% - 40px);
         margin: 16px 20px 0 20px;
-        min-height: 80px;
-        max-height: 150px;
+        min-height: 110px;
+        max-height: 190px;
         padding: 12px;
         border-radius: 8px;
-        border: 1px solid #cbd5e1;
+        border: 0.5px solid #93c5fd;
+        outline: none;
         font-size: 13px;
         line-height: 1.5;
         color: #334155;
         box-sizing: border-box;
+        box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.08);
+        resize: vertical;
       `,
     },
     didOpen: () => {
       const popup = Swal.getPopup();
 
-      // Hide the empty title wrappers to completely remove the white gap on top
-      const header = popup.querySelector('.swal2-header');
-      const title = popup.querySelector('.swal2-title');
-      if (title) title.style.display = 'none';
+      const header = popup.querySelector(".swal2-header");
+      const title = popup.querySelector(".swal2-title");
+
+      if (title) title.style.display = "none";
+
       if (header) {
-        header.style.padding = '0';
-        header.style.minHeight = '0';
-        header.style.border = 'none';
+        header.style.padding = "0";
+        header.style.minHeight = "0";
+        header.style.border = "none";
       }
 
-      // Precisely align the 'X' button with the "Specification" text
-      const closeBtn = popup.querySelector('.swal2-close');
+      const closeBtn = popup.querySelector(".swal2-close");
+
       if (closeBtn) {
-        closeBtn.style.position = 'absolute';
-        closeBtn.style.top = '14px'; // Pushed down to align perfectly with the text baseline
-        closeBtn.style.right = '20px'; // Matched with the 20px padding of the header
-        closeBtn.style.padding = '0'; // Strips SweetAlert's default padding
-        closeBtn.style.margin = '0';
-        closeBtn.style.width = '24px'; // Fixed bounding box
-        closeBtn.style.height = '24px';
-        closeBtn.style.fontSize = '24px'; 
-        closeBtn.style.lineHeight = '1';
-        closeBtn.style.display = 'flex';
-        closeBtn.style.alignItems = 'center';
-        closeBtn.style.justifyContent = 'center';
-        closeBtn.style.background = 'transparent';
-        closeBtn.style.color = '#94a3b8'; // Standard slate-400
+        closeBtn.style.position = "absolute";
+        closeBtn.style.top = "14px";
+        closeBtn.style.right = "20px";
+        closeBtn.style.padding = "0";
+        closeBtn.style.margin = "0";
+        closeBtn.style.width = "24px";
+        closeBtn.style.height = "24px";
+        closeBtn.style.fontSize = "24px";
+        closeBtn.style.lineHeight = "1";
+        closeBtn.style.display = "flex";
+        closeBtn.style.alignItems = "center";
+        closeBtn.style.justifyContent = "center";
+        closeBtn.style.background = "transparent";
+        closeBtn.style.color = "#94a3b8";
+      }
+
+      const confirmBtn = Swal.getConfirmButton();
+
+      if (confirmBtn) {
+        confirmBtn.innerHTML = `
+          <span style="
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+          ">
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              width="17" 
+              height="17" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              stroke-width="2.35" 
+              stroke-linecap="round" 
+              stroke-linejoin="round"
+            >
+              <path d="M20 6 9 17l-5-5"></path>
+            </svg>
+            Apply
+          </span>
+        `;
       }
 
       const input = Swal.getInput();
+
       if (input) {
         input.focus();
-        input.onfocus = () => (input.style.borderColor = "#3b82f6");
-        input.onblur = () => (input.style.borderColor = "#cbd5e1");
+
+        input.onfocus = () => {
+          input.style.border = "0.5px solid #2563eb";
+          input.style.boxShadow = "0 0 0 2px rgba(37, 99, 235, 0.12)";
+        };
+
+        input.onblur = () => {
+          input.style.border = "0.5px solid #93c5fd";
+          input.style.boxShadow = "0 0 0 1px rgba(59, 130, 246, 0.08)";
+        };
       }
     },
     preConfirm: (value) => (value || "").trim(),
@@ -1138,3 +1182,108 @@ export const useSwalHandleOpenSpecsModal = (
     }
   });
 };
+
+
+//   index,
+//   detailRows,
+//   handleDetailChange,
+//   rowValue,
+//   rowTitle,
+//   rowName,
+//   placeHolderValue
+// ) => {
+//   Swal.fire({
+//     title: "", 
+//     html: `
+//       <div style="
+//         background: #f8faff;
+//         padding: 16px 20px;
+//         border-bottom: 1px solid #e2e8f0;
+//         text-align: left;
+//         display: flex;
+//         align-items: center;
+//       ">
+//         <div style="color: #1e40af; font-size: 15px; font-weight: 700;">
+//           ${rowTitle || "Specification"}
+//         </div>
+//       </div>
+//     `,
+//     input: "textarea",
+//     inputValue: rowValue || "",
+//     inputPlaceholder: placeHolderValue || "Enter specification for this item...",
+//     showCloseButton: true,
+//     showCancelButton: false,
+//     confirmButtonText: "Apply",
+//     width: 400, 
+//     padding: "0", 
+//     background: "#ffffff",
+//     buttonsStyling: false,
+//     customClass: {
+//       popup: "rounded-xl shadow-2xl border border-slate-200 overflow-hidden", // 'overflow-hidden' clips the corners perfectly
+//       closeButton: "text-slate-400 hover:text-slate-600 focus:outline-none transition-colors", 
+//       input: "m-0",
+//       actions: "flex justify-center px-5 mt-4 mb-4", 
+//       confirmButton: "bg-blue-600 hover:bg-blue-700 text-white px-10 py-2 rounded-lg text-sm font-bold transition-all active:scale-95 shadow-md shadow-blue-100",
+//       htmlContainer: "p-0 m-0", // Ensures no extra space around our custom header
+//     },
+//     inputAttributes: {
+//       style: `
+//         width: calc(100% - 40px);
+//         margin: 16px 20px 0 20px;
+//         min-height: 80px;
+//         max-height: 150px;
+//         padding: 12px;
+//         border-radius: 8px;
+//         border: 1px solid #cbd5e1;
+//         font-size: 13px;
+//         line-height: 1.5;
+//         color: #334155;
+//         box-sizing: border-box;
+//       `,
+//     },
+//     didOpen: () => {
+//       const popup = Swal.getPopup();
+
+//       // Hide the empty title wrappers to completely remove the white gap on top
+//       const header = popup.querySelector('.swal2-header');
+//       const title = popup.querySelector('.swal2-title');
+//       if (title) title.style.display = 'none';
+//       if (header) {
+//         header.style.padding = '0';
+//         header.style.minHeight = '0';
+//         header.style.border = 'none';
+//       }
+
+//       // Precisely align the 'X' button with the "Specification" text
+//       const closeBtn = popup.querySelector('.swal2-close');
+//       if (closeBtn) {
+//         closeBtn.style.position = 'absolute';
+//         closeBtn.style.top = '14px'; // Pushed down to align perfectly with the text baseline
+//         closeBtn.style.right = '20px'; // Matched with the 20px padding of the header
+//         closeBtn.style.padding = '0'; // Strips SweetAlert's default padding
+//         closeBtn.style.margin = '0';
+//         closeBtn.style.width = '24px'; // Fixed bounding box
+//         closeBtn.style.height = '24px';
+//         closeBtn.style.fontSize = '24px'; 
+//         closeBtn.style.lineHeight = '1';
+//         closeBtn.style.display = 'flex';
+//         closeBtn.style.alignItems = 'center';
+//         closeBtn.style.justifyContent = 'center';
+//         closeBtn.style.background = 'transparent';
+//         closeBtn.style.color = '#94a3b8'; // Standard slate-400
+//       }
+
+//       const input = Swal.getInput();
+//       if (input) {
+//         input.focus();
+//         input.onfocus = () => (input.style.borderColor = "#3b82f6");
+//         input.onblur = () => (input.style.borderColor = "#cbd5e1");
+//       }
+//     },
+//     preConfirm: (value) => (value || "").trim(),
+//   }).then((result) => {
+//     if (result.isConfirmed) {
+//       handleDetailChange(index, rowName, result.value);
+//     }
+//   });
+// };
