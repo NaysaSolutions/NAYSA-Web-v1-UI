@@ -201,9 +201,6 @@ const RCMast = () => {
     setSelectedRcCode(null);
     setIsEditing(false);
 
-    if (formTopRef.current) {
-      formTopRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
   };
 
   const updateForm = (updates) => setForm((prev) => ({ ...prev, ...updates }));

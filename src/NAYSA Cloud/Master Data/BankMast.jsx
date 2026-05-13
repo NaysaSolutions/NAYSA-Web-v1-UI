@@ -519,10 +519,10 @@ const BankMast = () => {
   const showGlobalLoading = isInitialLoading || saveMutation.isPending || deleteMutation.isPending;
 
   return (
-    <div className="global-ref-main-div-ui mt-24">
+    <div className="global-ref-main-div-ui mt-16">
       {showGlobalLoading && <LoadingSpinner />}
 
-      <div className="global-ref-header-ui fixed left-6 right-6 top-10 z-30 mt-4 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+      <div className="global-ref-header-ui">
         <h1 className="global-ref-headertext-ui">{activeHeaderTitle}</h1>
         <div className="flex flex-wrap gap-1 overflow-x-hidden">
           {tabs.map((t) => (

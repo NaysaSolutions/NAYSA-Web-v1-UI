@@ -833,7 +833,7 @@ const CutoffRef = () => {
             docType="Cut Off Codes"
             fileName={`Cutoff_Reference_${selectedYear}_${new Date().toISOString().split("T")[0]}`}
             title="Cut off Reference Records"
-            tableSize="Half"
+            tableSize="Full"
             onMobileRowOpen={openMobileActionSheet} // <-- Hooked up action sheet
           />
         </div>
