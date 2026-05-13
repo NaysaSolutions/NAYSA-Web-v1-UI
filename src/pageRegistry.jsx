@@ -41,6 +41,7 @@ import VendMast from "./NAYSA Cloud/Master Data/VendMast.jsx";
 import BankMast from "./NAYSA Cloud/Master Data/BankMast.jsx";
 import RCMast from "./NAYSA Cloud/Master Data/RCMast.jsx";
 import SLMast from "./NAYSA Cloud/Master Data/SLMast.jsx";
+import WarehouseLocation from "./NAYSA Cloud/Master Data/Inventory/WareMast.jsx";
 
 // --- SALES ---
 import SO from "./NAYSA Cloud/Module/Main Module/Sales/SO.jsx";
@@ -293,6 +294,7 @@ export const pageRegistry = {
   MasterAccessRights,
   ATaxCode,
   BillCodeRef,
+  WarehouseLocation,
 
   // Posting
   PostSVI,
