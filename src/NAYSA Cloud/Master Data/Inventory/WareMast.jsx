@@ -581,7 +581,7 @@ const WareMast = () => {
                       type="lookup"
                       value={form.branchCode ? `${form.branchCode} - ${form.branchName || ""}` : ""}
                       onLookup={() => setBranchModalOpen(true)}
-                      disabled={!isEditing}
+                      disabled={false}
                       required
                     />
                     <FieldRenderer
