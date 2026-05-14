@@ -14,6 +14,7 @@ import {
   faFolderOpen,
   faSpinner,
   faEdit,
+  faFileLines,
 } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
@@ -27,12 +28,14 @@ import ATCLookupModal from "../../../Lookup/SearchATCRef.jsx";
 import SLMastLookupModal from "../../../Lookup/SearchSLMast.jsx";
 import PaytermLookupModal from "../../../Lookup/SearchPayTermRef.jsx";
 import CancelTranModal from "../../../Lookup/SearchCancelRef.jsx";
+import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
 import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
 import PostAPV from "./PostAPV.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
+import GlobalCombinedLookup from "../../../Lookup/SearchGlobalCombinedLookup.jsx";
 
 // Configuration
 import { fetchData, postRequest } from "../../../Configuration/BaseURL.jsx";
@@ -88,6 +91,10 @@ import {
 } from "@/NAYSA Cloud/Global/dates";
 
 import DateFormatInput from "@/NAYSA Cloud/Global/DateFormatInput.jsx";
+
+import {
+  useSelectedHSColConfig as selectedHSColConfig
+} from "@/NAYSA Cloud/Global/selectedData";
 
 // Header
 import Header from "@/NAYSA Cloud/Components/Header";
@@ -148,6 +155,24 @@ const normalizeSlrefDate = (value) => {
   return `${mm}/${dd}/${yyyy}`;
 };
 
+const getAssignedUserBranch = (userRow) => {
+  const branchCode = String(
+    userRow?.branchCode ?? userRow?.BRANCH_CODE ?? "",
+  ).trim();
+
+  return {
+    branchCode,
+    branchName: branchCode
+      ? String(
+          userRow?.branchName ??
+            userRow?.BranchName ??
+            userRow?.BRANCH_NAME ??
+            "",
+        ).trim()
+      : "",
+  };
+};
+
 const APV = () => {
   // View Document Const
   const loadedFromUrlRef = useRef(false);
@@ -163,6 +188,7 @@ const APV = () => {
     getAllTopVatAmount,
     getAllTopATCAmount,
   } = useAuth();
+  const assignedUserBranch = getAssignedUserBranch(currentUserRow);
   const [isViewDocument, setIsViewDocument] = useState(false);
   useEffect(() => {
     const p = new URLSearchParams(location.search);
@@ -217,8 +243,8 @@ const APV = () => {
       toDate: null,
     },
     // Branch information
-    branchCode: currentUserRow?.branchCode || "",
-    branchName: currentUserRow?.branchName || "",
+    branchCode: assignedUserBranch.branchCode,
+    branchName: assignedUserBranch.branchName,
 
     // Vendor information
     vendName: null,
@@ -276,7 +302,14 @@ const APV = () => {
     showAttachModal: false,
     showSignatoryModal: false,
     showPostingModal: false,
+
+
+    showRRRefModal: false,
+    openRRDataSummary: [],
+    openRRColSummary: [],
+    openRRColDetail: [],
   });
+  const [showInvoiceAddDropdown, setShowInvoiceAddDropdown] = useState(false);
 
   // Helper function to update state
   const updateState = (updates) => {
@@ -364,6 +397,23 @@ const APV = () => {
 
   const amountRefs = useRef([]);
 
+  useEffect(() => {
+    if (!refsLoaded || documentID || documentNo) return;
+
+    updateState({
+      branchCode: assignedUserBranch.branchCode,
+      branchName: assignedUserBranch.branchName,
+      userCode: currentUserRow?.userCode || "",
+    });
+  }, [
+    refsLoaded,
+    currentUserRow?.userCode,
+    assignedUserBranch.branchCode,
+    assignedUserBranch.branchName,
+    documentID,
+    documentNo,
+  ]);
+
   // Document type constants
   const docType = docTypes.APV;
   const pdfLink = docTypePDFGuide[docType];
@@ -408,6 +458,21 @@ const APV = () => {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [isDocNoDisabled, isFormDisabled]);
+
+  const openRRLookupColumns = [
+  { key: "type", label: "Type", width: 60 },
+  { key: "branchCode", label: "BC", width: 60 },
+  { key: "rrNo", label: "RR No", width: 110 },
+  { key: "rrDate", label: "RR Date", width: 100 },
+  { key: "poNo", label: "PO No", width: 110 },
+  { key: "vendCode", label: "Payee Code", width: 100 },
+  { key: "vendName", label: "Payee Name", width: 200 },
+  { key: "siNo", label: "SI No", width: 110 },
+  { key: "siDate", label: "SI Date", width: 100 },
+  { key: "siAmount", label: "SI Amt", width: 110, type: "amount" },
+  { key: "vatCode", label: "VAT Code", width: 90 },
+  { key: "vatDesc", label: "VAT Desc", width: 200 },
+];
 
   // Loading spinner component
   const LoadingSpinner = () => (
@@ -635,11 +700,11 @@ const APV = () => {
         fromDate: null,
         toDate: null,
       },
-      branchCode: "HO",
-      branchName: "Head Office",
-      currencyCode: "",
-      currencyName: "Philippine Peso",
-      currencyRate: "1.000000",
+      branchCode: assignedUserBranch.branchCode,
+      branchName: assignedUserBranch.branchName,
+      currCode:companyInfo?.currCode||"",
+      currName:companyInfo?.currName||"",
+      currRate:formatNumber(companyInfo?.currRate||1,6) ,
       apAccountName: "",
       apAccountCode: "",
       vendName: null,
@@ -1364,7 +1429,7 @@ const APV = () => {
   //     }
   //   }, [detailRows, syncGLReferenceFromInvoiceDetails]);
 
-  const handleAddRow = async (insertIndex = null) => {
+  const handleAddRow = async (insertIndex = null, useReferenceRR = false) => {
     try {
       const items = await handleFetchDetail(vendCode);
       const itemList = Array.isArray(items) ? items : [items];
@@ -1377,8 +1442,23 @@ const APV = () => {
           return {
             lnNo: "",
             invType: "",
-            rrNo: "",
-            poNo: "",
+            rrNo: useReferenceRR
+              ? item.rrNo ||
+                item.rr_no ||
+                item.RR_NO ||
+                item.msrrNo ||
+                item.MSRR_NO ||
+                ""
+              : "",
+            poNo: useReferenceRR
+              ? item.poNo ||
+                item.po_no ||
+                item.PO_NO ||
+                item.joNo ||
+                item.jo_no ||
+                item.JO_NO ||
+                ""
+              : "",
             siNo: "",
             siDate: useGetCurrentDayV2(),
             amount: formatNumber(amount),
@@ -1417,6 +1497,111 @@ const APV = () => {
       console.error("Error adding row:", error);
     }
   };
+
+  const handleInvoiceAddClick = () => {
+    if (isFormDisabled) return;
+    setShowInvoiceAddDropdown((prev) => !prev);
+  };
+
+  const handleAddInvoiceRow = async () => {
+    setShowInvoiceAddDropdown(false);
+    await handleAddRow();
+  };
+
+  const handleOpenReferenceRR = async (overrides = {}) => {
+  setShowInvoiceAddDropdown(false);
+  
+  // 1. Determine which vendor code to use
+  const lookupVendCode = String(overrides.vendCode ?? vendCode ?? "").trim();
+  const lookupBranchCode = String(overrides.branchCode ?? branchCode ?? "").trim();
+
+  // STEP 1: If no supplier is selected/passed, open the General Payee Modal
+  if (!lookupVendCode) {
+    updateState({
+      payeeModalOpen: true,
+      modalContext: "openRR", // Context is key for the bridge
+    });
+    return;
+  }
+
+  // STEP 2: Supplier exists, fetch filtered RR Balances
+  try {
+    updateState({ isLoading: true, showSpinner: true });
+
+    const response = await fetchData("getAPVRR_OpenSummary", {
+      PARAMS: JSON.stringify({ 
+        branchCode: lookupBranchCode,
+        vendCode: lookupVendCode // This filters the SP results
+      })
+    });
+
+    if (response.success && response.data[0].result) {
+      const rawRows = JSON.parse(response.data[0].result);
+      
+      if (rawRows.length === 0) {
+        useSwalErrorAlert("Open RR", "No open RR found for this supplier.");
+        return;
+      }
+      const summaryColumns = openRRLookupColumns; 
+
+      updateState({
+        globalLookupRow: rawRows,
+        globalLookupHeader: summaryColumns,
+        showRRRefModal: true,
+      });
+    }
+  } catch (error) {
+    console.error("Failed to fetch Open RR:", error);
+  } finally {
+    updateState({ isLoading: false, showSpinner: false });
+  }
+};
+
+const handleCloseRRRefModal = (selectedItems) => {
+  if (!selectedItems || !selectedItems.records) {
+    updateState({ showRRRefModal: false });
+    return;
+  }
+
+  // records contains the array of checked rows from the modal
+  const itemsArray = Array.isArray(selectedItems.records) 
+    ? selectedItems.records 
+    : [selectedItems.records];
+
+  const mappedRows = itemsArray.map((item) => ({
+    lnNo: "",
+    invType: item.type || "MS",
+    rrNo: item.rrNo || "",
+    poNo: item.poNo || "",
+    siNo: item.siNo || "",
+    siDate: item.siDate || item.rrDate || useGetCurrentDayV2(),
+    amount: formatNumber(item.siAmount || 0),
+    siAmount: formatNumber(item.siAmount || 0),
+    debitAcct: item.debitAcct || "1901", // Example account
+    sltypeCode: "VE",
+    slCode: item.vendCode || vendCode,
+    slName: item.vendName || vendName?.vendName,
+    vatCode: item.vatCode || "",
+    vatName: item.vatDesc || "",
+    vatAmount: formatNumber(item.vatAmount || 0),
+    atcCode: item.ewtCode || "", // Maps to EWT column in picture
+    atcName: item.ewtDesc || "",
+    atcAmount: formatNumber(item.ewtAmt || 0),
+    paytermCode: item.terms || "",
+    dueDate: item.dueDate || useGetCurrentDayV2(),
+    REC_RC: "N",
+    REC_SL: "Y",
+    rrId: item.rrId
+  }));
+
+  const updatedRows = [...detailRows, ...mappedRows];
+  updateState({ 
+    detailRows: updatedRows, 
+    showRRRefModal: false,
+    triggerGLEntries: true // Automatically generate GL after pulling RR
+  });
+  updateTotals(updatedRows);
+};
 
   const handleAddRowGL = (index = null) => {
     const newRow = {
@@ -1662,114 +1847,79 @@ const APV = () => {
   };
 
   const handleClosePayeeModal = async (selectedData) => {
-    if (!selectedData) {
-      updateState({ payeeModalOpen: false });
-      return;
-    }
+  if (!selectedData) {
+    updateState({ payeeModalOpen: false, modalContext: "" });
+    return;
+  }
 
-    updateState({ payeeModalOpen: false, isLoading: true });
+  // 1. Isolate the specific context
+  const isRRFlow = modalContext === "openRR";
 
-    try {
-      const selectedVendCode =
-        selectedData.vendCode ||
-        selectedData.VEND_CODE ||
-        selectedData.vend_code ||
-        "";
+  // 2. Start Loading
+  updateState({ payeeModalOpen: false, isLoading: true, showSpinner: true });
 
-      if (!selectedVendCode) {
-        updateState({ isLoading: false });
-        return;
-      }
+  try {
+    const selectedVendCode = selectedData.vendCode || selectedData.VEND_CODE || "";
+    
+    // 3. Fetch Full Payee Details (Auto-fill Logic)
+    const payeeRow = await fetchPayeeByCode(selectedVendCode);
+    const finalPayee = payeeRow || selectedData;
 
-      const payeeRow = await fetchPayeeByCode(selectedVendCode);
-      const finalPayee = payeeRow || selectedData;
+    const foundVendCode = finalPayee?.vendCode || finalPayee?.VEND_CODE || "";
+    const foundVendName = finalPayee?.vendName || finalPayee?.VEND_NAME || "";
+    const foundAcctCode = finalPayee?.apAccountCode || finalPayee?.acctCode || finalPayee?.AP_ACCT || "";
+    const foundAcctName = finalPayee?.apAccountName || finalPayee?.acctName || "";
+    const foundCurrCode = finalPayee?.currCode || finalPayee?.currencyCode || "";
+    const foundCurrName = finalPayee?.currName || finalPayee?.currencyName || "";
 
-      const foundVendCode = finalPayee?.vendCode || finalPayee?.VEND_CODE || "";
-
-      const foundVendName = finalPayee?.vendName || finalPayee?.VEND_NAME || "";
-
-      const foundAcctCode =
-        finalPayee?.apAccountCode ||
-        finalPayee?.acctCode ||
-        finalPayee?.AP_ACCT ||
-        finalPayee?.ACCT_CODE ||
-        "";
-
-      const foundAcctName =
-        finalPayee?.apAccountName ||
-        finalPayee?.acctName ||
-        finalPayee?.ACCT_NAME ||
-        "";
-
-      const foundCurrCode =
-        finalPayee?.currCode ||
-        finalPayee?.currencyCode ||
-        finalPayee?.CURR_CODE ||
-        "";
-
-      const foundCurrName =
-        finalPayee?.currName ||
-        finalPayee?.currencyName ||
-        finalPayee?.CURR_NAME ||
-        "";
-
-      updateState({
+    // 4. Update Header States (This handles the Auto-Fill you requested)
+    const headerUpdates = {
+      vendCode: foundVendCode,
+      vendName: {
         vendCode: foundVendCode,
-        vendName: {
-          vendCode: foundVendCode,
-          vendName: foundVendName,
-          currCode: foundCurrCode,
-          currName: foundCurrName,
-        },
-      });
+        vendName: foundVendName,
+        currCode: foundCurrCode,
+        currName: foundCurrName,
+      },
+      // AP Account formatting
+      apAccountCode: foundAcctCode,
+      apAccountName: foundAcctCode && foundAcctName ? `${foundAcctCode} - ${foundAcctName}` : foundAcctCode,
+      
+      // Currency logic
+      currencyCode: foundCurrCode,
+      currencyName: foundCurrName,
+    };
 
-      const updatedRows = detailRows.map((row) => ({
-        ...row,
-        slCode: foundVendCode,
-        slName: foundVendName,
-      }));
+    // 5. Apply the updates to state
+    updateState(headerUpdates);
 
-      updateState({ detailRows: updatedRows });
-
-      if (foundAcctCode) {
-        if (foundAcctName) {
-          updateState({
-            apAccountCode: foundAcctCode,
-            apAccountName: `${foundAcctCode} - ${foundAcctName}`,
-          });
-        } else {
-          await handleSelectAPAccount(foundAcctCode);
-        }
-      } else {
-        updateState({
-          apAccountCode: "",
-          apAccountName: "",
-        });
+    // 6. Handle Currency Rate (Forex) based on the auto-filled currency
+    if (foundCurrCode) {
+      let rate = defaultCurrRate;
+      if (foundCurrCode !== glCurrDefault) {
+        rate = await useTopForexRate(foundCurrCode, header.apv_date);
       }
-
-      if (foundCurrCode) {
-        await handleSelectCurrency({
-          currCode: foundCurrCode,
-          currName: foundCurrName || "",
-        });
-      } else {
-        updateState({
-          currencyCode: "",
-          currencyName: "",
-          currencyRate: "1.000000",
-        });
-      }
-    } catch (error) {
-      console.error("Error setting Payee details:", error);
-      Swal.fire({
-        icon: "error",
-        title: "Payee Error",
-        text: "Failed to fetch selected payee details.",
-      });
-    } finally {
-      updateState({ isLoading: false });
+      updateState({ currencyRate: formatNumber(parseFormattedNumber(rate || 1), 6) });
     }
-  };
+
+    // 7. THE BRIDGE: If this was for an RR Lookup, trigger Step 2 now
+    if (isRRFlow) {
+      // Small delay ensures state updates are being processed before next modal opens
+      setTimeout(() => {
+        handleOpenReferenceRR({ 
+          vendCode: foundVendCode, 
+          branchCode: branchCode 
+        });
+      }, 100);
+    }
+
+  } catch (error) {
+    console.error("Error auto-filling payee details:", error);
+    useSwalErrorAlert("Error", "Failed to fetch vendor details.");
+  } finally {
+    updateState({ isLoading: false, showSpinner: false, modalContext: "" });
+  }
+};
 
   const getVatRate = async (vatCode) => {
     if (!vatCode) return 0;
@@ -3046,15 +3196,6 @@ const handleAtcNameDoubleClick = (index) => {
                   </button>
                 </div>
 
-                {/* Action Button */}
-                <div className="flex justify-end">
-                  <button
-                    className="global-tran-button-lookup"
-                    disabled={isFormDisabled}
-                  >
-                    Get Reference RR
-                  </button>
-                </div>
               </div>
 
               {/* Invoice Details Button */}
@@ -3600,14 +3741,68 @@ const handleAtcNameDoubleClick = (index) => {
               <div className="global-tran-tab-footer-main-div-ui">
                 {/* Add Button */}
                 <div className="global-tran-tab-footer-button-div-ui">
-                  <button
-                    onClick={handleAddRow}
-                    className="global-tran-tab-footer-button-add-ui"
-                    disabled={isFormDisabled}
-                  >
-                    <FontAwesomeIcon icon={faPlus} className="mr-2" />
-                    Add
-                  </button>
+                  <div className="relative inline-block">
+                    {showInvoiceAddDropdown && (
+                      <div className="absolute bottom-[110%] left-0 mb-2 z-[9999] w-[220px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.16)] backdrop-blur-sm dark:border-slate-700 dark:bg-slate-800">
+                        <div className="border-b border-slate-100 px-3 py-2 dark:border-slate-700">
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-400 dark:text-slate-500">
+                            Invoice Details
+                          </div>
+                        </div>
+
+                        <div className="p-1.5">
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
+                            onClick={handleAddInvoiceRow}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                                <FontAwesomeIcon icon={faPlus} />
+                              </span>
+                              <div className="flex flex-col items-start">
+                                <span>Add Row</span>
+                                <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500">
+                                  Add invoice line
+                                </span>
+                              </div>
+                            </div>
+                          </button>
+
+                          <div className="my-1.5 border-t border-slate-100 dark:border-slate-700" />
+
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium text-blue-700 transition-all duration-150 hover:bg-blue-50 hover:text-blue-900 dark:text-blue-300 dark:hover:bg-slate-700"
+                            onClick={handleOpenReferenceRR}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-slate-700 dark:text-blue-300">
+                                <FontAwesomeIcon icon={faFileLines} />
+                              </span>
+                              <div className="flex flex-col items-start">
+                                <span>Open Reference RR</span>
+                                <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500">
+                                  Pull RR details
+                                </span>
+                              </div>
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleInvoiceAddClick}
+                      className={`global-tran-tab-footer-button-add-ui ${
+                        isFormDisabled ? "opacity-50 cursor-not-allowed" : ""
+                      }`}
+                      disabled={isFormDisabled}
+                    >
+                      <FontAwesomeIcon icon={faPlus} className="mr-2" />
+                      Add
+                    </button>
+                  </div>
                 </div>
 
                 {/* Totals Section */}
@@ -4496,6 +4691,21 @@ const handleAtcNameDoubleClick = (index) => {
           }
           source={accountModalSource}
         />
+
+       {state.showRRRefModal && (
+  <GlobalLookupModalv1
+    isOpen={state.showRRRefModal}
+    title="Open Receiving Reports"
+    data={state.globalLookupRow}
+    endpoint={openRRLookupColumns}
+    btnCaption="Get Selected RR"
+    // Change rrId to groupId here
+    idKey="groupId" 
+    onClose={handleCloseRRRefModal}
+    onCancel={() => updateState({ showRRRefModal: false })}
+    singleSelect={false}
+  />
+)}
 
         {/* VAT Code Modal */}
         {showVatModal && (

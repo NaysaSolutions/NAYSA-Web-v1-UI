@@ -7,6 +7,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faMagnifyingGlass,
   faPlus,
+  faMinus,
   faSpinner,
   faSearch,
   faBoxOpen,
@@ -414,6 +415,9 @@ const MSRR = (item) => {
   });
 
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+  const [showLotPickingModal, setShowLotPickingModal] = useState(false);
+  const [lotPickingRowIndex, setLotPickingRowIndex] = useState(null);
+  const [lotEntryRows, setLotEntryRows] = useState([]);
 
   const [totals, setTotals] = useState({
     rrQty: "",
@@ -426,7 +430,17 @@ const MSRR = (item) => {
   const videoLink = docTypeVideoGuide[docType];
   const documentTitle = docTypeNames[docType] || "MS Receiving Report";
 
-  const displayStatus = status || "OPEN";
+  const getFullStatus = (s) => {
+    const map = {
+      O: "OPEN",
+      C: "CLOSED",
+      X: "CANCELLED",
+      F: "FINALIZED",
+    };
+    return map[String(s || "").toUpperCase()] || s || "OPEN";
+  };
+
+  const displayStatus = getFullStatus(status);
   const statusMap = {
     FINALIZED: "global-tran-stat-text-finalized-ui",
     CANCELLED: "global-tran-stat-text-closed-ui",
@@ -1299,12 +1313,18 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       const vatAmt = parseFormattedNumber(d.vatAmount || 0);
       const net = parseFormattedNumber(d.netAmount || gross - discAmt);
 
+      const rrStatus =
+        getPOField(d, "rrStatus", "RR_STATUS", "RrStatus") ||
+        d.poStatus ||
+        "O";
+
       return {
         lN: idx + 1,
         lineNo: d.lineNo || d.ln || idx + 1,
 
         invType: d.invType || "MS",
-        poStatus: d.poStatus || "O",
+        rrStatus,
+        poStatus: d.poStatus || rrStatus,
         groupId: d.categCode || d.CATEG_CODE || d.categ_code || "",
         categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
 
@@ -1332,7 +1352,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         discRate: formatNumber(d.discRate || 0, 2),
         discAmount: formatNumber(discAmt, 2),
         vatCode: d.vatCode || "",
-        vatRate: vatRateMap?.[d.vatCode] ? String(vatRateMap[d.vatCode]) : "",
+        vatRate: d.vatCode ? formatNumber(vatRateMap?.[d.vatCode] ?? 0, 2) : "",
         vatAmount: formatNumber(vatAmt, 2),
         netAmount: formatNumber(net, 2),
 
@@ -1497,7 +1517,8 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       vat?.vat_percent ??
       "";
 
-    row.vatRate = String(vat?.vatRate ?? "");
+    row.vatRate = formatNumber(rate || 0, 2);
+    row = recalcMSRRRow(row);
 
     updatedRows[rowIndex] = row;
     updateState({ detailRows: updatedRows });
@@ -1666,17 +1687,67 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       const parsed =
         typeof jsonStr === "string" ? JSON.parse(jsonStr) : jsonStr;
 
-      if (!parsed || !parsed.rrId) {
+      const parsedDocumentNo = parsed?.rrNo || parsed?.RR_NO || "";
+      const parsedDocumentId = parsed?.rrId || parsed?.rrHdId || "";
+
+      if (!parsed || !parsedDocumentId) {
         updateState({ isLoading: false });
         return;
       }
+
+      const parsedWHCode = getPOField(
+        parsed,
+        "WHCode",
+        "WHcode",
+        "WhCode",
+        "whCode",
+        "wh_code",
+        "whouseCode",
+        "warehouseCode",
+        "WH_CODE",
+        "WAREHOUSE_CODE",
+      );
+      const parsedWHName = getPOField(
+        parsed,
+        "WHName",
+        "WhName",
+        "whName",
+        "wh_name",
+        "whouseName",
+        "warehouseName",
+        "WH_NAME",
+        "WAREHOUSE_NAME",
+      );
+      const parsedLocCode = getPOField(
+        parsed,
+        "LocCode",
+        "locCode",
+        "loccode",
+        "loc_code",
+        "locationCode",
+        "LocationCode",
+        "location_code",
+        "LOC_CODE",
+        "LOCATION_CODE",
+      );
+      const parsedLocName = getPOField(
+        parsed,
+        "LocName",
+        "locName",
+        "loc_name",
+        "locationName",
+        "LocationName",
+        "location_name",
+        "LOC_NAME",
+        "LOCATION_NAME",
+      );
 
       // -----------------------------
       // HEADER (MSRR)
       // -----------------------------
       updateState({
-        documentNo: parsed.rrNo || "",
-        documentID: parsed.rrId || "",
+        documentNo: parsedDocumentNo,
+        documentID: parsedDocumentId,
         documentDate: parsed.rrDate || null,
         cutoffCode: parsed.cutoffCode || "",
 
@@ -1686,8 +1757,11 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         vendCode: parsed.vendCode || "",
         vendName: parsed.vendName || "",
 
-        WHcode: parsed.whCode || "",
-        LocCode: parsed.locCode || "",
+        WHCode: parsedWHCode || "",
+        WHcode: parsedWHCode || "",
+        WHName: parsedWHName || "",
+        LocCode: parsedLocCode || "",
+        LocName: parsedLocName || "",
 
         drNo: parsed.drNo || "",
         siNo: parsed.siNo || "",
@@ -1712,46 +1786,285 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       );
       const vatRateMap = Object.fromEntries(vatRatePairs);
 
+      const getRetrievedItemCode = (r) =>
+        getPOField(
+          r,
+          "itemNo",
+          "itemCode",
+          "item_no",
+          "item_code",
+          "ItemNo",
+          "ItemCode",
+          "ITEM_NO",
+          "ITEM_CODE",
+        );
+
+      const getRetrievedItemName = (r) =>
+        getPOField(
+          r,
+          "itemName",
+          "itemDesc",
+          "itemDescription",
+          "description",
+          "item_name",
+          "item_desc",
+          "item_description",
+          "ItemName",
+          "ItemDesc",
+          "ItemDescription",
+          "Description",
+          "ITEM_NAME",
+          "ITEM_DESC",
+          "ITEM_DESCRIPTION",
+          "DESCRIPTION",
+        );
+
+      const getRetrievedLocCode = (r) =>
+        getPOField(
+          r,
+          "LocCode",
+          "locCode",
+          "loccode",
+          "loc_code",
+          "locationCode",
+          "LocationCode",
+          "location_code",
+          "location",
+          "Location",
+          "locName",
+          "locationName",
+          "LOC_CODE",
+          "LOCATION_CODE",
+          "LOCATION",
+          "LOC_NAME",
+          "LOCATION_NAME",
+        ) || parsed.LocCode || parsed.locCode || parsed.locationCode || "";
+
+      const getRetrievedQty = (r) =>
+        getPOField(
+          r,
+          "quantity",
+          "rrQuantity",
+          "rrQty",
+          "qty",
+          "Quantity",
+          "RRQuantity",
+          "RR_QTY",
+          "QTY",
+          "rr_quantity",
+          "rr_qty",
+        );
+
+      const getRetrievedFreeQty = (r) =>
+        getPOField(
+          r,
+          "freeQuantity",
+          "freeQty",
+          "FreeQuantity",
+          "FreeQty",
+          "FREE_QUANTITY",
+          "FREE_QTY",
+          "free_quantity",
+          "free_qty",
+        );
+
+      const getRetrievedUnitCost = (r) =>
+        getPOField(
+          r,
+          "unitCost",
+          "unitPrice",
+          "UnitCost",
+          "UnitPrice",
+          "UNIT_COST",
+          "UNIT_PRICE",
+          "unit_cost",
+          "unit_price",
+        );
+
+      const getRetrievedGrossAmount = (r) => {
+        const savedAmount = parseFormattedNumber(
+          getPOField(
+            r,
+            "itemAmount",
+            "grossAmount",
+            "amount",
+            "ItemAmount",
+            "GrossAmount",
+            "Amount",
+            "ITEM_AMOUNT",
+            "GROSS_AMOUNT",
+            "AMOUNT",
+            "item_amount",
+            "gross_amount",
+          ) || 0,
+        );
+
+        if (savedAmount) return savedAmount;
+
+        const qty = parseFormattedNumber(getRetrievedQty(r) || 0);
+        const freeQty = parseFormattedNumber(getRetrievedFreeQty(r) || 0);
+        const unitCost = parseFormattedNumber(getRetrievedUnitCost(r) || 0);
+
+        return Math.max(qty - freeQty, 0) * unitCost;
+      };
+
+      const itemCodesNeedingNames = [
+        ...new Set(
+          dt1
+            .filter((r) => !getRetrievedItemName(r))
+            .map((r) => getRetrievedItemCode(r))
+            .filter(Boolean),
+        ),
+      ];
+      let msItemMap = {};
+
+      if (itemCodesNeedingNames.length > 0) {
+        try {
+          const itemLookupResult = await fetchData("lookupMSMast", {
+            PARAMS: JSON.stringify({
+              search: "",
+              page: 1,
+              pageSize: 10000,
+            }),
+          });
+          const rawItems = itemLookupResult?.data?.[0]?.result || "[]";
+          const lookupItems =
+            typeof rawItems === "string" ? JSON.parse(rawItems) : rawItems;
+
+          msItemMap = (Array.isArray(lookupItems) ? lookupItems : []).reduce(
+            (acc, item) => {
+              const code = getRetrievedItemCode(item);
+              if (code) {
+                acc[String(code)] = item;
+                acc[String(code).trim().toLowerCase()] = item;
+              }
+              return acc;
+            },
+            {},
+          );
+        } catch (lookupError) {
+          console.warn("MSRR item description lookup failed:", lookupError);
+        }
+      }
+
       const mappedDT1 = dt1.map((r, idx) => ({
         lN: Number(r.lnNo ?? idx + 1),
 
-        itemCode: r.itemNo || "",
-        itemName: r.itemName || "",
-        itemSpecs: r.itemSpecs || "",
+        rrStatus: getPOField(
+          r,
+          "rrStatus",
+          "RR_STATUS",
+          "RrStatus",
+          "poStatus",
+          "PO_STATUS",
+        ),
+        poStatus: getPOField(
+          r,
+          "poStatus",
+          "PO_STATUS",
+          "rrStatus",
+          "RR_STATUS",
+          "RrStatus",
+        ),
+        poNo:
+          getPOField(r, "poNo", "PoNo", "PO_NO", "po_no") || parsed.poNo || "",
+        itemCode: getRetrievedItemCode(r),
+        itemName:
+          getRetrievedItemName(r) ||
+          getRetrievedItemName(
+            msItemMap[String(getRetrievedItemCode(r))] ||
+              msItemMap[String(getRetrievedItemCode(r)).trim().toLowerCase()] ||
+              {},
+          ),
+        itemSpecs: getPOField(
+          r,
+          "itemSpecs",
+          "itemSpec",
+          "specs",
+          "item_specs",
+          "ItemSpecs",
+          "ItemSpec",
+          "Specs",
+          "ITEM_SPECS",
+        ),
 
-        rrQty: String(r.quantity ?? 0),
-        freeQty: String(r.freeQuantity ?? 0),
+        rrQty: formatNumber(getRetrievedQty(r) || 0, decQty),
+        freeQty: formatNumber(getRetrievedFreeQty(r) || 0, decQty),
 
-        amount: String(r.itemAmount ?? 0),
+        amount: formatNumber(getRetrievedGrossAmount(r)),
+        itemAmount: formatNumber(getRetrievedGrossAmount(r)),
+        grossAmount: formatNumber(getRetrievedGrossAmount(r)),
         vatCode: r.vatCode || "",
-        vatRate: String(vatRateMap[r.vatCode] ?? 0),
-        vatAmount: String(r.vatAmount ?? 0),
+        vatRate: r.vatCode ? formatNumber(vatRateMap[r.vatCode] ?? 0, 2) : "",
+        vatAmount: formatNumber(r.vatAmount ?? 0),
 
         qsCode: r.qsCode || "",
-        whCode: r.whCode || "",
-        locCode: r.locCode || "",
+        whCode: getPOField(
+          r,
+          "whCode",
+          "whouseCode",
+          "wh_code",
+          "warehouseCode",
+          "WhCode",
+          "WHCode",
+          "WH_CODE",
+          "WAREHOUSE_CODE",
+        ),
+        whouseCode: getPOField(
+          r,
+          "whouseCode",
+          "whCode",
+          "wh_code",
+          "warehouseCode",
+          "WhCode",
+          "WHCode",
+          "WH_CODE",
+          "WAREHOUSE_CODE",
+        ),
+        locCode: getRetrievedLocCode(r),
+        LocCode: getRetrievedLocCode(r),
 
         uomCode: r.uomCode || "",
-        unitCost: String(r.unitCost ?? 0),
-        netAmount: String(r.netAmount ?? 0),
+        unitCost: formatNumber(getRetrievedUnitCost(r) || 0, decUcost),
+        netAmount: formatNumber(r.netAmount ?? 0),
         lotNo: r.lotNo || "",
         controlNo: r.controlNo || "",
       }));
 
       const dt2 = Array.isArray(parsed.dt2) ? parsed.dt2 : [];
+      const normalizeGLDate = (value) => {
+        if (!value) return "";
+        const text = String(value);
+        return text.includes("T") ? text.substring(0, 10) : text.substring(0, 10);
+      };
       const mappedDT2 = dt2.map((g, i) => ({
+        ...g,
         id: i + 1,
-        recNo: g.recNo || "",
-        acctCode: g.acctCode || "",
-        rcCode: g.rcCode || "",
-        sltypeCode: g.sltypeCode || "",
-        slCode: g.slCode || "",
-        particular: g.particular || "",
-        debit: Number(g.debit ?? 0),
-        credit: Number(g.credit ?? 0),
-        vatCode: g.vatCode || "",
-        atcCode: g.atcCode || "",
-        dt1Lineno: g.dt1Lineno || "",
+        recNo:
+          getPOField(g, "recNo", "RecNo", "REC_NO", "lineNo", "LINE_NO") ||
+          String(i + 1),
+        acctCode: getPOField(g, "acctCode", "AcctCode", "ACCT_CODE", "accountCode", "ACCOUNT_CODE"),
+        acctName: getPOField(g, "acctName", "AcctName", "ACCT_NAME", "accountName", "ACCOUNT_NAME"),
+        rcCode: getPOField(g, "rcCode", "RcCode", "RC_CODE"),
+        rcName: getPOField(g, "rcName", "RcName", "RC_NAME"),
+        sltypeCode: getPOField(g, "sltypeCode", "slTypeCode", "SlTypeCode", "SLTYPE_CODE", "SL_TYPE_CODE"),
+        slCode: getPOField(g, "slCode", "SlCode", "SL_CODE"),
+        slName: getPOField(g, "slName", "SlName", "SL_NAME"),
+        particular: getPOField(g, "particular", "particulars", "Particular", "Particulars", "PARTICULAR", "PARTICULARS"),
+        vatCode: getPOField(g, "vatCode", "VatCode", "VAT_CODE"),
+        vatName: getPOField(g, "vatName", "VatName", "VAT_NAME"),
+        atcCode: getPOField(g, "atcCode", "AtcCode", "ATC_CODE"),
+        atcName: getPOField(g, "atcName", "AtcName", "ATC_NAME"),
+        debit: formatNumber(getPOField(g, "debit", "Debit", "DEBIT") || 0),
+        credit: formatNumber(getPOField(g, "credit", "Credit", "CREDIT") || 0),
+        debitFx1: formatNumber(getPOField(g, "debitFx1", "DebitFx1", "DEBIT_FX1", "debit_fx1") || 0),
+        creditFx1: formatNumber(getPOField(g, "creditFx1", "CreditFx1", "CREDIT_FX1", "credit_fx1") || 0),
+        debitFx2: formatNumber(getPOField(g, "debitFx2", "DebitFx2", "DEBIT_FX2", "debit_fx2") || 0),
+        creditFx2: formatNumber(getPOField(g, "creditFx2", "CreditFx2", "CREDIT_FX2", "credit_fx2") || 0),
+        slRefNo: getPOField(g, "slRefNo", "slrefNo", "slref_no", "SLREF_NO", "SL_REF_NO"),
+        slRefDate: normalizeGLDate(getPOField(g, "slRefDate", "slrefDate", "slref_date", "SLREF_DATE", "SL_REF_DATE")),
+        remarks: getPOField(g, "remarks", "Remarks", "REMARKS"),
+        dt1Lineno: getPOField(g, "dt1Lineno", "dt1LineNo", "DT1_LINENO", "DT1_LINE_NO"),
       }));
 
       updateState({
@@ -2076,6 +2389,188 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     updateState({ showQstatModal: false });
   };
 
+  const getLotBreakdownQty = (rows = lotEntryRows) =>
+    rows.reduce(
+      (sum, lot) => sum + (parseFormattedNumber(lot?.quantity || 0) || 0),
+      0,
+    );
+
+  const makeLotBreakdownRow = (row = {}, quantity = "") => ({
+    id: Date.now() + Math.random(),
+    lotNo: "",
+    quantity,
+    bbDate: row.bbDate || "",
+    qstatCode: row.qstatCode || row.qsCode || "",
+    whouseCode: row.whouseCode || row.whCode || WHCode || "",
+    LocCode: row.LocCode || row.locCode || LocCode || "",
+  });
+
+  const handleOpenLotBreakdownModal = (index) => {
+    if (isFormDisabled) return;
+
+    const row = detailRows?.[index];
+    const rrQty = parseFormattedNumber(row?.rrQty || 0) || 0;
+
+    if (!row?.itemCode) {
+      Swal.fire({
+        icon: "warning",
+        title: "Lot No Breakdown",
+        text: "Please select an item before entering multiple lot numbers.",
+      });
+      return;
+    }
+
+    if (rrQty <= 0) {
+      Swal.fire({
+        icon: "warning",
+        title: "Lot No Breakdown",
+        text: "RR Quantity must be greater than zero before entering multiple lot numbers.",
+      });
+      return;
+    }
+
+    const existingLots = Array.isArray(row?.lotDetails) ? row.lotDetails : [];
+    const seededLots =
+      existingLots.length > 0
+        ? existingLots
+        : [
+            {
+              lotNo: row?.lotNo || "",
+              quantity: row?.rrQty || "",
+              bbDate: row?.bbDate || "",
+              qstatCode: row?.qstatCode || row?.qsCode || "",
+              whouseCode: row?.whouseCode || row?.whCode || WHCode || "",
+              LocCode: row?.LocCode || row?.locCode || LocCode || "",
+            },
+          ];
+
+    setLotEntryRows(
+      seededLots.map((lot, lotIndex) => ({
+        id: lot.id || lotIndex + 1,
+        lotNo: lot.lotNo || "",
+        quantity: lot.quantity || lot.rrQty || "",
+        bbDate: lot.bbDate || "",
+        qstatCode: lot.qstatCode || lot.qsCode || "",
+        whouseCode: lot.whouseCode || lot.whCode || WHCode || "",
+        LocCode: lot.LocCode || lot.locCode || LocCode || "",
+      })),
+    );
+    setLotPickingRowIndex(index);
+    setShowLotPickingModal(true);
+  };
+
+  const handleCloseLotPickingModal = () => {
+    setShowLotPickingModal(false);
+    setLotPickingRowIndex(null);
+    setLotEntryRows([]);
+  };
+
+  const handleLotEntryChange = (index, field, value) => {
+    setLotEntryRows((prev) =>
+      prev.map((lot, lotIndex) =>
+        lotIndex === index ? { ...lot, [field]: value } : lot,
+      ),
+    );
+  };
+
+  const handleAddLotEntryRow = (index = null) => {
+    const row = selectedLotPickingRow || {};
+    setLotEntryRows((prev) => {
+      const rrQty = parseFormattedNumber(row?.rrQty || 0) || 0;
+      const assignedQty = getLotBreakdownQty(prev);
+      const remainingQty = Math.max(rrQty - assignedQty, 0);
+      const nextRow = makeLotBreakdownRow(
+        row,
+        remainingQty > 0 ? formatNumber(remainingQty, decQty) : "",
+      );
+      const nextRows = [...prev];
+
+      if (index !== null && index !== undefined) {
+        nextRows.splice(index + 1, 0, nextRow);
+      } else {
+        nextRows.push(nextRow);
+      }
+
+      return nextRows;
+    });
+  };
+
+  const handleDeleteLotEntryRow = (index) => {
+    setLotEntryRows((prev) => prev.filter((_, lotIndex) => lotIndex !== index));
+  };
+
+  const handleConfirmLotPicking = () => {
+    if (lotPickingRowIndex === null || lotPickingRowIndex === undefined) return;
+
+    const updatedRows = [...(detailRows || [])];
+    const currentRow = updatedRows[lotPickingRowIndex];
+    if (!currentRow) return;
+
+    const validLots = lotEntryRows
+      .map((lot, index) => ({
+        ...lot,
+        id: index + 1,
+        quantity: parseFormattedNumber(lot.quantity || 0) || 0,
+      }))
+      .filter((lot) => lot.lotNo || lot.quantity > 0);
+    const totalLotQty = validLots.reduce((sum, lot) => sum + lot.quantity, 0);
+    const rrQty = parseFormattedNumber(currentRow.rrQty || 0) || 0;
+
+    if (validLots.some((lot) => !lot.lotNo || lot.quantity <= 0)) {
+      Swal.fire({
+        icon: "warning",
+        title: "Lot No Breakdown",
+        text: "Each lot row must have a Lot No and quantity greater than zero.",
+      });
+      return;
+    }
+
+    if (Number(totalLotQty.toFixed(decQty)) !== Number(rrQty.toFixed(decQty))) {
+      Swal.fire({
+        icon: "warning",
+        title: "Lot No Breakdown",
+        html: `Total lot quantity <b>${formatNumber(totalLotQty, decQty)}</b> must match RR Quantity <b>${formatNumber(rrQty, decQty)}</b>.`,
+      });
+      return;
+    }
+
+    const lotNos = validLots.map((lot) => lot.lotNo).filter(Boolean);
+    const firstLot = validLots[0] || {};
+    const normalizedLots = validLots.map((lot) => ({
+      ...lot,
+      quantity: formatNumber(lot.quantity, decQty),
+      rrQty: formatNumber(lot.quantity, decQty),
+    }));
+
+    updatedRows[lotPickingRowIndex] = recalcMSRRRow(
+      {
+        ...currentRow,
+        rrQty: formatNumber(totalLotQty, decQty),
+        lotNo: lotNos.join(", "),
+        bbDate: firstLot.bbDate || currentRow.bbDate || "",
+        qstatCode: firstLot.qstatCode || currentRow.qstatCode || "",
+        qsCode: firstLot.qstatCode || currentRow.qsCode || "",
+        whouseCode:
+          firstLot.whouseCode ||
+          currentRow.whouseCode ||
+          currentRow.whCode ||
+          "",
+        whCode:
+          firstLot.whouseCode ||
+          currentRow.whCode ||
+          currentRow.whouseCode ||
+          "",
+        LocCode: firstLot.LocCode || currentRow.LocCode || "",
+        locCode: firstLot.LocCode || currentRow.locCode || "",
+        lotDetails: normalizedLots,
+      },
+    );
+
+    updateState({ detailRows: updatedRows });
+    updateTotalsDisplay(updatedRows);
+    handleCloseLotPickingModal();
+  };
+
   const recalcMSRRRow = (row) => {
     const rrQty = parseFormattedNumber(row.rrQty || 0);
     const freeQty = parseFormattedNumber(row.freeQty || 0);
@@ -2095,6 +2590,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     return {
       ...row,
       grossAmount: formatNumber(gross, 2),
+      itemAmount: formatNumber(gross, 2),
       vatAmount: formatNumber(vatAmt, 2),
       netAmount: formatNumber(netAmt, 2),
       amount: formatNumber(gross, 2), // your Amount column
@@ -2195,10 +2691,25 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     }
 
     // ✅ numeric fields sanitize
-    if (["rrQty", "freeQty", "unitCost", "vatRate"].includes(field)) {
-      row[field] = String(normalizedValue ?? "").replace(/[^0-9.]/g, "");
+    const numericFieldDecimals = {
+      rrQty: decQty,
+      freeQty: decQty,
+      unitCost: decUcost,
+      vatRate: 2,
+    };
+    const shouldFormatNumeric = extraData === true;
+
+    if (Object.prototype.hasOwnProperty.call(numericFieldDecimals, field)) {
+      const numericValue = parseFormattedNumber(normalizedValue ?? 0);
+      row[field] = shouldFormatNumeric
+        ? formatNumber(numericValue, numericFieldDecimals[field])
+        : String(normalizedValue ?? "").replace(/[^0-9.]/g, "");
     } else {
       row[field] = normalizedValue ?? "";
+    }
+
+    if (field === "rrQty" || field === "lotNo") {
+      row.lotDetails = [];
     }
 
     // ✅ apply any extra lookup fields (names, etc.)
@@ -2228,12 +2739,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       await autoFillBlanks(field, row[field], extraData);
     }
 
-    // ✅ totals should count ONLY RR qty (not free)
-    const totalRRQty = updatedRows.reduce(
-      (acc, r) => acc + parseFormattedNumber(r?.rrQty || 0),
-      0,
-    );
-    updateTotalsDisplay(totalRRQty);
+    updateTotalsDisplay(updatedRows);
   };
 
   const totalDebitGL = (state.detailRowsGL || []).reduce(
@@ -2245,8 +2751,6 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     (sum, r) => sum + parseFormattedNumber(r?.credit || 0),
     0,
   );
-
-  const diffGL = totalDebitGL - totalCreditGL;
 
   const handleDocNoBlur = () => {
     if (!state.documentID && state.documentNo && state.branchCode) {
@@ -2288,6 +2792,82 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         }
       }
 
+      const dt1Payload = [];
+      (state.detailRows || []).forEach((r) => {
+        const lotDetails = Array.isArray(r.lotDetails) ? r.lotDetails : [];
+        const sourceLots =
+          lotDetails.length > 0
+            ? lotDetails
+            : [
+                {
+                  lotNo: r.lotNo || "",
+                  quantity: r.rrQty || 0,
+                  bbDate: r.bbDate || null,
+                  qstatCode: r.qstatCode || r.qsCode || "",
+                  whouseCode:
+                    r.whouseCode ||
+                    r.whCode ||
+                    state.WHCode ||
+                    state.WHcode ||
+                    "",
+                  LocCode: r.LocCode || r.locCode || state.LocCode || "",
+                },
+              ];
+
+        sourceLots.forEach((lot) => {
+          const lotQty = parseFormattedNumber(lot.quantity || lot.rrQty || 0);
+          const rowQty = parseFormattedNumber(r.rrQty || 0) || 0;
+          const lotRatio = rowQty > 0 ? lotQty / rowQty : 1;
+          dt1Payload.push({
+            lineNo: String(dt1Payload.length + 1),
+
+            invType: r.invType || "MS",
+            itemNo: r.itemCode || r.itemNo || "",
+            itemCode: r.itemCode || "",
+
+            rrQuantity: lotQty,
+            quantity: lotQty,
+            whCode:
+              lot.whouseCode ||
+              lot.whCode ||
+              r.whCode ||
+              r.whouseCode ||
+              state.WHCode ||
+              state.WHcode ||
+              "",
+            LocCode: lot.LocCode || lot.locCode || r.LocCode || state.LocCode || "",
+
+            itemName: r.itemName || "",
+            uomCode: r.uomCode || "",
+
+            unitCost: parseFormattedNumber(r.unitCost || r.unitCostFx || 0),
+            grossAmount: parseFormattedNumber(r.grossAmount || 0) * lotRatio,
+            discRate: parseFormattedNumber(r.discRate || 0),
+            discAmount: parseFormattedNumber(r.discAmount || 0) * lotRatio,
+            netAmount: parseFormattedNumber(r.netAmount || 0) * lotRatio,
+
+            vatCode: r.vatCode || "",
+            vatAmount: parseFormattedNumber(r.vatAmount || 0) * lotRatio,
+            itemAmount:
+              parseFormattedNumber(r.itemAmount || r.grossAmount || 0) *
+              lotRatio,
+
+            lotNo: lot.lotNo || "",
+            bbDate: lot.bbDate || null,
+            qsCode: lot.qstatCode || lot.qsCode || r.qsCode || "",
+
+            rcCode: r.rcCode || state.rcCode || "",
+
+            poNo: r.poNo || state.poNo || "",
+            poLineno: r.poLineno || r.poLineNo || "",
+            poBalance: parseFormattedNumber(r.poBalance || 0),
+
+            itemSpecs: r.itemSpecs || "",
+            categCode: r.categCode || "",
+          });
+        });
+      });
+
       // Build payload (match your sproc params)
       const glData = {
         branchCode: state.branchCode,
@@ -2313,50 +2893,19 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         currRate: Number(state.currRate || 1),
 
         whouseCode: state.WHCode || state.WHcode || "",
+        whCode: state.WHCode || state.WHcode || "",
+        WHCode: state.WHCode || state.WHcode || "",
         LocCode: state.LocCode || "",
+        locCode: state.LocCode || "",
+        locationCode: state.LocCode || "",
+        LocName: state.LocName || "",
+        locName: state.LocName || "",
 
         remarks: state.remarks || "",
         userCode: state.userCode || "",
 
         // DT1
-        dt1: (state.detailRows || []).map((r, idx) => ({
-          lineNo: String(r.lineNo ?? idx + 1),
-
-          invType: r.invType || "MS",
-          itemNo: r.itemCode || r.itemNo || "",
-          itemCode: r.itemCode || "", // ok to keep for UI side; SP uses itemNo
-
-          rrQuantity: parseFormattedNumber(r.rrQty || 0),
-          quantity: parseFormattedNumber(r.rrQty || 0), // SP loads $.quantity
-          whCode: r.whCode || r.whouseCode || state.WHCode || state.WHcode || "",
-          LocCode: r.LocCode || state.LocCode || "",
-
-          itemName: r.itemName || "",
-          uomCode: r.uomCode || "",
-
-          unitCost: parseFormattedNumber(r.unitCost || r.unitCostFx || 0),
-          grossAmount: parseFormattedNumber(r.grossAmount || 0),
-          discRate: parseFormattedNumber(r.discRate || 0),
-          discAmount: parseFormattedNumber(r.discAmount || 0),
-          netAmount: parseFormattedNumber(r.netAmount || 0),
-
-          vatCode: r.vatCode || "",
-          vatAmount: parseFormattedNumber(r.vatAmount || 0),
-          itemAmount: parseFormattedNumber(r.itemAmount || r.grossAmount || 0),
-
-          lotNo: r.lotNo || "",
-          bbDate: r.bbDate || null,
-          qsCode: r.qsCode || "",
-
-          rcCode: r.rcCode || state.rcCode || "",
-
-          poNo: r.poNo || state.poNo || "",
-          poLineno: r.poLineno || r.poLineNo || "",
-          poBalance: parseFormattedNumber(r.poBalance || 0),
-
-          itemSpecs: r.itemSpecs || "",
-          categCode: r.categCode || "",
-        })),
+        dt1: dt1Payload,
 
         // DT2 (GL)
         dt2: (state.detailRowsGL || []).map((r, i) => ({
@@ -2405,11 +2954,27 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
 
         console.log("MSRR upsert response:", res);
         // normalize row (supports: array, axios response, unwrapped response)
-        const row =
+        const normalizeSaveRow = (value) => {
+          if (!value) return null;
+          if (typeof value === "string") {
+            try {
+              const parsedValue = JSON.parse(value);
+              return Array.isArray(parsedValue) ? parsedValue[0] : parsedValue;
+            } catch {
+              return null;
+            }
+          }
+          const resultValue = value.result ?? value.RESULT ?? value.JsonResult;
+          if (resultValue) return normalizeSaveRow(resultValue);
+          return value;
+        };
+
+        const row = normalizeSaveRow(
           (Array.isArray(res) ? res?.[0] : null) ??
-          (Array.isArray(res?.data) ? res.data?.[0] : null) ??
-          (Array.isArray(res?.data?.data) ? res.data.data?.[0] : null) ??
-          null;
+          (Array.isArray(res?.data) ? res.data?.[0] : null) ??
+          (Array.isArray(res?.data?.data) ? res.data.data?.[0] : null) ??
+          null
+        );
 
         // handle SP validation pattern
         if (row?.errorCount && Number(row.errorCount) > 0) {
@@ -2423,9 +2988,28 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           return;
         }
 
-        // accept common key variants
-        const savedId = row?.rrHdId || row?.rrId || row?.rr_id || "";
-        const savedNo = row?.rrNo || row?.rr_no || "";
+        // accept common key variants returned by MSRR upsert
+        const savedId =
+          row?.rrHdId ||
+          row?.rrId ||
+          row?.rr_id ||
+          row?.msrrId ||
+          row?.msrrHdId ||
+          row?.MSRR_ID ||
+          row?.MSRR_HD_ID ||
+          row?.RR_HD_ID ||
+          documentID ||
+          "";
+        const savedNo =
+          row?.msrrNo ||
+          row?.MSRR_NO ||
+          row?.rrNo ||
+          row?.RR_NO ||
+          row?.rr_no ||
+          row?.documentNo ||
+          row?.docNo ||
+          documentNo ||
+          "";
 
         // reflect auto-generated RR No / RR ID in UI
         updateState({
@@ -2452,7 +3036,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     }
   };
 
-  const handleAddGLRow = () => {
+  const handleAddGLRow = (index = null) => {
     if (isFormDisabled) return;
 
     const rows = [...(state.detailRowsGL || [])];
@@ -2493,7 +3077,18 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       dt1Lineno: "", // keep for linking to dt1 if needed
     };
 
-    updateState({ detailRowsGL: [...rows, next] });
+    if (index !== null && index !== undefined) {
+      rows.splice(index + 1, 0, next);
+    } else {
+      rows.push(next);
+    }
+
+    updateState({
+      detailRowsGL: rows.map((row, rowIndex) => ({
+        ...row,
+        id: rowIndex + 1,
+      })),
+    });
   };
 
   const handleDeleteGLRow = (index) => {
@@ -2588,6 +3183,12 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       };
       updateState({ detailRowsGL: rows });
     }
+  };
+
+  const handleGLFieldChange = (index, field, value) => {
+    const rows = [...(state.detailRowsGL || [])];
+    rows[index] = { ...rows[index], [field]: value };
+    updateState({ detailRowsGL: rows });
   };
 
   // ==========================
@@ -2855,6 +3456,18 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       }
     }
   };
+
+  const selectedLotPickingRow =
+    lotPickingRowIndex !== null && lotPickingRowIndex !== undefined
+      ? detailRows?.[lotPickingRowIndex]
+      : null;
+  const lotBreakdownAssignedQty = getLotBreakdownQty();
+  const lotBreakdownTargetQty =
+    parseFormattedNumber(selectedLotPickingRow?.rrQty || 0) || 0;
+  const lotBreakdownRemainingQty = Math.max(
+    lotBreakdownTargetQty - lotBreakdownAssignedQty,
+    0,
+  );
 
   // ==========================
   // RENDER
@@ -3181,7 +3794,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
 
                 {/* colum 3 */}
                 {/* </div>
-              <div className="relative">
+                        <div className="relative w-fit">
                 <select
                   id="poType"
                   className="peer global-tran-textbox-ui"
@@ -3263,6 +3876,8 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                 <thead className="global-tran-thead-div-ui">
                   <tr>
                     <th className="global-tran-th-ui">LN</th>
+                    <th className="global-tran-th-ui">RR Status</th>
+                    <th className="global-tran-th-ui">PO No.</th>
                     <th className="global-tran-th-ui">Item Code</th>
                     <th className="global-tran-th-ui">Item Description</th>
                     <th className="global-tran-th-ui">Specification</th>
@@ -3295,6 +3910,24 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                       <td className="global-tran-td-ui text-center">
                         {index + 1}
                       </td>
+
+                    <td className="global-tran-td-ui">
+                      <input
+                        type="text"
+                        className="w-[90px] global-tran-td-inputclass-ui text-center"
+                        value={getFullStatus(row.rrStatus || row.poStatus)}
+                        readOnly
+                      />
+                    </td>
+
+                    <td className="global-tran-td-ui">
+                      <input
+                        type="text"
+                        className="w-[140px] global-tran-td-inputclass-ui text-center"
+                        value={row.poNo || state.poNo || ""}
+                        readOnly
+                      />
+                    </td>
 
                       {/* Item Code */}
                       <td className="global-tran-td-ui relative">
@@ -3376,7 +4009,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                               "",
                             );
                             if (
-                              /^-?\d*\.?\d{0,2}$/.test(sanitizedValue) ||
+                                /^-?\d*\.?\d{0,6}$/.test(sanitizedValue) ||
                               sanitizedValue === ""
                             ) {
                               handleDetailChange(
@@ -3431,12 +4064,12 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                               "",
                             );
                             if (
-                              /^-?\d*\.?\d{0,2}$/.test(sanitizedValue) ||
+                                /^-?\d*\.?\d{0,6}$/.test(sanitizedValue) ||
                               sanitizedValue === ""
                             ) {
                               handleDetailChange(
                                 index,
-                                "quantity",
+                                "freeQty",
                                 sanitizedValue,
                                 false,
                               );
@@ -3454,7 +4087,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                             const value = e.target.value;
                             const num = parseFormattedNumber(value);
                             if (!isNaN(num)) {
-                              handleDetailChange(index, "quantity", num, true);
+                          handleDetailChange(index, "freeQty", num, true);
                             }
                             setFocusedCell(null);
                           }}
@@ -3466,7 +4099,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                               if (!isNaN(num)) {
                                 handleDetailChange(
                                   index,
-                                  "quantity",
+                                  "freeQty",
                                   num,
                                   true,
                                 );
@@ -3491,7 +4124,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                               "",
                             );
                             if (
-                              /^\d*\.?\d{0,2}$/.test(sanitizedValue) ||
+                                /^\d*\.?\d{0,6}$/.test(sanitizedValue) ||
                               sanitizedValue === ""
                             ) {
                               handleDetailChange(
@@ -3544,7 +4177,9 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                           className="w-[140px] global-tran-td-inputclass-ui text-right"
                           value={
                             formatNumber(
-                              parseFormattedNumber(row.grossAmount),
+                              parseFormattedNumber(
+                                row.grossAmount ?? row.amount ?? row.itemAmount,
+                              ),
                             ) || ""
                           }
                         />
@@ -3589,7 +4224,11 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                         <input
                           type="text"
                           className="w-[120px] global-tran-td-inputclass-ui text-right"
-                          value={row.vatRate || ""}
+                          value={
+                            row.vatRate !== "" && row.vatRate !== null && row.vatRate !== undefined
+                              ? formatNumber(parseFormattedNumber(row.vatRate), 2)
+                              : ""
+                          }
                           readOnly
                           disabled
                         />
@@ -3621,12 +4260,17 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                         />
                       </td>
 
-                      <td className="global-tran-td-ui">
+                      <td
+                        className="global-tran-td-ui"
+                        onDoubleClick={() => handleOpenLotBreakdownModal(index)}
+                      >
                         <input
                           type="text"
                           className="w-[200px] global-tran-td-inputclass-ui"
                           value={row.lotNo || ""}
                           readOnly={isFormDisabled}
+                          onDoubleClick={() => handleOpenLotBreakdownModal(index)}
+                          title="Double-click to enter lot number breakdown"
                           onChange={(e) =>
                             handleDetailChange(index, "lotNo", e.target.value)
                           }
@@ -3637,7 +4281,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                       <td className="global-tran-td-ui">
                         <input
                           type="date"
-                          className="w-[100px] global-tran-td-inputclass-ui"
+                            className="w-[100px] global-tran-td-inputclass-ui"
                           value={row.bbDate || ""}
                           readOnly={isFormDisabled}
                           onChange={(e) =>
@@ -3755,30 +4399,6 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                     <div className="p-1.5">
                       <button
                         type="button"
-                        className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
-                        onClick={() => {
-                          setShowTypeDropdown(false);
-                          handleSelectTypeAndAddRow("FG");
-                        }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
-                            <FontAwesomeIcon icon={faBoxOpen} />
-                          </span>
-                          <div className="flex flex-col items-start">
-                            <span>Finished Goods</span>
-                            <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500">
-                              Add FG item
-                            </span>
-                          </div>
-                        </div>
-                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
-                          FG
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
                         className="mt-1 flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
                         onClick={handleOpenMSLookup}
                       >
@@ -3795,30 +4415,6 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                         </div>
                         <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
                           MS
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        className="mt-1 flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
-                        onClick={() => {
-                          setShowTypeDropdown(false);
-                          handleSelectTypeAndAddRow("RM");
-                        }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
-                            <FontAwesomeIcon icon={faWarehouse} />
-                          </span>
-                          <div className="flex flex-col items-start">
-                            <span>Raw Material</span>
-                            <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500">
-                              Add RM item
-                            </span>
-                          </div>
-                        </div>
-                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
-                          RM
                         </span>
                       </button>
 
@@ -3890,22 +4486,30 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     GENERAL LEDGER (DT2)
    ===================== */}
         <div className="global-tran-tab-div-ui mt-3">
-          <div className="global-tran-tab-nav-ui flex items-center justify-between">
+          <div className="global-tran-tab-nav-ui">
             <div className="flex flex-row sm:flex-row">
-              <span className="global-tran-tab-padding-ui global-tran-tab-text_active-ui">
+              <button
+                className={`global-tran-tab-padding-ui ${
+                  GLactiveTab === "invoice"
+                    ? "global-tran-tab-text_active-ui"
+                    : "global-tran-tab-text_inactive-ui"
+                }`}
+                onClick={() => updateState({ GLactiveTab: "invoice" })}
+              >
                 General Ledger
-              </span>
+              </button>
             </div>
 
-            {!isFormDisabled && (
-              <button
-                type="button"
-                className="global-tran-tab-footer-button-add-ui"
-                onClick={() => handleActivityOption("GenerateGL")}
-              >
-                Generate GL
-              </button>
-            )}
+          <div className="flex justify-end">
+            <button
+              onClick={() => handleActivityOption("GenerateGL")}
+              className="global-tran-button-generateGL"
+              disabled={isLoading}
+              style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
+            >
+              {isLoading ? "Generating..." : "Generate GL Entries"}
+            </button>
+          </div>
           </div>
 
           <div className="global-tran-table-main-div-ui">
@@ -3914,19 +4518,41 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                 <thead className="global-tran-thead-div-ui">
                   <tr>
                     <th className="global-tran-th-ui">LN</th>
-                    <th className="global-tran-th-ui">Account</th>
-                    <th className="global-tran-th-ui">SL Type</th>
-                    <th className="global-tran-th-ui">SL</th>
-                    <th className="global-tran-th-ui">RC</th>
-                    <th className="global-tran-th-ui">Particular</th>
-                    <th className="global-tran-th-ui">VAT</th>
-                    <th className="global-tran-th-ui">ATC</th>
-                    <th className="global-tran-th-ui">Debit</th>
-                    <th className="global-tran-th-ui">Credit</th>
+                    <th className="global-tran-th-ui">Account Code</th>
+                    <th className="global-tran-th-ui">RC Code</th>
+                    <th className="global-tran-th-ui">SL Type Code</th>
+                    <th className="global-tran-th-ui">SL Code</th>
+                    <th className="global-tran-th-ui w-[2000px]">Particulars</th>
+                    <th className="global-tran-th-ui">VAT Code</th>
+                    <th className="global-tran-th-ui">VAT Name</th>
+                    <th className="global-tran-th-ui">ATC Code</th>
+                    <th className="global-tran-th-ui">ATC Name</th>
+                    <th className="global-tran-th-ui">Debit ({glCurrDefault})</th>
+                    <th className="global-tran-th-ui">Credit ({glCurrDefault})</th>
+                    <th className={`global-tran-th-ui ${withCurr2 ? "" : "hidden"}`}>
+                      Debit ({withCurr3 ? glCurrGlobal2 : currCode})
+                    </th>
+                    <th className={`global-tran-th-ui ${withCurr2 ? "" : "hidden"}`}>
+                      Credit ({withCurr3 ? glCurrGlobal2 : currCode})
+                    </th>
+                    <th className={`global-tran-th-ui ${withCurr3 ? "" : "hidden"}`}>
+                      Debit ({glCurrGlobal3})
+                    </th>
+                    <th className={`global-tran-th-ui ${withCurr3 ? "" : "hidden"}`}>
+                      Credit ({glCurrGlobal3})
+                    </th>
+                    <th className="global-tran-th-ui">SL Ref. No.</th>
+                    <th className="global-tran-th-ui">SL Ref. Date</th>
+                    <th className="global-tran-th-ui">Remarks</th>
                     {!isFormDisabled && (
-                      <th className="global-tran-th-ui sticky right-0 bg-blue-300 dark:bg-blue-900 z-30">
-                        Delete
-                      </th>
+                      <>
+                        <th className="global-tran-th-ui sticky right-[43px] bg-blue-300 dark:bg-blue-900 z-30">
+                          Add
+                        </th>
+                        <th className="global-tran-th-ui sticky right-0 bg-blue-300 dark:bg-blue-900 z-30">
+                          Delete
+                        </th>
+                      </>
                     )}
                   </tr>
                 </thead>
@@ -3940,90 +4566,74 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
 
                       {/* Account */}
                       <td className="global-tran-td-ui">
-                        <div className="relative">
+                        <div className="relative w-fit">
                           <input
                             type="text"
-                            className="w-[140px] global-tran-td-inputclass-ui pr-10 cursor-pointer"
+                            className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
                             value={row.acctCode || ""}
                             readOnly
                             onClick={() => openGLModal(index, "showCOALookup")}
-                            disabled={isFormDisabled}
                           />
-                          <button
-                            type="button"
-                            className="absolute inset-y-0 right-1 flex items-center px-2"
-                            onClick={() => openGLModal(index, "showCOALookup")}
-                            disabled={isFormDisabled}
-                            tabIndex={-1}
-                          >
-                            <FontAwesomeIcon icon={faMagnifyingGlass} />
-                          </button>
-                        </div>
-                        <div className="text-[11px] opacity-70">
-                          {row.acctName || ""}
-                        </div>
-                      </td>
-
-                      {/* SL Type */}
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[80px] global-tran-td-inputclass-ui"
-                          value={row.sltypeCode || ""}
-                          readOnly
-                          disabled
-                        />
-                      </td>
-
-                      {/* SL */}
-                      <td className="global-tran-td-ui">
-                        <div className="relative">
-                          <input
-                            type="text"
-                            className="w-[120px] global-tran-td-inputclass-ui pr-10 cursor-pointer"
-                            value={row.slCode || ""}
-                            readOnly
-                            onClick={() => openGLModal(index, "showSLLookup")}
-                            disabled={isFormDisabled}
-                          />
-                          <button
-                            type="button"
-                            className="absolute inset-y-0 right-1 flex items-center px-2"
-                            onClick={() => openGLModal(index, "showSLLookup")}
-                            disabled={isFormDisabled}
-                            tabIndex={-1}
-                          >
-                            <FontAwesomeIcon icon={faMagnifyingGlass} />
-                          </button>
-                        </div>
-                        <div className="text-[11px] opacity-70">
-                          {row.slName || ""}
+                          {!isFormDisabled && (
+                            <FontAwesomeIcon
+                              icon={faMagnifyingGlass}
+                              className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                              onClick={() => openGLModal(index, "showCOALookup")}
+                            />
+                          )}
                         </div>
                       </td>
 
                       {/* RC */}
                       <td className="global-tran-td-ui">
-                        <div className="relative">
+                        <div className="relative w-fit">
                           <input
                             type="text"
-                            className="w-[110px] global-tran-td-inputclass-ui pr-10 cursor-pointer"
+                            className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
                             value={row.rcCode || ""}
                             readOnly
                             onClick={() => openGLModal(index, "showRCLookupGL")}
-                            disabled={isFormDisabled}
                           />
-                          <button
-                            type="button"
-                            className="absolute inset-y-0 right-1 flex items-center px-2"
-                            onClick={() => openGLModal(index, "showRCLookupGL")}
-                            disabled={isFormDisabled}
-                            tabIndex={-1}
-                          >
-                            <FontAwesomeIcon icon={faMagnifyingGlass} />
-                          </button>
+                          {!isFormDisabled && (
+                            <FontAwesomeIcon
+                              icon={faMagnifyingGlass}
+                              className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                              onClick={() => openGLModal(index, "showRCLookupGL")}
+                            />
+                          )}
                         </div>
-                        <div className="text-[11px] opacity-70">
-                          {row.rcName || ""}
+                    </td>
+
+                      {/* SL Type */}
+                      <td className="global-tran-td-ui">
+                        <input
+                          type="text"
+                          className="w-[100px] global-tran-td-inputclass-ui"
+                          value={row.sltypeCode || ""}
+                          onChange={(e) =>
+                            handleGLFieldChange(index, "sltypeCode", e.target.value)
+                          }
+                          readOnly={isFormDisabled}
+                        />
+                      </td>
+
+                      {/* SL */}
+                      <td className="global-tran-td-ui">
+                        <div className="relative w-fit">
+                          <input
+                            type="text"
+                            className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
+                            value={row.slCode || ""}
+                            readOnly
+                            onClick={() => openGLModal(index, "showSLLookup")}
+                          />
+                          {!isFormDisabled && (
+                            <FontAwesomeIcon
+                              icon={faMagnifyingGlass}
+                              className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                              onClick={() => openGLModal(index, "showSLLookup")}
+                            />
+                          )}
                         </div>
                       </td>
 
@@ -4031,72 +4641,82 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                       <td className="global-tran-td-ui">
                         <input
                           type="text"
-                          className="w-[220px] global-tran-td-inputclass-ui"
+                          className="w-[300px] global-tran-td-inputclass-ui"
                           value={row.particular || ""}
-                          onChange={(e) => {
-                            const rows = [...(state.detailRowsGL || [])];
-                            rows[index] = {
-                              ...rows[index],
-                              particular: e.target.value,
-                            };
-                            updateState({ detailRowsGL: rows });
-                          }}
-                          disabled={isFormDisabled}
+                          onChange={(e) =>
+                            handleGLFieldChange(index, "particular", e.target.value)
+                          }
+                          readOnly={isFormDisabled}
                         />
                       </td>
 
                       {/* VAT */}
                       <td className="global-tran-td-ui">
-                        <div className="relative">
+                        <div className="relative w-fit">
                           <input
                             type="text"
-                            className="w-[90px] global-tran-td-inputclass-ui pr-10 cursor-pointer"
+                            className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
                             value={row.vatCode || ""}
                             readOnly
                             onClick={() =>
                               openGLModal(index, "showVATLookupGL")
                             }
-                            disabled={isFormDisabled}
                           />
-                          <button
-                            type="button"
-                            className="absolute inset-y-0 right-1 flex items-center px-2"
-                            onClick={() =>
-                              openGLModal(index, "showVATLookupGL")
-                            }
-                            disabled={isFormDisabled}
-                            tabIndex={-1}
-                          >
-                            <FontAwesomeIcon icon={faMagnifyingGlass} />
-                          </button>
+                          {!isFormDisabled && (
+                            <FontAwesomeIcon
+                              icon={faMagnifyingGlass}
+                              className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                              onClick={() =>
+                                openGLModal(index, "showVATLookupGL")
+                              }
+                            />
+                          )}
                         </div>
+                      </td>
+
+                      <td className="global-tran-td-ui">
+                        <input
+                          type="text"
+                          className="w-[200px] global-tran-td-inputclass-ui"
+                          value={row.vatName || ""}
+                          readOnly
+                        />
                       </td>
 
                       {/* ATC */}
                       <td className="global-tran-td-ui">
-                        <div className="relative">
+                        <div className="relative w-fit">
                           <input
                             type="text"
-                            className="w-[90px] global-tran-td-inputclass-ui pr-10 cursor-pointer"
+                            className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
                             value={row.atcCode || ""}
                             readOnly
                             onClick={() =>
                               openGLModal(index, "showATCLookupGL")
                             }
-                            disabled={isFormDisabled}
                           />
-                          <button
-                            type="button"
-                            className="absolute inset-y-0 right-1 flex items-center px-2"
-                            onClick={() =>
-                              openGLModal(index, "showATCLookupGL")
-                            }
-                            disabled={isFormDisabled}
-                            tabIndex={-1}
-                          >
-                            <FontAwesomeIcon icon={faMagnifyingGlass} />
-                          </button>
+                          {!isFormDisabled && (
+                            <FontAwesomeIcon
+                              icon={faMagnifyingGlass}
+                              className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                              onClick={() =>
+                                openGLModal(index, "showATCLookupGL")
+                              }
+                            />
+                          )}
                         </div>
+                      </td>
+
+                      <td className="global-tran-td-ui">
+                        <input
+                          type="text"
+                          className="w-[200px] global-tran-td-inputclass-ui"
+                          value={row.atcName || ""}
+                          onChange={(e) =>
+                            handleGLFieldChange(index, "atcName", e.target.value)
+                          }
+                          readOnly={isFormDisabled}
+                        />
                       </td>
 
                       {/* Debit */}
@@ -4104,11 +4724,11 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                         <input
                           type="text"
                           className="w-[120px] global-tran-td-inputclass-ui text-right"
-                          value={row.debit || "0.00"}
+                          value={row.debit || ""}
                           onChange={(e) =>
                             handleGLAmountChange(index, "debit", e.target.value)
                           }
-                          disabled={isFormDisabled}
+                          readOnly={isFormDisabled}
                         />
                       </td>
 
@@ -4117,7 +4737,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                         <input
                           type="text"
                           className="w-[120px] global-tran-td-inputclass-ui text-right"
-                          value={row.credit || "0.00"}
+                          value={row.credit || ""}
                           onChange={(e) =>
                             handleGLAmountChange(
                               index,
@@ -4125,20 +4745,136 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                               e.target.value,
                             )
                           }
-                          disabled={isFormDisabled}
+                          readOnly={isFormDisabled}
+                        />
+                      </td>
+
+                      <td
+                        className={`global-tran-td-ui text-right ${
+                          withCurr2 ? "" : "hidden"
+                        }`}
+                      >
+                        <input
+                          type="text"
+                          className="w-[120px] global-tran-td-inputclass-ui text-right"
+                          value={row.debitFx1 || ""}
+                          onChange={(e) =>
+                            handleGLAmountChange(index, "debitFx1", e.target.value)
+                          }
+                          readOnly={isFormDisabled}
+                        />
+                      </td>
+
+                      <td
+                        className={`global-tran-td-ui text-right ${
+                          withCurr2 ? "" : "hidden"
+                        }`}
+                      >
+                        <input
+                          type="text"
+                          className="w-[120px] global-tran-td-inputclass-ui text-right"
+                          value={row.creditFx1 || ""}
+                          onChange={(e) =>
+                            handleGLAmountChange(index, "creditFx1", e.target.value)
+                          }
+                          readOnly={isFormDisabled}
+                        />
+                      </td>
+
+                      <td
+                        className={`global-tran-td-ui text-right ${
+                          withCurr3 ? "" : "hidden"
+                        }`}
+                      >
+                        <input
+                          type="text"
+                          className="w-[120px] global-tran-td-inputclass-ui text-right"
+                          value={row.debitFx2 || ""}
+                          onChange={(e) =>
+                            handleGLAmountChange(index, "debitFx2", e.target.value)
+                          }
+                          readOnly={isFormDisabled}
+                        />
+                      </td>
+
+                      <td
+                        className={`global-tran-td-ui text-right ${
+                          withCurr3 ? "" : "hidden"
+                        }`}
+                      >
+                        <input
+                          type="text"
+                          className="w-[120px] global-tran-td-inputclass-ui text-right"
+                          value={row.creditFx2 || ""}
+                          onChange={(e) =>
+                            handleGLAmountChange(index, "creditFx2", e.target.value)
+                          }
+                          readOnly={isFormDisabled}
+                        />
+                      </td>
+
+                      <td className="global-tran-td-ui">
+                        <input
+                          type="text"
+                          className="w-[100px] global-tran-td-inputclass-ui"
+                          value={row.slRefNo || ""}
+                          onChange={(e) =>
+                            handleGLFieldChange(index, "slRefNo", e.target.value)
+                          }
+                          readOnly={isFormDisabled}
+                          maxLength={useGetFieldLength(tblFieldArray, "slref_no")}
+                        />
+                      </td>
+
+                      <td className="global-tran-td-ui">
+                        <input
+                          type="date"
+                          className="w-[100px] global-tran-td-inputclass-ui"
+                          value={
+                            row.slRefDate ? String(row.slRefDate).substring(0, 10) : ""
+                          }
+                          onChange={(e) =>
+                            handleGLFieldChange(index, "slRefDate", e.target.value)
+                          }
+                          readOnly={isFormDisabled}
+                        />
+                      </td>
+
+                      <td className="global-tran-td-ui">
+                        <input
+                          type="text"
+                          className="w-[100px] global-tran-td-inputclass-ui"
+                          value={row.remarks || ""}
+                          onChange={(e) =>
+                            handleGLFieldChange(index, "remarks", e.target.value)
+                          }
+                          readOnly={isFormDisabled}
+                          maxLength={useGetFieldLength(tblFieldArray, "remarks")}
                         />
                       </td>
 
                       {/* Delete */}
                       {!isFormDisabled && (
-                        <td className="global-tran-td-ui text-center sticky right-0">
-                          <button
-                            className="global-tran-td-button-delete-ui"
-                            onClick={() => handleDeleteGLRow(index)}
-                          >
-                            -
-                          </button>
-                        </td>
+                        <>
+                          <td className="global-tran-td-ui text-center sticky right-10">
+                            <button
+                              type="button"
+                              className="global-tran-td-button-add-ui"
+                              onClick={() => handleAddGLRow(index)}
+                            >
+                              <FontAwesomeIcon icon={faPlus} />
+                            </button>
+                          </td>
+                          <td className="global-tran-td-ui text-center sticky right-0">
+                            <button
+                              type="button"
+                              className="global-tran-td-button-delete-ui"
+                              onClick={() => handleDeleteGLRow(index)}
+                            >
+                              <FontAwesomeIcon icon={faMinus} />
+                            </button>
+                          </td>
+                        </>
                       )}
                     </tr>
                   ))}
@@ -4151,20 +4887,19 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           <div className="global-tran-tab-footer-main-div-ui">
             <div className="global-tran-tab-footer-button-div-ui">
               <button
-                onClick={handleAddGLRow}
-                disabled={isFormDisabled}
-                className={`global-tran-tab-footer-button-add-ui ${isFormDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                onClick={() => handleAddGLRow()}
+                          className="global-tran-tab-footer-button-add-ui"
                 style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
               >
                 <FontAwesomeIcon icon={faPlus} className="mr-2" />
-                Add GL Row
+                Add
               </button>
             </div>
 
             <div className="global-tran-tab-footer-total-main-div-ui">
               <div className="global-tran-tab-footer-total-div-ui">
                 <label className="global-tran-tab-footer-total-label-ui">
-                  Total Debit:
+                  Total Debit ({glCurrDefault}):
                 </label>
                 <label className="global-tran-tab-footer-total-value-ui">
                   {formatNumber(totalDebitGL)}
@@ -4173,19 +4908,10 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
 
               <div className="global-tran-tab-footer-total-div-ui">
                 <label className="global-tran-tab-footer-total-label-ui">
-                  Total Credit:
+                  Total Credit ({glCurrDefault}):
                 </label>
                 <label className="global-tran-tab-footer-total-value-ui">
                   {formatNumber(totalCreditGL)}
-                </label>
-              </div>
-
-              <div className="global-tran-tab-footer-total-div-ui">
-                <label className="global-tran-tab-footer-total-label-ui">
-                  Difference:
-                </label>
-                <label className="global-tran-tab-footer-total-value-ui">
-                  {formatNumber(diffGL)}
                 </label>
               </div>
             </div>
@@ -4293,6 +5019,195 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         />
       )}
 
+      {showLotPickingModal && selectedLotPickingRow && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-6xl rounded-lg border border-gray-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800">
+            <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-slate-700">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                  Lot No Breakdown
+                </h2>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {selectedLotPickingRow.itemCode} - {selectedLotPickingRow.itemName}
+                </p>
+              </div>
+      <div className="flex gap-2 text-right">
+  {/* RR QTY Block */}
+  <div className="flex flex-col items-center justify-center rounded-md bg-gray-100 px-4 py-1.5 dark:bg-slate-900/50">
+    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+      RR QTY
+    </div>
+    <div className="text-sm  text-gray-900 dark:text-white">
+      {formatNumber(lotBreakdownTargetQty, decQty)}
+    </div>
+  </div>
+
+  {/* ASSIGNED Block */}
+  <div className="flex flex-col items-center justify-center rounded-md bg-gray-100 px-4 py-1.5 dark:bg-slate-900/50">
+    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+      Assigned
+    </div>
+    <div className="text-sm  text-gray-900 dark:text-white">
+      {formatNumber(lotBreakdownAssignedQty, decQty)}
+    </div>
+  </div>
+
+  {/* REMAINING Block */}
+  <div className="flex flex-col items-center justify-center rounded-md bg-gray-100 px-4 py-1.5 dark:bg-slate-900/50">
+    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+      Remaining
+    </div>
+    <div
+      className={`text-sm font-bold ${
+        lotBreakdownRemainingQty === 0
+          ? "text-emerald-600 dark:text-emerald-400"
+          : "text-amber-500 dark:text-amber-500"
+      }`}
+    >
+      {formatNumber(lotBreakdownRemainingQty, decQty)}
+    </div>
+  </div>
+</div>
+            </div>
+
+            <div className="max-h-[60vh] overflow-auto p-4">
+              <table className="min-w-full border-collapse">
+                <thead className="global-tran-thead-div-ui">
+                  <tr>
+                    <th className="global-tran-th-ui">LN</th>
+                    <th className="global-tran-th-ui">Lot No</th>
+                    <th className="global-tran-th-ui">Quantity</th>
+                    <th className="global-tran-th-ui">BB Date</th>
+                    <th className="global-tran-th-ui">QC Status</th>
+                    <th className="global-tran-th-ui">Warehouse</th>
+                    <th className="global-tran-th-ui">Location</th>
+                    <th className="global-tran-th-ui"></th>
+                    <th className="global-tran-th-ui">Delete</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lotEntryRows.map((lot, index) => (
+                    <tr key={lot.id || index} className="global-tran-tr-ui">
+                      <td className="global-tran-td-ui text-center">
+                        {index + 1}
+                      </td>
+                      <td className="global-tran-td-ui">
+                        <input
+                          type="text"
+                          className="w-[180px] global-tran-td-inputclass-ui"
+                          value={lot.lotNo || ""}
+                          onChange={(e) =>
+                            handleLotEntryChange(index, "lotNo", e.target.value)
+                          }
+                        />
+                      </td>
+                      <td className="global-tran-td-ui text-right">
+                        <input
+                          type="text"
+                          className="w-[120px] global-tran-td-inputclass-ui text-right"
+                          value={lot.quantity || ""}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/[^0-9.]/g, "");
+                            handleLotEntryChange(index, "quantity", value);
+                          }}
+                        />
+                      </td>
+                      <td className="global-tran-td-ui">
+                        <input
+                          type="date"
+                          className="w-[130px] global-tran-td-inputclass-ui"
+                          value={lot.bbDate || ""}
+                          onChange={(e) =>
+                            handleLotEntryChange(index, "bbDate", e.target.value)
+                          }
+                        />
+                      </td>
+                      <td className="global-tran-td-ui">
+                        <input
+                          type="text"
+                          className="w-[110px] global-tran-td-inputclass-ui"
+                          value={lot.qstatCode || ""}
+                          onChange={(e) =>
+                            handleLotEntryChange(
+                              index,
+                              "qstatCode",
+                              e.target.value,
+                            )
+                          }
+                        />
+                      </td>
+                      <td className="global-tran-td-ui">
+                        <input
+                          type="text"
+                          className="w-[110px] global-tran-td-inputclass-ui"
+                          value={lot.whouseCode || ""}
+                          onChange={(e) =>
+                            handleLotEntryChange(
+                              index,
+                              "whouseCode",
+                              e.target.value,
+                            )
+                          }
+                        />
+                      </td>
+                      <td className="global-tran-td-ui">
+                        <input
+                          type="text"
+                          className="w-[110px] global-tran-td-inputclass-ui"
+                          value={lot.LocCode || ""}
+                          onChange={(e) =>
+                            handleLotEntryChange(index, "LocCode", e.target.value)
+                          }
+                        />
+                      </td>
+                      <td className="global-tran-td-ui text-center">
+                        <button
+                          type="button"
+                          className="global-tran-td-button-add-ui"
+                          onClick={() => handleAddLotEntryRow(index)}
+                          title="Add lot row"
+                          aria-label="Add lot row"
+                        >
+                          <FontAwesomeIcon icon={faPlus} />
+                        </button>
+                      </td>
+                      <td className="global-tran-td-ui text-center">
+                        <button
+                          type="button"
+                          className="global-tran-td-button-delete-ui"
+                          onClick={() => handleDeleteLotEntryRow(index)}
+                        >
+                          <FontAwesomeIcon icon={faMinus} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex items-center justify-end border-t border-gray-200 px-4 py-3 dark:border-slate-700">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="px-3 py-2 text-xs font-medium rounded-md bg-gray-200 hover:bg-gray-300 dark:bg-slate-700 dark:hover:bg-slate-600"
+                  onClick={handleCloseLotPickingModal}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="px-3 py-2 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                  onClick={handleConfirmLotPicking}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showAllTranDocNo && (
         <AllTranDocNo
           isOpen={showAllTranDocNo}
@@ -4301,7 +5216,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
             branchName,
             docType,
             documentTitle,
-            fieldNo: "msajNo",
+            fieldNo: "rrNo",
           }}
           onRetrieve={handleTranDocNoRetrieval}
           onResponse={{ documentNo }}
