@@ -1,3 +1,4 @@
+// src/NAYSA Cloud/Master Data/CustMastTabs/PayeeSetupTab.jsx
 import React, {
   forwardRef,
   useEffect,
@@ -7,6 +8,7 @@ import React, {
   useState,
 } from "react";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer";
+import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 
 import SearchVendMast from "@/NAYSA Cloud/Lookup/SearchVendMast.jsx";
 import SearchBranchRef from "@/NAYSA Cloud/Lookup/SearchBranchRef.jsx";
@@ -64,6 +66,7 @@ const PayeeSetupTab = forwardRef(
       sourceOptions = [],
       activeOptions = [],
       onChangeForm,
+      onNameBlur, // Newly Added prop
       onSelectCustomerCode,
       payeeTypeOptions = [],
       taxClassOptions = [],
@@ -95,7 +98,6 @@ const PayeeSetupTab = forwardRef(
       return n || fallback;
     };
 
-    // --- UNLOCKING LOGIC ---
     const isManualMode = useMemo(() => {
       const mode = normalizeUpper(generationMode || "Manual");
       return mode === "MANUAL" || mode === "M";
@@ -148,13 +150,9 @@ const PayeeSetupTab = forwardRef(
     const isSupplier = sl === "SU";
     const isIndividualTaxClass = taxClass === "WI";
 
-    // TIN is required for all SL Types except Employee.
-    // This only controls the red required indicator in the UI.
-    // The save validation message still comes from your original backend/Swal flow.
     const isTinRequired = !isEmployee;
 
     const shouldAutoNameFromParts = isEmployee || isIndividualTaxClass;
-
     const shouldDisableBusinessName = isEmployee;
     const shouldLockNameParts = isSupplier && !isIndividualTaxClass;
 
@@ -325,19 +323,16 @@ const PayeeSetupTab = forwardRef(
 
       const currentRegName = form[f.name] || "";
 
-      // Registered Name should always follow First/Middle/Last Name in Individual mode.
       if (currentRegName !== reg) {
         updates[f.name] = reg;
       }
       nameAutoRef.current.registeredLastAuto = reg;
 
-      // Business Name should only be auto-filled when blank or still equal to the old auto-generated name.
-      // This prevents overwriting a business name that the user intentionally edited.
       const currentBusiness = form.businessName || "";
       const businessEmpty = !String(currentBusiness).trim();
       const businessWasAuto =
         normalizeNameCompare(currentBusiness) ===
-          normalizeNameCompare(nameAutoRef.current.businessLastAuto) ||
+        normalizeNameCompare(nameAutoRef.current.businessLastAuto) ||
         normalizeNameCompare(currentBusiness) === normalizeNameCompare(currentRegName);
 
       if (
@@ -348,13 +343,11 @@ const PayeeSetupTab = forwardRef(
         nameAutoRef.current.businessLastAuto = reg;
       }
 
-      // Check Name should also follow First/Middle/Last Name when it is still the auto-generated value.
-      // This fixes the issue where editing Last Name updates Registered Name but leaves Check Name unchanged.
       const currentCheck = form.checkName || "";
       const checkEmpty = !String(currentCheck).trim();
       const checkWasAuto =
         normalizeNameCompare(currentCheck) ===
-          normalizeNameCompare(nameAutoRef.current.checkLastAuto) ||
+        normalizeNameCompare(nameAutoRef.current.checkLastAuto) ||
         normalizeNameCompare(currentCheck) === normalizeNameCompare(currentRegName);
 
       if ((checkEmpty || checkWasAuto) && !nameAutoRef.current.checkTouched) {
@@ -454,6 +447,32 @@ const PayeeSetupTab = forwardRef(
     const [isAPAcctLookupOpen, setIsAPAcctLookupOpen] = useState(false);
     const [isPayTermLookupOpen, setIsPayTermLookupOpen] = useState(false);
     const [isCurrLookupOpen, setIsCurrLookupOpen] = useState(false);
+    const [tinError, setTinError] = useState("");
+    const [isValidatingTin, setIsValidatingTin] = useState(false);
+
+    const validateTin = async (tinValue) => {
+      if (!tinValue || tinValue.trim() === "") {
+        setTinError("");
+        return;
+      }
+
+      setIsValidatingTin(true);
+      try {
+        const res = await apiClient.post("/checkDuplicateTin", { tin: tinValue, excludeCode: form.vendCode });
+        
+        if (res.data.isDuplicate) {
+          setTinError(`TIN already exists for ${res.data.ownerName}`);
+          onChangeForm({ isTinValid: false });
+        } else {
+          setTinError("");
+          onChangeForm({ isTinValid: true });
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setIsValidatingTin(false);
+      }
+    };
 
     const openPayeeLookup = () => {
       if (isLoading) return;
@@ -491,11 +510,10 @@ const PayeeSetupTab = forwardRef(
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div
                 ref={overrideRef}
-                className={`w-full ${
-                  !canType
-                    ? "[&>div]:!bg-[#F1F5F9] [&_input]:!bg-transparent [&_input]:!pointer-events-none [&_input]:!text-slate-600 [&_button]:!text-slate-400 [&_label]:!bg-[#F1F5F9]"
-                    : ""
-                }`}
+                className={`w-full ${!canType
+                  ? "[&>div]:!bg-[#F1F5F9] [&_input]:!bg-transparent [&_input]:!pointer-events-none [&_input]:!text-slate-600 [&_button]:!text-slate-400 [&_label]:!bg-[#F1F5F9]"
+                  : ""
+                  }`}
               >
                 <FieldRenderer
                   label="Payee Code"
@@ -505,9 +523,9 @@ const PayeeSetupTab = forwardRef(
                   onChange={
                     canType
                       ? (v) => {
-                          const val = getValue(v);
-                          onChangeForm({ [f.code]: val, custCode: val });
-                        }
+                        const val = getValue(v);
+                        onChangeForm({ [f.code]: val, custCode: val });
+                      }
                       : undefined
                   }
                   onLookup={canType ? undefined : openPayeeLookup}
@@ -537,13 +555,18 @@ const PayeeSetupTab = forwardRef(
               onChange={(v) => {
                 const value = getValue(v);
                 nameAutoRef.current.registeredTouched = true;
-                const updates = { [f.name]: value };
+                const updates = { [f.name]: value, custName: value };
 
                 if (isSupplier && !isIndividualTaxClass) {
                   applyAutoNames(updates, value);
                 }
 
                 onChangeForm(updates);
+              }}
+              // Added onBlur validation logic
+              onBlur={async () => {
+                if (!isEditing || !form[f.name]) return;
+                await onNameBlur?.(form[f.name]);
               }}
               readOnly={isReadOnly || shouldAutoNameFromParts}
               disabled={isDisabled || shouldAutoNameFromParts}
@@ -801,15 +824,18 @@ const PayeeSetupTab = forwardRef(
                 required={isTinRequired}
                 type="text"
                 value={form.vendTin || form.vend_tin || form.tin || ""}
+                error={tinError}
+                helperText={isValidatingTin ? "Checking uniqueness..." : tinError}
                 onChange={(v) => {
                   const value = getValue(v);
                   onChangeForm({
                     vendTin: value,
                     tin: value,
                   });
+                  validateTin(value);
                 }}
                 readOnly={isReadOnly}
-                disabled={isDisabled}
+                disabled={isDisabled || isValidatingTin}
                 maxLength={getLen(col.tin, 50)}
               />
 

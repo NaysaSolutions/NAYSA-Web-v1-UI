@@ -50,6 +50,7 @@ const CustSetupTab = forwardRef(
       sourceOptions = [],
       activeOptions = [],
       onChangeForm,
+      onNameBlur,
       onSelectCustomerCode,
       taxClassOptions = [],
     },
@@ -57,6 +58,37 @@ const CustSetupTab = forwardRef(
   ) => {
     const [salesTab, setSalesTab] = useState("sales");
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+    // --- TIN VALIDATION STATE & LOGIC ---
+    const [tinError, setTinError] = useState("");
+    const [isValidatingTin, setIsValidatingTin] = useState(false);
+
+    const validateTin = async (tinValue) => {
+      if (!tinValue || tinValue.trim() === "") {
+        setTinError("");
+        return;
+      }
+
+      setIsValidatingTin(true);
+      try {
+        const res = await apiClient.post("/checkDuplicateTin", { 
+          tin: tinValue, 
+          excludeCode: form.custCode 
+        });
+        
+        if (res.data.isDuplicate) {
+          setTinError(`TIN already exists for ${res.data.ownerName}`);
+          onChangeForm({ isTinValid: false });
+        } else {
+          setTinError("");
+          onChangeForm({ isTinValid: true });
+        }
+      } catch (e) {
+        console.error("TIN Validation Error:", e);
+      } finally {
+        setIsValidatingTin(false);
+      }
+    };
 
     // --- 1. FIELD LENGTHS ---
     const { data: tblFieldArray = [] } = useQuery({
@@ -141,6 +173,11 @@ const CustSetupTab = forwardRef(
               type="text"
               value={form?.custName || ""}
               onChange={(v) => onChangeForm({ custName: getValue(v) })}
+              // ---> ADDED BLUR EVENT FOR DUPLICATE CHECK <---
+              onBlur={async () => {
+                if (!isEditing || !form?.custName) return;
+                await onNameBlur?.(form?.custName);
+              }}
               readOnly={isReadOnly}
               disabled={isDisabled}
               maxLength={getLen("cust_name", 150)}
@@ -474,9 +511,16 @@ const CustSetupTab = forwardRef(
                         required
                         type="text"
                         value={form?.custTin || ""}
-                        onChange={(v) => onChangeForm({ custTin: getValue(v) })}
+                        // ---> ADDED ERROR AND VALIDATION CHECK <---
+                        error={tinError}
+                        helperText={isValidatingTin ? "Checking uniqueness..." : tinError}
+                        onChange={(v) => {
+                          const val = getValue(v);
+                          onChangeForm({ custTin: val });
+                          validateTin(val);
+                        }}
                         readOnly={isReadOnly}
-                        disabled={isDisabled}
+                        disabled={isDisabled || isValidatingTin}
                         maxLength={getLen("cust_tin", 50)}
                       />
 

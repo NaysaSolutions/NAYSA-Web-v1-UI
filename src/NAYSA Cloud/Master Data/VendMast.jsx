@@ -32,7 +32,8 @@ import {
   useSwalSuccessAlert,
   useSwalErrorAlertAPI,
   useSwalDeleteConfirm,
-  useSwalDeleteRecord
+  useSwalDeleteRecord,
+  useSwalProceedConfirm // Added for duplicate name check
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 import PayeeSetupTab from "@/NAYSA Cloud/Master Data/CustMastTabs/PayeeSetupTab";
 import PayeeMasterDataTab from "@/NAYSA Cloud/Master Data/CustMastTabs/PayeeMasterDataTab";
@@ -100,6 +101,45 @@ const VendMast = () => {
   const videoLink = reftablesVideoGuide?.[docType] || "#";
   const [isOpenGuide, setOpenGuide] = useState(false);
 
+  // DUPLICATE NAME VALIDATION LOGIC
+  const allowedDuplicatePayeeNameRef = useRef("");
+  
+  const normalizeText = (value) => String(value || "").trim().replace(/\s+/g, " ").toUpperCase();
+
+  const findDuplicatePayeeName = (payeeName = form.vendName) => {
+    const normalizedName = normalizeText(payeeName);
+    if (!normalizedName) return null;
+
+    return masterAllRows.find((row) => {
+      const sameName = normalizeText(row?.vendName) === normalizedName;
+      const sameCode = normalizeText(row?.vendCode) === normalizeText(selectedVendCode || form.vendCode);
+      return sameName && !sameCode;
+    });
+  };
+
+  const confirmDuplicatePayeeName = async (payeeName = form.vendName) => {
+    const duplicateRecord = findDuplicatePayeeName(payeeName);
+    if (!duplicateRecord) return true;
+
+    const normalizedName = normalizeText(payeeName);
+    if (allowedDuplicatePayeeNameRef.current === normalizedName) return true;
+
+    const result = await useSwalProceedConfirm(
+      "Duplicate Payee Name",
+      `Payee Name "${payeeName}" already exists with Payee Code ${duplicateRecord.vendCode}.\n\nDo you want to proceed?`,
+      "Yes, Proceed"
+    );
+
+    if (result.isConfirmed) {
+      allowedDuplicatePayeeNameRef.current = normalizedName;
+      return true;
+    }
+
+    allowedDuplicatePayeeNameRef.current = "";
+    updateForm({ vendName: "", custName: "" });
+    return false;
+  };
+
   useEffect(() => {
     const handleClick = (e) => {
       if (guideRef.current && !guideRef.current.contains(e.target)) {
@@ -124,8 +164,6 @@ const VendMast = () => {
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isAttachOpen, setIsAttachOpen] = useState(false);
-
-  const contentPadding = "p-4 sm:p-6 lg:p-8";
 
   const [subsidiaryType, setSubsidiaryType] = useState("");
   const [masterFilters, setMasterFilters] = useState({});
@@ -392,10 +430,14 @@ const VendMast = () => {
   };
 
   const upsertVendor = async () => {
+    // 1. DUPLICATE NAME CHECK
+    const canProceed = await confirmDuplicatePayeeName(form.vendName || form.custName);
+    if (!canProceed) return;
+
     let code = String(form?.vendCode || form?.custCode || "").trim();
     const isAddMode = !selectedVendCode;
 
-    // Only run duplicate check if the user actually typed a code!
+    // 2. DUPLICATE CODE CHECK
     if (isAddMode && code) {
       const isDuplicate = await checkDuplicateVendor(code);
       if (isDuplicate) {
@@ -504,6 +546,7 @@ const VendMast = () => {
   };
 
   const handleAdd = () => {
+    allowedDuplicatePayeeNameRef.current = ""; // Reset ref memory
     const sl = normalizeSlType(form?.sltypeCode || "SU") || "SU";
     setSelectedVendCode("");
     setForm({
@@ -532,6 +575,7 @@ const VendMast = () => {
   };
 
   const handleResetSetup = () => {
+    allowedDuplicatePayeeNameRef.current = ""; // Reset ref memory
     setSelectedVendCode("");
     setForm({ ...emptyForm });
     setIsEditing(false);
@@ -725,7 +769,14 @@ const VendMast = () => {
               { value: "Y", label: "Yes" },
               { value: "N", label: "No" },
             ]}
-            onChangeForm={updateForm}
+            onChangeForm={(patch) => {
+              // Reset duplicate name memory if name is manually changed
+              if (patch.vendName || patch.custName) {
+                allowedDuplicatePayeeNameRef.current = "";
+              }
+              updateForm(patch);
+            }}
+            onNameBlur={confirmDuplicatePayeeName} // Pass the name blur logic
             onSelectCustomerCode={fetchVendorByCode}
           />
         )}

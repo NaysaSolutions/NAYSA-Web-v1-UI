@@ -1,3 +1,4 @@
+// src/NAYSA Cloud/Reference File/CustMast.jsx
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import Swal from "sweetalert2";
@@ -32,6 +33,7 @@ import {
     useSwalErrorAlertAPI,
     useSwalDeleteConfirm,
     useSwalDeleteRecord,
+    useSwalProceedConfirm // Added for duplicate name check
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
 import CustSetupTab from "./CustSetupTab";
@@ -134,6 +136,44 @@ const CustMast = () => {
     const pdfLink = reftablesPDFGuide?.[docType] || "#";
     const videoLink = reftablesVideoGuide?.[docType] || "#";
     const [isOpenGuide, setOpenGuide] = useState(false);
+
+    // --- DUPLICATE NAME LOGIC ---
+    const allowedDuplicateCustNameRef = useRef("");
+    const normalizeText = (value) => String(value || "").trim().replace(/\s+/g, " ").toUpperCase();
+
+    const findDuplicateCustName = (custName = form.custName) => {
+        const normalizedName = normalizeText(custName);
+        if (!normalizedName) return null;
+
+        return masterAllRows.find((row) => {
+            const sameName = normalizeText(row?.custName) === normalizedName;
+            const sameCode = normalizeText(row?.custCode) === normalizeText(selectedCustCode || form.custCode);
+            return sameName && !sameCode;
+        });
+    };
+
+    const confirmDuplicateCustName = async (custName = form.custName) => {
+        const duplicateRecord = findDuplicateCustName(custName);
+        if (!duplicateRecord) return true;
+
+        const normalizedName = normalizeText(custName);
+        if (allowedDuplicateCustNameRef.current === normalizedName) return true;
+
+        const result = await useSwalProceedConfirm(
+            "Duplicate Customer Name",
+            `Customer Name "${custName}" already exists with Customer Code ${duplicateRecord.custCode}.\n\nDo you want to proceed?`,
+            "Yes, Proceed"
+        );
+
+        if (result.isConfirmed) {
+            allowedDuplicateCustNameRef.current = normalizedName;
+            return true;
+        }
+
+        allowedDuplicateCustNameRef.current = "";
+        updateForm({ custName: "" });
+        return false;
+    };
 
     const referenceCodesRef = useRef(null);
     const [refTabState, setRefTabState] = useState({
@@ -264,19 +304,17 @@ const CustMast = () => {
         return [];
     };
 
-    const handleTaxClassChange = (v) => updateForm({ taxClass: v });
-    const handleBusinessNameChange = (v) => updateForm({ businessName: v });
-    const handleCheckNameChange = () => { };
-
-    const applyAutoNames = (updates = {}, baseName = "") => {
-        const reg = String(baseName || "").trim();
-        const currentBusiness = form?.businessName ?? "";
-        const currentCheck = form?.checkName ?? "";
-
-        if (!String(currentBusiness).trim()) updates.businessName = reg;
-        if (!String(currentCheck).trim()) updates.checkName = reg;
-
-        return updates;
+    const handleOpenAttach = async () => {
+        const code = String(form?.custCode || "").trim();
+        if (!code) {
+            await useSwalValidationAlert({
+                icon: "warning",
+                title: "Required",
+                message: "Customer Code is required.",
+            });
+            return;
+        }
+        setIsAttachOpen(true);
     };
 
     const loadMasterList = async () => {
@@ -311,19 +349,6 @@ const CustMast = () => {
     useEffect(() => {
         loadMasterList();
     }, []);
-
-    const handleOpenAttach = async () => {
-        const code = String(form?.custCode || "").trim();
-        if (!code) {
-            await useSwalValidationAlert({
-                icon: "warning",
-                title: "Required",
-                message: "Customer Code is required.",
-            });
-            return;
-        }
-        setIsAttachOpen(true);
-    };
 
     const fetchCustomerByCode = async (custCode) => {
         const code = String(custCode || "").trim();
@@ -462,9 +487,14 @@ const CustMast = () => {
     };
 
     const upsertCustomer = async () => {
+        // 1. DUPLICATE NAME CHECK
+        const canProceed = await confirmDuplicateCustName(form.custName);
+        if (!canProceed) return;
+
         let code = String(form?.custCode || "").trim();
         const isAddMode = !selectedCustCode;
 
+        // 2. DUPLICATE CODE CHECK
         if (isAddMode && code) {
             const isDuplicate = await checkDuplicateCustomer(code);
             if (isDuplicate) {
@@ -592,6 +622,7 @@ const CustMast = () => {
     };
 
     const handleAdd = () => {
+        allowedDuplicateCustNameRef.current = ""; // Reset ref
         const sl = normalizeSlType(form?.sltypeCode || "CU") || "CU";
         setSelectedCustCode("");
         setForm({
@@ -615,6 +646,7 @@ const CustMast = () => {
     };
 
     const handleResetSetup = () => {
+        allowedDuplicateCustNameRef.current = ""; // Reset ref
         setSelectedCustCode("");
         setForm({ ...emptyForm });
         setIsEditing(false);
@@ -807,7 +839,14 @@ const CustMast = () => {
                         form={form}
                         isEditing={isEditing}
                         isLoading={isLoading}
-                        onChangeForm={updateForm}
+                        onChangeForm={(patch) => {
+                            // Reset name check memory if name changes manually
+                            if (patch.custName) {
+                                allowedDuplicateCustNameRef.current = "";
+                            }
+                            updateForm(patch);
+                        }}
+                        onNameBlur={confirmDuplicateCustName}
                         onLookupCode={() => setIsSearchOpen(true)}
                         onSelectCustomerCode={fetchCustomerByCode}
                         sltypeOptions={sltypeOptions}
@@ -815,10 +854,6 @@ const CustMast = () => {
                         sourceOptions={sourceOptions}
                         mappedTaxClassOptions={mappedTaxClassOptions}
                         payeeTypeOptions={payeeTypeOptions}
-                        handleTaxClassChange={handleTaxClassChange}
-                        handleBusinessNameChange={handleBusinessNameChange}
-                        handleCheckNameChange={handleCheckNameChange}
-                        applyAutoNames={applyAutoNames}
                     />
                 )}
 

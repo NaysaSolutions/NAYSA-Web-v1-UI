@@ -108,7 +108,7 @@ const CancelTranModal = ({ isOpen, onClose, resetPasswordTrigger }) => {
                 onChange={(e) => setReason(e.target.value)}
                 placeholder="Explain why you are canceling this document..."
                 rows={3}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm resize-none focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+                className="w-full px-3 py-2 text-sm border border-black-300 rounded-lg shadow-sm resize-none focus:outline-none focus:ring-2 focus:ring-black-500/20 focus:border-black-500"
               />
             </div>
 
@@ -126,7 +126,7 @@ const CancelTranModal = ({ isOpen, onClose, resetPasswordTrigger }) => {
                 onContextMenu={(e) => e.preventDefault()}
                 autoComplete="one-time-code"
                 spellCheck={false}
-                className="border rounded px-2 py-1.5 text-xs w-full pr-8"
+                className="w-full px-3 py-2 text-sm border border-black-300 rounded-lg shadow-sm resize-none focus:outline-none focus:ring-2 focus:ring-black-500/20 focus:border-black-500"
               />
             </div>
           </div>
