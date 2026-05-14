@@ -29,6 +29,7 @@ import VATLookupModal from "../../../Lookup/SearchVATRef.jsx";
 import JobCodeLookupModal from "../../../Lookup/SearchJobCodesRef.jsx";
 import GlobalCombinedLookup from "../../../Lookup/SearchGlobalCombinedLookup.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
+import GlobalApprovalStatus from "@/NAYSA Cloud/Approval/GlobalApprovalStatus.jsx";
 
 // Configuration
 import { postRequest,fetchDataJson } from "../../../Configuration/BaseURL.jsx";
@@ -86,8 +87,10 @@ import {
   useSwalvalidateRequiredFields,
   useSwalInfoAlert,
   useSwalConfirmAlert,
+  useSwalProceedConfirm,
   useSwalHandleOpenSpecsModal,
-  useSwalSuccessAlert
+  useSwalSuccessAlert,
+  useSwalErrorAlert
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
 
@@ -121,7 +124,7 @@ const JO = () => {
     const navigate = useNavigate();
     const location = useLocation(); 
     const [isViewDocument, setIsViewDocument] = useState(false);
-    const { companyInfo, currentUserRow,getAllDropDown,refsLoaded ,getAllTopATCRow, getAllTopVatRow,getAllTopVatAmount,getAllTopATCAmount,getAllTopHSDocRow } = useAuth();
+    const { companyInfo, currentUserRow,getAllDropDown,refsLoaded ,getAllTopATCRow, getAllTopVatRow,getReplacementVatRow,getAllTopVatAmount,getAllTopATCAmount,getAllTopHSDocRow } = useAuth();
     const decUPrice = companyInfo?.pur_decuprice ?? 2;
   
   
@@ -161,6 +164,7 @@ const JO = () => {
     documentNo: "",
     documentStatus: "",
     status: "",
+    appLevel:0,
     originalDocStatus:"O",
     documentDate:useGetCurrentDayV2(),  
     dateNeeded:useGetCurrentDayV2(),  
@@ -216,6 +220,7 @@ const JO = () => {
 
     // Detail lines (PR dt1)
     detailRows: [],
+    detailRowsApp: [],
 
     // Modal states
     modalContext: "",
@@ -232,6 +237,7 @@ const JO = () => {
     showPaytermModal: false,
     payeeModalOpen: false,
     prLookupModalOpen: false,
+    showApprovalStatusModal: false,
     showJobCodesModal:false,
     showAllTranDocNo:false,
     showOpenPRModal:false,
@@ -254,6 +260,7 @@ const JO = () => {
     documentNo,
     documentDate,
     status,
+    appLevel,
     originalDocStatus,
     activeTab,
     isLoading,
@@ -303,6 +310,7 @@ const JO = () => {
     openPRJO_Col_Detail,
 
     detailRows,
+    detailRowsApp,
 
    
     currencyModalOpen,
@@ -313,6 +321,7 @@ const JO = () => {
     showPostModal,
     payeeModalOpen,
     prLookupModalOpen,
+    showApprovalStatusModal,
     paytermCode,
     paytermName,
     vatLookupModalOpen,
@@ -340,13 +349,34 @@ const JO = () => {
   const statusMap = {
     FINALIZED: "global-tran-stat-text-finalized-ui",
     CANCELLED: "global-tran-stat-text-closed-ui",
-    CLOSED: "global-tran-stat-text-closed-ui",
+    CLOSED: "global-tran-stat-text-finalized-ui",
   };
   
   const statusColor = statusMap[displayStatus] || "";
-  const isFormDisabled = isViewDocumentUrl || ["FINALIZED", "CANCELLED", "CLOSED"].includes(
+  const maxApprovalLevel = Number(currentUserRow?.joMaxAppLevel || 0);
+  const currentApprovalLevel = Number(appLevel ?? 0);
+  const approvalStatusHiddenStatuses = ["CANCELLED", "POSTED", "FINALIZED"];
+  const showApprovalStatus =
+    !!documentID &&
+    maxApprovalLevel > 0 &&
+    !approvalStatusHiddenStatuses.includes(String(displayStatus || "").toUpperCase());
+  const approvalStatus = (() => {
+    if (!showApprovalStatus) return "";
+    if (currentApprovalLevel === -1) return "Disapproved Transaction";
+    if (currentApprovalLevel >= maxApprovalLevel) return "Approved Transaction";
+    return `Awaiting for L${currentApprovalLevel + 1} Approval`;
+  })();
+  const approvalStatusColor =
+    currentApprovalLevel === -1
+      ? "text-rose-500 dark:text-rose-400 animate-pulse"
+      : statusColor;
+  const isDocumentLocked = isViewDocumentUrl || ["FINALIZED", "CANCELLED", "CLOSED"].includes(
     displayStatus
   );
+  const isApprovalLocked =
+    currentApprovalLevel > 0 &&
+    currentApprovalLevel <= maxApprovalLevel;
+  const isFormDisabled = isDocumentLocked || isApprovalLocked;
 
 
 
@@ -370,6 +400,7 @@ const JO = () => {
   ];
 
   const {
+    autoResizeRows: autoResizeJoDetailRows,
     getColumnStyle: getJoDetailColumnStyle,
     getFrozenColumnStyle: getJoDetailFrozenStyle,
     getOrderedColumns: getOrderedJoDetailColumns,
@@ -524,12 +555,15 @@ useEffect(() => {
       isResetDisabled: false,
       isFetchDisabled: false,
       status: "",
+      appLevel: 0,
       originalDocStatus:"O",
       noReprints: "",
       joCancelled: "",
       detailRows: [],
+      detailRowsApp: [],
       rcLookupModalOpen: false,
       selectedRowIndex: null,
+      showApprovalStatusModal: false,
     });
 
     updateTotalsDisplay([]);
@@ -580,8 +614,9 @@ const handleClosePayeeModal = async (selectedData) => {
 
     const payeeDetails = await handleFetchDetail(vendCode);
     const defaultVat = Array.isArray(payeeDetails) ? payeeDetails[0] : payeeDetails;
-    const newVatCode = defaultVat?.vatCode || "";
-    const newVatName = defaultVat?.vatName || "";
+    const replacementVat = getReplacementVatRow(defaultVat?.vatCode || "", "I", "G", "S");
+    const newVatCode = replacementVat?.vatCode || defaultVat?.vatCode || "";
+    const newVatName = replacementVat?.vatName || defaultVat?.vatName || "";
 
     const updatedRows = await Promise.all(
       detailRows.map(async (row) => {
@@ -692,7 +727,14 @@ const handleClosePayeeModal = async (selectedData) => {
 
 const fetchTranData = async (documentNo, branchCode,direction='') => {
   const resetState = () => {
-    updateState({documentNo:'', documentID: '', isDocNoDisabled: false, isFetchDisabled: false });
+    updateState({
+      documentNo:'',
+      documentID: '',
+      detailRowsApp: [],
+      showApprovalStatusModal: false,
+      isDocNoDisabled: false,
+      isFetchDisabled: false
+    });
     updateTotalsDisplay([]);
   };
 
@@ -700,7 +742,7 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
 
   try {
     const data = await useFetchTranData(documentNo, branchCode,docType,"joNo",direction);
-
+  
    
     if (!data?.joId) {
       Swal.fire({ icon: 'info', title: 'No Records Found', text: 'Transaction does not exist.' });
@@ -720,15 +762,29 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       netAmt: formatNumber(item.netAmt,2),
       totalAmt:formatNumber(item.totalAmt,2),
     }));
+    const retrievedApprovalRows = Array.isArray(data.dtApp)
+      ? data.dtApp
+      : data.dtApp
+        ? [data.dtApp]
+        : [];
 
-   
+    let fetchedCurrName = data.currName || "";
 
-  
+    if (data.currCode && !fetchedCurrName) {
+      try {
+        const currRow = await useTopCurrencyRow(data.currCode);
+        fetchedCurrName = currRow?.currName || "";
+      } catch (err) {
+        console.error("Error fetching currency name:", err);
+      }
+    }
+
     // Update state with fetched data
     updateState({
 
       documentStatus: data.joHStatus,
       status: data.joStatus,
+      appLevel: data.appLevel,
       originalDocStatus:data.joHStatus,
       documentID: data.joId,
       documentNo: data.joNo,
@@ -740,8 +796,9 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       payeeCode: data.payeeCode,
       payeeName: data.payeeName,
       attention:data.attention,
-      currCode: data.currCode,
-      currRate: formatNumber(data.currRate,6),
+      currCode: data.currCode || "",
+      currName: fetchedCurrName,
+      currRate: formatNumber(data.currRate || 1, 6),
       paytermCode: data.paytermCode,
       paytermName: data.paytermName,
       prNo: data.prNo,   
@@ -750,6 +807,7 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       joCancelled: data.joCancelled ,
       noReprints: data.noReprints,
       detailRows: retrievedDetailRows,
+      detailRowsApp: retrievedApprovalRows,
       isDocNoDisabled: true,
       isFetchDisabled: true,
     });
@@ -853,6 +911,10 @@ const insertNewRow = async (index = -1) => {
     vatCode = item?.vatCode || "";
     vatName = item?.vatName || "";
   }
+
+  const replacementVat = getReplacementVatRow(vatCode, "I", "G", "S");
+  vatCode = replacementVat?.vatCode || vatCode;
+  vatName = replacementVat?.vatName || vatName;
 
   const newRow = createEmptyDetailRow(vatCode, vatName);
   const updatedRows = [...detailRows];
@@ -1017,29 +1079,29 @@ const handleDeleteRow = (index) => {
 
 
     
-      const response = await useTransactionUpsert(docType,joData,updateState,"joId","joNo");
-
-      if (response) {
-
-        if (documentStatus==="C"){
-          await fetchTranData(documentNo,branchCode)
-        }
-
-    
-        const isZero = Number(noReprints) === 0;
-                        await fetchTranData(documentNo, branchCode);
-                        const onSaveAndPrint =
-                          isZero
-                            ? () => updateState({ showSignatoryModal: true })                  
-                            : () => handleSaveAndPrint(response.data[0].prId); 
-                        useSwalshowSaveSuccessDialog(
-                          handleReset,          
-                          onSaveAndPrint       
-                        );
-
-      }
-
-      updateState({ isDocNoDisabled: true, isFetchDisabled: true });
+       const response = await useTransactionUpsert(docType,joData,updateState,"joId","joNo");
+     
+           if (response) {
+               const responseDocNo =  response.data[0].joNo;
+               const responseDocId =  response.data[0].joId;
+     
+               await fetchTranData(responseDocNo,branchCode);
+     
+     
+         
+             const isZero = Number(noReprints) === 0;
+                             const onSaveAndPrint =
+                               isZero
+                                 ? () => updateState({ showSignatoryModal: true })                  
+                                 : () => handleSaveAndPrint(responseDocId); 
+                             useSwalshowSaveSuccessDialog(
+                               handleReset,          
+                               onSaveAndPrint       
+                             );
+     
+           }
+     
+           updateState({ isDocNoDisabled: true, isFetchDisabled: true });
     } catch (error) {
       console.error("Error during transaction upsert:", error);
     } finally {
@@ -1063,7 +1125,6 @@ const handleDeleteRow = (index) => {
 
   
   const handleCancel = async () => {
-    console.log(documentStatus,documentID)
 
     if (documentID && (documentStatus === "O" || documentStatus === "" )) {
       updateState({ showCancelModal: true });
@@ -1080,6 +1141,56 @@ const handleDeleteRow = (index) => {
 
   const handleAttach = async () => {
     updateState({ showAttachModal: true });
+  };
+
+  const handleNotify = async () => {
+    if (!documentID) return;
+
+    const confirm = await useSwalProceedConfirm(
+      "Notify Approver?",
+      `Do you want to notify the 1st Level Approver for JO ${documentNo || documentID}?`,
+      "Yes, notify",
+    );
+
+    if (!confirm?.isConfirmed) return;
+
+    updateState({ showSpinner: true });
+
+    try {
+      const payload = {
+        json_data: {
+          tranIds: String(documentID),
+          userCode,
+          userName: currentUserRow?.userName || "",
+          appLevel: currentUserRow?.joAppLevel || "",
+          mode: "Notify",
+          reason: "",
+          url: `${window.location.origin}/?page=JOApprovalModal`,
+        },
+      };
+
+      await postRequest("approveJO", payload);
+
+      await useSwalSuccessAlert(
+        "JO Notified",
+        `JO ${documentNo || documentID} has been notified to its Approver.`,
+      );
+
+      if (Number(appLevel) === -1 && documentNo && branchCode) {
+        await fetchTranData(documentNo, branchCode);
+      }
+    } catch (error) {
+      console.error("Notify JO approver failed:", error);
+      useSwalErrorAlert(
+        "JO Notify",
+        error?.response?.data?.message ||
+          error?.response?.data?.error ||
+          error?.message ||
+          "Unable to notify the JO approver.",
+      );
+    } finally {
+      updateState({ showSpinner: false });
+    }
   };
 
 
@@ -1104,6 +1215,9 @@ const handleCopy = async () => {
     originalDocStatus: "O",
     prNo:"",
     detailRows: cleanedRows,
+    isFetchDisabled: false,
+    isFormDisabled: false,
+    appLevel: 0,
   });
 };
 
@@ -1156,51 +1270,39 @@ const handleCopy = async () => {
   // HISTORY â€“ URL PARAM HANDLING
   // ==========================
 
-  
+   
+   
+   const cleanUrl = useCallback(() => {
+     window.history.replaceState({}, "", window.location.origin);
+   }, []);
+   const handleHistoryRowPick = useCallback(
+     async (row) => {
+       const docNo = row?.docNo;
+       const branchCode = row?.branchCode;
+       if (!docNo || !branchCode) return;
+   
+       await fetchTranData(docNo, branchCode); 
+       setTopTab("details");
+       cleanUrl(); // 
+     },
+     [fetchTranData, cleanUrl]
+   );
+   
+   
+   
+   useEffect(() => {
+     const params = new URLSearchParams(location.search);
+     const docNo = params.get("joNo");
+     const branchCode = params.get("branchCode");
+   
+     if (!loadedFromUrlRef.current && docNo && branchCode) {
+       loadedFromUrlRef.current = true;
+       handleHistoryRowPick({ docNo, branchCode });
+     }
+   }, [location.search, handleHistoryRowPick]);
+   
+    
 
-const cleanUrl = useCallback(() => {
-  window.history.replaceState({}, "", window.location.origin);
-}, []);
-const handleHistoryRowPick = useCallback(
-  async (row) => {
-    const docNo = row?.docNo;
-    const branchCode = row?.branchCode;
-    if (!docNo || !branchCode) return;
-
-    await fetchTranData(docNo, branchCode); 
-    setTopTab("details");
-    cleanUrl(); // 
-  },
-  [fetchTranData, cleanUrl]
-);
-
-
-
-useEffect(() => {
-  const params = new URLSearchParams(location.search);
-  const docNo = params.get("jONo");
-  const branchCode = params.get("branchCode");
-
-  if (!loadedFromUrlRef.current && docNo && branchCode) {
-    loadedFromUrlRef.current = true;
-    handleHistoryRowPick({ docNo, branchCode });
-  }
-}, [location.search, handleHistoryRowPick]);
-
-
-
-
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const docNo = params.get("prNo");
-    const brCode = params.get("branchCode");
-
-    if (!loadedFromUrlRef.current && docNo && brCode) {
-      loadedFromUrlRef.current = true;
-      handleHistoryRowPick({ docNo, branchCode: brCode });
-      cleanUrl();
-    }
-  }, [location.search, handleHistoryRowPick, cleanUrl]);
 
   const printData = {
     pr_no: documentNo,
@@ -1582,11 +1684,64 @@ const renderJoDetailColumn = (columnKey, row, index) => {
     <input type="text" className="w-full global-tran-td-inputclass-ui text-right" value={row[field] || ""} readOnly />
   );
 
+  const modalTextCell = (field, modalTitle, placeholder) => {
+    const value = row[field] || "";
+    const lineCount = Math.max(1, String(value).split(/\r\n|\r|\n/).length);
+
+    return (
+      <td key={columnKey} className="global-tran-td-ui relative align-top" style={style}>
+        <div className={`flex ${autoResizeJoDetailRows ? "items-start" : "items-center"}`}>
+          {autoResizeJoDetailRows ? (
+            <textarea
+              id={`${field}-${index}`}
+              className="w-full min-h-[28px] resize-none bg-transparent py-1 pr-8 text-xs leading-4 whitespace-pre-wrap break-words focus:outline-none focus:ring-0"
+              value={value}
+              rows={lineCount}
+              readOnly={isFormDisabled}
+              onChange={(e) => handleDetailChange(index, field, e.target.value, false)}
+            />
+          ) : (
+            <input
+              type="text"
+              id={`${field}-${index}`}
+              className="w-full global-tran-td-inputclass-ui pr-8"
+              value={value}
+              readOnly={isFormDisabled}
+              onChange={(e) => handleDetailChange(index, field, e.target.value, false)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" || isFormDisabled) return;
+                e.preventDefault();
+                focusNextDetailCell(field);
+              }}
+            />
+          )}
+          {!isFormDisabled && (
+            <FontAwesomeIcon
+              icon={faSearch}
+              className="absolute right-2 top-1.5 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+              onClick={() =>
+                useSwalHandleOpenSpecsModal(
+                  index,
+                  detailRows,
+                  handleDetailChange,
+                  value,
+                  modalTitle,
+                  field,
+                  placeholder
+                )
+              }
+            />
+          )}
+        </div>
+      </td>
+    );
+  };
+
   const detailColumnRenderers = {
     ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
     jobCode: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`jobCode-${index}`} className="w-full global-tran-td-inputclass-ui pr-6" value={row.jobCode || ""} readOnly onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("jobCode"); } }} />{!isFormDisabled && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={() => updateState({ showJobCodesModal: true, selectedRowIndex: index })} />}</div></td>,
-    scopeOfWork: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`scopeOfWork-${index}`} className="w-full global-tran-td-inputclass-ui pr-8" value={row.scopeOfWork || ""} readOnly={isFormDisabled} onChange={(e) => handleDetailChange(index, "scopeOfWork", e.target.value, false)} onKeyDown={(e) => { if (e.key === "Enter" && !isFormDisabled) { e.preventDefault(); focusNextDetailCell("scopeOfWork"); } }} />{!isFormDisabled && <FontAwesomeIcon icon={faSearch} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={() => useSwalHandleOpenSpecsModal(index, detailRows, handleDetailChange, row.scopeOfWork, "Scope of Work", "scopeOfWork", `Enter scope of work for ${row.jobCode || "this item"}...`)} />}</div></td>,
-    specification: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`specification-${index}`} className="w-full global-tran-td-inputclass-ui pr-8" value={row.specification || ""} readOnly={isFormDisabled} onChange={(e) => handleDetailChange(index, "specification", e.target.value, false)} onKeyDown={(e) => { if (e.key === "Enter" && !isFormDisabled) { e.preventDefault(); focusNextDetailCell("specification"); } }} />{!isFormDisabled && <FontAwesomeIcon icon={faSearch} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={() => useSwalHandleOpenSpecsModal(index, detailRows, handleDetailChange, row.specification, "Specification", "specification", `Enter specification for ${row.jobCode || "this item"}...`)} />}</div></td>,
+    scopeOfWork: () => modalTextCell("scopeOfWork", "Scope of Work", `Enter scope of work for ${row.jobCode || "this item"}...`),
+    specification: () => modalTextCell("specification", "Specification", `Enter specification for ${row.jobCode || "this item"}...`),
     quantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("quantity", { decimals: 2 })}</td>,
     unitPrice: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("unitPrice", { decimals: decUPrice })}</td>,
     uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("uomCode", { readOnly: isFormDisabled, maxLength: useGetFieldLength(tblFieldArray, "uom_code") })}</td>,
@@ -1623,9 +1778,12 @@ const renderJoDetailColumn = (columnKey, row, index) => {
           onCancel={handleCancel} 
           onCopy={handleCopy} 
           onAttach={handleAttach}
+          onNotify={handleNotify} 
 
           activeTopTab={topTab} 
           showActions={topTab === "details"} 
+          showNotify={(hsDoc?.docApp === "Y" || maxApprovalLevel > 0) && approvalStatus !== "Approved Transaction"}
+
           showBIRForm={false}   
           showCopyForm ={true} 
           isViewDocument={isViewDocument}  
@@ -1635,9 +1793,10 @@ const renderJoDetailColumn = (columnKey, row, index) => {
           detailsRoute="/page/JO"
 
           
-          isSaveDisabled={state.isSaveDisabled || isFormDisabled ||  ((detailRows?.length || 0)=== 0)} 
+          isSaveDisabled={state.isSaveDisabled || isDocumentLocked ||  ((detailRows?.length || 0)=== 0)} 
           isResetDisabled={state.isResetDisabled}
           isAttachDisabled={!documentID}
+          isNotifyDisabled={!documentID || displayStatus === "CANCELLED" || approvalStatus === "Approved Transaction"}
           isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
           isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
           isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED"|| displayStatus === "CLOSED"}
@@ -1656,7 +1815,25 @@ const renderJoDetailColumn = (columnKey, row, index) => {
         <div className={`global-tran-headertext-div-ui ${isViewDocument ? "max-md:!mb-1" : ""}`}>
           <h1 className="global-tran-headertext-ui">{documentTitle}</h1>
         </div>
-        <div className={`global-tran-headerstat-div-ui ${isViewDocument ? "max-md:!mt-0" : ""}`}>
+        <div
+          className={`global-tran-headerstat-div-ui ${
+            showApprovalStatus ? "max-sm:!flex-row max-sm:!items-start max-sm:!justify-center max-sm:!gap-x-6" : ""
+          } ${isViewDocument ? "max-md:!mt-0" : ""}`}
+        >
+          {showApprovalStatus && (
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => updateState({ showApprovalStatusModal: true })}
+                className="global-tran-headerstat-text-ui mx-auto block cursor-pointer rounded px-1 text-center transition-colors hover:bg-sky-50 hover:text-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                title="View Approval Status"
+                aria-label="View Approval Status"
+              >
+                Approval Status
+              </button>
+              <h1 className={`global-tran-stat-text-ui text-center ${approvalStatusColor}`}>{approvalStatus}</h1>
+            </div>
+          )}
           <div>
             <p className="global-tran-headerstat-text-ui">Transaction Status</p>
             <h1 className={`global-tran-stat-text-ui ${statusColor}`}>{displayStatus}</h1>
@@ -1756,7 +1933,7 @@ const renderJoDetailColumn = (columnKey, row, index) => {
                       value={rcName || ""}
                       disabled={isFormDisabled}
                       readOnly
-                      lookupDisabled={isFetchDisabled}
+                      lookupDisabled={isFormDisabled}
                       onLookup={() =>
                         !isFormDisabled &&
                         updateState({ rcLookupModalOpen: true })
@@ -1771,7 +1948,7 @@ const renderJoDetailColumn = (columnKey, row, index) => {
                       value={payeeCode || ""}
                       disabled={isFormDisabled}
                       readOnly
-                      lookupDisabled={isFetchDisabled}
+                      lookupDisabled={isFormDisabled}
                       onLookup={() => updateState({ payeeModalOpen: true })}
                     />
 
@@ -1792,7 +1969,7 @@ const renderJoDetailColumn = (columnKey, row, index) => {
                       value={attention || ""}
                       disabled={isFormDisabled}
                       onChange={(val) => updateState({ attention: val })}
-                      maxLength={useGetFieldLength(tblFieldArray, "vend_contact")}
+                      maxLength={useGetFieldLength(tblFieldArray, "attention")}
                     />
                   </div>
 
@@ -1826,7 +2003,7 @@ const renderJoDetailColumn = (columnKey, row, index) => {
                       value={paytermName || ""}
                       disabled={isFormDisabled}
                       readOnly
-                      lookupDisabled={isFetchDisabled}
+                      lookupDisabled={isFormDisabled}
                       onLookup={() =>
                         updateState({
                           showPaytermModal: true,
@@ -1840,7 +2017,7 @@ const renderJoDetailColumn = (columnKey, row, index) => {
                       label="JO Status"
                       type="select"
                       value={documentStatus || "O"}
-                      disabled={isFormDisabled || !documentID?.length || documentStatus !== "O"}
+                      disabled={isDocumentLocked || !documentID?.length || documentStatus !== "O"}
                       onChange={(val) => handleHeaderStatusChange(val)}
                       options={[
                         { label: "Open", value: "O" },
@@ -1900,7 +2077,7 @@ const renderJoDetailColumn = (columnKey, row, index) => {
                     )}
                     {!isFormDisabled && (
                       <th
-                        className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900"
+                        className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900"
                         style={transactionActionsHeaderStyle}
                       >
                         Actions
@@ -2007,14 +2184,7 @@ const renderJoDetailColumn = (columnKey, row, index) => {
     branchCode={state.branchCode}
     startDate={state.fromDate}
     endDate={state.toDate}
-    status={(() => {
-      const s = (state.status || "").toUpperCase();
-      if (s === "FINALIZED") return "F";
-      if (s === "CANCELLED") return "X";
-      if (s === "CLOSED") return "C";
-      if (s === "OPEN") return "";
-      return "All";
-    })()}
+    status="All"
     onRowDoubleClick={handleHistoryRowPick}
     historyExportName={`${documentTitle} History`}
   />
@@ -2105,6 +2275,18 @@ const renderJoDetailColumn = (columnKey, row, index) => {
         />
       )}
 
+      <GlobalApprovalStatus
+        isOpen={showApprovalStatusModal}
+        onClose={() => updateState({ showApprovalStatusModal: false })}
+        docType={docType}
+        docNo={documentNo}
+        docDate={documentDate}
+        status={approvalStatus}
+        remarks={remarks}
+        maxAppLevel={currentUserRow?.joMaxAppLevel}
+        data={detailRowsApp?.[0] || {}}
+      />
+
      
 
       {vatLookupModalOpen && (
@@ -2151,10 +2333,11 @@ const renderJoDetailColumn = (columnKey, row, index) => {
             const payload = {   
                 json_data: JSON.stringify({
                     json_data: { 
-                        selectedId: idString
+                        selectedIds: idString
                     }
                 })
             };
+        
             return postRequest("getPRJO_OpenDetail", payload);
         }}
         onCancel={() => updateState({ showOpenPRModal: false })}

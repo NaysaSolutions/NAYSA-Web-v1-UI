@@ -670,7 +670,7 @@ const PayeeSetupTab = forwardRef(
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <FieldRenderer
                 label="Old Code"
                 type="text"
@@ -691,7 +691,7 @@ const PayeeSetupTab = forwardRef(
                 disabled={isDisabled}
               />
 
-              <FieldRenderer
+              {/* <FieldRenderer
                 label="Payee Type"
                 type={payeeTypeOptions?.length ? "select" : "text"}
                 value={form.payeeType || ""}
@@ -699,7 +699,7 @@ const PayeeSetupTab = forwardRef(
                 onChange={(v) => onChangeForm({ payeeType: getValue(v) })}
                 readOnly={isReadOnly}
                 disabled={isDisabled}
-              />
+              /> */}
             </div>
           </Card>
 

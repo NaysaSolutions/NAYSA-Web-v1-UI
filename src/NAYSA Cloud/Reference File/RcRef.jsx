@@ -425,7 +425,7 @@ const RcRef = forwardRef(
           key: "__actions",
           label: <span className="hidden md:inline">Actions</span>,
           sortable: false,
-          width: 50,
+          width: 90,
           render: (row) => (
             <div className="flex gap-2 justify-center w-full">
               <button
@@ -466,12 +466,15 @@ const RcRef = forwardRef(
         {
           key: "rcTypeCode",
           label: "RC Type Code",
+          width: 200,
           sortable: true,
           // Fixed width removed to prevent mobile overflow clipping
         },
         {
           key: "rcTypeName",
           label: "RC Type Name",
+          width: 450,
+          maxWidth: 450,
           sortable: true,
           // Fixed width removed to prevent mobile overflow clipping
           render: (row) => (

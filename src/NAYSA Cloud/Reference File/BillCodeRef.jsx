@@ -439,6 +439,7 @@ const BillCodeRef = React.forwardRef((props, ref) => {
         label: <span className="hidden md:inline">Actions</span>,
         sortable: false,
         renderType: "actions",
+        width: 100,
         render: (row) => (
           <div className="flex items-center justify-center gap-3">
             <button
@@ -481,6 +482,9 @@ const BillCodeRef = React.forwardRef((props, ref) => {
         label: "Bill Code",
         sortable: true,
         className: "sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0]",
+        width: 100, 
+        minWidth: 100,
+        requiredVisible: true 
       },
       {
         key: "billName",
@@ -488,6 +492,10 @@ const BillCodeRef = React.forwardRef((props, ref) => {
         sortable: true,
         className:
           "sticky left-[120px] z-10 shadow-[1px_0_0_0_#e2e8f0]",
+        requiredVisible: true ,
+        width: 250, 
+        maxWidth: 300, 
+        minWidth: 100
       },
       {
         key: "uomCode",
@@ -495,21 +503,25 @@ const BillCodeRef = React.forwardRef((props, ref) => {
         sortable: true,
         className:
           "sticky left-[300px] z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]",
+        width: 100, 
+        minWidth: 100,
       },
-      { key: "billingClass", label: "Billing Class", sortable: true },
+      { key: "billingClass", label: "Billing Class", sortable: true, width: 100, minWidth: 100 },
       {
         key: "unitPriceRequired",
         label: "Unit Price Required?",
         sortable: true,
         render: (row) =>
           String(row.unitPriceRequired).toUpperCase() === "Y" ? "Yes" : "No",
+        width: 100, 
+        minWidth: 100,
       },
-      { key: "rcCode", label: "RC Code", sortable: true },
-      { key: "arAcct", label: "AR Account", sortable: true },
-      { key: "salesAcct", label: "Sales Account", sortable: true },
-      { key: "vatAcct", label: "VAT Account", sortable: true },
-      { key: "advancesAcct", label: "Advances Account", sortable: true },
-      { key: "sDiscAcct", label: "Discount Account", sortable: true },
+      { key: "rcCode", label: "RC Code", sortable: true, width: 100, minWidth: 100 },
+      { key: "arAcct", label: "AR Account", sortable: true, width: 100, minWidth: 100 },
+      { key: "salesAcct", label: "Sales Account", sortable: true, width: 100, minWidth: 100 },
+      { key: "vatAcct", label: "VAT Account", sortable: true, width: 100, minWidth: 100 },
+      { key: "advancesAcct", label: "Advances Account", sortable: true, width: 100, minWidth: 100 },
+      { key: "sDiscAcct", label: "Discount Account", sortable: true, width: 100, minWidth: 100 },
     ],
     [handleEdit, handleDelete, isMobile, openMobileActionSheet],
   );

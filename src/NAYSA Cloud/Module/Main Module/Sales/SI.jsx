@@ -24,9 +24,11 @@ import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
+import GlobalCombinedLookup from "../../../Lookup/SearchGlobalCombinedLookup.jsx";
+import SearchGlobalItemPickingModal from "../../../Lookup/SearchGlobalItemPickingModal.jsx";
 
 // Configuration
-import { apiClient, postRequest} from '../../../Configuration/BaseURL.jsx'
+import { apiClient, fetchDataJson, postRequest} from '../../../Configuration/BaseURL.jsx'
 import { useReset } from "../../../Components/ResetContext";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import {
@@ -59,6 +61,9 @@ import {
   useGetCurrentDayV2,
   useformatToDatev2
 } from '@/NAYSA Cloud/Global/dates';
+import {
+  useSelectedHSColConfig as selectedHSColConfig
+} from '@/NAYSA Cloud/Global/selectedData';
 
 import DateFormatInput from '@/NAYSA Cloud/Global/DateFormatInput.jsx';
 import {
@@ -94,7 +99,7 @@ const SI = () => {
   const detailRowsGLRef = useRef([]);
   const navigate = useNavigate();
   const location = useLocation();
-  const { companyInfo, currentUserRow,getAllDropDown,refsLoaded,getAllTopATCRow,getAllTopVatRow,getAllTopHSDocRow } = useAuth();
+  const { companyInfo, currentUserRow,getAllDropDown,refsLoaded,getAllTopATCRow,getAllTopVatRow,getAllTopVatAmount,getAllTopHSDocRow } = useAuth();
   const [isViewDocument, setIsViewDocument] = useState(false);
   useEffect(() => {
     const p = new URLSearchParams(location.search);
@@ -108,6 +113,9 @@ const SI = () => {
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
   const { resetFlag } = useReset();
   const [focusedCell, setFocusedCell] = useState(null); // { index: number, field: string }
+  const [showAddTypeDropdown, setShowAddTypeDropdown] = useState(false);
+  const [showItemPickingModal, setShowItemPickingModal] = useState(false);
+  const [itemPickingRowIndex, setItemPickingRowIndex] = useState(null);
   const docType = docTypes.SI;
   const hsDoc = getAllTopHSDocRow(docType) || {};
   const pdfLink = docTypePDFGuide[docType];
@@ -146,6 +154,9 @@ const SI = () => {
     billToCustName: "",
     contactPerson: "",
     customerPoNo: "",
+    customerPoDate: null,
+    salesRepCode: "",
+    salesRepName: "",
     atcCode: "",
     atcName: "",
     vatCode: "",
@@ -175,6 +186,9 @@ const SI = () => {
     //Detail 1-2
     detailRows  :[],
     detailRowsGL :[],
+    openDRSI_Data_Summary: [],
+    openDRSI_Col_Summary: [],
+    openDRSI_Col_Detail: [],
 
     totalDebit:"0.00",
     totalCredit:"0.00",
@@ -193,6 +207,7 @@ const SI = () => {
     showRcModal:false,
     showSlModal:false,
     showBilltermModal:false,
+    showSalesRepModal:false,
     showItemModal:false,    
     showATCModal:false,
     showVatModal:false,
@@ -204,7 +219,8 @@ const SI = () => {
     showCancelModal:false,
     showAttachModal:false,
     showSignatoryModal:false,
-    showAllTranDocNo:false
+    showAllTranDocNo:false,
+    showOpenDRModal:false
    });
 
   const updateState = (updates) => {
@@ -244,6 +260,9 @@ const SI = () => {
   billToCustCode,
   billToCustName,
   customerPoNo,
+  customerPoDate,
+  salesRepCode,
+  salesRepName,
   atcCode,
   atcName,
   vatCode,
@@ -267,6 +286,9 @@ const SI = () => {
   tblFieldArray,
   detailRows,
   detailRowsGL,
+  openDRSI_Data_Summary,
+  openDRSI_Col_Summary,
+  openDRSI_Col_Detail,
   totalDebit,
   totalCredit,
   totalDebitFx1,
@@ -285,6 +307,7 @@ const SI = () => {
   showAccountModal,
   showRcModal,
   showSlModal,
+  showSalesRepModal,
   showItemModal,
   currencyModalOpen,
   branchModalOpen,
@@ -294,6 +317,7 @@ const SI = () => {
   showAttachModal,
   showSignatoryModal,
   showAllTranDocNo,
+  showOpenDRModal,
   showATCModal,
   showVatModal
 
@@ -373,14 +397,14 @@ const SI = () => {
   const quantityDecimals = Number(companyInfo?.itemDescQtyFG ?? 2);
 
   // Company sales settings
-  const siDiscountMode = String(companyInfo?.siDiscountMode || "").toUpperCase();
-  const siAllowDuplicateItem = String(
+  const salesDiscountMode = String(companyInfo?.salesDiscountMode || "").toUpperCase();
+  const salesAllowDuplicateItem = String(
     companyInfo?.salesAllowDuplicateItem || ""
   ).toUpperCase();
 
   // Derived UI flags
-  const isUnitPriceAndDiscountEditable = siDiscountMode === "MANUAL";
-  const SO_ALLOW_DUPLICATE_ITEMS = siAllowDuplicateItem === "E";
+  const isSellingPriceAndDiscountEditable = salesDiscountMode === "MANUAL";
+  const SI_ALLOW_DUPLICATE_ITEMS = salesAllowDuplicateItem === "E";
 
   // Discount configuration
   const discountLevel = Math.min(
@@ -398,17 +422,19 @@ const SI = () => {
   );
 
   const detailColumnDefs = [
+    { key: "drId", label: "DR ID", width: 120 },
+    { key: "soId", label: "SO ID", width: 120 },
+    { key: "groupId", label: "Group ID", width: 120 },
     { key: "ln", label: "LN", width: 56 },
-    { key: "siStat", label: "SI Status", width: 110 },
+    { key: "siStat", label: "Picking Status", width: 130 },
+    { key: "drNo", label: "DR No.", width: 140 },
     { key: "itemCode", label: "Item Code", width: 140 },
     { key: "itemName", label: "Item Name", width: 240 },
     { key: "itemSpecs", label: "Specification", width: 240 },
     { key: "uomCode", label: "UOM", width: 100 },
     { key: "siQuantity", label: "SI Quantity", width: 120 },
+    { key: "quantityPicked", label: "Quantity Picked", width: 130 },
     { key: "unitPrice", label: "Unit Price", width: 130 },
-    { key: "grossAmount", label: "Gross Amount", width: 130 },
-    { key: "vatAmount", label: "VAT Amount", width: 130 },
-    { key: "atcAmount", label: "ATC Amount", width: 130 },
     { key: "grossAmount", label: "Gross Amount", width: 130 },
     ...visibleDiscountRateFields.map((field, index) => ({
       key: field,
@@ -423,18 +449,21 @@ const SI = () => {
     ...(showTotalDiscountColumn
       ? [{ key: "totDiscount", label: "Total Discount", width: 130 }]
       : []),
-    { key: "netAmount", label: "Net Amount", width: 130 },    
-    { key: "amountDue", label: "Amount Due", width: 130 },
+    { key: "netAmount", label: "Net Amount", width: 130 },
+    { key: "vatCode", label: "VAT Code", width: 120 },
+    { key: "vatRate", label: "VAT Rate", width: 110 },
+    { key: "vatAmount", label: "VAT Amount", width: 130 },
+    { key: "salesAmount", label: "Sales Amount", width: 130 },
     { key: "freeItem", label: "Free Item", width: 110 },
-    { key: "drQuantity", label: "DR Quantity", width: 120 },
-    { key: "siQuantity", label: "SI Quantity", width: 120 }, // This is the SI quantity, not the linked SI quantity
-    { key: "linkedSiQuantity", label: "Linked SI Quantity", width: 120 }, // Renamed to avoid confusion
   ];
+
+
   const {
     getColumnStyle: getDetailColumnStyle,
     getFrozenColumnStyle,
     getOrderedColumns: getOrderedSoDetailColumns,
     getSortedRows: getSortedSoDetailRows,
+    setHiddenColumnKeys: setSoDetailHiddenColumnKeys,
     setColumnOrder: setSoDetailColumnOrder,
     clearAllSorting: clearSoDetailSorting,
     clearZeroValueOnFocus: clearSoDetailZeroOnFocus,
@@ -443,6 +472,11 @@ const SI = () => {
     renderResizableHeader: renderSiDetailHeader,
   } = useResizableTableColumns(detailColumnDefs);
   const orderedDetailColumns = getOrderedSoDetailColumns(detailColumnDefs);
+  const normalizedSiTranType = String(siTranType || "").toUpperCase();
+  const isDirectSiType = normalizedSiTranType === "SI01";
+  const isPickingSiType = normalizedSiTranType === "SI02";
+  const isAddItemDisabledBySiType = isDirectSiType;
+  const isOpenDRDisabledBySiType = isPickingSiType;
   const getDetailColumnFallbackWidth = (key) =>
     detailColumnDefs.find((column) => column.key === key)?.width || 120;
   const getDetailCellStyle = (key, fallbackWidth) => ({
@@ -454,6 +488,20 @@ const SI = () => {
   useEffect(() => {
     setSoDetailColumnOrder(detailColumnDefs.map((column) => column.key));
   }, [setSoDetailColumnOrder, discountLevel]);
+
+  useEffect(() => {
+    const hiddenColumnKeys = ["drId", "soId", "groupId", "vatRate"];
+
+    if (isDirectSiType) {
+      hiddenColumnKeys.push("siStat", "quantityPicked");
+    }
+
+    if (isPickingSiType) {
+      hiddenColumnKeys.push("drNo");
+    }
+
+    setSoDetailHiddenColumnKeys(hiddenColumnKeys);
+  }, [setSoDetailHiddenColumnKeys, isDirectSiType, isPickingSiType]);
   const sortedDetailRows = getSortedSoDetailRows(
     detailRows.map((row, originalIndex) => ({ row, originalIndex })),
     (entry, sortKey) => {
@@ -558,6 +606,115 @@ const SI = () => {
   // API endpoints
   const SI_PRICE_MATRIX_ENDPOINT = "getPriceMatrixItemPrice"; // Assuming SI also uses price matrix
   const SI_DUPLICATE_PO_ENDPOINT = "/checkSIDuplicatePO"; // Assuming SI also has duplicate PO check
+
+  const calculateSalesAmount = (netAmount, vatAmount) =>
+    (parseFormattedNumber(netAmount || 0) || 0) -
+    (parseFormattedNumber(vatAmount || 0) || 0);
+
+  const formatSalesAmount = (netAmount, vatAmount) =>
+    formatNumber(calculateSalesAmount(netAmount, vatAmount));
+
+  const toFormattedAmountNumber = (value, decimals = 2) =>
+    parseFormattedNumber(formatNumber(value, decimals)) || 0;
+
+  const getDetailTaxBase = (row = {}) => {
+    const grossAmount = parseFormattedNumber(row.grossAmount || 0) || 0;
+    const totalDiscount = parseFormattedNumber(row.totDiscount || 0) || 0;
+    return grossAmount - totalDiscount;
+  };
+
+  const getDetailVatRate = (vatCodeValue = "") => {
+    const vatRow = getAllTopVatRow(vatCodeValue);
+    return parseFormattedNumber(vatRow?.vatRate || 0) || 0;
+  };
+
+  const getMatrixVatRate = (row = {}) =>
+    parseFormattedNumber(row?.vatRate ?? 0) || 0;
+
+  const distributeVatAcrossDetailRows = (rows = []) => {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return [];
+    }
+
+    const taxableRowsByVatCode = rows.reduce((groups, row, index) => {
+      const lineNetAmount = Math.max(
+        parseFormattedNumber(row.netAmount || 0) || getDetailTaxBase(row),
+        0
+      );
+      const lineVatCode = String(row.vatCode || "").trim();
+      const vatRate = getDetailVatRate(lineVatCode);
+
+      if (!lineVatCode || vatRate <= 0 || lineNetAmount <= 0) {
+        return groups;
+      }
+
+      if (!groups[lineVatCode]) {
+        groups[lineVatCode] = [];
+      }
+
+      groups[lineVatCode].push({
+        index,
+        lineNetAmount,
+        vatCode: lineVatCode,
+      });
+
+      console.log(groups)
+      return groups;
+    }, {});
+
+    const vatAmountByRowIndex = Object.values(taxableRowsByVatCode).reduce(
+      (amounts, taxableRows) => {
+        const totalNetAmount = taxableRows.reduce(
+          (sum, row) => sum + row.lineNetAmount,
+          0
+        );
+        const vatCodeForGroup = taxableRows[0]?.vatCode || "";
+        const totalVatAmount =
+          vatCodeForGroup && totalNetAmount > 0 && typeof getAllTopVatAmount === "function"
+            ? toFormattedAmountNumber(getAllTopVatAmount(vatCodeForGroup, totalNetAmount))
+            : 0;
+
+        let distributedVatAmount = 0;
+        const lastTaxableIndex = taxableRows[taxableRows.length - 1]?.index;
+
+        taxableRows.forEach(({ index, lineNetAmount }) => {
+          const lineVatAmount =
+            index === lastTaxableIndex
+              ? toFormattedAmountNumber(totalVatAmount - distributedVatAmount)
+              : toFormattedAmountNumber(
+                  totalNetAmount > 0
+                    ? totalVatAmount * (lineNetAmount / totalNetAmount)
+                    : 0
+                );
+
+          if (index !== lastTaxableIndex) {
+            distributedVatAmount += lineVatAmount;
+          }
+
+          amounts[index] = lineVatAmount;
+        });
+
+        return amounts;
+      },
+      {}
+    );
+
+    return rows.map((row, index) => {
+      const baseAmount = Math.max(
+        parseFormattedNumber(row.netAmount || 0) || getDetailTaxBase(row),
+        0
+      );
+      const lineVatAmount = vatAmountByRowIndex[index] || 0;
+      const atcAmount = parseFormattedNumber(row.atcAmount || 0) || 0;
+
+      return {
+        ...row,
+        vatAmount: formatNumber(lineVatAmount),
+        salesAmount: formatNumber(baseAmount - lineVatAmount),
+        amountDue: formatNumber(baseAmount + lineVatAmount - atcAmount),
+      };
+    });
+  };
 
   const updateTotalsDisplay = (grossAmt, discAmt, vatAmt, atcAmt, salesAmt, netAmt, amountDue) => {
     setTotals({
@@ -702,9 +859,13 @@ const SI = () => {
       ...row,
       [detailField]: detailValue,
     }));
+    const normalizedRows =
+      detailField === "vatCode"
+        ? distributeVatAcrossDetailRows(updatedRows)
+        : updatedRows;
 
-    updateState({ detailRows: updatedRows });
-    updateTotals(updatedRows);
+    updateState({ detailRows: normalizedRows });
+    updateTotals(normalizedRows);
   };
 
   const confirmApplyHeaderValueToDetails = async ({
@@ -820,6 +981,8 @@ useEffect(() => {
       currRate:formatNumber(companyInfo?.currRate||1,6),
       refSiNo1: "",
       refSiNo2: "",
+      salesRepCode:"",
+      salesRepName:"",
       remarks:"",
       billtermCode:"",
       billtermName:"",
@@ -828,6 +991,8 @@ useEffect(() => {
       noReprints:"0",
       billToCustCode:"",
       billToCustName:"",
+      customerPoNo: "",
+      customerPoDate: null,
       contactPerson: "",
       atcCode: "",
       atcName: "",
@@ -837,6 +1002,9 @@ useEffect(() => {
       documentID: "",
       detailRows: [],
       detailRowsGL: [],
+      openDRSI_Data_Summary: [],
+      openDRSI_Col_Summary: [],
+      openDRSI_Col_Detail: [],
       ...getGLTotalsState([]),
       documentStatus:"O",      
       siTranType: defaultSiType,
@@ -853,6 +1021,8 @@ useEffect(() => {
       showRcModal: false,
       showAccountModal: false,
       showSlModal: false,
+      showSalesRepModal: false,
+      showOpenDRModal: false,
     });
 
     updateTotalsDisplay(0, 0, 0, 0, 0, 0, 0);
@@ -893,9 +1063,14 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
     }
 
     // Format rows
-    const retrievedDetailRows = (data.dt1 || []).map(item => ({
+    const retrievedDetailRows = distributeVatAcrossDetailRows((data.dt1 || []).map(item => ({
       ...item,
+      siStat: item.pickStat || item.siStat || "F",
       siQuantity: formatNumber(item.siQuantity ?? 0,quantityDecimals),
+      drNo: item.drNo || "",
+      drId: item.drId || "",
+      soId: item.soId || "",
+      groupId: item.groupId || "",
       unitPrice: formatNumber(item.unitPrice??0,sellingPriceDecimals),
       grossAmount: formatNumber(item.grossAmount),
       discRate1: formatNumber(item.discRate1 ?? 0),
@@ -916,12 +1091,16 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
       discAmount8: formatNumber(item.discAmount8 ?? 0),
       totDiscount: formatNumber(item.totDiscount ?? 0),      
       vatAmount: formatNumber(item.vatAmount ?? 0),
+      vatCode: item.vatCode || data.vatCode || "",
+      vatRate: formatNumber(item.vatRate ?? 0),
+      salesAmount: formatSalesAmount(item.netAmount ?? 0, item.vatAmount ?? 0),
       atcAmount: formatNumber(item.atcAmount ?? 0),
       amountDue: formatNumber(item.amountDue ?? 0),
       netAmount: formatNumber(item.netAmount ?? 0),
+      quantityPicked: formatNumber(item.quantityPicked ?? item.qtyPicked ?? 0, quantityDecimals),
       drQuantity: formatNumber(item.drQuantity ?? 0, quantityDecimals),
       linkedSiQuantity: formatNumber(item.siQuantity ?? 0, quantityDecimals), // Renamed to avoid confusion
-    }));
+    })));
 
     const formattedGLRows = (data.dt2 || []).map(glRow => ({
       ...glRow,
@@ -946,12 +1125,16 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
       siTranType: data.siTranType,
       billToCustCode: data.custCode,
       billToCustName: data.custName,
+      customerPoNo: data.customerPoNo || "",
+      customerPoDate: data.customerPoDate ? useformatToDatev2(data.customerPoDate) : null,
       atcCode: data.atcCode || "",
       atcName: data.atcName || "",
       vatCode: data.vatCode || "",
       vatName: data.vatName || "",
       billtermCode: data.billtermCode,
       billtermName: data.billtermName,
+      salesRepCode: data.salesRepCode || "",
+      salesRepName: data.salesRepName || "",
       dueDate: data.dueDate ? useformatToDatev2(data.dueDate) : "",
       currCode: data.currCode,
       currName: data.currName,
@@ -1024,6 +1207,8 @@ const handleActivityOption = async (action) => {
         billToCustName,
         refSiNo1,
         refSiNo2,
+        salesRepCode,
+        salesRepName,
         currCode,
         currRate,
         remarks,
@@ -1031,6 +1216,7 @@ const handleActivityOption = async (action) => {
         userCode,
         contactPerson,
         customerPoNo,
+        customerPoDate,
         siTranType,
         siStatus,
         detailRows,
@@ -1057,16 +1243,23 @@ const handleActivityOption = async (action) => {
         remarks: remarks || "",
         userCode: userCode,
         customerPoNo: customerPoNo || '',
+        customerPoDate: customerPoDate || null,
+        salesRepCode,
+        salesRepName,
         soStatus: siStatus || 'O',
         dt1: detailRows.map((row, index) => ({
           lnNo: String(index + 1),
-          soStat: row.soStat || "O",
+          pickStat: row.siStat || "F",
+          siStat: row.siStat || "F",
+          drNo: row.drNo || "",
+          drId: row.drId || "",
+          soId: row.soId || "",
+          groupId: row.groupId || "",
           itemCode: row.itemCode || "",
           itemName: row.itemName || "",
           itemSpecs: row.itemSpecs || "",
           uomCode: row.uomCode || "",
           pmType: row.pmType || "",
-          groupId: row.groupId || "",
           pmId: row.pmId || "",
           siQuantity: parseFormattedNumber(row.siQuantity || 0),
           unitPrice: parseFormattedNumber(row.unitPrice || 0),
@@ -1088,14 +1281,17 @@ const handleActivityOption = async (action) => {
           discAmount7: parseFormattedNumber(row.discAmount7 || 0),
           discAmount8: parseFormattedNumber(row.discAmount8 || 0),
           totDiscount: parseFormattedNumber(row.totDiscount || 0),          
+          vatCode: row.vatCode || "",
+          vatRate: parseFormattedNumber(row.vatRate || 0),
           vatAmount: parseFormattedNumber(row.vatAmount || 0),
+          salesAmount: parseFormattedNumber(row.salesAmount || 0),
           atcAmount: parseFormattedNumber(row.atcAmount || 0),
           amountDue: parseFormattedNumber(row.amountDue || 0),
           netAmount: parseFormattedNumber(row.netAmount || 0),
           // No delivery date, customer PO, sales rep in SI details
           freeItem: row.freeItem || "",
+          quantityPicked: parseFormattedNumber(row.quantityPicked || 0),
           drQuantity: parseFormattedNumber(row.drQuantity || 0),
-          siQuantity: parseFormattedNumber(row.siQuantity || 0),
         })),
         dt2: glRows.map((entry, index) => ({
           recNo: String(index + 1),
@@ -1194,17 +1390,24 @@ const handleActivityOption = async (action) => {
 
   const createSIDetailRow = (overrides = {}) => ({
       lnNo: "",
-      siStat: "O",
+      siStat: "F",
+      drNo: "",
+      drId: "",
+      soId: "",
+      groupId: "",
       itemCode: "",
       itemName: "",
       itemSpecs: "",
       uomCode: "",
       pmType: "",
-      groupId: "",
       pmId: "",
       siQuantity: Number(0).toFixed(quantityDecimals),
+      quantityPicked: Number(0).toFixed(quantityDecimals),
       unitPrice: Number(0).toFixed(sellingPriceDecimals),
+      vatCode: "",
+      vatRate: "0.00",
       vatAmount: "0.00",
+      salesAmount: "0.00",
       atcAmount: "0.00",
       amountDue: "0.00",
       grossAmount: "0.00",
@@ -1229,7 +1432,6 @@ const handleActivityOption = async (action) => {
       // No delivery date, customer PO, sales rep in SI details
       freeItem: "",
       drQuantity: Number(0).toFixed(quantityDecimals),
-      siQuantity: Number(0).toFixed(quantityDecimals),
       ...overrides,
     });
 
@@ -1247,10 +1449,10 @@ const handleActivityOption = async (action) => {
       updatedRows.push(...normalizedInsertRows);
     }
 
-    const normalizedRows = updatedRows.map((row, index) => ({
+    const normalizedRows = distributeVatAcrossDetailRows(updatedRows.map((row, index) => ({
       ...row,
       lnNo: String(index + 1),
-    }));
+    })));
 
     updateState({
       detailRows: normalizedRows,
@@ -1269,6 +1471,66 @@ const handleActivityOption = async (action) => {
 
   const handleInsertBlankRow = (insertIndex = null) => {
     insertDetailRows([createSIDetailRow()], insertIndex);
+  };
+
+  const normalizeOpenDRLookupRow = (item = {}) => ({
+    ...item,
+    groupId: item?.groupId || "",
+    drId: item?.drId || "",
+    drNo: item?.drNo || "",
+    soId: item?.soId || "",
+  });
+
+  const mapOpenDRRecordToDetailRow = (item = {}) => {
+    const siQuantityValue =
+      item?.siQuantity ?? item?.drBalance ?? item?.drQuantity ?? item?.quantity ?? 0;
+    const netAmount = item?.netAmount ?? 0;
+    const vatAmount = item?.vatAmount ?? 0;
+
+    return createSIDetailRow({
+      drNo: item?.drNo || "",
+      drId: item?.drId || "",
+      soId: item?.soId || "",
+      groupId: item?.groupId || "",
+      itemCode: item?.itemCode || "",
+      itemName: item?.itemName || "",
+      itemSpecs: item?.itemSpecs || "",
+      uomCode: item?.uomCode || "",
+      pmType: item?.pmType || "",
+      pmId: item?.pmId || "",
+      siQuantity: formatNumber(siQuantityValue, quantityDecimals),
+      quantityPicked: formatNumber(item?.quantityPicked ?? 0, quantityDecimals),
+      unitPrice: formatNumber(item?.unitPrice ?? 0, sellingPriceDecimals),
+      grossAmount: formatNumber(item?.grossAmount ?? 0),
+      vatCode: item?.vatCode || vatCode || "",
+      vatRate: formatNumber(item?.vatRate ?? 0),
+      vatAmount: formatNumber(vatAmount),
+      salesAmount: formatSalesAmount(netAmount, vatAmount),
+      atcAmount: formatNumber(item?.atcAmount ?? 0),
+      amountDue: formatNumber(item?.amountDue ?? 0),
+      netAmount: formatNumber(netAmount),
+      freeItem: item?.freeItem || "",
+      drQuantity: formatNumber(item?.drQuantity ?? 0, quantityDecimals),
+    });
+  };
+
+  const handleInsertSelectedOpenDR = (payload) => {
+    const selectedRecords = Array.isArray(payload?.details) ? payload.details : [];
+
+    if (!selectedRecords.length) {
+      updateState({ showOpenDRModal: false });
+      return;
+    }
+
+    insertDetailRows(selectedRecords.map(mapOpenDRRecordToDetailRow), insertAfterIndex);
+    setTopTab("details");
+    updateState({
+      showOpenDRModal: false,
+      openDRSI_Data_Summary: [],
+      openDRSI_Col_Summary: [],
+      openDRSI_Col_Detail: [],
+      insertAfterIndex: null,
+    });
   };
 
   const normalizeItemModalRecords = (selectedItems) => {
@@ -1353,7 +1615,7 @@ const handleActivityOption = async (action) => {
 
   const fetchPriceMatrixRows = async (
     selectedRecords = [],
-    { custCode = billToCustCode || "", docDate = documentDate } = {}
+    { custCode = billToCustCode || "", docDate = documentDate, headerVatCode = vatCode } = {}
   ) => {
     if (!Array.isArray(selectedRecords) || selectedRecords.length === 0) {
       return [];
@@ -1363,6 +1625,7 @@ const handleActivityOption = async (action) => {
       json_data: {
         docDate,
         custCode,
+        vatCode: headerVatCode,
         items: selectedRecords.map((item, index) => ({
           sequence: index + 1,
           itemCode: item?.itemCode || "",
@@ -1389,6 +1652,7 @@ const handleActivityOption = async (action) => {
     custCode = billToCustCode || "",
     rows = detailRows,
     docDate = documentDate,
+    headerVatCode = vatCode,
   } = {}) => {
     if (!Array.isArray(rows) || rows.length === 0 || !custCode) {
       return;
@@ -1401,13 +1665,14 @@ const handleActivityOption = async (action) => {
     const priceMatrixRows = await fetchPriceMatrixRows(selectedRecords, {
       custCode,
       docDate,
+      headerVatCode,
     });
-    const updatedRows = rows.map((row, index) =>
+    const updatedRows = distributeVatAcrossDetailRows(rows.map((row, index) =>
       applyPriceMatrixToDetailRow(
         row,
         getPriceMatrixRowForItem(priceMatrixRows, row, index)
       )
-    );
+    ));
 
     updateState({ detailRows: updatedRows });
     updateTotals(updatedRows);
@@ -1433,10 +1698,9 @@ const handleActivityOption = async (action) => {
   const calculateRowAmountsFromRates = (row) => {
     const discountRateFields = visibleDiscountRateFields;
     const discountAmountFields = visibleDiscountAmountFields;
-    const roundTo2 = (num) => Number((Number(num) || 0).toFixed(2));
-    const quantity = parseFormattedNumber(row.soQuantity || 0) || 0;
-    const sellingPrice = parseFormattedNumber(row.sellingPrice || 0) || 0;
-    const grossAmount = roundTo2(quantity * sellingPrice);
+    const quantity = parseFormattedNumber(row.siQuantity || 0) || 0;
+    const unitPrice = parseFormattedNumber(row.unitPrice || 0) || 0;
+    const grossAmount = toFormattedAmountNumber(quantity * unitPrice);
     let runningBase = grossAmount;
     let totalDiscount = 0;
     const updatedAmounts = {};
@@ -1444,26 +1708,32 @@ const handleActivityOption = async (action) => {
     discountRateFields.forEach((rateField, index) => {
       const amountField = discountAmountFields[index];
       const rateValue = parseFormattedNumber(row[rateField] || 0) || 0;
-      const discountAmount = roundTo2(runningBase * (rateValue * 0.01));
+      const discountAmount = toFormattedAmountNumber(runningBase * (rateValue * 0.01));
 
       updatedAmounts[amountField] = formatNumber(discountAmount);
       totalDiscount += discountAmount;
-      runningBase = roundTo2(runningBase - discountAmount);
+      runningBase = toFormattedAmountNumber(runningBase - discountAmount);
     });
+    const netAmount = toFormattedAmountNumber(grossAmount - totalDiscount);
+    const vatAmount = parseFormattedNumber(row.vatAmount || 0) || 0;
+    const atcAmount = parseFormattedNumber(row.atcAmount || 0) || 0;
 
     return {
       ...row,
       grossAmount: formatNumber(grossAmount),
       ...updatedAmounts,
       totDiscount: formatNumber(totalDiscount),
-      netAmount: formatNumber(roundTo2(grossAmount - totalDiscount)), // Net amount after discount
-      vatAmount: formatNumber(roundTo2((grossAmount - totalDiscount) * vatRate)), // VAT on net amount
-      atcAmount: formatNumber(roundTo2((grossAmount - totalDiscount) * atcRate)), // ATC on net amount
-      amountDue: formatNumber(roundTo2((grossAmount - totalDiscount) + ((grossAmount - totalDiscount) * vatRate) - ((grossAmount - totalDiscount) * atcRate))), // Amount due
+      netAmount: formatNumber(netAmount),
+      salesAmount: formatNumber(netAmount - vatAmount),
+      amountDue: formatNumber(netAmount + vatAmount - atcAmount),
     };
   };
 
+
+
   const applyPriceMatrixToDetailRow = (baseRow, priceRow = {}) => {
+    
+
     if (baseRow.freeItem === "Y") {
       return calculateRowAmountsFromRates({
         ...baseRow,
@@ -1478,10 +1748,18 @@ const handleActivityOption = async (action) => {
     const getPmTypeValue = () => priceRow?.pmType||"";
     const getPmIdValue = () =>   priceRow?.pmId ||"";
     const getDiscountRateValue = (discountNo) =>  priceRow?.[`discRate${discountNo}`] ||0;
+
+    const selectedVatCode = priceRow?.vatCode || baseRow.vatCode || vatCode || "";
+    const selectedVatRow = getAllTopVatRow(selectedVatCode);
+
+    console.log(selectedVatRow)
+
     const updatedRow = {
       ...baseRow,
       pmType: getPmTypeValue() ?? baseRow.pmType ?? "",
       pmId: getPmIdValue() ?? baseRow.pmId ?? "",
+      vatCode: selectedVatCode,
+      vatRate: formatNumber(selectedVatRow?.vatRate || 0),
       unitPrice: formatNumber(
         getPriceValue() ?? baseRow.sellingPrice ?? 0,
         sellingPriceDecimals
@@ -1497,7 +1775,7 @@ const handleActivityOption = async (action) => {
     return calculateRowAmountsFromRates(updatedRow);
   };
 
-  const mapItemRecordToDetailRow = (item = {}) => createSODetailRow({
+  const mapItemRecordToDetailRow = (item = {}) => createSIDetailRow({
     itemCode: item?.itemCode || "",
     itemName: item?.itemName || "",
     itemSpecs: item?.itemSpecs || "",
@@ -1507,6 +1785,10 @@ const handleActivityOption = async (action) => {
     pmId: item?.pmId || "",
     soQuantity: formatNumber(
       item?.soQuantity ?? item?.quantity ?? item?.soQty ?? 0,
+      quantityDecimals
+    ),
+    siQuantity: formatNumber(
+      item?.siQuantity ?? item?.quantity ?? item?.soQty ?? 0,
       quantityDecimals
     ),
     sellingPrice: formatNumber(
@@ -1531,14 +1813,17 @@ const handleActivityOption = async (action) => {
     discAmount7: formatNumber(item?.discAmount7 ?? 0),
     discAmount8: formatNumber(item?.discAmount8 ?? 0),
     totDiscount: formatNumber(item?.totDiscount ?? 0),    
+    vatCode: item?.vatCode || "",
+    vatRate: formatNumber(item?.vatRate ?? 0),
     vatAmount: formatNumber(item?.vatAmount ?? 0),
+    salesAmount: formatSalesAmount(item?.netAmount ?? 0, item?.vatAmount ?? 0),
     atcAmount: formatNumber(item?.atcAmount ?? 0),
     amountDue: formatNumber(item?.amountDue ?? 0),
     netAmount: formatNumber(item?.netAmount ?? 0),
     // No delivery date, customer PO, sales rep in SI details
     freeItem: item?.freeItem || "",
+    quantityPicked: formatNumber(item?.quantityPicked ?? item?.qtyPicked ?? 0, quantityDecimals),
     drQuantity: formatNumber(item?.drQuantity ?? 0, quantityDecimals),
-    siQuantity: formatNumber(item?.siQuantity ?? 0, quantityDecimals),
   });
 
   const handleInsertSelectedItems = async (selectedRecords = []) => {
@@ -1555,6 +1840,8 @@ const handleActivityOption = async (action) => {
 
     insertDetailRows(rowsToInsert, insertAfterIndex);
   };
+
+
 
 const handleDeleteRow = async (index) => {
     const updatedRows = [...detailRows];
@@ -1711,7 +1998,8 @@ const handlePrint = async () => {
   const handleOpenAddItemModal =  async() => {
     const fieldsToCheck = { // Adjusted required fields for SI
       "Header : Bill To Customer Code": billToCustCode,
-      "Header : Billing Term": billtermCode,      
+      "Header : Billing Term": billtermCode,
+      "Header : Sales Rep": salesRepCode,
     };
 
     const isValid = await useSwalvalidateRequiredFields(fieldsToCheck, "Add Item");
@@ -1723,6 +2011,73 @@ const handlePrint = async () => {
       selectedRowIndex: null,
       insertAfterIndex: null,
     });
+  };
+
+  const handleAddRowClick = async () => {
+    if (documentStatus !== "O" || isFormDisabled) return;
+    setShowAddTypeDropdown((prev) => !prev);
+  };
+
+  const getApiErrorMessage = (error) =>
+    error?.response?.data?.message ||
+    error?.response?.data?.error ||
+    error?.message ||
+    "Unknown server error";
+
+  const handleOpenDRLookup = async () => {
+    const lookupCustCode = String(billToCustCode || "").trim();
+    const lookupBranchCode = String(branchCode || "").trim();
+
+    const fieldsToCheck = {
+      "Header : Bill To Customer Code": lookupCustCode,
+      "Header : Branch": lookupBranchCode,
+    };
+
+    const isValid = await useSwalvalidateRequiredFields(fieldsToCheck, "Open DR Lookup");
+    if (!isValid) return;
+
+    try {
+      updateState({ isLoading: true, showSpinner: true });
+
+      const endpoint = "getDRSI_OpenSummary";
+      const response = await fetchDataJson(endpoint, {
+        custCode: lookupCustCode,
+        billToCustCode: lookupCustCode,
+        branchCode: lookupBranchCode,
+      });
+
+      const drRows = response?.data?.[0]?.result
+        ? JSON.parse(response.data[0].result).map(normalizeOpenDRLookupRow)
+        : [];
+
+      if (!drRows.length) {
+        useSwalErrorAlert(
+          "Open DR",
+          "There are no open Delivery Receipt records for the selected customer/branch."
+        );
+        return;
+      }
+
+      const summaryColumns = await selectedHSColConfig(endpoint);
+      const detailColumns = await selectedHSColConfig("getDRSI_OpenDetail");
+
+      updateState({
+        openDRSI_Data_Summary: drRows,
+        openDRSI_Col_Summary: summaryColumns,
+        openDRSI_Col_Detail: detailColumns,
+        showOpenDRModal: true,
+      });
+    } catch (error) {
+      console.error("Failed to fetch Open DR:", error);
+      useSwalErrorAlert("Open DR", getApiErrorMessage(error));
+      updateState({
+        openDRSI_Data_Summary: [],
+        openDRSI_Col_Summary: [],
+        openDRSI_Col_Detail: [],
+      });
+    } finally {
+      updateState({ isLoading: false, showSpinner: false });
+    }
   };
 
 const handleCancel = async () => {
@@ -1749,7 +2104,7 @@ const handleCopy = async () => {
     const nextDocumentDate = useGetCurrentDayV2();
     const copiedDetailRows = detailRows.map((row) => ({
       ...row,
-      siStat: "O",      
+      siStat: "F",
       drQuantity: formatNumber(0, quantityDecimals),
       siQuantity: formatNumber(0, quantityDecimals),
       groupId: "",
@@ -1864,13 +2219,27 @@ const handleSaveAndPrint = async (documentID) => {
     updateState({ isLoading: true });
 
     try {
+
         const address = selectedData?.addr || "";
+        const selectedVatCode = selectedData?.vatCode || "";
+        const selectedVatRow = getAllTopVatRow(selectedVatCode);
+        const selectedVatName = selectedVatRow?.vatName || selectedData?.vatName || "";
+        const selectedAtcCode = selectedData?.atcCode || "";
+        const selectedAtcRow = getAllTopATCRow(selectedAtcCode);
+        const selectedAtcName = selectedAtcRow?.atcName || selectedData?.atcName || "";
         const custDetails = {            custCode: selectedData?.custCode || '',
             custName: selectedData?.custName || '',
             currCode: selectedData?.currCode || '',
             attention: selectedData?.attention || '',
             billtermCode: selectedData?.billtermCode || '',
             billtermName: selectedData?.billtermName || '',
+            salesRepCode: selectedData?.salesRepCode || '',
+            salesRepName: selectedData?.salesRepName || '',
+            vatCode: selectedVatCode,
+            vatName: selectedVatName,
+            atcCode: selectedAtcCode,
+            atcName: selectedAtcName,
+
         };
         const nextBillToCustCode = selectedData?.custCode || "";
         const shouldRepriceDetailRows =
@@ -1881,6 +2250,10 @@ const handleSaveAndPrint = async (documentID) => {
             {
                 billToCustName: selectedData.custName,
                 billToCustCode: selectedData.custCode,
+                vatCode: selectedVatCode,
+                vatName: selectedVatName,
+                atcCode: selectedAtcCode,
+                atcName: selectedAtcName,
                 custModalOpen: false,
                 modalContext: "",
             }
@@ -1896,22 +2269,47 @@ const handleSaveAndPrint = async (documentID) => {
                 custDetails.attention = customerRow?.custContact || custDetails.attention;
                 custDetails.billtermCode = customerRow?.billtermCode || custDetails.billtermCode;
                 custDetails.billtermName = customerRow?.billtermName || custDetails.billtermName;
+                custDetails.salesRepCode = customerRow?.salesRepCode || custDetails.salesRepCode;
+                custDetails.vatCode = customerRow?.vatCode || custDetails.vatCode;
+                const customerVatRow = getAllTopVatRow(custDetails.vatCode);
+                custDetails.vatName = customerVatRow?.vatName || customerRow?.vatName || custDetails.vatName;
+                custDetails.atcCode = customerRow?.atcCode || custDetails.atcCode;
+                const customerAtcRow = getAllTopATCRow(custDetails.atcCode);
+                custDetails.atcName = customerAtcRow?.atcName || customerRow?.atcName || custDetails.atcName;
             } else {
                 console.warn("API call for getCustomer returned success: false", response.message);
             }
         }
 
+        const custVatRow = getAllTopVatRow(custDetails.vatCode);
+        custDetails.vatName = custVatRow?.vatName || custDetails.vatName;
+        const custAtcRow = getAllTopATCRow(custDetails.atcCode);
+        custDetails.atcName = custAtcRow?.atcName || custDetails.atcName;
+
+        if (custDetails.salesRepCode) {
+          const salesRepRow = await useTopSalesRepRow(custDetails.salesRepCode);
+          custDetails.salesRepName = salesRepRow?.salesRepName || custDetails.salesRepName;
+        }
+
+     
         await Promise.all([
             handleSelectCurrency(custDetails.currCode),
             handleSelectBillTerm(custDetails.billtermCode),
             updateState({
             contactPerson: custDetails.attention,
+            salesRepCode: custDetails.salesRepCode,
+            salesRepName: custDetails.salesRepName,
+            vatCode: custDetails.vatCode,
+            vatName: custDetails.vatName,
+            atcCode: custDetails.atcCode,
+            atcName: custDetails.atcName,
           })
         ]);
 
         if (shouldRepriceDetailRows) {
             await refreshDetailRowsFromPriceMatrix({
               custCode: nextBillToCustCode,
+              headerVatCode: custDetails.vatCode || vatCode,
             });
         }
 
@@ -1940,12 +2338,10 @@ const handleSaveAndPrint = async (documentID) => {
       totalAmountDue += parseFormattedNumber(row.amountDue || 0) || 0;
     });
 
-    totalSalesAmt = totalNetAmt + totalVatAmt; // Assuming Sales Amount = Net Amount + VAT Amount
+    totalSalesAmt = totalNetAmt - totalVatAmt;
 
     updateTotalsDisplay(totalGrossAmt, totalDiscAmt, totalVatAmt, totalAtcAmt, totalSalesAmt, totalNetAmt, totalAmountDue);
   };
-
-  // Removed handleCloseRcModal and handleCloseSalesRepModal as they are not in the SI header
 
 const handleCloseRcModal = async (selectedRc) => {
   if (modalContext === "headerRc" && selectedRc) {
@@ -2102,8 +2498,27 @@ const handleCloseBranchModal = (selectedBranch) => {
           currRate: formatNumber(parseFormattedNumber(rate),6)
         });
       }
-    }
-  };
+  }
+};
+
+const handleCloseSalesRepModal = (selectedSalesRep) => {
+  if (selectedSalesRep) {
+    updateState({
+      salesRepCode: selectedSalesRep.salesRepCode || "",
+      salesRepName: selectedSalesRep.salesRepName || "",
+      showSalesRepModal: false,
+      selectedRowIndex: null,
+      modalContext: "",
+    });
+    return;
+  }
+
+  updateState({
+    showSalesRepModal: false,
+    selectedRowIndex: null,
+    modalContext: "",
+  });
+};
 
 const handleCloseBillTermModal = async (selectedBillTerm) => {
     if (selectedBillTerm) {
@@ -2111,6 +2526,63 @@ const handleCloseBillTermModal = async (selectedBillTerm) => {
   };
     updateState({ billtermModalOpen: false });
 }
+
+const handleOpenItemPickingModal = (index) => {
+  const row = detailRowsRef.current?.[index];
+  const requestedQty = parseFormattedNumber(row?.siQuantity || 0) || 0;
+
+  if (!row?.itemCode) {
+    useSwalErrorAlert("Item Picking", "Please select an item before opening the picking allocation.");
+    return;
+  }
+
+  if (!row?.groupId) {
+    useSwalErrorAlert("Item Picking", "Group ID is required for item picking allocation.");
+    return;
+  }
+
+  if (requestedQty <= 0) {
+    useSwalErrorAlert("Item Picking", "SI Quantity must be greater than zero before opening the picking allocation.");
+    return;
+  }
+
+  setItemPickingRowIndex(index);
+  setShowItemPickingModal(true);
+};
+
+const handleCloseItemPickingModal = () => {
+  setShowItemPickingModal(false);
+  setItemPickingRowIndex(null);
+};
+
+const handleConfirmItemPicking = (payload) => {
+  if (itemPickingRowIndex === null || itemPickingRowIndex === undefined) return;
+
+  const updatedRows = [...(detailRowsRef.current || [])];
+  const currentRow = updatedRows[itemPickingRowIndex];
+  if (!currentRow) return;
+
+  const totalPicked = parseFormattedNumber(payload?.totalPicked || 0) || 0;
+  const siQuantityValue = parseFormattedNumber(currentRow?.siQuantity || 0) || 0;
+
+  updatedRows[itemPickingRowIndex] = {
+    ...currentRow,
+    siStat:
+      totalPicked <= 0
+        ? "F"
+        : siQuantityValue > 0 && totalPicked >= siQuantityValue
+          ? "P"
+          : "T",
+    quantityPicked: formatNumber(totalPicked, quantityDecimals),
+    pickingAllocations: payload?.allocations || [],
+    pickingOrderedStockRows: payload?.orderedStockRows || [],
+  };
+
+  detailRowsRef.current = updatedRows;
+  updateState({ detailRows: updatedRows });
+  updateTotals(updatedRows);
+  handleCloseItemPickingModal();
+};
 
 const handleCloseItemModal = async (selectedItems) => {
   const records = normalizeItemModalRecords(selectedItems);
@@ -2140,8 +2612,9 @@ const handleCloseItemModal = async (selectedItems) => {
     };
     const priceRow = getPriceMatrixRowForItem(priceMatrixRows, selectedItem);
     updatedRows[selectedRowIndex] = applyPriceMatrixToDetailRow(baseRow, priceRow);
-    updateState({ detailRows: updatedRows });
-    updateTotals(updatedRows);
+    const normalizedRows = distributeVatAcrossDetailRows(updatedRows);
+    updateState({ detailRows: normalizedRows });
+    updateTotals(normalizedRows);
   }
 
   if (selectionContext === "multiAdd" && records.length > 0) {
@@ -2180,7 +2653,7 @@ const validateSIQuantity = (index, inputValue) => {
   const siQty = parseFormattedNumber(inputValue || 0) || 0;
   const rowStatus = String(row?.siStat || "").toUpperCase();
 
-  if (drQty > 0 && rowStatus === "O" && siQty < drQty) {
+  if (drQty > 0 && rowStatus === "F" && siQty < drQty) {
     const originalValue = row?.siQuantity ?? formatNumber(0, quantityDecimals);
 
     useSwalErrorAlert("Invalid Quantity", "SI Quantity must be greater than or equal to DR Quantity.");
@@ -2229,9 +2702,6 @@ const handleSODetailRowChange = (index, field, value) => {
     ...discountRateFields,
     ...discountAmountFields,
   ];
-  const roundTo2 = (num) => Number((Number(num) || 0).toFixed(2));
-  const vatRate = 0.12; // Example VAT rate, should come from config
-  const atcRate = 0.02; // Example ATC rate, should come from config
 
   const zeroValueByField = (targetField) => {
     if (targetField === "unitPrice") {
@@ -2254,6 +2724,10 @@ const handleSODetailRowChange = (index, field, value) => {
       freeItem: "Y",
       unitPrice: formatNumber(0, sellingPriceDecimals),
       grossAmount: formatNumber(0),
+      vatAmount: formatNumber(0),
+      salesAmount: formatNumber(0),
+      atcAmount: formatNumber(0),
+      amountDue: formatNumber(0),
       totDiscount: formatNumber(0),
       netAmount: formatNumber(0),
     };
@@ -2272,7 +2746,7 @@ const handleSODetailRowChange = (index, field, value) => {
   const recalculateSODetailRow = (row, changedField) => {
     const quantity = parseFormattedNumber(row.siQuantity || 0) || 0;
     const unitPrice = parseFormattedNumber(row.unitPrice || 0) || 0;
-    const grossAmount = roundTo2(quantity * unitPrice);
+    const grossAmount = toFormattedAmountNumber(quantity * unitPrice);
     
     let runningBase = grossAmount;
     let totalDiscount = 0;
@@ -2283,41 +2757,42 @@ const handleSODetailRowChange = (index, field, value) => {
       discountAmountFields.forEach((amountField, index) => {
         const discountNo = index + 1;
         const rateField = `discRate${discountNo}`;
-        const discountAmount = roundTo2(parseFormattedNumber(row[amountField] || 0));
+        const discountAmount = toFormattedAmountNumber(parseFormattedNumber(row[amountField] || 0));
         const discountRate =
-          runningBase !== 0 ? roundTo2((discountAmount / runningBase) * 100) : 0;
+          runningBase !== 0 ? toFormattedAmountNumber((discountAmount / runningBase) * 100) : 0;
 
         updatedDiscountAmounts[amountField] =
           amountField === changedField ? row[amountField] : formatNumber(discountAmount);
         updatedDiscountRates[rateField] = formatNumber(discountRate);
         totalDiscount += discountAmount;
-        runningBase = roundTo2(runningBase - discountAmount);
+        runningBase = toFormattedAmountNumber(runningBase - discountAmount);
       });
     } else {
       discountRateFields.forEach((rateField, index) => {
         const discountNo = index + 1;
         const amountField = `discAmount${discountNo}`;
         const rateValue = parseFormattedNumber(row[rateField] || 0) || 0;
-        const discountAmount = roundTo2(runningBase * (rateValue * 0.01));
+        const discountAmount = toFormattedAmountNumber(runningBase * (rateValue * 0.01));
 
         updatedDiscountRates[rateField] =
           rateField === changedField ? row[rateField] : formatNumber(rateValue);
         updatedDiscountAmounts[amountField] = formatNumber(discountAmount);
         totalDiscount += discountAmount;
-        runningBase = roundTo2(runningBase - discountAmount);
+        runningBase = toFormattedAmountNumber(runningBase - discountAmount);
       });
     }
 
-    const netAmount = roundTo2(grossAmount - totalDiscount);
-    const vatAmount = roundTo2(netAmount * vatRate);
-    const atcAmount = roundTo2(netAmount * atcRate);
-    const amountDue = roundTo2(netAmount + vatAmount - atcAmount);
+    const netAmount = toFormattedAmountNumber(grossAmount - totalDiscount);
+    const vatAmount = parseFormattedNumber(row.vatAmount || 0) || 0;
+    const atcAmount = parseFormattedNumber(row.atcAmount || 0) || 0;
 
     return {
       ...row,
       grossAmount: formatNumber(grossAmount),
       vatAmount: formatNumber(vatAmount),
+      salesAmount: formatNumber(netAmount - vatAmount),
       atcAmount: formatNumber(atcAmount),
+      amountDue: formatNumber(netAmount + vatAmount - atcAmount),
       ...updatedDiscountRates,
       ...updatedDiscountAmounts,
       totDiscount: formatNumber(totalDiscount),
@@ -2342,8 +2817,9 @@ const handleSODetailRowChange = (index, field, value) => {
   if (field === "freeItem") {
     updatedRow = buildFreeItemRow(updatedRow, value === "Y");
     updatedRows[index] = updatedRow;
-    updateState({ detailRows: updatedRows });
-    updateTotals(updatedRows);
+    const normalizedRows = distributeVatAcrossDetailRows(updatedRows);
+    updateState({ detailRows: normalizedRows });
+    updateTotals(normalizedRows);
     return;
   }
 
@@ -2356,8 +2832,9 @@ const handleSODetailRowChange = (index, field, value) => {
       [field]: zeroValueByField(field),
     };
     updatedRows[index] = buildFreeItemRow(updatedRow, true);
-    updateState({ detailRows: updatedRows });
-    updateTotals(updatedRows);
+    const normalizedRows = distributeVatAcrossDetailRows(updatedRows);
+    updateState({ detailRows: normalizedRows });
+    updateTotals(normalizedRows);
     return;
   }
 
@@ -2365,11 +2842,18 @@ const handleSODetailRowChange = (index, field, value) => {
     updatedRow = recalculateSODetailRow(updatedRow, field);
   }
 
-  updatedRows[index] = updatedRow;
+  console.log(updatedRow)
 
-  updateState({ detailRows: updatedRows });
-  updateTotals(updatedRows);
+  updatedRows[index] = updatedRow;
+  const normalizedRows = calculationTriggerFields.includes(field)
+    ? distributeVatAcrossDetailRows(updatedRows)
+    : updatedRows;
+
+  updateState({ detailRows: normalizedRows });
+  updateTotals(normalizedRows);
 };
+
+const handleSIDetailRowChange = handleSODetailRowChange;
 
 const enterNextRowZeroClearFields = [
   "siQuantity",
@@ -2392,10 +2876,12 @@ const enterNextRowZeroClearFields = [
   "discAmount8",
 ];
 
-const renderSIDetailCell = (columnKey, row, index, siStatusOptions) => {
+const renderSIDetailCell = (columnKey, row, index) => {
   const columnWidth = getDetailColumnFallbackWidth(columnKey);
   const style = getDetailCellStyle(columnKey, columnWidth);
   const isRowWithDR = (parseFormattedNumber(row.drQuantity || 0) || 0) > 0;
+  const quantityPickedValue = parseFormattedNumber(row.quantityPicked || 0) || 0;
+  const canEditPickingStatus = isRowWithDR && quantityPickedValue === 0;
   const canSearchItem = !isRowWithDR; // Can't change item if it's from a DR
   const canEditDetailAfterDR = !isRowWithDR; // Can't edit most fields if it's from a DR
   
@@ -2502,16 +2988,46 @@ const renderSIDetailCell = (columnKey, row, index, siStatusOptions) => {
 
   const detailColumnRenderers = {
     ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
-    siStat: () => { const isStatusLocked = !documentID || ["X", "C"].includes(row.siStat || "O"); return <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`siStat-${index}`} className="w-full global-tran-td-inputclass-ui text-left" value={row.siStat || "O"} disabled={isFormDisabled || isStatusLocked} onChange={(e) => handleSIDetailRowChange(index, "siStat", e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled || isStatusLocked) return; e.preventDefault(); focusNextDetailCell("siStat"); }}>{siStatusOptions.map((option) => <option key={option.DROPDOWN_CODE} value={option.DROPDOWN_CODE}>{option.DROPDOWN_NAME}</option>)}</select></td>; }, 
+    siStat: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`siStat-${index}`} className="w-full global-tran-td-inputclass-ui text-left" value={row.siStat || "F"} disabled={isFormDisabled || !canEditPickingStatus} onChange={(e) => handleSIDetailRowChange(index, "siStat", e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled || !canEditPickingStatus) return; e.preventDefault(); focusNextDetailCell("siStat"); }}><option value="F">For Picking</option>{canEditPickingStatus ? <option value="X">Cancelled</option> : <><option value="T">Partially Picked</option><option value="P">Picked</option><option value="X">Cancelled</option></>}</select></td>,
+    drNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { readOnly: true })}</td>,
     itemCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}><div className="flex items-center gap-1"><input type="text" value={row.itemCode || ""} readOnly className="w-full h-7 text-xs bg-transparent focus:outline-none focus:ring-0" />{canSearchItem && <button type="button" className="text-blue-600 hover:text-blue-800" onClick={() => updateState({ selectedRowIndex: index, selectionContext: "rowItemLookup", insertAfterIndex: null, showItemModal: true })}><FontAwesomeIcon icon={faSearch} /></button>}</div></td>, 
     itemName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey)}</td>,
     itemSpecs: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey)}</td>,
     uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { className: "text-center" })}<input type="hidden" value={row.pmType || ""} readOnly /><input type="hidden" value={row.groupId || ""} readOnly /><input type="hidden" value={row.pmId || ""} readOnly /></td>,
     siQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), onBlur: (e) => validateSIQuantity(index, e.target.value), onKeyDown: (e) => validateSIQuantity(index, e.target.value) })}</td>,
-    unitPrice: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: sellingPriceDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${sellingPriceDecimals}}$`), blocked: () => !isUnitPriceAndDiscountEditable || row.freeItem === "Y", readOnly: isFormDisabled || !isUnitPriceAndDiscountEditable || row.freeItem === "Y" })}</td>,
+    quantityPicked: () => (
+      <td key={columnKey} className="global-tran-td-ui" style={style}>
+        <div className="flex items-center gap-1">
+          <div className="min-w-0 flex-1">
+            {numericInput(columnKey, {
+              decimals: quantityDecimals,
+              regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`),
+              readOnly: true,
+            })}
+          </div>
+          {!isFormDisabled && (
+            <button
+              type="button"
+              title="Open Item Picking / Allocation"
+              aria-label="Open Item Picking / Allocation"
+              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-blue-200 bg-blue-50 text-[11px] text-blue-700 transition hover:border-blue-400 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={!row?.groupId || !row?.itemCode || (parseFormattedNumber(row?.siQuantity || 0) || 0) <= 0}
+              onClick={() => handleOpenItemPickingModal(index)}
+            >
+              <FontAwesomeIcon icon={faFolderOpen} />
+            </button>
+          )}
+        </div>
+      </td>
+    ),
+    unitPrice: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: sellingPriceDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${sellingPriceDecimals}}$`), blocked: () => !isSellingPriceAndDiscountEditable || row.freeItem === "Y", readOnly: isFormDisabled || !isSellingPriceAndDiscountEditable || row.freeItem === "Y" })}</td>,
     grossAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
+    vatCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { readOnly: true, className: "text-center" })}</td>,
+    vatRate: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
     vatAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>, // New field
+    salesAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
     atcAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>, // New field
+    totDiscount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
     netAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
     amountDue: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>, // New field
     freeItem: () => <td key={columnKey} className="global-tran-td-ui" style={style}><button type="button" className={`w-full h-7 rounded-full border text-[11px] font-semibold transition-colors ${row.freeItem === "Y" ? "border-blue-500 bg-blue-500/15 text-blue-700" : "border-slate-300 bg-white text-slate-600"} ${isFormDisabled || isRowWithDR ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`} disabled={isFormDisabled || isRowWithDR} onClick={() => handleSIDetailRowChange(index, "freeItem", row.freeItem === "Y" ? "" : "Y")}>{row.freeItem === "Y" ? "Yes" : "No"}</button></td>,
@@ -2520,7 +3036,7 @@ const renderSIDetailCell = (columnKey, row, index, siStatusOptions) => {
   };
 
   if (visibleDiscountRateFields.includes(columnKey) || visibleDiscountAmountFields.includes(columnKey)) {
-    detailColumnRenderers[columnKey] = () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { blocked: () => !isUnitPriceAndDiscountEditable || row.freeItem === "Y", readOnly: isFormDisabled || !isUnitPriceAndDiscountEditable || row.freeItem === "Y" })}</td>;
+    detailColumnRenderers[columnKey] = () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { blocked: () => !isSellingPriceAndDiscountEditable || row.freeItem === "Y", readOnly: isFormDisabled || !isSellingPriceAndDiscountEditable || row.freeItem === "Y" })}</td>;
   }
 
   return detailColumnRenderers[columnKey]?.() ?? null;
@@ -2635,6 +3151,10 @@ const renderSiGlCell = (columnKey, row, index) => {
 
   return glColumnRenderers[columnKey]?.() ?? null;
 };
+
+const selectedPickingRow = itemPickingRowIndex !== null && itemPickingRowIndex !== undefined
+  ? detailRows?.[itemPickingRowIndex]
+  : null;
 
 return (
 <>
@@ -2809,6 +3329,7 @@ return (
             <FieldRenderer
               id="atcName"
               label="ATC (Goods)"
+              required
               type="lookup"
               value={atcName || ""}
               disabled={isFormDisabled}
@@ -2819,7 +3340,8 @@ return (
 
             <FieldRenderer
               id="vatName"
-              label="VAT"
+              label="VAT (Goods)"
+              required
               type="lookup"
               value={vatName || ""}
               disabled={isFormDisabled}
@@ -2827,9 +3349,7 @@ return (
               lookupDisabled={isFetchDisabled}
               onLookup={() => updateState({ showVatModal: true })}
             />
-          </div>
 
-          <div className="global-tran-textbox-group-div-ui">
             <FieldRenderer
               id="billtermName"
               label="Billing Term"
@@ -2850,6 +3370,51 @@ return (
               disabled
               readOnly
             />
+          </div>
+
+          <div className="global-tran-textbox-group-div-ui">
+            <FieldRenderer
+              id="salesRepName"
+              label="Sales Rep"
+              required
+              type="lookup"
+              value={salesRepName || ""}
+              disabled={isFormDisabled}
+              readOnly
+              lookupDisabled={isFetchDisabled}
+              onLookup={() => updateState({ showSalesRepModal: true, modalContext: "headerSalesRep" })}
+            />
+
+            <FieldRenderer
+              id="customerPoNo"
+              label="Customer PO No."
+              type="text"
+              value={customerPoNo || ""}
+              disabled={isFormDisabled}
+              onChange={(val) => updateState({ customerPoNo: val })}
+              maxLength={useGetFieldLength(tblFieldArray, "cust_po_no")}
+            />
+
+            <div className="relative w-full">
+              <div
+                className={`flex items-stretch global-ref-textbox-ui ${
+                  !isFormDisabled
+                    ? "global-ref-textbox-enabled"
+                    : "global-ref-textbox-disabled"
+                }`}
+              >
+                <DateFormatInput
+                  id="customerPoDate"
+                  className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
+                  value={customerPoDate}
+                  disabled={isFormDisabled}
+                  updateState={updateState}
+                />
+              </div>
+              <label htmlFor="customerPoDate" className="global-ref-floating-label">
+                Customer PO Date
+              </label>
+            </div>
 
             <FieldRenderer
               id="refSiNo1"
@@ -3040,7 +3605,7 @@ return (
 
                 {!isFormDisabled && (
                   <th
-                    className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900"
+                    className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900"
                     style={transactionActionsHeaderStyle}
                   >
                     Actions
@@ -3052,22 +3617,12 @@ return (
 
           <tbody className="relative">{sortedDetailRows.map(({ row, originalIndex }) => {
             const hasDrQuantity = parseFormattedNumber(row.drQuantity || 0) > 0;
-            const canDeleteRow = !hasDrQuantity && (row.siStat || "O") === "O";
-            const siStatusOptions = hasDrQuantity
-              ? [
-                  { value: "O", label: "Open" },
-                  { value: "C", label: "Closed" },
-                ]
-              : [
-                  { value: "O", label: "Open" },
-                  { value: "C", label: "Closed" },
-                  { value: "X", label: "Cancelled" },
-                ];
+            const canDeleteRow = !hasDrQuantity && (row.siStat || "F") === "F";
 
             return (
             <tr key={originalIndex} className="global-tran-tr-ui">
               {orderedDetailColumns.map((column) =>
-                renderSIDetailCell(column.key, row, originalIndex, siStatusOptions)
+                renderSIDetailCell(column.key, row, originalIndex)
               )}
 
                {!isFormDisabled && (
@@ -3076,13 +3631,15 @@ return (
                       style={transactionActionsCellStyle}
                     >
                       <div className="flex items-center justify-center gap-1">
-                        <button
-                          type="button"
-                          className="global-tran-td-button-add-ui"
-                          onClick={() => handleInsertBlankRow(originalIndex)}
-                        >
-                          <FontAwesomeIcon icon={faPlus} />
-                        </button>
+                        {!isDirectSiType && (
+                          <button
+                            type="button"
+                            className="global-tran-td-button-add-ui"
+                            onClick={() => handleInsertBlankRow(originalIndex)}
+                          >
+                            <FontAwesomeIcon icon={faPlus} />
+                          </button>
+                        )}
 
                         <button
                           type="button"
@@ -3113,13 +3670,72 @@ return (
 
     {/* Add Button */}
     <div className="global-tran-tab-footer-button-div-ui">
-      <button
-        onClick={handleOpenAddItemModal}
-        className="global-tran-tab-footer-button-add-ui"
-        style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
-      >
-        <FontAwesomeIcon icon={faPlus} className="mr-2" />Add
-      </button>
+      <div className="relative inline-block" style={{ visibility: isFormDisabled ? "hidden" : "visible" }}>
+        {showAddTypeDropdown && (
+          <div className="absolute bottom-[110%] left-0 mb-3 z-[9999] w-[280px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur-sm dark:border-slate-700 dark:bg-slate-800">
+            <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-700">
+              <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
+                Add SI Detail
+              </div>
+            </div>
+
+            <div className="p-2">
+              <button
+                type="button"
+                className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150 ${isAddItemDisabledBySiType ? "cursor-not-allowed text-slate-400 opacity-50 dark:text-slate-500" : "text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"}`}
+                disabled={isAddItemDisabledBySiType}
+                onClick={() => {
+                  if (isAddItemDisabledBySiType) return;
+                  setShowAddTypeDropdown(false);
+                  handleOpenAddItemModal();
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                    <FontAwesomeIcon icon={faPlus} />
+                  </span>
+                  <div className="flex flex-col items-start">
+                    <span>Add Item</span>
+                    <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
+                      Select item from item master
+                    </span>
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                className={`mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150 ${isOpenDRDisabledBySiType ? "cursor-not-allowed text-slate-400 opacity-50 dark:text-slate-500" : "text-blue-700 hover:bg-blue-50 hover:text-blue-900 dark:text-blue-300 dark:hover:bg-slate-700"}`}
+                disabled={isOpenDRDisabledBySiType}
+                onClick={() => {
+                  if (isOpenDRDisabledBySiType) return;
+                  setShowAddTypeDropdown(false);
+                  handleOpenDRLookup();
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-slate-700 dark:text-blue-300">
+                    <FontAwesomeIcon icon={faFolderOpen} />
+                  </span>
+                  <div className="flex flex-col items-start">
+                    <span>Open DR</span>
+                    <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
+                      Lookup open DR items
+                    </span>
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={handleAddRowClick}
+          className="global-tran-tab-footer-button-add-ui"
+        >
+          <FontAwesomeIcon icon={faPlus} className="mr-2" />Add
+        </button>
+      </div>
     </div>
 
       
@@ -3169,7 +3785,7 @@ return (
                 )}
                 {!isFormDisabled && (
                   <th
-                    className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900"
+                    className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900"
                     style={transactionActionsHeaderStyle}
                   >
                     Actions
@@ -3321,7 +3937,7 @@ return (
       <ItemMastLookupModal
         isOpen={showItemModal}
         endpoint="getInvLookupFG"
-        docType="SO"
+        docType="SI"
         onClose={handleCloseItemModal}
         onCancel={() =>
           updateState({
@@ -3332,6 +3948,51 @@ return (
           })
         }
         enableMultiSelect={selectionContext === "multiAdd"}
+      />
+    )}
+
+    {showOpenDRModal && (
+      <GlobalCombinedLookup
+        isOpen={showOpenDRModal}
+        title="Open DR"
+        summarySelectionMode="multiple"
+        detailSelectionMode="multiple"
+        summaryColumns={openDRSI_Col_Summary}
+        detailColumns={openDRSI_Col_Detail}
+        summaryData={openDRSI_Data_Summary}
+        tabTitles={["Open DR Summary", "Open DR Detail"]}
+        fetchDetailApi={async (selectedIds) => {
+          const idString = Array.isArray(selectedIds)
+            ? selectedIds.join(",")
+            : selectedIds;
+
+          const payload = {
+            json_data: JSON.stringify({
+              json_data: {
+                selectedId: idString
+              },
+            }),
+          };
+
+          const response = await postRequest("getDRSI_OpenDetail", payload);
+
+          if (response?.data?.[0]?.result) {
+            response.data[0].result = JSON.stringify(
+              JSON.parse(response.data[0].result).map(normalizeOpenDRLookupRow)
+            );
+          }
+
+          return response;
+        }}
+        onClose={handleInsertSelectedOpenDR}
+        onCancel={() =>
+          updateState({
+            showOpenDRModal: false,
+            openDRSI_Data_Summary: [],
+            openDRSI_Col_Summary: [],
+            openDRSI_Col_Detail: [],
+          })
+        }
       />
     )}
 
@@ -3349,11 +4010,37 @@ return (
       />
     )}
 
-    {/* Removed RC Code Modal and Sales Rep Modal */}
+    {showSalesRepModal && (
+      <SearchSalesRepRef
+        isOpen={showSalesRepModal}
+        onClose={handleCloseSalesRepModal}
+      />
+    )}
+
     {showRcModal && (
       <RCLookupModal
         isOpen={showRcModal}
         onClose={handleCloseRcModal}
+      />
+    )}
+
+    {showItemPickingModal && selectedPickingRow && (
+      <SearchGlobalItemPickingModal
+        isOpen={showItemPickingModal}
+        onClose={handleCloseItemPickingModal}
+        transaction={{
+          sourceDocType: "SI",
+          sourceDocTypeName: "Sales Invoice",
+          sourceDocNo: documentNo || "New SI",
+          sourceLineNo: `Line ${Number(itemPickingRowIndex ?? 0) + 1}`,
+          groupId: selectedPickingRow?.groupId || "",
+          customerCode: billToCustCode || "",
+          customerName: billToCustName || "",
+          itemCode: selectedPickingRow?.itemCode || "",
+          itemName: selectedPickingRow?.itemName || selectedPickingRow?.itemSpecs || "",
+          requestedQty: parseFormattedNumber(selectedPickingRow?.siQuantity || 0) || 0,
+        }}
+        onConfirm={handleConfirmItemPicking}
       />
     )}
 

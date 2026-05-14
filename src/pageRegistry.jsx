@@ -43,6 +43,7 @@ import MSMast from "./NAYSA Cloud/Master Data/MSMasterData/MSMast.jsx";
 import FGMast from "./NAYSA Cloud/Master Data/FGMasterData/FGMast.jsx";
 import RCMast from "./NAYSA Cloud/Master Data/RCMast.jsx";
 import SLMast from "./NAYSA Cloud/Master Data/SLMast.jsx";
+import WarehouseLocation from "./NAYSA Cloud/Master Data/Inventory/WareMast.jsx";
 
 // --- SALES ---
 import SO from "./NAYSA Cloud/Module/Main Module/Sales/SO.jsx";
@@ -53,6 +54,9 @@ import SI from "./NAYSA Cloud/Module/Main Module/Sales/SI.jsx";
 // --- PURCHASING & INVENTORY ---
 import PR from "./NAYSA Cloud/Module/Main Module/Purchasing/PR.jsx";
 import PRApprovalModal from "./NAYSA Cloud/Approval/PRApprovalModal.jsx";
+import JOApprovalModal from "./NAYSA Cloud/Approval/JOApprovalModal.jsx";
+import POApprovalModal from "./NAYSA Cloud/Approval/POApprovalModal.jsx";
+import ApprovalMatrixModal from "./NAYSA Cloud/Approval/GlobalApprovalMatrix.jsx";
 import PO from "./NAYSA Cloud/Module/Main Module/Purchasing/PO.jsx";
 import JO from "./NAYSA Cloud/Module/Main Module/Purchasing/JO.jsx";
 import MSRR from "./NAYSA Cloud/Module/Main Module/Inventory/MSRR.jsx";
@@ -96,7 +100,9 @@ import MSINQ from "./NAYSA Cloud/Query/INVInq/MSStockCard.jsx";
 
 
 //Matrix
+import PRInquiry from "./NAYSA Cloud/Module/Main Module/Purchasing/PRInquiry.jsx";
 import SalesPMCustomerItem from "./NAYSA Cloud/Matrix/SalesPMCustomerItem.jsx"
+import CheckTemplateSetup from "./NAYSA Cloud/Matrix/CheckTemplateSetup.jsx"
 import PRInq from "./NAYSA Cloud/Module/Main Module/Purchasing/PRInq.jsx";
 import POInq from "./NAYSA Cloud/Module/Main Module/Purchasing/POInquiry.jsx";
 
@@ -233,10 +239,14 @@ export const pageRegistry = {
   PCV,
   CV,
   CVHistory,
+  CheckTemplateSetup,
 
   // Purchasing
   PR,
   PRApprovalModal,
+  JOApprovalModal,
+  POApprovalModal,
+  ApprovalMatrixModal,
   PO,
   JO,
 
@@ -290,6 +300,7 @@ export const pageRegistry = {
   MasterAccessRights,
   ATaxCode,
   BillCodeRef,
+  WarehouseLocation,
 
   // Posting
   PostSVI,
@@ -314,11 +325,12 @@ export const pageRegistry = {
   //Matrix
   SalesPMCustomerItem,
 
-  PRInq,
-  POInq,
+  // Purchasing Inquiry (Unified/Merged)
+  PRInquiry: PRInquiry, 
+  PRInq: PRInquiry,     
+  POInq: POInq,         
 
-  // Printing
-  // These keys now point to the Universal component but inject the specific module prop
+  // Printing (Universal Modal Mapping)
   APReportModal: (props) => <UniversalReportModal {...props} module="AP" />,
   VIReportModal: (props) => <UniversalReportModal {...props} module="VI" />,
   EWTReportModal: (props) => <UniversalReportModal {...props} module="EWT" />,

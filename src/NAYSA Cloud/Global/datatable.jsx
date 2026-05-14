@@ -2783,8 +2783,7 @@ export const transactionActionsHeaderStyle = {
   backgroundClip: "padding-box",
   borderLeft: "1px solid rgba(148, 163, 184, 0.45)",
   boxShadow: "-8px 0 14px -12px rgba(15, 23, 42, 0.35)",
-  backgroundImage:
-    "linear-gradient(to left, rgba(255,255,255,0.10), rgba(255,255,255,0.00))",
+  backgroundImage: "none",
 };
 
 export const transactionActionsCellStyle = {
@@ -2795,8 +2794,7 @@ export const transactionActionsCellStyle = {
   backgroundClip: "padding-box",
   borderLeft: "1px solid rgba(148, 163, 184, 0.35)",
   boxShadow: "-8px 0 14px -12px rgba(15, 23, 42, 0.28)",
-  backgroundImage:
-    "linear-gradient(to left, rgba(148,163,184,0.08), rgba(148,163,184,0.00))",
+  backgroundImage: "none",
 };
 
 export const useResizableTableColumns = (columns = []) => {
@@ -2824,6 +2822,7 @@ export const useResizableTableColumns = (columns = []) => {
     x: 0,
     y: 0,
   });
+  const [autoResizeRows, setAutoResizeRows] = useState(false);
   const [showColumnVisibilityModal, setShowColumnVisibilityModal] = useState(false);
   const [showExportFileNameModal, setShowExportFileNameModal] = useState(false);
   const [showPdfTextCaptureModal, setShowPdfTextCaptureModal] = useState(false);
@@ -4484,6 +4483,11 @@ export const useResizableTableColumns = (columns = []) => {
     setBodyContextMenu({ visible: false, x: 0, y: 0 });
   }, []);
 
+  const toggleAutoResizeRows = useCallback(() => {
+    setAutoResizeRows((prev) => !prev);
+    setBodyContextMenu({ visible: false, x: 0, y: 0 });
+  }, []);
+
   const showCopyDoneThenClose = useCallback((label = "Copied") => {
     if (copyFeedbackTimerRef.current) {
       window.clearTimeout(copyFeedbackTimerRef.current);
@@ -5102,6 +5106,18 @@ export const useResizableTableColumns = (columns = []) => {
           </button>
           <button
             type="button"
+            className={getMenuItemClassName(true)}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleAutoResizeRows();
+            }}
+          >
+            <Rows3 className={getMenuIconClassName(true)} aria-hidden="true" />
+            <span>{autoResizeRows ? "Fixed row height" : "Auto resize rows"}</span>
+          </button>
+          <button
+            type="button"
             disabled={isBodyActionColumn}
             className={getMenuItemClassName(!isBodyActionColumn)}
             onClick={isBodyActionColumn ? undefined : (e) => {
@@ -5444,6 +5460,7 @@ export const useResizableTableColumns = (columns = []) => {
     );
   }, [
     bodyContextMenu,
+    autoResizeRows,
     copyFeedback,
     clearSort,
     deleteGroupColumn,
@@ -5479,9 +5496,11 @@ export const useResizableTableColumns = (columns = []) => {
     toggleColumnFiltering,
     toggleFreezeColumn,
     toggleColumnVisibility,
+    toggleAutoResizeRows,
   ]);
 
   return {
+    autoResizeRows,
     columnWidths,
     columnOrder,
     frozenColumnKeys,

@@ -2612,7 +2612,7 @@ return (
                   </Fragment>
                 ))}
                 {!isFormDisabled && (
-                  <th key="detail-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
+                  <th key="detail-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
                 )}
               </tr>
               {renderMsajDetailHeaderContextMenu()}
@@ -2739,7 +2739,7 @@ return (
                     </Fragment>
                   ))}
                   {!isFormDisabled && (
-                    <th key="gl-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
+                    <th key="gl-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
                   )}
                 </tr>
                 {renderMsajGlHeaderContextMenu()}

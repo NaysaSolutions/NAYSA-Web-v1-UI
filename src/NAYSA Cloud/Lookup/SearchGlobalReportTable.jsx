@@ -206,6 +206,11 @@ const SearchGlobalReportTable = forwardRef(
       onStateChange,
     ]);
 
+    const hasActiveFilters = useMemo(
+      () => Object.values(filters).some((v) => String(v || "").trim() !== ""),
+      [filters]
+    );
+
     const parseNumber = (v) => {
       if (typeof parseFormattedNumber === "function") {
         const n = parseFormattedNumber(v);
@@ -612,6 +617,8 @@ const SearchGlobalReportTable = forwardRef(
     const moveColumn = (fromKey, toKey) => {
       if (!fromKey || !toKey || fromKey === toKey) return;
 
+      setAutoFillGridState(false);
+
       setColumnOrder((prev) => {
         const current = prev.length
           ? [...prev]
@@ -712,7 +719,6 @@ const SearchGlobalReportTable = forwardRef(
 
       if (containerWidth > 0 && tableWidth > 0 && tableWidth < containerWidth) {
         if (!autoFitTriggeredRef.current) {
-          setAutoFillGridState(true);
           autoFitTriggeredRef.current = true;
         }
       } else {
@@ -734,7 +740,7 @@ const SearchGlobalReportTable = forwardRef(
     }, [columns]);
 
     const startResizing = (e, key) => {
-      if (autoFillGridState) return;
+      setAutoFillGridState(false);
 
       e.preventDefault();
       const startX = e.clientX;
@@ -1005,8 +1011,10 @@ const SearchGlobalReportTable = forwardRef(
         <div
           className="p-2 rounded-md flex flex-col md:flex-row md:items-center md:justify-between gap-2"
           onDragOver={(e) => e.preventDefault()}
-          onDrop={() => {
+          onDrop={(e) => {
+            e.preventDefault();
             if (!draggedCol) return;
+            setAutoFillGridState(false);
             setGroupBy((p) => {
               const current = p.filter(
                 (key, index, arr) => baseColumnKeys.has(key) && arr.indexOf(key) === index,
@@ -1157,6 +1165,25 @@ const SearchGlobalReportTable = forwardRef(
                 />
               </div>
             )}
+
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  className={`rounded-md bg-red-100 text-red-700 hover:bg-red-200 shrink-0 font-medium flex items-center ${
+                    tableSize === "Half"
+                      ? "h-7 px-2 text-[10px]"
+                      : "h-8 px-3 text-xs"
+                  }`}
+                  onClick={() => {
+                    setFilters({});
+                    setCurrentPage(1);
+                  }}
+                  title="Clear column filters"
+                >
+                  <FontAwesomeIcon icon={faTimes} className="mr-1" />
+                  Clear Filters
+                </button>
+              )}
 
             {isMobileView ? (
               <div className="w-full grid grid-cols-3 gap-2">
@@ -1461,7 +1488,7 @@ const SearchGlobalReportTable = forwardRef(
                         setColumnChooserSearch("");
                       }}
                     >
-                      Restore Default
+                      Show All
                     </button>
                   </div>
                 </div>
@@ -1750,6 +1777,7 @@ const SearchGlobalReportTable = forwardRef(
                         onDragStart={(e) => {
                           if (autoFillGridState) return;
                           setDraggedCol(col.key);
+                          e.dataTransfer.setData("text/plain", col.key);
                           e.dataTransfer.effectAllowed = "move";
                         }}
                         onDragOver={(e) => {

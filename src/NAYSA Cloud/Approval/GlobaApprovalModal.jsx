@@ -89,7 +89,7 @@ const DisapprovalReasonModal = ({
     }.`;
 
   return (
-    <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-gray-900/60 p-4">
+    <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-gray-900/25 p-4">
       <div className="w-full max-w-md overflow-hidden rounded-xl bg-white shadow-2xl">
         <div className="flex items-center justify-between bg-white px-6 pb-2 pt-5">
           <h2 className="text-lg font-black tracking-tight text-gray-900">

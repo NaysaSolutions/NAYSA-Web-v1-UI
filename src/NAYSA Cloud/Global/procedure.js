@@ -368,12 +368,18 @@ export async function useHandleCancel(docCode, documentID, userCode, password, r
 
   // Wrong or missing password only
   if (status === 422 && code === "INVALID_CREDENTIALS") {
-    Swal.fire("Incorrect password","Please try again.", "warning");
+    useSwalErrorAlert(
+      "Incorrect Password", 
+      "The password you entered is incorrect. Please try again."
+    );  
     return { success: false, code, message: msg };
   }
 
   if (status === 422 && code === "MISSING_CREDENTIALS") {
-    Swal.fire("Password required", "Please enter your password.", "info");
+    useSwalErrorAlert(
+      "Password required", 
+      "Please enter your password."
+    );  
     return { success: false, code, message: msg };
   }
 
@@ -555,6 +561,9 @@ export const useGetFieldLength = (fieldsArray, fieldName) => {
 
   return field ? parseInt(field.fieldlength, 10) : 0;
 };
+
+
+
 
 
 

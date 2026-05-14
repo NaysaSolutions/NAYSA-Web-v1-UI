@@ -1417,7 +1417,7 @@ const AllTranHistory = (props) => {
   }
 
   const exportName =
-    historyExportNameProp ??
+    activeTab ??
     (location.state && location.state.historyExportName) ??
     "Transaction History";
 
@@ -2475,13 +2475,13 @@ const handleExportConfirm = async (enteredFileName) => {
                             onDragOver={(e) => e.preventDefault()}
                             onDrop={(e) => handleColDrop(e, col.key)}
                             onClick={() => col.sortable !== false && handleSort(col.key)}
-                            className={`px-2 py-2 whitespace-nowrap select-none relative ${
+                            className={`px-2 py-2 select-none relative ${
                               col.sortable !== false ? "cursor-pointer" : ""
-                            } ${meta.sticky ? "sticky z-50 bg-blue-100" : ""} ${numberAlignClass(col)}`}
+                            } ${autoFillGridState ? "whitespace-normal break-words" : "whitespace-nowrap"} ${meta.sticky ? "sticky z-50 bg-blue-100" : ""} ${numberAlignClass(col)}`}
                             style={style}
                           >
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="truncate">{col.label}</span>
+                            <div className={`flex items-center justify-between gap-2 ${autoFillGridState ? "min-w-0" : ""}`}>
+                              <span className={autoFillGridState ? "min-w-0 whitespace-normal break-words leading-tight" : "truncate"}>{col.label}</span>
                               {col.sortable !== false &&
                               sortConfig.key === col.key &&
                               sortConfig.tabKey === activeTab ? (

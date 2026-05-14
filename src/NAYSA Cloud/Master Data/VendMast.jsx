@@ -101,45 +101,6 @@ const VendMast = () => {
   const videoLink = reftablesVideoGuide?.[docType] || "#";
   const [isOpenGuide, setOpenGuide] = useState(false);
 
-  // DUPLICATE NAME VALIDATION LOGIC
-  const allowedDuplicatePayeeNameRef = useRef("");
-  
-  const normalizeText = (value) => String(value || "").trim().replace(/\s+/g, " ").toUpperCase();
-
-  const findDuplicatePayeeName = (payeeName = form.vendName) => {
-    const normalizedName = normalizeText(payeeName);
-    if (!normalizedName) return null;
-
-    return masterAllRows.find((row) => {
-      const sameName = normalizeText(row?.vendName) === normalizedName;
-      const sameCode = normalizeText(row?.vendCode) === normalizeText(selectedVendCode || form.vendCode);
-      return sameName && !sameCode;
-    });
-  };
-
-  const confirmDuplicatePayeeName = async (payeeName = form.vendName) => {
-    const duplicateRecord = findDuplicatePayeeName(payeeName);
-    if (!duplicateRecord) return true;
-
-    const normalizedName = normalizeText(payeeName);
-    if (allowedDuplicatePayeeNameRef.current === normalizedName) return true;
-
-    const result = await useSwalProceedConfirm(
-      "Duplicate Payee Name",
-      `Payee Name "${payeeName}" already exists with Payee Code ${duplicateRecord.vendCode}.\n\nDo you want to proceed?`,
-      "Yes, Proceed"
-    );
-
-    if (result.isConfirmed) {
-      allowedDuplicatePayeeNameRef.current = normalizedName;
-      return true;
-    }
-
-    allowedDuplicatePayeeNameRef.current = "";
-    updateForm({ vendName: "", custName: "" });
-    return false;
-  };
-
   useEffect(() => {
     const handleClick = (e) => {
       if (guideRef.current && !guideRef.current.contains(e.target)) {
@@ -264,10 +225,30 @@ const VendMast = () => {
     return [];
   };
 
-  const loadMasterList = async () => {
+  const loadMasterList = async (options = {}) => {
+    const {
+      page = 1,
+      pageSize = 300,
+      filters = masterFilters,
+      sltypeCode = subsidiaryType,
+    } = options;
+
+    const cleanedFilters = Object.fromEntries(
+      Object.entries(filters || {}).map(([key, value]) => [key, String(value || "").trim()])
+    );
+
     setIsLoading(true);
     try {
-      const res = await apiClient.get("/payee");
+      const res = await apiClient.get("/payee", {
+        params: {
+          page,
+          pageSize,
+          sltypeCode: normalizeSlType(sltypeCode),
+          ...cleanedFilters,
+        },
+        timeout: 120000,
+      });
+
       const parsed = parseSprocJsonResult(res?.data?.data);
       const list = Array.isArray(parsed) ? parsed : [];
 
@@ -285,7 +266,13 @@ const VendMast = () => {
       setMasterRows(normalized);
     } catch (e) {
       console.error(e);
-      Swal.fire("Error", "Failed to load payee list.", "error");
+      Swal.fire(
+        "Error",
+        e?.code === "ECONNABORTED"
+          ? "Payee list loading timed out. Please use a filter or try again."
+          : "Failed to load payee list.",
+        "error"
+      );
       setMasterAllRows([]);
       setMasterRows([]);
     } finally {
@@ -518,27 +505,19 @@ const VendMast = () => {
     }
   };
 
-  const applyMasterFilters = () => {
-    const selectedType = normalizeSlType(subsidiaryType);
-    const filtered = masterAllRows.filter((row) => {
-      const rowType = normalizeSlType(row?.sltypeCode);
-      if (selectedType && rowType !== selectedType) return false;
-
-      for (const [key, val] of Object.entries(masterFilters || {})) {
-        const q = String(val || "").trim().toLowerCase();
-        if (!q) continue;
-        const cell = String(row?.[key] || "").toLowerCase();
-        if (!cell.includes(q)) return false;
-      }
-      return true;
+  const applyMasterFilters = async () => {
+    await loadMasterList({
+      page: 1,
+      pageSize: 300,
+      filters: masterFilters,
+      sltypeCode: subsidiaryType,
     });
-    setMasterRows(filtered);
   };
 
-  const resetMasterFilters = () => {
+  const resetMasterFilters = async () => {
     setSubsidiaryType("");
     setMasterFilters({});
-    setMasterRows(masterAllRows);
+    await loadMasterList({ page: 1, pageSize: 300, filters: {}, sltypeCode: "" });
   };
 
   const handleChangeMasterFilter = (key, value) => {
