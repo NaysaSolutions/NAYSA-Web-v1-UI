@@ -418,8 +418,8 @@ const VendMast = () => {
 
   const upsertVendor = async () => {
     // 1. DUPLICATE NAME CHECK
-    const canProceed = await confirmDuplicatePayeeName(form.vendName || form.custName);
-    if (!canProceed) return;
+    // const canProceed = await confirmDuplicatePayeeName(form.vendName || form.custName);
+    // if (!canProceed) return;
 
     let code = String(form?.vendCode || form?.custCode || "").trim();
     const isAddMode = !selectedVendCode;
@@ -755,7 +755,7 @@ const VendMast = () => {
               }
               updateForm(patch);
             }}
-            onNameBlur={confirmDuplicatePayeeName} // Pass the name blur logic
+            // onNameBlur={confirmDuplicatePayeeName} // Pass the name blur logic
             onSelectCustomerCode={fetchVendorByCode}
           />
         )}
