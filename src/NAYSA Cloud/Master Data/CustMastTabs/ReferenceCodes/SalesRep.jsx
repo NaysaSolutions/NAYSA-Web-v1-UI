@@ -9,6 +9,9 @@ import React, {
 } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Edit, Trash2 } from "lucide-react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faPlus, faSave, faUndo, faEdit, faTrashAlt, faInfoCircle, faChevronDown, faFilePdf, faVideo } from "@fortawesome/free-solid-svg-icons";
+
 import Swal from "sweetalert2";
 
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
@@ -23,6 +26,7 @@ import {
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable.jsx";
 import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
+import { reftables, reftablesPDFGuide, reftablesVideoGuide } from "@/NAYSA Cloud/Global/reftable";
 
 /* ================= HELPERS ================= */
 
@@ -97,6 +101,11 @@ const SalesRep = forwardRef(({ onStateChange }, ref) => {
     user?.user_code || 
     user?.code || 
     "ADMIN";
+
+  const docType = "AgentRef";
+  const guideRef = useRef(null);
+  const pdfLink = reftablesPDFGuide[docType];
+  const videoLink = reftablesVideoGuide[docType];
 
   const codeInputRef = useRef(null);
   const enterValidatedRef = useRef(false);
@@ -279,27 +288,36 @@ const SalesRep = forwardRef(({ onStateChange }, ref) => {
       {
         key: "__actions",
         label: "Actions",
-        width: 80,
+        width: 90,
+        minWidth: 90,
         render: (row) => (
-          <div className="flex items-center justify-center gap-1.5">
+          <div className="flex gap-2 justify-center w-full">
+
             <button
               onClick={(e) => { e.stopPropagation(); handleEdit(row); }}
-              className="p-1.5 rounded-md bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+              className="global-ref-td-button-edit-ui"
+              title="Edit"
             >
-              <Edit size={14} />
+              <FontAwesomeIcon icon={faEdit} />
+              <span className="md:hidden">Edit</span>
             </button>
+
             <button
               onClick={(e) => { e.stopPropagation(); handleDelete(row); }}
-              className="p-1.5 rounded-md bg-red-50 text-red-600 border border-red-200 hover:bg-red-600 hover:text-white transition-all shadow-sm"
+              className="global-ref-td-button-delete-ui"
+              title="Delete"
             >
-              <Trash2 size={14} />
+              <FontAwesomeIcon icon={faTrashAlt} />
+              <span className="md:hidden">Delete</span>
             </button>
+
           </div>
         ),
       },
-      { key: "salesRepCode", label: "Code", sortable: true, width: 100, className: "font-bold text-slate-700" },
-      { key: "salesRepName", label: "Agent Name", sortable: true, width: 400, className: "whitespace-normal break-words" },
-      { key: "salesRepBranch", label: "Branch", sortable: true, width: 120 },
+      { key: "salesRepCode", label: "Agent Code", sortable: true, width: 100, minWidth: 100, requiredVisible: true },
+      { key: "salesRepName", label: "Agent Name", sortable: true, width: 250, minWidth: 150, maxWidth: 250, requiredVisible: true },
+      { key: "salesRepType", label: "Agent Type", sortable: true, width: 100, minWidth: 120},
+      { key: "salesRepBranch", label: "Branch", sortable: true, width: 120, minWidth: 120 },
     ],
     [handleEdit, handleDelete]
   );
@@ -392,17 +410,16 @@ const SalesRep = forwardRef(({ onStateChange }, ref) => {
         </Card>
       </div>
 
-      <div className="xl:col-span-8 bg-white rounded-lg p-3 shadow-sm border border-gray-100 w-full overflow-hidden">
+      <div className="xl:col-span-8 global-tran-table-main-div-ui">
         <SearchGlobalReferenceTable
           columns={tableColumns}
           data={tableData}
           isLoading={isInitialLoading}
-          docType="Representatives"
+          docType={docType}
           itemsPerPage={10}
           onRowDoubleClick={handleEdit}
           onRowClick={(row) => setSelectedRow(row)}
           showFilters
-          tableSize={tableSize}
           autoFillGrid={true}
         />
       </div>

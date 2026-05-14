@@ -229,7 +229,7 @@ body {
   /* TRANSACTION TABLE UI */
 
   .global-tran-table-main-div-ui {
-    @apply overflow-x-auto bg-white shadow-lg rounded-lg
+    @apply overflow-x-auto bg-white shadow-md rounded-lg
     dark:bg-black;
   }
 

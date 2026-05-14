@@ -86,6 +86,7 @@ import CutoffRef from "./NAYSA Cloud/Reference File/CutoffRef.jsx";
 import DForexRef from "./NAYSA Cloud/Reference File/DForexRef.jsx";
 import VATRef from "./NAYSA Cloud/Reference File/VATRef.jsx";
 import BillCodeRef from "./NAYSA Cloud/Reference File/BillCodeRef.jsx";
+import JobCodeRef from "./NAYSA Cloud/Reference File/JobCodeRef.jsx";
 
 // --- QUERIES & LOOKUPS ---
 import AllTranHistory from "./NAYSA Cloud/Lookup/SearchGlobalTranHistory.jsx";
@@ -252,7 +253,7 @@ export const pageRegistry = {
   ApprovalMatrixModal,
   PO,
   JO,
-  CAN,
+  JobCodeRef,
 
   //Sales
   SO,

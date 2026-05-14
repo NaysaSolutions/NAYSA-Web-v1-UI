@@ -367,6 +367,7 @@ const columns = useMemo(() => [
   key: "__actions",
   label: <span className="hidden md:inline">Actions</span>,
   width: 90,
+  minWidth: 90,
   render: (row) => (
     <div className="flex gap-2 justify-center w-full">
       <button

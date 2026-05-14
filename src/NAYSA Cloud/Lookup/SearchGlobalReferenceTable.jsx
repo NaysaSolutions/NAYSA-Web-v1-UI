@@ -1288,7 +1288,7 @@ const SearchGlobalReferenceTable = forwardRef(
       >
         {hasOriginalData && (
           <div
-            className="p-2 rounded-md flex flex-col md:flex-row md:items-center justify-between gap-2 bg-gray-50/50 border-b border-gray-100"
+            className="p-2 rounded-md flex flex-col md:flex-row md:items-center justify-between gap-2 bg-white border-b border-gray-100"
             onDragOver={(e) => {
               if (!isMobile && isGroupEnabled) e.preventDefault();
             }}
@@ -1757,7 +1757,7 @@ const SearchGlobalReferenceTable = forwardRef(
         </div>
 
         {hasDataFiltered && !isMobileView && (
-          <div className="border-t bg-gray-50/50 shrink-0 px-3 py-2 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="border-t bg-white shrink-0 px-3 py-2 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             <div className="text-[11px] sm:text-xs text-gray-600 flex items-center justify-center lg:justify-start gap-2">
               <div>
                 Showing <span className="font-semibold text-gray-900">{effectiveRowsPerPage > 0 ? (safePage - 1) * effectiveRowsPerPage + 1 : 1}</span> –{" "}
