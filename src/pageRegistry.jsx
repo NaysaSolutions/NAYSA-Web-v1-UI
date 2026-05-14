@@ -39,6 +39,8 @@ import GLFSMatching from "@/NAYSA Cloud/Master Data/ChartofAccounts/GLFSMatching
 import CustMast from "./NAYSA Cloud/Master Data/CustMast.jsx";
 import VendMast from "./NAYSA Cloud/Master Data/VendMast.jsx";
 import BankMast from "./NAYSA Cloud/Master Data/BankMast.jsx";
+import MSMast from "./NAYSA Cloud/Master Data/MSMasterData/MSMast.jsx";
+import FGMast from "./NAYSA Cloud/Master Data/FGMasterData/FGMast.jsx";
 import RCMast from "./NAYSA Cloud/Master Data/RCMast.jsx";
 import SLMast from "./NAYSA Cloud/Master Data/SLMast.jsx";
 
@@ -268,6 +270,8 @@ export const pageRegistry = {
   CustMast,
   VendMast,
   SLMast,
+   MSMast,
+  FGMast,
 
   // Global & Queries
   AllTranHistory,

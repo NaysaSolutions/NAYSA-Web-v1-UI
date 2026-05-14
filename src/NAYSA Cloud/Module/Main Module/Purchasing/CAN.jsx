@@ -180,6 +180,7 @@ export const CAN = () => {
   const [topTab, setTopTab] = useState("details");
   const [openPrRows, setOpenPrRows] = useState([]);
   const [selectedPrIds, setSelectedPrIds] = useState([]);
+  const [expandedItemLn, setExpandedItemLn] = useState(null);
   const [activeSupplierForAttachment, setActiveSupplierForAttachment] = useState(null);
 
   const [state, setState] = useState({
@@ -1276,7 +1277,7 @@ export const CAN = () => {
                   ))}
                 </div>
 
-                {expandedSupplier === supplierIndex && (
+                {activeSupplierIndex === supplierIndex && (
                   <div className="mt-4 overflow-auto rounded-xl border">
                     <table className="min-w-[1100px] w-full text-xs">
                       <thead className="bg-slate-100">
@@ -1339,6 +1340,8 @@ export const CAN = () => {
                       </span>
                     ))}
                   </div>
+                )}
+              </div>
                 )}
               </div>
             );
