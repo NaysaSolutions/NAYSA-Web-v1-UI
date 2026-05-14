@@ -29,6 +29,7 @@ export const reftables = {
     BillCode: "Billing Codes",
     VendMast: "Payee Master Data",
 
+    JobCodeRef: "Job Codes",
     AgentRef: "Agent Codes",
     ZoneRef: "Zone Codes",
     AreaRef: "Area Codes",
