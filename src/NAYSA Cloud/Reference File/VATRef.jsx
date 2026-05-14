@@ -53,10 +53,10 @@ import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
 const INITIAL_FORM = {
   vatCode: "",
   vatName: "",
-  vatType: "",
-  vatClass: "",
+  vatType: "I",
+  vatClass: "G",
   vatRate: "0.00",
-  vatCategory: "",
+  vatCategory: "V",
   acctCode: "",
   acctName: "",
   tblFieldArray: [],
@@ -156,6 +156,7 @@ const VATRef = () => {
         useSwalErrorAlert("Error", sqlRow?.errormsg || "Failed to save VAT .");
         return; 
       }
+      console.log("Save Response:", response);
 
       const status = response?.data?.status ?? response?.data?.data?.status;
       const success =
@@ -166,7 +167,7 @@ const VATRef = () => {
           "Error",
           response?.data?.message ||
             response?.data?.data?.message ||
-            "An error occurred while saving the VAT record.",
+            "An error occurred while saving the VAT record.",           
         );
         return;
       }
@@ -179,21 +180,20 @@ const VATRef = () => {
     onError: (error) => {
       useSwalErrorAlertAPI(
         "System Error",
-        error?.response?.status
-          ? `HTTP Error ${error.response.status}: ${error.response.statusText}`
-          : error?.message || String(error),
+        error?.response?.status ? `HTTP ${error.response.status}` : error?.message || String(error)
       );
+      resetForm(); // ✅ reset on request error too
     },
   });
 
   // --- UPDATED ACTIONS ---
   const handleSave = () => {
-    if (!formData.vatCode || !formData.vatName || !formData.acctCode) {
-      return useSwalErrorAlert(
-        "Validation Error",
-        "Please fill in all required fields.",
-      );
-    }
+    // if (!formData.vatCode || !formData.vatName || !formData.acctCode) {
+    //   return useSwalErrorAlert(
+    //     "Validation Error",
+    //     "Please fill in all required fields.",
+    //   );
+    // }
 
     if (parseFloat(formData.vatRate) < 0) {
       return useSwalErrorAlert("Invalid Rate", "VAT Rate cannot be negative.");
@@ -220,7 +220,7 @@ const VATRef = () => {
     
     // Optional: Also scroll to top on reset
     if (formTopRef.current) {
-      formTopRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      formTopRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
   };
 
@@ -254,14 +254,19 @@ const VATRef = () => {
     closeMobileActionSheet(); 
 
     // <-- Added smooth scroll to the form area after a short delay to allow the sheet to close
-    setTimeout(() => {
-      if (formTopRef.current) {
-        // Adjust scroll position slightly higher if you have a sticky header
-        const yOffset = -80; 
-        const y = formTopRef.current.getBoundingClientRect().top + window.pageYOffset + yOffset;
-        window.scrollTo({ top: y, behavior: 'smooth' });
-      }
-    }, 150);
+    // setTimeout(() => {
+    //   if (formTopRef.current) {
+    //     // Adjust scroll position slightly higher if you have a sticky header
+    //     const yOffset = -80; 
+    //     const y = formTopRef.current.getBoundingClientRect().top + window.pageYOffset + yOffset;
+    //     window.scrollTo({ top: y, behavior: 'smooth' });
+    //   }
+    // }, 150);
+
+    if (formTopRef.current) {
+      formTopRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+
   };
 
   const { mutate: deleteVat, isLoading: isDeleting } = useMutation({
@@ -389,12 +394,14 @@ const VATRef = () => {
           </div>
         ),
       },
-      { key: "vatCode", label: "VAT Code", sortable: true, width: 120 },
-      { key: "vatName", label: "VAT Name", sortable: true, width: 300, maxWidth: 300 },
+      { key: "vatCode", label: "VAT Code", sortable: true, width: 100, minWidth: 100, requiredVisible: true },
+      { key: "vatName", label: "VAT Name", sortable: true, width: 250, minWidth: 180, maxWidth: 300, requiredVisible: true },
       {
         key: "vatType",
         label: "VAT Type",
         sortable: true,
+        width: 120,
+        minWidth: 100, 
         render: (row) => {
           const match = dropdowns?.typ?.find(
             (d) => d.DROPDOWN_CODE === row.vatType,
@@ -406,6 +413,8 @@ const VATRef = () => {
         key: "vatClass",
         label: "VAT Classification",
         sortable: true,
+        width: 150, 
+        minWidth: 150, 
         render: (row) => {
           const match = dropdowns?.cls?.find(
             (d) => d.DROPDOWN_CODE === row.vatClass,
@@ -418,6 +427,8 @@ const VATRef = () => {
         label: "VAT Rate (%)",
         sortable: true,
         className: "text-right",
+        width: 110, 
+        minWidth: 110, 
         render: (row) => {
           const rate = parseFloat(row.vatRate || 0);
           return `${rate.toFixed(2)}%`;
@@ -426,6 +437,8 @@ const VATRef = () => {
       {
         key: "vatCategory",
         label: "VAT Category",
+        width: 150, 
+        minWidth: 120, 
         sortable: true,
         render: (row) => {
           const match = dropdowns?.cat?.find(
@@ -434,8 +447,8 @@ const VATRef = () => {
           return match ? match.DROPDOWN_NAME : row.vatCategory;
         },
       },
-      { key: "acctCode", label: "Account Code", sortable: true },
-      { key: "acctName", label: "Account Name", sortable: true },
+      { key: "acctCode", label: "Account Code", sortable: true, width: 120, minWidth: 120 },
+      { key: "acctName", label: "Account Name", sortable: true, width: 200, minWidth: 120 },
     ],
     [dropdowns, isMobile], 
   );
@@ -475,7 +488,7 @@ const VATRef = () => {
 
   const getMax = (col) => useGetFieldLength(tblFieldArray, col);
 
-  console.log("Current VAT Type:", formData.vatType);
+  
   return (
     <div className="global-ref-main-div-ui">
       {(isDropdownLoading || isListLoading || isSaving || isDeleting) && (

@@ -101,59 +101,6 @@ const VendMast = () => {
   const videoLink = reftablesVideoGuide?.[docType] || "#";
   const [isOpenGuide, setOpenGuide] = useState(false);
 
-  // DUPLICATE NAME VALIDATION LOGIC
-  const allowedDuplicatePayeeNameRef = useRef("");
-  
-  const normalizeText = (value) => String(value || "").trim().replace(/\s+/g, " ").toUpperCase();
-
-  const findDuplicatePayeeName = async (payeeName = form.vendName) => {
-    const normalizedName = normalizeText(payeeName);
-    if (!normalizedName) return null;
-
-    try {
-      const payload = {
-        json_data: JSON.stringify({
-          json_data: {
-            vendName: String(payeeName || "").trim(),
-            vendCode: String(selectedVendCode || form.vendCode || "").trim(),
-          },
-        }),
-      };
-
-      const res = await apiClient.post("/checkDuplicatePayeeName", payload);
-      const duplicateRecord = res?.data?.data?.[0] || null;
-
-      if (duplicateRecord?.vendCode) return duplicateRecord;
-      return null;
-    } catch (error) {
-      console.error("Duplicate payee name check failed:", error);
-      return null;
-    }
-  };
-
-  const confirmDuplicatePayeeName = async (payeeName = form.vendName) => {
-    const duplicateRecord = await findDuplicatePayeeName(payeeName);
-    if (!duplicateRecord) return true;
-
-    const normalizedName = normalizeText(payeeName);
-    if (allowedDuplicatePayeeNameRef.current === normalizedName) return true;
-
-    const result = await useSwalProceedConfirm(
-      "Duplicate Payee Name",
-      `Payee Name "${payeeName}" already exists with Payee Code ${duplicateRecord.vendCode}.\n\nDo you want to proceed?`,
-      "Yes, Proceed"
-    );
-
-    if (result.isConfirmed) {
-      allowedDuplicatePayeeNameRef.current = normalizedName;
-      return true;
-    }
-
-    allowedDuplicatePayeeNameRef.current = "";
-    updateForm({ vendName: "", custName: "" });
-    return false;
-  };
-
   useEffect(() => {
     const handleClick = (e) => {
       if (guideRef.current && !guideRef.current.contains(e.target)) {

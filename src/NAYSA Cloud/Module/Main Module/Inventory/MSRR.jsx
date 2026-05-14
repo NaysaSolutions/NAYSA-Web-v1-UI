@@ -4399,30 +4399,6 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                     <div className="p-1.5">
                       <button
                         type="button"
-                        className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
-                        onClick={() => {
-                          setShowTypeDropdown(false);
-                          handleSelectTypeAndAddRow("FG");
-                        }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
-                            <FontAwesomeIcon icon={faBoxOpen} />
-                          </span>
-                          <div className="flex flex-col items-start">
-                            <span>Finished Goods</span>
-                            <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500">
-                              Add FG item
-                            </span>
-                          </div>
-                        </div>
-                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
-                          FG
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
                         className="mt-1 flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
                         onClick={handleOpenMSLookup}
                       >
@@ -4439,30 +4415,6 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                         </div>
                         <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
                           MS
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        className="mt-1 flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
-                        onClick={() => {
-                          setShowTypeDropdown(false);
-                          handleSelectTypeAndAddRow("RM");
-                        }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
-                            <FontAwesomeIcon icon={faWarehouse} />
-                          </span>
-                          <div className="flex flex-col items-start">
-                            <span>Raw Material</span>
-                            <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500">
-                              Add RM item
-                            </span>
-                          </div>
-                        </div>
-                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
-                          RM
                         </span>
                       </button>
 

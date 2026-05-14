@@ -213,6 +213,11 @@ const COAMast = () => {
     setRegistrationInfo(INITIAL_REG);
     setSelectedAcctCode(null);
     setIsEditing(false);
+
+    if (formTopRef.current) {
+      formTopRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+
   };
 
   const handleEdit = (row) => {
@@ -242,15 +247,15 @@ const COAMast = () => {
     setIsEditing(true);
     setIsMobileActionSheetOpen(false); // close sheet after action
 
-    if (isMobile) {
-      setTimeout(() => {
-        formTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 200);
-    }
-
-    //     if (formTopRef.current) {
-    //   formTopRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // if (isMobile) {
+    //   setTimeout(() => {
+    //     formTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    //   }, 200);
     // }
+
+    if (formTopRef.current) {
+      formTopRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
 
   };  
 
@@ -400,7 +405,7 @@ const columns = useMemo(() => [
 },
 
   { key: "acctCode", label: "Account Code", sortable: true, width: 120, pinned: true, requiredVisible: true },
-  { key: "acctName", label: "Account Name", sortable: true, width: 250, maxWidth: 300},
+  { key: "acctName", label: "Account Name", sortable: true, width: 250, maxWidth: 300, requiredVisible: true },
 
   {
     key: "acctType",

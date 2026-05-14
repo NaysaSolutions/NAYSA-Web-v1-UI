@@ -1,4 +1,4 @@
-// SearchMSInvLookup.jsx
+// SearchFGInvLookup.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import ReactDOM from "react-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -6,15 +6,12 @@ import { faTimes, faSpinner } from "@fortawesome/free-solid-svg-icons";
 
 import { postRequest } from "../Configuration/BaseURL"; // adjust path if needed
 
-const MSInvLookup = ({
+const FGInvLookup = ({
   isOpen,
   onClose,
-  userCode   = "",
-  whouseCode = "",
-  locCode    = "",
-  docType    = "MSIS",
-  tranType   = "",
-  debug      = true,
+  userCode = "",
+  docType  = "FG",
+  debug    = true,
 }) => {
   const [rows,       setRows]       = useState([]);
   const [modalReady, setModalReady] = useState(false);
@@ -23,13 +20,11 @@ const MSInvLookup = ({
 
   // per-column filters
   const [filters, setFilters] = useState({
-    itemCode:   "",
-    itemName:   "",
-    uomCode:    "",
-    lotNo:      "",
-    qstatCode:  "",
-    whouseCode: "",
-    locCode:    "",
+    itemCode:  "",
+    itemName:  "",
+    uom:       "",
+    categCode: "",
+    classCode: "",
   });
 
   // multi-select
@@ -54,22 +49,20 @@ const MSInvLookup = ({
       setSelectedKeys(new Set());
 
       const payload = {
-        whouseCode: whouseCode || "",
-        locCode:    locCode    || "",
-        docType:    docType    || "MSIS",
-        userCode:   userCode   || "",
+        docType:  docType  || "FG",
+        userCode: userCode || "",
       };
 
       try {
-        log("MSInvLookup → API payload:", payload);
+        log("FGInvLookup → API payload:", payload);
 
-        const endpoint = "/msLookup";
-        log("MSInvLookup → POST", endpoint);
+        const endpoint = "/fgLookup";
+        log("FGInvLookup → POST", endpoint);
 
         const res  = await postRequest(endpoint, payload);
         const body = res?.data ?? res;
 
-        log("MSInvLookup ← BODY:", body);
+        log("FGInvLookup ← BODY:", body);
 
         const list = Array.isArray(body?.result) ? body.result : [];
 
@@ -78,12 +71,12 @@ const MSInvLookup = ({
           setModalReady(true);
         }
       } catch (e) {
-        console.error("MSInvLookup ❌ error:", e?.response?.status, e?.response?.data || e?.message);
+        console.error("FGInvLookup ❌ error:", e?.response?.status, e?.response?.data || e?.message);
         if (isMounted) {
           setError(
             e?.response?.data?.message ||
             e?.message ||
-            "Failed to load MS inventory lookup."
+            "Failed to load FG inventory lookup."
           );
           setRows([]);
           setModalReady(true);
@@ -99,14 +92,12 @@ const MSInvLookup = ({
       isMounted = false;
       setModalReady(false);
     };
-  }, [isOpen, whouseCode, locCode, userCode, docType, tranType]);
+  }, [isOpen, userCode, docType]);
 
   // -------------------------
   // Helpers
   // -------------------------
-  const rowKey = (r) =>
-    (r?.uniqueKey && `${r.itemCode}|${r.uniqueKey}`) ||
-    `${r.itemCode}|${r.lotNo || ""}|${r.bbDate || ""}|${r.qstatCode || ""}|${r.whouseCode || ""}|${r.locCode || ""}`;
+  const rowKey = (r) => r?.itemCode || "";
 
   const fmtQty = (v) => {
     const n = Number(v ?? 0);
@@ -114,41 +105,24 @@ const MSInvLookup = ({
     return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  const fmtCost = (v) => {
-    const n = Number(v ?? 0);
-    if (Number.isNaN(n)) return "0.000000";
-    return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
-  };
-
-  const fmtDate = (v) => {
-    if (!v) return "";
-    const d = new Date(v);
-    if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleDateString();
-  };
-
   const handleFilterChange = (k, v) => setFilters((p) => ({ ...p, [k]: v }));
 
   const filtered = useMemo(() => {
     const toLower = (v) => (v ?? "").toString().toLowerCase();
     const f = {
-      itemCode:   toLower(filters.itemCode),
-      itemName:   toLower(filters.itemName),
-      uomCode:    toLower(filters.uomCode),
-      lotNo:      toLower(filters.lotNo),
-      qstatCode:  toLower(filters.qstatCode),
-      whouseCode: toLower(filters.whouseCode),
-      locCode:    toLower(filters.locCode),
+      itemCode:  toLower(filters.itemCode),
+      itemName:  toLower(filters.itemName),
+      uom:       toLower(filters.uom),
+      categCode: toLower(filters.categCode),
+      classCode: toLower(filters.classCode),
     };
 
     return (rows || []).filter((r) =>
-      toLower(r.itemCode).includes(f.itemCode)     &&
-      toLower(r.itemName).includes(f.itemName)     &&
-      toLower(r.uomCode).includes(f.uomCode)       &&
-      toLower(r.lotNo).includes(f.lotNo)           &&
-      toLower(r.qstatCode).includes(f.qstatCode)   &&
-      toLower(r.whouseCode).includes(f.whouseCode) &&
-      toLower(r.locCode).includes(f.locCode)
+      toLower(r.itemCode).includes(f.itemCode)   &&
+      toLower(r.itemName).includes(f.itemName)   &&
+      toLower(r.uom).includes(f.uom)             &&
+      toLower(r.categCode).includes(f.categCode) &&
+      toLower(r.classCode).includes(f.classCode)
     );
   }, [rows, filters]);
 
@@ -169,8 +143,8 @@ const MSInvLookup = ({
 
   const toggleAll = () => {
     setSelectedKeys((prev) => {
-      const next            = new Set(prev);
-      const all             = filtered.map(rowKey);
+      const next       = new Set(prev);
+      const all        = filtered.map(rowKey);
       const shouldSelectAll = !filtered.every((r) => next.has(rowKey(r)));
       if (shouldSelectAll) all.forEach((k) => next.add(k));
       else                 all.forEach((k) => next.delete(k));
@@ -194,8 +168,9 @@ const MSInvLookup = ({
             {/* Header */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
               <div className="text-sm font-semibold text-blue-800">
-                MS Inventory Lookup (Multi-select)
+                FG Inventory Lookup (Multi-select)
               </div>
+
               <button
                 type="button"
                 onClick={() => close(null)}
@@ -220,45 +195,74 @@ const MSInvLookup = ({
 
                   {/* Column header row */}
                   <tr>
-                    <th className="w-32  px-3 py-2 text-left  text-xs font-bold text-blue-900">Item Code</th>
-                    <th className="w-72  px-3 py-2 text-left  text-xs font-bold text-blue-900">Item Name</th>
-                    <th className="w-20  px-3 py-2 text-left  text-xs font-bold text-blue-900">UOM</th>
-                    <th className="w-28  px-3 py-2 text-right text-xs font-bold text-blue-900">On Hand</th>
-                    <th className="w-28  px-3 py-2 text-right text-xs font-bold text-blue-900">Unit Cost</th>
-                    <th className="w-32  px-3 py-2 text-left  text-xs font-bold text-blue-900">Lot No</th>
-                    <th className="w-28  px-3 py-2 text-left  text-xs font-bold text-blue-900">BB Date</th>
-                    <th className="w-32  px-3 py-2 text-left  text-xs font-bold text-blue-900">Quality</th>
-                    <th className="w-28  px-3 py-2 text-left  text-xs font-bold text-blue-900">Warehouse</th>
-                    <th className="w-28  px-3 py-2 text-left  text-xs font-bold text-blue-900">Location</th>
+                    {/* Checkbox column */}
+                    <th className="w-10 px-2 py-2 text-center">
+                      <input
+                        type="checkbox"
+                        checked={isAllChecked}
+                        onChange={toggleAll}
+                        className="h-4 w-4"
+                        title="Select all"
+                      />
+                    </th>
+
+                    <th className="w-32  px-3 py-2 text-left text-xs font-bold text-blue-900">Item Code</th>
+                    <th className="w-72  px-3 py-2 text-left text-xs font-bold text-blue-900">Item Name</th>
+                    <th className="w-20  px-3 py-2 text-left text-xs font-bold text-blue-900">UOM</th>
+                    <th className="w-28  px-3 py-2 text-right text-xs font-bold text-blue-900">Qty on Hand</th>
+                    <th className="w-32  px-3 py-2 text-left text-xs font-bold text-blue-900">Category</th>
+                    <th className="w-48  px-3 py-2 text-left text-xs font-bold text-blue-900">Category Desc</th>
+                    <th className="w-32  px-3 py-2 text-left text-xs font-bold text-blue-900">Class</th>
+                    <th className="w-48  px-3 py-2 text-left text-xs font-bold text-blue-900">Class Desc</th>
                   </tr>
 
                   {/* Filter row */}
                   <tr className="bg-gray-100">
                     <th className="px-2 py-1" />
+
                     <th className="px-2 py-1">
-                      <input value={filters.itemCode}   onChange={(e) => handleFilterChange("itemCode",   e.target.value)} placeholder="Filter" className="w-full px-2 py-1 text-xs border rounded" />
+                      <input
+                        value={filters.itemCode}
+                        onChange={(e) => handleFilterChange("itemCode", e.target.value)}
+                        placeholder="Filter"
+                        className="w-full px-2 py-1 text-xs border rounded"
+                      />
                     </th>
                     <th className="px-2 py-1">
-                      <input value={filters.itemName}   onChange={(e) => handleFilterChange("itemName",   e.target.value)} placeholder="Filter" className="w-full px-2 py-1 text-xs border rounded" />
+                      <input
+                        value={filters.itemName}
+                        onChange={(e) => handleFilterChange("itemName", e.target.value)}
+                        placeholder="Filter"
+                        className="w-full px-2 py-1 text-xs border rounded"
+                      />
                     </th>
                     <th className="px-2 py-1">
-                      <input value={filters.uomCode}    onChange={(e) => handleFilterChange("uomCode",    e.target.value)} placeholder="Filter" className="w-full px-2 py-1 text-xs border rounded" />
+                      <input
+                        value={filters.uom}
+                        onChange={(e) => handleFilterChange("uom", e.target.value)}
+                        placeholder="Filter"
+                        className="w-full px-2 py-1 text-xs border rounded"
+                      />
                     </th>
-                    <th className="px-2 py-1" /> {/* On Hand — no filter */}
-                    <th className="px-2 py-1" /> {/* Unit Cost — no filter */}
+                    <th className="px-2 py-1" /> {/* Qty on Hand — no filter */}
                     <th className="px-2 py-1">
-                      <input value={filters.lotNo}      onChange={(e) => handleFilterChange("lotNo",      e.target.value)} placeholder="Filter" className="w-full px-2 py-1 text-xs border rounded" />
+                      <input
+                        value={filters.categCode}
+                        onChange={(e) => handleFilterChange("categCode", e.target.value)}
+                        placeholder="Filter"
+                        className="w-full px-2 py-1 text-xs border rounded"
+                      />
                     </th>
-                    <th className="px-2 py-1" /> {/* BB Date — no filter */}
+                    <th className="px-2 py-1" /> {/* Category Desc — no filter */}
                     <th className="px-2 py-1">
-                      <input value={filters.qstatCode}  onChange={(e) => handleFilterChange("qstatCode",  e.target.value)} placeholder="Filter" className="w-full px-2 py-1 text-xs border rounded" />
+                      <input
+                        value={filters.classCode}
+                        onChange={(e) => handleFilterChange("classCode", e.target.value)}
+                        placeholder="Filter"
+                        className="w-full px-2 py-1 text-xs border rounded"
+                      />
                     </th>
-                    <th className="px-2 py-1">
-                      <input value={filters.whouseCode} onChange={(e) => handleFilterChange("whouseCode", e.target.value)} placeholder="Filter" className="w-full px-2 py-1 text-xs border rounded" />
-                    </th>
-                    <th className="px-2 py-1">
-                      <input value={filters.locCode}    onChange={(e) => handleFilterChange("locCode",    e.target.value)} placeholder="Filter" className="w-full px-2 py-1 text-xs border rounded" />
-                    </th>
+                    <th className="px-2 py-1" /> {/* Class Desc — no filter */}
                   </tr>
                 </thead>
 
@@ -271,7 +275,9 @@ const MSInvLookup = ({
                       return (
                         <tr
                           key={k + "|" + idx}
-                          className={`hover:bg-blue-50 transition-colors duration-150 ${checked ? "bg-blue-50" : ""}`}
+                          className={`hover:bg-blue-50 transition-colors duration-150 ${
+                            checked ? "bg-blue-50" : ""
+                          }`}
                           onClick={() => toggleRow(r)}
                         >
                           <td className="px-2 py-1 text-center">
@@ -283,22 +289,37 @@ const MSInvLookup = ({
                               className="h-4 w-4"
                             />
                           </td>
-                          <td className="px-3 py-1"><div className="truncate" title={r.itemCode}>{r.itemCode}</div></td>
-                          <td className="px-3 py-1"><div className="truncate" title={r.itemName}>{r.itemName}</div></td>
-                          <td className="px-3 py-1"><div className="truncate" title={r.uomCode}>{r.uomCode}</div></td>
-                          <td className="px-3 py-1 text-right"><div className="truncate" title={String(r.qtyHand)}>{fmtQty(r.qtyHand)}</div></td>
-                          <td className="px-3 py-1 text-right"><div className="truncate" title={String(r.unitCost)}>{fmtCost(r.unitCost)}</div></td>
-                          <td className="px-3 py-1"><div className="truncate" title={r.lotNo}>{r.lotNo}</div></td>
-                          <td className="px-3 py-1"><div className="truncate" title={r.bbDate}>{fmtDate(r.bbDate)}</div></td>
-                          <td className="px-3 py-1"><div className="truncate" title={r.qstatCode}>{r.qstatCode}</div></td>
-                          <td className="px-3 py-1"><div className="truncate" title={r.whouseCode}>{r.whouseCode}</div></td>
-                          <td className="px-3 py-1"><div className="truncate" title={r.locCode}>{r.locCode}</div></td>
+
+                          <td className="px-3 py-1">
+                            <div className="truncate" title={r.itemCode}>{r.itemCode}</div>
+                          </td>
+                          <td className="px-3 py-1">
+                            <div className="truncate" title={r.itemName}>{r.itemName}</div>
+                          </td>
+                          <td className="px-3 py-1">
+                            <div className="truncate" title={r.uom}>{r.uom}</div>
+                          </td>
+                          <td className="px-3 py-1 text-right">
+                            <div className="truncate" title={String(r.qtyHand)}>{fmtQty(r.qtyHand)}</div>
+                          </td>
+                          <td className="px-3 py-1">
+                            <div className="truncate" title={r.categCode}>{r.categCode}</div>
+                          </td>
+                          <td className="px-3 py-1">
+                            <div className="truncate" title={r.categDesc}>{r.categDesc}</div>
+                          </td>
+                          <td className="px-3 py-1">
+                            <div className="truncate" title={r.classCode}>{r.classCode}</div>
+                          </td>
+                          <td className="px-3 py-1">
+                            <div className="truncate" title={r.classDesc}>{r.classDesc}</div>
+                          </td>
                         </tr>
                       );
                     })
                   ) : (
                     <tr>
-                      <td colSpan={11} className="px-4 py-6 text-center text-gray-500 text-sm">
+                      <td colSpan={9} className="px-4 py-6 text-center text-gray-500 text-sm">
                         No matching records.
                       </td>
                     </tr>
@@ -312,6 +333,7 @@ const MSInvLookup = ({
               <div className="text-xs text-gray-600 font-semibold">
                 Showing <strong>{filtered.length}</strong> of {rows.length} entries
               </div>
+
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -320,12 +342,15 @@ const MSInvLookup = ({
                 >
                   Cancel
                 </button>
+
                 <button
                   type="button"
                   onClick={applySelected}
                   disabled={selectedKeys.size === 0}
                   className={`px-4 py-1 text-xs font-medium rounded-md text-white ${
-                    selectedKeys.size === 0 ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
+                    selectedKeys.size === 0
+                      ? "bg-gray-400 cursor-not-allowed"
+                      : "bg-blue-600 hover:bg-blue-700"
                   }`}
                 >
                   Apply Selected
@@ -359,4 +384,4 @@ const MSInvLookup = ({
   );
 };
 
-export default MSInvLookup;
+export default FGInvLookup;

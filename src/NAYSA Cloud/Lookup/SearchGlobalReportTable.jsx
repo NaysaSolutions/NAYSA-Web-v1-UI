@@ -206,6 +206,11 @@ const SearchGlobalReportTable = forwardRef(
       onStateChange,
     ]);
 
+    const hasActiveFilters = useMemo(
+      () => Object.values(filters).some((v) => String(v || "").trim() !== ""),
+      [filters]
+    );
+
     const parseNumber = (v) => {
       if (typeof parseFormattedNumber === "function") {
         const n = parseFormattedNumber(v);
@@ -1161,6 +1166,25 @@ const SearchGlobalReportTable = forwardRef(
               </div>
             )}
 
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  className={`rounded-md bg-red-100 text-red-700 hover:bg-red-200 shrink-0 font-medium flex items-center ${
+                    tableSize === "Half"
+                      ? "h-7 px-2 text-[10px]"
+                      : "h-8 px-3 text-xs"
+                  }`}
+                  onClick={() => {
+                    setFilters({});
+                    setCurrentPage(1);
+                  }}
+                  title="Clear column filters"
+                >
+                  <FontAwesomeIcon icon={faTimes} className="mr-1" />
+                  Clear Filters
+                </button>
+              )}
+
             {isMobileView ? (
               <div className="w-full grid grid-cols-3 gap-2">
                 <div className="relative" data-sgrt-export>
@@ -1464,7 +1488,7 @@ const SearchGlobalReportTable = forwardRef(
                         setColumnChooserSearch("");
                       }}
                     >
-                      Restore Default
+                      Show All
                     </button>
                   </div>
                 </div>

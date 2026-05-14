@@ -1,0 +1,347 @@
+import React, { useEffect, useMemo, useState, useRef } from "react";
+import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+    faFolderOpen,
+    faList,
+    faTags,
+    faPlus,
+    faSave,
+    faUndo,
+    faPenToSquare,
+    faTrash,
+} from "@fortawesome/free-solid-svg-icons";
+
+import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
+import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
+import FGMast_SetupTab from "./FGMast_SetupTab.jsx";
+import FGMast_DataTab from "./FGMast_DataTab.jsx";
+import FGMast_ReferenceCodeTab from "./FGMast_ReferenceCodeTab.jsx";
+
+import {
+    useSwalErrorAlert,
+    useSwalSuccessAlert,
+    useSwalErrorAlertAPI,
+    useSwalDeleteConfirm,
+    useSwalDeleteRecord
+} from "@/NAYSA Cloud/Global/behavior.jsx";
+
+const emptyForm = {
+    itemCode: "", // Item No
+    itemDesc: "",
+    uom: "", uomName: "",
+    uom2: "",
+    qtyPerUom2: "0.000000",
+    categoryCode: "", categoryName: "",
+    classCode: "", className: "",
+    active: "Y",
+    status: "New",
+
+    subClass1Code: "", subClass1Name: "",
+    subClass2Code: "", subClass2Name: "",
+    subClass3Code: "", subClass3Name: "",
+    vacant07: "", vacant08: "", vacant09: "",
+    vacant10: "", vacant11: "", vacant12: "",
+
+    reOrderLevel: "0.000",
+    sellingPrice: "0.0000",
+    stdPoPrice: "0.000000",
+    planType: "Purchased",
+    shelfLife: "0",
+    minOrderQty: "0.00",
+    maxOrderQty: "0.00",
+    stdPackingQty: "0.00",
+    purchasingLeadTime: "0",
+    productionLeadTime: "0",
+
+    lastPurDate: "",
+    lastPurPrice: "0.000000",
+    allowOverRec: "N",
+    qtyOnHand: "0.000",
+    unitCost: "0.000000",
+
+    stdUnitCost: "0.00",
+    stdDlCost: "0.00",
+    stdFohCost: "0.00",
+    stdOsCost: "0.00",
+    stdDmCost: "0.00",
+
+    barcode: "",
+    altItemCode: "",
+    altItemDesc: "",
+    itemDesc2: "",
+    itemDesc3: "",
+    payeeCode: "", payeeName: "",
+
+    registeredBy: "", registeredDate: "",
+    updatedBy: "", updatedDate: "",
+    __isNew: false,
+};
+
+const FGMast = () => {
+    const [activeTab, setActiveTab] = useState("setup");
+    const [isLoading, setIsLoading] = useState(false);
+    const [generationMode, setGenerationMode] = useState("Auto");
+
+    const { user } = useAuth();
+    const userCode = user?.USER_CODE || user?.userCode || user?.code || "";
+
+    const [form, setForm] = useState({ ...emptyForm });
+    const [selectedItemCode, setSelectedItemCode] = useState("");
+    const [isEditing, setIsEditing] = useState(false);
+
+    const [masterAllRows, setMasterAllRows] = useState([]);
+    const [masterRows, setMasterRows] = useState([]);
+
+    // Reference Tab State
+    const refTabRef = useRef(null);
+    const [refState, setRefState] = useState({ isEditing: false, canSave: false });
+
+    useEffect(() => {
+        const fetchGenerationMode = async () => {
+            try {
+                const res = await apiClient.post("/lookupDocSeries", { docCode: "FG" });
+                setGenerationMode(res?.data?.data?.[0]?.docSeries || "Auto");
+            } catch (e) {
+                console.error("Failed to fetch mode", e);
+            }
+        };
+        fetchGenerationMode();
+        loadMasterList();
+    }, []);
+
+    const updateForm = (patch) => {
+        setForm((prev) => ({ ...prev, ...patch }));
+    };
+
+    const parseSprocJsonResult = (rows) => {
+        if (!rows) return [];
+        const r = rows?.[0]?.result;
+        if (typeof r === "string") {
+            try { return JSON.parse(r); } catch { return []; }
+        }
+        if (Array.isArray(rows) && rows.length && typeof rows[0] === "object") return rows;
+        return [];
+    };
+
+    const loadMasterList = async () => {
+        setIsLoading(true);
+        try {
+            const res = await apiClient.get("/fgMast");
+            const list = parseSprocJsonResult(res?.data?.data);
+            setMasterAllRows(list);
+            setMasterRows(list);
+        } catch (e) {
+            setMasterAllRows([]);
+            setMasterRows([]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // AFTER
+    const fetchItemByCode = async (itemCode, enterEditMode = false) => {
+        const code = String(itemCode || "").trim();
+        if (!code) return;
+
+        setIsLoading(true);
+        try {
+            const res = await apiClient.post("/getFGMast", { ITEM_CODE: code });
+            const parsed = parseSprocJsonResult(res?.data?.data);
+            const row = Array.isArray(parsed) ? parsed?.[0] : null;
+
+            if (!row) {
+                await useSwalErrorAlert("Info", "Item not found.");
+                return;
+            }
+
+            updateForm({
+                ...emptyForm,
+                __isNew: false,
+                ...row,
+                itemCode: code,
+            });
+
+            setSelectedItemCode(code);
+            if (enterEditMode) setIsEditing(true);
+        } catch (e) {
+            await useSwalErrorAlertAPI("Fetch Error", "Failed to fetch item.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const deleteItem = async () => {
+        const code = String(form?.itemCode || "").trim();
+        if (!code) return;
+
+        const confirm = await useSwalDeleteConfirm("Delete Item?", `Delete Item No ${code}?`);
+        if (!confirm?.isConfirmed) return;
+
+        setIsLoading(true);
+        try {
+            const payload = {
+                // Send as object so Laravel receives 'array'
+                json_data: { action: "delete", itemCode: code, userCode }
+            };
+
+            // Changed from /upsertFGMast to /deleteFGMast
+            await apiClient.post("/deleteFGMast", payload);
+
+            await useSwalDeleteRecord("Deleted", `Item No ${code} removed.`);
+            handleResetSetup();
+            await loadMasterList();
+        } catch (e) {
+            await useSwalErrorAlert("Delete Failed", e?.message || "Failed to delete item.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const upsertItem = async () => {
+        let code = String(form?.itemCode || "").trim();
+        setIsLoading(true);
+        try {
+            // ✅ Correct — matches what the sproc expects at $.json_data.*
+            const payload = {
+                json_data: JSON.stringify({
+                    ...form,
+                    action: selectedItemCode ? "edit" : "add",
+                    userCode,
+                }),
+            };
+
+            const res = await apiClient.post("/upsertFGMast", payload);
+
+            const sqlRow = res?.data?.data?.[0];
+            if (sqlRow?.errorcount > 0 || sqlRow?.errorCount > 0) {
+                await useSwalErrorAlert("Validation Failed", sqlRow?.errormsg || sqlRow?.errorMsg);
+                return;
+            }
+
+            const finalCode = sqlRow?.generatedCode || sqlRow?.generatedcode || code;
+
+            await useSwalSuccessAlert("Success!", "Item saved successfully.");
+            setSelectedItemCode(finalCode);
+            setIsEditing(false);
+            await loadMasterList();
+            await fetchItemByCode(finalCode);
+        } catch (e) {
+            await useSwalErrorAlert("Save Failed", "Failed to save item.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleAdd = () => {
+        setSelectedItemCode("");
+        setForm({ ...emptyForm, __isNew: true });
+        setIsEditing(true);
+        setActiveTab("setup");
+    };
+
+    const handleEdit = async () => {
+        if (!form?.itemCode) {
+            await useSwalErrorAlert({ title: "Required", message: "Select an Item first." });
+            return;
+        }
+        setIsEditing(true);
+        setActiveTab("setup");
+    };
+
+    const handleResetSetup = () => {
+        setSelectedItemCode("");
+        setForm({ ...emptyForm });
+        setIsEditing(false);
+    };
+
+    const tabs = [
+        { id: "setup", label: "Item Masterfile Set Up", icon: faFolderOpen },
+        { id: "master", label: "Item Master Data", icon: faList },
+        { id: "ref", label: "Reference Codes", icon: faTags },
+    ];
+
+    const headerButtons = useMemo(() => {
+        const baseBtn = "flex items-center justify-center h-8 w-8 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md transition-all shadow-sm text-white";
+
+        if (activeTab === "setup") {
+            const hasRecord = String(form?.itemCode || "").trim() && !form.__isNew;
+            return [
+                { key: "add", label: <span className="hidden sm:inline ml-1">Add</span>, icon: faPlus, onClick: handleAdd, disabled: isLoading, className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
+                { key: "save", label: <span className="hidden sm:inline ml-1">Save</span>, icon: faSave, onClick: upsertItem, disabled: isLoading || !isEditing, className: `${baseBtn} ${!isEditing ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
+                { key: "reset", label: <span className="hidden sm:inline ml-1">Reset</span>, icon: faUndo, onClick: handleResetSetup, disabled: isLoading, className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
+                { key: "edit", label: <span className="hidden sm:inline ml-1">Edit</span>, icon: faPenToSquare, onClick: handleEdit, disabled: isLoading || isEditing || !hasRecord, className: `${baseBtn} ${isEditing || !hasRecord ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
+                { key: "delete", label: <span className="hidden sm:inline ml-1">Delete</span>, icon: faTrash, onClick: deleteItem, disabled: isLoading || isEditing || !hasRecord, className: `${baseBtn} ${isEditing || !hasRecord ? "bg-red-400 cursor-not-allowed opacity-50" : "bg-red-500 hover:bg-red-600"}` },
+            ];
+        }
+
+        if (activeTab === "ref") {
+            return [
+                { key: "add", label: <span className="hidden sm:inline ml-1">Add</span>, icon: faPlus, onClick: () => refTabRef.current?.add?.(), className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
+                { key: "save", label: <span className="hidden sm:inline ml-1">Save</span>, icon: faSave, onClick: () => refTabRef.current?.save?.(), disabled: !refState.canSave, className: `${baseBtn} ${!refState.canSave ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
+                { key: "reset", label: <span className="hidden sm:inline ml-1">Reset</span>, icon: faUndo, onClick: () => refTabRef.current?.reset?.(), className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
+            ];
+        }
+
+        return [];
+    }, [activeTab, isLoading, isEditing, form, refState]);
+
+    return (
+        <div className="global-ref-main-div-ui">
+            <div className="global-ref-header-ui">
+                <div className="w-full flex flex-col lg:flex-row items-center justify-between gap-3">
+                    <div className="flex-shrink-0 w-full lg:w-auto text-center lg:text-left">
+                        <h1 className="global-ref-headertext-ui truncate">FG Master Data</h1>
+                    </div>
+
+                    <div className="flex-1 flex justify-center w-full overflow-x-auto no-scrollbar">
+                        <div className="flex flex-nowrap border-b border-blue-300">
+                            {tabs.map((tab) => (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(tab.id)}
+                                    className={`shrink-0 px-3 py-1 sm:py-2 sm:px-4 text-[10px] sm:text-[13px] font-bold border-b-2 rounded-md ${activeTab === tab.id ? "border-blue-700 text-blue-700 bg-blue-50" : "border-transparent text-gray-500 hover:text-blue-500"}`}
+                                >
+                                    <FontAwesomeIcon icon={tab.icon} className="mr-1.5" /> {tab.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="flex-shrink-0 w-full lg:w-auto flex flex-wrap items-center justify-center lg:justify-end gap-1.5">
+                        {!!headerButtons.length && <ButtonBar buttons={headerButtons} />}
+                    </div>
+                </div>
+            </div>
+
+            <div className="global-tran-tab-div-ui mt-36 sm:mt-32 md:mt-28 lg:mt-24" style={{ minHeight: "calc(100vh - 170px)" }}>
+                {activeTab === "setup" && (
+                    // AFTER
+                    <FGMast_SetupTab
+                        form={form}
+                        isEditing={isEditing}
+                        isLoading={isLoading}
+                        generationMode={generationMode}
+                        onChangeForm={updateForm}
+                        onLookupSelect={(itemCode) => fetchItemByCode(itemCode, true)}  // ← enters edit mode
+                    />
+                )}
+                {activeTab === "master" && (
+                    <FGMast_DataTab
+                        rows={masterRows}
+                        onRowDoubleClick={(row) => {
+                            fetchItemByCode(row.itemCode);
+                            setActiveTab("setup");
+                            setIsEditing(false);
+                        }}
+                    />
+                )}
+                {activeTab === "ref" && (
+                    <FGMast_ReferenceCodeTab ref={refTabRef} onStateChange={setRefState} />
+                )}
+            </div>
+        </div>
+    );
+};
+
+export default FGMast;
