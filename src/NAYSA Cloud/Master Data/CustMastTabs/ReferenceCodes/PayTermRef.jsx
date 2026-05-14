@@ -12,6 +12,8 @@ import React, {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Edit, Trash2 } from "lucide-react";
 import Swal from "sweetalert2";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faPlus, faSave, faUndo, faEdit, faTrashAlt, faInfoCircle, faChevronDown, faFilePdf, faVideo } from "@fortawesome/free-solid-svg-icons";
 
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
@@ -337,20 +339,25 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
         width: 90,
         render: (row) => (
           <div className="flex items-center justify-center gap-2">
+            
             <button
-              type="button"
               onClick={(e) => { e.stopPropagation(); handleEdit(row); }}
-              className="p-1 rounded-md bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-600 hover:text-white transition-colors"
+              className="global-ref-td-button-edit-ui"
+              title="Edit"
             >
-              <Edit size={16} />
+              <FontAwesomeIcon icon={faEdit} />
+              <span className="md:hidden">Edit</span>
             </button>
+
             <button
-              type="button"
               onClick={(e) => { e.stopPropagation(); handleDelete(row); }}
-              className="p-1 rounded-md bg-red-50 text-red-600 border border-red-200 hover:bg-red-600 hover:text-white transition-colors"
+              className="global-ref-td-button-delete-ui"
+              title="Delete"
             >
-              <Trash2 size={16} />
+              <FontAwesomeIcon icon={faTrashAlt} />
+              <span className="md:hidden">Delete</span>
             </button>
+
           </div>
         ),
       },
@@ -361,7 +368,7 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
         key: "advances",
         label: "AP Advances",
         sortable: true,
-        width: 100,
+        width: 120,
         render: (row) => (row.advances === "Y" ? "Yes" : "No"),
       },
     ],
@@ -425,8 +432,9 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
   // 4. REMOVED LOCAL BUTTON BAR UI
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 w-full">
-      {/* FORM */}
+  <div className="grid grid-cols-1 xl:grid-cols-12 gap-3 w-full">
+    {/* FORM */}
+    <div className="xl:col-span-4">
       <Card>
         <SectionHeader title="Basic Information" />
 
@@ -475,11 +483,11 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
 
         <RegistrationInfo data={form} layout="stacked" />
       </Card>
+    </div>
 
-      {/* LIST */}
-      <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-100">
-       
-
+    {/* LIST */}
+    <div className="xl:col-span-8">
+      <div className="global-tran-table-main-div-ui">
         <SearchGlobalReferenceTable
           columns={tableColumns}
           data={tableData}
@@ -493,6 +501,7 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
         />
       </div>
     </div>
+  </div>
   );
 });
 
