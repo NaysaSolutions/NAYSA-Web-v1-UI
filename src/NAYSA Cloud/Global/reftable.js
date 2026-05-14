@@ -29,6 +29,13 @@ export const reftables = {
     BillCode: "Billing Codes",
     VendMast: "Payee Master Data",
 
+    JobCodeRef: "Job Codes",
+    AgentRef: "Agent Codes",
+    ZoneRef: "Zone Codes",
+    AreaRef: "Area Codes",
+    CustTypeRef: "Customer Types",
+    BillTermRef: "Billing Terms",
+
     // Accounts Payable Module
     APV: "Accounts Payable Voucher Transaction",
     APDM: "AP Debit Memo Voucher Transaction",

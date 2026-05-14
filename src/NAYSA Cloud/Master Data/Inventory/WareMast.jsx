@@ -20,6 +20,7 @@ import {
   useSwalErrorAlert,
   useSwalSuccessAlert,
   useSwalDeleteConfirm,
+  useSwalErrorAlertAPI,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable";
@@ -79,6 +80,7 @@ const INITIAL_REG = {
   lastUpdatedDate: "",
 };
 
+
 const toYN = (value, def = "N") => {
   const normalized = String(value ?? "")
     .trim()
@@ -102,6 +104,12 @@ const WareMast = () => {
   const locationRef = useRef(null);
   const parameterRef = useRef(null); // <-- NEW REF
   const [activeTab, setActiveTab] = useState("warehouse");
+
+  // ADDED: State to track child components to trigger re-renders for buttons
+  const [childStates, setChildStates] = useState({
+    location: { isEditing: false, isSaving: false },
+    parameter: { isEditing: false, isSaving: false }
+  });
 
   // --- YOUR EXACT UNTOUCHED STATE ---
   const [form, setForm] = useState(DEFAULT_FORM);
@@ -378,16 +386,16 @@ const WareMast = () => {
     else if (activeTab === "parameter" && parameterRef.current) parameterRef.current.handleReset();
   };
 
-  // Determine button disabled states dynamically based on active tab
+  // UPDATED: Determine button states dynamically using the child state object
   const isCurrentlyEditing = 
     activeTab === "warehouse" ? isEditing : 
-    activeTab === "location" ? locationRef.current?.isEditing : 
-    parameterRef.current?.isEditing;
+    activeTab === "location" ? childStates.location.isEditing : 
+    activeTab === "parameter" ? childStates.parameter.isEditing : false;
 
   const isCurrentlySaving = 
     activeTab === "warehouse" ? saveMutation.isPending : 
-    activeTab === "location" ? locationRef.current?.isSaving : 
-    parameterRef.current?.isSaving;
+    activeTab === "location" ? childStates.location.isSaving : 
+    activeTab === "parameter" ? childStates.parameter.isSaving : false;
 
   // Modified Mobile Action Sheet to handle all tabs dynamically
   const openMobileActionSheet = (row, editFn = handleEdit, deleteFn = handleDelete) => {
@@ -573,7 +581,7 @@ const WareMast = () => {
                       type="lookup"
                       value={form.branchCode ? `${form.branchCode} - ${form.branchName || ""}` : ""}
                       onLookup={() => setBranchModalOpen(true)}
-                      disabled={!isEditing}
+                      disabled={false}
                       required
                     />
                     <FieldRenderer
@@ -661,20 +669,24 @@ const WareMast = () => {
         )}
 
         {/* 6. LOCATION TAB */}
+        {/* ADDED: onStateChange prop to receive state updates from the Location component */}
         {activeTab === "location" && (
            <Location 
              ref={locationRef} 
              isMobile={isMobile} 
-             onMobileActionOpen={openMobileActionSheet} 
+             onMobileActionOpen={openMobileActionSheet}
+             onStateChange={(state) => setChildStates(prev => ({ ...prev, location: state }))}
            />
         )}
 
         {/* 7. PARAMETER TAB */}
+        {/* ADDED: onStateChange prop to prepare WhParameter to do the same thing */}
         {activeTab === "parameter" && (
            <WhParameter 
              ref={parameterRef} 
              isMobile={isMobile} 
              onMobileActionOpen={openMobileActionSheet} 
+             onStateChange={(state) => setChildStates(prev => ({ ...prev, parameter: state }))}
            />
         )}
 

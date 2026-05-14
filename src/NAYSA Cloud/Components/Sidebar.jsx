@@ -83,7 +83,7 @@ const MenuItem = ({
   const Icon = level === 0 ? iconMap[item?.name] : null;
 
   const itemName = item?.name || "";
-  const isSpecialBlue = /(post|finalize)/i.test(itemName);
+  const isSpecialBlue = /(post|finalize|approval)/i.test(itemName);
 
   useEffect(() => {
     const lc = (searchTerm || "").toLowerCase();
