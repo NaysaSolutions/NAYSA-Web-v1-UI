@@ -330,7 +330,7 @@ const CutoffRef = () => {
     setSelectedCutoffCode(null); 
 
     if (formTopRef.current) {
-      formTopRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      formTopRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
   };
 
@@ -365,6 +365,11 @@ const CutoffRef = () => {
         window.scrollTo({ top: y, behavior: 'smooth' });
       }
     }, 150);
+
+    //    if (formTopRef.current) {
+    //   formTopRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    // }
+
   };
 
   const { mutate: deleteCutoff, isLoading: isDeleting } = useMutation({
@@ -506,8 +511,8 @@ const CutoffRef = () => {
           </div>
         ),
       },
-      { key: "cutoffCode", label: "Cut Off Code", sortable: true, width: 120 },
-      { key: "cutoffName", label: "Cut Off Name", sortable: true, width: 185, maxWidth: 185 },
+      { key: "cutoffCode", label: "Cut Off Code", sortable: true, width: 120, requiredVisible: true },
+      { key: "cutoffName", label: "Cut Off Name", sortable: true, width: 185, maxWidth: 185, requiredVisible: true },
       {
         key: "fromDate",
         label: "Start Date",
@@ -825,7 +830,7 @@ const CutoffRef = () => {
         </div>
 
         {/* RIGHT SIDE: Global Reference Table */}
-        <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg overflow-hidden flex flex-col global-tran-table-main-div-ui mt-0">
+        <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg overflow-hidden flex flex-col mt-0">
           <SearchGlobalReferenceTable
             columns={columns}
             data={filteredAccounts}
