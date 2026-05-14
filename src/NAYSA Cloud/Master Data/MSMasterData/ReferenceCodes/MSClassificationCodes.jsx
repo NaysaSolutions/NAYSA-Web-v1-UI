@@ -1,116 +1,502 @@
-// src/NAYSA Cloud/Reference File/ReferenceCodes/ClassificationCodes.jsx
-import React, { forwardRef, useImperativeHandle, useState, useEffect, useMemo } from "react";
-import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer";
-import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faTrashAlt, faPlus, faUndo, faSave } from "@fortawesome/free-solid-svg-icons";
-import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
-import { useSwalErrorAlert, useSwalSuccessAlert, useSwalDeleteConfirm, useSwalDeleteRecord } from "@/NAYSA Cloud/Global/behavior.jsx";
+// src/NAYSA Cloud/Reference File/ReferenceCodes/MSClassificationCodes.jsx
 
-const emptyForm = { code: "", description: "", __isNew: false };
+import React, {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Edit, Trash2 } from "lucide-react";
+
+import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
+import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
+import {
+  useSwalErrorAlert,
+  useSwalSuccessAlert,
+  useSwalDeleteConfirm,
+  useSwalDeleteRecord,
+} from "@/NAYSA Cloud/Global/behavior.jsx";
+
+import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
+import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
+import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable.jsx";
+import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
+import SearchMSInvCateg from "@/NAYSA Cloud/Lookup/SearchMSInvCateg.jsx";
+
+/* ================= HELPERS ================= */
+
+const Card = ({ children, className = "" }) => (
+  <div className={`bg-white shadow-sm border border-slate-200 rounded-md flex flex-col ${className}`}>
+    {children}
+  </div>
+);
+
+const SectionHeader = ({ title }) => (
+  <div className="mb-3">
+    <div className="text-[11px] font-bold text-slate-700 tracking-wide border-b border-slate-200 pb-1.5">
+      {title}
+    </div>
+  </div>
+);
+
+const extractRows = (payload) => {
+  const res =
+    payload?.data?.data?.[0]?.result ??
+    payload?.data?.result ??
+    payload?.data?.data;
+
+  if (!res) return [];
+  if (Array.isArray(res)) return res;
+
+  if (typeof res === "string") {
+    try {
+      return JSON.parse(res) || [];
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+};
+
+const DEFAULT_FORM = {
+  code:        "",
+  description: "",
+  categCode:   "",
+  categName:   "",
+  registeredBy:    "",
+  registeredDate:  "",
+  lastUpdatedBy:   "",
+  lastUpdatedDate: "",
+  __existing: false,
+};
+
+/* ================= COMPONENT ================= */
 
 const ClassificationCodes = forwardRef(({ onStateChange }, ref) => {
-    const [isLoading, setIsLoading] = useState(false);
-    const [isEditing, setIsEditing] = useState(false);
-    const [form, setForm] = useState({ ...emptyForm });
-    const [tableData, setTableData] = useState([]);
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
 
-    useEffect(() => { onStateChange?.({ isEditing, canSave: isEditing }); }, [isEditing, onStateChange]);
+  const userCode = user?.USER_CODE || user?.userCode || user?.code || "ADMIN";
 
-    const loadData = async () => {
-        setIsLoading(true);
-        try {
-            const res = await apiClient.post("/getMSReferenceList", { type: "classification" });
-            const rawData = res?.data?.data?.[0]?.result;
-            setTableData(rawData ? JSON.parse(rawData) : []);
-        } catch (e) {
-            setTableData([]);
-        } finally {
-            setIsLoading(false);
-        }
+  const codeInputRef    = useRef(null);
+  const enterValidatedRef = useRef(false);
+
+  const [form, setForm]               = useState(DEFAULT_FORM);
+  const [selectedRow, setSelectedRow] = useState(null);
+  const [isEditing, setIsEditing]     = useState(false);
+  const [isDupCode, setIsDupCode]     = useState(false);
+  const [search, setSearch]           = useState("");
+  const [isCategOpen, setIsCategOpen] = useState(false);
+
+  const setField = (key, value) =>
+    setForm((prev) => ({ ...prev, [key]: value }));
+
+  const resetForm = useCallback((next = DEFAULT_FORM) => {
+    setForm(next);
+  }, []);
+
+  /* ================= LOAD LIST ================= */
+
+  const classListQuery = useQuery({
+    queryKey: ["msClassificationList"],
+    queryFn: async () => {
+      const res = await apiClient.get("/msClass");
+      return extractRows(res);
+    },
+  });
+
+  const classifications = useMemo(
+    () => classListQuery.data || [],
+    [classListQuery.data]
+  );
+
+  const isInitialLoading = classListQuery.isLoading;
+
+  /* ================= DUPLICATE CHECK ================= */
+
+  const checkDuplicate = async (code) => {
+    const c = String(code || "").trim();
+    if (!c) return false;
+    try {
+      return classifications.some((item) =>
+        String(item.code || item.classCode || "").toUpperCase() === c.toUpperCase()
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  /* ================= VALIDATE CODE ================= */
+
+  const handleCodeValidate = async (arg) => {
+    const isEvent = arg && typeof arg === "object" && "type" in arg;
+
+    if (isEvent && arg.type === "keydown") {
+      if (arg.key !== "Enter") return;
+      enterValidatedRef.current = true;
+    }
+
+    if (isEvent && arg.type === "blur" && enterValidatedRef.current) {
+      enterValidatedRef.current = false;
+      return;
+    }
+
+    const code = String(form.code || "").trim();
+    if (!code || !isEditing || form.__existing) return;
+
+    const dup = await checkDuplicate(code);
+    if (dup) {
+      setIsDupCode(true);
+      await useSwalErrorAlert(
+        "Duplicate Entry",
+        `Classification Code "${code}" already exists.`
+      );
+      setField("code", "");
+      setTimeout(() => codeInputRef.current?.focus?.(), 0);
+    } else {
+      setIsDupCode(false);
+    }
+  };
+
+  /* ================= SAVE ================= */
+
+  const saveMutation = useMutation({
+    mutationFn: async (payload) => {
+      return apiClient.post("/upsertMSClass", {
+        json_data: JSON.stringify({
+          json_data: {
+            code:        payload.code,
+            description: payload.description,
+            categCode:   payload.categCode,
+            userCode:    payload.userCode,
+          },
+        }),
+      });
+    },
+    onSuccess: async (response) => {
+      const row = response?.data?.data?.[0] || response?.data || {};
+      const errorcount = Number(row?.errorcount ?? 0);
+      const errormsg   = String(row?.errormsg   ?? "");
+
+      if (errorcount > 0) {
+        await useSwalErrorAlert("Validation Error", errormsg);
+        return;
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["msClassificationList"] });
+      await useSwalSuccessAlert("Success!", "Classification Code saved successfully.");
+
+      setIsEditing(false);
+      setSelectedRow(null);
+      setIsDupCode(false);
+      resetForm(DEFAULT_FORM);
+    },
+    onError: async (error) => {
+      const msg =
+        error?.response?.data?.message ||
+        error?.response?.data?.errormsg ||
+        error?.message ||
+        "Failed to save classification code.";
+      await useSwalErrorAlert("Validation Error", msg);
+    },
+  });
+
+  const handleSave = useCallback(() => {
+    if (!isEditing || saveMutation.isPending) return;
+
+    const payload = {
+      ...form,
+      code:        String(form.code        || "").trim(),
+      description: String(form.description || "").trim(),
+      categCode:   String(form.categCode   || "").trim(),
+      userCode,
     };
 
-    useEffect(() => { loadData(); }, []);
+    saveMutation.mutate(payload);
+  }, [form, isEditing, saveMutation, userCode]);
 
-    const handleAdd = () => { setForm({ ...emptyForm, __isNew: true }); setIsEditing(true); };
-    const handleReset = () => { setForm({ ...emptyForm }); setIsEditing(false); };
-    const handleSave = async () => {
-        if (!form.code || !form.description) return useSwalErrorAlert("Required", "Please provide Code and Description.");
-        setIsLoading(true);
-        try {
-            await apiClient.post("/upsertMSReference", {
-                json_data: JSON.stringify({ json_data: { type: "classification", action: form.__isNew ? "add" : "edit", ...form } })
-            });
-            await useSwalSuccessAlert("Saved", "Classification Code saved successfully.");
-            setForm(prev => ({ ...prev, __isNew: false }));
-            setIsEditing(false);
-            loadData();
-        } catch (e) {
-            await useSwalErrorAlert("Error", "Failed to save record.");
-        } finally {
-            setIsLoading(false);
+  /* ================= DELETE ================= */
+
+  const deleteMutation = useMutation({
+    mutationFn: async (code) => {
+      return apiClient.post("/deleteMSClass", {
+        json_data: {
+          code,
+          userCode,
+        },
+      });
+    },
+    onSuccess: async (_, deletedCode) => {
+      queryClient.invalidateQueries({ queryKey: ["msClassificationList"] });
+      await useSwalDeleteRecord(
+        "Deleted",
+        `Classification Code ${deletedCode} has been successfully removed.`
+      );
+      resetForm(DEFAULT_FORM);
+      setIsEditing(false);
+      setSelectedRow(null);
+    },
+    onError: async (error) => {
+      const msg =
+        error?.response?.data?.message ||
+        error?.response?.data?.errormsg ||
+        error?.message ||
+        "Failed to delete classification code.";
+      await useSwalErrorAlert("Error", msg);
+    },
+  });
+
+  const handleDelete = useCallback(
+    async (row) => {
+      const code = row?.code || row?.classCode;
+      if (!code) return;
+
+      // Check if in use before confirming delete
+      try {
+        const checkRes = await apiClient.post("/checkInUsedMSClass", {
+          json_data: { code },
+        });
+        const result = String(
+          checkRes?.data?.data?.[0]?.result ??
+          checkRes?.data?.[0]?.result ??
+          "0"
+        ).trim();
+
+        if (result === "1") {
+          await useSwalErrorAlert(
+            "Cannot Delete",
+            `Classification Code "${code}" is currently in use and cannot be deleted.`
+          );
+          return;
         }
-    };
+      } catch {
+        await useSwalErrorAlert("Error", "Failed to check if record is in use.");
+        return;
+      }
 
-    const handleDelete = async () => {
-        if (form.__isNew || !form.code) return;
-        const confirm = await useSwalDeleteConfirm("Delete Record?", `Delete Classification Code ${form.code}?`);
-        if (!confirm.isConfirmed) return;
-        setIsLoading(true);
-        try {
-            await apiClient.post("/deleteMSReference", { type: "classification", code: form.code });
-            await useSwalDeleteRecord("Deleted", "Record removed successfully.");
-            handleReset();
-            loadData();
-        } catch (e) {
-            await useSwalErrorAlert("Error", "Failed to delete record.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
+      const confirm = await useSwalDeleteConfirm(
+        "Delete Record?",
+        `Are you sure you want to delete "${code}"?`
+      );
+      if (!confirm?.isConfirmed) return;
 
-    useImperativeHandle(ref, () => ({ add: handleAdd, reset: handleReset, save: handleSave }));
+      deleteMutation.mutate(code);
+    },
+    [deleteMutation]
+  );
 
-    const columns = useMemo(() => [
-        { key: "code", label: "Classification Code", sortable: true, width: 140 },
-        { key: "description", label: "Classification Description / Name", sortable: true, width: 300 },
-    ], []);
+  /* ================= EDIT ================= */
 
-    return (
-        <div className="flex flex-col xl:flex-row gap-3 h-full">
-            <div className="w-full xl:w-[400px] shrink-0 h-full">
-                <div className="bg-white shadow-sm border border-slate-200 rounded-md flex flex-col h-full overflow-hidden">
-                    <div className="flex items-center gap-1 p-2 border-b border-slate-300 bg-slate-50 shrink-0">
-                        <button onClick={handleAdd} disabled={isLoading} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-200 rounded disabled:opacity-50"><FontAwesomeIcon icon={faPlus} className="text-emerald-600" /> Add</button>
-                        <button onClick={handleReset} disabled={isLoading} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-200 rounded disabled:opacity-50"><FontAwesomeIcon icon={faUndo} className="text-blue-600" /> Reset</button>
-                        <button onClick={handleSave} disabled={isLoading || !isEditing} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-200 rounded disabled:opacity-50"><FontAwesomeIcon icon={faSave} className="text-slate-400" /> Save</button>
-                        <button onClick={handleDelete} disabled={isLoading || form.__isNew || !form.code} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-200 rounded disabled:opacity-50"><FontAwesomeIcon icon={faTrashAlt} className="text-red-500" /> Delete</button>
-                    </div>
+  const handleEdit = async (row) => {
+    if (!row) return;
+    setForm({
+      code:            row.code        || row.classCode   || "",
+      description:     row.description || row.classDesc   || "",
+      categCode:       row.categCode   || row.categ_code  || "",
+      categName:       row.categName   || row.categ_name  || "",
+      registeredBy:    row.registeredBy    || "",
+      registeredDate:  row.registeredDate  || "",
+      lastUpdatedBy:   row.lastUpdatedBy   || "",
+      lastUpdatedDate: row.lastUpdatedDate || "",
+      __existing: true,
+    });
+    setIsEditing(true);
+    setSelectedRow(row);
+    setIsDupCode(false);
+  };
 
-                    <div className="p-4 space-y-4">
-                        <div className="text-[12px] font-bold text-slate-500 border-b pb-1">BASIC INFORMATION</div>
-                        <FieldRenderer label="Classification Code" required type="text" value={form.code} onChange={(v) => setForm(p => ({ ...p, code: v.target?.value ?? v }))} readOnly={!form.__isNew || !isEditing} disabled={isLoading} />
-                        <FieldRenderer label="Classification Description" required type="text" value={form.description} onChange={(v) => setForm(p => ({ ...p, description: v.target?.value ?? v }))} readOnly={!isEditing} disabled={isLoading} />
-                    </div>
-                </div>
-            </div>
+  /* ================= LOADING ================= */
 
-            <div className="flex-1 h-[500px] xl:h-full bg-white border border-slate-200 rounded-md overflow-hidden flex flex-col">
-                <SearchGlobalReferenceTable
-                    columns={columns}
-                    data={tableData.map(r => ({ ...r, code: r.classCode || r.code, description: r.classDesc || r.description }))}
-                    itemsPerPage={50}
-                    showFilters={true}
-                    docType="MSReference"
-                    onRowDoubleClick={(row) => {
-                        setForm({ code: row.code, description: row.description, __isNew: false });
-                        setIsEditing(true);
-                    }}
-                    autoFillGrid={true}
-                />
-            </div>
-        </div>
-    );
+  const isLoading = isInitialLoading || saveMutation.isPending || deleteMutation.isPending;
+
+  /* ================= TABLE COLUMNS ================= */
+
+  const tableColumns = useMemo(
+    () => [
+      {
+        key: "__actions",
+        label: "Actions",
+        width: 90,
+        render: (row) => (
+          <div className="flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); handleEdit(row); }}
+              className="p-1 rounded-md bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-600 hover:text-white transition-colors"
+            >
+              <Edit size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); handleDelete(row); }}
+              className="p-1 rounded-md bg-red-50 text-red-600 border border-red-200 hover:bg-red-600 hover:text-white transition-colors"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        ),
+      },
+      { key: "code",        label: "Classification Code",              sortable: true, width: 150 },
+      { key: "description", label: "Classification Description / Name", sortable: true, width: 280 },
+      { key: "categCode",   label: "Category Code",                    sortable: true, width: 120 },
+      { key: "categName",   label: "Category Name",                    sortable: true, width: 200 },
+    ],
+    [handleEdit, handleDelete]
+  );
+
+  /* ================= TABLE DATA ================= */
+
+  const tableData = useMemo(() => {
+    const list = Array.isArray(classifications) ? classifications : [];
+
+    const mapped = list.map((row, index) => ({
+      ...row,
+      code:        row.code        || row.classCode  || "",
+      description: row.description || row.classDesc  || "",
+      categCode:   row.categCode   || row.categ_code || "",
+      categName:   row.categName   || row.categ_name || "",
+      __idx: index,
+    }));
+
+    return mapped.filter((row) => {
+      const s = String(search || "").trim().toLowerCase();
+      if (!s) return true;
+      return (
+        String(row.code        || "").toLowerCase().includes(s) ||
+        String(row.description || "").toLowerCase().includes(s) ||
+        String(row.categCode   || "").toLowerCase().includes(s) ||
+        String(row.categName   || "").toLowerCase().includes(s)
+      );
+    });
+  }, [classifications, search]);
+
+  /* ================= EXPOSE TO PARENT ================= */
+
+  useEffect(() => {
+    if (onStateChange) {
+      onStateChange({
+        isEditing,
+        canSave: isEditing && !isDupCode && !saveMutation.isPending,
+      });
+    }
+  }, [isEditing, isDupCode, saveMutation.isPending, onStateChange]);
+
+  useImperativeHandle(ref, () => ({
+    add: () => {
+      setIsEditing(true);
+      setSelectedRow(null);
+      setIsDupCode(false);
+      resetForm({ ...DEFAULT_FORM, __existing: false });
+      setTimeout(() => codeInputRef.current?.focus?.(), 0);
+    },
+    save:  handleSave,
+    reset: () => {
+      resetForm(DEFAULT_FORM);
+      setIsEditing(false);
+      setSelectedRow(null);
+      setIsDupCode(false);
+    },
+  }));
+
+  /* ================= RENDER ================= */
+
+  return (
+    <div className="flex flex-col h-full gap-3 w-full relative">
+
+      {/* LOADING SPINNER */}
+      {isLoading && <LoadingSpinner />}
+
+      {/* TOP PANELS */}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 shrink-0">
+
+        {/* BOX 1: BASIC INFORMATION */}
+        <Card className="p-4 flex flex-col">
+          <SectionHeader title="BASIC INFORMATION" />
+          <div className="space-y-3">
+
+            <FieldRenderer
+              label="Classification Code"
+              required
+              value={form.code}
+              inputRef={codeInputRef}
+              maxLength={20}
+              onChange={(v) => setField("code", v ?? "")}
+              onBlur={handleCodeValidate}
+              onKeyDown={handleCodeValidate}
+              disabled={!isEditing || form.__existing}
+            />
+
+            <FieldRenderer
+              label="Classification Description"
+              required
+              value={form.description}
+              maxLength={150}
+              onChange={(v) => setField("description", v ?? "")}
+              disabled={!isEditing}
+            />
+
+            <FieldRenderer
+              label="Category Code"
+              type="lookup"
+              value={form.categCode || ""}
+              onLookup={() => setIsCategOpen(true)}
+              onChange={(v) => {
+                setField("categCode", String(v ?? "").toUpperCase());
+                setField("categName", "");
+              }}
+              disabled={!isEditing}
+            />
+
+            <FieldRenderer
+              label="Category Description"
+              value={form.categName}
+              readOnly
+              disabled
+            />
+
+          </div>
+        </Card>
+
+        {/* BOX 2: REGISTRATION INFORMATION */}
+        <RegistrationInfo data={form} layout="stacked" />
+
+      </div>
+
+      {/* LIST TABLE */}
+      <div className="flex-1 bg-white rounded-md shadow-sm border border-slate-200 overflow-hidden min-h-[300px] flex flex-col">
+        <SearchGlobalReferenceTable
+          columns={tableColumns}
+          data={tableData}
+          isLoading={isInitialLoading}
+          docType="Classification Codes"
+          itemsPerPage={50}
+          onRowDoubleClick={handleEdit}
+          onRowClick={(row) => setSelectedRow(row)}
+          showFilters
+          autoFillGrid={true}
+        />
+      </div>
+
+      {/* Category Lookup Modal */}
+      <SearchMSInvCateg
+        isOpen={isCategOpen}
+        onClose={(selected) => {
+          setIsCategOpen(false);
+          if (selected) {
+            setField("categCode", selected.code || "");
+            setField("categName", selected.description || "");
+          }
+        }}
+      />
+
+    </div>
+  );
 });
+
 ClassificationCodes.displayName = "ClassificationCodes";
 export default ClassificationCodes;

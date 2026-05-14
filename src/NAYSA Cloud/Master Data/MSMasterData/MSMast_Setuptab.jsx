@@ -4,6 +4,7 @@ import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer";
 import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
 import { useFieldLenghtCheck, useGetFieldLength } from "@/NAYSA Cloud/Global/procedure";
 import SearchMSInvCateg from "@/NAYSA Cloud/Lookup/SearchMSInvCateg.jsx";
+import SearchMSInvClass from "@/NAYSA Cloud/Lookup/SearchMSInvClass.jsx";
 
 // ── Matches PayeeSetupTab exactly ──────────────────────────────────────────
 const SectionHeader = ({ title }) => (
@@ -47,6 +48,7 @@ const MSMast_SetupTab = forwardRef(
 
     // Lookup modal state for Category
     const [isCategOpen,  setIsCategOpen]  = useState(false);
+    const [isClassOpen, setIsClassOpen] = useState(false);
 
     // Field lengths — useEffect pattern (same as PayeeSetupTab)
     const [tblFieldArray, setTblFieldArray] = useState([]);
@@ -198,7 +200,8 @@ const MSMast_SetupTab = forwardRef(
                 label="Classification"
                 type="lookup"
                 value={form.classCode || ""}
-                onLookup={() => {}}
+                // 3. APPLY the click handler to open the modal
+                onLookup={() => !isDisabled && setIsClassOpen(true)} 
                 readOnly={isReadOnly}
                 disabled={isDisabled}
               />
@@ -397,6 +400,20 @@ const MSMast_SetupTab = forwardRef(
               onChangeForm({
                 categoryCode: selected.code,
                 categoryName: selected.description,
+              });
+            }
+          }}
+        />
+
+        {/* Classification lookup */}
+        <SearchMSInvClass
+          isOpen={isClassOpen}
+          onClose={(selected) => {
+            setIsClassOpen(false);
+            if (selected) {
+              onChangeForm({
+                classCode: selected.code,
+                className: selected.description,
               });
             }
           }}
