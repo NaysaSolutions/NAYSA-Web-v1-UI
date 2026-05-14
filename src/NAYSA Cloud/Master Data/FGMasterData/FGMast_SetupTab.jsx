@@ -4,10 +4,9 @@ import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
 import { useFieldLenghtCheck, useGetFieldLength } from "@/NAYSA Cloud/Global/procedure";
 import SearchFGInvCateg from "@/NAYSA Cloud/Lookup/SearchFGInvCateg.jsx";
 
-// Import your standard FG Item Master Lookup Modal
-import FGLookupModal from "@/NAYSA Cloud/Lookup/SearchFGMast.jsx";
+// Import the generic Item Master Lookup Modal instead of the specific FGLookupModal
+import ItemMastLookupModal from "@/NAYSA Cloud/Lookup/SearchItemMast.jsx";
 
-// ── Matches MSMast_SetupTab exactly ────────────────────────────────────────
 const SectionHeader = ({ title }) => (
     <div className="mb-3">
         <div className="text-[9px] sm:text-[12px] font-bold text-slate-500 tracking-widest border-b pb-2">
@@ -39,7 +38,6 @@ const getValue = (input) => {
     }
     return input ?? "";
 };
-// ───────────────────────────────────────────────────────────────────────────
 
 const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onChangeForm, onLookupSelect }) => {
     const isReadOnly = !isEditing;
@@ -50,7 +48,7 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
     const [isCategOpen, setIsCategOpen] = useState(false);
     const [isItemLookupOpen, setIsItemLookupOpen] = useState(false);
 
-    // Field lengths — same pattern as MSMast_SetupTab
+    // Field lengths
     const [tblFieldArray, setTblFieldArray] = useState([]);
     useEffect(() => {
         const run = async () => {
@@ -130,7 +128,6 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                         />
                     </div>
 
-                    {/* Item Description */}
                     <FieldRenderer
                         label="Item Description"
                         required
@@ -142,7 +139,6 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                         maxLength={getLen("item_name", 200)}
                     />
 
-                    {/* UOM row */}
                     <div className="grid grid-cols-5 gap-2 mt-1">
                         <div className="col-span-2">
                             <FieldRenderer
@@ -179,7 +175,6 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                         </div>
                     </div>
 
-                    {/* Category */}
                     <div className="grid grid-cols-3 gap-2 mt-1">
                         <FieldRenderer
                             label="Category"
@@ -201,7 +196,6 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                         </div>
                     </div>
 
-                    {/* Classification */}
                     <div className="grid grid-cols-3 gap-2 mt-1">
                         <FieldRenderer
                             label="Classification"
@@ -222,7 +216,6 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                         </div>
                     </div>
 
-                    {/* Active / Status */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-1">
                         <FieldRenderer
                             label="Active"
@@ -248,8 +241,6 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                 {/* Supplementary Information */}
                 <Card className="border border-blue-500/30 p-6 rounded-lg">
                     <SectionHeader title="SUPPLEMENTARY INFORMATION" />
-
-                    {/* Sub Class 1-3 */}
                     {[1, 2, 3].map((num) => (
                         <div key={num} className="grid grid-cols-3 gap-2">
                             <FieldRenderer
@@ -272,7 +263,6 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                         </div>
                     ))}
 
-                    {/* Vacant fields 07–12 */}
                     <div className="grid grid-cols-2 gap-x-8 gap-y-2 mt-3">
                         {[7, 8, 9, 10, 11, 12].map((i) => {
                             const vCode = i < 10 ? `vacant0${i}` : `vacant${i}`;
@@ -298,7 +288,6 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                 {/* Ordering & Pricing */}
                 <Card className="border border-blue-500/30 p-6 rounded-lg">
                     <SectionHeader title="ORDERING & PRICING" />
-
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <FieldRenderer
                             label="Re-Order Level"
@@ -316,7 +305,6 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                             readOnly={isReadOnly}
                             disabled={isDisabled}
                         />
-
                         <FieldRenderer
                             label="Standard PO Price"
                             type="number"
@@ -337,7 +325,6 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                             readOnly={isReadOnly}
                             disabled={isDisabled}
                         />
-
                         <FieldRenderer
                             label="Min Order Qty"
                             type="number"
@@ -354,7 +341,6 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                             readOnly={isReadOnly}
                             disabled={isDisabled}
                         />
-
                         <FieldRenderer
                             label="Standard Packing Qty"
                             type="number"
@@ -371,7 +357,6 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                             readOnly={isReadOnly}
                             disabled={isDisabled}
                         />
-
                         <FieldRenderer
                             label="Purchasing Lead Time"
                             type="number"
@@ -394,22 +379,9 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                 {/* Stock Card Information */}
                 <Card className="border border-blue-500/30 p-6 rounded-lg">
                     <SectionHeader title="STOCK CARD INFORMATION" />
-
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <FieldRenderer
-                            label="Last Purchase Date"
-                            type="text"
-                            value={form.lastPurDate || ""}
-                            readOnly
-                            disabled
-                        />
-                        <FieldRenderer
-                            label="Last Purchase Price"
-                            type="number"
-                            value={form.lastPurPrice || ""}
-                            readOnly
-                            disabled
-                        />
+                        <FieldRenderer label="Last Purchase Date" type="text" value={form.lastPurDate || ""} readOnly disabled />
+                        <FieldRenderer label="Last Purchase Price" type="number" value={form.lastPurPrice || ""} readOnly disabled />
                         <FieldRenderer
                             label="Allow Over Receiving?"
                             type="select"
@@ -419,27 +391,14 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                             readOnly={isReadOnly}
                             disabled={isDisabled}
                         />
-                        <FieldRenderer
-                            label="Qty on Hand"
-                            type="number"
-                            value={form.qtyOnHand || ""}
-                            readOnly
-                            disabled
-                        />
-                        <FieldRenderer
-                            label="Unit Cost"
-                            type="number"
-                            value={form.unitCost || ""}
-                            readOnly
-                            disabled
-                        />
+                        <FieldRenderer label="Qty on Hand" type="number" value={form.qtyOnHand || ""} readOnly disabled />
+                        <FieldRenderer label="Unit Cost" type="number" value={form.unitCost || ""} readOnly disabled />
                     </div>
                 </Card>
 
                 {/* Standard Costs */}
                 <Card className="border border-blue-500/30 p-6 rounded-lg">
                     <SectionHeader title="STANDARD COSTS" />
-
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <FieldRenderer
                             label="STD Unit Cost"
@@ -487,7 +446,6 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                 {/* Additional Details */}
                 <Card className="border border-blue-500/30 p-6 rounded-lg">
                     <SectionHeader title="ADDITIONAL DETAILS" />
-
                     <div className="space-y-3">
                         <FieldRenderer
                             label="Barcode / Part No"
@@ -498,7 +456,6 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                             disabled={isDisabled}
                             maxLength={getLen("barcode", 50)}
                         />
-
                         <div className="grid grid-cols-3 gap-2">
                             <FieldRenderer
                                 label="Alternate Item No"
@@ -520,7 +477,6 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                                 />
                             </div>
                         </div>
-
                         <FieldRenderer
                             label="Item Description (2)"
                             type="text"
@@ -539,7 +495,6 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                             disabled={isDisabled}
                             maxLength={getLen("fg3_name", 200)}
                         />
-
                         <div className="grid grid-cols-3 gap-2">
                             <FieldRenderer
                                 label="Payee"
@@ -551,18 +506,12 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                                 disabled={isDisabled}
                             />
                             <div className="col-span-2">
-                                <FieldRenderer
-                                    type="text"
-                                    value={form.payeeName || ""}
-                                    readOnly
-                                    disabled
-                                />
+                                <FieldRenderer type="text" value={form.payeeName || ""} readOnly disabled />
                             </div>
                         </div>
                     </div>
                 </Card>
 
-                {/* Registration Information — standalone */}
                 <RegistrationInfo
                     layout="twoCols"
                     disabled
@@ -589,17 +538,20 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                 }}
             />
 
-            {/* Standard FG Item Lookup Modal */}
-            <FGLookupModal
+            {/* Updated Generic Item Master Lookup Modal */}
+            <ItemMastLookupModal
                 isOpen={isItemLookupOpen}
-                onClose={(selected) => {
+                endpoint="/lookupFGMast" // Pass the route that points to FGMastController@lookup
+                docType="PRFG"           // Keep this to handle specific column visibility
+                enableMultiSelect={false}
+                onClose={(payload) => {
                     setIsItemLookupOpen(false);
+                    const selected = payload?.records?.[0];
                     if (selected) {
-                        onLookupSelect(selected.itemCode);  // fetches full record + enters edit mode
+                        onLookupSelect(selected.itemCode);
                     }
                 }}
             />
-
         </div>
     );
 };

@@ -41,12 +41,12 @@ const getValue = (input) => {
 
 const MSMast_SetupTab = forwardRef(
   ({ isLoading, isEditing, form = {}, generationMode, onChangeForm, onSelectItemCode }, ref) => {
-    const isReadOnly = !isEditing;
+    const isReadOnly  = !isEditing;
     const isNewRecord = form.__isNew;
-    const isDisabled = isReadOnly || isLoading;
+    const isDisabled  = isReadOnly || isLoading;
 
-    // Lookup modal state
-    const [isCategOpen, setIsCategOpen] = useState(false);
+    // Lookup modal state for Category
+    const [isCategOpen,  setIsCategOpen]  = useState(false);
 
     // Field lengths — useEffect pattern (same as PayeeSetupTab)
     const [tblFieldArray, setTblFieldArray] = useState([]);
@@ -70,7 +70,7 @@ const MSMast_SetupTab = forwardRef(
       return mode === "MANUAL" || mode === "M";
     }, [generationMode]);
 
-    const canType = isNewRecord && isManualMode;
+    const canType    = isNewRecord && isManualMode;
     const overrideRef = useRef(null);
 
     useEffect(() => {
@@ -99,15 +99,10 @@ const MSMast_SetupTab = forwardRef(
 
     return (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start rounded-lg relative">
-
-        {/* ================= LEFT COLUMN ================= */}
         <div className="flex flex-col gap-6">
-
-          {/* Basic Information */}
           <Card className="border border-blue-500/30 p-6 rounded-lg">
             <SectionHeader title="BASIC INFORMATION" />
 
-            {/* Item No */}
             <div
               ref={overrideRef}
               className={`w-full ${
@@ -121,7 +116,8 @@ const MSMast_SetupTab = forwardRef(
                 required
                 type="lookup"
                 value={form.itemCode || ""}
-                onLookup={canType ? undefined : () => {}}
+                // 3. Corrected to call onSelectItemCode prop
+                onLookup={canType ? undefined : () => !isDisabled && onSelectItemCode()}
                 readOnly={!canType}
                 disabled={isLoading}
                 maxLength={getLen("item_code", 30)}
@@ -377,20 +373,22 @@ const MSMast_SetupTab = forwardRef(
             </div>
           </Card>
 
-          {/* Registration Information — twoCols matches PayeeSetupTab */}
+          {/* Registration Information */}
           <RegistrationInfo
             layout="twoCols"
             disabled
             data={{
-              registeredBy: form.registeredBy || "",
-              registeredDate: form.registeredDate || "",
-              lastUpdatedBy: form.updatedBy || "",
-              lastUpdatedDate: form.updatedDate || "",
+              registeredBy:    form.registeredBy  || "",
+              registeredDate:  form.registeredDate || "",
+              lastUpdatedBy:   form.updatedBy      || "",
+              lastUpdatedDate: form.updatedDate    || "",
             }}
           />
         </div>
 
         {/* ================= LOOKUP MODALS ================= */}
+
+        {/* Category lookup */}
         <SearchMSInvCateg
           isOpen={isCategOpen}
           onClose={(selected) => {

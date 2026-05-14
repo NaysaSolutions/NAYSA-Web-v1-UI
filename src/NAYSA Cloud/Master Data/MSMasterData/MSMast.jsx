@@ -20,6 +20,7 @@ import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
 import MSMast_SetupTab from "@/NAYSA Cloud/Master Data/MSMasterData/MSMast_Setuptab.jsx";
 import MSMast_DataTab from "@/NAYSA Cloud/Master Data/MSMasterData/MSMast_DataTab.jsx";
+import ItemMastLookupModal from "@/NAYSA Cloud/Lookup/SearchItemMast.jsx";
 import MSMast_ReferenceCodeTab from "@/NAYSA Cloud/Master Data/MSMasterData/MSMast_ReferenceCodeTab.jsx";
 
 import {
@@ -65,6 +66,7 @@ const emptyForm = {
 
 const MSMast = () => {
     const [activeTab, setActiveTab] = useState("setup");
+    const [isItemLookupOpen, setIsItemLookupOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [generationMode, setGenerationMode] = useState("Auto");
 
@@ -222,71 +224,71 @@ const MSMast = () => {
     };
 
     const upsertItem = async () => {
-    const code = String(form?.itemCode || "").trim();
-    setIsLoading(true);
-    try {
-        // Map form fields to the exact keys the sproc reads via JSON_VALUE
-        const toNull = (v) => (String(v ?? "").trim() === "" ? null : v);
+        const code = String(form?.itemCode || "").trim();
+        setIsLoading(true);
+        try {
+            // Map form fields to the exact keys the sproc reads via JSON_VALUE
+            const toNull = (v) => (String(v ?? "").trim() === "" ? null : v);
 
-        const payload = {
-            json_data: JSON.stringify({
-                json_data: {
-                    itemCode:   code,
-                    itemName:   form.itemDesc,
-                    categCode:  form.categoryCode,
-                    classCode:  form.classCode,
-                    subclass1:  form.subClass1Code,
-                    subclass2:  form.subClass2Code,
-                    subclass3:  form.subClass3Code,
-                    uomCode:    form.uom,
-                    uomCode2:   form.uom2,
-                    uomQty2:    toNull(form.qtyPerUom2),
-                    active:     form.active,
-                    qtyOnHand:  toNull(form.qtyOnHand),
-                    conv1:      toNull(form.vacant01),
-                    conv2:      toNull(form.vacant02),
-                    conv3:      toNull(form.vacant03),
-                    conv4:      toNull(form.vacant04),
-                    conv5:      toNull(form.vacant05),
-                    conv6:      toNull(form.vacant06),
-                    var1:       form.vacant07,
-                    var2:       form.vacant08,
-                    var3:       form.vacant09,
-                    var4:       form.vacant10,
-                    var5:       form.vacant11,
-                    var6:       form.vacant12,
-                    reorderQty: toNull(form.reOrderLevel),
-                    basePrice:  toNull(form.stdPoPrice),
-                    lastPurDate:  toNull(form.lastPurDate),   // null prevents DATETIME crash
-                    lastPurPrice: toNull(form.lastPurPrice),
-                    unitCost:   toNull(form.unitCost),
-                    userCode,
-                },
-            }),
-        };
+            const payload = {
+                json_data: JSON.stringify({
+                    json_data: {
+                        itemCode: code,
+                        itemName: form.itemDesc,
+                        categCode: form.categoryCode,
+                        classCode: form.classCode,
+                        subclass1: form.subClass1Code,
+                        subclass2: form.subClass2Code,
+                        subclass3: form.subClass3Code,
+                        uomCode: form.uom,
+                        uomCode2: form.uom2,
+                        uomQty2: toNull(form.qtyPerUom2),
+                        active: form.active,
+                        qtyOnHand: toNull(form.qtyOnHand),
+                        conv1: toNull(form.vacant01),
+                        conv2: toNull(form.vacant02),
+                        conv3: toNull(form.vacant03),
+                        conv4: toNull(form.vacant04),
+                        conv5: toNull(form.vacant05),
+                        conv6: toNull(form.vacant06),
+                        var1: form.vacant07,
+                        var2: form.vacant08,
+                        var3: form.vacant09,
+                        var4: form.vacant10,
+                        var5: form.vacant11,
+                        var6: form.vacant12,
+                        reorderQty: toNull(form.reOrderLevel),
+                        basePrice: toNull(form.stdPoPrice),
+                        lastPurDate: toNull(form.lastPurDate),   // null prevents DATETIME crash
+                        lastPurPrice: toNull(form.lastPurPrice),
+                        unitCost: toNull(form.unitCost),
+                        userCode,
+                    },
+                }),
+            };
 
-        const res = await apiClient.post("/upsertMSMast", payload);
-        
-        const sqlRow = res?.data?.data?.[0];
-        if (sqlRow?.errorcount > 0 || sqlRow?.errorCount > 0) {
-            await useSwalErrorAlert("Validation Failed", sqlRow?.errormsg || sqlRow?.errorMsg);
-            return;
+            const res = await apiClient.post("/upsertMSMast", payload);
+
+            const sqlRow = res?.data?.data?.[0];
+            if (sqlRow?.errorcount > 0 || sqlRow?.errorCount > 0) {
+                await useSwalErrorAlert("Validation Failed", sqlRow?.errormsg || sqlRow?.errorMsg);
+                return;
+            }
+
+            const finalCode = sqlRow?.generatedCode || sqlRow?.generatedcode || code;
+
+            await useSwalSuccessAlert("Success!", "Item saved successfully.");
+            setSelectedItemCode(finalCode);
+            setIsEditing(false);
+            await loadMasterList();
+            await fetchItemByCode(finalCode);
+        } catch (e) {
+            console.error("upsertItem error:", e);
+            await useSwalErrorAlert("Save Failed", e?.response?.data?.message || e?.message || "Failed to save item.");
+        } finally {
+            setIsLoading(false);
         }
-
-        const finalCode = sqlRow?.generatedCode || sqlRow?.generatedcode || code;
-
-        await useSwalSuccessAlert("Success!", "Item saved successfully.");
-        setSelectedItemCode(finalCode);
-        setIsEditing(false);
-        await loadMasterList();
-        await fetchItemByCode(finalCode);
-    } catch (e) {
-        console.error("upsertItem error:", e);
-        await useSwalErrorAlert("Save Failed", e?.response?.data?.message || e?.message || "Failed to save item.");
-    } finally {
-        setIsLoading(false);
-    }
-};
+    };
 
     const handleAdd = () => {
         setSelectedItemCode("");
@@ -397,7 +399,7 @@ const MSMast = () => {
                         isLoading={isLoading}
                         generationMode={generationMode}
                         onChangeForm={updateForm}
-                        onSelectItemCode={fetchItemByCode}
+                        onSelectItemCode={() => setIsItemLookupOpen(true)}
                     />
                 )}
                 {activeTab === "master" && (
@@ -417,6 +419,19 @@ const MSMast = () => {
                     <MSMast_ReferenceCodeTab ref={refTabRef} onStateChange={setRefState} variant="ms" />
                 )}
             </div>
+            <ItemMastLookupModal
+                isOpen={isItemLookupOpen}
+                endpoint="/lookupMSMast" // Point to your MS specific lookup route
+                docType="PRMS"           // Use MS docType to trigger specific column visibility
+                enableMultiSelect={false}
+                onClose={(payload) => {
+                    setIsItemLookupOpen(false);
+                    const selected = payload?.records?.[0];
+                    if (selected) {
+                        fetchItemByCode(selected.itemCode);
+                    }
+                }}
+            />
         </div>
     );
 };
