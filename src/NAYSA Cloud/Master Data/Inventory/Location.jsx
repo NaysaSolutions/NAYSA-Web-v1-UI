@@ -56,7 +56,7 @@ const extractSprocValidation = (axiosResponse) => {
 };
 
 // Expose functions to the parent wrapper using forwardRef
-const Location = forwardRef(({ isMobile, onMobileActionOpen }, ref) => {
+const Location = forwardRef(({ isMobile, onMobileActionOpen, onStateChange }, ref) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -82,7 +82,7 @@ const Location = forwardRef(({ isMobile, onMobileActionOpen }, ref) => {
   const locationListQuery = useQuery({
     queryKey: ["locationList"],
     queryFn: async () => {
-      const result = await apiClient.post("/getLocationList", {});
+      const result = await apiClient.get("/location/location"); 
       return parseSprocJsonResult(result?.data?.data);
     },
   });
@@ -103,7 +103,7 @@ const Location = forwardRef(({ isMobile, onMobileActionOpen }, ref) => {
   }, [locationListQuery.data]);
 
   const saveMutation = useMutation({
-    mutationFn: async (payload) => apiClient.post("/upsertLocation", { json_data: JSON.stringify(payload) }),
+    mutationFn: async (payload) => apiClient.post("/location/upsertLocation", { json_data: JSON.stringify(payload) }),
     onSuccess: async (response) => {
       const sprocValidation = extractSprocValidation(response);
       if (Number(sprocValidation?.errorCount ?? 0) > 0) {
@@ -118,7 +118,7 @@ const Location = forwardRef(({ isMobile, onMobileActionOpen }, ref) => {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (payload) => apiClient.post("/deleteLocation", { json_data: payload }),
+   mutationFn: async (payload) => apiClient.post("/location/deleteLocation", { json_data: payload }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["locationList"] });
       useSwalDeleteRecord("Deleted!", "Location record removed successfully.");
@@ -126,6 +126,16 @@ const Location = forwardRef(({ isMobile, onMobileActionOpen }, ref) => {
     },
     onError: (error) => useSwalErrorAlertAPI("Error", error),
   });
+
+  // Calculate isSaving to use in the useEffect and the loading spinner
+  const isSaving = saveMutation.isPending || deleteMutation.isPending || locationListQuery.isLoading;
+
+  // Reactively send the current state back up to the parent component
+  useEffect(() => {
+    if (onStateChange) {
+      onStateChange({ isEditing, isSaving });
+    }
+  }, [isEditing, isSaving, onStateChange]);
 
   const handleReset = () => {
     setForm(INITIAL_FORM);
@@ -175,7 +185,7 @@ const Location = forwardRef(({ isMobile, onMobileActionOpen }, ref) => {
     handleSave,
     handleReset,
     isEditing,
-    isSaving: saveMutation.isPending || deleteMutation.isPending || locationListQuery.isLoading
+    isSaving
   }));
 
   const columns = [
@@ -202,7 +212,7 @@ const Location = forwardRef(({ isMobile, onMobileActionOpen }, ref) => {
 
   return (
     <div className="flex flex-col xl:flex-row gap-4 w-full h-auto xl:h-[calc(100vh-130px)]">
-      {(saveMutation.isPending || deleteMutation.isPending || locationListQuery.isLoading) && (
+      {isSaving && (
         <LoadingSpinner />
       )}
 

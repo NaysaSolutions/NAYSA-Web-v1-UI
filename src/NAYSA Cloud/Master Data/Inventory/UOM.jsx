@@ -1,7 +1,7 @@
 import React, { forwardRef, useImperativeHandle } from "react";
 
 // Use forwardRef to catch the global button clicks from the parent WareMast
-const Whparameter = forwardRef(({ isMobile, onMobileActionOpen }, ref) => {
+const UOM = forwardRef(({ isMobile, onMobileActionOpen }, ref) => {
 
   // Expose empty/safe methods to the parent WareMast component
   // so it doesn't crash when clicking global Add/Save/Reset buttons.
@@ -105,7 +105,7 @@ const Whparameter = forwardRef(({ isMobile, onMobileActionOpen }, ref) => {
 
       {/* Title */}
       <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">
-       Warehouse Parameters
+       UOM - Unit of Measure
       </h2>
 
       {/* Description */}
@@ -169,4 +169,4 @@ const Whparameter = forwardRef(({ isMobile, onMobileActionOpen }, ref) => {
   );
 });
 
-export default Whparameter;
+export default UOM;
