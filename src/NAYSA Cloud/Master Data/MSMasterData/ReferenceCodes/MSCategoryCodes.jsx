@@ -231,7 +231,7 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
 
     const payload = {
       ...form,
-      code: String(form.code || "").trim().toUpperCase(),
+      code: String(form.code || "").trim(),
       description: String(form.description || "").trim(),
       uCostFlag: form.uCostFlag === "Y" ? "Y" : "N",
       invAcct: String(form.invAcct || "").trim(),
@@ -291,6 +291,29 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
     async (row) => {
       const code = row?.code || row?.categoryCode;
       if (!code) return;
+
+      // Check if in use before confirming delete
+      try {
+        const checkRes = await apiClient.post("/checkInUsedMSCateg", {
+          json_data: { code },
+        });
+        const result = String(
+          checkRes?.data?.data?.[0]?.result ??
+          checkRes?.data?.[0]?.result ??
+          "0"
+        ).trim();
+
+        if (result === "1") {
+          await useSwalErrorAlert(
+            "Cannot Delete",
+            `Category Code "${code}" is currently in use and cannot be deleted.`
+          );
+          return;
+        }
+      } catch {
+        await useSwalErrorAlert("Error", "Failed to check if record is in use.");
+        return;
+      }
 
       const confirm = await useSwalDeleteConfirm(
         "Delete Record?",
@@ -469,7 +492,7 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
               value={form.code}
               inputRef={codeInputRef}
               maxLength={20}
-              onChange={(v) => setField("code", String(v ?? "").toUpperCase())}
+              onChange={(v) => setField("code", v ?? "")}
               onBlur={handleCodeValidate}
               onKeyDown={handleCodeValidate}
               disabled={!isEditing || form.__existing}
