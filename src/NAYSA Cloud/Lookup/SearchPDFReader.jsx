@@ -910,6 +910,8 @@ const PdfTextCaptureModal = ({
   title = "PDF Text Capture",
   initialText = "",
   onApply,
+  externalFile = null,
+  externalFiles = [],
 }) => {
   const [pdfFiles, setPdfFiles] = useState([]);
   const [activePdfId, setActivePdfId] = useState(null);
@@ -1029,9 +1031,30 @@ const PdfTextCaptureModal = ({
       clearAll();
     } else {
       setCapturedText(initialText || "");
+
+      const sourceFiles = Array.isArray(externalFiles) && externalFiles.length > 0
+        ? externalFiles
+        : externalFile
+          ? [externalFile]
+          : [];
+
+      if (sourceFiles.length > 0) {
+        const nextTabs = sourceFiles.map((file, index) => ({
+          id: `ext-${Date.now()}-${index}`,
+          identity: `ext-${file.id || file.name || index}`,
+          file: file.blob || file.url,
+          name: file.name || `PDF ${index + 1}`,
+          url: file.url,
+          pageNumber: 1,
+          numPages: 0,
+        }));
+
+        setPdfFiles(nextTabs);
+        setActivePdfId(nextTabs[0]?.id || null);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [isOpen, initialText, externalFile, externalFiles]);
 
   useEffect(() => {
     setSnipStart(null);
@@ -1625,4 +1648,3 @@ const PdfTextCaptureModal = ({
 };
 
 export default PdfTextCaptureModal;
-

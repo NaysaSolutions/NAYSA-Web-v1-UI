@@ -106,6 +106,7 @@ const DR = () => {
   const detailRowsRef = useRef([]);
   const detailSectionRef = useRef(null);
   const originalSOQuantityRef = useRef({});
+  const addTypeDropdownRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation();
   const { companyInfo, currentUserRow,getAllDropDown,refsLoaded,getAllTopHSDocRow } = useAuth();
@@ -313,6 +314,18 @@ const DR = () => {
   const [showAddTypeDropdown, setShowAddTypeDropdown] = useState(false);
   const [showItemPickingModal, setShowItemPickingModal] = useState(false);
   const [itemPickingRowIndex, setItemPickingRowIndex] = useState(null);
+
+  useEffect(() => {
+    if (!showAddTypeDropdown) return;
+
+    const handleClickOutside = (event) => {
+      if (addTypeDropdownRef.current?.contains(event.target)) return;
+      setShowAddTypeDropdown(false);
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showAddTypeDropdown]);
 
   useEffect(() => {
     detailRowsRef.current = detailRows || [];
@@ -2408,7 +2421,7 @@ return (
 
     {/* Add Button */}
     <div className="global-tran-tab-footer-button-div-ui">
-      <div className="relative inline-block" style={{ visibility: isFormDisabled ? "hidden" : "visible" }}>
+      <div ref={addTypeDropdownRef} className="relative inline-block" style={{ visibility: isFormDisabled ? "hidden" : "visible" }}>
         {showAddTypeDropdown && (
           <div className="absolute bottom-[110%] left-0 mb-3 z-[9999] w-[280px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur-sm dark:border-slate-700 dark:bg-slate-800">
             <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-700">
@@ -2757,13 +2770,7 @@ return (
     cacheKey={`DR:${state.branchCode || ""}`}
     activeTabKey="DR_Summary"
     branchCode={state.branchCode}
-    status={(() => {
-      const s = (state.status || "").toUpperCase();
-      if (s === "CANCELLED") return "X";
-      if (s === "CLOSED") return "C";
-      if (s === "OPEN") return "";
-      return "All";
-    })()}
+    status="All"
     onRowDoubleClick={handleHistoryRowPick}
     historyExportName={`${documentTitle} History`}
   />
