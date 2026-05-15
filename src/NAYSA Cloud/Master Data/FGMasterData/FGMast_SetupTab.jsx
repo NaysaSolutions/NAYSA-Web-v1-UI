@@ -3,8 +3,7 @@ import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer";
 import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
 import { useFieldLenghtCheck, useGetFieldLength } from "@/NAYSA Cloud/Global/procedure";
 import SearchFGInvCateg from "@/NAYSA Cloud/Lookup/SearchFGInvCateg.jsx";
-
-// Import the generic Item Master Lookup Modal instead of the specific FGLookupModal
+import SearchFGInvClass from "@/NAYSA Cloud/Lookup/SearchFGInvClass.jsx";
 import ItemMastLookupModal from "@/NAYSA Cloud/Lookup/SearchItemMast.jsx";
 
 const SectionHeader = ({ title }) => (
@@ -39,13 +38,15 @@ const getValue = (input) => {
     return input ?? "";
 };
 
-const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onChangeForm, onLookupSelect }) => {
+// ── Added onBlurItemCode prop ─────────────────────────────────────────────────
+const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onChangeForm, onLookupSelect, onBlurItemCode }) => {
     const isReadOnly = !isEditing;
     const isNewRecord = form.__isNew;
     const isDisabled = isReadOnly || isLoading;
 
     // Lookup modal states
     const [isCategOpen, setIsCategOpen] = useState(false);
+    const [isClassOpen, setIsClassOpen] = useState(false);
     const [isItemLookupOpen, setIsItemLookupOpen] = useState(false);
 
     // Field lengths
@@ -64,13 +65,16 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
     const getLen = (col, fallback = undefined) =>
         useGetFieldLength(tblFieldArray, col) || fallback;
 
-    // Manual code entry logic
-    const isManualMode = useMemo(() => {
-        const mode = normalizeUpper(generationMode || "Manual");
-        return mode === "MANUAL" || mode === "M";
-    }, [generationMode]);
+    // // Manual code entry logic
+    // const isManualMode = useMemo(() => {
+    //     const mode = normalizeUpper(generationMode || "Manual");
+    //     return mode === "MANUAL" || mode === "M";
+    // }, [generationMode]);
 
-    const canType = isNewRecord && isManualMode;
+    // const canType = isNewRecord && isManualMode;
+    // const overrideRef = useRef(null);
+
+    const canType = isNewRecord;
     const overrideRef = useRef(null);
 
     useEffect(() => {
@@ -87,15 +91,20 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                         if (val.length > maxLen) val = val.substring(0, maxLen);
                         onChangeForm({ itemCode: String(val).toUpperCase() });
                     };
+                    input.onblur = (e) => {
+                        const val = String(e.target.value || "").trim();
+                        if (val) onBlurItemCode?.(val);
+                    };
                 } else {
                     input.setAttribute("readonly", "true");
                     input.removeAttribute("maxlength");
                     input.onclick = null;
                     input.oninput = null;
+                    input.onblur = null;
                 }
             }
         }
-    }, [canType, isNewRecord, onChangeForm, tblFieldArray]);
+    }, [canType, isNewRecord, onChangeForm, onBlurItemCode, tblFieldArray]);
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start rounded-lg relative">
@@ -107,13 +116,15 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                 <Card className="border border-blue-500/30 p-6 rounded-lg">
                     <SectionHeader title="BASIC INFORMATION" />
 
-                    {/* Item No */}
+                    {/* Item No — readOnly={true} always so FieldRenderer always renders the lookup icon.
+                        When canType (new record), the useEffect above manually removes readonly
+                        from the DOM input so the user can still type. */}
                     <div
                         ref={overrideRef}
                         className={`w-full ${!canType
-                            ? "[&>div]:!bg-[#F1F5F9] [&_input]:!bg-transparent [&_input]:!pointer-events-none [&_input]:!text-slate-600 [&_label]:!bg-[#F1F5F9]"
-                            : ""
-                            }`}
+                            ? "[&>div]:!bg-[#F1F5F9] [&_input]:!bg-transparent [&_input]:!text-slate-600 [&_label]:!bg-[#F1F5F9]"
+                            : "[&_input]:!pointer-events-auto"
+                        }`}
                     >
                         <FieldRenderer
                             label="Item No"
@@ -121,8 +132,8 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                             type="lookup"
                             value={form.itemCode || ""}
                             onChange={(v) => onChangeForm({ itemCode: String(getValue(v)).toUpperCase() })}
-                            onLookup={() => !isLoading && setIsItemLookupOpen(true)}
-                            readOnly={!canType}
+                            onLookup={() => !isLoading && !isNewRecord && setIsItemLookupOpen(true)}
+                            readOnly={true}
                             disabled={isLoading}
                             maxLength={getLen("item_code", 30)}
                         />
@@ -201,8 +212,8 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                             label="Classification"
                             type="lookup"
                             value={form.classCode || ""}
-                            onChange={(v) => onChangeForm({ classCode: getValue(v) })}
-                            onLookup={() => { }}
+                            onChange={(v) => onChangeForm({ classCode: getValue(v), className: "" })}
+                            onLookup={() => !isDisabled && setIsClassOpen(true)}
                             readOnly={isReadOnly}
                             disabled={isDisabled}
                         />
@@ -538,11 +549,23 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                 }}
             />
 
-            {/* Updated Generic Item Master Lookup Modal */}
+            <SearchFGInvClass
+                isOpen={isClassOpen}
+                onClose={(selected) => {
+                    setIsClassOpen(false);
+                    if (selected) {
+                        onChangeForm({
+                            classCode: selected.code,
+                            className: selected.description,
+                        });
+                    }
+                }}
+            />
+
             <ItemMastLookupModal
                 isOpen={isItemLookupOpen}
-                endpoint="/lookupFGMast" // Pass the route that points to FGMastController@lookup
-                docType="PRFG"           // Keep this to handle specific column visibility
+                endpoint="/lookupFGMast"
+                docType="PRFG"
                 enableMultiSelect={false}
                 onClose={(payload) => {
                     setIsItemLookupOpen(false);

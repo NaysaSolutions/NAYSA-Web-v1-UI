@@ -27,7 +27,7 @@ import {
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
 const emptyForm = {
-    itemCode: "", // Item No
+    itemCode: "",
     itemDesc: "",
     uom: "", uomName: "",
     uom2: "",
@@ -81,7 +81,7 @@ const emptyForm = {
 const FGMast = () => {
     const [activeTab, setActiveTab] = useState("setup");
     const [isLoading, setIsLoading] = useState(false);
-    const [generationMode, setGenerationMode] = useState("Auto");
+    const generationMode = "Manual";
 
     const { user } = useAuth();
     const userCode = user?.USER_CODE || user?.userCode || user?.code || "";
@@ -97,16 +97,20 @@ const FGMast = () => {
     const refTabRef = useRef(null);
     const [refState, setRefState] = useState({ isEditing: false, canSave: false });
 
+    // useEffect(() => {
+    //     const fetchGenerationMode = async () => {
+    //         try {
+    //             const res = await apiClient.post("/lookupDocSeries", { docCode: "FG" });
+    //             setGenerationMode(res?.data?.data?.[0]?.docSeries || "Auto");
+    //         } catch (e) {
+    //             console.error("Failed to fetch mode", e);
+    //         }
+    //     };
+    //     fetchGenerationMode();
+    //     loadMasterList();
+    // }, []);
+
     useEffect(() => {
-        const fetchGenerationMode = async () => {
-            try {
-                const res = await apiClient.post("/lookupDocSeries", { docCode: "FG" });
-                setGenerationMode(res?.data?.data?.[0]?.docSeries || "Auto");
-            } catch (e) {
-                console.error("Failed to fetch mode", e);
-            }
-        };
-        fetchGenerationMode();
         loadMasterList();
     }, []);
 
@@ -139,7 +143,6 @@ const FGMast = () => {
         }
     };
 
-    // AFTER
     const fetchItemByCode = async (itemCode, enterEditMode = false) => {
         const code = String(itemCode || "").trim();
         if (!code) return;
@@ -171,9 +174,63 @@ const FGMast = () => {
         }
     };
 
+    // ── Check Duplicate ───────────────────────────────────────────────────────
+    // Called on blur of Item No field (new records only).
+    // Returns true if duplicate found (so caller can bail out).
+    const checkDuplicate = async (itemCode) => {
+        const code = String(itemCode || "").trim();
+        if (!code) return false;
+
+        try {
+            const res = await apiClient.post("/checkDuplicateFGMast", {
+                json_data: { itemCode: code },
+            });
+            const row = res?.data?.data?.[0];
+            const isDup = Number(row?.isDuplicate ?? row?.isdup ?? row?.duplicatecount ?? 0);
+            if (isDup > 0) {
+                await useSwalErrorAlert("Duplicate", `Item No "${code}" already exists.`);
+                updateForm({ itemCode: "" });
+                return true;
+            }
+        } catch (e) {
+            console.error("CheckDuplicate failed", e);
+        }
+        return false;
+    };
+
+    // ── Check In Used ─────────────────────────────────────────────────────────
+    // Called before delete to prevent removing items still referenced elsewhere.
+    // Returns true if item is in use.
+    const checkInUsed = async (itemCode) => {
+        const code = String(itemCode || "").trim();
+        if (!code) return false;
+
+        try {
+            const res = await apiClient.post("/checkInUsedFGMast", {
+                json_data: { itemCode: code },
+            });
+            const row = res?.data?.data?.[0];
+            const isUsed = Number(row?.isInUsed ?? row?.isinused ?? row?.inusedcount ?? 0);
+            if (isUsed > 0) {
+                await useSwalErrorAlert(
+                    "Cannot Delete",
+                    `Item No "${code}" is currently in use and cannot be deleted.`
+                );
+                return true;
+            }
+        } catch (e) {
+            console.error("CheckInUsed failed", e);
+        }
+        return false;
+    };
+
     const deleteItem = async () => {
         const code = String(form?.itemCode || "").trim();
         if (!code) return;
+
+        // Check in-use before showing delete confirmation
+        const inUse = await checkInUsed(code);
+        if (inUse) return;
 
         const confirm = await useSwalDeleteConfirm("Delete Item?", `Delete Item No ${code}?`);
         if (!confirm?.isConfirmed) return;
@@ -181,13 +238,9 @@ const FGMast = () => {
         setIsLoading(true);
         try {
             const payload = {
-                // Send as object so Laravel receives 'array'
                 json_data: { action: "delete", itemCode: code, userCode }
             };
-
-            // Changed from /upsertFGMast to /deleteFGMast
             await apiClient.post("/deleteFGMast", payload);
-
             await useSwalDeleteRecord("Deleted", `Item No ${code} removed.`);
             handleResetSetup();
             await loadMasterList();
@@ -199,16 +252,22 @@ const FGMast = () => {
     };
 
     const upsertItem = async () => {
-        let code = String(form?.itemCode || "").trim();
+        const code = String(form?.itemCode || "").trim();
+
+        // Extra duplicate guard on save for new records
+        if (!selectedItemCode) {
+            const isDup = await checkDuplicate(code);
+            if (isDup) return;
+        }
+
         setIsLoading(true);
         try {
-            // ✅ Correct — matches what the sproc expects at $.json_data.*
             const payload = {
-                json_data: JSON.stringify({
+                json_data: {
                     ...form,
                     action: selectedItemCode ? "edit" : "add",
                     userCode,
-                }),
+                },
             };
 
             const res = await apiClient.post("/upsertFGMast", payload);
@@ -316,19 +375,22 @@ const FGMast = () => {
 
             <div className="global-tran-tab-div-ui mt-36 sm:mt-32 md:mt-28 lg:mt-24" style={{ minHeight: "calc(100vh - 170px)" }}>
                 {activeTab === "setup" && (
-                    // AFTER
                     <FGMast_SetupTab
                         form={form}
                         isEditing={isEditing}
                         isLoading={isLoading}
                         generationMode={generationMode}
                         onChangeForm={updateForm}
-                        onLookupSelect={(itemCode) => fetchItemByCode(itemCode, true)}  // ← enters edit mode
+                        onLookupSelect={(itemCode) => fetchItemByCode(itemCode, true)}
+                        onBlurItemCode={checkDuplicate}
                     />
                 )}
                 {activeTab === "master" && (
                     <FGMast_DataTab
                         rows={masterRows}
+                        isLoading={isLoading}
+                        onFilter={loadMasterList}
+                        onReset={loadMasterList}
                         onRowDoubleClick={(row) => {
                             fetchItemByCode(row.itemCode);
                             setActiveTab("setup");
