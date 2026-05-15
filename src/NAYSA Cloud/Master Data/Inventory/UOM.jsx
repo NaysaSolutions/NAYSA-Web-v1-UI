@@ -1,172 +1,489 @@
-import React, { forwardRef, useImperativeHandle } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+} from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faEdit,
+  faTrashAlt,
+  faPlus,
+  faSave,
+  faUndo,
+  faInfoCircle,
+  faChevronDown,
+  faFilePdf,
+  faVideo,
+} from "@fortawesome/free-solid-svg-icons";
 
-// Use forwardRef to catch the global button clicks from the parent WareMast
-const UOM = forwardRef(({ isMobile, onMobileActionOpen }, ref) => {
+import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
+import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
+import {
+  useSwalErrorAlert,
+  useSwalSuccessAlert,
+  useSwalDeleteConfirm,
+  useSwalValidationAlert,
+  useSwalErrorAlertAPI,
+  useSwalDeleteRecord,
+} from "@/NAYSA Cloud/Global/behavior.jsx";
+import {
+  useFieldLenghtCheck,
+  useGetFieldLength,
+} from "@/NAYSA Cloud/Global/procedure";
 
-  // Expose empty/safe methods to the parent WareMast component
-  // so it doesn't crash when clicking global Add/Save/Reset buttons.
-  useImperativeHandle(ref, () => ({
-    handleAdd: () => {},
-    handleSave: () => {},
-    handleReset: () => {},
-    isEditing: false,
-    isSaving: false
-  }));
+import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
+import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
+import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable";
+import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
+import { reftables, reftablesPDFGuide, reftablesVideoGuide } from "@/NAYSA Cloud/Global/reftable";
+
+const INITIAL_FORM = {
+  uomCode: "",
+  uomName: "",
+  active: "Y",
+  __existing: false,
+};
+
+const INITIAL_REG = {
+  registeredBy: "",
+  registeredDate: "",
+  lastUpdatedBy: "",
+  lastUpdatedDate: "",
+};
+
+const parseSprocJsonResult = (rows) => {
+  if (!rows) return [];
+  const r = rows?.[0]?.result;
+  if (typeof r === "string") {
+    try {
+      return JSON.parse(r);
+    } catch {
+      return [];
+    }
+  }
+  if (Array.isArray(rows) && rows.length && typeof rows[0] === "object")
+    return rows;
+  return [];
+};
+
+const extractSprocValidation = (axiosResponse) => {
+  const payload = axiosResponse?.data ?? axiosResponse;
+  const data = payload?.data;
+  if (
+    Array.isArray(data) &&
+    data[0] &&
+    (data[0].errorCount !== undefined || data[0].errorcount !== undefined)
+  ) {
+    return {
+      errorCount: Number(data[0].errorCount ?? data[0].errorcount ?? 0),
+      errorMsg: String(data[0].errorMsg ?? data[0].errormsg ?? ""),
+    };
+  }
+  return null;
+};
+
+const UOM = () => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const docType = "UOM"; // Should match key in reftables
+  const formTopRef = useRef(null);
+  const guideRef = useRef(null);
+  
+  const pdfLink = reftablesPDFGuide[docType];
+  const videoLink = reftablesVideoGuide[docType];
+
+  const [form, setForm] = useState(INITIAL_FORM);
+  const [registrationInfo, setRegistrationInfo] = useState(INITIAL_REG);
+  const [isEditing, setIsEditing] = useState(false);
+  const [tblFieldArray, setTblFieldArray] = useState([]);
+  const [isOpenGuide, setOpenGuide] = useState(false);
+
+  // Mobile Action Sheet State
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isMobileActionSheetMounted, setIsMobileActionSheetMounted] = useState(false);
+  const [isMobileActionSheetOpen, setIsMobileActionSheetOpen] = useState(false);
+  const [selectedMobileRow, setSelectedMobileRow] = useState(null);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
+  const openMobileActionSheet = (row) => {
+    setSelectedMobileRow(row);
+    setIsMobileActionSheetMounted(true);
+    requestAnimationFrame(() => setIsMobileActionSheetOpen(true));
+  };
+
+  const closeMobileActionSheet = () => {
+    setIsMobileActionSheetOpen(false);
+    setTimeout(() => {
+      setIsMobileActionSheetMounted(false);
+      setSelectedMobileRow(null);
+    }, 300);
+  };
+
+  const setField = (key, value) =>
+    setForm((prev) => ({ ...prev, [key]: value }));
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const res = await useFieldLenghtCheck("UOM");
+      if (mounted) setTblFieldArray(res || []);
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  const getMax = (col) => useGetFieldLength(tblFieldArray, col);
+
+  const uomListQuery = useQuery({
+    queryKey: ["uomList"],
+    queryFn: async () => {
+      const result = await apiClient.get("/uom/uom");
+      return parseSprocJsonResult(result?.data?.data);
+    },
+  });
+
+  const uoms = useMemo(() => {
+    return (uomListQuery.data || []).map((row) => ({
+      uomCode: row?.uomCode ?? row?.UOM_CODE ?? "",
+      uomName: row?.uomName ?? row?.UOM_NAME ?? "",
+      active: row?.active ?? row?.ACTIVE ?? "Y",
+      registeredBy: row?.registeredBy ?? row?.REGISTERED_BY ?? "",
+      registeredDate: row?.registeredDate ?? row?.REGISTERED_DATE ?? "",
+      lastUpdatedBy: row?.lastUpdatedBy ?? row?.UPDATED_BY ?? "",
+      lastUpdatedDate: row?.lastUpdatedDate ?? row?.UPDATED_DATE ?? "",
+    }));
+  }, [uomListQuery.data]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (payload) =>
+      apiClient.post("/uom/upsertUom", {
+        json_data: JSON.stringify(payload),
+      }),
+    onSuccess: async (response) => {
+      const sprocValidation = extractSprocValidation(response);
+      if (Number(sprocValidation?.errorCount ?? 0) > 0) {
+        useSwalErrorAlert("Validation Failed", String(sprocValidation?.errorMsg));
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ["uomList"] });
+      useSwalSuccessAlert("Success!", "UOM saved successfully.");
+      handleReset();
+    },
+    onError: (error) => useSwalErrorAlertAPI("Error", error),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (payload) =>
+      apiClient.post("/uom/deleteUom", { json_data: payload }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["uomList"] });
+      useSwalDeleteRecord("Deleted!", "UOM record removed successfully.");
+      handleReset();
+    },
+    onError: (error) => useSwalErrorAlertAPI("Error", error),
+  });
+
+  const isSaving = saveMutation.isPending || deleteMutation.isPending;
+  const isListLoading = uomListQuery.isLoading;
+
+  const handleReset = () => {
+    setForm(INITIAL_FORM);
+    setRegistrationInfo(INITIAL_REG);
+    setIsEditing(false);
+    if (formTopRef.current) {
+      formTopRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  };
+
+  const handleSave = async () => {
+    if (!isEditing || saveMutation.isPending) return;
+    const uomCode = String(form.uomCode || "").trim();
+    const uomName = String(form.uomName || "").trim();
+
+    if (!uomCode || !uomName) {
+      return useSwalValidationAlert({
+        icon: "warning",
+        title: "Required Field",
+        message: "UOM Code and UOM Name are required.",
+      });
+    }
+
+    saveMutation.mutate({
+      uomCode,
+      uomName,
+      active: form.active,
+      action: form.__existing ? "EDIT" : "ADD",
+      userCode: user?.USER_CODE || "ADMIN",
+    });
+  };
+
+  const handleEdit = (row) => {
+    setForm({ ...INITIAL_FORM, ...row, __existing: true });
+    setRegistrationInfo({
+      registeredBy: row.registeredBy,
+      registeredDate: row.registeredDate,
+      lastUpdatedBy: row.lastUpdatedBy,
+      lastUpdatedDate: row.lastUpdatedDate,
+    });
+    setIsEditing(true);
+    closeMobileActionSheet();
+
+    setTimeout(() => {
+      if (formTopRef.current) {
+        const yOffset = -80; 
+        const y = formTopRef.current.getBoundingClientRect().top + window.pageYOffset + yOffset;
+        window.scrollTo({ top: y, behavior: 'smooth' });
+      }
+    }, 150);
+  };
+
+  const handleDelete = async (row) => {
+    try {
+      const checkRes = await apiClient.post("/uom/checkInUsedUom", {
+        json_data: { uomCode: row.uomCode }
+      });
+      const inUseData = checkRes?.data?.data;
+
+      if (inUseData && inUseData.result === "1") {
+        return useSwalErrorAlert(
+          "Cannot Delete",
+          `UOM ${row.uomCode} is currently in use and cannot be deleted.`
+        );
+      }
+
+      const confirm = await useSwalDeleteConfirm("Confirm Delete", `Delete UOM ${row.uomCode}?`);
+      if (confirm?.isConfirmed) {
+        deleteMutation.mutate({ uomCode: row.uomCode });
+      }
+    } catch (error) {
+      useSwalErrorAlertAPI("Error", error);
+    } finally {
+      closeMobileActionSheet();
+    }
+  };
+
+  // Keyboard and Click handlers
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.ctrlKey && e.key === "s") {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+    const handleClick = (e) => {
+      if (guideRef.current && !guideRef.current.contains(e.target)) setOpenGuide(false);
+    };
+    window.addEventListener("keydown", handleKey);
+    document.addEventListener("mousedown", handleClick);
+    return () => {
+      window.removeEventListener("keydown", handleKey);
+      document.removeEventListener("mousedown", handleClick);
+    };
+  }, [form, isEditing]);
+
+  const columns = useMemo(() => [
+    {
+      key: "__actions",
+      label: <span className="hidden md:inline">Actions</span>,
+      width: 90,
+      render: (row) => (
+        <div className="flex gap-2 justify-center w-full">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              isMobile ? openMobileActionSheet(row) : handleEdit(row);
+            }}
+            className="flex-1 h-7 md:flex-none flex items-center justify-center gap-1 py-2 px-3 bg-blue-50 border border-blue-100 text-blue-600 rounded-md hover:bg-blue-600 hover:text-white transition-colors text-xs"
+          >
+            <FontAwesomeIcon icon={faEdit} />
+            <span className="md:hidden">Edit</span>
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              isMobile ? openMobileActionSheet(row) : handleDelete(row);
+            }}
+            className="flex-1 h-7 md:flex-none flex items-center justify-center gap-1 py-2 px-3 bg-red-50 border border-red-100 text-red-600 rounded-md hover:bg-red-600 hover:text-white transition-colors text-xs"
+          >
+            <FontAwesomeIcon icon={faTrashAlt} />
+            <span className="md:hidden">Delete</span>
+          </button>
+        </div>
+      ),
+    },
+    { key: "uomCode", label: "UOM Code", sortable: true, width: 140 },
+    { key: "uomName", label: "UOM Name", sortable: true, width: 200 },
+    {
+      key: "active",
+      label: "Active",
+      sortable: true,
+      width: 90,
+      render: (row) => (row.active === "Y" ? "Yes" : "No"),
+    },
+  ], [isMobile]);
 
   return (
-    <div className="flex-1 w-full min-h-[500px] flex flex-col items-center justify-center bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg p-8 text-center mt-2">
-
-      {/* Animated Gear Icon */}
-      <div className="relative w-24 h-24 mb-6 flex items-center justify-center">
-        <svg
-          width="96"
-          height="96"
-          viewBox="0 0 96 96"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          {/* Background circle */}
-          <circle
-            cx="48"
-            cy="48"
-            r="46"
-            className="fill-blue-50 dark:fill-gray-700 stroke-blue-100 dark:stroke-gray-600"
-            strokeWidth="1"
-          />
-
-          {/* Large gear (spinning) */}
-          <g
-            style={{
-              transformOrigin: "48px 50px",
-              animation: "wh-spin 8s linear infinite",
-            }}
-          >
-            <path
-              d="M48 30c-1.1 0-2 .9-2 2v2.2a14.1 14.1 0 0 0-4.7 1.9l-1.5-1.5a2 2 0 0 0-2.8 0l-2.8 2.8a2 2 0 0 0 0 2.8l1.5 1.5A14.1 14.1 0 0 0 34 46H31.8a2 2 0 0 0-2 2v4c0 1.1.9 2 2 2H34c.4 1.7 1.1 3.3 2 4.7l-1.5 1.5a2 2 0 0 0 0 2.8l2.8 2.8a2 2 0 0 0 2.8 0l1.5-1.5A14.1 14.1 0 0 0 46 65.8V68c0 1.1.9 2 2 2h4c1.1 0 2-.9 2-2v-2.2a14.1 14.1 0 0 0 4.7-2l1.5 1.5a2 2 0 0 0 2.8 0l2.8-2.8a2 2 0 0 0 0-2.8L64.3 56A14.1 14.1 0 0 0 66.2 52H68c1.1 0 2-.9 2-2v-4c0-1.1-.9-2-2-2h-1.8a14.1 14.1 0 0 0-1.9-4.7l1.5-1.5a2 2 0 0 0 0-2.8l-2.8-2.8a2 2 0 0 0-2.8 0l-1.5 1.5A14.1 14.1 0 0 0 54 34.2V32c0-1.1-.9-2-2-2h-4z"
-              className="fill-blue-100 dark:fill-gray-600 stroke-blue-400 dark:stroke-blue-400"
-              strokeWidth="0.8"
-            />
-            <circle
-              cx="48"
-              cy="50"
-              r="6"
-              className="fill-white dark:fill-gray-800 stroke-blue-400 dark:stroke-blue-400"
-              strokeWidth="1.5"
-            />
-          </g>
-
-          {/* Small gear (counter-spinning) */}
-          <g
-            style={{
-              transformOrigin: "66px 34px",
-              animation: "wh-spin-rev 5s linear infinite",
-            }}
-          >
-            <path
-              d="M66 25c-.7 0-1.3.6-1.3 1.3v1.5a9.2 9.2 0 0 0-3.1 1.3l-1-1a1.3 1.3 0 0 0-1.9 0l-1.9 1.9a1.3 1.3 0 0 0 0 1.9l1 1A9.2 9.2 0 0 0 57.5 35H56a1.3 1.3 0 0 0-1.3 1.3v2.7c0 .7.6 1.3 1.3 1.3h1.5a9.2 9.2 0 0 0 1.3 3.1l-1 1a1.3 1.3 0 0 0 0 1.9l1.9 1.9c.5.5 1.4.5 1.9 0l1-1a9.2 9.2 0 0 0 3 1.3V50c0 .7.6 1.3 1.4 1.3h2.7c.7 0 1.3-.6 1.3-1.3v-1.5a9.2 9.2 0 0 0 3.1-1.3l1 1a1.3 1.3 0 0 0 1.9 0l1.9-1.9a1.3 1.3 0 0 0 0-1.9l-1-1a9.2 9.2 0 0 0 1.3-3.1H79c.7 0 1.3-.6 1.3-1.3v-2.7c0-.7-.6-1.3-1.3-1.3h-1.5a9.2 9.2 0 0 0-1.3-3.1l1-1a1.3 1.3 0 0 0 0-1.9l-1.9-1.9a1.3 1.3 0 0 0-1.9 0l-1 1A9.2 9.2 0 0 0 69.3 28v-1.7c0-.7-.6-1.3-1.3-1.3H66z"
-              className="fill-sky-50 dark:fill-gray-600 stroke-sky-400 dark:stroke-sky-400"
-              strokeWidth="0.8"
-            />
-            <circle
-              cx="66"
-              cy="34"
-              r="4"
-              className="fill-white dark:fill-gray-800 stroke-sky-400 dark:stroke-sky-400"
-              strokeWidth="1.5"
-            />
-          </g>
-        </svg>
-
-        {/* Keyframe styles injected once */}
-        <style>{`
-          @keyframes wh-spin {
-            from { transform: rotate(0deg); }
-            to   { transform: rotate(360deg); }
-          }
-          @keyframes wh-spin-rev {
-            from { transform: rotate(0deg); }
-            to   { transform: rotate(-360deg); }
-          }
-          @keyframes wh-pulse {
-            0%, 100% { opacity: 1; }
-            50%       { opacity: 0.35; }
-          }
-          @keyframes wh-bar {
-            from { width: 0%; }
-            to   { width: 45%; }
-          }
-        `}</style>
-      </div>
-
-      {/* Badge */}
-      <span className="inline-block mb-3 px-3 py-0.5 rounded-md text-xs font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-700 tracking-wide uppercase">
-        🚧 Under Construction
-      </span>
-
-      {/* Title */}
-      <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">
-       UOM - Unit of Measure
-      </h2>
-
-      {/* Description */}
-      <p className="text-gray-500 dark:text-gray-400 max-w-sm mx-auto text-sm leading-relaxed mb-6">
-        This module is currently being built. Our team is working hard to bring it to you. Stay tuned!
-      </p>
-
-      {/* Progress Bar */}
-      <div className="w-full max-w-xs mb-6">
-        <div className="flex justify-between items-center mb-1.5">
-          <span className="text-xs text-gray-400 dark:text-gray-500">Build progress</span>
-          <span className="text-xs font-medium text-blue-500 dark:text-blue-400">45%</span>
-        </div>
-        <div className="h-1.5 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden border border-gray-200 dark:border-gray-600">
-          <div
-            className="h-full bg-blue-400 dark:bg-blue-500 rounded-full"
-            style={{ animation: "wh-bar 2s ease-out forwards" }}
-          />
-        </div>
-      </div>
-
-      {/* Status Steps */}
-      <div className="grid grid-cols-3 gap-2 w-full max-w-xs mb-6">
-        {/* Step 1 — Done */}
-        <div className="flex flex-col items-center gap-1.5 bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-600 rounded-lg py-3 px-2">
-          <svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
-          <span className="text-xs text-gray-500 dark:text-gray-400 leading-tight text-center">Planning</span>
-        </div>
-
-        {/* Step 2 — In Progress */}
-        <div className="flex flex-col items-center gap-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg py-3 px-2">
-          <div className="flex items-center gap-0.5">
-            {[0, 0.3, 0.6].map((delay) => (
-              <span
-                key={delay}
-                className="block w-1.5 h-1.5 rounded-full bg-blue-400"
-                style={{ animation: `wh-pulse 1.4s ease-in-out ${delay}s infinite` }}
-              />
-            ))}
+    <div className="global-ref-main-div-ui">
+      {(isListLoading || isSaving || deleteMutation.isPending) && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-2xl flex flex-col items-center gap-4">
+            <div className="relative">
+              <div className="w-12 h-12 border-4 border-blue-100 dark:border-gray-700 rounded-full"></div>
+              <div className="absolute top-0 left-0 w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+            <span className="text-sm font-semibold animate-pulse">
+              {saveMutation.isPending ? "Saving..." : deleteMutation.isPending ? "Deleting..." : "Loading..."}
+            </span>
           </div>
-          <span className="text-xs text-blue-500 dark:text-blue-400 leading-tight text-center font-medium">Building</span>
         </div>
+      )}
 
-        {/* Step 3 — Pending */}
-        <div className="flex flex-col items-center gap-1.5 bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-600 rounded-lg py-3 px-2">
-          <svg className="w-4 h-4 text-gray-300 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
-          </svg>
-          <span className="text-xs text-gray-500 dark:text-gray-400 leading-tight text-center">Launch</span>
+      {/* Header Section */}
+      <div className="global-ref-header-ui">
+        <div className="w-full flex flex-col gap-3 md:grid md:grid-cols-3 md:items-center md:gap-0">
+          <div className="w-full md:w-auto md:justify-start flex">
+            <h1 className="global-ref-headertext-ui w-full md:w-auto truncate text-center md:text-left">
+              {reftables[docType] || "Unit of Measures"}
+            </h1>
+          </div>
+          <div className="hidden md:flex justify-center w-full" />
+          <div className="w-full md:w-auto flex md:justify-end">
+            <div className="w-full md:w-auto flex items-center justify-center md:justify-end gap-2 flex-wrap">
+              <ButtonBar
+                buttons={[
+                  {
+                    key: "add",
+                    label: <span className="sm:inline ml-1">Add</span>,
+                    icon: faPlus,
+                    onClick: () => { handleReset(); setIsEditing(true); },
+                    className: "flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all",
+                  },
+                  {
+                    key: "save",
+                    label: <span className="sm:inline ml-1">Save</span>,
+                    icon: faSave,
+                    onClick: handleSave,
+                    disabled: !isEditing || isSaving,
+                    className: `flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md transition-all ${!isEditing || isSaving ? "bg-blue-500 opacity-50 cursor-not-allowed text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`,
+                  },
+                  {
+                    key: "reset",
+                    label: <span className="sm:inline ml-1">Reset</span>,
+                    icon: faUndo,
+                    onClick: handleReset,
+                    className: "flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all",
+                  },
+                ]}
+              />
+              <div ref={guideRef} className="relative">
+                <button onClick={() => setOpenGuide((v) => !v)} className="bg-blue-600 text-white h-7 w-16 sm:w-auto sm:h-8 sm:px-4 rounded-md flex items-center justify-center gap-1 hover:bg-blue-700 transition-all">
+                  <FontAwesomeIcon icon={faInfoCircle} className="text-[12px]" />
+                  <span className="sm:inline ml-1 text-[11px] font-medium">Info</span>
+                  <FontAwesomeIcon icon={faChevronDown} className="hidden sm:inline text-[10px] opacity-80" />
+                </button>
+                {isOpenGuide && (
+                  <div className="absolute right-0 mt-2 w-52 rounded-md shadow-xl bg-white ring-1 ring-black/10 z-[60] dark:bg-gray-800 overflow-hidden">
+                    <button onClick={() => window.open(pdfLink, "_blank")} className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 dark:hover:bg-blue-900 border-b border-gray-100 dark:border-gray-700">
+                      <FontAwesomeIcon icon={faFilePdf} className="mr-2 text-red-500" /> PDF Guide
+                    </button>
+                    <button onClick={() => window.open(videoLink, "_blank")} className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 dark:hover:bg-blue-900">
+                      <FontAwesomeIcon icon={faVideo} className="mr-2 text-blue-500" /> Video Guide
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Footer note */}
-      <p className="text-xs text-gray-400 dark:text-gray-500 max-w-xs mx-auto">
-        Other modules are fully operational. Contact your system admin for assistance.
-      </p>
+      <div ref={formTopRef} className="mt-24 flex flex-col xl:flex-row gap-4 px-4 h-auto xl:h-[calc(100vh-130px)]">
+        {/* LEFT SIDE: Entry Details */}
+        <div className="w-full xl:w-[400px] flex flex-col gap-4 shrink-0">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg">
+            <h2 className="text-sm font-bold text-blue-600 mb-6 uppercase tracking-wider border-b pb-2">
+              Entry Details
+            </h2>
+            <div className="space-y-6">
+              <FieldRenderer
+                label="UOM Code"
+                required
+                type="text"
+                value={form.uomCode}
+                disabled={!isEditing || form.__existing}
+                onChange={(v) => setField("uomCode", String(v).toUpperCase())}
+                maxLength={getMax("UOM_CODE") || 20}
+              />
+              <FieldRenderer
+                label="UOM Name"
+                required
+                type="text"
+                value={form.uomName}
+                disabled={!isEditing}
+                onChange={(v) => setField("uomName", v)}
+                maxLength={getMax("UOM_NAME") || 100}
+              />
+              <FieldRenderer
+                label="Active?"
+                type="select"
+                value={form.active}
+                options={[{ value: "Y", label: "Yes" }, { value: "N", label: "No" }]}
+                disabled={!isEditing}
+                onChange={(v) => setField("active", v)}
+              />
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 mb-8 xl:mb-0">
+            <RegistrationInfo layout="stacked" data={registrationInfo} />
+          </div>
+        </div>
 
+        {/* RIGHT SIDE: Table */}
+        <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg overflow-hidden flex flex-col">
+          <SearchGlobalReferenceTable
+            docType="UOM Master"
+            columns={columns}
+            data={uoms}
+            onRowDoubleClick={handleEdit}
+            itemsPerPage={200}
+            onMobileRowOpen={openMobileActionSheet}
+            isLoading={uomListQuery.isLoading}
+            onRefresh={() => uomListQuery.refetch()}
+            tableSize="Full"
+          />
+        </div>
+      </div>
+
+      {/* Mobile Action Sheet */}
+      {isMobileActionSheetMounted && (
+        <div className="fixed inset-0 z-[120] md:hidden">
+          <div className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ${isMobileActionSheetOpen ? "opacity-100" : "opacity-0"}`} onClick={closeMobileActionSheet} />
+          <div className={`absolute bottom-0 left-0 right-0 rounded-t-2xl bg-white shadow-2xl p-4 transform transition-transform duration-300 ease-out ${isMobileActionSheetOpen ? "translate-y-0" : "translate-y-full"}`}>
+            <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-4" />
+            <div className="mb-3">
+              <h2 className="text-sm font-bold text-gray-800">UOM Actions</h2>
+              <p className="text-xs text-gray-500">{selectedMobileRow?.uomCode} - {selectedMobileRow?.uomName}</p>
+            </div>
+            <div className="space-y-2">
+              <button onClick={() => handleEdit(selectedMobileRow)} className="w-full flex items-center justify-center gap-2 rounded-lg bg-blue-50 text-blue-600 py-3 text-sm font-medium">
+                <FontAwesomeIcon icon={faEdit} /> Edit
+              </button>
+              <button onClick={() => handleDelete(selectedMobileRow)} className="w-full flex items-center justify-center gap-2 rounded-lg bg-red-50 text-red-600 py-3 text-sm font-medium">
+                <FontAwesomeIcon icon={faTrashAlt} /> Delete
+              </button>
+              <button onClick={closeMobileActionSheet} className="w-full rounded-lg bg-gray-100 text-gray-700 py-3 text-sm font-medium">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-});
+};
 
 export default UOM;

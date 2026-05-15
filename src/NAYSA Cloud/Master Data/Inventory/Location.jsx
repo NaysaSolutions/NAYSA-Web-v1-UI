@@ -108,6 +108,8 @@ const Location = forwardRef(
 
     const getMax = (col) => useGetFieldLength(tblFieldArray, col);
 
+    const normalizeCode = (value) => String(value || "").trim().toUpperCase();
+
     const locationListQuery = useQuery({
       queryKey: ["locationList"],
       queryFn: async () => {
@@ -127,6 +129,8 @@ const Location = forwardRef(
     });
 
     const locations = useMemo(() => {
+      const selectedWarehouse = normalizeCode(form.whCode);
+
       let filtered = (locationListQuery.data || []).map((row) => ({
         whCode: row?.whCode ?? row?.WH_CODE ?? "",
         whName: row?.whName ?? row?.WH_NAME ?? "",
@@ -140,9 +144,10 @@ const Location = forwardRef(
         lastUpdatedDate: row?.lastUpdatedDate ?? row?.updatedDate ?? row?.UPDATED_DATE ?? row?.updated_date ?? "",
       }));
 
-      // Filter locations by selected warehouse
-      if (form.whCode) {
-        filtered = filtered.filter((loc) => loc.whCode === form.whCode);
+      if (selectedWarehouse) {
+        filtered = filtered.filter(
+          (loc) => normalizeCode(loc.whCode) === selectedWarehouse,
+        );
       }
 
       return filtered;
@@ -366,26 +371,25 @@ const Location = forwardRef(
                 disabled={false}
               />
 
-              <div className="grid grid-cols-2 gap-3">
-                <FieldRenderer
-                  label="Location Code"
-                  required
-                  type="text"
-                  value={form.locCode}
-                  disabled={!isEditing || !form.whCode || form.__existing}
-                  onChange={(v) => setField("locCode", String(v).toUpperCase())}
-                  maxLength={getMax("LOC_CODE") || 20}
-                />
-                <FieldRenderer
-                  label="Location Name"
-                  required
-                  type="text"
-                  value={form.locName}
-                  disabled={!isEditing || !form.whCode}
-                  onChange={(v) => setField("locName", v)}
-                  maxLength={getMax("LOC_NAME") || 100}
-                />
-              </div>
+              <FieldRenderer
+                label="Location Code"
+                required
+                type="text"
+                value={form.locCode}
+                disabled={!isEditing || !form.whCode || form.__existing}
+                onChange={(v) => setField("locCode", String(v).toUpperCase())}
+                maxLength={getMax("LOC_CODE") || 20}
+              />
+
+              <FieldRenderer
+                label="Location Name"
+                required
+                type="text"
+                value={form.locName}
+                disabled={!isEditing || !form.whCode}
+                onChange={(v) => setField("locName", v)}
+                maxLength={getMax("LOC_NAME") || 100}
+              />
 
               <div className="grid grid-cols-2 gap-3">
                 <FieldRenderer
