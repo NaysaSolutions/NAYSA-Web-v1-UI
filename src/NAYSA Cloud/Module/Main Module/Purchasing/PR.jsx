@@ -143,6 +143,7 @@ const isDateBeforeDate = (value, baseValue) => {
   const detailRowsRef = useRef([]);
   const headerDateNeededRef = useRef("");
   const suppressHeaderDateNeededPromptRef = useRef(true);
+  const addTypeDropdownRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation(); 
   const [isViewDocument, setIsViewDocument] = useState(false);
@@ -354,6 +355,18 @@ const isDateBeforeDate = (value, baseValue) => {
   const isJobOrder = selectedPrTranType === "PR02";
   const [focusedCell, setFocusedCell] = useState(null);
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+
+  useEffect(() => {
+    if (!showTypeDropdown) return;
+
+    const handleClickOutside = (event) => {
+      if (addTypeDropdownRef.current?.contains(event.target)) return;
+      setShowTypeDropdown(false);
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showTypeDropdown]);
   const [totals, setTotals] = useState({
     totalQtyNeeded: "",
   });
@@ -1476,7 +1489,17 @@ if (field === 'prStatus') {
         documentStatus,
       } = state;
 
- 
+
+      const normalizedDetailRows = (detailRows || []).map((row) => ({
+        ...row,
+        prStatus: row.prStatus || "O",
+      }));
+      const hasOpenDetail = normalizedDetailRows.some(
+        (row) => String(row.prStatus || "O").toUpperCase() === "O"
+      );
+      const finalHeaderPrStatus = hasOpenDetail ? "O" : "C";
+
+      
 
       const prData = {
         branchCode: branchCode,
@@ -1493,7 +1516,7 @@ if (field === 'prStatus') {
         refPrNo1: refPrNo1 || "",
         refPrNo2: refPrNo2 || "",
         remarks: remarks || "",
-        prStatus: documentStatus?.length ? documentStatus : "O",
+        prStatus: finalHeaderPrStatus,
         userCode: userCode,
         // ⬇️ THIS PART guarantees ALL CURRENT detailRows (including newly added) are sent
         dt1: detailRows.map((row, index) => ({
@@ -2430,7 +2453,7 @@ const renderPrDetailColumn = (columnKey, row, index) => {
           {/* Detail Footer: Add Button + Total */}
           <div className="global-tran-tab-footer-main-div-ui">
             <div className="global-tran-tab-footer-button-div-ui">
-              <div className="relative inline-block">
+              <div ref={addTypeDropdownRef} className="relative inline-block">
  
  
   {/* Dropdown overlay (absolute so it will NOT expand layout) */}
