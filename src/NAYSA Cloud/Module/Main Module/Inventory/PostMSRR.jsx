@@ -1,12 +1,12 @@
-import { useState, useEffect, useRef } from "react";
-import { fetchDataJson } from "../../../Configuration/BaseURL.jsx";
-import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
+import { useState, useEffect, useRef } from 'react';
+import ReactDOM from 'react-dom';
+import { fetchDataJson } from '../../../Configuration/BaseURL.jsx';
+import { useSelectedHSColConfig } from '@/NAYSA Cloud/Global/selectedData';
 import GlobalGLPostingModalv1 from "../../../Lookup/SearchGlobalGLPostingv1.jsx";
+import { useSwalValidationAlert } from '@/NAYSA Cloud/Global/behavior';
 import { useHandlePostTran } from '@/NAYSA Cloud/Global/procedure';
-import { useSwalValidationAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
-import ReactDOM from "react-dom";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faSpinner } from "@fortawesome/free-solid-svg-icons";
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faSpinner } from '@fortawesome/free-solid-svg-icons';
 
 const PostMSRR = ({ isOpen, onClose, userCode }) => {
   const [data, setData] = useState([]);
@@ -21,6 +21,7 @@ const PostMSRR = ({ isOpen, onClose, userCode }) => {
 
     const fetchData = async () => {
       if (!isOpen) return;
+
       setLoading(true);
       alertFired.current = false;
 
@@ -28,33 +29,49 @@ const PostMSRR = ({ isOpen, onClose, userCode }) => {
         const endpoint = "postingMSRR";
         const response = await fetchDataJson(endpoint);
 
-        const rows = Array.isArray(response?.data)
-  ? response.data
-  : response?.data?.[0]?.result
-    ? JSON.parse(response.data[0].result)
-    : [];
+        let rawData = [];
 
-        if (rows.length === 0 && !alertFired.current) {
+        if (Array.isArray(response?.data)) {
+
+          // Case 1: JSON string response (SVI-style)
+          if (response.data?.[0]?.result) {
+            try {
+              rawData = JSON.parse(response.data[0].result || "[]");
+            } catch (err) {
+              console.error("JSON parse error:", err);
+              rawData = [];
+            }
+          }
+          // Case 2: direct SQL rows
+          else {
+            rawData = response.data;
+          }
+        }
+
+        if (!rawData.length && !alertFired.current) {
           useSwalValidationAlert({
             icon: "info",
             title: "No Records Found",
             message: "There are no records to display.",
           });
+
           alertFired.current = true;
           onClose?.();
+          return;
         }
 
         const colConfig = await useSelectedHSColConfig(endpoint);
 
         if (isMounted) {
-          setData(rows);
+          setData(rawData);
           setcolConfigData(colConfig);
           setModalReady(true);
         }
+
       } catch (error) {
-        console.error("Error fetching data:", error);
+        console.error("Error fetching MSRR:", error);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
@@ -66,34 +83,39 @@ const PostMSRR = ({ isOpen, onClose, userCode }) => {
     };
   }, [isOpen, onClose]);
 
-  const pickDocAndBranch = (row) => {
+  // =========================================
+  // 🔥 CRITICAL FIX: NORMALIZE BEFORE POSTING
+  // =========================================
+    const handlePost = async (selectedData, userPw) => {
+    await useHandlePostTran(selectedData, userPw, "MSRR", userCode, setLoading, onClose);
+  };
+
+const pickDocAndBranch = (row) => {
   if (!row) return { docNo: null, branchCode: null };
   const docNo = row.rrNo;
   const branchCode = row.branchCode;
   return { docNo, branchCode };
 };
-
-
-  const handlePost = async (selectedData, userPw) => {
-    await useHandlePostTran(selectedData, userPw, "MSRR", userCode, setLoading, onClose);
-  };
-
+  // =========================================
+  // VIEW DOCUMENT
+  // =========================================
   const handleViewDocument = (row) => {
-    const { rrNo, branchCode } = pickDocAndBranch(row);
+    const rrNo = row?.rrNo || row?.rr_no;
+    const branchCode = row?.branchCode || row?.branch_code;
 
     if (!rrNo || !branchCode) {
       useSwalValidationAlert({
         icon: "warning",
         title: "Missing keys",
-        message: "Cannot determine MSRR keys for viewing.",
+        message: "Cannot determine RR No or Branch Code"
       });
       return;
     }
 
-    const MSRR_VIEW_URL = "/inventory/transactions/msrr";
     const url =
-      `${window.location.origin}${MSRR_VIEW_URL}` +
-      `?rrNo=${encodeURIComponent(rrNo)}&branchCode=${encodeURIComponent(branchCode)}`;
+      `${window.location.origin}/tran-inv-msrr` +
+      `?rrNo=${encodeURIComponent(rrNo)}` +
+      `&branchCode=${encodeURIComponent(branchCode)}`;
 
     window.open(url, "_blank", "noopener,noreferrer");
   };
@@ -104,7 +126,7 @@ const PostMSRR = ({ isOpen, onClose, userCode }) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post MS Receiving"
+          title="Post MS Receiving Report"
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}
@@ -118,7 +140,7 @@ const PostMSRR = ({ isOpen, onClose, userCode }) => {
         loading ? (
           <div className="global-tran-spinner-main-div-ui">
             <div className="global-tran-spinner-sub-div-ui">
-              <FontAwesomeIcon icon={faSpinner} spin size="2x" className="text-blue-500 mb-2" />
+              <FontAwesomeIcon icon={faSpinner} spin size="2x" />
               <p>Please wait...</p>
             </div>
           </div>

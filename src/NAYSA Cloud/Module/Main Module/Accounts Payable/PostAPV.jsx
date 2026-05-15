@@ -74,11 +74,20 @@ const PostAPV = ({ isOpen, onClose, userCode }) => {
   };
 
   const pickDocAndBranch = (row) => {
-    if (!row) return { docNo: null, branchCode: null };
-    const docNo = row.apvNo;
-    const branchCode = row.branchCode;
-    return { docNo, branchCode };
+  if (!row) {
+    return {
+      docNo: null,
+      branchCode: null,
+      apvId: null,
+    };
+  }
+
+  return {
+    docNo: row.apvNo,
+    branchCode: row.branchCode,
+    apvId: row.groupId,
   };
+};
 
   const handleViewDocument = (row) => {
     const { docNo, branchCode } = pickDocAndBranch(row);
