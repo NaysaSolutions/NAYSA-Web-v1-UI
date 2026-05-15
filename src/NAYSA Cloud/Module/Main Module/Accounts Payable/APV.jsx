@@ -444,20 +444,29 @@ const APV = () => {
     });
   }, [selectedApType]);
 
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.key === "F1") {
-        e.preventDefault();
+  // useEffect(() => {
+  //   const onKey = (e) => {
+  //     if (e.key === "F1") {
+  //       e.preventDefault();
 
-        if (!isDocNoDisabled && !isFormDisabled) {
-          updateState({ showAllTranDocNo: true });
-        }
-      }
-    };
+  //       if (!isDocNoDisabled && !isFormDisabled) {
+  //         updateState({ showAllTranDocNo: true });
+  //       }
+  //     }
+  //   };
 
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [isDocNoDisabled, isFormDisabled]);
+  //   window.addEventListener("keydown", onKey);
+  //   return () => window.removeEventListener("keydown", onKey);
+  // }, [isDocNoDisabled, isFormDisabled]);
+
+
+    useEffect(() => {
+      const onKey = (e) => {
+        if (e.key === "F1") { e.preventDefault(); updateState({showAllTranDocNo:true}); }
+      };
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, []);
 
   const openRRLookupColumns = [
   { key: "type", label: "Type", width: 60 },
@@ -902,8 +911,8 @@ const APV = () => {
         selectedApType: data.apvtranType || data.apvType || "APV01",
         vendCode: data.vendCode,
         vendName: vendorData,
-        currencyCode: data.currCode || "PHP",
-        currencyName: data.currName || "Philippine Peso",
+        currencyCode: data.currCode,
+        currencyName: data.currName,
         currencyRate: formatNumber(data.currRate || 1, 6),
         apAccountCode: apAccountCode,
         apAccountName: apAccountName,
@@ -930,17 +939,30 @@ const APV = () => {
     }
   };
 
-  const handleHistoryRowPick = useCallback(
-    async (row) => {
-      const docNo = row?.docNo;
-      const branchCode = row?.branchCode;
-      if (!docNo || !branchCode) return;
+  // const handleHistoryRowPick = useCallback(
+  //   async (row) => {
+  //     const docNo = row?.docNo;
+  //     const branchCode = row?.branchCode;
+  //     if (!docNo || !branchCode) return;
 
-      await fetchTranData(docNo, branchCode);
-      setTopTab("details");
-    },
-    [fetchTranData],
-  );
+  //     await fetchTranData(docNo, branchCode);
+  //     setTopTab("details");
+  //   },
+  //   [fetchTranData],
+  // );
+
+  const cleanUrl = useCallback(() => {
+    window.history.replaceState({}, "", window.location.origin);
+   }, []);
+
+     const handleHistoryRowPick = useCallback(async (row) => {
+       const docNo = row?.docNo;
+       const branchCode = row?.branchCode;
+       if (!docNo || !branchCode) return;
+       await fetchTranData(docNo, branchCode);
+       setTopTab("details");
+       cleanUrl();
+     }, [fetchTranData]);
 
   const fetchRCNameByCode = async (rcCode) => {
     if (!rcCode) return "";
@@ -1227,10 +1249,10 @@ const APV = () => {
       vendName: vendName?.vendName || "",
       refapvNo1: header.refDocNo1 || "",
       refapvNo2: header.refDocNo2 || "",
-      currCode: currencyCode || "PHP",
+      currCode: currencyCode,
       currRate: parseFormattedNumber(currencyRate) || 1,
       remarks: header.remarks || "",
-      userCode: user?.USER_CODE || "NSI",
+      userCode: user?.USER_CODE ,
       dt1: detailRows.map((row, index) => ({
         lnNo: String(index + 1),
         invType: row.invType,
@@ -2505,14 +2527,12 @@ const handleCloseRRRefModal = async (selectedItems) => {
     await fetchTranData(data.docNo, branchCode, data.key);
     updateState({ showAllTranDocNo: data.modalClose });
   };
-
+  
   const handleTranDocNoSelection = async (data) => {
+    
     handleReset();
-    updateState({
-      showAllTranDocNo: false,
-      documentNo: data.docNo,
-    });
-  };
+    updateState({showAllTranDocNo: false, documentNo:data.docNo });
+};
 
   const handleSaveAndPrint = async (documentID) => {
     updateState({ showSpinner: true });
@@ -3023,12 +3043,6 @@ const handleAtcNameDoubleClick = (index) => {
                 onBlur={handleDocumentNoBlur}
                 onLookup={() => updateState({ showAllTranDocNo: true })}
                 onKeyDown={(e) => {
-                  if (e.key === "F1") {
-                    e.preventDefault();
-                    if (!isDocNoDisabled) {
-                      updateState({ showAllTranDocNo: true });
-                    }
-                  }
                   if (e.key === "Enter") {
                     e.preventDefault();
                     handleDocumentNoBlur();
@@ -3927,11 +3941,14 @@ const handleAtcNameDoubleClick = (index) => {
             <div className="flex justify-end">
               <button
                 onClick={() => handleActivityOption("GenerateGL")}
-                className="global-tran-button-generateGL"
+                className={`global-tran-tab-footer-button-add-ui ${
+                        isFormDisabled ? "opacity-50 cursor-not-allowed" : ""
+                      }`}
                 disabled={isLoading || isFormDisabled}
               >
                 {isLoading ? "Generating..." : "Generate GL Entries"}
               </button>
+
             </div>
           </div>
 
@@ -4645,12 +4662,15 @@ const handleAtcNameDoubleClick = (index) => {
             <div className="global-tran-tab-footer-button-div-ui">
               <button
                 onClick={handleAddRowGL}
-                className="global-tran-tab-footer-button-add-ui"
+                className={`global-tran-tab-footer-button-add-ui ${
+                        isFormDisabled ? "opacity-50 cursor-not-allowed" : ""
+                      }`}
                 disabled={isFormDisabled}
               >
                 <FontAwesomeIcon icon={faPlus} className="mr-2" />
                 Add
               </button>
+
             </div>
 
             {/* Totals Section */}
@@ -4851,6 +4871,8 @@ const handleAtcNameDoubleClick = (index) => {
           cacheKey={`APV:${state.branchCode || ""}:${state.documentNo || ""}`}
           activeTabKey="APV_Summary"
           branchCode={state.branchCode}
+          startDate={state.fromDate}
+          endDate={state.toDate}
           status={(() => {
             const s = (state.status || "").toUpperCase();
             if (s === "FINALIZED") return "F";
