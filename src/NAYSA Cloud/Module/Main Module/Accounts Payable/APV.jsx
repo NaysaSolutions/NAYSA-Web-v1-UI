@@ -1557,48 +1557,75 @@ const APV = () => {
   }
 };
 
-const handleCloseRRRefModal = (selectedItems) => {
+const handleCloseRRRefModal = async (selectedItems) => {
   if (!selectedItems || !selectedItems.records) {
     updateState({ showRRRefModal: false });
     return;
   }
 
-  // records contains the array of checked rows from the modal
-  const itemsArray = Array.isArray(selectedItems.records) 
-    ? selectedItems.records 
+  const itemsArray = Array.isArray(selectedItems.records)
+    ? selectedItems.records
     : [selectedItems.records];
 
-  const mappedRows = itemsArray.map((item) => ({
-    lnNo: "",
-    invType: item.type || "MS",
-    rrNo: item.rrNo || "",
-    poNo: item.poNo || "",
-    siNo: item.siNo || "",
-    siDate: item.siDate || item.rrDate || useGetCurrentDayV2(),
-    amount: formatNumber(item.siAmount || 0),
-    siAmount: formatNumber(item.siAmount || 0),
-    debitAcct: item.debitAcct || "1901", // Example account
-    sltypeCode: "VE",
-    slCode: item.vendCode || vendCode,
-    slName: item.vendName || vendName?.vendName,
-    vatCode: item.vatCode || "",
-    vatName: item.vatDesc || "",
-    vatAmount: formatNumber(item.vatAmount || 0),
-    atcCode: item.ewtCode || "", // Maps to EWT column in picture
-    atcName: item.ewtDesc || "",
-    atcAmount: formatNumber(item.ewtAmt || 0),
-    paytermCode: item.terms || "",
-    dueDate: item.dueDate || useGetCurrentDayV2(),
-    REC_RC: "N",
-    REC_SL: "Y",
-    rrId: item.rrId
-  }));
+  // Use Promise.all to handle async lookups for names/rates
+  const mappedRows = await Promise.all(
+    itemsArray.map(async (item) => {
+      // 1. VAT Logic: Strictly from the Receiving Report (item)
+      const vCode = item.vatCode || "";
+      const vatData = vCode ? await useTopVatRow(vCode) : null;
+
+      // 2. ATC Logic: Strictly from the Supplier (vendName state)
+      // Note: Step 1 (handleClosePayeeModal) must store the supplier's atcCode in vendName
+      const aCode = vendName?.atcCode || ""; 
+      const atcData = aCode ? await useTopATCRow(aCode) : null;
+
+      // 3. Calculation & Formatting
+      const amount = parseFormattedNumber(item.siAmount || 0);
+      const vatAmount = parseFormattedNumber(item.vatAmount || 0);
+      
+      // Calculate ATC Amount based on Supplier's rate and RR's Net Amount
+      const netOfVat = amount - vatAmount;
+      const atcRate = atcData?.atcRate || 0;
+      const calculatedAtcAmount = netOfVat * atcRate;
+
+      return {
+        lnNo: "",
+        invType: item.type || "MS",
+        rrNo: item.rrNo || "",
+        poNo: item.poNo || "",
+        siNo: item.siNo || "",
+        siDate: item.siDate || item.rrDate || useGetCurrentDayV2(),
+        amount: formatNumber(amount),
+        siAmount: formatNumber(amount),
+        debitAcct: item.debitAcct || "1901",
+        sltypeCode: "VE",
+        slCode: vendCode, // From Step 1
+        slName: vendName?.vendName, // From Step 1
+        
+        // VAT reflected from RR
+        vatCode: vCode,
+        vatName: vatData?.vatName || item.vatDesc || "",
+        vatAmount: formatNumber(vatAmount),
+        
+        // ATC reflected from Supplier
+        atcCode: aCode,
+        atcName: atcData?.atcName || "",
+        atcAmount: formatNumber(calculatedAtcAmount),
+        
+        paytermCode: item.terms || "",
+        dueDate: item.dueDate || useGetCurrentDayV2(),
+        REC_RC: "N",
+        REC_SL: "Y",
+        rrId: item.rrId,
+      };
+    })
+  );
 
   const updatedRows = [...detailRows, ...mappedRows];
-  updateState({ 
-    detailRows: updatedRows, 
+  updateState({
+    detailRows: updatedRows,
     showRRRefModal: false,
-    triggerGLEntries: true // Automatically generate GL after pulling RR
+    triggerGLEntries: true, // Auto-generate GL after picking
   });
   updateTotals(updatedRows);
 };
@@ -1871,6 +1898,8 @@ const handleCloseRRRefModal = (selectedItems) => {
     const foundAcctName = finalPayee?.apAccountName || finalPayee?.acctName || "";
     const foundCurrCode = finalPayee?.currCode || finalPayee?.currencyCode || "";
     const foundCurrName = finalPayee?.currName || finalPayee?.currencyName || "";
+    const foundVatCode = finalPayee?.vatCode || finalPayee?.VAT_CODE || "";
+    const foundAtcCode = finalPayee?.atcCode || finalPayee?.ATC_CODE || "";
 
     // 4. Update Header States (This handles the Auto-Fill you requested)
     const headerUpdates = {
@@ -1880,6 +1909,8 @@ const handleCloseRRRefModal = (selectedItems) => {
         vendName: foundVendName,
         currCode: foundCurrCode,
         currName: foundCurrName,
+        vatCode: foundVatCode, // Store for RR fallback
+        atcCode: foundAtcCode,
       },
       // AP Account formatting
       apAccountCode: foundAcctCode,
