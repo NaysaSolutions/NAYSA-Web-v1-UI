@@ -26,7 +26,15 @@ export const reftables = {
     COAMast: "Chart of Accounts",
     UserUpdate: "Update User",
     BankMast: "Bank Master Data",
-    BillCode: "Bill Codes",
+    BillCode: "Billing Codes",
+    VendMast: "Payee Master Data",
+
+    JobCodeRef: "Job Codes",
+    AgentRef: "Agent Codes",
+    ZoneRef: "Zone Codes",
+    AreaRef: "Area Codes",
+    CustTypeRef: "Customer Types",
+    BillTermRef: "Billing Terms",
 
     // Accounts Payable Module
     APV: "Accounts Payable Voucher Transaction",

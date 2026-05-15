@@ -23,6 +23,10 @@ import {
   faFileExport,
   faFileCsv,
   faSyncAlt,
+  faExpand,
+  faCompress,
+  faArrowsAltH,
+  faFilter
 } from "@fortawesome/free-solid-svg-icons";
 
 import { reftables } from "@/NAYSA Cloud/Global/reftable";
@@ -59,13 +63,13 @@ const SearchGlobalReferenceTable = forwardRef(
       data = [],
       itemsPerPage = 50,
       showFilters = true,
-      // ✅ ADDED: Background props to control UI visibility without user toggles
       showGlobalSearch = true,
       showGroupBy = true,
+      enableGroupBy, // New Prop for explicit control
       docType,
       onRowDoubleClick,
-      onRowClick, // Added to ensure compatibility with parent components
-      selectedRow, // Added to ensure compatibility with parent components
+      onRowClick, 
+      selectedRow, 
       className = "",
       initialState,
       onStateChange,
@@ -81,6 +85,9 @@ const SearchGlobalReferenceTable = forwardRef(
   ) => {
     const scrollRef = useRef(null);
     const exportContainerRef = useRef(null);
+
+    // Resolve grouping toggle switch
+    const isGroupEnabled = enableGroupBy !== undefined ? enableGroupBy : showGroupBy;
 
     const [isMobile, setIsMobile] = useState(false);
     const [forceTableView, setForceTableView] = useState(false);
@@ -102,7 +109,6 @@ const SearchGlobalReferenceTable = forwardRef(
     useEffect(() => {
       const checkSmall = () => setIsMobileView(window.innerWidth < 640);
       checkSmall();
-
       window.addEventListener("resize", checkSmall);
       return () => window.removeEventListener("resize", checkSmall);
     }, []);
@@ -196,7 +202,6 @@ const SearchGlobalReferenceTable = forwardRef(
       if (!data || data.length === 0) {
         if (groupBy.length > 0) setGroupBy([]);
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [data]);
 
     useEffect(() => {
@@ -336,8 +341,6 @@ const SearchGlobalReferenceTable = forwardRef(
 
     const headerCellWrap = "w-full min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]";
 
-    // Columns that must stay visible in the Show/Hide Columns chooser.
-    // You can also set requiredVisible: true in any column definition.
     const isRequiredVisibleColumn = (col) => {
       const key = String(col?.key || "").toLowerCase();
       return (
@@ -347,24 +350,17 @@ const SearchGlobalReferenceTable = forwardRef(
       );
     };
 
-    // Pin exactly the first 3 visible columns by default.
-    // Long values are still controlled by maxWidth + word wrapping,
-    // so pinned columns will not overlap the next column.
     const PINNED_COLUMN_COUNT = 3;
 
     const isPinnedColumn = (col, index = -1) => {
       if (!col) return false;
-
-      // Explicit column settings still have priority.
       if (col?.pinned === false) return false;
       if (col?.pinned === true) return true;
-
       return index >= 0 && index < PINNED_COLUMN_COUNT;
     };
 
     const getStickyLeftOffset = (colIndex) => {
       if (colIndex <= 0) return 0;
-
       let offset = 0;
       for (let i = 0; i < colIndex; i++) {
         const prevCol = visibleCols[i];
@@ -375,8 +371,7 @@ const SearchGlobalReferenceTable = forwardRef(
       return offset;
     };
 
-    const cellTextWrapClass =
-      "w-full min-w-0 whitespace-normal break-words [overflow-wrap:anywhere] overflow-hidden";
+    const cellTextWrapClass = "w-full min-w-0 whitespace-normal break-words [overflow-wrap:anywhere] overflow-hidden";
 
     const getWidthStyle = (col, isManual = false) => {
       const colWidth = getColWidth(col);
@@ -391,11 +386,6 @@ const SearchGlobalReferenceTable = forwardRef(
         maxWidth: `${maxWidth}px`,
       };
     };
-
-    const hasActionCol = useMemo(
-      () => visibleCols.some((c) => isActionColumn(c)),
-      [visibleCols],
-    );
 
     const handleColDragStart = (e, key) => {
       setDraggedCol(key);
@@ -826,13 +816,16 @@ const SearchGlobalReferenceTable = forwardRef(
     ]);
 
     const grandTotals = useMemo(() => ({}), []);
-    const hasDataFiltered =
-      Array.isArray(filteredData) && filteredData.length > 0;
+    const hasDataFiltered = Array.isArray(filteredData) && filteredData.length > 0;
     const hasOriginalData = Array.isArray(data) && data.length > 0;
+
+    const hasActiveFilters = useMemo(
+      () => Object.values(filters).some((v) => String(v || "").trim() !== ""),
+      [filters]
+    );
 
     const collectGroupKeys = (nodes) => {
       const keys = [];
-
       const walk = (arr) => {
         (arr || []).forEach((n) => {
           if (n?.isGroup) {
@@ -843,7 +836,6 @@ const SearchGlobalReferenceTable = forwardRef(
           }
         });
       };
-
       walk(nodes);
       return keys;
     };
@@ -860,44 +852,42 @@ const SearchGlobalReferenceTable = forwardRef(
       allGroupKeys.every((key) => expandedGroups[key]);
 
     useEffect(() => {
-  if (isMobile || effectiveGroupBy.length === 0) {
-    prevGroupKeysRef.current = [];
+      if (isMobile || effectiveGroupBy.length === 0) {
+        prevGroupKeysRef.current = [];
+        setExpandedGroups((prev) => {
+          if (!prev || Object.keys(prev).length === 0) return prev;
+          return {};
+        });
+        setCurrentPage((prev) => (prev === 1 ? prev : 1));
+        return;
+      }
 
-    setExpandedGroups((prev) => {
-      if (!prev || Object.keys(prev).length === 0) return prev;
-      return {};
-    });
+      setExpandedGroups((prev) => {
+        const prevKeys = prevGroupKeysRef.current || [];
+        const wasAllExpanded =
+          prevKeys.length > 0 && prevKeys.every((key) => prev[key]);
 
-    setCurrentPage((prev) => (prev === 1 ? prev : 1));
-    return;
-  }
+        let nextState = {};
 
-  setExpandedGroups((prev) => {
-    const prevKeys = prevGroupKeysRef.current || [];
-    const wasAllExpanded =
-      prevKeys.length > 0 && prevKeys.every((key) => prev[key]);
+        if (wasAllExpanded) {
+          nextState = Object.fromEntries(allGroupKeys.map((key) => [key, true]));
+        } else {
+          nextState = Object.fromEntries(
+            allGroupKeys.filter((key) => prev[key]).map((key) => [key, true])
+          );
+        }
 
-    let nextState = {};
+        prevGroupKeysRef.current = allGroupKeys;
 
-    if (wasAllExpanded) {
-      nextState = Object.fromEntries(allGroupKeys.map((key) => [key, true]));
-    } else {
-      nextState = Object.fromEntries(
-        allGroupKeys.filter((key) => prev[key]).map((key) => [key, true])
-      );
-    }
+        const prevJson = JSON.stringify(prev || {});
+        const nextJson = JSON.stringify(nextState);
+        if (prevJson === nextJson) return prev;
 
-    prevGroupKeysRef.current = allGroupKeys;
+        return nextState;
+      });
 
-    const prevJson = JSON.stringify(prev || {});
-    const nextJson = JSON.stringify(nextState);
-    if (prevJson === nextJson) return prev;
-
-    return nextState;
-  });
-
-  setCurrentPage((prev) => (prev === 1 ? prev : 1));
-}, [isMobile, effectiveGroupBy, allGroupKeys]);
+      setCurrentPage((prev) => (prev === 1 ? prev : 1));
+    }, [isMobile, effectiveGroupBy, allGroupKeys]);
 
     const toggleGroup = (node) => {
       const uniqueId = getGroupNodeId(node);
@@ -912,7 +902,6 @@ const SearchGlobalReferenceTable = forwardRef(
         setExpandedGroups({});
         return;
       }
-
       setExpandedGroups(
         Object.fromEntries(allGroupKeys.map((key) => [key, true])),
       );
@@ -926,13 +915,11 @@ const SearchGlobalReferenceTable = forwardRef(
       setGroupBy((prev) => prev.filter((k) => k !== gKey));
       setExpandedGroups((prev) => {
         const next = { ...prev };
-
         Object.keys(next).forEach((key) => {
           if (key.startsWith(`${gKey}:`) || key.includes(`__${gKey}:`)) {
             delete next[key];
           }
         });
-
         return next;
       });
       setCurrentPage(1);
@@ -947,7 +934,6 @@ const SearchGlobalReferenceTable = forwardRef(
 
     const handleMouseMove = useCallback((e) => {
       if (!resizingRef.current) return;
-
       const { startX, startWidth, key } = resizingRef.current;
       const delta = e.clientX - startX;
       const newWidth = Math.max(60, startWidth + delta);
@@ -996,196 +982,13 @@ const SearchGlobalReferenceTable = forwardRef(
       const dd = String(now.getDate()).padStart(2, "0");
       const hh = String(now.getHours()).padStart(2, "0");
       const mi = String(now.getMinutes()).padStart(2, "0");
-      const ss = String(now.getSeconds()).padStart(2, "0");
-      return `${yyyy}${mm}${dd}_${hh}${mi}${ss}`;
+      return `${yyyy}${mm}${dd}_${hh}${mi}`;
     };
 
     const getDefaultExportFileName = () => {
       const effectiveDocType = String(docType ?? "").trim();
-      const title =
-        reftables?.[effectiveDocType] || effectiveDocType || "Reference";
+      const title = reftables?.[effectiveDocType] || effectiveDocType || "Reference";
       return sanitizeFileName(`${title}_${getDateTimeStamp()}`);
-    };
-
-    const handleExportExcel = async () => {
-      if (!hasDataFiltered) return;
-
-      const defaultFileName = getDefaultExportFileName();
-      const { value: fileName } = await Swal.fire({
-        input: "text",
-        inputLabel: "Export Excel File Name:",
-        inputValue: defaultFileName,
-        width: "400px",
-        showCancelButton: true,
-        confirmButtonText: "Export",
-        inputValidator: (value) =>
-          !value || value.trim() === "" ? "File name cannot be empty!" : null,
-      });
-      if (!fileName) return;
-
-      const exportData =
-        effectiveGroupBy.length > 0
-          ? buildExpandedExportRows(groupedStructure)
-          : filteredData;
-
-      const normalizedExportData = exportData.map((row) => {
-        const out = {};
-        exportVisibleCols.forEach((col) => {
-          out[col.key] = row?.isGroup
-            ? (row[col.key] ?? "")
-            : getCellDisplayText(row, col);
-        });
-        return out;
-      });
-
-      await exportGenericQueryExcel(
-        normalizedExportData,
-        grandTotals,
-        exportVisibleCols,
-        [],
-        exportColumns,
-        {},
-        7,
-        fileName,
-        currentUserRow?.userName,
-        companyInfo?.compName,
-        companyInfo?.compAddr,
-        companyInfo?.telNo,
-      );
-    };
-
-    const handleExportCsv = async () => {
-      if (!hasDataFiltered) return;
-
-      const defaultFileName = getDefaultExportFileName();
-      const { value: fileName } = await Swal.fire({
-        input: "text",
-        inputLabel: "Export CSV File Name:",
-        inputValue: defaultFileName,
-        width: "400px",
-        showCancelButton: true,
-        confirmButtonText: "Export CSV",
-        inputValidator: (value) =>
-          !value || value.trim() === "" ? "File name cannot be empty!" : null,
-      });
-      if (!fileName) return;
-
-      const headerRow = exportVisibleCols
-        .map((col) => {
-          let header = String(col.label ?? "");
-          header = header.replace(/,/g, "");
-          header = header.toUpperCase().replace(/\s+/g, "_");
-          const escaped = header.replace(/"/g, '""');
-          return `"${escaped}"`;
-        })
-        .join(",");
-
-      const csvLines = [headerRow];
-      const csvRows =
-        effectiveGroupBy.length === 0 ? filteredData : fullRenderRows;
-
-      csvRows.forEach((row) => {
-        const line = exportVisibleCols
-          .map((col, idx) => {
-            let formatted = "";
-
-            if (row?.isGroup) {
-              formatted =
-                idx === 0
-                  ? `${columns.find((c) => c.key === row.key)?.label}: ${row.value} (${row.count})`
-                  : "";
-            } else {
-              formatted = getCellDisplayText(row, col);
-            }
-
-            const noCommas = String(formatted ?? "").replace(/,/g, "");
-            const escaped = noCommas.replace(/"/g, '""');
-            return `"${escaped}"`;
-          })
-          .join(",");
-        csvLines.push(line);
-      });
-
-      const blob = new Blob([csvLines.join("\r\n")], {
-        type: "text/csv;charset=utf-8;",
-      });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", `${fileName}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    };
-
-    const handleExportPdf = async () => {
-      if (!hasDataFiltered || !exportContainerRef.current) return;
-
-      const defaultFileName = getDefaultExportFileName();
-      const { value: fileName } = await Swal.fire({
-        input: "text",
-        inputLabel: "Export PDF File Name:",
-        inputValue: defaultFileName,
-        width: "400px",
-        showCancelButton: true,
-        confirmButtonText: "Export PDF",
-        inputValidator: (value) =>
-          !value || value.trim() === "" ? "File name cannot be empty!" : null,
-      });
-      if (!fileName) return;
-
-      const canvas = await html2canvas(exportContainerRef.current, {
-        scale: 2,
-        useCORS: true,
-      });
-
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF("l", "mm", "a4");
-
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const ratio = Math.min(
-        pdfWidth / canvas.width,
-        pdfHeight / canvas.height,
-      );
-
-      const imgWidth = canvas.width * ratio;
-      const imgHeight = canvas.height * ratio;
-      const x = (pdfWidth - imgWidth) / 2;
-      const y = (pdfHeight - imgHeight) / 2;
-
-      pdf.addImage(imgData, "PNG", x, y, imgWidth, imgHeight);
-      pdf.save(`${fileName}.pdf`);
-    };
-
-    const handleExportImage = async () => {
-      if (!hasDataFiltered || !exportContainerRef.current) return;
-
-      const defaultFileName = getDefaultExportFileName();
-      const { value: fileName } = await Swal.fire({
-        input: "text",
-        inputLabel: "Export Image File Name:",
-        inputValue: defaultFileName,
-        width: "400px",
-        showCancelButton: true,
-        confirmButtonText: "Export Image",
-        inputValidator: (value) =>
-          !value || value.trim() === "" ? "File name cannot be empty!" : null,
-      });
-      if (!fileName) return;
-
-      const canvas = await html2canvas(exportContainerRef.current, {
-        scale: 2,
-        useCORS: true,
-      });
-      const imgData = canvas.toDataURL("image/png");
-      const link = document.createElement("a");
-      link.href = imgData;
-      link.download = `${fileName}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
     };
 
     useImperativeHandle(ref, () => ({
@@ -1221,146 +1024,129 @@ const SearchGlobalReferenceTable = forwardRef(
     }));
 
     const openExportModal = (type) => {
-  if (!hasDataFiltered) return;
+      if (!hasDataFiltered) return;
+      setExportType(type);
+      setExportFileName(getDefaultExportFileName());
+      setExportModalOpen(true);
+    };
 
-  setExportType(type);
-  setExportFileName(getDefaultExportFileName());
-  setExportModalOpen(true);
-};
+    const handleConfirmExport = async (fileName) => {
+      setExportModalOpen(false);
 
-const handleConfirmExport = async (fileName) => {
-  setExportModalOpen(false);
+      if (exportType === "excel") {
+        const exportData =
+          effectiveGroupBy.length > 0
+            ? buildExpandedExportRows(groupedStructure)
+            : filteredData;
 
-  if (exportType === "excel") {
-    const exportData =
-      effectiveGroupBy.length > 0
-        ? buildExpandedExportRows(groupedStructure)
-        : filteredData;
+        const normalizedExportData = exportData.map((row) => {
+          const out = {};
+          exportVisibleCols.forEach((col) => {
+            out[col.key] = row?.isGroup
+              ? (row[col.key] ?? "")
+              : getCellDisplayText(row, col);
+          });
+          return out;
+        });
 
-    const normalizedExportData = exportData.map((row) => {
-      const out = {};
-      exportVisibleCols.forEach((col) => {
-        out[col.key] = row?.isGroup
-          ? (row[col.key] ?? "")
-          : getCellDisplayText(row, col);
-      });
-      return out;
-    });
+        await exportGenericQueryExcel(
+          normalizedExportData,
+          grandTotals,
+          exportVisibleCols,
+          [],
+          exportColumns,
+          {},
+          7,
+          fileName,
+          currentUserRow?.userName,
+          companyInfo?.compName,
+          companyInfo?.compAddr,
+          companyInfo?.telNo,
+        );
+        return;
+      }
 
-    await exportGenericQueryExcel(
-      normalizedExportData,
-      grandTotals,
-      exportVisibleCols,
-      [],
-      exportColumns,
-      {},
-      7,
-      fileName,
-      currentUserRow?.userName,
-      companyInfo?.compName,
-      companyInfo?.compAddr,
-      companyInfo?.telNo,
-    );
-    return;
-  }
+      if (exportType === "csv") {
+        const headerRow = exportVisibleCols
+          .map((col) => {
+            let header = String(col.label ?? "");
+            header = header.replace(/,/g, "");
+            header = header.toUpperCase().replace(/\s+/g, "_");
+            const escaped = header.replace(/"/g, '""');
+            return `"${escaped}"`;
+          })
+          .join(",");
 
-  if (exportType === "csv") {
-    const headerRow = exportVisibleCols
-      .map((col) => {
-        let header = String(col.label ?? "");
-        header = header.replace(/,/g, "");
-        header = header.toUpperCase().replace(/\s+/g, "_");
-        const escaped = header.replace(/"/g, '""');
-        return `"${escaped}"`;
-      })
-      .join(",");
+        const csvLines = [headerRow];
+        const csvRows = effectiveGroupBy.length === 0 ? filteredData : fullRenderRows;
 
-    const csvLines = [headerRow];
-    const csvRows =
-      effectiveGroupBy.length === 0 ? filteredData : fullRenderRows;
+        csvRows.forEach((row) => {
+          const line = exportVisibleCols
+            .map((col, idx) => {
+              let formatted = "";
 
-    csvRows.forEach((row) => {
-      const line = exportVisibleCols
-        .map((col, idx) => {
-          let formatted = "";
+              if (row?.isGroup) {
+                formatted =
+                  idx === 0
+                    ? `${columns.find((c) => c.key === row.key)?.label}: ${row.value} (${row.count})`
+                    : "";
+              } else {
+                formatted = getCellDisplayText(row, col);
+              }
 
-          if (row?.isGroup) {
-            formatted =
-              idx === 0
-                ? `${columns.find((c) => c.key === row.key)?.label}: ${row.value} (${row.count})`
-                : "";
-          } else {
-            formatted = getCellDisplayText(row, col);
-          }
+              const noCommas = String(formatted ?? "").replace(/,/g, "");
+              const escaped = noCommas.replace(/"/g, '""');
+              return `"${escaped}"`;
+            })
+            .join(",");
 
-          const noCommas = String(formatted ?? "").replace(/,/g, "");
-          const escaped = noCommas.replace(/"/g, '""');
-          return `"${escaped}"`;
-        })
-        .join(",");
+          csvLines.push(line);
+        });
 
-      csvLines.push(line);
-    });
+        const blob = new Blob([csvLines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${fileName}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        return;
+      }
 
-    const blob = new Blob([csvLines.join("\r\n")], {
-      type: "text/csv;charset=utf-8;",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${fileName}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    return;
-  }
+      if (exportType === "pdf") {
+        if (!exportContainerRef.current) return;
+        const canvas = await html2canvas(exportContainerRef.current, { scale: 2, useCORS: true });
+        const imgData = canvas.toDataURL("image/png");
+        const pdf = new jsPDF("l", "mm", "a4");
 
-  if (exportType === "pdf") {
-    if (!exportContainerRef.current) return;
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        const ratio = Math.min(pdfWidth / canvas.width, pdfHeight / canvas.height);
 
-    const canvas = await html2canvas(exportContainerRef.current, {
-      scale: 2,
-      useCORS: true,
-    });
+        const imgWidth = canvas.width * ratio;
+        const imgHeight = canvas.height * ratio;
+        const x = (pdfWidth - imgWidth) / 2;
+        const y = (pdfHeight - imgHeight) / 2;
 
-    const imgData = canvas.toDataURL("image/png");
-    const pdf = new jsPDF("l", "mm", "a4");
+        pdf.addImage(imgData, "PNG", x, y, imgWidth, imgHeight);
+        pdf.save(`${fileName}.pdf`);
+        return;
+      }
 
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
-    const ratio = Math.min(
-      pdfWidth / canvas.width,
-      pdfHeight / canvas.height,
-    );
-
-    const imgWidth = canvas.width * ratio;
-    const imgHeight = canvas.height * ratio;
-    const x = (pdfWidth - imgWidth) / 2;
-    const y = (pdfHeight - imgHeight) / 2;
-
-    pdf.addImage(imgData, "PNG", x, y, imgWidth, imgHeight);
-    pdf.save(`${fileName}.pdf`);
-    return;
-  }
-
-  if (exportType === "image") {
-    if (!exportContainerRef.current) return;
-
-    const canvas = await html2canvas(exportContainerRef.current, {
-      scale: 2,
-      useCORS: true,
-    });
-
-    const imgData = canvas.toDataURL("image/png");
-    const link = document.createElement("a");
-    link.href = imgData;
-    link.download = `${fileName}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
-};
+      if (exportType === "image") {
+        if (!exportContainerRef.current) return;
+        const canvas = await html2canvas(exportContainerRef.current, { scale: 2, useCORS: true });
+        const imgData = canvas.toDataURL("image/png");
+        const link = document.createElement("a");
+        link.href = imgData;
+        link.download = `${fileName}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    };
 
     const chooserColumns = baseVisibleColumns;
     const hideableChooserKeys = chooserColumns
@@ -1373,14 +1159,9 @@ const handleConfirmExport = async (fileName) => {
 
     const toggleSelectAll = (e) => {
       const checked = e.target.checked;
-
       setUserHiddenCols((prev) => {
-        const protectedHidden = prev.filter(
-          (key) => !hideableChooserKeys.includes(key),
-        );
-
+        const protectedHidden = prev.filter((key) => !hideableChooserKeys.includes(key));
         if (checked) return protectedHidden;
-
         return [...new Set([...protectedHidden, ...hideableChooserKeys])];
       });
     };
@@ -1393,8 +1174,7 @@ const handleConfirmExport = async (fileName) => {
       }
     };
 
-    const filterInputClass =
-      "w-full min-w-0 px-2 py-1 text-[11px] rounded-md border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-300";
+    const filterInputClass = "w-full min-w-0 px-2 py-1 text-[11px] rounded-md border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-300";
 
     const renderMobileCard = (row, idx) => {
       if (row?.isGroup) {
@@ -1493,35 +1273,38 @@ const handleConfirmExport = async (fileName) => {
       );
     };
 
+    const getIconBtnClass = (extraClass = "") => {
+      const base = "flex items-center justify-center rounded transition-colors border shadow-sm active:scale-[0.98]";
+      const size = tableSize === "Half" ? "h-7 w-7 text-xs" : "h-8 w-8 text-sm";
+      return `${base} ${size} ${extraClass}`;
+    };
+
     return (
       <div
         className={[
-          "global-tran-table-main-div-ui flex flex-col flex-1 min-h-[330px] overflow-hidden",
+          "global-tran-table-main-div-ui flex flex-col flex-1 min-h-[300px] overflow-hidden",
           className,
         ].join(" ")}
       >
         {hasOriginalData && (
           <div
-            className="
-              p-2 rounded-md
-              flex flex-col md:flex-row md:items-center md:justify-between gap-2
-            "
+            className="p-2 rounded-md flex flex-col md:flex-row md:items-center justify-between gap-2 bg-white border-b border-gray-100"
             onDragOver={(e) => {
-              if (!isMobile) e.preventDefault();
+              if (!isMobile && isGroupEnabled) e.preventDefault();
             }}
             onDrop={(e) => {
-              if (!isMobile) handleColDrop(e, null, true);
+              if (!isMobile && isGroupEnabled) handleColDrop(e, null, true);
             }}
           >
-            {/* GROUP BY SECTION (Controlled by background prop showGroupBy) */}
-            {!isMobile && showGroupBy && (
-              <div className="flex-1 flex flex-wrap gap-2 items-center min-w-0">
+            {/* GROUP BY SECTION (Controlled by enableGroupBy prop) */}
+            {!isMobile && isGroupEnabled && (
+              <div className="flex flex-wrap gap-2 items-center min-w-0 mr-auto">
                 {groupBy.length === 0 && (
                   <div
                     className={`text-gray-400 italic border border-dashed border-gray-300 rounded ${
                       tableSize === "Half"
-                        ? "text-[8px] sm:text-[9px] w-18 px-2 py-1.5"
-                        : "text-[10px] sm:text-xs px-8 py-2"
+                        ? "text-[9px] px-2 py-1"
+                        : "text-xs px-4 py-1.5"
                     }`}
                   >
                     <FontAwesomeIcon icon={faLayerGroup} className="mr-1" />
@@ -1541,7 +1324,6 @@ const handleConfirmExport = async (fileName) => {
                     <span className="truncate">
                       {columns.find((c) => c.key === gKey)?.label}
                     </span>
-
                     <button
                       type="button"
                       onClick={() => handleRemoveGroup(gKey)}
@@ -1552,80 +1334,36 @@ const handleConfirmExport = async (fileName) => {
                     </button>
                   </div>
                 ))}
+
+                {groupBy.length > 0 && (
+                  <div className="flex items-center gap-1.5 ml-2 border-l border-gray-300 pl-2">
+                    <button
+                      type="button"
+                      onClick={handleToggleExpandCollapse}
+                      className={getIconBtnClass("text-blue-600 hover:bg-blue-100 border-blue-200 bg-blue-50")}
+                      title={allExpanded ? "Collapse All Groups" : "Expand All Groups"}
+                    >
+                      <FontAwesomeIcon icon={allExpanded ? faCompress : faExpand} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRemoveAllGroups}
+                      className={getIconBtnClass("text-red-500 hover:bg-red-100 border-red-200 bg-red-50")}
+                      title="Remove All Groups"
+                    >
+                      <FontAwesomeIcon icon={faTimes} />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* CONTROLS SECTION (Right Side) */}
-            <div
-              className={`flex items-center gap-2 flex-wrap justify-end w-full md:w-auto ${!isMobile && showGroupBy ? "" : "ml-auto"}`}
-            >
-              {/* EXPAND/COLLAPSE ALL GROUPS */}
-              {!isMobile && showGroupBy && groupBy.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <label
-                    className={`inline-flex items-center cursor-pointer select-none ${
-                      tableSize === "Half" ? "h-7" : "h-9"
-                    }`}
-                    title={allExpanded ? "Collapse All" : "Expand All"}
-                    onClick={handleToggleExpandCollapse}
-                  >
-               
-
-                    <div
-                      className={`relative rounded-full transition-colors duration-200 ${
-                        allExpanded
-                          ? "bg-blue-600 text-white"
-                          : "bg-gray-300 text-gray-600"
-                      } ${tableSize === "Half" ? "w-[78px] h-7" : "w-24 h-8"}`}
-                    >
-                      <span
-                        className={`absolute rounded-full bg-white shadow-md transition-all duration-200 ${
-                          allExpanded
-                            ? tableSize === "Half"
-                              ? "left-[48px]"
-                              : "left-[66px]"
-                            : "left-[2px]"
-                        } ${tableSize === "Half" ? "top-[2px] w-6 h-6" : "top-[2px] w-7 h-7"}`}
-                      />
-
-                      <span
-                        className={`absolute inset-0 flex items-center font-medium pointer-events-none transition-all duration-200 ${
-                          tableSize === "Half" ? "text-[10px]" : "text-[11px]"
-                        } ${
-                          allExpanded
-                            ? "justify-start pl-4 text-white"
-                            : "justify-end pr-4 text-gray-700"
-                        }`}
-                      >
-                        {allExpanded ? "Collapse" : "Expand"}
-                      </span>
-                    </div>
-                  </label>
-
-                  <button
-                    type="button"
-                    onClick={handleRemoveAllGroups}
-                    className={`font-medium text-white bg-red-600 border rounded-md hover:bg-red-700 active:scale-[0.98] transition ${
-                      tableSize === "Half"
-                        ? "h-7 text-[10px] px-2 py-1"
-                        : "h-8 text-xs px-3 py-1"
-                    }`}
-                    title="Remove All Groups"
-                  >
-                    <FontAwesomeIcon
-                      icon={faTimes}
-                      className={`mr-1 text-white ${
-                        tableSize === "Half" ? "text-[10px]" : "text-sm"
-                      }`}
-                    />
-                    Remove
-                  </button>
-                </div>
-              )}
-
-              {/* QUICK SEARCH (Controlled by background prop showGlobalSearch) */}
+            {/* CONTROLS SECTION (COMPACT ICONS) */}
+            <div className={`flex items-center gap-1.5 flex-wrap justify-end w-full md:w-auto ${!isMobile && isGroupEnabled ? "" : "ml-auto"}`}>
+              
+              {/* QUICK SEARCH */}
               {showGlobalSearch && (
-                <div className="flex items-center gap-2 w-full md:w-auto">
+                <div className="relative">
                   <input
                     type="text"
                     value={globalSearch}
@@ -1633,277 +1371,163 @@ const handleConfirmExport = async (fileName) => {
                       setGlobalSearch(e.target.value);
                       setCurrentPage(1);
                     }}
-                    placeholder="Quick Search..."
-                    className={`w-full rounded-md border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-300 ${
+                    placeholder="Search..."
+                    className={`w-full rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-300 transition-shadow ${
                       tableSize === "Half"
-                        ? "h-7 md:w-24 px-2 text-[11px]"
-                        : "h-8 md:w-64 px-3 text-xs"
+                        ? "h-7 w-24 md:w-32 px-2 text-[11px]"
+                        : "h-8 w-32 md:w-48 px-3 text-xs"
                     }`}
                   />
-
                   {globalSearch?.trim() && (
                     <button
                       type="button"
-                      className={`rounded-md bg-gray-200 hover:bg-gray-300 shrink-0 ${
-                        tableSize === "Half"
-                          ? "h-7 px-2 text-[10px]"
-                          : "h-8 px-3 text-xs"
-                      }`}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 bg-transparent"
                       onClick={() => {
                         setGlobalSearch("");
                         setCurrentPage(1);
                       }}
                       title="Clear search"
                     >
-                      Clear
+                      <FontAwesomeIcon icon={faTimes} className={tableSize === "Half" ? "text-[10px]" : "text-[11px]"} />
                     </button>
                   )}
                 </div>
               )}
 
+              {/* CLEAR FILTERS */}
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  className={getIconBtnClass("text-red-500 hover:bg-red-50 border-red-200 bg-red-50/30")}
+                  onClick={() => {
+                    setFilters({});
+                    setCurrentPage(1);
+                  }}
+                  title="Clear Active Filters"
+                >
+                  <FontAwesomeIcon icon={faFilter} />
+                </button>
+              )}
+
               {/* AUTO FIT SWITCH */}
               {!isMobile && (
-                <label
-                  className={`inline-flex items-center cursor-pointer select-none shrink-0 ${
-                    tableSize === "Half" ? "h-7" : "h-8"
-                  }`}
-                  title={autoFillGrid ? "Disable auto fit" : "Enable auto fit"}
+                <button
+                  type="button"
+                  onClick={() => setAutoFillGrid((p) => !p)}
+                  className={getIconBtnClass(
+                    autoFillGrid
+                      ? "bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200"
+                      : "text-gray-600 hover:bg-gray-50 border-gray-300 bg-white"
+                  )}
+                  title={autoFillGrid ? "Disable Auto Fit" : "Enable Auto Fit"}
                 >
-                  <input
-                    type="checkbox"
-                    checked={autoFillGrid}
-                    onChange={() => setAutoFillGrid((p) => !p)}
-                    className="sr-only"
-                  />
-
-                  <div
-                    className={`relative rounded-full transition-colors duration-200 ${
-                      autoFillGrid
-                        ? "bg-blue-600 text-white"
-                        : "bg-gray-300 text-gray-600"
-                    } ${tableSize === "Half" ? "w-20 h-7" : "w-20 h-8"}`}
-                  >
-                    <span
-                      className={`absolute top-[2px] rounded-full bg-white shadow-md transition-all duration-200 ${
-                        autoFillGrid
-                          ? tableSize === "Half"
-                            ? "left-[55px]"
-                            : "left-[50px]"
-                          : "left-[2px]"
-                      } ${tableSize === "Half" ? "w-6 h-6" : "w-7 h-7"}`}
-                    />
-
-                    <span
-                      className={`absolute inset-0 flex items-center text-[11px] font-medium pointer-events-none transition-all duration-200 ${
-                        autoFillGrid
-                          ? "justify-start pl-2 text-white"
-                          : "justify-end pr-2 text-gray-700"
-                      }`}
-                    >
-                      Auto Fit
-                    </span>
-                  </div>
-                </label>
+                  <FontAwesomeIcon icon={faArrowsAltH} />
+                </button>
               )}
 
               {/* REFRESH */}
               {onRefresh && (
-                <div className="relative flex-1 md:flex-none min-w-[40px]">
-                  <button
-                    type="button"
-                    onClick={onRefresh}
-                    className={`w-full text-xs font-medium text-white bg-blue-600 border border-slate-300 rounded-md hover:bg-slate-50 hover:text-blue-600 active:scale-[0.98] transition flex items-center justify-center ${
-                      tableSize === "Half" ? "h-7 px-2 py-1" : "h-8 px-3 py-2"
-                    }`}
-                    title="Sync Data"
-                  >
-                    <FontAwesomeIcon
-                      icon={faSyncAlt}
-                      spin={isFetching}
-                      className="mr-1 md:mr-0 lg:mr-1"
-                    />
-                    <span
-                      className={` ${tableSize === "Half" ? "inline lg:hidden" : "hidden lg:inline"}`}
-                    >
-                      Sync
-                    </span>
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={onRefresh}
+                  className={getIconBtnClass("text-blue-600 hover:bg-blue-50 border-gray-300 bg-white")}
+                  title="Sync Data"
+                >
+                  <FontAwesomeIcon icon={faSyncAlt} spin={isFetching} />
+                </button>
               )}
 
               {/* EXPORT */}
-              <div
-                className="relative flex-1 md:flex-none min-w-[80px]"
-                data-sgrt-export
-              >
+              <div className="relative" data-sgrt-export>
                 <button
                   type="button"
-                  onClick={() =>
-                    hasDataFiltered && setShowExportMenu((p) => !p)
-                  }
+                  onClick={() => hasDataFiltered && setShowExportMenu((p) => !p)}
                   disabled={!hasDataFiltered}
-                  className={`w-full text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 active:scale-[0.98] transition flex items-center justify-center ${
-                    tableSize === "Half"
-                      ? "h-7 md:w-38 px-3 py-1"
-                      : "h-8 md:w-[80px] px-3 py-2"
-                  }`}
+                  className={getIconBtnClass("text-green-600 hover:bg-green-50 border-gray-300 bg-white disabled:opacity-50")}
+                  title="Export Data"
                 >
-                  <FontAwesomeIcon icon={faFileExport} className="mr-1" />
-                  Export
+                  <FontAwesomeIcon icon={faFileExport} />
                 </button>
 
                 {showExportMenu && (
-                  <div className="absolute right-0 mt-1 min-w-[80px] rounded-lg shadow-lg bg-white ring-1 ring-black/10 z-[60] overflow-hidden">
+                  <div className="absolute right-0 mt-1 w-32 rounded-lg shadow-lg bg-white ring-1 ring-black/5 z-[60] overflow-hidden py-1">
                     <button
                       type="button"
-                      onClick={() => {
-  setShowExportMenu(false);
-  openExportModal("excel");
-}}
-                      className={`flex items-center w-full text-left hover:bg-blue-50 transition-colors ${
-                        tableSize === "Half"
-                          ? "h-7 text-xs px-2"
-                          : "h-8 text-sm px-4"
-                      }`}
+                      onClick={() => { setShowExportMenu(false); openExportModal("excel"); }}
+                      className="flex items-center w-full text-left hover:bg-blue-50 transition-colors px-3 py-1.5 text-xs text-gray-700"
                     >
-                      <FontAwesomeIcon
-                        icon={faFileExcel}
-                        className={`mr-2 text-green-600 ${
-                          tableSize === "Half" ? "text-xs" : "text-sm"
-                        }`}
-                      />
-                      Excel
+                      <FontAwesomeIcon icon={faFileExcel} className="mr-2 text-green-600" /> Excel
                     </button>
-
                     <button
                       type="button"
-                      onClick={() => {
-  setShowExportMenu(false);
-  openExportModal("csv");
-}}
-                      className={`flex items-center w-full text-left hover:bg-blue-50 transition-colors ${
-                        tableSize === "Half"
-                          ? "h-7 text-xs px-2"
-                          : "h-8 text-sm px-4"
-                      }`}
+                      onClick={() => { setShowExportMenu(false); openExportModal("csv"); }}
+                      className="flex items-center w-full text-left hover:bg-blue-50 transition-colors px-3 py-1.5 text-xs text-gray-700"
                     >
-                      <FontAwesomeIcon
-                        icon={faFileCsv}
-                        className={`mr-2 text-emerald-600 ${
-                          tableSize === "Half" ? "text-xs" : "text-sm"
-                        }`}
-                      />
-                      CSV
+                      <FontAwesomeIcon icon={faFileCsv} className="mr-2 text-emerald-600" /> CSV
                     </button>
-
                     <button
                       type="button"
-                      onClick={() => {
-  setShowExportMenu(false);
-  openExportModal("pdf");
-}}
-                      className={`flex items-center w-full text-left hover:bg-blue-50 transition-colors ${
-                        tableSize === "Half"
-                          ? "h-7 text-xs px-2"
-                          : "h-8 text-sm px-4"
-                      }`}
+                      onClick={() => { setShowExportMenu(false); openExportModal("pdf"); }}
+                      className="flex items-center w-full text-left hover:bg-blue-50 transition-colors px-3 py-1.5 text-xs text-gray-700"
                     >
-                      <FontAwesomeIcon
-                        icon={faFilePdf}
-                        className={`mr-2 text-red-600 ${
-                          tableSize === "Half" ? "text-xs" : "text-sm"
-                        }`}
-                      />
-                      PDF
+                      <FontAwesomeIcon icon={faFilePdf} className="mr-2 text-red-600" /> PDF
                     </button>
-
                     <button
                       type="button"
-                     onClick={() => {
-  setShowExportMenu(false);
-  openExportModal("image");
-}}
-                      className={`flex items-center w-full text-left hover:bg-blue-50 transition-colors ${
-                        tableSize === "Half"
-                          ? "h-7 text-xs px-2"
-                          : "h-8 text-sm px-4"
-                      }`}
+                      onClick={() => { setShowExportMenu(false); openExportModal("image"); }}
+                      className="flex items-center w-full text-left hover:bg-blue-50 transition-colors px-3 py-1.5 text-xs text-gray-700"
                     >
-                      <FontAwesomeIcon
-                        icon={faFileImage}
-                        className={`mr-2 text-blue-600 ${
-                          tableSize === "Half" ? "text-xs" : "text-sm"
-                        }`}
-                      />
-                      Image
+                      <FontAwesomeIcon icon={faFileImage} className="mr-2 text-blue-600" /> Image
                     </button>
                   </div>
                 )}
               </div>
 
               {/* COLUMNS */}
-              <div
-                className="relative flex-1 md:flex-none min-w-[80px]"
-                data-sgrt-cols
-              >
+              <div className="relative" data-sgrt-cols>
                 <button
                   type="button"
                   onClick={() => setShowColumnChooser((p) => !p)}
-                  className={`w-full text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 active:scale-[0.98] transition flex items-center justify-center ${
-                    tableSize === "Half"
-                      ? "h-7 text-xs px-2 py-1"
-                      : "h-8 text-sm px-3 py-2"
-                  }`}
+                  className={getIconBtnClass("text-gray-700 hover:bg-gray-50 border-gray-300 bg-white")}
+                  title="Show/Hide Columns"
                 >
-                  <FontAwesomeIcon icon={faColumns} className="mr-1" />
-                  Columns
+                  <FontAwesomeIcon icon={faColumns} />
                 </button>
 
                 {showColumnChooser && (
-                  <div className="absolute right-0 mt-1 bg-white border rounded shadow-lg p-2 max-h-64 overflow-auto z-50 min-w-[240px]">
-                    <div className="flex items-center justify-between text-[11px] font-semibold mb-1 border-b pb-1">
-                      <span>Show / Hide Columns</span>
-                      <label className="flex items-center gap-1 text-[11px]">
-                        <input
-                          type="checkbox"
-                          className="h-3 w-3"
-                          checked={allChecked}
-                          onChange={toggleSelectAll}
-                        />
-                        <span>Select All</span>
-                      </label>
+                  <div className="absolute right-0 mt-1 bg-white border rounded shadow-lg p-2 max-h-64 overflow-auto z-50 min-w-[200px]">
+                    <div className="flex items-center justify-between text-[11px] font-semibold mb-2 border-b pb-1">
+                      <span>Columns</span>
+                      <div className="flex items-center gap-2">
+                        {userHiddenCols.length > 0 && (
+                          <button type="button" className="text-blue-600 hover:underline" onClick={() => setUserHiddenCols([])}>
+                            All
+                          </button>
+                        )}
+                        <label className="flex items-center gap-1 cursor-pointer">
+                          <input type="checkbox" className="h-3 w-3" checked={allChecked} onChange={toggleSelectAll} />
+                        </label>
+                      </div>
                     </div>
 
                     {chooserColumns.map((col) => (
                       <label
                         key={col.key}
-                        className={`flex items-center text-[11px] gap-2 mb-1 ${
-                          isRequiredVisibleColumn(col)
-                            ? "opacity-60 cursor-not-allowed"
-                            : ""
+                        className={`flex items-center text-[11px] gap-2 mb-1.5 cursor-pointer ${
+                          isRequiredVisibleColumn(col) ? "opacity-60 cursor-not-allowed" : ""
                         }`}
                       >
                         <input
                           type="checkbox"
                           className="h-3 w-3"
-                          checked={
-                            isRequiredVisibleColumn(col) ||
-                            !userHiddenCols.includes(col.key)
-                          }
+                          checked={isRequiredVisibleColumn(col) || !userHiddenCols.includes(col.key)}
                           disabled={isRequiredVisibleColumn(col)}
                           onChange={(e) => {
                             if (isRequiredVisibleColumn(col)) return;
-
                             const checked = e.target.checked;
-
                             setUserHiddenCols((prev) => {
-                              if (checked) {
-                                return prev.filter((k) => k !== col.key);
-                              }
-
-                              return prev.includes(col.key)
-                                ? prev
-                                : [...prev, col.key];
+                              if (checked) return prev.filter((k) => k !== col.key);
+                              return prev.includes(col.key) ? prev : [...prev, col.key];
                             });
                           }}
                         />
@@ -1917,7 +1541,7 @@ const handleConfirmExport = async (fileName) => {
           </div>
         )}
 
-        <div className="global-tran-table-main-sub-div-ui flex flex-col flex-1 min-h-[481px] relative">
+        <div className="global-tran-table-main-sub-div-ui flex flex-col flex-1 min-h-[400px] relative">
           {isInitialLoading ? (
             <TableLoader />
           ) : useCardView ? (
@@ -1944,7 +1568,7 @@ const handleConfirmExport = async (fileName) => {
                     : "table-auto min-w-max w-max"
                 }`}
               >
-                <thead className="global-tran-thead-div-ui text-[11px] sticky top-0 z-30 bg-white">
+                <thead className="global-tran-thead-div-ui text-[11px] sticky top-0 z-30 bg-white shadow-sm">
                   <tr>
                     {visibleCols.map((col, index) => {
                       const isStickyLeft = isPinnedColumn(col, index);
@@ -1960,24 +1584,24 @@ const handleConfirmExport = async (fileName) => {
                           } ${actionCol ? "cursor-default" : "cursor-pointer"} ${col.className || ""}`}
                           draggable={
                             !isMobile &&
-                            showGroupBy &&
+                            isGroupEnabled &&
                             !groupBy.includes(col.key) &&
                             !actionCol
                           }
                           onDragStart={(e) => {
-                            if (!isMobile && showGroupBy && !actionCol)
+                            if (!isMobile && isGroupEnabled && !actionCol)
                               handleColDragStart(e, col.key);
                           }}
                           onDragOver={(e) => {
-                            if (!isMobile && showGroupBy) e.preventDefault();
+                            if (!isMobile && isGroupEnabled) e.preventDefault();
                           }}
                           onDrop={(e) => {
-                            if (!isMobile && showGroupBy)
+                            if (!isMobile && isGroupEnabled)
                               handleColDrop(e, col.key);
                           }}
                           onClick={() => handleSort(col.key, col.sortable)}
                           title={
-                            !isMobile && showGroupBy && !actionCol
+                            !isMobile && isGroupEnabled && !actionCol
                               ? "Click to sort • Drag to reorder/group"
                               : col.sortable
                                 ? "Click to sort"
@@ -1992,17 +1616,10 @@ const handleConfirmExport = async (fileName) => {
                             <span className={headerCellWrap}>{col.label}</span>
                             {sortConfig.key === col.key ? (
                               <FontAwesomeIcon
-                                icon={
-                                  sortConfig.direction === "asc"
-                                    ? faSortUp
-                                    : faSortDown
-                                }
+                                icon={sortConfig.direction === "asc" ? faSortUp : faSortDown}
                               />
                             ) : (
-                              <FontAwesomeIcon
-                                icon={faSort}
-                                className="opacity-30"
-                              />
+                              <FontAwesomeIcon icon={faSort} className="opacity-30" />
                             )}
                           </div>
 
@@ -2023,7 +1640,7 @@ const handleConfirmExport = async (fileName) => {
                       {visibleCols.map((col, index) => {
                         const isStickyLeft = isPinnedColumn(col, index);
                         const leftOffset = getStickyLeftOffset(index);
-                          const isManual = manualResizedCols[col.key];
+                        const isManual = manualResizedCols[col.key];
                         const actionCol = isActionColumn(col);
 
                         return (
@@ -2034,9 +1651,7 @@ const handleConfirmExport = async (fileName) => {
                             }`}
                             style={{
                               ...getWidthStyle(col, isManual),
-                              left: isStickyLeft
-                                ? `${leftOffset}px`
-                                : undefined,
+                              left: isStickyLeft ? `${leftOffset}px` : undefined,
                             }}
                           >
                             {actionCol ? (
@@ -2071,13 +1686,8 @@ const handleConfirmExport = async (fileName) => {
                 <tbody>
                   {!hasDataFiltered ? (
                     <tr>
-                      <td
-                        colSpan={visibleCols.length}
-                        className="global-ref-norecords-ui"
-                      >
-                        {Array.isArray(data) && data.length > 0
-                          ? "No records found"
-                          : "No data"}
+                      <td colSpan={visibleCols.length} className="global-ref-norecords-ui text-center p-4 text-gray-500">
+                        {Array.isArray(data) && data.length > 0 ? "No records found" : "No data"}
                       </td>
                     </tr>
                   ) : (
@@ -2091,33 +1701,12 @@ const handleConfirmExport = async (fileName) => {
                             className="global-tran-tr-ui bg-gray-100 cursor-pointer"
                             onClick={() => toggleGroup(row)}
                           >
-                            <td
-                              colSpan={visibleCols.length}
-                              className="global-tran-td-ui font-semibold text-blue-900"
-                            >
-                              <div
-                                className="flex items-center"
-                                style={{ paddingLeft: row.level * 20 }}
-                              >
-                                <FontAwesomeIcon
-                                  icon={
-                                    isExpanded ? faChevronDown : faChevronRight
-                                  }
-                                  className="mr-2 text-gray-500"
-                                />
-                                <span className="mr-2 text-gray-600">
-                                  {
-                                    columns.find((c) => c.key === row.key)
-                                      ?.label
-                                  }
-                                  :
-                                </span>
-                                <span className="mr-2 font-bold">
-                                  {row.value}
-                                </span>
-                                <span className="bg-blue-200 text-blue-800 text-[10px] px-2 rounded-full">
-                                  {row.count}
-                                </span>
+                            <td colSpan={visibleCols.length} className="global-tran-td-ui font-semibold text-blue-900 border-b">
+                              <div className="flex items-center" style={{ paddingLeft: row.level * 20 }}>
+                                <FontAwesomeIcon icon={isExpanded ? faChevronDown : faChevronRight} className="mr-2 text-gray-500" />
+                                <span className="mr-2 text-gray-600">{columns.find((c) => c.key === row.key)?.label}:</span>
+                                <span className="mr-2 font-bold">{row.value}</span>
+                                <span className="bg-blue-200 text-blue-800 text-[10px] px-2 rounded-full">{row.count}</span>
                               </div>
                             </td>
                           </tr>
@@ -2127,7 +1716,7 @@ const handleConfirmExport = async (fileName) => {
                       return (
                         <tr
                           key={row.__idx ?? idx}
-                          className="global-tran-tr-ui hover:bg-gray-50 cursor-pointer"
+                          className="global-tran-tr-ui hover:bg-gray-50 cursor-pointer border-b border-gray-100"
                           onClick={() => {
                             if (onRowClick) onRowClick(row);
                             if (isMobile) handleRowOpen(row);
@@ -2144,9 +1733,7 @@ const handleConfirmExport = async (fileName) => {
                               <td
                                 key={col.key}
                                 className={`global-tran-td-ui align-center bg-white ${
-                                  isStickyLeft
-                                    ? "sticky z-10 shadow-[-1px_0_0_0_rgba(229,231,235,1)]"
-                                    : ""
+                                  isStickyLeft ? "sticky z-10 shadow-[-1px_0_0_0_rgba(229,231,235,1)]" : ""
                                 } ${col.className || ""}`}
                                 style={{
                                   ...getWidthStyle(col, manualResizedCols[col.key]),
@@ -2154,9 +1741,7 @@ const handleConfirmExport = async (fileName) => {
                                 }}
                               >
                                 <div className={cellTextWrapClass} title={getCellDisplayText(row, col)}>
-                                  {typeof col.render === "function"
-                                    ? col.render(row)
-                                    : formatValue(row[col.key], col)}
+                                  {typeof col.render === "function" ? col.render(row) : formatValue(row[col.key], col)}
                                 </div>
                               </td>
                             );
@@ -2172,120 +1757,47 @@ const handleConfirmExport = async (fileName) => {
         </div>
 
         {hasDataFiltered && !isMobileView && (
-          <div
-            className="
-              border-t bg-white shrink-0
-              px-3 py-2 sm:px-2
-              flex flex-col gap-3
-              lg:flex-row lg:items-center lg:justify-between
-            "
-          >
-            <div className="text-[11px] sm:text-xs text-gray-600 text-center lg:text-left flex items-center justify-center lg:justify-start gap-2">
+          <div className="border-t bg-white shrink-0 px-3 py-2 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div className="text-[11px] sm:text-xs text-gray-600 flex items-center justify-center lg:justify-start gap-2">
               <div>
-                Showing{" "}
-                <span className="font-semibold text-gray-900">
-                  {effectiveRowsPerPage > 0
-                    ? (safePage - 1) * effectiveRowsPerPage + 1
-                    : 1}
-                </span>
-                –
-                <span className="font-semibold text-gray-900">
-                  {effectiveRowsPerPage > 0
-                    ? Math.min(safePage * effectiveRowsPerPage, totalItems)
-                    : totalItems}
-                </span>{" "}
-                of{" "}
-                <span className="font-semibold text-gray-900">
-                  {totalItems}
-                </span>
+                Showing <span className="font-semibold text-gray-900">{effectiveRowsPerPage > 0 ? (safePage - 1) * effectiveRowsPerPage + 1 : 1}</span> –{" "}
+                <span className="font-semibold text-gray-900">{effectiveRowsPerPage > 0 ? Math.min(safePage * effectiveRowsPerPage, totalItems) : totalItems}</span> of{" "}
+                <span className="font-semibold text-gray-900">{totalItems}</span>
               </div>
-
               {isFetching && (
                 <span className="text-[10px] text-blue-500 animate-pulse font-bold flex items-center gap-1 uppercase ml-2">
-                  <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
-                  Syncing...
+                  <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div> Syncing...
                 </span>
               )}
             </div>
 
-            <div
-              className="
-                flex flex-col sm:flex-row sm:flex-wrap
-                items-stretch sm:items-center
-                justify-center lg:justify-end
-                gap-2 sm:gap-2
-                w-full lg:w-auto
-              "
-            >
-              <div className="flex items-center justify-between sm:justify-start gap-2 w-full sm:w-auto">
-                <span className="text-[11px] sm:text-xs text-gray-600 whitespace-nowrap">
-                  Rows per page
-                </span>
-
+            <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-end gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] sm:text-xs text-gray-600">Rows per page</span>
                 <select
-                  className="
-                    global-tran-textbox-ui global-tran-textbox-enabled
-                    h-8 min-w-[70px] w-20
-                    rounded-md sm:text-xs
-                  "
+                  className="global-tran-textbox-ui global-tran-textbox-enabled h-8 min-w-[70px] w-20 rounded-md sm:text-xs border-gray-300"
                   value={rowsPerPage}
-                  onChange={(e) => {
-                    setRowsPerPage(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
+                  onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
                 >
-                  {[10, 20, 50, 100, 200, 500, 1000].map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
+                  {[10, 20, 50, 100, 200, 500, 1000].map((n) => (<option key={n} value={n}>{n}</option>))}
                 </select>
               </div>
 
-              <div
-                className="
-                  flex items-center justify-between sm:justify-end
-                  gap-2 sm:gap-3
-                  w-full sm:w-auto
-                "
-              >
+              <div className="flex items-center gap-2">
                 <button
-                  className="
-                    global-tran-btn-ui
-                    h-8 px-3 sm:px-4
-                    min-w-[80px]
-                    rounded-md
-                    hover:bg-blue-100 hover:text-blue-800
-                    text-xs sm:text-sm
-                    active:scale-[0.98] transition
-                    disabled:opacity-50 disabled:cursor-not-allowed
-                  "
+                  className="global-tran-btn-ui h-8 px-3 min-w-[70px] rounded-md border hover:bg-gray-100 text-xs sm:text-sm active:scale-[0.98] transition disabled:opacity-50"
                   disabled={safePage <= 1}
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 >
                   Prev
                 </button>
-
-                <div className="text-[11px] sm:text-xs text-gray-700 whitespace-nowrap">
-                  Page <span className="font-semibold">{safePage}</span> /{" "}
-                  <span className="font-semibold">{totalPages}</span>
+                <div className="text-[11px] sm:text-xs text-gray-700 whitespace-nowrap px-2">
+                  Page <span className="font-semibold">{safePage}</span> / <span className="font-semibold">{totalPages}</span>
                 </div>
-
                 <button
-                  className="
-                    global-tran-btn-ui
-                    h-8 px-3 sm:px-4
-                    min-w-[80px]
-                    rounded-md
-                    hover:bg-blue-100 hover:text-blue-800
-                    text-xs sm:text-sm
-                    active:scale-[0.98] transition
-                    disabled:opacity-50 disabled:cursor-not-allowed
-                  "
+                  className="global-tran-btn-ui h-8 px-3 min-w-[70px] rounded-md border hover:bg-gray-100 text-xs sm:text-sm active:scale-[0.98] transition disabled:opacity-50"
                   disabled={safePage >= totalPages}
-                  onClick={() =>
-                    setCurrentPage((p) => Math.min(totalPages, p + 1))
-                  }
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 >
                   Next
                 </button>
@@ -2297,69 +1809,33 @@ const handleConfirmExport = async (fileName) => {
         {hasDataFiltered && (
           <div
             ref={exportContainerRef}
-            style={{
-              position: "fixed",
-              bottom: 0,
-              left: 0,
-              width: 0,
-              height: 0,
-              overflow: "hidden",
-              opacity: 0,
-              pointerEvents: "none",
-            }}
+            style={{ position: "absolute", top: "-10000px", left: "-10000px" }} // Fix for html2canvas
           >
             <table className="border-collapse text-[5px]">
               <thead>
                 <tr>
                   {exportVisibleCols.map((col) => (
-                    <th
-                      key={col.key}
-                      className="border px-2 py-1 text-left bg-gray-200 align-bottom"
-                      style={{
-                        maxWidth: 150,
-                        whiteSpace: "normal",
-                        wordBreak: "break-word",
-                      }}
-                    >
+                    <th key={col.key} className="border px-2 py-1 text-left bg-gray-200 align-bottom" style={{ maxWidth: 150, whiteSpace: "normal", wordBreak: "break-word" }}>
                       {col.label}
                     </th>
                   ))}
                 </tr>
               </thead>
-
               <tbody>
-                {(effectiveGroupBy.length === 0
-                  ? filteredData
-                  : fullRenderRows
-                ).map((row, idx) => {
+                {(effectiveGroupBy.length === 0 ? filteredData : fullRenderRows).map((row, idx) => {
                   if (effectiveGroupBy.length > 0 && row.isGroup) {
                     return (
-                      <tr
-                        key={`exp-g-${row.key}-${row.value}-${row.level}-${idx}`}
-                      >
-                        <td
-                          colSpan={exportVisibleCols.length}
-                          className="border px-2 py-1 font-semibold bg-gray-100"
-                        >
-                          {columns.find((c) => c.key === row.key)?.label}:{" "}
-                          {row.value} ({row.count})
+                      <tr key={`exp-g-${row.key}-${row.value}-${row.level}-${idx}`}>
+                        <td colSpan={exportVisibleCols.length} className="border px-2 py-1 font-semibold bg-gray-100">
+                          {columns.find((c) => c.key === row.key)?.label}: {row.value} ({row.count})
                         </td>
                       </tr>
                     );
                   }
-
                   return (
                     <tr key={`exp-row-${idx}`}>
                       {exportVisibleCols.map((col) => (
-                        <td
-                          key={col.key}
-                          className="border px-2 py-1 align-bottom"
-                          style={{
-                            maxWidth: 150,
-                            whiteSpace: "normal",
-                            wordBreak: "break-word",
-                          }}
-                        >
+                        <td key={col.key} className="border px-2 py-1 align-bottom" style={{ maxWidth: 150, whiteSpace: "normal", wordBreak: "break-word" }}>
                           {getCellDisplayText(row, col)}
                         </td>
                       ))}
@@ -2372,13 +1848,13 @@ const handleConfirmExport = async (fileName) => {
         )}
 
         <ExportFileNameModal
-  isOpen={exportModalOpen}
-  title={`Export ${String(exportType || "").toUpperCase()} File Name`}
-  defaultFileName={exportFileName}
-  confirmText="Export"
-  onClose={() => setExportModalOpen(false)}
-  onConfirm={handleConfirmExport}
-/>
+          isOpen={exportModalOpen}
+          title={`Export ${String(exportType || "").toUpperCase()} File Name`}
+          defaultFileName={exportFileName}
+          confirmText="Export"
+          onClose={() => setExportModalOpen(false)}
+          onConfirm={handleConfirmExport}
+        />
       </div>
     );
   },

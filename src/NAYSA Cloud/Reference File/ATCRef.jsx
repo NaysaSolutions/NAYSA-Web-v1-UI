@@ -669,10 +669,10 @@ const ATCRef = () => {
     isInitialLoading || saveMutation.isPending || deleteMutation.isPending;
 
   return (
-    <div className="global-ref-main-div-ui mt-24">
+    <div className="global-ref-main-div-ui mt-16">
       {showGlobalLoading && <LoadingSpinner />}
 
-      <div className="fixed mt-4 top-14 left-6 right-6 z-30 global-ref-header-ui flex justify-between items-center bg-white/80 backdrop-blur p-3 rounded-xl border border-slate-200 shadow-sm">
+      <div className="global-ref-header-ui">
         <h1 className="global-ref-headertext-ui">{documentTitle}</h1>
 
         <div className="flex gap-2 text-xs">

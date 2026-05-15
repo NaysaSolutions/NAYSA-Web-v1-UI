@@ -32,7 +32,8 @@ import {
   useSwalSuccessAlert,
   useSwalErrorAlertAPI,
   useSwalDeleteConfirm,
-  useSwalDeleteRecord
+  useSwalDeleteRecord,
+  useSwalProceedConfirm // Added for duplicate name check
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 import PayeeSetupTab from "@/NAYSA Cloud/Master Data/CustMastTabs/PayeeSetupTab";
 import PayeeMasterDataTab from "@/NAYSA Cloud/Master Data/CustMastTabs/PayeeMasterDataTab";
@@ -124,8 +125,6 @@ const VendMast = () => {
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isAttachOpen, setIsAttachOpen] = useState(false);
-
-  const contentPadding = "p-4 sm:p-6 lg:p-8";
 
   const [subsidiaryType, setSubsidiaryType] = useState("");
   const [masterFilters, setMasterFilters] = useState({});
@@ -226,10 +225,30 @@ const VendMast = () => {
     return [];
   };
 
-  const loadMasterList = async () => {
+  const loadMasterList = async (options = {}) => {
+    const {
+      page = 1,
+      pageSize = 300,
+      filters = masterFilters,
+      sltypeCode = subsidiaryType,
+    } = options;
+
+    const cleanedFilters = Object.fromEntries(
+      Object.entries(filters || {}).map(([key, value]) => [key, String(value || "").trim()])
+    );
+
     setIsLoading(true);
     try {
-      const res = await apiClient.get("/payee");
+      const res = await apiClient.get("/payee", {
+        params: {
+          page,
+          pageSize,
+          sltypeCode: normalizeSlType(sltypeCode),
+          ...cleanedFilters,
+        },
+        timeout: 120000,
+      });
+
       const parsed = parseSprocJsonResult(res?.data?.data);
       const list = Array.isArray(parsed) ? parsed : [];
 
@@ -247,7 +266,13 @@ const VendMast = () => {
       setMasterRows(normalized);
     } catch (e) {
       console.error(e);
-      Swal.fire("Error", "Failed to load payee list.", "error");
+      Swal.fire(
+        "Error",
+        e?.code === "ECONNABORTED"
+          ? "Payee list loading timed out. Please use a filter or try again."
+          : "Failed to load payee list.",
+        "error"
+      );
       setMasterAllRows([]);
       setMasterRows([]);
     } finally {
@@ -392,10 +417,14 @@ const VendMast = () => {
   };
 
   const upsertVendor = async () => {
+    // 1. DUPLICATE NAME CHECK
+    // const canProceed = await confirmDuplicatePayeeName(form.vendName || form.custName);
+    // if (!canProceed) return;
+
     let code = String(form?.vendCode || form?.custCode || "").trim();
     const isAddMode = !selectedVendCode;
 
-    // Only run duplicate check if the user actually typed a code!
+    // 2. DUPLICATE CODE CHECK
     if (isAddMode && code) {
       const isDuplicate = await checkDuplicateVendor(code);
       if (isDuplicate) {
@@ -476,27 +505,19 @@ const VendMast = () => {
     }
   };
 
-  const applyMasterFilters = () => {
-    const selectedType = normalizeSlType(subsidiaryType);
-    const filtered = masterAllRows.filter((row) => {
-      const rowType = normalizeSlType(row?.sltypeCode);
-      if (selectedType && rowType !== selectedType) return false;
-
-      for (const [key, val] of Object.entries(masterFilters || {})) {
-        const q = String(val || "").trim().toLowerCase();
-        if (!q) continue;
-        const cell = String(row?.[key] || "").toLowerCase();
-        if (!cell.includes(q)) return false;
-      }
-      return true;
+  const applyMasterFilters = async () => {
+    await loadMasterList({
+      page: 1,
+      pageSize: 300,
+      filters: masterFilters,
+      sltypeCode: subsidiaryType,
     });
-    setMasterRows(filtered);
   };
 
-  const resetMasterFilters = () => {
+  const resetMasterFilters = async () => {
     setSubsidiaryType("");
     setMasterFilters({});
-    setMasterRows(masterAllRows);
+    await loadMasterList({ page: 1, pageSize: 300, filters: {}, sltypeCode: "" });
   };
 
   const handleChangeMasterFilter = (key, value) => {
@@ -504,6 +525,7 @@ const VendMast = () => {
   };
 
   const handleAdd = () => {
+    allowedDuplicatePayeeNameRef.current = ""; // Reset ref memory
     const sl = normalizeSlType(form?.sltypeCode || "SU") || "SU";
     setSelectedVendCode("");
     setForm({
@@ -532,6 +554,7 @@ const VendMast = () => {
   };
 
   const handleResetSetup = () => {
+    allowedDuplicatePayeeNameRef.current = ""; // Reset ref memory
     setSelectedVendCode("");
     setForm({ ...emptyForm });
     setIsEditing(false);
@@ -725,7 +748,14 @@ const VendMast = () => {
               { value: "Y", label: "Yes" },
               { value: "N", label: "No" },
             ]}
-            onChangeForm={updateForm}
+            onChangeForm={(patch) => {
+              // Reset duplicate name memory if name is manually changed
+              if (patch.vendName || patch.custName) {
+                allowedDuplicatePayeeNameRef.current = "";
+              }
+              updateForm(patch);
+            }}
+            // onNameBlur={confirmDuplicatePayeeName} // Pass the name blur logic
             onSelectCustomerCode={fetchVendorByCode}
           />
         )}

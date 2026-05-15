@@ -39,8 +39,13 @@ import GLFSMatching from "@/NAYSA Cloud/Master Data/ChartofAccounts/GLFSMatching
 import CustMast from "./NAYSA Cloud/Master Data/CustMast.jsx";
 import VendMast from "./NAYSA Cloud/Master Data/VendMast.jsx";
 import BankMast from "./NAYSA Cloud/Master Data/BankMast.jsx";
+import MSMast from "./NAYSA Cloud/Master Data/MSMasterData/MSMast.jsx";
+import FGMast from "./NAYSA Cloud/Master Data/FGMasterData/FGMast.jsx";
 import RCMast from "./NAYSA Cloud/Master Data/RCMast.jsx";
 import SLMast from "./NAYSA Cloud/Master Data/SLMast.jsx";
+import WarehouseLocation from "./NAYSA Cloud/Master Data/Inventory/WareMast.jsx";
+import UOM from "./NAYSA Cloud/Master Data/Inventory/UOM.jsx";
+import QualityStat from "./NAYSA Cloud/Master Data/Inventory/QualityStat.jsx";
 
 // --- SALES ---
 import SO from "./NAYSA Cloud/Module/Main Module/Sales/SO.jsx";
@@ -56,6 +61,7 @@ import POApprovalModal from "./NAYSA Cloud/Approval/POApprovalModal.jsx";
 import ApprovalMatrixModal from "./NAYSA Cloud/Approval/GlobalApprovalMatrix.jsx";
 import PO from "./NAYSA Cloud/Module/Main Module/Purchasing/PO.jsx";
 import JO from "./NAYSA Cloud/Module/Main Module/Purchasing/JO.jsx";
+import CAN from "./NAYSA Cloud/Module/Main Module/Purchasing/CAN.jsx";
 import MSRR from "./NAYSA Cloud/Module/Main Module/Inventory/MSRR.jsx";
 import MSIS from "./NAYSA Cloud/Module/Main Module/Inventory/MSIS.jsx";
 import MSST from "./NAYSA Cloud/Module/Main Module/Inventory/MSST.jsx";
@@ -80,6 +86,7 @@ import CutoffRef from "./NAYSA Cloud/Reference File/CutoffRef.jsx";
 import DForexRef from "./NAYSA Cloud/Reference File/DForexRef.jsx";
 import VATRef from "./NAYSA Cloud/Reference File/VATRef.jsx";
 import BillCodeRef from "./NAYSA Cloud/Reference File/BillCodeRef.jsx";
+import JobCodeRef from "./NAYSA Cloud/Reference File/JobCodeRef.jsx";
 
 // --- QUERIES & LOOKUPS ---
 import AllTranHistory from "./NAYSA Cloud/Lookup/SearchGlobalTranHistory.jsx";
@@ -97,6 +104,7 @@ import MSINQ from "./NAYSA Cloud/Query/INVInq/MSStockCard.jsx";
 
 
 //Matrix
+import PRInquiry from "./NAYSA Cloud/Module/Main Module/Purchasing/PRInquiry.jsx";
 import SalesPMCustomerItem from "./NAYSA Cloud/Matrix/SalesPMCustomerItem.jsx"
 import CheckTemplateSetup from "./NAYSA Cloud/Matrix/CheckTemplateSetup.jsx"
 import PRInq from "./NAYSA Cloud/Module/Main Module/Purchasing/PRInq.jsx";
@@ -245,6 +253,7 @@ export const pageRegistry = {
   ApprovalMatrixModal,
   PO,
   JO,
+  JobCodeRef,
 
   //Sales
   SO,
@@ -266,6 +275,8 @@ export const pageRegistry = {
   CustMast,
   VendMast,
   SLMast,
+  MSMast,
+  FGMast,
 
   // Global & Queries
   AllTranHistory,
@@ -294,6 +305,9 @@ export const pageRegistry = {
   MasterAccessRights,
   ATaxCode,
   BillCodeRef,
+  WarehouseLocation,
+  UOM,
+  QualityStat,
 
   // Posting
   PostSVI,
@@ -318,11 +332,12 @@ export const pageRegistry = {
   //Matrix
   SalesPMCustomerItem,
 
-  PRInq,
-  POInq,
+  // Purchasing Inquiry (Unified/Merged)
+  PRInquiry: PRInquiry, 
+  PRInq: PRInquiry,     
+  POInq: POInq,         
 
-  // Printing
-  // These keys now point to the Universal component but inject the specific module prop
+  // Printing (Universal Modal Mapping)
   APReportModal: (props) => <UniversalReportModal {...props} module="AP" />,
   VIReportModal: (props) => <UniversalReportModal {...props} module="VI" />,
   EWTReportModal: (props) => <UniversalReportModal {...props} module="EWT" />,

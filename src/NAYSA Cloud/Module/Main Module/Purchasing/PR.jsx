@@ -152,11 +152,11 @@ const isDateBeforeDate = (value, baseValue) => {
 
       
   useEffect(() => {
-  const p = new URLSearchParams(location.search);
-          if (p.get("viewDocument") === "true") {
-            setIsViewDocument(true);
-          }
-          }, []); 
+    const p = new URLSearchParams(location.search);
+    if (p.get("viewDocument") === "true" || p.get("viewOnly") === "Y") {
+      setIsViewDocument(true);
+    }
+  }, []); 
   const isViewDocumentUrl = isViewDocument;
       
       
@@ -2549,7 +2549,8 @@ const renderPrDetailColumn = (columnKey, row, index) => {
 
       <button
         onClick={handleAddRowClick}
-        className={`global-tran-tab-footer-button-add-ui`}
+        disabled={isFormDisabled}
+        className={`global-tran-tab-footer-button-add-ui ${isFormDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
       >
         <FontAwesomeIcon icon={faPlus} className="mr-2" />
         Add
