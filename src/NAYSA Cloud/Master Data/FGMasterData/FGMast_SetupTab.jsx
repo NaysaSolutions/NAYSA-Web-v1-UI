@@ -6,6 +6,9 @@ import SearchFGInvCateg from "@/NAYSA Cloud/Lookup/SearchFGInvCateg.jsx";
 import SearchFGInvClass from "@/NAYSA Cloud/Lookup/SearchFGInvClass.jsx";
 import ItemMastLookupModal from "@/NAYSA Cloud/Lookup/SearchItemMast.jsx";
 
+// Import your UOM Search Modal
+import SearchUOM from "@/NAYSA Cloud/Lookup/SearchUOM.jsx"; 
+
 const SectionHeader = ({ title }) => (
     <div className="mb-3">
         <div className="text-[9px] sm:text-[12px] font-bold text-slate-500 tracking-widest border-b pb-2">
@@ -38,7 +41,6 @@ const getValue = (input) => {
     return input ?? "";
 };
 
-// ── Added onBlurItemCode prop ─────────────────────────────────────────────────
 const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onChangeForm, onLookupSelect, onBlurItemCode }) => {
     const isReadOnly = !isEditing;
     const isNewRecord = form.__isNew;
@@ -48,6 +50,10 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
     const [isCategOpen, setIsCategOpen] = useState(false);
     const [isClassOpen, setIsClassOpen] = useState(false);
     const [isItemLookupOpen, setIsItemLookupOpen] = useState(false);
+    
+    // Add UOM lookup states
+    const [isUomOpen, setIsUomOpen] = useState(false);
+    const [isUom2Open, setIsUom2Open] = useState(false);
 
     // Field lengths
     const [tblFieldArray, setTblFieldArray] = useState([]);
@@ -64,15 +70,6 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
     }, []);
     const getLen = (col, fallback = undefined) =>
         useGetFieldLength(tblFieldArray, col) || fallback;
-
-    // // Manual code entry logic
-    // const isManualMode = useMemo(() => {
-    //     const mode = normalizeUpper(generationMode || "Manual");
-    //     return mode === "MANUAL" || mode === "M";
-    // }, [generationMode]);
-
-    // const canType = isNewRecord && isManualMode;
-    // const overrideRef = useRef(null);
 
     const canType = isNewRecord;
     const overrideRef = useRef(null);
@@ -116,9 +113,6 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                 <Card className="border border-blue-500/30 p-6 rounded-lg">
                     <SectionHeader title="BASIC INFORMATION" />
 
-                    {/* Item No — readOnly={true} always so FieldRenderer always renders the lookup icon.
-                        When canType (new record), the useEffect above manually removes readonly
-                        from the DOM input so the user can still type. */}
                     <div
                         ref={overrideRef}
                         className={`w-full ${!canType
@@ -158,7 +152,7 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                                 type="lookup"
                                 value={form.uom || ""}
                                 onChange={(v) => onChangeForm({ uom: getValue(v) })}
-                                onLookup={() => { }}
+                                onLookup={() => !isDisabled && setIsUomOpen(true)} // Open UOM1 Lookup
                                 readOnly={isReadOnly}
                                 disabled={isDisabled}
                             />
@@ -169,7 +163,7 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                                 type="lookup"
                                 value={form.uom2 || ""}
                                 onChange={(v) => onChangeForm({ uom2: getValue(v) })}
-                                onLookup={() => { }}
+                                onLookup={() => !isDisabled && setIsUom2Open(true)} // Open UOM2 Lookup
                                 readOnly={isReadOnly}
                                 disabled={isDisabled}
                             />
@@ -572,6 +566,29 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                     const selected = payload?.records?.[0];
                     if (selected) {
                         onLookupSelect(selected.itemCode);
+                    }
+                }}
+            />
+
+            {/* UOM 1 Lookup */}
+            <SearchUOM
+                isOpen={isUomOpen}
+                onClose={(selected) => {
+                    setIsUomOpen(false);
+                    if (selected) {
+                        onChangeForm({ uom: selected.uomCode });
+                    }
+                }}
+            />
+
+            {/* UOM 2 Lookup */}
+            <SearchUOM
+                isOpen={isUom2Open}
+                title="Select UOM 2"
+                onClose={(selected) => {
+                    setIsUom2Open(false);
+                    if (selected) {
+                        onChangeForm({ uom2: selected.uomCode });
                     }
                 }}
             />

@@ -331,6 +331,7 @@ export const pageRegistry = {
 
   //Matrix
   SalesPMCustomerItem,
+  CAN,
 
   // Purchasing Inquiry (Unified/Merged)
   PRInquiry: PRInquiry, 

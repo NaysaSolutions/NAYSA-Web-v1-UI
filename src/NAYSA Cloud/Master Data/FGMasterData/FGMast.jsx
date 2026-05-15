@@ -97,19 +97,6 @@ const FGMast = () => {
     const refTabRef = useRef(null);
     const [refState, setRefState] = useState({ isEditing: false, canSave: false });
 
-    // useEffect(() => {
-    //     const fetchGenerationMode = async () => {
-    //         try {
-    //             const res = await apiClient.post("/lookupDocSeries", { docCode: "FG" });
-    //             setGenerationMode(res?.data?.data?.[0]?.docSeries || "Auto");
-    //         } catch (e) {
-    //             console.error("Failed to fetch mode", e);
-    //         }
-    //     };
-    //     fetchGenerationMode();
-    //     loadMasterList();
-    // }, []);
-
     useEffect(() => {
         loadMasterList();
     }, []);
@@ -175,8 +162,8 @@ const FGMast = () => {
     };
 
     // ── Check Duplicate ───────────────────────────────────────────────────────
-    // Called on blur of Item No field (new records only).
-    // Returns true if duplicate found (so caller can bail out).
+    // Calls sproc CheckDuplicate mode. Returns true if duplicate found.
+    // Response: { result: "1" } = duplicate, { result: "0" } = OK.
     const checkDuplicate = async (itemCode) => {
         const code = String(itemCode || "").trim();
         if (!code) return false;
@@ -186,8 +173,10 @@ const FGMast = () => {
                 json_data: { itemCode: code },
             });
             const row = res?.data?.data?.[0];
-            const isDup = Number(row?.isDuplicate ?? row?.isdup ?? row?.duplicatecount ?? 0);
-            if (isDup > 0) {
+            // Sproc returns: select ... result = '1' or '0'
+            const isDup = String(row?.result ?? row?.isDuplicate ?? row?.isdup ?? "0") === "1"
+                || Number(row?.isDuplicate ?? row?.isdup ?? row?.duplicatecount ?? 0) > 0;
+            if (isDup) {
                 await useSwalErrorAlert("Duplicate", `Item No "${code}" already exists.`);
                 updateForm({ itemCode: "" });
                 return true;
@@ -199,8 +188,8 @@ const FGMast = () => {
     };
 
     // ── Check In Used ─────────────────────────────────────────────────────────
-    // Called before delete to prevent removing items still referenced elsewhere.
-    // Returns true if item is in use.
+    // Calls sproc CheckInUsed mode. Returns true if item is referenced in transactions.
+    // Response: { result: "1" } = in use, { result: "0" } = safe to delete.
     const checkInUsed = async (itemCode) => {
         const code = String(itemCode || "").trim();
         if (!code) return false;
@@ -210,8 +199,10 @@ const FGMast = () => {
                 json_data: { itemCode: code },
             });
             const row = res?.data?.data?.[0];
-            const isUsed = Number(row?.isInUsed ?? row?.isinused ?? row?.inusedcount ?? 0);
-            if (isUsed > 0) {
+            // Sproc returns: select ... result = '1' or '0'
+            const isUsed = String(row?.result ?? row?.isInUsed ?? row?.isinused ?? "0") === "1"
+                || Number(row?.isInUsed ?? row?.isinused ?? row?.inusedcount ?? 0) > 0;
+            if (isUsed) {
                 await useSwalErrorAlert(
                     "Cannot Delete",
                     `Item No "${code}" is currently in use and cannot be deleted.`
@@ -237,10 +228,18 @@ const FGMast = () => {
 
         setIsLoading(true);
         try {
+            // Sproc Delete mode handles in-use guard + audit trail on the SQL side
             const payload = {
-                json_data: { action: "delete", itemCode: code, userCode }
+                json_data: { itemCode: code, userCode },
             };
-            await apiClient.post("/deleteFGMast", payload);
+            const res = await apiClient.post("/deleteFGMast", payload);
+
+            const sqlRow = res?.data?.data?.[0];
+            if (sqlRow?.errorcount > 0 || sqlRow?.errorCount > 0) {
+                await useSwalErrorAlert("Delete Failed", sqlRow?.errormsg || sqlRow?.errorMsg);
+                return;
+            }
+
             await useSwalDeleteRecord("Deleted", `Item No ${code} removed.`);
             handleResetSetup();
             await loadMasterList();
@@ -262,6 +261,9 @@ const FGMast = () => {
 
         setIsLoading(true);
         try {
+            // FIX: pass json_data as a plain object — do NOT JSON.stringify it.
+            // The sproc reads fields via json_value(@params, '$.json_data.*'),
+            // so the API must receive a real nested JSON object, not a string.
             const payload = {
                 json_data: {
                     ...form,
@@ -326,18 +328,18 @@ const FGMast = () => {
         if (activeTab === "setup") {
             const hasRecord = String(form?.itemCode || "").trim() && !form.__isNew;
             return [
-                { key: "add", label: <span className="hidden sm:inline ml-1">Add</span>, icon: faPlus, onClick: handleAdd, disabled: isLoading, className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
-                { key: "save", label: <span className="hidden sm:inline ml-1">Save</span>, icon: faSave, onClick: upsertItem, disabled: isLoading || !isEditing, className: `${baseBtn} ${!isEditing ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
-                { key: "reset", label: <span className="hidden sm:inline ml-1">Reset</span>, icon: faUndo, onClick: handleResetSetup, disabled: isLoading, className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
-                { key: "edit", label: <span className="hidden sm:inline ml-1">Edit</span>, icon: faPenToSquare, onClick: handleEdit, disabled: isLoading || isEditing || !hasRecord, className: `${baseBtn} ${isEditing || !hasRecord ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
-                { key: "delete", label: <span className="hidden sm:inline ml-1">Delete</span>, icon: faTrash, onClick: deleteItem, disabled: isLoading || isEditing || !hasRecord, className: `${baseBtn} ${isEditing || !hasRecord ? "bg-red-400 cursor-not-allowed opacity-50" : "bg-red-500 hover:bg-red-600"}` },
+                { key: "add",    label: <span className="hidden sm:inline ml-1">Add</span>,    icon: faPlus,        onClick: handleAdd,        disabled: isLoading,                              className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
+                { key: "save",   label: <span className="hidden sm:inline ml-1">Save</span>,   icon: faSave,        onClick: upsertItem,       disabled: isLoading || !isEditing,                className: `${baseBtn} ${!isEditing ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
+                { key: "reset",  label: <span className="hidden sm:inline ml-1">Reset</span>,  icon: faUndo,        onClick: handleResetSetup, disabled: isLoading,                              className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
+                { key: "edit",   label: <span className="hidden sm:inline ml-1">Edit</span>,   icon: faPenToSquare, onClick: handleEdit,       disabled: isLoading || isEditing || !hasRecord,   className: `${baseBtn} ${isEditing || !hasRecord ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
+                { key: "delete", label: <span className="hidden sm:inline ml-1">Delete</span>, icon: faTrash,       onClick: deleteItem,       disabled: isLoading || isEditing || !hasRecord,   className: `${baseBtn} ${isEditing || !hasRecord ? "bg-red-400 cursor-not-allowed opacity-50" : "bg-red-500 hover:bg-red-600"}` },
             ];
         }
 
         if (activeTab === "ref") {
             return [
-                { key: "add", label: <span className="hidden sm:inline ml-1">Add</span>, icon: faPlus, onClick: () => refTabRef.current?.add?.(), className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
-                { key: "save", label: <span className="hidden sm:inline ml-1">Save</span>, icon: faSave, onClick: () => refTabRef.current?.save?.(), disabled: !refState.canSave, className: `${baseBtn} ${!refState.canSave ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
+                { key: "add",   label: <span className="hidden sm:inline ml-1">Add</span>,   icon: faPlus, onClick: () => refTabRef.current?.add?.(),   className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
+                { key: "save",  label: <span className="hidden sm:inline ml-1">Save</span>,  icon: faSave, onClick: () => refTabRef.current?.save?.(),  disabled: !refState.canSave, className: `${baseBtn} ${!refState.canSave ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
                 { key: "reset", label: <span className="hidden sm:inline ml-1">Reset</span>, icon: faUndo, onClick: () => refTabRef.current?.reset?.(), className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
             ];
         }
