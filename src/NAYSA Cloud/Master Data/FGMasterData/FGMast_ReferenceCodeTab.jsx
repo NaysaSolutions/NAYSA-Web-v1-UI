@@ -10,6 +10,7 @@ import {
   faChevronRight,
 } from "@fortawesome/free-solid-svg-icons";
 import FGCategoryCodes from "@/NAYSA Cloud/Master Data/FGMasterData/ReferenceCodes/FGCategoryCodes";
+import FGClassificationCodes from "@/NAYSA Cloud/Master Data/FGMasterData/ReferenceCodes/FGClassificationCodes";
 
 // TEMPORARY PLACEHOLDER COMPONENT (Replace these with your actual FG Reference components when ready)
 const PlaceholderRef = forwardRef(({ label, onStateChange }, ref) => {
@@ -44,48 +45,53 @@ const FGMast_ReferenceCodeTab = forwardRef(({ onStateChange }, ref) => {
   const [collapseNav, setCollapseNav] = useState(false);
 
   const refTabs = useMemo(() => [
-    { id: "category", label: "Category Codes", icon: faSitemap },
-    { id: "classification", label: "Classification Codes", icon: faLayerGroup },
-    { id: "subclass", label: "Sub Class Codes", icon: faListAlt },
-    { id: "uom", label: "UOM Codes", icon: faRulerCombined },
-    { id: "supplementary", label: "Supplementary Codes", icon: faTags },
+    { id: "category",       label: "Category Codes",       icon: faSitemap       },
+    { id: "classification", label: "Classification Codes", icon: faLayerGroup    },
+    { id: "subclass",       label: "Sub Class Codes",      icon: faListAlt       },
+    { id: "uom",            label: "UOM Codes",            icon: faRulerCombined },
+    { id: "supplementary",  label: "Supplementary Codes",  icon: faTags          },
   ], []);
 
   const [activeRefTab, setActiveRefTab] = useState(refTabs[0].id);
 
   useImperativeHandle(ref, () => ({
     add: () => {
-      if (activeRefTab === "category") categoryRef.current?.add?.();
+      if (activeRefTab === "category")       categoryRef.current?.add?.();
       if (activeRefTab === "classification") classRef.current?.add?.();
-      if (activeRefTab === "subclass") subclassRef.current?.add?.();
-      if (activeRefTab === "uom") uomRef.current?.add?.();
-      if (activeRefTab === "supplementary") suppRef.current?.add?.();
+      if (activeRefTab === "subclass")       subclassRef.current?.add?.();
+      if (activeRefTab === "uom")            uomRef.current?.add?.();
+      if (activeRefTab === "supplementary")  suppRef.current?.add?.();
     },
     save: () => {
-      if (activeRefTab === "category") categoryRef.current?.save?.();
+      if (activeRefTab === "category")       categoryRef.current?.save?.();
       if (activeRefTab === "classification") classRef.current?.save?.();
-      if (activeRefTab === "subclass") subclassRef.current?.save?.();
-      if (activeRefTab === "uom") uomRef.current?.save?.();
-      if (activeRefTab === "supplementary") suppRef.current?.save?.();
+      if (activeRefTab === "subclass")       subclassRef.current?.save?.();
+      if (activeRefTab === "uom")            uomRef.current?.save?.();
+      if (activeRefTab === "supplementary")  suppRef.current?.save?.();
     },
     reset: () => {
-      if (activeRefTab === "category") categoryRef.current?.reset?.();
+      if (activeRefTab === "category")       categoryRef.current?.reset?.();
       if (activeRefTab === "classification") classRef.current?.reset?.();
-      if (activeRefTab === "subclass") subclassRef.current?.reset?.();
-      if (activeRefTab === "uom") uomRef.current?.reset?.();
-      if (activeRefTab === "supplementary") suppRef.current?.reset?.();
+      if (activeRefTab === "subclass")       subclassRef.current?.reset?.();
+      if (activeRefTab === "uom")            uomRef.current?.reset?.();
+      if (activeRefTab === "supplementary")  suppRef.current?.reset?.();
     },
   }));
 
   const renderRight = () => {
     switch (activeRefTab) {
-      // Replace with your actual <FGCategoryCodes /> etc components later
-      case "category": return <FGCategoryCodes ref={categoryRef} onStateChange={onStateChange} />;
-      case "classification": return <PlaceholderRef label="FG Classification Codes" ref={classRef} onStateChange={onStateChange} />;
-      case "subclass": return <PlaceholderRef label="FG Sub Class Codes" ref={subclassRef} onStateChange={onStateChange} />;
-      case "uom": return <PlaceholderRef label="FG UOM Codes" ref={uomRef} onStateChange={onStateChange} />;
-      case "supplementary": return <PlaceholderRef label="FG Supplementary Codes" ref={suppRef} onStateChange={onStateChange} />;
-      default: return null;
+      case "category":
+        return <FGCategoryCodes ref={categoryRef} onStateChange={onStateChange} />;
+      case "classification":
+        return <FGClassificationCodes ref={classRef} onStateChange={onStateChange} />;
+      case "subclass":
+        return <PlaceholderRef label="FG Sub Class Codes" ref={subclassRef} onStateChange={onStateChange} />;
+      case "uom":
+        return <PlaceholderRef label="FG UOM Codes" ref={uomRef} onStateChange={onStateChange} />;
+      case "supplementary":
+        return <PlaceholderRef label="FG Supplementary Codes" ref={suppRef} onStateChange={onStateChange} />;
+      default:
+        return null;
     }
   };
 
