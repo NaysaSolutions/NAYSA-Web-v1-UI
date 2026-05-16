@@ -67,6 +67,7 @@ import MSIS from "./NAYSA Cloud/Module/Main Module/Inventory/MSIS.jsx";
 import MSST from "./NAYSA Cloud/Module/Main Module/Inventory/MSST.jsx";
 import MSAJ from "./NAYSA Cloud/Module/Main Module/Inventory/MSAJ.jsx";
 import MSRTV from "./NAYSA Cloud/Module/Main Module/Inventory/MSRTV.jsx";
+import FGRR from "./NAYSA Cloud/Module/Main Module/Inventory/FGRR.jsx";
 import PostMSRR from "./NAYSA Cloud/Module/Main Module/Inventory/PostMSRR.jsx";
 import PostMSRTV from "./NAYSA Cloud/Module/Main Module/Inventory/PostMSRTV.jsx";
 import PostMSAJ from "./NAYSA Cloud/Module/Main Module/Inventory/PostMSAJ.jsx";
@@ -266,6 +267,7 @@ export const pageRegistry = {
   MSST,
   MSAJ,
   MSRTV,
+  FGRR,
 
   // General Ledger & Master Data
   JV,

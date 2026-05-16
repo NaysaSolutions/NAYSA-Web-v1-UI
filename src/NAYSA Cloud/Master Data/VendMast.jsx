@@ -71,6 +71,7 @@ const emptyForm = {
   custTin: "",
   custFaxNo: "",
   businessName: "",
+  checkName: "",
   firstName: "",
   middleName: "",
   lastName: "",
@@ -122,6 +123,8 @@ const VendMast = () => {
 
   const refTabRef = useRef(null);
   const [refState, setRefState] = useState({ isEditing: false, canSave: false });
+
+  const allowedDuplicatePayeeNameRef = useRef("");
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isAttachOpen, setIsAttachOpen] = useState(false);
@@ -334,6 +337,7 @@ const VendMast = () => {
         vendTin: row?.vendTin ?? "",
         custTin: row?.vendTin ?? "",
         businessName: row?.businessName ?? "",
+        checkName: row?.checkName ?? "",
         firstName: row?.firstName ?? "",
         middleName: row?.middleName ?? "",
         lastName: row?.lastName ?? "",
@@ -441,6 +445,7 @@ const VendMast = () => {
           vendCode: code, 
           vendName: form.vendName || form.custName || "",
           businessName: form.businessName || "",
+          checkName: form.checkName || "",
           firstName: form.firstName || "",
           middleName: form.middleName || "",
           lastName: form.lastName || "",
