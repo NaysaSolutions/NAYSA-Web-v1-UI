@@ -1818,6 +1818,16 @@ const handleCloseRRRefModal = async (selectedItems) => {
         status: "OPEN",
         documentDate: useGetCurrentDayV2(),
         noReprints: "0",
+
+
+      detailRows: detailRows.map((row) => ({
+        ...row,
+        siNo: "",
+        poNo: "",
+        rrNo: "",
+        siDate: useGetCurrentDayV2(),
+      })),
+
       });
     }
   };

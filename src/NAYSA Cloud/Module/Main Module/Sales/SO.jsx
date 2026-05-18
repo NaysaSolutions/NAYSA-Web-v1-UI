@@ -3343,13 +3343,7 @@ return (
     cacheKey={`SO:${state.branchCode || ""}`}
     activeTabKey="SO_Summary"
     branchCode={state.branchCode}
-    status={(() => {
-      const s = (state.status || "").toUpperCase();
-      if (s === "CANCELLED") return "X";
-      if (s === "CLOSED") return "C";
-      if (s === "OPEN") return "";
-      return "All";
-    })()}
+    status="All"
     onRowDoubleClick={handleHistoryRowPick}
     historyExportName={`${documentTitle} History`}
   />

@@ -459,7 +459,7 @@ export const CAN = () => {
         detailRows: nextDetailRows,
         supplierRows: nextSuppliers,
         statusHistory: normalizeRows(data.statusHistory),
-        activeTab: "items",
+        activeTab: "review",
       });
 
       setSelectedPrIds(normalizeRows(data.prRows).map((row) => String(row.prId)));
@@ -505,7 +505,7 @@ export const CAN = () => {
             }),
           })
         ),
-        activeTab: "items",
+        activeTab: "review",
       });
     } catch (error) {
       useSwalErrorAlert("Load PR Detail", errorMessage(error));
@@ -954,24 +954,23 @@ export const CAN = () => {
         </div>
 
         <div className="global-tran-textbox-group-div-ui">
-         
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {[
               ["PR Count", totals.prCount],
               ["Items", totals.itemCount],
               ["Suppliers", totals.supplierCount],
-              ["Total Qty", totals.totalQty],
+              ["Total Quantity", totals.totalQty],
               ["Best Offer", totals.bestOffer],
             ].map(([label, value]) => (
-              <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 last:col-span-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
-                <div className="mt-1 text-sm font-bold text-slate-800">{value}</div>
+              <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm">
+                <div className="text-[9px] font-semibold tracking-wide text-slate-500">{label}</div>
+                <div className="mt-1 text-sm text-right text-slate-900">{value}</div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="md:col-span-2 lg:col-span-2">
+        <div className="col-span-full">
           <div className="relative">
             <textarea
               id="canRemarks"
@@ -1389,7 +1388,7 @@ export const CAN = () => {
             <button
               type="button"
               key={key}
-              onClick={() => updateState({ activeTab: key === "review" ? "items" : key })}
+              onClick={() => updateState({ activeTab: key })}
               className={`flex items-center gap-3 border-b px-2 py-2 text-left last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0 ${
                 isActive ? "text-blue-700" : "text-slate-400"
               }`}
@@ -1524,10 +1523,30 @@ export const CAN = () => {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_180px]">
+      <div className="grid grid-cols-1 gap-4">
         <div>
           <div className="mb-1 text-xs font-semibold text-slate-600">Select PRs</div>
-          <div className="max-h-32 overflow-auto rounded-lg border border-slate-200 bg-white">
+          <div className="overflow-auto rounded-lg border border-slate-200 bg-white">
+            {/** Use a fixed column template when there are no rows so the Department column
+                doesn't stretch; otherwise allow the department column to take remaining space. */}
+            <div>
+              {(() => {
+                // Fix first column to 40px so checkbox column doesn't become large
+                const prGridCols = openPrRows.length === 0
+                  ? "grid-cols-[40px_120px_120px_120px_120px_120px]"
+                  : "grid-cols-[40px_120px_120px_120px_minmax(0,1fr)_120px]";
+                return (
+                  <div className={`grid ${prGridCols} items-center gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600`}>
+                    <span className="justify-self-center w-4" />
+                    <span className="text-left truncate">Branch</span>
+                    <span className="text-left truncate">PR No</span>
+                    <span className="text-left truncate">PR Date</span>
+                    <span className="text-left truncate">Department</span>
+                    <span className="text-right">Date Needed</span>
+                  </div>
+                );
+              })()}
+            </div>
             {openPrRows.length === 0 ? (
               <div className="px-3 py-6 text-center text-xs text-slate-500">No open PR records found.</div>
             ) : (
@@ -1536,11 +1555,12 @@ export const CAN = () => {
                 return (
                   <label
                     key={row.prId}
-                    className={`flex cursor-pointer items-center gap-3 border-b px-3 py-2 text-sm last:border-b-0 hover:bg-blue-50 ${
+                    className={`grid cursor-pointer ${openPrRows.length === 0 ? 'grid-cols-[auto_120px_120px_120px_120px_120px]' : 'grid-cols-[auto_120px_120px_120px_minmax(0,1fr)_120px]'} items-center gap-3 border-b px-3 py-2 text-sm last:border-b-0 hover:bg-slate-50 ${
                       checked ? "bg-blue-50 text-blue-800" : "text-slate-700"
                     }`}
                   >
                     <input
+                      className="h-4 w-4 justify-self-center"
                       type="checkbox"
                       checked={checked}
                       onChange={() =>
@@ -1552,26 +1572,15 @@ export const CAN = () => {
                       }
                       disabled={isLocked}
                     />
-                    <span className="min-w-0 flex-1 truncate">
-                      {row.prNo} - {row.rcName || row.rcCode || "No Department"}
-                    </span>
-                    <span className="text-xs text-slate-500">{qty(row.totalQty, decQty)}</span>
+                    <span className="truncate">{row.branchCode || row.branchName || "-"}</span>
+                    <span className="truncate font-medium">{row.prNo || "-"}</span>
+                    <span className="text-xs text-slate-500">{toDateInputValue(row.prDate) || row.prDate || "-"}</span>
+                    <span className="truncate">{row.rcName || row.rcCode || "No Department"}</span>
+                    <span className="text-right text-xs text-slate-500">{toDateInputValue(row.dateNeeded) || row.dateNeeded || "-"}</span>
                   </label>
                 );
               })
             )}
-          </div>
-        </div>
-        <div>
-          <div className="mb-1 text-xs font-semibold text-slate-600">Departments</div>
-          <div className="min-h-32 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-            {prRows.map((row) => row.rcName || row.rcCode).filter(Boolean).join(", ") || "No PR selected"}
-          </div>
-        </div>
-        <div>
-          <div className="mb-1 text-xs font-semibold text-slate-600">Total Selected PRs</div>
-          <div className="flex min-h-32 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-3xl font-bold text-slate-900">
-            {selectedPrIds.length}
           </div>
         </div>
       </div>
@@ -1581,19 +1590,16 @@ export const CAN = () => {
           type="button"
           onClick={handleLoadSelectedPR}
           disabled={isLocked || selectedPrIds.length === 0}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+          className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-bold text-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <FontAwesomeIcon icon={faClipboardList} className="mr-2" />
           {selectedPrIds.length} PRs Selected
         </button>
-        <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-700">
+        <span className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-bold text-blue-700">
           {detailRows.filter((row) => normalizeRows(row.prBreakdown).length > 1).length} Common Items Found
         </span>
-        <span className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-bold text-slate-700">
+        <span className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-bold text-blue-700">
           {detailRows.length} Total Unique Items
-        </span>
-        <span className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-xs text-blue-800">
-          Identical items across PRs are consolidated into single lines.
         </span>
       </div>
     </section>
@@ -1615,7 +1621,7 @@ export const CAN = () => {
             <FontAwesomeIcon icon={faListCheck} className="mr-1" />
             {showPrBreakdown ? "Hide PR Breakdown" : "Show PR Breakdown"}
           </button>
-          <button type="button" onClick={() => updateState({ activeTab: "items" })} className="rounded-lg border px-3 py-2 text-xs font-semibold text-blue-700">
+          <button type="button" onClick={() => updateState({ activeTab: "review" })} className="rounded-lg border px-3 py-2 text-xs font-semibold text-blue-700">
             <FontAwesomeIcon icon={faTableCells} className="mr-1" />
             Full Table
           </button>
@@ -2000,9 +2006,9 @@ export const CAN = () => {
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_270px]">
         <div className="space-y-4">
           {renderStepIndicator()}
-          {renderPrSelectorCard()}
-          {renderConsolidatedCanvasCard()}
-          {renderSupplierOffersCard()}
+          {activeTab === "pr" && renderPrSelectorCard()}
+          {activeTab !== "review" && renderConsolidatedCanvasCard()}
+          {(activeTab === "suppliers" || activeTab === "review") && renderSupplierOffersCard()}
           {statusHistory.length > 0 && renderStatusHistory()}
         </div>
         {renderSummaryPanel()}

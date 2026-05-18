@@ -1,7 +1,6 @@
 // src/NAYSA Cloud/Reference File/MSMast.jsx
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
-import Swal from "sweetalert2";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
     faFolderOpen,
@@ -12,20 +11,16 @@ import {
     faUndo,
     faPenToSquare,
     faTrash,
-    faInfoCircle,
-    faChevronDown
 } from "@fortawesome/free-solid-svg-icons";
 
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
 import MSMast_SetupTab from "@/NAYSA Cloud/Master Data/MSMasterData/MSMast_Setuptab.jsx";
 import MSMast_DataTab from "@/NAYSA Cloud/Master Data/MSMasterData/MSMast_DataTab.jsx";
-import ItemMastLookupModal from "@/NAYSA Cloud/Lookup/SearchItemMast.jsx";
 import MSMast_ReferenceCodeTab from "@/NAYSA Cloud/Master Data/MSMasterData/MSMast_ReferenceCodeTab.jsx";
 
 import {
     useSwalErrorAlert,
-    useSwalValidationAlert,
     useSwalSuccessAlert,
     useSwalErrorAlertAPI,
     useSwalDeleteConfirm,
@@ -33,45 +28,41 @@ import {
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
 const emptyForm = {
-    itemCode: "", // Item No
+    itemCode: "",
     itemDesc: "",
-    uom: "",
+    uom: "", uomName: "",
     uom2: "",
     qtyPerUom2: "1.000",
-    categoryCode: "",
-    categoryName: "",
-    classCode: "",
-    className: "",
+    categoryCode: "", categoryName: "",
+    classCode: "", className: "",
     active: "Y",
     status: "New",
     subClass1Code: "", subClass1Name: "",
     subClass2Code: "", subClass2Name: "",
     subClass3Code: "", subClass3Name: "",
-    vacant01: "0.00", vacant02: "0.00", vacant03: "0.00", vacant04: "0.00", vacant05: "0.00", vacant06: "0.00",
-    vacant07: "", vacant08: "", vacant09: "", vacant10: "", vacant11: "", vacant12: "",
+    vacant01: "0.00", vacant02: "0.00", vacant03: "0.00",
+    vacant04: "0.00", vacant05: "0.00", vacant06: "0.00",
+    vacant07: "", vacant08: "", vacant09: "",
+    vacant10: "", vacant11: "", vacant12: "",
     reOrderLevel: "0.000",
     stdPoPrice: "0.000000",
-    sellingPrice: "0.000000",
     lastPurDate: "",
     lastPurPrice: "0.000000",
     allowOverRec: "N",
     qtyOnHand: "0.000",
     unitCost: "0.000000",
-    registeredBy: "",
-    registeredDate: "",
-    updatedBy: "",
-    updatedDate: "",
+    registeredBy: "", registeredDate: "",
+    updatedBy: "", updatedDate: "",
     __isNew: false,
 };
 
 const MSMast = () => {
     const [activeTab, setActiveTab] = useState("setup");
-    const [isItemLookupOpen, setIsItemLookupOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    const [generationMode, setGenerationMode] = useState("Auto");
+    const generationMode = "Manual";
 
     const { user } = useAuth();
-    const userCode = user?.userCode || user?.USER_CODE || user?.code || "";
+    const userCode = user?.USER_CODE || user?.userCode || user?.code || "";
 
     const [form, setForm] = useState({ ...emptyForm });
     const [selectedItemCode, setSelectedItemCode] = useState("");
@@ -80,20 +71,11 @@ const MSMast = () => {
     const [masterAllRows, setMasterAllRows] = useState([]);
     const [masterRows, setMasterRows] = useState([]);
 
-    // --- ADDED REF STATE LOGIC FOR REFERENCE TAB ---
+    // Reference Tab State
     const refTabRef = useRef(null);
     const [refState, setRefState] = useState({ isEditing: false, canSave: false });
 
     useEffect(() => {
-        const fetchGenerationMode = async () => {
-            try {
-                const res = await apiClient.post("/lookupDocSeries", { docCode: "MS" });
-                setGenerationMode(res?.data?.data?.[0]?.docSeries || "Auto");
-            } catch (e) {
-                console.error("Failed to fetch mode", e);
-            }
-        };
-        fetchGenerationMode();
         loadMasterList();
     }, []);
 
@@ -115,15 +97,10 @@ const MSMast = () => {
         setIsLoading(true);
         try {
             const res = await apiClient.get("/MSMast");
-            const rawData = res?.data?.data || [];
-
-            // Always parse — rawData is always an array [{result: "...json..."}]
-            // from FOR JSON AUTO sprocs, so we must unwrap it every time.
-            const list = parseSprocJsonResult(rawData);
+            const list = parseSprocJsonResult(res?.data?.data);
             setMasterAllRows(list);
             setMasterRows(list);
         } catch (e) {
-            console.error(e);
             setMasterAllRows([]);
             setMasterRows([]);
         } finally {
@@ -131,15 +108,14 @@ const MSMast = () => {
         }
     };
 
-    const fetchItemByCode = async (itemCode) => {
+    const fetchItemByCode = async (itemCode, enterEditMode = false) => {
         const code = String(itemCode || "").trim();
         if (!code) return;
 
         setIsLoading(true);
         try {
             const res = await apiClient.post("/getMSMast", { ITEM_CODE: code });
-            const rawData = res?.data?.data || [];
-            const parsed = parseSprocJsonResult(rawData);
+            const parsed = parseSprocJsonResult(res?.data?.data);
             const row = Array.isArray(parsed) ? parsed?.[0] : null;
 
             if (!row) {
@@ -147,73 +123,95 @@ const MSMast = () => {
                 return;
             }
 
-            // Map SQL columns (uppercase) OR sproc aliases (camelCase) to form fields
-            const r = (key, fallback = "") => row?.[key] ?? row?.[key.toUpperCase()] ?? fallback;
-
             updateForm({
                 ...emptyForm,
                 __isNew: false,
-                itemCode: r("itemCode", code),
-                itemDesc: r("itemDesc") || row?.ITEM_NAME || "",
-                uom: r("uom") || row?.UOM_CODE || "",
-                uom2: r("uom2") || row?.UOM_CODE2 || "",
-                qtyPerUom2: r("qtyPerUom2") || row?.UOM_QTY2 || "1.000",
-                categoryCode: r("categoryCode") || row?.CATEG_CODE || "",
-                categoryName: r("categoryName") || "",
-                classCode: r("classCode") || row?.CLASS_CODE || "",
-                className: r("className") || "",
-                subClass1Code: r("subClass1Code") || row?.SUBCLASS1_CODE || "",
-                subClass2Code: r("subClass2Code") || row?.SUBCLASS2_CODE || "",
-                subClass3Code: r("subClass3Code") || row?.SUBCLASS3_CODE || "",
-                active: r("active") || row?.ACTIVE || "Y",
-                vacant01: r("vacant01") || row?.CONVERSION1 || "0.00",
-                vacant02: r("vacant02") || row?.CONVERSION2 || "0.00",
-                vacant03: r("vacant03") || row?.CONVERSION3 || "0.00",
-                vacant04: r("vacant04") || row?.CONVERSION4 || "0.00",
-                vacant05: r("vacant05") || row?.CONVERSION5 || "0.00",
-                vacant06: r("vacant06") || row?.CONVERSION6 || "0.00",
-                vacant07: r("vacant07") || row?.VARIABLE1 || "",
-                vacant08: r("vacant08") || row?.VARIABLE2 || "",
-                vacant09: r("vacant09") || row?.VARIABLE3 || "",
-                vacant10: r("vacant10") || row?.VARIABLE4 || "",
-                vacant11: r("vacant11") || row?.VARIABLE5 || "",
-                vacant12: r("vacant12") || row?.VARIABLE6 || "",
-                reOrderLevel: r("reOrderLevel") || row?.REORDER_QTY || "0.000",
-                stdPoPrice: r("stdPoPrice") || row?.BASE_PRICE || "0.000000",
-                lastPurDate: r("lastPurDate") || row?.LASTPUR_DATE || "",
-                lastPurPrice: r("lastPurPrice") || row?.LASTPUR_PRICE || "0.000000",
-                unitCost: r("unitCost") || row?.UNIT_COST || "0.000000",
-                qtyOnHand: r("qtyOnHand") || row?.QTY_ONHAND || "0.000",
-                registeredBy: r("registeredBy") || row?.REGISTERED_BY || "",
-                registeredDate: r("registeredDate") || row?.REGISTERED_DATE || "",
-                updatedBy: r("updatedBy") || row?.UPDATED_BY || "",
-                updatedDate: r("updatedDate") || row?.UPDATED_DATE || "",
+                ...row,
+                itemCode: code,
             });
 
             setSelectedItemCode(code);
+            if (enterEditMode) setIsEditing(true);
         } catch (e) {
-            console.error(e);
             await useSwalErrorAlertAPI("Fetch Error", "Failed to fetch item.");
         } finally {
             setIsLoading(false);
         }
     };
 
+    const checkDuplicate = async (itemCode) => {
+    const code = String(itemCode || "").trim();
+    if (!code) return false;          // ← only skip if empty
+
+    try {
+        const res = await apiClient.post("/checkDuplicateMSMast", {
+            json_data: { itemCode: code },
+        });
+        const row = res?.data?.data?.[0];
+        const isDup = String(row?.result ?? "0") === "1";
+        if (isDup) {
+            await useSwalErrorAlert("Duplicate", `Item No "${code}" already exists.`);
+            updateForm({ itemCode: "" });
+            return true;
+        }
+    } catch (e) {
+        console.error("CheckDuplicate failed", e);
+    }
+    return false;
+};
+
+    // ── Check In Used ─────────────────────────────────────────────────────────
+    // Calls sproc CheckInUsed mode. Returns true if item is referenced in transactions.
+    // Response: { result: "1" } = in use, { result: "0" } = safe to delete.
+    const checkInUsed = async (itemCode) => {
+        const code = String(itemCode || "").trim();
+        if (!code) return false;
+
+        try {
+            const res = await apiClient.post("/checkInUsedMSMast", {
+                json_data: { itemCode: code },
+            });
+            const row = res?.data?.data?.[0];
+            // Sproc returns: select ... result = '1' or '0'
+            const isUsed = String(row?.result ?? row?.isInUsed ?? row?.isinused ?? "0") === "1"
+                || Number(row?.isInUsed ?? row?.isinused ?? row?.inusedcount ?? 0) > 0;
+            if (isUsed) {
+                await useSwalErrorAlert(
+                    "Cannot Delete",
+                    `Item No "${code}" is currently in use and cannot be deleted.`
+                );
+                return true;
+            }
+        } catch (e) {
+            console.error("CheckInUsed failed", e);
+        }
+        return false;
+    };
+
     const deleteItem = async () => {
         const code = String(form?.itemCode || "").trim();
         if (!code) return;
+
+        // Check in-use before showing delete confirmation
+        const inUse = await checkInUsed(code);
+        if (inUse) return;
 
         const confirm = await useSwalDeleteConfirm("Delete Item?", `Delete Item No ${code}?`);
         if (!confirm?.isConfirmed) return;
 
         setIsLoading(true);
         try {
+            // Sproc Delete mode handles in-use guard + audit trail on the SQL side
             const payload = {
-                json_data: JSON.stringify({
-                    json_data: { action: "delete", itemCode: code, userCode }
-                })
+                json_data: { itemCode: code, userCode },
             };
-            await apiClient.post("/upsertMSMast", payload);
+            const res = await apiClient.post("/deleteMSMast", payload);
+
+            const sqlRow = res?.data?.data?.[0];
+            if (sqlRow?.errorcount > 0 || sqlRow?.errorCount > 0) {
+                await useSwalErrorAlert("Delete Failed", sqlRow?.errormsg || sqlRow?.errorMsg);
+                return;
+            }
 
             await useSwalDeleteRecord("Deleted", `Item No ${code} removed.`);
             handleResetSetup();
@@ -227,46 +225,48 @@ const MSMast = () => {
 
     const upsertItem = async () => {
         const code = String(form?.itemCode || "").trim();
+
+        // Use __isNew like FGMast — not !selectedItemCode
+        if (form.__isNew) {
+            const isDup = await checkDuplicate(code);
+            if (isDup) return;
+        }
+
         setIsLoading(true);
         try {
-            // Map form fields to the exact keys the sproc reads via JSON_VALUE
-            const toNull = (v) => (String(v ?? "").trim() === "" ? null : v);
-
             const payload = {
-                json_data: JSON.stringify({
-                    json_data: {
-                        itemCode: code,
-                        itemName: form.itemDesc,
-                        categCode: form.categoryCode,
-                        classCode: form.classCode,
-                        subclass1: form.subClass1Code,
-                        subclass2: form.subClass2Code,
-                        subclass3: form.subClass3Code,
-                        uomCode: form.uom,
-                        uomCode2: form.uom2,
-                        uomQty2: toNull(form.qtyPerUom2),
-                        active: form.active,
-                        qtyOnHand: toNull(form.qtyOnHand),
-                        conv1: toNull(form.vacant01),
-                        conv2: toNull(form.vacant02),
-                        conv3: toNull(form.vacant03),
-                        conv4: toNull(form.vacant04),
-                        conv5: toNull(form.vacant05),
-                        conv6: toNull(form.vacant06),
-                        var1: form.vacant07,
-                        var2: form.vacant08,
-                        var3: form.vacant09,
-                        var4: form.vacant10,
-                        var5: form.vacant11,
-                        var6: form.vacant12,
-                        reorderQty: toNull(form.reOrderLevel),
-                        basePrice: toNull(form.stdPoPrice),
-                        lastPurDate: toNull(form.lastPurDate),   // null prevents DATETIME crash
-                        lastPurPrice: toNull(form.lastPurPrice),
-                        unitCost: toNull(form.unitCost),
-                        userCode,
-                    },
-                }),
+                json_data: {
+                    itemCode: code,
+                    itemName: form.itemDesc || null,
+                    categCode: form.categoryCode || null,
+                    classCode: form.classCode || null,
+                    subclass1: form.subClass1Code || null,
+                    subclass2: form.subClass2Code || null,
+                    subclass3: form.subClass3Code || null,
+                    uomCode: form.uom || null,
+                    uomCode2: form.uom2 || null,
+                    uomQty2: form.qtyPerUom2 || null,
+                    active: form.active || "Y",
+                    qtyOnHand: form.qtyOnHand || null,
+                    conv1: form.vacant01 || null,
+                    conv2: form.vacant02 || null,
+                    conv3: form.vacant03 || null,
+                    conv4: form.vacant04 || null,
+                    conv5: form.vacant05 || null,
+                    conv6: form.vacant06 || null,
+                    var1: form.vacant07 || null,
+                    var2: form.vacant08 || null,
+                    var3: form.vacant09 || null,
+                    var4: form.vacant10 || null,
+                    var5: form.vacant11 || null,
+                    var6: form.vacant12 || null,
+                    reorderQty: form.reOrderLevel || null,
+                    basePrice: form.stdPoPrice || null,
+                    lastPurDate: form.lastPurDate || null,
+                    lastPurPrice: form.lastPurPrice || null,
+                    unitCost: form.unitCost || null,
+                    userCode: userCode || null,
+                },
             };
 
             const res = await apiClient.post("/upsertMSMast", payload);
@@ -285,8 +285,7 @@ const MSMast = () => {
             await loadMasterList();
             await fetchItemByCode(finalCode);
         } catch (e) {
-            console.error("upsertItem error:", e);
-            await useSwalErrorAlert("Save Failed", e?.response?.data?.message || e?.message || "Failed to save item.");
+            await useSwalErrorAlert("Save Failed", "Failed to save item."); // matches FGMast
         } finally {
             setIsLoading(false);
         }
@@ -321,44 +320,24 @@ const MSMast = () => {
     ];
 
     const headerButtons = useMemo(() => {
-        const baseBtn = "flex items-center justify-center h-8 w-8 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md transition-all shadow-sm";
+        const baseBtn = "flex items-center justify-center h-8 w-8 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md transition-all shadow-sm text-white";
 
         if (activeTab === "setup") {
             const hasRecord = String(form?.itemCode || "").trim() && !form.__isNew;
             return [
-                { key: "add", label: <span className="hidden sm:inline ml-1">Add</span>, icon: faPlus, onClick: handleAdd, disabled: isLoading, className: `${baseBtn} bg-blue-600 text-white hover:bg-blue-700` },
-                { key: "save", label: <span className="hidden sm:inline ml-1">Save</span>, icon: faSave, onClick: upsertItem, disabled: isLoading || !isEditing, className: `${baseBtn} ${!isEditing ? "bg-blue-400 opacity-50 cursor-not-allowed text-white" : "bg-blue-600 text-white hover:bg-blue-700"}` },
-                { key: "reset", label: <span className="hidden sm:inline ml-1">Reset</span>, icon: faUndo, onClick: handleResetSetup, disabled: isLoading, className: `${baseBtn} bg-blue-600 text-white hover:bg-blue-700` },
-                { key: "edit", label: <span className="hidden sm:inline ml-1">Edit</span>, icon: faPenToSquare, onClick: handleEdit, disabled: isLoading || isEditing || !hasRecord, className: `${baseBtn} ${isEditing || !hasRecord ? "bg-blue-400 opacity-50 cursor-not-allowed text-white" : "bg-blue-600 text-white hover:bg-blue-700"}` },
-                { key: "delete", label: <span className="hidden sm:inline ml-1">Delete</span>, icon: faTrash, onClick: deleteItem, disabled: isLoading || isEditing || !hasRecord, className: `${baseBtn} ${isEditing || !hasRecord ? "bg-red-400 opacity-50 cursor-not-allowed text-white" : "bg-red-500 text-white hover:bg-red-600"}` },
+                { key: "add", label: <span className="hidden sm:inline ml-1">Add</span>, icon: faPlus, onClick: handleAdd, disabled: isLoading, className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
+                { key: "save", label: <span className="hidden sm:inline ml-1">Save</span>, icon: faSave, onClick: upsertItem, disabled: isLoading || !isEditing, className: `${baseBtn} ${!isEditing ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
+                { key: "reset", label: <span className="hidden sm:inline ml-1">Reset</span>, icon: faUndo, onClick: handleResetSetup, disabled: isLoading, className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
+                { key: "edit", label: <span className="hidden sm:inline ml-1">Edit</span>, icon: faPenToSquare, onClick: handleEdit, disabled: isLoading || isEditing || !hasRecord, className: `${baseBtn} ${isEditing || !hasRecord ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
+                { key: "delete", label: <span className="hidden sm:inline ml-1">Delete</span>, icon: faTrash, onClick: deleteItem, disabled: isLoading || isEditing || !hasRecord, className: `${baseBtn} ${isEditing || !hasRecord ? "bg-red-400 cursor-not-allowed opacity-50" : "bg-red-500 hover:bg-red-600"}` },
             ];
         }
 
-        // --- ADDED REFERENCE TABS LOGIC FROM VENDMAST ---
         if (activeTab === "ref") {
             return [
-                {
-                    key: "add",
-                    label: <span className="hidden sm:inline ml-1">Add</span>,
-                    icon: faPlus,
-                    onClick: () => refTabRef.current?.add?.(),
-                    className: `${baseBtn} bg-blue-600 text-white hover:bg-blue-700`,
-                },
-                {
-                    key: "save",
-                    label: <span className="hidden sm:inline ml-1">Save</span>,
-                    icon: faSave,
-                    onClick: () => refTabRef.current?.save?.(),
-                    disabled: !refState.canSave,
-                    className: `${baseBtn} ${!refState.canSave ? "bg-blue-500 opacity-50 cursor-not-allowed text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`,
-                },
-                {
-                    key: "reset",
-                    label: <span className="hidden sm:inline ml-1">Reset</span>,
-                    icon: faUndo,
-                    onClick: () => refTabRef.current?.reset?.(),
-                    className: `${baseBtn} bg-blue-600 text-white hover:bg-blue-700`,
-                },
+                { key: "add", label: <span className="hidden sm:inline ml-1">Add</span>, icon: faPlus, onClick: () => refTabRef.current?.add?.(), className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
+                { key: "save", label: <span className="hidden sm:inline ml-1">Save</span>, icon: faSave, onClick: () => refTabRef.current?.save?.(), disabled: !refState.canSave, className: `${baseBtn} ${!refState.canSave ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
+                { key: "reset", label: <span className="hidden sm:inline ml-1">Reset</span>, icon: faUndo, onClick: () => refTabRef.current?.reset?.(), className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
             ];
         }
 
@@ -401,39 +380,27 @@ const MSMast = () => {
                         isLoading={isLoading}
                         generationMode={generationMode}
                         onChangeForm={updateForm}
-                        onSelectItemCode={() => setIsItemLookupOpen(true)}
+                        onLookupSelect={(itemCode) => fetchItemByCode(itemCode, true)}
+                        onBlurItemCode={checkDuplicate}
                     />
                 )}
                 {activeTab === "master" && (
                     <MSMast_DataTab
                         rows={masterRows}
+                        isLoading={isLoading}
                         onFilter={loadMasterList}
                         onReset={loadMasterList}
                         onRowDoubleClick={(row) => {
                             fetchItemByCode(row.itemCode);
-                            setActiveTab('setup');
+                            setActiveTab("setup");
                             setIsEditing(false);
                         }}
                     />
                 )}
                 {activeTab === "ref" && (
-                    // Passed ref and onStateChange to capture child states
                     <MSMast_ReferenceCodeTab ref={refTabRef} onStateChange={setRefState} variant="ms" />
                 )}
             </div>
-            <ItemMastLookupModal
-                isOpen={isItemLookupOpen}
-                endpoint="/lookupMSMast" // Point to your MS specific lookup route
-                docType="PRMS"           // Use MS docType to trigger specific column visibility
-                enableMultiSelect={false}
-                onClose={(payload) => {
-                    setIsItemLookupOpen(false);
-                    const selected = payload?.records?.[0];
-                    if (selected) {
-                        fetchItemByCode(selected.itemCode);
-                    }
-                }}
-            />
         </div>
     );
 };

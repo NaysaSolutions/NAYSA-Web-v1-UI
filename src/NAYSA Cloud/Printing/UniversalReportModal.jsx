@@ -19,6 +19,7 @@ import { useTopUserRow, useTopHSRptRow } from "@/NAYSA Cloud/Global/top1RefTable
 import {
   useHandlePrintAPReport,
   useHandleDownloadExcelAPReport,
+  useHandleDownloadExcelPURReport,
   useHandlePrintARReport,
   useHandleDownloadExcelARReport,
   useHandlePrintGLReport,
@@ -49,7 +50,7 @@ const MODULE_DEFS = {
     label: "Payee",
     lookup: PayeeMastLookupModal,
     print: useHandlePrintAPReport,
-    excel: useHandleDownloadExcelAPReport,
+    excel: useHandleDownloadExcelPURReport,
     hasExtra: false,
     hasCutoff: false,
     hasReportType: false,
@@ -71,6 +72,18 @@ const MODULE_DEFS = {
     hasExtra: false,
     hasCutoff: false,
     hasReportType: false,
+  },
+  PUR: {
+    label: "Payee",
+    lookup: PayeeMastLookupModal,
+    print: useHandlePrintAPReport,
+    excel: useHandleDownloadExcelAPReport,
+    hasExtra: false,
+    hasCutoff: false,
+    hasReportType: false,
+    hasSingleMain: true,
+    hasSingleRc: true,
+    rcLabel: "Department/RC",
   },
   AR: {
     label: "Customer",
@@ -267,6 +280,10 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
     eRcCode: "",
     eRcName: "",
 
+    // PUR - single Department/RC
+    rcCode: "",
+    rcName: "",
+
     // BIR
     userName:currentUserRow.userName,
     sCutOff: companyInfo.cutoffCode,
@@ -283,18 +300,17 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
 
   // ---------------- LOAD REPORTS ----------------
   const { data, isLoading: isInitialLoading } = useQuery({
-    queryKey: ["reports", module, userCode],
+    queryKey: ["reports", module, currentUserRow.userCode],
     queryFn: async () => {
-      const [rptRes, userRes] = await Promise.all([
-        fetchData("hsrpt", { mdl: module, userCode }),
-        useTopUserRow(userCode),
+      const [rptRes] = await Promise.all([
+        fetchData("hsrpt", { mdl: module, userCode: currentUserRow.userCode }),
       ]);
 
       const list = rptRes?.data?.[0]?.result
         ? JSON.parse(rptRes.data[0].result)
         : [];
 
-      return { list, userDefaults: userRes };
+      return { list};
     },
     enabled: isOpen,
   });
@@ -311,10 +327,10 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
         });
       }
 
-      if (data.userDefaults && !filters.branchCode) {
+      if (!filters.branchCode) {
         updateFilters({
-          branchCode: data.userDefaults.branchCode,
-          branchName: data.userDefaults.branchName,
+          branchCode: currentUserRow.branchCode,
+          branchName: currentUserRow.branchName,
         });
       }
     }
@@ -334,21 +350,26 @@ const generateMutation = useMutation({
 
       // AP / AR / GL main range
       sPayeeCode: filters.sCode,
-      ePayeeCode: filters.eCode,
+      ePayeeCode: config.hasSingleMain ? filters.sCode : filters.eCode,
       sCustCode: filters.sCode,
-      eCustCode: filters.eCode,
+      eCustCode: config.hasSingleMain ? filters.sCode : filters.eCode,
       sAccCode: filters.sCode,
-      eAccCode: filters.eCode,
+      eAccCode: config.hasSingleMain ? filters.sCode : filters.eCode,
 
-      // GL specific ranges
+      // PUR / single lookup aliases
+      payeeCode: filters.sCode,
+      vendCode: filters.sCode,
+      departmentCode: filters.rcCode,
+
+      // GL specific ranges / PUR single Department-RC
       sSLCode: filters.sSlCode,
       eSLCode: filters.eSlCode,
-      sRcCode: filters.sRcCode,
-      eRcCode: filters.eRcCode,
+      sRcCode: config.hasSingleRc ? filters.rcCode : filters.sRcCode,
+      eRcCode: config.hasSingleRc ? filters.rcCode : filters.eRcCode,
 
       // fallback old single fields if needed by backend
       slCode: filters.sSlCode,
-      rcCode: filters.sRcCode,
+      rcCode: config.hasSingleRc ? filters.rcCode : filters.sRcCode,
 
       // BIR specific
       sCutOff: filters.sCutOff,
@@ -491,7 +512,7 @@ const generateMutation = useMutation({
   const selectedReport = data?.list?.find((x) => x.reportId === ui.selected.id);
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-0 md:p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/0 p-0 md:p-4">
       <div
         className={`relative w-full max-w-[1100px] bg-white shadow-2xl md:rounded-2xl h-full ${modalHeightClass} flex flex-col overflow-hidden transition-all duration-300`}
       >
@@ -715,24 +736,24 @@ const generateMutation = useMutation({
                 </>
               )}
 
-              {/* Starting / Ending Main Lookup */}
+              {/* Main Lookup */}
               {!config.hasCutoff &&
-                ["s", "e"].map((dir) => (
-                  <React.Fragment key={dir}>
+                (config.hasSingleMain ? (
+                  <>
                     <label className="text-[10px] md:text-xs font-bold text-gray-400 uppercase">
-                      {dir === "s" ? "Starting" : "Ending"} {config.label}
+                      {config.label}
                     </label>
                     <div className="relative">
                       <input
                         readOnly
-                        value={filters[`${dir}Name`]}
+                        value={filters.sName}
                         placeholder={`Select ${config.label}...`}
                         className="w-full border rounded-lg p-2.5 text-xs outline-none focus:border-blue-500"
                       />
                       <button
                         onClick={() =>
                           updateUi({
-                            lookupMode: dir.toUpperCase(),
+                            lookupMode: "S",
                             mainLookup: true,
                           })
                         }
@@ -741,8 +762,58 @@ const generateMutation = useMutation({
                         <FontAwesomeIcon icon={faMagnifyingGlass} />
                       </button>
                     </div>
-                  </React.Fragment>
+                  </>
+                ) : (
+                  ["s", "e"].map((dir) => (
+                    <React.Fragment key={dir}>
+                      <label className="text-[10px] md:text-xs font-bold text-gray-400 uppercase">
+                        {dir === "s" ? "Starting" : "Ending"} {config.label}
+                      </label>
+                      <div className="relative">
+                        <input
+                          readOnly
+                          value={filters[`${dir}Name`]}
+                          placeholder={`Select ${config.label}...`}
+                          className="w-full border rounded-lg p-2.5 text-xs outline-none focus:border-blue-500"
+                        />
+                        <button
+                          onClick={() =>
+                            updateUi({
+                              lookupMode: dir.toUpperCase(),
+                              mainLookup: true,
+                            })
+                          }
+                          className="absolute right-1 top-1 bottom-1 bg-blue-600 text-white px-3 rounded-md active:bg-blue-800 transition-colors"
+                        >
+                          <FontAwesomeIcon icon={faMagnifyingGlass} />
+                        </button>
+                      </div>
+                    </React.Fragment>
+                  ))
                 ))}
+
+              {/* PUR ONLY - Single Department/RC */}
+              {config.hasSingleRc && (
+                <>
+                  <label className="text-[10px] md:text-xs font-bold text-gray-400 uppercase">
+                    {config.rcLabel || "Department/RC"}
+                  </label>
+                  <div className="relative">
+                    <input
+                      readOnly
+                      value={filters.rcName}
+                      placeholder={`Select ${config.rcLabel || "Department/RC"}...`}
+                      className="w-full border rounded-lg p-2.5 text-xs outline-none focus:border-blue-500"
+                    />
+                    <button
+                      onClick={() => updateUi({ rcLookupMode: "SINGLE", rcModal: true })}
+                      className="absolute right-1 top-1 bottom-1 bg-blue-600 text-white px-3 rounded-md active:bg-blue-800 transition-colors"
+                    >
+                      <FontAwesomeIcon icon={faMagnifyingGlass} />
+                    </button>
+                  </div>
+                </>
+              )}
 
               {/* GL ONLY */}
               {config.hasExtra && (
@@ -839,6 +910,8 @@ const generateMutation = useMutation({
                     sRcName: "",
                     eRcCode: "",
                     eRcName: "",
+                    rcCode: "",
+                    rcName: "",
                     sCutOff: "",
                     sCutOffName: "",
                     eCutOff: "",
@@ -968,7 +1041,12 @@ const generateMutation = useMutation({
             isOpen={ui.rcModal}
             onClose={(p) => {
               if (p) {
-                if (ui.rcLookupMode === "S") {
+                if (ui.rcLookupMode === "SINGLE") {
+                  updateFilters({
+                    rcCode: p.rcCode || "",
+                    rcName: p.rcName || "",
+                  });
+                } else if (ui.rcLookupMode === "S") {
                   updateFilters({
                     sRcCode: p.rcCode || "",
                     sRcName: p.rcName || "",

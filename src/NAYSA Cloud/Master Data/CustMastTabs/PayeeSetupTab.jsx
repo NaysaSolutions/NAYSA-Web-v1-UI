@@ -449,6 +449,7 @@ const PayeeSetupTab = forwardRef(
     const [isCurrLookupOpen, setIsCurrLookupOpen] = useState(false);
     const [tinError, setTinError] = useState("");
     const [isValidatingTin, setIsValidatingTin] = useState(false);
+    const tinValidationTimerRef = useRef(null);
 
     const validateTin = async (tinValue) => {
       if (!tinValue || tinValue.trim() === "") {
@@ -473,6 +474,15 @@ const PayeeSetupTab = forwardRef(
         setIsValidatingTin(false);
       }
     };
+
+    useEffect(() => {
+      return () => {
+        if (tinValidationTimerRef.current) {
+          clearTimeout(tinValidationTimerRef.current);
+          tinValidationTimerRef.current = null;
+        }
+      };
+    }, []);
 
     const openPayeeLookup = () => {
       if (isLoading) return;
@@ -828,14 +838,19 @@ const PayeeSetupTab = forwardRef(
                 helperText={isValidatingTin ? "Checking uniqueness..." : tinError}
                 onChange={(v) => {
                   const value = getValue(v);
-                  onChangeForm({
-                    vendTin: value,
-                    tin: value,
-                  });
-                  validateTin(value);
+                  onChangeForm({ vendTin: value, tin: value });
+
+                  if (tinValidationTimerRef.current) {
+                    clearTimeout(tinValidationTimerRef.current);
+                  }
+
+                  tinValidationTimerRef.current = setTimeout(() => {
+                    validateTin(value);
+                    tinValidationTimerRef.current = null;
+                  }, 700);
                 }}
                 readOnly={isReadOnly}
-                disabled={isDisabled || isValidatingTin}
+                disabled={isDisabled}
                 maxLength={getLen(col.tin, 50)}
               />
 

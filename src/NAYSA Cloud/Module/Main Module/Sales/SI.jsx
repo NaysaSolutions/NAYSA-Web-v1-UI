@@ -1,3 +1,7 @@
+
+
+
+
 import { useState, useEffect,useRef,useCallback } from "react";
 import Swal from 'sweetalert2';
 import { useNavigate,useLocation  } from "react-router-dom";
@@ -24,7 +28,7 @@ import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
-import GlobalCombinedLookup from "../../../Lookup/SearchGlobalCombinedLookup.jsx";
+import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
 import SearchGlobalItemPickingModal from "../../../Lookup/SearchGlobalItemPickingModal.jsx";
 
 // Configuration
@@ -97,9 +101,10 @@ const SI = () => {
   const originalSOQuantityRef = useRef({});
   const detailRowsRef = useRef([]);
   const detailRowsGLRef = useRef([]);
+  const addTypeDropdownRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const { companyInfo, currentUserRow,getAllDropDown,refsLoaded,getAllTopATCRow,getAllTopVatRow,getAllTopVatAmount,getAllTopHSDocRow } = useAuth();
+  const { companyInfo, currentUserRow,getAllDropDown,refsLoaded,getAllTopATCRow,getAllTopVatRow,getAllTopVatAmount,getAllTopATCAmount,getAllTopHSDocRow } = useAuth();
   const [isViewDocument, setIsViewDocument] = useState(false);
   useEffect(() => {
     const p = new URLSearchParams(location.search);
@@ -122,6 +127,18 @@ const SI = () => {
   const videoLink = docTypeVideoGuide[docType];
   const documentTitle = hsDoc.docName + ' Transaction';
 
+  useEffect(() => {
+    if (!showAddTypeDropdown) return;
+
+    const handleClickOutside = (event) => {
+      if (addTypeDropdownRef.current?.contains(event.target)) return;
+      setShowAddTypeDropdown(false);
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showAddTypeDropdown]);
+
   const [state, setState] = useState({
     // Document information
     documentName: hsDoc?.docName||"",
@@ -130,7 +147,7 @@ const SI = () => {
     documentID: null,
     documentDate:useGetCurrentDayV2(),
     documentNo: "",
-    documentStatus:"O",
+    documentStatus:"",
     status: "OPEN",
     noReprints:"0",
 
@@ -188,7 +205,6 @@ const SI = () => {
     detailRowsGL :[],
     openDRSI_Data_Summary: [],
     openDRSI_Col_Summary: [],
-    openDRSI_Col_Detail: [],
 
     totalDebit:"0.00",
     totalCredit:"0.00",
@@ -277,6 +293,7 @@ const SI = () => {
   refSiNo1,
   refSiNo2,
   remarks,
+  contactPerson,
   billtermCode,
   billtermName,
   dueDate,
@@ -288,7 +305,6 @@ const SI = () => {
   detailRowsGL,
   openDRSI_Data_Summary,
   openDRSI_Col_Summary,
-  openDRSI_Col_Detail,
   totalDebit,
   totalCredit,
   totalDebitFx1,
@@ -477,6 +493,9 @@ const SI = () => {
   const isPickingSiType = normalizedSiTranType === "SI02";
   const isAddItemDisabledBySiType = isDirectSiType;
   const isOpenDRDisabledBySiType = isPickingSiType;
+  const hasDRLinkedDetailRows = (detailRows || []).some((row) =>
+    Boolean(String(row?.drNo || "").trim())
+  );
   const getDetailColumnFallbackWidth = (key) =>
     detailColumnDefs.find((column) => column.key === key)?.width || 120;
   const getDetailCellStyle = (key, fallbackWidth) => ({
@@ -583,13 +602,25 @@ const SI = () => {
   ];
 
   const setGLActiveTab = (tab) => updateState({ GLactiveTab: tab });
-
   const calculateDueDate = (startDate, daysDue) => {
     if (!startDate || daysDue === "" || daysDue === null || daysDue === undefined || isNaN(daysDue)) return "";
     try {
-      const date = new Date(startDate);
+      const rawDate = String(startDate).trim();
+      const isoMatch = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      const usMatch = rawDate.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      const date = isoMatch
+        ? new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]))
+        : usMatch
+        ? new Date(Number(usMatch[3]), Number(usMatch[1]) - 1, Number(usMatch[2]))
+        : new Date(rawDate);
+
+      if (Number.isNaN(date.getTime())) return "";
+
       date.setDate(date.getDate() + parseInt(daysDue, 10));
-      return date.toISOString().split("T")[0];
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      const year = date.getFullYear();
+      return `${month}/${day}/${year}`;
     } catch (error) {
       console.error("Error calculating due date:", error);
       return "";
@@ -603,6 +634,14 @@ const SI = () => {
     updateState({ dueDate: nextDueDate });
   }, [documentDate, daysDue, billtermCode]);
 
+
+
+
+
+
+
+
+
   // API endpoints
   const SI_PRICE_MATRIX_ENDPOINT = "getPriceMatrixItemPrice"; // Assuming SI also uses price matrix
   const SI_DUPLICATE_PO_ENDPOINT = "/checkSIDuplicatePO"; // Assuming SI also has duplicate PO check
@@ -611,17 +650,16 @@ const SI = () => {
     (parseFormattedNumber(netAmount || 0) || 0) -
     (parseFormattedNumber(vatAmount || 0) || 0);
 
-  const formatSalesAmount = (netAmount, vatAmount) =>
-    formatNumber(calculateSalesAmount(netAmount, vatAmount));
-
+  const formatSalesAmount = (netAmount, vatAmount) => formatNumber(calculateSalesAmount(netAmount, vatAmount));
   const toFormattedAmountNumber = (value, decimals = 2) =>
-    parseFormattedNumber(formatNumber(value, decimals)) || 0;
+    parseFormattedNumber(formatNumber(parseFormattedNumber(value), decimals)) || 0;
 
   const getDetailTaxBase = (row = {}) => {
     const grossAmount = parseFormattedNumber(row.grossAmount || 0) || 0;
     const totalDiscount = parseFormattedNumber(row.totDiscount || 0) || 0;
     return grossAmount - totalDiscount;
   };
+
 
   const getDetailVatRate = (vatCodeValue = "") => {
     const vatRow = getAllTopVatRow(vatCodeValue);
@@ -631,11 +669,12 @@ const SI = () => {
   const getMatrixVatRate = (row = {}) =>
     parseFormattedNumber(row?.vatRate ?? 0) || 0;
 
-  const distributeVatAcrossDetailRows = (rows = []) => {
+  const distributeVatAcrossDetailRows = (rows = [], options = {}) => {
     if (!Array.isArray(rows) || rows.length === 0) {
       return [];
     }
 
+  
     const taxableRowsByVatCode = rows.reduce((groups, row, index) => {
       const lineNetAmount = Math.max(
         parseFormattedNumber(row.netAmount || 0) || getDetailTaxBase(row),
@@ -658,7 +697,6 @@ const SI = () => {
         vatCode: lineVatCode,
       });
 
-      console.log(groups)
       return groups;
     }, {});
 
@@ -699,34 +737,72 @@ const SI = () => {
       {}
     );
 
+
+
+
     return rows.map((row, index) => {
-      const baseAmount = Math.max(
-        parseFormattedNumber(row.netAmount || 0) || getDetailTaxBase(row),
+      const grossAmount = toFormattedAmountNumber(row.grossAmount || 0);
+      const totalDiscount = toFormattedAmountNumber(row.totDiscount || 0);
+      const netAmount = Math.max(
+        toFormattedAmountNumber(grossAmount - totalDiscount),
         0
       );
-      const lineVatAmount = vatAmountByRowIndex[index] || 0;
-      const atcAmount = parseFormattedNumber(row.atcAmount || 0) || 0;
+      const lineVatAmount = toFormattedAmountNumber(vatAmountByRowIndex[index] || 0);
+      const salesAmount = toFormattedAmountNumber(netAmount - lineVatAmount);
 
       return {
         ...row,
+        netAmount: formatNumber(netAmount),
         vatAmount: formatNumber(lineVatAmount),
-        salesAmount: formatNumber(baseAmount - lineVatAmount),
-        amountDue: formatNumber(baseAmount + lineVatAmount - atcAmount),
+        salesAmount: formatNumber(salesAmount),
+        // ATC is header-level only. Keep detail ATC/amountDue at zero.
+        atcAmount: formatNumber(0),
+        amountDue: formatNumber(0),
       };
     });
   };
 
-  const updateTotalsDisplay = (grossAmt, discAmt, vatAmt, atcAmt, salesAmt, netAmt, amountDue) => {
+
+
+
+
+
+  const updateTotalsDisplay = (
+    grossAmt,
+    discAmt,
+    vatAmt,
+    atcAmt,
+    salesAmt,
+    netAmt,
+    amountDue,
+    atcCodeOverride = atcCode
+  ) => {
+    const grossAmount = toFormattedAmountNumber(grossAmt);
+    const discountAmount = toFormattedAmountNumber(discAmt);
+    const vatAmount = toFormattedAmountNumber(vatAmt);
+    const netAmount = toFormattedAmountNumber(netAmt);
+    const salesBaseAmount = toFormattedAmountNumber(
+      salesAmt || grossAmount - discountAmount - vatAmount
+    );
+
+    const computedAtcAmount = toFormattedAmountNumber(
+      getAllTopATCAmount(atcCodeOverride, salesBaseAmount)
+    );
+    const computedAmountDue = toFormattedAmountNumber(netAmount - computedAtcAmount);
+
     setTotals({
-          totalGrossAmount: formatNumber(grossAmt),
-          totalDiscountAmount: formatNumber(discAmt),
-          totalVatAmount: formatNumber(vatAmt),
-          totalAtcAmount: formatNumber(atcAmt),
-          totalSalesAmount: formatNumber(salesAmt),
-          totalNetAmount: formatNumber(netAmt),
-          totalAmountDue: formatNumber(amountDue),
-      });
+      totalGrossAmount: formatNumber(grossAmount),
+      totalDiscountAmount: formatNumber(discountAmount),
+      totalVatAmount: formatNumber(vatAmount),
+      totalAtcAmount: formatNumber(computedAtcAmount),
+      totalSalesAmount: formatNumber(salesBaseAmount),
+      totalNetAmount: formatNumber(netAmount),
+      totalAmountDue: formatNumber(computedAmountDue),
+    });
   };
+
+
+
 
   const formatFetchedHeaderDate = (value) => {
     const raw = String(value || "").trim();
@@ -854,18 +930,26 @@ const SI = () => {
     }
   };
 
-  const applyHeaderValueToDetailRows = (detailField, detailValue) => {
-    const updatedRows = detailRows.map((row) => ({
-      ...row,
-      [detailField]: detailValue,
-    }));
-    const normalizedRows =
-      detailField === "vatCode"
-        ? distributeVatAcrossDetailRows(updatedRows)
-        : updatedRows;
+  const applyHeaderValueToDetailRows = (detailField, detailValue, headerOverrides = {}) => {
+    const selectedVatRow =
+      detailField === "vatCode" ? getAllTopVatRow(detailValue) : null;
+    const updatedRows = detailRows.map((row) =>
+      recalculateSODetailRow(
+        {
+          ...row,
+          [detailField]: detailValue,
+          ...(detailField === "vatCode"
+            ? { vatRate: formatNumber(selectedVatRow?.vatRate || 0) }
+            : {}),
+        },
+        detailField
+      )
+    );
+    const normalizedRows = distributeVatAcrossDetailRows(updatedRows, headerOverrides);
 
     updateState({ detailRows: normalizedRows });
     updateTotals(normalizedRows);
+    regenerateGlEntriesForRows(normalizedRows, headerOverrides);
   };
 
   const confirmApplyHeaderValueToDetails = async ({
@@ -1004,9 +1088,8 @@ useEffect(() => {
       detailRowsGL: [],
       openDRSI_Data_Summary: [],
       openDRSI_Col_Summary: [],
-      openDRSI_Col_Detail: [],
       ...getGLTotalsState([]),
-      documentStatus:"O",      
+      documentStatus:"",      
       siTranType: defaultSiType,
       siStatus:"O",
 
@@ -1033,7 +1116,7 @@ useEffect(() => {
 
         try {
           const hdtblcol_result = await useFieldLenghtCheck(
-            "si_hd,si_dt1"
+            "si_hd,si_dt1,'si_dt2"
           );
 
           if (hdtblcol_result) {
@@ -1057,7 +1140,7 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
   try {
     const data = await useFetchTranData(documentNo, branchCode, docType, "siNo", direction);
 
-    if (!data?.soId) {
+    if (!data?.siId) {
       Swal.fire({ icon: 'info', title: 'No Records Found', text: 'Transaction does not exist.' });
       return resetState();
     }
@@ -1100,7 +1183,7 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
       quantityPicked: formatNumber(item.quantityPicked ?? item.qtyPicked ?? 0, quantityDecimals),
       drQuantity: formatNumber(item.drQuantity ?? 0, quantityDecimals),
       linkedSiQuantity: formatNumber(item.siQuantity ?? 0, quantityDecimals), // Renamed to avoid confusion
-    })));
+    })), { atcCode: data.atcCode || "" });
 
     const formattedGLRows = (data.dt2 || []).map(glRow => ({
       ...glRow,
@@ -1119,6 +1202,8 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
       noReprints:data.noReprints,
       documentID: data.siId,
       documentNo: data.siNo,
+      refSiNo1: data.refSiNo1 || "",
+      refSiNo2: data.refSiNo2 || "",
       branchCode: data.branchCode,
       branchName:data.branchName,
       documentDate: useformatToDatev2(data.siDate),
@@ -1153,7 +1238,7 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
       isFetchDisabled: true,
     });
 
-    updateTotals(retrievedDetailRows);
+    updateTotals(retrievedDetailRows, data.atcCode || "");
 
   } catch (error) {
     console.error("Error fetching transaction data:", error);
@@ -1194,7 +1279,7 @@ const handleActivityOption = async (action) => {
    await moveFocusBeforeSave();
   }
 
-  if (documentStatus === "O") { // Assuming SI also has an 'O' status for open
+  if (documentStatus === "") { // Assuming SI also has an 'O' status for open
     updateState({ isLoading: true });
 
     try {
@@ -1227,18 +1312,21 @@ const handleActivityOption = async (action) => {
 
       const buildSoData = (glRows = finalDetailRowsGL) => ({
         branchCode: branchCode,
-        soNo: documentNo || "",
-        soId: documentID || "",
-        soDate: documentDate,
-        sotranType: siTranType,
+        siNo: documentNo || "",
+        siId: documentID || "",
+        siDate: documentDate,
+        sitranType: siTranType,
         billtermCode: billtermCode,
         custCode: billToCustCode,
         custName: billToCustName,
         attention: contactPerson,
-        refDocNo1: refSiNo1,
-        refDocNo2: refSiNo2,
+        refSiNo1: refSiNo1,
+        refSiNo2: refSiNo2,
         currCode: currCode || "PHP",
         currRate: parseFormattedNumber(currRate),
+        atcAmount: parseFormattedNumber(totals.totalAtcAmount),
+        atcCode: atcCode || "",
+        vatCode: vatCode || "",
         dueDate: dueDate || "",
         remarks: remarks || "",
         userCode: userCode,
@@ -1473,6 +1561,14 @@ const handleActivityOption = async (action) => {
     insertDetailRows([createSIDetailRow()], insertIndex);
   };
 
+  // const resolveOpenDRGroupId = (item = {}) =>
+  //   item?.groupId || item?.group_id || "";
+
+  // const resolveOpenDRDrNo = (item = {}) =>
+  //   item?.drNo || item?.dr_no || "";
+
+
+
   const normalizeOpenDRLookupRow = (item = {}) => ({
     ...item,
     groupId: item?.groupId || "",
@@ -1481,13 +1577,85 @@ const handleActivityOption = async (action) => {
     soId: item?.soId || "",
   });
 
-  const mapOpenDRRecordToDetailRow = (item = {}) => {
-    const siQuantityValue =
-      item?.siQuantity ?? item?.drBalance ?? item?.drQuantity ?? item?.quantity ?? 0;
-    const netAmount = item?.netAmount ?? 0;
-    const vatAmount = item?.vatAmount ?? 0;
+  const getUniqueOpenDRRemarks = (records = []) => {
+    const seen = new Set();
 
-    return createSIDetailRow({
+    return (records || []).reduce((acc, record) => {
+      const value = String(record?.remarks || "").trim();
+      if (!value) return acc;
+
+      const key = value.replace(/\s+/g, " ").toLowerCase();
+      if (seen.has(key)) return acc;
+
+      seen.add(key);
+      acc.push(value);
+      return acc;
+    }, []);
+  };
+
+  const appendMissingRemarks = (currentRemarks = "", newRemarks = []) => {
+    const current = String(currentRemarks || "").trim();
+    const currentKey = current.replace(/\s+/g, " ").toLowerCase();
+    const missingRemarks = newRemarks.filter((remark) => {
+      const key = String(remark || "").trim().replace(/\s+/g, " ").toLowerCase();
+      return key && !currentKey.includes(key);
+    });
+
+    if (missingRemarks.length === 0) return currentRemarks || "";
+    return [current, ...missingRemarks].filter(Boolean).join("\n");
+  };
+
+  const buildOpenDRHeaderUpdates = async (selectedRecords = [], selectedSummaryRecords = []) => {
+    const topRecord = selectedRecords.find(Boolean) || {};
+    const updates = {};
+
+    const nextRemarks = appendMissingRemarks(
+      remarks,
+      getUniqueOpenDRRemarks(selectedSummaryRecords)
+    );
+    if (nextRemarks !== (remarks || "")) {
+      updates.remarks = nextRemarks;
+    }
+
+    const nextSalesRepCode = String(topRecord?.salesrepCode || "").trim();
+    if (nextSalesRepCode) {
+      const salesRepRow = await useTopSalesRepRow(nextSalesRepCode);
+      updates.salesRepCode = nextSalesRepCode;
+      updates.salesRepName = salesRepRow?.salesRepName || "";
+    }
+
+    const nextBilltermCode = String(topRecord?.billtermCode || "").trim();
+    if (nextBilltermCode) {
+      const billTermRow = await useTopBillTermRow(nextBilltermCode);
+      if (billTermRow) {
+        updates.billtermCode = billTermRow.billtermCode;
+        updates.billtermName = billTermRow.billtermName;
+        updates.daysDue = billTermRow.daysDue;
+        updates.dueDate = calculateDueDate(documentDate, billTermRow.daysDue);
+      } else {
+        updates.billtermCode = nextBilltermCode;
+      }
+    }
+
+    const nextCustPoNo = topRecord?.custpoNo || "";
+    if (nextCustPoNo) {
+      updates.customerPoNo = nextCustPoNo;
+    }
+
+    const nextCustPoDate = topRecord?.custpoDate || "";
+    if (nextCustPoDate) {
+      updates.customerPoDate = useformatToDatev2(nextCustPoDate);
+    }
+
+    return updates;
+  };
+
+  const mapOpenDRRecordToDetailRow = (item = {}) => {
+    const siQuantityValue =item?.siQuantity ?? 0;
+    const selectedVatCode = item?.vatCode || vatCode || "";
+    const selectedVatRow = getAllTopVatRow(selectedVatCode);
+
+    return calculateRowAmountsFromRates(createSIDetailRow({
       drNo: item?.drNo || "",
       drId: item?.drId || "",
       soId: item?.soId || "",
@@ -1499,38 +1667,154 @@ const handleActivityOption = async (action) => {
       pmType: item?.pmType || "",
       pmId: item?.pmId || "",
       siQuantity: formatNumber(siQuantityValue, quantityDecimals),
-      quantityPicked: formatNumber(item?.quantityPicked ?? 0, quantityDecimals),
-      unitPrice: formatNumber(item?.unitPrice ?? 0, sellingPriceDecimals),
-      grossAmount: formatNumber(item?.grossAmount ?? 0),
-      vatCode: item?.vatCode || vatCode || "",
-      vatRate: formatNumber(item?.vatRate ?? 0),
-      vatAmount: formatNumber(vatAmount),
-      salesAmount: formatSalesAmount(netAmount, vatAmount),
+      quantityPicked: formatNumber(item?.quantityPicked ?? siQuantityValue ?? 0, quantityDecimals),
+      unitPrice: formatNumber(item?.unitPrice ?? item?.sellPrice ?? item?.sellingPrice ?? 0, sellingPriceDecimals),
+      vatCode: selectedVatCode,
+      vatRate: formatNumber(item?.vatRate ?? selectedVatRow?.vatRate ?? 0),
+      vatAmount: formatNumber(item?.vatAmount ?? 0),
       atcAmount: formatNumber(item?.atcAmount ?? 0),
-      amountDue: formatNumber(item?.amountDue ?? 0),
-      netAmount: formatNumber(netAmount),
+      discRate1: formatNumber(item?.discRate1 ?? 0),
+      discRate2: formatNumber(item?.discRate2 ?? 0),
+      discRate3: formatNumber(item?.discRate3 ?? 0),
+      discRate4: formatNumber(item?.discRate4 ?? 0),
+      discRate5: formatNumber(item?.discRate5 ?? 0),
+      discRate6: formatNumber(item?.discRate6 ?? 0),
+      discRate7: formatNumber(item?.discRate7 ?? 0),
+      discRate8: formatNumber(item?.discRate8 ?? 0),
       freeItem: item?.freeItem || "",
-      drQuantity: formatNumber(item?.drQuantity ?? 0, quantityDecimals),
+    }));
+  };
+
+  const getOpenDRDuplicateKey = (row = {}) => {
+    const rowDrId = String(row?.drId || "").trim().toUpperCase();
+    const rowGroupId = String(row?.groupId || "").trim().toUpperCase();
+    return rowDrId && rowGroupId ? `${rowDrId}||${rowGroupId}` : "";
+  };
+
+  const applySelectedOpenDRSummaryKeys = (rows = [], summaries = []) => {
+    const normalizedSummaries = (summaries || []).map(normalizeOpenDRLookupRow);
+    if (!normalizedSummaries.length) return rows;
+
+    const summaryByGroupId = new Map(
+      normalizedSummaries
+        .filter((summary) => summary.groupId)
+        .map((summary) => [String(summary.groupId), summary])
+    );
+    const singleSummary = normalizedSummaries.length === 1 ? normalizedSummaries[0] : null;
+
+    return (rows || []).map((row) => {
+      const normalizedRow = normalizeOpenDRLookupRow(row);
+      const matchedSummary = summaryByGroupId.get(String(normalizedRow.drId || "")) || singleSummary;
+
+      if (!matchedSummary) return normalizedRow;
+
+      return {
+        ...normalizedRow,
+        drNo: normalizedRow.drNo || matchedSummary.drNo || "",
+        groupId: normalizedRow.groupId || "",
+        drId: normalizedRow.drId || matchedSummary.drId || matchedSummary.groupId || "",
+      };
     });
   };
 
-  const handleInsertSelectedOpenDR = (payload) => {
-    const selectedRecords = Array.isArray(payload?.details) ? payload.details : [];
+  const getDuplicateOpenDRRows = (incomingRows = []) => {
+    const seenKeys = new Set(
+      (detailRowsRef.current || [])
+        .map(getOpenDRDuplicateKey)
+        .filter(Boolean)
+    );
+    const duplicateRows = [];
 
-    if (!selectedRecords.length) {
+    (incomingRows || []).forEach((row) => {
+      const key = getOpenDRDuplicateKey(row);
+      if (!key) return;
+
+      if (seenKeys.has(key)) {
+        duplicateRows.push(row);
+        return;
+      }
+
+      seenKeys.add(key);
+    });
+
+    return duplicateRows;
+  };
+
+  const handleInsertSelectedOpenDR = async (payload) => {
+   
+    const selectedIds = Array.isArray(payload?.data) ? payload.data : [];
+    const selectedSummaryRecords = Array.isArray(payload?.records) ? payload.records : [];
+
+    if (!selectedIds.length) {
       updateState({ showOpenDRModal: false });
       return;
     }
 
-    insertDetailRows(selectedRecords.map(mapOpenDRRecordToDetailRow), insertAfterIndex);
-    setTopTab("details");
-    updateState({
-      showOpenDRModal: false,
-      openDRSI_Data_Summary: [],
-      openDRSI_Col_Summary: [],
-      openDRSI_Col_Detail: [],
-      insertAfterIndex: null,
-    });
+    const idString = selectedIds.join(",");
+    const requestPayload = {
+      json_data: {
+        selectedId: idString,
+        selectedIds: idString,
+      },
+    };
+
+    try {
+      updateState({ isLoading: true, showSpinner: true });
+      const response = await postRequest("getDRSI_Selected", JSON.stringify(requestPayload));
+      const rawRows = response?.data?.[0]?.result
+        ? JSON.parse(response.data[0].result)
+        : response?.data || response;
+      const selectedRecords = Array.isArray(rawRows)
+        ? applySelectedOpenDRSummaryKeys(rawRows, selectedSummaryRecords)
+        : [];
+
+
+      if (!selectedRecords.length) {
+        useSwalErrorAlert("Open DR", "No SI detail rows were returned for the selected Delivery Receipt record(s).");
+        return;
+      }
+
+
+      const duplicateRows = getDuplicateOpenDRRows(selectedRecords);
+      if (duplicateRows.length > 0) {
+        const duplicateList = duplicateRows
+          .map((row) => {
+            const drNo = row?.drNo || "";
+            const itemCode = row?.itemCode || "";
+            return `DR No. ${drNo || "-"} / Item Code ${itemCode || "-"}`;
+          })
+          .filter(Boolean);
+        useSwalErrorAlert(
+          "Duplicate Open DR Detail",
+          `Duplicate DR item(s) are not allowed:\n${[...new Set(duplicateList)].join("\n")}`
+        );
+        return;
+      }
+
+
+
+      const headerUpdates = await buildOpenDRHeaderUpdates(selectedRecords, selectedSummaryRecords);
+
+      insertDetailRows(selectedRecords.map(mapOpenDRRecordToDetailRow), insertAfterIndex);
+      setTopTab("details");
+      updateState({
+        ...headerUpdates,
+        showOpenDRModal: false,
+        openDRSI_Data_Summary: [],
+        openDRSI_Col_Summary: [],
+        insertAfterIndex: null,
+      });
+    } catch (error) {
+      console.error("getDRSI_Selected failed:", {
+        payload: requestPayload,
+        status: error?.response?.status,
+        data: error?.response?.data,
+        error,
+      });
+      useSwalErrorAlert("Open DR", getApiErrorMessage(error));
+    } finally {
+      updateState({ isLoading: false, showSpinner: false });
+    }
   };
 
   const normalizeItemModalRecords = (selectedItems) => {
@@ -1584,12 +1868,14 @@ const handleActivityOption = async (action) => {
     return filteredRecords;
   };
 
+
+
+
   const parsePriceMatrixResponse = (response) => {
     const directResult =
       response?.data?.[0]?.result ??
       response?.result ??
       response?.data?.result;
-
     if (typeof directResult === "string") {
       try {
         const parsed = JSON.parse(directResult);
@@ -1600,16 +1886,14 @@ const handleActivityOption = async (action) => {
       }
     }
 
-    const rawData = response?.data ?? [];
 
+    const rawData = response?.data ?? [];
     if (Array.isArray(rawData)) {
       return rawData;
     }
-
     if (Array.isArray(response)) {
       return response;
     }
-
     return [];
   };
 
@@ -1647,6 +1931,9 @@ const handleActivityOption = async (action) => {
       updateState({ isLoading: false });
     }
   };
+
+
+
 
   const refreshDetailRowsFromPriceMatrix = async ({ // Assuming SI also uses price matrix
     custCode = billToCustCode || "",
@@ -1716,7 +2003,6 @@ const handleActivityOption = async (action) => {
     });
     const netAmount = toFormattedAmountNumber(grossAmount - totalDiscount);
     const vatAmount = parseFormattedNumber(row.vatAmount || 0) || 0;
-    const atcAmount = parseFormattedNumber(row.atcAmount || 0) || 0;
 
     return {
       ...row,
@@ -1725,15 +2011,15 @@ const handleActivityOption = async (action) => {
       totDiscount: formatNumber(totalDiscount),
       netAmount: formatNumber(netAmount),
       salesAmount: formatNumber(netAmount - vatAmount),
-      amountDue: formatNumber(netAmount + vatAmount - atcAmount),
+      // ATC is header-level only, not per detail row.
+      atcAmount: formatNumber(0),
+      amountDue: formatNumber(0),
     };
   };
 
 
 
   const applyPriceMatrixToDetailRow = (baseRow, priceRow = {}) => {
-    
-
     if (baseRow.freeItem === "Y") {
       return calculateRowAmountsFromRates({
         ...baseRow,
@@ -1744,87 +2030,89 @@ const handleActivityOption = async (action) => {
       });
     }
 
-    const getPriceValue = () => priceRow?.sellingPrice ||0
-    const getPmTypeValue = () => priceRow?.pmType||"";
-    const getPmIdValue = () =>   priceRow?.pmId ||"";
-    const getDiscountRateValue = (discountNo) =>  priceRow?.[`discRate${discountNo}`] ||0;
+    const hasPriceMatrix = priceRow && Object.keys(priceRow).length > 0;
+
+    // IMPORTANT:
+    // Do not return 0 immediately when price matrix has no sellingPrice.
+    // calculateRowAmountsFromRates() uses row.unitPrice, so fallback must include
+    // priceRow.unitPrice, baseRow.unitPrice, and baseRow.sellingPrice.
+    const getPriceValue = () =>
+      priceRow?.sellingPrice ??
+      priceRow?.unitPrice ??
+      baseRow?.unitPrice ??
+      baseRow?.sellingPrice ??
+      0;
+
+    const getPmTypeValue = () => priceRow?.pmType ?? baseRow?.pmType ?? "";
+    const getPmIdValue = () => priceRow?.pmId ?? baseRow?.pmId ?? "";
+
+    const getDiscountRateValue = (discountNo) =>
+      hasPriceMatrix
+        ? priceRow?.[`discRate${discountNo}`] ?? baseRow?.[`discRate${discountNo}`] ?? 0
+        : baseRow?.[`discRate${discountNo}`] ?? 0;
 
     const selectedVatCode = priceRow?.vatCode || baseRow.vatCode || vatCode || "";
     const selectedVatRow = getAllTopVatRow(selectedVatCode);
 
-    console.log(selectedVatRow)
-
     const updatedRow = {
       ...baseRow,
-      pmType: getPmTypeValue() ?? baseRow.pmType ?? "",
-      pmId: getPmIdValue() ?? baseRow.pmId ?? "",
+      pmType: getPmTypeValue(),
+      pmId: getPmIdValue(),
       vatCode: selectedVatCode,
-      vatRate: formatNumber(selectedVatRow?.vatRate || 0),
-      unitPrice: formatNumber(
-        getPriceValue() ?? baseRow.sellingPrice ?? 0,
-        sellingPriceDecimals
-      ),
+      vatRate: formatNumber(selectedVatRow?.vatRate || baseRow?.vatRate || 0),
+      unitPrice: formatNumber(getPriceValue(), sellingPriceDecimals),
     };
 
     visibleDiscountRateFields.forEach((field, index) => {
-      updatedRow[field] = formatNumber(
-        getDiscountRateValue(index + 1) ?? baseRow[field] ?? 0
-      );
+      updatedRow[field] = formatNumber(getDiscountRateValue(index + 1));
     });
 
     return calculateRowAmountsFromRates(updatedRow);
   };
 
-  const mapItemRecordToDetailRow = (item = {}) => createSIDetailRow({
-    itemCode: item?.itemCode || "",
-    itemName: item?.itemName || "",
-    itemSpecs: item?.itemSpecs || "",
-    uomCode: item?.uomCode || "",
-    pmType: item?.pmType || "",
-    groupId: "",
-    pmId: item?.pmId || "",
-    soQuantity: formatNumber(
-      item?.soQuantity ?? item?.quantity ?? item?.soQty ?? 0,
-      quantityDecimals
-    ),
-    siQuantity: formatNumber(
-      item?.siQuantity ?? item?.quantity ?? item?.soQty ?? 0,
-      quantityDecimals
-    ),
-    sellingPrice: formatNumber(
-      item?.sellingPrice ?? item?.unitPrice ?? 0,
-      sellingPriceDecimals
-    ),
-    grossAmount: formatNumber(item?.grossAmount ?? 0),
-    discRate1: formatNumber(item?.discRate1 ?? 0),
-    discRate2: formatNumber(item?.discRate2 ?? 0),
-    discRate3: formatNumber(item?.discRate3 ?? 0),
-    discRate4: formatNumber(item?.discRate4 ?? 0),
-    discRate5: formatNumber(item?.discRate5 ?? 0),
-    discRate6: formatNumber(item?.discRate6 ?? 0),
-    discRate7: formatNumber(item?.discRate7 ?? 0),
-    discRate8: formatNumber(item?.discRate8 ?? 0),
-    discAmount1: formatNumber(item?.discAmount1 ?? 0),
-    discAmount2: formatNumber(item?.discAmount2 ?? 0),
-    discAmount3: formatNumber(item?.discAmount3 ?? 0),
-    discAmount4: formatNumber(item?.discAmount4 ?? 0),
-    discAmount5: formatNumber(item?.discAmount5 ?? 0),
-    discAmount6: formatNumber(item?.discAmount6 ?? 0),
-    discAmount7: formatNumber(item?.discAmount7 ?? 0),
-    discAmount8: formatNumber(item?.discAmount8 ?? 0),
-    totDiscount: formatNumber(item?.totDiscount ?? 0),    
-    vatCode: item?.vatCode || "",
-    vatRate: formatNumber(item?.vatRate ?? 0),
-    vatAmount: formatNumber(item?.vatAmount ?? 0),
-    salesAmount: formatSalesAmount(item?.netAmount ?? 0, item?.vatAmount ?? 0),
-    atcAmount: formatNumber(item?.atcAmount ?? 0),
-    amountDue: formatNumber(item?.amountDue ?? 0),
-    netAmount: formatNumber(item?.netAmount ?? 0),
-    // No delivery date, customer PO, sales rep in SI details
-    freeItem: item?.freeItem || "",
-    quantityPicked: formatNumber(item?.quantityPicked ?? item?.qtyPicked ?? 0, quantityDecimals),
-    drQuantity: formatNumber(item?.drQuantity ?? 0, quantityDecimals),
-  });
+  const mapItemRecordToDetailRow = (item = {}) => {
+   
+
+    return createSIDetailRow({
+      itemCode: item?.itemCode || "",
+      itemName: item?.itemName || "",
+      itemSpecs: item?.itemSpecs || "",
+      uomCode: item?.uomCode || "",
+      pmType: item?.pmType || "",
+      groupId: "",
+      pmId: item?.pmId || "",    
+      siQuantity: formatNumber( item?.siQuantity ?? 0, quantityDecimals ),
+      sellingPrice: formatNumber(item?.sellPrice, sellingPriceDecimals),
+      grossAmount: formatNumber(item?.grossAmount ?? 0),
+      discRate1: formatNumber(item?.discRate1 ?? 0),
+      discRate2: formatNumber(item?.discRate2 ?? 0),
+      discRate3: formatNumber(item?.discRate3 ?? 0),
+      discRate4: formatNumber(item?.discRate4 ?? 0),
+      discRate5: formatNumber(item?.discRate5 ?? 0),
+      discRate6: formatNumber(item?.discRate6 ?? 0),
+      discRate7: formatNumber(item?.discRate7 ?? 0),
+      discRate8: formatNumber(item?.discRate8 ?? 0),
+      discAmount1: formatNumber(item?.discAmount1 ?? 0),
+      discAmount2: formatNumber(item?.discAmount2 ?? 0),
+      discAmount3: formatNumber(item?.discAmount3 ?? 0),
+      discAmount4: formatNumber(item?.discAmount4 ?? 0),
+      discAmount5: formatNumber(item?.discAmount5 ?? 0),
+      discAmount6: formatNumber(item?.discAmount6 ?? 0),
+      discAmount7: formatNumber(item?.discAmount7 ?? 0),
+      discAmount8: formatNumber(item?.discAmount8 ?? 0),
+      totDiscount: formatNumber(item?.totDiscount ?? 0),
+      vatCode: item?.vatCode || "",
+      vatRate: formatNumber(item?.vatRate ?? 0),
+      vatAmount: formatNumber(item?.vatAmount ?? 0),
+      salesAmount: formatSalesAmount(item?.netAmount ?? 0, item?.vatAmount ?? 0),
+      atcAmount: formatNumber(item?.atcAmount ?? 0),
+      amountDue: formatNumber(item?.amountDue ?? 0),
+      netAmount: formatNumber(item?.netAmount ?? 0),
+      freeItem: item?.freeItem || "",
+      quantityPicked: formatNumber(item?.quantityPicked ?? item?.qtyPicked ?? 0, quantityDecimals),
+      drQuantity: formatNumber(item?.drQuantity ?? 0, quantityDecimals),
+    });
+  };
 
   const handleInsertSelectedItems = async (selectedRecords = []) => {
     if (!Array.isArray(selectedRecords) || selectedRecords.length === 0) {
@@ -1995,11 +2283,15 @@ const handlePrint = async () => {
   }
 };
 
-  const handleOpenAddItemModal =  async() => {
-    const fieldsToCheck = { // Adjusted required fields for SI
-      "Header : Bill To Customer Code": billToCustCode,
-      "Header : Billing Term": billtermCode,
-      "Header : Sales Rep": salesRepCode,
+  const handleOpenAddItemModal = async (overrides = {}) => {
+    const lookupCustCode = String(overrides.billToCustCode ?? billToCustCode ?? "").trim();
+    const lookupBillTermCode = String(overrides.billtermCode ?? billtermCode ?? "").trim();
+    const lookupSalesRepCode = String(overrides.salesRepCode ?? salesRepCode ?? "").trim();
+
+    const fieldsToCheck = {
+      "Header : Bill To Customer Code": lookupCustCode,
+      "Header : Billing Term": lookupBillTermCode,
+      "Header : Sales Rep": lookupSalesRepCode,
     };
 
     const isValid = await useSwalvalidateRequiredFields(fieldsToCheck, "Add Item");
@@ -2014,8 +2306,32 @@ const handlePrint = async () => {
   };
 
   const handleAddRowClick = async () => {
-    if (documentStatus !== "O" || isFormDisabled) return;
-    setShowAddTypeDropdown((prev) => !prev);
+    if (documentStatus !== "" || isFormDisabled) return;
+
+    setShowAddTypeDropdown(false);
+
+    const lookupCustCode = String(billToCustCode || "").trim();
+
+    if (!lookupCustCode) {
+      const branchIsValid = await useSwalvalidateRequiredFields(
+        { "Header : Branch": branchCode },
+        "Add SI Detail"
+      );
+      if (!branchIsValid) return;
+
+      updateState({
+        custModalOpen: true,
+        modalContext: "addDetail",
+      });
+      return;
+    }
+
+    if (String(siTranType || "").toUpperCase() === "SI01") {
+      await handleOpenDRLookup();
+      return;
+    }
+
+    await handleOpenAddItemModal();
   };
 
   const getApiErrorMessage = (error) =>
@@ -2024,9 +2340,23 @@ const handlePrint = async () => {
     error?.message ||
     "Unknown server error";
 
-  const handleOpenDRLookup = async () => {
-    const lookupCustCode = String(billToCustCode || "").trim();
-    const lookupBranchCode = String(branchCode || "").trim();
+  const handleOpenDRLookup = async (overrides = {}) => {
+    const lookupCustCode = String(overrides.billToCustCode ?? billToCustCode ?? "").trim();
+    const lookupBranchCode = String(overrides.branchCode ?? branchCode ?? "").trim();
+
+    if (!lookupCustCode) {
+      const branchIsValid = await useSwalvalidateRequiredFields(
+        { "Header : Branch": lookupBranchCode },
+        "Open DR Lookup"
+      );
+      if (!branchIsValid) return;
+
+      updateState({
+        custModalOpen: true,
+        modalContext: "openDR",
+      });
+      return;
+    }
 
     const fieldsToCheck = {
       "Header : Bill To Customer Code": lookupCustCode,
@@ -2059,12 +2389,9 @@ const handlePrint = async () => {
       }
 
       const summaryColumns = await selectedHSColConfig(endpoint);
-      const detailColumns = await selectedHSColConfig("getDRSI_OpenDetail");
-
       updateState({
         openDRSI_Data_Summary: drRows,
         openDRSI_Col_Summary: summaryColumns,
-        openDRSI_Col_Detail: detailColumns,
         showOpenDRModal: true,
       });
     } catch (error) {
@@ -2073,7 +2400,6 @@ const handlePrint = async () => {
       updateState({
         openDRSI_Data_Summary: [],
         openDRSI_Col_Summary: [],
-        openDRSI_Col_Detail: [],
       });
     } finally {
       updateState({ isLoading: false, showSpinner: false });
@@ -2085,7 +2411,7 @@ const handleCancel = async () => {
       return; // Assuming SI also requires detail rows to cancel
       }
 
-  if (documentID && (documentStatus === 'O')) {
+  if (documentID && (documentStatus === '')) {
     updateState({ showCancelModal: true });
   }
 };
@@ -2115,7 +2441,7 @@ const handleCopy = async () => {
     updateState({
       documentNo: "",
       documentID: "",
-      documentStatus: "O",
+      documentStatus: "",
       status: "OPEN",
       siStatus: "O",
       documentDate: nextDocumentDate,
@@ -2147,7 +2473,7 @@ const handleHistoryRowPick = useCallback(
 
 useEffect(() => {
   const params = new URLSearchParams(location.search);
-  const docNo = params.get("soNo");
+  const docNo = params.get("siNo");
   const branchCode = params.get("branchCode");
   
   if (!loadedFromUrlRef.current && docNo && branchCode) {
@@ -2175,7 +2501,7 @@ const handleTranDocNoSelection = async (data) => {
 };
 
 const handleCloseCancel = async (confirmation) => {
-    if(confirmation && documentStatus === "O" && documentID !== null ) {
+    if(confirmation && documentStatus === "" && documentID !== null ) {
       
       const result = await useHandleCancel(docType,documentID,currentUserRow.userCode,confirmation.password,confirmation.reason,updateState);
       if (result.success)
@@ -2313,34 +2639,209 @@ const handleSaveAndPrint = async (documentID) => {
             });
         }
 
+        if (modalContext === "addDetail" || modalContext === "openDR") {
+          const nextCustomerCode = custDetails.custCode || selectedData?.custCode || "";
+          const nextBillTermCode = custDetails.billtermCode || "";
+          const nextSalesRepCode = custDetails.salesRepCode || "";
+
+          if (String(siTranType || "").toUpperCase() === "SI01" || modalContext === "openDR") {
+            await handleOpenDRLookup({
+              billToCustCode: nextCustomerCode,
+              branchCode,
+            });
+          } else {
+            await handleOpenAddItemModal({
+              billToCustCode: nextCustomerCode,
+              billtermCode: nextBillTermCode,
+              salesRepCode: nextSalesRepCode,
+            });
+          }
+        }
+
     } catch (error) {
         console.error("Error fetching customer details:", error);
     } finally {
-       updateState({ isLoading: false });
+       updateState({ isLoading: false, modalContext: "" });
     }
 };
 
-  const updateTotals = (rows) => {
+  const computeTotalsFromRows = (rows = [], atcCodeOverride = atcCode) => {
     let totalGrossAmt = 0;
     let totalDiscAmt = 0;
     let totalVatAmt = 0;
-    let totalAtcAmt = 0;
     let totalSalesAmt = 0;
     let totalNetAmt = 0;
-    let totalAmountDue = 0;
 
-    rows.forEach(row => {
-      totalGrossAmt += parseFormattedNumber(row.grossAmount || 0) || 0;
-      totalDiscAmt += parseFormattedNumber(row.totDiscount || 0) || 0;
-      totalVatAmt += parseFormattedNumber(row.vatAmount || 0) || 0;
-      totalAtcAmt += parseFormattedNumber(row.atcAmount || 0) || 0;
-      totalNetAmt += parseFormattedNumber(row.netAmount || 0) || 0;
-      totalAmountDue += parseFormattedNumber(row.amountDue || 0) || 0;
+    rows.forEach((row) => {
+      totalGrossAmt += toFormattedAmountNumber(row.grossAmount || 0);
+      totalDiscAmt += toFormattedAmountNumber(row.totDiscount || 0);
+      totalVatAmt += toFormattedAmountNumber(row.vatAmount || 0);
+      totalNetAmt += toFormattedAmountNumber(row.netAmount || 0);
     });
 
-    totalSalesAmt = totalNetAmt - totalVatAmt;
+    totalSalesAmt = toFormattedAmountNumber(totalNetAmt - totalVatAmt);
 
-    updateTotalsDisplay(totalGrossAmt, totalDiscAmt, totalVatAmt, totalAtcAmt, totalSalesAmt, totalNetAmt, totalAmountDue);
+    const totalAtcAmt = toFormattedAmountNumber(
+      getAllTopATCAmount(atcCodeOverride, totalSalesAmt)
+    );
+    const totalAmountDue = toFormattedAmountNumber(totalNetAmt - totalAtcAmt);
+
+    return {
+      totalGrossAmt,
+      totalDiscAmt,
+      totalVatAmt,
+      totalAtcAmt,
+      totalSalesAmt,
+      totalNetAmt,
+      totalAmountDue,
+    };
+  };
+
+  const updateTotals = (rows = [], atcCodeOverride = atcCode) => {
+    const {
+      totalGrossAmt,
+      totalDiscAmt,
+      totalVatAmt,
+      totalAtcAmt,
+      totalSalesAmt,
+      totalNetAmt,
+      totalAmountDue,
+    } = computeTotalsFromRows(rows, atcCodeOverride);
+
+    updateTotalsDisplay(
+      totalGrossAmt,
+      totalDiscAmt,
+      totalVatAmt,
+      totalAtcAmt,
+      totalSalesAmt,
+      totalNetAmt,
+      totalAmountDue,
+      atcCodeOverride
+    );
+  };
+
+  const buildSiDataForGl = (rows = detailRows, glRows = [], headerOverrides = {}) => {
+    const nextVatCode =
+      headerOverrides.vatCode !== undefined ? headerOverrides.vatCode : vatCode;
+    const nextAtcCode =
+      headerOverrides.atcCode !== undefined ? headerOverrides.atcCode : atcCode;
+    const totalValues = computeTotalsFromRows(rows, nextAtcCode);
+
+    return {
+      branchCode,
+      siNo: documentNo || "",
+      siId: documentID || "",
+      siDate: documentDate,
+      sitranType: siTranType,
+      billtermCode,
+      custCode: billToCustCode,
+      custName: billToCustName,
+      attention: contactPerson,
+      refSiNo1,
+      refSiNo2,
+      currCode: currCode || "PHP",
+      currRate: parseFormattedNumber(currRate),
+      atcAmount: totalValues.totalAtcAmt,
+      atcCode: nextAtcCode || "",
+      vatCode: nextVatCode || "",
+      dueDate: dueDate || "",
+      remarks: remarks || "",
+      userCode,
+      customerPoNo: customerPoNo || "",
+      customerPoDate: customerPoDate || null,
+      salesRepCode,
+      salesRepName,
+      soStatus: siStatus || "O",
+      dt1: rows.map((row, index) => ({
+        lnNo: String(index + 1),
+        pickStat: row.siStat || "F",
+        siStat: row.siStat || "F",
+        drNo: row.drNo || "",
+        drId: row.drId || "",
+        soId: row.soId || "",
+        groupId: row.groupId || "",
+        itemCode: row.itemCode || "",
+        itemName: row.itemName || "",
+        itemSpecs: row.itemSpecs || "",
+        uomCode: row.uomCode || "",
+        pmType: row.pmType || "",
+        pmId: row.pmId || "",
+        siQuantity: parseFormattedNumber(row.siQuantity || 0),
+        unitPrice: parseFormattedNumber(row.unitPrice || 0),
+        grossAmount: parseFormattedNumber(row.grossAmount || 0),
+        discRate1: parseFormattedNumber(row.discRate1 || 0),
+        discRate2: parseFormattedNumber(row.discRate2 || 0),
+        discRate3: parseFormattedNumber(row.discRate3 || 0),
+        discRate4: parseFormattedNumber(row.discRate4 || 0),
+        discRate5: parseFormattedNumber(row.discRate5 || 0),
+        discRate6: parseFormattedNumber(row.discRate6 || 0),
+        discRate7: parseFormattedNumber(row.discRate7 || 0),
+        discRate8: parseFormattedNumber(row.discRate8 || 0),
+        discAmount1: parseFormattedNumber(row.discAmount1 || 0),
+        discAmount2: parseFormattedNumber(row.discAmount2 || 0),
+        discAmount3: parseFormattedNumber(row.discAmount3 || 0),
+        discAmount4: parseFormattedNumber(row.discAmount4 || 0),
+        discAmount5: parseFormattedNumber(row.discAmount5 || 0),
+        discAmount6: parseFormattedNumber(row.discAmount6 || 0),
+        discAmount7: parseFormattedNumber(row.discAmount7 || 0),
+        discAmount8: parseFormattedNumber(row.discAmount8 || 0),
+        totDiscount: parseFormattedNumber(row.totDiscount || 0),
+        vatCode: row.vatCode || "",
+        vatRate: parseFormattedNumber(row.vatRate || 0),
+        vatAmount: parseFormattedNumber(row.vatAmount || 0),
+        salesAmount: parseFormattedNumber(row.salesAmount || 0),
+        atcAmount: parseFormattedNumber(row.atcAmount || 0),
+        amountDue: parseFormattedNumber(row.amountDue || 0),
+        netAmount: parseFormattedNumber(row.netAmount || 0),
+        freeItem: row.freeItem || "",
+        quantityPicked: parseFormattedNumber(row.quantityPicked || 0),
+        drQuantity: parseFormattedNumber(row.drQuantity || 0),
+      })),
+      dt2: glRows.map((entry, index) => ({
+        recNo: String(index + 1),
+        acctCode: entry.acctCode || "",
+        rcCode: entry.rcCode || "",
+        sltypeCode: entry.sltypeCode || "",
+        slCode: entry.slCode || "",
+        particular: entry.particular || "",
+        vatCode: entry.vatCode || "",
+        vatName: entry.vatName || "",
+        atcCode: entry.atcCode || "",
+        atcName: entry.atcName || "",
+        debit: parseFormattedNumber(entry.debit || 0),
+        credit: parseFormattedNumber(entry.credit || 0),
+        debitFx1: parseFormattedNumber(entry.debitFx1 || 0),
+        creditFx1: parseFormattedNumber(entry.creditFx1 || 0),
+        debitFx2: parseFormattedNumber(entry.debitFx2 || 0),
+        creditFx2: parseFormattedNumber(entry.creditFx2 || 0),
+        slRefNo: entry.slRefNo || "",
+        slRefDate: entry.slRefDate || null,
+        remarks: entry.remarks || "",
+        dt1Lineno: entry.dt1Lineno || "",
+      })),
+    };
+  };
+
+  const regenerateGlEntriesForRows = async (rows, headerOverrides = {}) => {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      updateState({ detailRowsGL: [] });
+      return;
+    }
+
+    try {
+      updateState({ detailRowsGL: [], isGeneratingGL: true });
+      const newGlEntries = await useGenerateGLEntries(
+        docType,
+        buildSiDataForGl(rows, [], headerOverrides)
+      );
+      updateState({
+        detailRowsGL: newGlEntries && newGlEntries.length > 0 ? newGlEntries : [],
+        isGeneratingGL: false,
+      });
+    } catch (error) {
+      updateState({ detailRowsGL: [], isGeneratingGL: false });
+      console.error(error);
+    }
   };
 
 const handleCloseRcModal = async (selectedRc) => {
@@ -2369,7 +2870,7 @@ const handleCloseRcModal = async (selectedRc) => {
   });
 };
 
-const handleCloseATCModal = (selectedATC) => {
+const handleCloseATCModal = async (selectedATC) => {
   if (!selectedATC) {
     updateState({ showATCModal: false, selectedRowIndex: null, modalContext: "" });
     return;
@@ -2405,42 +2906,161 @@ const handleCloseATCModal = (selectedATC) => {
     return;
   }
 
-  updateState({ 
-    atcCode: selectedATC.atcCode || "",
+  const nextAtcCode = selectedATC.atcCode || "";
+  const normalizedRows = distributeVatAcrossDetailRows(detailRowsRef.current || detailRows, {
+    atcCode: nextAtcCode,
+  });
+
+  updateState({
+    atcCode: nextAtcCode,
     atcName: selectedATC.atcName || "",
+    detailRows: normalizedRows,
     showATCModal: false,
     selectedRowIndex: null,
     modalContext: "",
   });
+  updateTotals(normalizedRows, nextAtcCode);
+  await regenerateGlEntriesForRows(normalizedRows, { atcCode: nextAtcCode });
 };
 
-const handleCloseVatModal = (selectedVat) => {
-  if (!selectedVat) {
-    updateState({ showVatModal: false, selectedRowIndex: null, modalContext: "" });
-    return;
-  }
-
-  if (modalContext === "glVAT" && selectedRowIndex !== null) {
-    const result = getAllTopVatRow(selectedVat.vatCode);
-    if (result) {
-      handleDetailChangeGL(selectedRowIndex, "vatCode", result);
-    }
-
-    updateState({
-      showVatModal: false,
-      selectedRowIndex: null,
-      modalContext: "",
-    });
-    return;
-  }
+const handleCloseVatModal = async (selectedVat) => {
+  const closeContext = modalContext;
+  const closeRowIndex = selectedRowIndex;
 
   updateState({
-    vatCode: selectedVat.vatCode || "",
-    vatName: selectedVat.vatName || "",
     showVatModal: false,
     selectedRowIndex: null,
     modalContext: "",
   });
+
+  if (!selectedVat) return;
+
+  try {
+    const selectedVatCode =
+      selectedVat?.vatCode ||
+      selectedVat?.vat_code ||
+      selectedVat?.VAT_CODE ||
+      selectedVat?.code ||
+      "";
+
+    const selectedVatRow = getAllTopVatRow(selectedVatCode) || selectedVat || {};
+
+    const nextVatCode =
+      selectedVatRow?.vatCode ||
+      selectedVatRow?.vat_code ||
+      selectedVatRow?.VAT_CODE ||
+      selectedVatCode ||
+      "";
+
+    const nextVatName =
+      selectedVatRow?.vatName ||
+      selectedVatRow?.vat_name ||
+      selectedVatRow?.VAT_NAME ||
+      selectedVatRow?.vatDesc ||
+      selectedVatRow?.vat_desc ||
+      selectedVatRow?.VAT_DESC ||
+      selectedVat?.vatName ||
+      selectedVat?.vatDesc ||
+      "";
+
+    const nextVatRate = formatNumber(
+      selectedVatRow?.vatRate ??
+      selectedVatRow?.vat_rate ??
+      selectedVatRow?.VAT_RATE ??
+      selectedVat?.vatRate ??
+      selectedVat?.vat_rate ??
+      0
+    );
+
+    if (!nextVatCode) {
+      useSwalErrorAlert(
+        "Invalid VAT",
+        "Selected VAT did not return a valid VAT Code."
+      );
+      return;
+    }
+
+    if (closeContext === "detailVAT" && closeRowIndex !== null) {
+      const updatedRows = [...(detailRowsRef.current || [])];
+      const currentRow = updatedRows[closeRowIndex];
+
+      if (!currentRow) return;
+
+      updatedRows[closeRowIndex] = recalculateSODetailRow(
+        {
+          ...currentRow,
+          vatCode: nextVatCode,
+          vatRate: nextVatRate,
+          vatAmount: "0.00",
+        },
+        "vatCode"
+      );
+
+      const normalizedRows = distributeVatAcrossDetailRows(updatedRows, {
+        vatCode: nextVatCode,
+        atcCode,
+      });
+
+      updateState({
+        detailRows: normalizedRows,
+      });
+
+      updateTotals(normalizedRows);
+      await regenerateGlEntriesForRows(normalizedRows, {
+        vatCode: nextVatCode,
+        atcCode,
+      });
+      return;
+    }
+
+    if (closeContext === "glVAT" && closeRowIndex !== null) {
+      await handleDetailChangeGL(closeRowIndex, "vatCode", {
+        ...selectedVatRow,
+        vatCode: nextVatCode,
+        vatName: nextVatName,
+        vatRate: nextVatRate,
+      });
+      return;
+    }
+
+    const updatedRows = (detailRowsRef.current || detailRows || []).map((row) =>
+      recalculateSODetailRow(
+        {
+          ...row,
+          vatCode: nextVatCode,
+          vatRate: nextVatRate,
+          vatAmount: "0.00",
+        },
+        "vatCode"
+      )
+    );
+
+    const normalizedRows = distributeVatAcrossDetailRows(updatedRows, {
+      vatCode: nextVatCode,
+      atcCode,
+    });
+
+    updateState({
+      vatCode: nextVatCode,
+      vatName: nextVatName,
+      detailRows: normalizedRows,
+      showVatModal: false,
+      selectedRowIndex: null,
+      modalContext: "",
+    });
+
+    updateTotals(normalizedRows);
+    await regenerateGlEntriesForRows(normalizedRows, {
+      vatCode: nextVatCode,
+      atcCode,
+    });
+  } catch (error) {
+    console.error("Error applying selected VAT:", error);
+    useSwalErrorAlert(
+      "VAT Selection Error",
+      error?.message || "Unable to apply the selected VAT."
+    );
+  }
 };
 
 const handleCloseAccountModal = (selectedAccount) => {
@@ -2675,6 +3295,92 @@ const validateSIQuantity = (index, inputValue) => {
   return true;
 };
 
+
+const recalculateSODetailRow = (row = {}, changedField = "") => {
+  const discountRateFields = [
+    "discRate1",
+    "discRate2",
+    "discRate3",
+    "discRate4",
+    "discRate5",
+    "discRate6",
+    "discRate7",
+    "discRate8",
+  ];
+  const discountAmountFields = [
+    "discAmount1",
+    "discAmount2",
+    "discAmount3",
+    "discAmount4",
+    "discAmount5",
+    "discAmount6",
+    "discAmount7",
+    "discAmount8",
+  ];
+
+  const quantity = parseFormattedNumber(row.siQuantity || 0) || 0;
+  const unitPrice = parseFormattedNumber(row.unitPrice || 0) || 0;
+  const grossAmount = toFormattedAmountNumber(quantity * unitPrice);
+
+  let runningBase = grossAmount;
+  let totalDiscount = 0;
+  const updatedDiscountAmounts = {};
+  const updatedDiscountRates = {};
+
+  if (discountAmountFields.includes(changedField)) {
+    discountAmountFields.forEach((amountField, index) => {
+      const discountNo = index + 1;
+      const rateField = `discRate${discountNo}`;
+      const discountAmount = toFormattedAmountNumber(
+        parseFormattedNumber(row[amountField] || 0)
+      );
+      const discountRate =
+        runningBase !== 0
+          ? toFormattedAmountNumber((discountAmount / runningBase) * 100)
+          : 0;
+
+      updatedDiscountAmounts[amountField] =
+        amountField === changedField ? row[amountField] : formatNumber(discountAmount);
+      updatedDiscountRates[rateField] = formatNumber(discountRate);
+
+      totalDiscount += discountAmount;
+      runningBase = toFormattedAmountNumber(runningBase - discountAmount);
+    });
+  } else {
+    discountRateFields.forEach((rateField, index) => {
+      const discountNo = index + 1;
+      const amountField = `discAmount${discountNo}`;
+      const rateValue = parseFormattedNumber(row[rateField] || 0) || 0;
+      const discountAmount = toFormattedAmountNumber(runningBase * (rateValue * 0.01));
+
+      updatedDiscountRates[rateField] =
+        rateField === changedField ? row[rateField] : formatNumber(rateValue);
+      updatedDiscountAmounts[amountField] = formatNumber(discountAmount);
+
+      totalDiscount += discountAmount;
+      runningBase = toFormattedAmountNumber(runningBase - discountAmount);
+    });
+  }
+
+  const netAmount = toFormattedAmountNumber(grossAmount - totalDiscount);
+  const vatAmount = parseFormattedNumber(row.vatAmount || 0) || 0;
+
+  
+  return {
+    ...row,
+    grossAmount: formatNumber(grossAmount),
+    vatAmount: formatNumber(vatAmount),
+    salesAmount: formatNumber(netAmount - vatAmount),
+    // ATC is header-level only, not per detail row.
+    atcAmount: formatNumber(0),
+    amountDue: formatNumber(0),
+    ...updatedDiscountRates,
+    ...updatedDiscountAmounts,
+    totDiscount: formatNumber(totalDiscount),
+    netAmount: formatNumber(netAmount),
+  };
+};
+
 const handleSODetailRowChange = (index, field, value) => {
   const discountRateFields = [
     "discRate1",
@@ -2743,63 +3449,6 @@ const handleSODetailRowChange = (index, field, value) => {
     return zeroedRow;
   };
 
-  const recalculateSODetailRow = (row, changedField) => {
-    const quantity = parseFormattedNumber(row.siQuantity || 0) || 0;
-    const unitPrice = parseFormattedNumber(row.unitPrice || 0) || 0;
-    const grossAmount = toFormattedAmountNumber(quantity * unitPrice);
-    
-    let runningBase = grossAmount;
-    let totalDiscount = 0;
-    const updatedDiscountAmounts = {};
-    const updatedDiscountRates = {};
-
-    if (discountAmountFields.includes(changedField)) {
-      discountAmountFields.forEach((amountField, index) => {
-        const discountNo = index + 1;
-        const rateField = `discRate${discountNo}`;
-        const discountAmount = toFormattedAmountNumber(parseFormattedNumber(row[amountField] || 0));
-        const discountRate =
-          runningBase !== 0 ? toFormattedAmountNumber((discountAmount / runningBase) * 100) : 0;
-
-        updatedDiscountAmounts[amountField] =
-          amountField === changedField ? row[amountField] : formatNumber(discountAmount);
-        updatedDiscountRates[rateField] = formatNumber(discountRate);
-        totalDiscount += discountAmount;
-        runningBase = toFormattedAmountNumber(runningBase - discountAmount);
-      });
-    } else {
-      discountRateFields.forEach((rateField, index) => {
-        const discountNo = index + 1;
-        const amountField = `discAmount${discountNo}`;
-        const rateValue = parseFormattedNumber(row[rateField] || 0) || 0;
-        const discountAmount = toFormattedAmountNumber(runningBase * (rateValue * 0.01));
-
-        updatedDiscountRates[rateField] =
-          rateField === changedField ? row[rateField] : formatNumber(rateValue);
-        updatedDiscountAmounts[amountField] = formatNumber(discountAmount);
-        totalDiscount += discountAmount;
-        runningBase = toFormattedAmountNumber(runningBase - discountAmount);
-      });
-    }
-
-    const netAmount = toFormattedAmountNumber(grossAmount - totalDiscount);
-    const vatAmount = parseFormattedNumber(row.vatAmount || 0) || 0;
-    const atcAmount = parseFormattedNumber(row.atcAmount || 0) || 0;
-
-    return {
-      ...row,
-      grossAmount: formatNumber(grossAmount),
-      vatAmount: formatNumber(vatAmount),
-      salesAmount: formatNumber(netAmount - vatAmount),
-      atcAmount: formatNumber(atcAmount),
-      amountDue: formatNumber(netAmount + vatAmount - atcAmount),
-      ...updatedDiscountRates,
-      ...updatedDiscountAmounts,
-      totDiscount: formatNumber(totalDiscount),
-      netAmount: formatNumber(netAmount),
-    };
-  };
-
   const updatedRows = [...(detailRowsRef.current || [])];
   let updatedRow = {
     ...updatedRows[index],
@@ -2842,12 +3491,12 @@ const handleSODetailRowChange = (index, field, value) => {
     updatedRow = recalculateSODetailRow(updatedRow, field);
   }
 
-  console.log(updatedRow)
 
   updatedRows[index] = updatedRow;
   const normalizedRows = calculationTriggerFields.includes(field)
     ? distributeVatAcrossDetailRows(updatedRows)
     : updatedRows;
+
 
   updateState({ detailRows: normalizedRows });
   updateTotals(normalizedRows);
@@ -2879,11 +3528,10 @@ const enterNextRowZeroClearFields = [
 const renderSIDetailCell = (columnKey, row, index) => {
   const columnWidth = getDetailColumnFallbackWidth(columnKey);
   const style = getDetailCellStyle(columnKey, columnWidth);
-  const isRowWithDR = (parseFormattedNumber(row.drQuantity || 0) || 0) > 0;
+  const isRowWithDR = Boolean(String(row.drNo || "").trim());
   const quantityPickedValue = parseFormattedNumber(row.quantityPicked || 0) || 0;
   const canEditPickingStatus = isRowWithDR && quantityPickedValue === 0;
   const canSearchItem = !isRowWithDR; // Can't change item if it's from a DR
-  const canEditDetailAfterDR = !isRowWithDR; // Can't edit most fields if it's from a DR
   
   // Removed salesRepCode from detailModalHandlers
   // Added ATC lookup for detail rows if needed, but not explicitly requested for details.
@@ -2994,7 +3642,7 @@ const renderSIDetailCell = (columnKey, row, index) => {
     itemName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey)}</td>,
     itemSpecs: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey)}</td>,
     uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { className: "text-center" })}<input type="hidden" value={row.pmType || ""} readOnly /><input type="hidden" value={row.groupId || ""} readOnly /><input type="hidden" value={row.pmId || ""} readOnly /></td>,
-    siQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), onBlur: (e) => validateSIQuantity(index, e.target.value), onKeyDown: (e) => validateSIQuantity(index, e.target.value) })}</td>,
+    siQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), readOnly: isFormDisabled || isRowWithDR, onBlur: (e) => validateSIQuantity(index, e.target.value), onKeyDown: (e) => validateSIQuantity(index, e.target.value) })}</td>,
     quantityPicked: () => (
       <td key={columnKey} className="global-tran-td-ui" style={style}>
         <div className="flex items-center gap-1">
@@ -3022,7 +3670,20 @@ const renderSIDetailCell = (columnKey, row, index) => {
     ),
     unitPrice: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: sellingPriceDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${sellingPriceDecimals}}$`), blocked: () => !isSellingPriceAndDiscountEditable || row.freeItem === "Y", readOnly: isFormDisabled || !isSellingPriceAndDiscountEditable || row.freeItem === "Y" })}</td>,
     grossAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
-    vatCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { readOnly: true, className: "text-center" })}</td>,
+    vatCode: () => (
+      <td key={columnKey} className="global-tran-td-ui" style={style}>
+        <div className="relative w-full">
+          {lookupInput(columnKey, { className: "text-center" })}
+          {!isFormDisabled && (
+            <FontAwesomeIcon
+              icon={faMagnifyingGlass}
+              className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+              onClick={() => updateState({ selectedRowIndex: index, showVatModal: true, modalContext: "detailVAT" })}
+            />
+          )}
+        </div>
+      </td>
+    ),
     vatRate: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
     vatAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>, // New field
     salesAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
@@ -3190,7 +3851,7 @@ return (
         isAttachDisabled={!documentID}
         isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
         isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
-        isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED"|| displayStatus === "CLOSED" || totalSiQuantity > 0}
+        isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED"|| displayStatus === "CLOSED" }
       />
       </div>
 
@@ -3295,10 +3956,10 @@ return (
               required
               type="lookup"
               value={billToCustCode || ""}
-              disabled={isFormDisabled}
+              disabled={isFormDisabled || hasDRLinkedDetailRows}
               readOnly
-              lookupDisabled={isFetchDisabled}
-              onLookup={() => updateState({ custModalOpen: true, modalContext: "billTo" })}
+              lookupDisabled={isFetchDisabled || hasDRLinkedDetailRows}
+              onLookup={() => updateState({ custModalOpen: true, modalContext: "OpenDR" })}
             />
 
             <FieldRenderer
@@ -3318,7 +3979,7 @@ return (
               label="SI Type"
               type="select"
               value={siTranType || ""}
-              disabled={isFormDisabled}
+              disabled={isFormDisabled || hasDRLinkedDetailRows}
               onChange={(val) => updateState({ siTranType: val })}
               options={(siTranTypeOptions || []).map((t) => ({
                 label: t.DROPDOWN_NAME,
@@ -3334,7 +3995,7 @@ return (
               value={atcName || ""}
               disabled={isFormDisabled}
               readOnly
-              lookupDisabled={isFetchDisabled}
+              lookupDisabled={isFormDisabled}
               onLookup={() => updateState({ showATCModal: true })}
             />
 
@@ -3346,8 +4007,8 @@ return (
               value={vatName || ""}
               disabled={isFormDisabled}
               readOnly
-              lookupDisabled={isFetchDisabled}
-              onLookup={() => updateState({ showVatModal: true })}
+              lookupDisabled={isFormDisabled}
+              onLookup={() => updateState({ showVatModal: true, selectedRowIndex: null, modalContext: "headerVAT" })}
             />
 
             <FieldRenderer
@@ -3358,18 +4019,33 @@ return (
               value={billtermName || ""}
               disabled={isFormDisabled}
               readOnly
-              lookupDisabled={isFetchDisabled}
+              lookupDisabled={isFormDisabled}
               onLookup={() => updateState({ billtermModalOpen: true })}
             />
 
-            <FieldRenderer
-              id="dueDate"
-              label="Due Date"
-              type="date"
-              value={dueDate || ""}
-              disabled
-              readOnly
-            />
+           
+              <div className="relative w-full">
+              <div
+                className={`flex items-stretch global-ref-textbox-ui ${
+                  !isFormDisabled
+                    ? "global-ref-textbox-enabled"
+                    : "global-ref-textbox-disabled"
+                }`}
+              >
+                <DateFormatInput
+                  id="dueDate"
+                  className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
+                  value={dueDate}
+                  disabled
+                  updateState={updateState}
+                />
+              </div>
+              <label htmlFor="dueDate" className="global-ref-floating-label">
+                Due Date
+              </label>
+            </div>
+
+
           </div>
 
           <div className="global-tran-textbox-group-div-ui">
@@ -3381,7 +4057,7 @@ return (
               value={salesRepName || ""}
               disabled={isFormDisabled}
               readOnly
-              lookupDisabled={isFetchDisabled}
+              lookupDisabled={isFormDisabled}
               onLookup={() => updateState({ showSalesRepModal: true, modalContext: "headerSalesRep" })}
             />
 
@@ -3423,7 +4099,7 @@ return (
               value={refSiNo1 || ""}
               disabled={isFormDisabled}
               onChange={(val) => updateState({ refSiNo1: val })}
-              maxLength={useGetFieldLength(tblFieldArray, "refsvi_no1")}
+              maxLength={useGetFieldLength(tblFieldArray, "refsi_no1")}
             />
 
             <FieldRenderer
@@ -3433,7 +4109,7 @@ return (
               value={refSiNo2 || ""}
               disabled={isFormDisabled}
               onChange={(val) => updateState({ refSiNo2: val })}
-              maxLength={useGetFieldLength(tblFieldArray, "refsvi_no2")}
+              maxLength={useGetFieldLength(tblFieldArray, "refsi_no2")}
             />
           </div>
 
@@ -3670,7 +4346,7 @@ return (
 
     {/* Add Button */}
     <div className="global-tran-tab-footer-button-div-ui">
-      <div className="relative inline-block" style={{ visibility: isFormDisabled ? "hidden" : "visible" }}>
+      <div ref={addTypeDropdownRef} className="relative inline-block" style={{ visibility: isFormDisabled ? "hidden" : "visible" }}>
         {showAddTypeDropdown && (
           <div className="absolute bottom-[110%] left-0 mb-3 z-[9999] w-[280px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur-sm dark:border-slate-700 dark:bg-slate-800">
             <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-700">
@@ -3746,7 +4422,10 @@ return (
     </div>
 
     {/* General Ledger Section */}
-    <div className="global-tran-tab-div-ui">
+    <div
+      className={topTab === "details" ? "global-tran-tab-div-ui" : "hidden"}
+      style={{ display: topTab === "details" ? undefined : "none" }}
+    >
       <div className="global-tran-tab-nav-ui">
         <div className="flex flex-row sm:flex-row">
           <button
@@ -3914,6 +4593,7 @@ return (
       <CustomerMastLookupModal
         isOpen={custModalOpen}
         onClose={handleCloseCustModal}
+        customParam={siTranType === "SI01" ? "openDR" : undefined}
       />
     )}
 
@@ -3952,45 +4632,18 @@ return (
     )}
 
     {showOpenDRModal && (
-      <GlobalCombinedLookup
+      <GlobalLookupModalv1
         isOpen={showOpenDRModal}
-        title="Open DR"
-        summarySelectionMode="multiple"
-        detailSelectionMode="multiple"
-        summaryColumns={openDRSI_Col_Summary}
-        detailColumns={openDRSI_Col_Detail}
-        summaryData={openDRSI_Data_Summary}
-        tabTitles={["Open DR Summary", "Open DR Detail"]}
-        fetchDetailApi={async (selectedIds) => {
-          const idString = Array.isArray(selectedIds)
-            ? selectedIds.join(",")
-            : selectedIds;
-
-          const payload = {
-            json_data: JSON.stringify({
-              json_data: {
-                selectedId: idString
-              },
-            }),
-          };
-
-          const response = await postRequest("getDRSI_OpenDetail", payload);
-
-          if (response?.data?.[0]?.result) {
-            response.data[0].result = JSON.stringify(
-              JSON.parse(response.data[0].result).map(normalizeOpenDRLookupRow)
-            );
-          }
-
-          return response;
-        }}
+        title="Open Delivery Receipt Summary"
+        endpoint={openDRSI_Col_Summary}
+        data={openDRSI_Data_Summary}
+        btnCaption="Get Selected DR"
         onClose={handleInsertSelectedOpenDR}
         onCancel={() =>
           updateState({
             showOpenDRModal: false,
             openDRSI_Data_Summary: [],
             openDRSI_Col_Summary: [],
-            openDRSI_Col_Detail: [],
           })
         }
       />
@@ -4007,6 +4660,7 @@ return (
       <VATLookupModal
         isOpen={showVatModal}
         onClose={handleCloseVatModal}
+        customParam ="OutputGoods"
       />
     )}
 
@@ -4097,13 +4751,7 @@ return (
     cacheKey={`SI:${state.branchCode || ""}`}
     activeTabKey="SI_Summary"
     branchCode={state.branchCode}
-    status={(() => {
-      const s = (state.status || "").toUpperCase();
-      if (s === "CANCELLED") return "X";
-      if (s === "CLOSED") return "C";
-      if (s === "OPEN") return "";
-      return "All";
-    })()}
+    status="All"
     onRowDoubleClick={handleHistoryRowPick}
     historyExportName={`${documentTitle} History`}
   />
@@ -4116,3 +4764,13 @@ return (
 };
 
 export default SI;
+
+
+
+
+
+
+
+
+
+

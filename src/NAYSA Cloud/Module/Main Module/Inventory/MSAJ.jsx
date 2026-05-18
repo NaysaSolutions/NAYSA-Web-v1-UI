@@ -258,6 +258,7 @@ const MSAJ = () => {
     showSlModal:false,
     msLookupModalOpen:false,
     warehouseLookupOpen:false,
+    warehouseLookupKey:0,
 
     currencyModalOpen:false,
     branchModalOpen:false,
@@ -370,6 +371,7 @@ const MSAJ = () => {
   showQstatModal,
   msLookupModalOpen,
   warehouseLookupOpen,
+  warehouseLookupKey,
   locationLookupOpen
 
 } = state;
@@ -402,6 +404,10 @@ const MSAJ = () => {
         invAcct: glAccountFilter.ActiveAll,
   };
   const customParam = customParamMap[accountModalSource] || null;
+  const selectedAJTypeName =
+    ajTypes.find((type) => type?.DROPDOWN_CODE === selectedAJType)?.DROPDOWN_NAME || "";
+  const isBeginningBalance =
+    selectedAJType === "BB" || /beginning\s*balance/i.test(selectedAJTypeName);
   
 
 
@@ -817,7 +823,7 @@ const handleActivityOption = async (action) => {
     }
 
     if (action === "Upsert") {
-      if (finalDetailRowsGL.length === 0 && selectedAJType !== "BB") {
+      if (finalDetailRowsGL.length === 0 && !isBeginningBalance) {
         const newGlEntries = await useGenerateGLEntries(
           docType,
           buildGlData([])
@@ -1221,7 +1227,7 @@ const handleFieldBehavior = (option) => {
 
     case "hiddenBBMode":
      return (
-        selectedAJType === "BB" || currentUserRow?.viewCostamt ==='N'
+        isBeginningBalance || currentUserRow?.viewCostamt ==='N'
       );
 
 
@@ -1231,7 +1237,7 @@ const handleFieldBehavior = (option) => {
 
 
   case "allowInsert":
-      return ["BB", "IG", "IR"].includes(selectedAJType);
+      return isBeginningBalance || ["IG", "IR"].includes(selectedAJType);
 
 
       case "hiddenCAMode":
@@ -1926,6 +1932,79 @@ const handleSaveAndPrint = async (documentID) => {
 
 
 
+const normalizeSelectValue = (val) => {
+  if (val && typeof val === "object") {
+    return val.target?.value ?? val.value ?? val.DROPDOWN_CODE ?? val.dropdownCode ?? "";
+  }
+  return val ?? "";
+};
+
+const handleAdjustmentTypeChange = (val) => {
+  const nextAJType = normalizeSelectValue(val);
+
+  updateState({
+    selectedAJType: nextAJType,
+    warehouseLookupOpen: false,
+    locationLookupOpen: false,
+    msLookupModalOpen: false,
+    accountModalSource: null,
+    selectedRowIndex: null,
+    selectedWH: "",
+    WHCode: "",
+    WHName: "",
+    LocCode: "",
+    LocName: "",
+    detailRowsGL: [],
+  });
+
+  setTimeout(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+  }, 0);
+};
+
+const handleOpenHeaderWarehouseLookup = () => {
+  if (isFormDisabled) return;
+
+  setState((prev) => ({
+    ...prev,
+    warehouseLookupOpen: false,
+    locationLookupOpen: false,
+    accountModalSource: null,
+    selectedRowIndex: null,
+    selectedWH: "",
+    warehouseLookupKey: (Number(prev.warehouseLookupKey) || 0) + 1,
+  }));
+
+  setTimeout(() => {
+    setState((prev) => ({
+      ...prev,
+      warehouseLookupOpen: true,
+    }));
+  }, 0);
+};
+
+const handleOpenDetailWarehouseLookup = (index) => {
+  if (isFormDisabled) return;
+
+  setState((prev) => ({
+    ...prev,
+    warehouseLookupOpen: false,
+    locationLookupOpen: false,
+    selectedRowIndex: index,
+    accountModalSource: "whouseCode",
+    warehouseLookupKey: (Number(prev.warehouseLookupKey) || 0) + 1,
+  }));
+
+  setTimeout(() => {
+    setState((prev) => ({
+      ...prev,
+      warehouseLookupOpen: true,
+    }));
+  }, 0);
+};
+
 const handleCloseWarehouseLookup = (row) => {
   if (row) {
     accountModalSource
@@ -1939,7 +2018,7 @@ const handleCloseWarehouseLookup = (row) => {
     
 
     const hasDetails = detailRows && detailRows.length > 0;
-    if (!accountModalSource && (selectedAJType === "IG" || selectedAJType === "BB") && hasDetails) {
+    if (!accountModalSource && (selectedAJType === "IG" || isBeginningBalance) && hasDetails) {
       
       Swal.fire({
         title: 'Apply to Details?',
@@ -1961,7 +2040,7 @@ const handleCloseWarehouseLookup = (row) => {
     }
   }
   
-  updateState({ warehouseLookupOpen: false,accountModalSource:"" });
+  updateState({ warehouseLookupOpen: false, accountModalSource: null, selectedRowIndex: null });
 };
 
 
@@ -1976,7 +2055,7 @@ const handleCloseLocationLookup = (row) => {
       : updateState({ LocCode: row.locCode, LocName: row.locName });
 
      const hasDetails = detailRows && detailRows.length > 0;
-      if (!accountModalSource && (selectedAJType === "IG" || selectedAJType === "BB") && hasDetails) {
+      if (!accountModalSource && (selectedAJType === "IG" || isBeginningBalance) && hasDetails) {
         
         Swal.fire({
           title: 'Apply to Details?',
@@ -1996,7 +2075,7 @@ const handleCloseLocationLookup = (row) => {
       });
     }
   }
-  updateState({ locationLookupOpen: false, selectedWH:"" ,accountModalSource:"" });
+  updateState({ locationLookupOpen: false, selectedWH:"", accountModalSource: null, selectedRowIndex: null });
 };
 
 
@@ -2076,12 +2155,12 @@ const handleCloseBranchModal = (selectedBranch) => {
       const custData = response?.data?.[0]?.result ? JSON.parse(response.data[0].result) : [];
   
 
-      const lookupTypes = ["BB", "IG"];  
-      const colConfig = await useSelectedHSColConfig((lookupTypes.includes(selectedAJType) || itemSingleSelect) ? "AllMastItemLookup" : "getInvLookupMS");
+      const useMasterItemLookup = isBeginningBalance || selectedAJType === "IG" || itemSingleSelect;
+      const colConfig = await useSelectedHSColConfig(useMasterItemLookup ? "AllMastItemLookup" : "getInvLookupMS");
 
 
      if (custData.length === 0) {
-        useSwalInfoAlert(lookupTypes.includes(selectedAJType) ? "MS Master Data" : "MS Location Balance","No records found")
+        useSwalInfoAlert(useMasterItemLookup ? "MS Master Data" : "MS Location Balance","No records found")
          updateState({ isLoading: false });
         return; 
       }
@@ -2094,7 +2173,8 @@ const handleCloseBranchModal = (selectedBranch) => {
   
 
     } catch (error) {
-      useSwalErrorAlert(lookupTypes.includes(selectedAJType) ? "MS Master Data" : "MS Location Balance","No records found")
+      const useMasterItemLookup = isBeginningBalance || selectedAJType === "IG" || itemSingleSelect;
+      useSwalErrorAlert(useMasterItemLookup ? "MS Master Data" : "MS Location Balance","No records found")
       updateState({ 
           globalLookupRow: [] ,
           globalLookupHeader: [],
@@ -2288,7 +2368,7 @@ const renderMsajDetailColumn = (columnKey, row, index) => {
   const style = getMsajDetailCellStyle(columnKey, columnWidth);
   const isNegative = parseFormattedNumber(row.quantity) < 0;
   const textColorClass = isNegative ? "text-red-600" : "";
-  const canLookupStock = ["BB", "IG", "IR"].includes(selectedAJType) && !isFormDisabled && row.operation !== "S";
+  const canLookupStock = (isBeginningBalance || ["IG", "IR"].includes(selectedAJType)) && !isFormDisabled && row.operation !== "S";
 
   const focusNextDetailCell = (field) => {
     focusNextMsajDetailRowInput(index, field, {
@@ -2322,7 +2402,7 @@ const renderMsajDetailColumn = (columnKey, row, index) => {
     lotNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("lotNo", { readOnly: isFormDisabled || selectedAJType === "IL" || selectedAJType === "CA" || (selectedAJType === "IR" && row.operation === "S"), maxLength: useGetFieldLength(tblFieldArray, "lot_no") })}</td>,
     bbDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="date" id={`bbDate-${index}`} className={`w-full global-tran-td-inputclass-ui text-center ${textColorClass}`.trim()} value={toDateInputValue(row.bbDate)} readOnly={isFormDisabled || selectedAJType === "IL" || selectedAJType === "CA" || (selectedAJType === "IR" && row.operation === "S")} onChange={(e) => handleDetailChange(index, "bbDate", e.target.value, false)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("bbDate"); } }} /></td>,
     qstatCode: () => lookupCell("qstatCode", () => updateState({ selectedRowIndex: index, showQstatModal: true }), { hideIcon: !canLookupStock }),
-    whouseCode: () => lookupCell("whouseCode", () => updateState({ selectedRowIndex: index, warehouseLookupOpen: true, accountModalSource: "whouseCode" }), { hideIcon: !canLookupStock }),
+    whouseCode: () => lookupCell("whouseCode", () => handleOpenDetailWarehouseLookup(index), { hideIcon: !canLookupStock }),
     locCode: () => lookupCell("locCode", () => updateState({ selectedRowIndex: index, locationLookupOpen: true, selectedWH: row.whouseCode, accountModalSource: "locCode" }), { hideIcon: !canLookupStock }),
     acctCode: () => lookupCell("acctCode", () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "invAcct" })),
     rcCode: () => lookupCell("rcCode", () => updateState({ selectedRowIndex: index, showRcModal: true, accountModalSource: "rcCode" })),
@@ -2506,7 +2586,7 @@ return (
                 type="select"
                 value={selectedAJType || ""}
                 disabled={isFormDisabled || detailRows.length > 0}
-                onChange={(val) => updateState({ selectedAJType: val })}
+                onChange={handleAdjustmentTypeChange}
                 options={ajTypes
                   .filter((type) => type?.DROPDOWN_CODE && !(type.DROPDOWN_CODE === "CA" && handleFieldBehavior("noViewCostamt")))
                   .map((type) => ({ label: type.DROPDOWN_NAME, value: type.DROPDOWN_CODE }))}
@@ -2543,7 +2623,7 @@ return (
                 disabled={isFormDisabled}
                 readOnly
                 lookupDisabled={isFormDisabled}
-                onLookup={() => !isFormDisabled && updateState({ warehouseLookupOpen: true })}
+                onLookup={handleOpenHeaderWarehouseLookup}
               />
 
               <FieldRenderer
@@ -2952,14 +3032,13 @@ return (
         
 
 
-        {warehouseLookupOpen && (
-            <WarehouseLookupModal
-              isOpen={warehouseLookupOpen}
-              onClose={handleCloseWarehouseLookup}
-              filter={"ByBC" + branchCode}
-              source={accountModalSource}
-            />
-          )}  
+        <WarehouseLookupModal
+          key={`warehouse-${warehouseLookupKey}-${branchCode || ""}-${accountModalSource || "header"}`}
+          isOpen={warehouseLookupOpen}
+          onClose={handleCloseWarehouseLookup}
+          filter={isBeginningBalance ? "ActiveAll" : "ByBC" + (branchCode || "")}
+          source={accountModalSource || null}
+        />  
    
       {locationLookupOpen && (
         <LocationLookupModal

@@ -27,7 +27,7 @@ import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import RCLookupModal from "../../../Lookup/SearchRCMast.jsx";
-import MSLookupModal from "../../../Lookup/SearchMSMast.jsx";
+import FGLookupModal from "../../../Lookup/SearchFGMast.jsx";
 import PayeeMastLookupModal from "../../../Lookup/SearchVendMast";
 import PaytermLookupModal from "../../../Lookup/SearchPayTermRef.jsx";
 import GlobalCombinedLookup from "../../../Lookup/SearchGlobalCombinedLookup.jsx";
@@ -94,15 +94,13 @@ import { useGetCurrentDay, useFormatToDate } from "@/NAYSA Cloud/Global/dates";
 // Header
 import Header from "@/NAYSA Cloud/Components/Header";
 
-const MSRR = (item) => {
+const FGRR = (item) => {
   const loadedFromUrlRef = useRef(false);
   const navigate = useNavigate();
   const location = useLocation();
 
   const { resetFlag } = useReset();
-  const { user, companyInfo } = useAuth();
-  const isGeneralLedgerEnabled =
-    String(companyInfo?.msinvGLMode || "").toUpperCase() !== "D";
+  const { user } = useAuth();
 
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
 
@@ -283,7 +281,7 @@ const MSRR = (item) => {
     accountModalSource: null,
     showQstatModal: false,
 
-    msLookupModalOpen: false,
+    fgLookupModalOpen: false,
     tblFieldArray: [],
 
     activeTab: "basic",
@@ -409,7 +407,7 @@ const MSRR = (item) => {
     rcLookupContext,
     showAllTranDocNo,
 
-    msLookupModalOpen,
+    fgLookupModalOpen,
   } = state;
 
   const [header, setHeader] = useState({
@@ -426,11 +424,11 @@ const MSRR = (item) => {
   });
 
   // PR.jsx
-  const docType = docTypes?.MSRR || "MSRR";
+  const docType = docTypes?.FGRR || "FGRR";
 
   const pdfLink = docTypePDFGuide[docType];
   const videoLink = docTypeVideoGuide[docType];
-  const documentTitle = docTypeNames[docType] || "MS Receiving Report";
+  const documentTitle = docTypeNames[docType] || "FG Receiving Report";
 
   const getFullStatus = (s) => {
     const map = {
@@ -1163,7 +1161,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     try {
       updateState({ isLoading: true });
 
-      const endpoint = "getPORR_OpenSummary";
+      const endpoint = "getFGPORR_OpenSummary";
       const response = await fetchDataJson(endpoint, { branchCode });
       const rawRows = response?.data?.[0]?.result
         ? JSON.parse(response.data[0].result)
@@ -1277,6 +1275,10 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         "wh_name",
         "whouseName",
       );
+    const headerWhCode = state.WHCode || state.WHcode || WHCode || WHcode || "";
+    const headerWhName = state.WHName || WHName || "";
+    const headerLocCode = state.LocCode || LocCode || "";
+    const headerLocName = state.LocName || LocName || "";
 
     console.log("MSRR Reference PO warehouse fetch", {
       selection,
@@ -1364,13 +1366,13 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         bbDate: "",
         qstatCode: "",
 
-        whCode: poWhCode || "",
-        whName: poWhName || "",
-        whouseCode: poWhCode || "",
-        whouseName: poWhName || "",
-        LocCode: "",
-        locCode: "",
-        locName: "",
+        whCode: headerWhCode || poWhCode || "",
+        whName: headerWhName || poWhName || "",
+        whouseCode: headerWhCode || poWhCode || "",
+        whouseName: headerWhName || poWhName || "",
+        LocCode: headerLocCode || "",
+        locCode: headerLocCode || "",
+        locName: headerLocName || "",
       };
     });
 
@@ -1483,7 +1485,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       // ======================
       rcLookupModalOpen: false,
       rcLookupContext: "",
-      msLookupModalOpen: false,
+      fgLookupModalOpen: false,
       warehouseLookupOpen: false,
       locationLookupOpen: false,
       accountModalSource: "",
@@ -1497,39 +1499,45 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     updateState({ vatLookupOpen: true, vatLookupRowIndex: rowIndex });
   };
 
-  const handleCloseVatLookup = (vat) => {
-    const rowIndex = state.vatLookupRowIndex;
+  const handleCloseVatLookup = async (vat) => {
+    const rowIndex = state.vatLookupRowIndex;
 
-    updateState({ vatLookupOpen: false, vatLookupRowIndex: null });
+    updateState({ vatLookupOpen: false, vatLookupRowIndex: null });
 
-    if (!vat || rowIndex === null || rowIndex === undefined) return;
+    if (!vat || rowIndex === null || rowIndex === undefined) return;
 
-    const updatedRows = [...detailRows];
-    let row = { ...updatedRows[rowIndex] };
+    const updatedRows = [...detailRows];
+    let row = { ...updatedRows[rowIndex] };
 
-    // 1. Set VAT code and name values safely
-    row.vatCode = vat?.vatCode || vat?.VAT_CODE || "";
-    row.vatName = vat?.vatName || vat?.VAT_NAME || "";
+    // set VAT code always
+    row.vatCode = vat?.vatCode || "";
+    row.vatName = vat?.vatName || "";
 
-    // 2. Extract VAT rate variant keys from modal lookup source
+    // set VAT rate from lookup (supports various backend keys)
+    const lookupRate =
+      vat?.vatRate ??
+      vat?.VatRate ??
+      vat?.VAT_RATE ??
+      vat?.vat_rate ??
+      vat?.rate ??
+      vat?.vatPerc ??
+      vat?.vat_percent ??
+      "";
+    const fetchedRate = row.vatCode ? await fetchVatRate(row.vatCode) : "";
     const rate =
-      vat?.vatRate ??
-      vat?.vat_rate ??
-      vat?.rate ??
-      vat?.vatPerc ??
-      vat?.vat_percent ??
-      0;
+      lookupRate !== "" &&
+      lookupRate !== null &&
+      lookupRate !== undefined &&
+      parseFormattedNumber(lookupRate) !== 0
+        ? lookupRate
+        : fetchedRate;
 
-    // 3. Set row field explicitly BEFORE recomputing rows math equations
-    row.vatRate = formatNumber(rate, 2);
-
-    // 4. Recompute transaction metrics with active rate variables loaded
+    row.vatRate = formatNumber(parseFormattedNumber(rate || 0), 2);
     row = recalcMSRRRow(row);
 
-    // 5. Update state instances safely
-    updatedRows[rowIndex] = row;
-    updateState({ detailRows: updatedRows });
-  };
+    updatedRows[rowIndex] = row;
+    updateState({ detailRows: updatedRows });
+  };
 
   const loadCompanyData = async () => {
     updateState({ isLoading: true });
@@ -1672,36 +1680,78 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
   // ==========================
 
   const fetchTranData = async (rrNo, branchCode, direction = "") => {
-  try {
-    updateState({ isLoading: true });
+    try {
+      updateState({ isLoading: true });
 
-    const resp = await apiClient.get("/getMSRR", {
-      params: {
-        branchCode,
-        rrNo,
-        direction,
-      },
-    });
+      const resp = await apiClient.get("/getMSRR", {
+        params: {
+          branchCode,
+          rrNo,
+          direction, // F/P/N/L or ''
+        },
+      });
 
-    // Handle nested format variations safely
-    const row = resp?.data?.data?.[0] || resp?.data?.[0];
-    const jsonStr = row?.result ?? row?.RESULT ?? row?.JsonResult ?? row;
+      const row = resp?.data?.data?.[0] ?? resp?.data?.[0] ?? resp?.data;
+      const jsonStr =
+        row?.result ?? row?.RESULT ?? row?.JsonResult ?? row?.jsonResult ?? row ?? null;
 
-    if (!jsonStr) {
-      updateState({ isLoading: false });
-      return;
-    }
+      if (!jsonStr) {
+        updateState({ isLoading: false });
+        return;
+      }
 
-    const parsed = typeof jsonStr === "string" ? JSON.parse(jsonStr) : jsonStr;
+      const parsedResult =
+        typeof jsonStr === "string" ? JSON.parse(jsonStr) : jsonStr;
+      const parsed = Array.isArray(parsedResult)
+        ? parsedResult[0]
+        : Array.isArray(parsedResult?.data)
+          ? parsedResult.data[0]
+          : parsedResult;
 
-    // Use safe resolution keys matching what the stored procedure outputs
-    const parsedDocumentNo = parsed?.rrNo || parsed?.RR_NO || parsed?.rr_no || "";
-    const parsedDocumentId = parsed?.rrId || parsed?.rrHdId || parsed?.rr_id || parsed?.rrHdId;
+      const parsedDocumentNo =
+        getPOField(
+          parsed,
+          "rrNo",
+          "RR_NO",
+          "rr_no",
+          "fgrrNo",
+          "FGRR_NO",
+          "msrrNo",
+          "MSRR_NO",
+          "docNo",
+          "DocNo",
+          "DOC_NO",
+          "documentNo",
+          "DocumentNo",
+          "DOCUMENT_NO",
+        ) || rrNo;
+      const parsedDocumentId = getPOField(
+        parsed,
+        "rrId",
+        "rrHdId",
+        "RR_ID",
+        "RR_HD_ID",
+        "rr_id",
+        "rr_hd_id",
+        "fgrrId",
+        "fgrrHdId",
+        "FGRR_ID",
+        "FGRR_HD_ID",
+        "msrrId",
+        "msrrHdId",
+        "MSRR_ID",
+        "MSRR_HD_ID",
+        "documentID",
+        "DocumentID",
+        "DOCUMENT_ID",
+        "docId",
+        "DOC_ID",
+      );
 
-    if (!parsed || !parsedDocumentId) {
-      updateState({ isLoading: false });
-      return;
-    }
+      if (!parsed || !parsedDocumentNo) {
+        updateState({ isLoading: false });
+        return;
+      }
 
       const parsedWHCode = getPOField(
         parsed,
@@ -1749,6 +1799,32 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         "LOC_NAME",
         "LOCATION_NAME",
       );
+      const parsedRRDate = String(
+        getPOField(
+          parsed,
+          "rrDate",
+          "RR_DATE",
+          "rr_date",
+          "documentDate",
+          "DocumentDate",
+          "DOC_DATE",
+          "docDate",
+        ) || "",
+      ).substring(0, 10);
+      const parsedStatus = getPOField(
+        parsed,
+        "rrStatus",
+        "RR_STATUS",
+        "status",
+        "Status",
+        "STATUS",
+        "documentStatus",
+        "DocumentStatus",
+      );
+
+      if (parsedRRDate) {
+        setHeader((prev) => ({ ...prev, rr_date: parsedRRDate }));
+      }
 
       // -----------------------------
       // HEADER (MSRR)
@@ -1756,14 +1832,14 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       updateState({
         documentNo: parsedDocumentNo,
         documentID: parsedDocumentId,
-        documentDate: parsed.rrDate || null,
-        cutoffCode: parsed.cutoffCode || "",
+        documentDate: parsedRRDate || null,
+        cutoffCode: getPOField(parsed, "cutoffCode", "CUTOFF_CODE", "cutoff_code"),
 
-        poNo: parsed.poNo || "",
-        prNo: parsed.prNo || "",
+        poNo: getPOField(parsed, "poNo", "PoNo", "PO_NO", "po_no"),
+        prNo: getPOField(parsed, "prNo", "PrNo", "PR_NO", "pr_no"),
 
-        vendCode: parsed.vendCode || "",
-        vendName: parsed.vendName || "",
+        vendCode: getPOField(parsed, "vendCode", "VendCode", "VEND_CODE", "vend_code"),
+        vendName: getPOField(parsed, "vendName", "VendName", "VEND_NAME", "vend_name"),
 
         WHCode: parsedWHCode || "",
         WHcode: parsedWHCode || "",
@@ -1771,24 +1847,32 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         LocCode: parsedLocCode || "",
         LocName: parsedLocName || "",
 
-        drNo: parsed.drNo || "",
-        siNo: parsed.siNo || "",
-        siDate: parsed.siDate || null,
+        drNo: getPOField(parsed, "drNo", "DrNo", "DR_NO", "dr_no", "refNo", "REF_NO"),
+        siNo: getPOField(parsed, "siNo", "SiNo", "SI_NO", "si_no"),
+        siDate: getPOField(parsed, "siDate", "SiDate", "SI_DATE", "si_date") || null,
 
-        vatCode: parsed.vatCode || "",
-        rrAmount: parsed.rrAmount ?? 0,
-        rrVat: parsed.rrVat ?? 0,
+        vatCode: getPOField(parsed, "vatCode", "VatCode", "VAT_CODE", "vat_code"),
+        rrAmount: getPOField(parsed, "rrAmount", "RR_AMOUNT", "rr_amount") || 0,
+        rrVat: getPOField(parsed, "rrVat", "RR_VAT", "rr_vat") || 0,
 
-        refDocNo1: parsed.refrrNo1 || "",
-        refDocNo2: parsed.refrrNo2 || "",
+        refDocNo1: getPOField(parsed, "refrrNo1", "refDocNo1", "REF_DOC_NO1", "ref_doc_no1"),
+        refDocNo2: getPOField(parsed, "refrrNo2", "refDocNo2", "REF_DOC_NO2", "ref_doc_no2"),
 
-        remarks: parsed.remarks || "",
-        documentStatus: parsed.rrStatus || "",
+        remarks: getPOField(parsed, "remarks", "Remarks", "REMARKS"),
+        documentStatus: parsedStatus || "",
+        status: parsedStatus || "OPEN",
       });
 
-      const dt1 = Array.isArray(parsed.dt1) ? parsed.dt1 : [];
+      const dt1 = Array.isArray(parsed.dt1)
+        ? parsed.dt1
+        : Array.isArray(parsed.DT1)
+          ? parsed.DT1
+          : [];
 
-      const vatCodes = [...new Set(dt1.map((d) => d.vatCode).filter(Boolean))];
+      const getRetrievedVatCode = (r) =>
+        getPOField(r, "vatCode", "VatCode", "VAT_CODE", "vat_code");
+
+      const vatCodes = [...new Set(dt1.map(getRetrievedVatCode).filter(Boolean))];
       const vatRatePairs = await Promise.all(
         vatCodes.map(async (code) => [code, await fetchVatRate(code)]),
       );
@@ -1955,8 +2039,43 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         }
       }
 
-      const mappedDT1 = dt1.map((r, idx) => ({
-        lN: Number(r.lnNo ?? idx + 1),
+      const mappedDT1 = dt1.map((r, idx) => {
+        const vatCode = getRetrievedVatCode(r);
+        const retrievedWhCode = getPOField(
+          r,
+          "whCode",
+          "whouseCode",
+          "wh_code",
+          "warehouseCode",
+          "WhCode",
+          "WHCode",
+          "WH_CODE",
+          "WAREHOUSE_CODE",
+        );
+        const retrievedWhName = getPOField(
+          r,
+          "whName",
+          "whouseName",
+          "warehouseName",
+          "WhName",
+          "WHName",
+          "WH_NAME",
+          "WAREHOUSE_NAME",
+        );
+        const retrievedLocCode = getRetrievedLocCode(r);
+        const retrievedLocName = getPOField(
+          r,
+          "locName",
+          "LocName",
+          "loc_name",
+          "locationName",
+          "LocationName",
+          "LOCATION_NAME",
+          "LOC_NAME",
+        );
+
+        return {
+        lN: Number(getPOField(r, "lnNo", "lineNo", "LINE_NO", "ln", "LN") || idx + 1),
 
         rrStatus: getPOField(
           r,
@@ -1975,7 +2094,9 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           "RrStatus",
         ),
         poNo:
-          getPOField(r, "poNo", "PoNo", "PO_NO", "po_no") || parsed.poNo || "",
+          getPOField(r, "poNo", "PoNo", "PO_NO", "po_no") ||
+          getPOField(parsed, "poNo", "PoNo", "PO_NO", "po_no") ||
+          "",
         itemCode: getRetrievedItemCode(r),
         itemName:
           getRetrievedItemName(r) ||
@@ -2002,44 +2123,49 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         amount: formatNumber(getRetrievedGrossAmount(r)),
         itemAmount: formatNumber(getRetrievedGrossAmount(r)),
         grossAmount: formatNumber(getRetrievedGrossAmount(r)),
-        vatCode: r.vatCode || "",
-        vatRate: r.vatCode ? formatNumber(vatRateMap[r.vatCode] ?? 0, 2) : "",
-        vatAmount: formatNumber(r.vatAmount ?? 0),
-
-        qsCode: r.qsCode || "",
-        whCode: getPOField(
-          r,
-          "whCode",
-          "whouseCode",
-          "wh_code",
-          "warehouseCode",
-          "WhCode",
-          "WHCode",
-          "WH_CODE",
-          "WAREHOUSE_CODE",
+        vatCode,
+        vatRate: vatCode
+          ? formatNumber(
+              getPOField(r, "vatRate", "VatRate", "VAT_RATE", "vat_rate") ||
+                vatRateMap[vatCode] ||
+                0,
+              2,
+            )
+          : "",
+        vatAmount: formatNumber(
+          getPOField(r, "vatAmount", "VatAmount", "VAT_AMOUNT", "vat_amount") || 0,
         ),
-        whouseCode: getPOField(
-          r,
-          "whouseCode",
-          "whCode",
-          "wh_code",
-          "warehouseCode",
-          "WhCode",
-          "WHCode",
-          "WH_CODE",
-          "WAREHOUSE_CODE",
-        ),
-        locCode: getRetrievedLocCode(r),
-        LocCode: getRetrievedLocCode(r),
 
-        uomCode: r.uomCode || "",
+        qsCode: getPOField(r, "qsCode", "qstatCode", "QS_CODE", "QSTAT_CODE", "qstat_code"),
+        qstatCode: getPOField(r, "qstatCode", "qsCode", "QSTAT_CODE", "QS_CODE", "qstat_code"),
+        whCode: retrievedWhCode || parsedWHCode,
+        whouseCode: retrievedWhCode || parsedWHCode,
+        whName: retrievedWhName || parsedWHName,
+        whouseName: retrievedWhName || parsedWHName,
+        locCode: retrievedLocCode || parsedLocCode,
+        LocCode: retrievedLocCode || parsedLocCode,
+        locName: retrievedLocName || parsedLocName,
+
+        uomCode: getPOField(r, "uomCode", "UomCode", "UOM_CODE", "uom_code", "uom", "UOM"),
         unitCost: formatNumber(getRetrievedUnitCost(r) || 0, decUcost),
-        netAmount: formatNumber(r.netAmount ?? 0),
-        lotNo: r.lotNo || "",
-        controlNo: r.controlNo || "",
-      }));
+        netAmount: formatNumber(
+          getPOField(r, "netAmount", "NetAmount", "NET_AMOUNT", "net_amount") || 0,
+        ),
+        lotNo: getPOField(r, "lotNo", "LotNo", "LOT_NO", "lot_no"),
+        bbDate: String(getPOField(r, "bbDate", "BBDate", "BB_DATE", "bb_date") || "").substring(0, 10),
+        controlNo: getPOField(r, "controlNo", "ControlNo", "CONTROL_NO", "control_no"),
+        invType: getPOField(r, "invType", "InvType", "INV_TYPE", "inv_type") || "FG",
+        poLineno: getPOField(r, "poLineno", "poLineNo", "PO_LINENO", "PO_LINE_NO", "po_lineno"),
+        poBalance: formatNumber(getPOField(r, "poBalance", "PO_BALANCE", "po_balance") || 0, decQty),
+        categCode: getPOField(r, "categCode", "CATEG_CODE", "categ_code"),
+      };
+      });
 
-      const dt2 = Array.isArray(parsed.dt2) ? parsed.dt2 : [];
+      const dt2 = Array.isArray(parsed.dt2)
+        ? parsed.dt2
+        : Array.isArray(parsed.DT2)
+          ? parsed.DT2
+          : [];
       const normalizeGLDate = (value) => {
         if (!value) return "";
         const text = String(value);
@@ -2086,9 +2212,9 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     }
   };
 
-  const handleCloseMSLookup = async (selectedItem) => {
+  const handleCloseFGLookup = async (selectedItem) => {
     if (!selectedItem) {
-      updateState({ msLookupModalOpen: false, selectedRowIndex: null });
+      updateState({ fgLookupModalOpen: false, selectedRowIndex: null });
       return;
     }
 
@@ -2165,6 +2291,10 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       parseFormattedNumber(selectedVatLookupRate) !== 0
         ? selectedVatLookupRate
         : selectedVatFetchedRate;
+    const headerWhCode = state.WHCode || state.WHcode || WHCode || WHcode || "";
+    const headerWhName = state.WHName || WHName || "";
+    const headerLocCode = state.LocCode || LocCode || "";
+    const headerLocName = state.LocName || LocName || "";
 
     if (selectedRowIndex !== null && selectedRowIndex !== undefined) {
       const updatedRows = [...detailRows];
@@ -2186,11 +2316,18 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           selectedVatRate !== "" && selectedVatRate !== null && selectedVatRate !== undefined
             ? formatNumber(parseFormattedNumber(selectedVatRate), 2)
             : currentRow.vatRate || "",
+        whouseCode: headerWhCode || currentRow.whouseCode || currentRow.whCode || "",
+        whCode: headerWhCode || currentRow.whCode || currentRow.whouseCode || "",
+        whouseName: headerWhName || currentRow.whouseName || currentRow.whName || "",
+        whName: headerWhName || currentRow.whName || currentRow.whouseName || "",
+        LocCode: headerLocCode || currentRow.LocCode || currentRow.locCode || "",
+        locCode: headerLocCode || currentRow.locCode || currentRow.LocCode || "",
+        locName: headerLocName || currentRow.locName || currentRow.LocName || "",
       });
 
       updateState({
         detailRows: updatedRows,
-        msLookupModalOpen: false,
+        fgLookupModalOpen: false,
         selectedRowIndex: null,
       });
       updateTotalsDisplay(updatedRows);
@@ -2198,19 +2335,12 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     }
 
     const newRow = {
-      invType: "MS",
-      unitCost: formatNumber(parseFormattedNumber(selectedUnitCost), decUcost),
-      vatCode: selectedVatCode,
-      vatName: selectedVatName,
-      vatRate:
-        selectedVatRate !== "" && selectedVatRate !== null && selectedVatRate !== undefined
-          ? formatNumber(parseFormattedNumber(selectedVatRate), 2)
-          : "",
+      invType: "FG",
       groupId: selectedItem.categCode || "",
       poStatus: status || "",
       itemCode: selectedItem.itemCode || "",
       itemName: selectedItem.itemName || "",
-      uomCode: selectedItem.uom || "",
+    uomCode: selectedItem.uomCode || selectedItem.uom || "",
       qtyOnHand: formatNumber(selectedItem.qtyHand ?? 0, 6),
       qtyAlloc: "0.000000",
       qtyNeeded: "0.000000",
@@ -2222,13 +2352,27 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       serviceName: "",
       poQty: "0.000000",
       rrQty: "0.000000",
-      freeQty: "0.000000",
-    };
+    freeQty: "0.000000",
+      unitCost: formatNumber(parseFormattedNumber(selectedUnitCost), decUcost),
+      vatCode: selectedVatCode,
+      vatName: selectedVatName,
+      vatRate:
+        selectedVatRate !== "" && selectedVatRate !== null && selectedVatRate !== undefined
+          ? formatNumber(parseFormattedNumber(selectedVatRate), 2)
+          : "",
+      whouseCode: headerWhCode,
+      whCode: headerWhCode,
+      whouseName: headerWhName,
+      whName: headerWhName,
+      LocCode: headerLocCode,
+      locCode: headerLocCode,
+      locName: headerLocName,
+  };
 
-    const updatedRows = [...detailRows, recalcMSRRRow(newRow)];
+    const updatedRows = [...detailRows, recalcMSRRRow(newRow)];
     updateState({
       detailRows: updatedRows,
-      msLookupModalOpen: false,
+      fgLookupModalOpen: false,
     });
 
     const totalQty = updatedRows.reduce(
@@ -2274,9 +2418,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
   const fetchVatRate = async (vatCode) => {
     if (!vatCode) return "";
 
-    const res = await fetchData(
-      `/getVat?VAT_CODE=${encodeURIComponent(vatCode)}`,
-    );
+    const res = await fetchData("getVat", { VAT_CODE: vatCode });
 
     if (!res?.success) return "";
 
@@ -2287,7 +2429,16 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     const parsed = JSON.parse(row0.result);
     const vat = Array.isArray(parsed) ? parsed[0] : parsed;
 
-    return vat?.vatRate ?? "";
+    return (
+      vat?.vatRate ??
+      vat?.VatRate ??
+      vat?.VAT_RATE ??
+      vat?.vat_rate ??
+      vat?.rate ??
+      vat?.vatPerc ??
+      vat?.vat_percent ??
+      ""
+    );
   };
 
   // When user clicks the "Add Line" button
@@ -2313,6 +2464,10 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
   // When user picks FG / MS / RM
   const handleSelectTypeAndAddRow = (typeCode) => {
     const today = header.rr_date || new Date().toISOString().split("T")[0];
+    const headerWhCode = state.WHCode || state.WHcode || WHCode || WHcode || "";
+    const headerWhName = state.WHName || WHName || "";
+    const headerLocCode = state.LocCode || LocCode || "";
+    const headerLocName = state.LocName || LocName || "";
 
     const newRow = {
       invType: typeCode,
@@ -2333,6 +2488,13 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       poQty: "0.000000",
       rrQty: "0.000000",
       freeQty: "0.000000",
+      whouseCode: headerWhCode,
+      whCode: headerWhCode,
+      whouseName: headerWhName,
+      whName: headerWhName,
+      LocCode: headerLocCode,
+      locCode: headerLocCode,
+      locName: headerLocName,
     };
 
     const updatedRows = [...detailRows, newRow];
@@ -2347,10 +2509,10 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     setShowTypeDropdown(false);
   };
 
-  const handleOpenMSLookup = () => {
+  const handleOpenFGLookup = () => {
     if (isFormDisabled) return;
     setShowTypeDropdown(false);
-    updateState({ msLookupModalOpen: true, selectedRowIndex: null });
+    updateState({ fgLookupModalOpen: true, selectedRowIndex: null });
   };
 
   const handleDeleteRow = (index) => {
@@ -2863,7 +3025,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       const isNew = !state.documentID;
 
       // Optional front-end guard: prevent save when GL is unbalanced
-    if (isGeneralLedgerEnabled && action === "Upsert") {
+      if (action === "Upsert") {
         const totalDebit = (state.detailRowsGL || []).reduce(
           (sum, r) => sum + parseFormattedNumber(r?.debit || 0),
           0,
@@ -3001,7 +3163,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         dt1: dt1Payload,
 
         // DT2 (GL)
-        dt2: isGeneralLedgerEnabled ? (state.detailRowsGL || []).map((r, i) => ({
+        dt2: (state.detailRowsGL || []).map((r, i) => ({
           recNo: String(i + 1),
           acctCode: r.acctCode || "",
           rcCode: r.rcCode || "",
@@ -3020,14 +3182,13 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           slRefDate: r.slRefDate || null,
           remarks: r.remarks || "",
           dt1Lineno: r.dt1Lineno || "",
-        })) : [],
+        })),
       };
 
       // ================
       // GENERATE GL
       // ================
-    if (action === "GenerateGL") {
-      if (!isGeneralLedgerEnabled) return;
+      if (action === "GenerateGL") {
         const newGlEntries = await useGenerateGLEntries(docType, glData);
         if (newGlEntries) updateState({ detailRowsGL: newGlEntries });
         return;
@@ -3347,17 +3508,53 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
   }, [navigate, location.pathname]);
 
   const handleHistoryRowPick = useCallback((row) => {
-    const docNo = row?.docNo;
-    const branchCode = row?.branchCode;
-    if (!docNo || !branchCode) return;
-    fetchTranData(docNo, branchCode);
+    const docNo = getPOField(
+      row,
+      "docNo",
+      "DocNo",
+      "DOC_NO",
+      "rrNo",
+      "RR_NO",
+      "rr_no",
+      "fgrrNo",
+      "FGRR_NO",
+      "msrrNo",
+      "MSRR_NO",
+      "documentNo",
+      "DocumentNo",
+      "DOCUMENT_NO",
+    );
+    const pickedBranchCode =
+      getPOField(
+        row,
+        "branchCode",
+        "BranchCode",
+        "BRANCH_CODE",
+        "branch",
+        "Branch",
+        "BRANCH",
+        "bc",
+        "BC",
+        "BCode",
+        "BCODE",
+      ) ||
+      state.branchCode ||
+      branchCode;
+    if (!docNo || !pickedBranchCode) return;
+    fetchTranData(docNo, pickedBranchCode);
     setTopTab("details");
-  }, []);
+  }, [state.branchCode, branchCode]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const docNo = params.get("poNo");
-    const brCode = params.get("branchCode");
+    const docNo =
+      params.get("rrNo") ||
+      params.get("docNo") ||
+      params.get("fgrrNo") ||
+      params.get("msrrNo") ||
+      params.get("poNo");
+    const brCode =
+      params.get("branchCode") || params.get("bc") || params.get("branch");
 
     if (!loadedFromUrlRef.current && docNo && brCode) {
       loadedFromUrlRef.current = true;
@@ -3373,13 +3570,20 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
   };
 
   const handleTranDocNoRetrieval = async (data) => {
-    await fetchTranData(data.docNo, data.branchCode || branchCode, data.key);
+    const docNo = getPOField(data, "docNo", "rrNo", "RR_NO", "fgrrNo", "FGRR_NO", "msrrNo", "MSRR_NO");
+    const pickedBranchCode =
+      getPOField(data, "branchCode", "BranchCode", "BRANCH_CODE", "branch", "BC") ||
+      branchCode;
+    await fetchTranData(docNo, pickedBranchCode, data.key);
     updateState({ showAllTranDocNo: data.modalClose });
   };
 
   const handleTranDocNoSelection = async (data) => {
     handleReset();
-    updateState({ showAllTranDocNo: false, documentNo: data.docNo });
+    updateState({
+      showAllTranDocNo: false,
+      documentNo: getPOField(data, "docNo", "rrNo", "RR_NO", "fgrrNo", "FGRR_NO", "msrrNo", "MSRR_NO"),
+    });
   };
 
   // ==========================
@@ -3580,11 +3784,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           printData={printData}
           onReset={handleReset}
           onSave={() => handleActivityOption("Upsert")}
-          onGenerateGL={
-            isGeneralLedgerEnabled
-              ? () => handleActivityOption("GenerateGL")
-              : undefined
-          }
+          onGenerateGL={() => handleActivityOption("GenerateGL")}
           onPost={handlePost}
           onCancel={handleCancel}
           onCopy={handleCopy}
@@ -3658,27 +3858,27 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                 />
 
                 {/* PR No */}
-                <FieldRenderer
-                  id="msrrNo"
-                  label="MSRR No."
-                  type="lookup"
-                  value={state.documentNo || ""}
-                  disabled={state.isDocNoDisabled}
-                  onChange={(val) => updateState({ documentNo: val })}
-                  onLookup={() => updateState({ showAllTranDocNo: true })}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      handleDocNoBlur();
-                      e.preventDefault();
-                      document.getElementById("RRDate")?.focus();
-                    }
-                  }}
-                />
-
+                {/* FGRR No Field Hookup */}
+<FieldRenderer
+  id="msrrNo"
+  label="FGRR No."
+  type="lookup"
+  value={documentNo || ""}
+  disabled={isDocNoDisabled}
+  onChange={(val) => updateState({ documentNo: val })}
+  onLookup={() => updateState({ showAllTranDocNo: true })}
+  onKeyDown={(e) => {
+    if (e.key === "Enter") {
+      handleDocNoBlur();
+      e.preventDefault();
+      document.getElementById("RRDate")?.focus();
+    }
+  }}
+/>
                 {/* PR Date */}
                 <FieldRenderer
                   id="RRDate"
-                  label="MSRR Date"
+                  label="FGRR Date"
                   type="date"
                   value={header.rr_date}
                   onChange={(val) =>
@@ -4043,7 +4243,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                               onClick={() => {
                                 updateState({
                                   selectedRowIndex: index,
-                                  msLookupModalOpen: true,
+                                  fgLookupModalOpen: true,
                                 });
                               }}
                             />
@@ -4300,13 +4500,16 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                             readOnly
                           />
 
-                          {!isFormDisabled &&
-                            (
+                          {!isFormDisabled && (
                               <FontAwesomeIcon
                                 icon={faMagnifyingGlass}
                                 className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
                                 onClick={() => {
-                                  handleOpenVatLookup(index);
+                                  updateState({
+                                    selectedRowIndex: index,
+                                    vatLookupOpen: true,
+                                    vatLookupRowIndex: index,
+                                  });
                                 }}
                               />
                             )}
@@ -4494,21 +4697,21 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                       <button
                         type="button"
                         className="mt-1 flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
-                        onClick={handleOpenMSLookup}
+                        onClick={handleOpenFGLookup}
                       >
                         <div className="flex items-center gap-2">
                           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
                             <FontAwesomeIcon icon={faTableCellsLarge} />
                           </span>
                           <div className="flex flex-col items-start">
-                            <span>Material Supplies</span>
+                            <span>Finished Goods</span>
                             <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500">
-                              Add MS item
+                              Add FG item
                             </span>
                           </div>
                         </div>
                         <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
-                          MS
+                          FG
                         </span>
                       </button>
 
@@ -4576,15 +4779,450 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           </div>
         </div>
 
+        {/* =====================
+    GENERAL LEDGER (DT2)
+   ===================== */}
+        <div className="global-tran-tab-div-ui mt-3">
+          <div className="global-tran-tab-nav-ui">
+            <div className="flex flex-row sm:flex-row">
+              <button
+                className={`global-tran-tab-padding-ui ${
+                  GLactiveTab === "invoice"
+                    ? "global-tran-tab-text_active-ui"
+                    : "global-tran-tab-text_inactive-ui"
+                }`}
+                onClick={() => updateState({ GLactiveTab: "invoice" })}
+              >
+                General Ledger
+              </button>
+            </div>
+
+          <div className="flex justify-end">
+            <button
+              onClick={() => handleActivityOption("GenerateGL")}
+              className="global-tran-button-generateGL"
+              disabled={isLoading}
+              style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
+            >
+              {isLoading ? "Generating..." : "Generate GL Entries"}
+            </button>
+          </div>
+          </div>
+
+          <div className="global-tran-table-main-div-ui">
+            <div className="global-tran-table-main-sub-div-ui">
+              <table className="min-w-full border-collapse">
+                <thead className="global-tran-thead-div-ui">
+                  <tr>
+                    <th className="global-tran-th-ui">LN</th>
+                    <th className="global-tran-th-ui">Account Code</th>
+                    <th className="global-tran-th-ui">RC Code</th>
+                    <th className="global-tran-th-ui">SL Type Code</th>
+                    <th className="global-tran-th-ui">SL Code</th>
+                    <th className="global-tran-th-ui w-[2000px]">Particulars</th>
+                    <th className="global-tran-th-ui">VAT Code</th>
+                    <th className="global-tran-th-ui">VAT Name</th>
+                    <th className="global-tran-th-ui">ATC Code</th>
+                    <th className="global-tran-th-ui">ATC Name</th>
+                    <th className="global-tran-th-ui">Debit ({glCurrDefault})</th>
+                    <th className="global-tran-th-ui">Credit ({glCurrDefault})</th>
+                    <th className={`global-tran-th-ui ${withCurr2 ? "" : "hidden"}`}>
+                      Debit ({withCurr3 ? glCurrGlobal2 : currCode})
+                    </th>
+                    <th className={`global-tran-th-ui ${withCurr2 ? "" : "hidden"}`}>
+                      Credit ({withCurr3 ? glCurrGlobal2 : currCode})
+                    </th>
+                    <th className={`global-tran-th-ui ${withCurr3 ? "" : "hidden"}`}>
+                      Debit ({glCurrGlobal3})
+                    </th>
+                    <th className={`global-tran-th-ui ${withCurr3 ? "" : "hidden"}`}>
+                      Credit ({glCurrGlobal3})
+                    </th>
+                    <th className="global-tran-th-ui">SL Ref. No.</th>
+                    <th className="global-tran-th-ui">SL Ref. Date</th>
+                    <th className="global-tran-th-ui">Remarks</th>
+                    {!isFormDisabled && (
+                      <>
+                        <th className="global-tran-th-ui sticky right-[43px] bg-blue-300 dark:bg-blue-900 z-30">
+                          Add
+                        </th>
+                        <th className="global-tran-th-ui sticky right-0 bg-blue-300 dark:bg-blue-900 z-30">
+                          Delete
+                        </th>
+                      </>
+                    )}
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {(state.detailRowsGL || []).map((row, index) => (
+                    <tr key={index} className="global-tran-tr-ui">
+                      <td className="global-tran-td-ui text-center">
+                        {index + 1}
+                      </td>
+
+                      {/* Account */}
+                      <td className="global-tran-td-ui">
+                        <div className="relative w-fit">
+                          <input
+                            type="text"
+                            className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
+                            value={row.acctCode || ""}
+                            readOnly
+                            onClick={() => openGLModal(index, "showCOALookup")}
+                          />
+                          {!isFormDisabled && (
+                            <FontAwesomeIcon
+                              icon={faMagnifyingGlass}
+                              className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                              onClick={() => openGLModal(index, "showCOALookup")}
+                            />
+                          )}
+                        </div>
+                      </td>
+
+                      {/* RC */}
+                      <td className="global-tran-td-ui">
+                        <div className="relative w-fit">
+                          <input
+                            type="text"
+                            className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
+                            value={row.rcCode || ""}
+                            readOnly
+                            onClick={() => openGLModal(index, "showRCLookupGL")}
+                          />
+                          {!isFormDisabled && (
+                            <FontAwesomeIcon
+                              icon={faMagnifyingGlass}
+                              className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                              onClick={() => openGLModal(index, "showRCLookupGL")}
+                            />
+                          )}
+                        </div>
+                    </td>
+
+                      {/* SL Type */}
+                      <td className="global-tran-td-ui">
+                        <input
+                          type="text"
+                          className="w-[100px] global-tran-td-inputclass-ui"
+                          value={row.sltypeCode || ""}
+                          onChange={(e) =>
+                            handleGLFieldChange(index, "sltypeCode", e.target.value)
+                          }
+                          readOnly={isFormDisabled}
+                        />
+                      </td>
+
+                      {/* SL */}
+                      <td className="global-tran-td-ui">
+                        <div className="relative w-fit">
+                          <input
+                            type="text"
+                            className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
+                            value={row.slCode || ""}
+                            readOnly
+                            onClick={() => openGLModal(index, "showSLLookup")}
+                          />
+                          {!isFormDisabled && (
+                            <FontAwesomeIcon
+                              icon={faMagnifyingGlass}
+                              className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                              onClick={() => openGLModal(index, "showSLLookup")}
+                            />
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Particular */}
+                      <td className="global-tran-td-ui">
+                        <input
+                          type="text"
+                          className="w-[300px] global-tran-td-inputclass-ui"
+                          value={row.particular || ""}
+                          onChange={(e) =>
+                            handleGLFieldChange(index, "particular", e.target.value)
+                          }
+                          readOnly={isFormDisabled}
+                        />
+                      </td>
+
+                      {/* VAT */}
+                      <td className="global-tran-td-ui">
+                        <div className="relative w-fit">
+                          <input
+                            type="text"
+                            className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
+                            value={row.vatCode || ""}
+                            readOnly
+                            onClick={() =>
+                              openGLModal(index, "showVATLookupGL")
+                            }
+                          />
+                          {!isFormDisabled && (
+                            <FontAwesomeIcon
+                              icon={faMagnifyingGlass}
+                              className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                              onClick={() =>
+                                openGLModal(index, "showVATLookupGL")
+                              }
+                            />
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="global-tran-td-ui">
+                        <input
+                          type="text"
+                          className="w-[200px] global-tran-td-inputclass-ui"
+                          value={row.vatName || ""}
+                          readOnly
+                        />
+                      </td>
+
+                      {/* ATC */}
+                      <td className="global-tran-td-ui">
+                        <div className="relative w-fit">
+                          <input
+                            type="text"
+                            className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
+                            value={row.atcCode || ""}
+                            readOnly
+                            onClick={() =>
+                              openGLModal(index, "showATCLookupGL")
+                            }
+                          />
+                          {!isFormDisabled && (
+                            <FontAwesomeIcon
+                              icon={faMagnifyingGlass}
+                              className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                              onClick={() =>
+                                openGLModal(index, "showATCLookupGL")
+                              }
+                            />
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="global-tran-td-ui">
+                        <input
+                          type="text"
+                          className="w-[200px] global-tran-td-inputclass-ui"
+                          value={row.atcName || ""}
+                          onChange={(e) =>
+                            handleGLFieldChange(index, "atcName", e.target.value)
+                          }
+                          readOnly={isFormDisabled}
+                        />
+                      </td>
+
+                      {/* Debit */}
+                      <td className="global-tran-td-ui text-right">
+                        <input
+                          type="text"
+                          className="w-[120px] global-tran-td-inputclass-ui text-right"
+                          value={row.debit || ""}
+                          onChange={(e) =>
+                            handleGLAmountChange(index, "debit", e.target.value)
+                          }
+                          readOnly={isFormDisabled}
+                        />
+                      </td>
+
+                      {/* Credit */}
+                      <td className="global-tran-td-ui text-right">
+                        <input
+                          type="text"
+                          className="w-[120px] global-tran-td-inputclass-ui text-right"
+                          value={row.credit || ""}
+                          onChange={(e) =>
+                            handleGLAmountChange(
+                              index,
+                              "credit",
+                              e.target.value,
+                            )
+                          }
+                          readOnly={isFormDisabled}
+                        />
+                      </td>
+
+                      <td
+                        className={`global-tran-td-ui text-right ${
+                          withCurr2 ? "" : "hidden"
+                        }`}
+                      >
+                        <input
+                          type="text"
+                          className="w-[120px] global-tran-td-inputclass-ui text-right"
+                          value={row.debitFx1 || ""}
+                          onChange={(e) =>
+                            handleGLAmountChange(index, "debitFx1", e.target.value)
+                          }
+                          readOnly={isFormDisabled}
+                        />
+                      </td>
+
+                      <td
+                        className={`global-tran-td-ui text-right ${
+                          withCurr2 ? "" : "hidden"
+                        }`}
+                      >
+                        <input
+                          type="text"
+                          className="w-[120px] global-tran-td-inputclass-ui text-right"
+                          value={row.creditFx1 || ""}
+                          onChange={(e) =>
+                            handleGLAmountChange(index, "creditFx1", e.target.value)
+                          }
+                          readOnly={isFormDisabled}
+                        />
+                      </td>
+
+                      <td
+                        className={`global-tran-td-ui text-right ${
+                          withCurr3 ? "" : "hidden"
+                        }`}
+                      >
+                        <input
+                          type="text"
+                          className="w-[120px] global-tran-td-inputclass-ui text-right"
+                          value={row.debitFx2 || ""}
+                          onChange={(e) =>
+                            handleGLAmountChange(index, "debitFx2", e.target.value)
+                          }
+                          readOnly={isFormDisabled}
+                        />
+                      </td>
+
+                      <td
+                        className={`global-tran-td-ui text-right ${
+                          withCurr3 ? "" : "hidden"
+                        }`}
+                      >
+                        <input
+                          type="text"
+                          className="w-[120px] global-tran-td-inputclass-ui text-right"
+                          value={row.creditFx2 || ""}
+                          onChange={(e) =>
+                            handleGLAmountChange(index, "creditFx2", e.target.value)
+                          }
+                          readOnly={isFormDisabled}
+                        />
+                      </td>
+
+                      <td className="global-tran-td-ui">
+                        <input
+                          type="text"
+                          className="w-[100px] global-tran-td-inputclass-ui"
+                          value={row.slRefNo || ""}
+                          onChange={(e) =>
+                            handleGLFieldChange(index, "slRefNo", e.target.value)
+                          }
+                          readOnly={isFormDisabled}
+                          maxLength={useGetFieldLength(tblFieldArray, "slref_no")}
+                        />
+                      </td>
+
+                      <td className="global-tran-td-ui">
+                        <input
+                          type="date"
+                          className="w-[100px] global-tran-td-inputclass-ui"
+                          value={
+                            row.slRefDate ? String(row.slRefDate).substring(0, 10) : ""
+                          }
+                          onChange={(e) =>
+                            handleGLFieldChange(index, "slRefDate", e.target.value)
+                          }
+                          readOnly={isFormDisabled}
+                        />
+                      </td>
+
+                      <td className="global-tran-td-ui">
+                        <input
+                          type="text"
+                          className="w-[100px] global-tran-td-inputclass-ui"
+                          value={row.remarks || ""}
+                          onChange={(e) =>
+                            handleGLFieldChange(index, "remarks", e.target.value)
+                          }
+                          readOnly={isFormDisabled}
+                          maxLength={useGetFieldLength(tblFieldArray, "remarks")}
+                        />
+                      </td>
+
+                      {/* Delete */}
+                      {!isFormDisabled && (
+                        <>
+                          <td className="global-tran-td-ui text-center sticky right-10">
+                            <button
+                              type="button"
+                              className="global-tran-td-button-add-ui"
+                              onClick={() => handleAddGLRow(index)}
+                            >
+                              <FontAwesomeIcon icon={faPlus} />
+                            </button>
+                          </td>
+                          <td className="global-tran-td-ui text-center sticky right-0">
+                            <button
+                              type="button"
+                              className="global-tran-td-button-delete-ui"
+                              onClick={() => handleDeleteGLRow(index)}
+                            >
+                              <FontAwesomeIcon icon={faMinus} />
+                            </button>
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="global-tran-tab-footer-main-div-ui">
+            <div className="global-tran-tab-footer-button-div-ui">
+              <button
+                onClick={() => handleAddGLRow()}
+                          className="global-tran-tab-footer-button-add-ui"
+                style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
+              >
+                <FontAwesomeIcon icon={faPlus} className="mr-2" />
+                Add
+              </button>
+            </div>
+
+            <div className="global-tran-tab-footer-total-main-div-ui">
+              <div className="global-tran-tab-footer-total-div-ui">
+                <label className="global-tran-tab-footer-total-label-ui">
+                  Total Debit ({glCurrDefault}):
+                </label>
+                <label className="global-tran-tab-footer-total-value-ui">
+                  {formatNumber(totalDebitGL)}
+                </label>
+              </div>
+
+              <div className="global-tran-tab-footer-total-div-ui">
+                <label className="global-tran-tab-footer-total-label-ui">
+                  Total Credit ({glCurrDefault}):
+                </label>
+                <label className="global-tran-tab-footer-total-value-ui">
+                  {formatNumber(totalCreditGL)}
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-     {/* HISTORY TAB */}
+      {/* HISTORY TAB */}
       <div className={topTab === "history" ? "" : "hidden"}>
         <AllTranHistory
           showHeader={false}
-          endpoint="/getPRHistory"
-          cacheKey={`PR:${state.branchCode || ""}:${state.documentNo || ""}`}
-          activeTabKey="PR_Summary"
+          endpoint="/getFGRRHistory"
+          cacheKey={`FGRR:${state.branchCode || ""}:${state.documentNo || ""}`}
+          activeTabKey="FGRR_Summary"
           branchCode={state.branchCode}
           startDate={null}
           endDate={null}
@@ -4884,8 +5522,6 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         />
       )}
 
-      {isGeneralLedgerEnabled && (
-        <>
       {/* COA Lookup */}
       <COAMastLookupModal
         isOpen={state.showCOALookup}
@@ -4938,10 +5574,8 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           applyLookupToGLRow("atcCode", { atcCode: item.atcCode });
         }}
       />
-        </>
-      )}
 
-     {state.poLookupModalOpen && (
+      {state.poLookupModalOpen && (
   <GlobalCombinedLookup
     isOpen={state.poLookupModalOpen}
     summarySelectionMode="single"
@@ -5040,10 +5674,10 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         />
       )}
 
-      {msLookupModalOpen && (
-        <MSLookupModal
-          isOpen={msLookupModalOpen}
-          onClose={handleCloseMSLookup}
+      {fgLookupModalOpen && (
+        <FGLookupModal
+          isOpen={fgLookupModalOpen}
+          onClose={handleCloseFGLookup}
           customParam={null} // or pass something if you need it
         />
       )}
@@ -5095,4 +5729,4 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
   );
 };
 
-export default MSRR;
+export default FGRR;

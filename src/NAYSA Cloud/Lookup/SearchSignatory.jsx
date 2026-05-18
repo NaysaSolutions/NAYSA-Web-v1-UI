@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { postRequest } from "@/NAYSA Cloud/Configuration/BaseURL";
 import { useTopDocSign } from "@/NAYSA Cloud/Global/top1RefTable";
-import { X, Printer, FileText, CheckCircle, ChevronDown } from "lucide-react";
+import { X, Printer, FileText, CheckCircle, ChevronDown, User } from "lucide-react";
+import { useAuth } from "../Authentication/AuthContext.jsx";
 
 const InputField = ({ label, name, value, onChange, disabled, isSaving }) => (
   <div className="flex flex-col space-y-1">
@@ -36,9 +37,12 @@ const DocumentSignatories = ({ isOpen, onClose, onCancel, params }) => {
   const hasLoadedInitialData = useRef(false);
   const cancelRef = useRef(null);
 
+const { user } = useAuth();
+const userName = user?.USER_NAME || user?.USER_CODE || "User";
+
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [form, setForm] = useState({
-    preparedBy: "NSI",
+    preparedBy: userName,
     checkedBy: "",
     notedBy: "",
     approvedBy: "",
@@ -59,6 +63,7 @@ const DocumentSignatories = ({ isOpen, onClose, onCancel, params }) => {
     if (serverData && !hasLoadedInitialData.current) {
       setForm((prev) => ({
         ...prev,
+        preparedBy: serverData.preparedBy || userName,
         checkedBy: serverData.checkedBy || "",
         notedBy: serverData.notedBy || "",
         approvedBy: serverData.approvedBy || "",

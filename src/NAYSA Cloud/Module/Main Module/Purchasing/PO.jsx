@@ -131,6 +131,7 @@ const PO = () => {
   const detailRowsRef = useRef([]);
   const deliveryDateRef = useRef("");
   const suppressDeliveryDatePromptRef = useRef(true);
+  const addTypeDropdownRef = useRef(null);
   const navigate = useNavigate();
   const { companyInfo, currentUserRow, getAllDropDown, refsLoaded, getAllTopHSDocRow, getReplacementVatRow, getAllTopVatAmount } = useAuth();
   const { resetFlag } = useReset();
@@ -413,6 +414,18 @@ const PO = () => {
   });
 
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+
+  useEffect(() => {
+    if (!showTypeDropdown) return;
+
+    const handleClickOutside = (event) => {
+      if (addTypeDropdownRef.current?.contains(event.target)) return;
+      setShowTypeDropdown(false);
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showTypeDropdown]);
   const [poDetailActiveTab, setPoDetailActiveTab] = useState("detailed");
   const [summaryEditValues, setSummaryEditValues] = useState({});
   const [totals, setTotals] = useState({
@@ -1827,7 +1840,7 @@ const PO = () => {
           prId: d?.prId || d?.pr_id || d?.prID || relatedSummary?.prId || relatedSummary?.pr_id || relatedSummary?.groupId || "",
           refBranchCode: d?.branchCode || relatedSummary?.branchCode || branchCode,
 
-          invType: "FG",
+          invType: d?.invType || "",
           groupId: d?.groupId || "",
           poStatus: "O",
 
@@ -2391,6 +2404,19 @@ const handleActivityOption = async (action) => {
 
     const poAmount = poGrossAmount - poDiscountAmount;
 
+
+
+    const normalizedDetailRows = (detailRows || []).map((row) => ({
+        ...row,
+        status: row.poStatus || "O",
+      }));
+      const hasOpenDetail = normalizedDetailRows.some(
+        (row) => String(row.poStatus || "O").toUpperCase() === "O"
+      );
+      const finalHeaderPOStatus = hasOpenDetail ? "O" : "C";
+
+
+
     const poData = {
       branchCode: branchCode,
       poNo: documentNo || "",
@@ -2419,7 +2445,7 @@ const handleActivityOption = async (action) => {
       discAmount: parseFormattedNumber(poDiscountAmount || 0),
       advAmount: 0,
       remarks: remarks || "",
-      poStatus: status || "O",
+      poStatus: finalHeaderPOStatus || "O",
       userCode: currentUserRow?.userCode,
 
       dt1: rowsForSave.map((row, index) => ({
@@ -3845,7 +3871,7 @@ const handleActivityOption = async (action) => {
               {/* Detail Footer: Add Button + Total */}
               <div className="global-tran-tab-footer-main-div-ui">
                 <div className="global-tran-tab-footer-button-div-ui">
-                  <div className="relative inline-block">
+                  <div ref={addTypeDropdownRef} className="relative inline-block">
 
                     {/* Polished dropdown overlay */}
                     {showTypeDropdown && (
@@ -4086,6 +4112,7 @@ const handleActivityOption = async (action) => {
                     branchCode: row.branchCode || "",
                     prNo: row.prNo || row.pr_no || "",
                     ln: row.ln || "",
+                    invType: row.invType || "",
                     item_code: row.item_code || "",
                     item_name: row.item_name || "",
                     item_specs: row.item_specs || "",

@@ -27,7 +27,7 @@ import {
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
 const emptyForm = {
-    itemCode: "", // Item No
+    itemCode: "",
     itemDesc: "",
     uom: "", uomName: "",
     uom2: "",
@@ -81,7 +81,7 @@ const emptyForm = {
 const FGMast = () => {
     const [activeTab, setActiveTab] = useState("setup");
     const [isLoading, setIsLoading] = useState(false);
-    const [generationMode, setGenerationMode] = useState("Auto");
+    const generationMode = "Manual";
 
     const { user } = useAuth();
     const userCode = user?.USER_CODE || user?.userCode || user?.code || "";
@@ -98,15 +98,6 @@ const FGMast = () => {
     const [refState, setRefState] = useState({ isEditing: false, canSave: false });
 
     useEffect(() => {
-        const fetchGenerationMode = async () => {
-            try {
-                const res = await apiClient.post("/lookupDocSeries", { docCode: "FG" });
-                setGenerationMode(res?.data?.data?.[0]?.docSeries || "Auto");
-            } catch (e) {
-                console.error("Failed to fetch mode", e);
-            }
-        };
-        fetchGenerationMode();
         loadMasterList();
     }, []);
 
@@ -139,7 +130,6 @@ const FGMast = () => {
         }
     };
 
-    // AFTER
     const fetchItemByCode = async (itemCode, enterEditMode = false) => {
         const code = String(itemCode || "").trim();
         if (!code) return;
@@ -171,22 +161,84 @@ const FGMast = () => {
         }
     };
 
+    // ── Check Duplicate ───────────────────────────────────────────────────────
+    // Calls sproc CheckDuplicate mode. Returns true if duplicate found.
+    // Response: { result: "1" } = duplicate, { result: "0" } = OK.
+    const checkDuplicate = async (itemCode) => {
+        const code = String(itemCode || "").trim();
+        if (!code) return false;
+
+        try {
+            const res = await apiClient.post("/checkDuplicateFGMast", {
+                json_data: { itemCode: code },
+            });
+            const row = res?.data?.data?.[0];
+            // Sproc returns: select ... result = '1' or '0'
+            const isDup = String(row?.result ?? row?.isDuplicate ?? row?.isdup ?? "0") === "1"
+                || Number(row?.isDuplicate ?? row?.isdup ?? row?.duplicatecount ?? 0) > 0;
+            if (isDup) {
+                await useSwalErrorAlert("Duplicate", `Item No "${code}" already exists.`);
+                updateForm({ itemCode: "" });
+                return true;
+            }
+        } catch (e) {
+            console.error("CheckDuplicate failed", e);
+        }
+        return false;
+    };
+
+    // ── Check In Used ─────────────────────────────────────────────────────────
+    // Calls sproc CheckInUsed mode. Returns true if item is referenced in transactions.
+    // Response: { result: "1" } = in use, { result: "0" } = safe to delete.
+    const checkInUsed = async (itemCode) => {
+        const code = String(itemCode || "").trim();
+        if (!code) return false;
+
+        try {
+            const res = await apiClient.post("/checkInUsedFGMast", {
+                json_data: { itemCode: code },
+            });
+            const row = res?.data?.data?.[0];
+            // Sproc returns: select ... result = '1' or '0'
+            const isUsed = String(row?.result ?? row?.isInUsed ?? row?.isinused ?? "0") === "1"
+                || Number(row?.isInUsed ?? row?.isinused ?? row?.inusedcount ?? 0) > 0;
+            if (isUsed) {
+                await useSwalErrorAlert(
+                    "Cannot Delete",
+                    `Item No "${code}" is currently in use and cannot be deleted.`
+                );
+                return true;
+            }
+        } catch (e) {
+            console.error("CheckInUsed failed", e);
+        }
+        return false;
+    };
+
     const deleteItem = async () => {
         const code = String(form?.itemCode || "").trim();
         if (!code) return;
+
+        // Check in-use before showing delete confirmation
+        const inUse = await checkInUsed(code);
+        if (inUse) return;
 
         const confirm = await useSwalDeleteConfirm("Delete Item?", `Delete Item No ${code}?`);
         if (!confirm?.isConfirmed) return;
 
         setIsLoading(true);
         try {
+            // Sproc Delete mode handles in-use guard + audit trail on the SQL side
             const payload = {
-                // Send as object so Laravel receives 'array'
-                json_data: { action: "delete", itemCode: code, userCode }
+                json_data: { itemCode: code, userCode },
             };
+            const res = await apiClient.post("/deleteFGMast", payload);
 
-            // Changed from /upsertFGMast to /deleteFGMast
-            await apiClient.post("/deleteFGMast", payload);
+            const sqlRow = res?.data?.data?.[0];
+            if (sqlRow?.errorcount > 0 || sqlRow?.errorCount > 0) {
+                await useSwalErrorAlert("Delete Failed", sqlRow?.errormsg || sqlRow?.errorMsg);
+                return;
+            }
 
             await useSwalDeleteRecord("Deleted", `Item No ${code} removed.`);
             handleResetSetup();
@@ -199,16 +251,25 @@ const FGMast = () => {
     };
 
     const upsertItem = async () => {
-        let code = String(form?.itemCode || "").trim();
+        const code = String(form?.itemCode || "").trim();
+
+        // Extra duplicate guard on save for new records
+        if (!selectedItemCode) {
+            const isDup = await checkDuplicate(code);
+            if (isDup) return;
+        }
+
         setIsLoading(true);
         try {
-            // ✅ Correct — matches what the sproc expects at $.json_data.*
+            // FIX: pass json_data as a plain object — do NOT JSON.stringify it.
+            // The sproc reads fields via json_value(@params, '$.json_data.*'),
+            // so the API must receive a real nested JSON object, not a string.
             const payload = {
-                json_data: JSON.stringify({
+                json_data: {
                     ...form,
                     action: selectedItemCode ? "edit" : "add",
                     userCode,
-                }),
+                },
             };
 
             const res = await apiClient.post("/upsertFGMast", payload);
@@ -267,18 +328,18 @@ const FGMast = () => {
         if (activeTab === "setup") {
             const hasRecord = String(form?.itemCode || "").trim() && !form.__isNew;
             return [
-                { key: "add", label: <span className="hidden sm:inline ml-1">Add</span>, icon: faPlus, onClick: handleAdd, disabled: isLoading, className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
-                { key: "save", label: <span className="hidden sm:inline ml-1">Save</span>, icon: faSave, onClick: upsertItem, disabled: isLoading || !isEditing, className: `${baseBtn} ${!isEditing ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
-                { key: "reset", label: <span className="hidden sm:inline ml-1">Reset</span>, icon: faUndo, onClick: handleResetSetup, disabled: isLoading, className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
-                { key: "edit", label: <span className="hidden sm:inline ml-1">Edit</span>, icon: faPenToSquare, onClick: handleEdit, disabled: isLoading || isEditing || !hasRecord, className: `${baseBtn} ${isEditing || !hasRecord ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
-                { key: "delete", label: <span className="hidden sm:inline ml-1">Delete</span>, icon: faTrash, onClick: deleteItem, disabled: isLoading || isEditing || !hasRecord, className: `${baseBtn} ${isEditing || !hasRecord ? "bg-red-400 cursor-not-allowed opacity-50" : "bg-red-500 hover:bg-red-600"}` },
+                { key: "add",    label: <span className="hidden sm:inline ml-1">Add</span>,    icon: faPlus,        onClick: handleAdd,        disabled: isLoading,                              className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
+                { key: "save",   label: <span className="hidden sm:inline ml-1">Save</span>,   icon: faSave,        onClick: upsertItem,       disabled: isLoading || !isEditing,                className: `${baseBtn} ${!isEditing ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
+                { key: "reset",  label: <span className="hidden sm:inline ml-1">Reset</span>,  icon: faUndo,        onClick: handleResetSetup, disabled: isLoading,                              className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
+                { key: "edit",   label: <span className="hidden sm:inline ml-1">Edit</span>,   icon: faPenToSquare, onClick: handleEdit,       disabled: isLoading || isEditing || !hasRecord,   className: `${baseBtn} ${isEditing || !hasRecord ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
+                { key: "delete", label: <span className="hidden sm:inline ml-1">Delete</span>, icon: faTrash,       onClick: deleteItem,       disabled: isLoading || isEditing || !hasRecord,   className: `${baseBtn} ${isEditing || !hasRecord ? "bg-red-400 cursor-not-allowed opacity-50" : "bg-red-500 hover:bg-red-600"}` },
             ];
         }
 
         if (activeTab === "ref") {
             return [
-                { key: "add", label: <span className="hidden sm:inline ml-1">Add</span>, icon: faPlus, onClick: () => refTabRef.current?.add?.(), className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
-                { key: "save", label: <span className="hidden sm:inline ml-1">Save</span>, icon: faSave, onClick: () => refTabRef.current?.save?.(), disabled: !refState.canSave, className: `${baseBtn} ${!refState.canSave ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
+                { key: "add",   label: <span className="hidden sm:inline ml-1">Add</span>,   icon: faPlus, onClick: () => refTabRef.current?.add?.(),   className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
+                { key: "save",  label: <span className="hidden sm:inline ml-1">Save</span>,  icon: faSave, onClick: () => refTabRef.current?.save?.(),  disabled: !refState.canSave, className: `${baseBtn} ${!refState.canSave ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
                 { key: "reset", label: <span className="hidden sm:inline ml-1">Reset</span>, icon: faUndo, onClick: () => refTabRef.current?.reset?.(), className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
             ];
         }
@@ -316,19 +377,22 @@ const FGMast = () => {
 
             <div className="global-tran-tab-div-ui mt-36 sm:mt-32 md:mt-28 lg:mt-24" style={{ minHeight: "calc(100vh - 170px)" }}>
                 {activeTab === "setup" && (
-                    // AFTER
                     <FGMast_SetupTab
                         form={form}
                         isEditing={isEditing}
                         isLoading={isLoading}
                         generationMode={generationMode}
                         onChangeForm={updateForm}
-                        onLookupSelect={(itemCode) => fetchItemByCode(itemCode, true)}  // ← enters edit mode
+                        onLookupSelect={(itemCode) => fetchItemByCode(itemCode, true)}
+                        onBlurItemCode={checkDuplicate}
                     />
                 )}
                 {activeTab === "master" && (
                     <FGMast_DataTab
                         rows={masterRows}
+                        isLoading={isLoading}
+                        onFilter={loadMasterList}
+                        onReset={loadMasterList}
                         onRowDoubleClick={(row) => {
                             fetchItemByCode(row.itemCode);
                             setActiveTab("setup");

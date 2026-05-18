@@ -809,37 +809,73 @@ export default function AuthProvider({ children }) {
     [allATCList]
   );
 
-  const getAllTopVatAmount = useCallback(
-    (vatCode, grossAmt) => {
-      if (!vatCode?.trim() || Number(grossAmt) === 0) return 0;
 
-      const vatRow = getAllTopVatRow(vatCode);
-      if (!vatRow) return 0;
 
-      const vatRate = Number(vatRow.vatRate || 0);
 
-      return +(
-        (Number(grossAmt) * vatRate * 0.01) /
-        (1 + vatRate * 0.01)
-      ).toFixed(2);
-    },
-    [getAllTopVatRow]
-  );
+const roundAmount = (value, decimals = 2) => {
+  const factor = Math.pow(10, decimals);
+  return Math.round((Number(value) + Number.EPSILON) * factor) / factor;
+};
 
-  const getAllTopATCAmount = useCallback(
-    (atcCode, netAmount) => {
-      const amount = Number(netAmount) || 0;
-      if (!atcCode?.trim() || amount === 0) return 0;
+const toNumberAmount = (value) => {
+  if (value === null || value === undefined || value === "") return 0;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+  const cleanedValue = String(value)
+    .replace(/,/g, "")
+    .trim();
+  const numberValue = Number(cleanedValue);
+  return Number.isFinite(numberValue) ? numberValue : 0;
+};
 
-      const atcRow = getAllTopATCRow(atcCode);
-      if (!atcRow) return 0;
 
-      const atcRate = Number(atcRow.atcRate || 0);
 
-      return +(amount * atcRate * 0.01).toFixed(2);
-    },
-    [getAllTopATCRow]
-  );
+const getAllTopVatAmount = useCallback(
+  (vatCode, grossAmt) => {
+    const amount = toNumberAmount(grossAmt);
+
+    if (!String(vatCode || "").trim() || amount === 0) return 0;
+
+    const vatRow = getAllTopVatRow(vatCode);
+    if (!vatRow) return 0;
+
+    const vatRate = toNumberAmount(vatRow.vatRate);
+    const rate = vatRate * 0.01;
+
+    if (rate === 0) return 0;
+
+    return roundAmount((amount * rate) / (1 + rate), 2);
+  },
+  [getAllTopVatRow]
+);
+
+
+
+
+
+const getAllTopATCAmount = useCallback(
+  (atcCode, netAmount) => {
+    const amount = toNumberAmount(netAmount);
+
+    if (!String(atcCode || "").trim() || amount === 0) return 0;
+
+    const atcRow = getAllTopATCRow(atcCode);
+    if (!atcRow) return 0;
+
+    const atcRate = toNumberAmount(atcRow.atcRate);
+    const rate = atcRate * 0.01;
+
+    if (rate === 0) return 0;
+
+    return roundAmount(amount * rate, 2);
+  },
+  [getAllTopATCRow]
+);
+
+
+
+
 
   const authContextValue = useMemo(
     () => ({
