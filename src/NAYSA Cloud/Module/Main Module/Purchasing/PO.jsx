@@ -1840,7 +1840,7 @@ const PO = () => {
           prId: d?.prId || d?.pr_id || d?.prID || relatedSummary?.prId || relatedSummary?.pr_id || relatedSummary?.groupId || "",
           refBranchCode: d?.branchCode || relatedSummary?.branchCode || branchCode,
 
-          invType: "FG",
+          invType: d?.invType || "",
           groupId: d?.groupId || "",
           poStatus: "O",
 
@@ -4112,6 +4112,7 @@ const handleActivityOption = async (action) => {
                     branchCode: row.branchCode || "",
                     prNo: row.prNo || row.pr_no || "",
                     ln: row.ln || "",
+                    invType: row.invType || "",
                     item_code: row.item_code || "",
                     item_name: row.item_name || "",
                     item_specs: row.item_specs || "",

@@ -287,6 +287,30 @@ export async function useHandleDownloadExcelAPReport(params) {
 
 
 
+export async function useHandleDownloadExcelPURReport(params) {
+  const { mode, branchCode, startDate, endDate, payeeCode, rcCode } = params;
+  try {
+
+    const payload = {
+      PARAMS: JSON.stringify({
+        mode,
+        branchCode,
+        startDate,
+        endDate,
+        payeeCode: payeeCode,
+        rcCode: rcCode,      
+      }),
+    };
+
+    return await postRequest("getPURReport", payload);
+  } catch (error) {
+    console.error("Error downloading Purchasing report:", error);
+    return { Data: {} };
+  }
+}
+
+
+
 
 
 export async function useHandleDownloadExcelBIRReport(params) {

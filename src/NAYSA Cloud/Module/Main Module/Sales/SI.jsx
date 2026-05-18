@@ -1,5 +1,7 @@
 
 
+
+
 import { useState, useEffect,useRef,useCallback } from "react";
 import Swal from 'sweetalert2';
 import { useNavigate,useLocation  } from "react-router-dom";
@@ -145,7 +147,7 @@ const SI = () => {
     documentID: null,
     documentDate:useGetCurrentDayV2(),
     documentNo: "",
-    documentStatus:"O",
+    documentStatus:"",
     status: "OPEN",
     noReprints:"0",
 
@@ -649,7 +651,8 @@ const SI = () => {
     (parseFormattedNumber(vatAmount || 0) || 0);
 
   const formatSalesAmount = (netAmount, vatAmount) => formatNumber(calculateSalesAmount(netAmount, vatAmount));
-  const toFormattedAmountNumber = (value, decimals = 2) => parseFormattedNumber(formatNumber(value, decimals)) || 0;
+  const toFormattedAmountNumber = (value, decimals = 2) =>
+    parseFormattedNumber(formatNumber(parseFormattedNumber(value), decimals)) || 0;
 
   const getDetailTaxBase = (row = {}) => {
     const grossAmount = parseFormattedNumber(row.grossAmount || 0) || 0;
@@ -694,7 +697,6 @@ const SI = () => {
         vatCode: lineVatCode,
       });
 
-      console.log(groups)
       return groups;
     }, {});
 
@@ -1087,7 +1089,7 @@ useEffect(() => {
       openDRSI_Data_Summary: [],
       openDRSI_Col_Summary: [],
       ...getGLTotalsState([]),
-      documentStatus:"O",      
+      documentStatus:"",      
       siTranType: defaultSiType,
       siStatus:"O",
 
@@ -1277,7 +1279,7 @@ const handleActivityOption = async (action) => {
    await moveFocusBeforeSave();
   }
 
-  if (documentStatus === "O") { // Assuming SI also has an 'O' status for open
+  if (documentStatus === "") { // Assuming SI also has an 'O' status for open
     updateState({ isLoading: true });
 
     try {
@@ -2018,8 +2020,6 @@ const handleActivityOption = async (action) => {
 
 
   const applyPriceMatrixToDetailRow = (baseRow, priceRow = {}) => {
-    
-
     if (baseRow.freeItem === "Y") {
       return calculateRowAmountsFromRates({
         ...baseRow,
@@ -2030,87 +2030,89 @@ const handleActivityOption = async (action) => {
       });
     }
 
-    const getPriceValue = () => priceRow?.sellingPrice ||0
-    const getPmTypeValue = () => priceRow?.pmType||"";
-    const getPmIdValue = () =>   priceRow?.pmId ||"";
-    const getDiscountRateValue = (discountNo) =>  priceRow?.[`discRate${discountNo}`] ||0;
+    const hasPriceMatrix = priceRow && Object.keys(priceRow).length > 0;
+
+    // IMPORTANT:
+    // Do not return 0 immediately when price matrix has no sellingPrice.
+    // calculateRowAmountsFromRates() uses row.unitPrice, so fallback must include
+    // priceRow.unitPrice, baseRow.unitPrice, and baseRow.sellingPrice.
+    const getPriceValue = () =>
+      priceRow?.sellingPrice ??
+      priceRow?.unitPrice ??
+      baseRow?.unitPrice ??
+      baseRow?.sellingPrice ??
+      0;
+
+    const getPmTypeValue = () => priceRow?.pmType ?? baseRow?.pmType ?? "";
+    const getPmIdValue = () => priceRow?.pmId ?? baseRow?.pmId ?? "";
+
+    const getDiscountRateValue = (discountNo) =>
+      hasPriceMatrix
+        ? priceRow?.[`discRate${discountNo}`] ?? baseRow?.[`discRate${discountNo}`] ?? 0
+        : baseRow?.[`discRate${discountNo}`] ?? 0;
 
     const selectedVatCode = priceRow?.vatCode || baseRow.vatCode || vatCode || "";
     const selectedVatRow = getAllTopVatRow(selectedVatCode);
 
-    console.log(selectedVatRow)
-
     const updatedRow = {
       ...baseRow,
-      pmType: getPmTypeValue() ?? baseRow.pmType ?? "",
-      pmId: getPmIdValue() ?? baseRow.pmId ?? "",
+      pmType: getPmTypeValue(),
+      pmId: getPmIdValue(),
       vatCode: selectedVatCode,
-      vatRate: formatNumber(selectedVatRow?.vatRate || 0),
-      unitPrice: formatNumber(
-        getPriceValue() ?? baseRow.sellingPrice ?? 0,
-        sellingPriceDecimals
-      ),
+      vatRate: formatNumber(selectedVatRow?.vatRate || baseRow?.vatRate || 0),
+      unitPrice: formatNumber(getPriceValue(), sellingPriceDecimals),
     };
 
     visibleDiscountRateFields.forEach((field, index) => {
-      updatedRow[field] = formatNumber(
-        getDiscountRateValue(index + 1) ?? baseRow[field] ?? 0
-      );
+      updatedRow[field] = formatNumber(getDiscountRateValue(index + 1));
     });
 
     return calculateRowAmountsFromRates(updatedRow);
   };
 
-  const mapItemRecordToDetailRow = (item = {}) => createSIDetailRow({
-    itemCode: item?.itemCode || "",
-    itemName: item?.itemName || "",
-    itemSpecs: item?.itemSpecs || "",
-    uomCode: item?.uomCode || "",
-    pmType: item?.pmType || "",
-    groupId: "",
-    pmId: item?.pmId || "",
-    soQuantity: formatNumber(
-      item?.soQuantity ?? item?.quantity ?? item?.soQty ?? 0,
-      quantityDecimals
-    ),
-    siQuantity: formatNumber(
-      item?.siQuantity ?? item?.quantity ?? item?.soQty ?? 0,
-      quantityDecimals
-    ),
-    sellingPrice: formatNumber(
-      item?.sellingPrice ?? item?.unitPrice ?? 0,
-      sellingPriceDecimals
-    ),
-    grossAmount: formatNumber(item?.grossAmount ?? 0),
-    discRate1: formatNumber(item?.discRate1 ?? 0),
-    discRate2: formatNumber(item?.discRate2 ?? 0),
-    discRate3: formatNumber(item?.discRate3 ?? 0),
-    discRate4: formatNumber(item?.discRate4 ?? 0),
-    discRate5: formatNumber(item?.discRate5 ?? 0),
-    discRate6: formatNumber(item?.discRate6 ?? 0),
-    discRate7: formatNumber(item?.discRate7 ?? 0),
-    discRate8: formatNumber(item?.discRate8 ?? 0),
-    discAmount1: formatNumber(item?.discAmount1 ?? 0),
-    discAmount2: formatNumber(item?.discAmount2 ?? 0),
-    discAmount3: formatNumber(item?.discAmount3 ?? 0),
-    discAmount4: formatNumber(item?.discAmount4 ?? 0),
-    discAmount5: formatNumber(item?.discAmount5 ?? 0),
-    discAmount6: formatNumber(item?.discAmount6 ?? 0),
-    discAmount7: formatNumber(item?.discAmount7 ?? 0),
-    discAmount8: formatNumber(item?.discAmount8 ?? 0),
-    totDiscount: formatNumber(item?.totDiscount ?? 0),    
-    vatCode: item?.vatCode || "",
-    vatRate: formatNumber(item?.vatRate ?? 0),
-    vatAmount: formatNumber(item?.vatAmount ?? 0),
-    salesAmount: formatSalesAmount(item?.netAmount ?? 0, item?.vatAmount ?? 0),
-    atcAmount: formatNumber(item?.atcAmount ?? 0),
-    amountDue: formatNumber(item?.amountDue ?? 0),
-    netAmount: formatNumber(item?.netAmount ?? 0),
-    // No delivery date, customer PO, sales rep in SI details
-    freeItem: item?.freeItem || "",
-    quantityPicked: formatNumber(item?.quantityPicked ?? item?.qtyPicked ?? 0, quantityDecimals),
-    drQuantity: formatNumber(item?.drQuantity ?? 0, quantityDecimals),
-  });
+  const mapItemRecordToDetailRow = (item = {}) => {
+   
+
+    return createSIDetailRow({
+      itemCode: item?.itemCode || "",
+      itemName: item?.itemName || "",
+      itemSpecs: item?.itemSpecs || "",
+      uomCode: item?.uomCode || "",
+      pmType: item?.pmType || "",
+      groupId: "",
+      pmId: item?.pmId || "",    
+      siQuantity: formatNumber( item?.siQuantity ?? 0, quantityDecimals ),
+      sellingPrice: formatNumber(item?.sellPrice, sellingPriceDecimals),
+      grossAmount: formatNumber(item?.grossAmount ?? 0),
+      discRate1: formatNumber(item?.discRate1 ?? 0),
+      discRate2: formatNumber(item?.discRate2 ?? 0),
+      discRate3: formatNumber(item?.discRate3 ?? 0),
+      discRate4: formatNumber(item?.discRate4 ?? 0),
+      discRate5: formatNumber(item?.discRate5 ?? 0),
+      discRate6: formatNumber(item?.discRate6 ?? 0),
+      discRate7: formatNumber(item?.discRate7 ?? 0),
+      discRate8: formatNumber(item?.discRate8 ?? 0),
+      discAmount1: formatNumber(item?.discAmount1 ?? 0),
+      discAmount2: formatNumber(item?.discAmount2 ?? 0),
+      discAmount3: formatNumber(item?.discAmount3 ?? 0),
+      discAmount4: formatNumber(item?.discAmount4 ?? 0),
+      discAmount5: formatNumber(item?.discAmount5 ?? 0),
+      discAmount6: formatNumber(item?.discAmount6 ?? 0),
+      discAmount7: formatNumber(item?.discAmount7 ?? 0),
+      discAmount8: formatNumber(item?.discAmount8 ?? 0),
+      totDiscount: formatNumber(item?.totDiscount ?? 0),
+      vatCode: item?.vatCode || "",
+      vatRate: formatNumber(item?.vatRate ?? 0),
+      vatAmount: formatNumber(item?.vatAmount ?? 0),
+      salesAmount: formatSalesAmount(item?.netAmount ?? 0, item?.vatAmount ?? 0),
+      atcAmount: formatNumber(item?.atcAmount ?? 0),
+      amountDue: formatNumber(item?.amountDue ?? 0),
+      netAmount: formatNumber(item?.netAmount ?? 0),
+      freeItem: item?.freeItem || "",
+      quantityPicked: formatNumber(item?.quantityPicked ?? item?.qtyPicked ?? 0, quantityDecimals),
+      drQuantity: formatNumber(item?.drQuantity ?? 0, quantityDecimals),
+    });
+  };
 
   const handleInsertSelectedItems = async (selectedRecords = []) => {
     if (!Array.isArray(selectedRecords) || selectedRecords.length === 0) {
@@ -2281,11 +2283,15 @@ const handlePrint = async () => {
   }
 };
 
-  const handleOpenAddItemModal =  async() => {
-    const fieldsToCheck = { // Adjusted required fields for SI
-      "Header : Bill To Customer Code": billToCustCode,
-      "Header : Billing Term": billtermCode,
-      "Header : Sales Rep": salesRepCode,
+  const handleOpenAddItemModal = async (overrides = {}) => {
+    const lookupCustCode = String(overrides.billToCustCode ?? billToCustCode ?? "").trim();
+    const lookupBillTermCode = String(overrides.billtermCode ?? billtermCode ?? "").trim();
+    const lookupSalesRepCode = String(overrides.salesRepCode ?? salesRepCode ?? "").trim();
+
+    const fieldsToCheck = {
+      "Header : Bill To Customer Code": lookupCustCode,
+      "Header : Billing Term": lookupBillTermCode,
+      "Header : Sales Rep": lookupSalesRepCode,
     };
 
     const isValid = await useSwalvalidateRequiredFields(fieldsToCheck, "Add Item");
@@ -2300,8 +2306,32 @@ const handlePrint = async () => {
   };
 
   const handleAddRowClick = async () => {
-    if (documentStatus !== "O" || isFormDisabled) return;
-    setShowAddTypeDropdown((prev) => !prev);
+    if (documentStatus !== "" || isFormDisabled) return;
+
+    setShowAddTypeDropdown(false);
+
+    const lookupCustCode = String(billToCustCode || "").trim();
+
+    if (!lookupCustCode) {
+      const branchIsValid = await useSwalvalidateRequiredFields(
+        { "Header : Branch": branchCode },
+        "Add SI Detail"
+      );
+      if (!branchIsValid) return;
+
+      updateState({
+        custModalOpen: true,
+        modalContext: "addDetail",
+      });
+      return;
+    }
+
+    if (String(siTranType || "").toUpperCase() === "SI01") {
+      await handleOpenDRLookup();
+      return;
+    }
+
+    await handleOpenAddItemModal();
   };
 
   const getApiErrorMessage = (error) =>
@@ -2310,9 +2340,23 @@ const handlePrint = async () => {
     error?.message ||
     "Unknown server error";
 
-  const handleOpenDRLookup = async () => {
-    const lookupCustCode = String(billToCustCode || "").trim();
-    const lookupBranchCode = String(branchCode || "").trim();
+  const handleOpenDRLookup = async (overrides = {}) => {
+    const lookupCustCode = String(overrides.billToCustCode ?? billToCustCode ?? "").trim();
+    const lookupBranchCode = String(overrides.branchCode ?? branchCode ?? "").trim();
+
+    if (!lookupCustCode) {
+      const branchIsValid = await useSwalvalidateRequiredFields(
+        { "Header : Branch": lookupBranchCode },
+        "Open DR Lookup"
+      );
+      if (!branchIsValid) return;
+
+      updateState({
+        custModalOpen: true,
+        modalContext: "openDR",
+      });
+      return;
+    }
 
     const fieldsToCheck = {
       "Header : Bill To Customer Code": lookupCustCode,
@@ -2367,7 +2411,7 @@ const handleCancel = async () => {
       return; // Assuming SI also requires detail rows to cancel
       }
 
-  if (documentID && (documentStatus === 'O')) {
+  if (documentID && (documentStatus === '')) {
     updateState({ showCancelModal: true });
   }
 };
@@ -2397,7 +2441,7 @@ const handleCopy = async () => {
     updateState({
       documentNo: "",
       documentID: "",
-      documentStatus: "O",
+      documentStatus: "",
       status: "OPEN",
       siStatus: "O",
       documentDate: nextDocumentDate,
@@ -2429,7 +2473,7 @@ const handleHistoryRowPick = useCallback(
 
 useEffect(() => {
   const params = new URLSearchParams(location.search);
-  const docNo = params.get("soNo");
+  const docNo = params.get("siNo");
   const branchCode = params.get("branchCode");
   
   if (!loadedFromUrlRef.current && docNo && branchCode) {
@@ -2457,7 +2501,7 @@ const handleTranDocNoSelection = async (data) => {
 };
 
 const handleCloseCancel = async (confirmation) => {
-    if(confirmation && documentStatus === "O" && documentID !== null ) {
+    if(confirmation && documentStatus === "" && documentID !== null ) {
       
       const result = await useHandleCancel(docType,documentID,currentUserRow.userCode,confirmation.password,confirmation.reason,updateState);
       if (result.success)
@@ -2595,10 +2639,29 @@ const handleSaveAndPrint = async (documentID) => {
             });
         }
 
+        if (modalContext === "addDetail" || modalContext === "openDR") {
+          const nextCustomerCode = custDetails.custCode || selectedData?.custCode || "";
+          const nextBillTermCode = custDetails.billtermCode || "";
+          const nextSalesRepCode = custDetails.salesRepCode || "";
+
+          if (String(siTranType || "").toUpperCase() === "SI01" || modalContext === "openDR") {
+            await handleOpenDRLookup({
+              billToCustCode: nextCustomerCode,
+              branchCode,
+            });
+          } else {
+            await handleOpenAddItemModal({
+              billToCustCode: nextCustomerCode,
+              billtermCode: nextBillTermCode,
+              salesRepCode: nextSalesRepCode,
+            });
+          }
+        }
+
     } catch (error) {
         console.error("Error fetching customer details:", error);
     } finally {
-       updateState({ isLoading: false });
+       updateState({ isLoading: false, modalContext: "" });
     }
 };
 
@@ -3302,6 +3365,7 @@ const recalculateSODetailRow = (row = {}, changedField = "") => {
   const netAmount = toFormattedAmountNumber(grossAmount - totalDiscount);
   const vatAmount = parseFormattedNumber(row.vatAmount || 0) || 0;
 
+  
   return {
     ...row,
     grossAmount: formatNumber(grossAmount),
@@ -3427,12 +3491,12 @@ const handleSODetailRowChange = (index, field, value) => {
     updatedRow = recalculateSODetailRow(updatedRow, field);
   }
 
-  console.log(updatedRow)
 
   updatedRows[index] = updatedRow;
   const normalizedRows = calculationTriggerFields.includes(field)
     ? distributeVatAcrossDetailRows(updatedRows)
     : updatedRows;
+
 
   updateState({ detailRows: normalizedRows });
   updateTotals(normalizedRows);
@@ -3895,7 +3959,7 @@ return (
               disabled={isFormDisabled || hasDRLinkedDetailRows}
               readOnly
               lookupDisabled={isFetchDisabled || hasDRLinkedDetailRows}
-              onLookup={() => updateState({ custModalOpen: true, modalContext: "billTo" })}
+              onLookup={() => updateState({ custModalOpen: true, modalContext: "OpenDR" })}
             />
 
             <FieldRenderer
@@ -4358,7 +4422,10 @@ return (
     </div>
 
     {/* General Ledger Section */}
-    <div className="global-tran-tab-div-ui">
+    <div
+      className={topTab === "details" ? "global-tran-tab-div-ui" : "hidden"}
+      style={{ display: topTab === "details" ? undefined : "none" }}
+    >
       <div className="global-tran-tab-nav-ui">
         <div className="flex flex-row sm:flex-row">
           <button
@@ -4526,6 +4593,7 @@ return (
       <CustomerMastLookupModal
         isOpen={custModalOpen}
         onClose={handleCloseCustModal}
+        customParam={siTranType === "SI01" ? "openDR" : undefined}
       />
     )}
 
@@ -4696,6 +4764,10 @@ return (
 };
 
 export default SI;
+
+
+
+
 
 
 

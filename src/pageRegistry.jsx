@@ -51,6 +51,7 @@ import QualityStat from "./NAYSA Cloud/Master Data/Inventory/QualityStat.jsx";
 import SO from "./NAYSA Cloud/Module/Main Module/Sales/SO.jsx";
 import DR from "./NAYSA Cloud/Module/Main Module/Sales/DR.jsx";
 import SI from "./NAYSA Cloud/Module/Main Module/Sales/SI.jsx";
+import PostSI from "./NAYSA Cloud/Module/Main Module/Sales/PostSI.jsx";
 
 
 // --- PURCHASING & INVENTORY ---
@@ -226,6 +227,8 @@ import POInq from "./NAYSA Cloud/Module/Main Module/Purchasing/POInquiry.jsx";
 import UniversalReportModal from "./NAYSA Cloud/Printing/UniversalReportModal.jsx";
 
 
+
+
 // ... ensure all other components (SVI, SOA, etc.) are imported above ...
 
 export const pageRegistry = {
@@ -327,6 +330,7 @@ export const pageRegistry = {
   PostMSRR,
   PostMSRTV,
   PostMSAJ,
+  PostSI,
   MonthendGLProcessingModal,
   YearendGLProcessingModal,
 
@@ -351,4 +355,6 @@ export const pageRegistry = {
   
   GLReportModal: (props) => <UniversalReportModal {...props} module="GL" />,
   BIRReportModal: (props) => <UniversalReportModal {...props} module="BIR" />,
+  PURReportModal: (props) => <UniversalReportModal {...props} module="PUR" />,
+  MSINVReportModal: (props) => <UniversalReportModal {...props} module="MSINV" />,
 };
