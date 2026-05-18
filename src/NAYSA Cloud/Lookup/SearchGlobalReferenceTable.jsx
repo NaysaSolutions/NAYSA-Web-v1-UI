@@ -62,6 +62,7 @@ const SearchGlobalReferenceTable = forwardRef(
       columns = [],
       data = [],
       itemsPerPage = 50,
+      showPagination = true,
       showFilters = true,
       showGlobalSearch = true,
       showGroupBy = true,
@@ -763,7 +764,7 @@ const SearchGlobalReferenceTable = forwardRef(
       return expandAll(groupedStructure);
     }, [filteredData, groupedStructure, effectiveGroupBy]);
 
-    const effectiveRowsPerPage = isMobileView ? 0 : rowsPerPage;
+    const effectiveRowsPerPage = isMobileView ? 0 : (showPagination ? rowsPerPage : 0);
 
     const totalItems =
       effectiveGroupBy.length > 0
@@ -1756,7 +1757,7 @@ const SearchGlobalReferenceTable = forwardRef(
           )}
         </div>
 
-        {hasDataFiltered && !isMobileView && (
+        {hasDataFiltered && !isMobileView && showPagination && (
           <div className="border-t bg-white shrink-0 px-3 py-2 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             <div className="text-[11px] sm:text-xs text-gray-600 flex items-center justify-center lg:justify-start gap-2">
               <div>

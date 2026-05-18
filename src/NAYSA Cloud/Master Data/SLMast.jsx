@@ -644,6 +644,8 @@ const handleDeleteSLType = async (row) => {
         key: "__actions",
         label: "Actions",
         sortable: false,
+        width: 90,
+        minWidth: 90,
         render: (row) => (
           <div className="flex gap-1 justify-center">
             <button
@@ -704,7 +706,8 @@ const handleDeleteSLType = async (row) => {
         key: "__actions",
         label: "Actions",
         sortable: false,
-        width: 100,
+        width: 120,
+        minWidth: 120,
         render: (row) => (
           <div className="flex gap-1 justify-center">
             <button
@@ -742,11 +745,11 @@ const handleDeleteSLType = async (row) => {
           </div>
         ),
       },
-      { key: "slTypeCode", label: "SL Type Code", sortable: true, width: 5 },
-      { key: "slTypeName", label: "SL Type Name", sortable: true, width: 5 },
-      { key: "slTypeActive", label: "Active", sortable: true, width: 10 },
-      { key: "slTypeIncSu", label: "Payee", sortable: true, width: 10 },
-      { key: "slTypeIncCu", label: "Customer", sortable: true, width: 10 },
+      { key: "slTypeCode", label: "SL Type Code", sortable: true, width: 120, minWidth: 120 },
+      { key: "slTypeName", label: "SL Type Name", sortable: true, width: 200, minWidth: 200 },
+      { key: "slTypeActive", label: "Active", sortable: true, width: 85, minWidth: 85 },
+      { key: "slTypeIncSu", label: "Payee", sortable: true, width: 85, minWidth: 85 },
+      { key: "slTypeIncCu", label: "Customer", sortable: true, width: 85, minWidth: 85 },
     ],
     []
   );
@@ -767,6 +770,8 @@ const handleDeleteSLType = async (row) => {
           </div>
         ),
         sortable: true,
+        width: 20,
+        minWidth: 20,
         
         render: (row) => (
           <div className="flex justify-center">
@@ -778,19 +783,20 @@ const handleDeleteSLType = async (row) => {
             />
           </div>
         ),
-        width: 5
       },
       {
         key: "acctCode",
         label: "Account Code",
         sortable: true,
-        width: 5,
+        width: 120,  
+        minWidth: 120,
       },
       {
         key: "acctName",
         label: "Account Name",
         sortable: true,
-        width: 280,
+        width: 250,  
+        minWidth: 200,
       },
     ],
     [selectedGLAccounts, isAllSelected]
@@ -1102,6 +1108,7 @@ const handleDeleteSLType = async (row) => {
             columns={slMasterColumns}
             data={filteredSLMasterList}
             itemsPerPage={200}
+            showPagination={false}
             onRowDoubleClick={handleEditSL}
             // autoFillGrid="True"         
             isLoading={filteredSLMasterList.isLoading}
@@ -1215,6 +1222,7 @@ const handleDeleteSLType = async (row) => {
               columns={slTypeColumns}
               data={slTypes}
               itemsPerPage={100}
+              showPagination={false}
               onRowClick={(row) => {handleEditSLType(row);}}
               onRowDoubleClick={handleEditSLType}
               tableSize="Half"
@@ -1297,6 +1305,7 @@ const handleDeleteSLType = async (row) => {
               isFetching={displayedSLCoaList.isFetching}
               onRefresh={() => displayedSLCoaList.refetch()}
               showGroupBy = {false}
+              showPagination={false}
             />
           </div>
         </div>
