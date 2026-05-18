@@ -51,9 +51,8 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
     const [isClassOpen, setIsClassOpen] = useState(false);
     const [isItemLookupOpen, setIsItemLookupOpen] = useState(false);
     
-    // Add UOM lookup states
-    const [isUomOpen, setIsUomOpen] = useState(false);
-    const [isUom2Open, setIsUom2Open] = useState(false);
+    // "uom" | "uom2" | null  — tracks which UOM field opened the lookup
+    const [uomTarget, setUomTarget] = useState(null);
 
     // Field lengths
     const [tblFieldArray, setTblFieldArray] = useState([]);
@@ -152,7 +151,7 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                                 type="lookup"
                                 value={form.uom || ""}
                                 onChange={(v) => onChangeForm({ uom: getValue(v) })}
-                                onLookup={() => !isDisabled && setIsUomOpen(true)} // Open UOM1 Lookup
+                                onLookup={() => !isDisabled && setUomTarget("uom")} // Open UOM1 Lookup
                                 readOnly={isReadOnly}
                                 disabled={isDisabled}
                             />
@@ -163,7 +162,7 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                                 type="lookup"
                                 value={form.uom2 || ""}
                                 onChange={(v) => onChangeForm({ uom2: getValue(v) })}
-                                onLookup={() => !isDisabled && setIsUom2Open(true)} // Open UOM2 Lookup
+                                onLookup={() => !isDisabled && setUomTarget("uom2")} // Open UOM2 Lookup
                                 readOnly={isReadOnly}
                                 disabled={isDisabled}
                             />
@@ -570,26 +569,14 @@ const FGMast_SetupTab = ({ isLoading, isEditing, form = {}, generationMode, onCh
                 }}
             />
 
-            {/* UOM 1 Lookup */}
+            {/* UOM Lookup — shared for both UOM and UOM 2 */}
             <SearchUOM
-                isOpen={isUomOpen}
+                isOpen={uomTarget !== null}
                 onClose={(selected) => {
-                    setIsUomOpen(false);
-                    if (selected) {
-                        onChangeForm({ uom: selected.uomCode });
+                    if (selected && uomTarget) {
+                        onChangeForm({ [uomTarget]: selected.uomCode });
                     }
-                }}
-            />
-
-            {/* UOM 2 Lookup */}
-            <SearchUOM
-                isOpen={isUom2Open}
-                title="Select UOM 2"
-                onClose={(selected) => {
-                    setIsUom2Open(false);
-                    if (selected) {
-                        onChangeForm({ uom2: selected.uomCode });
-                    }
+                    setUomTarget(null);
                 }}
             />
         </div>
