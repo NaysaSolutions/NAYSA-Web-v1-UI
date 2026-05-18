@@ -148,7 +148,7 @@ const handleCodeChange = (v) => {
 
       // --- NEW: Handle Period 13 ---
       if (monthStr === "13") {
-        updates.cutoffName = `PERIOD 13 ${year}`; // Feel free to change this label
+        updates.cutoffName = `MONTH 13 ${year}`; // Feel free to change this label
         updates.fromDate = `${yearStr}-12-31`;
         updates.toDate = `${yearStr}-12-31`;
       } 
