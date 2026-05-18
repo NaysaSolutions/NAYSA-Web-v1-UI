@@ -561,7 +561,7 @@ const QualityStat = () => {
 
         <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg overflow-hidden flex flex-col">
           <SearchGlobalReferenceTable
-            docType="Quality Stat Master"
+            docType="Quality Status"
             columns={columns}
             data={qualityStats}
             onRowDoubleClick={handleEdit}
