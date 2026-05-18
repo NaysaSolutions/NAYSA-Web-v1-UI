@@ -53,7 +53,7 @@ const INITIAL_FORM = {
   branchTin: "",
   telNo: "",
   zipCode: "",
-  main: "N",   // Y = Main, N = Branch
+  main: "Branch",   // Main = Main, Branch = Branch
   active: "Y", // Y/N
   tblFieldArray :[],
 };
@@ -91,7 +91,7 @@ const BranchRef = () => {
   }, []);
 
   const getBranchTypeLabel = (mainYN) =>
-    String(mainYN || "").toUpperCase() === "Y" ? "Main" : "Branch";
+    String(mainYN || "").toUpperCase() === "MAIN" ? "Main" : "Branch";
 
   const getActiveLabel = (activeYN) =>
     String(activeYN || "").toUpperCase() === "Y" ? "Yes" : "No";
@@ -188,7 +188,7 @@ const { mutate: saveBranch, isLoading: isSaving } = useMutation({
       branchTin: row.branchTin ?? "",
       telNo: row.telNo ?? "",
       zipCode: row.zipCode ?? "",
-      main: String(row.main ?? "N").toUpperCase() === "Y" ? "Y" : "N",
+      main: String(row.main ?? "Branch").toUpperCase() === "MAIN" ? "Main" : "Branch",
       active: String(row.active ?? "Y").toUpperCase() === "Y" ? "Y" : "N",
     });
 
@@ -313,7 +313,8 @@ const handleCheckDuplicate = async (code) => {
 {
         key: "__actions",
         label: "Actions",
-        width: 80,
+        width: 100,
+        minWidth: 100,
         render: (row) => (
           <div className="flex gap-2 justify-center">
             <button
@@ -337,23 +338,25 @@ const handleCheckDuplicate = async (code) => {
         ),
       },
 
-      { key: "branchCode", label: "Branch Code", sortable: true , width: 120 },
-      { key: "branchName", label: "Branch Name", sortable: true , width: 280 },
+      { key: "branchCode", label: "Branch Code", sortable: true , width: 120, minWidth: 120, requiredVisible: true },
+      { key: "branchName", label: "Branch Name", sortable: true , width: 280, minWidth: 280, requiredVisible: true },
       {
         key: "address",
         label: "Address",
         sortable: true,
-        width: 400 ,
+        width: 350 ,
+        minWidth: 100,
         render: (row) => getAddress(row),
       },
-      { key: "zipCode", label: "Zip Code", sortable: true, width: 100 },
-      { key: "branchTin", label: "TIN", sortable: true, width: 100 },
-      { key: "telNo", label: "Contact No.", sortable: true, width: 100 },
+      { key: "zipCode", label: "Zip Code", sortable: true, width: 100, minWidth: 100 },
+      { key: "branchTin", label: "TIN", sortable: true, width: 150, minWidth: 100 },
+      { key: "telNo", label: "Contact No.", sortable: true, width: 150, minWidth: 100 },
       {
         key: "main",
-        label: "Main / Branch",
+        label: "Branch Type",
         sortable: true,
         width: 100 ,
+        minWidth: 100,
         render: (row) => getBranchTypeLabel(row.main),
       },
       {
@@ -361,6 +364,7 @@ const handleCheckDuplicate = async (code) => {
         label: "Active",
         sortable: true,
         width: 100 ,
+        minWidth: 100,
         render: (row) => getActiveLabel(row.active),
       },
       
@@ -574,13 +578,13 @@ const handleCheckDuplicate = async (code) => {
             <FieldRenderer
               label="Branch Type"
               type="select"
-              value={formData.main === "Y" ? "Main" : "Branch"}
+              value={formData.main === "Main" ? "Main" : "Branch"}
               disabled={!isEditing}
               options={[
                 { value: "Main", label: "Main" },
                 { value: "Branch", label: "Branch" },
               ]}
-              onChange={(v) => updateForm({ main: v === "Main" ? "Y" : "N" })}
+              onChange={(v) => updateForm({ main: v === "Main" ? "Main" : "Branch" })}
             />
 
             <FieldRenderer

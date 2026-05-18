@@ -83,17 +83,69 @@ export const useformatToDatev2 = (value) => {
   if (!value) return "";
 
   const raw = String(value).trim();
-
   const datePart = raw.includes("T") ? raw.split("T")[0] : raw;
 
-  const parts = datePart.split("-");
-  if (parts.length !== 3) return "";
+  // Try hyphen-separated formats first (YYYY-MM-DD or DD-MM-YYYY)
+  let parts = datePart.split("-");
+  if (parts.length === 3) {
+    const [a, b, c] = parts;
+    if (a.length === 4) {
+      // YYYY-MM-DD
+      const year = a;
+      const month = String(b).padStart(2, "0");
+      const day = String(c).padStart(2, "0");
+      return `${month}/${day}/${year}`;
+    }
+    if (c.length === 4) {
+      // DD-MM-YYYY
+      const year = c;
+      const month = String(b).padStart(2, "0");
+      const day = String(a).padStart(2, "0");
+      return `${month}/${day}/${year}`;
+    }
+  }
 
-  const [year, month, day] = parts;
+  // Try slash-separated formats (MM/DD/YYYY or YYYY/MM/DD)
+  parts = datePart.split("/");
+  if (parts.length === 3) {
+    const [a, b, c] = parts;
+    if (a.length === 4) {
+      // YYYY/MM/DD
+      const year = a;
+      const month = String(b).padStart(2, "0");
+      const day = String(c).padStart(2, "0");
+      return `${month}/${day}/${year}`;
+    }
+    if (c.length === 4) {
+      // MM/DD/YYYY
+      const year = c;
+      const month = String(a).padStart(2, "0");
+      const day = String(b).padStart(2, "0");
+      return `${month}/${day}/${year}`;
+    }
+  }
 
-  if (!year || !month || !day) return "";
+  // Try compact numeric YYYYMMDD or DDMMYYYY
+  const digits = datePart.replace(/\D/g, "");
+  if (digits.length === 8) {
+    // Assume YYYYMMDD
+    const y = digits.slice(0, 4);
+    const m = digits.slice(4, 6);
+    const d = digits.slice(6, 8);
+    return `${m}/${d}/${y}`;
+  }
 
-  return `${month}/${day}/${year}`;
+  // Fallback: use Date parsing and normalize to MM/DD/YYYY
+  const dObj = new Date(raw);
+  if (!Number.isNaN(dObj.getTime())) {
+    const local = new Date(dObj.getTime() - dObj.getTimezoneOffset() * 60000);
+    const year = local.getFullYear();
+    const month = String(local.getMonth() + 1).padStart(2, "0");
+    const day = String(local.getDate()).padStart(2, "0");
+    return `${month}/${day}/${year}`;
+  }
+
+  return "";
 };
 
 
