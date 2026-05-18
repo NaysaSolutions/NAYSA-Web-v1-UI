@@ -125,27 +125,37 @@ const CutoffRef = () => {
     },
   });
 
-  const handleCodeChange = (v) => {
+const handleCodeChange = (v) => {
     // 1. Strictly enforce 6-digit limit during typing
     if (v.length > 6) return;
 
     const updates = { cutoffCode: v };
 
     if (/^\d{6}$/.test(v)) {
-      const year = parseInt(v.substring(0, 4));
-      const month = parseInt(v.substring(4, 6)) - 1;
+      const yearStr = v.substring(0, 4);
+      const monthStr = v.substring(4, 6);
+      
+      const year = parseInt(yearStr);
+      const month = parseInt(monthStr) - 1;
 
-      if (month >= 0 && month <= 11) {
+      // Local formatting helper to avoid UTC timezone shifts
+      const formatLocal = (date) => {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, "0");
+        const d = String(date.getDate()).padStart(2, "0");
+        return `${y}-${m}-${d}`;
+      };
+
+      // --- NEW: Handle Period 13 ---
+      if (monthStr === "13") {
+        updates.cutoffName = `MONTH 13 ${year}`; // Feel free to change this label
+        updates.fromDate = `${yearStr}-12-31`;
+        updates.toDate = `${yearStr}-12-31`;
+      } 
+      // --- Existing logic for Months 01 to 12 ---
+      else if (month >= 0 && month <= 11) {
         const startDate = new Date(year, month, 1);
         const endDate = new Date(year, month + 1, 0);
-
-        // Local formatting helper to avoid UTC timezone shifts
-        const formatLocal = (date) => {
-          const y = date.getFullYear();
-          const m = String(date.getMonth() + 1).padStart(2, "0");
-          const d = String(date.getDate()).padStart(2, "0");
-          return `${y}-${m}-${d}`;
-        };
 
         const monthName = startDate
           .toLocaleString("default", { month: "long" })
@@ -260,11 +270,12 @@ const CutoffRef = () => {
       );
     }
 
-    // Validate Month
-    if (codeMonth !== startMonth || codeMonth !== endMonth) {
+ const isPeriod13Valid = codeMonth === "13" && startMonth === "12" && endMonth === "12";
+    
+    if (!isPeriod13Valid && (codeMonth !== startMonth || codeMonth !== endMonth)) {
       return useSwalErrorAlert(
         "Invalid Dates",
-        `The Start and End Date months must match the last 2 digits of the Cut Off Code (${codeMonth}).`
+        `The Start and End Date months must match the last 2 digits of the Cut Off Code (${codeMonth}), except for Period 13 which uses December (12).`
       );
     }
     // --------------------------------

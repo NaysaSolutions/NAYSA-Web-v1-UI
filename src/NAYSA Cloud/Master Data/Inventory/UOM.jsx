@@ -90,18 +90,6 @@ const UOM = () => {
   const formTopRef = useRef(null);
   const guideRef = useRef(null);
 
-  // Debug authentication and tenant
-  useEffect(() => {
-    console.log("👤 User:", user);
-    console.log(
-      "🏢 Tenant:",
-      localStorage.getItem("companyCode") ||
-        sessionStorage.getItem("companyCode"),
-    );
-    console.log("🔑 Auth Headers:", apiClient.defaults.headers.common);
-    console.log("🔗 API Base URL:", apiClient.defaults.baseURL);
-  }, [user]);
-
   // Check if user is authenticated
   if (!user) {
     return (
@@ -116,11 +104,10 @@ const UOM = () => {
     );
   }
 
-  // Check if tenant is set
-  const tenant =
-    localStorage.getItem("companyCode") ||
-    sessionStorage.getItem("companyCode");
-  if (!tenant) {
+  if (
+    !localStorage.getItem("companyCode") &&
+    !sessionStorage.getItem("companyCode")
+  ) {
     return (
       <div className="global-ref-main-div-ui flex items-center justify-center min-h-screen">
         <div className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-lg text-center">
@@ -144,7 +131,6 @@ const UOM = () => {
   const [tblFieldArray, setTblFieldArray] = useState([]);
   const [isOpenGuide, setOpenGuide] = useState(false);
 
-  // Mobile Action Sheet State
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isMobileActionSheetMounted, setIsMobileActionSheetMounted] =
     useState(false);
@@ -171,33 +157,26 @@ const UOM = () => {
     }, 300);
   };
 
-
-
-const handleCheckDuplicate = async (code) => {
+  const handleCheckDuplicate = async (code) => {
     if (form.__existing || !code) return;
     try {
       const payload = { json_data: { uomCode: code } };
-      // Call the existing route from api.php
-      const response = await apiClient.post("/checkDuplicateUom", payload); 
+      const response = await apiClient.post("/checkDuplicateUom", payload);
       const sqlRow = response?.data?.data?.[0];
       const rawJsonString = sqlRow?.result || Object.values(sqlRow || {})[0];
       const parsedData = JSON.parse(rawJsonString || '{"result":"0"}');
-      
+
       if (String(parsedData.result) === "1") {
         setField("uomCode", "");
         return useSwalErrorAlert(
-          "Duplicate Code", 
-          `UOM Code ${code} is already in use.`
+          "Duplicate Code",
+          `UOM Code ${code} is already in use.`,
         );
       }
     } catch (error) {
       console.error("Duplicate check failed", error);
     }
   };
-
-
-
-
 
   const setField = (key, value) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -219,21 +198,7 @@ const handleCheckDuplicate = async (code) => {
     queryKey: ["uomList"],
     queryFn: async () => {
       try {
-        console.log(
-          "🔍 Fetching UOM data from:",
-          apiClient.defaults.baseURL + "/uom/uom",
-        );
-        console.log("📡 API Headers:", apiClient.defaults.headers.common);
-        console.log(
-          "🌐 Environment VITE_API_URL:",
-          import.meta.env.VITE_API_URL,
-        );
         const result = await apiClient.get("/uom");
-        console.log("✅ UOM API Response:", result?.data);
-        console.log(
-          "📊 Parsed data:",
-          parseSprocJsonResult(result?.data?.data),
-        );
         return parseSprocJsonResult(result?.data?.data);
       } catch (error) {
         console.error("❌ UOM API Error:", error.message);
@@ -266,7 +231,7 @@ const handleCheckDuplicate = async (code) => {
   const saveMutation = useMutation({
     mutationFn: async (payload) =>
       apiClient.post("/upsertUom", {
-        json_data: payload, //
+        json_data: payload,
       }),
     onSuccess: async (response) => {
       const sprocValidation = extractSprocValidation(response);
@@ -309,7 +274,7 @@ const handleCheckDuplicate = async (code) => {
     }
   };
 
-const handleSave = async () => {
+  const handleSave = async () => {
     if (!isEditing || saveMutation.isPending) return;
     const uomCode = String(form.uomCode || "").trim();
     const uomName = String(form.uomName || "").trim();
@@ -322,20 +287,19 @@ const handleSave = async () => {
       });
     }
 
-    // --- ADDED: Duplicate Check Upon Saving ---
     if (!form.__existing) {
       try {
-        const checkRes = await apiClient.post("/checkDuplicateUom", { 
-          json_data: { uomCode } 
+        const checkRes = await apiClient.post("/checkDuplicateUom", {
+          json_data: { uomCode },
         });
         const sqlRow = checkRes?.data?.data?.[0];
         const rawJsonString = sqlRow?.result || Object.values(sqlRow || {})[0];
         const parsedData = JSON.parse(rawJsonString || '{"result":"0"}');
-        
+
         if (String(parsedData.result) === "1") {
           return useSwalErrorAlert(
-            "Duplicate Code", 
-            `UOM Code ${uomCode} is already in use. Please enter a different code.`
+            "Duplicate Code",
+            `UOM Code ${uomCode} is already in use. Please enter a different code.`,
           );
         }
       } catch (error) {
@@ -375,12 +339,12 @@ const handleSave = async () => {
     }, 150);
   };
 
-const handleDelete = async (row) => {
+  const handleDelete = async (row) => {
     try {
       const checkRes = await apiClient.post("/checkInUsedUom", {
         json_data: { uomCode: row.uomCode },
       });
-      
+
       const sqlRow = checkRes?.data?.data?.[0];
       const rawJsonString = sqlRow?.result || Object.values(sqlRow || {})[0];
       const parsedData = JSON.parse(rawJsonString || '{"result":"0"}');
@@ -458,7 +422,13 @@ const handleDelete = async (row) => {
         ),
       },
       { key: "uomCode", label: "UOM Code", sortable: true, width: 150 },
-      { key: "uomName", label: "UOM Name", sortable: true, width: 450, maxWidth: 450 },
+      {
+        key: "uomName",
+        label: "UOM Name",
+        sortable: true,
+        width: 450,
+        maxWidth: 450,
+      },
       {
         key: "active",
         label: "Active",
