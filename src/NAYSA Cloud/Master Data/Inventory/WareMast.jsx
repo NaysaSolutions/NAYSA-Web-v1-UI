@@ -418,7 +418,7 @@ const WareMast = () => {
       {
         key: "__actions",
         label: <span className="hidden md:inline">Actions</span>,
-        width: 90,
+        width: 120,
         render: (row) => (
           <div className="flex gap-2 justify-center w-full">
             <button
@@ -461,16 +461,17 @@ const WareMast = () => {
         sortable: true,
         render: (row) =>
           row.branchCode ? `${row.branchCode} - ${row.branchName || ""}` : "",
+        width: 120
       },
-      { key: "whCode", label: "Code", sortable: true },
-      { key: "whName", label: "Warehouse Name", sortable: true },
+      { key: "whCode", label: "Code", sortable: true, width: 100 },
+      { key: "whName", label: "Warehouse Name", sortable: true, width: 250, maxWidth: 250 },
       {
         key: "invType",
         label: "Inventory Type",
         render: (row) =>
           dropdowns?.invTypes?.find((d) => d.DROPDOWN_CODE === row.invType)?.DROPDOWN_NAME || row.invType,
       },
-      { key: "address1", label: "Address 1", sortable: true },
+      { key: "address1", label: "Address 1", sortable: true, width: 350  },
       {
         key: "active",
         label: "Active",

@@ -291,7 +291,7 @@ const Location = forwardRef(
       {
         key: "__actions",
         label: <span className="hidden md:inline">Actions</span>,
-        width: 90,
+        width: 100,
         render: (row) => (
           <div className="flex gap-2 justify-center w-full">
             <button

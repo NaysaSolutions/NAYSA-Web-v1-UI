@@ -1,9 +1,4 @@
-import React, {
-  useEffect,
-  useMemo,
-  useState,
-  useRef,
-} from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -37,7 +32,11 @@ import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
 import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable";
 import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
-import { reftables, reftablesPDFGuide, reftablesVideoGuide } from "@/NAYSA Cloud/Global/reftable";
+import {
+  reftables,
+  reftablesPDFGuide,
+  reftablesVideoGuide,
+} from "@/NAYSA Cloud/Global/reftable";
 
 const INITIAL_FORM = {
   uomCode: "",
@@ -94,7 +93,11 @@ const UOM = () => {
   // Debug authentication and tenant
   useEffect(() => {
     console.log("👤 User:", user);
-    console.log("🏢 Tenant:", localStorage.getItem("companyCode") || sessionStorage.getItem("companyCode"));
+    console.log(
+      "🏢 Tenant:",
+      localStorage.getItem("companyCode") ||
+        sessionStorage.getItem("companyCode"),
+    );
     console.log("🔑 Auth Headers:", apiClient.defaults.headers.common);
     console.log("🔗 API Base URL:", apiClient.defaults.baseURL);
   }, [user]);
@@ -104,7 +107,9 @@ const UOM = () => {
     return (
       <div className="global-ref-main-div-ui flex items-center justify-center min-h-screen">
         <div className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-lg text-center">
-          <h2 className="text-xl font-bold text-red-600 mb-4">Authentication Required</h2>
+          <h2 className="text-xl font-bold text-red-600 mb-4">
+            Authentication Required
+          </h2>
           <p className="text-gray-600">Please log in to access UOM data.</p>
         </div>
       </div>
@@ -112,18 +117,24 @@ const UOM = () => {
   }
 
   // Check if tenant is set
-  const tenant = localStorage.getItem("companyCode") || sessionStorage.getItem("companyCode");
+  const tenant =
+    localStorage.getItem("companyCode") ||
+    sessionStorage.getItem("companyCode");
   if (!tenant) {
     return (
       <div className="global-ref-main-div-ui flex items-center justify-center min-h-screen">
         <div className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-lg text-center">
-          <h2 className="text-xl font-bold text-orange-600 mb-4">Company Selection Required</h2>
-          <p className="text-gray-600">Please select a company to access UOM data.</p>
+          <h2 className="text-xl font-bold text-orange-600 mb-4">
+            Company Selection Required
+          </h2>
+          <p className="text-gray-600">
+            Please select a company to access UOM data.
+          </p>
         </div>
       </div>
     );
   }
-  
+
   const pdfLink = reftablesPDFGuide[docType];
   const videoLink = reftablesVideoGuide[docType];
 
@@ -135,7 +146,8 @@ const UOM = () => {
 
   // Mobile Action Sheet State
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const [isMobileActionSheetMounted, setIsMobileActionSheetMounted] = useState(false);
+  const [isMobileActionSheetMounted, setIsMobileActionSheetMounted] =
+    useState(false);
   const [isMobileActionSheetOpen, setIsMobileActionSheetOpen] = useState(false);
   const [selectedMobileRow, setSelectedMobileRow] = useState(null);
 
@@ -168,7 +180,9 @@ const UOM = () => {
       const res = await useFieldLenghtCheck("UOM");
       if (mounted) setTblFieldArray(res || []);
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const getMax = (col) => useGetFieldLength(tblFieldArray, col);
@@ -177,12 +191,21 @@ const UOM = () => {
     queryKey: ["uomList"],
     queryFn: async () => {
       try {
-        console.log("🔍 Fetching UOM data from:", apiClient.defaults.baseURL + "/uom/uom");
+        console.log(
+          "🔍 Fetching UOM data from:",
+          apiClient.defaults.baseURL + "/uom/uom",
+        );
         console.log("📡 API Headers:", apiClient.defaults.headers.common);
-        console.log("🌐 Environment VITE_API_URL:", import.meta.env.VITE_API_URL);
+        console.log(
+          "🌐 Environment VITE_API_URL:",
+          import.meta.env.VITE_API_URL,
+        );
         const result = await apiClient.get("/uom");
         console.log("✅ UOM API Response:", result?.data);
-        console.log("📊 Parsed data:", parseSprocJsonResult(result?.data?.data));
+        console.log(
+          "📊 Parsed data:",
+          parseSprocJsonResult(result?.data?.data),
+        );
         return parseSprocJsonResult(result?.data?.data);
       } catch (error) {
         console.error("❌ UOM API Error:", error.message);
@@ -212,15 +235,18 @@ const UOM = () => {
     }));
   }, [uomListQuery.data]);
 
-const saveMutation = useMutation({
-  mutationFn: async (payload) =>
-    apiClient.post("/upsertUom", {
-      json_data: payload, // 
-    }),
+  const saveMutation = useMutation({
+    mutationFn: async (payload) =>
+      apiClient.post("/upsertUom", {
+        json_data: payload, //
+      }),
     onSuccess: async (response) => {
       const sprocValidation = extractSprocValidation(response);
       if (Number(sprocValidation?.errorCount ?? 0) > 0) {
-        useSwalErrorAlert("Validation Failed", String(sprocValidation?.errorMsg));
+        useSwalErrorAlert(
+          "Validation Failed",
+          String(sprocValidation?.errorMsg),
+        );
         return;
       }
       await queryClient.invalidateQueries({ queryKey: ["uomList"] });
@@ -230,9 +256,9 @@ const saveMutation = useMutation({
     onError: (error) => useSwalErrorAlertAPI("Error", error),
   });
 
-const deleteMutation = useMutation({
-  mutationFn: async (payload) =>
-    apiClient.post("/deleteUom", { json_data: payload }),
+  const deleteMutation = useMutation({
+    mutationFn: async (payload) =>
+      apiClient.post("/deleteUom", { json_data: payload }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["uomList"] });
       useSwalDeleteRecord("Deleted!", "UOM record removed successfully.");
@@ -251,7 +277,7 @@ const deleteMutation = useMutation({
     setRegistrationInfo(INITIAL_REG);
     setIsEditing(false);
     if (formTopRef.current) {
-      formTopRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      formTopRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
     }
   };
 
@@ -290,28 +316,34 @@ const deleteMutation = useMutation({
 
     setTimeout(() => {
       if (formTopRef.current) {
-        const yOffset = -80; 
-        const y = formTopRef.current.getBoundingClientRect().top + window.pageYOffset + yOffset;
-        window.scrollTo({ top: y, behavior: 'smooth' });
+        const yOffset = -80;
+        const y =
+          formTopRef.current.getBoundingClientRect().top +
+          window.pageYOffset +
+          yOffset;
+        window.scrollTo({ top: y, behavior: "smooth" });
       }
     }, 150);
   };
 
-const handleDelete = async (row) => {
-  try {
-    const checkRes = await apiClient.post("/checkInUsedUom", {
-      json_data: { uomCode: row.uomCode }
-    });
+  const handleDelete = async (row) => {
+    try {
+      const checkRes = await apiClient.post("/checkInUsedUom", {
+        json_data: { uomCode: row.uomCode },
+      });
       const inUseData = checkRes?.data?.data;
 
       if (inUseData && inUseData.result === "1") {
         return useSwalErrorAlert(
           "Cannot Delete",
-          `UOM ${row.uomCode} is currently in use and cannot be deleted.`
+          `UOM ${row.uomCode} is currently in use and cannot be deleted.`,
         );
       }
 
-      const confirm = await useSwalDeleteConfirm("Confirm Delete", `Delete UOM ${row.uomCode}?`);
+      const confirm = await useSwalDeleteConfirm(
+        "Confirm Delete",
+        `Delete UOM ${row.uomCode}?`,
+      );
       if (confirm?.isConfirmed) {
         deleteMutation.mutate({ uomCode: row.uomCode });
       }
@@ -331,7 +363,8 @@ const handleDelete = async (row) => {
       }
     };
     const handleClick = (e) => {
-      if (guideRef.current && !guideRef.current.contains(e.target)) setOpenGuide(false);
+      if (guideRef.current && !guideRef.current.contains(e.target))
+        setOpenGuide(false);
     };
     window.addEventListener("keydown", handleKey);
     document.addEventListener("mousedown", handleClick);
@@ -341,46 +374,49 @@ const handleDelete = async (row) => {
     };
   }, [form, isEditing]);
 
-  const columns = useMemo(() => [
-    {
-      key: "__actions",
-      label: <span className="hidden md:inline">Actions</span>,
-      width: 90,
-      render: (row) => (
-        <div className="flex gap-2 justify-center w-full">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              isMobile ? openMobileActionSheet(row) : handleEdit(row);
-            }}
-            className="flex-1 h-7 md:flex-none flex items-center justify-center gap-1 py-2 px-3 bg-blue-50 border border-blue-100 text-blue-600 rounded-md hover:bg-blue-600 hover:text-white transition-colors text-xs"
-          >
-            <FontAwesomeIcon icon={faEdit} />
-            <span className="md:hidden">Edit</span>
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              isMobile ? openMobileActionSheet(row) : handleDelete(row);
-            }}
-            className="flex-1 h-7 md:flex-none flex items-center justify-center gap-1 py-2 px-3 bg-red-50 border border-red-100 text-red-600 rounded-md hover:bg-red-600 hover:text-white transition-colors text-xs"
-          >
-            <FontAwesomeIcon icon={faTrashAlt} />
-            <span className="md:hidden">Delete</span>
-          </button>
-        </div>
-      ),
-    },
-    { key: "uomCode", label: "UOM Code", sortable: true, width: 140 },
-    { key: "uomName", label: "UOM Name", sortable: true, width: 200 },
-    {
-      key: "active",
-      label: "Active",
-      sortable: true,
-      width: 90,
-      render: (row) => (row.active === "Y" ? "Yes" : "No"),
-    },
-  ], [isMobile]);
+  const columns = useMemo(
+    () => [
+      {
+        key: "__actions",
+        label: <span className="hidden md:inline">Actions</span>,
+        width: 120,
+        render: (row) => (
+          <div className="flex gap-2 justify-center w-full">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                isMobile ? openMobileActionSheet(row) : handleEdit(row);
+              }}
+              className="flex-1 h-7 md:flex-none flex items-center justify-center gap-1 py-2 px-3 bg-blue-50 border border-blue-100 text-blue-600 rounded-md hover:bg-blue-600 hover:text-white transition-colors text-xs"
+            >
+              <FontAwesomeIcon icon={faEdit} />
+              <span className="md:hidden">Edit</span>
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                isMobile ? openMobileActionSheet(row) : handleDelete(row);
+              }}
+              className="flex-1 h-7 md:flex-none flex items-center justify-center gap-1 py-2 px-3 bg-red-50 border border-red-100 text-red-600 rounded-md hover:bg-red-600 hover:text-white transition-colors text-xs"
+            >
+              <FontAwesomeIcon icon={faTrashAlt} />
+              <span className="md:hidden">Delete</span>
+            </button>
+          </div>
+        ),
+      },
+      { key: "uomCode", label: "UOM Code", sortable: true, width: 150 },
+      { key: "uomName", label: "UOM Name", sortable: true, width: 450, maxWidth: 450 },
+      {
+        key: "active",
+        label: "Active",
+        sortable: true,
+        width: 90,
+        render: (row) => (row.active === "Y" ? "Yes" : "No"),
+      },
+    ],
+    [isMobile],
+  );
 
   return (
     <div className="global-ref-main-div-ui">
@@ -392,7 +428,11 @@ const handleDelete = async (row) => {
               <div className="absolute top-0 left-0 w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
             </div>
             <span className="text-sm font-semibold animate-pulse">
-              {saveMutation.isPending ? "Saving..." : deleteMutation.isPending ? "Deleting..." : "Loading..."}
+              {saveMutation.isPending
+                ? "Saving..."
+                : deleteMutation.isPending
+                  ? "Deleting..."
+                  : "Loading..."}
             </span>
           </div>
         </div>
@@ -432,8 +472,12 @@ const handleDelete = async (row) => {
                     key: "add",
                     label: <span className="sm:inline ml-1">Add</span>,
                     icon: faPlus,
-                    onClick: () => { handleReset(); setIsEditing(true); },
-                    className: "flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all",
+                    onClick: () => {
+                      handleReset();
+                      setIsEditing(true);
+                    },
+                    className:
+                      "flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all",
                   },
                   {
                     key: "save",
@@ -448,23 +492,49 @@ const handleDelete = async (row) => {
                     label: <span className="sm:inline ml-1">Reset</span>,
                     icon: faUndo,
                     onClick: handleReset,
-                    className: "flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all",
+                    className:
+                      "flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all",
                   },
                 ]}
               />
               <div ref={guideRef} className="relative">
-                <button onClick={() => setOpenGuide((v) => !v)} className="bg-blue-600 text-white h-7 w-16 sm:w-auto sm:h-8 sm:px-4 rounded-md flex items-center justify-center gap-1 hover:bg-blue-700 transition-all">
-                  <FontAwesomeIcon icon={faInfoCircle} className="text-[12px]" />
-                  <span className="sm:inline ml-1 text-[11px] font-medium">Info</span>
-                  <FontAwesomeIcon icon={faChevronDown} className="hidden sm:inline text-[10px] opacity-80" />
+                <button
+                  onClick={() => setOpenGuide((v) => !v)}
+                  className="bg-blue-600 text-white h-7 w-16 sm:w-auto sm:h-8 sm:px-4 rounded-md flex items-center justify-center gap-1 hover:bg-blue-700 transition-all"
+                >
+                  <FontAwesomeIcon
+                    icon={faInfoCircle}
+                    className="text-[12px]"
+                  />
+                  <span className="sm:inline ml-1 text-[11px] font-medium">
+                    Info
+                  </span>
+                  <FontAwesomeIcon
+                    icon={faChevronDown}
+                    className="hidden sm:inline text-[10px] opacity-80"
+                  />
                 </button>
                 {isOpenGuide && (
                   <div className="absolute right-0 mt-2 w-52 rounded-md shadow-xl bg-white ring-1 ring-black/10 z-[60] dark:bg-gray-800 overflow-hidden">
-                    <button onClick={() => window.open(pdfLink, "_blank")} className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 dark:hover:bg-blue-900 border-b border-gray-100 dark:border-gray-700">
-                      <FontAwesomeIcon icon={faFilePdf} className="mr-2 text-red-500" /> PDF Guide
+                    <button
+                      onClick={() => window.open(pdfLink, "_blank")}
+                      className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 dark:hover:bg-blue-900 border-b border-gray-100 dark:border-gray-700"
+                    >
+                      <FontAwesomeIcon
+                        icon={faFilePdf}
+                        className="mr-2 text-red-500"
+                      />{" "}
+                      PDF Guide
                     </button>
-                    <button onClick={() => window.open(videoLink, "_blank")} className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 dark:hover:bg-blue-900">
-                      <FontAwesomeIcon icon={faVideo} className="mr-2 text-blue-500" /> Video Guide
+                    <button
+                      onClick={() => window.open(videoLink, "_blank")}
+                      className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 dark:hover:bg-blue-900"
+                    >
+                      <FontAwesomeIcon
+                        icon={faVideo}
+                        className="mr-2 text-blue-500"
+                      />{" "}
+                      Video Guide
                     </button>
                   </div>
                 )}
@@ -474,7 +544,10 @@ const handleDelete = async (row) => {
         </div>
       </div>
 
-      <div ref={formTopRef} className="mt-24 flex flex-col xl:flex-row gap-4 px-4 h-auto xl:h-[calc(100vh-130px)]">
+      <div
+        ref={formTopRef}
+        className="mt-24 flex flex-col xl:flex-row gap-4 px-4 h-auto xl:h-[calc(100vh-130px)]"
+      >
         {/* LEFT SIDE: Entry Details */}
         <div className="w-full xl:w-[400px] flex flex-col gap-4 shrink-0">
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg">
@@ -504,7 +577,10 @@ const handleDelete = async (row) => {
                 label="Active?"
                 type="select"
                 value={form.active}
-                options={[{ value: "Y", label: "Yes" }, { value: "N", label: "No" }]}
+                options={[
+                  { value: "Y", label: "Yes" },
+                  { value: "N", label: "No" },
+                ]}
                 disabled={!isEditing}
                 onChange={(v) => setField("active", v)}
               />
@@ -534,21 +610,39 @@ const handleDelete = async (row) => {
       {/* Mobile Action Sheet */}
       {isMobileActionSheetMounted && (
         <div className="fixed inset-0 z-[120] md:hidden">
-          <div className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ${isMobileActionSheetOpen ? "opacity-100" : "opacity-0"}`} onClick={closeMobileActionSheet} />
-          <div className={`absolute bottom-0 left-0 right-0 rounded-t-2xl bg-white shadow-2xl p-4 transform transition-transform duration-300 ease-out ${isMobileActionSheetOpen ? "translate-y-0" : "translate-y-full"}`}>
+          <div
+            className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ${isMobileActionSheetOpen ? "opacity-100" : "opacity-0"}`}
+            onClick={closeMobileActionSheet}
+          />
+          <div
+            className={`absolute bottom-0 left-0 right-0 rounded-t-2xl bg-white shadow-2xl p-4 transform transition-transform duration-300 ease-out ${isMobileActionSheetOpen ? "translate-y-0" : "translate-y-full"}`}
+          >
             <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-4" />
             <div className="mb-3">
               <h2 className="text-sm font-bold text-gray-800">UOM Actions</h2>
-              <p className="text-xs text-gray-500">{selectedMobileRow?.uomCode} - {selectedMobileRow?.uomName}</p>
+              <p className="text-xs text-gray-500">
+                {selectedMobileRow?.uomCode} - {selectedMobileRow?.uomName}
+              </p>
             </div>
             <div className="space-y-2">
-              <button onClick={() => handleEdit(selectedMobileRow)} className="w-full flex items-center justify-center gap-2 rounded-lg bg-blue-50 text-blue-600 py-3 text-sm font-medium">
+              <button
+                onClick={() => handleEdit(selectedMobileRow)}
+                className="w-full flex items-center justify-center gap-2 rounded-lg bg-blue-50 text-blue-600 py-3 text-sm font-medium"
+              >
                 <FontAwesomeIcon icon={faEdit} /> Edit
               </button>
-              <button onClick={() => handleDelete(selectedMobileRow)} className="w-full flex items-center justify-center gap-2 rounded-lg bg-red-50 text-red-600 py-3 text-sm font-medium">
+              <button
+                onClick={() => handleDelete(selectedMobileRow)}
+                className="w-full flex items-center justify-center gap-2 rounded-lg bg-red-50 text-red-600 py-3 text-sm font-medium"
+              >
                 <FontAwesomeIcon icon={faTrashAlt} /> Delete
               </button>
-              <button onClick={closeMobileActionSheet} className="w-full rounded-lg bg-gray-100 text-gray-700 py-3 text-sm font-medium">Cancel</button>
+              <button
+                onClick={closeMobileActionSheet}
+                className="w-full rounded-lg bg-gray-100 text-gray-700 py-3 text-sm font-medium"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>

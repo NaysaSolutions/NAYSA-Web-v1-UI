@@ -320,7 +320,7 @@ const CurrRef = () => {
       {
         key: "__actions",
         label: <span className="hidden md:inline">Actions</span>,
-        width: 50,
+        width: 100,
         render: (row) => (
           <div className="flex gap-2 justify-center w-full">
             <button
@@ -357,8 +357,8 @@ const CurrRef = () => {
           </div>
         ),
       },
-      { key: "currCode", label: "Currency Code", sortable: true },
-      { key: "currName", label: "Currency Name", sortable: true },
+      { key: "currCode", label: "Currency Code", sortable: true, width: 100,  },
+      { key: "currName", label: "Currency Name", sortable: true, width: 400, maxWidth: 400 },
     ],
     [isMobile]
   );
