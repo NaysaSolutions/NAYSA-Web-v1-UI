@@ -90,6 +90,39 @@ const UOM = () => {
   const docType = "UOM"; // Should match key in reftables
   const formTopRef = useRef(null);
   const guideRef = useRef(null);
+
+  // Debug authentication and tenant
+  useEffect(() => {
+    console.log("👤 User:", user);
+    console.log("🏢 Tenant:", localStorage.getItem("companyCode") || sessionStorage.getItem("companyCode"));
+    console.log("🔑 Auth Headers:", apiClient.defaults.headers.common);
+    console.log("🔗 API Base URL:", apiClient.defaults.baseURL);
+  }, [user]);
+
+  // Check if user is authenticated
+  if (!user) {
+    return (
+      <div className="global-ref-main-div-ui flex items-center justify-center min-h-screen">
+        <div className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-lg text-center">
+          <h2 className="text-xl font-bold text-red-600 mb-4">Authentication Required</h2>
+          <p className="text-gray-600">Please log in to access UOM data.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Check if tenant is set
+  const tenant = localStorage.getItem("companyCode") || sessionStorage.getItem("companyCode");
+  if (!tenant) {
+    return (
+      <div className="global-ref-main-div-ui flex items-center justify-center min-h-screen">
+        <div className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-lg text-center">
+          <h2 className="text-xl font-bold text-orange-600 mb-4">Company Selection Required</h2>
+          <p className="text-gray-600">Please select a company to access UOM data.</p>
+        </div>
+      </div>
+    );
+  }
   
   const pdfLink = reftablesPDFGuide[docType];
   const videoLink = reftablesVideoGuide[docType];
@@ -143,8 +176,27 @@ const UOM = () => {
   const uomListQuery = useQuery({
     queryKey: ["uomList"],
     queryFn: async () => {
-      const result = await apiClient.get("/uom/uom");
-      return parseSprocJsonResult(result?.data?.data);
+      try {
+        console.log("🔍 Fetching UOM data from:", apiClient.defaults.baseURL + "/uom/uom");
+        console.log("📡 API Headers:", apiClient.defaults.headers.common);
+        console.log("🌐 Environment VITE_API_URL:", import.meta.env.VITE_API_URL);
+        const result = await apiClient.get("/uom");
+        console.log("✅ UOM API Response:", result?.data);
+        console.log("📊 Parsed data:", parseSprocJsonResult(result?.data?.data));
+        return parseSprocJsonResult(result?.data?.data);
+      } catch (error) {
+        console.error("❌ UOM API Error:", error.message);
+        console.error("Response Status:", error.response?.status);
+        console.error("Response Data:", error.response?.data);
+        throw error;
+      }
+    },
+    retry: (failureCount, error) => {
+      // Don't retry on 401/403 errors
+      if (error?.response?.status === 401 || error?.response?.status === 403) {
+        return false;
+      }
+      return failureCount < 3;
     },
   });
 
@@ -160,11 +212,11 @@ const UOM = () => {
     }));
   }, [uomListQuery.data]);
 
-  const saveMutation = useMutation({
-    mutationFn: async (payload) =>
-      apiClient.post("/uom/upsertUom", {
-        json_data: JSON.stringify(payload),
-      }),
+const saveMutation = useMutation({
+  mutationFn: async (payload) =>
+    apiClient.post("/upsertUom", {
+      json_data: payload, // 
+    }),
     onSuccess: async (response) => {
       const sprocValidation = extractSprocValidation(response);
       if (Number(sprocValidation?.errorCount ?? 0) > 0) {
@@ -178,9 +230,9 @@ const UOM = () => {
     onError: (error) => useSwalErrorAlertAPI("Error", error),
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: async (payload) =>
-      apiClient.post("/uom/deleteUom", { json_data: payload }),
+const deleteMutation = useMutation({
+  mutationFn: async (payload) =>
+    apiClient.post("/deleteUom", { json_data: payload }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["uomList"] });
       useSwalDeleteRecord("Deleted!", "UOM record removed successfully.");
@@ -191,6 +243,8 @@ const UOM = () => {
 
   const isSaving = saveMutation.isPending || deleteMutation.isPending;
   const isListLoading = uomListQuery.isLoading;
+  const hasError = uomListQuery.isError;
+  const errorMessage = uomListQuery.error?.message || "Unknown error occurred";
 
   const handleReset = () => {
     setForm(INITIAL_FORM);
@@ -243,11 +297,11 @@ const UOM = () => {
     }, 150);
   };
 
-  const handleDelete = async (row) => {
-    try {
-      const checkRes = await apiClient.post("/uom/checkInUsedUom", {
-        json_data: { uomCode: row.uomCode }
-      });
+const handleDelete = async (row) => {
+  try {
+    const checkRes = await apiClient.post("/checkInUsedUom", {
+      json_data: { uomCode: row.uomCode }
+    });
       const inUseData = checkRes?.data?.data;
 
       if (inUseData && inUseData.result === "1") {
@@ -341,6 +395,23 @@ const UOM = () => {
               {saveMutation.isPending ? "Saving..." : deleteMutation.isPending ? "Deleting..." : "Loading..."}
             </span>
           </div>
+        </div>
+      )}
+
+      {/* Error Display */}
+      {hasError && !isListLoading && (
+        <div className="fixed top-4 right-4 z-[100] bg-red-500 text-white p-4 rounded-lg shadow-lg max-w-md">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg">⚠️</span>
+            <span className="font-bold">API Error</span>
+          </div>
+          <p className="text-sm">{errorMessage}</p>
+          <button
+            onClick={() => uomListQuery.refetch()}
+            className="mt-2 bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-xs"
+          >
+            Retry
+          </button>
         </div>
       )}
 

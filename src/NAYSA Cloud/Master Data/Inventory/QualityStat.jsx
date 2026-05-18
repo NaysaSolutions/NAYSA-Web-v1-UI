@@ -93,7 +93,7 @@ const QualityStat = forwardRef(({ isMobile, onMobileActionOpen }, ref) => {
           }
           @keyframes wh-bar {
             from { width: 0%; }
-            to   { width: 45%; }
+            to   { width: 10%; }
           }
         `}</style>
       </div>
@@ -117,7 +117,7 @@ const QualityStat = forwardRef(({ isMobile, onMobileActionOpen }, ref) => {
       <div className="w-full max-w-xs mb-6">
         <div className="flex justify-between items-center mb-1.5">
           <span className="text-xs text-gray-400 dark:text-gray-500">Build progress</span>
-          <span className="text-xs font-medium text-blue-500 dark:text-blue-400">45%</span>
+          <span className="text-xs font-medium text-blue-500 dark:text-blue-400">10%</span>
         </div>
         <div className="h-1.5 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden border border-gray-200 dark:border-gray-600">
           <div
