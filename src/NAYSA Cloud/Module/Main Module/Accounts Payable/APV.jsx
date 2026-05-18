@@ -38,7 +38,7 @@ import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import GlobalCombinedLookup from "../../../Lookup/SearchGlobalCombinedLookup.jsx";
 
 // Configuration
-import { fetchData, postRequest } from "../../../Configuration/BaseURL.jsx";
+import { fetchData, fetchDataJson, postRequest } from "../../../Configuration/BaseURL.jsx";
 import { useReset } from "../../../Components/ResetContext";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 
@@ -485,6 +485,99 @@ const APV = () => {
   { key: "vatDesc", label: "VAT Desc", width: 200 },
   { key: "vatAmount", label: "VAT Amount", width: 110, type: "amount" },
 ];
+
+  const getLookupValue = (row, ...keys) => {
+    if (!row || typeof row !== "object") return "";
+
+    for (const key of keys) {
+      const value = row[key];
+      if (value !== undefined && value !== null && value !== "") return value;
+    }
+
+    const normalizeKey = (key) =>
+      String(key || "")
+        .replace(/[_\s-]/g, "")
+        .toLowerCase();
+    const normalized = Object.entries(row).reduce((acc, [key, value]) => {
+      acc[normalizeKey(key)] = value;
+      return acc;
+    }, {});
+
+    for (const key of keys) {
+      const value = normalized[normalizeKey(key)];
+      if (value !== undefined && value !== null && value !== "") return value;
+    }
+
+    return "";
+  };
+
+  const extractOpenRRRows = (value) => {
+    if (!value) return [];
+
+    if (typeof value === "string") {
+      try {
+        return extractOpenRRRows(JSON.parse(value));
+      } catch {
+        return [];
+      }
+    }
+
+    if (Array.isArray(value)) return value;
+    if (Array.isArray(value?.dt1)) return value.dt1;
+    if (Array.isArray(value?.data)) return value.data;
+    if (Array.isArray(value?.rows)) return value.rows;
+    if (value?.result) return extractOpenRRRows(value.result);
+    if (typeof value === "object" && Object.keys(value).length > 0) return [value];
+
+    return [];
+  };
+
+  const extractOpenRRResponseRows = (response) => {
+    const resultValue =
+      response?.data?.[0]?.result ??
+      response?.data?.[0]?.RESULT ??
+      response?.data?.[0]?.JsonResult ??
+      response?.data?.result ??
+      response?.data?.RESULT ??
+      response?.result ??
+      response?.RESULT ??
+      response?.JsonResult ??
+      response?.data ??
+      response;
+
+    return extractOpenRRRows(resultValue);
+  };
+
+  const normalizeOpenRRRow = (row, index) => {
+    const rrNo = getLookupValue(row, "rrNo", "rr_no", "RR_NO", "msrrNo", "MSRR_NO", "docNo", "DOC_NO", "tranNo", "TRAN_NO");
+    const rrId = getLookupValue(row, "rrId", "rr_id", "RR_ID", "rrHdId", "RR_HD_ID", "msrrId", "MSRR_ID");
+    const poNo = getLookupValue(row, "poNo", "po_no", "PO_NO");
+
+    return {
+      ...row,
+      groupId:
+        getLookupValue(row, "groupId", "GROUP_ID", "id", "ID") ||
+        [rrId, rrNo, poNo, index + 1].filter(Boolean).join("-") ||
+        String(index + 1),
+      type: getLookupValue(row, "type", "Type", "TYPE", "invType", "INV_TYPE"),
+      branchCode: getLookupValue(row, "branchCode", "BranchCode", "BRANCH_CODE", "bc", "BC"),
+      rrNo,
+      rrDate: getLookupValue(row, "rrDate", "rr_date", "RR_DATE"),
+      rrId,
+      poNo,
+      vendCode: getLookupValue(row, "vendCode", "vend_code", "VEND_CODE"),
+      vendName: getLookupValue(row, "vendName", "vend_name", "VEND_NAME"),
+      siNo: getLookupValue(row, "siNo", "si_no", "SI_NO", "drNo", "DR_NO"),
+      siDate: getLookupValue(row, "siDate", "si_date", "SI_DATE", "rrDate", "RR_DATE"),
+      siAmount: getLookupValue(row, "siAmount", "si_amount", "SI_AMOUNT", "amount", "AMOUNT", "rrAmount", "RR_AMOUNT"),
+      drAcct: getLookupValue(row, "drAcct", "dr_acct", "DR_ACCT", "debitAcct", "DEBIT_ACCT"),
+      rcCode: getLookupValue(row, "rcCode", "rc_code", "RC_CODE"),
+      vatCode: getLookupValue(row, "vatCode", "vat_code", "VAT_CODE"),
+      vatDesc: getLookupValue(row, "vatDesc", "vat_desc", "VAT_DESC", "vatName", "VAT_NAME"),
+      vatAmount: getLookupValue(row, "vatAmount", "vat_amount", "VAT_AMOUNT"),
+      categCode: getLookupValue(row, "categCode", "categ_code", "CATEG_CODE", "categoryCode", "CATEGORY_CODE"),
+    };
+  };
 
   // Loading spinner component
   const LoadingSpinner = () => (
@@ -1567,28 +1660,48 @@ const APV = () => {
   try {
     updateState({ isLoading: true, showSpinner: true });
 
-    const response = await fetchData("getAPVRR_OpenSummary", {
-      PARAMS: JSON.stringify({ 
-        branchCode: lookupBranchCode,
-        vendCode: lookupVendCode 
-      })
-    });
+    const lookupPayload = {
+      branchCode: lookupBranchCode,
+      vendCode: lookupVendCode,
+    };
 
-    if (response.success && response.data[0].result) {
-      const rawRows = JSON.parse(response.data[0].result);
-      
-      if (rawRows.length === 0) {
-        useSwalErrorAlert("Open RR", "No open RR found for this supplier.");
-        return;
+    const requestAttempts = [
+      () => fetchDataJson("getAPVRR_OpenSummary", lookupPayload),
+      () =>
+        fetchData("getAPVRR_OpenSummary", {
+          PARAMS: JSON.stringify({ json_data: lookupPayload }),
+        }),
+      () =>
+        fetchData("getAPVRR_OpenSummary", {
+          PARAMS: JSON.stringify(lookupPayload),
+        }),
+    ];
+
+    let rawRows = [];
+    for (const requestOpenRR of requestAttempts) {
+      try {
+        const response = await requestOpenRR();
+        rawRows = extractOpenRRResponseRows(response);
+        if (rawRows.length > 0) break;
+      } catch (requestError) {
+        console.warn("Open RR lookup attempt failed:", requestError);
       }
-      const summaryColumns = openRRLookupColumns; 
-
-      updateState({
-        globalLookupRow: rawRows,
-        globalLookupHeader: summaryColumns,
-        showRRRefModal: true,
-      });
     }
+
+    const normalizedRows = rawRows.map((row, index) =>
+      normalizeOpenRRRow(row, index),
+    );
+
+    if (normalizedRows.length === 0) {
+      useSwalErrorAlert("Open RR", "No open RR found for this supplier.");
+      return;
+    }
+
+    updateState({
+      globalLookupRow: normalizedRows,
+      globalLookupHeader: openRRLookupColumns,
+      showRRRefModal: true,
+    });
   } catch (error) {
     console.error("Failed to fetch Open RR:", error);
   } finally {
