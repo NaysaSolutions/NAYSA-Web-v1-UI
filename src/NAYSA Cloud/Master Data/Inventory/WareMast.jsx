@@ -80,7 +80,6 @@ const INITIAL_REG = {
   lastUpdatedDate: "",
 };
 
-
 const toYN = (value, def = "N") => {
   const normalized = String(value ?? "")
     .trim()
@@ -108,7 +107,7 @@ const WareMast = () => {
   // ADDED: State to track child components to trigger re-renders for buttons
   const [childStates, setChildStates] = useState({
     location: { isEditing: false, isSaving: false },
-    parameter: { isEditing: false, isSaving: false }
+    parameter: { isEditing: false, isSaving: false },
   });
 
   // --- YOUR EXACT UNTOUCHED STATE ---
@@ -118,14 +117,16 @@ const WareMast = () => {
   const [selectedRow, setSelectedRow] = useState(null);
   const [isBranchModalOpen, setBranchModalOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [isMobileActionSheetMounted, setIsMobileActionSheetMounted] = useState(false);
+  const [isMobileActionSheetMounted, setIsMobileActionSheetMounted] =
+    useState(false);
   const [isMobileActionSheetOpen, setIsMobileActionSheetOpen] = useState(false);
   const [selectedMobileRow, setSelectedMobileRow] = useState(null);
   const [mobileHandlers, setMobileHandlers] = useState({});
   const [tblFieldArray, setTblFieldArray] = useState([]);
   const [isOpenGuide, setOpenGuide] = useState(false);
 
-  const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
+  const setField = (key, value) =>
+    setForm((prev) => ({ ...prev, [key]: value }));
   const resetForm = (next = DEFAULT_FORM) => setForm(next);
 
   // load max length metadata
@@ -163,7 +164,8 @@ const WareMast = () => {
   // Click outside guide listener
   useEffect(() => {
     const handleClick = (e) => {
-      if (guideRef.current && !guideRef.current.contains(e.target)) setOpenGuide(false);
+      if (guideRef.current && !guideRef.current.contains(e.target))
+        setOpenGuide(false);
     };
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
@@ -204,9 +206,9 @@ const WareMast = () => {
         (branchLookupQuery.data || []).map((item) => [
           String(item.branchCode || "").trim(),
           item.branchName || "",
-        ])
+        ]),
       ),
-    [branchLookupQuery.data]
+    [branchLookupQuery.data],
   );
 
   const warehouses = useMemo(() => {
@@ -235,7 +237,7 @@ const WareMast = () => {
 
     if (form.branchCode) {
       return allRows.filter(
-        (wh) => String(wh.branchCode).trim() === String(form.branchCode).trim()
+        (wh) => String(wh.branchCode).trim() === String(form.branchCode).trim(),
       );
     }
     return allRows;
@@ -250,7 +252,10 @@ const WareMast = () => {
     onSuccess: async (response) => {
       const sqlRow = response?.data?.data?.[0] || {};
       if (Number(sqlRow.errorcount || 0) > 0) {
-        useSwalErrorAlert("Save Failed", sqlRow.errormsg || "Unable to save record.");
+        useSwalErrorAlert(
+          "Save Failed",
+          sqlRow.errormsg || "Unable to save record.",
+        );
         return;
       }
       await queryClient.invalidateQueries({ queryKey: ["wareMastList"] });
@@ -268,7 +273,10 @@ const WareMast = () => {
     onSuccess: async (response) => {
       const sqlRow = response?.data?.data?.[0] || {};
       if (Number(sqlRow.errorcount || 0) > 0) {
-        useSwalErrorAlert("Delete Failed", sqlRow.errormsg || "Unable to delete record.");
+        useSwalErrorAlert(
+          "Delete Failed",
+          sqlRow.errormsg || "Unable to delete record.",
+        );
         return;
       }
       await queryClient.invalidateQueries({ queryKey: ["wareMastList"] });
@@ -285,7 +293,10 @@ const WareMast = () => {
     const whCode = String(form.whCode || "").trim();
     const whName = String(form.whName || "").trim();
     if (!whCode || !whName) {
-      return useSwalErrorAlert("Validation Error", "Warehouse Code and Name are required.");
+      return useSwalErrorAlert(
+        "Validation Error",
+        "Warehouse Code and Name are required.",
+      );
     }
     const payload = {
       ...form,
@@ -315,15 +326,15 @@ const WareMast = () => {
     const whCode = row.whCode || "";
     try {
       const checkResponse = await apiClient.post("warehouse/checkInUsedWH", {
-        json_data: { whCode }
+        json_data: { whCode },
       });
       const sqlRow = checkResponse?.data?.data?.[0];
       const rawJsonString = sqlRow?.result || Object.values(sqlRow || {})[0];
       const parsedData = JSON.parse(rawJsonString || '{"result":"0"}');
       if (String(parsedData.result) === "1") {
         return useSwalErrorAlert(
-          "Cannot Delete", 
-          `Warehouse Code ${whCode} is currently in use and cannot be deleted.`
+          "Cannot Delete",
+          `Warehouse Code ${whCode} is currently in use and cannot be deleted.`,
         );
       }
     } catch (error) {
@@ -331,7 +342,7 @@ const WareMast = () => {
     }
     const confirm = await useSwalDeleteConfirm(
       "Confirm Delete",
-      `Are you sure you want to delete warehouse ${whCode}?`
+      `Are you sure you want to delete warehouse ${whCode}?`,
     );
     if (confirm?.isConfirmed) {
       deleteMutation.mutate(whCode);
@@ -342,13 +353,19 @@ const WareMast = () => {
     if (form.__existing || !code) return;
     try {
       const payload = { json_data: { whCode: code } };
-      const response = await apiClient.post("warehouse/checkDuplicateWH", payload);
+      const response = await apiClient.post(
+        "warehouse/checkDuplicateWH",
+        payload,
+      );
       const sqlRow = response?.data?.data?.[0];
       const rawJsonString = sqlRow?.result || Object.values(sqlRow || {})[0];
       const parsedData = JSON.parse(rawJsonString || '{"result":"0"}');
       if (parsedData.result === "1") {
         setField("whCode", "");
-        return useSwalErrorAlert("Duplicate Code", `Warehouse Code ${code} is already in use.`);
+        return useSwalErrorAlert(
+          "Duplicate Code",
+          `Warehouse Code ${code} is already in use.`,
+        );
       }
     } catch (error) {
       console.error("Duplicate check failed", error);
@@ -376,29 +393,45 @@ const WareMast = () => {
 
   const handleGlobalSave = () => {
     if (activeTab === "warehouse") handleSave();
-    else if (activeTab === "location" && locationRef.current) locationRef.current.handleSave();
-    else if (activeTab === "parameter" && parameterRef.current) parameterRef.current.handleSave();
+    else if (activeTab === "location" && locationRef.current)
+      locationRef.current.handleSave();
+    else if (activeTab === "parameter" && parameterRef.current)
+      parameterRef.current.handleSave();
   };
 
   const handleGlobalReset = () => {
     if (activeTab === "warehouse") handleReset();
-    else if (activeTab === "location" && locationRef.current) locationRef.current.handleReset();
-    else if (activeTab === "parameter" && parameterRef.current) parameterRef.current.handleReset();
+    else if (activeTab === "location" && locationRef.current)
+      locationRef.current.handleReset();
+    else if (activeTab === "parameter" && parameterRef.current)
+      parameterRef.current.handleReset();
   };
 
   // UPDATED: Determine button states dynamically using the child state object
-  const isCurrentlyEditing = 
-    activeTab === "warehouse" ? isEditing : 
-    activeTab === "location" ? childStates.location.isEditing : 
-    activeTab === "parameter" ? childStates.parameter.isEditing : false;
+  const isCurrentlyEditing =
+    activeTab === "warehouse"
+      ? isEditing
+      : activeTab === "location"
+        ? childStates.location.isEditing
+        : activeTab === "parameter"
+          ? childStates.parameter.isEditing
+          : false;
 
-  const isCurrentlySaving = 
-    activeTab === "warehouse" ? saveMutation.isPending : 
-    activeTab === "location" ? childStates.location.isSaving : 
-    activeTab === "parameter" ? childStates.parameter.isSaving : false;
+  const isCurrentlySaving =
+    activeTab === "warehouse"
+      ? saveMutation.isPending
+      : activeTab === "location"
+        ? childStates.location.isSaving
+        : activeTab === "parameter"
+          ? childStates.parameter.isSaving
+          : false;
 
   // Modified Mobile Action Sheet to handle all tabs dynamically
-  const openMobileActionSheet = (row, editFn = handleEdit, deleteFn = handleDelete) => {
+  const openMobileActionSheet = (
+    row,
+    editFn = handleEdit,
+    deleteFn = handleDelete,
+  ) => {
     setSelectedMobileRow(row);
     setMobileHandlers({ edit: editFn, delete: deleteFn });
     setIsMobileActionSheetMounted(true);
@@ -461,17 +494,24 @@ const WareMast = () => {
         sortable: true,
         render: (row) =>
           row.branchCode ? `${row.branchCode} - ${row.branchName || ""}` : "",
-        width: 120
+        width: 120,
       },
       { key: "whCode", label: "Code", sortable: true, width: 100 },
-      { key: "whName", label: "Warehouse Name", sortable: true, width: 250, maxWidth: 250 },
+      {
+        key: "whName",
+        label: "Warehouse Name",
+        sortable: true,
+        width: 250,
+        maxWidth: 250,
+      },
       {
         key: "invType",
         label: "Inventory Type",
         render: (row) =>
-          dropdowns?.invTypes?.find((d) => d.DROPDOWN_CODE === row.invType)?.DROPDOWN_NAME || row.invType,
+          dropdowns?.invTypes?.find((d) => d.DROPDOWN_CODE === row.invType)
+            ?.DROPDOWN_NAME || row.invType,
       },
-      { key: "address1", label: "Address 1", sortable: true, width: 350  },
+      { key: "address1", label: "Address 1", sortable: true, width: 350 },
       {
         key: "active",
         label: "Active",
@@ -479,19 +519,18 @@ const WareMast = () => {
         render: (row) => (row.active === "Y" ? "Yes" : "No"),
       },
     ],
-    [isMobile, dropdowns]
+    [isMobile, dropdowns],
   );
 
   return (
     <div className="global-ref-main-div-ui">
-      {(warehouseListQuery.isLoading || saveMutation.isPending || deleteMutation.isPending) && (
-        <LoadingSpinner />
-      )}
+      {(warehouseListQuery.isLoading ||
+        saveMutation.isPending ||
+        deleteMutation.isPending) && <LoadingSpinner />}
 
       {/* 4. TABBED HEADER */}
       <div className="global-ref-header-ui">
         <div className="w-full flex flex-col gap-3 md:grid md:grid-cols-3 md:items-center md:gap-0">
-          
           <div className="w-full md:w-auto md:justify-start flex">
             <h1 className="global-ref-headertext-ui w-full md:w-auto truncate text-center md:text-left">
               {activeTab === "warehouse" && "Warehouse Master"}
@@ -510,9 +549,14 @@ const WareMast = () => {
                 ].map((tab) => (
                   <button
                     key={tab.id}
-                    onClick={() => { setActiveTab(tab.id); handleReset(); }} 
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                      handleReset();
+                    }}
                     className={`shrink-0 whitespace-nowrap px-3 py-1 sm:py-2 sm:px-4 text-[10px] sm:text-[13px] font-bold transition-all border-b-2 rounded-md ${
-                      activeTab === tab.id ? "border-blue-700 text-blue-700 bg-blue-50/50" : "border-transparent text-gray-500 hover:text-blue-500"
+                      activeTab === tab.id
+                        ? "border-blue-700 text-blue-700 bg-blue-50/50"
+                        : "border-transparent text-gray-500 hover:text-blue-500"
                     }`}
                   >
                     {tab.label}
@@ -528,37 +572,77 @@ const WareMast = () => {
                 <ButtonBar
                   buttons={[
                     {
-                      key: "add", label: <span className="sm:inline ml-1">Add</span>, icon: faPlus,
+                      key: "add",
+                      label: <span className="sm:inline ml-1">Add</span>,
+                      icon: faPlus,
                       onClick: handleGlobalAdd,
-                      className: "flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all",
+                      className:
+                        "flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all",
                     },
                     {
-                      key: "save", label: <span className="sm:inline ml-1">Save</span>, icon: faSaveIcon,
-                      onClick: handleGlobalSave, disabled: !isCurrentlyEditing || isCurrentlySaving,
-                      className: `flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md transition-all ${(!isCurrentlyEditing || isCurrentlySaving) ? "bg-blue-500 opacity-50 cursor-not-allowed text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`,
+                      key: "save",
+                      label: <span className="sm:inline ml-1">Save</span>,
+                      icon: faSaveIcon,
+                      onClick: handleGlobalSave,
+                      disabled: !isCurrentlyEditing || isCurrentlySaving,
+                      className: `flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md transition-all ${!isCurrentlyEditing || isCurrentlySaving ? "bg-blue-500 opacity-50 cursor-not-allowed text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`,
                     },
                     {
-                      key: "reset", label: <span className="sm:inline ml-1">Reset</span>, icon: faUndo,
+                      key: "reset",
+                      label: <span className="sm:inline ml-1">Reset</span>,
+                      icon: faUndo,
                       onClick: handleGlobalReset,
-                      className: "flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all",
+                      className:
+                        "flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all",
                     },
                   ]}
                 />
               </div>
 
               <div ref={guideRef} className="relative">
-                <button onClick={() => setOpenGuide((v) => !v)} className="bg-blue-600 text-white h-7 w-16 sm:w-auto sm:h-8 sm:px-4 rounded-md flex items-center justify-center gap-1 hover:bg-blue-700 transition-all">
-                  <FontAwesomeIcon icon={faInfoCircle} className="text-[12px]" />
-                  <span className="sm:inline ml-1 text-[11px] font-medium">Info</span>
-                  <FontAwesomeIcon icon={faChevronDown} className="hidden sm:inline text-[10px] opacity-80" />
+                <button
+                  onClick={() => setOpenGuide((v) => !v)}
+                  className="bg-blue-600 text-white h-7 w-16 sm:w-auto sm:h-8 sm:px-4 rounded-md flex items-center justify-center gap-1 hover:bg-blue-700 transition-all"
+                >
+                  <FontAwesomeIcon
+                    icon={faInfoCircle}
+                    className="text-[12px]"
+                  />
+                  <span className="sm:inline ml-1 text-[11px] font-medium">
+                    Info
+                  </span>
+                  <FontAwesomeIcon
+                    icon={faChevronDown}
+                    className="hidden sm:inline text-[10px] opacity-80"
+                  />
                 </button>
                 {isOpenGuide && (
                   <div className="absolute right-0 mt-2 w-52 rounded-md shadow-xl bg-white ring-1 ring-black/10 z-[60] dark:bg-gray-800 overflow-hidden">
-                    <button onClick={() => { window.open(pdfLink, "_blank"); setOpenGuide(false); }} className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 dark:hover:bg-blue-900 border-b border-gray-100 dark:border-gray-700">
-                      <FontAwesomeIcon icon={faFilePdf} className="mr-2 text-red-500" /> PDF Guide
+                    <button
+                      onClick={() => {
+                        window.open(pdfLink, "_blank");
+                        setOpenGuide(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 dark:hover:bg-blue-900 border-b border-gray-100 dark:border-gray-700"
+                    >
+                      <FontAwesomeIcon
+                        icon={faFilePdf}
+                        className="mr-2 text-red-500"
+                      />{" "}
+                      PDF Guide
                     </button>
-                    <button onClick={() => { window.open(videoLink, "_blank"); setOpenGuide(false); }} className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 dark:hover:bg-blue-900">
-                      <FontAwesomeIcon icon={faVideo} className="mr-2 text-blue-500" /> Video Guide
+                    <button
+                      onClick={() => {
+                        window.open(videoLink, "_blank");
+                        setOpenGuide(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 dark:hover:bg-blue-900"
+                    >
+                      <FontAwesomeIcon
+                        icon={faVideo}
+                        className="mr-2 text-blue-500"
+                      />{" "}
+                      Video Guide
                     </button>
                   </div>
                 )}
@@ -568,8 +652,10 @@ const WareMast = () => {
         </div>
       </div>
 
-      <div className="mt-40 sm:mt-24" style={{ minHeight: "calc(100vh - 170px)" }}>
-        
+      <div
+        className="mt-40 sm:mt-24"
+        style={{ minHeight: "calc(100vh - 170px)" }}
+      >
         {/* 5. WAREHOUSE FORM */}
         {activeTab === "warehouse" && (
           <>
@@ -580,7 +666,11 @@ const WareMast = () => {
                     <FieldRenderer
                       label="Branch"
                       type="lookup"
-                      value={form.branchCode ? `${form.branchCode} - ${form.branchName || ""}` : ""}
+                      value={
+                        form.branchCode
+                          ? `${form.branchCode} - ${form.branchName || ""}`
+                          : ""
+                      }
                       onLookup={() => setBranchModalOpen(true)}
                       disabled={false}
                       required
@@ -588,19 +678,23 @@ const WareMast = () => {
                     <FieldRenderer
                       label="Warehouse Code"
                       value={form.whCode}
-                      onChange={(val) => setField("whCode", String(val).toUpperCase())}
+                      onChange={(val) =>
+                        setField("whCode", String(val).toUpperCase())
+                      }
                       onBlur={(e) => handleCheckDuplicate(e.target.value)}
                       disabled={!isEditing || form.__existing}
                       required
                       maxLength={getMax("WHOUSE_CODE")}
                     />
                     <FieldRenderer
-                      label="Address 1"
-                      value={form.address1}
-                      onChange={(val) => setField("address1", val)}
+                      label="Warehouse Name"
+                      value={form.whName}
+                      onChange={(val) => setField("whName", val)}
                       disabled={!isEditing}
-                      maxLength={getMax("ADDRESS1")}
+                      required
+                      maxLength={getMax("WHOUSE_NAME")}
                     />
+
                     <FieldRenderer
                       label="Inventory Type"
                       type="select"
@@ -617,13 +711,13 @@ const WareMast = () => {
                   <div className="space-y-6">
                     <div className="hidden md:block h-[33px]"></div>
                     <FieldRenderer
-                      label="Warehouse Name"
-                      value={form.whName}
-                      onChange={(val) => setField("whName", val)}
+                      label="Address 1"
+                      value={form.address1}
+                      onChange={(val) => setField("address1", val)}
                       disabled={!isEditing}
-                      required
-                      maxLength={getMax("WHOUSE_NAME")}
+                      maxLength={getMax("ADDRESS1")}
                     />
+
                     <FieldRenderer
                       label="Address 2"
                       value={form.address2}
@@ -663,7 +757,9 @@ const WareMast = () => {
                 onRowClick={(row) => setSelectedRow(row)}
                 isLoading={warehouseListQuery.isLoading}
                 onRefresh={() => warehouseListQuery.refetch()}
-                onMobileRowOpen={(row) => openMobileActionSheet(row, handleEdit, handleDelete)}
+                onMobileRowOpen={(row) =>
+                  openMobileActionSheet(row, handleEdit, handleDelete)
+                }
               />
             </div>
           </>
@@ -672,25 +768,28 @@ const WareMast = () => {
         {/* 6. LOCATION TAB */}
         {/* ADDED: onStateChange prop to receive state updates from the Location component */}
         {activeTab === "location" && (
-           <Location 
-             ref={locationRef} 
-             isMobile={isMobile} 
-             onMobileActionOpen={openMobileActionSheet}
-             onStateChange={(state) => setChildStates(prev => ({ ...prev, location: state }))}
-           />
+          <Location
+            ref={locationRef}
+            isMobile={isMobile}
+            onMobileActionOpen={openMobileActionSheet}
+            onStateChange={(state) =>
+              setChildStates((prev) => ({ ...prev, location: state }))
+            }
+          />
         )}
 
         {/* 7. PARAMETER TAB */}
         {/* ADDED: onStateChange prop to prepare WhParameter to do the same thing */}
         {activeTab === "parameter" && (
-           <WhParameter 
-             ref={parameterRef} 
-             isMobile={isMobile} 
-             onMobileActionOpen={openMobileActionSheet} 
-             onStateChange={(state) => setChildStates(prev => ({ ...prev, parameter: state }))}
-           />
+          <WhParameter
+            ref={parameterRef}
+            isMobile={isMobile}
+            onMobileActionOpen={openMobileActionSheet}
+            onStateChange={(state) =>
+              setChildStates((prev) => ({ ...prev, parameter: state }))
+            }
+          />
         )}
-
       </div>
 
       <SearchBranchRef
@@ -722,7 +821,8 @@ const WareMast = () => {
             <div className="mb-3">
               <h2 className="text-sm font-bold text-gray-800">Actions</h2>
               <p className="text-xs text-gray-500">
-                {selectedMobileRow?.whCode} - {selectedMobileRow?.whName || selectedMobileRow?.locName}
+                {selectedMobileRow?.whCode} -{" "}
+                {selectedMobileRow?.whName || selectedMobileRow?.locName}
               </p>
             </div>
             <div className="space-y-2">

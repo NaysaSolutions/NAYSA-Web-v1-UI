@@ -444,20 +444,29 @@ const APV = () => {
     });
   }, [selectedApType]);
 
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.key === "F1") {
-        e.preventDefault();
+  // useEffect(() => {
+  //   const onKey = (e) => {
+  //     if (e.key === "F1") {
+  //       e.preventDefault();
 
-        if (!isDocNoDisabled && !isFormDisabled) {
-          updateState({ showAllTranDocNo: true });
-        }
-      }
-    };
+  //       if (!isDocNoDisabled && !isFormDisabled) {
+  //         updateState({ showAllTranDocNo: true });
+  //       }
+  //     }
+  //   };
 
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [isDocNoDisabled, isFormDisabled]);
+  //   window.addEventListener("keydown", onKey);
+  //   return () => window.removeEventListener("keydown", onKey);
+  // }, [isDocNoDisabled, isFormDisabled]);
+
+
+    useEffect(() => {
+      const onKey = (e) => {
+        if (e.key === "F1") { e.preventDefault(); updateState({showAllTranDocNo:true}); }
+      };
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, []);
 
   const openRRLookupColumns = [
   { key: "type", label: "Type", width: 60 },
@@ -470,8 +479,11 @@ const APV = () => {
   { key: "siNo", label: "SI No", width: 110 },
   { key: "siDate", label: "SI Date", width: 100 },
   { key: "siAmount", label: "SI Amt", width: 110, type: "amount" },
+  { key: "drAcct", label: "DR Account", width: 90 },
+  { key: "rcCode", label: "Responsibility Code", width: 90 },
   { key: "vatCode", label: "VAT Code", width: 90 },
   { key: "vatDesc", label: "VAT Desc", width: 200 },
+  { key: "vatAmount", label: "VAT Amount", width: 110, type: "amount" },
 ];
 
   // Loading spinner component
@@ -902,8 +914,8 @@ const APV = () => {
         selectedApType: data.apvtranType || data.apvType || "APV01",
         vendCode: data.vendCode,
         vendName: vendorData,
-        currencyCode: data.currCode || "PHP",
-        currencyName: data.currName || "Philippine Peso",
+        currencyCode: data.currCode,
+        currencyName: data.currName,
         currencyRate: formatNumber(data.currRate || 1, 6),
         apAccountCode: apAccountCode,
         apAccountName: apAccountName,
@@ -930,17 +942,30 @@ const APV = () => {
     }
   };
 
-  const handleHistoryRowPick = useCallback(
-    async (row) => {
-      const docNo = row?.docNo;
-      const branchCode = row?.branchCode;
-      if (!docNo || !branchCode) return;
+  // const handleHistoryRowPick = useCallback(
+  //   async (row) => {
+  //     const docNo = row?.docNo;
+  //     const branchCode = row?.branchCode;
+  //     if (!docNo || !branchCode) return;
 
-      await fetchTranData(docNo, branchCode);
-      setTopTab("details");
-    },
-    [fetchTranData],
-  );
+  //     await fetchTranData(docNo, branchCode);
+  //     setTopTab("details");
+  //   },
+  //   [fetchTranData],
+  // );
+
+  const cleanUrl = useCallback(() => {
+    window.history.replaceState({}, "", window.location.origin);
+   }, []);
+
+     const handleHistoryRowPick = useCallback(async (row) => {
+       const docNo = row?.docNo;
+       const branchCode = row?.branchCode;
+       if (!docNo || !branchCode) return;
+       await fetchTranData(docNo, branchCode);
+       setTopTab("details");
+       cleanUrl();
+     }, [fetchTranData]);
 
   const fetchRCNameByCode = async (rcCode) => {
     if (!rcCode) return "";
@@ -1227,10 +1252,10 @@ const APV = () => {
       vendName: vendName?.vendName || "",
       refapvNo1: header.refDocNo1 || "",
       refapvNo2: header.refDocNo2 || "",
-      currCode: currencyCode || "PHP",
+      currCode: currencyCode,
       currRate: parseFormattedNumber(currencyRate) || 1,
       remarks: header.remarks || "",
-      userCode: user?.USER_CODE || "NSI",
+      userCode: user?.USER_CODE ,
       dt1: detailRows.map((row, index) => ({
         lnNo: String(index + 1),
         invType: row.invType,
@@ -1437,7 +1462,18 @@ const APV = () => {
       const newRows = await Promise.all(
         itemList.map(async (item) => {
           const amount = parseFormattedNumber(item.origAmount || 0);
-          const vatRate = await getVatRate(item.vatCode);
+          
+          // 1. Resolve VAT Code: check item details first, fall back to selected Payee master default
+          const defaultVatCode = item.vatCode || vendName?.vatCode || "";
+          const vatRate = await getVatRate(defaultVatCode);
+          const vatData = defaultVatCode ? await useTopVatRow(defaultVatCode) : null;
+
+          // Compute VAT-inclusive amount breakdown
+          const computedVatAmount = vatRate > 0 ? (amount / (1 + vatRate)) * vatRate : 0;
+
+          // 2. Resolve ATC Code: check item details first, fall back to selected Payee master default
+          const defaultAtcCode = item.atcCode || vendName?.atcCode || "";
+          const atcData = defaultAtcCode ? await useTopATCRow(defaultAtcCode) : null;
 
           return {
             lnNo: "",
@@ -1464,15 +1500,20 @@ const APV = () => {
             amount: formatNumber(amount),
             siAmount: formatNumber(amount),
             debitAcct: "",
-            sltypeCode: item.sltypeCode || "",
+            sltypeCode: item.sltypeCode || "VE", // Falls back to Vendor ledger type
             slCode: vendCode || "",
             slName: vendName?.vendName || "",
-            vatCode: item.vatCode || "",
-            vatName: item.vatName || "",
-            vatAmount: formatNumber(amount * vatRate),
-            atcCode: item.atcCode || "",
-            atcName: item.atcName || "",
+            
+            // Reflected VAT Configurations
+            vatCode: defaultVatCode,
+            vatName: vatData?.vatName || item.vatName || "",
+            vatAmount: formatNumber(computedVatAmount),
+            
+            // Reflected ATC Configurations
+            atcCode: defaultAtcCode,
+            atcName: atcData?.atcName || item.atcName || "",
             atcAmount: "0.00",
+            
             paytermCode: item.paytermCode || "",
             dueDate: useGetCurrentDayV2(),
             remarks: "",
@@ -1484,7 +1525,7 @@ const APV = () => {
 
       let updatedRows = [...detailRows];
 
-      // Positional Logic:
+      // Positional Logic
       if (insertIndex !== null && insertIndex >= 0) {
         updatedRows.splice(insertIndex + 1, 0, ...newRows);
       } else {
@@ -1515,23 +1556,21 @@ const APV = () => {
   const lookupVendCode = String(overrides.vendCode ?? vendCode ?? "").trim();
   const lookupBranchCode = String(overrides.branchCode ?? branchCode ?? "").trim();
 
-  // STEP 1: If no supplier is selected/passed, open the General Payee Modal
   if (!lookupVendCode) {
     updateState({
       payeeModalOpen: true,
-      modalContext: "openRR", // Context is key for the bridge
+      modalContext: "openRR", 
     });
     return;
   }
 
-  // STEP 2: Supplier exists, fetch filtered RR Balances
   try {
     updateState({ isLoading: true, showSpinner: true });
 
     const response = await fetchData("getAPVRR_OpenSummary", {
       PARAMS: JSON.stringify({ 
         branchCode: lookupBranchCode,
-        vendCode: lookupVendCode // This filters the SP results
+        vendCode: lookupVendCode 
       })
     });
 
@@ -1567,74 +1606,114 @@ const handleCloseRRRefModal = async (selectedItems) => {
     ? selectedItems.records
     : [selectedItems.records];
 
-  // Use Promise.all to handle async lookups for names/rates
-  const mappedRows = await Promise.all(
-    itemsArray.map(async (item) => {
-      // 1. VAT Logic: Strictly from the Receiving Report (item)
-      const vCode = item.vatCode || "";
-      const vatData = vCode ? await useTopVatRow(vCode) : null;
+  updateState({ isLoading: true, showSpinner: true });
 
-      // 2. ATC Logic: Strictly from the Supplier (vendName state)
-      // Note: Step 1 (handleClosePayeeModal) must store the supplier's atcCode in vendName
-      const aCode = vendName?.atcCode || ""; 
-      const atcData = aCode ? await useTopATCRow(aCode) : null;
+  try {
+    const mappedRows = await Promise.all(
+      itemsArray.map(async (item) => {
+        // 1. Resolve DR Account: Use the record's drAcct value, fallback to dynamic category lookup if missing
+        let resolvedDebitAcct = item.drAcct || item.debitAcct || "";
+        const itemCategoryCode = item.categCode || item.CATEG_CODE || item.categoryCode || item.category || "";
 
-      // 3. Calculation & Formatting
-      const amount = parseFormattedNumber(item.siAmount || 0);
-      const vatAmount = parseFormattedNumber(item.vatAmount || 0);
-      
-      // Calculate ATC Amount based on Supplier's rate and RR's Net Amount
-      const netOfVat = amount - vatAmount;
-      const atcRate = atcData?.atcRate || 0;
-      const calculatedAtcAmount = netOfVat * atcRate;
+        if (!resolvedDebitAcct && itemCategoryCode) {
+          try {
+            const categResponse = await fetchData("getCategoryDetails", { code: itemCategoryCode });
+            if (categResponse?.success && categResponse?.data?.[0]?.result) {
+              const categData = JSON.parse(categResponse.data[0].result);
+              const categRow = Array.isArray(categData) ? categData[0] : categData;
+              if (categRow?.invAcct || categRow?.inv_acct || categRow?.INV_ACCT) {
+                resolvedDebitAcct = categRow.invAcct || categRow.inv_acct || categRow.INV_ACCT;
+              }
+            }
+          } catch (categoryLookupError) {
+            console.warn(`Could not resolve category mapping fallback for: ${itemCategoryCode}`, categoryLookupError);
+          }
+        }
 
-      return {
-        lnNo: "",
-        invType: item.type || "MS",
-        rrNo: item.rrNo || "",
-        poNo: item.poNo || "",
-        siNo: item.siNo || "",
-        siDate: item.siDate || item.rrDate || useGetCurrentDayV2(),
-        amount: formatNumber(amount),
-        siAmount: formatNumber(amount),
-        debitAcct: item.debitAcct || "1901",
-        sltypeCode: "VE",
-        slCode: vendCode, // From Step 1
-        slName: vendName?.vendName, // From Step 1
+        // 2. Resolve VAT Data: Extract from reference item, fallback to supplier configuration rules
+        const vCode = item.vatCode || vendName?.vatCode || "";
+        const vatData = vCode ? await useTopVatRow(vCode) : null;
+
+        // 3. Resolve RC Data: Extract directly from the source RR reference row and fetch descriptive metadata
+        const targetRcCode = item.rcCode || "";
+        const targetRcName = targetRcCode ? await fetchRCNameByCode(targetRcCode) : "";
+
+        // 4. Resolve ATC Data: Pull from supplier profile configurations
+        const aCode = vendName?.atcCode || ""; 
+        const atcData = aCode ? await useTopATCRow(aCode) : null;
+
+        // 5. Calculations, Taxes & Financial Math Elements
+        const amount = parseFormattedNumber(item.siAmount || item.amount || 0);
+        const dynamicVatRate = vCode ? await getVatRate(vCode) : 0;
         
-        // VAT reflected from RR
-        vatCode: vCode,
-        vatName: vatData?.vatName || item.vatDesc || "",
-        vatAmount: formatNumber(vatAmount),
-        
-        // ATC reflected from Supplier
-        atcCode: aCode,
-        atcName: atcData?.atcName || "",
-        atcAmount: formatNumber(calculatedAtcAmount),
-        
-        paytermCode: item.terms || "",
-        dueDate: item.dueDate || useGetCurrentDayV2(),
-        REC_RC: "N",
-        REC_SL: "Y",
-        rrId: item.rrId,
-      };
-    })
-  );
+        // Auto-assign existing VAT amount value if present, otherwise recalculate based on tax rules
+        const inputVatAmount = parseFormattedNumber(item.vatAmount);
+        const vatAmount = inputVatAmount > 0 
+          ? inputVatAmount 
+          : dynamicVatRate > 0 ? (amount / (1 + dynamicVatRate)) * dynamicVatRate : 0;
+          
+        const netOfVat = amount - vatAmount;
+        const atcRate = atcData?.atcRate || 0;
+        const calculatedAtcAmount = netOfVat * atcRate;
 
-  const updatedRows = [...detailRows, ...mappedRows];
-  updateState({
-    detailRows: updatedRows,
-    showRRRefModal: false,
-    triggerGLEntries: true, // Auto-generate GL after picking
-  });
-  updateTotals(updatedRows);
+        return {
+          lnNo: "",
+          invType: item.type || item.invType || "MS",
+          rrNo: item.rrNo || "",
+          poNo: item.poNo || "",
+          siNo: item.siNo || "",
+          siDate: item.siDate || item.rrDate || useGetCurrentDayV2(),
+          amount: formatNumber(amount),
+          siAmount: formatNumber(amount),
+          
+          // 🔥 Auto-filled accounts, spaces, and visibility metrics
+          debitAcct: resolvedDebitAcct, 
+          rcCode: targetRcCode,
+          rcName: targetRcName,
+          
+          sltypeCode: "SU",
+          slCode: vendCode, 
+          slName: vendName?.vendName, 
+          
+          // 🔥 Auto-filled VAT mapping allocations
+          vatCode: vCode,
+          vatName: vatData?.vatName || item.vatDesc || "",
+          vatAmount: formatNumber(vatAmount),
+          
+          // ATC structural calculations
+          atcCode: aCode,
+          atcName: atcData?.atcName || "",
+          atcAmount: formatNumber(calculatedAtcAmount),
+          
+          paytermCode: item.terms || item.paytermCode || "",
+          dueDate: item.dueDate || useGetCurrentDayV2(),
+          REC_RC: targetRcCode ? "Y" : "N",
+          REC_SL: "Y",
+          rrId: item.rrId,
+        };
+      })
+    );
+
+    const updatedRows = [...detailRows, ...mappedRows];
+    updateState({
+      detailRows: updatedRows,
+      showRRRefModal: false,
+      triggerGLEntries: true, // Triggers automatic general ledger account generation rules seamlessly
+    });
+    updateTotals(updatedRows);
+
+  } catch (error) {
+    console.error("APV processing error inside handleCloseRRRefModal wrapper structure:", error);
+  } finally {
+    updateState({ isLoading: false, showSpinner: false });
+  }
 };
 
   const handleAddRowGL = (index = null) => {
     const newRow = {
       acctCode: "",
       rcCode: "",
-      sltypeCode: "VE",
+      sltypeCode: "SU",
       slCode: "",
       particular: "",
       vatCode: "",
@@ -1911,7 +1990,12 @@ const handleCloseRRRefModal = async (selectedItems) => {
     const foundVatCode = finalPayee?.vatCode || finalPayee?.VAT_CODE || "";
     const foundAtcCode = finalPayee?.atcCode || finalPayee?.ATC_CODE || "";
 
-    // 4. Update Header States (This handles the Auto-Fill you requested)
+    // 🌟 REACTIVE BRIDGE: Pull master records for description layouts instantly
+    const masterVatRow = foundVatCode ? await useTopVatRow(foundVatCode) : null;
+    const masterVatRate = foundVatCode ? await getVatRate(foundVatCode) : 0;
+    const masterAtcRow = foundAtcCode ? await useTopATCRow(foundAtcCode) : null;
+
+    // 4. Update Header States
     const headerUpdates = {
       vendCode: foundVendCode,
       vendName: {
@@ -1919,19 +2003,45 @@ const handleCloseRRRefModal = async (selectedItems) => {
         vendName: foundVendName,
         currCode: foundCurrCode,
         currName: foundCurrName,
-        vatCode: foundVatCode, // Store for RR fallback
+        vatCode: foundVatCode, 
         atcCode: foundAtcCode,
       },
-      // AP Account formatting
       apAccountCode: foundAcctCode,
       apAccountName: foundAcctCode && foundAcctName ? `${foundAcctCode} - ${foundAcctName}` : foundAcctCode,
-      
-      // Currency logic
       currencyCode: foundCurrCode,
       currencyName: foundCurrName,
     };
 
-    // 5. Apply the updates to state
+    // 5. Apply cascade down updates to existing rows in Invoice Details if present
+    if (detailRows.length > 0) {
+      headerUpdates.detailRows = detailRows.map((row) => {
+        const rowVatCode = row.vatCode && row.vatCode !== "" ? row.vatCode : (foundVatCode || "");
+        const rowVatName = row.vatCode && row.vatCode !== "" ? row.vatName : (masterVatRow?.vatName || "");
+        const rowAtcCode = row.atcCode && row.atcCode !== "" ? row.atcCode : (foundAtcCode || "");
+        const rowAtcName = row.atcCode && row.atcCode !== "" ? row.atcName : (masterAtcRow?.atcName || "");
+        
+        const currentAmount = parseFormattedNumber(row.amount) || 0;
+        const lineVatRate = rowVatCode === foundVatCode ? masterVatRate : 0; 
+        
+        // Correct inclusive formula deployment on master update change events
+        const calculatedVatAmount = row.vatCode && row.vatCode !== "" 
+          ? parseFormattedNumber(row.vatAmount) 
+          : lineVatRate > 0 ? (currentAmount / (1 + lineVatRate)) * lineVatRate : 0;
+
+        return {
+          ...row,
+          slCode: foundVendCode,
+          slName: foundVendName,
+          vatCode: rowVatCode,
+          vatName: rowVatName,
+          vatAmount: formatNumber(calculatedVatAmount),
+          atcCode: rowAtcCode,
+          atcName: rowAtcName,
+        };
+      });
+    }
+
+    // Apply the updates to state
     updateState(headerUpdates);
 
     // 6. Handle Currency Rate (Forex) based on the auto-filled currency
@@ -1943,9 +2053,13 @@ const handleCloseRRRefModal = async (selectedItems) => {
       updateState({ currencyRate: formatNumber(parseFormattedNumber(rate || 1), 6) });
     }
 
+    // Trigger total calculation recalculation step safely
+    if (headerUpdates.detailRows) {
+      updateTotals(headerUpdates.detailRows);
+    }
+
     // 7. THE BRIDGE: If this was for an RR Lookup, trigger Step 2 now
     if (isRRFlow) {
-      // Small delay ensures state updates are being processed before next modal opens
       setTimeout(() => {
         handleOpenReferenceRR({ 
           vendCode: foundVendCode, 
@@ -1962,36 +2076,34 @@ const handleCloseRRRefModal = async (selectedItems) => {
   }
 };
 
+
+
   const getVatRate = async (vatCode) => {
-    if (!vatCode) return 0;
+  if (!vatCode) return 0;
 
-    try {
-      const response = await fetchData("getVat", { VAT_CODE: vatCode });
+  try {
+    const response = await fetchData("getVat", { VAT_CODE: vatCode });
 
-      if (response.success) {
-        const vatData = JSON.parse(response.data[0].result);
-        const rate = vatData[0]?.vatRate;
+    if (response.success) {
+      const vatData = JSON.parse(response.data[0].result);
+      
+      // Look for the rate field mapping variation safely
+      const rawRate = vatData[0]?.vatRate ?? vatData[0]?.VatRate ?? vatData[0]?.vat_rate ?? 0;
+      const parsedRate = parseFloat(rawRate);
 
-        if (typeof rate === "number") {
-          return rate;
-        }
-
-        const parsedRate = parseFloat(rate);
-        if (!isNaN(parsedRate)) {
-          return parsedRate;
-        }
-
-        console.warn("Unrecognized VAT rate format, defaulting to 0");
-        return 0;
+      if (!isNaN(parsedRate)) {
+        // If your database stores 12% as 12 or 12.00, convert it to 0.12 for decimals
+        return parsedRate > 1 ? parsedRate / 100 : parsedRate;
       }
 
-      console.warn("getVat API failed, defaulting to 0");
-      return 0;
-    } catch (error) {
-      console.error("Error fetching VAT rate:", error);
       return 0;
     }
-  };
+    return 0;
+  } catch (error) {
+    console.error("Error fetching VAT rate:", error);
+    return 0;
+  }
+};
 
   const handleDetailChange = async (
     index,
@@ -2071,9 +2183,11 @@ const handleCloseRRRefModal = async (selectedItems) => {
       const origAtcCode = row.atcCode || "";
 
       async function recalcRow(newAmount) {
-        const newVatAmount = origVatCode
-          ? await useTopVatAmount(origVatCode, newAmount)
-          : 0;
+        // Fetch structural configuration details for calculation formulas
+        const rate = await getVatRate(origVatCode);
+        
+        // Calculate VAT component from VAT-inclusive amount: (Amount / 1.12) * 0.12
+        const newVatAmount = rate > 0 ? (newAmount / (1 + rate)) * rate : 0;
         const newNetOfVat = +(newAmount - newVatAmount).toFixed(2);
         const newATCAmount = origAtcCode
           ? await useTopATCAmount(origAtcCode, newNetOfVat)
@@ -2092,9 +2206,10 @@ const handleCloseRRRefModal = async (selectedItems) => {
 
       if (field === "vatCode") {
         const currentAmount = parseFormattedNumber(row.amount) || 0;
-        const newVatAmount = row.vatCode
-          ? await useTopVatAmount(row.vatCode, currentAmount)
-          : 0;
+        const rate = await getVatRate(row.vatCode);
+        
+        // Compute VAT-inclusive formula breakdown
+        const newVatAmount = rate > 0 ? (currentAmount / (1 + rate)) * rate : 0;
         const newNetOfVat = +(currentAmount - newVatAmount).toFixed(2);
         const newATCAmount = row.atcCode
           ? await useTopATCAmount(row.atcCode, newNetOfVat)
@@ -2505,14 +2620,12 @@ const handleCloseRRRefModal = async (selectedItems) => {
     await fetchTranData(data.docNo, branchCode, data.key);
     updateState({ showAllTranDocNo: data.modalClose });
   };
-
+  
   const handleTranDocNoSelection = async (data) => {
+    
     handleReset();
-    updateState({
-      showAllTranDocNo: false,
-      documentNo: data.docNo,
-    });
-  };
+    updateState({showAllTranDocNo: false, documentNo:data.docNo });
+};
 
   const handleSaveAndPrint = async (documentID) => {
     updateState({ showSpinner: true });
@@ -3023,12 +3136,6 @@ const handleAtcNameDoubleClick = (index) => {
                 onBlur={handleDocumentNoBlur}
                 onLookup={() => updateState({ showAllTranDocNo: true })}
                 onKeyDown={(e) => {
-                  if (e.key === "F1") {
-                    e.preventDefault();
-                    if (!isDocNoDisabled) {
-                      updateState({ showAllTranDocNo: true });
-                    }
-                  }
                   if (e.key === "Enter") {
                     e.preventDefault();
                     handleDocumentNoBlur();
@@ -3927,11 +4034,14 @@ const handleAtcNameDoubleClick = (index) => {
             <div className="flex justify-end">
               <button
                 onClick={() => handleActivityOption("GenerateGL")}
-                className="global-tran-button-generateGL"
+                className={`global-tran-tab-footer-button-add-ui ${
+                        isFormDisabled ? "opacity-50 cursor-not-allowed" : ""
+                      }`}
                 disabled={isLoading || isFormDisabled}
               >
                 {isLoading ? "Generating..." : "Generate GL Entries"}
               </button>
+
             </div>
           </div>
 
@@ -4645,12 +4755,15 @@ const handleAtcNameDoubleClick = (index) => {
             <div className="global-tran-tab-footer-button-div-ui">
               <button
                 onClick={handleAddRowGL}
-                className="global-tran-tab-footer-button-add-ui"
+                className={`global-tran-tab-footer-button-add-ui ${
+                        isFormDisabled ? "opacity-50 cursor-not-allowed" : ""
+                      }`}
                 disabled={isFormDisabled}
               >
                 <FontAwesomeIcon icon={faPlus} className="mr-2" />
                 Add
               </button>
+
             </div>
 
             {/* Totals Section */}
@@ -4851,6 +4964,8 @@ const handleAtcNameDoubleClick = (index) => {
           cacheKey={`APV:${state.branchCode || ""}:${state.documentNo || ""}`}
           activeTabKey="APV_Summary"
           branchCode={state.branchCode}
+          startDate={state.fromDate}
+          endDate={state.toDate}
           status={(() => {
             const s = (state.status || "").toUpperCase();
             if (s === "FINALIZED") return "F";

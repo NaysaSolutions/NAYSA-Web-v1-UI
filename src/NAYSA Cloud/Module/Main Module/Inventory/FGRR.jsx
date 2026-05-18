@@ -647,8 +647,8 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       "bc",
     );
     const poNo = getPOField(row, "PoNo", "PO_NO", "poNo", "po_no");
-    const lineNo =
-      getPOField(row, "ln", "Ln", "LN", "LINE_NO", "lineNo", "line_no") ||
+    const lnNo =
+      getPOField(row, "lnNo", "Ln", "LN", "LINE_NO", "lnNo", "line_no") ||
       index + 1;
     const itemCode = getPOField(
       row,
@@ -856,7 +856,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     return {
       ...row,
       groupId: String(
-        existingGroupId || `${poNo}-${lineNo}-${itemCode}-${index}`,
+        existingGroupId || `${poNo}-${lnNo}-${itemCode}-${index}`,
       ),
       BC: branchCode,
       Branch: branchCode,
@@ -873,10 +873,10 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       po_no: poNo,
       PO_NO: poNo,
       Type: getPOField(row, "Type", "TYPE", "invType", "INV_TYPE"),
-      Ln: lineNo,
-      LN: lineNo,
-      lineNo,
-      line_no: lineNo,
+      Ln: lnNo,
+      LN: lnNo,
+      lnNo,
+      line_no: lnNo,
       ItemCode: itemCode,
       ItemNo: itemCode,
       JobCode: itemCode,
@@ -1042,7 +1042,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         "poStatus",
         "po_status",
       ),
-      LINE_NO: lineNo,
+      LINE_NO: lnNo,
       ITEM_SPECS: itemSpecs,
       ItemSpecs: itemSpecs,
       itemSpecs,
@@ -1084,9 +1084,9 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       bc: row.branchCode,
       pono: row.poNo,
       ponumber: row.poNo,
-      ln: row.lineNo,
-      lineno: row.lineNo,
-      linenumber: row.lineNo,
+      lnNo: row.lnNo,
+      lineno: row.lnNo,
+      linenumber: row.lnNo,
       itemcode: row.itemCode,
       itemno: row.itemCode,
       itemnumber: row.itemCode,
@@ -1280,7 +1280,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     const headerLocCode = state.LocCode || LocCode || "";
     const headerLocName = state.LocName || LocName || "";
 
-    console.log("MSRR Reference PO warehouse fetch", {
+    console.log("FGRR Reference PO warehouse fetch", {
       selection,
       summary,
       firstDetail: details?.[0] || {},
@@ -1324,7 +1324,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
 
       return {
         lN: idx + 1,
-        lineNo: d.lineNo || d.ln || idx + 1,
+        lnNo: d.lnNo || d.lnNo || idx + 1,
 
         invType: d.invType || "MS",
         rrStatus,
@@ -1333,7 +1333,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
 
         poNo: d.poNo || summary.poNo || "",
-        poLineno: d.lineNo || d.ln || idx + 1,
+        poLineno: d.lnNo || d.lnNo || idx + 1,
 
         itemCode: d.itemCode || "",
         itemName: d.itemName || "",
@@ -1533,7 +1533,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         : fetchedRate;
 
     row.vatRate = formatNumber(parseFormattedNumber(rate || 0), 2);
-    row = recalcMSRRRow(row);
+    row = recalcFGRRRow(row);
 
     updatedRows[rowIndex] = row;
     updateState({ detailRows: updatedRows });
@@ -1683,7 +1683,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     try {
       updateState({ isLoading: true });
 
-      const resp = await apiClient.get("/getMSRR", {
+      const resp = await apiClient.get("/getFGRR", {
         params: {
           branchCode,
           rrNo,
@@ -1716,8 +1716,6 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           "rr_no",
           "fgrrNo",
           "FGRR_NO",
-          "msrrNo",
-          "MSRR_NO",
           "docNo",
           "DocNo",
           "DOC_NO",
@@ -1737,10 +1735,6 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         "fgrrHdId",
         "FGRR_ID",
         "FGRR_HD_ID",
-        "msrrId",
-        "msrrHdId",
-        "MSRR_ID",
-        "MSRR_HD_ID",
         "documentID",
         "DocumentID",
         "DOCUMENT_ID",
@@ -2035,7 +2029,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
             {},
           );
         } catch (lookupError) {
-          console.warn("MSRR item description lookup failed:", lookupError);
+          console.warn("FGRR item description lookup failed:", lookupError);
         }
       }
 
@@ -2075,7 +2069,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         );
 
         return {
-        lN: Number(getPOField(r, "lnNo", "lineNo", "LINE_NO", "ln", "LN") || idx + 1),
+        lN: Number(getPOField(r, "lnNoNo", "lnNo", "LINE_NO", "lnNo", "LN") || idx + 1),
 
         rrStatus: getPOField(
           r,
@@ -2175,7 +2169,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         ...g,
         id: i + 1,
         recNo:
-          getPOField(g, "recNo", "RecNo", "REC_NO", "lineNo", "LINE_NO") ||
+          getPOField(g, "recNo", "RecNo", "REC_NO", "lnNo", "LINE_NO") ||
           String(i + 1),
         acctCode: getPOField(g, "acctCode", "AcctCode", "ACCT_CODE", "accountCode", "ACCOUNT_CODE"),
         acctName: getPOField(g, "acctName", "AcctName", "ACCT_NAME", "accountName", "ACCOUNT_NAME"),
@@ -2300,7 +2294,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       const updatedRows = [...detailRows];
       const currentRow = updatedRows[selectedRowIndex] || {};
 
-      updatedRows[selectedRowIndex] = recalcMSRRRow({
+      updatedRows[selectedRowIndex] = recalcFGRRRow({
         ...currentRow,
         groupId: selectedItem.categCode || currentRow.groupId || "",
         categCode: selectedItem.categCode || currentRow.categCode || "",
@@ -2369,7 +2363,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       locName: headerLocName,
   };
 
-    const updatedRows = [...detailRows, recalcMSRRRow(newRow)];
+    const updatedRows = [...detailRows, recalcFGRRRow(newRow)];
     updateState({
       detailRows: updatedRows,
       fgLookupModalOpen: false,
@@ -2797,7 +2791,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       rrQty: formatNumber(lot.quantity, decQty),
     }));
 
-    updatedRows[lotPickingRowIndex] = recalcMSRRRow(
+    updatedRows[lotPickingRowIndex] = recalcFGRRRow(
       {
         ...currentRow,
         rrQty: formatNumber(totalLotQty, decQty),
@@ -2826,7 +2820,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     handleCloseLotPickingModal();
   };
 
-  const recalcMSRRRow = (row) => {
+  const recalcFGRRRow = (row) => {
     const rrQty = parseFormattedNumber(row.rrQty || 0);
     const freeQty = parseFormattedNumber(row.freeQty || 0);
     const unitCost = parseFormattedNumber(row.unitCost || 0);
@@ -2974,7 +2968,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
 
     // ✅ recompute amounts only when needed
     if (["rrQty", "freeQty", "unitCost", "vatRate"].includes(field)) {
-      row = recalcMSRRRow(row);
+      row = recalcFGRRRow(row);
     }
 
     updatedRows[index] = row;
@@ -3074,7 +3068,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           const rowQty = parseFormattedNumber(r.rrQty || 0) || 0;
           const lotRatio = rowQty > 0 ? lotQty / rowQty : 1;
           dt1Payload.push({
-            lineNo: String(dt1Payload.length + 1),
+            lnNo: String(dt1Payload.length + 1),
 
             invType: r.invType || "MS",
             itemNo: r.itemCode || r.itemNo || "",
@@ -3194,7 +3188,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         return;
       }
 
-      console.log("MSRR upsert response:", docType, glData, updateState);
+      console.log("FGRR upsert response:", docType, glData, updateState);
       // ================
       // UPSERT / SAVE
       // ================
@@ -3203,11 +3197,11 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           docType,
           glData,
           updateState,
-          "rrHdId",
+          "rrId",
           "rrNo",
         );
 
-        console.log("MSRR upsert response:", res);
+        console.log("FGRR upsert response:", res);
         // normalize row (supports: array, axios response, unwrapped response)
         const normalizeSaveRow = (value) => {
           if (!value) return null;
@@ -3248,16 +3242,12 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           row?.rrHdId ||
           row?.rrId ||
           row?.rr_id ||
-          row?.msrrId ||
-          row?.msrrHdId ||
-          row?.MSRR_ID ||
-          row?.MSRR_HD_ID ||
           row?.RR_HD_ID ||
           documentID ||
           "";
         const savedNo =
-          row?.msrrNo ||
-          row?.MSRR_NO ||
+          row?.fgrrNo ||
+          row?.FGRR_NO ||
           row?.rrNo ||
           row?.RR_NO ||
           row?.rr_no ||
@@ -3280,7 +3270,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         );
       }
     } catch (err) {
-      console.error("MSRR action error:", err);
+      console.error("FGRR action error:", err);
       Swal.fire({
         icon: "error",
         title: "Error",
@@ -3518,8 +3508,6 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       "rr_no",
       "fgrrNo",
       "FGRR_NO",
-      "msrrNo",
-      "MSRR_NO",
       "documentNo",
       "DocumentNo",
       "DOCUMENT_NO",
@@ -3570,7 +3558,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
   };
 
   const handleTranDocNoRetrieval = async (data) => {
-    const docNo = getPOField(data, "docNo", "rrNo", "RR_NO", "fgrrNo", "FGRR_NO", "msrrNo", "MSRR_NO");
+    const docNo = getPOField(data, "docNo", "rrNo", "RR_NO", "fgrrNo", "FGRR_NO");
     const pickedBranchCode =
       getPOField(data, "branchCode", "BranchCode", "BRANCH_CODE", "branch", "BC") ||
       branchCode;
@@ -3582,7 +3570,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     handleReset();
     updateState({
       showAllTranDocNo: false,
-      documentNo: getPOField(data, "docNo", "rrNo", "RR_NO", "fgrrNo", "FGRR_NO", "msrrNo", "MSRR_NO"),
+      documentNo: getPOField(data, "docNo", "rrNo", "RR_NO", "fgrrNo", "FGRR_NO"),
     });
   };
 
@@ -5615,7 +5603,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         const normalized = normalizeOpenPODetailRow(row, index);
         const uniqueGroupId = [
           normalized.poNo || normalized.PoNo || idString,
-          normalized.lineNo || normalized.Ln || index + 1,
+          normalized.lnNo || normalized.Ln || index + 1,
           normalized.itemCode || normalized.ItemCode || "item",
           index,
         ].join("-");

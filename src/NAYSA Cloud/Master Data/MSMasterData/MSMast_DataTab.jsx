@@ -1,11 +1,10 @@
 // src/NAYSA Cloud/Reference File/MSMast_DataTab.jsx
-import React, { useMemo, useState, useCallback, useEffect } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faFilter, faUndo, faTimes, faBoxOpen } from "@fortawesome/free-solid-svg-icons";
 import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable";
 
 // -------------------- Helpers --------------------
-// These functions map uppercase SQL columns (e.g. ITEM_CODE) to React camelCase (itemCode)
 const pick = (obj, keys = []) => {
   for (const k of keys) {
     const val = obj?.[k];
@@ -14,19 +13,13 @@ const pick = (obj, keys = []) => {
   return "";
 };
 
-const toSnake = (s) => String(s || "").replace(/[A-Z]/g, (m) => `_${m}`).toLowerCase();
 
-const pickAnyCase = (row, key) => {
-  const k = String(key || "");
-  return pick(row, [k, k.toLowerCase(), k.toUpperCase(), toSnake(k), toSnake(k).toUpperCase()]);
-};
-
-const MSMast_DataTab = ({ 
+const MSMast_DataTab = ({
   isLoading = false,
-  rows = [], 
+  rows = [],
   onFilter,
   onReset,
-  onRowDoubleClick 
+  onRowDoubleClick
 }) => {
   const docType = "MSMast";
 
@@ -35,19 +28,27 @@ const MSMast_DataTab = ({
   const [searchMode, setSearchMode] = useState("part"); // default to "Contains"
 
   const tableColumns = useMemo(() => [
-    { key: "itemCode", label: "Item No", sortable: true, width: 140 },
-    { key: "itemDesc", label: "Item Description", sortable: true, width: 300 },
-    { key: "uom", label: "UOM", sortable: true, width: 100 },
-    { key: "categoryCode", label: "Category", sortable: true, width: 120 },
-    { key: "classCode", label: "Classification", sortable: true, width: 150 },
-    { key: "active", label: "Active", sortable: true, width: 90 },
+    { key: "itemCode",        label: "Item No",              sortable: true, width: 130 },
+    { key: "itemDesc",        label: "Item Description",     sortable: true, width: 260 },
+    { key: "uom",             label: "UOM",                  sortable: true, width: 80  },
+    { key: "uom2",            label: "UOM2",                 sortable: true, width: 80  },
+    { key: "qtyPerUom2",      label: "Qty Per UOM2",         sortable: true, width: 110 },
+    { key: "qtyOnHand",       label: "Qty on Hand",          sortable: true, width: 110 },
+    { key: "lastPurPrice",    label: "Last Purchase Price",  sortable: true, width: 140 },
+    { key: "reOrderLevel",    label: "Re-Order Level",       sortable: true, width: 110 },
+    { key: "categoryCode",    label: "Category Code",        sortable: true, width: 120 },
+    { key: "categoryName",    label: "Category Name",        sortable: true, width: 180 },
+    { key: "classCode",       label: "Class Code",           sortable: true, width: 110 },
+    { key: "className",       label: "Class Name",           sortable: true, width: 160 },
+    { key: "subClass1Code",   label: "Sub Class 1",          sortable: true, width: 120 },
+    { key: "subClass2Code",   label: "Sub Class 2",          sortable: true, width: 120 },
+    { key: "subClass3Code",   label: "Sub Class 3",          sortable: true, width: 120 },
+    { key: "active",          label: "Active",               sortable: true, width: 80  },
   ], []);
 
   const handleLoad = useCallback(() => {
-  if (typeof onFilter === 'function') {
-    onFilter();
-  }
-}, [onFilter]);
+    if (typeof onFilter === "function") onFilter();
+  }, [onFilter]);
 
   const handleReset = useCallback(() => {
     setSearchTerm("");
@@ -55,18 +56,32 @@ const MSMast_DataTab = ({
     onReset?.();
   }, [onReset]);
 
-  // 1. DATA MAPPING: Format the raw SQL Database rows into standard React properties
+  // 1. DATA MAPPING: Format raw SQL rows into standard React camelCase properties.
+  //    Load mode returns m.* (raw snake_case) + categoryName + className from joins.
+  //    Exact SQL columns: item_code, item_name, uom_code, uom_code2, uom_qty2,
+  //    qty_onhand, lastpur_price, reorder_qty, categ_code, class_code,
+  //    subclass1_code, subclass2_code, subclass3_code, active
   const tableDataRaw = useMemo(() => {
     const list = Array.isArray(rows) ? rows : [];
 
     return list.map((r) => ({
       ...r,
-      itemCode: pickAnyCase(r, "itemCode") || pick(r, ["ITEM_CODE", "item_code"]),
-      itemDesc: pickAnyCase(r, "itemName") || pickAnyCase(r, "itemDesc") || pick(r, ["ITEM_NAME", "item_name"]),
-      uom: pickAnyCase(r, "uomCode") || pickAnyCase(r, "uom") || pick(r, ["UOM_CODE", "uom_code"]),
-      categoryCode: pickAnyCase(r, "categCode") || pickAnyCase(r, "categoryCode") || pick(r, ["CATEG_CODE", "categ_code"]),
-      classCode: pickAnyCase(r, "classCode") || pick(r, ["CLASS_CODE", "class_code"]),
-      active: pickAnyCase(r, "active") || pick(r, ["ACTIVE", "active"]),
+      itemCode:      pick(r, ["item_code",      "ITEM_CODE",      "itemCode"]),
+      itemDesc:      pick(r, ["item_name",       "ITEM_NAME",      "itemName",    "itemDesc"]),
+      uom:           pick(r, ["uom_code",        "UOM_CODE",       "uomCode",     "uom"]),
+      uom2:          pick(r, ["uom_code2",       "UOM_CODE2",      "uomCode2",    "uom2"]),
+      qtyPerUom2:    pick(r, ["uom_qty2",        "UOM_QTY2",       "uomQty2",     "qtyPerUom2"]),
+      qtyOnHand:     pick(r, ["qty_onhand",      "QTY_ONHAND",     "qtyOnhand",   "qtyOnHand"]),
+      lastPurPrice:  pick(r, ["lastpur_price",   "LASTPUR_PRICE",  "lastpurPrice","lastPurPrice"]),
+      reOrderLevel:  pick(r, ["reorder_qty",     "REORDER_QTY",    "reorderQty",  "reOrderLevel"]),
+      categoryCode:  pick(r, ["categ_code",      "CATEG_CODE",     "categCode",   "categoryCode"]),
+      categoryName:  pick(r, ["categoryName",    "categoryname",   "categ_name",  "CATEG_NAME",  "categName"]),
+      classCode:     pick(r, ["class_code",      "CLASS_CODE",     "classCode"]),
+      className:     pick(r, ["className",       "classname",      "class_name",  "CLASS_NAME"]),
+      subClass1Code: pick(r, ["subclass1_code",  "SUBCLASS1_CODE", "subclass1Code","subClass1Code"]),
+      subClass2Code: pick(r, ["subclass2_code",  "SUBCLASS2_CODE", "subclass2Code","subClass2Code"]),
+      subClass3Code: pick(r, ["subclass3_code",  "SUBCLASS3_CODE", "subclass3Code","subClass3Code"]),
+      active:        pick(r, ["active",          "ACTIVE"]),
     }));
   }, [rows]);
 
@@ -75,24 +90,24 @@ const MSMast_DataTab = ({
     const q = String(searchTerm || "").trim().toLowerCase();
     if (!q) return tableDataRaw;
 
-    const keysToSearch = tableColumns.map(c => c.key);
-    
-    return tableDataRaw.filter(r => keysToSearch.some(k => {
-      const cell = String(r?.[k] || "").toLowerCase();
-      return searchMode === "start" ? cell.startsWith(q) : cell.includes(q);
-    }));
+    const keysToSearch = tableColumns.map((c) => c.key);
+
+    return tableDataRaw.filter((r) =>
+      keysToSearch.some((k) => {
+        const cell = String(r?.[k] || "").toLowerCase();
+        return searchMode === "start" ? cell.startsWith(q) : cell.includes(q);
+      })
+    );
   }, [tableDataRaw, searchTerm, searchMode, tableColumns]);
 
   // 3. PERFORMANCE SLICER: Caps rendering at 100 rows to prevent freezing
-  const tableData = useMemo(() => {
-    return tableDataFiltered.slice(0, 100);
-  }, [tableDataFiltered]);
+  const tableData = useMemo(() => tableDataFiltered.slice(0, 100), [tableDataFiltered]);
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* Top bar */}
       <div className="flex flex-wrap items-center gap-3 mb-2 shrink-0">
-        
+
         {/* Search Input with Clear Button */}
         <div className="relative flex-grow max-w-md">
           <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
@@ -107,8 +122,8 @@ const MSMast_DataTab = ({
             onKeyDown={(e) => e.key === "Enter" && handleLoad()}
           />
           {searchTerm && (
-            <button 
-              onClick={() => setSearchTerm("")} 
+            <button
+              onClick={() => setSearchTerm("")}
               className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-red-500 transition-colors"
             >
               <FontAwesomeIcon icon={faTimes} />
@@ -119,22 +134,22 @@ const MSMast_DataTab = ({
         {/* Search Modes */}
         <div className="flex items-center gap-3 px-3 border-l border-gray-300">
           <label className="flex items-center gap-1.5 cursor-pointer">
-            <input 
-              type="radio" 
-              value="start" 
-              checked={searchMode === "start"} 
-              onChange={(e) => setSearchMode(e.target.value)} 
-              className="accent-blue-600" 
+            <input
+              type="radio"
+              value="start"
+              checked={searchMode === "start"}
+              onChange={(e) => setSearchMode(e.target.value)}
+              className="accent-blue-600"
             />
             <span className="text-xs text-gray-700">Starts with</span>
           </label>
           <label className="flex items-center gap-1.5 cursor-pointer">
-            <input 
-              type="radio" 
-              value="part" 
-              checked={searchMode === "part"} 
-              onChange={(e) => setSearchMode(e.target.value)} 
-              className="accent-blue-600" 
+            <input
+              type="radio"
+              value="part"
+              checked={searchMode === "part"}
+              onChange={(e) => setSearchMode(e.target.value)}
+              className="accent-blue-600"
             />
             <span className="text-xs text-gray-700">Contains</span>
           </label>
@@ -142,11 +157,10 @@ const MSMast_DataTab = ({
 
         {/* Buttons */}
         <div className="flex items-center gap-2">
-          {/* Row limit warning indicator */}
           {tableDataFiltered.length > 100 && (
-             <span className="text-[11px] text-red-500 font-bold mr-2 animate-pulse uppercase tracking-wider">
-                Showing top 100 of {tableDataFiltered.length} records
-             </span>
+            <span className="text-[11px] text-red-500 font-bold mr-2 animate-pulse uppercase tracking-wider">
+              Showing top 100 of {tableDataFiltered.length} records
+            </span>
           )}
 
           <button
