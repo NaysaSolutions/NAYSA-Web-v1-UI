@@ -171,6 +171,34 @@ const UOM = () => {
     }, 300);
   };
 
+
+
+const handleCheckDuplicate = async (code) => {
+    if (form.__existing || !code) return;
+    try {
+      const payload = { json_data: { uomCode: code } };
+      // Call the existing route from api.php
+      const response = await apiClient.post("/checkDuplicateUom", payload); 
+      const sqlRow = response?.data?.data?.[0];
+      const rawJsonString = sqlRow?.result || Object.values(sqlRow || {})[0];
+      const parsedData = JSON.parse(rawJsonString || '{"result":"0"}');
+      
+      if (String(parsedData.result) === "1") {
+        setField("uomCode", "");
+        return useSwalErrorAlert(
+          "Duplicate Code", 
+          `UOM Code ${code} is already in use.`
+        );
+      }
+    } catch (error) {
+      console.error("Duplicate check failed", error);
+    }
+  };
+
+
+
+
+
   const setField = (key, value) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
@@ -281,7 +309,7 @@ const UOM = () => {
     }
   };
 
-  const handleSave = async () => {
+const handleSave = async () => {
     if (!isEditing || saveMutation.isPending) return;
     const uomCode = String(form.uomCode || "").trim();
     const uomName = String(form.uomName || "").trim();
@@ -292,6 +320,27 @@ const UOM = () => {
         title: "Required Field",
         message: "UOM Code and UOM Name are required.",
       });
+    }
+
+    // --- ADDED: Duplicate Check Upon Saving ---
+    if (!form.__existing) {
+      try {
+        const checkRes = await apiClient.post("/checkDuplicateUom", { 
+          json_data: { uomCode } 
+        });
+        const sqlRow = checkRes?.data?.data?.[0];
+        const rawJsonString = sqlRow?.result || Object.values(sqlRow || {})[0];
+        const parsedData = JSON.parse(rawJsonString || '{"result":"0"}');
+        
+        if (String(parsedData.result) === "1") {
+          return useSwalErrorAlert(
+            "Duplicate Code", 
+            `UOM Code ${uomCode} is already in use. Please enter a different code.`
+          );
+        }
+      } catch (error) {
+        console.error("Duplicate check on save failed", error);
+      }
     }
 
     saveMutation.mutate({
@@ -326,14 +375,17 @@ const UOM = () => {
     }, 150);
   };
 
-  const handleDelete = async (row) => {
+const handleDelete = async (row) => {
     try {
       const checkRes = await apiClient.post("/checkInUsedUom", {
         json_data: { uomCode: row.uomCode },
       });
-      const inUseData = checkRes?.data?.data;
+      
+      const sqlRow = checkRes?.data?.data?.[0];
+      const rawJsonString = sqlRow?.result || Object.values(sqlRow || {})[0];
+      const parsedData = JSON.parse(rawJsonString || '{"result":"0"}');
 
-      if (inUseData && inUseData.result === "1") {
+      if (String(parsedData.result) === "1") {
         return useSwalErrorAlert(
           "Cannot Delete",
           `UOM ${row.uomCode} is currently in use and cannot be deleted.`,
@@ -562,6 +614,7 @@ const UOM = () => {
                 value={form.uomCode}
                 disabled={!isEditing || form.__existing}
                 onChange={(v) => setField("uomCode", String(v).toUpperCase())}
+                onBlur={(e) => handleCheckDuplicate(e.target.value)}
                 maxLength={getMax("UOM_CODE") || 20}
               />
               <FieldRenderer
