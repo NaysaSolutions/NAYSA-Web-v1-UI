@@ -58,8 +58,8 @@ const MSMast_SetupTab = ({
   const [isCategOpen, setIsCategOpen] = useState(false);
   const [isClassOpen, setIsClassOpen] = useState(false);
   const [isItemLookupOpen, setIsItemLookupOpen] = useState(false);
-  const [isUomOpen, setIsUomOpen] = useState(false);
-  const [isUom2Open, setIsUom2Open] = useState(false);
+  // "uom" | "uom2" | null  — tracks which UOM field opened the lookup
+  const [uomTarget, setUomTarget] = useState(null);
 
   // Field lengths
   const [tblFieldArray, setTblFieldArray] = useState([]);
@@ -169,7 +169,7 @@ const MSMast_SetupTab = ({
                 type="lookup"
                 value={form.uom || ""}
                 onChange={(v) => onChangeForm({ uom: getValue(v) })}
-                onLookup={() => !isDisabled && setIsUomOpen(true)}
+                onLookup={() => !isDisabled && setUomTarget("uom")}
                 readOnly={isReadOnly}
                 disabled={isDisabled}
               />
@@ -180,7 +180,7 @@ const MSMast_SetupTab = ({
                 type="lookup"
                 value={form.uom2 || ""}
                 onChange={(v) => onChangeForm({ uom2: getValue(v) })}
-                onLookup={() => !isDisabled && setIsUom2Open(true)}
+                onLookup={() => !isDisabled && setUomTarget("uom2")}
                 readOnly={isReadOnly}
                 disabled={isDisabled}
               />
@@ -429,22 +429,12 @@ const MSMast_SetupTab = ({
       />
 
       <SearchUOM
-        isOpen={isUomOpen}
+        isOpen={uomTarget !== null}
         onClose={(selected) => {
-          setIsUomOpen(false);
-          if (selected) {
-            onChangeForm({ uom: selected.uomCode });
+          if (selected && uomTarget) {
+            onChangeForm({ [uomTarget]: selected.uomCode });
           }
-        }}
-      />
-
-      <SearchUOM
-        isOpen={isUom2Open}
-        onClose={(selected) => {
-          setIsUom2Open(false);
-          if (selected) {
-            onChangeForm({ uom2: selected.uomCode });
-          }
+          setUomTarget(null);
         }}
       />
 
