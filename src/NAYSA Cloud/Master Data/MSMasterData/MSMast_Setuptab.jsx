@@ -40,7 +40,31 @@ const getValue = (input) => {
   return input ?? "";
 };
 
-// ── Added onLookupSelect + onBlurItemCode props (matching FGMast_SetupTab) ───
+// --- Sidebar tab definitions ---
+const TABS = [
+  {
+    id: "stockcard",
+    label: "Stock Card",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="2" width="12" height="12" rx="1.5" />
+        <path d="M5 5h6M5 8h4M5 11h3" />
+      </svg>
+    ),
+  },
+  {
+    id: "others",
+    label: "Others",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="4" cy="8" r="1" fill="currentColor" stroke="none" />
+        <circle cx="8" cy="8" r="1" fill="currentColor" stroke="none" />
+        <circle cx="12" cy="8" r="1" fill="currentColor" stroke="none" />
+      </svg>
+    ),
+  },
+];
+
 const MSMast_SetupTab = ({
   isLoading,
   isEditing,
@@ -54,15 +78,14 @@ const MSMast_SetupTab = ({
   const isNewRecord = form.__isNew;
   const isDisabled = isReadOnly || isLoading;
 
-  // Lookup modal states
   const [isCategOpen, setIsCategOpen] = useState(false);
   const [isClassOpen, setIsClassOpen] = useState(false);
   const [isItemLookupOpen, setIsItemLookupOpen] = useState(false);
-  // "uom" | "uom2" | null  — tracks which UOM field opened the lookup
   const [uomTarget, setUomTarget] = useState(null);
-
-  // Field lengths
+  const [activeTab, setActiveTab] = useState("stockcard");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [tblFieldArray, setTblFieldArray] = useState([]);
+
   useEffect(() => {
     const run = async () => {
       try {
@@ -78,7 +101,6 @@ const MSMast_SetupTab = ({
   const getLen = (col, fallback = undefined) =>
     useGetFieldLength(tblFieldArray, col) || fallback;
 
-  // FG pattern: canType = isNewRecord (no generationMode check needed for MS)
   const canType = isNewRecord;
   const overrideRef = useRef(null);
 
@@ -87,7 +109,6 @@ const MSMast_SetupTab = ({
       if (!overrideRef.current) return;
       const input = overrideRef.current.querySelector("input");
       if (!input) return;
-
       if (canType) {
         const maxLen = getLen("item_code", 30);
         input.removeAttribute("readonly");
@@ -110,31 +131,25 @@ const MSMast_SetupTab = ({
         input.onblur = null;
       }
     };
-
     attach();
-    const t = setTimeout(attach, 50);   // ← retry after paint
+    const t = setTimeout(attach, 50);
     return () => clearTimeout(t);
   }, [canType, isNewRecord, onChangeForm, onBlurItemCode, tblFieldArray]);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start rounded-lg relative">
+    <>
+      <div className="flex flex-col gap-6 rounded-lg relative">
 
-      {/* ================= LEFT COLUMN ================= */}
-      <div className="flex flex-col gap-6">
-
-        {/* Basic Information */}
+        {/* ── TOP CARD: Basic Information ── */}
         <Card className="border border-blue-500/30 p-6 rounded-lg">
           <SectionHeader title="BASIC INFORMATION" />
 
-          {/* Item No — readOnly={true} always so FieldRenderer always renders the lookup icon.
-                        When canType (new record), the useEffect above manually removes readonly
-                        from the DOM input so the user can still type. */}
           <div
             ref={overrideRef}
             className={`w-full ${!canType
-              ? "[&>div]:!bg-[#F1F5F9] [&_input]:!bg-transparent [&_input]:!text-slate-600 [&_label]:!bg-[#F1F5F9]"
-              : "[&_input]:!pointer-events-auto"
-              }`}
+              ? "[&>div]:!bg-[#F1F5F9] [&_input]:!bg-transparent [&_input]:!pointer-events-none [&_input]:!text-slate-600 [&_button]:!text-slate-400 [&_label]:!bg-[#F1F5F9]"
+              : ""
+            }`}
           >
             <FieldRenderer
               label="Item No"
@@ -142,7 +157,7 @@ const MSMast_SetupTab = ({
               type="lookup"
               value={form.itemCode || ""}
               onChange={(v) => onChangeForm({ itemCode: String(getValue(v)).toUpperCase() })}
-              onLookup={() => !isLoading && !isNewRecord && setIsItemLookupOpen(true)}
+              onLookup={canType ? undefined : () => !isLoading && setIsItemLookupOpen(true)}
               readOnly={true}
               disabled={isLoading}
               maxLength={getLen("item_code", 30)}
@@ -263,134 +278,9 @@ const MSMast_SetupTab = ({
           </div>
         </Card>
 
-        {/* Supplementary Information */}
-        <Card className="border border-blue-500/30 p-6 rounded-lg">
-          <SectionHeader title="SUPPLEMENTARY INFORMATION" />
-
-          {[1, 2, 3].map((num) => (
-            <div key={num} className="grid grid-cols-3 gap-2">
-              <FieldRenderer
-                label={`Sub Class ${num}`}
-                type="lookup"
-                value={form[`subClass${num}Code`] || ""}
-                onChange={(v) => onChangeForm({ [`subClass${num}Code`]: getValue(v) })}
-                onLookup={() => { }}
-                readOnly={isReadOnly}
-                disabled={isDisabled}
-              />
-              <div className="col-span-2">
-                <FieldRenderer
-                  type="text"
-                  value={form[`subClass${num}Name`] || ""}
-                  readOnly
-                  disabled
-                />
-              </div>
-            </div>
-          ))}
-
-          {/* vacant01–06 (numeric conversions) + vacant07–12 (text variables) */}
-          <div className="grid grid-cols-2 gap-x-8 gap-y-2 mt-3">
-            {[1, 2, 3, 4, 5, 6].map((i) => {
-              const numCode = `vacant0${i}`;
-              const textCode = i + 6 < 10 ? `vacant0${i + 6}` : `vacant${i + 6}`;
-              return (
-                <React.Fragment key={i}>
-                  <FieldRenderer
-                    label={`Vacant 0${i}`}
-                    type="number"
-                    value={form[numCode] || ""}
-                    onChange={(v) => onChangeForm({ [numCode]: getValue(v) })}
-                    readOnly={isReadOnly}
-                    disabled={isDisabled}
-                  />
-                  <FieldRenderer
-                    label={textCode.replace("vacant", "Vacant ")}
-                    type="text"
-                    value={form[textCode] || ""}
-                    onChange={(v) => onChangeForm({ [textCode]: getValue(v) })}
-                    readOnly={isReadOnly}
-                    disabled={isDisabled}
-                  />
-                </React.Fragment>
-              );
-            })}
-          </div>
-        </Card>
-      </div>
-
-      {/* ================= RIGHT COLUMN ================= */}
-      <div className="flex flex-col gap-6">
-
-        {/* Other Information */}
-        <Card className="border border-blue-500/30 p-6 rounded-lg">
-          <SectionHeader title="OTHER INFORMATION" />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <FieldRenderer
-              label="Re-Order Level"
-              type="number"
-              value={form.reOrderLevel || ""}
-              onChange={(v) => onChangeForm({ reOrderLevel: getValue(v) })}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-            />
-            <FieldRenderer
-              label="Standard PO Price"
-              type="number"
-              value={form.stdPoPrice || ""}
-              onChange={(v) => onChangeForm({ stdPoPrice: getValue(v) })}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-            />
-            <FieldRenderer
-              label="Last Purchase Date"
-              type="text"
-              value={form.lastPurDate || ""}
-              readOnly
-              disabled
-            />
-            <FieldRenderer
-              label="Last Purchase Price"
-              type="number"
-              value={form.lastPurPrice || ""}
-              readOnly
-              disabled
-            />
-            <FieldRenderer
-              label="Allow Over Receiving?"
-              type="select"
-              options={[{ value: "Y", label: "Yes" }, { value: "N", label: "No" }]}
-              value={form.allowOverRec || "N"}
-              onChange={(v) => onChangeForm({ allowOverRec: getValue(v) })}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-            />
-          </div>
-        </Card>
-
-        {/* Stock Card Information */}
-        <Card className="border border-blue-500/30 p-6 rounded-lg">
-          <SectionHeader title="STOCK CARD INFORMATION" />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <FieldRenderer
-              label="Qty on Hand"
-              type="number"
-              value={form.qtyOnHand || ""}
-              readOnly
-              disabled
-            />
-            <FieldRenderer
-              label="Unit Cost"
-              type="number"
-              value={form.unitCost || ""}
-              readOnly
-              disabled
-            />
-          </div>
-        </Card>
-
+        {/* ── Registration Info ── */}
         <RegistrationInfo
-          layout="twoCols"
+          layout="straight"
           disabled
           data={{
             registeredBy: form.registeredBy || "",
@@ -399,45 +289,133 @@ const MSMast_SetupTab = ({
             lastUpdatedDate: form.updatedDate || "",
           }}
         />
+
+        {/* ── MIDDLE CARD: Collapsible Sidebar ── */}
+        <Card className="border border-blue-500/30 rounded-lg overflow-hidden !focus-within:ring-0 !focus-within:shadow-none !focus-within:-translate-y-0">
+          <div className="flex flex-col md:flex-row">
+
+            {/* ── Sidebar ── */}
+            <div
+              className={`flex md:flex-col border-b md:border-b-0 md:border-r border-blue-500/30 bg-slate-50 transition-all duration-200 ${sidebarCollapsed ? "md:w-12 md:min-w-[48px]" : "md:w-48 md:min-w-[192px]"}`}
+            >
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed((v) => !v)}
+                className="hidden md:flex items-center justify-end px-3 py-3 border-b border-blue-500/30 hover:bg-white transition-colors"
+              >
+                <svg
+                  width="18" height="18" viewBox="0 0 16 16" fill="none"
+                  stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"
+                  className={`text-slate-400 transition-transform duration-200 ${sidebarCollapsed ? "rotate-180" : ""}`}
+                >
+                  <path d="M10 3L5 8L10 13" />
+                </svg>
+              </button>
+
+              <div className="flex flex-row md:flex-col gap-2 md:gap-1 p-2 flex-1 overflow-x-auto">
+                {TABS.map((tab) => (
+                  <div key={tab.id} className="relative group flex-shrink-0 md:flex-shrink">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`flex items-center gap-3 w-full text-left rounded transition-colors duration-150 overflow-hidden whitespace-nowrap
+                        ${sidebarCollapsed ? "md:justify-center md:px-0 md:py-2 px-4 py-2" : "px-4 py-2 md:px-3 md:py-2.5"}
+                        ${activeTab === tab.id
+                          ? "bg-blue-50 text-blue-700 md:border-b-0 border-b-2 md:border-l-2 border-blue-600 rounded-none"
+                          : "text-slate-500 hover:bg-white hover:text-slate-700"
+                        }`}
+                    >
+                      <span className="flex-shrink-0">{tab.icon}</span>
+                      <span className={`text-[12px] font-medium truncate ${sidebarCollapsed ? "md:hidden" : "block"}`}>
+                        {tab.label}
+                      </span>
+                    </button>
+                    {sidebarCollapsed && (
+                      <div className="absolute left-12 top-1/2 -translate-y-1/2 z-10 hidden md:group-hover:block bg-white border border-slate-200 rounded-md px-3 py-1.5 text-[12px] font-medium text-slate-700 whitespace-nowrap shadow-sm pointer-events-none">
+                        {tab.label}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ── Content Area ── */}
+            <div className="flex-1 p-5 md:p-6 space-y-4 min-w-0">
+
+              {activeTab === "stockcard" && (
+                <>
+                  <SectionHeader title="STOCK CARD INFORMATION" />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <FieldRenderer label="Qty on Hand" type="number" value={form.qtyOnHand || ""} readOnly disabled />
+                    <FieldRenderer label="Unit Cost" type="number" value={form.unitCost || ""} readOnly disabled />
+                  </div>
+                </>
+              )}
+
+              {activeTab === "others" && (
+                <>
+                  <SectionHeader title="ORDERING & PRICING" />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <FieldRenderer
+                      label="Re-Order Level"
+                      type="number"
+                      value={form.reOrderLevel || ""}
+                      onChange={(v) => onChangeForm({ reOrderLevel: getValue(v) })}
+                      readOnly={isReadOnly}
+                      disabled={isDisabled}
+                    />
+                    <FieldRenderer
+                      label="Standard PO Price"
+                      type="number"
+                      value={form.stdPoPrice || ""}
+                      onChange={(v) => onChangeForm({ stdPoPrice: getValue(v) })}
+                      readOnly={isReadOnly}
+                      disabled={isDisabled}
+                    />
+                    <FieldRenderer label="Last Purchase Date" type="text" value={form.lastPurDate || ""} readOnly disabled />
+                    <FieldRenderer label="Last Purchase Price" type="number" value={form.lastPurPrice || ""} readOnly disabled />
+                    <FieldRenderer
+                      label="Allow Over Receiving?"
+                      type="select"
+                      options={[{ value: "Y", label: "Yes" }, { value: "N", label: "No" }]}
+                      value={form.allowOverRec || "N"}
+                      onChange={(v) => onChangeForm({ allowOverRec: getValue(v) })}
+                      readOnly={isReadOnly}
+                      disabled={isDisabled}
+                    />
+                  </div>
+                </>
+              )}
+
+            </div>
+          </div>
+        </Card>
+
       </div>
 
-      {/* ================= LOOKUP MODALS ================= */}
+      {/* ── LOOKUP MODALS ── */}
       <SearchMSInvCateg
         isOpen={isCategOpen}
         onClose={(selected) => {
           setIsCategOpen(false);
-          if (selected) {
-            onChangeForm({
-              categoryCode: selected.code,
-              categoryName: selected.description,
-            });
-          }
+          if (selected) onChangeForm({ categoryCode: selected.code, categoryName: selected.description });
         }}
       />
-
       <SearchMSInvClass
         isOpen={isClassOpen}
         onClose={(selected) => {
           setIsClassOpen(false);
-          if (selected) {
-            onChangeForm({
-              classCode: selected.code,
-              className: selected.description,
-            });
-          }
+          if (selected) onChangeForm({ classCode: selected.code, className: selected.description });
         }}
       />
-
       <SearchUOM
         isOpen={uomTarget !== null}
         onClose={(selected) => {
-          if (selected && uomTarget) {
-            onChangeForm({ [uomTarget]: selected.uomCode });
-          }
+          if (selected && uomTarget) onChangeForm({ [uomTarget]: selected.uomCode });
           setUomTarget(null);
         }}
       />
-
       <ItemMastLookupModal
         isOpen={isItemLookupOpen}
         endpoint="/lookupMSMast"
@@ -446,12 +424,10 @@ const MSMast_SetupTab = ({
         onClose={(payload) => {
           setIsItemLookupOpen(false);
           const selected = payload?.records?.[0];
-          if (selected) {
-            onLookupSelect(selected.itemCode);
-          }
+          if (selected) onLookupSelect(selected.itemCode);
         }}
       />
-    </div>
+    </>
   );
 };
 

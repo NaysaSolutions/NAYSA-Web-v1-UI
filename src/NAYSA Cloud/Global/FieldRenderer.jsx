@@ -253,6 +253,7 @@ const FieldRenderer = ({
   variant = "default",
   maxLength,
   onPaste,
+  labelClassName = "",
   ...props
 }) => {
   const isAudit = variant === "audit";
@@ -280,7 +281,7 @@ const FieldRenderer = ({
 
   const labelClass = `global-ref-floating-label ${
     isEnabled ? "global-ref-label-enabled" : "global-ref-label-disabled"
-  }`;
+  } ${labelClassName}`;
 
   const getDisplayValue = (val, fieldType = "text") => {
     if (val === undefined || val === null) return "";

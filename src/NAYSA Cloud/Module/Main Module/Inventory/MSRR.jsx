@@ -42,6 +42,7 @@ import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 
+
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 
 // Configuration
@@ -101,6 +102,17 @@ const MSRR = (item) => {
 
   const { resetFlag } = useReset();
   const { user, companyInfo } = useAuth();
+const [isViewDocument, setIsViewDocument] = useState(false);
+
+  useEffect(() => {
+    const p = new URLSearchParams(location.search);
+    if (p.get("viewDocument") === "true") {
+      setIsViewDocument(true);
+    }
+  }, []);
+
+  const isViewDocumentUrl = isViewDocument;
+
   const isGeneralLedgerEnabled =
     String(companyInfo?.msinvGLMode || "").toUpperCase() !== "D";
 
@@ -449,9 +461,10 @@ const MSRR = (item) => {
     CLOSED: "global-tran-stat-text-closed-ui",
   };
   const statusColor = statusMap[displayStatus] || "";
-  const isFormDisabled = ["FINALIZED", "CANCELLED", "CLOSED"].includes(
-    displayStatus,
-  );
+  const isFormDisabled =
+  isViewDocumentUrl ||
+  ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+
 
   const updateTotalsDisplay = (input) => {
     const rows = Array.isArray(input)
@@ -649,8 +662,8 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       "bc",
     );
     const poNo = getPOField(row, "PoNo", "PO_NO", "poNo", "po_no");
-    const lineNo =
-      getPOField(row, "ln", "Ln", "LN", "LINE_NO", "lineNo", "line_no") ||
+    const lnNo =
+      getPOField(row, "ln", "Ln", "LN", "LINE_NO", "lnNo", "line_no") ||
       index + 1;
     const itemCode = getPOField(
       row,
@@ -858,7 +871,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     return {
       ...row,
       groupId: String(
-        existingGroupId || `${poNo}-${lineNo}-${itemCode}-${index}`,
+        existingGroupId || `${poNo}-${lnNo}-${itemCode}-${index}`,
       ),
       BC: branchCode,
       Branch: branchCode,
@@ -875,10 +888,10 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       po_no: poNo,
       PO_NO: poNo,
       Type: getPOField(row, "Type", "TYPE", "invType", "INV_TYPE"),
-      Ln: lineNo,
-      LN: lineNo,
-      lineNo,
-      line_no: lineNo,
+      Ln: lnNo,
+      LN: lnNo,
+      lnNo,
+      ln_no: lnNo,
       ItemCode: itemCode,
       ItemNo: itemCode,
       JobCode: itemCode,
@@ -1044,7 +1057,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         "poStatus",
         "po_status",
       ),
-      LINE_NO: lineNo,
+      LINE_NO: lnNo,
       ITEM_SPECS: itemSpecs,
       ItemSpecs: itemSpecs,
       itemSpecs,
@@ -1086,9 +1099,9 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       bc: row.branchCode,
       pono: row.poNo,
       ponumber: row.poNo,
-      ln: row.lineNo,
-      lineno: row.lineNo,
-      linenumber: row.lineNo,
+      ln: row.lnNo,
+      lineno: row.lnNo,
+      linenumber: row.lnNo,
       itemcode: row.itemCode,
       itemno: row.itemCode,
       itemnumber: row.itemCode,
@@ -1321,8 +1334,8 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         "O";
 
       return {
-        lN: idx + 1,
-        lineNo: d.lineNo || d.ln || idx + 1,
+        lnNo: idx + 1,
+        lnNo: d.lnNo || d.ln || idx + 1,
 
         invType: d.invType || "MS",
         rrStatus,
@@ -1331,7 +1344,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
 
         poNo: d.poNo || summary.poNo || "",
-        poLineno: d.lineNo || d.ln || idx + 1,
+        poLineno: d.lnNo || d.ln || idx + 1,
 
         itemCode: d.itemCode || "",
         itemName: d.itemName || "",
@@ -1668,419 +1681,151 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
   );
 
   // ==========================
-  // FETCH (GET) – PR HEADER + DT1
-  // ==========================
+  // FETCH (GET) – MSRR HEADER + DT1
+  // ==========================
 
-  const fetchTranData = async (rrNo, branchCode, direction = "") => {
-  try {
+  const fetchTranData = async (rrNo, branchCode, direction = "") => {
     updateState({ isLoading: true });
 
-    const resp = await apiClient.get("/getMSRR", {
-      params: {
-        branchCode,
-        rrNo,
-        direction,
-      },
-    });
+    try {
+      const data = await useFetchTranData(rrNo, branchCode, docType, "rrNo", direction);
 
-    // Handle nested format variations safely
-    const row = resp?.data?.data?.[0] || resp?.data?.[0];
-    const jsonStr = row?.result ?? row?.RESULT ?? row?.JsonResult ?? row;
-
-    if (!jsonStr) {
-      updateState({ isLoading: false });
-      return;
-    }
-
-    const parsed = typeof jsonStr === "string" ? JSON.parse(jsonStr) : jsonStr;
-
-    // Use safe resolution keys matching what the stored procedure outputs
-    const parsedDocumentNo = parsed?.rrNo || parsed?.RR_NO || parsed?.rr_no || "";
-    const parsedDocumentId = parsed?.rrId || parsed?.rrHdId || parsed?.rr_id || parsed?.rrHdId;
-
-    if (!parsed || !parsedDocumentId) {
-      updateState({ isLoading: false });
-      return;
-    }
-
-      const parsedWHCode = getPOField(
-        parsed,
-        "WHCode",
-        "WHcode",
-        "WhCode",
-        "whCode",
-        "wh_code",
-        "whouseCode",
-        "warehouseCode",
-        "WH_CODE",
-        "WAREHOUSE_CODE",
-      );
-      const parsedWHName = getPOField(
-        parsed,
-        "WHName",
-        "WhName",
-        "whName",
-        "wh_name",
-        "whouseName",
-        "warehouseName",
-        "WH_NAME",
-        "WAREHOUSE_NAME",
-      );
-      const parsedLocCode = getPOField(
-        parsed,
-        "LocCode",
-        "locCode",
-        "loccode",
-        "loc_code",
-        "locationCode",
-        "LocationCode",
-        "location_code",
-        "LOC_CODE",
-        "LOCATION_CODE",
-      );
-      const parsedLocName = getPOField(
-        parsed,
-        "LocName",
-        "locName",
-        "loc_name",
-        "locationName",
-        "LocationName",
-        "location_name",
-        "LOC_NAME",
-        "LOCATION_NAME",
-      );
-
-      // -----------------------------
-      // HEADER (MSRR)
-      // -----------------------------
-      updateState({
-        documentNo: parsedDocumentNo,
-        documentID: parsedDocumentId,
-        documentDate: parsed.rrDate || null,
-        cutoffCode: parsed.cutoffCode || "",
-
-        poNo: parsed.poNo || "",
-        prNo: parsed.prNo || "",
-
-        vendCode: parsed.vendCode || "",
-        vendName: parsed.vendName || "",
-
-        WHCode: parsedWHCode || "",
-        WHcode: parsedWHCode || "",
-        WHName: parsedWHName || "",
-        LocCode: parsedLocCode || "",
-        LocName: parsedLocName || "",
-
-        drNo: parsed.drNo || "",
-        siNo: parsed.siNo || "",
-        siDate: parsed.siDate || null,
-
-        vatCode: parsed.vatCode || "",
-        rrAmount: parsed.rrAmount ?? 0,
-        rrVat: parsed.rrVat ?? 0,
-
-        refDocNo1: parsed.refrrNo1 || "",
-        refDocNo2: parsed.refrrNo2 || "",
-
-        remarks: parsed.remarks || "",
-        documentStatus: parsed.rrStatus || "",
-      });
-
-      const dt1 = Array.isArray(parsed.dt1) ? parsed.dt1 : [];
-
-      const vatCodes = [...new Set(dt1.map((d) => d.vatCode).filter(Boolean))];
-      const vatRatePairs = await Promise.all(
-        vatCodes.map(async (code) => [code, await fetchVatRate(code)]),
-      );
-      const vatRateMap = Object.fromEntries(vatRatePairs);
-
-      const getRetrievedItemCode = (r) =>
-        getPOField(
-          r,
-          "itemNo",
-          "itemCode",
-          "item_no",
-          "item_code",
-          "ItemNo",
-          "ItemCode",
-          "ITEM_NO",
-          "ITEM_CODE",
-        );
-
-      const getRetrievedItemName = (r) =>
-        getPOField(
-          r,
-          "itemName",
-          "itemDesc",
-          "itemDescription",
-          "description",
-          "item_name",
-          "item_desc",
-          "item_description",
-          "ItemName",
-          "ItemDesc",
-          "ItemDescription",
-          "Description",
-          "ITEM_NAME",
-          "ITEM_DESC",
-          "ITEM_DESCRIPTION",
-          "DESCRIPTION",
-        );
-
-      const getRetrievedLocCode = (r) =>
-        getPOField(
-          r,
-          "LocCode",
-          "locCode",
-          "loccode",
-          "loc_code",
-          "locationCode",
-          "LocationCode",
-          "location_code",
-          "location",
-          "Location",
-          "locName",
-          "locationName",
-          "LOC_CODE",
-          "LOCATION_CODE",
-          "LOCATION",
-          "LOC_NAME",
-          "LOCATION_NAME",
-        ) || parsed.LocCode || parsed.locCode || parsed.locationCode || "";
-
-      const getRetrievedQty = (r) =>
-        getPOField(
-          r,
-          "quantity",
-          "rrQuantity",
-          "rrQty",
-          "qty",
-          "Quantity",
-          "RRQuantity",
-          "RR_QTY",
-          "QTY",
-          "rr_quantity",
-          "rr_qty",
-        );
-
-      const getRetrievedFreeQty = (r) =>
-        getPOField(
-          r,
-          "freeQuantity",
-          "freeQty",
-          "FreeQuantity",
-          "FreeQty",
-          "FREE_QUANTITY",
-          "FREE_QTY",
-          "free_quantity",
-          "free_qty",
-        );
-
-      const getRetrievedUnitCost = (r) =>
-        getPOField(
-          r,
-          "unitCost",
-          "unitPrice",
-          "UnitCost",
-          "UnitPrice",
-          "UNIT_COST",
-          "UNIT_PRICE",
-          "unit_cost",
-          "unit_price",
-        );
-
-      const getRetrievedGrossAmount = (r) => {
-        const savedAmount = parseFormattedNumber(
-          getPOField(
-            r,
-            "itemAmount",
-            "grossAmount",
-            "amount",
-            "ItemAmount",
-            "GrossAmount",
-            "Amount",
-            "ITEM_AMOUNT",
-            "GROSS_AMOUNT",
-            "AMOUNT",
-            "item_amount",
-            "gross_amount",
-          ) || 0,
-        );
-
-        if (savedAmount) return savedAmount;
-
-        const qty = parseFormattedNumber(getRetrievedQty(r) || 0);
-        const freeQty = parseFormattedNumber(getRetrievedFreeQty(r) || 0);
-        const unitCost = parseFormattedNumber(getRetrievedUnitCost(r) || 0);
-
-        return Math.max(qty - freeQty, 0) * unitCost;
-      };
-
-      const itemCodesNeedingNames = [
-        ...new Set(
-          dt1
-            .filter((r) => !getRetrievedItemName(r))
-            .map((r) => getRetrievedItemCode(r))
-            .filter(Boolean),
-        ),
-      ];
-      let msItemMap = {};
-
-      if (itemCodesNeedingNames.length > 0) {
-        try {
-          const itemLookupResult = await fetchData("lookupMSMast", {
-            PARAMS: JSON.stringify({
-              search: "",
-              page: 1,
-              pageSize: 10000,
-            }),
-          });
-          const rawItems = itemLookupResult?.data?.[0]?.result || "[]";
-          const lookupItems =
-            typeof rawItems === "string" ? JSON.parse(rawItems) : rawItems;
-
-          msItemMap = (Array.isArray(lookupItems) ? lookupItems : []).reduce(
-            (acc, item) => {
-              const code = getRetrievedItemCode(item);
-              if (code) {
-                acc[String(code)] = item;
-                acc[String(code).trim().toLowerCase()] = item;
-              }
-              return acc;
-            },
-            {},
-          );
-        } catch (lookupError) {
-          console.warn("MSRR item description lookup failed:", lookupError);
-        }
+      if (!data?.rrId) {
+        Swal.fire({ icon: 'info', title: 'No Records Found', text: 'Transaction does not exist.' });
+        updateState({ isLoading: false });
+        return;
       }
 
-      const mappedDT1 = dt1.map((r, idx) => ({
-        lN: Number(r.lnNo ?? idx + 1),
+      const parsed = data;
+      const parsedDocumentNo = parsed.rrNo || "";
+      const parsedDocumentId = parsed.rrId || parsed.rrHdId;
 
-        rrStatus: getPOField(
-          r,
-          "rrStatus",
-          "RR_STATUS",
-          "RrStatus",
-          "poStatus",
-          "PO_STATUS",
-        ),
-        poStatus: getPOField(
-          r,
-          "poStatus",
-          "PO_STATUS",
-          "rrStatus",
-          "RR_STATUS",
-          "RrStatus",
-        ),
-        poNo:
-          getPOField(r, "poNo", "PoNo", "PO_NO", "po_no") || parsed.poNo || "",
-        itemCode: getRetrievedItemCode(r),
-        itemName:
-          getRetrievedItemName(r) ||
-          getRetrievedItemName(
-            msItemMap[String(getRetrievedItemCode(r))] ||
-              msItemMap[String(getRetrievedItemCode(r)).trim().toLowerCase()] ||
-              {},
-          ),
-        itemSpecs: getPOField(
-          r,
-          "itemSpecs",
-          "itemSpec",
-          "specs",
-          "item_specs",
-          "ItemSpecs",
-          "ItemSpec",
-          "Specs",
-          "ITEM_SPECS",
-        ),
+      const parsedWHCode = parsed.WHCode || parsed.whCode || parsed.warehouseCode || "";
+      const parsedWHName = parsed.WHName || parsed.whName || parsed.warehouseName || "";
+      const parsedLocCode = parsed.LocCode || parsed.locCode || parsed.locationCode || "";
+      const parsedLocName = parsed.LocName || parsed.locName || parsed.locationName || "";
 
-        rrQty: formatNumber(getRetrievedQty(r) || 0, decQty),
-        freeQty: formatNumber(getRetrievedFreeQty(r) || 0, decQty),
+      // ===========================
+      // HEADER (MSRR)
+      // ===========================
+      updateState({
+        documentNo: parsedDocumentNo,
+        documentID: parsedDocumentId,
+        documentDate: parsed.rrDate || null,
+        cutoffCode: parsed.cutoffCode || "",
 
-        amount: formatNumber(getRetrievedGrossAmount(r)),
-        itemAmount: formatNumber(getRetrievedGrossAmount(r)),
-        grossAmount: formatNumber(getRetrievedGrossAmount(r)),
-        vatCode: r.vatCode || "",
+        poNo: parsed.poNo || "",
+        prNo: parsed.prNo || "",
+
+        vendCode: parsed.vendCode || "",
+        vendName: parsed.vendName || "",
+
+        WHCode: parsedWHCode || "",
+        WHcode: parsedWHCode || "",
+        WHName: parsedWHName || "",
+        LocCode: parsedLocCode || "",
+        LocName: parsedLocName || "",
+
+        drNo: parsed.drNo || "",
+        siNo: parsed.siNo || "",
+        siDate: parsed.siDate || null,
+
+        vatCode: parsed.vatCode || "",
+        rrAmount: parsed.rrAmount ?? 0,
+        rrVat: parsed.rrVat ?? 0,
+
+        refDocNo1: parsed.refrrNo1 || "",
+        refDocNo2: parsed.refrrNo2 || "",
+
+        remarks: parsed.remarks || "",
+        documentStatus: parsed.rrStatus || "",
+      });
+
+      // ===========================
+      // DETAIL ROWS (DT1)
+      // ===========================
+      const dt1 = Array.isArray(parsed.dt1) ? parsed.dt1 : [];
+
+      const vatCodes = [...new Set(dt1.map((d) => d.vatCode).filter(Boolean))];
+      const vatRatePairs = await Promise.all(
+        vatCodes.map(async (code) => [code, await fetchVatRate(code)]),
+      );
+      const vatRateMap = Object.fromEntries(vatRatePairs);
+
+      const mappedDT1 = dt1.map((r, idx) => ({
+        lnNo: Number(r.lnNo ?? idx + 1),
+        rrStatus: r.rrStatus || r.poStatus || "",
+        poStatus: r.poStatus || r.rrStatus || "",
+        poNo: r.poNo || parsed.poNo || "",
+        itemCode: r.itemCode || r.itemNo || "",
+        itemName: r.itemName || r.itemDesc || "",
+        itemSpecs: r.itemSpecs || r.itemSpec || "",
+
+        rrQty: formatNumber(r.rrQty || r.quantity || 0, decQty),
+        freeQty: formatNumber(r.freeQty || r.freeQuantity || 0, decQty),
+
+        amount: formatNumber(r.itemAmount || r.grossAmount || 0),
+        itemAmount: formatNumber(r.itemAmount || r.grossAmount || 0),
+        grossAmount: formatNumber(r.itemAmount || r.grossAmount || 0),
+        vatCode: r.vatCode || "",
         vatRate: r.vatCode ? formatNumber(vatRateMap[r.vatCode] ?? 0, 2) : "",
         vatAmount: formatNumber(r.vatAmount ?? 0),
 
-        qsCode: r.qsCode || "",
-        whCode: getPOField(
-          r,
-          "whCode",
-          "whouseCode",
-          "wh_code",
-          "warehouseCode",
-          "WhCode",
-          "WHCode",
-          "WH_CODE",
-          "WAREHOUSE_CODE",
-        ),
-        whouseCode: getPOField(
-          r,
-          "whouseCode",
-          "whCode",
-          "wh_code",
-          "warehouseCode",
-          "WhCode",
-          "WHCode",
-          "WH_CODE",
-          "WAREHOUSE_CODE",
-        ),
-        locCode: getRetrievedLocCode(r),
-        LocCode: getRetrievedLocCode(r),
+        qsCode: r.qsCode || "",
+        whCode: r.whCode || r.whouseCode || parsed.WHCode || "",
+        whouseCode: r.whouseCode || r.whCode || parsed.WHCode || "",
+        locCode: r.locCode || parsedLocCode || "",
+        LocCode: r.locCode || parsedLocCode || "",
 
-        uomCode: r.uomCode || "",
-        unitCost: formatNumber(getRetrievedUnitCost(r) || 0, decUcost),
+        uomCode: r.uomCode || "",
+        unitCost: formatNumber(r.unitCost || r.unitPrice || 0, decUcost),
         netAmount: formatNumber(r.netAmount ?? 0),
-        lotNo: r.lotNo || "",
-        controlNo: r.controlNo || "",
-      }));
+        lotNo: r.lotNo || "",
+        controlNo: r.controlNo || "",
+      }));
 
-      const dt2 = Array.isArray(parsed.dt2) ? parsed.dt2 : [];
+      const dt2 = Array.isArray(parsed.dt2) ? parsed.dt2 : [];
       const normalizeGLDate = (value) => {
         if (!value) return "";
         const text = String(value);
         return text.includes("T") ? text.substring(0, 10) : text.substring(0, 10);
       };
-      const mappedDT2 = dt2.map((g, i) => ({
-        ...g,
-        id: i + 1,
-        recNo:
-          getPOField(g, "recNo", "RecNo", "REC_NO", "lineNo", "LINE_NO") ||
-          String(i + 1),
-        acctCode: getPOField(g, "acctCode", "AcctCode", "ACCT_CODE", "accountCode", "ACCOUNT_CODE"),
-        acctName: getPOField(g, "acctName", "AcctName", "ACCT_NAME", "accountName", "ACCOUNT_NAME"),
-        rcCode: getPOField(g, "rcCode", "RcCode", "RC_CODE"),
-        rcName: getPOField(g, "rcName", "RcName", "RC_NAME"),
-        sltypeCode: getPOField(g, "sltypeCode", "slTypeCode", "SlTypeCode", "SLTYPE_CODE", "SL_TYPE_CODE"),
-        slCode: getPOField(g, "slCode", "SlCode", "SL_CODE"),
-        slName: getPOField(g, "slName", "SlName", "SL_NAME"),
-        particular: getPOField(g, "particular", "particulars", "Particular", "Particulars", "PARTICULAR", "PARTICULARS"),
-        vatCode: getPOField(g, "vatCode", "VatCode", "VAT_CODE"),
-        vatName: getPOField(g, "vatName", "VatName", "VAT_NAME"),
-        atcCode: getPOField(g, "atcCode", "AtcCode", "ATC_CODE"),
-        atcName: getPOField(g, "atcName", "AtcName", "ATC_NAME"),
-        debit: formatNumber(getPOField(g, "debit", "Debit", "DEBIT") || 0),
-        credit: formatNumber(getPOField(g, "credit", "Credit", "CREDIT") || 0),
-        debitFx1: formatNumber(getPOField(g, "debitFx1", "DebitFx1", "DEBIT_FX1", "debit_fx1") || 0),
-        creditFx1: formatNumber(getPOField(g, "creditFx1", "CreditFx1", "CREDIT_FX1", "credit_fx1") || 0),
-        debitFx2: formatNumber(getPOField(g, "debitFx2", "DebitFx2", "DEBIT_FX2", "debit_fx2") || 0),
-        creditFx2: formatNumber(getPOField(g, "creditFx2", "CreditFx2", "CREDIT_FX2", "credit_fx2") || 0),
-        slRefNo: getPOField(g, "slRefNo", "slrefNo", "slref_no", "SLREF_NO", "SL_REF_NO"),
-        slRefDate: normalizeGLDate(getPOField(g, "slRefDate", "slrefDate", "slref_date", "SLREF_DATE", "SL_REF_DATE")),
-        remarks: getPOField(g, "remarks", "Remarks", "REMARKS"),
-        dt1Lineno: getPOField(g, "dt1Lineno", "dt1LineNo", "DT1_LINENO", "DT1_LINE_NO"),
-      }));
 
-      updateState({
-        detailRows: mappedDT1,
-        detailRowsGL: mappedDT2,
-      });
-    } catch (e) {
-      console.error("fetchTranData error:", e);
+      const mappedDT2 = dt2.map((g, i) => ({
+        ...g,
+        id: i + 1,
+        recNo: g.recNo || g.lnNo || String(i + 1),
+        acctCode: g.acctCode || g.accountCode || "",
+        acctName: g.acctName || g.accountName || "",
+        rcCode: g.rcCode || "",
+        rcName: g.rcName || "",
+        sltypeCode: g.sltypeCode || g.slTypeCode || "",
+        slCode: g.slCode || "",
+        slName: g.slName || "",
+        particular: g.particular || g.particulars || "",
+        vatCode: g.vatCode || "",
+        vatName: g.vatName || "",
+        atcCode: g.atcCode || "",
+        atcName: g.atcName || "",
+        debit: formatNumber(g.debit || 0),
+        credit: formatNumber(g.credit || 0),
+        debitFx1: formatNumber(g.debitFx1 || 0),
+        creditFx1: formatNumber(g.creditFx1 || 0),
+        debitFx2: formatNumber(g.debitFx2 || 0),
+        creditFx2: formatNumber(g.creditFx2 || 0),
+        slRefNo: g.slRefNo || "",
+        slRefDate: normalizeGLDate(g.slRefDate || ""),
+        remarks: g.remarks || "",
+        dt1Lineno: g.dt1Lineno || "",
+      }));
+
+      updateState({
+        detailRows: mappedDT1,
+        detailRowsGL: mappedDT2,
+      });
+    } catch (e) {
+      console.error("fetchTranData error:", e);
+      Swal.fire({ icon: 'error', title: 'Fetch Error', text: e.message });
     } finally {
       updateState({ isLoading: false });
     }
@@ -2912,7 +2657,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           const rowQty = parseFormattedNumber(r.rrQty || 0) || 0;
           const lotRatio = rowQty > 0 ? lotQty / rowQty : 1;
           dt1Payload.push({
-            lineNo: String(dt1Payload.length + 1),
+            lnNo: String(dt1Payload.length + 1),
 
             invType: r.invType || "MS",
             itemNo: r.itemCode || r.itemNo || "",
@@ -3050,23 +2795,98 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         // normalize row (supports: array, axios response, unwrapped response)
         const normalizeSaveRow = (value) => {
           if (!value) return null;
+          if (Array.isArray(value)) return normalizeSaveRow(value[0]);
           if (typeof value === "string") {
             try {
               const parsedValue = JSON.parse(value);
-              return Array.isArray(parsedValue) ? parsedValue[0] : parsedValue;
+              return normalizeSaveRow(parsedValue);
             } catch {
               return null;
             }
           }
-          const resultValue = value.result ?? value.RESULT ?? value.JsonResult;
+          if (Array.isArray(value?.data)) return normalizeSaveRow(value.data[0]);
+          if (value?.data) return normalizeSaveRow(value.data);
+
+          const resultValue =
+            value.result ?? value.RESULT ?? value.JsonResult ?? value.jsonResult;
           if (resultValue) return normalizeSaveRow(resultValue);
+          value.msrrNo = getReturnedValue(
+            value,
+            "msrrNo",
+            "MSRR_NO",
+            "MSRRNo",
+            "msRRNo",
+            "rrNo",
+            "RR_NO",
+            "rr_no",
+            "RrNo",
+            "documentNo",
+            "DocumentNo",
+            "DOCUMENT_NO",
+            "docNo",
+            "DocNo",
+            "DOC_NO",
+            "tranNo",
+            "TranNo",
+            "TRAN_NO",
+          );
+          value.msrrHdId = getReturnedValue(
+            value,
+            "rrHdId",
+            "rrId",
+            "rr_id",
+            "rr_hd_id",
+            "RR_ID",
+            "RR_HD_ID",
+            "msrrId",
+            "msrrHdId",
+            "MSRR_ID",
+            "MSRR_HD_ID",
+            "documentID",
+            "DocumentID",
+            "DOCUMENT_ID",
+            "docId",
+            "DOC_ID",
+          );
           return value;
+        };
+
+        const getReturnedValue = (row, ...keys) => {
+          if (!row || typeof row !== "object") return "";
+
+          for (const key of keys) {
+            const value = row?.[key];
+            if (value !== undefined && value !== null && value !== "") {
+              return value;
+            }
+          }
+
+          const normalizeKey = (key) =>
+            String(key || "")
+              .replace(/[_\s-]/g, "")
+              .toLowerCase();
+          const normalizedEntries = Object.entries(row).reduce(
+            (acc, [key, value]) => {
+              acc[normalizeKey(key)] = value;
+              return acc;
+            },
+            {},
+          );
+
+          for (const key of keys) {
+            const value = normalizedEntries[normalizeKey(key)];
+            if (value !== undefined && value !== null && value !== "") {
+              return value;
+            }
+          }
+
+          return "";
         };
 
         const row = normalizeSaveRow(
           (Array.isArray(res) ? res?.[0] : null) ??
-          (Array.isArray(res?.data) ? res.data?.[0] : null) ??
-          (Array.isArray(res?.data?.data) ? res.data.data?.[0] : null) ??
+          (Array.isArray(res?.data) ? res.data?.[0] : res?.data ?? null) ??
+          (Array.isArray(res?.data?.data) ? res.data.data?.[0] : res?.data?.data ?? null) ??
           null
         );
 
@@ -3114,9 +2934,13 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         });
 
         // success + print
-        useSwalshowSaveSuccessDialog(handleReset, () =>
-          handleSaveAndPrint(savedId),
-        );
+        useSwalshowSaveSuccessDialog(
+              () => {
+                handleReset();
+                setTopTab("history");
+              },
+              () => handleSaveAndPrint(response.data[0].jvId),
+            );
       }
     } catch (err) {
       console.error("MSRR action error:", err);
@@ -3589,35 +3413,40 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           onCancel={handleCancel}
           onCopy={handleCopy}
           onAttach={handleAttach}
+          onDetails={() => setTopTab("details")}
           onHistory={() => setTopTab("history")}
+          disableRouteNavigation={true}
+          detailsRoute="/page/MSRR"
           isSaveDisabled={isSaveDisabled}
           isResetDisabled={isResetDisabled}
-        />
+          isViewDocument={isViewDocument}
+          isCancelDisabled={
+            !documentID ||
+            displayStatus === "CANCELLED" ||
+            displayStatus === "FINALIZED"
+          }
+/>
       </div>
 
       <div className={topTab === "details" ? "" : "hidden"}>
-        {/* Header Section */}
-        <div className="global-tran-header-ui">
-          <div className="global-tran-headertext-div-ui">
-            <h1 className="global-tran-headertext-ui">{documentTitle}</h1>
-          </div>
-
-          <div className="global-tran-headerstat-div-ui">
-            <div>
-              <p className="global-tran-headerstat-text-ui">
-                Transaction Status
-              </p>
-              <h1 className={`global-tran-stat-text-ui ${statusColor}`}>
-                {displayStatus}
-              </h1>
-            </div>
-          </div>
-        </div>
+        {/* Page title and subheading */} 
+      <div className={`global-tran-header-ui ${isViewDocument ? "max-md:!mt-12 max-md:!pt-2 max-md:!pb-2" : ""}`}>
+        <div className={`global-tran-headertext-div-ui ${isViewDocument ? "max-md:!mb-1" : ""}`}>
+          <h1 className="global-tran-headertext-ui">{documentTitle}</h1>
+        </div>
+        <div className={`global-tran-headerstat-div-ui ${isViewDocument ? "max-md:!mt-0" : ""}`}>
+          <div>
+            <p className="global-tran-headerstat-text-ui">Transaction Status</p>
+            <h1 className={`global-tran-stat-text-ui ${statusColor}`}>{displayStatus}</h1>
+          </div>
+        </div>
+      </div>
 
         {/* Form Layout with Tabs */}
-        <div className="global-tran-header-div-ui">
-          {/* Tab Navigation */}
-          <div className="global-tran-header-tab-div-ui">
+        <div className={`global-tran-header-div-ui ${isViewDocument ? "max-md:!mt-10 max-md:!pt-0 max-md:!pb-0" : ""}`}>
+
+    {/* Tab Navigation */}
+    <div className={`global-tran-header-tab-div-ui ${isViewDocument ? "max-md:!mt-0 max-md:!pt-0 max-md:!pb-4 max-md:!mb-4 max-md:!justify-start max-md:!text-left" : ""}`}>
             <button
               className={`global-tran-tab-padding-ui ${
                 activeTab === "basic"
@@ -4582,7 +4411,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       <div className={topTab === "history" ? "" : "hidden"}>
         <AllTranHistory
           showHeader={false}
-          endpoint="/getPRHistory"
+          endpoint="/getMSRRHistory"
           cacheKey={`PR:${state.branchCode || ""}:${state.documentNo || ""}`}
           activeTabKey="PR_Summary"
           branchCode={state.branchCode}
@@ -4981,7 +4810,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         const normalized = normalizeOpenPODetailRow(row, index);
         const uniqueGroupId = [
           normalized.poNo || normalized.PoNo || idString,
-          normalized.lineNo || normalized.Ln || index + 1,
+          normalized.lnNo || normalized.Ln || index + 1,
           normalized.itemCode || normalized.ItemCode || "item",
           index,
         ].join("-");

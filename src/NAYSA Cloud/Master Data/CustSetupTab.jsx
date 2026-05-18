@@ -1,6 +1,13 @@
-import React, { forwardRef, useState, useMemo, useEffect, useRef } from "react";
+// src/NAYSA Cloud/Master Data/CustMastTabs/CustSetupTab.jsx
+import React, {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer";
-import { useQuery } from "@tanstack/react-query";
 
 import SearchCusMast from "@/NAYSA Cloud/Lookup/SearchCustMast.jsx";
 import SearchBranchRef from "@/NAYSA Cloud/Lookup/SearchBranchRef.jsx";
@@ -19,7 +26,7 @@ import {
 } from "@/NAYSA Cloud/Global/procedure";
 
 const SectionHeader = ({ title }) => (
-  <div className="mb-4">
+  <div className="mb-3">
     <div className="text-[9px] sm:text-[12px] font-bold text-slate-500 tracking-widest border-b pb-2">
       {title}
     </div>
@@ -27,7 +34,17 @@ const SectionHeader = ({ title }) => (
 );
 
 const Card = ({ children, className = "" }) => (
-  <div className={`bg-white shadow-sm ${className}`}>{children}</div>
+  <div
+    className={[
+      "global-tran-textbox-group-div-ui flex flex-col",
+      "transition-all duration-150",
+      "focus-within:ring-2 focus-within:ring-blue-400/60 focus-within:shadow-2xl",
+      "focus-within:-translate-y-[1px]",
+      className,
+    ].join(" ")}
+  >
+    {children}
+  </div>
 );
 
 const normalizeUpper = (v) => String(v ?? "").toUpperCase().trim();
@@ -39,6 +56,61 @@ const getValue = (input) => {
   }
   return input ?? "";
 };
+
+// --- Sidebar tab definitions ---
+const TABS = [
+  {
+    id: "contact",
+    label: "Contact",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
+        <path d="M2 14c0-3.314 2.686-5 6-5s6 1.686 6 5" />
+      </svg>
+    ),
+  },
+  {
+    id: "accounting",
+    label: "Accounting",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="3" width="12" height="10" rx="1.5" />
+        <path d="M5 7h6M5 10h4" />
+      </svg>
+    ),
+  },
+  {
+    id: "sales",
+    label: "Sales",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2 12l3-4 3 2 3-5 3 3" />
+        <path d="M2 14h12" />
+      </svg>
+    ),
+  },
+  {
+    id: "cc",
+    label: "Credit & Collection",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="1.5" y="4" width="13" height="9" rx="1.5" />
+        <path d="M1.5 7h13" />
+        <path d="M5 10.5h2M10 10.5h1.5" />
+      </svg>
+    ),
+  },
+  {
+    id: "tcsignatory",
+    label: "TC Signatory",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M10.5 2.5l3 3-7 7H3.5v-3l7-7z" />
+        <path d="M8.5 4.5l3 3" />
+      </svg>
+    ),
+  },
+];
 
 const CustSetupTab = forwardRef(
   (
@@ -56,148 +128,197 @@ const CustSetupTab = forwardRef(
     },
     ref
   ) => {
-    const [salesTab, setSalesTab] = useState("sales");
+    useImperativeHandle(ref, () => ({}));
+
+    const isNewRecord = form.__isNew;
+    const isReadOnly = !isEditing;
+    const isDisabled = isReadOnly || isLoading;
+
+    const [tblFieldArray, setTblFieldArray] = useState([]);
+    const [activeTab, setActiveTab] = useState("contact");
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-    // --- TIN VALIDATION STATE & LOGIC ---
-    const [tinError, setTinError] = useState("");
-    const [isValidatingTin, setIsValidatingTin] = useState(false);
-
-    const validateTin = async (tinValue) => {
-      if (!tinValue || tinValue.trim() === "") {
-        setTinError("");
-        return;
-      }
-
-      setIsValidatingTin(true);
-      try {
-        const res = await apiClient.post("/checkDuplicateTin", { 
-          tin: tinValue, 
-          excludeCode: form.custCode 
-        });
-        
-        if (res.data.isDuplicate) {
-          setTinError(`TIN already exists for ${res.data.ownerName}`);
-          onChangeForm({ isTinValid: false });
-        } else {
-          setTinError("");
-          onChangeForm({ isTinValid: true });
+    useEffect(() => {
+      const run = async () => {
+        try {
+          const result = await useFieldLenghtCheck("cust_mast");
+          if (result) setTblFieldArray(result);
+        } catch (e) {
+          console.error("Failed to load field lengths:", e);
         }
-      } catch (e) {
-        console.error("TIN Validation Error:", e);
-      } finally {
-        setIsValidatingTin(false);
-      }
-    };
+      };
+      run();
+    }, []);
 
-    // --- 1. FIELD LENGTHS ---
-    const { data: tblFieldArray = [] } = useQuery({
-      queryKey: ["fieldLengths", "cust_mast"],
-      queryFn: () => useFieldLenghtCheck("cust_mast"),
-    });
-
-    const getLen = (colName, fallback = undefined) => {
-      const n = useGetFieldLength(tblFieldArray, colName);
+    const getLen = (col, fallback = undefined) => {
+      const n = useGetFieldLength(tblFieldArray, col);
       return n || fallback;
     };
 
-    // --- 2. LOGIC CONSTANTS ---
-    const isReadOnly = !isEditing;
-    const isDisabled = isReadOnly || isLoading;
-    const isNewRecord = form.__isNew;
+    const taxClass = useMemo(
+      () => normalizeUpper(form?.taxClass || ""),
+      [form?.taxClass]
+    );
 
-    const taxClass = useMemo(() => normalizeUpper(form?.taxClass || ""), [form?.taxClass]);
     const isIndividual = taxClass === "WI";
 
     const buildRegisteredName = (fn, mn, ln) => {
-      return [fn, mn, ln].map((v) => String(v ?? "").trim()).filter(Boolean).join(" ");
+      return [fn, mn, ln]
+        .map((v) => String(v ?? "").trim())
+        .filter(Boolean)
+        .join(" ");
     };
 
     const nameAutoRef = useRef({ businessTouched: false });
 
-    // --- 3. AUTO-NAMING EFFECT ---
     useEffect(() => {
       if (!isEditing || !isIndividual) return;
-
       const reg = buildRegisteredName(form.firstName, form.middleName, form.lastName);
-
       if (reg && (form.custName || "") !== reg) {
         const updates = { custName: reg };
-
-        // Auto-sync Business Name if not manually touched
         if (!nameAutoRef.current.businessTouched || !form.businessName) {
           updates.businessName = reg;
         }
-
         onChangeForm(updates);
       }
     }, [isEditing, isIndividual, form.firstName, form.middleName, form.lastName]);
 
-    // --- 4. LOOKUP & OPTIONS ---
-    const [lookups, setLookups] = useState({
-      cust: false, branch: false, atc: false, vat: false, billTerm: false, curr: false,
-      custType: false, area: false, zone: false, salesRep: false,
-    });
-    const toggleLookup = (key, val) => setLookups(prev => ({ ...prev, [key]: val }));
-
     const mappedTaxClassOptions = useMemo(() => {
-      const base = [{ value: "WC", label: "Corporate" }, { value: "WI", label: "Individual" }];
+      const base = [
+        { value: "WC", label: "Corporate" },
+        { value: "WI", label: "Individual" },
+      ];
       const extra = (Array.isArray(taxClassOptions) ? taxClassOptions : [])
-        .map(o => {
+        .map((o) => {
           const val = normalizeUpper(o?.value ?? o?.code ?? o);
-          return (val === "WC" || val === "WI" || !val) ? null : { value: val, label: o?.label || o?.name || val };
-        }).filter(Boolean);
+          return val === "WC" || val === "WI" || !val
+            ? null
+            : { value: val, label: o?.label || o?.name || val };
+        })
+        .filter(Boolean);
       const seen = new Set();
-      return [...base, ...extra].filter(x => !seen.has(x.value) && seen.add(x.value));
+      return [...base, ...extra].filter(
+        (x) => !seen.has(x.value) && seen.add(x.value)
+      );
     }, [taxClassOptions]);
 
+    // --- Lookup open states (individual, matching PayeeSetupTab pattern) ---
+    const [isCustLookupOpen, setIsCustLookupOpen] = useState(false);
+    const [isBranchLookupOpen, setIsBranchLookupOpen] = useState(false);
+    const [isATCLookupOpen, setIsATCLookupOpen] = useState(false);
+    const [isVATLookupOpen, setIsVATLookupOpen] = useState(false);
+    const [isBillTermLookupOpen, setIsBillTermLookupOpen] = useState(false);
+    const [isCurrLookupOpen, setIsCurrLookupOpen] = useState(false);
+    const [isSalesRepLookupOpen, setIsSalesRepLookupOpen] = useState(false);
+    const [isCustTypeLookupOpen, setIsCustTypeLookupOpen] = useState(false);
+    const [isAreaLookupOpen, setIsAreaLookupOpen] = useState(false);
+    const [isZoneLookupOpen, setIsZoneLookupOpen] = useState(false);
+
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start rounded-lg relative">
-        <div className="flex flex-col gap-6">
-          <Card className="border border-blue-500/30 p-5 md:p-7 rounded-lg space-y-5 md:space-y-6">
+      <>
+        <div className="flex flex-col gap-6 rounded-lg relative">
+
+          {/* ── TOP CARD: Basic Information ── */}
+          <Card className="border border-blue-500/30 p-6 rounded-lg">
             <SectionHeader title="BASIC INFORMATION" />
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-              <FieldRenderer label="SL Type" type="select" value={form?.sltypeCode || ""} options={sltypeOptions} onChange={(v) => onChangeForm({ sltypeCode: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} />
-              <FieldRenderer label="Active?" type="select" value={form?.active || "Y"} options={activeOptions} onChange={(v) => onChangeForm({ active: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} />
+            {/* Row 1: SL Type | Active | Branch */}
+            <div className="grid grid-cols-3 gap-3">
+              <FieldRenderer
+                label="SL Type"
+                type="select"
+                value={form?.sltypeCode || ""}
+                options={sltypeOptions}
+                onChange={(v) => onChangeForm({ sltypeCode: getValue(v) })}
+                readOnly={isReadOnly}
+                disabled={isDisabled}
+              />
+              <FieldRenderer
+                label="Active?"
+                type="select"
+                value={form?.active || "Y"}
+                options={activeOptions}
+                onChange={(v) => onChangeForm({ active: getValue(v) })}
+                readOnly={isReadOnly}
+                disabled={isDisabled}
+              />
+              <FieldRenderer
+                label="Branch"
+                type="lookup"
+                value={form?.branchCode || ""}
+                onLookup={isDisabled ? undefined : () => setIsBranchLookupOpen(true)}
+                readOnly={isReadOnly}
+                disabled={isDisabled}
+              />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-              <FieldRenderer label="Customer Code" required type="lookup" value={form.custCode || ""} onChange={isNewRecord ? (v) => onChangeForm({ custCode: getValue(v) }) : undefined} onLookup={() => toggleLookup("cust", true)} readOnly={!isNewRecord} disabled={isLoading} maxLength={getLen("cust_code", 20)} />
-              <FieldRenderer label="Tax Rate Class" required type="select" value={taxClass} options={mappedTaxClassOptions} onChange={(v) => onChangeForm({ taxClass: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} />
+            {/* Row 2: Customer Code | Tax Rate Class | Old Code */}
+            <div className="grid grid-cols-3 gap-3">
+              <FieldRenderer
+                label="Customer Code"
+                required
+                type="lookup"
+                value={form.custCode || ""}
+                onChange={isNewRecord ? (v) => onChangeForm({ custCode: getValue(v) }) : undefined}
+                onLookup={isNewRecord ? undefined : () => !isLoading && setIsCustLookupOpen(true)}
+                readOnly={!isNewRecord}
+                disabled={isLoading}
+                maxLength={getLen("cust_code", 20)}
+              />
+              <FieldRenderer
+                label="Tax Rate Class"
+                required
+                type="select"
+                value={taxClass}
+                options={mappedTaxClassOptions}
+                onChange={(v) => onChangeForm({ taxClass: getValue(v) })}
+                readOnly={isReadOnly}
+                disabled={isDisabled}
+              />
+              <FieldRenderer
+                label="Old Code"
+                type="text"
+                value={form?.oldCode || ""}
+                onChange={(v) => onChangeForm({ oldCode: getValue(v) })}
+                readOnly={isReadOnly}
+                disabled={isDisabled}
+                maxLength={getLen("old_code", 50)}
+              />
             </div>
 
-            <FieldRenderer
-              label="Registered Name"
-              required
-              type="text"
-              value={form?.custName || ""}
-              onChange={(v) => onChangeForm({ custName: getValue(v) })}
-              // ---> ADDED BLUR EVENT FOR DUPLICATE CHECK <---
-              onBlur={async () => {
-                if (!isEditing || !form?.custName) return;
-                await onNameBlur?.(form?.custName);
-              }}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-              maxLength={getLen("cust_name", 150)}
-            />
+            {/* Row 3: Registered Name | Business Name */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <FieldRenderer
+                label="Registered Name"
+                required
+                type="text"
+                value={form?.custName || ""}
+                onChange={(v) => onChangeForm({ custName: getValue(v) })}
+                onBlur={async () => {
+                  if (!isEditing || !form?.custName) return;
+                  await onNameBlur?.(form?.custName);
+                }}
+                readOnly={isReadOnly || isIndividual}
+                disabled={isDisabled || isIndividual}
+                maxLength={getLen("cust_name", 150)}
+              />
+              <FieldRenderer
+                label="Business Name"
+                required={!isIndividual}
+                type="text"
+                value={form?.businessName || ""}
+                onChange={(v) => {
+                  nameAutoRef.current.businessTouched = true;
+                  onChangeForm({ businessName: getValue(v) });
+                }}
+                readOnly={isReadOnly}
+                disabled={isDisabled}
+                maxLength={getLen("business_name", 150)}
+              />
+            </div>
 
-            <FieldRenderer
-              label="Business Name"
-              required={!isIndividual}
-              type="text"
-              value={form?.businessName || ""}
-              onChange={(v) => {
-                nameAutoRef.current.businessTouched = true;
-                onChangeForm({ businessName: getValue(v) });
-              }}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-              maxLength={getLen("business_name", 150)}
-            />
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5">
+            {/* Row 4: First Name | Middle Name | Last Name */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <FieldRenderer
                 label="First Name"
                 required={isIndividual}
@@ -228,43 +349,28 @@ const CustSetupTab = forwardRef(
                 maxLength={getLen("last_name", 100)}
               />
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-              <FieldRenderer label="Old Code" type="text" value={form?.oldCode || ""} onChange={(v) => onChangeForm({ oldCode: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} maxLength={getLen("old_code", 50)} />
-              <FieldRenderer label="Branch" type="lookup" value={form?.branchCode || ""} onLookup={isDisabled ? undefined : () => toggleLookup("branch", true)} readOnly={isReadOnly} disabled={isDisabled} />
-            </div>
           </Card>
 
-          <Card className="border border-blue-500/30 p-5 md:p-7 rounded-lg space-y-5 md:space-y-6">
-            <SectionHeader title="CONTACT INFORMATION" />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-              <FieldRenderer label="Contact Person" type="text" value={form?.custContact || ""} onChange={(v) => onChangeForm({ custContact: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} maxLength={getLen("cust_contact", 100)} />
-              <FieldRenderer label="Position" type="text" value={form?.custPosition || ""} onChange={(v) => onChangeForm({ custPosition: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} maxLength={getLen("cust_position", 100)} />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-              <FieldRenderer label="Telephone No." type="text" value={form?.custTelno || ""} onChange={(v) => onChangeForm({ custTelno: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} maxLength={getLen("cust_telno", 50)} />
-              <FieldRenderer label="Mobile No." type="text" value={form?.custMobileno || ""} onChange={(v) => onChangeForm({ custMobileno: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} maxLength={getLen("cust_mobileno", 50)} />
-            </div>
-            <FieldRenderer label="Email Address" type="text" value={form?.custEmail || ""} onChange={(v) => onChangeForm({ custEmail: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} maxLength={getLen("cust_email", 150)} />
-            <FieldRenderer label="Address 1" required type="text" value={form?.custAddr1 || ""} onChange={(v) => onChangeForm({ custAddr1: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} maxLength={getLen("cust_addr1", 255)} />
-            <FieldRenderer label="Address 2" type="text" value={form?.custAddr2 || ""} onChange={(v) => onChangeForm({ custAddr2: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} maxLength={getLen("cust_addr2", 255)} />
-            <FieldRenderer label="Address 3" type="text" value={form?.custAddr3 || ""} onChange={(v) => onChangeForm({ custAddr3: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} maxLength={getLen("cust_addr3", 255)} />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-              <FieldRenderer label="ZIP Code" type="text" value={form?.custZip || ""} onChange={(v) => onChangeForm({ custZip: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} maxLength={getLen("cust_zip", 20)} />
-              <FieldRenderer label="Source" required type="select" value={form?.source || ""} options={sourceOptions} onChange={(v) => onChangeForm({ source: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} />
-            </div>
-          </Card>
-        </div>
+          <RegistrationInfo
+            layout="straight"
+            disabled
+            data={{
+              registeredBy: form?.registeredBy || "",
+              registeredDate: form?.registeredDate || "",
+              lastUpdatedBy: form?.updatedBy || "",
+              lastUpdatedDate: form?.updatedDate || "",
+            }}
+          />
 
-        <div className="flex flex-col gap-6">
-          <Card className="border border-blue-500/30 rounded-lg overflow-hidden">
+          {/* ── MIDDLE CARD: Collapsible Sidebar ── */}
+          <Card className="border border-blue-500/30 rounded-lg overflow-hidden !focus-within:ring-0 !focus-within:shadow-none !focus-within:-translate-y-0">
             <div className="flex flex-col md:flex-row">
 
-              {/* Collapsible Sidebar (Responsive: Tabs on Mobile) */}
+              {/* ── Sidebar ── */}
               <div
                 className={`flex md:flex-col border-b md:border-b-0 md:border-r border-blue-500/30 bg-slate-50 transition-all duration-200 ${sidebarCollapsed ? "md:w-12 md:min-w-[48px]" : "md:w-48 md:min-w-[192px]"}`}
               >
-                {/* Toggle button - Hidden on mobile */}
+                {/* Toggle button — desktop only */}
                 <button
                   type="button"
                   onClick={() => setSidebarCollapsed((v) => !v)}
@@ -279,41 +385,16 @@ const CustSetupTab = forwardRef(
                   </svg>
                 </button>
 
-                {/* Tab items (Responsive: Horizontally scrollable on mobile) */}
-                <div className="flex flex-row md:flex-col gap-2 md:gap-1 p-2 md:p-2 flex-1 overflow-x-auto">
-                  {[
-                    {
-                      id: "sales", label: "Sales & A/R",
-                      icon: (
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                          <rect x="2" y="3" width="12" height="10" rx="1.5" /><path d="M5 7h6M5 10h4" />
-                        </svg>
-                      )
-                    },
-                    {
-                      id: "other1", label: "Other Info 1",
-                      icon: (
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="8" cy="8" r="5.5" /><path d="M8 5.5v3l1.5 1.5" />
-                        </svg>
-                      )
-                    },
-                    {
-                      id: "other2", label: "Other Info 2",
-                      icon: (
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M3 4h10M3 8h7M3 12h5" />
-                        </svg>
-                      )
-                    },
-                  ].map((tab) => (
+                {/* Tab items */}
+                <div className="flex flex-row md:flex-col gap-2 md:gap-1 p-2 flex-1 overflow-x-auto">
+                  {TABS.map((tab) => (
                     <div key={tab.id} className="relative group flex-shrink-0 md:flex-shrink">
                       <button
                         type="button"
-                        onClick={() => setSalesTab(tab.id)}
+                        onClick={() => setActiveTab(tab.id)}
                         className={`flex items-center gap-3 w-full text-left rounded transition-colors duration-150 overflow-hidden whitespace-nowrap
                           ${sidebarCollapsed ? "md:justify-center md:px-0 md:py-2 px-4 py-2" : "px-4 py-2 md:px-3 md:py-2.5"}
-                          ${salesTab === tab.id
+                          ${activeTab === tab.id
                             ? "bg-blue-50 text-blue-700 md:border-b-0 border-b-2 md:border-l-2 border-blue-600 rounded-none"
                             : "text-slate-500 hover:bg-white hover:text-slate-700"
                           }`}
@@ -334,67 +415,231 @@ const CustSetupTab = forwardRef(
                 </div>
               </div>
 
-              {/* Content area */}
-              <div className="flex-1 p-5 md:p-7 space-y-5 md:space-y-6 min-w-0">
+              {/* ── Content Area ── */}
+              <div className="flex-1 p-5 md:p-6 space-y-4 min-w-0">
 
-                {salesTab === "sales" && (
+                {/* ── CONTACT ── */}
+                {activeTab === "contact" && (
+                  <>
+                    <SectionHeader title="CONTACT INFORMATION" />
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <FieldRenderer
+                        label="Contact Person"
+                        type="text"
+                        value={form?.custContact || ""}
+                        onChange={(v) => onChangeForm({ custContact: getValue(v) })}
+                        readOnly={isReadOnly}
+                        disabled={isDisabled}
+                        maxLength={getLen("cust_contact", 100)}
+                      />
+                      <FieldRenderer
+                        label="Position"
+                        type="text"
+                        value={form?.custPosition || ""}
+                        onChange={(v) => onChangeForm({ custPosition: getValue(v) })}
+                        readOnly={isReadOnly}
+                        disabled={isDisabled}
+                        maxLength={getLen("cust_position", 100)}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <FieldRenderer
+                        label="Telephone No."
+                        type="text"
+                        value={form?.custTelno || ""}
+                        onChange={(v) => onChangeForm({ custTelno: getValue(v) })}
+                        readOnly={isReadOnly}
+                        disabled={isDisabled}
+                        maxLength={getLen("cust_telno", 50)}
+                      />
+                      <FieldRenderer
+                        label="Mobile No."
+                        type="text"
+                        value={form?.custMobileno || ""}
+                        onChange={(v) => onChangeForm({ custMobileno: getValue(v) })}
+                        readOnly={isReadOnly}
+                        disabled={isDisabled}
+                        maxLength={getLen("cust_mobileno", 50)}
+                      />
+                    </div>
+
+                    <FieldRenderer
+                      label="Email Address"
+                      type="text"
+                      value={form?.custEmail || ""}
+                      onChange={(v) => onChangeForm({ custEmail: getValue(v) })}
+                      readOnly={isReadOnly}
+                      disabled={isDisabled}
+                      maxLength={getLen("cust_email", 150)}
+                    />
+
+                    <FieldRenderer
+                      label="Address 1"
+                      required
+                      type="text"
+                      value={form?.custAddr1 || ""}
+                      onChange={(v) => onChangeForm({ custAddr1: getValue(v) })}
+                      readOnly={isReadOnly}
+                      disabled={isDisabled}
+                      maxLength={getLen("cust_addr1", 255)}
+                    />
+
+                    <FieldRenderer
+                      label="Address 2"
+                      type="text"
+                      value={form?.custAddr2 || ""}
+                      onChange={(v) => onChangeForm({ custAddr2: getValue(v) })}
+                      readOnly={isReadOnly}
+                      disabled={isDisabled}
+                      maxLength={getLen("cust_addr2", 255)}
+                    />
+
+                    <FieldRenderer
+                      label="Address 3"
+                      type="text"
+                      value={form?.custAddr3 || ""}
+                      onChange={(v) => onChangeForm({ custAddr3: getValue(v) })}
+                      readOnly={isReadOnly}
+                      disabled={isDisabled}
+                      maxLength={getLen("cust_addr3", 255)}
+                    />
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <FieldRenderer
+                        label="ZIP Code"
+                        type="text"
+                        value={form?.custZip || ""}
+                        onChange={(v) => onChangeForm({ custZip: getValue(v) })}
+                        readOnly={isReadOnly}
+                        disabled={isDisabled}
+                        maxLength={getLen("cust_zip", 20)}
+                      />
+                      <FieldRenderer
+                        label="Source"
+                        required
+                        type="select"
+                        value={form?.source || ""}
+                        options={sourceOptions}
+                        onChange={(v) => onChangeForm({ source: getValue(v) })}
+                        readOnly={isReadOnly}
+                        disabled={isDisabled}
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* ── ACCOUNTING ── */}
+                {activeTab === "accounting" && (
+                  <>
+                    <SectionHeader title="ACCOUNTING INFORMATION" />
+
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <FieldRenderer
+                        label="TIN"
+                        required
+                        type="text"
+                        value={form?.custTin || ""}
+                        onChange={(v) => onChangeForm({ custTin: getValue(v) })}
+                        readOnly={isReadOnly}
+                        disabled={isDisabled}
+                        maxLength={getLen("cust_tin", 50)}
+                      />
+                      <FieldRenderer
+                        label="ATC Code"
+                        type="lookup"
+                        value={form?.atcCode || ""}
+                        onLookup={isDisabled ? undefined : () => setIsATCLookupOpen(true)}
+                        readOnly={isReadOnly}
+                        disabled={isDisabled}
+                      />
+                      <FieldRenderer
+                        label="VAT Code"
+                        required
+                        type="lookup"
+                        value={form?.vatCode || ""}
+                        onLookup={isDisabled ? undefined : () => setIsVATLookupOpen(true)}
+                        readOnly={isReadOnly}
+                        disabled={isDisabled}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <FieldRenderer
+                        label="Billing Terms"
+                        required
+                        type="lookup"
+                        value={form?.billtermCode || ""}
+                        onLookup={isDisabled ? undefined : () => setIsBillTermLookupOpen(true)}
+                        readOnly={isReadOnly}
+                        disabled={isDisabled}
+                        maxLength={getLen("billterm_code", 20)}
+                        labelClassName="!text-[12px]"
+                      />
+                      <FieldRenderer
+                        label="Business Style"
+                        type="select"
+                        value={form?.businessStyle || ""}
+                        options={[]}
+                        onChange={(v) => onChangeForm({ businessStyle: getValue(v) })}
+                        readOnly={isReadOnly}
+                        disabled={isDisabled}
+                      />
+                      <FieldRenderer
+                        label="Currency"
+                        type="lookup"
+                        value={form?.currCode || ""}
+                        onLookup={isDisabled ? undefined : () => setIsCurrLookupOpen(true)}
+                        readOnly={isReadOnly}
+                        disabled={isDisabled}
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* ── SALES ── */}
+                {activeTab === "sales" && (
                   <>
                     <SectionHeader title="SALES INFORMATION" />
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       <FieldRenderer
                         label="Sales Rep."
                         required
                         type="lookup"
-                        value={form?.salesRep || ""} // Ensure this matches your form key
-                        onLookup={
-                          isDisabled
-                            ? undefined
-                            : () => toggleLookup("salesRep", true)
-                        }
+                        value={form?.salesRep || ""}
+                        onLookup={isDisabled ? undefined : () => setIsSalesRepLookupOpen(true)}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
                       />
-
                       <FieldRenderer
                         label="Customer Type"
                         type="lookup"
                         value={form?.customerType || ""}
-                        onLookup={
-                          isDisabled
-                            ? undefined
-                            : () => toggleLookup("custType", true)
-                        }
+                        onLookup={isDisabled ? undefined : () => setIsCustTypeLookupOpen(true)}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
                       />
-
                       <FieldRenderer
                         label="Area"
                         type="lookup"
                         value={form?.area || ""}
-                        onLookup={
-                          isDisabled
-                            ? undefined
-                            : () => toggleLookup("area", true)
-                        }
+                        onLookup={isDisabled ? undefined : () => setIsAreaLookupOpen(true)}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
                       />
+                    </div>
 
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       <FieldRenderer
                         label="Zone"
                         type="lookup"
                         value={form?.zone || ""}
-                        onLookup={
-                          isDisabled
-                            ? undefined
-                            : () => toggleLookup("zone", true)
-                        }
+                        onLookup={isDisabled ? undefined : () => setIsZoneLookupOpen(true)}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
                       />
-
                       <FieldRenderer
                         label="Chain Flag"
                         type="select"
@@ -404,7 +649,6 @@ const CustSetupTab = forwardRef(
                         readOnly={isReadOnly}
                         disabled={isDisabled}
                       />
-
                       <FieldRenderer
                         label="Customer Since"
                         type="date"
@@ -416,214 +660,93 @@ const CustSetupTab = forwardRef(
                         readOnly={isReadOnly}
                         disabled={isDisabled}
                       />
+                    </div>
 
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       <FieldRenderer
                         label="Chain Code"
                         type="lookup"
                         value={form?.chainCode || ""}
-                        onLookup={
-                          isDisabled ? undefined : () => toggleLookup("chain", true)
-                        }
+                        onLookup={isDisabled ? undefined : () => {}}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
                       />
-
                       <FieldRenderer
                         label="Chain Customer"
                         type="lookup"
                         value={form?.chainCustomer || ""}
-                        onLookup={
-                          isDisabled
-                            ? undefined
-                            : () => toggleLookup("chainCust", true)
-                        }
+                        onLookup={isDisabled ? undefined : () => {}}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
                       />
-
-                      <div className="md:col-span-2">
-                        <FieldRenderer
-                          label="Shipping Lines"
-                          type="select"
-                          value={form?.shippingLines || ""}
-                          options={[]}
-                          onChange={(v) =>
-                            onChangeForm({ shippingLines: getValue(v) })
-                          }
-                          readOnly={isReadOnly}
-                          disabled={isDisabled}
-                        />
-                      </div>
-
-                      <FieldRenderer
-                        label="Source"
-                        required
-                        type="select"
-                        value={form?.source || ""}
-                        options={sourceOptions}
-                        onChange={(v) => onChangeForm({ source: getValue(v) })}
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
-
-                      <FieldRenderer
-                        label="Currency"
-                        type="lookup"
-                        value={form?.currCode || ""}
-                        onLookup={
-                          isDisabled ? undefined : () => toggleLookup("curr", true)
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
-
                       <FieldRenderer
                         label="Price Group"
                         type="select"
                         value={form?.priceGroup || ""}
                         options={[]}
-                        onChange={(v) =>
-                          onChangeForm({ priceGroup: getValue(v) })
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
-
-                      <FieldRenderer
-                        label="Direct SI/DR WH"
-                        type="lookup"
-                        value={form?.directWarehouse || ""}
-                        onLookup={
-                          isDisabled
-                            ? undefined
-                            : () => toggleLookup("warehouse", true)
-                        }
+                        onChange={(v) => onChangeForm({ priceGroup: getValue(v) })}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
                       />
                     </div>
 
-                    <SectionHeader title="ACCOUNTING INFORMATION" />
+                    <FieldRenderer
+                      label="Shipping Lines"
+                      type="select"
+                      value={form?.shippingLines || ""}
+                      options={[]}
+                      onChange={(v) => onChangeForm({ shippingLines: getValue(v) })}
+                      readOnly={isReadOnly}
+                      disabled={isDisabled}
+                    />
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-                      <FieldRenderer
-                        label="TIN"
-                        required
-                        type="text"
-                        value={form?.custTin || ""}
-                        // ---> ADDED ERROR AND VALIDATION CHECK <---
-                        error={tinError}
-                        helperText={isValidatingTin ? "Checking uniqueness..." : tinError}
-                        onChange={(v) => {
-                          const val = getValue(v);
-                          onChangeForm({ custTin: val });
-                          validateTin(val);
-                        }}
-                        readOnly={isReadOnly}
-                        disabled={isDisabled || isValidatingTin}
-                        maxLength={getLen("cust_tin", 50)}
-                      />
-
-                      <FieldRenderer
-                        label="ATC Code"
-                        type="lookup"
-                        value={form?.atcCode || ""}
-                        onLookup={
-                          isDisabled ? undefined : () => toggleLookup("atc", true)
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-                      <FieldRenderer
-                        label="VAT Code"
-                        required
-                        type="lookup"
-                        value={form?.vatCode || ""}
-                        onLookup={
-                          isDisabled ? undefined : () => toggleLookup("vat", true)
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
-
-                      <FieldRenderer
-                        label="Billing Terms"
-                        required
-                        type="lookup"
-                        value={form?.billtermCode || ""}
-                        onLookup={
-                          isDisabled
-                            ? undefined
-                            : () => toggleLookup("billTerm", true)
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                        maxLength={getLen("billterm_code", 20)}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-                      <FieldRenderer
-                        label="Business Style"
-                        type="select"
-                        value={form?.businessStyle || ""}
-                        options={[]}
-                        onChange={(v) =>
-                          onChangeForm({ businessStyle: getValue(v) })
-                        }
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
-                    </div>
+                    <FieldRenderer
+                      label="Direct SI/DR WH"
+                      type="lookup"
+                      value={form?.directWarehouse || ""}
+                      onLookup={isDisabled ? undefined : () => {}}
+                      readOnly={isReadOnly}
+                      disabled={isDisabled}
+                    />
                   </>
                 )}
 
-                {salesTab === "other1" && (
+                {/* ── CREDIT & COLLECTION ── */}
+                {activeTab === "cc" && (
                   <>
-                    <SectionHeader title="C&C INFORMATION" />
+                    <SectionHeader title="CREDIT & COLLECTION INFORMATION" />
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       <FieldRenderer
                         label="Credit Investigator"
                         type="text"
                         value={form?.creditInvestigator || ""}
-                        onChange={(v) =>
-                          onChangeForm({ creditInvestigator: getValue(v) })
-                        }
+                        onChange={(v) => onChangeForm({ creditInvestigator: getValue(v) })}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
                       />
-
                       <FieldRenderer
                         label="Credit Limit"
                         type="number"
                         value={form?.creditLimit || "0"}
-                        onChange={(v) =>
-                          onChangeForm({ creditLimit: getValue(v) })
-                        }
+                        onChange={(v) => onChangeForm({ creditLimit: getValue(v) })}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
                       />
-
                       <FieldRenderer
                         label="Total AR"
                         type="number"
                         value={form?.totalAR || ""}
-                        onChange={(v) => onChangeForm({ totalAR: getValue(v) })}
                         readOnly={true}
                         disabled={true}
                       />
+                    </div>
 
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       <FieldRenderer
                         label="Credit Balance"
                         type="number"
                         value={form?.creditBalance || "0"}
-                        onChange={(v) =>
-                          onChangeForm({ creditBalance: getValue(v) })
-                        }
                         readOnly={true}
                         disabled={true}
                       />
@@ -631,129 +754,98 @@ const CustSetupTab = forwardRef(
                   </>
                 )}
 
-                {salesTab === "other2" && (
+                {/* ── TC SIGNATORY ── */}
+                {activeTab === "tcsignatory" && (
                   <>
                     <SectionHeader title="TAX CERTIFICATE SIGNATORY" />
 
-                    <div className="space-y-4 md:space-y-5">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <FieldRenderer
                         label="Name"
                         type="text"
                         value={form?.taxSignatoryName || ""}
-                        onChange={(v) =>
-                          onChangeForm({ taxSignatoryName: getValue(v) })
-                        }
+                        onChange={(v) => onChangeForm({ taxSignatoryName: getValue(v) })}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
                       />
-
                       <FieldRenderer
                         label="TIN"
                         type="text"
                         value={form?.taxSignatoryTin || ""}
-                        onChange={(v) =>
-                          onChangeForm({ taxSignatoryTin: getValue(v) })
-                        }
+                        onChange={(v) => onChangeForm({ taxSignatoryTin: getValue(v) })}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
                       />
+                    </div>
 
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <FieldRenderer
                         label="Position"
                         type="text"
                         value={form?.taxSignatoryPosition || ""}
-                        onChange={(v) =>
-                          onChangeForm({ taxSignatoryPosition: getValue(v) })
-                        }
+                        onChange={(v) => onChangeForm({ taxSignatoryPosition: getValue(v) })}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
                       />
-
                       <FieldRenderer
                         label="Email Address"
                         type="text"
                         value={form?.taxSignatoryEmail || ""}
-                        onChange={(v) =>
-                          onChangeForm({ taxSignatoryEmail: getValue(v) })
-                        }
+                        onChange={(v) => onChangeForm({ taxSignatoryEmail: getValue(v) })}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
                       />
+                    </div>
 
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <FieldRenderer
                         label="ZIP Code"
                         type="text"
                         value={form?.taxSignatoryZip || ""}
-                        onChange={(v) =>
-                          onChangeForm({ taxSignatoryZip: getValue(v) })
-                        }
+                        onChange={(v) => onChangeForm({ taxSignatoryZip: getValue(v) })}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
                       />
                     </div>
                   </>
                 )}
+
               </div>{/* end content area */}
             </div>{/* end flex row */}
           </Card>
 
-          <div className="mt-2">
-            <RegistrationInfo
-              layout="twoCols"
-              disabled
-              data={{
-                registeredBy: form?.registeredBy || "",
-                registeredDate: form?.registeredDate || "",
-                lastUpdatedBy: form?.updatedBy || "",
-                lastUpdatedDate: form?.updatedDate || "",
-              }}
-            />
-          </div>
         </div>
 
+        {/* ── LOOKUP MODALS ── */}
         <SearchCusMast
-          isOpen={lookups.cust}
+          isOpen={isCustLookupOpen}
           customParam="ActiveAll"
           onClose={async (selected) => {
-            toggleLookup("cust", false);
+            setIsCustLookupOpen(false);
             if (!selected) return;
-
-            const code =
-              getValue(selected?.custCode) || getValue(selected?.cust_code);
-            const tin =
-              getValue(selected?.custTin) ||
-              getValue(selected?.cust_tin) ||
-              getValue(selected?.tin);
-
+            const code = getValue(selected?.custCode) || getValue(selected?.cust_code);
+            const tin = getValue(selected?.custTin) || getValue(selected?.cust_tin) || getValue(selected?.tin);
             if (!code) return;
-
-            onChangeForm({
-              custCode: code,
-              custTin: tin,
-              __isNew: false,
-            });
-
+            onChangeForm({ custCode: code, custTin: tin, __isNew: false });
             await onSelectCustomerCode?.(code);
           }}
         />
 
         <SearchBranchRef
-          isOpen={lookups.branch}
+          isOpen={isBranchLookupOpen}
           onClose={(selected) => {
-            toggleLookup("branch", false);
+            setIsBranchLookupOpen(false);
             if (!selected) return;
-            onChangeForm({
-              branchCode:
-                getValue(selected?.branchCode) ||
-                getValue(selected?.branch_code),
-            });
+            const branchCode = getValue(selected?.branchCode) || getValue(selected?.branch_code);
+            if (!branchCode) return;
+            onChangeForm({ branchCode });
           }}
         />
 
         <SearchATCRef
-          isOpen={lookups.atc}
+          isOpen={isATCLookupOpen}
           onClose={(selected) => {
-            toggleLookup("atc", false);
+            setIsATCLookupOpen(false);
             if (!selected) return;
             onChangeForm({
               atcCode: getValue(selected?.atcCode) || getValue(selected?.atc_code),
@@ -763,9 +855,9 @@ const CustSetupTab = forwardRef(
         />
 
         <SearchVATRef
-          isOpen={lookups.vat}
+          isOpen={isVATLookupOpen}
           onClose={(selected) => {
-            toggleLookup("vat", false);
+            setIsVATLookupOpen(false);
             if (!selected) return;
             onChangeForm({
               vatCode: getValue(selected?.vatCode) || getValue(selected?.vat_code),
@@ -775,27 +867,21 @@ const CustSetupTab = forwardRef(
         />
 
         <SearchBillTermRef
-          isOpen={lookups.billTerm}
+          isOpen={isBillTermLookupOpen}
           onClose={(selected) => {
-            toggleLookup("billTerm", false);
+            setIsBillTermLookupOpen(false);
             if (!selected) return;
             onChangeForm({
-              billtermCode:
-                getValue(selected?.billtermCode) ||
-                getValue(selected?.billterm_code) ||
-                getValue(selected?.code),
-              billtermName:
-                getValue(selected?.billtermName) ||
-                getValue(selected?.billterm_name) ||
-                getValue(selected?.name),
+              billtermCode: getValue(selected?.billtermCode) || getValue(selected?.billterm_code) || getValue(selected?.code),
+              billtermName: getValue(selected?.billtermName) || getValue(selected?.billterm_name) || getValue(selected?.name),
             });
           }}
         />
 
         <SearchCurrRef
-          isOpen={lookups.curr}
+          isOpen={isCurrLookupOpen}
           onClose={(selected) => {
-            toggleLookup("curr", false);
+            setIsCurrLookupOpen(false);
             if (!selected) return;
             onChangeForm({
               currCode: getValue(selected?.currCode),
@@ -803,10 +889,23 @@ const CustSetupTab = forwardRef(
             });
           }}
         />
-        <CustTypeLookupModal
-          isOpen={lookups.custType}
+
+        <SearchSalesRepRef
+          isOpen={isSalesRepLookupOpen}
           onClose={(selected) => {
-            toggleLookup("custType", false);
+            setIsSalesRepLookupOpen(false);
+            if (!selected) return;
+            onChangeForm({
+              salesRep: getValue(selected?.salesRepCode),
+              salesRepName: getValue(selected?.salesRepName),
+            });
+          }}
+        />
+
+        <CustTypeLookupModal
+          isOpen={isCustTypeLookupOpen}
+          onClose={(selected) => {
+            setIsCustTypeLookupOpen(false);
             if (!selected) return;
             onChangeForm({
               customerType: getValue(selected?.custTypeCode),
@@ -816,9 +915,9 @@ const CustSetupTab = forwardRef(
         />
 
         <AreaLookupModal
-          isOpen={lookups.area}
+          isOpen={isAreaLookupOpen}
           onClose={(selected) => {
-            toggleLookup("area", false);
+            setIsAreaLookupOpen(false);
             if (!selected) return;
             onChangeForm({
               area: getValue(selected?.areaCode),
@@ -827,25 +926,10 @@ const CustSetupTab = forwardRef(
           }}
         />
 
-        <SearchSalesRepRef
-          isOpen={lookups.salesRep}
-          onClose={(selected) => {
-            toggleLookup("salesRep", false);
-            if (!selected) return;
-
-            // Updates the form with the selected Sales Rep code
-            onChangeForm({
-              salesRep: getValue(selected?.salesRepCode),
-              // If you also track the name for display purposes elsewhere:
-              salesRepName: getValue(selected?.salesRepName),
-            });
-          }}
-        />
-
         <ZoneLookupModal
-          isOpen={lookups.zone}
+          isOpen={isZoneLookupOpen}
           onClose={(selected) => {
-            toggleLookup("zone", false);
+            setIsZoneLookupOpen(false);
             if (!selected) return;
             onChangeForm({
               zone: getValue(selected?.zoneCode),
@@ -853,7 +937,7 @@ const CustSetupTab = forwardRef(
             });
           }}
         />
-      </div>
+      </>
     );
   }
 );
