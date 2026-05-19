@@ -11,6 +11,8 @@ import {
     faUndo,
     faPenToSquare,
     faTrash,
+    faDownload,
+    faFileImport,
 } from "@fortawesome/free-solid-svg-icons";
 
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
@@ -73,7 +75,7 @@ const MSMast = () => {
 
     // Reference Tab State
     const refTabRef = useRef(null);
-    const [refState, setRefState] = useState({ isEditing: false, canSave: false });
+    const [refState, setRefState] = useState({ isEditing: false, canSave: false, activeRefTab: "category" });
 
     useEffect(() => {
         loadMasterList();
@@ -334,10 +336,15 @@ const MSMast = () => {
         }
 
         if (activeTab === "ref") {
+            const isCategoryTab = refState.activeRefTab === "category";
             return [
                 { key: "add", label: <span className="hidden sm:inline ml-1">Add</span>, icon: faPlus, onClick: () => refTabRef.current?.add?.(), className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
                 { key: "save", label: <span className="hidden sm:inline ml-1">Save</span>, icon: faSave, onClick: () => refTabRef.current?.save?.(), disabled: !refState.canSave, className: `${baseBtn} ${!refState.canSave ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
                 { key: "reset", label: <span className="hidden sm:inline ml-1">Reset</span>, icon: faUndo, onClick: () => refTabRef.current?.reset?.(), className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
+                ...(isCategoryTab ? [
+                    { key: "downloadTemplate", label: <span className="hidden sm:inline ml-1">Download Template</span>, icon: faDownload, onClick: () => refTabRef.current?.downloadTemplate?.(), className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
+                    { key: "importValidate", label: <span className="hidden sm:inline ml-1">Import & Validate</span>, icon: faFileImport, onClick: () => refTabRef.current?.triggerImport?.(), className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
+                ] : []),
             ];
         }
 

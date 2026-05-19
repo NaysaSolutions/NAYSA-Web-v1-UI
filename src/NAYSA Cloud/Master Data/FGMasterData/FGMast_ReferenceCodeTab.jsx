@@ -47,9 +47,9 @@ const FGMast_ReferenceCodeTab = forwardRef(({ onStateChange }, ref) => {
   const refTabs = useMemo(() => [
     { id: "category",       label: "Category Codes",       icon: faSitemap       },
     { id: "classification", label: "Classification Codes", icon: faLayerGroup    },
-    { id: "subclass",       label: "Sub Class Codes",      icon: faListAlt       },
-    { id: "uom",            label: "UOM Codes",            icon: faRulerCombined },
-    { id: "supplementary",  label: "Supplementary Codes",  icon: faTags          },
+    // { id: "subclass",       label: "Sub Class Codes",      icon: faListAlt       },
+    // { id: "uom",            label: "UOM Codes",            icon: faRulerCombined },
+    // { id: "supplementary",  label: "Supplementary Codes",  icon: faTags          },
   ], []);
 
   const [activeRefTab, setActiveRefTab] = useState(refTabs[0].id);
