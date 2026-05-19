@@ -26,6 +26,7 @@ import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
 import QstatLookupModal from "../../../Lookup/SearchQStatRef.jsx";
+import ItemMastLookupModal from "../../../Lookup/SearchItemMast.jsx";
 
 
 // Configuration
@@ -48,7 +49,6 @@ import {
   useTopCurrencyRow,
   useTopHSOption,
   useTopDocControlRow,
-  useTopDocDropDown,
 } from '@/NAYSA Cloud/Global/top1RefTable';
 
 import {
@@ -122,16 +122,6 @@ const toDateInputValue = (value) => {
   return "";
 };
 
-const normalizeGlRefDate = (value, fallback = "") => {
-  const raw = String(value || "").trim();
-  const fallbackValue = String(fallback || "").trim();
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) return raw;
-  const converted = useformatToDatev2(raw);
-  if (converted && !converted.endsWith("/0001")) return converted;
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(fallbackValue)) return fallbackValue;
-  const convertedFallback = useformatToDatev2(fallbackValue);
-  return convertedFallback && !convertedFallback.endsWith("/0001") ? convertedFallback : "";
-};
 
 const MSAJ = () => {
 
@@ -169,13 +159,13 @@ const MSAJ = () => {
 
 
     // HS Option
-    glCurrMode:"M",
-    glCurrDefault:"PHP",
+    glCurrMode:companyInfo?.glCurrMode||"",
+    glCurrDefault:companyInfo?.currCode||"",
     withCurr2:false,
     withCurr3:false,
-    glCurrGlobal1:"",
-    glCurrGlobal2:"",
-    glCurrGlobal3:"",
+    glCurrGlobal1:companyInfo?.glCurrGlobal1||"",
+    glCurrGlobal2:companyInfo?.glCurrGlobal2||"",
+    glCurrGlobal3:companyInfo?.glCurrGlobal3||"",
 
 
     
@@ -214,11 +204,11 @@ const MSAJ = () => {
     selectedWH:"",
 
     
-    // Currency information
-    currCode: "PHP",
-    currName: "Philippine Peso",
-    currRate: "1.000000",
-    defaultCurrRate:"1.000000",
+     // Currency information
+    currCode: companyInfo?.currCode||"",
+    currName: companyInfo?.currName||"",
+    currRate: formatNumber(companyInfo?.currRate||1,6),
+    defaultCurrRate:formatNumber(companyInfo?.currRate||1,6),
 
 
     //Other Header Info
@@ -227,7 +217,7 @@ const MSAJ = () => {
     refDocNo1: "",
     refDocNo2: "", 
     remarks: "",
-    selectedAJType : "REG",
+    selectedAJType : "BB",
     userCode: currentUserRow?.userCode||user?.USER_CODE||"", 
 
     //Detail 1-2
@@ -257,8 +247,8 @@ const MSAJ = () => {
     showAtcModal:false,
     showSlModal:false,
     msLookupModalOpen:false,
+    itemMastLookupOpen:false,
     warehouseLookupOpen:false,
-    warehouseLookupKey:0,
 
     currencyModalOpen:false,
     branchModalOpen:false,
@@ -370,8 +360,8 @@ const MSAJ = () => {
   showAllTranDocNo,
   showQstatModal,
   msLookupModalOpen,
+  itemMastLookupOpen,
   warehouseLookupOpen,
-  warehouseLookupKey,
   locationLookupOpen
 
 } = state;
@@ -404,10 +394,6 @@ const MSAJ = () => {
         invAcct: glAccountFilter.ActiveAll,
   };
   const customParam = customParamMap[accountModalSource] || null;
-  const selectedAJTypeName =
-    ajTypes.find((type) => type?.DROPDOWN_CODE === selectedAJType)?.DROPDOWN_NAME || "";
-  const isBeginningBalance =
-    selectedAJType === "BB" || /beginning\s*balance/i.test(selectedAJTypeName);
   
 
 
@@ -479,7 +465,7 @@ useEffect(() => {
     if (!refsLoaded) return;
     const ajDrop = getAllDropDown("AJTRAN_TYPE", docType);
     if (ajDrop.length > 0) {
-      updateState({ ajTypes: ajDrop, selectedAJType: "" });
+      updateState({ ajTypes: ajDrop, selectedAJType: "BB" });
     }
   }, [docType, refsLoaded]);
 
@@ -490,6 +476,8 @@ useEffect(() => {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+
 
 const handleReset = () => {
       clearMsajDetailSorting();
@@ -512,7 +500,7 @@ const handleReset = () => {
       detailRowsGL:[],
       documentStatus:"",
       itemSingleSelect:false,
-      selectedAJType:"",
+      selectedAJType:"BB",
       WHCode:"",
       WHName:"",
       LocCode:"",
@@ -536,91 +524,24 @@ const handleReset = () => {
 
 
    const loadCompanyData = async () => {
-
     updateState({isLoading:true})
-
-    try {
-      // 🔹 1. Run these in parallel since they don’t depend on each other      
-      const data = await useTopDocDropDown(docType,"AJTRAN_TYPE");
-      if(data){
-        updateState({
-         ajTypes: data,
-         selectedAJType: "",
-          });
-        };   
-
-        
-
-      // 🔹 2. Document row (independent)
-      const docRow = await useTopDocControlRow(docType);
-
-      if (docRow) {
-        updateState({
-          documentName: docRow.docName,
-          documentSeries: docRow.docName,
-          documentDocLen: docRow.docName,
-        });
-      }
-
-
-
-      // 🔹 3. HS Options + Currency row (dependent chain)
-      const hsOption = await useTopHSOption();
-      if (hsOption) {
-        updateState({
-          glCurrMode: hsOption.glCurrMode,
-          glCurrDefault: hsOption.glCurrDefault,
-          currCode: hsOption.glCurrDefault,
-          glCurrGlobal1: hsOption.glCurrGlobal1,
-          glCurrGlobal2: hsOption.glCurrGlobal2,
-          glCurrGlobal3: hsOption.glCurrGlobal3,
-        });
-
-        const curr = await useTopCurrencyRow(hsOption.glCurrDefault);
-        if (curr) {
-          updateState({
-            currName: curr.currName,
-            currRate: formatNumber(1, 6),
-          });
-        }
-      }
-
-      
+    try {     
      const tbls = 'msaj_hd,msaj_dt1,msaj_dt2'
      const hdtblcol_result = await useFieldLenghtCheck(tbls);
      if (hdtblcol_result){
        updateState({tblFieldArray :hdtblcol_result })
      }
-      
 
 
     } catch (err) {
       console.error("Error fetching data:", err);
     }
-
      updateState({isLoading:false})
   };
 
 
 
   
-const loadCurrencyMode = (
-
-      mode = glCurrMode,
-      defaultCurr = glCurrDefault,
-      curr = currCode
-    ) => {
-
-    const calcWithCurr3 = mode === "T";
-    const calcWithCurr2 = (mode === "M" && defaultCurr !== curr) || mode === "D" || calcWithCurr3;
-
-      updateState({
-        glCurrMode: mode,
-        withCurr2: calcWithCurr2,
-        withCurr3: calcWithCurr3,
-      });
-};
-
 
 
 
@@ -634,9 +555,6 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
 
   try {
     const data = await useFetchTranData(documentNo, branchCode,docType,"msajNo",direction);
-
-    console.log(data.msajId)
-
     if (!data?.msajId) {
       Swal.fire({ icon: 'info', title: 'No Records Found', text: 'Transaction does not exist.' });
       return resetState();
@@ -823,7 +741,7 @@ const handleActivityOption = async (action) => {
     }
 
     if (action === "Upsert") {
-      if (finalDetailRowsGL.length === 0 && !isBeginningBalance) {
+      if (finalDetailRowsGL.length === 0 && selectedAJType !== "BB") {
         const newGlEntries = await useGenerateGLEntries(
           docType,
           buildGlData([])
@@ -1069,6 +987,14 @@ const handleGetItem = async (index = null) => {
 
     console.log(isValid)
 
+    if (["BB", "IG"].includes(selectedAJType)) {
+      updateState({
+        itemSingleSelect: false,
+        itemMastLookupOpen: true,
+      });
+      return;
+    }
+
     await handleOpenMSLookup(false);
     return;
 };
@@ -1078,6 +1004,15 @@ const handleGetItem = async (index = null) => {
 
   const handleAddItem = async (index) => {
   if (!selectedAJType) return;
+
+  if (["BB", "IG"].includes(selectedAJType)) {
+    updateState({
+      selectedRowIndex: index,
+      itemSingleSelect: true,
+      itemMastLookupOpen: true,
+    });
+    return;
+  }
 
     updateState({ selectedRowIndex: index}); 
     await handleOpenMSLookup(true);
@@ -1227,7 +1162,7 @@ const handleFieldBehavior = (option) => {
 
     case "hiddenBBMode":
      return (
-        isBeginningBalance || currentUserRow?.viewCostamt ==='N'
+        selectedAJType === "BB" || currentUserRow?.viewCostamt ==='N'
       );
 
 
@@ -1237,7 +1172,7 @@ const handleFieldBehavior = (option) => {
 
 
   case "allowInsert":
-      return isBeginningBalance || ["IG", "IR"].includes(selectedAJType);
+      return ["BB", "IG", "IR"].includes(selectedAJType);
 
 
       case "hiddenCAMode":
@@ -1932,79 +1867,6 @@ const handleSaveAndPrint = async (documentID) => {
 
 
 
-const normalizeSelectValue = (val) => {
-  if (val && typeof val === "object") {
-    return val.target?.value ?? val.value ?? val.DROPDOWN_CODE ?? val.dropdownCode ?? "";
-  }
-  return val ?? "";
-};
-
-const handleAdjustmentTypeChange = (val) => {
-  const nextAJType = normalizeSelectValue(val);
-
-  updateState({
-    selectedAJType: nextAJType,
-    warehouseLookupOpen: false,
-    locationLookupOpen: false,
-    msLookupModalOpen: false,
-    accountModalSource: null,
-    selectedRowIndex: null,
-    selectedWH: "",
-    WHCode: "",
-    WHName: "",
-    LocCode: "",
-    LocName: "",
-    detailRowsGL: [],
-  });
-
-  setTimeout(() => {
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur();
-    }
-  }, 0);
-};
-
-const handleOpenHeaderWarehouseLookup = () => {
-  if (isFormDisabled) return;
-
-  setState((prev) => ({
-    ...prev,
-    warehouseLookupOpen: false,
-    locationLookupOpen: false,
-    accountModalSource: null,
-    selectedRowIndex: null,
-    selectedWH: "",
-    warehouseLookupKey: (Number(prev.warehouseLookupKey) || 0) + 1,
-  }));
-
-  setTimeout(() => {
-    setState((prev) => ({
-      ...prev,
-      warehouseLookupOpen: true,
-    }));
-  }, 0);
-};
-
-const handleOpenDetailWarehouseLookup = (index) => {
-  if (isFormDisabled) return;
-
-  setState((prev) => ({
-    ...prev,
-    warehouseLookupOpen: false,
-    locationLookupOpen: false,
-    selectedRowIndex: index,
-    accountModalSource: "whouseCode",
-    warehouseLookupKey: (Number(prev.warehouseLookupKey) || 0) + 1,
-  }));
-
-  setTimeout(() => {
-    setState((prev) => ({
-      ...prev,
-      warehouseLookupOpen: true,
-    }));
-  }, 0);
-};
-
 const handleCloseWarehouseLookup = (row) => {
   if (row) {
     accountModalSource
@@ -2018,7 +1880,7 @@ const handleCloseWarehouseLookup = (row) => {
     
 
     const hasDetails = detailRows && detailRows.length > 0;
-    if (!accountModalSource && (selectedAJType === "IG" || isBeginningBalance) && hasDetails) {
+    if (!accountModalSource && (selectedAJType === "IG" || selectedAJType === "BB") && hasDetails) {
       
       Swal.fire({
         title: 'Apply to Details?',
@@ -2040,7 +1902,7 @@ const handleCloseWarehouseLookup = (row) => {
     }
   }
   
-  updateState({ warehouseLookupOpen: false, accountModalSource: null, selectedRowIndex: null });
+  updateState({ warehouseLookupOpen: false,accountModalSource:"" });
 };
 
 
@@ -2055,7 +1917,7 @@ const handleCloseLocationLookup = (row) => {
       : updateState({ LocCode: row.locCode, LocName: row.locName });
 
      const hasDetails = detailRows && detailRows.length > 0;
-      if (!accountModalSource && (selectedAJType === "IG" || isBeginningBalance) && hasDetails) {
+      if (!accountModalSource && (selectedAJType === "IG" || selectedAJType === "BB") && hasDetails) {
         
         Swal.fire({
           title: 'Apply to Details?',
@@ -2075,7 +1937,7 @@ const handleCloseLocationLookup = (row) => {
       });
     }
   }
-  updateState({ locationLookupOpen: false, selectedWH:"", accountModalSource: null, selectedRowIndex: null });
+  updateState({ locationLookupOpen: false, selectedWH:"" ,accountModalSource:"" });
 };
 
 
@@ -2155,12 +2017,12 @@ const handleCloseBranchModal = (selectedBranch) => {
       const custData = response?.data?.[0]?.result ? JSON.parse(response.data[0].result) : [];
   
 
-      const useMasterItemLookup = isBeginningBalance || selectedAJType === "IG" || itemSingleSelect;
-      const colConfig = await useSelectedHSColConfig(useMasterItemLookup ? "AllMastItemLookup" : "getInvLookupMS");
+      const lookupTypes = ["BB", "IG"];  
+      const colConfig = await useSelectedHSColConfig((lookupTypes.includes(selectedAJType) || itemSingleSelect) ? "AllMastItemLookup" : "getInvLookupMS");
 
 
      if (custData.length === 0) {
-        useSwalInfoAlert(useMasterItemLookup ? "MS Master Data" : "MS Location Balance","No records found")
+        useSwalInfoAlert(lookupTypes.includes(selectedAJType) ? "MS Master Data" : "MS Location Balance","No records found")
          updateState({ isLoading: false });
         return; 
       }
@@ -2173,8 +2035,7 @@ const handleCloseBranchModal = (selectedBranch) => {
   
 
     } catch (error) {
-      const useMasterItemLookup = isBeginningBalance || selectedAJType === "IG" || itemSingleSelect;
-      useSwalErrorAlert(useMasterItemLookup ? "MS Master Data" : "MS Location Balance","No records found")
+      useSwalErrorAlert(lookupTypes.includes(selectedAJType) ? "MS Master Data" : "MS Location Balance","No records found")
       updateState({ 
           globalLookupRow: [] ,
           globalLookupHeader: [],
@@ -2358,6 +2219,32 @@ const handleCloseMSLookup = (selectedItems) => {
    updateState({itemSingleSelect: false ,msLookupModalOpen: false });
 };
 
+const handleCloseItemMastLookup = (selectedItems) => {
+  if (!selectedItems) {
+    updateState({ itemMastLookupOpen: false, itemSingleSelect: false });
+    return;
+  }
+
+  const itemsArray = Array.isArray(selectedItems.records)
+    ? selectedItems.records
+    : selectedItems.records ? [selectedItems.records] : [];
+
+  if (itemSingleSelect) {
+    if (itemsArray.length > 0 && selectedRowIndex !== null) {
+      handleDetailChange(selectedRowIndex, "itemCode", itemsArray[0], false);
+    }
+    updateState({
+      itemMastLookupOpen: false,
+      itemSingleSelect: false,
+      selectedRowIndex: null,
+    });
+    return;
+  }
+
+  handleCloseMSLookup(selectedItems);
+  updateState({ itemMastLookupOpen: false });
+};
+
 
 
 
@@ -2368,7 +2255,7 @@ const renderMsajDetailColumn = (columnKey, row, index) => {
   const style = getMsajDetailCellStyle(columnKey, columnWidth);
   const isNegative = parseFormattedNumber(row.quantity) < 0;
   const textColorClass = isNegative ? "text-red-600" : "";
-  const canLookupStock = (isBeginningBalance || ["IG", "IR"].includes(selectedAJType)) && !isFormDisabled && row.operation !== "S";
+  const canLookupStock = ["BB", "IG", "IR"].includes(selectedAJType) && !isFormDisabled && row.operation !== "S";
 
   const focusNextDetailCell = (field) => {
     focusNextMsajDetailRowInput(index, field, {
@@ -2393,7 +2280,7 @@ const renderMsajDetailColumn = (columnKey, row, index) => {
 
   const detailColumnRenderers = {
     ln: () => <td key={columnKey} className={`global-tran-td-ui text-center ${textColorClass}`} style={style}>{index + 1}</td>,
-    itemCode: () => lookupCell("itemCode", () => handleAddItem(index), { hideIcon: !(row.operation === "A" && selectedAJType === "IR") }),
+    itemCode: () => lookupCell("itemCode", () => handleAddItem(index), { hideIcon: !(["BB", "IG"].includes(selectedAJType) || (row.operation === "A" && selectedAJType === "IR")) }),
     itemName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("itemName", { readOnly: true })}</td>,
     uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("uomCode", { readOnly: true, className: "text-center" })}</td>,
     quantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("quantity", { allowNegative: true })}</td>,
@@ -2402,7 +2289,7 @@ const renderMsajDetailColumn = (columnKey, row, index) => {
     lotNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("lotNo", { readOnly: isFormDisabled || selectedAJType === "IL" || selectedAJType === "CA" || (selectedAJType === "IR" && row.operation === "S"), maxLength: useGetFieldLength(tblFieldArray, "lot_no") })}</td>,
     bbDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="date" id={`bbDate-${index}`} className={`w-full global-tran-td-inputclass-ui text-center ${textColorClass}`.trim()} value={toDateInputValue(row.bbDate)} readOnly={isFormDisabled || selectedAJType === "IL" || selectedAJType === "CA" || (selectedAJType === "IR" && row.operation === "S")} onChange={(e) => handleDetailChange(index, "bbDate", e.target.value, false)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("bbDate"); } }} /></td>,
     qstatCode: () => lookupCell("qstatCode", () => updateState({ selectedRowIndex: index, showQstatModal: true }), { hideIcon: !canLookupStock }),
-    whouseCode: () => lookupCell("whouseCode", () => handleOpenDetailWarehouseLookup(index), { hideIcon: !canLookupStock }),
+    whouseCode: () => lookupCell("whouseCode", () => updateState({ selectedRowIndex: index, warehouseLookupOpen: true, accountModalSource: "whouseCode" }), { hideIcon: !canLookupStock }),
     locCode: () => lookupCell("locCode", () => updateState({ selectedRowIndex: index, locationLookupOpen: true, selectedWH: row.whouseCode, accountModalSource: "locCode" }), { hideIcon: !canLookupStock }),
     acctCode: () => lookupCell("acctCode", () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "invAcct" })),
     rcCode: () => lookupCell("rcCode", () => updateState({ selectedRowIndex: index, showRcModal: true, accountModalSource: "rcCode" })),
@@ -2586,7 +2473,7 @@ return (
                 type="select"
                 value={selectedAJType || ""}
                 disabled={isFormDisabled || detailRows.length > 0}
-                onChange={handleAdjustmentTypeChange}
+                onChange={(val) => updateState({ selectedAJType: val })}
                 options={ajTypes
                   .filter((type) => type?.DROPDOWN_CODE && !(type.DROPDOWN_CODE === "CA" && handleFieldBehavior("noViewCostamt")))
                   .map((type) => ({ label: type.DROPDOWN_NAME, value: type.DROPDOWN_CODE }))}
@@ -2623,7 +2510,7 @@ return (
                 disabled={isFormDisabled}
                 readOnly
                 lookupDisabled={isFormDisabled}
-                onLookup={handleOpenHeaderWarehouseLookup}
+                onLookup={() => !isFormDisabled && updateState({ warehouseLookupOpen: true })}
               />
 
               <FieldRenderer
@@ -2655,11 +2542,11 @@ return (
             </div>
           </div>
         </div>
-      </div>
+    </div>
 
 
-          {/* APV Detail Section */}
-          <div id="apv_dtl" className="global-tran-tab-div-ui mt-3">
+          {/* Item Details Section */}
+          <div id="apv_dtl" className="global-tran-tab-div-ui">
 
           {/* Tab Navigation */}
           <div className="global-tran-tab-nav-ui">
@@ -2692,7 +2579,7 @@ return (
                   </Fragment>
                 ))}
                 {!isFormDisabled && (
-                  <th key="detail-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
+                  <th key="detail-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
                 )}
               </tr>
               {renderMsajDetailHeaderContextMenu()}
@@ -2772,7 +2659,7 @@ return (
 
     
         {/* General Ledger Button */}
-        <div className="global-tran-tab-div-ui mt-3" hidden={handleFieldBehavior("hiddenBBMode")}>
+        <div className="global-tran-tab-div-ui" hidden={handleFieldBehavior("hiddenBBMode")}>
 
           {/* Tab Navigation */}
           <div className="global-tran-tab-nav-ui">
@@ -2819,7 +2706,7 @@ return (
                     </Fragment>
                   ))}
                   {!isFormDisabled && (
-                    <th key="gl-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
+                    <th key="gl-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
                   )}
                 </tr>
                 {renderMsajGlHeaderContextMenu()}
@@ -2890,6 +2777,10 @@ return (
         
 
       </div>
+
+      
+
+    </div>
 
 
 
@@ -3029,16 +2920,28 @@ return (
                 singleSelect={itemSingleSelect}
               />
         )}
+
+      {itemMastLookupOpen && (
+        <ItemMastLookupModal
+          isOpen={itemMastLookupOpen}
+          endpoint="getInvLookupMS"
+          onClose={handleCloseItemMastLookup}
+          onCancel={() => updateState({ itemMastLookupOpen: false, itemSingleSelect: false })}
+          enableMultiSelect={!itemSingleSelect}
+          docType="PRMS"
+        />
+      )}
         
 
 
-        <WarehouseLookupModal
-          key={`warehouse-${warehouseLookupKey}-${branchCode || ""}-${accountModalSource || "header"}`}
-          isOpen={warehouseLookupOpen}
-          onClose={handleCloseWarehouseLookup}
-          filter={isBeginningBalance ? "ActiveAll" : "ByBC" + (branchCode || "")}
-          source={accountModalSource || null}
-        />  
+        {warehouseLookupOpen && (
+            <WarehouseLookupModal
+              isOpen={warehouseLookupOpen}
+              onClose={handleCloseWarehouseLookup}
+              filter={"ByBC" + branchCode}
+              source={accountModalSource}
+            />
+          )}  
    
       {locationLookupOpen && (
         <LocationLookupModal
@@ -3059,8 +2962,6 @@ return (
       )}
 
       
-    </div>
-
     </div>
 
 
