@@ -112,7 +112,7 @@ import SalesPMCustomerItem from "./NAYSA Cloud/Matrix/SalesPMCustomerItem.jsx"
 import CheckTemplateSetup from "./NAYSA Cloud/Matrix/CheckTemplateSetup.jsx"
 import PRInq from "./NAYSA Cloud/Module/Main Module/Purchasing/PRInq.jsx";
 import POInq from "./NAYSA Cloud/Module/Main Module/Purchasing/POInquiry.jsx";
-
+import JOInq from "./NAYSA Cloud/Module/Main Module/Purchasing/JOInquiry.jsx";
 // --- PRINTING / MODALS ---
 // import ARReportModal from "./NAYSA Cloud/Printing/ARReport.jsx";
 // import APReportModal from "./NAYSA Cloud/Printing/APReport.jsx";
@@ -345,7 +345,8 @@ export const pageRegistry = {
   // Purchasing Inquiry (Unified/Merged)
   PRInquiry: PRInquiry, 
   PRInq: PRInquiry,     
-  POInq: POInq,         
+  POInq: POInq,    
+  JOInq: JOInq,        
 
   // Printing (Universal Modal Mapping)
   APReportModal: (props) => <UniversalReportModal {...props} module="AP" />,
