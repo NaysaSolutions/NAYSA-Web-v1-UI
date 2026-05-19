@@ -70,6 +70,7 @@ import PostMSRTV from "./NAYSA Cloud/Module/Main Module/Inventory/PostMSRTV.jsx"
 import PostMSAJ from "./NAYSA Cloud/Module/Main Module/Inventory/PostMSAJ.jsx";
 import MonthendGLProcessingModal from "@/NAYSA Cloud/Processing/MonthendProcessing.jsx";
 import YearendGLProcessingModal from "@/NAYSA Cloud/Processing/YearendProcessing.jsx";
+import BankReconProcessing from "@/NAYSA Cloud/Processing/BankReconProcessing.jsx";
 
 // --- REFERENCE FILES ---
 import Company from "./NAYSA Cloud/Reference File/Company.jsx";
@@ -323,6 +324,8 @@ export const pageRegistry = {
   PostSI,
   MonthendGLProcessingModal,
   YearendGLProcessingModal,
+  BankReconProcessing,
+  BankReconProcessingModal: BankReconProcessing,
 
 
   //Matrix
