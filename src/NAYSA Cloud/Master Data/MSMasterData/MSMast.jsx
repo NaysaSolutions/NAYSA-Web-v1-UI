@@ -341,10 +341,10 @@ const MSMast = () => {
                 { key: "add", label: <span className="hidden sm:inline ml-1">Add</span>, icon: faPlus, onClick: () => refTabRef.current?.add?.(), className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
                 { key: "save", label: <span className="hidden sm:inline ml-1">Save</span>, icon: faSave, onClick: () => refTabRef.current?.save?.(), disabled: !refState.canSave, className: `${baseBtn} ${!refState.canSave ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
                 { key: "reset", label: <span className="hidden sm:inline ml-1">Reset</span>, icon: faUndo, onClick: () => refTabRef.current?.reset?.(), className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
-                ...(isCategoryTab ? [
-                    { key: "downloadTemplate", label: <span className="hidden sm:inline ml-1">Download Template</span>, icon: faDownload, onClick: () => refTabRef.current?.downloadTemplate?.(), className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
-                    { key: "importValidate", label: <span className="hidden sm:inline ml-1">Import & Validate</span>, icon: faFileImport, onClick: () => refTabRef.current?.triggerImport?.(), className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
-                ] : []),
+                // ...(isCategoryTab ? [
+                //     { key: "downloadTemplate", label: <span className="hidden sm:inline ml-1">Download Template</span>, icon: faDownload, onClick: () => refTabRef.current?.downloadTemplate?.(), className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
+                //     { key: "importValidate", label: <span className="hidden sm:inline ml-1">Import & Validate</span>, icon: faFileImport, onClick: () => refTabRef.current?.triggerImport?.(), className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
+                // ] : []),
             ];
         }
 

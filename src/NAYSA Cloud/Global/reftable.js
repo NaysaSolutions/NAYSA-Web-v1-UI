@@ -24,7 +24,7 @@ export const reftables = {
     Cutoff: "Cycle Period",
     Currency: "Currency Codes",
     COAMast: "Chart of Accounts",
-    UserUpdate: "Update User",
+    UserUpdate: "User Management",
     BankMast: "Bank Master Data",
     BillCode: "Billing Codes",
     VendMast: "Payee Master Data",

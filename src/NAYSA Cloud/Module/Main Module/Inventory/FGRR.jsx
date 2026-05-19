@@ -42,6 +42,7 @@ import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 
+
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 
 // Configuration
@@ -100,12 +101,25 @@ const FGRR = (item) => {
   const location = useLocation();
 
   const { resetFlag } = useReset();
-  const { user } = useAuth();
+  const { user, companyInfo } = useAuth();
+const [isViewDocument, setIsViewDocument] = useState(false);
+
+  useEffect(() => {
+    const p = new URLSearchParams(location.search);
+    if (p.get("viewDocument") === "true") {
+      setIsViewDocument(true);
+    }
+  }, []);
+
+  const isViewDocumentUrl = isViewDocument;
+
+  const isGeneralLedgerEnabled =
+    String(companyInfo?.msinvGLMode || "").toUpperCase() !== "D";
 
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
 
   const openPOColSummary = [
-    { key: "BC", label: "BC", renderType: "text", width: 80 },
+    { key: "BC", label: "Branch", renderType: "text", width: 80 },
     { key: "PoNo", label: "PO No", renderType: "text", width: 140 },
     { key: "PoDate", label: "PO Date", renderType: "date", width: 120 },
     { key: "DelDate", label: "Del Date", renderType: "date", width: 120 },
@@ -281,11 +295,11 @@ const FGRR = (item) => {
     accountModalSource: null,
     showQstatModal: false,
 
-    fgLookupModalOpen: false,
+    msLookupModalOpen: false,
     tblFieldArray: [],
 
     activeTab: "basic",
-    GLactiveTab: "invoice", // same pattern as MSAJ (optional)
+    GLactiveTab: "invoice", // same pattern as FGAJ (optional)
     detailRowsGL: [], // DT2 rows
 
     // GL modal states
@@ -360,6 +374,11 @@ const FGRR = (item) => {
     cutoffFrom,
     cutoffTo,
 
+poId,
+prId,
+prNo,
+groupId,
+
     vendCode,
     vendName,
     LocCode,
@@ -407,7 +426,7 @@ const FGRR = (item) => {
     rcLookupContext,
     showAllTranDocNo,
 
-    fgLookupModalOpen,
+    msLookupModalOpen,
   } = state;
 
   const [header, setHeader] = useState({
@@ -447,9 +466,10 @@ const FGRR = (item) => {
     CLOSED: "global-tran-stat-text-closed-ui",
   };
   const statusColor = statusMap[displayStatus] || "";
-  const isFormDisabled = ["FINALIZED", "CANCELLED", "CLOSED"].includes(
-    displayStatus,
-  );
+  const isFormDisabled =
+  isViewDocumentUrl ||
+  ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+
 
   const updateTotalsDisplay = (input) => {
     const rows = Array.isArray(input)
@@ -558,6 +578,28 @@ const FGRR = (item) => {
     return [];
   };
 
+  const formatOpenPODate = (value) => {
+    if (!value) return "";
+
+    const text = String(value).trim();
+    const dateOnly = text.includes("T") ? text.split("T")[0] : text;
+    const ymdMatch = dateOnly.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+
+    if (ymdMatch) {
+      const [, year, month, day] = ymdMatch;
+      return `${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}/${year}`;
+    }
+
+    const date = new Date(text);
+    if (Number.isNaN(date.getTime())) return text;
+
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const year = date.getFullYear();
+
+    return `${month}/${day}/${year}`;
+  };
+
   const normalizeOpenPOSummaryRow = (row, index) => {
     const existingGroupId = getPOField(row, "groupId", "GROUP_ID");
     const tranId = getPOField(
@@ -572,6 +614,9 @@ const FGRR = (item) => {
     );
     const poId = getPOField(row, "PoId", "PO_ID", "poId", "po_id");
     const poNo = getPOField(row, "PoNo", "PO_NO", "poNo", "po_no");
+    const formattedPoDate = formatOpenPODate(
+      getPOField(row, "PoDate", "PO_DATE", "poDate", "po_date"),
+    );
 
     return {
       ...row,
@@ -594,7 +639,10 @@ const FGRR = (item) => {
       ),
       PoId: poId,
       PoNo: poNo,
-      PoDate: getPOField(row, "PoDate", "PO_DATE", "poDate", "po_date"),
+      PoDate: formattedPoDate,
+      PO_DATE: formattedPoDate,
+      poDate: formattedPoDate,
+      po_date: formattedPoDate,
       DelDate: getPOField(row, "DelDate", "DEL_DATE", "delDate", "del_date"),
       PoType: getPOField(row, "PoType", "PO_TYPE", "poType", "po_type"),
       RefNo: getPOField(row, "RefNo", "REF_NO", "refNo", "ref_no"),
@@ -648,7 +696,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     );
     const poNo = getPOField(row, "PoNo", "PO_NO", "poNo", "po_no");
     const lnNo =
-      getPOField(row, "lnNo", "Ln", "LN", "LINE_NO", "lnNo", "line_no") ||
+      getPOField(row, "ln", "Ln", "LN", "LINE_NO", "lnNo", "line_no") ||
       index + 1;
     const itemCode = getPOField(
       row,
@@ -658,8 +706,8 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       "ITEM_CODE",
       "JobCode",
       "JOB_CODE",
-      "MSCode",
-      "MS_CODE",
+      "FGCode",
+      "FG_CODE",
       "itemCode",
       "itemNo",
       "jobCode",
@@ -876,11 +924,11 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       Ln: lnNo,
       LN: lnNo,
       lnNo,
-      line_no: lnNo,
+      ln_no: lnNo,
       ItemCode: itemCode,
       ItemNo: itemCode,
       JobCode: itemCode,
-      MSCode: itemCode,
+      FGCode: itemCode,
       itemCode,
       itemNo: itemCode,
       jobCode: itemCode,
@@ -892,7 +940,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       ITEM_CODE: itemCode,
       ITEM_NO: itemCode,
       JOB_CODE: itemCode,
-      MS_CODE: itemCode,
+      FG_CODE: itemCode,
       ItemName: itemName,
       ItemDesc: itemName,
       Description: itemName,
@@ -1084,7 +1132,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       bc: row.branchCode,
       pono: row.poNo,
       ponumber: row.poNo,
-      lnNo: row.lnNo,
+      ln: row.lnNo,
       lineno: row.lnNo,
       linenumber: row.lnNo,
       itemcode: row.itemCode,
@@ -1157,7 +1205,51 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     );
   };
 
-  const handleOpenPOOpenLookup = async () => {
+ const getOpenPOVendorCode = (row = {}) =>
+   String(
+     getPOField(row, "VendCode", "VEND_CODE", "vendCode", "vend_code") || "",
+   )
+     .trim()
+     .toUpperCase();
+
+ const getOpenPOVendorName = (row = {}) =>
+   String(
+     getPOField(row, "VendName", "VEND_NAME", "vendName", "vend_name") || "",
+   ).trim();
+
+ const getUniqueOpenPOSuppliers = (records = []) => {
+   const supplierMap = new Map();
+
+   records.forEach((record) => {
+     const code = getOpenPOVendorCode(record);
+     const name = getOpenPOVendorName(record);
+     const key = code || name.toUpperCase();
+
+     if (key && !supplierMap.has(key)) {
+       supplierMap.set(key, { code, name });
+     }
+   });
+
+   return Array.from(supplierMap.values());
+ };
+
+ const validateOpenPOSameSupplier = async (records = []) => {
+   const suppliers = getUniqueOpenPOSuppliers(records);
+
+   if (suppliers.length <= 1) {
+     return true;
+   }
+
+   await Swal.fire({
+     icon: "warning",
+     title: "Open Purchase Order",
+     text: "Please select PO records from the same payee or supplier only.",
+   });
+
+   return false;
+ };
+
+ const handleOpenPOOpenLookup = async () => {
     try {
       updateState({ isLoading: true });
 
@@ -1232,11 +1324,26 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     return;
   }
 
-  updateState({ isLoading: true, poLookupModalOpen: false });
-
   try {
-    const summary = selection.summary?.[0] || {};
+    const summaries = Array.isArray(selection.summary) ? selection.summary : [];
+    const summary = summaries[0] || {};
     const details = selection.details || [];
+
+    if (!(await validateOpenPOSameSupplier(summaries.length > 0 ? summaries : details))) {
+      return;
+    }
+
+    updateState({ isLoading: true, poLookupModalOpen: false });
+
+    const selectedPoNos = [
+      ...new Set(
+        [...summaries, ...details]
+          .map((row) =>
+            getPOField(row, "PoNo", "PO_NO", "poNo", "po_no"),
+          )
+          .filter(Boolean),
+      ),
+    ];
     const poWhCode =
       getPOField(
         summary,
@@ -1275,10 +1382,6 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         "wh_name",
         "whouseName",
       );
-    const headerWhCode = state.WHCode || state.WHcode || WHCode || WHcode || "";
-    const headerWhName = state.WHName || WHName || "";
-    const headerLocCode = state.LocCode || LocCode || "";
-    const headerLocName = state.LocName || LocName || "";
 
     console.log("FGRR Reference PO warehouse fetch", {
       selection,
@@ -1323,17 +1426,27 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         "O";
 
       return {
-        lN: idx + 1,
-        lnNo: d.lnNo || d.lnNo || idx + 1,
+        lnNo: idx + 1,
+        lnNo: d.lnNo || d.ln || idx + 1,
 
-        invType: d.invType || "MS",
+        invType: d.invType || "FG",
         rrStatus,
         poStatus: d.poStatus || rrStatus,
-        groupId: d.categCode || d.CATEG_CODE || d.categ_code || "",
-        categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
+        poId: d.poId || d.po_id || summary.poId || summary.po_id || "",
+prId: d.prId || d.pr_id || "",
+prNo: d.prNo || d.pr_no || "",
+
+groupId:
+  d.groupId ||
+  d.group_id ||
+  d.GROUP_ID ||
+  d.GroupId ||
+  d.GROUPID ||
+  "",
+categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
 
         poNo: d.poNo || summary.poNo || "",
-        poLineno: d.lnNo || d.lnNo || idx + 1,
+        poLineno: d.lnNo || d.ln || idx + 1,
 
         itemCode: d.itemCode || "",
         itemName: d.itemName || "",
@@ -1343,7 +1456,16 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         uomCode2: d.uomCode2 || "",
         uomQty2: formatNumber(d.uomQty2 || 0, 6),
 
-        poQty: formatNumber(poQty, 6),
+        poQty: formatNumber(
+  parseFormattedNumber(
+    d.poQty ||
+    d.poQuantity ||
+    d.PO_QUANTITY ||
+    d.QtyOrdered ||
+    0
+  ),
+  6
+),
         rrQty: formatNumber(qtyBalance, 6),
         poBalance: formatNumber(qtyBalance, 6),
         freeQty: formatNumber(0, 6),
@@ -1366,22 +1488,22 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         bbDate: "",
         qstatCode: "",
 
-        whCode: headerWhCode || poWhCode || "",
-        whName: headerWhName || poWhName || "",
-        whouseCode: headerWhCode || poWhCode || "",
-        whouseName: headerWhName || poWhName || "",
-        LocCode: headerLocCode || "",
-        locCode: headerLocCode || "",
-        locName: headerLocName || "",
+        whCode: poWhCode || "",
+        whName: poWhName || "",
+        whouseCode: poWhCode || "",
+        whouseName: poWhName || "",
+        LocCode: "",
+        locCode: "",
+        locName: "",
       };
     });
 
     updateState({
-      poNo: summary.poNo || "",
+      poNo: selectedPoNos.join(", ") || summary.poNo || "",
       branchCode: summary.branchCode || branchCode,
       rcCode: summary.rcCode || rcCode,
-      vendCode: summary.vendCode || "",
-      vendName: summary.vendName || "",
+      vendCode: getPOField(summary, "VendCode", "VEND_CODE", "vendCode", "vend_code"),
+      vendName: getPOField(summary, "VendName", "VEND_NAME", "vendName", "vend_name"),
       currCode: summary.currCode || currCode || "PHP",
       currRate: formatNumber(summary.currRate || 1, 6),
       WHCode: poWhCode || WHCode || "",
@@ -1485,7 +1607,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       // ======================
       rcLookupModalOpen: false,
       rcLookupContext: "",
-      fgLookupModalOpen: false,
+      msLookupModalOpen: false,
       warehouseLookupOpen: false,
       locationLookupOpen: false,
       accountModalSource: "",
@@ -1499,45 +1621,39 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     updateState({ vatLookupOpen: true, vatLookupRowIndex: rowIndex });
   };
 
-  const handleCloseVatLookup = async (vat) => {
-    const rowIndex = state.vatLookupRowIndex;
+  const handleCloseVatLookup = (vat) => {
+    const rowIndex = state.vatLookupRowIndex;
 
-    updateState({ vatLookupOpen: false, vatLookupRowIndex: null });
+    updateState({ vatLookupOpen: false, vatLookupRowIndex: null });
 
-    if (!vat || rowIndex === null || rowIndex === undefined) return;
+    if (!vat || rowIndex === null || rowIndex === undefined) return;
 
-    const updatedRows = [...detailRows];
-    let row = { ...updatedRows[rowIndex] };
+    const updatedRows = [...detailRows];
+    let row = { ...updatedRows[rowIndex] };
 
-    // set VAT code always
-    row.vatCode = vat?.vatCode || "";
-    row.vatName = vat?.vatName || "";
+    // 1. Set VAT code and name values safely
+    row.vatCode = vat?.vatCode || vat?.VAT_CODE || "";
+    row.vatName = vat?.vatName || vat?.VAT_NAME || "";
 
-    // set VAT rate from lookup (supports various backend keys)
-    const lookupRate =
-      vat?.vatRate ??
-      vat?.VatRate ??
-      vat?.VAT_RATE ??
-      vat?.vat_rate ??
-      vat?.rate ??
-      vat?.vatPerc ??
-      vat?.vat_percent ??
-      "";
-    const fetchedRate = row.vatCode ? await fetchVatRate(row.vatCode) : "";
+    // 2. Extract VAT rate variant keys from modal lookup source
     const rate =
-      lookupRate !== "" &&
-      lookupRate !== null &&
-      lookupRate !== undefined &&
-      parseFormattedNumber(lookupRate) !== 0
-        ? lookupRate
-        : fetchedRate;
+      vat?.vatRate ??
+      vat?.vat_rate ??
+      vat?.rate ??
+      vat?.vatPerc ??
+      vat?.vat_percent ??
+      0;
 
-    row.vatRate = formatNumber(parseFormattedNumber(rate || 0), 2);
+    // 3. Set row field explicitly BEFORE recomputing rows math equations
+    row.vatRate = formatNumber(rate, 2);
+
+    // 4. Recompute transaction metrics with active rate variables loaded
     row = recalcFGRRRow(row);
 
-    updatedRows[rowIndex] = row;
-    updateState({ detailRows: updatedRows });
-  };
+    // 5. Update state instances safely
+    updatedRows[rowIndex] = row;
+    updateState({ detailRows: updatedRows });
+  };
 
   const loadCompanyData = async () => {
     updateState({ isLoading: true });
@@ -1606,7 +1722,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       }
 
       // -------------------------------------------------------
-      // 4) FIELD LENGTH CHECK (MSAJ style)
+      // 4) FIELD LENGTH CHECK (FGAJ style)
       // -------------------------------------------------------
       const lens = await useFieldLenghtCheck("msrr_hd,msrr_dt1,msrr_dt2");
       if (Array.isArray(lens)) {
@@ -1676,531 +1792,151 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
   );
 
   // ==========================
-  // FETCH (GET) – PR HEADER + DT1
-  // ==========================
+  // FETCH (GET) – FGRR HEADER + DT1
+  // ==========================
 
-  const fetchTranData = async (rrNo, branchCode, direction = "") => {
-    try {
-      updateState({ isLoading: true });
+  const fetchTranData = async (rrNo, branchCode, direction = "") => {
+    updateState({ isLoading: true });
 
-      const resp = await apiClient.get("/getFGRR", {
-        params: {
-          branchCode,
-          rrNo,
-          direction, // F/P/N/L or ''
-        },
-      });
+    try {
+      const data = await useFetchTranData(rrNo, branchCode, docType, "rrNo", direction);
 
-      const row = resp?.data?.data?.[0] ?? resp?.data?.[0] ?? resp?.data;
-      const jsonStr =
-        row?.result ?? row?.RESULT ?? row?.JsonResult ?? row?.jsonResult ?? row ?? null;
-
-      if (!jsonStr) {
-        updateState({ isLoading: false });
-        return;
-      }
-
-      const parsedResult =
-        typeof jsonStr === "string" ? JSON.parse(jsonStr) : jsonStr;
-      const parsed = Array.isArray(parsedResult)
-        ? parsedResult[0]
-        : Array.isArray(parsedResult?.data)
-          ? parsedResult.data[0]
-          : parsedResult;
-
-      const parsedDocumentNo =
-        getPOField(
-          parsed,
-          "rrNo",
-          "RR_NO",
-          "rr_no",
-          "fgrrNo",
-          "FGRR_NO",
-          "docNo",
-          "DocNo",
-          "DOC_NO",
-          "documentNo",
-          "DocumentNo",
-          "DOCUMENT_NO",
-        ) || rrNo;
-      const parsedDocumentId = getPOField(
-        parsed,
-        "rrId",
-        "rrHdId",
-        "RR_ID",
-        "RR_HD_ID",
-        "rr_id",
-        "rr_hd_id",
-        "fgrrId",
-        "fgrrHdId",
-        "FGRR_ID",
-        "FGRR_HD_ID",
-        "documentID",
-        "DocumentID",
-        "DOCUMENT_ID",
-        "docId",
-        "DOC_ID",
-      );
-
-      if (!parsed || !parsedDocumentNo) {
-        updateState({ isLoading: false });
-        return;
-      }
-
-      const parsedWHCode = getPOField(
-        parsed,
-        "WHCode",
-        "WHcode",
-        "WhCode",
-        "whCode",
-        "wh_code",
-        "whouseCode",
-        "warehouseCode",
-        "WH_CODE",
-        "WAREHOUSE_CODE",
-      );
-      const parsedWHName = getPOField(
-        parsed,
-        "WHName",
-        "WhName",
-        "whName",
-        "wh_name",
-        "whouseName",
-        "warehouseName",
-        "WH_NAME",
-        "WAREHOUSE_NAME",
-      );
-      const parsedLocCode = getPOField(
-        parsed,
-        "LocCode",
-        "locCode",
-        "loccode",
-        "loc_code",
-        "locationCode",
-        "LocationCode",
-        "location_code",
-        "LOC_CODE",
-        "LOCATION_CODE",
-      );
-      const parsedLocName = getPOField(
-        parsed,
-        "LocName",
-        "locName",
-        "loc_name",
-        "locationName",
-        "LocationName",
-        "location_name",
-        "LOC_NAME",
-        "LOCATION_NAME",
-      );
-      const parsedRRDate = String(
-        getPOField(
-          parsed,
-          "rrDate",
-          "RR_DATE",
-          "rr_date",
-          "documentDate",
-          "DocumentDate",
-          "DOC_DATE",
-          "docDate",
-        ) || "",
-      ).substring(0, 10);
-      const parsedStatus = getPOField(
-        parsed,
-        "rrStatus",
-        "RR_STATUS",
-        "status",
-        "Status",
-        "STATUS",
-        "documentStatus",
-        "DocumentStatus",
-      );
-
-      if (parsedRRDate) {
-        setHeader((prev) => ({ ...prev, rr_date: parsedRRDate }));
+      if (!data?.rrId) {
+        Swal.fire({ icon: 'info', title: 'No Records Found', text: 'Transaction does not exist.' });
+        updateState({ isLoading: false });
+        return;
       }
 
-      // -----------------------------
-      // HEADER (MSRR)
-      // -----------------------------
-      updateState({
-        documentNo: parsedDocumentNo,
-        documentID: parsedDocumentId,
-        documentDate: parsedRRDate || null,
-        cutoffCode: getPOField(parsed, "cutoffCode", "CUTOFF_CODE", "cutoff_code"),
+      const parsed = data;
+      const parsedDocumentNo = parsed.rrNo || "";
+      const parsedDocumentId = parsed.rrId || parsed.rrHdId;
 
-        poNo: getPOField(parsed, "poNo", "PoNo", "PO_NO", "po_no"),
-        prNo: getPOField(parsed, "prNo", "PrNo", "PR_NO", "pr_no"),
+      const parsedWHCode = parsed.WHCode || parsed.whCode || parsed.warehouseCode || "";
+      const parsedWHName = parsed.WHName || parsed.whName || parsed.warehouseName || "";
+      const parsedLocCode = parsed.LocCode || parsed.locCode || parsed.locationCode || "";
+      const parsedLocName = parsed.LocName || parsed.locName || parsed.locationName || "";
 
-        vendCode: getPOField(parsed, "vendCode", "VendCode", "VEND_CODE", "vend_code"),
-        vendName: getPOField(parsed, "vendName", "VendName", "VEND_NAME", "vend_name"),
+      // ===========================
+      // HEADER (FGRR)
+      // ===========================
+      updateState({
+        documentNo: parsedDocumentNo,
+        documentID: parsedDocumentId,
+        documentDate: parsed.rrDate || null,
+        cutoffCode: parsed.cutoffCode || "",
 
-        WHCode: parsedWHCode || "",
+        poNo: parsed.poNo || "",
+        prNo: parsed.prNo || "",
+
+        vendCode: parsed.vendCode || "",
+        vendName: parsed.vendName || "",
+
+        WHCode: parsedWHCode || "",
         WHcode: parsedWHCode || "",
         WHName: parsedWHName || "",
-        LocCode: parsedLocCode || "",
+        LocCode: parsedLocCode || "",
         LocName: parsedLocName || "",
 
-        drNo: getPOField(parsed, "drNo", "DrNo", "DR_NO", "dr_no", "refNo", "REF_NO"),
-        siNo: getPOField(parsed, "siNo", "SiNo", "SI_NO", "si_no"),
-        siDate: getPOField(parsed, "siDate", "SiDate", "SI_DATE", "si_date") || null,
+        drNo: parsed.drNo || "",
+        siNo: parsed.siNo || "",
+        siDate: parsed.siDate || null,
 
-        vatCode: getPOField(parsed, "vatCode", "VatCode", "VAT_CODE", "vat_code"),
-        rrAmount: getPOField(parsed, "rrAmount", "RR_AMOUNT", "rr_amount") || 0,
-        rrVat: getPOField(parsed, "rrVat", "RR_VAT", "rr_vat") || 0,
+        vatCode: parsed.vatCode || "",
+        rrAmount: parsed.rrAmount ?? 0,
+        rrVat: parsed.rrVat ?? 0,
 
-        refDocNo1: getPOField(parsed, "refrrNo1", "refDocNo1", "REF_DOC_NO1", "ref_doc_no1"),
-        refDocNo2: getPOField(parsed, "refrrNo2", "refDocNo2", "REF_DOC_NO2", "ref_doc_no2"),
+        refDocNo1: parsed.refrrNo1 || "",
+        refDocNo2: parsed.refrrNo2 || "",
 
-        remarks: getPOField(parsed, "remarks", "Remarks", "REMARKS"),
-        documentStatus: parsedStatus || "",
-        status: parsedStatus || "OPEN",
-      });
-
-      const dt1 = Array.isArray(parsed.dt1)
-        ? parsed.dt1
-        : Array.isArray(parsed.DT1)
-          ? parsed.DT1
-          : [];
-
-      const getRetrievedVatCode = (r) =>
-        getPOField(r, "vatCode", "VatCode", "VAT_CODE", "vat_code");
-
-      const vatCodes = [...new Set(dt1.map(getRetrievedVatCode).filter(Boolean))];
-      const vatRatePairs = await Promise.all(
-        vatCodes.map(async (code) => [code, await fetchVatRate(code)]),
-      );
-      const vatRateMap = Object.fromEntries(vatRatePairs);
-
-      const getRetrievedItemCode = (r) =>
-        getPOField(
-          r,
-          "itemNo",
-          "itemCode",
-          "item_no",
-          "item_code",
-          "ItemNo",
-          "ItemCode",
-          "ITEM_NO",
-          "ITEM_CODE",
-        );
-
-      const getRetrievedItemName = (r) =>
-        getPOField(
-          r,
-          "itemName",
-          "itemDesc",
-          "itemDescription",
-          "description",
-          "item_name",
-          "item_desc",
-          "item_description",
-          "ItemName",
-          "ItemDesc",
-          "ItemDescription",
-          "Description",
-          "ITEM_NAME",
-          "ITEM_DESC",
-          "ITEM_DESCRIPTION",
-          "DESCRIPTION",
-        );
-
-      const getRetrievedLocCode = (r) =>
-        getPOField(
-          r,
-          "LocCode",
-          "locCode",
-          "loccode",
-          "loc_code",
-          "locationCode",
-          "LocationCode",
-          "location_code",
-          "location",
-          "Location",
-          "locName",
-          "locationName",
-          "LOC_CODE",
-          "LOCATION_CODE",
-          "LOCATION",
-          "LOC_NAME",
-          "LOCATION_NAME",
-        ) || parsed.LocCode || parsed.locCode || parsed.locationCode || "";
-
-      const getRetrievedQty = (r) =>
-        getPOField(
-          r,
-          "quantity",
-          "rrQuantity",
-          "rrQty",
-          "qty",
-          "Quantity",
-          "RRQuantity",
-          "RR_QTY",
-          "QTY",
-          "rr_quantity",
-          "rr_qty",
-        );
-
-      const getRetrievedFreeQty = (r) =>
-        getPOField(
-          r,
-          "freeQuantity",
-          "freeQty",
-          "FreeQuantity",
-          "FreeQty",
-          "FREE_QUANTITY",
-          "FREE_QTY",
-          "free_quantity",
-          "free_qty",
-        );
-
-      const getRetrievedUnitCost = (r) =>
-        getPOField(
-          r,
-          "unitCost",
-          "unitPrice",
-          "UnitCost",
-          "UnitPrice",
-          "UNIT_COST",
-          "UNIT_PRICE",
-          "unit_cost",
-          "unit_price",
-        );
-
-      const getRetrievedGrossAmount = (r) => {
-        const savedAmount = parseFormattedNumber(
-          getPOField(
-            r,
-            "itemAmount",
-            "grossAmount",
-            "amount",
-            "ItemAmount",
-            "GrossAmount",
-            "Amount",
-            "ITEM_AMOUNT",
-            "GROSS_AMOUNT",
-            "AMOUNT",
-            "item_amount",
-            "gross_amount",
-          ) || 0,
-        );
-
-        if (savedAmount) return savedAmount;
-
-        const qty = parseFormattedNumber(getRetrievedQty(r) || 0);
-        const freeQty = parseFormattedNumber(getRetrievedFreeQty(r) || 0);
-        const unitCost = parseFormattedNumber(getRetrievedUnitCost(r) || 0);
-
-        return Math.max(qty - freeQty, 0) * unitCost;
-      };
-
-      const itemCodesNeedingNames = [
-        ...new Set(
-          dt1
-            .filter((r) => !getRetrievedItemName(r))
-            .map((r) => getRetrievedItemCode(r))
-            .filter(Boolean),
-        ),
-      ];
-      let msItemMap = {};
-
-      if (itemCodesNeedingNames.length > 0) {
-        try {
-          const itemLookupResult = await fetchData("lookupMSMast", {
-            PARAMS: JSON.stringify({
-              search: "",
-              page: 1,
-              pageSize: 10000,
-            }),
-          });
-          const rawItems = itemLookupResult?.data?.[0]?.result || "[]";
-          const lookupItems =
-            typeof rawItems === "string" ? JSON.parse(rawItems) : rawItems;
-
-          msItemMap = (Array.isArray(lookupItems) ? lookupItems : []).reduce(
-            (acc, item) => {
-              const code = getRetrievedItemCode(item);
-              if (code) {
-                acc[String(code)] = item;
-                acc[String(code).trim().toLowerCase()] = item;
-              }
-              return acc;
-            },
-            {},
-          );
-        } catch (lookupError) {
-          console.warn("FGRR item description lookup failed:", lookupError);
-        }
-      }
-
-      const mappedDT1 = dt1.map((r, idx) => {
-        const vatCode = getRetrievedVatCode(r);
-        const retrievedWhCode = getPOField(
-          r,
-          "whCode",
-          "whouseCode",
-          "wh_code",
-          "warehouseCode",
-          "WhCode",
-          "WHCode",
-          "WH_CODE",
-          "WAREHOUSE_CODE",
-        );
-        const retrievedWhName = getPOField(
-          r,
-          "whName",
-          "whouseName",
-          "warehouseName",
-          "WhName",
-          "WHName",
-          "WH_NAME",
-          "WAREHOUSE_NAME",
-        );
-        const retrievedLocCode = getRetrievedLocCode(r);
-        const retrievedLocName = getPOField(
-          r,
-          "locName",
-          "LocName",
-          "loc_name",
-          "locationName",
-          "LocationName",
-          "LOCATION_NAME",
-          "LOC_NAME",
-        );
-
-        return {
-        lN: Number(getPOField(r, "lnNoNo", "lnNo", "LINE_NO", "lnNo", "LN") || idx + 1),
-
-        rrStatus: getPOField(
-          r,
-          "rrStatus",
-          "RR_STATUS",
-          "RrStatus",
-          "poStatus",
-          "PO_STATUS",
-        ),
-        poStatus: getPOField(
-          r,
-          "poStatus",
-          "PO_STATUS",
-          "rrStatus",
-          "RR_STATUS",
-          "RrStatus",
-        ),
-        poNo:
-          getPOField(r, "poNo", "PoNo", "PO_NO", "po_no") ||
-          getPOField(parsed, "poNo", "PoNo", "PO_NO", "po_no") ||
-          "",
-        itemCode: getRetrievedItemCode(r),
-        itemName:
-          getRetrievedItemName(r) ||
-          getRetrievedItemName(
-            msItemMap[String(getRetrievedItemCode(r))] ||
-              msItemMap[String(getRetrievedItemCode(r)).trim().toLowerCase()] ||
-              {},
-          ),
-        itemSpecs: getPOField(
-          r,
-          "itemSpecs",
-          "itemSpec",
-          "specs",
-          "item_specs",
-          "ItemSpecs",
-          "ItemSpec",
-          "Specs",
-          "ITEM_SPECS",
-        ),
-
-        rrQty: formatNumber(getRetrievedQty(r) || 0, decQty),
-        freeQty: formatNumber(getRetrievedFreeQty(r) || 0, decQty),
-
-        amount: formatNumber(getRetrievedGrossAmount(r)),
-        itemAmount: formatNumber(getRetrievedGrossAmount(r)),
-        grossAmount: formatNumber(getRetrievedGrossAmount(r)),
-        vatCode,
-        vatRate: vatCode
-          ? formatNumber(
-              getPOField(r, "vatRate", "VatRate", "VAT_RATE", "vat_rate") ||
-                vatRateMap[vatCode] ||
-                0,
-              2,
-            )
-          : "",
-        vatAmount: formatNumber(
-          getPOField(r, "vatAmount", "VatAmount", "VAT_AMOUNT", "vat_amount") || 0,
-        ),
-
-        qsCode: getPOField(r, "qsCode", "qstatCode", "QS_CODE", "QSTAT_CODE", "qstat_code"),
-        qstatCode: getPOField(r, "qstatCode", "qsCode", "QSTAT_CODE", "QS_CODE", "qstat_code"),
-        whCode: retrievedWhCode || parsedWHCode,
-        whouseCode: retrievedWhCode || parsedWHCode,
-        whName: retrievedWhName || parsedWHName,
-        whouseName: retrievedWhName || parsedWHName,
-        locCode: retrievedLocCode || parsedLocCode,
-        LocCode: retrievedLocCode || parsedLocCode,
-        locName: retrievedLocName || parsedLocName,
-
-        uomCode: getPOField(r, "uomCode", "UomCode", "UOM_CODE", "uom_code", "uom", "UOM"),
-        unitCost: formatNumber(getRetrievedUnitCost(r) || 0, decUcost),
-        netAmount: formatNumber(
-          getPOField(r, "netAmount", "NetAmount", "NET_AMOUNT", "net_amount") || 0,
-        ),
-        lotNo: getPOField(r, "lotNo", "LotNo", "LOT_NO", "lot_no"),
-        bbDate: String(getPOField(r, "bbDate", "BBDate", "BB_DATE", "bb_date") || "").substring(0, 10),
-        controlNo: getPOField(r, "controlNo", "ControlNo", "CONTROL_NO", "control_no"),
-        invType: getPOField(r, "invType", "InvType", "INV_TYPE", "inv_type") || "FG",
-        poLineno: getPOField(r, "poLineno", "poLineNo", "PO_LINENO", "PO_LINE_NO", "po_lineno"),
-        poBalance: formatNumber(getPOField(r, "poBalance", "PO_BALANCE", "po_balance") || 0, decQty),
-        categCode: getPOField(r, "categCode", "CATEG_CODE", "categ_code"),
-      };
+        remarks: parsed.remarks || "",
+        documentStatus: parsed.rrStatus || "",
       });
 
-      const dt2 = Array.isArray(parsed.dt2)
-        ? parsed.dt2
-        : Array.isArray(parsed.DT2)
-          ? parsed.DT2
-          : [];
+      // ===========================
+      // DETAIL ROWS (DT1)
+      // ===========================
+      const dt1 = Array.isArray(parsed.dt1) ? parsed.dt1 : [];
+
+      const vatCodes = [...new Set(dt1.map((d) => d.vatCode).filter(Boolean))];
+      const vatRatePairs = await Promise.all(
+        vatCodes.map(async (code) => [code, await fetchVatRate(code)]),
+      );
+      const vatRateMap = Object.fromEntries(vatRatePairs);
+
+      const mappedDT1 = dt1.map((r, idx) => ({
+        lnNo: Number(r.lnNo ?? idx + 1),
+        rrStatus: r.rrStatus || r.poStatus || "",
+        poStatus: r.poStatus || r.rrStatus || "",
+        poNo: r.poNo || parsed.poNo || "",
+        itemCode: r.itemCode || r.itemNo || "",
+        itemName: r.itemName || r.itemDesc || "",
+        itemSpecs: r.itemSpecs || r.itemSpec || "",
+
+        rrQty: formatNumber(r.rrQty || r.quantity || 0, decQty),
+        freeQty: formatNumber(r.freeQty || r.freeQuantity || 0, decQty),
+
+        amount: formatNumber(r.itemAmount || r.grossAmount || 0),
+        itemAmount: formatNumber(r.itemAmount || r.grossAmount || 0),
+        grossAmount: formatNumber(r.itemAmount || r.grossAmount || 0),
+        vatCode: r.vatCode || "",
+        vatRate: r.vatCode ? formatNumber(vatRateMap[r.vatCode] ?? 0, 2) : "",
+        vatAmount: formatNumber(r.vatAmount ?? 0),
+
+        qsCode: r.qsCode || "",
+        whCode: r.whCode || r.whouseCode || parsed.WHCode || "",
+        whouseCode: r.whouseCode || r.whCode || parsed.WHCode || "",
+        locCode: r.locCode || parsedLocCode || "",
+        LocCode: r.locCode || parsedLocCode || "",
+
+        uomCode: r.uomCode || "",
+        unitCost: formatNumber(r.unitCost || r.unitPrice || 0, decUcost),
+        netAmount: formatNumber(r.netAmount ?? 0),
+        lotNo: r.lotNo || "",
+        controlNo: r.controlNo || "",
+      }));
+
+      const dt2 = Array.isArray(parsed.dt2) ? parsed.dt2 : [];
       const normalizeGLDate = (value) => {
         if (!value) return "";
         const text = String(value);
         return text.includes("T") ? text.substring(0, 10) : text.substring(0, 10);
       };
-      const mappedDT2 = dt2.map((g, i) => ({
-        ...g,
-        id: i + 1,
-        recNo:
-          getPOField(g, "recNo", "RecNo", "REC_NO", "lnNo", "LINE_NO") ||
-          String(i + 1),
-        acctCode: getPOField(g, "acctCode", "AcctCode", "ACCT_CODE", "accountCode", "ACCOUNT_CODE"),
-        acctName: getPOField(g, "acctName", "AcctName", "ACCT_NAME", "accountName", "ACCOUNT_NAME"),
-        rcCode: getPOField(g, "rcCode", "RcCode", "RC_CODE"),
-        rcName: getPOField(g, "rcName", "RcName", "RC_NAME"),
-        sltypeCode: getPOField(g, "sltypeCode", "slTypeCode", "SlTypeCode", "SLTYPE_CODE", "SL_TYPE_CODE"),
-        slCode: getPOField(g, "slCode", "SlCode", "SL_CODE"),
-        slName: getPOField(g, "slName", "SlName", "SL_NAME"),
-        particular: getPOField(g, "particular", "particulars", "Particular", "Particulars", "PARTICULAR", "PARTICULARS"),
-        vatCode: getPOField(g, "vatCode", "VatCode", "VAT_CODE"),
-        vatName: getPOField(g, "vatName", "VatName", "VAT_NAME"),
-        atcCode: getPOField(g, "atcCode", "AtcCode", "ATC_CODE"),
-        atcName: getPOField(g, "atcName", "AtcName", "ATC_NAME"),
-        debit: formatNumber(getPOField(g, "debit", "Debit", "DEBIT") || 0),
-        credit: formatNumber(getPOField(g, "credit", "Credit", "CREDIT") || 0),
-        debitFx1: formatNumber(getPOField(g, "debitFx1", "DebitFx1", "DEBIT_FX1", "debit_fx1") || 0),
-        creditFx1: formatNumber(getPOField(g, "creditFx1", "CreditFx1", "CREDIT_FX1", "credit_fx1") || 0),
-        debitFx2: formatNumber(getPOField(g, "debitFx2", "DebitFx2", "DEBIT_FX2", "debit_fx2") || 0),
-        creditFx2: formatNumber(getPOField(g, "creditFx2", "CreditFx2", "CREDIT_FX2", "credit_fx2") || 0),
-        slRefNo: getPOField(g, "slRefNo", "slrefNo", "slref_no", "SLREF_NO", "SL_REF_NO"),
-        slRefDate: normalizeGLDate(getPOField(g, "slRefDate", "slrefDate", "slref_date", "SLREF_DATE", "SL_REF_DATE")),
-        remarks: getPOField(g, "remarks", "Remarks", "REMARKS"),
-        dt1Lineno: getPOField(g, "dt1Lineno", "dt1LineNo", "DT1_LINENO", "DT1_LINE_NO"),
-      }));
 
-      updateState({
-        detailRows: mappedDT1,
-        detailRowsGL: mappedDT2,
-      });
-    } catch (e) {
-      console.error("fetchTranData error:", e);
+      const mappedDT2 = dt2.map((g, i) => ({
+        ...g,
+        id: i + 1,
+        recNo: g.recNo || g.lnNo || String(i + 1),
+        acctCode: g.acctCode || g.accountCode || "",
+        acctName: g.acctName || g.accountName || "",
+        rcCode: g.rcCode || "",
+        rcName: g.rcName || "",
+        sltypeCode: g.sltypeCode || g.slTypeCode || "",
+        slCode: g.slCode || "",
+        slName: g.slName || "",
+        particular: g.particular || g.particulars || "",
+        vatCode: g.vatCode || "",
+        vatName: g.vatName || "",
+        atcCode: g.atcCode || "",
+        atcName: g.atcName || "",
+        debit: formatNumber(g.debit || 0),
+        credit: formatNumber(g.credit || 0),
+        debitFx1: formatNumber(g.debitFx1 || 0),
+        creditFx1: formatNumber(g.creditFx1 || 0),
+        debitFx2: formatNumber(g.debitFx2 || 0),
+        creditFx2: formatNumber(g.creditFx2 || 0),
+        slRefNo: g.slRefNo || "",
+        slRefDate: normalizeGLDate(g.slRefDate || ""),
+        remarks: g.remarks || "",
+        dt1Lineno: g.dt1Lineno || "",
+      }));
+
+      updateState({
+        detailRows: mappedDT1,
+        detailRowsGL: mappedDT2,
+      });
+    } catch (e) {
+      console.error("fetchTranData error:", e);
+      Swal.fire({ icon: 'error', title: 'Fetch Error', text: e.message });
     } finally {
       updateState({ isLoading: false });
     }
@@ -2208,7 +1944,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
 
   const handleCloseFGLookup = async (selectedItem) => {
     if (!selectedItem) {
-      updateState({ fgLookupModalOpen: false, selectedRowIndex: null });
+      updateState({ msLookupModalOpen: false, selectedRowIndex: null });
       return;
     }
 
@@ -2285,10 +2021,6 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       parseFormattedNumber(selectedVatLookupRate) !== 0
         ? selectedVatLookupRate
         : selectedVatFetchedRate;
-    const headerWhCode = state.WHCode || state.WHcode || WHCode || WHcode || "";
-    const headerWhName = state.WHName || WHName || "";
-    const headerLocCode = state.LocCode || LocCode || "";
-    const headerLocName = state.LocName || LocName || "";
 
     if (selectedRowIndex !== null && selectedRowIndex !== undefined) {
       const updatedRows = [...detailRows];
@@ -2310,18 +2042,11 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           selectedVatRate !== "" && selectedVatRate !== null && selectedVatRate !== undefined
             ? formatNumber(parseFormattedNumber(selectedVatRate), 2)
             : currentRow.vatRate || "",
-        whouseCode: headerWhCode || currentRow.whouseCode || currentRow.whCode || "",
-        whCode: headerWhCode || currentRow.whCode || currentRow.whouseCode || "",
-        whouseName: headerWhName || currentRow.whouseName || currentRow.whName || "",
-        whName: headerWhName || currentRow.whName || currentRow.whouseName || "",
-        LocCode: headerLocCode || currentRow.LocCode || currentRow.locCode || "",
-        locCode: headerLocCode || currentRow.locCode || currentRow.LocCode || "",
-        locName: headerLocName || currentRow.locName || currentRow.LocName || "",
       });
 
       updateState({
         detailRows: updatedRows,
-        fgLookupModalOpen: false,
+        msLookupModalOpen: false,
         selectedRowIndex: null,
       });
       updateTotalsDisplay(updatedRows);
@@ -2330,11 +2055,18 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
 
     const newRow = {
       invType: "FG",
+      unitCost: formatNumber(parseFormattedNumber(selectedUnitCost), decUcost),
+      vatCode: selectedVatCode,
+      vatName: selectedVatName,
+      vatRate:
+        selectedVatRate !== "" && selectedVatRate !== null && selectedVatRate !== undefined
+          ? formatNumber(parseFormattedNumber(selectedVatRate), 2)
+          : "",
       groupId: selectedItem.categCode || "",
       poStatus: status || "",
       itemCode: selectedItem.itemCode || "",
       itemName: selectedItem.itemName || "",
-    uomCode: selectedItem.uomCode || selectedItem.uom || "",
+      uomCode: selectedItem.uom || "",
       qtyOnHand: formatNumber(selectedItem.qtyHand ?? 0, 6),
       qtyAlloc: "0.000000",
       qtyNeeded: "0.000000",
@@ -2346,27 +2078,13 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       serviceName: "",
       poQty: "0.000000",
       rrQty: "0.000000",
-    freeQty: "0.000000",
-      unitCost: formatNumber(parseFormattedNumber(selectedUnitCost), decUcost),
-      vatCode: selectedVatCode,
-      vatName: selectedVatName,
-      vatRate:
-        selectedVatRate !== "" && selectedVatRate !== null && selectedVatRate !== undefined
-          ? formatNumber(parseFormattedNumber(selectedVatRate), 2)
-          : "",
-      whouseCode: headerWhCode,
-      whCode: headerWhCode,
-      whouseName: headerWhName,
-      whName: headerWhName,
-      LocCode: headerLocCode,
-      locCode: headerLocCode,
-      locName: headerLocName,
-  };
+      freeQty: "0.000000",
+    };
 
-    const updatedRows = [...detailRows, recalcFGRRRow(newRow)];
+    const updatedRows = [...detailRows, recalcFGRRRow(newRow)];
     updateState({
       detailRows: updatedRows,
-      fgLookupModalOpen: false,
+      msLookupModalOpen: false,
     });
 
     const totalQty = updatedRows.reduce(
@@ -2412,7 +2130,9 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
   const fetchVatRate = async (vatCode) => {
     if (!vatCode) return "";
 
-    const res = await fetchData("getVat", { VAT_CODE: vatCode });
+    const res = await fetchData(
+      `/getVat?VAT_CODE=${encodeURIComponent(vatCode)}`,
+    );
 
     if (!res?.success) return "";
 
@@ -2423,16 +2143,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     const parsed = JSON.parse(row0.result);
     const vat = Array.isArray(parsed) ? parsed[0] : parsed;
 
-    return (
-      vat?.vatRate ??
-      vat?.VatRate ??
-      vat?.VAT_RATE ??
-      vat?.vat_rate ??
-      vat?.rate ??
-      vat?.vatPerc ??
-      vat?.vat_percent ??
-      ""
-    );
+    return vat?.vatRate ?? "";
   };
 
   // When user clicks the "Add Line" button
@@ -2455,13 +2166,9 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     setShowTypeDropdown((prev) => !prev);
   };
 
-  // When user picks FG / MS / RM
+  // When user picks FG / FG / RM
   const handleSelectTypeAndAddRow = (typeCode) => {
     const today = header.rr_date || new Date().toISOString().split("T")[0];
-    const headerWhCode = state.WHCode || state.WHcode || WHCode || WHcode || "";
-    const headerWhName = state.WHName || WHName || "";
-    const headerLocCode = state.LocCode || LocCode || "";
-    const headerLocName = state.LocName || LocName || "";
 
     const newRow = {
       invType: typeCode,
@@ -2482,13 +2189,6 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       poQty: "0.000000",
       rrQty: "0.000000",
       freeQty: "0.000000",
-      whouseCode: headerWhCode,
-      whCode: headerWhCode,
-      whouseName: headerWhName,
-      whName: headerWhName,
-      LocCode: headerLocCode,
-      locCode: headerLocCode,
-      locName: headerLocName,
     };
 
     const updatedRows = [...detailRows, newRow];
@@ -2506,7 +2206,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
   const handleOpenFGLookup = () => {
     if (isFormDisabled) return;
     setShowTypeDropdown(false);
-    updateState({ fgLookupModalOpen: true, selectedRowIndex: null });
+    updateState({ msLookupModalOpen: true, selectedRowIndex: null });
   };
 
   const handleDeleteRow = (index) => {
@@ -3007,7 +2707,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     }
   };
   // ==========================
-  // SAVE / UPSERT (MSRR + DT1 + DT2)
+  // SAVE / UPSERT (FGRR + DT1 + DT2)
   // ==========================
   const handleActivityOption = async (action) => {
     // If already posted/cancelled/finalized, do not allow save / generate
@@ -3019,7 +2719,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       const isNew = !state.documentID;
 
       // Optional front-end guard: prevent save when GL is unbalanced
-      if (action === "Upsert") {
+    if (isGeneralLedgerEnabled && action === "Upsert") {
         const totalDebit = (state.detailRowsGL || []).reduce(
           (sum, r) => sum + parseFormattedNumber(r?.debit || 0),
           0,
@@ -3068,52 +2768,54 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           const rowQty = parseFormattedNumber(r.rrQty || 0) || 0;
           const lotRatio = rowQty > 0 ? lotQty / rowQty : 1;
           dt1Payload.push({
-            lnNo: String(dt1Payload.length + 1),
+  lnNo: String(dt1Payload.length + 1),
 
-            invType: r.invType || "MS",
-            itemNo: r.itemCode || r.itemNo || "",
-            itemCode: r.itemCode || "",
+  poId: r.poId || r.po_id || r.PO_ID || "",
+  prId: r.prId || r.pr_id || r.PR_ID || "",
+  prNo: r.prNo || r.pr_no || r.PR_NO || "",
 
-            rrQuantity: lotQty,
-            quantity: lotQty,
-            whCode:
-              lot.whouseCode ||
-              lot.whCode ||
-              r.whCode ||
-              r.whouseCode ||
-              state.WHCode ||
-              state.WHcode ||
-              "",
-            LocCode: lot.LocCode || lot.locCode || r.LocCode || state.LocCode || "",
+  groupId:
+    r.groupId ||
+    r.group_id ||
+    r.GROUP_ID ||
+    r.GroupId ||
+    "",
 
-            itemName: r.itemName || "",
-            uomCode: r.uomCode || "",
+  invType: r.invType || "FG",
+  itemCode: r.itemCode || "",
+  itemName: r.itemName || "",
+  uomCode: r.uomCode || "",
 
-            unitCost: parseFormattedNumber(r.unitCost || r.unitCostFx || 0),
-            grossAmount: parseFormattedNumber(r.grossAmount || 0) * lotRatio,
-            discRate: parseFormattedNumber(r.discRate || 0),
-            discAmount: parseFormattedNumber(r.discAmount || 0) * lotRatio,
-            netAmount: parseFormattedNumber(r.netAmount || 0) * lotRatio,
+  quantity: parseFormattedNumber(r.rrQty || r.quantity || 0),
+  rrQuantity: parseFormattedNumber(r.rrQty || r.quantity || 0),
 
-            vatCode: r.vatCode || "",
-            vatAmount: parseFormattedNumber(r.vatAmount || 0) * lotRatio,
-            itemAmount:
-              parseFormattedNumber(r.itemAmount || r.grossAmount || 0) *
-              lotRatio,
+  poNo: r.poNo || state.poNo || "",
+  poLineno: r.poLineno || r.poLineNo || r.lnNo || r.Ln || "",
+  poQty: parseFormattedNumber(r.poQty || r.poQuantity || r.PO_QUANTITY || 0),
+  poBalance: parseFormattedNumber(r.poBalance || r.qtyBalance || 0),
 
-            lotNo: lot.lotNo || "",
-            bbDate: lot.bbDate || null,
-            qsCode: lot.qstatCode || lot.qsCode || r.qsCode || "",
+  unitCost: parseFormattedNumber(r.unitCost || 0),
+  itemAmount: parseFormattedNumber(r.itemAmount || r.grossAmount || 0),
+  vatCode: r.vatCode || "",
+  vatAmount: parseFormattedNumber(r.vatAmount || 0),
+  netAmount: parseFormattedNumber(r.netAmount || 0),
 
-            rcCode: r.rcCode || state.rcCode || "",
+  whouseCode:
+    r.whouseCode ||
+    r.whCode ||
+    state.WHCode ||
+    state.WHcode ||
+    "",
 
-            poNo: r.poNo || state.poNo || "",
-            poLineno: r.poLineno || r.poLineNo || "",
-            poBalance: parseFormattedNumber(r.poBalance || 0),
+  locCode: r.locCode || r.LocCode || state.LocCode || "",
 
-            itemSpecs: r.itemSpecs || "",
-            categCode: r.categCode || "",
-          });
+  lotNo: r.lotNo || "",
+  bbDate: r.bbDate || null,
+  qstatCode: r.qstatCode || r.qsCode || "",
+  rcCode: r.rcCode || state.rcCode || "",
+  itemSpecs: r.itemSpecs || "",
+  categCode: r.categCode || "",
+});
         });
       });
 
@@ -3123,7 +2825,8 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
 
         // NEW vs EDIT
         rrNo: documentNo || "",
-        rrHdId: documentID || "",
+        rrId: documentID || "",
+rrHdId: documentID || "",
 
         rrDate:
           header?.rr_date ||
@@ -3157,7 +2860,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         dt1: dt1Payload,
 
         // DT2 (GL)
-        dt2: (state.detailRowsGL || []).map((r, i) => ({
+        dt2: isGeneralLedgerEnabled ? (state.detailRowsGL || []).map((r, i) => ({
           recNo: String(i + 1),
           acctCode: r.acctCode || "",
           rcCode: r.rcCode || "",
@@ -3176,13 +2879,14 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           slRefDate: r.slRefDate || null,
           remarks: r.remarks || "",
           dt1Lineno: r.dt1Lineno || "",
-        })),
+        })) : [],
       };
 
       // ================
       // GENERATE GL
       // ================
-      if (action === "GenerateGL") {
+    if (action === "GenerateGL") {
+      if (!isGeneralLedgerEnabled) return;
         const newGlEntries = await useGenerateGLEntries(docType, glData);
         if (newGlEntries) updateState({ detailRowsGL: newGlEntries });
         return;
@@ -3197,7 +2901,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           docType,
           glData,
           updateState,
-          "rrId",
+          "rrHdId",
           "rrNo",
         );
 
@@ -3205,23 +2909,98 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         // normalize row (supports: array, axios response, unwrapped response)
         const normalizeSaveRow = (value) => {
           if (!value) return null;
+          if (Array.isArray(value)) return normalizeSaveRow(value[0]);
           if (typeof value === "string") {
             try {
               const parsedValue = JSON.parse(value);
-              return Array.isArray(parsedValue) ? parsedValue[0] : parsedValue;
+              return normalizeSaveRow(parsedValue);
             } catch {
               return null;
             }
           }
-          const resultValue = value.result ?? value.RESULT ?? value.JsonResult;
+          if (Array.isArray(value?.data)) return normalizeSaveRow(value.data[0]);
+          if (value?.data) return normalizeSaveRow(value.data);
+
+          const resultValue =
+            value.result ?? value.RESULT ?? value.JsonResult ?? value.jsonResult;
           if (resultValue) return normalizeSaveRow(resultValue);
+          value.msrrNo = getReturnedValue(
+            value,
+            "msrrNo",
+            "FGRR_NO",
+            "FGRRNo",
+            "msRRNo",
+            "rrNo",
+            "RR_NO",
+            "rr_no",
+            "RrNo",
+            "documentNo",
+            "DocumentNo",
+            "DOCUMENT_NO",
+            "docNo",
+            "DocNo",
+            "DOC_NO",
+            "tranNo",
+            "TranNo",
+            "TRAN_NO",
+          );
+          value.msrrHdId = getReturnedValue(
+            value,
+            "rrHdId",
+            "rrId",
+            "rr_id",
+            "rr_hd_id",
+            "RR_ID",
+            "RR_HD_ID",
+            "msrrId",
+            "msrrHdId",
+            "FGRR_ID",
+            "FGRR_HD_ID",
+            "documentID",
+            "DocumentID",
+            "DOCUMENT_ID",
+            "docId",
+            "DOC_ID",
+          );
           return value;
+        };
+
+        const getReturnedValue = (row, ...keys) => {
+          if (!row || typeof row !== "object") return "";
+
+          for (const key of keys) {
+            const value = row?.[key];
+            if (value !== undefined && value !== null && value !== "") {
+              return value;
+            }
+          }
+
+          const normalizeKey = (key) =>
+            String(key || "")
+              .replace(/[_\s-]/g, "")
+              .toLowerCase();
+          const normalizedEntries = Object.entries(row).reduce(
+            (acc, [key, value]) => {
+              acc[normalizeKey(key)] = value;
+              return acc;
+            },
+            {},
+          );
+
+          for (const key of keys) {
+            const value = normalizedEntries[normalizeKey(key)];
+            if (value !== undefined && value !== null && value !== "") {
+              return value;
+            }
+          }
+
+          return "";
         };
 
         const row = normalizeSaveRow(
           (Array.isArray(res) ? res?.[0] : null) ??
-          (Array.isArray(res?.data) ? res.data?.[0] : null) ??
-          (Array.isArray(res?.data?.data) ? res.data.data?.[0] : null) ??
+          (Array.isArray(res?.data) ? res.data?.[0] : res?.data ?? null) ??
+          (Array.isArray(res?.data?.data) ? res.data.data?.[0] : res?.data?.data ?? null) ??
           null
         );
 
@@ -3237,16 +3016,20 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           return;
         }
 
-        // accept common key variants returned by MSRR upsert
+        // accept common key variants returned by FGRR upsert
         const savedId =
           row?.rrHdId ||
           row?.rrId ||
           row?.rr_id ||
+          row?.msrrId ||
+          row?.msrrHdId ||
+          row?.FGRR_ID ||
+          row?.FGRR_HD_ID ||
           row?.RR_HD_ID ||
           documentID ||
           "";
         const savedNo =
-          row?.fgrrNo ||
+          row?.msrrNo ||
           row?.FGRR_NO ||
           row?.rrNo ||
           row?.RR_NO ||
@@ -3265,9 +3048,13 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         });
 
         // success + print
-        useSwalshowSaveSuccessDialog(handleReset, () =>
-          handleSaveAndPrint(savedId),
-        );
+        useSwalshowSaveSuccessDialog(
+  () => {
+    handleReset();
+    setTopTab("history");
+  },
+  () => handleSaveAndPrint(savedId)
+);
       }
     } catch (err) {
       console.error("FGRR action error:", err);
@@ -3341,7 +3128,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     const rows = [...(state.detailRowsGL || [])];
     rows.splice(index, 1);
 
-    // re-id like MSAJ
+    // re-id like FGAJ
     const resequenced = rows.map((r, i) => ({ ...r, id: i + 1 }));
     updateState({ detailRowsGL: resequenced });
   };
@@ -3358,7 +3145,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     const rows = [...(state.detailRowsGL || [])];
     const currentRow = rows[idx];
 
-    // ✅ Ask backend to fill acctName/slName/rcName/vatName/atcName etc (same as MSAJ)
+    // ✅ Ask backend to fill acctName/slName/rcName/vatName/atcName etc (same as FGAJ)
     const lookedUp = await useUpdateRowGLEntries(
       currentRow,
       field,
@@ -3396,7 +3183,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     rows[index] = { ...rows[index], [field]: value };
     updateState({ detailRowsGL: rows });
 
-    // ✅ recompute Fx fields like MSAJ (editEntries API)
+    // ✅ recompute Fx fields like FGAJ (editEntries API)
     const edited = await useUpdateRowEditEntries(
       rows[index],
       field,
@@ -3498,51 +3285,17 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
   }, [navigate, location.pathname]);
 
   const handleHistoryRowPick = useCallback((row) => {
-    const docNo = getPOField(
-      row,
-      "docNo",
-      "DocNo",
-      "DOC_NO",
-      "rrNo",
-      "RR_NO",
-      "rr_no",
-      "fgrrNo",
-      "FGRR_NO",
-      "documentNo",
-      "DocumentNo",
-      "DOCUMENT_NO",
-    );
-    const pickedBranchCode =
-      getPOField(
-        row,
-        "branchCode",
-        "BranchCode",
-        "BRANCH_CODE",
-        "branch",
-        "Branch",
-        "BRANCH",
-        "bc",
-        "BC",
-        "BCode",
-        "BCODE",
-      ) ||
-      state.branchCode ||
-      branchCode;
-    if (!docNo || !pickedBranchCode) return;
-    fetchTranData(docNo, pickedBranchCode);
+    const docNo = row?.docNo;
+    const branchCode = row?.branchCode;
+    if (!docNo || !branchCode) return;
+    fetchTranData(docNo, branchCode);
     setTopTab("details");
-  }, [state.branchCode, branchCode]);
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const docNo =
-      params.get("rrNo") ||
-      params.get("docNo") ||
-      params.get("fgrrNo") ||
-      params.get("msrrNo") ||
-      params.get("poNo");
-    const brCode =
-      params.get("branchCode") || params.get("bc") || params.get("branch");
+    const docNo = params.get("poNo");
+    const brCode = params.get("branchCode");
 
     if (!loadedFromUrlRef.current && docNo && brCode) {
       loadedFromUrlRef.current = true;
@@ -3558,20 +3311,13 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
   };
 
   const handleTranDocNoRetrieval = async (data) => {
-    const docNo = getPOField(data, "docNo", "rrNo", "RR_NO", "fgrrNo", "FGRR_NO");
-    const pickedBranchCode =
-      getPOField(data, "branchCode", "BranchCode", "BRANCH_CODE", "branch", "BC") ||
-      branchCode;
-    await fetchTranData(docNo, pickedBranchCode, data.key);
+    await fetchTranData(data.docNo, data.branchCode || branchCode, data.key);
     updateState({ showAllTranDocNo: data.modalClose });
   };
 
   const handleTranDocNoSelection = async (data) => {
     handleReset();
-    updateState({
-      showAllTranDocNo: false,
-      documentNo: getPOField(data, "docNo", "rrNo", "RR_NO", "fgrrNo", "FGRR_NO"),
-    });
+    updateState({ showAllTranDocNo: false, documentNo: data.docNo });
   };
 
   // ==========================
@@ -3772,40 +3518,49 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           printData={printData}
           onReset={handleReset}
           onSave={() => handleActivityOption("Upsert")}
-          onGenerateGL={() => handleActivityOption("GenerateGL")}
+          onGenerateGL={
+            isGeneralLedgerEnabled
+              ? () => handleActivityOption("GenerateGL")
+              : undefined
+          }
           onPost={handlePost}
           onCancel={handleCancel}
           onCopy={handleCopy}
           onAttach={handleAttach}
+          onDetails={() => setTopTab("details")}
           onHistory={() => setTopTab("history")}
+          disableRouteNavigation={true}
+          detailsRoute="/page/FGRR"
           isSaveDisabled={isSaveDisabled}
           isResetDisabled={isResetDisabled}
-        />
+          isViewDocument={isViewDocument}
+          isCancelDisabled={
+            !documentID ||
+            displayStatus === "CANCELLED" ||
+            displayStatus === "FINALIZED"
+          }
+/>
       </div>
 
       <div className={topTab === "details" ? "" : "hidden"}>
-        {/* Header Section */}
-        <div className="global-tran-header-ui">
-          <div className="global-tran-headertext-div-ui">
-            <h1 className="global-tran-headertext-ui">{documentTitle}</h1>
-          </div>
-
-          <div className="global-tran-headerstat-div-ui">
-            <div>
-              <p className="global-tran-headerstat-text-ui">
-                Transaction Status
-              </p>
-              <h1 className={`global-tran-stat-text-ui ${statusColor}`}>
-                {displayStatus}
-              </h1>
-            </div>
-          </div>
-        </div>
+        {/* Page title and subheading */} 
+      <div className={`global-tran-header-ui ${isViewDocument ? "max-md:!mt-12 max-md:!pt-2 max-md:!pb-2" : ""}`}>
+        <div className={`global-tran-headertext-div-ui ${isViewDocument ? "max-md:!mb-1" : ""}`}>
+          <h1 className="global-tran-headertext-ui">{documentTitle}</h1>
+        </div>
+        <div className={`global-tran-headerstat-div-ui ${isViewDocument ? "max-md:!mt-0" : ""}`}>
+          <div>
+            <p className="global-tran-headerstat-text-ui">Transaction Status</p>
+            <h1 className={`global-tran-stat-text-ui ${statusColor}`}>{displayStatus}</h1>
+          </div>
+        </div>
+      </div>
 
         {/* Form Layout with Tabs */}
-        <div className="global-tran-header-div-ui">
-          {/* Tab Navigation */}
-          <div className="global-tran-header-tab-div-ui">
+        <div className={`global-tran-header-div-ui ${isViewDocument ? "max-md:!mt-10 max-md:!pt-0 max-md:!pb-0" : ""}`}>
+
+    {/* Tab Navigation */}
+    <div className={`global-tran-header-tab-div-ui ${isViewDocument ? "max-md:!mt-0 max-md:!pt-0 max-md:!pb-4 max-md:!mb-4 max-md:!justify-start max-md:!text-left" : ""}`}>
             <button
               className={`global-tran-tab-padding-ui ${
                 activeTab === "basic"
@@ -3846,23 +3601,23 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                 />
 
                 {/* PR No */}
-                {/* FGRR No Field Hookup */}
-<FieldRenderer
-  id="msrrNo"
-  label="FGRR No."
-  type="lookup"
-  value={documentNo || ""}
-  disabled={isDocNoDisabled}
-  onChange={(val) => updateState({ documentNo: val })}
-  onLookup={() => updateState({ showAllTranDocNo: true })}
-  onKeyDown={(e) => {
-    if (e.key === "Enter") {
-      handleDocNoBlur();
-      e.preventDefault();
-      document.getElementById("RRDate")?.focus();
-    }
-  }}
-/>
+                <FieldRenderer
+                  id="msrrNo"
+                  label="FGRR No."
+                  type="lookup"
+                  value={state.documentNo || ""}
+                  disabled={state.isDocNoDisabled}
+                  onChange={(val) => updateState({ documentNo: val })}
+                  onLookup={() => updateState({ showAllTranDocNo: true })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleDocNoBlur();
+                      e.preventDefault();
+                      document.getElementById("RRDate")?.focus();
+                    }
+                  }}
+                />
+
                 {/* PR Date */}
                 <FieldRenderer
                   id="RRDate"
@@ -4231,7 +3986,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                               onClick={() => {
                                 updateState({
                                   selectedRowIndex: index,
-                                  fgLookupModalOpen: true,
+                                  msLookupModalOpen: true,
                                 });
                               }}
                             />
@@ -4488,16 +4243,13 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
                             readOnly
                           />
 
-                          {!isFormDisabled && (
+                          {!isFormDisabled &&
+                            (
                               <FontAwesomeIcon
                                 icon={faMagnifyingGlass}
                                 className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
                                 onClick={() => {
-                                  updateState({
-                                    selectedRowIndex: index,
-                                    vatLookupOpen: true,
-                                    vatLookupRowIndex: index,
-                                  });
+                                  handleOpenVatLookup(index);
                                 }}
                               />
                             )}
@@ -4767,450 +4519,15 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           </div>
         </div>
 
-        {/* =====================
-    GENERAL LEDGER (DT2)
-   ===================== */}
-        <div className="global-tran-tab-div-ui mt-3">
-          <div className="global-tran-tab-nav-ui">
-            <div className="flex flex-row sm:flex-row">
-              <button
-                className={`global-tran-tab-padding-ui ${
-                  GLactiveTab === "invoice"
-                    ? "global-tran-tab-text_active-ui"
-                    : "global-tran-tab-text_inactive-ui"
-                }`}
-                onClick={() => updateState({ GLactiveTab: "invoice" })}
-              >
-                General Ledger
-              </button>
-            </div>
-
-          <div className="flex justify-end">
-            <button
-              onClick={() => handleActivityOption("GenerateGL")}
-              className="global-tran-button-generateGL"
-              disabled={isLoading}
-              style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
-            >
-              {isLoading ? "Generating..." : "Generate GL Entries"}
-            </button>
-          </div>
-          </div>
-
-          <div className="global-tran-table-main-div-ui">
-            <div className="global-tran-table-main-sub-div-ui">
-              <table className="min-w-full border-collapse">
-                <thead className="global-tran-thead-div-ui">
-                  <tr>
-                    <th className="global-tran-th-ui">LN</th>
-                    <th className="global-tran-th-ui">Account Code</th>
-                    <th className="global-tran-th-ui">RC Code</th>
-                    <th className="global-tran-th-ui">SL Type Code</th>
-                    <th className="global-tran-th-ui">SL Code</th>
-                    <th className="global-tran-th-ui w-[2000px]">Particulars</th>
-                    <th className="global-tran-th-ui">VAT Code</th>
-                    <th className="global-tran-th-ui">VAT Name</th>
-                    <th className="global-tran-th-ui">ATC Code</th>
-                    <th className="global-tran-th-ui">ATC Name</th>
-                    <th className="global-tran-th-ui">Debit ({glCurrDefault})</th>
-                    <th className="global-tran-th-ui">Credit ({glCurrDefault})</th>
-                    <th className={`global-tran-th-ui ${withCurr2 ? "" : "hidden"}`}>
-                      Debit ({withCurr3 ? glCurrGlobal2 : currCode})
-                    </th>
-                    <th className={`global-tran-th-ui ${withCurr2 ? "" : "hidden"}`}>
-                      Credit ({withCurr3 ? glCurrGlobal2 : currCode})
-                    </th>
-                    <th className={`global-tran-th-ui ${withCurr3 ? "" : "hidden"}`}>
-                      Debit ({glCurrGlobal3})
-                    </th>
-                    <th className={`global-tran-th-ui ${withCurr3 ? "" : "hidden"}`}>
-                      Credit ({glCurrGlobal3})
-                    </th>
-                    <th className="global-tran-th-ui">SL Ref. No.</th>
-                    <th className="global-tran-th-ui">SL Ref. Date</th>
-                    <th className="global-tran-th-ui">Remarks</th>
-                    {!isFormDisabled && (
-                      <>
-                        <th className="global-tran-th-ui sticky right-[43px] bg-blue-300 dark:bg-blue-900 z-30">
-                          Add
-                        </th>
-                        <th className="global-tran-th-ui sticky right-0 bg-blue-300 dark:bg-blue-900 z-30">
-                          Delete
-                        </th>
-                      </>
-                    )}
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {(state.detailRowsGL || []).map((row, index) => (
-                    <tr key={index} className="global-tran-tr-ui">
-                      <td className="global-tran-td-ui text-center">
-                        {index + 1}
-                      </td>
-
-                      {/* Account */}
-                      <td className="global-tran-td-ui">
-                        <div className="relative w-fit">
-                          <input
-                            type="text"
-                            className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
-                            value={row.acctCode || ""}
-                            readOnly
-                            onClick={() => openGLModal(index, "showCOALookup")}
-                          />
-                          {!isFormDisabled && (
-                            <FontAwesomeIcon
-                              icon={faMagnifyingGlass}
-                              className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                              onClick={() => openGLModal(index, "showCOALookup")}
-                            />
-                          )}
-                        </div>
-                      </td>
-
-                      {/* RC */}
-                      <td className="global-tran-td-ui">
-                        <div className="relative w-fit">
-                          <input
-                            type="text"
-                            className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
-                            value={row.rcCode || ""}
-                            readOnly
-                            onClick={() => openGLModal(index, "showRCLookupGL")}
-                          />
-                          {!isFormDisabled && (
-                            <FontAwesomeIcon
-                              icon={faMagnifyingGlass}
-                              className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                              onClick={() => openGLModal(index, "showRCLookupGL")}
-                            />
-                          )}
-                        </div>
-                    </td>
-
-                      {/* SL Type */}
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[100px] global-tran-td-inputclass-ui"
-                          value={row.sltypeCode || ""}
-                          onChange={(e) =>
-                            handleGLFieldChange(index, "sltypeCode", e.target.value)
-                          }
-                          readOnly={isFormDisabled}
-                        />
-                      </td>
-
-                      {/* SL */}
-                      <td className="global-tran-td-ui">
-                        <div className="relative w-fit">
-                          <input
-                            type="text"
-                            className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
-                            value={row.slCode || ""}
-                            readOnly
-                            onClick={() => openGLModal(index, "showSLLookup")}
-                          />
-                          {!isFormDisabled && (
-                            <FontAwesomeIcon
-                              icon={faMagnifyingGlass}
-                              className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                              onClick={() => openGLModal(index, "showSLLookup")}
-                            />
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Particular */}
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[300px] global-tran-td-inputclass-ui"
-                          value={row.particular || ""}
-                          onChange={(e) =>
-                            handleGLFieldChange(index, "particular", e.target.value)
-                          }
-                          readOnly={isFormDisabled}
-                        />
-                      </td>
-
-                      {/* VAT */}
-                      <td className="global-tran-td-ui">
-                        <div className="relative w-fit">
-                          <input
-                            type="text"
-                            className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
-                            value={row.vatCode || ""}
-                            readOnly
-                            onClick={() =>
-                              openGLModal(index, "showVATLookupGL")
-                            }
-                          />
-                          {!isFormDisabled && (
-                            <FontAwesomeIcon
-                              icon={faMagnifyingGlass}
-                              className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                              onClick={() =>
-                                openGLModal(index, "showVATLookupGL")
-                              }
-                            />
-                          )}
-                        </div>
-                      </td>
-
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[200px] global-tran-td-inputclass-ui"
-                          value={row.vatName || ""}
-                          readOnly
-                        />
-                      </td>
-
-                      {/* ATC */}
-                      <td className="global-tran-td-ui">
-                        <div className="relative w-fit">
-                          <input
-                            type="text"
-                            className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
-                            value={row.atcCode || ""}
-                            readOnly
-                            onClick={() =>
-                              openGLModal(index, "showATCLookupGL")
-                            }
-                          />
-                          {!isFormDisabled && (
-                            <FontAwesomeIcon
-                              icon={faMagnifyingGlass}
-                              className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                              onClick={() =>
-                                openGLModal(index, "showATCLookupGL")
-                              }
-                            />
-                          )}
-                        </div>
-                      </td>
-
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[200px] global-tran-td-inputclass-ui"
-                          value={row.atcName || ""}
-                          onChange={(e) =>
-                            handleGLFieldChange(index, "atcName", e.target.value)
-                          }
-                          readOnly={isFormDisabled}
-                        />
-                      </td>
-
-                      {/* Debit */}
-                      <td className="global-tran-td-ui text-right">
-                        <input
-                          type="text"
-                          className="w-[120px] global-tran-td-inputclass-ui text-right"
-                          value={row.debit || ""}
-                          onChange={(e) =>
-                            handleGLAmountChange(index, "debit", e.target.value)
-                          }
-                          readOnly={isFormDisabled}
-                        />
-                      </td>
-
-                      {/* Credit */}
-                      <td className="global-tran-td-ui text-right">
-                        <input
-                          type="text"
-                          className="w-[120px] global-tran-td-inputclass-ui text-right"
-                          value={row.credit || ""}
-                          onChange={(e) =>
-                            handleGLAmountChange(
-                              index,
-                              "credit",
-                              e.target.value,
-                            )
-                          }
-                          readOnly={isFormDisabled}
-                        />
-                      </td>
-
-                      <td
-                        className={`global-tran-td-ui text-right ${
-                          withCurr2 ? "" : "hidden"
-                        }`}
-                      >
-                        <input
-                          type="text"
-                          className="w-[120px] global-tran-td-inputclass-ui text-right"
-                          value={row.debitFx1 || ""}
-                          onChange={(e) =>
-                            handleGLAmountChange(index, "debitFx1", e.target.value)
-                          }
-                          readOnly={isFormDisabled}
-                        />
-                      </td>
-
-                      <td
-                        className={`global-tran-td-ui text-right ${
-                          withCurr2 ? "" : "hidden"
-                        }`}
-                      >
-                        <input
-                          type="text"
-                          className="w-[120px] global-tran-td-inputclass-ui text-right"
-                          value={row.creditFx1 || ""}
-                          onChange={(e) =>
-                            handleGLAmountChange(index, "creditFx1", e.target.value)
-                          }
-                          readOnly={isFormDisabled}
-                        />
-                      </td>
-
-                      <td
-                        className={`global-tran-td-ui text-right ${
-                          withCurr3 ? "" : "hidden"
-                        }`}
-                      >
-                        <input
-                          type="text"
-                          className="w-[120px] global-tran-td-inputclass-ui text-right"
-                          value={row.debitFx2 || ""}
-                          onChange={(e) =>
-                            handleGLAmountChange(index, "debitFx2", e.target.value)
-                          }
-                          readOnly={isFormDisabled}
-                        />
-                      </td>
-
-                      <td
-                        className={`global-tran-td-ui text-right ${
-                          withCurr3 ? "" : "hidden"
-                        }`}
-                      >
-                        <input
-                          type="text"
-                          className="w-[120px] global-tran-td-inputclass-ui text-right"
-                          value={row.creditFx2 || ""}
-                          onChange={(e) =>
-                            handleGLAmountChange(index, "creditFx2", e.target.value)
-                          }
-                          readOnly={isFormDisabled}
-                        />
-                      </td>
-
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[100px] global-tran-td-inputclass-ui"
-                          value={row.slRefNo || ""}
-                          onChange={(e) =>
-                            handleGLFieldChange(index, "slRefNo", e.target.value)
-                          }
-                          readOnly={isFormDisabled}
-                          maxLength={useGetFieldLength(tblFieldArray, "slref_no")}
-                        />
-                      </td>
-
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="date"
-                          className="w-[100px] global-tran-td-inputclass-ui"
-                          value={
-                            row.slRefDate ? String(row.slRefDate).substring(0, 10) : ""
-                          }
-                          onChange={(e) =>
-                            handleGLFieldChange(index, "slRefDate", e.target.value)
-                          }
-                          readOnly={isFormDisabled}
-                        />
-                      </td>
-
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[100px] global-tran-td-inputclass-ui"
-                          value={row.remarks || ""}
-                          onChange={(e) =>
-                            handleGLFieldChange(index, "remarks", e.target.value)
-                          }
-                          readOnly={isFormDisabled}
-                          maxLength={useGetFieldLength(tblFieldArray, "remarks")}
-                        />
-                      </td>
-
-                      {/* Delete */}
-                      {!isFormDisabled && (
-                        <>
-                          <td className="global-tran-td-ui text-center sticky right-10">
-                            <button
-                              type="button"
-                              className="global-tran-td-button-add-ui"
-                              onClick={() => handleAddGLRow(index)}
-                            >
-                              <FontAwesomeIcon icon={faPlus} />
-                            </button>
-                          </td>
-                          <td className="global-tran-td-ui text-center sticky right-0">
-                            <button
-                              type="button"
-                              className="global-tran-td-button-delete-ui"
-                              onClick={() => handleDeleteGLRow(index)}
-                            >
-                              <FontAwesomeIcon icon={faMinus} />
-                            </button>
-                          </td>
-                        </>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="global-tran-tab-footer-main-div-ui">
-            <div className="global-tran-tab-footer-button-div-ui">
-              <button
-                onClick={() => handleAddGLRow()}
-                          className="global-tran-tab-footer-button-add-ui"
-                style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
-              >
-                <FontAwesomeIcon icon={faPlus} className="mr-2" />
-                Add
-              </button>
-            </div>
-
-            <div className="global-tran-tab-footer-total-main-div-ui">
-              <div className="global-tran-tab-footer-total-div-ui">
-                <label className="global-tran-tab-footer-total-label-ui">
-                  Total Debit ({glCurrDefault}):
-                </label>
-                <label className="global-tran-tab-footer-total-value-ui">
-                  {formatNumber(totalDebitGL)}
-                </label>
-              </div>
-
-              <div className="global-tran-tab-footer-total-div-ui">
-                <label className="global-tran-tab-footer-total-label-ui">
-                  Total Credit ({glCurrDefault}):
-                </label>
-                <label className="global-tran-tab-footer-total-value-ui">
-                  {formatNumber(totalCreditGL)}
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
-      {/* HISTORY TAB */}
+     {/* HISTORY TAB */}
       <div className={topTab === "history" ? "" : "hidden"}>
         <AllTranHistory
           showHeader={false}
           endpoint="/getFGRRHistory"
-          cacheKey={`FGRR:${state.branchCode || ""}:${state.documentNo || ""}`}
-          activeTabKey="FGRR_Summary"
+          cacheKey={`PR:${state.branchCode || ""}:${state.documentNo || ""}`}
+          activeTabKey="PR_Summary"
           branchCode={state.branchCode}
           startDate={null}
           endDate={null}
@@ -5510,6 +4827,8 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         />
       )}
 
+      {isGeneralLedgerEnabled && (
+        <>
       {/* COA Lookup */}
       <COAMastLookupModal
         isOpen={state.showCOALookup}
@@ -5562,11 +4881,13 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           applyLookupToGLRow("atcCode", { atcCode: item.atcCode });
         }}
       />
+        </>
+      )}
 
-      {state.poLookupModalOpen && (
+     {state.poLookupModalOpen && (
   <GlobalCombinedLookup
     isOpen={state.poLookupModalOpen}
-    summarySelectionMode="single"
+    summarySelectionMode="multiple"
     detailSelectionMode="multiple"
     summaryColumns={
       openPORRColSummary.length > 0
@@ -5581,6 +4902,14 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     summaryData={openPODataSummary}
     tabTitles={["Open PO Summary", "Open PO Detail"]}
     fetchDetailApi={async (selectedIds) => {
+      const selectedSummaries = openPODataSummary.filter((row) =>
+        (Array.isArray(selectedIds) ? selectedIds : [selectedIds]).includes(row.groupId),
+      );
+
+      if (!(await validateOpenPOSameSupplier(selectedSummaries))) {
+        throw new Error("Selected PO records must have the same supplier.");
+      }
+
       const idString = Array.isArray(selectedIds)
         ? selectedIds.join(",")
         : selectedIds;
@@ -5662,9 +4991,9 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         />
       )}
 
-      {fgLookupModalOpen && (
+      {msLookupModalOpen && (
         <FGLookupModal
-          isOpen={fgLookupModalOpen}
+          isOpen={msLookupModalOpen}
           onClose={handleCloseFGLookup}
           customParam={null} // or pass something if you need it
         />

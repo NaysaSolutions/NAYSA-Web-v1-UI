@@ -119,7 +119,7 @@ const [isViewDocument, setIsViewDocument] = useState(false);
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
 
   const openPOColSummary = [
-    { key: "BC", label: "BC", renderType: "text", width: 80 },
+    { key: "BC", label: "Branch", renderType: "text", width: 80 },
     { key: "PoNo", label: "PO No", renderType: "text", width: 140 },
     { key: "PoDate", label: "PO Date", renderType: "date", width: 120 },
     { key: "DelDate", label: "Del Date", renderType: "date", width: 120 },
@@ -138,7 +138,7 @@ const [isViewDocument, setIsViewDocument] = useState(false);
   ];
 
   const openPOColDetail = [
-    { key: "BC", label: "BC", renderType: "text", width: 80 },
+    { key: "BC", label: "Branch", renderType: "text", width: 80 },
     { key: "PoNo", label: "PO No", renderType: "text", width: 140 },
     { key: "Type", label: "Type", renderType: "text", width: 80 },
     { key: "Ln", label: "LN", renderType: "number", roundingOff: 0, width: 70 },
@@ -374,6 +374,11 @@ const [isViewDocument, setIsViewDocument] = useState(false);
     cutoffFrom,
     cutoffTo,
 
+poId,
+prId,
+prNo,
+groupId,
+
     vendCode,
     vendName,
     LocCode,
@@ -573,6 +578,28 @@ const [isViewDocument, setIsViewDocument] = useState(false);
     return [];
   };
 
+  const formatOpenPODate = (value) => {
+    if (!value) return "";
+
+    const text = String(value).trim();
+    const dateOnly = text.includes("T") ? text.split("T")[0] : text;
+    const ymdMatch = dateOnly.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+
+    if (ymdMatch) {
+      const [, year, month, day] = ymdMatch;
+      return `${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}/${year}`;
+    }
+
+    const date = new Date(text);
+    if (Number.isNaN(date.getTime())) return text;
+
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const year = date.getFullYear();
+
+    return `${month}/${day}/${year}`;
+  };
+
   const normalizeOpenPOSummaryRow = (row, index) => {
     const existingGroupId = getPOField(row, "groupId", "GROUP_ID");
     const tranId = getPOField(
@@ -587,6 +614,9 @@ const [isViewDocument, setIsViewDocument] = useState(false);
     );
     const poId = getPOField(row, "PoId", "PO_ID", "poId", "po_id");
     const poNo = getPOField(row, "PoNo", "PO_NO", "poNo", "po_no");
+    const formattedPoDate = formatOpenPODate(
+      getPOField(row, "PoDate", "PO_DATE", "poDate", "po_date"),
+    );
 
     return {
       ...row,
@@ -609,7 +639,10 @@ const [isViewDocument, setIsViewDocument] = useState(false);
       ),
       PoId: poId,
       PoNo: poNo,
-      PoDate: getPOField(row, "PoDate", "PO_DATE", "poDate", "po_date"),
+      PoDate: formattedPoDate,
+      PO_DATE: formattedPoDate,
+      poDate: formattedPoDate,
+      po_date: formattedPoDate,
       DelDate: getPOField(row, "DelDate", "DEL_DATE", "delDate", "del_date"),
       PoType: getPOField(row, "PoType", "PO_TYPE", "poType", "po_type"),
       RefNo: getPOField(row, "RefNo", "REF_NO", "refNo", "ref_no"),
@@ -1172,7 +1205,51 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     );
   };
 
-  const handleOpenPOOpenLookup = async () => {
+ const getOpenPOVendorCode = (row = {}) =>
+   String(
+     getPOField(row, "VendCode", "VEND_CODE", "vendCode", "vend_code") || "",
+   )
+     .trim()
+     .toUpperCase();
+
+ const getOpenPOVendorName = (row = {}) =>
+   String(
+     getPOField(row, "VendName", "VEND_NAME", "vendName", "vend_name") || "",
+   ).trim();
+
+ const getUniqueOpenPOSuppliers = (records = []) => {
+   const supplierMap = new Map();
+
+   records.forEach((record) => {
+     const code = getOpenPOVendorCode(record);
+     const name = getOpenPOVendorName(record);
+     const key = code || name.toUpperCase();
+
+     if (key && !supplierMap.has(key)) {
+       supplierMap.set(key, { code, name });
+     }
+   });
+
+   return Array.from(supplierMap.values());
+ };
+
+ const validateOpenPOSameSupplier = async (records = []) => {
+   const suppliers = getUniqueOpenPOSuppliers(records);
+
+   if (suppliers.length <= 1) {
+     return true;
+   }
+
+   await Swal.fire({
+     icon: "warning",
+     title: "Open Purchase Order",
+     text: "Please select PO records from the same payee or supplier only.",
+   });
+
+   return false;
+ };
+
+ const handleOpenPOOpenLookup = async () => {
     try {
       updateState({ isLoading: true });
 
@@ -1247,11 +1324,26 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     return;
   }
 
-  updateState({ isLoading: true, poLookupModalOpen: false });
-
   try {
-    const summary = selection.summary?.[0] || {};
+    const summaries = Array.isArray(selection.summary) ? selection.summary : [];
+    const summary = summaries[0] || {};
     const details = selection.details || [];
+
+    if (!(await validateOpenPOSameSupplier(summaries.length > 0 ? summaries : details))) {
+      return;
+    }
+
+    updateState({ isLoading: true, poLookupModalOpen: false });
+
+    const selectedPoNos = [
+      ...new Set(
+        [...summaries, ...details]
+          .map((row) =>
+            getPOField(row, "PoNo", "PO_NO", "poNo", "po_no"),
+          )
+          .filter(Boolean),
+      ),
+    ];
     const poWhCode =
       getPOField(
         summary,
@@ -1340,8 +1432,18 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         invType: d.invType || "MS",
         rrStatus,
         poStatus: d.poStatus || rrStatus,
-        groupId: d.categCode || d.CATEG_CODE || d.categ_code || "",
-        categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
+        poId: d.poId || d.po_id || summary.poId || summary.po_id || "",
+prId: d.prId || d.pr_id || "",
+prNo: d.prNo || d.pr_no || "",
+
+groupId:
+  d.groupId ||
+  d.group_id ||
+  d.GROUP_ID ||
+  d.GroupId ||
+  d.GROUPID ||
+  "",
+categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
 
         poNo: d.poNo || summary.poNo || "",
         poLineno: d.lnNo || d.ln || idx + 1,
@@ -1354,7 +1456,16 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         uomCode2: d.uomCode2 || "",
         uomQty2: formatNumber(d.uomQty2 || 0, 6),
 
-        poQty: formatNumber(poQty, 6),
+        poQty: formatNumber(
+  parseFormattedNumber(
+    d.poQty ||
+    d.poQuantity ||
+    d.PO_QUANTITY ||
+    d.QtyOrdered ||
+    0
+  ),
+  6
+),
         rrQty: formatNumber(qtyBalance, 6),
         poBalance: formatNumber(qtyBalance, 6),
         freeQty: formatNumber(0, 6),
@@ -1388,11 +1499,11 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     });
 
     updateState({
-      poNo: summary.poNo || "",
+      poNo: selectedPoNos.join(", ") || summary.poNo || "",
       branchCode: summary.branchCode || branchCode,
       rcCode: summary.rcCode || rcCode,
-      vendCode: summary.vendCode || "",
-      vendName: summary.vendName || "",
+      vendCode: getPOField(summary, "VendCode", "VEND_CODE", "vendCode", "vend_code"),
+      vendName: getPOField(summary, "VendName", "VEND_NAME", "vendName", "vend_name"),
       currCode: summary.currCode || currCode || "PHP",
       currRate: formatNumber(summary.currRate || 1, 6),
       WHCode: poWhCode || WHCode || "",
@@ -2657,52 +2768,54 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           const rowQty = parseFormattedNumber(r.rrQty || 0) || 0;
           const lotRatio = rowQty > 0 ? lotQty / rowQty : 1;
           dt1Payload.push({
-            lnNo: String(dt1Payload.length + 1),
+  lnNo: String(dt1Payload.length + 1),
 
-            invType: r.invType || "MS",
-            itemNo: r.itemCode || r.itemNo || "",
-            itemCode: r.itemCode || "",
+  poId: r.poId || r.po_id || r.PO_ID || "",
+  prId: r.prId || r.pr_id || r.PR_ID || "",
+  prNo: r.prNo || r.pr_no || r.PR_NO || "",
 
-            rrQuantity: lotQty,
-            quantity: lotQty,
-            whCode:
-              lot.whouseCode ||
-              lot.whCode ||
-              r.whCode ||
-              r.whouseCode ||
-              state.WHCode ||
-              state.WHcode ||
-              "",
-            LocCode: lot.LocCode || lot.locCode || r.LocCode || state.LocCode || "",
+  groupId:
+    r.groupId ||
+    r.group_id ||
+    r.GROUP_ID ||
+    r.GroupId ||
+    "",
 
-            itemName: r.itemName || "",
-            uomCode: r.uomCode || "",
+  invType: r.invType || "MS",
+  itemCode: r.itemCode || "",
+  itemName: r.itemName || "",
+  uomCode: r.uomCode || "",
 
-            unitCost: parseFormattedNumber(r.unitCost || r.unitCostFx || 0),
-            grossAmount: parseFormattedNumber(r.grossAmount || 0) * lotRatio,
-            discRate: parseFormattedNumber(r.discRate || 0),
-            discAmount: parseFormattedNumber(r.discAmount || 0) * lotRatio,
-            netAmount: parseFormattedNumber(r.netAmount || 0) * lotRatio,
+  quantity: parseFormattedNumber(r.rrQty || r.quantity || 0),
+  rrQuantity: parseFormattedNumber(r.rrQty || r.quantity || 0),
 
-            vatCode: r.vatCode || "",
-            vatAmount: parseFormattedNumber(r.vatAmount || 0) * lotRatio,
-            itemAmount:
-              parseFormattedNumber(r.itemAmount || r.grossAmount || 0) *
-              lotRatio,
+  poNo: r.poNo || state.poNo || "",
+  poLineno: r.poLineno || r.poLineNo || r.lnNo || r.Ln || "",
+  poQty: parseFormattedNumber(r.poQty || r.poQuantity || r.PO_QUANTITY || 0),
+  poBalance: parseFormattedNumber(r.poBalance || r.qtyBalance || 0),
 
-            lotNo: lot.lotNo || "",
-            bbDate: lot.bbDate || null,
-            qsCode: lot.qstatCode || lot.qsCode || r.qsCode || "",
+  unitCost: parseFormattedNumber(r.unitCost || 0),
+  itemAmount: parseFormattedNumber(r.itemAmount || r.grossAmount || 0),
+  vatCode: r.vatCode || "",
+  vatAmount: parseFormattedNumber(r.vatAmount || 0),
+  netAmount: parseFormattedNumber(r.netAmount || 0),
 
-            rcCode: r.rcCode || state.rcCode || "",
+  whouseCode:
+    r.whouseCode ||
+    r.whCode ||
+    state.WHCode ||
+    state.WHcode ||
+    "",
 
-            poNo: r.poNo || state.poNo || "",
-            poLineno: r.poLineno || r.poLineNo || "",
-            poBalance: parseFormattedNumber(r.poBalance || 0),
+  locCode: r.locCode || r.LocCode || state.LocCode || "",
 
-            itemSpecs: r.itemSpecs || "",
-            categCode: r.categCode || "",
-          });
+  lotNo: r.lotNo || "",
+  bbDate: r.bbDate || null,
+  qstatCode: r.qstatCode || r.qsCode || "",
+  rcCode: r.rcCode || state.rcCode || "",
+  itemSpecs: r.itemSpecs || "",
+  categCode: r.categCode || "",
+});
         });
       });
 
@@ -2712,7 +2825,8 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
 
         // NEW vs EDIT
         rrNo: documentNo || "",
-        rrHdId: documentID || "",
+        rrId: documentID || "",
+rrHdId: documentID || "",
 
         rrDate:
           header?.rr_date ||
@@ -2935,12 +3049,12 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
 
         // success + print
         useSwalshowSaveSuccessDialog(
-              () => {
-                handleReset();
-                setTopTab("history");
-              },
-              () => handleSaveAndPrint(response.data[0].jvId),
-            );
+  () => {
+    handleReset();
+    setTopTab("history");
+  },
+  () => handleSaveAndPrint(savedId)
+);
       }
     } catch (err) {
       console.error("MSRR action error:", err);
@@ -4773,7 +4887,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
      {state.poLookupModalOpen && (
   <GlobalCombinedLookup
     isOpen={state.poLookupModalOpen}
-    summarySelectionMode="single"
+    summarySelectionMode="multiple"
     detailSelectionMode="multiple"
     summaryColumns={
       openPORRColSummary.length > 0
@@ -4788,6 +4902,14 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     summaryData={openPODataSummary}
     tabTitles={["Open PO Summary", "Open PO Detail"]}
     fetchDetailApi={async (selectedIds) => {
+      const selectedSummaries = openPODataSummary.filter((row) =>
+        (Array.isArray(selectedIds) ? selectedIds : [selectedIds]).includes(row.groupId),
+      );
+
+      if (!(await validateOpenPOSameSupplier(selectedSummaries))) {
+        throw new Error("Selected PO records must have the same supplier.");
+      }
+
       const idString = Array.isArray(selectedIds)
         ? selectedIds.join(",")
         : selectedIds;
