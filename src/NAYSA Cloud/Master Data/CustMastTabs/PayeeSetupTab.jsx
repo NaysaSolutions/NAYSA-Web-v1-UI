@@ -470,6 +470,7 @@ const PayeeSetupTab = forwardRef(
                   label="Payee Code"
                   required
                   type="lookup"
+                  editableLookup
                   value={form[f.code] || ""}
                   onChange={
                     canType

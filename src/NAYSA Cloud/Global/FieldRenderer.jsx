@@ -246,6 +246,7 @@ const FieldRenderer = ({
   onKeyDown,
   disabled,
   lookupDisabled = false,
+  editableLookup = false,
   options = [],
   readOnly = false,
   placeholder = " ",
@@ -387,14 +388,14 @@ const FieldRenderer = ({
             readOnly
             placeholder={placeholder}
             className={`${sharedClasses} cursor-pointer ${
-              !lookupActionDisabled && getDisplayValue(value, "lookup")
+              !lookupActionDisabled && editableLookup && getDisplayValue(value, "lookup")
                 ? "pr-20"
                 : "pr-10"
             }`}
             onClick={() => !lookupActionDisabled && onLookup?.()}
           />
 
-          {!lookupActionDisabled && getDisplayValue(value, "lookup") && (
+          {!lookupActionDisabled && editableLookup && getDisplayValue(value, "lookup") && (
             <div
               style={{
                 position: "absolute",
@@ -504,9 +505,7 @@ const FieldRenderer = ({
             >
               <SelectTrigger
                 id={inputId}
-                className={`${sharedClasses} flex items-center justify-between bg-transparent !leading-none ${
-                  canClear && getDisplayValue(value, "select") ? "pr-14" : ""
-                }`}
+                className={`${sharedClasses} flex items-center justify-between bg-transparent !leading-none`}
               >
                 <SelectValue placeholder={placeholder} />
               </SelectTrigger>
@@ -523,23 +522,6 @@ const FieldRenderer = ({
                 ))}
               </SelectContent>
             </Select>
-
-            {canClear && getDisplayValue(value, "select") && (
-              <div
-                style={{
-                  position: "absolute",
-                  right: "30px",
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  zIndex: 10,
-                }}
-              >
-                {clearBtn((e) => {
-                  e.stopPropagation();
-                  handleChange("");
-                })}
-              </div>
-            )}
           </div>
           {renderLabel()}
         </>

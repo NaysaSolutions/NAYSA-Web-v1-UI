@@ -154,6 +154,7 @@ const MSMast_SetupTab = ({
             <FieldRenderer
               label="Item No"
               required
+              editableLookup
               type="lookup"
               value={form.itemCode || ""}
               onChange={(v) => onChangeForm({ itemCode: String(getValue(v)).toUpperCase() })}

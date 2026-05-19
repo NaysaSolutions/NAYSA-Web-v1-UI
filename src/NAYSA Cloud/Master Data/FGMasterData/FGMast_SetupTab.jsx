@@ -171,6 +171,7 @@ const FGMast_SetupTab = ({
               label="Item No"
               required
               type="lookup"
+              editableLookup
               value={form.itemCode || ""}
               onChange={(v) => onChangeForm({ itemCode: String(getValue(v)).toUpperCase() })}
               onLookup={() => !isLoading && !isNewRecord && setIsItemLookupOpen(true)}
