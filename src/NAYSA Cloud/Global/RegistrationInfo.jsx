@@ -68,13 +68,13 @@ const RegistrationInfo = ({ data = {}, layout = "stacked", showHeader = true }) 
   );
 
   return (
-    <div className={`bg-white p-3 rounded-lg border shadow-sm h-full flex flex-col gap-3 ${layout === 'minimize' ? 'max-w-2xl' : ''}`}>
+    <div className={`bg-white p-3 rounded-lg border shadow-sm ${layout === 'minimize' ? 'max-w-2xl' : ''}`}>
       {showHeader && (
-        <h3 className="text-[10px] font-bold text-slate-500 tracking-widest border-b pb-2 uppercase">
+        <h3 className="text-[9px] sm:text-[12px] font-bold text-slate-500 tracking-widest border-b pb-2 mb-3 uppercase">
           Registration Information
         </h3>
       )}
-      
+
       {layout === "minimize" ? (
         /* MINIMIZE MODE: 2 Columns (Registration on left, Updates on right) */
         <div className="grid grid-cols-2 gap-x-8 gap-y-4">
@@ -85,11 +85,16 @@ const RegistrationInfo = ({ data = {}, layout = "stacked", showHeader = true }) 
             {updateFields.map(renderField)}
           </div>
         </div>
+      ) : layout === "straight" ? (
+        /* STRAIGHT MODE: Header on top, all 4 fields in one horizontal row below */
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-5 gap-y-3">
+          {[...registrationFields, ...updateFields].map(renderField)}
+        </div>
       ) : (
         /* STANDARD MODES: twoCols or stacked */
-        <div className={layout === "twoCols" 
-          ? "grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-4" 
-          : "flex flex-col gap-4"}
+        <div className={`flex flex-col gap-3 ${layout === "twoCols"
+          ? "grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-4"
+          : "flex flex-col gap-4"}`}
         >
           {[...registrationFields, ...updateFields].map(renderField)}
         </div>

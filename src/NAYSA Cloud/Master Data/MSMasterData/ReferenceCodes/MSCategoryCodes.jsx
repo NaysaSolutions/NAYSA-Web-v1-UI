@@ -10,7 +10,8 @@ import React, {
   useCallback,
 } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Edit, Trash2 } from "lucide-react";
+import { Edit, Trash2, Upload, Download, CheckCircle2, XCircle, AlertTriangle, FileSpreadsheet, Loader2 } from "lucide-react";
+import * as XLSX from "xlsx";
 import Swal from "sweetalert2";
 
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
@@ -96,6 +97,15 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
   const [isDupCode, setIsDupCode] = useState(false);
   const [search, setSearch] = useState("");
 
+  // ── Import / Validate state ───────────────────────────────────────────────
+  const fileInputRef = useRef(null);
+  const [importModal, setImportModal] = useState(false);
+  const [importRows, setImportRows] = useState([]);      // parsed from Excel
+  const [validatedRows, setValidatedRows] = useState([]); // after sproc validation
+  const [isValidating, setIsValidating] = useState(false);
+  const [isBulkSaving, setIsBulkSaving] = useState(false);
+  const [importStep, setImportStep] = useState("upload"); // "upload" | "results"
+
   // Lookup States
   const [isCoaOpen, setIsCoaOpen] = useState(false);
   const [isRcOpen, setIsRcOpen] = useState(false);
@@ -171,6 +181,194 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
       setTimeout(() => codeInputRef.current?.focus?.(), 0);
     } else {
       setIsDupCode(false);
+    }
+  };
+
+  /* ================= TEMPLATE DOWNLOAD ================= */
+  const handleDownloadTemplate = () => {
+    const headers = [
+      "Category Code",
+      "Category Description",
+      "UCost Flag (Y/N)",
+      "Inventory Account",
+      "Expense Account",
+      "RR Account",
+      "RC Code",
+    ];
+
+    const sample = [
+      ["CAT-001", "Sample Category", "N", "1010-001", "5010-001", "2010-001", "RC-001"],
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...sample]);
+
+    // Column widths
+    ws["!cols"] = [
+      { wch: 18 }, { wch: 30 }, { wch: 18 },
+      { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 16 },
+    ];
+
+    // Style the header row (background + bold) — basic xlsx approach
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Category Template");
+    XLSX.writeFile(wb, "MSCategory_ImportTemplate.xlsx");
+  };
+
+  /* ================= FILE PARSE (Excel → rows) ================= */
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset so same file can be re-selected
+    e.target.value = "";
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target.result);
+        const wb = XLSX.read(data, { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rawRows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+
+        const mapped = rawRows.map((r, idx) => ({
+          _rowNum: idx + 2,                              // Excel row (header = 1)
+          code:        String(r["Category Code"]           || "").trim(),
+          description: String(r["Category Description"]    || "").trim(),
+          uCostFlag:   String(r["UCost Flag (Y/N)"]        || "N").trim().toUpperCase() === "Y" ? "Y" : "N",
+          invAcct:     String(r["Inventory Account"]       || "").trim(),
+          expAcct:     String(r["Expense Account"]         || "").trim(),
+          rrAcct:      String(r["RR Account"]              || "").trim(),
+          rcCode:      String(r["RC Code"]                 || "").trim(),
+        }));
+
+        setImportRows(mapped);
+        setValidatedRows([]);
+        setImportStep("upload");
+        setImportModal(true);
+      } catch {
+        Swal.fire("Error", "Failed to parse the Excel file. Make sure it matches the template.", "error");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  /* ================= VALIDATE via sproc ================= */
+  const handleValidate = async () => {
+    if (!importRows.length) return;
+    setIsValidating(true);
+
+    try {
+      const res = await apiClient.post("/validateMSCategBulk", {
+        json_data: {
+          rows: importRows,
+        },
+      });
+
+      const raw =
+        res?.data?.data?.[0]?.result ??
+        res?.data?.result ??
+        res?.data?.data;
+
+      let results = [];
+      if (typeof raw === "string") {
+        try { results = JSON.parse(raw); } catch { results = []; }
+      } else if (Array.isArray(raw)) {
+        results = raw;
+      }
+
+      // Merge sproc results back with original row data
+      const merged = importRows.map((row) => {
+        const found = results.find((r) => String(r.rowNum) === String(row._rowNum));
+        return {
+          ...row,
+          status:  found?.status  ?? "Invalid",
+          remarks: found?.remarks ?? "No response from server.",
+        };
+      });
+
+      setValidatedRows(merged);
+      setImportStep("results");
+    } catch (err) {
+      Swal.fire("Error", "Validation request failed. Please try again.", "error");
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  /* ================= BULK IMPORT (valid rows only) ================= */
+  const handleBulkImport = async () => {
+    const toImport = validatedRows.filter((r) => r.status === "Valid");
+    if (!toImport.length) return;
+
+    const confirm = await Swal.fire({
+      title: "Import Valid Rows?",
+      text: `${toImport.length} valid row(s) will be saved as Category Codes.`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonColor: "#2563eb",
+      confirmButtonText: "Yes, Import",
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    setIsBulkSaving(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const row of toImport) {
+      try {
+        const res = await apiClient.post("/upsertMSCateg", {
+          json_data: JSON.stringify({
+            json_data: {
+              code:        row.code,
+              description: row.description,
+              uCostFlag:   row.uCostFlag,
+              invAcct:     row.invAcct,
+              expAcct:     row.expAcct,
+              rrAcct:      row.rrAcct,
+              lcAcct:      "",
+              rcCode:      row.rcCode,
+              userCode,
+            },
+          }),
+        });
+
+        const sqlRow = res?.data?.data?.[0] || res?.data || {};
+        const errcount = Number(sqlRow?.errorcount ?? sqlRow?.errorCount ?? 0);
+
+        if (errcount > 0) {
+          failCount++;
+          // Mark the row as failed in results
+          setValidatedRows((prev) =>
+            prev.map((r) =>
+              r.code === row.code
+                ? { ...r, status: "Import Failed", remarks: sqlRow?.errormsg || "Sproc rejected the record." }
+                : r
+            )
+          );
+        } else {
+          successCount++;
+        }
+      } catch {
+        failCount++;
+      }
+    }
+
+    setIsBulkSaving(false);
+    queryClient.invalidateQueries({ queryKey: ["msCategoryList"] });
+
+    await Swal.fire({
+      icon: failCount === 0 ? "success" : "warning",
+      title: failCount === 0 ? "Import Complete!" : "Import Partial",
+      text: `${successCount} imported successfully${failCount > 0 ? `, ${failCount} failed (see table).` : "."}`,
+      confirmButtonColor: "#2563eb",
+    });
+
+    if (failCount === 0) {
+      setImportModal(false);
+      setImportRows([]);
+      setValidatedRows([]);
+      setImportStep("upload");
     }
   };
 
@@ -462,6 +660,8 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
       setSelectedRow(null);
       setIsDupCode(false);
     },
+    downloadTemplate: handleDownloadTemplate,
+    triggerImport: () => fileInputRef.current?.click(),
   }));
 
   /* ================= LOOKUP HANDLERS ================= */
@@ -478,6 +678,15 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
 
       {/* LOADING SPINNER */}
       {isLoading && <LoadingSpinner />}
+
+      {/* Hidden file input (still needed for triggerImport) */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        className="hidden"
+        onChange={handleFileChange}
+      />
 
       {/* TOP PANELS — Basic Info narrow | Accounting Info wide | Registration Info */}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,1fr)] gap-3 shrink-0">
@@ -643,6 +852,198 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
           }
         }}
       />
+
+      {/* ── Import & Validate Modal ── */}
+      {importModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+          style={{ background: "rgba(15,23,42,0.55)" }}
+          onClick={() => {
+            if (!isValidating && !isBulkSaving) {
+              setImportModal(false);
+              setImportRows([]);
+              setValidatedRows([]);
+              setImportStep("upload");
+            }
+          }}
+        >
+          <div
+            className="relative flex w-full max-w-5xl max-h-[90vh] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-100 border border-blue-200">
+                  <FileSpreadsheet size={18} className="text-blue-600" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-slate-800">Import Category Codes</h2>
+                  <p className="text-[11px] text-slate-400">
+                    {importStep === "upload"
+                      ? `${importRows.length} row(s) parsed — click Validate to check accounts`
+                      : `${validatedRows.filter((r) => r.status === "Valid").length} valid · ${validatedRows.filter((r) => r.status !== "Valid").length} invalid`}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={isValidating || isBulkSaving}
+                onClick={() => {
+                  setImportModal(false);
+                  setImportRows([]);
+                  setValidatedRows([]);
+                  setImportStep("upload");
+                }}
+                className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
+              >
+                <XCircle size={15} />
+              </button>
+            </div>
+
+            {/* Body — parsed / validated table */}
+            <div className="flex-1 overflow-auto px-6 py-4">
+              {importRows.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                  <AlertTriangle size={32} className="mb-2 text-amber-400" />
+                  <p className="text-sm">No rows detected. Make sure the file matches the template.</p>
+                </div>
+              ) : (
+                <table className="min-w-full text-[11px]">
+                  <thead className="sticky top-0 z-10 bg-slate-50">
+                    <tr className="border-b border-slate-200">
+                      <th className="px-3 py-2 text-left font-semibold text-slate-500 w-10">#</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-500">Category Code</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-500">Description</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-500 w-8">UCost</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-500">Inv Acct</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-500">Exp Acct</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-500">RR Acct</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-500">RC Code</th>
+                      {importStep === "results" && (
+                        <>
+                          <th className="px-3 py-2 text-left font-semibold text-slate-500 w-20">Status</th>
+                          <th className="px-3 py-2 text-left font-semibold text-slate-500">Remarks</th>
+                        </>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {(importStep === "results" ? validatedRows : importRows).map((row) => {
+                      const isValid   = row.status === "Valid";
+                      const isFailed  = row.status === "Import Failed";
+                      const rowBg     = importStep === "results"
+                        ? isValid   ? "bg-emerald-50/60"
+                        : isFailed  ? "bg-red-50/60"
+                        :             "bg-red-50/40"
+                        : "";
+
+                      return (
+                        <tr key={row._rowNum} className={`${rowBg} transition`}>
+                          <td className="px-3 py-2 text-slate-400 font-mono">{row._rowNum}</td>
+                          <td className="px-3 py-2 font-semibold text-slate-700">{row.code || <span className="text-red-400 italic">—</span>}</td>
+                          <td className="px-3 py-2 text-slate-600 max-w-[180px] truncate">{row.description}</td>
+                          <td className="px-3 py-2 text-center text-slate-600">{row.uCostFlag}</td>
+                          <td className="px-3 py-2 font-mono text-slate-600">{row.invAcct || <span className="text-slate-300">—</span>}</td>
+                          <td className="px-3 py-2 font-mono text-slate-600">{row.expAcct || <span className="text-slate-300">—</span>}</td>
+                          <td className="px-3 py-2 font-mono text-slate-600">{row.rrAcct  || <span className="text-slate-300">—</span>}</td>
+                          <td className="px-3 py-2 text-slate-600">{row.rcCode || <span className="text-slate-300">—</span>}</td>
+                          {importStep === "results" && (
+                            <>
+                              <td className="px-3 py-2">
+                                {isValid ? (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+                                    <CheckCircle2 size={10} /> Valid
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700 border border-red-200">
+                                    <XCircle size={10} /> {isFailed ? "Failed" : "Invalid"}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-slate-500 max-w-[220px]">{row.remarks}</td>
+                            </>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Footer actions */}
+            <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-3 shrink-0">
+              <div className="text-[11px] text-slate-400">
+                {importStep === "results" && (
+                  <span>
+                    <span className="font-semibold text-emerald-600">{validatedRows.filter((r) => r.status === "Valid").length} valid</span>
+                    {" · "}
+                    <span className="font-semibold text-red-500">{validatedRows.filter((r) => r.status !== "Valid").length} invalid</span>
+                    {" of "}
+                    {validatedRows.length} rows
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={isValidating || isBulkSaving}
+                  onClick={() => {
+                    setImportModal(false);
+                    setImportRows([]);
+                    setValidatedRows([]);
+                    setImportStep("upload");
+                  }}
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                {importStep === "upload" && (
+                  <button
+                    type="button"
+                    disabled={isValidating || importRows.length === 0}
+                    onClick={handleValidate}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isValidating ? (
+                      <><Loader2 size={12} className="animate-spin" /> Validating…</>
+                    ) : (
+                      <><CheckCircle2 size={12} /> Validate</>
+                    )}
+                  </button>
+                )}
+
+                {importStep === "results" && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={isValidating || isBulkSaving}
+                      onClick={() => { setImportStep("upload"); setValidatedRows([]); }}
+                      className="rounded-lg border border-slate-300 bg-white px-4 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition disabled:opacity-50"
+                    >
+                      Re-validate
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isBulkSaving || validatedRows.filter((r) => r.status === "Valid").length === 0}
+                      onClick={handleBulkImport}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isBulkSaving ? (
+                        <><Loader2 size={12} className="animate-spin" /> Importing…</>
+                      ) : (
+                        <><CheckCircle2 size={12} /> Import Valid ({validatedRows.filter((r) => r.status === "Valid").length})</>
+                      )}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

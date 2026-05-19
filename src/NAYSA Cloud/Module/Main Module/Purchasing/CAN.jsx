@@ -1,5 +1,6 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Swal from "sweetalert2";
+import { useLocation } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faChevronDown,
@@ -11,19 +12,23 @@ import {
   faMagnifyingGlass,
   faPaperclip,
   faPlus,
-  faRefresh,
   faSearch,
-  faTableCells,
   faTrashAlt,
   faTrophy,
+  faEye,
 } from "@fortawesome/free-solid-svg-icons";
 
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
 import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import CancelTranModal from "../../../Lookup/SearchCancelRef.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
+import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
+import PayeeMastLookupModal from "../../../Lookup/SearchVendMast.jsx";
+import PaytermLookupModal from "../../../Lookup/SearchPayTermRef.jsx";
 import GlobalApprovalStatus from "@/NAYSA Cloud/Approval/GlobalApprovalStatus.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
+import { useResizableTableColumns } from "@/NAYSA Cloud/Global/datatable.jsx";
+import { Maximize2, Minimize2 } from "lucide-react";
 
 import { apiClient } from "../../../Configuration/BaseURL.jsx";
 import { useReset } from "../../../Components/ResetContext";
@@ -36,10 +41,17 @@ import {
   useSwalErrorAlert,
   useSwalInfoAlert,
   useSwalSuccessAlert,
+  useSwalvalidateRequiredFields,
   useSwalshowSaveSuccessDialog,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 import { useGetCurrentDayV2, useformatToDatev2 } from "@/NAYSA Cloud/Global/dates";
+import { useTopPayeeRow, useTopPayTermRow } from "@/NAYSA Cloud/Global/top1RefTable.js";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
+import { useTransactionUpsert } from "@/NAYSA Cloud/Global/procedure";
+import {
+  useFetchTranAtt,
+  useHandleFileDelete,
+} from "@/NAYSA Cloud/Global/fileManagement";
 import Header from "@/NAYSA Cloud/Components/Header";
 
 const docType = "CAN";
@@ -94,12 +106,27 @@ const num = (value) => {
 
 const money = (value) => formatNumber(num(value), 2);
 const qty = (value, dec = 2) => formatNumber(num(value), dec);
+const sanitizeNumeric = (value) => {
+  const raw = String(value ?? "");
+  const cleaned = raw.replace(/[^0-9.]/g, "");
+  const parts = cleaned.split(".");
+  return parts.length <= 1 ? cleaned : `${parts.shift()}.${parts.join("")}`;
+};
 
 const errorMessage = (error, fallback = "Unable to complete the request.") =>
   error?.response?.data?.message ||
   error?.response?.data?.error ||
   error?.message ||
   fallback;
+
+const cleanDisplayText = (value) =>
+  String(value ?? "")
+    .replace(/Ã¢â‚¬Â¢|â€¢|ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢/g, "•")
+    .replace(/Ã¢â‚¬â€œ|â€“|ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“/g, "–")
+    .replace(/Ã¢â‚¬â„¢|â€™|ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢/g, "'")
+    .replace(/Ã¢â‚¬Å“|â€œ|ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ/g, '"')
+    .replace(/Ã¢â‚¬Â|â€|ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â/g, '"')
+    .trim();
 
 const statusText = (code, fallback = "") => {
   const map = {
@@ -122,17 +149,23 @@ const canEndpointMap = {
   submit: ["/submitCAN", "/can/submit"],
   approve: ["/approveCAN", "/can/approve"],
   award: ["/awardCAN", "/can/award"],
+  markPOGenerated: ["/markCANPOGenerated", "/can/mark-po-generated"],
+  markPOLinesGenerated: ["/markCANPOLinesGenerated", "/can/mark-po-lines-generated"],
   find: ["/findCAN", "/can/find"],
 };
 
-const makeSupplierDetail = (item) => ({
+const DEC_AMT = 2;
+
+const makeSupplierDetail = (item, decQty = 2, decUPrice = 2, vatCode = "") => ({
   canLn: item.canLn,
+  invType: item.invType || "",
   itemCode: item.itemCode || "",
   itemName: item.itemName || "",
   itemSpecs: item.itemSpecs || "",
   uomCode: item.uomCode || "",
-  quantity: qty(item.selectedQty || item.totalQtyNeeded || 0, 6),
-  unitPrice: "0.000000",
+  quantity: qty(item.selectedQty || item.totalQtyNeeded || 0, decQty),
+  vatCode,
+  unitPrice: qty(0, decUPrice),
   grossAmount: "0.00",
   discountAmount: "0.00",
   vatAmount: "0.00",
@@ -141,13 +174,31 @@ const makeSupplierDetail = (item) => ({
   remarks: "",
 });
 
-const calcDetail = (row) => {
+const calcDetail = (row, options = {}) => {
+  const {
+    decQty = 2,
+    decUPrice = 2,
+    getVatAmount = () => 0,
+    changedField = "",
+  } = options;
   const grossAmount = num(row.quantity) * num(row.unitPrice);
-  const netAmount = grossAmount - num(row.discountAmount) + num(row.vatAmount);
+  const discountAmount = Math.min(num(row.discountAmount), grossAmount);
+  const amountAfterDiscount = grossAmount - discountAmount;
+  const vatAmount = changedField === "vatAmount"
+    ? num(row.vatAmount)
+    : row.vatCode
+      ? getVatAmount(row.vatCode, amountAfterDiscount)
+      : 0;
+  const netAmount = amountAfterDiscount - vatAmount;
+
   return {
     ...row,
-    grossAmount: money(grossAmount),
-    netAmount: money(netAmount),
+    quantity: qty(row.quantity, decQty),
+    unitPrice: qty(row.unitPrice, decUPrice),
+    grossAmount: formatNumber(grossAmount || 0, DEC_AMT),
+    discountAmount: formatNumber(discountAmount || 0, DEC_AMT),
+    vatAmount: formatNumber(vatAmount || 0, DEC_AMT),
+    netAmount: formatNumber(netAmount || 0, DEC_AMT),
   };
 };
 
@@ -168,20 +219,30 @@ const calcSupplier = (supplier) => {
 };
 
 export const CAN = () => {
+  const loadedFromUrlRef = useRef(false);
+  const location = useLocation();
   const { resetFlag } = useReset();
-  const { companyInfo, currentUserRow, getAllTopHSDocRow } = useAuth();
+  const { companyInfo, currentUserRow, getAllTopHSDocRow, getAllTopVatAmount, getReplacementVatRow } = useAuth();
 
   const hsDoc = getAllTopHSDocRow?.(docType) || {};
   const pdfLink = docTypePDFGuide?.[docType];
   const videoLink = docTypeVideoGuide?.[docType];
   const decQty = companyInfo?.itemDecqtyPur ?? 2;
-  const documentTitle = `${hsDoc?.docName || "Canvas"} Transaction`;
+  const decUPrice = companyInfo?.pur_decuprice ?? 2;
+  const documentTitle = `${hsDoc?.docName || "Canvass"} Transaction`;
 
   const [topTab, setTopTab] = useState("details");
   const [openPrRows, setOpenPrRows] = useState([]);
   const [selectedPrIds, setSelectedPrIds] = useState([]);
   const [expandedItemLn, setExpandedItemLn] = useState(null);
   const [activeSupplierForAttachment, setActiveSupplierForAttachment] = useState(null);
+  const [poSelectionTouched, setPoSelectionTouched] = useState(false);
+  const [selectedPOItemKeys, setSelectedPOItemKeys] = useState([]);
+  const [generatePOGroupBy, setGeneratePOGroupBy] = useState("supplier");
+  const [generatePOActiveTab, setGeneratePOActiveTab] = useState("details");
+  const [generatedPOInfo, setGeneratedPOInfo] = useState(null);
+  const [showSupplierCompareModal, setShowSupplierCompareModal] = useState(false);
+  const [isSupplierCompareMaximized, setIsSupplierCompareMaximized] = useState(false);
 
   const [state, setState] = useState({
     canId: "",
@@ -229,6 +290,10 @@ export const CAN = () => {
     showAttachModal: false,
     showCancelModal: false,
     showApprovalStatusModal: false,
+    showPayeeLookupModal: false,
+    activeSupplierIndexForLookup: null,
+    showPaytermModal: false,
+    activeSupplierIndexForPayterm: null,
   });
 
   const updateState = (updates) => setState((prev) => ({ ...prev, ...updates }));
@@ -266,12 +331,40 @@ export const CAN = () => {
     showAttachModal,
     showCancelModal,
     showApprovalStatusModal,
+    showPayeeLookupModal,
+    activeSupplierIndexForLookup,
+    showPaytermModal,
+    activeSupplierIndexForPayterm,
   } = state;
 
   const displayStatus = statusText(canStatus, canStatusName);
   const isLocked = ["A", "W", "C"].includes(String(canStatus || "").toUpperCase()) || canCancelled;
+  const isFormDisabled = isLocked;
   const isDraft = String(canStatus || "D").toUpperCase() === "D";
   const hasDocument = Boolean(canId);
+  const getCanVatAmount = (vatCode, amount) =>
+    typeof getAllTopVatAmount === "function" ? getAllTopVatAmount(vatCode, amount) : 0;
+  const getCanGoodsVatRow = (vatCode) =>
+    typeof getReplacementVatRow === "function" ? getReplacementVatRow(vatCode || "", "I", "S", "G") : null;
+
+  const getStatusHistoryActionName = useCallback(
+    (row) => {
+      const actionBy = cleanDisplayText(row?.actionBy);
+      const currentUserCode = cleanDisplayText(currentUserRow?.userCode);
+      const currentUserName = cleanDisplayText(currentUserRow?.userName);
+
+      return (
+        cleanDisplayText(row?.actionName) ||
+        cleanDisplayText(row?.actionByName) ||
+        cleanDisplayText(row?.userName) ||
+        (actionBy && currentUserCode && actionBy.toUpperCase() === currentUserCode.toUpperCase()
+          ? currentUserName
+          : actionBy) ||
+        ""
+      );
+    },
+    [currentUserRow?.userCode, currentUserRow?.userName]
+  );
 
   const totals = useMemo(() => {
     const totalQty = detailRows.reduce((sum, row) => sum + num(row.totalQtyNeeded), 0);
@@ -299,6 +392,305 @@ export const CAN = () => {
   const lowestSupplierKey = rankedSuppliers[0]
     ? `${rankedSuppliers[0].supplierCode || ""}-${rankedSuppliers[0].originalIndex}`
     : "";
+
+  const awardedSupplier = useMemo(() => {
+    const selectedCode = String(selectedSupplierCode || "").trim().toUpperCase();
+    return (supplierRows || []).find((supplier) => {
+      const supplierCode = String(supplier?.supplierCode || "").trim().toUpperCase();
+      return Boolean(supplier?.isAwarded) || (selectedCode && supplierCode === selectedCode);
+    }) || null;
+  }, [supplierRows, selectedSupplierCode]);
+
+  const poAllDetailRows = useMemo(() => {
+    if (!awardedSupplier) return [];
+
+    const canvasDetailByLn = new Map(
+      normalizeRows(detailRows).map((row) => [String(row?.canLn || ""), row])
+    );
+
+    let runningLn = 0;
+
+    return normalizeRows(awardedSupplier.detailRows)
+      .filter((row) => String(row?.itemCode || "").trim())
+      .flatMap((row, supplierDetailIndex) => {
+        const canvasDetail = canvasDetailByLn.get(String(row?.canLn || "")) || {};
+        const breakdownRows = normalizeRows(canvasDetail.prBreakdown);
+        const poReferences = normalizeRows(row.poReferences || row.poReferenceRows || row.poRows);
+        const sourceBreakdownRows = breakdownRows.length > 0
+          ? breakdownRows
+          : [
+              {
+                prId: row?.prId || canId || "",
+                prNo: row?.prNo || canNo || "",
+                prGroupId: row?.groupId || row?.canDt1Id || row?.canLn || "",
+                rcCode: row?.rcCode || "",
+                rcName: row?.rcName || "",
+                includedQty: row?.quantity || canvasDetail?.selectedQty || 0,
+                qtyInPr: row?.quantity || canvasDetail?.selectedQty || 0,
+                dateNeeded: row?.dateNeeded || "",
+              },
+            ];
+
+        const totalBreakdownQty = sourceBreakdownRows.reduce(
+          (sum, item) => sum + num(item?.includedQty || item?.qtyInPr || 0),
+          0
+        );
+        const supplierQty = num(row.quantity || canvasDetail?.selectedQty || 0);
+        const unitPrice = num(row.unitPrice);
+        const supplierGross = num(row.grossAmount) || supplierQty * unitPrice;
+        const supplierDiscount = num(row.discountAmount);
+        const supplierVat = num(row.vatAmount);
+        const discountRatio = supplierGross ? supplierDiscount / supplierGross : 0;
+        const vatRatio = supplierGross ? supplierVat / supplierGross : 0;
+
+        return sourceBreakdownRows.map((breakdown, breakdownIndex) => {
+          runningLn += 1;
+
+          const rawQty = num(breakdown?.includedQty || breakdown?.qtyInPr || 0);
+          const lineQty = totalBreakdownQty > 0 && supplierQty > 0
+            ? (rawQty / totalBreakdownQty) * supplierQty
+            : rawQty || supplierQty;
+          const grossAmount = lineQty * unitPrice;
+          const discountAmount = grossAmount * discountRatio;
+          const amountAfterDiscount = Math.max(grossAmount - discountAmount, 0);
+          const vatAmount = row.vatCode
+            ? getCanVatAmount(row.vatCode, amountAfterDiscount)
+            : grossAmount * vatRatio;
+          const netAmount = amountAfterDiscount - vatAmount;
+
+          const rowKey = String(
+            [
+              row?.canSupplierDt1Id || row?.canDt1Id || row?.canLn || supplierDetailIndex,
+              breakdown?.prId || "",
+              breakdown?.prGroupId || "",
+              breakdownIndex,
+            ].join("|")
+          );
+
+          const matchingPOReference = poReferences.find((ref) => {
+            const sameLineKey = String(ref?.poLineKey || ref?.lineKey || "") === rowKey;
+            const samePr = String(ref?.prId || "").toUpperCase() === String(breakdown?.prId || "").toUpperCase();
+            const sameGroup = String(ref?.groupId || ref?.prGroupId || "").toUpperCase() === String(breakdown?.prGroupId || "").toUpperCase();
+            return sameLineKey || (samePr && sameGroup);
+          }) || {};
+
+          const linePoNo =
+            matchingPOReference.poNo ||
+            matchingPOReference.po_no ||
+            row.poNo ||
+            row.po_no ||
+            "";
+          const linePoId =
+            matchingPOReference.poId ||
+            matchingPOReference.po_id ||
+            row.poId ||
+            row.po_id ||
+            "";
+
+          return {
+            ...row,
+            poKey: rowKey,
+            poLn: runningLn,
+            poLineKey: rowKey,
+            prNo: breakdown?.prNo || row?.prNo || canNo || "",
+            prId: breakdown?.prId || row?.prId || canId || "",
+            groupId: breakdown?.prGroupId || row?.groupId || row?.canDt1Id || row?.canLn || "",
+            rcCode: breakdown?.rcCode || row?.rcCode || "",
+            rcName: breakdown?.rcName || row?.rcName || "",
+            dateNeeded: breakdown?.dateNeeded || row?.dateNeeded || "",
+            supplierCode: awardedSupplier.supplierCode || selectedSupplierCode || "",
+            supplierName: awardedSupplier.supplierName || selectedSupplierName || "",
+            poNo: linePoNo,
+            poId: linePoId,
+            poGenerated: Boolean(linePoNo || linePoId || matchingPOReference.poGenerated || matchingPOReference.po_generated),
+            quantity: qty(lineQty, decQty),
+            unitPrice: qty(unitPrice, decUPrice),
+            grossAmount: money(grossAmount),
+            discountAmount: money(discountAmount),
+            vatAmount: money(vatAmount),
+            netAmount: money(netAmount),
+          };
+        });
+      });
+  }, [awardedSupplier, detailRows, selectedSupplierCode, selectedSupplierName, canId, canNo, decQty, decUPrice, getCanVatAmount]);
+
+  const poCandidateRows = useMemo(
+    () => poAllDetailRows.filter((row) => !(row.poNo || row.poId || row.poGenerated)),
+    [poAllDetailRows]
+  );
+
+  const generatedPODetailRows = useMemo(
+    () => poAllDetailRows.filter((row) => row.poNo || row.poId || row.poGenerated),
+    [poAllDetailRows]
+  );
+
+  const hasGeneratedPOLines = generatedPODetailRows.length > 0;
+  const allPOLinesGenerated = poAllDetailRows.length > 0 && poCandidateRows.length === 0;
+
+  const activePOSelectedKeys = poSelectionTouched
+    ? selectedPOItemKeys
+    : poCandidateRows.map((row) => row.poKey);
+
+  const selectedPORows = useMemo(
+    () => poCandidateRows.filter((row) => activePOSelectedKeys.includes(row.poKey)),
+    [poCandidateRows, activePOSelectedKeys]
+  );
+
+  const poSummaryRows = useMemo(() => {
+    const summaryMap = new Map();
+    const summarySourceRows = selectedPORows.length > 0 ? selectedPORows : poAllDetailRows;
+
+    summarySourceRows.forEach((row) => {
+      const summaryKey = [
+        String(row.itemCode || "").trim().toUpperCase(),
+        String(row.invType || "").trim().toUpperCase(),
+        String(row.itemSpecs || "").trim().toUpperCase(),
+      ].join("||");
+
+      if (!summaryMap.has(summaryKey)) {
+        summaryMap.set(summaryKey, {
+          poKey: summaryKey,
+          invType: row.invType || "",
+          itemCode: row.itemCode || "",
+          itemName: row.itemName || "",
+          itemSpecs: row.itemSpecs || "",
+          uomCode: row.uomCode || "",
+          quantity: 0,
+          unitPrice: num(row.unitPrice),
+          grossAmount: 0,
+          discountAmount: 0,
+          vatCode: row.vatCode || "",
+          vatName: row.vatName || "",
+          vatAmount: 0,
+          netAmount: 0,
+        });
+      }
+
+      const summary = summaryMap.get(summaryKey);
+      summary.quantity += num(row.quantity);
+      summary.grossAmount += num(row.grossAmount);
+      summary.discountAmount += num(row.discountAmount);
+      summary.vatAmount += num(row.vatAmount);
+      summary.netAmount += num(row.netAmount);
+      summary.unitPrice = summary.quantity ? summary.grossAmount / summary.quantity : summary.unitPrice;
+    });
+
+    return Array.from(summaryMap.values()).map((row, index) => ({
+      ...row,
+      poLn: index + 1,
+      quantity: qty(row.quantity, decQty),
+      unitPrice: qty(row.unitPrice, decUPrice),
+      grossAmount: money(row.grossAmount),
+      discountAmount: money(row.discountAmount),
+      vatAmount: money(row.vatAmount),
+      netAmount: money(row.netAmount),
+    }));
+  }, [selectedPORows, poAllDetailRows, decQty, decUPrice]);
+
+  const uniqueGeneratePOPrNos = useMemo(
+    () => [...new Set(poAllDetailRows.map((row) => String(row.prNo || "").trim()).filter(Boolean))],
+    [poAllDetailRows]
+  );
+
+  const hasCommonGeneratePOItems = useMemo(() => {
+    const groupCount = new Map();
+    poAllDetailRows.forEach((row) => {
+      const key = [
+        String(row.itemCode || "").trim().toUpperCase(),
+        String(row.invType || "").trim().toUpperCase(),
+        String(row.itemSpecs || "").trim().toUpperCase(),
+      ].join("||");
+      groupCount.set(key, (groupCount.get(key) || 0) + 1);
+    });
+    return Array.from(groupCount.values()).some((count) => count > 1);
+  }, [poAllDetailRows]);
+
+  const showGeneratePOSummary = uniqueGeneratePOPrNos.length > 1 || hasCommonGeneratePOItems;
+
+  useEffect(() => {
+    if (!showGeneratePOSummary && generatePOActiveTab === "summary") {
+      setGeneratePOActiveTab("details");
+    }
+  }, [showGeneratePOSummary, generatePOActiveTab]);
+
+  const generatedPOCount = useMemo(() => selectedPORows.length > 0 ? 1 : 0, [selectedPORows]);
+
+  const existingGeneratedPOInfo = useMemo(() => {
+    if (generatedPOInfo?.poNo || generatedPOInfo?.poId) {
+      return generatedPOInfo;
+    }
+
+    const supplier = awardedSupplier || {};
+    const poNo =
+      supplier.poNo ||
+      supplier.po_no ||
+      supplier.generatedPoNo ||
+      supplier.generated_po_no ||
+      supplier.purchaseOrderNo ||
+      supplier.purchase_order_no ||
+      "";
+    const poId =
+      supplier.poId ||
+      supplier.po_id ||
+      supplier.generatedPoId ||
+      supplier.generated_po_id ||
+      supplier.purchaseOrderId ||
+      supplier.purchase_order_id ||
+      "";
+
+    if (!poNo && !poId) return null;
+
+    return {
+      poNo,
+      poId,
+      branchCode: supplier.branchCode || supplier.branch_code || branchCode || "",
+    };
+  }, [generatedPOInfo, awardedSupplier, branchCode]);
+
+  const generatedPONoList = useMemo(() => {
+    const poNos = [
+      ...generatedPODetailRows.map((row) => row?.poNo || row?.po_no || ""),
+      existingGeneratedPOInfo?.poNo || existingGeneratedPOInfo?.documentNo || "",
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+
+    return [...new Set(poNos)];
+  }, [generatedPODetailRows, existingGeneratedPOInfo]);
+
+  const hasGeneratedPO = allPOLinesGenerated;
+
+  const togglePOItemSelection = (rowKey) => {
+    if (hasGeneratedPO) return;
+    setPoSelectionTouched(true);
+    setSelectedPOItemKeys((prev) => {
+      const currentKeys = poSelectionTouched ? prev : poCandidateRows.map((row) => row.poKey);
+      return currentKeys.includes(rowKey)
+        ? currentKeys.filter((key) => key !== rowKey)
+        : [...currentKeys, rowKey];
+    });
+  };
+
+  const toggleAllPOItemSelection = () => {
+    if (hasGeneratedPO) return;
+    setPoSelectionTouched(true);
+    setSelectedPOItemKeys((prev) => {
+      const currentKeys = poSelectionTouched ? prev : poCandidateRows.map((row) => row.poKey);
+      return currentKeys.length === poCandidateRows.length ? [] : poCandidateRows.map((row) => row.poKey);
+    });
+  };
+
+  const viewGeneratedPO = (poRow = existingGeneratedPOInfo) => {
+    const poNo = poRow?.poNo || poRow?.documentNo || "";
+    const poBranchCode = poRow?.branchCode || branchCode || "";
+
+    if (!poNo) {
+      useSwalInfoAlert("View Purchase Order", "No generated Purchase Order is available yet.");
+      return;
+    }
+
+    window.open(`/tran/PO?poNo=${encodeURIComponent(poNo)}&branchCode=${encodeURIComponent(poBranchCode)}`, "_blank");
+  };
 
   const callCAN = async (endpointKey, jsonData = {}) => {
     const endpoints = Array.isArray(endpointKey)
@@ -332,14 +724,17 @@ export const CAN = () => {
     if (resetFlag) handleReset();
   }, [resetFlag]);
 
-  useEffect(() => {
-    if (branchCode) loadOpenPR();
-  }, [branchCode]);
-
   const handleReset = () => {
+    setOpenPrRows([]);
     setSelectedPrIds([]);
     setExpandedItemLn(null);
     setActiveSupplierForAttachment(null);
+    setPoSelectionTouched(false);
+    setSelectedPOItemKeys([]);
+    setGeneratePOGroupBy("supplier");
+    setGeneratePOActiveTab("details");
+    setGeneratedPOInfo(null);
+    setShowSupplierCompareModal(false);
 
     updateState({
       canId: "",
@@ -372,6 +767,10 @@ export const CAN = () => {
       showAttachModal: false,
       showCancelModal: false,
       showApprovalStatusModal: false,
+      showPayeeLookupModal: false,
+      activeSupplierIndexForLookup: null,
+      showPaytermModal: false,
+      activeSupplierIndexForPayterm: null,
     });
   };
 
@@ -394,7 +793,7 @@ export const CAN = () => {
       const data = await callCAN("history", { branchCode, ...historyFilter });
       updateState({ historyRows: normalizeRows(data) });
     } catch (error) {
-      useSwalErrorAlert("Canvas History", errorMessage(error));
+      useSwalErrorAlert("Canvass History", errorMessage(error));
     } finally {
       updateState({ isLoading: false });
     }
@@ -411,7 +810,7 @@ export const CAN = () => {
       });
 
       if (!data || data?.result === null) {
-        useSwalInfoAlert("Canvas Transaction", "Transaction does not exist.");
+        useSwalInfoAlert("Canvass Transaction", "Transaction does not exist.");
         return;
       }
 
@@ -442,6 +841,31 @@ export const CAN = () => {
         (supplier) => supplier.isAwarded || supplier.supplierCode === data.selectedSupplierCode
       );
 
+      const fetchedPoNo =
+        awarded?.poNo ||
+        awarded?.po_no ||
+        awarded?.generatedPoNo ||
+        awarded?.generated_po_no ||
+        data.poNo ||
+        data.po_no ||
+        "";
+      const fetchedPoId =
+        awarded?.poId ||
+        awarded?.po_id ||
+        awarded?.generatedPoId ||
+        awarded?.generated_po_id ||
+        data.poId ||
+        data.po_id ||
+        "";
+
+      setGeneratedPOInfo(
+        fetchedPoNo || fetchedPoId
+          ? { poNo: fetchedPoNo, poId: fetchedPoId, branchCode: data.branchCode || fetchBranchCode }
+          : null
+      );
+      setPoSelectionTouched(false);
+      setSelectedPOItemKeys([]);
+
       updateState({
         canId: data.canId || "",
         canNo: data.canNo || "",
@@ -465,14 +889,123 @@ export const CAN = () => {
       setSelectedPrIds(normalizeRows(data.prRows).map((row) => String(row.prId)));
       setTopTab("details");
     } catch (error) {
-      useSwalErrorAlert("Fetch Canvas", errorMessage(error));
+      useSwalErrorAlert("Fetch Canvass", errorMessage(error));
     } finally {
       updateState({ isLoading: false });
     }
   };
 
+  const cleanUrl = useCallback(() => {
+    window.history.replaceState({}, "", `${window.location.origin}${window.location.pathname}`);
+  }, []);
+
+  const handleHistoryRowPick = useCallback(
+    async (row) => {
+      const selectedCanId = row?.canId || row?.can_id || row?.tranId || row?.documentID || "";
+      const selectedCanNo = row?.canNo || row?.can_no || row?.docNo || row?.documentNo || "";
+      const selectedBranchCode = row?.branchCode || row?.branch_code || branchCode;
+
+      if (!selectedCanId && !selectedCanNo) return;
+
+      await fetchCAN({
+        canId: selectedCanId,
+        canNo: selectedCanNo,
+        branchCode: selectedBranchCode,
+      });
+
+      setTopTab("details");
+      cleanUrl();
+    },
+    [branchCode, cleanUrl]
+  );
+
+  useEffect(() => {
+    if (loadedFromUrlRef.current) return;
+
+    const params = new URLSearchParams(location.search);
+    const urlCanId = params.get("canId") || params.get("documentID") || "";
+    const urlCanNo = params.get("canNo") || params.get("docNo") || "";
+    const urlBranchCode = params.get("branchCode") || branchCode;
+
+    if (urlCanId || (urlCanNo && urlBranchCode)) {
+      loadedFromUrlRef.current = true;
+      fetchCAN({
+        canId: urlCanId,
+        canNo: urlCanNo,
+        branchCode: urlBranchCode,
+      });
+      setTopTab("details");
+    }
+    // Run once on mount to match the PR URL-load behavior and avoid repeated state updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleDocNoBlur = () => {
     if (!canId && canNo && branchCode) fetchCAN({ canNo, branchCode });
+  };
+
+
+  const getCanvassItemSignature = (row = {}) =>
+    [
+      String(row?.invType || "").trim().toUpperCase(),
+      String(row?.itemCode || "").trim().toUpperCase(),
+      String(row?.itemName || "").trim().toUpperCase(),
+      String(row?.itemSpecs || "").trim().toUpperCase(),
+      String(row?.uomCode || "").trim().toUpperCase(),
+    ].join("||");
+
+  const syncSupplierRowsWithCanvassDetails = (sourceSupplierRows = [], sourceDetailRows = []) => {
+    const normalizedDetails = normalizeRows(sourceDetailRows);
+
+    return normalizeRows(sourceSupplierRows).map((supplier) => {
+      const existingDetails = normalizeRows(supplier.detailRows);
+      const existingByLn = new Map();
+      const existingBySignature = new Map();
+
+      existingDetails.forEach((detail) => {
+        const lnKey = String(detail?.canLn || "");
+        if (lnKey) existingByLn.set(lnKey, detail);
+
+        const signatureKey = getCanvassItemSignature(detail);
+        if (signatureKey && !existingBySignature.has(signatureKey)) {
+          existingBySignature.set(signatureKey, detail);
+        }
+      });
+
+      const nextSupplierDetails = normalizedDetails.map((item) => {
+        const lnKey = String(item?.canLn || "");
+        const signatureKey = getCanvassItemSignature(item);
+        const existing = existingByLn.get(lnKey) || existingBySignature.get(signatureKey);
+
+        const baseDetail = existing
+          ? {
+              ...existing,
+              canLn: item.canLn,
+              invType: item.invType || existing.invType || "",
+              itemCode: item.itemCode || existing.itemCode || "",
+              itemName: item.itemName || existing.itemName || "",
+              itemSpecs: item.itemSpecs || existing.itemSpecs || "",
+              uomCode: item.uomCode || existing.uomCode || "",
+              quantity: item.selectedQty || item.totalQtyNeeded || existing.quantity || 0,
+            }
+          : makeSupplierDetail(item, decQty, decUPrice, supplier.vatCode || "");
+
+        return calcDetail(
+          {
+            ...baseDetail,
+            quantity: item.selectedQty || item.totalQtyNeeded || 0,
+            vatCode: baseDetail.vatCode || supplier.vatCode || "",
+            vatName: baseDetail.vatName || supplier.vatName || "",
+          },
+          { decQty, decUPrice, getVatAmount: getCanVatAmount },
+        );
+      });
+
+      return calcSupplier({
+        ...supplier,
+        detailRows: nextSupplierDetails,
+      });
+    });
   };
 
   const handleLoadSelectedPR = async () => {
@@ -496,15 +1029,7 @@ export const CAN = () => {
       updateState({
         prRows: openPrRows.filter((row) => selectedPrIds.includes(String(row.prId))),
         detailRows: nextDetailRows,
-        supplierRows: supplierRows.map((supplier) =>
-          calcSupplier({
-            ...supplier,
-            detailRows: nextDetailRows.map((item) => {
-              const existing = normalizeRows(supplier.detailRows).find((x) => Number(x.canLn) === Number(item.canLn));
-              return existing || makeSupplierDetail(item);
-            }),
-          })
-        ),
+        supplierRows: syncSupplierRowsWithCanvassDetails(supplierRows, nextDetailRows),
         activeTab: "review",
       });
     } catch (error) {
@@ -531,42 +1056,142 @@ export const CAN = () => {
           supplierName: "",
           quoteNo: "",
           quoteDate: "",
+          offerDate: "",
           paymentTerms: "",
           deliveryTerms: "",
           deliveryDate: "",
           remarks: "",
           isAwarded: false,
           isLowestOffer: false,
-          detailRows: detailRows.map(makeSupplierDetail),
+          detailRows: detailRows.map((item) => makeSupplierDetail(item, decQty, decUPrice)),
           attachments: [],
         }),
       ],
     });
   };
 
+  const getSupplierAttachmentDocumentNo = useCallback(
+    (supplier) => `${canNo || "CAN"}-${supplier?.supplierCode || "SUPPLIER"}`,
+    [canNo]
+  );
+
+  const deleteSupplierAttachments = async (supplier) => {
+    const lookupKeys = [
+      getSupplierAttachmentDocumentNo(supplier),
+      supplier?.canSupplierId,
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+
+    const uniqueLookupKeys = [...new Set(lookupKeys)];
+    const deletedFileIds = new Set();
+
+    for (const lookupKey of uniqueLookupKeys) {
+      const attachmentRows = normalizeRows(await useFetchTranAtt(lookupKey));
+
+      for (const attachment of attachmentRows) {
+        const fileId =
+          attachment?.id ||
+          attachment?.fileID ||
+          attachment?.fileId ||
+          attachment?.attachmentId ||
+          "";
+
+        if (!fileId || deletedFileIds.has(String(fileId))) continue;
+
+        await useHandleFileDelete(fileId);
+        deletedFileIds.add(String(fileId));
+      }
+    }
+
+    return deletedFileIds.size;
+  };
+
   const removeSupplier = async (index) => {
     if (isLocked) return;
-    const result = await useSwalConfirmAlert("Remove Supplier Offer?", "Remove this supplier offer?", "Yes");
-    if (!result?.isConfirmed) return;
 
     const removed = supplierRows[index];
-    updateState({
-      supplierRows: supplierRows.filter((_, i) => i !== index),
-      activeSupplierIndex: Math.max(0, Math.min(activeSupplierIndex, supplierRows.length - 2)),
-      ...(removed?.supplierCode === selectedSupplierCode
-        ? {
-            selectedSupplierCode: "",
-            selectedSupplierName: "",
-            selectedOfferAmount: "0.00",
-          }
-        : {}),
-    });
+    const hasSavedSupplier = Boolean(removed?.canSupplierId);
+    const nextSupplierRows = supplierRows.filter((_, i) => i !== index);
+    const supplierWasSelected = removed?.supplierCode === selectedSupplierCode;
+    const nextSelectedSupplierCode = supplierWasSelected ? "" : selectedSupplierCode;
+    const nextSelectedSupplierName = supplierWasSelected ? "" : selectedSupplierName;
+    const nextSelectedOfferAmount = supplierWasSelected ? "0.00" : selectedOfferAmount;
+
+    const result = await useSwalConfirmAlert(
+      "Remove Supplier Offer?",
+      hasSavedSupplier
+        ? "This will also delete supplier quotation attachments linked to this supplier and re-save the Canvass transaction. Continue?"
+        : "Remove this supplier offer?",
+      "Yes"
+    );
+
+    if (!result?.isConfirmed) return;
+
+    updateState({ isLoading: true });
+
+    try {
+      if (hasSavedSupplier) {
+        await deleteSupplierAttachments(removed);
+      }
+
+      updateState({
+        supplierRows: nextSupplierRows,
+        activeSupplierIndex: Math.max(0, Math.min(activeSupplierIndex, nextSupplierRows.length - 1)),
+        selectedSupplierCode: nextSelectedSupplierCode,
+        selectedSupplierName: nextSelectedSupplierName,
+        selectedOfferAmount: nextSelectedOfferAmount,
+      });
+
+      if (canId) {
+        const data = await callCAN(
+          "upsert",
+          buildPayload({
+            supplierRows: nextSupplierRows,
+            selectedSupplierCode: nextSelectedSupplierCode,
+            selectedSupplierName: nextSelectedSupplierName,
+            selectedOfferAmount: nextSelectedOfferAmount,
+          })
+        );
+
+        const responseRow = Array.isArray(data) ? data[0] : data;
+        const savedCanId = responseRow?.canId || responseRow?.can_id || canId;
+        const savedCanNo = responseRow?.canNo || responseRow?.can_no || canNo;
+
+        await fetchCAN({
+          canId: savedCanId,
+          canNo: savedCanNo,
+          branchCode,
+        });
+      }
+
+      await useSwalSuccessAlert(
+        "Supplier Removed",
+        hasSavedSupplier
+          ? "Supplier offer and its quotation attachments were removed. Canvass was re-saved successfully."
+          : "Supplier offer was removed."
+      );
+    } catch (error) {
+      useSwalErrorAlert(
+        "Remove Supplier",
+        errorMessage(error, "Unable to remove supplier offer and quotation attachments.")
+      );
+    } finally {
+      updateState({ isLoading: false });
+    }
   };
 
   const updateSupplier = (index, field, value) => {
     if (isLocked) return;
     const rows = [...supplierRows];
-    rows[index] = { ...rows[index], [field]: field === "supplierCode" ? String(value || "").toUpperCase() : value };
+    const normalizedValue = field === "supplierCode" ? String(value || "").toUpperCase() : value;
+
+    const updates = { [field]: normalizedValue };
+    if (field === "supplierCode" && !normalizedValue) {
+      updates.supplierName = "";
+    }
+
+    rows[index] = { ...rows[index], ...updates };
     updateState({ supplierRows: rows });
   };
 
@@ -578,7 +1203,14 @@ export const CAN = () => {
     const rows = [...normalizeRows(supplier.detailRows)];
 
     rows[detailIndex] = { ...rows[detailIndex], [field]: value };
-    if (commit) rows[detailIndex] = calcDetail(rows[detailIndex]);
+    if (commit) {
+      rows[detailIndex] = calcDetail(rows[detailIndex], {
+        decQty,
+        decUPrice,
+        getVatAmount: getCanVatAmount,
+        changedField: field,
+      });
+    }
 
     suppliers[supplierIndex] = calcSupplier({ ...supplier, detailRows: rows });
     updateState({ supplierRows: suppliers });
@@ -590,6 +1222,135 @@ export const CAN = () => {
         ...supplierActiveTabs,
         [supplierIndex]: tab,
       },
+    });
+  };
+
+  const openSupplierLookup = (supplierIndex) => {
+    if (isLocked) return;
+    updateState({
+      showPayeeLookupModal: true,
+      activeSupplierIndexForLookup: supplierIndex,
+    });
+  };
+
+  const handleSupplierLookupClose = async (selectedPayee) => {
+    updateState({ showPayeeLookupModal: false });
+
+    if (!selectedPayee || activeSupplierIndexForLookup === null) {
+      updateState({ activeSupplierIndexForLookup: null });
+      return;
+    }
+
+    updateState({ isLoading: true });
+
+    try {
+      const selectedVendCode = String(selectedPayee?.vendCode || "").trim();
+      let payeeRow = null;
+      if (selectedVendCode) {
+        try {
+          payeeRow = await useTopPayeeRow(selectedVendCode);
+        } catch (error) {
+          console.error("Error fetching selected supplier:", error);
+        }
+      }
+
+      const suppliers = [...supplierRows];
+      const supplier = { ...suppliers[activeSupplierIndexForLookup] };
+      const nextSupplierCode = String(payeeRow?.vendCode || selectedPayee.vendCode || "").trim().toUpperCase();
+
+      if (
+        nextSupplierCode &&
+        suppliers.some((row, index) =>
+          index !== activeSupplierIndexForLookup &&
+          String(row?.supplierCode || "").trim().toUpperCase() === nextSupplierCode
+        )
+      ) {
+        updateState({ activeSupplierIndexForLookup: null });
+        useSwalInfoAlert("Supplier Offer", "This supplier is already selected in another supplier card.");
+        return;
+      }
+
+      const replacementVat = getCanGoodsVatRow(payeeRow?.vatCode || selectedPayee.vatCode || "");
+      const nextVatCode = replacementVat?.vatCode || payeeRow?.vatCode || selectedPayee.vatCode || "";
+      const nextVatName = replacementVat?.vatName || payeeRow?.vatName || selectedPayee.vatName || "";
+      let nextPaymentTerms =
+        payeeRow?.paytermName ||
+        payeeRow?.paytermCode ||
+        selectedPayee.paytermName ||
+        selectedPayee.paytermCode ||
+        selectedPayee.paymentTerms ||
+        selectedPayee.payTerms ||
+        supplier.paymentTerms ||
+        "";
+      const nextPaytermCode = payeeRow?.paytermCode || selectedPayee.paytermCode || "";
+      if (nextPaytermCode) {
+        try {
+          const paytermRow = await useTopPayTermRow(nextPaytermCode);
+          nextPaymentTerms = paytermRow?.paytermName || paytermRow?.paytermCode || nextPaymentTerms;
+        } catch (error) {
+          console.error("Error fetching selected payment term:", error);
+        }
+      }
+
+      supplier.supplierCode = nextSupplierCode;
+      supplier.supplierName = selectedPayee.vendName || payeeRow?.vendName || "";
+      supplier.paymentTerms = nextPaymentTerms;
+      supplier.vatCode = nextVatCode;
+      supplier.vatName = nextVatName;
+      supplier.detailRows = normalizeRows(supplier.detailRows).map((detail) =>
+        calcDetail(
+          {
+            ...detail,
+            vatCode: nextVatCode,
+            vatName: nextVatName,
+          },
+          { decQty, decUPrice, getVatAmount: getCanVatAmount },
+        )
+      );
+
+      suppliers[activeSupplierIndexForLookup] = calcSupplier(supplier);
+      updateState({
+        supplierRows: suppliers,
+        activeSupplierIndexForLookup: null,
+      });
+    } catch (error) {
+      console.error("Error selecting supplier:", error);
+      useSwalErrorAlert("Supplier Offer", errorMessage(error, "Unable to update selected supplier."));
+    } finally {
+      updateState({ isLoading: false });
+    }
+  };
+
+  const openPaytermLookup = (supplierIndex) => {
+    if (isLocked) return;
+    updateState({
+      showPaytermModal: true,
+      activeSupplierIndexForPayterm: supplierIndex,
+    });
+  };
+
+  const handleClosePaytermModal = async (selectedPayterm) => {
+    if (selectedPayterm) {
+      await handleSelectPayTerm(selectedPayterm.paytermCode);
+    }
+    updateState({ showPaytermModal: false });
+  };
+
+  const handleSelectPayTerm = async (code) => {
+    if (!code || activeSupplierIndexForPayterm === null) return;
+
+    const result = await useTopPayTermRow(code);
+    if (!result) return;
+
+    const suppliers = [...supplierRows];
+    const supplier = { ...suppliers[activeSupplierIndexForPayterm] };
+
+    supplier.paymentTerms = result.paytermName || result.paytermCode || "";
+
+    suppliers[activeSupplierIndexForPayterm] = supplier;
+    updateState({
+      supplierRows: suppliers,
+      activeSupplierIndexForPayterm: null,
     });
   };
 
@@ -622,21 +1383,535 @@ export const CAN = () => {
       prBreakdown: commit ? distributeIncludedQty(row.prBreakdown, clampedQty) : row.prBreakdown,
     };
 
-    const suppliers = supplierRows.map((supplier) =>
-      calcSupplier({
-        ...supplier,
-        detailRows: normalizeRows(supplier.detailRows).map((detail) =>
-          Number(detail.canLn) === Number(row.canLn)
-            ? calcDetail({
-                ...detail,
-                quantity: selectedQtyValue,
-              })
-            : detail
-        ),
-      })
-    );
+    const suppliers = syncSupplierRowsWithCanvassDetails(supplierRows, rows);
 
     updateState({ detailRows: rows, supplierRows: suppliers });
+  };
+
+  const toggleSelectedPrId = (prId) => {
+    if (isLocked) return;
+
+    const id = String(prId);
+    setSelectedPrIds((prev) =>
+      prev.includes(id) ? prev.filter((selectedId) => selectedId !== id) : [...prev, id]
+    );
+  };
+
+  const displayedPrRows = useMemo(() => {
+    const rowsByPrId = new Map();
+
+    const addOrMergePr = (row = {}, source = "open") => {
+      const prId = String(row?.prId || row?.pr_id || "").trim();
+      const prNo = String(row?.prNo || row?.pr_no || "").trim();
+      const key = prId || prNo;
+      if (!key) return;
+
+      const existing = rowsByPrId.get(key) || {};
+      rowsByPrId.set(key, {
+        ...existing,
+        ...row,
+        prId: prId || existing.prId || "",
+        prNo: prNo || existing.prNo || "",
+        branchCode: row.branchCode || row.branch_code || existing.branchCode || branchCode || "",
+        prDate: row.prDate || row.pr_date || existing.prDate || "",
+        rcCode: row.rcCode || row.rc_code || existing.rcCode || "",
+        rcName: row.rcName || row.rc_name || existing.rcName || "",
+        requestedBy: row.requestedBy || row.requested_by || existing.requestedBy || "",
+        dateNeeded: row.dateNeeded || row.date_needed || existing.dateNeeded || "",
+        totalItems: row.totalItems ?? existing.totalItems ?? 0,
+        totalQty: row.totalQty ?? existing.totalQty ?? 0,
+        remarks: row.remarks || existing.remarks || "",
+        isSavedPr: source === "saved" || existing.isSavedPr || false,
+      });
+    };
+
+    normalizeRows(openPrRows).forEach((row) => addOrMergePr(row, "open"));
+    normalizeRows(prRows).forEach((row) => addOrMergePr(row, "saved"));
+
+    const detailByPr = new Map();
+    normalizeRows(detailRows).forEach((detail) => {
+      normalizeRows(detail?.prBreakdown).forEach((breakdown) => {
+        const prId = String(breakdown?.prId || breakdown?.pr_id || "").trim();
+        const prNo = String(breakdown?.prNo || breakdown?.pr_no || "").trim();
+        const key = prId || prNo;
+        if (!key) return;
+
+        const current = detailByPr.get(key) || {
+          totalItems: 0,
+          totalQty: 0,
+          prId,
+          prNo,
+          branchCode: breakdown.branchCode || breakdown.branch_code || branchCode || "",
+          rcCode: breakdown.rcCode || breakdown.rc_code || "",
+          rcName: breakdown.rcName || breakdown.rc_name || "",
+          requestedBy: breakdown.requestedBy || breakdown.requested_by || "",
+          dateNeeded: breakdown.dateNeeded || breakdown.date_needed || "",
+        };
+
+        current.totalItems += 1;
+        current.totalQty += num(breakdown?.includedQty || breakdown?.qtyInPr || detail?.selectedQty || 0);
+        current.prId = current.prId || prId;
+        current.prNo = current.prNo || prNo;
+        current.branchCode = current.branchCode || breakdown.branchCode || breakdown.branch_code || branchCode || "";
+        current.rcCode = current.rcCode || breakdown.rcCode || breakdown.rc_code || "";
+        current.rcName = current.rcName || breakdown.rcName || breakdown.rc_name || "";
+        current.requestedBy = current.requestedBy || breakdown.requestedBy || breakdown.requested_by || "";
+        current.dateNeeded = current.dateNeeded || breakdown.dateNeeded || breakdown.date_needed || "";
+        detailByPr.set(key, current);
+      });
+    });
+
+    detailByPr.forEach((computed, key) => {
+      const existing = rowsByPrId.get(key) || {};
+      rowsByPrId.set(key, {
+        ...computed,
+        ...existing,
+        totalItems: num(existing.totalItems) > 0 ? existing.totalItems : computed.totalItems,
+        totalQty: num(existing.totalQty) > 0 ? existing.totalQty : computed.totalQty,
+        isSavedPr: existing.isSavedPr ?? true,
+      });
+    });
+
+    return Array.from(rowsByPrId.values());
+  }, [openPrRows, prRows, detailRows, branchCode]);
+
+  const canPrColumnDefs = useMemo(() => [
+    { key: "selected", label: "Select", width: 72 },
+    { key: "branchCode", label: "Branch", width: 110 },
+    { key: "prNo", label: "PR No.", width: 130 },
+    { key: "prDate", label: "PR Date", width: 120 },
+    { key: "rcName", label: "Department", width: 180 },
+    { key: "requestedBy", label: "Requested By", width: 160 },
+    { key: "dateNeeded", label: "Date Needed", width: 130 },
+    { key: "totalItems", label: "Items", width: 90 },
+    { key: "totalQty", label: "Quantity Needed", width: 150 },
+    { key: "remarks", label: "Remarks", width: 260 },
+  ], []);
+
+  const {
+    getColumnStyle: getCanPrColumnStyle,
+    getFrozenColumnStyle: getCanPrFrozenStyle,
+    getOrderedColumns: getOrderedCanPrColumns,
+    getSortedRows: getSortedCanPrRows,
+    renderHeaderContextMenu: renderCanPrHeaderContextMenu,
+    renderResizableHeader: renderCanPrHeader,
+    setFrozenColumnKeys: setCanPrFrozenColumnKeys,
+  } = useResizableTableColumns(canPrColumnDefs);
+  const orderedCanPrColumns = getOrderedCanPrColumns(canPrColumnDefs);
+  useEffect(() => {
+    const stickyPrColumns = ["selected", "prNo"];
+    setCanPrFrozenColumnKeys((prev) => {
+      const availableKeys = new Set(canPrColumnDefs.map((column) => column.key));
+      const next = [
+        ...stickyPrColumns.filter((key) => availableKeys.has(key)),
+        ...prev.filter((key) => availableKeys.has(key) && !stickyPrColumns.includes(key)),
+      ];
+
+      return next.length === prev.length && next.every((key, index) => key === prev[index]) ? prev : next;
+    });
+  }, [canPrColumnDefs, setCanPrFrozenColumnKeys]);
+  const sortedCanPrRows = getSortedCanPrRows(
+    displayedPrRows.map((row, originalIndex) => ({ row, originalIndex })),
+    (entry, sortKey) => {
+      if (sortKey === "selected") return selectedPrIds.includes(String(entry.row?.prId)) ? 1 : 0;
+      return entry.row?.[sortKey] ?? "";
+    },
+  );
+  const canPrTotals = useMemo(() => ({
+    totalItems: displayedPrRows.reduce((sum, row) => sum + num(row.totalItems), 0),
+    totalQty: qty(displayedPrRows.reduce((sum, row) => sum + num(row.totalQty), 0), decQty),
+  }), [displayedPrRows, decQty]);
+  const getCanPrFallbackWidth = (key) => canPrColumnDefs.find((column) => column.key === key)?.width || 120;
+  const getCanPrCellStyle = (key, fallbackWidth) => ({
+    ...getCanPrColumnStyle(key, fallbackWidth),
+    ...getCanPrFrozenStyle(key, orderedCanPrColumns, fallbackWidth, { isHeader: false }),
+  });
+
+  const canCanvassColumnDefs = useMemo(() => [
+    { key: "expand", label: "", width: 56 },
+    { key: "ln", label: "LN", width: 64 },
+    { key: "invType", label: "Type", width: 80 },
+    { key: "itemCode", label: "Item Code", width: 130 },
+    { key: "itemName", label: "Item Description", width: 300 },
+    { key: "itemSpecs", label: "Specification", width: 200 },
+    { key: "uomCode", label: "UOM", width: 90 },
+    { key: "totalQtyNeeded", label: "Total Qty Needed", width: 130 },
+    { key: "sourcePrs", label: "Source PRs", width: 180 },
+    { key: "prCount", label: "PR Count", width: 110 },
+    { key: "availableQty", label: "Available / Remaining", width: 170 },
+    { key: "selectedQty", label: "Canvass Quantity", width: 150 },
+  ], []);
+
+  const {
+    getColumnStyle: getCanCanvassColumnStyle,
+    getFrozenColumnStyle: getCanCanvassFrozenStyle,
+    getOrderedColumns: getOrderedCanCanvassColumns,
+    getSortedRows: getSortedCanCanvassRows,
+    renderHeaderContextMenu: renderCanCanvassHeaderContextMenu,
+    renderResizableHeader: renderCanCanvassHeader,
+    setFrozenColumnKeys: setCanCanvassFrozenColumnKeys,
+  } = useResizableTableColumns(canCanvassColumnDefs);
+  const orderedCanCanvassColumns = getOrderedCanCanvassColumns(canCanvassColumnDefs);
+  useEffect(() => {
+    const stickyCanvassColumns = ["expand", "ln", "invType", "itemCode", "itemName"];
+    setCanCanvassFrozenColumnKeys((prev) => {
+      const availableKeys = new Set(canCanvassColumnDefs.map((column) => column.key));
+      const next = [
+        ...stickyCanvassColumns.filter((key) => availableKeys.has(key)),
+        ...prev.filter((key) => availableKeys.has(key) && !stickyCanvassColumns.includes(key)),
+      ];
+
+      return next.length === prev.length && next.every((key, index) => key === prev[index]) ? prev : next;
+    });
+  }, [canCanvassColumnDefs, setCanCanvassFrozenColumnKeys]);
+  const sortedCanCanvassRows = getSortedCanCanvassRows(
+    detailRows.map((row, originalIndex) => ({ row, originalIndex })),
+    (entry, sortKey) => {
+      if (sortKey === "expand") return "";
+      if (sortKey === "ln") return entry.originalIndex + 1;
+      if (sortKey === "sourcePrs") {
+        return normalizeRows(entry.row?.prBreakdown).map((item) => item.prNo).join(", ");
+      }
+      if (sortKey === "prCount") return normalizeRows(entry.row?.prBreakdown).length;
+      if (sortKey === "availableQty") return num(entry.row?.selectedQty);
+      return entry.row?.[sortKey] ?? "";
+    },
+  );
+  const getCanCanvassFallbackWidth = (key) => canCanvassColumnDefs.find((column) => column.key === key)?.width || 120;
+  const getCanCanvassCellStyle = (key, fallbackWidth) => ({
+    ...getCanCanvassColumnStyle(key, fallbackWidth),
+    ...getCanCanvassFrozenStyle(key, orderedCanCanvassColumns, fallbackWidth, { isHeader: false }),
+  });
+  const getCanCanvassFooterCellStyle = (key, fallbackWidth) => getCanCanvassColumnStyle(key, fallbackWidth);
+
+  const canSupplierItemColumnDefs = useMemo(() => [
+    { key: "ln", label: "LN", width: 56 },
+    { key: "invType", label: "Type", width: 80 },
+    { key: "itemCode", label: "Item Code", width: 130 },
+    { key: "itemName", label: "Item Description", width: 300 },
+    { key: "itemSpecs", label: "Specification", width: 300 },
+    { key: "uomCode", label: "UOM", width: 90 },
+    { key: "quantity", label: "Quantity", width: 130 },
+    { key: "unitPrice", label: "Unit Price", width: 130 },
+    { key: "grossAmount", label: "Gross Amount", width: 140 },
+    { key: "discountAmount", label: "Discount Amount", width: 150 },
+    { key: "vatCode", label: "VAT Code", width: 120 },
+    { key: "vatAmount", label: "VAT Amount", width: 140 },
+    { key: "netAmount", label: "Net Amount", width: 140 },
+  ], []);
+
+  const {
+    getColumnStyle: getCanSupplierItemColumnStyle,
+    getFrozenColumnStyle: getCanSupplierItemFrozenStyle,
+    getOrderedColumns: getOrderedCanSupplierItemColumns,
+    getSortedRows: getSortedCanSupplierItemRows,
+    renderHeaderContextMenu: renderCanSupplierItemHeaderContextMenu,
+    renderResizableHeader: renderCanSupplierItemHeader,
+  } = useResizableTableColumns(canSupplierItemColumnDefs);
+  const orderedCanSupplierItemColumns = getOrderedCanSupplierItemColumns(canSupplierItemColumnDefs);
+  const getCanSupplierItemFallbackWidth = (key) =>
+    canSupplierItemColumnDefs.find((column) => column.key === key)?.width || 120;
+  const getCanSupplierItemCellStyle = (key, fallbackWidth) => ({
+    ...getCanSupplierItemColumnStyle(key, fallbackWidth),
+    ...getCanSupplierItemFrozenStyle(key, orderedCanSupplierItemColumns, fallbackWidth, { isHeader: false }),
+  });
+
+  const generatePODetailColumnDefs = useMemo(() => [
+    { key: "poNo", label: "PO No.", width: 140 },
+    { key: "viewPO", label: "", width: 56 },
+    { key: "prNo", label: "PR No.", width: 130 },
+    { key: "ln", label: "LN", width: 56 },
+    { key: "invType", label: "Type", width: 80 },
+    { key: "itemCode", label: "Item Code", width: 130 },
+    { key: "itemName", label: "Item Description", width: 300 },
+    { key: "itemSpecs", label: "Specification", width: 300 },
+    { key: "uomCode", label: "UOM", width: 90 },
+    { key: "quantity", label: "Quantity", width: 130 },
+    { key: "unitPrice", label: "Unit Price", width: 130 },
+    { key: "grossAmount", label: "Gross Amount", width: 140 },
+    { key: "discountAmount", label: "Discount Amount", width: 150 },
+    { key: "vatCode", label: "VAT Code", width: 120 },
+    { key: "vatAmount", label: "VAT Amount", width: 140 },
+    { key: "netAmount", label: "Net Amount", width: 140 },
+    { key: "rcCode", label: "RC Code", width: 120 },
+    { key: "rcName", label: "RC Name", width: 220 },
+  ], []);
+
+  const {
+    getColumnStyle: getGeneratePODetailColumnStyle,
+    getFrozenColumnStyle: getGeneratePODetailFrozenStyle,
+    getOrderedColumns: getOrderedGeneratePODetailColumns,
+    getSortedRows: getSortedGeneratePODetailRows,
+    renderHeaderContextMenu: renderGeneratePODetailHeaderContextMenu,
+    renderResizableHeader: renderGeneratePODetailHeader,
+  } = useResizableTableColumns(generatePODetailColumnDefs);
+  const orderedGeneratePODetailColumns = getOrderedGeneratePODetailColumns(generatePODetailColumnDefs);
+  const sortedGeneratePODetailRows = getSortedGeneratePODetailRows(
+    poAllDetailRows.map((row, originalIndex) => ({ row, originalIndex })),
+    (entry, sortKey) => {
+      if (sortKey === "viewPO") return entry.row?.poNo || entry.row?.poId || "";
+      if (sortKey === "ln") return entry.originalIndex + 1;
+      return entry.row?.[sortKey] ?? "";
+    }
+  );
+  const getGeneratePODetailFallbackWidth = (key) =>
+    generatePODetailColumnDefs.find((column) => column.key === key)?.width || 120;
+  const getGeneratePODetailCellStyle = (key, fallbackWidth) => ({
+    ...getGeneratePODetailColumnStyle(key, fallbackWidth),
+    ...getGeneratePODetailFrozenStyle(key, orderedGeneratePODetailColumns, fallbackWidth, { isHeader: false }),
+  });
+
+  const generatePOSummaryColumnDefs = useMemo(() => [
+    { key: "ln", label: "LN", width: 56 },
+    { key: "invType", label: "Type", width: 80 },
+    { key: "itemCode", label: "Item Code", width: 130 },
+    { key: "itemName", label: "Item Description", width: 300 },
+    { key: "itemSpecs", label: "Specification", width: 300 },
+    { key: "uomCode", label: "UOM", width: 90 },
+    { key: "quantity", label: "Quantity", width: 130 },
+    { key: "unitPrice", label: "Unit Price", width: 130 },
+    { key: "grossAmount", label: "Gross Amount", width: 140 },
+    { key: "discountAmount", label: "Discount Amount", width: 150 },
+    { key: "vatCode", label: "VAT Code", width: 120 },
+    { key: "vatAmount", label: "VAT Amount", width: 140 },
+    { key: "netAmount", label: "Net Amount", width: 140 },
+  ], []);
+
+  const {
+    getColumnStyle: getGeneratePOSummaryColumnStyle,
+    getFrozenColumnStyle: getGeneratePOSummaryFrozenStyle,
+    getOrderedColumns: getOrderedGeneratePOSummaryColumns,
+    getSortedRows: getSortedGeneratePOSummaryRows,
+    renderHeaderContextMenu: renderGeneratePOSummaryHeaderContextMenu,
+    renderResizableHeader: renderGeneratePOSummaryHeader,
+  } = useResizableTableColumns(generatePOSummaryColumnDefs);
+  const orderedGeneratePOSummaryColumns = getOrderedGeneratePOSummaryColumns(generatePOSummaryColumnDefs);
+  const sortedGeneratePOSummaryRows = getSortedGeneratePOSummaryRows(
+    poSummaryRows.map((row, originalIndex) => ({ row, originalIndex })),
+    (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? ""
+  );
+  const getGeneratePOSummaryFallbackWidth = (key) =>
+    generatePOSummaryColumnDefs.find((column) => column.key === key)?.width || 120;
+  const getGeneratePOSummaryCellStyle = (key, fallbackWidth) => ({
+    ...getGeneratePOSummaryColumnStyle(key, fallbackWidth),
+    ...getGeneratePOSummaryFrozenStyle(key, orderedGeneratePOSummaryColumns, fallbackWidth, { isHeader: false }),
+  });
+
+  const renderCanPrCell = (columnKey, row) => {
+    const style = getCanPrCellStyle(columnKey, getCanPrFallbackWidth(columnKey));
+    const checked = selectedPrIds.includes(String(row.prId));
+    const textValue = (value, className = "") => (
+      <td key={columnKey} className={`global-tran-td-ui h-8 ${className}`.trim()} style={style}>
+        <input
+          className={`w-full min-h-[25px] global-tran-td-inputclass-ui ${className.includes("text-right") ? "text-right" : ""}`.trim()}
+          value={value || ""}
+          readOnly
+        />
+      </td>
+    );
+
+    const renderers = {
+      selected: () => (
+        <td key={columnKey} className="global-tran-td-ui h-8 text-center" style={style}>
+          <input
+            type="checkbox"
+            checked={checked}
+            disabled={isLocked}
+            onChange={() => toggleSelectedPrId(row.prId)}
+            className="h-4 w-4"
+          />
+        </td>
+      ),
+      branchCode: () => textValue(row.branchCode || row.branchName || ""),
+      prNo: () => textValue(row.prNo),
+      prDate: () => textValue(safeDate(row.prDate)),
+      rcName: () => textValue(row.rcName || row.rcCode || "No Department"),
+      requestedBy: () => textValue(row.requestedBy),
+      dateNeeded: () => textValue(safeDate(row.dateNeeded)),
+      totalItems: () => textValue(row.totalItems, "text-right"),
+      totalQty: () => textValue(qty(row.totalQty, decQty), "text-right"),
+      remarks: () => textValue(row.remarks),
+    };
+
+    return renderers[columnKey]?.() || textValue(row[columnKey]);
+  };
+
+  const renderCanCanvassCell = (columnKey, row, originalIndex) => {
+    const style = getCanCanvassCellStyle(columnKey, getCanCanvassFallbackWidth(columnKey));
+    const breakdown = normalizeRows(row.prBreakdown);
+    const textValue = (value, className = "") => (
+      <td key={columnKey} className={`global-tran-td-ui ${className}`.trim()} style={style}>
+        <input
+          className={`w-full global-tran-td-inputclass-ui ${className.includes("text-right") ? "text-right" : ""}`.trim()}
+          value={value || ""}
+          readOnly
+        />
+      </td>
+    );
+
+    const renderers = {
+      expand: () => (
+        <td key={columnKey} className="global-tran-td-ui text-center" style={style}>
+          <button
+            type="button"
+            onClick={() => setExpandedItemLn(expandedItemLn === row.canLn ? null : row.canLn)}
+            className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-slate-100"
+          >
+            <FontAwesomeIcon icon={expandedItemLn === row.canLn ? faChevronDown : faChevronRight} />
+          </button>
+        </td>
+      ),
+      ln: () => textValue(originalIndex + 1, "text-center"),
+      invType: () => textValue(row.invType),
+      itemCode: () => textValue(row.itemCode),
+      itemName: () => textValue(row.itemName),
+      itemSpecs: () => textValue(row.itemSpecs),
+      uomCode: () => textValue(row.uomCode),
+      totalQtyNeeded: () => textValue(qty(row.totalQtyNeeded, decQty), "text-right"),
+      sourcePrs: () => textValue(breakdown.map((item) => item.prNo).filter(Boolean).join(", ")),
+      prCount: () => textValue(breakdown.length, "text-center"),
+      availableQty: () => textValue(`${qty(row.selectedQty, decQty)} / ${qty(row.totalQtyNeeded, decQty)}`, "text-right"),
+      selectedQty: () => (
+        <td key={columnKey} className="global-tran-td-ui text-right" style={style}>
+          <input
+            data-can-canvass-selected-qty-input="true"
+            className="w-full global-tran-td-inputclass-ui text-right"
+            value={row.selectedQty || ""}
+            onChange={(e) => updateItemSelectedQty(originalIndex, e.target.value)}
+            onBlur={(e) => updateItemSelectedQty(originalIndex, e.target.value, true)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter" || isLocked) return;
+              e.preventDefault();
+              const inputs = Array.from(document.querySelectorAll('[data-can-canvass-selected-qty-input="true"]'));
+              const currentIndex = inputs.indexOf(e.currentTarget);
+              updateItemSelectedQty(originalIndex, e.currentTarget.value, true);
+              window.setTimeout(() => {
+                const nextInputs = Array.from(document.querySelectorAll('[data-can-canvass-selected-qty-input="true"]'));
+                const nextInput = nextInputs[currentIndex + 1];
+                if (nextInput) {
+                  nextInput.focus();
+                  if (typeof nextInput.select === "function") nextInput.select();
+                }
+              }, 0);
+            }}
+            readOnly={isLocked}
+          />
+        </td>
+      ),
+    };
+
+    return renderers[columnKey]?.() || textValue(row[columnKey]);
+  };
+
+  const renderCanSupplierItemCell = (columnKey, row, originalIndex, supplierIndex) => {
+    const style = getCanSupplierItemCellStyle(columnKey, getCanSupplierItemFallbackWidth(columnKey));
+    const supplierRowsForNavigation = normalizeRows(supplierRows?.[supplierIndex]?.detailRows);
+    const supplierEditableFields = ["unitPrice", "discountAmount"];
+    const focusSupplierItemCell = (field, rowIndex) => {
+      const nextEl = document.getElementById(`can-supplier-${supplierIndex}-${field}-${rowIndex}`);
+      if (nextEl) {
+        nextEl.focus();
+        if (typeof nextEl.select === "function") nextEl.select();
+      }
+    };
+    const commitSupplierItemNumber = (field, value) => {
+      const decimals = field === "unitPrice" ? decUPrice : DEC_AMT;
+      const sanitizedValue = sanitizeNumeric(value);
+      updateSupplierDetail(
+        supplierIndex,
+        originalIndex,
+        field,
+        formatNumber(parseFormattedNumber(sanitizedValue || 0) || 0, decimals),
+        true,
+      );
+    };
+    const handleSupplierItemKeyDown = (e, field) => {
+      if (isLocked) return;
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+        commitSupplierItemNumber(field, e.currentTarget.value);
+        window.setTimeout(() => {
+          focusSupplierItemCell(field, Math.min(supplierRowsForNavigation.length - 1, originalIndex + 1));
+        }, 0);
+        return;
+      }
+
+      if (e.key === "Tab") {
+        e.preventDefault();
+        commitSupplierItemNumber(field, e.currentTarget.value);
+        const currentFieldIndex = supplierEditableFields.indexOf(field);
+        const nextFieldIndex = e.shiftKey
+          ? Math.max(0, currentFieldIndex - 1)
+          : Math.min(supplierEditableFields.length - 1, currentFieldIndex + 1);
+        window.setTimeout(() => focusSupplierItemCell(supplierEditableFields[nextFieldIndex], originalIndex), 0);
+      }
+    };
+    const textValue = (value, className = "") => (
+      <td key={columnKey} className={`global-tran-td-ui h-8 ${className}`.trim()} style={style}>
+        <input
+          className={`w-full min-h-[28px] global-tran-td-inputclass-ui ${className.includes("text-right") ? "text-right" : ""} `.trim()}
+          value={value || ""}
+          readOnly
+        />
+      </td>
+    );
+    const editableNumber = (field, decimals = DEC_AMT, options = {}) => (
+      <td key={columnKey} className="global-tran-td-ui h-8 text-right" style={style}>
+        <input
+          id={`can-supplier-${supplierIndex}-${field}-${originalIndex}`}
+          className="w-full min-h-[28px] global-tran-td-inputclass-ui text-right"
+          value={row[field] || ""}
+          onChange={(e) => updateSupplierDetail(supplierIndex, originalIndex, field, sanitizeNumeric(e.target.value))}
+          onFocus={(e) => {
+            if (isLocked || !options.clearZeroOnFocus) return;
+            if (parseFormattedNumber(e.target.value || 0) === 0) {
+              updateSupplierDetail(supplierIndex, originalIndex, field, "");
+            }
+          }}
+          onBlur={(e) => {
+            if (isLocked) return;
+            updateSupplierDetail(
+              supplierIndex,
+              originalIndex,
+              field,
+              formatNumber(parseFormattedNumber(sanitizeNumeric(e.target.value) || 0) || 0, decimals),
+              true,
+            );
+          }}
+          onKeyDown={(e) => options.gridNavigation ? handleSupplierItemKeyDown(e, field) : undefined}
+          readOnly={isLocked}
+        />
+      </td>
+    );
+
+    const renderers = {
+      ln: () => textValue(originalIndex + 1, "text-center"),
+      invType: () => textValue(row.invType),
+      itemCode: () => textValue(row.itemCode),
+      itemName: () => textValue(row.itemName),
+      itemSpecs: () => textValue(row.itemSpecs),
+      uomCode: () => textValue(row.uomCode),
+      quantity: () => editableNumber("quantity", decQty),
+      unitPrice: () => editableNumber("unitPrice", decUPrice, { clearZeroOnFocus: true, gridNavigation: true }),
+      grossAmount: () => textValue(money(row.grossAmount), "text-right"),
+      discountAmount: () => editableNumber("discountAmount", DEC_AMT, { clearZeroOnFocus: true, gridNavigation: true }),
+      vatCode: () => (
+        <td key={columnKey} className="global-tran-td-ui h-8" style={style}>
+          <input
+            className="w-full min-h-[28px] global-tran-td-inputclass-ui"
+            value={row.vatCode || ""}
+            onChange={(e) => updateSupplierDetail(supplierIndex, originalIndex, "vatCode", e.target.value.toUpperCase())}
+            onBlur={(e) => updateSupplierDetail(supplierIndex, originalIndex, "vatCode", e.target.value.toUpperCase(), true)}
+            readOnly={isLocked}
+          />
+        </td>
+      ),
+      vatAmount: () => textValue(money(row.vatAmount), "text-right"),
+      netAmount: () => textValue(money(row.netAmount), "text-right font-bold"),
+    };
+
+    return renderers[columnKey]?.() || textValue(row[columnKey]);
   };
 
   const awardSupplier = async (supplier) => {
@@ -645,12 +1920,13 @@ export const CAN = () => {
       return;
     }
 
-    const result = await useSwalConfirmAlert(
-      "Award Supplier?",
-      `Award this Canvas transaction to ${supplier.supplierName || supplier.supplierCode}?`,
-      "Yes, Award"
-    );
-    if (!result?.isConfirmed) return;
+    if (num(supplier?.netAmount) <= 0) {
+      useSwalInfoAlert(
+        "Award Supplier",
+        "Supplier offer cannot be awarded because Total Net Amount is zero."
+      );
+      return;
+    }
 
     if (!canId) {
       updateState({
@@ -662,15 +1938,39 @@ export const CAN = () => {
           isAwarded: row.supplierCode === supplier.supplierCode,
         })),
       });
-      useSwalInfoAlert("Supplier Selected", "Please save the Canvas first before final awarding.");
+
+      useSwalInfoAlert(
+        "Supplier Selected",
+        "Please save the Canvass first before final awarding."
+      );
       return;
     }
+
+    if (!supplier?.canSupplierId) {
+      useSwalInfoAlert(
+        "Award Supplier",
+        "Please save the Canvass transaction first before awarding this supplier offer."
+      );
+      return;
+    }
+
+    const result = await useSwalConfirmAlert(
+      "Award Supplier?",
+      `Award this Canvass transaction to ${supplier.supplierName || supplier.supplierCode}?`,
+      "Yes, Award"
+    );
+
+    if (!result?.isConfirmed) return;
+
+    const currentCanId = canId;
+    const currentCanNo = canNo;
+    const currentBranchCode = branchCode;
 
     updateState({ isLoading: true });
 
     try {
-      await callCAN("award", {
-        canId,
+      const data = await callCAN("award", {
+        canId: currentCanId,
         userCode,
         selectedSupplierCode: supplier.supplierCode,
         selectedSupplierName: supplier.supplierName,
@@ -678,8 +1978,41 @@ export const CAN = () => {
         remarks,
       });
 
-      await useSwalSuccessAlert("Awarded", "Supplier offer has been awarded.");
-      await fetchCAN({ canId });
+      const responseRow = Array.isArray(data) ? data[0] : data;
+      const responseCanId = responseRow?.canId || responseRow?.can_id || currentCanId;
+      const responseCanNo = responseRow?.canNo || responseRow?.can_no || currentCanNo;
+
+      /*
+        Update the visible fields immediately, then retrieve the transaction
+        again from SQL so status, selected supplier, awarded flag, attachments,
+        and status history are all synchronized with the database.
+      */
+      updateState({
+        canId: responseCanId,
+        canNo: responseCanNo,
+        canStatus: responseRow?.canStatus || "W",
+        canStatusName: responseRow?.canStatusName || "Awarded",
+        selectedSupplierCode: supplier.supplierCode,
+        selectedSupplierName: supplier.supplierName,
+        selectedOfferAmount: money(supplier.netAmount),
+        supplierRows: supplierRows.map((row) => ({
+          ...row,
+          isAwarded:
+            String(row?.supplierCode || "").trim().toUpperCase() ===
+            String(supplier.supplierCode || "").trim().toUpperCase(),
+        })),
+      });
+
+      await fetchCAN({
+        canId: responseCanId,
+        canNo: responseCanNo,
+        branchCode: currentBranchCode,
+      });
+
+      await useSwalSuccessAlert(
+        "Awarded",
+        "Supplier offer has been awarded."
+      );
     } catch (error) {
       useSwalErrorAlert("Award Supplier", errorMessage(error));
     } finally {
@@ -687,109 +2020,496 @@ export const CAN = () => {
     }
   };
 
-  const buildPayload = () => ({
-    canId,
-    canNo,
-    canDate: toDateInputValue(canDate) || canDate,
-    branchCode,
-    remarks,
-    userCode,
-    selectedSupplierCode,
-    selectedSupplierName,
-    selectedOfferAmount: num(selectedOfferAmount),
+  const buildPurchaseOrderPayload = (rows = []) => {
+    const supplier = awardedSupplier || {};
+    const paytermValue = supplier.paytermCode || supplier.paymentTerms || supplier.paytermName || "";
+    const today = useGetCurrentDayV2();
 
-    prRows: prRows.map((row) => ({
-      prId: row.prId,
-      branchCode: row.branchCode || branchCode,
-      prNo: row.prNo,
-      prDate: toDateInputValue(row.prDate) || row.prDate || null,
-      rcCode: row.rcCode || "",
-      rcName: row.rcName || "",
-      requestedBy: row.requestedBy || "",
-      dateNeeded: toDateInputValue(row.dateNeeded) || row.dateNeeded || null,
-    })),
+    const detailForPO = normalizeRows(rows).map((row, index) => {
+      const grossAmount = num(row.grossAmount);
+      const discountAmount = num(row.discountAmount);
+      const itemAmount = Math.max(grossAmount - discountAmount, 0);
 
-    detailRows: detailRows.map((row, index) => ({
-      canLn: index + 1,
-      itemCode: row.itemCode || "",
-      itemName: row.itemName || "",
-      itemSpecs: row.itemSpecs || "",
-      uomCode: row.uomCode || "",
-      totalQtyNeeded: num(row.totalQtyNeeded),
-      selectedQty: num(row.selectedQty),
-      remarks: row.remarks || "",
-      prBreakdown: normalizeRows(row.prBreakdown).map((b) => ({
-        prId: b.prId,
-        prNo: b.prNo,
-        prLn: b.prLn,
-        prGroupId: b.prGroupId || "",
-        branchCode: b.branchCode || branchCode,
-        rcCode: b.rcCode || "",
-        rcName: b.rcName || "",
-        qtyInPr: num(b.qtyInPr),
-        includedQty: num(b.includedQty),
-        dateNeeded: toDateInputValue(b.dateNeeded) || b.dateNeeded || null,
+      return {
+        poId: "",
+        prId: row.prId || canId || "",
+        groupId: row.groupId || row.canDt1Id || row.canLn || "",
+        prNo: row.prNo || canNo || "",
+        prStatus: row.prStatus || "",
+        poStatus: "O",
+        invType: row.invType || "",
+        lnNo: index + 1,
+        itemCode: row.itemCode || "",
+        itemName: row.itemName || "",
+        uomCode: row.uomCode || "",
+        qtyOnHand: 0,
+        prBalance: num(row.quantity),
+        poQty: num(row.quantity),
+        unitCost: num(row.unitPrice),
+        grossAmount,
+        discRate: grossAmount ? (discountAmount / grossAmount) * 100 : 0,
+        discAmount: discountAmount,
+        netAmount: num(row.netAmount),
+        vatCode: row.vatCode || supplier.vatCode || "",
+        vatName: row.vatName || supplier.vatName || "",
+        vatAmount: num(row.vatAmount),
+        itemAmount,
+        rcCode: row.rcCode || "",
+        rcName: row.rcName || "",
+        dateNeeded: today,
+        itemSpecs: row.itemSpecs || "",
+        rrQty: 0,
+        canSupplierId: awardedSupplier?.canSupplierId || "",
+        canSupplierDt1Id: row.canSupplierDt1Id || row.can_supplier_dt1_id || "",
+        poLineKey: row.poLineKey || row.poKey || "",
+      };
+    });
+
+    const summaryMap = new Map();
+    detailForPO.forEach((row) => {
+      const summaryKey = [
+        String(row.itemCode || "").trim().toUpperCase(),
+        String(row.invType || "").trim().toUpperCase(),
+        String(row.itemSpecs || "").trim().toUpperCase(),
+      ].join("||");
+
+      if (!summaryMap.has(summaryKey)) {
+        summaryMap.set(summaryKey, {
+          summaryKey,
+          invType: row.invType || "",
+          itemCode: row.itemCode || "",
+          itemName: row.itemName || "",
+          itemSpecs: row.itemSpecs || "",
+          uomCode: row.uomCode || "",
+          poQty: 0,
+          unitCost: row.unitCost || 0,
+          grossAmount: 0,
+          discRate: 0,
+          discAmount: 0,
+          netAmount: 0,
+          vatCode: row.vatCode || "",
+          vatName: row.vatName || "",
+          vatAmount: 0,
+          itemAmount: 0,
+        });
+      }
+
+      const summary = summaryMap.get(summaryKey);
+      summary.poQty += num(row.poQty);
+      summary.grossAmount += num(row.grossAmount);
+      summary.discAmount += num(row.discAmount);
+      summary.netAmount += num(row.netAmount);
+      summary.vatAmount += num(row.vatAmount);
+      summary.itemAmount += num(row.itemAmount);
+      summary.unitCost = summary.poQty ? summary.grossAmount / summary.poQty : summary.unitCost;
+      summary.discRate = summary.grossAmount ? (summary.discAmount / summary.grossAmount) * 100 : 0;
+    });
+
+    const grossTotal = detailForPO.reduce((sum, row) => sum + num(row.grossAmount), 0);
+    const discountTotal = detailForPO.reduce((sum, row) => sum + num(row.discAmount), 0);
+    const vatTotal = detailForPO.reduce((sum, row) => sum + num(row.vatAmount), 0);
+    const poAmount = grossTotal - discountTotal;
+
+    return {
+      branchCode: branchCode || "",
+      poNo: "",
+      poId: "",
+      poDate: today,
+      rcCode: "",
+      vendCode: supplier.supplierCode || selectedSupplierCode || "",
+      vendName: supplier.supplierName || selectedSupplierName || "",
+      whCode: "",
+      whName: "",
+      delAddress: "",
+      address1: "",
+      address2: "",
+      address3: "",
+      vendContact: "",
+      paytermCode: paytermValue,
+      poType: "",
+      delDate: today,
+      currCode: companyInfo?.currCode || "PHP",
+      currRate: parseFormattedNumber(companyInfo?.currRate || 1) || 1,
+      refPoNo1: "",
+      refPoNo2: "",
+      refPrNo2: canNo || "",
+      poAmount,
+      vatAmount: vatTotal,
+      discAmount: discountTotal,
+      advAmount: 0,
+      remarks: [
+        `Generated from Canvass ${canNo || ""}`.trim(),
+        remarks || "",
+      ].filter(Boolean).join("\n"),
+      poStatus: "O",
+      userCode: currentUserRow?.userCode || userCode || "",
+      dt1: detailForPO,
+      dt3: Array.from(summaryMap.values()).map((row, index) => ({
+        poId: "",
+        summaryKey: row.summaryKey || "",
+        invType: row.invType || "",
+        lnNo: index + 1,
+        itemCode: row.itemCode || "",
+        itemName: row.itemName || "",
+        itemSpecs: row.itemSpecs || "",
+        uomCode: row.uomCode || "",
+        poQty: num(row.poQty),
+        unitCost: num(row.unitCost),
+        grossAmount: num(row.grossAmount),
+        discRate: num(row.discRate),
+        discAmount: num(row.discAmount),
+        netAmount: num(row.netAmount),
+        vatCode: row.vatCode || "",
+        vatName: row.vatName || "",
+        vatAmount: num(row.vatAmount),
+        itemAmount: num(row.itemAmount),
       })),
-    })),
+    };
+  };
 
-    supplierRows: supplierRows.map((supplier, supplierIndex) => ({
-      supplierCode: supplier.supplierCode || "",
-      supplierName: supplier.supplierName || "",
-      quoteNo: supplier.quoteNo || "",
-      quoteDate: toDateInputValue(supplier.quoteDate) || supplier.quoteDate || null,
-      offerAmount: num(supplier.offerAmount),
-      discountAmount: num(supplier.discountAmount),
-      vatAmount: num(supplier.vatAmount),
-      netAmount: num(supplier.netAmount),
-      paymentTerms: supplier.paymentTerms || "",
-      deliveryTerms: supplier.deliveryTerms || "",
-      deliveryDate: toDateInputValue(supplier.deliveryDate) || supplier.deliveryDate || null,
-      isLowestOffer:
-        `${supplier.supplierCode || ""}-${supplierIndex}` === lowestSupplierKey &&
-        num(supplier.netAmount) > 0,
-      isAwarded: Boolean(supplier.isAwarded),
-      remarks: supplier.remarks || "",
-      detailRows: normalizeRows(supplier.detailRows).map((detail) => ({
-        canLn: detail.canLn,
-        itemCode: detail.itemCode || "",
-        itemName: detail.itemName || "",
-        itemSpecs: detail.itemSpecs || "",
-        uomCode: detail.uomCode || "",
-        quantity: num(detail.quantity),
-        unitPrice: num(detail.unitPrice),
-        grossAmount: num(detail.grossAmount),
-        discountAmount: num(detail.discountAmount),
-        vatAmount: num(detail.vatAmount),
-        netAmount: num(detail.netAmount),
-        isAwardedLine: Boolean(detail.isAwardedLine),
-        remarks: detail.remarks || "",
-      })),
-    })),
-  });
+  const extractPOResponseRow = (response) => {
+    const unwrapResult = (value) => {
+      if (!value) return value;
 
-  const save = async () => {
-    if (!branchCode) return useSwalErrorAlert("Canvas Validation", "Branch is required.");
-    if (!canDate) return useSwalErrorAlert("Canvas Validation", "Canvas Date is required.");
-    if (!userCode) return useSwalErrorAlert("Canvas Validation", "User Code is required.");
-    if (detailRows.length === 0) return useSwalErrorAlert("Canvas Validation", "Please select at least one PR item.");
-    if (supplierRows.some((s) => !s.supplierCode || !s.supplierName)) {
-      return useSwalErrorAlert("Canvas Validation", "Supplier Code and Supplier Name are required.");
+      if (Array.isArray(value)) return value[0];
+
+      if (typeof value === "string") {
+        try {
+          const parsed = JSON.parse(value);
+          return unwrapResult(parsed);
+        } catch {
+          return { result: value };
+        }
+      }
+
+      if (value?.result) return unwrapResult(value.result);
+      if (Array.isArray(value?.data)) return value.data[0];
+      if (Array.isArray(value?.data?.data)) return value.data.data[0];
+      if (value?.data && typeof value.data === "object") return unwrapResult(value.data);
+
+      return value;
+    };
+
+    return unwrapResult(response);
+  };
+
+  const handleGeneratePO = async () => {
+    if (!canId) {
+      useSwalInfoAlert("Generate Purchase Order", "Please save the Canvass transaction first.");
+      return;
     }
 
-    updateState({ isLoading: true });
+    if (hasGeneratedPO) {
+      useSwalInfoAlert(
+        "Generate Purchase Order",
+        `All available lines already have Purchase Order reference${existingGeneratedPOInfo?.poNo ? ` (${existingGeneratedPOInfo.poNo})` : ""}.`
+      );
+      return;
+    }
+
+    if (String(canStatus || "").toUpperCase() !== "W") {
+      useSwalInfoAlert("Generate Purchase Order", "Only awarded Canvass transactions can generate Purchase Order.");
+      return;
+    }
+
+    if (!awardedSupplier?.canSupplierId) {
+      useSwalInfoAlert("Generate Purchase Order", "Awarded supplier must be saved before generating Purchase Order.");
+      return;
+    }
+
+    if (selectedPORows.length === 0) {
+      useSwalInfoAlert("Generate Purchase Order", "Please select at least one awarded item to generate Purchase Order.");
+      return;
+    }
+
+    const result = await useSwalConfirmAlert(
+      "Generate Purchase Order?",
+      `Create ${generatedPOCount} Purchase Order${generatedPOCount > 1 ? "s" : ""} using the existing PO save endpoint?`,
+      "Generate PO"
+    );
+
+    if (!result?.isConfirmed) return;
+
+    updateState({ isLoading: true, showSpinner: true });
 
     try {
-      const data = await callCAN("upsert", buildPayload());
-      const savedCanId = data?.canId || data?.[0]?.canId || canId;
+      const rowGroups = [selectedPORows];
 
-      if (savedCanId) await fetchCAN({ canId: savedCanId });
-      useSwalshowSaveSuccessDialog(handleReset, async () => savedCanId && fetchCAN({ canId: savedCanId }));
+      const createdPOs = [];
+
+      for (const rows of rowGroups) {
+        const poPayload = buildPurchaseOrderPayload(rows);
+
+        const response = await useTransactionUpsert(
+          "PO",
+          poPayload,
+          () => {},
+          "poId",
+          "poNo"
+        );
+
+        const responseRow = extractPOResponseRow(response);
+        const responsePoNo = responseRow?.poNo || responseRow?.po_no || responseRow?.documentNo || "";
+        const responsePoId = responseRow?.poId || responseRow?.po_id || responseRow?.documentID || "";
+
+        if (!responsePoNo && !responsePoId) {
+          console.warn("PO upsert completed but no PO number/ID was returned.", response);
+        }
+
+        createdPOs.push({
+          poNo: responsePoNo,
+          poId: responsePoId,
+          branchCode: responseRow?.branchCode || responseRow?.branch_code || branchCode || "",
+        });
+      }
+
+      const firstPO = createdPOs.find((row) => row?.poNo || row?.poId) || createdPOs[0] || null;
+      setGeneratedPOInfo(firstPO);
+
+      if (!firstPO?.poNo && !firstPO?.poId) {
+        useSwalErrorAlert(
+          "Generate Purchase Order",
+          "PO save was called, but the PO endpoint did not return poNo or poId. Please check the PO upsert response in the console/network tab."
+        );
+        return;
+      }
+
+      await callCAN("markPOLinesGenerated", {
+        canId,
+        canSupplierId: awardedSupplier.canSupplierId,
+        poId: firstPO?.poId || "",
+        poNo: firstPO?.poNo || "",
+        userCode: currentUserRow?.userCode || userCode || "",
+        lineRows: selectedPORows.map((row) => ({
+          canSupplierDt1Id: row.canSupplierDt1Id || row.can_supplier_dt1_id || "",
+          canDt1Id: row.canDt1Id || row.can_dt1_id || "",
+          canLn: row.canLn || "",
+          poLineKey: row.poLineKey || row.poKey || "",
+          prId: row.prId || "",
+          prNo: row.prNo || "",
+          groupId: row.groupId || "",
+          rcCode: row.rcCode || "",
+          rcName: row.rcName || "",
+          itemCode: row.itemCode || "",
+          invType: row.invType || "",
+          itemSpecs: row.itemSpecs || "",
+          quantity: num(row.quantity),
+        })),
+      });
+
+      setGeneratedPOInfo(firstPO);
+
+      await fetchCAN({
+        canId,
+        canNo,
+        branchCode,
+      });
+
+      await useSwalSuccessAlert(
+        "Purchase Order Generated",
+        `${createdPOs.length} Purchase Order${createdPOs.length > 1 ? "s" : ""} generated successfully.`
+      );
     } catch (error) {
-      useSwalErrorAlert("Save Canvas", errorMessage(error));
+      useSwalErrorAlert(
+        "Generate Purchase Order",
+        errorMessage(error, "Unable to generate Purchase Order using the existing PO endpoint.")
+      );
     } finally {
-      updateState({ isLoading: false });
+      updateState({ isLoading: false, showSpinner: false });
     }
   };
+
+  const buildPayload = (overrides = {}) => {
+    const sourceSupplierRows = overrides.supplierRows || supplierRows;
+    const sourceSelectedSupplierCode = overrides.selectedSupplierCode ?? selectedSupplierCode;
+    const sourceSelectedSupplierName = overrides.selectedSupplierName ?? selectedSupplierName;
+    const sourceSelectedOfferAmount = overrides.selectedOfferAmount ?? selectedOfferAmount;
+
+    const sourceRankedSuppliers = sourceSupplierRows
+      .map((supplier, index) => ({ ...supplier, originalIndex: index }))
+      .filter((supplier) => supplier.supplierCode || supplier.supplierName || num(supplier.netAmount) > 0)
+      .sort((a, b) => num(a.netAmount) - num(b.netAmount));
+
+    const sourceLowestSupplierKey = sourceRankedSuppliers[0]
+      ? `${sourceRankedSuppliers[0].supplierCode || ""}-${sourceRankedSuppliers[0].originalIndex}`
+      : "";
+
+    return {
+      canId,
+      canNo,
+      canDate: toDateInputValue(canDate) || canDate,
+      branchCode,
+      remarks,
+      userCode,
+      selectedSupplierCode: sourceSelectedSupplierCode,
+      selectedSupplierName: sourceSelectedSupplierName,
+      selectedOfferAmount: num(sourceSelectedOfferAmount),
+
+      prRows: prRows.map((row) => ({
+        prId: row.prId,
+        branchCode: row.branchCode || branchCode,
+        prNo: row.prNo,
+        prDate: toDateInputValue(row.prDate) || row.prDate || null,
+        rcCode: row.rcCode || "",
+        rcName: row.rcName || "",
+        requestedBy: row.requestedBy || "",
+        dateNeeded: toDateInputValue(row.dateNeeded) || row.dateNeeded || null,
+      })),
+
+      detailRows: detailRows.map((row, index) => ({
+        canLn: index + 1,
+        invType: row.invType || "",
+        itemCode: row.itemCode || "",
+        itemName: row.itemName || "",
+        itemSpecs: row.itemSpecs || "",
+        uomCode: row.uomCode || "",
+        totalQtyNeeded: num(row.totalQtyNeeded),
+        selectedQty: num(row.selectedQty),
+        remarks: row.remarks || "",
+        prBreakdown: normalizeRows(row.prBreakdown).map((b) => ({
+          prId: b.prId,
+          prNo: b.prNo,
+          prLn: b.prLn,
+          prGroupId: b.prGroupId || "",
+          branchCode: b.branchCode || branchCode,
+          rcCode: b.rcCode || "",
+          rcName: b.rcName || "",
+          qtyInPr: num(b.qtyInPr),
+          includedQty: num(b.includedQty),
+          dateNeeded: toDateInputValue(b.dateNeeded) || b.dateNeeded || null,
+        })),
+      })),
+
+      supplierRows: sourceSupplierRows.map((supplier, supplierIndex) => ({
+        supplierCode: supplier.supplierCode || "",
+        supplierName: supplier.supplierName || "",
+        quoteNo: supplier.quoteNo || "",
+        quoteDate: toDateInputValue(supplier.quoteDate) || supplier.quoteDate || null,
+        offerDate: toDateInputValue(supplier.offerDate) || supplier.offerDate || null,
+        vatCode: supplier.vatCode || "",
+        vatName: supplier.vatName || "",
+        offerAmount: num(supplier.offerAmount),
+        discountAmount: num(supplier.discountAmount),
+        vatAmount: num(supplier.vatAmount),
+        netAmount: num(supplier.netAmount),
+        paymentTerms: supplier.paymentTerms || "",
+        deliveryTerms: supplier.deliveryTerms || "",
+        deliveryDate: toDateInputValue(supplier.deliveryDate) || supplier.deliveryDate || null,
+        isLowestOffer:
+          `${supplier.supplierCode || ""}-${supplierIndex}` === sourceLowestSupplierKey &&
+          num(supplier.netAmount) > 0,
+        isAwarded: Boolean(supplier.isAwarded),
+        remarks: supplier.remarks || "",
+        poId: supplier.poId || supplier.po_id || "",
+        poNo: supplier.poNo || supplier.po_no || "",
+        poGenerated: Boolean(supplier.poGenerated || supplier.po_generated),
+        poGeneratedBy: supplier.poGeneratedBy || supplier.po_generated_by || "",
+        poGeneratedDate: supplier.poGeneratedDate || supplier.po_generated_date || null,
+        detailRows: normalizeRows(supplier.detailRows).map((detail) => ({
+          canLn: detail.canLn,
+          invType: detail.invType || "",
+          itemCode: detail.itemCode || "",
+          itemName: detail.itemName || "",
+          itemSpecs: detail.itemSpecs || "",
+          uomCode: detail.uomCode || "",
+          quantity: num(detail.quantity),
+          unitPrice: num(detail.unitPrice),
+          grossAmount: num(detail.grossAmount),
+          discountAmount: num(detail.discountAmount),
+          vatCode: detail.vatCode || "",
+          vatName: detail.vatName || "",
+          vatAmount: num(detail.vatAmount),
+          netAmount: num(detail.netAmount),
+          isAwardedLine: Boolean(detail.isAwardedLine),
+          remarks: detail.remarks || "",
+          poId: detail.poId || detail.po_id || "",
+          poNo: detail.poNo || detail.po_no || "",
+          poGenerated: Boolean(detail.poGenerated || detail.po_generated),
+          poReferences: normalizeRows(detail.poReferences || detail.poReferenceRows || detail.poRows),
+        })),
+      })),
+    };
+  };
+
+ const save = async () => {
+  const fieldsToCheck = {
+    "Header : Branch": branchCode,
+    "Header : Canvass Date": canDate,
+    "Header : User Code": userCode,
+  };
+
+  const isValid = await useSwalvalidateRequiredFields(
+    fieldsToCheck,
+    "Canvass Validation"
+  );
+
+  if (!isValid) return;
+  if (isFormDisabled) return;
+
+  if (detailRows.length === 0) {
+    return useSwalErrorAlert(
+      "Canvass Validation",
+      "Please select at least one PR item."
+    );
+  }
+
+  if (supplierRows.some((s) => !s.supplierCode || !s.supplierName)) {
+    return useSwalErrorAlert(
+      "Canvass Validation",
+      "Supplier Code and Supplier Name are required."
+    );
+  }
+
+  updateState({ isLoading: true });
+
+  try {
+    const data = await callCAN("upsert", buildPayload());
+    const responseRow = Array.isArray(data) ? data[0] : data;
+    const savedCanId =responseRow?.canId ||  "";
+    const savedCanNo = responseRow?.canNo ||  "";
+
+    
+    if (!savedCanId && !savedCanNo) {
+      useSwalErrorAlert( "Save Canvass", "Canvass was saved but no Canvass ID or Canvass No. was returned." );
+      return;
+    }
+
+    updateState({
+      canId: savedCanId,
+      canNo: savedCanNo,
+      isLoading: true,
+    });
+
+    if (savedCanId) {
+      await fetchCAN({ canId: savedCanId });
+    } else if (savedCanNo) {
+      await fetchCAN({
+        canNo: savedCanNo,
+        branchCode,
+      });
+    }
+
+    useSwalshowSaveSuccessDialog(
+      handleReset,
+      async () => {
+        if (savedCanId) {
+          await fetchCAN({ canId: savedCanId });
+        } else if (savedCanNo) {
+          await fetchCAN({
+            canNo: savedCanNo,
+            branchCode,
+          });
+        }
+      }
+    );
+  } catch (error) {
+    useSwalErrorAlert("Save Canvass", errorMessage(error));
+  } finally {
+    updateState({ isLoading: false });
+  }
+};
+
+
 
   const cancel = () => {
     if (!canId || canCancelled) return;
@@ -810,37 +2530,61 @@ export const CAN = () => {
         userCode,
         cancelReason: confirmation.reason || "",
       });
-      await useSwalSuccessAlert("Canvas Cancelled", "Cancellation completed.");
+      await useSwalSuccessAlert("Canvass Cancelled", "Cancellation completed.");
       await fetchCAN({ canId });
     } catch (error) {
-      useSwalErrorAlert("Cancel Canvas", errorMessage(error));
+      useSwalErrorAlert("Cancel Canvass", errorMessage(error));
     } finally {
       updateState({ isLoading: false, showCancelModal: false });
     }
   };
 
   const submit = async () => {
-    if (!canId) return useSwalInfoAlert("Submit Canvas", "Please save the Canvas transaction first.");
+    if (!canId) return useSwalInfoAlert("Submit Canvass", "Please save the Canvass transaction first.");
 
-    const result = await useSwalConfirmAlert("Submit Canvas?", "Submit this Canvas transaction for approval?", "Submit");
+    const result = await useSwalConfirmAlert("Submit Canvass?", "Submit this Canvass transaction for approval?", "Submit");
     if (!result?.isConfirmed) return;
 
     updateState({ isLoading: true });
 
     try {
       await callCAN("submit", { canId, userCode, remarks });
-      await useSwalSuccessAlert("Submitted", "Canvas transaction has been submitted.");
+      await useSwalSuccessAlert("Submitted", "Canvass transaction has been submitted.");
       await fetchCAN({ canId });
     } catch (error) {
-      useSwalErrorAlert("Submit Canvas", errorMessage(error));
+      useSwalErrorAlert("Submit Canvass", errorMessage(error));
     } finally {
       updateState({ isLoading: false });
     }
   };
 
+  const openCanvassAttachment = () => {
+    if (!canId) {
+      useSwalInfoAlert(
+        "Canvass Attachment",
+        "Please save the Canvass transaction first before attaching files."
+      );
+      return;
+    }
+
+    setActiveSupplierForAttachment(null);
+    updateState({ showAttachModal: true });
+  };
+
   const openAttachment = (supplier) => {
+    if (!canId) {
+      useSwalInfoAlert(
+        "Supplier Attachment",
+        "Please save the Canvass transaction first before attaching supplier quotation files."
+      );
+      return;
+    }
+
     if (!supplier?.canSupplierId) {
-      useSwalInfoAlert("Supplier Attachment", "Please save the Canvas first before attaching supplier quotation files.");
+      useSwalInfoAlert(
+        "Supplier Attachment",
+        "Please save this supplier offer first before attaching quotation files."
+      );
       return;
     }
 
@@ -881,7 +2625,7 @@ export const CAN = () => {
     </div>
   );
 
-  const renderCanvasInfoCard = () => (
+  const renderCanvassInfoCard = () => (
     <div className="global-tran-header-div-ui">
       <div className="grid grid-cols-1 gap-4 rounded-lg md:grid-cols-2 lg:grid-cols-3" id="can_hd">
         <div className="global-tran-textbox-group-div-ui">
@@ -897,7 +2641,7 @@ export const CAN = () => {
 
           <FieldRenderer
             id="canNo"
-            label="Canvas No."
+            label="Canvass No."
             type="lookup"
             value={canNo || ""}
             disabled={Boolean(canId)}
@@ -914,7 +2658,7 @@ export const CAN = () => {
 
           <FieldRenderer
             id="canDate"
-            label="Canvas Date"
+            label="Canvass Date"
             type="date"
             value={toDateInputValue(canDate)}
             disabled={isLocked}
@@ -1013,9 +2757,14 @@ export const CAN = () => {
           <p className="text-xs text-slate-500">Select multiple PRs. Common items will be consolidated automatically.</p>
         </div>
         <div className="flex gap-2">
-          <button type="button" onClick={loadOpenPR} className="rounded-lg border px-3 py-2 text-xs font-semibold">
-            <FontAwesomeIcon icon={faRefresh} className="mr-1" />
-            Refresh
+          <button
+            type="button"
+            onClick={loadOpenPR}
+            className="inline-flex min-w-[36px] flex-col items-center justify-center gap-0.5 rounded-md bg-blue-600 px-2 py-1.5 text-[10px] font-medium text-white transition-all duration-200 hover:bg-blue-700 lg:flex-row lg:px-3 lg:py-2 lg:text-xs"
+          >
+            <FontAwesomeIcon icon={faListCheck} />
+            <span className="block text-[8px] leading-none lg:hidden">Load</span>
+            <span className="hidden lg:inline lg:ml-2">Load Open PR</span>
           </button>
           <button
             type="button"
@@ -1183,7 +2932,7 @@ export const CAN = () => {
       <div className="mb-3 flex items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-bold text-slate-700">Supplier Offers</h2>
-          <p className="text-xs text-slate-500">Attach files per supplier after saving the Canvas.</p>
+          <p className="text-xs text-slate-500">Attach files per supplier after saving the Canvass.</p>
         </div>
         <button
           type="button"
@@ -1218,16 +2967,15 @@ export const CAN = () => {
                   </button>
 
                   <div className="flex flex-wrap gap-2">
-                    <button type="button" onClick={() => openAttachment(supplier)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"> {/* Attachments button */}
+                    <button type="button" onClick={() => openAttachment(supplier)} className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"> {/* Attachments button */}
                       <FontAwesomeIcon icon={faPaperclip} className="mr-1" />
                       Attachments ({normalizeRows(supplier.attachments).length})
                     </button>
-                    <button type="button" onClick={() => awardSupplier(supplier)} disabled={isLocked || canCancelled || String(canStatus).toUpperCase() === "W"} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"> {/* Award button */}
+                    <button type="button" onClick={() => awardSupplier(supplier)} disabled={isLocked || canCancelled || String(canStatus).toUpperCase() === "W" || !supplier?.canSupplierId} className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-600 text-white transition-colors hover:bg-emerald-700 disabled:opacity-50" title="Award Transaction"> {/* Award button */}
                       <FontAwesomeIcon icon={faTrophy} className="mr-1" />
-                      Award
                     </button>
                     {!isLocked && (
-                      <button type="button" onClick={() => removeSupplier(supplierIndex)} className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50"> {/* Remove button */}
+                      <button type="button" onClick={() => removeSupplier(supplierIndex)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 transition-colors hover:bg-rose-50" title="Remove Offer"> {/* Remove button */}
                         <FontAwesomeIcon icon={faTrashAlt} />
                       </button>
                     )}
@@ -1236,97 +2984,184 @@ export const CAN = () => {
 
                 {activeSupplierIndex === supplierIndex && ( /* This is the expanded content for the active supplier */
                   <div className="border-t border-slate-200 p-4">
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-                  {[
-                    ["supplierCode", "Supplier Code"],
-                    ["supplierName", "Supplier Name"],
-                    ["quoteNo", "Quote No."],
-                    ["quoteDate", "Quote Date"],
-                  ].map(([field, label]) => (
-                    <div key={field}>
-                      <label className="global-tran-label-ui">{label}</label>
-                      <input
-                        type={field === "quoteDate" ? "date" : "text"}
-                        className="global-tran-input-ui"
-                        value={field === "quoteDate" ? toDateInputValue(supplier[field]) : supplier[field] || ""}
-                        onChange={(e) => updateSupplier(supplierIndex, field, e.target.value)}
-                        readOnly={isLocked}
-                      />
-                    </div>
-                  ))}
-                </div>
+                    {/* Offer Info Section */}
+                    <div className="mb-6 rounded-lg bg-slate-50 p-4 border border-slate-200">
+                      <h3 className="text-sm font-bold text-slate-800 mb-4">Offer Information</h3>
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                        {/* Supplier Lookup Field */}
+                        <FieldRenderer
+                          id={`supplier-code-${supplierIndex}`}
+                          name={`supplierCode-${supplierIndex}`}
+                          label="Supplier Code"
+                          type="lookup"
+                          value={supplier.supplierCode || ""}
+                          onLookup={() => openSupplierLookup(supplierIndex)}
+                          onClear={() => updateSupplier(supplierIndex, "supplierCode", "")}
+                          disabled={isLocked}
+                          placeholder="Search supplier..."
+                        />
 
-                <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-4">
-                  {[
-                    ["paymentTerms", "Payment Terms"],
-                    ["deliveryTerms", "Delivery Terms"],
-                    ["deliveryDate", "Delivery Date"],
-                    ["remarks", "Remarks"],
-                  ].map(([field, label]) => (
-                    <div key={field}>
-                      <label className="global-tran-label-ui">{label}</label>
-                      <input
-                        type={field === "deliveryDate" ? "date" : "text"}
-                        className="global-tran-input-ui"
-                        value={field === "deliveryDate" ? toDateInputValue(supplier[field]) : supplier[field] || ""}
-                        onChange={(e) => updateSupplier(supplierIndex, field, e.target.value)}
-                        readOnly={isLocked}
-                      />
+                        {/* Supplier Name - Read Only Display */}
+                        <FieldRenderer
+                          id={`supplier-name-${supplierIndex}`}
+                          label="Supplier Name"
+                          type="text"
+                          value={supplier.supplierName || ""}
+                          disabled={true}
+                        />
+
+                        {/* Quote No */}
+                        <FieldRenderer
+                          id={`quote-no-${supplierIndex}`}
+                          name={`quoteNo-${supplierIndex}`}
+                          label="Quote No."
+                          type="text"
+                          value={supplier.quoteNo || ""}
+                          onChange={(val) => updateSupplier(supplierIndex, "quoteNo", val)}
+                          disabled={isLocked}
+                        />
+
+                        <FieldRenderer
+                          id={`quote-date-${supplierIndex}`}
+                          label="Quote Date"
+                          type="date"
+                          value={toDateInputValue(supplier.quoteDate)}
+                          disabled={isLocked}
+                          onChange={(val) => updateSupplier(supplierIndex, "quoteDate", val)}
+                        />
+
+                        <FieldRenderer
+                          id={`offer-date-${supplierIndex}`}
+                          label="Offer Date"
+                          type="date"
+                          value={toDateInputValue(supplier.offerDate)}
+                          disabled={isLocked}
+                          onChange={(val) => updateSupplier(supplierIndex, "offerDate", val)}
+                        />
+
+                        <FieldRenderer
+                          id={`delivery-date-${supplierIndex}`}
+                          label="Delivery Date"
+                          type="date"
+                          value={toDateInputValue(supplier.deliveryDate)}
+                          disabled={isLocked}
+                          onChange={(val) => updateSupplier(supplierIndex, "deliveryDate", val)}
+                        />
+
+                        {/* Payment Terms Lookup */}
+                        <FieldRenderer
+                          id={`payment-terms-${supplierIndex}`}
+                          label="Payment Terms"
+                          type="lookup"
+                          value={supplier.paymentTerms || ""}
+                          onLookup={() => openPaytermLookup(supplierIndex)}
+                          onClear={() => updateSupplier(supplierIndex, "paymentTerms", "")}
+                          disabled={isLocked}
+                        />
+
+                        <FieldRenderer
+                          id={`delivery-terms-${supplierIndex}`}
+                          name={`deliveryTerms-${supplierIndex}`}
+                          label="Delivery Terms"
+                          type="text"
+                          value={supplier.deliveryTerms || ""}
+                          onChange={(val) => updateSupplier(supplierIndex, "deliveryTerms", val)}
+                          disabled={isLocked}
+                        />
+
+                        <div />
+                        <div />
+                        <div />
+                        <FieldRenderer
+                          id={`total-amount-display-${supplierIndex}`}
+                          label="Total Offer Amount"
+                          type="amount"
+                          value={`PHP ${money(supplier.netAmount)}`}
+                          disabled={true}
+                          readOnly
+                        />
+
+                        <div className="col-span-full mt-2">
+                          <div className="relative">
+                            <textarea
+                              id={`supplier-remarks-${supplierIndex}`}
+                              placeholder=""
+                              rows={3}
+                              className="peer global-tran-textbox-remarks-ui pt-2"
+                              value={supplier.remarks || ""}
+                              onChange={(e) => updateSupplier(supplierIndex, "remarks", e.target.value)}
+                              disabled={isLocked}
+                            />
+                            <label htmlFor={`supplier-remarks-${supplierIndex}`} className="global-tran-floating-label-remarks">
+                              Supplier Remarks
+                            </label>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  ))}
-                </div>
 
                 {activeSupplierIndex === supplierIndex && (
-                  <div className="mt-4 overflow-auto rounded-xl border">
-                    <table className="min-w-[1100px] w-full text-xs">
-                      <thead className="bg-slate-100">
-                        <tr>
-                          <th className="px-2 py-2 text-center">LN</th>
-                          <th className="px-2 py-2 text-left">Item</th>
-                          <th className="px-2 py-2 text-left">UOM</th>
-                          <th className="px-2 py-2 text-right">Qty</th>
-                          <th className="px-2 py-2 text-right">Unit Price</th>
-                          <th className="px-2 py-2 text-right">Gross</th>
-                          <th className="px-2 py-2 text-right">Discount</th>
-                          <th className="px-2 py-2 text-right">VAT</th>
-                          <th className="px-2 py-2 text-right">Net</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {normalizeRows(supplier.detailRows).map((row, detailIndex) => (
-                          <tr key={`${supplierIndex}-${row.canLn}`} className="border-t">
-                            <td className="px-2 py-2 text-center">{detailIndex + 1}</td>
-                            <td className="px-2 py-2">
-                              <div className="font-semibold">{row.itemCode}</div>
-                              <div className="text-slate-500">{row.itemName}</div>
-                            </td>
-                            <td className="px-2 py-2">{row.uomCode}</td>
-                            {["quantity", "unitPrice", "discountAmount", "vatAmount"].map((field) => (
-                              <td key={field} className="px-2 py-2">
+                  <div className="global-tran-table-main-div-ui mt-4">
+                    <div className="global-tran-table-main-sub-div-ui">
+                      <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
+                        <thead className="global-tran-thead-div-ui">
+                          <tr>
+                            <th className="global-tran-th-ui text-center w-[50px]">LN</th>
+                            <th className="global-tran-th-ui text-left w-[250px]">Item</th>
+                            <th className="global-tran-th-ui text-left w-[80px]">UOM</th>
+                            <th className="global-tran-th-ui text-right w-[100px]">Qty</th>
+                            <th className="global-tran-th-ui text-right w-[120px]">Unit Price</th>
+                            <th className="global-tran-th-ui text-left w-[100px]">VAT Code</th>
+                            <th className="global-tran-th-ui text-right w-[130px]">Gross Amount</th>
+                            <th className="global-tran-th-ui text-right w-[130px]">Discount Amount</th>
+                            <th className="global-tran-th-ui text-right w-[130px]">VAT Amount</th>
+                            <th className="global-tran-th-ui text-right w-[130px]">Net Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {normalizeRows(supplier.detailRows).map((row, detailIndex) => (
+                            <tr key={`${supplierIndex}-${row.canLn}`} className="global-tran-tr-ui">
+                              <td className="global-tran-td-ui text-center">{detailIndex + 1}</td>
+                              <td className="global-tran-td-ui">
+                                <div className="font-semibold">{row.itemCode}</div>
+                                <div className="text-slate-500">{row.itemName}</div>
+                              </td>
+                              <td className="global-tran-td-ui">{row.uomCode}</td>
+                              {["quantity", "unitPrice", "discountAmount", "vatAmount"].map((field) => (
+                                <td key={field} className="global-tran-td-ui text-right">
+                                  <input
+                                    className="w-full global-tran-td-inputclass-ui text-right"
+                                    value={row[field] || ""}
+                                    onChange={(e) => updateSupplierDetail(supplierIndex, detailIndex, field, e.target.value)}
+                                    onBlur={(e) => updateSupplierDetail(supplierIndex, detailIndex, field, field === "quantity" || field === "unitPrice" ? qty(e.target.value, 6) : money(e.target.value), true)}
+                                    readOnly={isLocked}
+                                  />
+                                </td>
+                              ))}
+                              <td className="global-tran-td-ui">
                                 <input
-                                  className="w-full rounded border px-2 py-1 text-right"
-                                  value={row[field] || ""}
-                                  onChange={(e) => updateSupplierDetail(supplierIndex, detailIndex, field, e.target.value)}
-                                  onBlur={(e) => updateSupplierDetail(supplierIndex, detailIndex, field, field === "quantity" || field === "unitPrice" ? qty(e.target.value, 6) : money(e.target.value), true)}
+                                  className="w-full global-tran-td-inputclass-ui"
+                                  value={row.vatCode || ""}
+                                  onChange={(e) => updateSupplierDetail(supplierIndex, detailIndex, "vatCode", e.target.value)}
                                   readOnly={isLocked}
                                 />
                               </td>
-                            ))}
-                            <td className="px-2 py-2 text-right">{money(row.grossAmount)}</td>
-                            <td className="px-2 py-2 text-right font-bold">{money(row.netAmount)}</td>
+                              <td className="global-tran-td-ui text-right">{money(row.grossAmount)}</td>
+                              <td className="global-tran-td-ui text-right font-bold">{money(row.netAmount)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="bg-slate-50 font-bold">
+                          <tr>
+                            <td colSpan={6} className="global-tran-td-ui text-right border-l">Total</td>
+                            <td className="global-tran-td-ui text-right">{money(supplier.offerAmount)}</td>
+                            <td className="global-tran-td-ui text-right">{money(supplier.discountAmount)}</td>
+                            <td className="global-tran-td-ui text-right">{money(supplier.vatAmount)}</td>
+                            <td className="global-tran-td-ui text-right">{money(supplier.netAmount)}</td>
                           </tr>
-                        ))}
-                      </tbody>
-                      <tfoot className="bg-slate-50 font-bold">
-                        <tr>
-                          <td colSpan={5} className="px-2 py-2 text-right">Total</td>
-                          <td className="px-2 py-2 text-right">{money(supplier.offerAmount)}</td>
-                          <td className="px-2 py-2 text-right">{money(supplier.discountAmount)}</td>
-                          <td className="px-2 py-2 text-right">{money(supplier.vatAmount)}</td>
-                          <td className="px-2 py-2 text-right">{money(supplier.netAmount)}</td>
-                        </tr>
-                      </tfoot>
-                    </table>
+                        </tfoot>
+                      </table>
+                    </div>
                   </div>
                 )}
 
@@ -1350,6 +3185,298 @@ export const CAN = () => {
     </div>
   );
 
+  const renderGeneratePOSection = () => {
+    const canGeneratePO =
+      Boolean(canId) &&
+      String(canStatus || "").toUpperCase() === "W" &&
+      Boolean(awardedSupplier?.canSupplierId) &&
+      poCandidateRows.length > 0;
+    const selectedKeys = activePOSelectedKeys;
+    const poStatusText = generatedPONoList.length > 0
+      ? `Generated - ${generatedPONoList.join(", ")}`
+      : "Ready to Generate";
+    const detailTotals = selectedPORows.reduce(
+      (total, row) => ({
+        quantity: total.quantity + num(row.quantity),
+        grossAmount: total.grossAmount + num(row.grossAmount),
+        discountAmount: total.discountAmount + num(row.discountAmount),
+        vatAmount: total.vatAmount + num(row.vatAmount),
+        netAmount: total.netAmount + num(row.netAmount),
+      }),
+      { quantity: 0, grossAmount: 0, discountAmount: 0, vatAmount: 0, netAmount: 0 }
+    );
+    const summaryTotals = poSummaryRows.reduce(
+      (total, row) => ({
+        quantity: total.quantity + num(row.quantity),
+        grossAmount: total.grossAmount + num(row.grossAmount),
+        discountAmount: total.discountAmount + num(row.discountAmount),
+        vatAmount: total.vatAmount + num(row.vatAmount),
+        netAmount: total.netAmount + num(row.netAmount),
+      }),
+      { quantity: 0, grossAmount: 0, discountAmount: 0, vatAmount: 0, netAmount: 0 }
+    );
+
+    const renderGeneratePODetailValue = (row, key, index) => {
+      if (key === "poNo") return row.poNo || row.poId || "For PO";
+      if (key === "ln") return index + 1;
+      if (["quantity"].includes(key)) return qty(row[key], decQty);
+      if (["unitPrice"].includes(key)) return qty(row[key], decUPrice);
+      if (["grossAmount", "discountAmount", "vatAmount", "netAmount"].includes(key)) return money(row[key]);
+      return row[key] || "";
+    };
+
+    const renderGeneratePOSummaryValue = (row, key, index) => {
+      if (key === "ln") return index + 1;
+      if (["quantity"].includes(key)) return qty(row[key], decQty);
+      if (["unitPrice"].includes(key)) return qty(row[key], decUPrice);
+      if (["grossAmount", "discountAmount", "vatAmount", "netAmount"].includes(key)) return money(row[key]);
+      return row[key] || "";
+    };
+
+    const renderGeneratePODetailCell = (columnKey, row, originalIndex) => {
+      const fallbackWidth = getGeneratePODetailFallbackWidth(columnKey);
+      const style = getGeneratePODetailCellStyle(columnKey, fallbackWidth);
+      const textValue = (value, className = "") => (
+        <td key={columnKey} className={`global-tran-td-ui h-8 ${className}`.trim()} style={style}>
+          <input
+            className={`w-full min-h-[28px] global-tran-td-inputclass-ui ${className.includes("text-right") ? "text-right" : ""}`.trim()}
+            value={value || ""}
+            readOnly
+          />
+        </td>
+      );
+
+      if (columnKey === "viewPO") {
+        const hasReference = Boolean(row.poNo || row.poId);
+        return (
+          <td key={columnKey} className="global-tran-td-ui h-8 text-center" style={style}>
+            <button
+              type="button"
+              onClick={() => hasReference && viewGeneratedPO({ poNo: row.poNo, poId: row.poId, branchCode })}
+              disabled={!hasReference}
+              className="inline-flex h-7 w-7 items-center justify-center rounded text-blue-700 hover:bg-blue-50 disabled:text-slate-300 disabled:hover:bg-transparent"
+              title={hasReference ? "View generated Purchase Order" : "No Purchase Order generated yet"}
+            >
+              <FontAwesomeIcon icon={faEye} />
+            </button>
+          </td>
+        );
+      }
+
+      const rightColumns = ["quantity", "unitPrice", "grossAmount", "discountAmount", "vatAmount", "netAmount"];
+      const centerColumns = ["ln"];
+      const className = rightColumns.includes(columnKey) ? "text-right" : centerColumns.includes(columnKey) ? "text-center" : "";
+      return textValue(renderGeneratePODetailValue(row, columnKey, originalIndex), className);
+    };
+
+    const renderGeneratePOSummaryCell = (columnKey, row, originalIndex) => {
+      const fallbackWidth = getGeneratePOSummaryFallbackWidth(columnKey);
+      const style = getGeneratePOSummaryCellStyle(columnKey, fallbackWidth);
+      const rightColumns = ["quantity", "unitPrice", "grossAmount", "discountAmount", "vatAmount", "netAmount"];
+      const centerColumns = ["ln"];
+      const className = rightColumns.includes(columnKey) ? "text-right" : centerColumns.includes(columnKey) ? "text-center" : "";
+
+      return (
+        <td key={columnKey} className={`global-tran-td-ui h-8 ${className}`.trim()} style={style}>
+          <input
+            className={`w-full min-h-[28px] global-tran-td-inputclass-ui ${className.includes("text-right") ? "text-right" : ""}`.trim()}
+            value={renderGeneratePOSummaryValue(row, columnKey, originalIndex) || ""}
+            readOnly
+          />
+        </td>
+      );
+    };
+
+    return (
+      <section className="rounded-lg border border-blue-100 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-slate-800">Generate Purchase Order</h2>
+            <p className="text-xs text-slate-500">Item Details are split per PR No.; Item Summary appears only when grouping is needed.</p>
+          </div>
+        </div>
+
+        {!canId ? (
+          <div className="rounded-lg border border-dashed p-4 text-center text-xs text-slate-500">Save the Canvass before generating Purchase Order.</div>
+        ) : String(canStatus || "").toUpperCase() !== "W" ? (
+          <div className="rounded-lg border border-dashed p-4 text-center text-xs text-slate-500">Award a supplier first before generating Purchase Order.</div>
+        ) : !awardedSupplier ? (
+          <div className="rounded-lg border border-dashed p-4 text-center text-xs text-slate-500">No awarded supplier found.</div>
+        ) : (
+          <>
+            <div className="mb-3 grid grid-cols-1 gap-2 text-xs md:grid-cols-3">
+              <div className="rounded-lg border bg-slate-50 p-3">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Awarded Supplier</div>
+                <div className="mt-1 truncate text-slate-800" title={awardedSupplier.supplierName || awardedSupplier.supplierCode}>
+                  {awardedSupplier.supplierName || awardedSupplier.supplierCode || "-"}
+                </div>
+              </div>
+              <div className="rounded-lg border bg-slate-50 p-3">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Selected Offer Amount</div>
+                <div className="mt-1 text-right text-slate-800">{money(selectedOfferAmount || awardedSupplier.netAmount)}</div>
+              </div>
+              <div className="rounded-lg border bg-slate-50 p-3">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">PO Status</div>
+                <div className={`mt-1 rounded px-2 py-1 text-center ${generatedPONoList.length > 0 ? "bg-emerald-50 text-emerald-700" : "bg-blue-50 text-blue-700"}`}>
+                  {poStatusText}
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setGeneratePOActiveTab("details")}
+                className={`rounded-t-xl border px-4 py-2 text-xs font-semibold ${generatePOActiveTab === "details" ? "border-blue-200 bg-white text-blue-700" : "border-transparent bg-slate-100 text-slate-500"}`}
+              >
+                Item Details <span className="ml-1 rounded-full bg-slate-200 px-2 py-0.5">{poAllDetailRows.length}</span>
+              </button>
+              {showGeneratePOSummary && (
+                <button
+                  type="button"
+                  onClick={() => setGeneratePOActiveTab("summary")}
+                  className={`rounded-t-xl border px-4 py-2 text-xs font-semibold ${generatePOActiveTab === "summary" ? "border-blue-200 bg-white text-blue-700" : "border-transparent bg-slate-100 text-slate-500"}`}
+                >
+                  Item Summary <span className="ml-1 rounded-full bg-slate-200 px-2 py-0.5">{poSummaryRows.length}</span>
+                </button>
+              )}
+            </div>
+
+            {generatePOActiveTab === "details" || !showGeneratePOSummary ? (
+              <div className="global-tran-table-main-div-ui max-h-[460px]">
+                <div className="global-tran-table-main-sub-div-ui">
+                  <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
+                    <thead className="global-tran-thead-div-ui sticky top-0 z-10">
+                      <tr>
+                        <th className="global-tran-th-ui text-center" style={{ width: 54, minWidth: 54 }}>
+                          <input
+                            type="checkbox"
+                            checked={poCandidateRows.length > 0 && selectedKeys.length === poCandidateRows.length}
+                            onChange={toggleAllPOItemSelection}
+                            disabled={!canGeneratePO || isLoading || poCandidateRows.length === 0}
+                          />
+                        </th>
+                        {orderedGeneratePODetailColumns.map((column) =>
+                          renderGeneratePODetailHeader(column.label, column.key, column.width, {
+                            orderedColumns: orderedGeneratePODetailColumns,
+                          })
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="relative">
+                      {poAllDetailRows.length === 0 ? (
+                        <tr className="global-tran-tr-ui">
+                          <td colSpan={orderedGeneratePODetailColumns.length + 1} className="global-tran-td-ui text-center text-slate-500">
+                            No awarded item lines available.
+                          </td>
+                        </tr>
+                      ) : (
+                        sortedGeneratePODetailRows.map(({ row, originalIndex }) => (
+                          <tr key={`generate-po-detail-${row.poKey || originalIndex}`} className="global-tran-tr-ui">
+                            <td className="global-tran-td-ui text-center" style={{ width: 54, minWidth: 54 }}>
+                              <input
+                                type="checkbox"
+                                checked={!row.poNo && !row.poId && selectedKeys.includes(row.poKey)}
+                                onChange={() => togglePOItemSelection(row.poKey)}
+                                disabled={!canGeneratePO || isLoading || Boolean(row.poNo || row.poId || row.poGenerated)}
+                              />
+                            </td>
+                            {orderedGeneratePODetailColumns.map((column) => renderGeneratePODetailCell(column.key, row, originalIndex))}
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                    <tfoot className="sticky bottom-0 bg-slate-50 font-bold z-10">
+                      <tr className="h-8 bg-slate-100">
+                        <td colSpan={10} className="global-tran-td-ui text-right border-l py-1">Total</td>
+                        <td className="global-tran-td-ui text-right py-1">{qty(detailTotals.quantity, decQty)}</td>
+                        <td className="global-tran-td-ui py-1" />
+                        <td className="global-tran-td-ui text-right py-1">{money(detailTotals.grossAmount)}</td>
+                        <td className="global-tran-td-ui text-right py-1">{money(detailTotals.discountAmount)}</td>
+                        <td className="global-tran-td-ui py-1" />
+                        <td className="global-tran-td-ui text-right py-1">{money(detailTotals.vatAmount)}</td>
+                        <td className="global-tran-td-ui text-right py-1">{money(detailTotals.netAmount)}</td>
+                        <td className="global-tran-td-ui py-1" />
+                        <td className="global-tran-td-ui py-1" />
+                      </tr>
+                    </tfoot>
+                  </table>
+                  {renderGeneratePODetailHeaderContextMenu?.()}
+                </div>
+              </div>
+            ) : (
+              <div className="global-tran-table-main-div-ui max-h-[460px]">
+                <div className="global-tran-table-main-sub-div-ui">
+                  <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
+                    <thead className="global-tran-thead-div-ui sticky top-0 z-10">
+                      <tr>
+                        {orderedGeneratePOSummaryColumns.map((column) =>
+                          renderGeneratePOSummaryHeader(column.label, column.key, column.width, {
+                            orderedColumns: orderedGeneratePOSummaryColumns,
+                          })
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="relative">
+                      {poSummaryRows.length === 0 ? (
+                        <tr className="global-tran-tr-ui">
+                          <td colSpan={orderedGeneratePOSummaryColumns.length} className="global-tran-td-ui text-center text-slate-500">
+                            No summary lines available.
+                          </td>
+                        </tr>
+                      ) : (
+                        sortedGeneratePOSummaryRows.map(({ row, originalIndex }) => (
+                          <tr key={`generate-po-summary-${row.poKey || originalIndex}`} className="global-tran-tr-ui">
+                            {orderedGeneratePOSummaryColumns.map((column) => renderGeneratePOSummaryCell(column.key, row, originalIndex))}
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                    <tfoot className="sticky bottom-0 bg-slate-50 font-bold z-10">
+                      <tr className="h-8 bg-slate-100">
+                        <td colSpan={6} className="global-tran-td-ui text-right border-l py-1">Total</td>
+                        <td className="global-tran-td-ui text-right py-1">{qty(summaryTotals.quantity, decQty)}</td>
+                        <td className="global-tran-td-ui py-1" />
+                        <td className="global-tran-td-ui text-right py-1">{money(summaryTotals.grossAmount)}</td>
+                        <td className="global-tran-td-ui text-right py-1">{money(summaryTotals.discountAmount)}</td>
+                        <td className="global-tran-td-ui py-1" />
+                        <td className="global-tran-td-ui text-right py-1">{money(summaryTotals.vatAmount)}</td>
+                        <td className="global-tran-td-ui text-right py-1">{money(summaryTotals.netAmount)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                  {renderGeneratePOSummaryHeaderContextMenu?.()}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-lg border bg-slate-50 px-4 py-2 text-center">
+                  <div className="text-lg font-bold text-slate-800">{hasGeneratedPO ? 0 : generatedPOCount}</div>
+                  <div className="text-slate-500">PO(s) to create</div>
+                </div>
+                <div className="rounded-lg border bg-slate-50 px-4 py-2 text-center">
+                  <div className="text-lg font-bold text-slate-800">{selectedPORows.length}</div>
+                  <div className="text-slate-500">Detail line(s)</div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleGeneratePO}
+                disabled={!canGeneratePO || selectedPORows.length === 0 || poCandidateRows.length === 0 || isLoading}
+                className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+              >
+                {poCandidateRows.length === 0 && poAllDetailRows.length > 0 ? "All Lines Generated" : hasGeneratedPO ? "PO Generated" : "Generate PO"}
+              </button>
+            </div>
+          </>
+        )}
+      </section>
+    );
+  };
+
   const renderStatusHistory = () => (
     <div className="rounded-b-2xl rounded-tr-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="mb-3 text-sm font-bold text-slate-700">Status History</h2>
@@ -1361,9 +3488,11 @@ export const CAN = () => {
             <div key={row.canStatusHistId || index} className="flex gap-3 rounded-xl border p-3">
               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-blue-700">{index + 1}</div>
               <div>
-                <div className="text-sm font-bold">{row.statusName}</div>
-                <div className="text-xs text-slate-500">{row.actionBy} • {safeDate(row.actionDate)}</div>
-                {row.remarks && <div className="mt-1 whitespace-pre-wrap text-xs">{row.remarks}</div>}
+                <div className="text-sm font-bold">{cleanDisplayText(row.statusName)}</div>
+                <div className="text-xs text-slate-500">
+                  {getStatusHistoryActionName(row)} • {safeDate(row.actionDate)}
+                </div>
+                {row.remarks && <div className="mt-1 whitespace-pre-wrap text-xs">{cleanDisplayText(row.remarks)}</div>}
               </div>
             </div>
           ))}
@@ -1372,38 +3501,355 @@ export const CAN = () => {
     </div>
   );
 
-  const renderStepIndicator = () => {
-    const steps = [
-      ["pr", "Select PRs & Consolidate"],
-      ["suppliers", "Supplier Offers"],
-      ["review", "Review & Award"],
+
+  const supplierCompareRows = useMemo(() => {
+    return normalizeRows(detailRows).map((item, index) => {
+      const itemKey = [
+        String(item?.canLn || index + 1),
+        String(item?.invType || "").trim().toUpperCase(),
+        String(item?.itemCode || "").trim().toUpperCase(),
+        String(item?.itemSpecs || "").trim().toUpperCase(),
+      ].join("||");
+
+      const offers = normalizeRows(supplierRows).map((supplier) => {
+        const supplierDetails = normalizeRows(supplier?.detailRows);
+        const matchedDetail =
+          supplierDetails.find((detail) => String(detail?.canLn || "") === String(item?.canLn || "")) ||
+          supplierDetails.find(
+            (detail) =>
+              String(detail?.invType || "").trim().toUpperCase() === String(item?.invType || "").trim().toUpperCase() &&
+              String(detail?.itemCode || "").trim().toUpperCase() === String(item?.itemCode || "").trim().toUpperCase() &&
+              String(detail?.itemSpecs || "").trim().toUpperCase() === String(item?.itemSpecs || "").trim().toUpperCase()
+          );
+
+        return {
+          supplierCode: supplier?.supplierCode || "",
+          supplierName: supplier?.supplierName || supplier?.supplierCode || "Unnamed Supplier",
+          isAwarded: Boolean(supplier?.isAwarded),
+          unitPrice: num(matchedDetail?.unitPrice),
+          netAmount: num(matchedDetail?.netAmount),
+          grossAmount: num(matchedDetail?.grossAmount),
+          hasOffer: Boolean(matchedDetail) && (num(matchedDetail?.unitPrice) > 0 || num(matchedDetail?.netAmount) > 0),
+        };
+      });
+
+      const validOffers = offers.filter((offer) => offer.hasOffer && offer.unitPrice > 0);
+      const lowestUnitPrice = validOffers.length ? Math.min(...validOffers.map((offer) => offer.unitPrice)) : 0;
+
+      return {
+        itemKey,
+        ln: index + 1,
+        invType: item?.invType || "",
+        itemCode: item?.itemCode || "",
+        itemName: item?.itemName || "",
+        itemSpecs: item?.itemSpecs || "",
+        uomCode: item?.uomCode || "",
+        quantity: num(item?.selectedQty || item?.totalQtyNeeded),
+        offers,
+        lowestUnitPrice,
+      };
+    });
+  }, [detailRows, supplierRows]);
+
+  const supplierCompareTotals = useMemo(() => {
+    return normalizeRows(supplierRows).map((supplier) => {
+      const supplierName = supplier?.supplierName || supplier?.supplierCode || "Unnamed Supplier";
+      const totalNet = supplierCompareRows.reduce((sum, row) => {
+        const offer = row.offers.find((x) => x.supplierName === supplierName);
+        return sum + num(offer?.netAmount);
+      }, 0);
+
+      return {
+        supplierCode: supplier?.supplierCode || "",
+        supplierName,
+        isAwarded: Boolean(supplier?.isAwarded),
+        totalNet,
+      };
+    });
+  }, [supplierRows, supplierCompareRows]);
+
+  const supplierCompareDisplaySuppliers = useMemo(
+    () =>
+      normalizeRows(supplierRows).filter(
+        (supplier) => supplier?.supplierCode || supplier?.supplierName || normalizeRows(supplier?.detailRows).length > 0
+      ),
+    [supplierRows]
+  );
+
+  const supplierCompareColumnDefs = useMemo(() => {
+    const baseColumns = [
+      { key: "ln", label: "LN", width: 54 },
+      { key: "invType", label: "Type", width: 78 },
+      { key: "itemCode", label: "Item Code", width: 130 },
+      { key: "itemName", label: "Item Description", width: 250 },
+      { key: "itemSpecs", label: "Specification", width: 220 },
+      { key: "uomCode", label: "UOM", width: 68 },
+      { key: "quantity", label: "Quantity", width: 98 },
     ];
-    const activeStep = activeTab === "pr" ? "pr" : activeTab === "suppliers" ? "suppliers" : "review";
+
+    const supplierColumns = supplierCompareDisplaySuppliers
+      .flatMap((_supplier, index) => {
+        const supplierKey = index + 1;
+        const supplierLabel = `S${index + 1}`;
+        return [
+          { key: `supplier-${supplierKey}-offer`, label: `${supplierLabel} Offer`, width: 92 },
+          { key: `supplier-${supplierKey}-net`, label: `${supplierLabel} Net`, width: 108 },
+        ];
+      });
+
+    return [...baseColumns, ...supplierColumns];
+  }, [supplierCompareDisplaySuppliers]);
+
+  const {
+    getColumnStyle: getSupplierCompareColumnStyle,
+    getFrozenColumnStyle: getSupplierCompareFrozenStyle,
+    getOrderedColumns: getOrderedSupplierCompareColumns,
+    getSortedRows: getSortedSupplierCompareRows,
+    renderHeaderContextMenu: renderSupplierCompareHeaderContextMenu,
+    renderResizableHeader: renderSupplierCompareHeader,
+    handleBodyContextMenu: handleSupplierCompareBodyContextMenu,
+    setFrozenColumnKeys: setSupplierCompareFrozenColumnKeys,
+  } = useResizableTableColumns(supplierCompareColumnDefs);
+  const orderedSupplierCompareColumns = getOrderedSupplierCompareColumns(supplierCompareColumnDefs);
+  useEffect(() => {
+    const stickyCompareColumns = ["ln", "invType", "itemCode", "itemName"];
+    setSupplierCompareFrozenColumnKeys((prev) => {
+      const availableKeys = new Set(supplierCompareColumnDefs.map((column) => column.key));
+      const next = [
+        ...stickyCompareColumns.filter((key) => availableKeys.has(key)),
+        ...prev.filter((key) => availableKeys.has(key) && !stickyCompareColumns.includes(key)),
+      ];
+
+      return next.length === prev.length && next.every((key, index) => key === prev[index]) ? prev : next;
+    });
+  }, [setSupplierCompareFrozenColumnKeys, supplierCompareColumnDefs]);
+  const getSupplierCompareFallbackWidth = (key) =>
+    supplierCompareColumnDefs.find((column) => column.key === key)?.width || 110;
+  const getSupplierCompareCellStyle = (key, fallbackWidth) => ({
+    ...getSupplierCompareColumnStyle(key, fallbackWidth),
+    ...getSupplierCompareFrozenStyle(key, orderedSupplierCompareColumns, fallbackWidth, { isHeader: false }),
+  });
+  const getSupplierCompareOfferByColumn = (row, columnKey) => {
+    const match = String(columnKey || "").match(/^supplier-(\d+)-(offer|net)$/);
+    if (!match) return {};
+
+    const supplier = supplierCompareDisplaySuppliers[Number(match[1]) - 1];
+    const supplierName = supplier?.supplierName || supplier?.supplierCode || "Unnamed Supplier";
+    return row.offers.find((offer) => offer.supplierName === supplierName || offer.supplierCode === supplier?.supplierCode) || {};
+  };
+  const getSupplierCompareTotalByColumn = (columnKey) => {
+    const match = String(columnKey || "").match(/^supplier-(\d+)-net$/);
+    if (!match) return {};
+
+    const supplier = supplierCompareDisplaySuppliers[Number(match[1]) - 1];
+    const supplierName = supplier?.supplierName || supplier?.supplierCode || "Unnamed Supplier";
+    return supplierCompareTotals.find((total) => total.supplierName === supplierName || total.supplierCode === supplier?.supplierCode) || {};
+  };
+  const sortedSupplierCompareRows = getSortedSupplierCompareRows(
+    supplierCompareRows.map((row, originalIndex) => ({ row, originalIndex })),
+    (entry, sortKey) => {
+      if (sortKey === "quantity") return num(entry.row?.quantity);
+      if (sortKey.endsWith("-offer")) return num(getSupplierCompareOfferByColumn(entry.row, sortKey)?.unitPrice);
+      if (sortKey.endsWith("-net")) return num(getSupplierCompareOfferByColumn(entry.row, sortKey)?.netAmount);
+      return entry.row?.[sortKey] ?? "";
+    },
+  );
+
+  const renderSupplierCompareModal = () => {
+    if (!showSupplierCompareModal) return null;
+
+    const getBaseValue = (row, key) => {
+      switch (key) {
+        case "ln":
+          return row.ln;
+        case "quantity":
+          return qty(row.quantity, decQty);
+        default:
+          return row?.[key] || "";
+      }
+    };
+
+    const handleCloseCompareModal = () => {
+      setIsSupplierCompareMaximized(false);
+      setShowSupplierCompareModal(false);
+    };
+
+    const renderCompareCell = (columnKey, row) => {
+      const style = getSupplierCompareCellStyle(columnKey, getSupplierCompareFallbackWidth(columnKey));
+      const isRightAligned = ["quantity"].includes(columnKey) || columnKey.endsWith("-offer") || columnKey.endsWith("-net");
+      const isCenterAligned = columnKey === "ln";
+      const alignClass = isRightAligned ? "text-right" : isCenterAligned ? "text-center" : "text-left";
+      const isSupplierOfferColumn = columnKey.endsWith("-offer");
+      const isSupplierNetColumn = columnKey.endsWith("-net");
+      const offer = isSupplierOfferColumn || isSupplierNetColumn ? getSupplierCompareOfferByColumn(row, columnKey) : {};
+      const isLowest = isSupplierOfferColumn && offer.hasOffer && row.lowestUnitPrice > 0 && num(offer.unitPrice) === num(row.lowestUnitPrice);
+      const value = isSupplierOfferColumn
+        ? offer.hasOffer ? money(offer.unitPrice) : "-"
+        : isSupplierNetColumn
+          ? offer.hasOffer ? money(offer.netAmount) : "-"
+          : getBaseValue(row, columnKey);
+
+      return (
+        <td
+          key={`compare-cell-${row.itemKey}-${columnKey}`}
+          className={`global-tran-td-ui bg-inherit py-0.5 ${alignClass} ${isLowest ? "bg-blue-50 text-blue-700" : ""}`}
+          style={style}
+        >
+          <input
+            className={`w-full min-h-[22px] global-tran-td-inputclass-ui ${alignClass} ${isLowest ? "bg-blue-50 font-semibold text-blue-700" : ""}`}
+            value={value || ""}
+            readOnly
+          />
+        </td>
+      );
+    };
 
     return (
-      <div className="grid grid-cols-1 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm md:grid-cols-3">
-        {steps.map(([key, label], index) => {
-          const isActive = activeStep === key;
-          return (
-            <button
-              type="button"
-              key={key}
-              onClick={() => updateState({ activeTab: key })}
-              className={`flex items-center gap-3 border-b px-2 py-2 text-left last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0 ${
-                isActive ? "text-blue-700" : "text-slate-400"
-              }`}
-            >
-              <span
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                  isActive ? "bg-blue-600 text-white" : "border border-slate-300 bg-white"
-                }`}
-              >
-                {index + 1}
-              </span>
-              <span className="text-xs font-bold">{label}</span>
-            </button>
-          );
-        })}
+      <div className={`fixed inset-0 z-[1000] flex items-center justify-center bg-black/40 ${isSupplierCompareMaximized ? "p-0" : "p-2 sm:p-4"}`}>
+        <div className={`relative flex flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl ${
+          isSupplierCompareMaximized
+            ? "h-screen w-screen rounded-none"
+            : "h-[78vh] w-[95vw] max-w-[1480px] rounded-xl"
+        }`}
+          style={
+            isSupplierCompareMaximized
+              ? undefined
+              : {
+                  resize: "both",
+                  minWidth: "min(980px, calc(100vw - 16px))",
+                  minHeight: "520px",
+                  maxWidth: "calc(100vw - 16px)",
+                  maxHeight: "calc(100dvh - 16px)",
+                }
+          }
+        >
+          <div className="sticky top-0 z-30">
+            <div className="flex items-center justify-between bg-slate-100 border-b border-slate-200 px-3 sm:px-5 py-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <h2 className="global-lookup-headertext-ui text-[19px] truncate">Supplier Offer Comparison</h2>
+                </div>
+                <p className="text-[9px] sm:text-xs text-slate-700 mt-0.5 truncate">
+                  Compare supplier offer by item. Lowest non-zero offer per item is highlighted in blue.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsSupplierCompareMaximized((prev) => !prev)}
+                  className="p-2 text-slate-400 transition-colors hover:text-blue-600"
+                  title={isSupplierCompareMaximized ? "Restore" : "Maximize"}
+                >
+                  {isSupplierCompareMaximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCloseCompareModal}
+                  className="p-2 text-slate-400 transition-colors hover:text-red-600"
+                  title="Close"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-3 border-b bg-slate-50 px-5 py-3 text-xs sm:grid-cols-2 lg:grid-cols-5">
+            <div className="rounded-lg border bg-white p-3 shadow-sm">
+              <div className="text-slate-500">Canvass No.</div>
+              <div className="mt-1 font-semibold text-slate-800">{canNo || "Draft"}</div>
+            </div>
+            <div className="rounded-lg border bg-white p-3 shadow-sm">
+              <div className="text-slate-500">Items</div>
+              <div className="mt-1 font-semibold text-slate-800">{supplierCompareRows.length}</div>
+            </div>
+            <div className="rounded-lg border bg-white p-3 shadow-sm">
+              <div className="text-slate-500">Suppliers</div>
+              <div className="mt-1 font-semibold text-slate-800">{supplierCompareDisplaySuppliers.length}</div>
+            </div>
+            <div className="rounded-lg border bg-white p-3 shadow-sm">
+              <div className="text-slate-500">Status</div>
+              <div className="mt-1 font-semibold text-slate-800">{displayStatus}</div>
+            </div>
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 shadow-sm">
+              <div className="text-blue-600">Identifier</div>
+              <div className="mt-1 font-semibold text-blue-700">Blue = Lowest Cost</div>
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 bg-white p-4">
+            {supplierCompareDisplaySuppliers.length === 0 ? (
+              <div className="rounded-xl border border-dashed p-8 text-center text-sm text-slate-500">
+                No supplier offers available to compare.
+              </div>
+            ) : (
+              <div className="flex h-full min-h-0 flex-col gap-2">
+                <div className="flex flex-wrap gap-2 text-[11px] text-slate-600">
+                  {supplierCompareDisplaySuppliers.map((supplier, index) => (
+                    <span key={`compare-supplier-legend-${supplier?.canSupplierId || supplier?.supplierCode || index}`} className="rounded border border-slate-200 bg-slate-50 px-2 py-1">
+                      <span className="font-bold text-slate-800">{`S${index + 1}`}</span>
+                      {` - ${supplier?.supplierName || supplier?.supplierCode || `Supplier ${index + 1}`}`}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="global-tran-table-main-div-ui min-h-0 flex-1 rounded-lg border border-slate-200 bg-white">
+                <div className="global-tran-table-main-sub-div-ui h-full" onContextMenu={handleSupplierCompareBodyContextMenu}>
+                  <table className="min-w-max border-separate border-spacing-0 text-[11px] [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
+                    <thead className="global-tran-thead-div-ui sticky top-0 z-[80] bg-blue-100">
+                      <tr className="whitespace-nowrap">
+                        {orderedSupplierCompareColumns.map((column) =>
+                          renderSupplierCompareHeader(column.label, column.key, column.width, {
+                            orderedColumns: orderedSupplierCompareColumns,
+                            extraClassName: column.key.endsWith("-offer") || column.key.endsWith("-net") ? "text-right" : "",
+                          })
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="relative bg-white">
+                      {supplierCompareRows.length === 0 ? (
+                        <tr className="global-tran-tr-ui">
+                          <td colSpan={orderedSupplierCompareColumns.length} className="global-tran-td-ui py-8 text-center text-slate-500">
+                            No item rows available.
+                          </td>
+                        </tr>
+                      ) : (
+                        sortedSupplierCompareRows.map(({ row }, rowIndex) => (
+                          <tr key={`compare-row-${row.itemKey}`} className={`global-tran-tr-ui h-8 hover:bg-blue-50 ${rowIndex % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}>
+                            {orderedSupplierCompareColumns.map((column) => renderCompareCell(column.key, row))}
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                    <tfoot className="sticky bottom-0 z-[70] bg-slate-100 font-bold">
+                      <tr className="h-8 bg-slate-100">
+                        {orderedSupplierCompareColumns.map((column, index) => {
+                          const style = getSupplierCompareCellStyle(column.key, getSupplierCompareFallbackWidth(column.key));
+                          const isNetColumn = column.key.endsWith("-net");
+                          const total = isNetColumn ? getSupplierCompareTotalByColumn(column.key) : {};
+                          const value = column.key === "itemName" ? "Supplier Total Net Amount" : isNetColumn ? money(total?.totalNet || 0) : "";
+                          return (
+                            <td
+                              key={`compare-total-${column.key}`}
+                              className={`global-tran-td-ui border-t bg-slate-100 py-1 font-bold ${isNetColumn ? "text-right text-slate-800" : column.key === "itemName" ? "text-left text-slate-800" : ""}`}
+                              style={style}
+                            >
+                              {value}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    </tfoot>
+                  </table>
+                  {renderSupplierCompareHeaderContextMenu()}
+                </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     );
   };
@@ -1430,6 +3876,17 @@ export const CAN = () => {
             </div>
           ))}
         </div>
+
+        <button
+          type="button"
+          onClick={() => setShowSupplierCompareModal(true)}
+          disabled={supplierRows.length === 0 || detailRows.length === 0}
+          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+          title="Compare Supplier Offers"
+        >
+          <FontAwesomeIcon icon={faClipboardList} />
+          Compare Supplier Offers
+        </button>
       </div>
 
       <div className="border-t pt-4">
@@ -1517,70 +3974,76 @@ export const CAN = () => {
           <h2 className="text-sm font-bold text-slate-800">1. Select Purchase Requisitions</h2>
           <p className="text-xs text-slate-500">Approved open PRs are loaded by branch.</p>
         </div>
-        <button type="button" onClick={loadOpenPR} className="rounded-lg border px-3 py-2 text-xs font-semibold">
-          <FontAwesomeIcon icon={faRefresh} className="mr-1" />
-          Refresh
+        <button
+          type="button"
+          onClick={loadOpenPR}
+          className="inline-flex min-w-[36px] flex-col items-center justify-center gap-0.5 rounded-md bg-blue-600 px-2 py-1.5 text-[10px] font-medium text-white transition-all duration-200 hover:bg-blue-700 lg:flex-row lg:px-3 lg:py-2 lg:text-xs"
+        >
+          <FontAwesomeIcon icon={faListCheck} />
+          <span className="block text-[8px] leading-none lg:hidden">Load</span>
+          <span className="hidden lg:inline lg:ml-2">Load Open PR</span>
         </button>
       </div>
 
       <div className="grid grid-cols-1 gap-4">
         <div>
           <div className="mb-1 text-xs font-semibold text-slate-600">Select PRs</div>
-          <div className="overflow-auto rounded-lg border border-slate-200 bg-white">
-            {/** Use a fixed column template when there are no rows so the Department column
-                doesn't stretch; otherwise allow the department column to take remaining space. */}
-            <div>
-              {(() => {
-                // Fix first column to 40px so checkbox column doesn't become large
-                const prGridCols = openPrRows.length === 0
-                  ? "grid-cols-[40px_120px_120px_120px_120px_120px]"
-                  : "grid-cols-[40px_120px_120px_120px_minmax(0,1fr)_120px]";
-                return (
-                  <div className={`grid ${prGridCols} items-center gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600`}>
-                    <span className="justify-self-center w-4" />
-                    <span className="text-left truncate">Branch</span>
-                    <span className="text-left truncate">PR No</span>
-                    <span className="text-left truncate">PR Date</span>
-                    <span className="text-left truncate">Department</span>
-                    <span className="text-right">Date Needed</span>
-                  </div>
-                );
-              })()}
+          <div className="global-tran-table-main-div-ui">
+            <div className="global-tran-table-main-sub-div-ui">
+              <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
+                <thead className="global-tran-thead-div-ui">
+                  <tr>
+                    {orderedCanPrColumns.map((column) =>
+                      renderCanPrHeader(column.label, column.key, column.width, {
+                        orderedColumns: orderedCanPrColumns,
+                      })
+                    )}
+                  </tr>
+                </thead>
+                <tbody className="relative">
+                  {sortedCanPrRows.length === 0 ? (
+                    <tr className="global-tran-tr-ui">
+                      <td colSpan={orderedCanPrColumns.length} className="global-tran-td-ui text-center text-slate-500">
+                        No PR records found for this Canvass.
+                      </td>
+                    </tr>
+                  ) : (
+                    sortedCanPrRows.map(({ row, originalIndex }) => (
+                      <tr
+                        key={row.prId || originalIndex}
+                        className={`global-tran-tr-ui ${selectedPrIds.includes(String(row.prId)) ? "bg-blue-50" : ""}`}
+                        onDoubleClick={() => toggleSelectedPrId(row.prId)}
+                      >
+                        {orderedCanPrColumns.map((column) => renderCanPrCell(column.key, row))}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+                <tfoot className="sticky bottom-0 z-10 bg-slate-50 font-bold">
+                  <tr className="h-8 bg-slate-100">
+                    {orderedCanPrColumns.map((column) => {
+                      const style = getCanPrCellStyle(column.key, getCanPrFallbackWidth(column.key));
+                      const valueByColumn = {
+                        dateNeeded: "Total",
+                        totalItems: canPrTotals.totalItems,
+                        totalQty: canPrTotals.totalQty,
+                      };
+                      const isNumeric = ["totalItems", "totalQty"].includes(column.key);
+                      return (
+                        <td
+                          key={`pr-total-${column.key}`}
+                          className={`global-tran-td-ui py-1 ${isNumeric || column.key === "dateNeeded" ? "text-right" : ""}`.trim()}
+                          style={style}
+                        >
+                          {valueByColumn[column.key] || ""}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </tfoot>
+              </table>
+              {renderCanPrHeaderContextMenu()}
             </div>
-            {openPrRows.length === 0 ? (
-              <div className="px-3 py-6 text-center text-xs text-slate-500">No open PR records found.</div>
-            ) : (
-              openPrRows.map((row) => {
-                const checked = selectedPrIds.includes(String(row.prId));
-                return (
-                  <label
-                    key={row.prId}
-                    className={`grid cursor-pointer ${openPrRows.length === 0 ? 'grid-cols-[auto_120px_120px_120px_120px_120px]' : 'grid-cols-[auto_120px_120px_120px_minmax(0,1fr)_120px]'} items-center gap-3 border-b px-3 py-2 text-sm last:border-b-0 hover:bg-slate-50 ${
-                      checked ? "bg-blue-50 text-blue-800" : "text-slate-700"
-                    }`}
-                  >
-                    <input
-                      className="h-4 w-4 justify-self-center"
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() =>
-                        setSelectedPrIds((prev) =>
-                          checked
-                            ? prev.filter((id) => id !== String(row.prId))
-                            : [...prev, String(row.prId)]
-                        )
-                      }
-                      disabled={isLocked}
-                    />
-                    <span className="truncate">{row.branchCode || row.branchName || "-"}</span>
-                    <span className="truncate font-medium">{row.prNo || "-"}</span>
-                    <span className="text-xs text-slate-500">{toDateInputValue(row.prDate) || row.prDate || "-"}</span>
-                    <span className="truncate">{row.rcName || row.rcCode || "No Department"}</span>
-                    <span className="text-right text-xs text-slate-500">{toDateInputValue(row.dateNeeded) || row.dateNeeded || "-"}</span>
-                  </label>
-                );
-              })
-            )}
           </div>
         </div>
       </div>
@@ -1605,11 +4068,11 @@ export const CAN = () => {
     </section>
   );
 
-  const renderConsolidatedCanvasCard = () => (
+  const renderConsolidatedCanvassCard = () => (
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-bold text-slate-800">2. Consolidated Item Canvas</h2>
+          <h2 className="text-sm font-bold text-slate-800">2. Consolidated Item Canvass</h2>
           <p className="text-xs text-slate-500">Set the quantity to include in this transaction.</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -1620,10 +4083,6 @@ export const CAN = () => {
           >
             <FontAwesomeIcon icon={faListCheck} className="mr-1" />
             {showPrBreakdown ? "Hide PR Breakdown" : "Show PR Breakdown"}
-          </button>
-          <button type="button" onClick={() => updateState({ activeTab: "review" })} className="rounded-lg border px-3 py-2 text-xs font-semibold text-blue-700">
-            <FontAwesomeIcon icon={faTableCells} className="mr-1" />
-            Full Table
           </button>
           <button type="button" onClick={() => updateState({ showFilters: !showFilters })} className="rounded-lg border px-3 py-2 text-xs font-semibold text-blue-700">
             <FontAwesomeIcon icon={faFilter} className="mr-1" />
@@ -1638,119 +4097,99 @@ export const CAN = () => {
         </div>
       )}
 
-      <div className="overflow-auto rounded-lg border">
-        <table className="min-w-[980px] w-full text-xs">
-          <thead className="bg-slate-100 text-slate-600">
-            <tr>
-              <th className="w-10 px-2 py-2 text-center"></th>
-              <th className="w-12 px-2 py-2 text-center">#</th>
-              <th className="px-2 py-2 text-left">Group / Item</th>
-              <th className="px-2 py-2 text-left">Description</th>
-              <th className="w-20 px-2 py-2 text-left">UOM</th>
-              <th className="w-28 px-2 py-2 text-right">Total Qty Needed</th>
-              <th className="w-28 px-2 py-2 text-left">Source PRs</th>
-              <th className="w-20 px-2 py-2 text-center">PR Count</th>
-              <th className="w-28 px-2 py-2 text-right">Available / Remaining</th>
-              <th className="w-28 px-2 py-2 text-right">Select Qty</th>
-            </tr>
-          </thead>
-          <tbody>
-            {detailRows.length === 0 ? (
+      <div className="global-tran-table-main-div-ui">
+        <div className="global-tran-table-main-sub-div-ui">
+          <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
+            <thead className="global-tran-thead-div-ui">
               <tr>
-                <td colSpan={10} className="px-3 py-8 text-center text-slate-500">No consolidated items yet.</td>
+                {orderedCanCanvassColumns.map((column) =>
+                  renderCanCanvassHeader(column.label, column.key, column.width, {
+                    orderedColumns: orderedCanCanvassColumns,
+                  })
+                )}
               </tr>
-            ) : (
-              detailRows.map((row, index) => {
-                const breakdown = normalizeRows(row.prBreakdown);
-                return (
-                  <Fragment key={row.canLn || index}>
-                    <tr className="border-t hover:bg-slate-50">
-                      <td className="px-2 py-2 text-center">
-                        <button type="button" onClick={() => setExpandedItemLn(expandedItemLn === row.canLn ? null : row.canLn)}>
-                          <FontAwesomeIcon icon={expandedItemLn === row.canLn ? faChevronDown : faChevronRight} />
-                        </button>
-                      </td>
-                      <td className="px-2 py-2 text-center">
-                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-[11px] font-bold text-white">{index + 1}</span>
-                      </td>
-                      <td className="px-2 py-2">
-                        <div className="font-bold text-slate-800">{row.itemCode}</div>
-                        {breakdown.length > 1 && <span className="rounded bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">Common Item</span>}
-                      </td>
-                      <td className="px-2 py-2">
-                        <div className="font-semibold">{row.itemName}</div>
-                        <div className="text-slate-500">{row.itemSpecs}</div>
-                      </td>
-                      <td className="px-2 py-2">{row.uomCode}</td>
-                      <td className="px-2 py-2 text-right font-bold">{qty(row.totalQtyNeeded, decQty)}</td>
-                      <td className="px-2 py-2">
-                        <div className="flex flex-wrap gap-1">
-                          {breakdown.slice(0, 2).map((b) => (
-                            <span key={`${row.canLn}-${b.prNo}`} className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
-                              {b.prNo}
-                            </span>
-                          ))}
-                          {breakdown.length > 2 && <span className="text-[10px] text-slate-500">+{breakdown.length - 2}</span>}
-                        </div>
-                      </td>
-                      <td className="px-2 py-2 text-center font-bold">{breakdown.length}</td>
-                      <td className="px-2 py-2 text-right font-bold text-emerald-700">
-                        {qty(row.selectedQty, decQty)} / {qty(row.totalQtyNeeded, decQty)}
-                      </td>
-                      <td className="px-2 py-2">
-                        <input
-                          className="w-full rounded border px-2 py-1 text-right"
-                          value={row.selectedQty || ""}
-                          onChange={(e) => updateItemSelectedQty(index, e.target.value)}
-                          onBlur={(e) => updateItemSelectedQty(index, e.target.value, true)}
-                          readOnly={isLocked}
-                        />
-                      </td>
-                    </tr>
-                    {showPrBreakdown && expandedItemLn === row.canLn && (
-                      <tr className="bg-slate-50">
-                        <td colSpan={10} className="px-8 py-2">
-                          <table className="w-full rounded-lg border bg-white text-xs">
-                            <thead className="bg-slate-100">
-                              <tr>
-                                <th className="px-2 py-1 text-left">Source PR</th>
-                                <th className="px-2 py-1 text-left">Department</th>
-                                <th className="px-2 py-1 text-left">Requested By</th>
-                                <th className="px-2 py-1 text-left">Required Date</th>
-                                <th className="px-2 py-1 text-right">Qty in PR</th>
-                                <th className="px-2 py-1 text-right">Included Qty</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {breakdown.map((b, bIndex) => (
-                                <tr key={`${b.prId}-${b.prLn}-${bIndex}`} className="border-t">
-                                  <td className="px-2 py-1">{b.prNo}</td>
-                                  <td className="px-2 py-1">{b.rcName || b.rcCode}</td>
-                                  <td className="px-2 py-1">{b.requestedBy}</td>
-                                  <td className="px-2 py-1">{safeDate(b.dateNeeded)}</td>
-                                  <td className="px-2 py-1 text-right">{qty(b.qtyInPr, decQty)}</td>
-                                  <td className="px-2 py-1 text-right font-bold">{qty(b.includedQty, decQty)}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </td>
+            </thead>
+            <tbody className="relative">
+              {sortedCanCanvassRows.length === 0 ? (
+                <tr className="global-tran-tr-ui">
+                  <td colSpan={orderedCanCanvassColumns.length} className="global-tran-td-ui text-center text-slate-500">
+                    No consolidated items yet.
+                  </td>
+                </tr>
+              ) : (
+                sortedCanCanvassRows.map(({ row, originalIndex }) => {
+                  const breakdown = normalizeRows(row.prBreakdown);
+                  return (
+                    <Fragment key={row.canLn || originalIndex}>
+                      <tr
+                        className="global-tran-tr-ui"
+                        onDoubleClick={() => setExpandedItemLn(expandedItemLn === row.canLn ? null : row.canLn)}
+                      >
+                        {orderedCanCanvassColumns.map((column) =>
+                          renderCanCanvassCell(column.key, row, originalIndex)
+                        )}
                       </tr>
-                    )}
-                  </Fragment>
-                );
-              })
-            )}
-          </tbody>
-          {detailRows.length > 0 && (
-            <tfoot className="bg-slate-50 font-bold">
-              <tr>
-                <td colSpan={9} className="px-2 py-2 text-right">Total Selected Quantity:</td>
-                <td className="px-2 py-2 text-right">{totals.selectedQty} Units</td>
+                      {showPrBreakdown && expandedItemLn === row.canLn && (
+                        <tr className="bg-slate-50">
+                          <td colSpan={orderedCanCanvassColumns.length} className="px-8 py-2">
+                            <table className="w-full border-separate border-spacing-0 bg-white text-xs [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
+                              <thead className="global-tran-thead-div-ui">
+                                <tr>
+                                  <th className="global-tran-th-ui">Source PR</th>
+                                  <th className="global-tran-th-ui">Department</th>
+                                  <th className="global-tran-th-ui">Requested By</th>
+                                  <th className="global-tran-th-ui">Required Date</th>
+                                  <th className="global-tran-th-ui text-right">Qty in PR</th>
+                                  <th className="global-tran-th-ui text-right">Included Qty</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {breakdown.map((b, bIndex) => (
+                                  <tr key={`${b.prId}-${b.prLn}-${bIndex}`} className="global-tran-tr-ui">
+                                    <td className="global-tran-td-ui">{b.prNo}</td>
+                                    <td className="global-tran-td-ui">{b.rcName || b.rcCode}</td>
+                                    <td className="global-tran-td-ui">{b.requestedBy}</td>
+                                    <td className="global-tran-td-ui">{safeDate(b.dateNeeded)}</td>
+                                    <td className="global-tran-td-ui text-right">{qty(b.qtyInPr, decQty)}</td>
+                                    <td className="global-tran-td-ui text-right font-bold">{qty(b.includedQty, decQty)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })
+              )}
+            </tbody>
+            <tfoot className="sticky bottom-0 z-10 bg-slate-50 font-bold">
+              <tr className="h-8 bg-slate-100">
+                {orderedCanCanvassColumns.map((column, index) => {
+                  const style = getCanCanvassFooterCellStyle(column.key, getCanCanvassFallbackWidth(column.key));
+                  const valueByColumn = {
+                    totalQtyNeeded: totals.totalQty,
+                    availableQty: `${totals.selectedQty} / ${totals.totalQty}`,
+                    selectedQty: totals.selectedQty,
+                  };
+                  const isNumeric = ["totalQtyNeeded", "availableQty", "selectedQty"].includes(column.key);
+
+                  return (
+                    <td
+                      key={`canvass-total-${column.key}`}
+                      className={`global-tran-td-ui py-1 ${index === 0 ? "border-l" : ""} ${isNumeric ? "text-right" : ""}`}
+                      style={style}
+                    >
+                      {valueByColumn[column.key] || ""}
+                    </td>
+                  );
+                })}
               </tr>
             </tfoot>
-          )}
-        </table>
+          </table>
+          {renderCanCanvassHeaderContextMenu()}
+        </div>
       </div>
     </section>
   );
@@ -1782,6 +4221,10 @@ export const CAN = () => {
           const isAwarded = supplier.isAwarded || supplier.supplierCode === selectedSupplierCode;
           const isLowest = `${supplier.supplierCode || ""}-${supplierIndex}` === lowestSupplierKey && num(supplier.netAmount) > 0;
           const activeSupplierTab = supplierActiveTabs[supplierIndex] || "offer";
+          const sortedSupplierItemRows = getSortedCanSupplierItemRows(
+            normalizeRows(supplier.detailRows).map((row, originalIndex) => ({ row, originalIndex })),
+            (entry, sortKey) => (sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? ""),
+          );
 
           return (
             <div className="rounded-lg border border-slate-200 bg-white">
@@ -1810,145 +4253,214 @@ export const CAN = () => {
                 })}
               </div>
 
-              <div className={`p-4 ${isAwarded ? "bg-emerald-50/40" : ""}`}>
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className={`p-3 ${isAwarded ? "bg-emerald-50/40" : ""}`}>
+                <div className="mb-2 grid grid-cols-1 items-center gap-2 lg:grid-cols-[1fr_auto_1fr]">
                   <div className="text-sm font-bold text-slate-800">
                     Supplier {supplierIndex + 1}
                     {isLowest && <span className="ml-2 rounded bg-emerald-100 px-2 py-0.5 text-[10px] text-emerald-700">Lowest Offer</span>}
                     {isAwarded && <span className="ml-2 rounded bg-blue-100 px-2 py-0.5 text-[10px] text-blue-700">Awarded</span>}
                   </div>
-                  {!isLocked && (
-                    <button type="button" onClick={() => removeSupplier(supplierIndex)} className="text-rose-500">
-                      <FontAwesomeIcon icon={faTrashAlt} />
-                    </button>
-                  )}
-                </div>
 
-                <div className="mb-3 flex flex-wrap gap-1 border-b border-slate-200">
-                  {[
-                    ["offer", "Offer"],
-                    ["items", "Item Details"],
-                    ["attachments", `Attachments (${normalizeRows(supplier.attachments).length})`],
-                  ].map(([tab, label]) => (
-                    <button
-                      key={tab}
-                      type="button"
-                      onClick={() => setSupplierTab(supplierIndex, tab)}
-                      className={`rounded-t-lg px-3 py-2 text-xs font-bold ${
-                        activeSupplierTab === tab
-                          ? "border border-b-white border-blue-200 bg-white text-blue-700"
-                          : "text-slate-500 hover:bg-slate-50"
-                      }`}
-                    >
-                      {label}
+                  <div className="flex justify-start lg:justify-center">
+                    <div className="inline-flex rounded-full border border-slate-200 bg-slate-100 p-1">
+                      {[
+                        ["offer", "Offer"],
+                        ["items", "Item Details"],
+                        ["attachments", `Attachments (${normalizeRows(supplier.attachments).length})`],
+                      ].map(([tab, label]) => (
+                        <button
+                          key={tab}
+                          type="button"
+                          onClick={() => setSupplierTab(supplierIndex, tab)}
+                          className={`min-w-[82px] truncate rounded-full px-3 py-1.5 text-center text-[10px] font-bold transition-colors lg:text-xs ${
+                            activeSupplierTab === tab
+                              ? "bg-white text-blue-700 shadow-sm"
+                              : "text-slate-500 hover:bg-white"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 lg:justify-end">
+                    <button type="button" onClick={() => awardSupplier(supplier)} disabled={isLocked || canCancelled || String(canStatus).toUpperCase() === "W" || !supplier?.canSupplierId} className="inline-flex min-w-[36px] flex-col items-center justify-center gap-0.5 rounded-md bg-blue-600 px-2 py-1.5 text-[10px] font-medium text-white transition-all duration-200 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-65 lg:flex-row lg:px-3 lg:py-2 lg:text-xs" title="Award Transaction">
+                      <FontAwesomeIcon icon={faTrophy} />
+                      Award
                     </button>
-                  ))}
+                    {!isLocked && (
+                      <button type="button" onClick={() => removeSupplier(supplierIndex)} className="inline-flex min-w-[36px] flex-col items-center justify-center gap-0.5 rounded-md bg-red-600 px-2 py-1.5 text-[10px] font-medium text-white transition-all duration-200 hover:bg-red-700 lg:flex-row lg:px-3 lg:py-2 lg:text-xs" title="Remove Offer">
+                        <FontAwesomeIcon icon={faTrashAlt} />
+                        Delete
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {activeSupplierTab === "offer" && (
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-                    <div>
-                      <label className="global-tran-label-ui">Supplier</label>
-                      <input className="global-tran-input-ui" value={supplier.supplierCode || ""} onChange={(e) => updateSupplier(supplierIndex, "supplierCode", e.target.value)} readOnly={isLocked} />
-                    </div>
-                    <div>
-                      <label className="global-tran-label-ui">Supplier Name</label>
-                      <input className="global-tran-input-ui" value={supplier.supplierName || ""} onChange={(e) => updateSupplier(supplierIndex, "supplierName", e.target.value)} readOnly={isLocked} />
-                    </div>
-                    <div>
-                      <label className="global-tran-label-ui">Quote No.</label>
-                      <input className="global-tran-input-ui" value={supplier.quoteNo || ""} onChange={(e) => updateSupplier(supplierIndex, "quoteNo", e.target.value)} readOnly={isLocked} />
-                    </div>
-                    <div>
-                      <label className="global-tran-label-ui">Offer Date</label>
-                      <input type="date" className="global-tran-input-ui" value={toDateInputValue(supplier.quoteDate)} onChange={(e) => updateSupplier(supplierIndex, "quoteDate", e.target.value)} readOnly={isLocked} />
-                    </div>
-                    <div>
-                      <label className="global-tran-label-ui">Payment Terms</label>
-                      <input className="global-tran-input-ui" value={supplier.paymentTerms || ""} onChange={(e) => updateSupplier(supplierIndex, "paymentTerms", e.target.value)} readOnly={isLocked} />
-                    </div>
-                    <div>
-                      <label className="global-tran-label-ui">Delivery Terms</label>
-                      <input className="global-tran-input-ui" value={supplier.deliveryTerms || ""} onChange={(e) => updateSupplier(supplierIndex, "deliveryTerms", e.target.value)} readOnly={isLocked} />
-                    </div>
-                    <div>
-                      <label className="global-tran-label-ui">Delivery Date</label>
-                      <input type="date" className="global-tran-input-ui" value={toDateInputValue(supplier.deliveryDate)} onChange={(e) => updateSupplier(supplierIndex, "deliveryDate", e.target.value)} readOnly={isLocked} />
-                    </div>
-                    <div>
-                      <label className="global-tran-label-ui">Total Offer Amount</label>
-                      <input className="global-tran-input-ui text-right font-bold" value={`PHP ${money(supplier.netAmount)}`} readOnly />
-                    </div>
-                    <div className="lg:col-span-4">
-                      <label className="global-tran-label-ui">Remarks</label>
-                      <input className="global-tran-input-ui" value={supplier.remarks || ""} onChange={(e) => updateSupplier(supplierIndex, "remarks", e.target.value)} readOnly={isLocked} />
+                  <div className="space-y-4">
+                    {/* Offer Info Section */}
+                    <div className="rounded-lg bg-slate-50 p-4 border border-slate-200">
+                      <h3 className="text-sm font-bold text-slate-800 mb-4">Offer Information</h3>
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                        {/* Supplier Lookup Field */}
+                        <FieldRenderer
+                          id={`supplier-code-review-${supplierIndex}`}
+                          name={`supplierCode-review-${supplierIndex}`}
+                          label="Supplier Code"
+                          type="lookup"
+                          value={supplier.supplierCode || ""}
+                          onLookup={() => openSupplierLookup(supplierIndex)}
+                          onClear={() => updateSupplier(supplierIndex, "supplierCode", "")}
+                          disabled={isLocked}
+                          placeholder="Search supplier..."
+                        />
+
+                        {/* Supplier Name - Read Only Display */}
+                        <FieldRenderer
+                          id={`supplier-name-review-${supplierIndex}`}
+                          label="Supplier Name"
+                          type="text"
+                          value={supplier.supplierName || ""}
+                          disabled={true}
+                        />
+
+                        {/* Quote No */}
+                        <FieldRenderer
+                          id={`quote-no-review-${supplierIndex}`}
+                          name={`quoteNo-review-${supplierIndex}`}
+                          label="Quote No."
+                          type="text"
+                          value={supplier.quoteNo || ""}
+                          onChange={(val) => updateSupplier(supplierIndex, "quoteNo", val)}
+                          disabled={isLocked}
+                        />
+
+                        <FieldRenderer
+                          id={`quote-date-review-${supplierIndex}`}
+                          label="Quote Date"
+                          type="date"
+                          value={toDateInputValue(supplier.quoteDate)}
+                          disabled={isLocked}
+                          onChange={(val) => updateSupplier(supplierIndex, "quoteDate", val)}
+                        />
+
+                        <FieldRenderer
+                          id={`offer-date-review-${supplierIndex}`}
+                          label="Offer Date"
+                          type="date"
+                          value={toDateInputValue(supplier.offerDate)}
+                          disabled={isLocked}
+                          onChange={(val) => updateSupplier(supplierIndex, "offerDate", val)}
+                        />
+
+                        <FieldRenderer
+                          id={`delivery-date-review-${supplierIndex}`}
+                          label="Delivery Date"
+                          type="date"
+                          value={toDateInputValue(supplier.deliveryDate)}
+                          disabled={isLocked}
+                          onChange={(val) => updateSupplier(supplierIndex, "deliveryDate", val)}
+                        />
+
+                        {/* Payment Terms Lookup */}
+                        <FieldRenderer
+                          id={`payment-terms-review-${supplierIndex}`}
+                          label="Payment Terms"
+                          type="lookup"
+                          value={supplier.paymentTerms || ""}
+                          onLookup={() => openPaytermLookup(supplierIndex)}
+                          onClear={() => updateSupplier(supplierIndex, "paymentTerms", "")}
+                          disabled={isLocked}
+                        />
+
+                        <FieldRenderer
+                          id={`delivery-terms-review-${supplierIndex}`}
+                          name={`deliveryTerms-review-${supplierIndex}`}
+                          label="Delivery Terms"
+                          type="text"
+                          value={supplier.deliveryTerms || ""}
+                          onChange={(val) => updateSupplier(supplierIndex, "deliveryTerms", val)}
+                          disabled={isLocked}
+                        />
+
+                        <div />
+                        <div />
+                        <div />
+                        <FieldRenderer
+                          id={`total-amount-review-${supplierIndex}`}
+                          name={`totalAmount-review-${supplierIndex}`}
+                          label="Total Offer Amount"
+                          type="amount"
+                          value={`PHP ${money(supplier.netAmount)}`}
+                          disabled={true}
+                        />
+
+                        <div className="col-span-full mt-2">
+                          <div className="relative">
+                            <textarea
+                              id={`supplier-remarks-review-${supplierIndex}`}
+                              placeholder=""
+                              rows={3}
+                              className="peer global-tran-textbox-remarks-ui pt-2"
+                              value={supplier.remarks || ""}
+                              onChange={(e) => updateSupplier(supplierIndex, "remarks", e.target.value)}
+                              disabled={isLocked}
+                            />
+                            <label htmlFor={`supplier-remarks-review-${supplierIndex}`} className="global-tran-floating-label-remarks">
+                              Supplier Remarks
+                            </label>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
 
                 {activeSupplierTab === "items" && (
-                  <div className="max-h-[460px] overflow-auto rounded-lg border">
-                    <table className="min-w-[1040px] w-full text-xs">
-                      <thead className="sticky top-0 bg-slate-100">
-                        <tr>
-                          <th className="px-2 py-2 text-center">LN</th>
-                          <th className="px-2 py-2 text-left">Item Code</th>
-                          <th className="px-2 py-2 text-left">Item Name</th>
-                          <th className="px-2 py-2 text-left">Specification</th>
-                          <th className="px-2 py-2 text-left">UOM</th>
-                          <th className="px-2 py-2 text-right">Qty</th>
-                          <th className="px-2 py-2 text-right">Unit Price</th>
-                          <th className="px-2 py-2 text-right">Gross</th>
-                          <th className="px-2 py-2 text-right">Discount</th>
-                          <th className="px-2 py-2 text-right">VAT</th>
-                          <th className="px-2 py-2 text-right">Net</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {normalizeRows(supplier.detailRows).map((row, detailIndex) => (
-                          <tr key={`${supplierIndex}-${row.canLn}`} className="border-t">
-                            <td className="px-2 py-2 text-center">{detailIndex + 1}</td>
-                            <td className="px-2 py-2 font-semibold">{row.itemCode}</td>
-                            <td className="px-2 py-2">{row.itemName}</td>
-                            <td className="px-2 py-2">{row.itemSpecs}</td>
-                            <td className="px-2 py-2">{row.uomCode}</td>
-                            {["quantity", "unitPrice"].map((field) => (
-                              <td key={field} className="px-2 py-2">
-                                <input
-                                  className="w-24 rounded border px-2 py-1 text-right"
-                                  value={row[field] || ""}
-                                  onChange={(e) => updateSupplierDetail(supplierIndex, detailIndex, field, e.target.value)}
-                                  onBlur={(e) => updateSupplierDetail(supplierIndex, detailIndex, field, qty(e.target.value, 6), true)}
-                                  readOnly={isLocked}
-                                />
-                              </td>
-                            ))}
-                            <td className="px-2 py-2 text-right">{money(row.grossAmount)}</td>
-                            {["discountAmount", "vatAmount"].map((field) => (
-                              <td key={field} className="px-2 py-2">
-                                <input
-                                  className="w-24 rounded border px-2 py-1 text-right"
-                                  value={row[field] || ""}
-                                  onChange={(e) => updateSupplierDetail(supplierIndex, detailIndex, field, e.target.value)}
-                                  onBlur={(e) => updateSupplierDetail(supplierIndex, detailIndex, field, money(e.target.value), true)}
-                                  readOnly={isLocked}
-                                />
-                              </td>
-                            ))}
-                            <td className="px-2 py-2 text-right font-bold">{money(row.netAmount)}</td>
+                  <div className="global-tran-table-main-div-ui max-h-[460px]">
+                    <div className="global-tran-table-main-sub-div-ui">
+                      <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
+                        <thead className="global-tran-thead-div-ui sticky top-0 z-10">
+                          <tr>
+                            {orderedCanSupplierItemColumns.map((column) =>
+                              renderCanSupplierItemHeader(column.label, column.key, column.width, {
+                                orderedColumns: orderedCanSupplierItemColumns,
+                              })
+                            )}
                           </tr>
-                        ))}
-                      </tbody>
-                      <tfoot className="sticky bottom-0 bg-slate-50 font-bold">
-                        <tr>
-                          <td colSpan={7} className="px-2 py-2 text-right">Total</td>
-                          <td className="px-2 py-2 text-right">{money(supplier.offerAmount)}</td>
-                          <td className="px-2 py-2 text-right">{money(supplier.discountAmount)}</td>
-                          <td className="px-2 py-2 text-right">{money(supplier.vatAmount)}</td>
-                          <td className="px-2 py-2 text-right">{money(supplier.netAmount)}</td>
-                        </tr>
-                      </tfoot>
-                    </table>
+                        </thead>
+                        <tbody className="relative">
+                          {sortedSupplierItemRows.length === 0 ? (
+                            <tr className="global-tran-tr-ui">
+                              <td colSpan={orderedCanSupplierItemColumns.length} className="global-tran-td-ui text-center text-slate-500">
+                                No item details yet.
+                              </td>
+                            </tr>
+                          ) : (
+                            sortedSupplierItemRows.map(({ row, originalIndex }) => (
+                              <tr key={`${supplierIndex}-${row.canLn || originalIndex}`} className="global-tran-tr-ui">
+                                {orderedCanSupplierItemColumns.map((column) =>
+                                  renderCanSupplierItemCell(column.key, row, originalIndex, supplierIndex)
+                                )}
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                        <tfoot className="sticky bottom-0 bg-slate-50 font-bold z-10">
+                          <tr className="h-8 bg-slate-100">
+                            <td colSpan={8} className="global-tran-td-ui text-right border-l py-1">Total</td>
+                            <td className="global-tran-td-ui text-right py-1">{money(supplier.offerAmount)}</td>
+                            <td className="global-tran-td-ui text-right py-1">{money(supplier.discountAmount)}</td>
+                            <td className="global-tran-td-ui py-1" />
+                            <td className="global-tran-td-ui text-right py-1">{money(supplier.vatAmount)}</td>
+                            <td className="global-tran-td-ui text-right py-1">{money(supplier.netAmount)}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                      {renderCanSupplierItemHeaderContextMenu()}
+                    </div>
                   </div>
                 )}
 
@@ -1972,138 +4484,46 @@ export const CAN = () => {
                     </div>
                   </div>
                 )}
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button type="button" onClick={() => awardSupplier(supplier)} disabled={canCancelled || String(canStatus).toUpperCase() === "W"} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">
-                    <FontAwesomeIcon icon={faTrophy} className="mr-1" />
-                    Award
-                  </button>
-                </div>
               </div>
             </div>
           );
         })()
       )}
 
-      {supplierRows.length > 0 && (
-        <button
-          type="button"
-          onClick={addSupplier}
-          disabled={isLocked || detailRows.length === 0}
-          className="mt-4 w-full rounded-lg border border-dashed border-blue-200 py-3 text-xs font-bold text-blue-700 disabled:opacity-50"
-        >
-          <FontAwesomeIcon icon={faPlus} className="mr-1" />
-          Add Another Supplier
-        </button>
-      )}
     </section>
   );
 
   const renderDetails = () => (
     <>
       {renderHeader()}
-      {renderCanvasInfoCard()}
+      {renderCanvassInfoCard()}
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_270px]">
         <div className="space-y-4">
-          {renderStepIndicator()}
-          {activeTab === "pr" && renderPrSelectorCard()}
-          {activeTab !== "review" && renderConsolidatedCanvasCard()}
-          {(activeTab === "suppliers" || activeTab === "review") && renderSupplierOffersCard()}
+          {renderPrSelectorCard()}
+          {renderConsolidatedCanvassCard()}
+          {renderSupplierOffersCard()}
           {statusHistory.length > 0 && renderStatusHistory()}
         </div>
         {renderSummaryPanel()}
       </div>
+      <div className="mt-4">{renderGeneratePOSection()}</div>
     </>
   );
 
   const renderHistory = () => (
-    <div className="global-tran-header-ui">
-      <div className="global-tran-headertext-div-ui">
-        <h1 className="global-tran-headertext-ui">Canvas Transaction History</h1>
-      </div>
-
-      <div className="mt-3 rounded-2xl border bg-white p-4 shadow-sm">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
-          {[
-            ["canNo", "Canvas No."],
-            ["prNo", "PR No."],
-            ["supplier", "Supplier"],
-          ].map(([field, label]) => (
-            <div key={field}>
-              <label className="global-tran-label-ui">{label}</label>
-              <input
-                className="global-tran-input-ui"
-                value={historyFilter[field]}
-                onChange={(e) => updateState({ historyFilter: { ...historyFilter, [field]: e.target.value } })}
-              />
-            </div>
-          ))}
-          <div>
-            <label className="global-tran-label-ui">Status</label>
-            <select className="global-tran-input-ui" value={historyFilter.status} onChange={(e) => updateState({ historyFilter: { ...historyFilter, status: e.target.value } })}>
-              <option value="">All</option>
-              <option value="D">Draft</option>
-              <option value="F">For Approval</option>
-              <option value="A">Approved</option>
-              <option value="W">Awarded</option>
-              <option value="C">Cancelled</option>
-            </select>
-          </div>
-          <div>
-            <label className="global-tran-label-ui">Date From</label>
-            <input type="date" className="global-tran-input-ui" value={toDateInputValue(historyFilter.dateFrom)} onChange={(e) => updateState({ historyFilter: { ...historyFilter, dateFrom: e.target.value } })} />
-          </div>
-          <div>
-            <label className="global-tran-label-ui">Date To</label>
-            <input type="date" className="global-tran-input-ui" value={toDateInputValue(historyFilter.dateTo)} onChange={(e) => updateState({ historyFilter: { ...historyFilter, dateTo: e.target.value } })} />
-          </div>
-        </div>
-
-        <div className="mt-3 flex justify-end">
-          <button type="button" onClick={loadHistory} className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white">
-            <FontAwesomeIcon icon={faSearch} className="mr-1" />
-            Load History
-          </button>
-        </div>
-
-        <div className="mt-4 overflow-auto rounded-xl border">
-          <table className="min-w-[980px] w-full text-xs">
-            <thead className="bg-slate-100">
-              <tr>
-                <th className="px-2 py-2 text-left">Canvas No.</th>
-                <th className="px-2 py-2 text-left">Date</th>
-                <th className="px-2 py-2 text-right">PR Count</th>
-                <th className="px-2 py-2 text-right">Items</th>
-                <th className="px-2 py-2 text-right">Suppliers</th>
-                <th className="px-2 py-2 text-left">Selected Supplier</th>
-                <th className="px-2 py-2 text-right">Amount</th>
-                <th className="px-2 py-2 text-left">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {historyRows.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-slate-500">No history loaded.</td>
-                </tr>
-              ) : (
-                historyRows.map((row) => (
-                  <tr key={row.canId} className="cursor-pointer border-t hover:bg-blue-50" onDoubleClick={() => fetchCAN({ canId: row.canId, branchCode: row.branchCode || branchCode })}>
-                    <td className="px-2 py-2 font-bold text-blue-700">{row.canNo}</td>
-                    <td className="px-2 py-2">{safeDate(row.canDate)}</td>
-                    <td className="px-2 py-2 text-right">{row.prCount}</td>
-                    <td className="px-2 py-2 text-right">{row.itemCount}</td>
-                    <td className="px-2 py-2 text-right">{row.supplierCount}</td>
-                    <td className="px-2 py-2">{row.selectedSupplierName}</td>
-                    <td className="px-2 py-2 text-right">{money(row.selectedOfferAmount)}</td>
-                    <td className="px-2 py-2">{row.canStatusName}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+    <AllTranHistory
+      showHeader={false}
+      isActive={topTab === "history"}
+      endpoint="/getCANHistory"
+      cacheKey={`CAN:${branchCode || ""}:${historyFilter.dateFrom || ""}:${historyFilter.dateTo || ""}`}
+      activeTabKey="CAN_Summary"
+      branchCode={branchCode}
+      startDate={historyFilter.dateFrom}
+      endDate={historyFilter.dateTo}
+      status="All"
+      onRowDoubleClick={handleHistoryRowPick}
+      historyExportName={`${documentTitle} History`}
+    />
   );
 
   return (
@@ -2115,42 +4535,46 @@ export const CAN = () => {
           docType={docType}
           pdfLink={pdfLink}
           videoLink={videoLink}
-          onPrint={() => useSwalInfoAlert("Print", "Canvas print form is not yet configured.")}
+          onPrint={() => {
+            if (!canId) {
+              useSwalInfoAlert("Print", "Please save the Canvass transaction first before printing.");
+              return;
+            }
+            useSwalInfoAlert("Print", "Canvass print form is ready to be connected to the CAN report endpoint.");
+          }}
           onPost={submit}
           printData={{ can_no: canNo, branch: branchCode, doc_id: docType }}
           onReset={handleReset}
           onSave={save}
           onCancel={cancel}
-          onCopy={() => updateState({ canId: "", canNo: "", canStatus: "D", canStatusName: "Draft", canCancelled: false })}
-          onAttach={() => openAttachment(supplierRows.find((s) => s.supplierCode === selectedSupplierCode) || supplierRows[0])}
-          onUpload={() => useSwalInfoAlert("Upload", "Use Supplier Attachments inside Supplier Offers.")}
+          onAttach={openCanvassAttachment}
+          onUpload={() => useSwalInfoAlert("Upload", "Use Attach for Canvass-level files or Supplier Attachments inside Supplier Offers.")}
           onNotify={submit}
           activeTopTab={topTab}
           showActions={topTab === "details"}
           showNotify={hasDocument && isDraft}
           showBIRForm={false}
-          showCopyForm={true}
+          showCopyForm={false}
           showUpload={false}
           isViewDocument={false}
           onDetails={() => setTopTab("details")}
-          onHistory={() => {
-            setTopTab("history");
-            loadHistory();
-          }}
+          onHistory={() => setTopTab("history")}
           disableRouteNavigation={true}
           detailsRoute="/page/CAN"
-          isSaveDisabled={isLocked || detailRows.length === 0}
+          isSaveDisabled={isFormDisabled || detailRows.length === 0}
           isResetDisabled={false}
-          isAttachDisabled={!supplierRows.some((s) => s.canSupplierId)}
+          isAttachDisabled={!hasDocument}
           isNotifyDisabled={!hasDocument || !isDraft}
           isPrintDisabled={!hasDocument || canCancelled}
-          isCopyDisabled={!hasDocument}
+          isCopyDisabled={true}
           isCancelDisabled={!hasDocument || canCancelled || String(canStatus).toUpperCase() === "W"}
         />
       </div>
 
       <div className={topTab === "details" ? "" : "hidden"}>{renderDetails()}</div>
       <div className={topTab === "history" ? "" : "hidden"}>{renderHistory()}</div>
+
+      {renderSupplierCompareModal()}
 
       {showBranchModal && (
         <BranchLookupModal
@@ -2184,18 +4608,28 @@ export const CAN = () => {
         />
       )}
 
-      {showAttachModal && activeSupplierForAttachment && (
+      {showAttachModal && (
         <AttachDocumentModal
-          open={showAttachModal}
+          isOpen={showAttachModal}
           onClose={async () => {
+            const wasSupplierAttachment = Boolean(activeSupplierForAttachment);
+            setActiveSupplierForAttachment(null);
             updateState({ showAttachModal: false });
-            if (canId) await fetchCAN({ canId });
+            if (canId && wasSupplierAttachment) {
+              await fetchCAN({ canId });
+            }
           }}
           params={{
-            DocumentID: activeSupplierForAttachment.canSupplierId,
-            DocumentName: `${canNo || "CAN"} - ${activeSupplierForAttachment.supplierName || activeSupplierForAttachment.supplierCode}`,
+            DocumentID: activeSupplierForAttachment?.canSupplierId || canId,
+            DocumentName: activeSupplierForAttachment
+              ? `${canNo || "CAN"} - ${activeSupplierForAttachment.supplierName || activeSupplierForAttachment.supplierCode}`
+              : `${canNo || "CAN"} - Canvass Transaction`,
+            BranchName: branchName || branchCode,
             BranchCode: branchCode,
-            DocumentType: "CAN_SUPPLIER",
+            DocumentNo: activeSupplierForAttachment
+              ? `${canNo || "CAN"}-${activeSupplierForAttachment.supplierCode || "SUPPLIER"}`
+              : canNo,
+            DocumentType: activeSupplierForAttachment ? "CAN_SUPPLIER" : "CAN",
           }}
         />
       )}
@@ -2216,6 +4650,21 @@ export const CAN = () => {
           tranId={canId}
           docCode={docType}
           docNo={canNo}
+        />
+      )}
+
+      {showPayeeLookupModal && (
+        <PayeeMastLookupModal
+          isOpen={showPayeeLookupModal}
+          onClose={handleSupplierLookupClose}
+          customParam="ActiveAll"
+        />
+      )}
+
+      {showPaytermModal && (
+        <PaytermLookupModal
+          isOpen={showPaytermModal}
+          onClose={handleClosePaytermModal}
         />
       )}
     </div>

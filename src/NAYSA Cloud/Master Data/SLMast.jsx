@@ -747,8 +747,8 @@ const handleDeleteSLType = async (row) => {
       },
       { key: "slTypeCode", label: "SL Type Code", sortable: true, width: 120, minWidth: 120 },
       { key: "slTypeName", label: "SL Type Name", sortable: true, width: 200, minWidth: 200 },
-      { key: "slTypeActive", label: "Active", sortable: true, width: 85, minWidth: 85 },
-      { key: "slTypeIncSu", label: "Payee", sortable: true, width: 85, minWidth: 85 },
+      { key: "slTypeActive", label: "Active", sortable: true, width: 80, minWidth: 80 },
+      { key: "slTypeIncSu", label: "Payee", sortable: true, width: 80, minWidth: 80 },
       { key: "slTypeIncCu", label: "Customer", sortable: true, width: 85, minWidth: 85 },
     ],
     []
@@ -770,8 +770,8 @@ const handleDeleteSLType = async (row) => {
           </div>
         ),
         sortable: true,
-        width: 20,
-        minWidth: 20,
+        width: 30,
+        minWidth: 30,
         
         render: (row) => (
           <div className="flex justify-center">
@@ -795,8 +795,8 @@ const handleDeleteSLType = async (row) => {
         key: "acctName",
         label: "Account Name",
         sortable: true,
-        width: 250,  
-        minWidth: 200,
+        width: 350,  
+        minWidth: 350,
       },
     ],
     [selectedGLAccounts, isAllSelected]
@@ -1237,19 +1237,8 @@ const handleDeleteSLType = async (row) => {
 
           <div className="bg-white dark:bg-gray-800 p-3 rounded-xl border shadow-lg">
             <div className="mb-1 flex items-center justify-between gap-2 flex-wrap">
-              <div className="text-lg font-semibold text-blue-800">
-                {isGLMatchingLoaded ? (
-                  <>
-                    {selectedSLType && (
-                      <span className="text-lg font-extrabold text-blue-800 bg-blue-100 px-10 py-1.5 rounded-md">
-                        {selectedSLType.slTypeName}  -  GL Matching
-                      </span>
-                    )}{" "}
-                     {/* GL Matching */}
-                  </>
-                ) : (
-                  "SL - GL Matching"
-                )}
+              <div className="text-lg font-semibold text-blue-800 p-1">
+                        GL Matching
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
@@ -1289,10 +1278,20 @@ const handleDeleteSLType = async (row) => {
                   }`}
                 >
                   <FontAwesomeIcon icon={faSave} className="mr-2" />
-                  Save SL-GL Matching
+                  Save Matching
                 </button>
               </div>
+
+              
             </div>
+            
+
+              <div className="text-sm font-semibold text-blue-800 mb-2">
+                  <span className="block text-sm font-extrabold text-blue-800 bg-blue-100 px-2 py-1.5 rounded-md">
+                    SL Type - {selectedSLType.slTypeName}
+                  </span>
+              </div>
+
 
             <SearchGlobalReferenceTable
               docType={`SLGL Matching`}

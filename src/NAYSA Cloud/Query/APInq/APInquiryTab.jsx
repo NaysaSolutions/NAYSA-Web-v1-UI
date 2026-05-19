@@ -188,7 +188,7 @@ const APInquiryTab = forwardRef(function APInquiryTab({ registerActions }, ref) 
       );
 
       const beg = parseFormattedNumber(beginningBalance) || 0;
-      const end = beg + totals.debit - totals.credit;
+      const end = beg + totals.credit - totals.debit;
 
       updateState({
         totalDebit: formatNumber(totals.debit),

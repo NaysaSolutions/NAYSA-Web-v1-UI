@@ -1,5 +1,5 @@
 // src/NAYSA Cloud/Reference File/MSMast_ReferenceCodeTab.jsx
-import React, { forwardRef, useImperativeHandle, useMemo, useState, useRef } from "react";
+import React, { forwardRef, useImperativeHandle, useMemo, useState, useRef, useCallback, useEffect } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faSitemap,
@@ -43,12 +43,38 @@ const MSMast_ReferenceCodeTab = forwardRef(({ onStateChange }, ref) => {
   const refTabs = useMemo(() => [
     { id: "category", label: "Category Codes", icon: faSitemap },
     { id: "classification", label: "Classification Codes", icon: faLayerGroup },
-    { id: "subclass", label: "Sub Class Codes", icon: faListAlt },
-    { id: "uom", label: "UOM Codes", icon: faRulerCombined },
-    { id: "supplementary", label: "Supplementary Codes", icon: faTags },
+    // { id: "subclass", label: "Sub Class Codes", icon: faListAlt },
+    // { id: "uom", label: "UOM Codes", icon: faRulerCombined },
+    // { id: "supplementary", label: "Supplementary Codes", icon: faTags },
   ], []);
 
   const [activeRefTab, setActiveRefTab] = useState(refTabs[0].id);
+
+  // Ref mirror so childStateChange closure always reads the latest value without stale closure issues
+  const activeRefTabRef = useRef(refTabs[0].id);
+
+  // Switch sub-tab and notify MSMast which one is now active
+  const switchRefTab = (id) => {
+    activeRefTabRef.current = id;
+    setActiveRefTab(id);
+    onStateChange?.((prev) => ({ ...prev, activeRefTab: id }));
+  };
+
+  // Wrapper given to every child component.
+  // Children call onStateChange({ isEditing, canSave }) as a plain object which would
+  // overwrite activeRefTab in MSMast's refState. This wrapper always re-stamps it.
+  const childStateChange = useCallback((patch) => {
+    const updater = typeof patch === "function"
+      ? (prev) => ({ ...patch(prev), activeRefTab: activeRefTabRef.current })
+      : (prev) => ({ ...prev, ...patch, activeRefTab: activeRefTabRef.current });
+    onStateChange?.(updater);
+  }, [onStateChange]);
+
+  // Emit initial activeRefTab on mount so MSMast header is correct right away
+  useEffect(() => {
+    onStateChange?.((prev) => ({ ...prev, activeRefTab: refTabs[0].id }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Wire top-level parent buttons to the active child
   useImperativeHandle(ref, () => ({
@@ -73,15 +99,17 @@ const MSMast_ReferenceCodeTab = forwardRef(({ onStateChange }, ref) => {
       if (activeRefTab === "uom") uomRef.current?.reset?.();
       if (activeRefTab === "supplementary") suppRef.current?.reset?.();
     },
-  }));
+    downloadTemplate: () => categoryRef.current?.downloadTemplate?.(),
+    triggerImport:    () => categoryRef.current?.triggerImport?.(),
+  }), [activeRefTab]);
 
   const renderRight = () => {
     switch (activeRefTab) {
-      case "category": return <CategoryCodes ref={categoryRef} onStateChange={onStateChange} />;
-      case "classification": return <ClassificationCodes ref={classRef} onStateChange={onStateChange} />;
-      case "subclass": return <SubclassCodes ref={subclassRef} onStateChange={onStateChange} />;
-      case "uom": return <UOMCodes ref={uomRef} onStateChange={onStateChange} />;
-      case "supplementary": return <SupplementaryCodes ref={suppRef} onStateChange={onStateChange} />;
+      case "category":       return <CategoryCodes ref={categoryRef} onStateChange={childStateChange} />;
+      case "classification": return <ClassificationCodes ref={classRef} onStateChange={childStateChange} />;
+      case "subclass":       return <SubclassCodes ref={subclassRef} onStateChange={childStateChange} />;
+      case "uom":            return <UOMCodes ref={uomRef} onStateChange={childStateChange} />;
+      case "supplementary":  return <SupplementaryCodes ref={suppRef} onStateChange={childStateChange} />;
       default: return null;
     }
   };
@@ -102,7 +130,7 @@ const MSMast_ReferenceCodeTab = forwardRef(({ onStateChange }, ref) => {
               <button
                 key={t.id}
                 type="button"
-                onClick={() => setActiveRefTab(t.id)}
+                onClick={() => switchRefTab(t.id)}
                 className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs md:text-sm font-bold transition-colors duration-200
                   ${activeRefTab === t.id ? "bg-blue-100 text-blue-700" : "text-gray-600 hover:bg-gray-100 hover:text-blue-700"}
                   ${collapseNav ? "justify-center px-2 w-10" : ""}

@@ -11,6 +11,8 @@ import {
     faUndo,
     faPenToSquare,
     faTrash,
+    faDownload,
+    faFileImport,
 } from "@fortawesome/free-solid-svg-icons";
 
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
@@ -73,7 +75,7 @@ const MSMast = () => {
 
     // Reference Tab State
     const refTabRef = useRef(null);
-    const [refState, setRefState] = useState({ isEditing: false, canSave: false });
+    const [refState, setRefState] = useState({ isEditing: false, canSave: false, activeRefTab: "category" });
 
     useEffect(() => {
         loadMasterList();
@@ -334,10 +336,15 @@ const MSMast = () => {
         }
 
         if (activeTab === "ref") {
+            const isCategoryTab = refState.activeRefTab === "category";
             return [
                 { key: "add", label: <span className="hidden sm:inline ml-1">Add</span>, icon: faPlus, onClick: () => refTabRef.current?.add?.(), className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
                 { key: "save", label: <span className="hidden sm:inline ml-1">Save</span>, icon: faSave, onClick: () => refTabRef.current?.save?.(), disabled: !refState.canSave, className: `${baseBtn} ${!refState.canSave ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
                 { key: "reset", label: <span className="hidden sm:inline ml-1">Reset</span>, icon: faUndo, onClick: () => refTabRef.current?.reset?.(), className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
+                ...(isCategoryTab ? [
+                    { key: "downloadTemplate", label: <span className="hidden sm:inline ml-1">Download Template</span>, icon: faDownload, onClick: () => refTabRef.current?.downloadTemplate?.(), className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
+                    { key: "importValidate", label: <span className="hidden sm:inline ml-1">Import & Validate</span>, icon: faFileImport, onClick: () => refTabRef.current?.triggerImport?.(), className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
+                ] : []),
             ];
         }
 
@@ -348,24 +355,28 @@ const MSMast = () => {
         <div className="global-ref-main-div-ui">
             <div className="global-ref-header-ui">
                 <div className="w-full flex flex-col lg:flex-row items-center justify-between gap-3">
-                    <div className="flex-shrink-0 w-full lg:w-auto text-center lg:text-left">
-                        <h1 className="global-ref-headertext-ui truncate">MS Master Data</h1>
-                    </div>
+                    {/* LEFT: title + tabs grouped together */}
+                    <div className="flex flex-col lg:flex-row items-center lg:items-center gap-2 lg:gap-4 w-full lg:w-auto">
+                        <div className="flex-shrink-0 text-center lg:text-left">
+                            <h1 className="global-ref-headertext-ui truncate">MS Master Data</h1>
+                        </div>
 
-                    <div className="flex-1 flex justify-center w-full overflow-x-auto no-scrollbar">
-                        <div className="flex flex-nowrap border-b border-blue-300">
-                            {tabs.map((tab) => (
-                                <button
-                                    key={tab.id}
-                                    onClick={() => setActiveTab(tab.id)}
-                                    className={`shrink-0 px-3 py-1 sm:py-2 sm:px-4 text-[10px] sm:text-[13px] font-bold border-b-2 rounded-md ${activeTab === tab.id ? "border-blue-700 text-blue-700 bg-blue-50" : "border-transparent text-gray-500 hover:text-blue-500"}`}
-                                >
-                                    <FontAwesomeIcon icon={tab.icon} className="mr-1.5" /> {tab.label}
-                                </button>
-                            ))}
+                        <div className="overflow-x-auto no-scrollbar">
+                            <div className="flex flex-nowrap border-b border-blue-300">
+                                {tabs.map((tab) => (
+                                    <button
+                                        key={tab.id}
+                                        onClick={() => setActiveTab(tab.id)}
+                                        className={`shrink-0 px-3 py-1 sm:py-2 sm:px-4 text-[10px] sm:text-[13px] font-bold border-b-2 rounded-md ${activeTab === tab.id ? "border-blue-700 text-blue-700 bg-blue-50" : "border-transparent text-gray-500 hover:text-blue-500"}`}
+                                    >
+                                        <FontAwesomeIcon icon={tab.icon} className="mr-1.5" /> {tab.label}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     </div>
 
+                    {/* RIGHT: buttons stay on the far right */}
                     <div className="flex-shrink-0 w-full lg:w-auto flex flex-wrap items-center justify-center lg:justify-end gap-1.5">
                         {!!headerButtons.length && <ButtonBar buttons={headerButtons} />}
                     </div>
