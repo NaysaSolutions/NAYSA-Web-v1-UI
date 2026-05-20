@@ -32,6 +32,7 @@ const Header = ({
   showActions = true,
   showBIRForm = true,
   showCopyForm = true,
+  showPrintCheck = false,
   isViewDocument = false,
   showPost = false,
   showUpload = false,
@@ -49,6 +50,7 @@ const Header = ({
   pdfLink,
   videoLink,
   onPrint,
+  onPrintCheck,
   printData,
   onReset,
   onSave,
@@ -124,6 +126,7 @@ const Header = ({
     setIsGuideOpen(false);
   };
   const handlePrint = () => onPrint?.(printData);
+  const handlePrintCheck = () => onPrintCheck?.();
   const handleUpload = () => onUpload?.();
   const handleNotify = () => onNotify?.();
   const closeMoreMenu = () => setIsMoreOpen(false);
@@ -223,6 +226,17 @@ const Header = ({
               <span className={mobileLabelClass}>Print</span>
               <span className={desktopLabelClass}>Print</span>
             </button>
+            {showPrintCheck && (
+              <button 
+                onClick={handlePrintCheck} 
+                disabled={isPrintDisabled}
+                className={getBlueButtonClass(isPrintDisabled)}
+              >
+                <FontAwesomeIcon icon={faPrint} />
+                <span className={mobileLabelClass}>Print Check</span>
+                <span className={desktopLabelClass}>Print Check</span>
+              </button>
+            )}
            {showBIRForm && (
               <button 
                 onClick={handlePrint} 

@@ -1422,8 +1422,16 @@ const handlePrint = async () => {
       return;
       }
   if (documentID) {
+    updateState({ showSignatoryModal: true });
+  }
+};
+
+const handlePrintCheck = async () => {
+ if (!detailRows || detailRows.length === 0) {
+      return;
+      }
+  if (documentID) {
     setShowCheckPreview(true);
-    // updateState({ showSignatoryModal: true });
   }
 };
 
@@ -2545,6 +2553,8 @@ const renderCvGlCell = (columnKey, row, index) => {
               pdfLink={pdfLink} 
               videoLink={videoLink}
               onPrint={handlePrint} 
+              showPrintCheck={true}
+              onPrintCheck={handlePrintCheck}
               onPost={handlePost} 
               printData={printData} 
               onReset={handleReset}

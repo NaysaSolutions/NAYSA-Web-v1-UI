@@ -313,7 +313,7 @@ const getFieldValue = (field, checkData, showForAccountOnly) => {
   if (field.fieldKey === "checkAmount") {
     const amount = checkData?.checkAmount ?? checkData?.amount ?? "";
     const formatted = formatAmount(amount);
-    return formatted ? `₱  *** ${formatted}` : "";
+    return formatted ? `${formatted}` : "";
   }
 
   if (field.fieldKey === "forAccountOnly") {
@@ -601,7 +601,7 @@ export default function CheckPrintPreviewModal({
                 backgroundSize: "8px 8px",
               }}
             >
-              <div className="absolute left-[12px] top-[115px] text-[11px] font-bold text-slate-600">
+              {/* <div className="absolute left-[12px] top-[115px] text-[11px] font-bold text-slate-600">
                 PAY TO THE
                 <br />
                 ORDER OF
@@ -611,7 +611,7 @@ export default function CheckPrintPreviewModal({
               </div>
               <div className="absolute bottom-[32px] left-[30px] text-[17px] tracking-[5px] text-slate-600">
                 ❞1234567890❞ &nbsp;&nbsp; 0102034567❞ &nbsp;&nbsp; 1001
-              </div>
+              </div> */}
 
               {visibleFields.map((field) => {
                 const x = (numberOrZero(field.xPosition) + offsetX) * pxPerMm;

@@ -61,7 +61,7 @@ const FIELD_OPTIONS = [
   {
     fieldKey: "checkAmount",
     fieldLabel: "Check Amount",
-    sampleValue: "₱  *** 125,000.00",
+    sampleValue: "125,000.00",
     colorClass: "border-purple-400 bg-purple-50/70 text-purple-700",
   },
   {
@@ -153,7 +153,7 @@ const DEFAULT_TEMPLATE_FIELDS = [
     fieldKey: "checkAmount",
     fieldLabel: "Check Amount",
     staticValue: "",
-    sampleValue: "₱  *** 125,000.00",
+    sampleValue: "125,000.00",
     xPosition: 150,
     yPosition: 43,
     fieldWidth: 42,
@@ -1281,17 +1281,17 @@ export default function CheckTemplateSetup() {
           backgroundSize: "8px 8px",
         }}
       >
-        <div className="absolute left-[12px] top-[115px] text-[11px] font-bold text-slate-600">
+        {/* <div className="absolute left-[12px] top-[115px] text-[11px] font-bold text-slate-600">
           PAY TO THE
           <br />
           ORDER OF
         </div>
         <div className="absolute right-[42px] top-[88px] text-[10px] font-bold text-slate-600">
           DATE
-        </div>
-        <div className="absolute bottom-[32px] left-[30px] text-[17px] tracking-[5px] text-slate-600">
+        </div> */}
+        {/* <div className="absolute bottom-[32px] left-[30px] text-[17px] tracking-[5px] text-slate-600">
           ❞1234567890❞ &nbsp;&nbsp; 0102034567❞ &nbsp;&nbsp; 1001
-        </div>
+        </div> */}
 
         {fields
           .filter((field) => field.isVisible)
