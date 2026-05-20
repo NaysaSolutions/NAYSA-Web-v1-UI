@@ -58,17 +58,22 @@ const formatDateDisplay = (value) => {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
 };
 
-// Column Configuration - Added Item Code
+// Column Configuration matrix with visibility flags
 const defaultPRColumns = [
   { key: "prNo", label: "PR Number", visible: true, type: "text" },
   { key: "prDate", label: "PR Date", visible: true, type: "date" },
   { key: "branch", label: "Branch", visible: true, type: "text" },
+  { key: "invType", label: "Type", visible: true, type: "text" },
   { key: "itemCode", label: "Item Code", visible: true, type: "text" },
   { key: "itemName", label: "Item Description", visible: true, type: "text" },
   { key: "status", label: "Status", visible: true, type: "text" },
   { key: "prQuantity", label: "PR Qty", visible: true, type: "number" },
   { key: "poQty", label: "PO/JO Qty", visible: true, type: "number" },
+  { key: "poNo", label: "PO/JO Ref No.", visible: true, type: "text" }, // ✅ Added PO/JO Reference Column Mapping
   { key: "rrQty", label: "RR Qty", visible: true, type: "number" },
+  { key: "rrNo", label: "RR Ref No.", visible: true, type: "text" },   
+  { key: "apvNo", label: "APV Ref No.", visible: true, type: "text" }, 
+  { key: "cvNo", label: "CV Ref No.", visible: true, type: "text" },
 ];
 
 const normalizePRDetailRows = (rows = []) => {
@@ -77,12 +82,18 @@ const normalizePRDetailRows = (rows = []) => {
     id: `${item.branchCode}-${item.prNo}-${index}`,
     prDate: formatDateDisplay(item.prDate),
     branch: item.branchCode || "",
+    invType: item.invType || "N/A",
     status: item.prStatusDesc || "Open",
-    itemCode: item.itemCode || "", //
+    itemCode: item.itemCode || "", 
     itemName: item.itemName || "", 
     prQuantity: Number(item.prQuantity || 0),
     poQty: Number(item.poQty || 0),
     rrQty: Number(item.rrQty || 0),
+    // Replaces raw CHAR(10) newlines from SQL with clean comma separators for clean text visibility
+    poNo: (item.poNo || "").trim().replace(/\n/g, ", "), // ✅ Added PO/JO Dynamic Newline Sanitizer Map
+    rrNo: (item.rrNo || "").trim().replace(/\n/g, ", "),
+    apvNo: (item.apvNo || "").trim().replace(/\n/g, ", "),
+    cvNo: (item.cvNo || "").trim().replace(/\n/g, ", "),
   }));
 };
 
@@ -120,7 +131,6 @@ export default function PRInquiry() {
   const fetchRecord = useCallback(async () => {
     updateState({ isLoading: true });
     try {
-      // Maps to Sproc codes: O=Open, C=Closed, X=Cancelled
       const statusMap = { "All": "", "Open": "O", "Closed": "C", "Cancelled": "X" };
       const itemCodesStr = state.selectedItems.map(i => i.code).join(',');
 
@@ -157,7 +167,7 @@ export default function PRInquiry() {
   };
 
   const handleViewDocument = (row) => {
-   navigate(`/page/PR?prNo=${encodeURIComponent(row.prNo)}&branchCode=${encodeURIComponent(row.branchCode)}&viewOnly=Y`);
+    navigate(`/page/PR?prNo=${encodeURIComponent(row.prNo)}&branchCode=${encodeURIComponent(row.branchCode)}&viewOnly=Y`);
   };
 
   return (
@@ -207,8 +217,6 @@ export default function PRInquiry() {
           <>
             <div className="global-tran-tab-div-ui">
               <div className="bg-white rounded-2xl shadow-sm border p-4 flex flex-col gap-4">
-                
-                {/* ROW 1: Branch, Department, Inventory Type, From Date */}
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                   <div className="md:col-span-3">
                     <FieldRenderer type="lookup" label="Branch" value={state.branchName} onLookup={() => setShowLookup("branch")} />
@@ -222,6 +230,7 @@ export default function PRInquiry() {
                       <option value="FG">FG</option>
                       <option value="MS">MS</option>
                       <option value="RM">RM</option>
+                      <option value="JO">JO</option>
                     </select>
                     <label className="global-tran-floating-label">Inv Type</label>
                   </div>
@@ -230,7 +239,6 @@ export default function PRInquiry() {
                   </div>
                 </div>
 
-                {/* ROW 2: Status, Item (Multiple Select), To Date */}
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                   <div className="md:col-span-2 relative">
                     <select value={state.statusFilter} onChange={(e) => updateState({ statusFilter: e.target.value })} className="peer global-tran-textbox-ui">
