@@ -26,9 +26,14 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { FiSun, FiMoon } from "react-icons/fi";
-import { useSwalDeleteConfirm } from "../Global/behavior";
+import Swal from "sweetalert2";
+import {
+  useSwalDeleteConfirm,
+  useSwalSuccessAlert,
+  useSwalErrorAlert,
+} from "../Global/behavior";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
-import apiClient from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
+import apiClient, { ensureCsrf } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { Link } from "react-router-dom"; // Add this import
 
 const DEFAULT_AVATAR = "/3135715.png";
@@ -47,6 +52,7 @@ const Navbar = ({
   const [capturedImage, setCapturedImage] = useState(null);
   const [profileImageSrc, setProfileImageSrc] = useState(DEFAULT_AVATAR);
   const [isMobileView, setIsMobileView] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(false);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [brightness, setBrightness] = useState(100);
@@ -261,6 +267,127 @@ const Navbar = ({
       console.error("Logout confirmation failed:", error);
     }
   };
+
+  const encodePassword = (value) => {
+    try {
+      return btoa(unescape(encodeURIComponent(value)));
+    } catch (error) {
+      return btoa(value);
+    }
+  };
+
+  const promptInitializePassword = async () => {
+    const result = await Swal.fire({
+      title: "Confirm Initialize",
+      text: "Enter your password to authorize the initialization.",
+      icon: "warning",
+      input: "password",
+      inputPlaceholder: "Password",
+      inputAttributes: {
+        autocapitalize: "off",
+        autocorrect: "off",
+        autocomplete: "new-password",
+      },
+      showCancelButton: true,
+      confirmButtonText: "Initialize",
+      cancelButtonText: "Cancel",
+      focusConfirm: false,
+      reverseButtons: true,
+      preConfirm: (value) => {
+        if (!value || !value.trim()) {
+          Swal.showValidationMessage("Password is required to proceed.");
+          return null;
+        }
+        return value.trim();
+      },
+    });
+
+    return result.isConfirmed ? result.value : null;
+  };
+
+  const handleInitializeClick = async () => {
+  if (isInitializing) return;
+
+  const password = await promptInitializePassword();
+  if (!password) return;
+
+  // Validate password first by silent login
+  try {
+    await ensureCsrf();
+
+    await apiClient.post(
+      "/login",
+      {
+        USER_CODE: user?.USER_CODE,
+        PASSWORD: password,
+      },
+      {
+        headers: {
+          "X-Skip-Logout-Broadcast": "1",
+        },
+      }
+    );
+  } catch (err) {
+    console.error("Password verification failed:", err);
+
+    if (err?.response?.status === 401 || err?.response?.status === 403) {
+      useSwalErrorAlert(
+        "Incorrect Password",
+        err?.response?.data?.message || "The password you entered is incorrect."
+      );
+    } else {
+      useSwalErrorAlert(
+        "Verification Error",
+        err?.response?.data?.message ||
+          err?.message ||
+          "Failed to verify password."
+      );
+    }
+
+    return;
+  }
+
+  // If password is valid, proceed to initialize
+  setIsInitializing(true);
+
+  try {
+    const response = await apiClient.post("/initialize", {
+      mode: "Initialize",
+      params: {
+        user_code: user?.USER_CODE,
+      },
+    });
+
+    const apiMessage = response?.data?.message;
+    const apiSuccess =
+      typeof response?.data?.success !== "undefined"
+        ? !!response.data.success
+        : true;
+
+    if (!apiSuccess) {
+      useSwalErrorAlert(
+        "Initialization Failed",
+        apiMessage || "Initialization failed."
+      );
+    } else {
+      useSwalSuccessAlert(
+        "Initialized",
+        apiMessage || "Initialize completed successfully."
+      );
+    }
+  } catch (error) {
+    console.error("API initialize failed:", error);
+
+    useSwalErrorAlert(
+      "Initialization Error",
+      error?.response?.data?.message ||
+        error?.message ||
+        "Failed to execute API initialize."
+    );
+  } finally {
+    setIsInitializing(false);
+  }
+};
 
   const resetPhotoEditor = () => {
     setCapturedImage(null);
@@ -944,6 +1071,16 @@ const Navbar = ({
               className="rounded-full bg-gray-100 p-1.5 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
             >
               {isDark ? <FiSun size={16} /> : <FiMoon size={16} />}
+            </motion.button>
+
+            <motion.button
+              whileTap={{ scale: 0.92 }}
+              onClick={handleInitializeClick}
+              disabled={isInitializing}
+              className="rounded-full bg-red-600 p-1.5 text-white transition-colors hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-red-700 dark:text-white dark:hover:bg-red-600"
+              title="Initialize Transactions"
+            >
+              <RotateCcw className={`h-4 w-4 ${isInitializing ? "animate-spin" : ""}`} />
             </motion.button>
 
             <div className="relative">
