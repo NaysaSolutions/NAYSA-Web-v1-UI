@@ -228,15 +228,61 @@ import {
   useSwalSuccessAlert,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
-/* ─── Password requirements ─────────────────────────────────────── */
-const REQUIREMENTS = [
-  { key: "len", test: (p) => p.length >= 8, label: "At least 8 characters" },
-  { key: "lower", test: (p) => /[a-z]/.test(p), label: "Contains a lowercase letter" },
-  { key: "upper", test: (p) => /[A-Z]/.test(p), label: "Contains an uppercase letter" },
-  { key: "digit", test: (p) => /\d/.test(p), label: "Contains a number" },
-  { key: "special", test: (p) => /[^A-Za-z0-9]/.test(p), label: "Contains a special character" },
-  { key: "spaces", test: (p) => !/\s/.test(p), label: "No spaces" },
-];
+/* ─── Build requirements list from HS_SEC policy ────────────────── */
+const buildRequirements = (policy) => {
+  const reqs = [];
+
+  // minimChar: minimum character length (0 = not enforced, but always show if > 0)
+  const minLen = policy?.minimChar ?? 0;
+  if (minLen > 0) {
+    reqs.push({
+      key: "len",
+      test: (p) => p.length >= minLen,
+      label: `At least ${minLen} character${minLen !== 1 ? "s" : ""}`,
+    });
+  }
+
+  // upLow: must contain both uppercase AND lowercase letters
+  if (policy?.upLow) {
+    reqs.push({
+      key: "upper",
+      test: (p) => /[A-Z]/.test(p),
+      label: "Contains an uppercase letter",
+    });
+    reqs.push({
+      key: "lower",
+      test: (p) => /[a-z]/.test(p),
+      label: "Contains a lowercase letter",
+    });
+  }
+
+  // letNum: must contain both letters AND numbers
+  if (policy?.letNum) {
+    reqs.push({
+      key: "digit",
+      test: (p) => /\d/.test(p),
+      label: "Contains a number",
+    });
+  }
+
+  // specChar: must contain a special character
+  if (policy?.specChar) {
+    reqs.push({
+      key: "special",
+      test: (p) => /[^A-Za-z0-9]/.test(p),
+      label: "Contains a special character",
+    });
+  }
+
+  // No spaces — always enforced
+  reqs.push({
+    key: "spaces",
+    test: (p) => !/\s/.test(p),
+    label: "No spaces",
+  });
+
+  return reqs;
+};
 
 /* ─── Animation variants — same as Login / Register ─────────────── */
 const fadeUp = {
@@ -328,9 +374,9 @@ function PasswordInput({ value, onChange, show, onToggle, placeholder = "••�
 }
 
 /* ─── Strength bar ───────────────────────────────────────────────── */
-function StrengthBar({ password }) {
-  const passed = REQUIREMENTS.filter((r) => r.test(password)).length;
-  const pct = password ? (passed / REQUIREMENTS.length) * 100 : 0;
+function StrengthBar({ password, requirements }) {
+  const passed = requirements.filter((r) => r.test(password)).length;
+  const pct = password ? (passed / requirements.length) * 100 : 0;
   const color =
     pct <= 33 ? "#ef4444" :
       pct <= 66 ? "#f59e0b" :
@@ -384,7 +430,7 @@ const ChangePassword = () => {
   const mode = (params.get("mode") || "").trim();
   const companyFromLink = (params.get("company") || "").trim();
 
-  const requiresOldPassword = !["reset", "release"].includes(mode);
+  const requiresOldPassword = !["reset", "release", "expired"].includes(mode);
 
   /* State */
   const [oldPassword, setOldPassword] = useState("");
@@ -394,6 +440,10 @@ const ChangePassword = () => {
   const [showNew, setShowNew] = useState(false);
   const [showConf, setShowConf] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [policy, setPolicy] = useState(null);
+
+  /* Derive requirements from fetched policy */
+  const REQUIREMENTS = useMemo(() => buildRequirements(policy), [policy]);
 
   useEffect(() => {
     if (companyFromLink) setTenant(companyFromLink);
@@ -403,6 +453,16 @@ const ChangePassword = () => {
       const cleanUrl = window.location.protocol + "//" + window.location.host + "/";
       window.history.replaceState({}, document.title, cleanUrl);
     }
+
+    // Fetch HS_SEC password policy
+    apiClient
+      .get("/security/policy")
+      .then(({ data }) => {
+        if (data?.success && data?.data) setPolicy(data.data);
+      })
+      .catch(() => {
+        // On failure, leave policy null → buildRequirements returns defaults (no-spaces only)
+      });
   }, [companyFromLink]);
 
   const tenant = getTenant();
@@ -504,6 +564,7 @@ const ChangePassword = () => {
           >
             {mode === "reset" && "Reset your password to continue."}
             {mode === "release" && "Set a new password to unlock your account."}
+            {mode === "expired" && "Your password has expired. Please set a new one to continue."}  {/* ADD THIS */}
             {!mode && "Update your account password."}
           </motion.p>
         </div>
@@ -608,7 +669,7 @@ const ChangePassword = () => {
                 disabled={loading}
               />
               {/* Strength bar */}
-              {newPassword && <StrengthBar password={newPassword} />}
+              {newPassword && <StrengthBar password={newPassword} requirements={REQUIREMENTS} />}
             </motion.div>
 
             {/* Confirm password */}
