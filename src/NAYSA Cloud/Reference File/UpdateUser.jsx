@@ -551,7 +551,9 @@
 //     }
 //   };
 
-//   const handleReleaseAccount = async () => {
+//   const handleUnlockAccount = async () => {
+
+  //const handleReleaseAccount = async () => {
 //     if (!selectedUser?.userCode) {
 //       await useSwalErrorAlert(
 //         "Validation Error",
@@ -2447,6 +2449,7 @@ import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import BranchLookupModal from "@/NAYSA Cloud/Lookup/SearchBranchRef";
 import RCLookupModal from "@/NAYSA Cloud/Lookup/SearchRCMast";
 import UserRoleModal from "@/NAYSA Cloud/Lookup/SetUserRole";
+import LoginPassPolicy from "@/NAYSA Cloud/Lookup/LoginPassPolicy";
 import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 
@@ -2467,6 +2470,8 @@ import {
   faInfoCircle,
   faVideo,
   faUserShield,
+  faShieldHalved,
+  faLockOpen,
 } from "@fortawesome/free-solid-svg-icons";
 
 import {
@@ -2520,6 +2525,8 @@ const UpdateUser = () => {
   const [rcName, setRcName] = useState("");
   const [rcModalOpen, setRcModalOpen] = useState(false);
   const [showUserRoleModal, setShowUserRoleModal] = useState(false);
+  const [showLoginPolicyModal, setShowLoginPolicyModal] = useState(false);
+  const [policy, setPolicy] = useState(null);
   const [position, setPosition] = useState("");
   const [emailAdd, setEmailAdd] = useState("");
   const [viewCostamt, setViewCostamt] = useState("N");
@@ -2637,6 +2644,16 @@ const UpdateUser = () => {
       }
     }
   }, [searchParams, users, activeTab, selectedUser]);
+
+  // Fetch password policy (maxLog) once on mount
+  useEffect(() => {
+    apiClient
+      .get("/security/policy")
+      .then(({ data }) => {
+        if (data?.success && data?.data) setPolicy(data.data);
+      })
+      .catch(() => {});
+  }, []);
 
   const saveMutation = useMutation({
     mutationFn: async ({ payload }) => {
@@ -3052,6 +3069,40 @@ const UpdateUser = () => {
     }
   };
 
+  const handleUnlockAccount = async () => {
+    if (!selectedUser?.userCode) return;
+
+    const confirmRes = await useSwalDeleteConfirm(
+      "Release Account",
+      `Release account for ${selectedUser.userName} and reset failed login attempts?`,
+      "Yes, release it"
+    );
+
+    if (!confirmRes?.isConfirmed) return;
+
+    try {
+      const { data } = await apiClient.post("/users/approve", {
+        userCode: selectedUser.userCode,
+        mode: "release",
+      });
+
+      if (data?.status === "success") {
+        await useSwalSuccessAlert("Released", "Account has been released successfully.");
+        setSelectedUser(null);
+        setIsEditing(false);
+        await queryClient.invalidateQueries({ queryKey: ["users"] });
+        await refetchUsers();
+      } else {
+        await useSwalErrorAlert("", data?.message || "Release failed.");
+      }
+    } catch (error) {
+      await useSwalErrorAlertAPI(
+        "",
+        error?.response?.data?.message || error.message || "Release failed."
+      );
+    }
+  };
+
   const handleReleaseAccount = async () => {
     if (!selectedUser?.userCode) {
       await useSwalErrorAlert("", "Please select a user to approve account.");
@@ -3341,6 +3392,13 @@ const UpdateUser = () => {
         />
       )}
 
+      {showLoginPolicyModal && (
+        <LoginPassPolicy
+          isOpen={showLoginPolicyModal}
+          onClose={() => setShowLoginPolicyModal(false)}
+        />
+      )}
+
       <div className="fixed mt-4 top-14 left-6 right-6 z-30 global-ref-header-ui flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
         <div className="flex items-center justify-center sm:justify-start w-full sm:w-auto">
           <h1 className="global-ref-headertext-ui text-center sm:text-left">{documentTitle}</h1>
@@ -3417,6 +3475,29 @@ const UpdateUser = () => {
           >
             <FontAwesomeIcon icon={faKey} />
             <span className="hidden sm:inline">Reset Password</span>
+          </button>
+
+          {selectedUser &&
+            selectedUser.active === "N" &&
+            policy?.maxLog > 0 &&
+            (selectedUser.stat ?? 0) >= policy.maxLog && (
+            <button
+              onClick={handleUnlockAccount}
+              title="Release Locked Account"
+              className="bg-rose-600 text-white h-8 w-8 sm:w-auto sm:px-3 sm:py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-rose-700 transition-all"
+            >
+              <FontAwesomeIcon icon={faLockOpen} />
+              <span className="hidden sm:inline">Release Account</span>
+            </button>
+          )}
+
+          <button
+            onClick={() => setShowLoginPolicyModal(true)}
+            title="Login / Password Policy"
+            className="bg-indigo-600 text-white h-8 w-8 sm:w-auto sm:px-3 sm:py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all"
+          >
+            <FontAwesomeIcon icon={faShieldHalved} />
+            <span className="hidden sm:inline">Login / Password Policy</span>
           </button>
 
           {selectedUser && selectedUser.active === "P" && (
