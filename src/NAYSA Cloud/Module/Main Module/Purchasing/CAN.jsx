@@ -7,7 +7,6 @@ import {
   faChevronRight,
   faCircleInfo,
   faClipboardList,
-  faFilter,
   faListCheck,
   faMagnifyingGlass,
   faPaperclip,
@@ -47,15 +46,38 @@ import {
 import { useGetCurrentDayV2, useformatToDatev2 } from "@/NAYSA Cloud/Global/dates";
 import { useTopPayeeRow, useTopPayTermRow } from "@/NAYSA Cloud/Global/top1RefTable.js";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
-import { useTransactionUpsert } from "@/NAYSA Cloud/Global/procedure";
+import { useHandleCancel, useTransactionUpsert } from "@/NAYSA Cloud/Global/procedure";
 import {
   useFetchTranAtt,
   useHandleFileDelete,
 } from "@/NAYSA Cloud/Global/fileManagement";
 import Header from "@/NAYSA Cloud/Components/Header";
 
+/* ============================================================================
+   CAN.jsx - Canvass Transaction
+   ----------------------------------------------------------------------------
+   Main flow:
+   1. Load open PR records from sproc_PHP_CAN GetOpenPR.
+   2. User selects PR(s), then loads consolidated canvass item rows.
+   3. User creates supplier offers and enters prices per canvass item.
+   4. User awards one supplier after validation.
+   5. Awarded supplier lines can generate Purchase Orders.
+   6. Generated PO references are tracked per line to prevent duplicate PO creation.
+
+   Important field rule:
+   - Use only the exact camelCase fields returned by sproc_PHP_CAN.
+   - Avoid fallback aliases like group_id, groupID, po_no, can_id, etc.
+   ============================================================================ */
+
 const docType = "CAN";
 
+/* -----------------------------------------------------------------------------
+   Shared helpers
+   -----------------------------------------------------------------------------
+   These helpers keep parsing/formatting consistent across API responses, table
+   rendering, and payload building. normalizeRows is intentionally kept because
+   SQL JSON fields may arrive either as arrays or JSON strings.
+----------------------------------------------------------------------------- */
 const normalizeRows = (value) => {
   if (!value) return [];
   if (Array.isArray(value)) return value;
@@ -128,17 +150,29 @@ const cleanDisplayText = (value) =>
     .replace(/Ã¢â‚¬Â|â€|ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â/g, '"')
     .trim();
 
+
 const statusText = (code, fallback = "") => {
+  const value = String(code || "").trim().toUpperCase();
+  const fallbackValue = String(fallback || "").trim().toUpperCase();
   const map = {
-    D: "Draft",
-    F: "For Approval",
-    A: "Approved",
-    W: "Awarded",
-    C: "Cancelled",
+    D: "DRAFT",
+    F: "FOR APPROVAL",
+    A: "APPROVED",
+    W: "AWARDED",
+    C: "CANCELLED",
+    X: "CANCELLED",
   };
-  return map[String(code || "").toUpperCase()] || fallback || "Draft";
+  return map[value] || map[fallbackValue] || fallbackValue || "DRAFT";
 };
 
+
+
+/* -----------------------------------------------------------------------------
+   API endpoint map
+   -----------------------------------------------------------------------------
+   callCAN() uses this map to try the legacy route first, then the clean route.
+   The payload always goes as { json_data: ... } to match the CAN controller.
+----------------------------------------------------------------------------- */
 const canEndpointMap = {
   history: ["/getCANHistory", "/can/history"],
   openPR: ["/getCANOpenPR", "/can/open-pr"],
@@ -154,8 +188,17 @@ const canEndpointMap = {
   find: ["/findCAN", "/can/find"],
 };
 
-const DEC_AMT = 2;
 
+
+
+const DEC_AMT = 2;
+/* -----------------------------------------------------------------------------
+   Supplier offer calculation helpers
+   -----------------------------------------------------------------------------
+   makeSupplierDetail creates one supplier quote line from one consolidated
+   canvass item. calcDetail recalculates amounts, and calcSupplier recalculates
+   header totals from all quote lines.
+----------------------------------------------------------------------------- */
 const makeSupplierDetail = (item, decQty = 2, decUPrice = 2, vatCode = "") => ({
   canLn: item.canLn,
   invType: item.invType || "",
@@ -218,6 +261,12 @@ const calcSupplier = (supplier) => {
   };
 };
 
+
+
+
+/* =============================================================================
+   Main component
+============================================================================= */
 export const CAN = () => {
   const loadedFromUrlRef = useRef(false);
   const location = useLocation();
@@ -231,6 +280,12 @@ export const CAN = () => {
   const decUPrice = companyInfo?.pur_decuprice ?? 2;
   const documentTitle = `${hsDoc?.docName || "Canvass"} Transaction`;
 
+  /* ---------------------------------------------------------------------------
+     Local UI state outside the main transaction state
+     ---------------------------------------------------------------------------
+     These values control tabs, selection, generated PO behavior, and modal UI.
+     They are kept separate from state because they are screen-only concerns.
+  --------------------------------------------------------------------------- */
   const [topTab, setTopTab] = useState("details");
   const [openPrRows, setOpenPrRows] = useState([]);
   const [selectedPrIds, setSelectedPrIds] = useState([]);
@@ -244,6 +299,12 @@ export const CAN = () => {
   const [showSupplierCompareModal, setShowSupplierCompareModal] = useState(false);
   const [isSupplierCompareMaximized, setIsSupplierCompareMaximized] = useState(false);
 
+  /* ---------------------------------------------------------------------------
+     Main transaction state
+     ---------------------------------------------------------------------------
+     This state mirrors the CAN transaction returned by sproc_PHP_CAN GetCAN.
+     Keep field names aligned with the stored procedure JSON aliases.
+  --------------------------------------------------------------------------- */
   const [state, setState] = useState({
     canId: "",
     canNo: "",
@@ -253,7 +314,7 @@ export const CAN = () => {
     canCancelled: false,
 
     branchCode: currentUserRow?.branchCode || "",
-    branchName: currentUserRow?.branchName || currentUserRow?.BranchName || "",
+    branchName: currentUserRow?.branchName || "",
 
     selectedSupplierCode: "",
     selectedSupplierName: "",
@@ -282,7 +343,6 @@ export const CAN = () => {
     activeSupplierIndex: 0,
     supplierActiveTabs: {},
     showPrBreakdown: true,
-    showFilters: false,
     isLoading: false,
     showSpinner: false,
     showBranchModal: false,
@@ -323,7 +383,6 @@ export const CAN = () => {
     activeSupplierIndex,
     supplierActiveTabs,
     showPrBreakdown,
-    showFilters,
     isLoading,
     showSpinner,
     showBranchModal,
@@ -338,15 +397,27 @@ export const CAN = () => {
   } = state;
 
   const displayStatus = statusText(canStatus, canStatusName);
-  const isLocked = ["A", "W", "C"].includes(String(canStatus || "").toUpperCase()) || canCancelled;
+  const normalizedCanStatus = String(canStatus || "").toUpperCase();
+  const normalizedDisplayStatus = String(displayStatus || canStatusName || "").toUpperCase();
+  const isAwardedOrCancelled =
+    ["W", "X",  "AWARDED", "CANCELLED"].includes(normalizedCanStatus) ||
+    [ "AWARDED", "CANCELLED"].includes(normalizedDisplayStatus) ||
+    canCancelled;
+  const isLocked = ["A", "APPROVED"].includes(normalizedCanStatus) || normalizedDisplayStatus === "APPROVED" || isAwardedOrCancelled;
   const isFormDisabled = isLocked;
-  const isDraft = String(canStatus || "D").toUpperCase() === "D";
+  const isDraft = normalizedCanStatus === "D" || normalizedDisplayStatus === "DRAFT";
   const hasDocument = Boolean(canId);
-  const getCanVatAmount = (vatCode, amount) =>
-    typeof getAllTopVatAmount === "function" ? getAllTopVatAmount(vatCode, amount) : 0;
-  const getCanGoodsVatRow = (vatCode) =>
-    typeof getReplacementVatRow === "function" ? getReplacementVatRow(vatCode || "", "I", "S", "G") : null;
-
+  const hasPrBreakdownRows = detailRows.some((row) => normalizeRows(row.prBreakdown).length > 0);
+  const statusTextColor =
+    normalizedDisplayStatus === "CANCELLED"
+      ? "text-red-600"
+      : normalizedDisplayStatus === "AWARDED"
+        ? "text-blue-700"
+        : "text-slate-900";
+  
+  const compactActionButtonClass =  "inline-flex h-9 w-36 items-center justify-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white transition-all duration-200 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50";
+  const getCanVatAmount = (vatCode, amount) => typeof getAllTopVatAmount === "function" ? getAllTopVatAmount(vatCode, amount) : 0;
+  const getCanGoodsVatRow = (vatCode) => typeof getReplacementVatRow === "function" ? getReplacementVatRow(vatCode || "", "I", "S", "G") : null;
   const getStatusHistoryActionName = useCallback(
     (row) => {
       const actionBy = cleanDisplayText(row?.actionBy);
@@ -366,6 +437,11 @@ export const CAN = () => {
     [currentUserRow?.userCode, currentUserRow?.userName]
   );
 
+  /* ---------------------------------------------------------------------------
+     Dashboard / summary values
+     ---------------------------------------------------------------------------
+     Used by Transaction Summary cards and quick validation display.
+  --------------------------------------------------------------------------- */
   const totals = useMemo(() => {
     const totalQty = detailRows.reduce((sum, row) => sum + num(row.totalQtyNeeded), 0);
     const selectedQty = detailRows.reduce((sum, row) => sum + num(row.selectedQty), 0);
@@ -393,6 +469,12 @@ export const CAN = () => {
     ? `${rankedSuppliers[0].supplierCode || ""}-${rankedSuppliers[0].originalIndex}`
     : "";
 
+  /* ---------------------------------------------------------------------------
+     Awarded supplier resolver
+     ---------------------------------------------------------------------------
+     A supplier is considered awarded when isAwarded is true, or when its code
+     matches the selected supplier saved in CAN_HD.
+  --------------------------------------------------------------------------- */
   const awardedSupplier = useMemo(() => {
     const selectedCode = String(selectedSupplierCode || "").trim().toUpperCase();
     return (supplierRows || []).find((supplier) => {
@@ -401,6 +483,13 @@ export const CAN = () => {
     }) || null;
   }, [supplierRows, selectedSupplierCode]);
 
+  /* ---------------------------------------------------------------------------
+     Generate PO: detail line preparation
+     ---------------------------------------------------------------------------
+     Converts the awarded supplier item rows into PR-level PO detail rows.
+     Each row carries prId/prGroupId information from the canvass breakdown so
+     PO references can be tracked per original PR line.
+  --------------------------------------------------------------------------- */
   const poAllDetailRows = useMemo(() => {
     if (!awardedSupplier) return [];
 
@@ -422,7 +511,7 @@ export const CAN = () => {
               {
                 prId: row?.prId || canId || "",
                 prNo: row?.prNo || canNo || "",
-                prGroupId: row?.groupId || row?.canDt1Id || row?.canLn || "",
+                prGroupId: row?.canDt1Id || row?.canLn || "",
                 rcCode: row?.rcCode || "",
                 rcName: row?.rcName || "",
                 includedQty: row?.quantity || canvasDetail?.selectedQty || 0,
@@ -470,21 +559,17 @@ export const CAN = () => {
           const matchingPOReference = poReferences.find((ref) => {
             const sameLineKey = String(ref?.poLineKey || ref?.lineKey || "") === rowKey;
             const samePr = String(ref?.prId || "").toUpperCase() === String(breakdown?.prId || "").toUpperCase();
-            const sameGroup = String(ref?.groupId || ref?.prGroupId || "").toUpperCase() === String(breakdown?.prGroupId || "").toUpperCase();
+            const sameGroup = String(ref?.groupId || "").toUpperCase() === String(breakdown?.prGroupId || "").toUpperCase();
             return sameLineKey || (samePr && sameGroup);
           }) || {};
 
           const linePoNo =
             matchingPOReference.poNo ||
-            matchingPOReference.po_no ||
             row.poNo ||
-            row.po_no ||
             "";
           const linePoId =
             matchingPOReference.poId ||
-            matchingPOReference.po_id ||
             row.poId ||
-            row.po_id ||
             "";
 
           return {
@@ -494,7 +579,7 @@ export const CAN = () => {
             poLineKey: rowKey,
             prNo: breakdown?.prNo || row?.prNo || canNo || "",
             prId: breakdown?.prId || row?.prId || canId || "",
-            groupId: breakdown?.prGroupId || row?.groupId || row?.canDt1Id || row?.canLn || "",
+            groupId: breakdown?.prGroupId || row?.canDt1Id || row?.canLn || "",
             rcCode: breakdown?.rcCode || row?.rcCode || "",
             rcName: breakdown?.rcName || row?.rcName || "",
             dateNeeded: breakdown?.dateNeeded || row?.dateNeeded || "",
@@ -502,7 +587,7 @@ export const CAN = () => {
             supplierName: awardedSupplier.supplierName || selectedSupplierName || "",
             poNo: linePoNo,
             poId: linePoId,
-            poGenerated: Boolean(linePoNo || linePoId || matchingPOReference.poGenerated || matchingPOReference.po_generated),
+            poGenerated: Boolean(linePoNo || linePoId || matchingPOReference.poGenerated),
             quantity: qty(lineQty, decQty),
             unitPrice: qty(unitPrice, decUPrice),
             grossAmount: money(grossAmount),
@@ -536,6 +621,12 @@ export const CAN = () => {
     [poCandidateRows, activePOSelectedKeys]
   );
 
+  /* ---------------------------------------------------------------------------
+     Generate PO: summary preparation
+     ---------------------------------------------------------------------------
+     Groups selected PO detail rows by invType + itemCode + itemSpecs. This
+     matches the PO.jsx Item Summary behavior.
+  --------------------------------------------------------------------------- */
   const poSummaryRows = useMemo(() => {
     const summaryMap = new Map();
     const summarySourceRows = selectedPORows.length > 0 ? selectedPORows : poAllDetailRows;
@@ -623,19 +714,9 @@ export const CAN = () => {
     const supplier = awardedSupplier || {};
     const poNo =
       supplier.poNo ||
-      supplier.po_no ||
-      supplier.generatedPoNo ||
-      supplier.generated_po_no ||
-      supplier.purchaseOrderNo ||
-      supplier.purchase_order_no ||
       "";
     const poId =
       supplier.poId ||
-      supplier.po_id ||
-      supplier.generatedPoId ||
-      supplier.generated_po_id ||
-      supplier.purchaseOrderId ||
-      supplier.purchase_order_id ||
       "";
 
     if (!poNo && !poId) return null;
@@ -643,14 +724,14 @@ export const CAN = () => {
     return {
       poNo,
       poId,
-      branchCode: supplier.branchCode || supplier.branch_code || branchCode || "",
+      branchCode: supplier.branchCode || branchCode || "",
     };
   }, [generatedPOInfo, awardedSupplier, branchCode]);
 
   const generatedPONoList = useMemo(() => {
     const poNos = [
-      ...generatedPODetailRows.map((row) => row?.poNo || row?.po_no || ""),
-      existingGeneratedPOInfo?.poNo || existingGeneratedPOInfo?.documentNo || "",
+      ...generatedPODetailRows.map((row) => row?.poNo || ""),
+      existingGeneratedPOInfo?.poNo || "",
     ]
       .map((value) => String(value || "").trim())
       .filter(Boolean);
@@ -681,7 +762,7 @@ export const CAN = () => {
   };
 
   const viewGeneratedPO = (poRow = existingGeneratedPOInfo) => {
-    const poNo = poRow?.poNo || poRow?.documentNo || "";
+    const poNo = poRow?.poNo || "";
     const poBranchCode = poRow?.branchCode || branchCode || "";
 
     if (!poNo) {
@@ -692,6 +773,12 @@ export const CAN = () => {
     window.open(`/tran/PO?poNo=${encodeURIComponent(poNo)}&branchCode=${encodeURIComponent(poBranchCode)}`, "_blank");
   };
 
+  /* ---------------------------------------------------------------------------
+     CAN API caller
+     ---------------------------------------------------------------------------
+     Attempts each mapped endpoint until one succeeds. This keeps compatibility
+     with both current legacy routes and newer /can/* routes.
+  --------------------------------------------------------------------------- */
   const callCAN = async (endpointKey, jsonData = {}) => {
     const endpoints = Array.isArray(endpointKey)
       ? endpointKey
@@ -724,6 +811,12 @@ export const CAN = () => {
     if (resetFlag) handleReset();
   }, [resetFlag]);
 
+  /* ---------------------------------------------------------------------------
+     Reset transaction screen
+     ---------------------------------------------------------------------------
+     Returns the component to a new Draft Canvass state and clears temporary
+     selections, generated PO UI state, and comparison modal state.
+  --------------------------------------------------------------------------- */
   const handleReset = () => {
     setOpenPrRows([]);
     setSelectedPrIds([]);
@@ -759,7 +852,6 @@ export const CAN = () => {
       activeSupplierIndex: 0,
       supplierActiveTabs: {},
       showPrBreakdown: true,
-      showFilters: false,
       isLoading: false,
       showSpinner: false,
       showBranchModal: false,
@@ -774,6 +866,12 @@ export const CAN = () => {
     });
   };
 
+  /* ---------------------------------------------------------------------------
+     Open PR loading
+     ---------------------------------------------------------------------------
+     Loads available PRs from GetOpenPR. The stored procedure already applies
+     branch, approval, and remaining quantity rules.
+  --------------------------------------------------------------------------- */
   const loadOpenPR = async () => {
     if (!branchCode) return;
     updateState({ isLoading: true });
@@ -799,6 +897,15 @@ export const CAN = () => {
     }
   };
 
+
+
+
+  /* ---------------------------------------------------------------------------
+     Retrieve existing Canvass
+     ---------------------------------------------------------------------------
+     Reads the CAN header, selected PRs, consolidated detail rows, supplier
+     offers, status history, and generated PO references.
+  --------------------------------------------------------------------------- */
   const fetchCAN = async ({ canId: fetchCanId = "", canNo: fetchCanNo = "", branchCode: fetchBranchCode = branchCode, direction = "" }) => {
     updateState({ isLoading: true });
     try {
@@ -843,19 +950,11 @@ export const CAN = () => {
 
       const fetchedPoNo =
         awarded?.poNo ||
-        awarded?.po_no ||
-        awarded?.generatedPoNo ||
-        awarded?.generated_po_no ||
         data.poNo ||
-        data.po_no ||
         "";
       const fetchedPoId =
         awarded?.poId ||
-        awarded?.po_id ||
-        awarded?.generatedPoId ||
-        awarded?.generated_po_id ||
         data.poId ||
-        data.po_id ||
         "";
 
       setGeneratedPOInfo(
@@ -901,9 +1000,9 @@ export const CAN = () => {
 
   const handleHistoryRowPick = useCallback(
     async (row) => {
-      const selectedCanId = row?.canId || row?.can_id || row?.tranId || row?.documentID || "";
-      const selectedCanNo = row?.canNo || row?.can_no || row?.docNo || row?.documentNo || "";
-      const selectedBranchCode = row?.branchCode || row?.branch_code || branchCode;
+      const selectedCanId = row?.canId || row?.tranId || "";
+      const selectedCanNo = row?.canNo || row?.docNo || "";
+      const selectedBranchCode = row?.branchCode || branchCode;
 
       if (!selectedCanId && !selectedCanNo) return;
 
@@ -944,6 +1043,20 @@ export const CAN = () => {
     if (!canId && canNo && branchCode) fetchCAN({ canNo, branchCode });
   };
 
+  const handleTranDocNoRetrieval = async (data) => {
+    await fetchCAN({
+      canNo: data.docNo,
+      branchCode: data.branchCode || branchCode,
+      direction: data.key,
+    });
+    updateState({ showAllTranDocNo: data.modalClose });
+  };
+
+  const handleTranDocNoSelection = async (data) => {
+    handleReset();
+    updateState({ showAllTranDocNo: false, canNo: data.docNo });
+  };
+
 
   const getCanvassItemSignature = (row = {}) =>
     [
@@ -954,6 +1067,13 @@ export const CAN = () => {
       String(row?.uomCode || "").trim().toUpperCase(),
     ].join("||");
 
+  /* ---------------------------------------------------------------------------
+     Sync supplier offer lines with consolidated canvass details
+     ---------------------------------------------------------------------------
+     Called when PR selection or Canvass Quantity changes. It keeps existing
+     supplier prices/discounts/remarks where possible, adds new item rows, drops
+     removed rows, updates quantity, and recalculates supplier totals.
+  --------------------------------------------------------------------------- */
   const syncSupplierRowsWithCanvassDetails = (sourceSupplierRows = [], sourceDetailRows = []) => {
     const normalizedDetails = normalizeRows(sourceDetailRows);
 
@@ -1008,6 +1128,12 @@ export const CAN = () => {
     });
   };
 
+  /* ---------------------------------------------------------------------------
+     Load selected PR details
+     ---------------------------------------------------------------------------
+     Consolidates selected PR detail rows into canvass items and immediately
+     re-syncs supplier offer lines if suppliers already exist.
+  --------------------------------------------------------------------------- */
   const handleLoadSelectedPR = async () => {
     if (selectedPrIds.length === 0) {
       useSwalInfoAlert("Select PR", "Please select at least one PR.");
@@ -1039,6 +1165,12 @@ export const CAN = () => {
     }
   };
 
+  /* ---------------------------------------------------------------------------
+     Supplier offer management
+     ---------------------------------------------------------------------------
+     Supplier cards are based on the current consolidated canvass detail rows.
+     Each supplier has its own quote header and item detail pricing.
+  --------------------------------------------------------------------------- */
   const addSupplier = () => {
     if (isLocked) return;
     if (detailRows.length === 0) {
@@ -1155,8 +1287,8 @@ export const CAN = () => {
         );
 
         const responseRow = Array.isArray(data) ? data[0] : data;
-        const savedCanId = responseRow?.canId || responseRow?.can_id || canId;
-        const savedCanNo = responseRow?.canNo || responseRow?.can_no || canNo;
+        const savedCanId = responseRow?.canId || canId;
+        const savedCanNo = responseRow?.canNo || canNo;
 
         await fetchCAN({
           canId: savedCanId,
@@ -1369,6 +1501,12 @@ export const CAN = () => {
     });
   };
 
+  /* ---------------------------------------------------------------------------
+     Canvass Quantity edit
+     ---------------------------------------------------------------------------
+     Updates selected quantity, redistributes quantity to the PR breakdown, and
+     re-syncs every supplier item row to keep supplier quantities consistent.
+  --------------------------------------------------------------------------- */
   const updateItemSelectedQty = (index, value, commit = false) => {
     if (isLocked) return;
 
@@ -1397,12 +1535,18 @@ export const CAN = () => {
     );
   };
 
+  /* ---------------------------------------------------------------------------
+     PR selector displayed rows
+     ---------------------------------------------------------------------------
+     Merges open PR rows with saved PR rows from the retrieved transaction so
+     existing Canvass records still show their PRs after they are no longer open.
+  --------------------------------------------------------------------------- */
   const displayedPrRows = useMemo(() => {
     const rowsByPrId = new Map();
 
     const addOrMergePr = (row = {}, source = "open") => {
-      const prId = String(row?.prId || row?.pr_id || "").trim();
-      const prNo = String(row?.prNo || row?.pr_no || "").trim();
+      const prId = String(row?.prId || "").trim();
+      const prNo = String(row?.prNo || "").trim();
       const key = prId || prNo;
       if (!key) return;
 
@@ -1412,12 +1556,12 @@ export const CAN = () => {
         ...row,
         prId: prId || existing.prId || "",
         prNo: prNo || existing.prNo || "",
-        branchCode: row.branchCode || row.branch_code || existing.branchCode || branchCode || "",
-        prDate: row.prDate || row.pr_date || existing.prDate || "",
-        rcCode: row.rcCode || row.rc_code || existing.rcCode || "",
-        rcName: row.rcName || row.rc_name || existing.rcName || "",
-        requestedBy: row.requestedBy || row.requested_by || existing.requestedBy || "",
-        dateNeeded: row.dateNeeded || row.date_needed || existing.dateNeeded || "",
+        branchCode: row.branchCode || existing.branchCode || branchCode || "",
+        prDate: row.prDate || existing.prDate || "",
+        rcCode: row.rcCode || existing.rcCode || "",
+        rcName: row.rcName || existing.rcName || "",
+        requestedBy: row.requestedBy || existing.requestedBy || "",
+        dateNeeded: row.dateNeeded || existing.dateNeeded || "",
         totalItems: row.totalItems ?? existing.totalItems ?? 0,
         totalQty: row.totalQty ?? existing.totalQty ?? 0,
         remarks: row.remarks || existing.remarks || "",
@@ -1431,8 +1575,8 @@ export const CAN = () => {
     const detailByPr = new Map();
     normalizeRows(detailRows).forEach((detail) => {
       normalizeRows(detail?.prBreakdown).forEach((breakdown) => {
-        const prId = String(breakdown?.prId || breakdown?.pr_id || "").trim();
-        const prNo = String(breakdown?.prNo || breakdown?.pr_no || "").trim();
+        const prId = String(breakdown?.prId || "").trim();
+        const prNo = String(breakdown?.prNo || "").trim();
         const key = prId || prNo;
         if (!key) return;
 
@@ -1441,22 +1585,22 @@ export const CAN = () => {
           totalQty: 0,
           prId,
           prNo,
-          branchCode: breakdown.branchCode || breakdown.branch_code || branchCode || "",
-          rcCode: breakdown.rcCode || breakdown.rc_code || "",
-          rcName: breakdown.rcName || breakdown.rc_name || "",
-          requestedBy: breakdown.requestedBy || breakdown.requested_by || "",
-          dateNeeded: breakdown.dateNeeded || breakdown.date_needed || "",
+          branchCode: breakdown.branchCode || branchCode || "",
+          rcCode: breakdown.rcCode || "",
+          rcName: breakdown.rcName || "",
+          requestedBy: breakdown.requestedBy || "",
+          dateNeeded: breakdown.dateNeeded || "",
         };
 
         current.totalItems += 1;
         current.totalQty += num(breakdown?.includedQty || breakdown?.qtyInPr || detail?.selectedQty || 0);
         current.prId = current.prId || prId;
         current.prNo = current.prNo || prNo;
-        current.branchCode = current.branchCode || breakdown.branchCode || breakdown.branch_code || branchCode || "";
-        current.rcCode = current.rcCode || breakdown.rcCode || breakdown.rc_code || "";
-        current.rcName = current.rcName || breakdown.rcName || breakdown.rc_name || "";
-        current.requestedBy = current.requestedBy || breakdown.requestedBy || breakdown.requested_by || "";
-        current.dateNeeded = current.dateNeeded || breakdown.dateNeeded || breakdown.date_needed || "";
+        current.branchCode = current.branchCode || breakdown.branchCode || branchCode || "";
+        current.rcCode = current.rcCode || breakdown.rcCode || "";
+        current.rcName = current.rcName || breakdown.rcName || "";
+        current.requestedBy = current.requestedBy || breakdown.requestedBy || "";
+        current.dateNeeded = current.dateNeeded || breakdown.dateNeeded || "";
         detailByPr.set(key, current);
       });
     });
@@ -1475,6 +1619,12 @@ export const CAN = () => {
     return Array.from(rowsByPrId.values());
   }, [openPrRows, prRows, detailRows, branchCode]);
 
+  /* ---------------------------------------------------------------------------
+     Table column definitions
+     ---------------------------------------------------------------------------
+     Each table uses useResizableTableColumns so resizing, sorting, and frozen
+     columns behave consistently across the Canvass screen.
+  --------------------------------------------------------------------------- */
   const canPrColumnDefs = useMemo(() => [
     { key: "selected", label: "Select", width: 72 },
     { key: "branchCode", label: "Branch", width: 110 },
@@ -1697,6 +1847,12 @@ export const CAN = () => {
     ...getGeneratePOSummaryFrozenStyle(key, orderedGeneratePOSummaryColumns, fallbackWidth, { isHeader: false }),
   });
 
+  /* ---------------------------------------------------------------------------
+     Cell renderers
+     ---------------------------------------------------------------------------
+     Renderers keep JSX table rows readable and ensure formatting is centralized
+     per table/column group.
+  --------------------------------------------------------------------------- */
   const renderCanPrCell = (columnKey, row) => {
     const style = getCanPrCellStyle(columnKey, getCanPrFallbackWidth(columnKey));
     const checked = selectedPrIds.includes(String(row.prId));
@@ -1914,6 +2070,12 @@ export const CAN = () => {
     return renderers[columnKey]?.() || textValue(row[columnKey]);
   };
 
+  /* ---------------------------------------------------------------------------
+     Award supplier
+     ---------------------------------------------------------------------------
+     Validates supplier offer totals, saves the awarded supplier in CAN, and
+     refreshes the transaction to display the latest status and selected offer.
+  --------------------------------------------------------------------------- */
   const awardSupplier = async (supplier) => {
     if (!supplier?.supplierCode) {
       useSwalInfoAlert("Award Supplier", "Please enter Supplier Code first.");
@@ -1979,8 +2141,8 @@ export const CAN = () => {
       });
 
       const responseRow = Array.isArray(data) ? data[0] : data;
-      const responseCanId = responseRow?.canId || responseRow?.can_id || currentCanId;
-      const responseCanNo = responseRow?.canNo || responseRow?.can_no || currentCanNo;
+      const responseCanId = responseRow?.canId || currentCanId;
+      const responseCanNo = responseRow?.canNo || currentCanNo;
 
       /*
         Update the visible fields immediately, then retrieve the transaction
@@ -2060,7 +2222,7 @@ export const CAN = () => {
         itemSpecs: row.itemSpecs || "",
         rrQty: 0,
         canSupplierId: awardedSupplier?.canSupplierId || "",
-        canSupplierDt1Id: row.canSupplierDt1Id || row.can_supplier_dt1_id || "",
+        canSupplierDt1Id: row.canSupplierDt1Id || "",
         poLineKey: row.poLineKey || row.poKey || "",
       };
     });
@@ -2193,6 +2355,13 @@ export const CAN = () => {
     return unwrapResult(response);
   };
 
+  /* ---------------------------------------------------------------------------
+     Generate Purchase Order
+     ---------------------------------------------------------------------------
+     Builds a PO payload from selected, ungenerated awarded-supplier lines and
+     calls the existing PO upsert endpoint. After success, each generated line is
+     marked back in CAN to prevent duplicate PO generation.
+  --------------------------------------------------------------------------- */
   const handleGeneratePO = async () => {
     if (!canId) {
       useSwalInfoAlert("Generate Purchase Order", "Please save the Canvass transaction first.");
@@ -2249,8 +2418,8 @@ export const CAN = () => {
         );
 
         const responseRow = extractPOResponseRow(response);
-        const responsePoNo = responseRow?.poNo || responseRow?.po_no || responseRow?.documentNo || "";
-        const responsePoId = responseRow?.poId || responseRow?.po_id || responseRow?.documentID || "";
+        const responsePoNo = responseRow?.poNo || "";
+        const responsePoId = responseRow?.poId || "";
 
         if (!responsePoNo && !responsePoId) {
           console.warn("PO upsert completed but no PO number/ID was returned.", response);
@@ -2259,7 +2428,7 @@ export const CAN = () => {
         createdPOs.push({
           poNo: responsePoNo,
           poId: responsePoId,
-          branchCode: responseRow?.branchCode || responseRow?.branch_code || branchCode || "",
+          branchCode: responseRow?.branchCode || branchCode || "",
         });
       }
 
@@ -2281,8 +2450,8 @@ export const CAN = () => {
         poNo: firstPO?.poNo || "",
         userCode: currentUserRow?.userCode || userCode || "",
         lineRows: selectedPORows.map((row) => ({
-          canSupplierDt1Id: row.canSupplierDt1Id || row.can_supplier_dt1_id || "",
-          canDt1Id: row.canDt1Id || row.can_dt1_id || "",
+          canSupplierDt1Id: row.canSupplierDt1Id || "",
+          canDt1Id: row.canDt1Id || "",
           canLn: row.canLn || "",
           poLineKey: row.poLineKey || row.poKey || "",
           prId: row.prId || "",
@@ -2319,6 +2488,12 @@ export const CAN = () => {
     }
   };
 
+  /* ---------------------------------------------------------------------------
+     Build CAN upsert payload
+     ---------------------------------------------------------------------------
+     Converts current screen state into the exact JSON structure expected by
+     sproc_PHP_CAN Upsert. Keep field names aligned with the stored procedure.
+  --------------------------------------------------------------------------- */
   const buildPayload = (overrides = {}) => {
     const sourceSupplierRows = overrides.supplierRows || supplierRows;
     const sourceSelectedSupplierCode = overrides.selectedSupplierCode ?? selectedSupplierCode;
@@ -2400,11 +2575,11 @@ export const CAN = () => {
           num(supplier.netAmount) > 0,
         isAwarded: Boolean(supplier.isAwarded),
         remarks: supplier.remarks || "",
-        poId: supplier.poId || supplier.po_id || "",
-        poNo: supplier.poNo || supplier.po_no || "",
-        poGenerated: Boolean(supplier.poGenerated || supplier.po_generated),
-        poGeneratedBy: supplier.poGeneratedBy || supplier.po_generated_by || "",
-        poGeneratedDate: supplier.poGeneratedDate || supplier.po_generated_date || null,
+        poId: supplier.poId || "",
+        poNo: supplier.poNo || "",
+        poGenerated: Boolean(supplier.poGenerated),
+        poGeneratedBy: supplier.poGeneratedBy || "",
+        poGeneratedDate: supplier.poGeneratedDate || null,
         detailRows: normalizeRows(supplier.detailRows).map((detail) => ({
           canLn: detail.canLn,
           invType: detail.invType || "",
@@ -2422,15 +2597,21 @@ export const CAN = () => {
           netAmount: num(detail.netAmount),
           isAwardedLine: Boolean(detail.isAwardedLine),
           remarks: detail.remarks || "",
-          poId: detail.poId || detail.po_id || "",
-          poNo: detail.poNo || detail.po_no || "",
-          poGenerated: Boolean(detail.poGenerated || detail.po_generated),
+          poId: detail.poId || "",
+          poNo: detail.poNo || "",
+          poGenerated: Boolean(detail.poGenerated),
           poReferences: normalizeRows(detail.poReferences || detail.poReferenceRows || detail.poRows),
         })),
       })),
     };
   };
 
+  /* ---------------------------------------------------------------------------
+     Save Canvass
+     ---------------------------------------------------------------------------
+     Performs required field validation, upserts CAN, then reloads the saved
+     transaction so IDs and computed values come from the database.
+  --------------------------------------------------------------------------- */
  const save = async () => {
   const fieldsToCheck = {
     "Header : Branch": branchCode,
@@ -2512,9 +2693,12 @@ export const CAN = () => {
 
 
   const cancel = () => {
-    if (!canId || canCancelled) return;
+    if (!canId || isAwardedOrCancelled) return;
     updateState({ showCancelModal: true });
   };
+
+
+
 
   const closeCancel = async (confirmation) => {
     if (!confirmation) {
@@ -2522,22 +2706,30 @@ export const CAN = () => {
       return;
     }
 
-    updateState({ isLoading: true });
-
     try {
-      await callCAN("cancel", {
+      const result = await useHandleCancel(
+        docType,
         canId,
         userCode,
-        cancelReason: confirmation.reason || "",
-      });
-      await useSwalSuccessAlert("Canvass Cancelled", "Cancellation completed.");
-      await fetchCAN({ canId });
+        confirmation.password,
+        confirmation.reason,
+        updateState
+      );
+
+      if (result.success) {
+        await useSwalSuccessAlert("Success", "Cancellation Completed");
+        await fetchCAN({ canId });
+      }
     } catch (error) {
       useSwalErrorAlert("Cancel Canvass", errorMessage(error));
     } finally {
-      updateState({ isLoading: false, showCancelModal: false });
+      updateState({ showCancelModal: false });
     }
   };
+
+
+
+
 
   const submit = async () => {
     if (!canId) return useSwalInfoAlert("Submit Canvass", "Please save the Canvass transaction first.");
@@ -2594,11 +2786,11 @@ export const CAN = () => {
 
   const renderStatusPill = () => {
     const className =
-      String(canStatus).toUpperCase() === "C"
+      normalizedDisplayStatus === "CANCELLED"
         ? "bg-rose-50 text-rose-700 border-rose-200"
-        : String(canStatus).toUpperCase() === "W"
-          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-          : String(canStatus).toUpperCase() === "A"
+        : normalizedDisplayStatus === "AWARDED"
+          ? "bg-blue-50 text-blue-700 border-blue-200"
+          : normalizedDisplayStatus === "APPROVED"
             ? "bg-blue-50 text-blue-700 border-blue-200"
             : "bg-slate-50 text-slate-700 border-slate-200";
 
@@ -2619,7 +2811,7 @@ export const CAN = () => {
           aria-label="View Approval Status"
         >
           <p className="global-tran-headerstat-text-ui">Transaction Status</p>
-          <h1 className="global-tran-stat-text-ui text-blue-900">{displayStatus}</h1>
+          <h1 className={`global-tran-stat-text-ui ${statusTextColor}`}>{displayStatus}</h1>
         </button>
       </div>
     </div>
@@ -2760,19 +2952,20 @@ export const CAN = () => {
           <button
             type="button"
             onClick={loadOpenPR}
-            className="inline-flex min-w-[36px] flex-col items-center justify-center gap-0.5 rounded-md bg-blue-600 px-2 py-1.5 text-[10px] font-medium text-white transition-all duration-200 hover:bg-blue-700 lg:flex-row lg:px-3 lg:py-2 lg:text-xs"
+            disabled={isLocked}
+            className={compactActionButtonClass}
           >
             <FontAwesomeIcon icon={faListCheck} />
-            <span className="block text-[8px] leading-none lg:hidden">Load</span>
-            <span className="hidden lg:inline lg:ml-2">Load Open PR</span>
+            <span>Load Open PR</span>
           </button>
           <button
             type="button"
             onClick={handleLoadSelectedPR}
             disabled={isLocked || selectedPrIds.length === 0}
-            className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+            className={compactActionButtonClass}
           >
-            Add Selected PR
+            <FontAwesomeIcon icon={faClipboardList} />
+            <span>Load Selected PR</span>
           </button>
         </div>
       </div>
@@ -2938,10 +3131,10 @@ export const CAN = () => {
           type="button"
           onClick={addSupplier}
           disabled={isLocked || detailRows.length === 0}
-          className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+          className={compactActionButtonClass}
         >
-          <FontAwesomeIcon icon={faPlus} className="mr-1" />
-          Add Supplier
+          <FontAwesomeIcon icon={faPlus} />
+          <span>Add Supplier</span>
         </button>
       </div>
 
@@ -2971,7 +3164,7 @@ export const CAN = () => {
                       <FontAwesomeIcon icon={faPaperclip} className="mr-1" />
                       Attachments ({normalizeRows(supplier.attachments).length})
                     </button>
-                    <button type="button" onClick={() => awardSupplier(supplier)} disabled={isLocked || canCancelled || String(canStatus).toUpperCase() === "W" || !supplier?.canSupplierId} className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-600 text-white transition-colors hover:bg-emerald-700 disabled:opacity-50" title="Award Transaction"> {/* Award button */}
+                    <button type="button" onClick={() => awardSupplier(supplier)} disabled={isAwardedOrCancelled || isLocked || !supplier?.canSupplierId} className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-600 text-white transition-colors hover:bg-emerald-700 disabled:opacity-50" title="Award Transaction"> {/* Award button */}
                       <FontAwesomeIcon icon={faTrophy} className="mr-1" />
                     </button>
                     {!isLocked && (
@@ -3502,6 +3695,12 @@ export const CAN = () => {
   );
 
 
+  /* ---------------------------------------------------------------------------
+     Supplier comparison modal data
+     ---------------------------------------------------------------------------
+     Pivots canvass items into rows and suppliers into columns so users can
+     compare offers per item. Lowest cost is identified in blue.
+  --------------------------------------------------------------------------- */
   const supplierCompareRows = useMemo(() => {
     return normalizeRows(detailRows).map((item, index) => {
       const itemKey = [
@@ -3655,6 +3854,12 @@ export const CAN = () => {
     },
   );
 
+  /* ---------------------------------------------------------------------------
+     Supplier comparison modal renderer
+     ---------------------------------------------------------------------------
+     Read-only modal for side-by-side supplier offer analysis. Uses the same
+     table styling direction as Consolidated Item Canvass.
+  --------------------------------------------------------------------------- */
   const renderSupplierCompareModal = () => {
     if (!showSupplierCompareModal) return null;
 
@@ -3977,11 +4182,11 @@ export const CAN = () => {
         <button
           type="button"
           onClick={loadOpenPR}
-          className="inline-flex min-w-[36px] flex-col items-center justify-center gap-0.5 rounded-md bg-blue-600 px-2 py-1.5 text-[10px] font-medium text-white transition-all duration-200 hover:bg-blue-700 lg:flex-row lg:px-3 lg:py-2 lg:text-xs"
+          disabled={isLocked}
+          className={compactActionButtonClass}
         >
           <FontAwesomeIcon icon={faListCheck} />
-          <span className="block text-[8px] leading-none lg:hidden">Load</span>
-          <span className="hidden lg:inline lg:ml-2">Load Open PR</span>
+          <span>Load Open PR</span>
         </button>
       </div>
 
@@ -4053,10 +4258,10 @@ export const CAN = () => {
           type="button"
           onClick={handleLoadSelectedPR}
           disabled={isLocked || selectedPrIds.length === 0}
-          className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-bold text-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          className={compactActionButtonClass}
         >
-          <FontAwesomeIcon icon={faClipboardList} className="mr-2" />
-          {selectedPrIds.length} PRs Selected
+          <FontAwesomeIcon icon={faClipboardList} />
+          <span>Load Selected PR</span>
         </button>
         <span className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-bold text-blue-700">
           {detailRows.filter((row) => normalizeRows(row.prBreakdown).length > 1).length} Common Items Found
@@ -4079,23 +4284,14 @@ export const CAN = () => {
           <button
             type="button"
             onClick={() => updateState({ showPrBreakdown: !showPrBreakdown })}
-            className="rounded-lg border px-3 py-2 text-xs font-semibold text-blue-700"
+            disabled={!hasPrBreakdownRows}
+            className={compactActionButtonClass}
           >
-            <FontAwesomeIcon icon={faListCheck} className="mr-1" />
-            {showPrBreakdown ? "Hide PR Breakdown" : "Show PR Breakdown"}
-          </button>
-          <button type="button" onClick={() => updateState({ showFilters: !showFilters })} className="rounded-lg border px-3 py-2 text-xs font-semibold text-blue-700">
-            <FontAwesomeIcon icon={faFilter} className="mr-1" />
-            Filters
+            <FontAwesomeIcon icon={faListCheck} />
+            <span>{showPrBreakdown ? "Hide Breakdown" : "Show Breakdown"}</span>
           </button>
         </div>
       </div>
-
-      {showFilters && (
-        <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-          Use the PR selector above to change the consolidation set.
-        </div>
-      )}
 
       <div className="global-tran-table-main-div-ui">
         <div className="global-tran-table-main-sub-div-ui">
@@ -4123,13 +4319,12 @@ export const CAN = () => {
                     <Fragment key={row.canLn || originalIndex}>
                       <tr
                         className="global-tran-tr-ui"
-                        onDoubleClick={() => setExpandedItemLn(expandedItemLn === row.canLn ? null : row.canLn)}
                       >
                         {orderedCanCanvassColumns.map((column) =>
                           renderCanCanvassCell(column.key, row, originalIndex)
                         )}
                       </tr>
-                      {showPrBreakdown && expandedItemLn === row.canLn && (
+                      {showPrBreakdown && breakdown.length > 0 && (
                         <tr className="bg-slate-50">
                           <td colSpan={orderedCanCanvassColumns.length} className="px-8 py-2">
                             <table className="w-full border-separate border-spacing-0 bg-white text-xs [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
@@ -4205,10 +4400,10 @@ export const CAN = () => {
           type="button"
           onClick={addSupplier}
           disabled={isLocked || detailRows.length === 0}
-          className="rounded-lg border border-blue-200 px-3 py-2 text-xs font-bold text-blue-700 disabled:opacity-50"
+          className={compactActionButtonClass}
         >
-          <FontAwesomeIcon icon={faPlus} className="mr-1" />
-          Add Supplier
+          <FontAwesomeIcon icon={faPlus} />
+          <span>Add Supplier</span>
         </button>
       </div>
 
@@ -4285,7 +4480,7 @@ export const CAN = () => {
                   </div>
 
                   <div className="flex items-center gap-2 lg:justify-end">
-                    <button type="button" onClick={() => awardSupplier(supplier)} disabled={isLocked || canCancelled || String(canStatus).toUpperCase() === "W" || !supplier?.canSupplierId} className="inline-flex min-w-[36px] flex-col items-center justify-center gap-0.5 rounded-md bg-blue-600 px-2 py-1.5 text-[10px] font-medium text-white transition-all duration-200 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-65 lg:flex-row lg:px-3 lg:py-2 lg:text-xs" title="Award Transaction">
+                    <button type="button" onClick={() => awardSupplier(supplier)} disabled={isAwardedOrCancelled || isLocked || !supplier?.canSupplierId} className="inline-flex min-w-[36px] flex-col items-center justify-center gap-0.5 rounded-md bg-blue-600 px-2 py-1.5 text-[10px] font-medium text-white transition-all duration-200 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-65 lg:flex-row lg:px-3 lg:py-2 lg:text-xs" title="Award Transaction">
                       <FontAwesomeIcon icon={faTrophy} />
                       Award
                     </button>
@@ -4526,6 +4721,12 @@ export const CAN = () => {
     />
   );
 
+  /* ---------------------------------------------------------------------------
+     Main JSX layout
+     ---------------------------------------------------------------------------
+     Header, transaction tabs, PR selector, consolidated canvass items, supplier
+     offers, transaction summary, Generate PO, history, and modals.
+  --------------------------------------------------------------------------- */
   return (
     <div className="global-tran-main-div-ui">
       {showSpinner && <LoadingSpinner />}
@@ -4567,7 +4768,7 @@ export const CAN = () => {
           isNotifyDisabled={!hasDocument || !isDraft}
           isPrintDisabled={!hasDocument || canCancelled}
           isCopyDisabled={true}
-          isCancelDisabled={!hasDocument || canCancelled || String(canStatus).toUpperCase() === "W"}
+          isCancelDisabled={!hasDocument || isAwardedOrCancelled}
         />
       </div>
 
@@ -4593,18 +4794,12 @@ export const CAN = () => {
 
       {showAllTranDocNo && (
         <AllTranDocNo
-          open={showAllTranDocNo}
-          onClose={(data) => {
-            if (data?.key) {
-              fetchCAN({ canNo: data.docNo, branchCode: data.branchCode || branchCode, direction: data.key });
-            } else if (data?.docNo) {
-              updateState({ canNo: data.docNo, showAllTranDocNo: false });
-            } else {
-              updateState({ showAllTranDocNo: false });
-            }
-          }}
-          docCode={docType}
-          branchCode={branchCode}
+          isOpen={showAllTranDocNo}
+          params={{ branchCode, branchName, docType, documentTitle, fieldNo: "canNo" }}
+          onRetrieve={handleTranDocNoRetrieval}
+          onResponse={{ documentNo: canNo }}
+          onSelected={handleTranDocNoSelection}
+          onClose={() => updateState({ showAllTranDocNo: false })}
         />
       )}
 
@@ -4636,10 +4831,8 @@ export const CAN = () => {
 
       {showCancelModal && (
         <CancelTranModal
-          open={showCancelModal}
+          isOpen={showCancelModal}
           onClose={closeCancel}
-          documentNo={canNo}
-          documentType={docType}
         />
       )}
 
