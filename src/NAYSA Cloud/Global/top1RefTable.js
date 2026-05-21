@@ -106,8 +106,9 @@ export async function useTopDocControlRow(docId) {
 
   try {
     const response = await fetchData("getHSDoc", { DOC_ID: docId });
-    if (response.success) {
-      const responseData = JSON.parse(response.data[0].result);
+    if (response?.success) {
+      const responseData = JSON.parse(response.data?.[0]?.result || "[]");
+      if (!Array.isArray(responseData)) return null;
       return responseData.length > 0 ? responseData[0] : null;
     }
     return null;
@@ -126,8 +127,9 @@ export async function useTopHSRptRow(reportId) {
   if (!reportId) return null;
   try {
     const response = await fetchData("getHsrpt", { REPORT_ID: reportId });
-    if (response.success) {
-      const responseData = JSON.parse(response.data[0].result);
+    if (response?.success) {
+      const responseData = JSON.parse(response.data?.[0]?.result || "[]");
+      if (!Array.isArray(responseData)) return null;
       return responseData.length > 0 ? responseData[0] : null;
     }
     return null;

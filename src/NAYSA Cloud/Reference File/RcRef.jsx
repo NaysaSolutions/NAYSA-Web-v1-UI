@@ -120,10 +120,11 @@ const RcRef = forwardRef(
     const [selectedMobileRow, setSelectedMobileRow] = useState(null);
 
     useEffect(() => {
-      const checkMobile = () => setIsMobile(window.innerWidth < 768);
-      checkMobile();
-      window.addEventListener("resize", checkMobile);
-      return () => window.removeEventListener("resize", checkMobile);
+      const checkMobile = () => window.innerWidth < 768;
+      const handleResize = () => setIsMobile(checkMobile());
+      setIsMobile(checkMobile());
+      window.addEventListener("resize", handleResize);
+      return () => window.removeEventListener("resize", handleResize);
     }, []);
 
     const openMobileActionSheet = (row) => {
@@ -321,6 +322,8 @@ const RcRef = forwardRef(
           .toUpperCase(),
         rcTypeName: String(form.rcTypeName || "").trim(),
         userCode: user?.USER_CODE || "ADMIN",
+        // Enforce the edit flag for the SQL procedure to bypass key constraint re-insertions
+        isEdit: form.__existing ? 1 : 0, 
       };
 
       if (!payload.rcTypeCode || !payload.rcTypeName) {
@@ -468,7 +471,6 @@ const RcRef = forwardRef(
           label: "RC Type Code",
           width: 200,
           sortable: true,
-          // Fixed width removed to prevent mobile overflow clipping
         },
         {
           key: "rcTypeName",
@@ -476,7 +478,6 @@ const RcRef = forwardRef(
           width: 450,
           maxWidth: 450,
           sortable: true,
-          // Fixed width removed to prevent mobile overflow clipping
           render: (row) => (
             <div 
               className="whitespace-normal break-words min-w-[150px] max-w-[300px] lg:max-w-[400px]"
@@ -691,7 +692,7 @@ const RcRef = forwardRef(
                     activeTab === "rctype"
                       ? "border-blue-600 text-blue-600"
                       : "border-transparent text-gray-400 hover:text-gray-600"
-                  }`}
+                    }`}
                 >
                   RC Type
                 </button>
@@ -704,7 +705,7 @@ const RcRef = forwardRef(
        <div ref={formTopRef} className="mt-20 md:mt-16 px-4 md:px-9 flex flex-col gap-4">
           <div className="flex flex-col xl:flex-row gap-4 h-auto xl:h-[calc(100vh-130px)]">
             
-            {/* Left Column (col-span-3 equivalent): Data Entry & Registration Info */}
+            {/* Left Column: Data Entry & Registration Info */}
             <div className="w-full xl:w-[400px] flex flex-col gap-5 shrink-0 h-fit">
               <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm space-y-4">
                 <FieldRenderer
@@ -744,10 +745,8 @@ const RcRef = forwardRef(
               </div>
             </div>
 
-            {/* Right Column (col-span-8 equivalent): Data Table */}
-            {/* Added min-w-0 and w-full to prevent flexbox from overflowing its parent width on mobile */}
+            {/* Right Column: Data Table */}
             <div className="flex-1 flex flex-col gap-4 h-[500px] xl:h-full pb-8 xl:pb-0 min-w-0 w-full overflow-hidden">
-              {/* Added overflow-x-auto here so the table scrolls left/right safely */}
               <div className="global-tran-table-main-div-ui bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden h-full mt-0 w-full min-w-0 relative z-0">
                 <SearchGlobalReferenceTable
                   ref={tableRef}
