@@ -97,7 +97,7 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
     setForm(next);
   }, []);
 
-  
+
   /* ================= LOAD LIST ================= */
 
   const paytermListQuery = useQuery({
@@ -207,9 +207,10 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
         return;
       }
 
-      queryClient.invalidateQueries({ queryKey: ["paytermList"] });
-      await useSwalSuccessAlert("Success!", "Payment Term saved successfully.");
+      await queryClient.invalidateQueries({ queryKey: ["paytermList"] });
+      await queryClient.invalidateQueries({ queryKey: ["lookupPayterms"] });
 
+      await useSwalSuccessAlert("Success!", "Payment Term saved successfully.");
       setIsEditing(false);
       setSelectedRow(null);
       setIsDupCode(false);
@@ -229,10 +230,22 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
   const handleSave = useCallback(() => {
     if (!isEditing || saveMutation.isPending) return;
 
+    const dueDays = form.daysDue === "" || form.daysDue === null
+      ? 0
+      : Number(form.daysDue);
+
+    if (dueDays < 0) {
+      useSwalErrorAlert(
+        "Validation Error",
+        "Due Days cannot be negative."
+      );
+      return;
+    }
+
     const payload = {
       paytermCode: String(form.paytermCode || "").trim().toUpperCase(),
       paytermName: String(form.paytermName || "").trim(),
-      dueDays: form.daysDue === "" || form.daysDue === null ? 0 : Number(form.daysDue),
+      dueDays,
       advances: form.advances === "Y" ? "Y" : "",
       userCode,
     };
@@ -257,7 +270,9 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
         return;
       }
 
-      queryClient.invalidateQueries({ queryKey: ["paytermList"] });
+      await queryClient.invalidateQueries({ queryKey: ["paytermList"] });
+      await queryClient.invalidateQueries({ queryKey: ["lookupPayterms"] });
+
 
       await useSwalDeleteRecord(
         "Deleted",
@@ -339,7 +354,7 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
         width: 90,
         render: (row) => (
           <div className="flex items-center justify-center gap-2">
-            
+
             <button
               onClick={(e) => { e.stopPropagation(); handleEdit(row); }}
               className="global-ref-td-button-edit-ui"
@@ -432,76 +447,92 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
   // 4. REMOVED LOCAL BUTTON BAR UI
 
   return (
-  <div className="grid grid-cols-1 xl:grid-cols-12 gap-3 w-full">
-    {/* FORM */}
-    <div className="xl:col-span-4">
-      <Card>
-        <SectionHeader title="Basic Information" />
+    <div className="grid grid-cols-1 xl:grid-cols-12 gap-3 w-full">
+      {/* FORM */}
+      <div className="xl:col-span-4">
+        <Card>
+          <SectionHeader title="Basic Information" />
 
-        <FieldRenderer
-          label="Payment Term Code"
-          required
-          value={form.paytermCode}
-          inputRef={codeInputRef}
-          maxLength={5}
-          onChange={(v) => setField("paytermCode", String(v ?? "").toUpperCase())}
-          onBlur={handleCodeValidate}
-          onKeyDown={handleCodeValidate}
-          disabled={!isEditing || form.__existing}
-        />
+          <FieldRenderer
+            label="Payment Term Code"
+            required
+            value={form.paytermCode}
+            inputRef={codeInputRef}
+            maxLength={5}
+            onChange={(v) => setField("paytermCode", String(v ?? "").toUpperCase())}
+            onBlur={handleCodeValidate}
+            onKeyDown={handleCodeValidate}
+            disabled={!isEditing || form.__existing}
+          />
 
-        <FieldRenderer
-          label="Payment Term Name"
-          required
-          value={form.paytermName}
-          maxLength={20}
-          onChange={(v) => setField("paytermName", v ?? "")}
-          disabled={!isEditing}
-        />
+          <FieldRenderer
+            label="Payment Term Name"
+            required
+            value={form.paytermName}
+            maxLength={20}
+            onChange={(v) => setField("paytermName", v ?? "")}
+            disabled={!isEditing}
+          />
 
-        <FieldRenderer
-          label="Due Days"
-          type="number"
-          value={form.daysDue}
-          onChange={(v) => setField("daysDue", v ?? "")}
-          disabled={!isEditing}
-        />
+          <FieldRenderer
+            label="Due Days"
+            type="number"
+            value={form.daysDue}
+            min={0}
+            onChange={(v) => {
+              const value = v ?? "";
 
-        <FieldRenderer
-          label="AP Advances"
-          type="select"
-          value={!form.advances || form.advances === "" ? "N" : form.advances}
-          onChange={(v) => {
-            setField("advances", v === "N" ? "" : "Y");
-          }}
-          options={[
-            { value: "N", label: "No" },
-            { value: "Y", label: "Yes" },
-          ]}
-          disabled={!isEditing}
-        />
+              if (value === "") {
+                setField("daysDue", "");
+                return;
+              }
 
-        <RegistrationInfo data={form} layout="stacked" />
-      </Card>
-    </div>
+              const numValue = Number(value);
 
-    {/* LIST */}
-    <div className="xl:col-span-8">
-      <div className="global-tran-table-main-div-ui">
-        <SearchGlobalReferenceTable
-          columns={tableColumns}
-          data={tableData}
-          isLoading={isInitialLoading}
-          docType="Payment Terms"
-          itemsPerPage={10}
-          onRowDoubleClick={handleEdit}
-          onRowClick={(row) => setSelectedRow(row)}
-          showFilters
-          tableSize={tableSize}
-        />
+              if (numValue < 0) {
+                setField("daysDue", 0);
+                return;
+              }
+
+              setField("daysDue", value);
+            }}
+            disabled={!isEditing}
+          />
+          <FieldRenderer
+            label="AP Advances"
+            type="select"
+            value={!form.advances || form.advances === "" ? "N" : form.advances}
+            onChange={(v) => {
+              setField("advances", v === "N" ? "" : "Y");
+            }}
+            options={[
+              { value: "N", label: "No" },
+              { value: "Y", label: "Yes" },
+            ]}
+            disabled={!isEditing}
+          />
+
+          <RegistrationInfo data={form} layout="stacked" />
+        </Card>
+      </div>
+
+      {/* LIST */}
+      <div className="xl:col-span-8">
+        <div className="global-tran-table-main-div-ui">
+          <SearchGlobalReferenceTable
+            columns={tableColumns}
+            data={tableData}
+            isLoading={isInitialLoading}
+            docType="Payment Terms"
+            itemsPerPage={10}
+            onRowDoubleClick={handleEdit}
+            onRowClick={(row) => setSelectedRow(row)}
+            showFilters
+            tableSize={tableSize}
+          />
+        </div>
       </div>
     </div>
-  </div>
   );
 });
 
