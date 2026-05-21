@@ -16,6 +16,7 @@ import CR from "./NAYSA Cloud/Module/Main Module/Accounts Receivable/CR.jsx";
 import PostCR from "./NAYSA Cloud/Module/Main Module/Accounts Receivable/PostCR.jsx";
 import AR from "./NAYSA Cloud/Module/Main Module/Accounts Receivable/AR.jsx";
 import PostAR from "./NAYSA Cloud/Module/Main Module/Accounts Receivable/PostAR.jsx";
+import ARDS from "./NAYSA Cloud/Module/Main Module/Accounts Receivable/ARDS.jsx";
 
 // --- ACCOUNTS PAYABLE ---
 import APV from "./NAYSA Cloud/Module/Main Module/Accounts Payable/APV.jsx";
@@ -234,6 +235,7 @@ export const pageRegistry = {
   ARDM,
   CR,
   AR,
+  ARDS,
 
   // Accounts Payable
   APV,
