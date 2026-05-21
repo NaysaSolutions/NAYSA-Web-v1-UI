@@ -80,11 +80,17 @@ const SearchPayTermRef = ({ isOpen, onClose }) => {
       }));
     },
     enabled: isOpen,
-    staleTime: 1000 * 60 * 5,
-    refetchInterval: 1000 * 30,
-    refetchIntervalInBackground: false,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
     placeholderData: keepPreviousData,
   });
+
+  useEffect(() => {
+    if (isOpen) {
+      refetch();
+    }
+  }, [isOpen, refetch]);
 
   const filteredAndSorted = useMemo(() => {
     if (!payterms.length) return [];
@@ -147,14 +153,12 @@ const SearchPayTermRef = ({ isOpen, onClose }) => {
               </h2>
               <div className="absolute -top-1 -right-4 flex h-2 w-2">
                 <span
-                  className={`animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75 ${
-                    isFetching ? "block" : "hidden"
-                  }`}
+                  className={`animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75 ${isFetching ? "block" : "hidden"
+                    }`}
                 ></span>
                 <span
-                  className={`relative inline-flex rounded-full h-2 w-2 bg-blue-500 ${
-                    isFetching ? "block" : "hidden"
-                  }`}
+                  className={`relative inline-flex rounded-full h-2 w-2 bg-blue-500 ${isFetching ? "block" : "hidden"
+                    }`}
                 ></span>
               </div>
             </div>
@@ -221,11 +225,10 @@ const SearchPayTermRef = ({ isOpen, onClose }) => {
                         </label>
                         <FontAwesomeIcon
                           icon={faSort}
-                          className={`text-[9px] ${
-                            sortConfig.key === col.key
-                              ? "text-blue-500"
-                              : "opacity-20"
-                          }`}
+                          className={`text-[9px] ${sortConfig.key === col.key
+                            ? "text-blue-500"
+                            : "opacity-20"
+                            }`}
                         />
                       </div>
 

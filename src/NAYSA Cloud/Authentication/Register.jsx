@@ -639,7 +639,13 @@ export default function Register({ onRegister, onSwitchToLogin }) {
     }
   };
 
-  if (showLogin) return <Login />;
+  if (showLogin) {
+  return (
+    <Login
+      onSwitchToRegister={() => setShowLogin(false)}
+    />
+  );
+}
 
   /* ── User ID status hint ── */
   const userCodeHint = checkingUserCode ? (

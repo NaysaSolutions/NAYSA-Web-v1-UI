@@ -68,8 +68,8 @@ import {
 } from '@/NAYSA Cloud/Global/procedure';
 
 import {
-  useGetCurrentDay,
-  useFormatToDate,
+  useGetCurrentDayV2,
+  useformatToDatev2,
 } from '@/NAYSA Cloud/Global/dates';
 
 import {
@@ -93,6 +93,8 @@ import {
 // Header
 import Header from '@/NAYSA Cloud/Components/Header';
 import { faAdd } from "@fortawesome/free-solid-svg-icons/faAdd";
+import FieldRenderer from '@/NAYSA Cloud/Global/FieldRenderer.jsx';
+import DateFormatInput from '@/NAYSA Cloud/Global/DateFormatInput.jsx';
 import { User, Warehouse } from "lucide-react";
 
 
@@ -140,7 +142,7 @@ const MSRTV = () => {
     documentSeries: "Auto",
     documentDocLen: 8,
     documentID: null,
-    documentDate:useGetCurrentDay(),   
+    documentDate: useGetCurrentDayV2(),
     documentNo: "",
     documentStatus:"",
     status: "OPEN",
@@ -474,7 +476,7 @@ useEffect(() => {
       branchCode: "HO",
       branchName: "Head Office",
       userCode:user.USER_CODE,
-      documentDate:useGetCurrentDay(),
+      documentDate: useGetCurrentDayV2(),
 
       refDocNo1: "",
       refDocNo2:"", 
@@ -645,7 +647,7 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       documentID: data.msrtvId,
       documentNo: data.msrtvNo,
       branchCode: data.branchCode,
-      documentDate: useFormatToDate(data.msrtvDate),
+      documentDate: useformatToDatev2(data.msrtvDate),
       // selectedAJType: data.ajtranType,
       vendCode: data.vendCode,
       vendName: data.vendName,
@@ -1028,7 +1030,7 @@ const handleCopy = async () => {
                   documentID:"",
                   documentStatus:"",
                   status:"OPEN",
-                  documentDate:useGetCurrentDay(), 
+                  documentDate: useGetCurrentDayV2(), 
                   noReprints:"0",
      });
   }
@@ -1044,7 +1046,6 @@ const handleCopy = async () => {
 
     updateState({
       payeeLookupOpen: false,
-      vendCode: row?.vend_code ?? row?.vendCode ?? "", // keep both if you have the typo key
       vendCode: row?.vend_code ?? row?.vendCode ?? "",
       vendName: row?.vend_name ?? row?.vendName ?? "",
     });
@@ -1839,8 +1840,12 @@ return (
         onDetails={() => setTopTab("details")}
         onHistory={() => setTopTab("history")}
         disableRouteNavigation={true}         
-        isSaveDisabled={isSaveDisabled} 
-        isResetDisabled={isResetDisabled} 
+        isSaveDisabled={state.isSaveDisabled || isFormDisabled || ((detailRows?.length || 0) + (detailRowsGL?.length || 0) === 0)}
+        isResetDisabled={state.isResetDisabled}
+        isAttachDisabled={!documentID}
+        isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
+        isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
+        isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED" || displayStatus === "CLOSED"}
         detailsRoute="/page/MSRTV"
       />
       </div>
@@ -1880,17 +1885,17 @@ return (
                     ? 'global-tran-tab-text_active-ui'
                     : 'global-tran-tab-text_inactive-ui'
                 }`}
-                onClick={() => setActiveTab('basic')}
+                onClick={() => updateState({ activeTab: "basic" })}
             >
                 Basic Information
             </button>
             {/* Provision for Other Tabs */}
         </div>
 
-        {/* SVI Header Form Section - Main Grid Container */}
+        {/* MSRTV Header Form Section */}
        <div
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 rounded-lg relative"
-            id="pr_hd"
+            id="msrtv_hd"
           >
             {/* Columns 1–3 (Header fields) */}
             <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1899,76 +1904,53 @@ return (
                 <div className="global-tran-textbox-group-div-ui">
                     {/* Branch Name Input with lookup button */}
                     <div className="relative">
-                        <input
-                            type="text"
-                            id="branchName"
-                            placeholder=" "
-                            value={branchName}
-                            readOnly
-                            onFocus={(e) => e.target.blur()}
-                            className="peer global-tran-textbox-ui cursor-pointer select-none"
-                        />
-                        <label htmlFor="branchName" className="global-tran-floating-label">
-                            Branch
-                        </label>
-                        <button
-                            type="button"
-                            className={`global-tran-textbox-button-search-padding-ui ${
-                                isFetchDisabled
-                                ? "global-tran-textbox-button-search-disabled-ui"
-                                : "global-tran-textbox-button-search-enabled-ui"
-                            } global-tran-textbox-button-search-ui`}
-                            disabled={state.isFetchDisabled || state.isDocNoDisabled || isFormDisabled}
-                            onClick={() => updateState({ branchModalOpen: true })}
-                        >
-                            <FontAwesomeIcon icon={faMagnifyingGlass} />
-                        </button>
+                      <FieldRenderer
+                        id="branchName"
+                        label="Branch"
+                        type="lookup"
+                        value={branchName || ""}
+                        onLookup={() => !isFormDisabled && updateState({ branchModalOpen: true })}
+                        disabled={state.isFetchDisabled || state.isDocNoDisabled || isFormDisabled}
+                        readOnly
+                        lookupDisabled={isFetchDisabled}
+                        placeholder=" "
+                      />
                     </div>
 
                     {/* SVI Number Field */}
                     <div className="relative">
-                        <input
-                            type="text"
-                            id="msrtvNo"
-                            value={state.documentNo}
-                            onChange={(e) => updateState({ documentNo: e.target.value })}
-                            // onBlur={handleDocNoBlur}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                handleDocNoBlur();
-                                e.preventDefault(); 
-                                document.getElementById("msrtvDate")?.focus();
-                              }}}
-                            placeholder=" "
-                            className={`peer global-tran-textbox-ui ${state.isDocNoDisabled ? 'bg-blue-100 cursor-not-allowed' : ''}`}
-                            disabled={state.isDocNoDisabled}
-                        />
-                        <label htmlFor="msrtvNo" className="global-tran-floating-label">
-                            MSRTV No.
-                        </label>
-                        <button
-                            className={`global-tran-textbox-button-search-padding-ui ${
-                                (state.isFetchDisabled || state.isDocNoDisabled)
-                                ? "global-tran-textbox-button-search-disabled-ui"
-                                : "global-tran-textbox-button-search-enabled-ui"
-                            } global-tran-textbox-button-search-ui`}
-                            // disabled={state.isFetchDisabled || state.isDocNoDisabled}
-                            onClick={() => {updateState({showAllTranDocNo:true})}}
-                        >
-                            <FontAwesomeIcon icon={faMagnifyingGlass} />
-                        </button>
+                      <FieldRenderer
+                        id="msrtvNo"
+                        label="MSRTV No."
+                        type="lookup"
+                        value={state.documentNo || ""}
+                        onChange={(val) => updateState({ documentNo: val })}
+                        onLookup={() => updateState({ showAllTranDocNo: true })}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            handleDocNoBlur();
+                            e.preventDefault();
+                            document.getElementById("msrtvDate")?.focus();
+                          }
+                        }}
+                        placeholder=" "
+                        disabled={state.isDocNoDisabled}
+                      />
                     </div>
 
                     {/* SVI Date Picker */}
-                    <div className="relative">
-                        <input type="date"
-                            id="msrtvDate"
-                            className="peer global-tran-textbox-ui"
-                            value={documentDate}
-                            onChange={(e) => updateState({ documentDate: e.target.value })} 
-                            disabled={isFormDisabled} 
+                    <div className="relative w-full">
+                      <div className={`flex items-stretch global-ref-textbox-ui ${!isFormDisabled ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"}`}>
+                        <DateFormatInput
+                          id="msrtvDate"
+                          name="documentDate"
+                          className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
+                          value={documentDate}
+                          disabled={isFormDisabled}
+                          updateState={updateState}
                         />
-                        <label htmlFor="msrtvDate" className="global-tran-floating-label">MSRTV Date</label>
+                      </div>
+                      <label htmlFor="msrtvDate" className="global-ref-floating-label">MSRTV Date</label>
                     </div>
 
                    
@@ -2006,69 +1988,48 @@ return (
 
                 {/* Payee Code. */}
                 <div className="relative group flex-[1.3]">
-                  <input
-                    type="text"
+                  <FieldRenderer
                     id="vendCode"
-                    value={vendCode}
-                    readOnly
-                    placeholder=" "
-                    className="peer global-tran-textbox-ui"
-                    onClick={() => updateState({ payeeLookupOpen: true })}
-                  />
-
-                  <label
-                    htmlFor="vendCode"
-                    className="global-tran-floating-label"
-                  >
-                    <span className="text-red-500">* </span>Payee Code
-                  </label>
-                  <button
-                    type="button"
+                    label="Payee Code"
+                    type="lookup"
+                    required
+                    value={vendCode || ""}
+                    onLookup={() => !isFormDisabled && updateState({ payeeLookupOpen: true })}
                     disabled={isFormDisabled}
-                    className={`global-tran-textbox-button-search-padding-ui ${
-                      isFetchDisabled
-                        ? "global-tran-textbox-button-search-disabled-ui"
-                        : "global-tran-textbox-button-search-enabled-ui"
-                    } global-tran-textbox-button-search-ui`}
-                    // onClick={() => updateState({ payeeLookupOpen: true })}
-                    // disabled={isFormDisabled}
-                     onClick={() =>
-                       !isFormDisabled &&
-                       updateState({ payeeLookupOpen: true })
-                     }
-                  >
-                    <FontAwesomeIcon icon={faMagnifyingGlass} />
-                  </button>
-                  <div></div>
+                    readOnly
+                    lookupDisabled={isFormDisabled}
+                    placeholder=" "
+                  />
                 </div>
 
                 {/* Ref No (Payee Name) */}
                 <div className="relative">
-                  <input
-                    type="text"
+                  <FieldRenderer
                     id="vendName"
-                    value={vendName}
-                    placeholder=" "
-                    onChange={(e) => updateState({ vendName: e.target.value })}
-                    className="peer global-tran-textbox-ui"
+                    label="Payee Name"
+                    type="lookup"
+                    required
+                    value={vendName || ""}
+                    onLookup={() => !isFormDisabled && updateState({ payeeLookupOpen: true })}
                     disabled={isFormDisabled}
-                    readOnly={true}
-                    onClick={() => updateState({ payeeLookupOpen: true })}
+                    readOnly
+                    lookupDisabled={isFormDisabled}
+                    placeholder=" "
                   />
-                  <label
-                    htmlFor="vendName"
-                    className="global-tran-floating-label"
-                  >
-                    <span className="text-red-500">* </span>Payee Name
-                  </label>
                 </div>
-                   
+                    
                      <div className="relative">
-                        <input type="text" id="refDocNo1"  value={refDocNo1} placeholder=" " onChange={(e) => updateState({ refDocNo1: e.target.value })} className="peer global-tran-textbox-ui " disabled={isFormDisabled} maxLength={useGetFieldLength(tblFieldArray, "refrtv_no1")} />
-                        <label htmlFor="refDocNo1" className="global-tran-floating-label">Ref Doc No. 1</label>
+                        <FieldRenderer
+                          id="refDocNo1"
+                          label="Ref Doc No. 1"
+                          type="text"
+                          value={refDocNo1 || ""}
+                          onChange={(val) => updateState({ refDocNo1: val })}
+                          placeholder=" "
+                          disabled={isFormDisabled}
+                          maxLength={useGetFieldLength(tblFieldArray, "refrtv_no1")}
+                        />
                     </div>
-
-            
 
                    
                 </div>
@@ -2077,77 +2038,53 @@ return (
                 <div className="global-tran-textbox-group-div-ui">
                    
                <div className="relative group flex-[1.3]">
-                   <input
-                     type="text"
+                   <FieldRenderer
                      id="WHcode"
+                     label="Warehouse"
+                     type="lookup"
+                     required
                      value={state.WHname || state.WHcode || ""}
-                     readOnly
-                     placeholder=" "
-                     className="peer global-tran-textbox-ui"
-                   />
-                   <label
-                     htmlFor="WHcode"
-                     className="global-tran-floating-label"
-                   >
-                     <span className="text-red-500">* </span>Warehouse 
-                   </label>
-                   <button
-                     type="button"
-                     className={`global-tran-textbox-button-search-padding-ui ${
-                       isFetchDisabled
-                         ? "global-tran-textbox-button-search-disabled-ui"
-                         : "global-tran-textbox-button-search-enabled-ui"
-                     } global-tran-textbox-button-search-ui`}
-                     disabled={isFormDisabled}
-                     onClick={() =>
+                     onLookup={() =>
                        !isFormDisabled &&
                        updateState({ warehouseLookupOpen: true })
                      }
-                   >
-                     <FontAwesomeIcon icon={faMagnifyingGlass} />
-                   </button>
+                     disabled={isFormDisabled}
+                     readOnly
+                     lookupDisabled={isFormDisabled}
+                     placeholder=" "
+                   />
                  </div>
  
                  <div className="relative group flex-[1.3]">
-                   <input
-                     type="text"
+                   <FieldRenderer
                      id="locName"
+                     label="Location"
+                     type="lookup"
+                     required
                      value={state.locName || state.locCode || ""}
+                     onLookup={() =>
+                       !isFormDisabled && (state.WHname || state.WHcode) &&
+                       updateState({ locationLookupOpen: true })
+                     }
+                     disabled={isFormDisabled || !(state.WHname || state.WHcode)}
                      readOnly
+                     lookupDisabled={isFormDisabled || !(state.WHname || state.WHcode)}
                      placeholder=" "
-                     className="peer global-tran-textbox-ui"
-                     onClick={() =>
-                       !isFormDisabled &&
-                       updateState({ locationLookupOpen: true })
-                     }
                    />
-                   <label
-                     htmlFor="locName"
-                     className="global-tran-floating-label"
-                   >
-                     <span className="text-red-500">* </span>Location 
-                   </label>
-                   <button
-                     type="button"
-                     className={`global-tran-textbox-button-search-padding-ui ${
-                       isFetchDisabled
-                         ? "global-tran-textbox-button-search-disabled-ui"
-                         : "global-tran-textbox-button-search-enabled-ui"
-                     } global-tran-textbox-button-search-ui`}
-                     disabled={isFormDisabled}
-                     onClick={() =>
-                       !isFormDisabled &&
-                       updateState({ locationLookupOpen: true })
-                     }
-                   >
-                     <FontAwesomeIcon icon={faMagnifyingGlass} />
-                   </button>
                  </div> 
 
                  
                     <div className="relative">
-                        <input type="text" id="refDocNo2" value={refDocNo2} placeholder=" " onChange={(e) => updateState({ refDocNo2: e.target.value })}  className="peer global-tran-textbox-ui" disabled={isFormDisabled} maxLength={useGetFieldLength(tblFieldArray, "refrtv_no2")} />
-                        <label htmlFor="refDocNo2" className="global-tran-floating-label">Ref Doc No. 2</label>
+                        <FieldRenderer
+                          id="refDocNo2"
+                          label="Ref Doc No. 2"
+                          type="text"
+                          value={refDocNo2 || ""}
+                          onChange={(val) => updateState({ refDocNo2: val })}
+                          placeholder=" "
+                          disabled={isFormDisabled}
+                          maxLength={useGetFieldLength(tblFieldArray, "refrtv_no2")}
+                        />
                     </div>                 
         
                 </div>
@@ -2200,7 +2137,7 @@ return (
                   ? 'global-tran-tab-text_active-ui'
                   : 'global-tran-tab-text_inactive-ui'
               }`}
-              // onClick={() => setGLActiveTab('invoice')}
+              // onClick={() => updateState({ GLactiveTab: "invoice" })}
             >
               Item Details
             </button>
@@ -2211,7 +2148,7 @@ return (
     
       <div className="global-tran-table-main-div-ui">
       <div className="global-tran-table-main-sub-div-ui"> 
-        <table className="min-w-full border-collapse">
+        <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
           <thead className="global-tran-thead-div-ui">
             <tr>
               <th className="global-tran-th-ui">LN</th>
@@ -2706,7 +2643,7 @@ return (
                   ? 'global-tran-tab-text_active-ui'
                   : 'global-tran-tab-text_inactive-ui'
               }`}
-              onClick={() => setGLActiveTab('invoice')}
+              onClick={() => updateState({ GLactiveTab: "invoice" })}
             >
               General Ledger
             </button>
@@ -2729,7 +2666,7 @@ return (
         {/* GL Details Table */}
         <div className="global-tran-table-main-div-ui">
         <div className="global-tran-table-main-sub-div-ui"> 
-          <table className="min-w-full border-collapse">
+          <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
 
             <thead className="global-tran-thead-div-ui">
               <tr>
