@@ -2549,6 +2549,24 @@ const UpdateUser = () => {
   const currentUserCode =
     user?.USER_CODE || user?.userCode || user?.code || "SYSTEM";
 
+  // Normalize userType to single-letter code regardless of what auth stores.
+  // Covers camelCase (userType), snake_case (user_type), and UPPER variants,
+  // plus full-label values like "Security Administrator".
+  const rawUserType =
+    user?.userType     ||
+    user?.USER_TYPE    ||
+    user?.user_type    ||
+    user?.usertype     ||
+    "";
+  const currentUserType = (() => {
+    const t = rawUserType.trim().toUpperCase();
+    if (t === "S" || t === "SYSTEM ADMINISTRATOR")   return "S";
+    if (t === "X" || t === "SECURITY ADMINISTRATOR") return "X";
+    if (t === "M" || t === "MANAGEMENT")             return "M";
+    if (t === "R" || t === "REGULAR")                return "R";
+    return t;
+  })();
+
   const activeLabel = (code) => {
     if (code === "Y") return "Yes";
     if (code === "P") return "Pending";
@@ -2762,6 +2780,7 @@ const UpdateUser = () => {
     mutationFn: async (targetUser) => {
       return apiClient.post("/users/delete", {
         userCode: targetUser.userCode,
+        doneBy:    currentUserCode, 
       });
     },
     onSuccess: async (response) => {
@@ -2926,7 +2945,7 @@ const UpdateUser = () => {
         editUprice: editUprice || "N",
         active: active === "Yes" ? "Y" : active === "Pending" ? "P" : "N",
         position: position ? position.trim() : "",
-        userCodeAudit: currentUserCode,
+        doneBy: currentUserCode, 
       },
     };
 
@@ -3466,41 +3485,46 @@ const UpdateUser = () => {
             )}
           </div>
 
-          <button
-            onClick={handleResetPassword}
-            title="Reset Password"
-            className={`bg-blue-600 text-white h-8 w-8 sm:w-auto sm:px-3 sm:py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-blue-700 transition-all ${!selectedUser || selectedUser.active !== "Y" ? "opacity-50 cursor-not-allowed" : ""
-              }`}
-            disabled={!selectedUser || selectedUser.active !== "Y"}
-          >
-            <FontAwesomeIcon icon={faKey} />
-            <span className="hidden sm:inline">Reset Password</span>
-          </button>
+          {["S", "X"].includes(currentUserType) && (
+            <button
+              onClick={handleResetPassword}
+              title="Reset Password"
+              className={`bg-blue-600 text-white h-8 w-8 sm:w-auto sm:px-3 sm:py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-blue-700 transition-all ${!selectedUser || selectedUser.active !== "Y" ? "opacity-50 cursor-not-allowed" : ""
+                }`}
+              disabled={!selectedUser || selectedUser.active !== "Y"}
+            >
+              <FontAwesomeIcon icon={faKey} />
+              <span className="hidden sm:inline">Reset Password</span>
+            </button>
+          )}
 
-          {selectedUser &&
+          {currentUserType === "X" &&
+            selectedUser &&
             selectedUser.active === "N" &&
             policy?.maxLog > 0 &&
             (selectedUser.stat ?? 0) >= policy.maxLog && (
             <button
               onClick={handleUnlockAccount}
               title="Release Locked Account"
-              className="bg-rose-600 text-white h-8 w-8 sm:w-auto sm:px-3 sm:py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-rose-700 transition-all"
+              className="bg-blue-600 text-white h-8 w-8 sm:w-auto sm:px-3 sm:py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-blue-700 transition-all"
             >
               <FontAwesomeIcon icon={faLockOpen} />
               <span className="hidden sm:inline">Release Account</span>
             </button>
           )}
 
-          <button
-            onClick={() => setShowLoginPolicyModal(true)}
-            title="Login / Password Policy"
-            className="bg-indigo-600 text-white h-8 w-8 sm:w-auto sm:px-3 sm:py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all"
-          >
-            <FontAwesomeIcon icon={faShieldHalved} />
-            <span className="hidden sm:inline">Login / Password Policy</span>
-          </button>
+          {currentUserType === "X" && (
+            <button
+              onClick={() => setShowLoginPolicyModal(true)}
+              title="Login / Password Policy"
+              className="bg-blue-600 text-white h-8 w-8 sm:w-auto sm:px-3 sm:py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-blue-700 transition-all"
+            >
+              <FontAwesomeIcon icon={faShieldHalved} />
+              <span className="hidden sm:inline">Login / Password Policy</span>
+            </button>
+          )}
 
-          {selectedUser && selectedUser.active === "P" && (
+          {currentUserType === "X" && selectedUser && selectedUser.active === "P" && (
             <button
               onClick={handleReleaseAccount}
               title="Approve"

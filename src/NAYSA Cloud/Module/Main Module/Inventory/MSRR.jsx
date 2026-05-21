@@ -8,6 +8,7 @@ import {
   faMagnifyingGlass,
   faPlus,
   faMinus,
+  faTrashAlt,
   faSpinner,
   faSearch,
   faBoxOpen,
@@ -91,6 +92,11 @@ import {
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
 import { useGetCurrentDay, useFormatToDate } from "@/NAYSA Cloud/Global/dates";
+import {
+  transactionActionsCellStyle,
+  transactionActionsHeaderStyle,
+  useResizableTableColumns,
+} from "@/NAYSA Cloud/Global/datatable.jsx";
 
 // Header
 import Header from "@/NAYSA Cloud/Components/Header";
@@ -111,7 +117,7 @@ const [isViewDocument, setIsViewDocument] = useState(false);
     }
   }, []);
 
-  const isViewDocumentUrl = isViewDocument;
+const isViewDocumentUrl = isViewDocument;
 
   const isGeneralLedgerEnabled =
     String(companyInfo?.msinvGLMode || "").toUpperCase() !== "D";
@@ -466,9 +472,46 @@ groupId,
     CLOSED: "global-tran-stat-text-closed-ui",
   };
   const statusColor = statusMap[displayStatus] || "";
-  const isFormDisabled =
+  const isFormDisabled =
   isViewDocumentUrl ||
   ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+
+  const msrrDetailColumnDefs = [
+    { key: "ln", label: "LN", width: 56 },
+    { key: "rrStatus", label: "RR Status", width: 100 },
+    { key: "poNo", label: "PO No.", width: 140 },
+    { key: "itemCode", label: "Item Code", width: 120 },
+    { key: "itemName", label: "Item Description", width: 300 },
+    { key: "itemSpecs", label: "Specification", width: 300 },
+    { key: "uomCode", label: "UOM", width: 80 },
+    { key: "rrQty", label: "RR Quantity", width: 130 },
+    { key: "freeQty", label: "Free Quantity", width: 130 },
+    { key: "unitCost", label: "Unit Cost", width: 120 },
+    { key: "grossAmount", label: "Amount", width: 140 },
+    { key: "vatCode", label: "VAT", width: 110 },
+    { key: "vatRate", label: "VAT Rate", width: 120 },
+    { key: "vatAmount", label: "VAT Amount", width: 120 },
+    { key: "netAmount", label: "Net Amount", width: 120 },
+    { key: "lotNo", label: "Lot No", width: 200 },
+    { key: "bbDate", label: "BB Date", width: 130 },
+    { key: "qstatCode", label: "QC Status", width: 120 },
+    { key: "whouseCode", label: "Warehouse", width: 120 },
+    { key: "LocCode", label: "Location", width: 120 },
+  ];
+
+  const {
+    getOrderedColumns: getOrderedMSRRDetailColumns,
+    getSortedRows: getSortedMSRRDetailRows,
+    renderHeaderContextMenu: renderMSRRDetailHeaderContextMenu,
+    renderResizableHeader: renderMSRRDetailHeader,
+  } = useResizableTableColumns(msrrDetailColumnDefs);
+
+  const visibleMSRRDetailColumns = getOrderedMSRRDetailColumns(msrrDetailColumnDefs);
+  const sortedMSRRDetailRows = getSortedMSRRDetailRows(
+    detailRows.map((row, originalIndex) => ({ row, originalIndex })),
+    (entry, sortKey) =>
+      sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? "",
+  );
 
 
   const updateTotalsDisplay = (input) => {
@@ -1255,9 +1298,12 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
 
       const endpoint = "getPORR_OpenSummary";
       const response = await fetchDataJson(endpoint, { branchCode });
+      console.log("Open Reference PO - Summary API Response:", response);
       const rawRows = response?.data?.[0]?.result
         ? JSON.parse(response.data[0].result)
         : [];
+
+    console.log("Open Reference PO - Raw Summary Rows:", rawRows);
       const colConfig = await getSelectedHSColConfig(endpoint);
       const colConfigDetail =
         await getSelectedHSColConfig("getPORR_OpenDetail");
@@ -1272,6 +1318,8 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           return !statusText || statusText.includes("OPEN");
         })
         .map(normalizeOpenPOSummaryRow);
+
+console.log("Open Reference PO - Filtered Open Summary Rows:", openRows);
 
       if (openRows.length === 0) {
         await Swal.fire({
@@ -1328,6 +1376,13 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     const summaries = Array.isArray(selection.summary) ? selection.summary : [];
     const summary = summaries[0] || {};
     const details = selection.details || [];
+
+    console.log("Open Reference PO - Selected PO:", {
+  selection,
+  summaries,
+  summary,
+  details,
+});
 
     if (!(await validateOpenPOSameSupplier(summaries.length > 0 ? summaries : details))) {
       return;
@@ -1811,10 +1866,31 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
       const parsedDocumentNo = parsed.rrNo || "";
       const parsedDocumentId = parsed.rrId || parsed.rrHdId;
 
-      const parsedWHCode = parsed.WHCode || parsed.whCode || parsed.warehouseCode || "";
-      const parsedWHName = parsed.WHName || parsed.whName || parsed.warehouseName || "";
-      const parsedLocCode = parsed.LocCode || parsed.locCode || parsed.locationCode || "";
-      const parsedLocName = parsed.LocName || parsed.locName || parsed.locationName || "";
+      const parsedWHCode =
+  parsed.whouseCode ||
+  parsed.WHCode ||
+  parsed.whCode ||
+  parsed.warehouseCode ||
+  "";
+
+const parsedWHName =
+  parsed.whouseName ||
+  parsed.WHName ||
+  parsed.whName ||
+  parsed.warehouseName ||
+  "";
+
+const parsedLocCode =
+  parsed.locCode ||
+  parsed.LocCode ||
+  parsed.locationCode ||
+  "";
+
+const parsedLocName =
+  parsed.locName ||
+  parsed.LocName ||
+  parsed.locationName ||
+  "";
 
       // ===========================
       // HEADER (MSRR)
@@ -1850,6 +1926,7 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
 
         remarks: parsed.remarks || "",
         documentStatus: parsed.rrStatus || "",
+        status: parsed.rrStatus || "OPEN",
       });
 
       // ===========================
@@ -3785,7 +3862,11 @@ rrHdId: documentID || "",
                   label="Location"
                   required
                   type="lookup"
-                  value={LocName || LocCode || ""}
+                  value={
+  LocCode && LocName
+    ? `${LocCode} - ${LocName}`
+    : LocName || LocCode || ""
+}
                   readOnly
                   disabled={isFormDisabled || !WHCode}
                   lookupDisabled={isFetchDisabled}
@@ -3913,40 +3994,27 @@ rrHdId: documentID || "",
 
           <div className="global-tran-table-main-div-ui">
             <div className="global-tran-table-main-sub-div-ui">
-              <table className="min-w-full border-collapse">
+              <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
                 <thead className="global-tran-thead-div-ui">
                   <tr>
-                    <th className="global-tran-th-ui">LN</th>
-                    <th className="global-tran-th-ui">RR Status</th>
-                    <th className="global-tran-th-ui">PO No.</th>
-                    <th className="global-tran-th-ui">Item Code</th>
-                    <th className="global-tran-th-ui">Item Description</th>
-                    <th className="global-tran-th-ui">Specification</th>
-                    <th className="global-tran-th-ui">UOM</th>
-                    <th className="global-tran-th-ui">RR Quantity</th>
-                    <th className="global-tran-th-ui">Free Quantity</th>
-                    <th className="global-tran-th-ui">Unit Cost</th>
-                    <th className="global-tran-th-ui">Amount</th>
-                    <th className="global-tran-th-ui">VAT</th>
-                    <th className="global-tran-th-ui">VAT Rate</th>
-                    <th className="global-tran-th-ui">VAT Amount</th>
-                    <th className="global-tran-th-ui">Net Amount</th>
-                    <th className="global-tran-th-ui">Lot No</th>
-                    <th className="global-tran-th-ui">BB Date</th>
-                    <th className="global-tran-th-ui">QC Status</th>
-                    <th className="global-tran-th-ui">Warehouse</th>
-                    <th className="global-tran-th-ui">Location</th>
+                    {visibleMSRRDetailColumns.map((column) =>
+                      renderMSRRDetailHeader(column.label, column.key, column.width, {
+                        orderedColumns: visibleMSRRDetailColumns,
+                      })
+                    )}
                     {!isFormDisabled && (
-                      <th className="global-tran-th-ui sticky right-0 bg-blue-300 dark:bg-blue-900 z-30">
-                        Delete
+                    <th className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>
+                      Actions
                       </th>
                     )}
                   </tr>
                 </thead>
 
                 <tbody className="relative">
-                  {detailRows.map((row, index) => (
-                    <tr key={index} className="global-tran-tr-ui">
+                  {sortedMSRRDetailRows.map(({ row, originalIndex }) => {
+                    const index = originalIndex;
+                    return (
+                    <tr key={originalIndex} className="global-tran-tr-ui">
                       {/* LN */}
                       <td className="global-tran-td-ui text-center">
                         {index + 1}
@@ -4405,19 +4473,21 @@ rrHdId: documentID || "",
 
                       {/* Delete */}
                       {!isFormDisabled && (
-                        <td className="global-tran-td-ui text-center sticky right-0">
+                      <td className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black" style={transactionActionsCellStyle}>
                           <button
                             className="global-tran-td-button-delete-ui"
                             onClick={() => handleDeleteRow(index)}
                           >
-                            -
+                        <FontAwesomeIcon icon={faTrashAlt} />
                           </button>
                         </td>
                       )}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {renderMSRRDetailHeaderContextMenu?.()}
             </div>
           </div>
 
@@ -4676,13 +4746,7 @@ rrHdId: documentID || "",
               <table className="min-w-full border-collapse">
                 <thead className="global-tran-thead-div-ui">
                   <tr>
-                    <th className="global-tran-th-ui">LN</th>
-                    <th className="global-tran-th-ui">Lot No</th>
                     <th className="global-tran-th-ui">Quantity</th>
-                    <th className="global-tran-th-ui">BB Date</th>
-                    <th className="global-tran-th-ui">QC Status</th>
-                    <th className="global-tran-th-ui">Warehouse</th>
-                    <th className="global-tran-th-ui">Location</th>
                     <th className="global-tran-th-ui"></th>
                     <th className="global-tran-th-ui">Delete</th>
                   </tr>
