@@ -430,7 +430,7 @@ const ChangePassword = () => {
   const mode = (params.get("mode") || "").trim();
   const companyFromLink = (params.get("company") || "").trim();
 
-  const requiresOldPassword = !["reset", "release", "expired"].includes(mode);
+  const requiresOldPassword = !["reset", "release", "unlock", "expired"].includes(mode);
 
   /* State */
   const [oldPassword, setOldPassword] = useState("");
@@ -565,6 +565,7 @@ const ChangePassword = () => {
             {mode === "reset" && "Reset your password to continue."}
             {mode === "release" && "Set a new password to unlock your account."}
             {mode === "expired" && "Your password has expired. Please set a new one to continue."}  {/* ADD THIS */}
+            {mode === "unlock" && "Your account has been released. Please set a new password to continue."}
             {!mode && "Update your account password."}
           </motion.p>
         </div>

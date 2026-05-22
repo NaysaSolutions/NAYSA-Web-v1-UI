@@ -3092,21 +3092,27 @@ const UpdateUser = () => {
     if (!selectedUser?.userCode) return;
 
     const confirmRes = await useSwalDeleteConfirm(
-      "Release Account",
-      `Release account for ${selectedUser.userName} and reset failed login attempts?`,
+      "Release Locked Account",
+      `Release the locked account for <strong>${selectedUser.userName}</strong>?<br/>
+       The user will receive an email with a password reset link.`,
       "Yes, release it"
     );
 
     if (!confirmRes?.isConfirmed) return;
 
     try {
-      const { data } = await apiClient.post("/users/approve", {
+      const { data } = await apiClient.post("/users/release-locked", {
         userCode: selectedUser.userCode,
-        mode: "release",
+        doneBy:   currentUserCode,
       });
 
       if (data?.status === "success") {
-        await useSwalSuccessAlert("Released", "Account has been released successfully.");
+        await useSwalSuccessAlert(
+          "Account Released",
+          `The account for <strong>${selectedUser.userName}</strong> has been unlocked.<br/>
+           A password reset link has been sent to their email address.`
+        );
+        setActiveTab("active");
         setSelectedUser(null);
         setIsEditing(false);
         await queryClient.invalidateQueries({ queryKey: ["users"] });
@@ -3226,10 +3232,13 @@ const UpdateUser = () => {
       )
       .map((u) => ({
         ...u,
-        activeLabel: activeLabel(u.active),
-        branchDisplay: u.branchName || u.branchCode || "-",
-        rcDisplay: u.rcName || u.rcCode || "-",
+        stat:            u.stat ?? 0,
+        activeLabel:     activeLabel(u.active),
+        branchDisplay:   u.branchName || u.branchCode || "-",
+        rcDisplay:       u.rcName || u.rcCode || "-",
         userTypeDisplay: USER_TYPE_MAP[u.userType] ?? u.userType ?? "-",
+        // True when account was locked by exceeding max login attempts
+        isLocked:        u.active === "N" && (u.stat ?? 0) > 0,
       }));
   }, [users, activeTab]);
 
@@ -3376,6 +3385,30 @@ const UpdateUser = () => {
         label: "Active",
         sortable: true,
         className: "w-[70px] min-w-[70px] text-center overflow-hidden",
+      },
+      {
+        key: "isLocked",
+        label: "Status",
+        sortable: false,
+        className: "w-[90px] min-w-[90px] text-center",
+        render: (row) => {
+          if (row.active === "Y") return null;
+          if (row.active === "P") return (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200">
+              Pending
+            </span>
+          );
+          return row.isLocked ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-red-700 border border-red-200">
+              <FontAwesomeIcon icon={faLockOpen} className="text-[10px]" />
+              Locked
+            </span>
+          ) : (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
+              Inactive
+            </span>
+          );
+        },
       },
     ];
   }, [selectedUser, activeTab, users, isMobile]);

@@ -224,9 +224,7 @@ const ACTIVITY_OPTIONS = [
     { value: "Added", label: "Added" },
     { value: "Edited", label: "Edited" },
     { value: "Deleted", label: "Deleted" },
-    { value: "Inactivated", label: "Inactivated" },
     { value: "PolicySaved", label: "Policy Saved" },
-    { value: "SetTempPassword", label: "Set Temp Password" },
     { value: "PasswordChanged", label: "Password Changed" },
     { value: "ReleaseAccount", label: "Release Account" },
 ];
@@ -501,9 +499,6 @@ const SecurityAuditTrail = () => {
             <div className="global-ref-header-ui flex-none">
                 <div className="w-full flex flex-col gap-3 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
                     <div className="min-w-0 flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 border border-blue-100 dark:border-blue-800 shrink-0">
-                            <FontAwesomeIcon icon={faShieldAlt} className="text-[13px]" />
-                        </div>
                         <h1 className="global-ref-headertext-ui truncate">
                             Security Audit Trail
                         </h1>
