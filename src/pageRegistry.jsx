@@ -86,6 +86,7 @@ import ATaxCode from "./NAYSA Cloud/Reference File/ATCRef.jsx";
 import UpdateUser from "./NAYSA Cloud/Reference File/UpdateUser.jsx";
 import UserAccessRights from "./NAYSA Cloud/Reference File/UserAccessRights.jsx";
 import MasterAccessRights from "./NAYSA Cloud/Reference File/MasterAccessRights.jsx";
+import ReportAccessRights from "./NAYSA Cloud/Reference File/ReportAccessRights.jsx";
 import CutoffRef from "./NAYSA Cloud/Reference File/CutoffRef.jsx";
 import DForexRef from "./NAYSA Cloud/Reference File/DForexRef.jsx";
 import VATRef from "./NAYSA Cloud/Reference File/VATRef.jsx";
@@ -313,6 +314,7 @@ export const pageRegistry = {
   UpdateUser,
   UserAccessRights,
   MasterAccessRights,
+  ReportAccessRights,
   ATaxCode,
   BillCodeRef,
   WarehouseLocation,

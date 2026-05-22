@@ -44,7 +44,6 @@ const RoleAccessTab = forwardRef(({ roles = [], tableSize = "Half" }, ref) => {
   const [mobileStep, setMobileStep] = useState("roles");
 
   /* ================= FILTER ACTIVE ROLES ================= */
-  // Ensure only active roles appear for menu configuration
   const activeRoles = useMemo(() => {
     return (Array.isArray(roles) ? roles : []).filter((r) => r.active === "Y");
   }, [roles]);
@@ -213,22 +212,25 @@ const RoleAccessTab = forwardRef(({ roles = [], tableSize = "Half" }, ref) => {
       const selectedRole = selectedRoleDetails?.[0] || null;
 
       const rows = (Array.isArray(menus) ? menus : []).map((m) => ({
-        roleCode: selectedRole?.roleCode || "",
-        roleName: selectedRole?.roleName || "",
-        menuCode: m.menuCode || "",
-        menuName: m.menuName || "",
-        access: checkedMenus.has(m.menuCode) ? "Yes" : "No",
+        roleCode:   selectedRole?.roleCode || "",
+        roleName:   selectedRole?.roleName || "",
+        moduleName: m.moduleName || "",
+        subMenu:    m.subMenu    || "",
+        menuCode:   m.menuCode   || "",
+        menuName:   m.menuName   || "",
+        access:     checkedMenus.has(m.menuCode) ? "Yes" : "No",
       }));
 
       return {
         fileName: "Role Access Rights",
         rows,
         columns: [
-          { key: "roleCode", label: "Role Code" },
-          { key: "roleName", label: "Role Name" },
-          { key: "menuCode", label: "Menu Code" },
-          { key: "menuName", label: "Menu Name" },
-          { key: "access", label: "Access" },
+          { key: "roleCode",   label: "Role Code"   },
+          { key: "roleName",   label: "Role Name"   },
+          { key: "moduleName", label: "Module"       },
+          { key: "subMenu",    label: "Sub Menu"     },
+          { key: "menuName",   label: "Menu Name"   },
+          { key: "access",     label: "Access"       },
         ],
       };
     },
@@ -296,6 +298,7 @@ const RoleAccessTab = forwardRef(({ roles = [], tableSize = "Half" }, ref) => {
     [selectedRoles, toggleRole]
   );
 
+  // ✅ Menu Code column removed; Module and Sub Menu columns retained
   const menuColumns = useMemo(
     () => [
       {
@@ -317,16 +320,25 @@ const RoleAccessTab = forwardRef(({ roles = [], tableSize = "Half" }, ref) => {
         ),
       },
       {
-        key: "menuCode",
-        label: "Menu Code",
+        // ⚠️ Blank if your hs_menu column is NOT named "module_name".
+        // Run: SELECT TOP 1 * FROM hs_menu — then tell us the real column name
+        // and update the SQL alias:  a.YOUR_COLUMN AS moduleName
+        key: "moduleName",
+        label: "Module",
         sortable: true,
-        width: 170,
+        width: 200,
+      },
+      {
+        key: "subMenu",
+        label: "Sub Menu",
+        sortable: true,
+        width: 200,
       },
       {
         key: "menuName",
         label: "Menu Name",
         sortable: true,
-        width: 300,
+        width: 380,
       },
     ],
     [checkedMenus, toggleMenu]
@@ -334,7 +346,7 @@ const RoleAccessTab = forwardRef(({ roles = [], tableSize = "Half" }, ref) => {
 
   const roleTableData = useMemo(
     () =>
-      activeRoles.map((row, index) => ({ // Using filtered activeRoles here
+      activeRoles.map((row, index) => ({
         ...row,
         __idx: index,
       })),
@@ -368,8 +380,7 @@ const RoleAccessTab = forwardRef(({ roles = [], tableSize = "Half" }, ref) => {
       <div className="flex flex-col md:flex-row md:items-stretch gap-4">
         {/* ROLES PANEL */}
         <div
-          className={`w-full md:w-1/2 ${mobileStep === "roles" ? "block" : "hidden md:block"
-            }`}
+          className={`w-full md:w-1/2 ${mobileStep === "roles" ? "block" : "hidden md:block"}`}
         >
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 h-full flex flex-col">
             <h2 className="text-lg font-semibold mb-2 text-gray-700">Roles</h2>
@@ -397,8 +408,7 @@ const RoleAccessTab = forwardRef(({ roles = [], tableSize = "Half" }, ref) => {
 
         {/* MENUS PANEL */}
         <div
-          className={`w-full md:w-1/2 ${mobileStep === "menus" ? "block" : "hidden md:block"
-            }`}
+          className={`w-full md:w-1/2 ${mobileStep === "menus" ? "block" : "hidden md:block"}`}
         >
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 h-full flex flex-col">
             <div className="flex items-center justify-between mb-2 gap-3">
@@ -445,7 +455,6 @@ const RoleAccessTab = forwardRef(({ roles = [], tableSize = "Half" }, ref) => {
                           <span className="inline-flex items-center rounded-full border border-blue-200 bg-white px-2 py-0.5 text-xs font-medium text-blue-800">
                             {selectedRoleDetails.length} roles
                           </span>
-
                           {selectedRoleDetails.slice(0, 1).map((role) => (
                             <span
                               key={role.roleCode}
@@ -454,7 +463,6 @@ const RoleAccessTab = forwardRef(({ roles = [], tableSize = "Half" }, ref) => {
                               {role.roleCode}
                             </span>
                           ))}
-
                           {selectedRoleDetails.length > 1 && (
                             <span className="inline-flex items-center rounded-full border border-blue-200 bg-white px-2 py-0.5 text-[11px] text-blue-700">
                               +{selectedRoleDetails.length - 1} more
