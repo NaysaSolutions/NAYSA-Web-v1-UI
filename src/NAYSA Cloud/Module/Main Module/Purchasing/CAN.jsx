@@ -1686,10 +1686,10 @@ export const CAN = () => {
     { key: "itemSpecs", label: "Specification", width: 200 },
     { key: "uomCode", label: "UOM", width: 90 },
     { key: "totalQtyNeeded", label: "Total Qty Needed", width: 130 },
+    { key: "selectedQty", label: "Canvass Quantity", width: 150 },
     { key: "sourcePrs", label: "Source PRs", width: 180 },
     { key: "prCount", label: "PR Count", width: 110 },
-    { key: "availableQty", label: "Available / Remaining", width: 170 },
-    { key: "selectedQty", label: "Canvass Quantity", width: 150 },
+    { key: "availableQty", label: "Actual / Original", width: 170 },
   ], []);
 
   const {
@@ -1732,7 +1732,13 @@ export const CAN = () => {
     ...getCanCanvassColumnStyle(key, fallbackWidth),
     ...getCanCanvassFrozenStyle(key, orderedCanCanvassColumns, fallbackWidth, { isHeader: false }),
   });
-  const getCanCanvassFooterCellStyle = (key, fallbackWidth) => getCanCanvassColumnStyle(key, fallbackWidth);
+  const getCanCanvassFooterCellStyle = (key, fallbackWidth) => ({
+    ...getCanCanvassColumnStyle(key, fallbackWidth),
+    ...getCanCanvassFrozenStyle(key, orderedCanCanvassColumns, fallbackWidth, {
+      isHeader: false,
+      backgroundColor: "#f1f5f9",
+    }),
+  });
 
   const canSupplierItemColumnDefs = useMemo(() => [
     { key: "ln", label: "LN", width: 56 },
@@ -1767,8 +1773,8 @@ export const CAN = () => {
   });
 
   const generatePODetailColumnDefs = useMemo(() => [
+    { key: "viewPO", label: "View", width: 56 },
     { key: "poNo", label: "PO No.", width: 140 },
-    { key: "viewPO", label: "", width: 56 },
     { key: "prNo", label: "PR No.", width: 130 },
     { key: "ln", label: "LN", width: 56 },
     { key: "invType", label: "Type", width: 80 },
@@ -3408,6 +3414,8 @@ export const CAN = () => {
       }),
       { quantity: 0, grossAmount: 0, discountAmount: 0, vatAmount: 0, netAmount: 0 }
     );
+    const generatePODetailViewColumn = orderedGeneratePODetailColumns.find((column) => column.key === "viewPO");
+    const generatePODetailDataColumns = orderedGeneratePODetailColumns.filter((column) => column.key !== "viewPO");
 
     const renderGeneratePODetailValue = (row, key, index) => {
       if (key === "poNo") return row.poNo || row.poId || "For PO";
@@ -3443,15 +3451,16 @@ export const CAN = () => {
         const hasReference = Boolean(row.poNo || row.poId);
         return (
           <td key={columnKey} className="global-tran-td-ui h-8 text-center" style={style}>
-            <button
-              type="button"
-              onClick={() => hasReference && viewGeneratedPO({ poNo: row.poNo, poId: row.poId, branchCode })}
-              disabled={!hasReference}
-              className="inline-flex h-7 w-7 items-center justify-center rounded text-blue-700 hover:bg-blue-50 disabled:text-slate-300 disabled:hover:bg-transparent"
-              title={hasReference ? "View generated Purchase Order" : "No Purchase Order generated yet"}
-            >
-              <FontAwesomeIcon icon={faEye} />
-            </button>
+            {hasReference && (
+              <button
+                type="button"
+                onClick={() => viewGeneratedPO({ poNo: row.poNo, poId: row.poId, branchCode })}
+                className="inline-flex h-5 w-8 items-center justify-center rounded bg-blue-500 text-white shadow-sm hover:bg-blue-600"
+                title="View generated Purchase Order"
+              >
+                <FontAwesomeIcon icon={faEye} className="text-[10px]" />
+              </button>
+            )}
           </td>
         );
       }
@@ -3541,6 +3550,12 @@ export const CAN = () => {
                   <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
                     <thead className="global-tran-thead-div-ui sticky top-0 z-10">
                       <tr>
+                        {generatePODetailViewColumn && renderGeneratePODetailHeader(
+                          generatePODetailViewColumn.label,
+                          generatePODetailViewColumn.key,
+                          generatePODetailViewColumn.width,
+                          { orderedColumns: orderedGeneratePODetailColumns }
+                        )}
                         <th className="global-tran-th-ui text-center" style={{ width: 54, minWidth: 54 }}>
                           <input
                             type="checkbox"
@@ -3549,7 +3564,7 @@ export const CAN = () => {
                             disabled={!canGeneratePO || isLoading || poCandidateRows.length === 0}
                           />
                         </th>
-                        {orderedGeneratePODetailColumns.map((column) =>
+                        {generatePODetailDataColumns.map((column) =>
                           renderGeneratePODetailHeader(column.label, column.key, column.width, {
                             orderedColumns: orderedGeneratePODetailColumns,
                           })
@@ -3566,6 +3581,7 @@ export const CAN = () => {
                       ) : (
                         sortedGeneratePODetailRows.map(({ row, originalIndex }) => (
                           <tr key={`generate-po-detail-${row.poKey || originalIndex}`} className="global-tran-tr-ui">
+                            {generatePODetailViewColumn && renderGeneratePODetailCell(generatePODetailViewColumn.key, row, originalIndex)}
                             <td className="global-tran-td-ui text-center" style={{ width: 54, minWidth: 54 }}>
                               <input
                                 type="checkbox"
@@ -3574,7 +3590,7 @@ export const CAN = () => {
                                 disabled={!canGeneratePO || isLoading || Boolean(row.poNo || row.poId || row.poGenerated)}
                               />
                             </td>
-                            {orderedGeneratePODetailColumns.map((column) => renderGeneratePODetailCell(column.key, row, originalIndex))}
+                            {generatePODetailDataColumns.map((column) => renderGeneratePODetailCell(column.key, row, originalIndex))}
                           </tr>
                         ))
                       )}
@@ -4000,8 +4016,8 @@ export const CAN = () => {
                   ))}
                 </div>
 
-                <div className="global-tran-table-main-div-ui min-h-0 flex-1 rounded-lg border border-slate-200 bg-white">
-                <div className="global-tran-table-main-sub-div-ui h-full" onContextMenu={handleSupplierCompareBodyContextMenu}>
+                <div className={`global-tran-table-main-div-ui min-h-0 flex-1 rounded-lg border border-slate-200 bg-white ${isSupplierCompareMaximized ? "overflow-hidden" : ""}`}>
+                <div className={`global-tran-table-main-sub-div-ui h-full ${isSupplierCompareMaximized ? "max-h-none overflow-auto" : ""}`} onContextMenu={handleSupplierCompareBodyContextMenu}>
                   <table className="min-w-max border-separate border-spacing-0 text-[11px] [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
                     <thead className="global-tran-thead-div-ui sticky top-0 z-[80] bg-blue-100">
                       <tr className="whitespace-nowrap">
@@ -4155,6 +4171,9 @@ export const CAN = () => {
                         {supplier.supplierName || supplier.supplierCode || "Unnamed Supplier"}
                       </span>
                       <span className="block font-bold text-slate-950">PHP {money(supplier.netAmount)}</span>
+                      <span className="block text-[11px] text-slate-500">
+                        Delivery Date: {supplier.deliveryDate ? safeDate(supplier.deliveryDate) : "Not set"}
+                      </span>
                     </span>
                     {isLowest && <span className="rounded bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">Lowest</span>}
                   </div>
@@ -4167,7 +4186,7 @@ export const CAN = () => {
 
       <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
         <FontAwesomeIcon icon={faCircleInfo} className="mr-2" />
-        Common items are merged into one canvas line while preserving PR-level breakdown.
+        Common items are merged into one canvass line while preserving PR-level breakdown.
       </div>
     </aside>
   );
