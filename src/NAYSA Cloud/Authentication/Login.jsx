@@ -729,14 +729,23 @@ export default function Login({ onSwitchToRegister }) {
         const options = normalizeCompaniesPayload(data).filter((x) => x.code || x.database);
         if (!alive) return;
         setCompanies(options);
-        if (!companyCode && options.length === 1) {
-          setCompanyCode(options[0].code || options[0].database || "");
-        } else if (
-          companyCode &&
-          !options.some((o) => o.code === companyCode || o.database === companyCode)
-        ) {
-          if (options[0]) setCompanyCode(options[0].code || options[0].database || "");
-        }
+        setCompanyCode((currentCompanyCode) => {
+          if (!currentCompanyCode && options.length === 1) {
+            return options[0].code || options[0].database || "";
+          }
+
+          if (
+            currentCompanyCode &&
+            !options.some(
+              (o) => o.code === currentCompanyCode || o.database === currentCompanyCode
+            ) &&
+            options[0]
+          ) {
+            return options[0].code || options[0].database || "";
+          }
+
+          return currentCompanyCode;
+        });
       } catch (e) {
         useSwalErrorAlert(
           "Unable to load companies",
@@ -747,7 +756,7 @@ export default function Login({ onSwitchToRegister }) {
       }
     })();
     return () => { alive = false; };
-  }, [companyCode]);
+  }, []);
 
   useEffect(() => {
     if (companyCode) localStorage.setItem("companyCode", companyCode);

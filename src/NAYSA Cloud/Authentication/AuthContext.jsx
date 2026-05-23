@@ -127,7 +127,7 @@ const readCachedAuthRefs = () => {
 
 export default function AuthProvider({ children }) {
   const [user, setUserState] = useState(() => readCachedUser());
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !!readCachedUser());
 
   const [refsLoading, setRefsLoading] = useState(false);
   const [refsLoaded, setRefsLoaded] = useState(false);
