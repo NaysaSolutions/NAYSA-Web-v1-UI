@@ -807,7 +807,7 @@ const fetchTranData = async (documentNo, branchCode,direction="") => {
 
   try {
     const data = await useFetchTranData(documentNo, branchCode,docType,"arNo",direction);
-    console.log(data)
+    
 
     if (!data?.arId) {
       Swal.fire({ icon: 'info', title: 'No Records Found', text: 'Transaction does not exist.' });
