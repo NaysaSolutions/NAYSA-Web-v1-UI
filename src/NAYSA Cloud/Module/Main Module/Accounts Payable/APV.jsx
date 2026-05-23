@@ -549,35 +549,140 @@ const APV = () => {
   };
 
   const normalizeOpenRRRow = (row, index) => {
-    const rrNo = getLookupValue(row, "rrNo", "rr_no", "RR_NO", "msrrNo", "MSRR_NO", "docNo", "DOC_NO", "tranNo", "TRAN_NO");
-    const rrId = getLookupValue(row, "rrId", "rr_id", "RR_ID", "rrHdId", "RR_HD_ID", "msrrId", "MSRR_ID");
-    const poNo = getLookupValue(row, "poNo", "po_no", "PO_NO");
+  const type = getLookupValue(row, "type", "Type", "TYPE", "invType", "INV_TYPE");
 
-    return {
-      ...row,
-      groupId:
-        getLookupValue(row, "groupId", "GROUP_ID", "id", "ID") ||
-        [rrId, rrNo, poNo, index + 1].filter(Boolean).join("-") ||
-        String(index + 1),
-      type: getLookupValue(row, "type", "Type", "TYPE", "invType", "INV_TYPE"),
-      branchCode: getLookupValue(row, "branchCode", "BranchCode", "BRANCH_CODE", "bc", "BC"),
-      rrNo,
-      rrDate: getLookupValue(row, "rrDate", "rr_date", "RR_DATE"),
-      rrId,
-      poNo,
-      vendCode: getLookupValue(row, "vendCode", "vend_code", "VEND_CODE"),
-      vendName: getLookupValue(row, "vendName", "vend_name", "VEND_NAME"),
-      siNo: getLookupValue(row, "siNo", "si_no", "SI_NO", "drNo", "DR_NO"),
-      siDate: getLookupValue(row, "siDate", "si_date", "SI_DATE", "rrDate", "RR_DATE"),
-      siAmount: getLookupValue(row, "siAmount", "si_amount", "SI_AMOUNT", "amount", "AMOUNT", "rrAmount", "RR_AMOUNT"),
-      drAcct: getLookupValue(row, "drAcct", "dr_acct", "DR_ACCT", "debitAcct", "DEBIT_ACCT"),
-      rcCode: getLookupValue(row, "rcCode", "rc_code", "RC_CODE"),
-      vatCode: getLookupValue(row, "vatCode", "vat_code", "VAT_CODE"),
-      vatDesc: getLookupValue(row, "vatDesc", "vat_desc", "VAT_DESC", "vatName", "VAT_NAME"),
-      vatAmount: getLookupValue(row, "vatAmount", "vat_amount", "VAT_AMOUNT"),
-      categCode: getLookupValue(row, "categCode", "categ_code", "CATEG_CODE", "categoryCode", "CATEGORY_CODE"),
-    };
+  const rrNo = getLookupValue(
+    row,
+    "rrNo",
+    "rr_no",
+    "RR_NO",
+    "msrrNo",
+    "MSRR_NO",
+    "joNo",
+    "jo_no",
+    "JO_NO",
+    "docNo",
+    "DOC_NO",
+    "tranNo",
+    "TRAN_NO",
+  );
+
+  const rrId = getLookupValue(
+    row,
+    "rrId",
+    "rr_id",
+    "RR_ID",
+    "rrHdId",
+    "RR_HD_ID",
+    "msrrId",
+    "MSRR_ID",
+    "joId",
+    "jo_id",
+    "JO_ID",
+  );
+
+  const poNo = getLookupValue(
+    row,
+    "poNo",
+    "po_no",
+    "PO_NO",
+    "joNo",
+    "jo_no",
+    "JO_NO",
+  );
+
+  return {
+    ...row,
+    groupId:
+      getLookupValue(row, "groupId", "GROUP_ID", "id", "ID") ||
+      [rrId, rrNo, poNo, index + 1].filter(Boolean).join("-") ||
+      String(index + 1),
+
+    type,
+    branchCode: getLookupValue(
+      row,
+      "branchCode",
+      "BranchCode",
+      "BRANCH_CODE",
+      "bc",
+      "BC",
+    ),
+
+    rrNo,
+    rrDate: getLookupValue(
+      row,
+      "rrDate",
+      "rr_date",
+      "RR_DATE",
+      "joDate",
+      "jo_date",
+      "JO_DATE",
+    ),
+    rrId,
+
+    poNo,
+
+    vendCode: getLookupValue(row, "vendCode", "vend_code", "VEND_CODE"),
+    vendName: getLookupValue(row, "vendName", "vend_name", "VEND_NAME"),
+
+    siNo: getLookupValue(row, "siNo", "si_no", "SI_NO", "drNo", "DR_NO"),
+    siDate: getLookupValue(
+      row,
+      "siDate",
+      "si_date",
+      "SI_DATE",
+      "rrDate",
+      "RR_DATE",
+      "joDate",
+      "JO_DATE",
+    ),
+
+    siAmount: getLookupValue(
+      row,
+      "siAmount",
+      "si_amount",
+      "SI_AMOUNT",
+      "amount",
+      "AMOUNT",
+      "rrAmount",
+      "RR_AMOUNT",
+      "joAmount",
+      "JO_AMOUNT",
+    ),
+
+    drAcct: getLookupValue(
+      row,
+      "drAcct",
+      "dr_acct",
+      "DR_ACCT",
+      "debitAcct",
+      "DEBIT_ACCT",
+    ),
+
+    rcCode: getLookupValue(row, "rcCode", "rc_code", "RC_CODE"),
+    rcName: getLookupValue(row, "rcName", "rc_name", "RC_NAME"),
+
+    vatCode: getLookupValue(row, "vatCode", "vat_code", "VAT_CODE"),
+    vatDesc: getLookupValue(
+      row,
+      "vatDesc",
+      "vat_desc",
+      "VAT_DESC",
+      "vatName",
+      "VAT_NAME",
+    ),
+    vatAmount: getLookupValue(row, "vatAmount", "vat_amount", "VAT_AMOUNT"),
+
+    categCode: getLookupValue(
+      row,
+      "categCode",
+      "categ_code",
+      "CATEG_CODE",
+      "categoryCode",
+      "CATEGORY_CODE",
+    ),
   };
+};
 
   // Loading spinner component
   const LoadingSpinner = () => (
@@ -1666,34 +1771,62 @@ const APV = () => {
     };
 
     const requestAttempts = [
-      () => fetchDataJson("getAPVRR_OpenSummary", lookupPayload),
-      () =>
-        fetchData("getAPVRR_OpenSummary", {
-          PARAMS: JSON.stringify({ json_data: lookupPayload }),
-        }),
-      () =>
-        fetchData("getAPVRR_OpenSummary", {
-          PARAMS: JSON.stringify(lookupPayload),
-        }),
-    ];
+  async () => {
+    const rrResponse = await fetchDataJson("getAPVRR_OpenSummary", lookupPayload);
+    const joResponse = await fetchDataJson("getAPVJO_OpenSummary", lookupPayload);
 
-    let rawRows = [];
-    for (const requestOpenRR of requestAttempts) {
-      try {
-        const response = await requestOpenRR();
-        rawRows = extractOpenRRResponseRows(response);
-        if (rawRows.length > 0) break;
-      } catch (requestError) {
-        console.warn("Open RR lookup attempt failed:", requestError);
-      }
-    }
+    return [
+      ...extractOpenRRResponseRows(rrResponse),
+      ...extractOpenRRResponseRows(joResponse),
+    ];
+  },
+
+  async () => {
+    const rrResponse = await fetchData("getAPVRR_OpenSummary", {
+      PARAMS: JSON.stringify({ json_data: lookupPayload }),
+    });
+    const joResponse = await fetchData("getAPVJO_OpenSummary", {
+      PARAMS: JSON.stringify({ json_data: lookupPayload }),
+    });
+
+    return [
+      ...extractOpenRRResponseRows(rrResponse),
+      ...extractOpenRRResponseRows(joResponse),
+    ];
+  },
+
+  async () => {
+    const rrResponse = await fetchData("getAPVRR_OpenSummary", {
+      PARAMS: JSON.stringify(lookupPayload),
+    });
+    const joResponse = await fetchData("getAPVJO_OpenSummary", {
+      PARAMS: JSON.stringify(lookupPayload),
+    });
+
+    return [
+      ...extractOpenRRResponseRows(rrResponse),
+      ...extractOpenRRResponseRows(joResponse),
+    ];
+  },
+];
+
+let rawRows = [];
+
+for (const requestOpenReference of requestAttempts) {
+  try {
+    rawRows = await requestOpenReference();
+    if (rawRows.length > 0) break;
+  } catch (requestError) {
+    console.warn("Open RR/JO lookup attempt failed:", requestError);
+  }
+}
 
     const normalizedRows = rawRows.map((row, index) =>
       normalizeOpenRRRow(row, index),
     );
 
     if (normalizedRows.length === 0) {
-      useSwalErrorAlert("Open RR", "No open RR found for this supplier.");
+      useSwalErrorAlert("Open Reference", "No open RR/JO found for this supplier.");
       return;
     }
 
@@ -1756,54 +1889,68 @@ const handleCloseRRRefModal = async (selectedItems) => {
         const atcData = aCode ? await useTopATCRow(aCode) : null;
 
         // 5. Calculations, Taxes & Financial Math Elements
-        const amount = parseFormattedNumber(item.siAmount || item.amount || 0);
-        const dynamicVatRate = vCode ? await getVatRate(vCode) : 0;
-        
-        // Auto-assign existing VAT amount value if present, otherwise recalculate based on tax rules
-        const inputVatAmount = parseFormattedNumber(item.vatAmount);
-        const vatAmount = inputVatAmount > 0 
-          ? inputVatAmount 
-          : dynamicVatRate > 0 ? (amount / (1 + dynamicVatRate)) * dynamicVatRate : 0;
-          
-        const netOfVat = amount - vatAmount;
-        const atcRate = atcData?.atcRate || 0;
-        const calculatedAtcAmount = netOfVat * atcRate;
+const amount = parseFormattedNumber(item.siAmount || item.amount || 0);
+const dynamicVatRate = vCode ? await getVatRate(vCode) : 0;
+
+// Auto-assign existing VAT amount value if present,
+// otherwise recalculate based on VAT-inclusive rules
+const inputVatAmount = parseFormattedNumber(item.vatAmount);
+const vatAmount =
+  inputVatAmount > 0
+    ? inputVatAmount
+    : dynamicVatRate > 0
+      ? (amount / (1 + dynamicVatRate)) * dynamicVatRate
+      : 0;
+
+const netOfVat = +(amount - vatAmount).toFixed(2);
+
+const calculatedAtcAmount = aCode
+  ? await useTopATCAmount(aCode, netOfVat)
+  : 0;
 
         return {
-          lnNo: "",
-          invType: item.type || item.invType || "MS",
-          rrNo: item.rrNo || "",
-          poNo: item.poNo || "",
-          siNo: item.siNo || "",
-          siDate: item.siDate || item.rrDate || useGetCurrentDayV2(),
-          amount: formatNumber(amount),
-          siAmount: formatNumber(amount),
-          
-          // 🔥 Auto-filled accounts, spaces, and visibility metrics
-          debitAcct: resolvedDebitAcct, 
-          rcCode: targetRcCode,
-          rcName: targetRcName,
-          
-          sltypeCode: "SU",
-          slCode: vendCode, 
-          slName: vendName?.vendName, 
-          
-          // 🔥 Auto-filled VAT mapping allocations
-          vatCode: vCode,
-          vatName: vatData?.vatName || item.vatDesc || "",
-          vatAmount: formatNumber(vatAmount),
-          
-          // ATC structural calculations
-          atcCode: aCode,
-          atcName: atcData?.atcName || "",
-          atcAmount: formatNumber(calculatedAtcAmount),
-          
-          paytermCode: item.terms || item.paytermCode || "",
-          dueDate: item.dueDate || useGetCurrentDayV2(),
-          REC_RC: targetRcCode ? "Y" : "N",
-          REC_SL: "Y",
-          rrId: item.rrId,
-        };
+  lnNo: "",
+  invType: item.type || item.invType || "MS",
+
+  rrNo:
+    String(item.type || "").toUpperCase() === "JO"
+      ? item.joNo || item.rrNo || ""
+      : item.rrNo || "",
+
+  poNo:
+    String(item.type || "").toUpperCase() === "JO"
+      ? item.joNo || item.poNo || ""
+      : item.poNo || "",
+
+  siNo: item.siNo || "",
+  siDate: item.siDate || item.rrDate || useGetCurrentDayV2(),
+  amount: formatNumber(amount),
+  siAmount: formatNumber(amount),
+
+  debitAcct: resolvedDebitAcct,
+  rcCode: targetRcCode,
+  rcName: targetRcName,
+
+  sltypeCode: "SU",
+  slCode: vendCode,
+  slName: vendName?.vendName,
+
+  vatCode: vCode,
+  vatName: vatData?.vatName || item.vatDesc || "",
+  vatAmount: formatNumber(vatAmount),
+
+  atcCode: aCode,
+  atcName: atcData?.atcName || "",
+  atcAmount: formatNumber(calculatedAtcAmount),
+
+  paytermCode: item.terms || item.paytermCode || "",
+  dueDate: item.dueDate || useGetCurrentDayV2(),
+
+  REC_RC: targetRcCode ? "Y" : "N",
+  REC_SL: "Y",
+
+  rrId: item.rrId || item.joId || "",
+};
       })
     );
 
@@ -4042,9 +4189,9 @@ const handleAtcNameDoubleClick = (index) => {
                                 <FontAwesomeIcon icon={faFileLines} />
                               </span>
                               <div className="flex flex-col items-start">
-                                <span>Open Reference RR</span>
+                                <span>Open Reference RR/JO</span>
                                 <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500">
-                                  Pull RR details
+                                  Pull RR/JO details
                                 </span>
                               </div>
                             </div>
@@ -4962,7 +5109,7 @@ const handleAtcNameDoubleClick = (index) => {
        {state.showRRRefModal && (
   <GlobalLookupModalv1
     isOpen={state.showRRRefModal}
-    title="Open Receiving Reports"
+    title="Open RR / JO References"
     data={state.globalLookupRow}
     endpoint={openRRLookupColumns}
     btnCaption="Get Selected RR"

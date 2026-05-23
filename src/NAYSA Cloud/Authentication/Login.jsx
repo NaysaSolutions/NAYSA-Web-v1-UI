@@ -1,6 +1,3 @@
-
-
-
 // import React, { useEffect, useState, useRef } from "react";
 // import {
 //   FiUser,
@@ -51,7 +48,7 @@
 //   });
 // }
 
-// export default function Login({ onSwitchToRegister, onForgot }) {
+// export default function Login({ onSwitchToRegister }) {
 //   const { login, loginWithBiometric } = useAuth();
 //   const navigate = useNavigate();
 
@@ -432,7 +429,7 @@
 //             <div className="flex justify-end pt-1">
 //               <button
 //                 type="button"
-//                 onClick={onForgot}
+//                 onClick={() => setShowForgot(true)}
 //                 className="text-sm font-medium text-sky-700 hover:text-sky-600"
 //               >
 //                 Forgot password?
@@ -561,11 +558,12 @@ import {
   useSwalSuccessAlert,
   useSwalWarningAlert,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
+import ForgotPassword from "./ForgotPassword.jsx";
 
 /* ─── Animation variants ─────────────────────────────────────────── */
 const fadeUp = {
   hidden: { opacity: 0, y: 16 },
-  show:   { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] } },
+  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] } },
 };
 
 const staggerContainer = {
@@ -631,12 +629,12 @@ function normalizeCompaniesPayload(raw) {
   else if (raw && typeof raw === "object") arr = Object.values(raw);
   return arr.map((r) => {
     const get = (o, ...keys) => keys.reduce((v, k) => v ?? o?.[k], undefined);
-    const code     = get(r, "code", "CODE", "Code") ?? get(r, "database", "DATABASE", "Database") ?? "";
-    const company  = get(r, "company", "COMPANY", "Company") ?? get(r, "database", "DATABASE", "Database") ?? get(r, "code", "CODE", "Code") ?? "";
+    const code = get(r, "code", "CODE", "Code") ?? get(r, "database", "DATABASE", "Database") ?? "";
+    const company = get(r, "company", "COMPANY", "Company") ?? get(r, "database", "DATABASE", "Database") ?? get(r, "code", "CODE", "Code") ?? "";
     const database = get(r, "database", "DATABASE", "Database") ?? "";
     return {
-      code:     String(code || "").trim(),
-      company:  String(company || "").trim(),
+      code: String(code || "").trim(),
+      company: String(company || "").trim(),
       database: String(database || "").trim(),
     };
   });
@@ -706,7 +704,7 @@ const inputCls =
 /* ════════════════════════════════════════════════════════════════════
    Login
    ════════════════════════════════════════════════════════════════════ */
-export default function Login({ onSwitchToRegister, onForgot }) {
+export default function Login({ onSwitchToRegister }) {
   const { login, loginWithBiometric } = useAuth();
   const navigate = useNavigate();
 
@@ -718,6 +716,7 @@ export default function Login({ onSwitchToRegister, onForgot }) {
   const [isBioLoading, setIsBioLoading] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
   const [capsOn, setCapsOn] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
   const pwdRef = useRef(null);
 
   /* ── Load companies ── */
@@ -758,7 +757,7 @@ export default function Login({ onSwitchToRegister, onForgot }) {
     try {
       if (v) sessionStorage.setItem("bioAuthInProgress", "1");
       else sessionStorage.removeItem("bioAuthInProgress");
-    } catch {}
+    } catch { }
   };
 
   const handleChange = (e) => {
@@ -787,8 +786,8 @@ export default function Login({ onSwitchToRegister, onForgot }) {
       navigate("/", { replace: true });
     } catch (err) {
       const status = err?.response?.status;
-      const code   = err?.response?.data?.code;
-      const msg    = err?.response?.data?.message || err?.message || "Please try again.";
+      const code = err?.response?.data?.code;
+      const msg = err?.response?.data?.message || err?.message || "Please try again.";
 
       if (status === 403 && code === "PENDING") {
         useSwalErrorAlert(
@@ -805,6 +804,26 @@ export default function Login({ onSwitchToRegister, onForgot }) {
         );
         return;
       }
+
+      if (status === 403 && code === "LOCKED") {
+        useSwalErrorAlert(
+          "Account Locked",
+          msg || "Your account has been locked due to too many failed login attempts. Please contact your administrator."
+        );
+        return;
+      }
+
+      if (status === 403 && code === "PASSWORD_EXPIRED") {
+        useSwalErrorAlert(
+          "Password Expired",
+          msg || "Your password has expired. Please set a new password."
+        );
+        navigate(
+          `/change-password?user=${encodeURIComponent(form.USER_CODE.trim())}&mode=expired&company=${encodeURIComponent(companyCode)}`
+        );
+        return;
+      }
+
 
       if (status === 429 && code === "SEAT_LIMIT") {
         useSwalWarningAlert(
@@ -845,7 +864,7 @@ export default function Login({ onSwitchToRegister, onForgot }) {
         throw new Error(optionRes?.message || "Failed to load biometric login options.");
       }
 
-      const publicKey  = prepareLoginPublicKey(optionRes.data);
+      const publicKey = prepareLoginPublicKey(optionRes.data);
       const credential = await navigator.credentials.get({ publicKey });
       if (!credential) throw new Error("Biometric authentication was cancelled.");
 
@@ -1047,7 +1066,7 @@ export default function Login({ onSwitchToRegister, onForgot }) {
             <motion.div variants={fadeUp} className="flex justify-end -mt-1">
               <button
                 type="button"
-                onClick={onForgot}
+                onClick={() => setShowForgot(true)}
                 className="text-sm font-medium text-sky-700 hover:text-sky-600 transition-colors"
               >
                 Forgot password?
@@ -1208,6 +1227,14 @@ export default function Login({ onSwitchToRegister, onForgot }) {
           </motion.div>
         </motion.div>
       </div>
+
+      {/* Forgot Password Modal */}
+      <ForgotPassword
+        open={showForgot}
+        onClose={() => setShowForgot(false)}
+        companies={companies}
+        defaultCompanyCode={companyCode}
+      />
     </div>
   );
 }
