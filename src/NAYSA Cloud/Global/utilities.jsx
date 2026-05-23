@@ -74,39 +74,89 @@
 // }
 
 
+// export function LoadingSpinner() {
+//   return (
+//     <div className="fixed inset-0 z-[9999] flex items-center justify-center animate-in fade-in duration-200">
+//       {/* Light overlay */}
+//       <div className="absolute inset-0 bg-slate-900/10" />
+
+//       {/* Floating loader container */}
+//       <div className="relative flex flex-col items-center justify-center gap-2 sm:gap-3 px-4 py-4 sm:px-6 sm:py-5 rounded-xl sm:rounded-2xl bg-white/85 backdrop-blur-md border border-white/40 shadow-2xl">
+//         {/* Soft background glow */}
+//         <div className="absolute inset-0 rounded-xl sm:rounded-2xl bg-white/30 blur-xl scale-110 pointer-events-none"></div>
+
+//         {/* Spinner area */}
+//         <div className="relative flex items-center justify-center w-14 h-14 sm:w-20 sm:h-20">
+//           {/* Static ring */}
+//           <div className="absolute inset-0 rounded-full border-[2px] border-slate-200"></div>
+
+//           {/* Animated ring */}
+//           <div className="absolute inset-0 rounded-full border-[3px] border-blue-600 border-t-transparent animate-spin"></div>
+
+//           {/* Logo */}
+//           <img
+//             src="/naysa_logo.png"
+//             alt="Loading"
+//             className="relative w-9 h-9 sm:w-14 sm:h-14 object-contain"
+//             draggable={false}
+//           />
+//         </div>
+
+//         {/* Label */}
+//         <div className="relative text-xs sm:text-sm font-medium text-slate-700 tracking-wide text-center">
+//           Loading, please wait...
+//         </div>
+//       </div>
+//     </div>
+//   );
+// }
 
 
 export function LoadingSpinner() {
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center animate-in fade-in duration-200">
       {/* Light overlay */}
-      <div className="absolute inset-0 bg-slate-900/10" />
+      <div className="absolute inset-0 bg-slate-950/5" />
 
       {/* Floating loader container */}
-      <div className="relative flex flex-col items-center justify-center gap-2 sm:gap-3 px-4 py-4 sm:px-6 sm:py-5 rounded-xl sm:rounded-2xl bg-white/85 backdrop-blur-md border border-white/40 shadow-2xl">
+      <div className="relative flex min-w-[132px] flex-col items-center justify-center gap-3 rounded-2xl border border-white/70 bg-white/90 px-6 py-5 shadow-[0_24px_70px_rgba(15,23,42,0.22)] backdrop-blur-xl">
         {/* Soft background glow */}
-        <div className="absolute inset-0 rounded-xl sm:rounded-2xl bg-white/30 blur-xl scale-110 pointer-events-none"></div>
+        <div className="pointer-events-none absolute inset-0 rounded-2xl bg-white/40 blur-xl"></div>
+        <div className="pointer-events-none absolute -top-px left-5 right-5 h-px bg-white/90"></div>
 
         {/* Spinner area */}
-        <div className="relative flex items-center justify-center w-14 h-14 sm:w-20 sm:h-20">
-          {/* Static ring */}
-          <div className="absolute inset-0 rounded-full border-[2px] border-slate-200"></div>
-
-          {/* Animated ring */}
-          <div className="absolute inset-0 rounded-full border-[3px] border-blue-600 border-t-transparent animate-spin"></div>
+        <div className="relative flex h-[72px] w-[72px] items-center justify-center sm:h-20 sm:w-20">
+          <div className="absolute inset-0 rounded-full bg-blue-50"></div>
+          <div className="absolute inset-1 rounded-full border border-slate-200"></div>
+          <div className="absolute inset-1 animate-spin" style={{ animationDuration: "1.35s" }}>
+            <div className="absolute inset-0 rounded-full border-[3px] border-blue-600 border-r-transparent border-t-transparent"></div>
+          </div>
+          <div className="absolute inset-3 rounded-full bg-white shadow-inner"></div>
 
           {/* Logo */}
           <img
             src="/naysa_logo.png"
             alt="Loading"
-            className="relative w-9 h-9 sm:w-14 sm:h-14 object-contain"
+            className="relative h-14 w-14 object-contain sm:h-16 sm:w-16"
             draggable={false}
           />
         </div>
 
-        {/* Label */}
-        <div className="relative text-xs sm:text-sm font-medium text-slate-700 tracking-wide text-center">
-          Loading, please wait...
+        {/* Animated brand letters */}
+        <div className="relative flex flex-col items-center justify-center leading-tight" aria-label="Loading">
+          {["N A Y S A", "Financials", "Cloud"].map((line, lineIndex) => (
+            <div key={line} className="flex items-center justify-center gap-x-1">
+              {line.split("").map((letter, index) => (
+                <span
+                  key={`${line}-${letter}-${index}`}
+                  className="text-[10px] font-extrabold tracking-wide text-blue-700 animate-pulse"
+                  style={{ animationDelay: `${(lineIndex * 6 + index) * 45}ms`, animationDuration: "1s" }}
+                >
+                  {letter === " " ? "\u00A0" : letter}
+                </span>
+              ))}
+            </div>
+          ))}
         </div>
       </div>
     </div>

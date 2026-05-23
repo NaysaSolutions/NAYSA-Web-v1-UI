@@ -1,4 +1,5 @@
 // import React, { useEffect, useMemo, useRef, useState } from "react";
+// import { createPortal } from "react-dom";
 // import {
 //   ClipboardCopy,
 //   Download,
@@ -16,6 +17,7 @@
 //   ZoomOut,
 // } from "lucide-react";
 // import { Document, Page, pdfjs } from "react-pdf";
+// import { recognize } from "tesseract.js";
 // import workerSrc from "pdfjs-dist/build/pdf.worker.min.js?url";
 // import "react-pdf/dist/Page/AnnotationLayer.css";
 // import "react-pdf/dist/Page/TextLayer.css";
@@ -30,6 +32,7 @@
 // const MAX_PDF_FILES = 5;
 // const MAX_PDF_SIZE_MB = 25;
 // const MAX_PDF_SIZE_BYTES = MAX_PDF_SIZE_MB * 1024 * 1024;
+// const EMPTY_EXTERNAL_FILES = [];
 
 // const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
@@ -40,11 +43,54 @@
 //     .replace(/\n{4,}/g, "\n\n\n")
 //     .trim();
 
+// const withTimeout = (promise, timeoutMs, message) =>
+//   Promise.race([
+//     promise,
+//     new Promise((_, reject) => {
+//       window.setTimeout(() => reject(new Error(message)), timeoutMs);
+//     }),
+//   ]);
+
 // const safeFileName = (name = "captured-text") =>
 //   String(name || "captured-text")
-//     .replace(/\.pdf$/i, "")
+//     .replace(/\.(pdf|png|jpg|jpeg|webp)$/i, "")
 //     .replace(/[\\/:*?"<>|]/g, "-")
 //     .trim() || "captured-text";
+
+// const isImageFile = (file = {}) => {
+//   const type = file.type || file.blob?.type || file.file?.type || "";
+//   const name = String(file.name || file.file?.name || file.url || "").toLowerCase();
+
+//   return (
+//     type.startsWith("image/") ||
+//     name.endsWith(".png") ||
+//     name.endsWith(".jpg") ||
+//     name.endsWith(".jpeg") ||
+//     name.endsWith(".webp")
+//   );
+// };
+
+// const isPdfFile = (file = {}) =>
+//   file.type === "application/pdf" ||
+//   file.blob?.type === "application/pdf" ||
+//   file.file?.type === "application/pdf" ||
+//   String(file.name || file.file?.name || file.url || "").toLowerCase().endsWith(".pdf");
+
+// const getReadableFileKind = (file = {}) => {
+//   if (isPdfFile(file)) return "pdf";
+//   if (isImageFile(file)) return "image";
+//   return "";
+// };
+
+// const getExternalFileSignature = (file = {}, index = 0) => {
+//   const source = file.blob || file.file || file.url || file;
+//   const name = file.name || source?.name || file.url || "";
+//   const size = file.size || source?.size || "";
+//   const lastModified = file.lastModified || source?.lastModified || "";
+//   const type = file.type || source?.type || file.kind || "";
+
+//   return [file.id || "", name, size, lastModified, type, index].join(":");
+// };
 
 // const getPdfTextByPage = async (pdf, pageNumber) => {
 //   const page = await pdf.getPage(pageNumber);
@@ -70,6 +116,19 @@
 
 //   if (currentLine.trim()) lines.push(currentLine.trim());
 //   return cleanText(lines.join("\n"));
+// };
+
+// const renderPdfPageToCanvas = async (pdf, pageNumber, scale = 2) => {
+//   const page = await pdf.getPage(pageNumber);
+//   const viewport = page.getViewport({ scale });
+//   const canvas = document.createElement("canvas");
+//   const context = canvas.getContext("2d");
+
+//   canvas.width = Math.ceil(viewport.width);
+//   canvas.height = Math.ceil(viewport.height);
+
+//   await page.render({ canvasContext: context, viewport }).promise;
+//   return canvas;
 // };
 
 // const getRectFromPoints = (start, end) => {
@@ -103,6 +162,8 @@
 //   title = "PDF Text Capture",
 //   initialText = "",
 //   onApply,
+//   externalFile = null,
+//   externalFiles = EMPTY_EXTERNAL_FILES,
 // }) => {
 //   const [pdfFiles, setPdfFiles] = useState([]);
 //   const [activePdfId, setActivePdfId] = useState(null);
@@ -131,15 +192,38 @@
 //   const viewerScrollRef = useRef(null);
 //   const modalRef = useRef(null);
 
+//   useEffect(() => {
+//     if (!isOpen) return undefined;
+
+//     const previousBodyOverflow = document.body.style.overflow;
+//     const previousHtmlOverflow = document.documentElement.style.overflow;
+
+//     document.body.style.overflow = "hidden";
+//     document.documentElement.style.overflow = "hidden";
+
+//     return () => {
+//       document.body.style.overflow = previousBodyOverflow;
+//       document.documentElement.style.overflow = previousHtmlOverflow;
+//     };
+//   }, [isOpen]);
+
 //   const activePdf = useMemo(
 //     () => pdfFiles.find((item) => item.id === activePdfId) || null,
 //     [pdfFiles, activePdfId]
 //   );
 
-//   const activePdfDoc = activePdf ? pdfDocsRef.current[activePdf.id] : null;
+//   const activeFileKind = activePdf?.kind || getReadableFileKind(activePdf?.file || activePdf || {});
+//   const isActiveImage = activeFileKind === "image";
+//   const activePdfDoc = activeFileKind === "pdf" && activePdf ? pdfDocsRef.current[activePdf.id] : null;
 //   const pageNumber = activePdf?.pageNumber || 1;
-//   const numPages = activePdf?.numPages || 0;
+//   const numPages = isActiveImage ? 1 : activePdf?.numPages || 0;
 //   const fileUrl = activePdf?.url || "";
+//   const externalSourceSignature =
+//     Array.isArray(externalFiles) && externalFiles.length > 0
+//       ? externalFiles.map(getExternalFileSignature).join("|")
+//       : externalFile
+//         ? getExternalFileSignature(externalFile)
+//         : "";
 
 //   useEffect(() => {
 //     pageShellRef.current = activePdfId ? pageShellRefs.current[activePdfId] || null : null;
@@ -150,10 +234,10 @@
 
 //     const timer = window.setTimeout(() => {
 //       setIsPageRendering(false);
-//     }, 1800);
+//     }, isActiveImage ? 300 : 1800);
 
 //     return () => window.clearTimeout(timer);
-//   }, [isPageRendering, activePdfId, pageNumber, scale]);
+//   }, [isPageRendering, activePdfId, pageNumber, scale, isActiveImage]);
 
 //   const updateActivePdf = (updates) => {
 //     if (!activePdfId) return;
@@ -207,9 +291,39 @@
 //       clearAll();
 //     } else {
 //       setCapturedText(initialText || "");
+
+//       const sourceFiles = Array.isArray(externalFiles) && externalFiles.length > 0
+//         ? externalFiles
+//         : externalFile
+//           ? [externalFile]
+//           : [];
+
+//       if (sourceFiles.length > 0) {
+//         const nextTabs = sourceFiles
+//           .map((file, index) => {
+//             const source = file.blob || file.file || file.url || file;
+//             const kind = file.kind || getReadableFileKind(file) || getReadableFileKind(source);
+//             if (!kind) return null;
+
+//             return {
+//               id: `ext-${Date.now()}-${index}`,
+//               identity: `ext-${file.id || file.name || index}`,
+//               file: source,
+//               name: file.name || `${kind === "image" ? "Image" : "PDF"} ${index + 1}`,
+//               url: file.url || (source instanceof Blob ? URL.createObjectURL(source) : source),
+//               kind,
+//               pageNumber: 1,
+//               numPages: kind === "image" ? 1 : 0,
+//             };
+//           })
+//           .filter(Boolean);
+
+//         setPdfFiles(nextTabs);
+//         setActivePdfId(nextTabs[0]?.id || null);
+//       }
 //     }
 //     // eslint-disable-next-line react-hooks/exhaustive-deps
-//   }, [isOpen]);
+//   }, [isOpen, initialText, externalSourceSignature]);
 
 //   useEffect(() => {
 //     setSnipStart(null);
@@ -222,14 +336,14 @@
 //     }
 
 //     // When switching back to an already loaded tab, do not keep showing the loader.
-//     setIsPageRendering(!pdfDocsRef.current[activePdfId]);
-//   }, [activePdfId, fileUrl]);
+//     setIsPageRendering(activeFileKind === "pdf" && !pdfDocsRef.current[activePdfId]);
+//   }, [activePdfId, fileUrl, activeFileKind]);
 
 //   useEffect(() => {
-//     if (!fileUrl || !activePdfDoc) return;
+//     if (!fileUrl || !activePdfDoc || activeFileKind !== "pdf") return;
 //     window.requestAnimationFrame(() => fitPdfToViewer(activePdfDoc, pageNumber, activePdfId));
 //     // eslint-disable-next-line react-hooks/exhaustive-deps
-//   }, [activePdfId, pageNumber, rightPaneWidth, fileUrl]);
+//   }, [activePdfId, pageNumber, rightPaneWidth, fileUrl, activeFileKind]);
 
 //   useEffect(() => {
 //     if (!isPaneResizing) return;
@@ -275,9 +389,10 @@
 //   };
 
 //   const pageLabel = useMemo(() => {
+//     if (isActiveImage) return "Image file";
 //     if (!numPages) return "No PDF loaded";
 //     return `Page ${pageNumber} of ${numPages}`;
-//   }, [numPages, pageNumber]);
+//   }, [isActiveImage, numPages, pageNumber]);
 
 //   const modalClassName = isMaximized
 //     ? "grid h-[100dvh] w-screen grid-rows-[auto_minmax(0,1fr)] overflow-hidden border border-slate-200 bg-white shadow-2xl"
@@ -288,12 +403,10 @@
 
 //   const handleFileChange = (event) => {
 //     const rawFiles = Array.from(event.target.files || []);
-//     const selectedFiles = rawFiles.filter(
-//       (item) => item.type === "application/pdf" || item.name?.toLowerCase().endsWith(".pdf")
-//     );
+//     const selectedFiles = rawFiles.filter((item) => getReadableFileKind(item));
 
 //     if (!selectedFiles.length) {
-//       setLoadError("Please select valid PDF file(s).");
+//       setLoadError("Please select valid PDF or image file(s).");
 //       if (event.target) event.target.value = "";
 //       return;
 //     }
@@ -301,7 +414,7 @@
 //     const oversizedFile = selectedFiles.find((item) => item.size > MAX_PDF_SIZE_BYTES);
 //     if (oversizedFile) {
 //       setLoadError(
-//         `"${oversizedFile.name}" is too large. Maximum PDF size is ${MAX_PDF_SIZE_MB}MB per file.`
+//         `"${oversizedFile.name}" is too large. Maximum file size is ${MAX_PDF_SIZE_MB}MB per file.`
 //       );
 //       if (event.target) event.target.value = "";
 //       return;
@@ -328,25 +441,27 @@
 //       });
 
 //       if (!availableSlots && !tabToActivate) {
-//         setLoadError(`Maximum of ${MAX_PDF_FILES} PDF files only.`);
+//         setLoadError(`Maximum of ${MAX_PDF_FILES} files only.`);
 //         return prev;
 //       }
 
 //       if (uniqueNewFiles.length < selectedFiles.filter((selectedFile) => !existingByIdentity.has(getPdfIdentity(selectedFile))).length) {
-//         setLoadError(`Only ${MAX_PDF_FILES} PDF files can be opened at a time.`);
+//         setLoadError(`Only ${MAX_PDF_FILES} files can be opened at a time.`);
 //       } else {
 //         setLoadError("");
 //       }
 
 //       const newTabs = uniqueNewFiles.map(({ selectedFile, identity }) => {
+//         const kind = getReadableFileKind(selectedFile);
 //         const nextTab = {
 //           id: `${Date.now()}-${Math.random().toString(36).slice(2)}-${selectedFile.name}`,
 //           identity,
 //           file: selectedFile,
 //           name: selectedFile.name,
 //           url: URL.createObjectURL(selectedFile),
+//           kind,
 //           pageNumber: 1,
-//           numPages: 0,
+//           numPages: kind === "image" ? 1 : 0,
 //         };
 //         tabToActivate = nextTab.id;
 //         return nextTab;
@@ -380,6 +495,40 @@
 //     const selectedText = cleanText(window.getSelection?.().toString() || "");
 //     appendText(selectedText);
 //     window.getSelection?.().removeAllRanges?.();
+//   };
+
+//   const loadPdfDocumentFromSource = async (source) => {
+//     if (!source) return null;
+
+//     if (source instanceof Blob) {
+//       const data = new Uint8Array(await source.arrayBuffer());
+//       return pdfjs.getDocument({ data, disableWorker: true }).promise;
+//     }
+
+//     if (typeof source === "string") {
+//       const response = await fetch(source);
+//       const data = new Uint8Array(await response.arrayBuffer());
+//       return pdfjs.getDocument({ data, disableWorker: true }).promise;
+//     }
+
+//     return pdfjs.getDocument({ data: source, disableWorker: true }).promise;
+//   };
+
+//   const ensureActivePdfDocument = async () => {
+//     if (activePdfDoc) return activePdfDoc;
+//     if (!activePdf || isActiveImage) return null;
+
+//     const pdf = await loadPdfDocumentFromSource(activePdf.file || activePdf.url);
+//     if (!pdf) return null;
+
+//     pdfDocsRef.current[activePdf.id] = pdf;
+//     setPdfFiles((prev) =>
+//       prev.map((item) =>
+//         item.id === activePdf.id ? { ...item, numPages: pdf.numPages || item.numPages || 0 } : item
+//       )
+//     );
+
+//     return pdf;
 //   };
 
 //   const getPointFromEvent = (event) => {
@@ -445,10 +594,86 @@
 //     window.requestAnimationFrame(() => captureSnippedText(rect));
 //   };
 
-//   const captureSnippedText = (overrideRect = null) => {
+//   const recognizeImageSource = async (source) => {
+//     const result = await recognize(source, "eng", {
+//       logger: (message) => {
+//         if (!message?.status) return;
+//         if (message.status === "recognizing text") {
+//           setLoadError(`Reading text... ${Math.round((message.progress || 0) * 100)}%`);
+//         }
+//       },
+//     });
+
+//     setLoadError("");
+//     return cleanText(result?.data?.text || "");
+//   };
+
+//   const cropImageSelectionToCanvas = (shell, targetRect) => {
+//     const image = shell?.querySelector("img");
+//     if (!image || !targetRect || !image.naturalWidth || !image.naturalHeight) return null;
+
+//     const shellBox = shell.getBoundingClientRect();
+//     const imageBox = image.getBoundingClientRect();
+//     const imageLeft = imageBox.left - shellBox.left;
+//     const imageTop = imageBox.top - shellBox.top;
+//     const displayLeft = clamp(targetRect.left - imageLeft, 0, imageBox.width);
+//     const displayTop = clamp(targetRect.top - imageTop, 0, imageBox.height);
+//     const displayRight = clamp(targetRect.left + targetRect.width - imageLeft, 0, imageBox.width);
+//     const displayBottom = clamp(targetRect.top + targetRect.height - imageTop, 0, imageBox.height);
+//     const displayWidth = displayRight - displayLeft;
+//     const displayHeight = displayBottom - displayTop;
+
+//     if (displayWidth < 2 || displayHeight < 2) return null;
+
+//     const scaleX = image.naturalWidth / imageBox.width;
+//     const scaleY = image.naturalHeight / imageBox.height;
+//     const canvas = document.createElement("canvas");
+
+//     canvas.width = Math.max(1, Math.round(displayWidth * scaleX));
+//     canvas.height = Math.max(1, Math.round(displayHeight * scaleY));
+//     canvas
+//       .getContext("2d")
+//       ?.drawImage(
+//         image,
+//         Math.round(displayLeft * scaleX),
+//         Math.round(displayTop * scaleY),
+//         canvas.width,
+//         canvas.height,
+//         0,
+//         0,
+//         canvas.width,
+//         canvas.height
+//       );
+
+//     return canvas;
+//   };
+
+//   const captureSnippedText = async (overrideRect = null) => {
 //     const shell = pageShellRef.current;
 //     const targetRect = overrideRect || snipRect;
 //     if (!shell || !targetRect) return;
+
+//     if (isActiveImage) {
+//       try {
+//         setIsReading(true);
+//         const canvas = cropImageSelectionToCanvas(shell, targetRect);
+//         if (!canvas) {
+//           setLoadError("Unable to read the selected image area.");
+//           return;
+//         }
+//         appendText(await recognizeImageSource(canvas));
+//       } catch (error) {
+//         console.error("Unable to read selected image area:", error);
+//         setLoadError("Unable to read the selected image area.");
+//       } finally {
+//         setIsReading(false);
+//         setSnipStart(null);
+//         setSnipEnd(null);
+//         setSnipRect(null);
+//         setIsSnipMode(false);
+//       }
+//       return;
+//     }
 
 //     const shellBox = shell.getBoundingClientRect();
 //     const selectionBox = {
@@ -475,31 +700,138 @@
 //   };
 
 //   const readCurrentPage = async () => {
-//     if (!activePdfDoc) return;
+//     if (!activePdf && !isActiveImage) return;
 //     try {
 //       setIsReading(true);
-//       appendText(await getPdfTextByPage(activePdfDoc, pageNumber));
+//       setLoadError("");
+
+//       if (isActiveImage) {
+//         const imageSource = activePdf?.url || activePdf?.file;
+//         if (!imageSource) {
+//           setLoadError("No image is loaded.");
+//           return;
+//         }
+
+//         const text = await recognizeImageSource(imageSource);
+//         if (!text) {
+//           setLoadError("No readable text was found in this image.");
+//           return;
+//         }
+
+//         appendText(text);
+//         return;
+//       }
+
+//       const pdf = await ensureActivePdfDocument();
+//       if (!pdf) {
+//         setLoadError("No PDF is loaded.");
+//         return;
+//       }
+
+//       let text = await getPdfTextByPage(pdf, pageNumber);
+//       if (!text) {
+//         setLoadError("No selectable text found. Reading page with OCR...");
+//         const canvas = await renderPdfPageToCanvas(pdf, pageNumber);
+//         text = await recognizeImageSource(canvas);
+//       }
+
+//       if (!text) {
+//         setLoadError("No readable text was found on this page.");
+//         return;
+//       }
+
+//       appendText(text);
 //     } catch (error) {
-//       console.error("Unable to read current page:", error);
-//       setLoadError("Unable to read the current page.");
+//       console.error("Unable to read current file:", error);
+//       setLoadError(isActiveImage ? "Unable to read text from this image." : "Unable to read the current page.");
 //     } finally {
 //       setIsReading(false);
 //     }
 //   };
 
 //   const readEntirePdf = async () => {
-//     if (!activePdfDoc || !numPages) return;
+//     if (!activePdf && !isActiveImage) return;
 //     try {
 //       setIsReading(true);
-//       const pageTexts = [];
-//       for (let page = 1; page <= numPages; page += 1) {
-//         const pageText = await getPdfTextByPage(activePdfDoc, page);
-//         if (pageText) pageTexts.push(`Page ${page}\n${pageText}`);
+//       setLoadError("");
+
+//       if (isActiveImage) {
+//         const imageSource = activePdf?.url || activePdf?.file;
+//         if (!imageSource) {
+//           setLoadError("No image is loaded.");
+//           return;
+//         }
+
+//         const text = await recognizeImageSource(imageSource);
+//         if (!text) {
+//           setCapturedText("");
+//           setLoadError("No readable text was found in this image.");
+//           return;
+//         }
+
+//         setCapturedText(text);
+//         return;
 //       }
+
+//       const pdf = await ensureActivePdfDocument();
+//       const totalPages = pdf?.numPages || numPages;
+//       if (!pdf || !totalPages) {
+//         setLoadError("No PDF is loaded.");
+//         return;
+//       }
+
+//       const pageTexts = [];
+//       setCapturedText("");
+//       for (let page = 1; page <= totalPages; page += 1) {
+//         setLoadError(`Reading page ${page} of ${totalPages}...`);
+//         let pageText = "";
+
+//         try {
+//           pageText = await withTimeout(
+//             getPdfTextByPage(pdf, page),
+//             10000,
+//             `Text extraction timed out on page ${page}.`
+//           );
+//         } catch (error) {
+//           console.warn(error);
+//         }
+
+//         if (!pageText) {
+//           try {
+//             setLoadError(`No selectable text on page ${page}. Reading with OCR...`);
+//             const canvas = await withTimeout(
+//               renderPdfPageToCanvas(pdf, page),
+//               15000,
+//               `PDF page render timed out on page ${page}.`
+//             );
+//             pageText = await withTimeout(
+//               recognizeImageSource(canvas),
+//               45000,
+//               `OCR timed out on page ${page}.`
+//             );
+//           } catch (error) {
+//             console.warn(error);
+//           }
+//         }
+
+//         if (pageText) {
+//           const nextPageText = `Page ${page}\n${pageText}`;
+//           pageTexts.push(nextPageText);
+//           setCapturedText(cleanText(pageTexts.join("\n\n")));
+//         }
+//       }
+
+//       if (!pageTexts.length) {
+//         setCapturedText("");
+//         setLoadError("No readable text was found in this PDF.");
+//         return;
+//       }
+
+//       setLoadError("");
 //       setCapturedText(cleanText(pageTexts.join("\n\n")));
 //     } catch (error) {
-//       console.error("Unable to read PDF:", error);
-//       setLoadError("Unable to read the entire PDF.");
+//       console.error("Unable to read file:", error);
+//       setLoadError(isActiveImage ? "Unable to read text from this image." : "Unable to read the entire PDF.");
 //     } finally {
 //       setIsReading(false);
 //     }
@@ -590,10 +922,10 @@
 
 //   if (!isOpen) return null;
 
-//   return (
+//   return createPortal(
 //     <>
 //       {isMinimized && (
-//         <div className="fixed bottom-4 right-4 z-[10000] flex max-w-[calc(100vw-24px)] items-center gap-2 rounded-2xl border border-slate-200 bg-white/95 px-3 py-2 text-xs text-slate-700 shadow-2xl shadow-slate-900/20 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:shadow-slate-900/25">
+//         <div className="fixed bottom-4 right-4 z-[1000000] flex max-w-[calc(100vw-24px)] items-center gap-2 rounded-2xl border border-slate-200 bg-white/95 px-3 py-2 text-xs text-slate-700 shadow-2xl shadow-slate-900/20 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:shadow-slate-900/25">
 //           <div className="flex min-w-0 items-center gap-2">
 //             <FileText className="h-4 w-4 shrink-0 text-slate-500" aria-hidden="true" />
 //             <div className="min-w-0">
@@ -624,7 +956,7 @@
 //         </div>
 //       )}
 
-//       <div className={`fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/35 p-1 sm:p-2 ${isMinimized ? "pointer-events-none opacity-0" : ""}`}>
+//       <div className={`fixed inset-0 z-[999999] flex items-center justify-center bg-slate-950/35 p-1 sm:p-2 ${isMinimized ? "pointer-events-none opacity-0" : ""}`}>
 //         <div
 //           ref={modalRef}
 //           className={modalClassName}
@@ -636,18 +968,18 @@
 //                 <FileText className="h-4 w-4 text-slate-500" aria-hidden="true" />
 //                 <h2 className="truncate text-base font-semibold text-slate-900">{title}</h2>
 //               </div>
-//               <p className="mt-0.5 text-xs text-slate-500">Preview, Shift + mouse wheel to zoom the active PDF, snip-highlight, capture selected text, or read the full PDF.</p>
+//               <p className="mt-0.5 text-xs text-slate-500">Preview, Shift + mouse wheel to zoom the active file, snip-highlight, capture selected text, or read the full PDF.</p>
 //             </div>
 //             <div className="flex items-center gap-2">
-//               <input ref={fileInputRef} type="file" accept="application/pdf" multiple className="hidden" onChange={handleFileChange} />
+//               <input ref={fileInputRef} type="file" accept="application/pdf,image/*,.pdf,.png,.jpg,.jpeg,.webp" multiple className="hidden" onChange={handleFileChange} />
 //               <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => fileInputRef.current?.click()}>
-//                 <Upload className="h-3.5 w-3.5" /> Browse PDF
+//                 <Upload className="h-3.5 w-3.5" /> Browse PDF / Image
 //               </button>
 //               <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" disabled={!fileUrl || isReading} onClick={readEntirePdf}>
-//                 <BookOpen className="h-3.5 w-3.5" /> Read entire PDF
+//                 <BookOpen className="h-3.5 w-3.5" /> Read All
 //               </button>
 //               <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" disabled={!pdfFiles.length} onClick={removeAllPdf}>
-//                 <Trash2 className="h-3.5 w-3.5" /> Remove All PDF
+//                 <Trash2 className="h-3.5 w-3.5" /> Remove All
 //               </button>
 //               <button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50" onClick={() => setIsMinimized(true)} title="Minimize"><Minus className="h-4 w-4" /></button>
 //               <button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50" onClick={() => setIsMaximized((prev) => !prev)} title={isMaximized ? "Restore" : "Maximize"}>{isMaximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button>
@@ -703,7 +1035,7 @@
 //                 )}
 //                 {!fileUrl ? (
 //                   <div className="flex h-full min-h-[420px] items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center">
-//                     <div><Search className="mx-auto h-7 w-7 text-slate-300" /><div className="mt-3 text-sm font-medium text-slate-700">Select PDF file(s) to preview</div><div className="mt-1 text-xs text-slate-500">Multiple PDFs will appear as sheet-style tabs.</div></div>
+//                     <div><Search className="mx-auto h-7 w-7 text-slate-300" /><div className="mt-3 text-sm font-medium text-slate-700">Select PDF or image file(s) to preview</div><div className="mt-1 text-xs text-slate-500">Multiple files will appear as sheet-style tabs.</div></div>
 //                   </div>
 //                 ) : (
 //                   <div className="inline-block min-w-full bg-white p-0 shadow-sm">
@@ -723,6 +1055,24 @@
 //                             onMouseUp={isActiveTab ? handleSnipMouseUp : undefined}
 //                             onWheel={isActiveTab ? handleViewerWheel : undefined}
 //                           >
+//                             {item.kind === "image" ? (
+//                               <img
+//                                 src={item.url}
+//                                 alt={item.name || "Uploaded image"}
+//                                 draggable={false}
+//                                 className="block max-w-none select-none"
+//                                 style={{ width: `${Math.max(20, Math.round(scale * 100))}%`, userSelect: "none" }}
+//                                 onLoad={() => {
+//                                   if (isActiveTab) setIsPageRendering(false);
+//                                 }}
+//                                 onError={() => {
+//                                   if (isActiveTab) {
+//                                     setLoadError("Unable to preview this image.");
+//                                     setIsPageRendering(false);
+//                                   }
+//                                 }}
+//                               />
+//                             ) : (
 //                             <Document
 //                               file={item.file}
 //                               loading={<div className="flex h-[360px] min-w-[260px] items-center justify-center text-xs text-slate-500">Loading PDF...</div>}
@@ -754,6 +1104,7 @@
 //                                 onRenderError={() => { if (isActiveTab) setIsPageRendering(false); }}
 //                               />
 //                             </Document>
+//                             )}
 //                             {isActiveTab && visibleSnipRect && <div className="pointer-events-none absolute border border-blue-500 bg-blue-400/20 shadow-[0_0_0_9999px_rgba(15,23,42,0.08)]" style={{ left: `${visibleSnipRect.left}px`, top: `${visibleSnipRect.top}px`, width: `${visibleSnipRect.width}px`, height: `${visibleSnipRect.height}px` }} />}
 //                             {isActiveTab && isMagnifierOn && magnifier.visible && <div className="pointer-events-none absolute z-40 h-52 w-72 overflow-hidden rounded-xl border border-slate-300 bg-white shadow-2xl ring-4 ring-white/80" style={{ left: `${magnifier.x + 20}px`, top: `${magnifier.y + 20}px`, backgroundImage: magnifier.bg ? `url(${magnifier.bg})` : undefined, backgroundRepeat: "no-repeat", backgroundSize: magnifier.bgWidth && magnifier.bgHeight ? `${magnifier.bgWidth}px ${magnifier.bgHeight}px` : undefined, backgroundPosition: magnifier.bg ? `${144 - magnifier.x * 3}px ${104 - magnifier.y * 3}px` : undefined }} />}
 //                           </div>
@@ -790,18 +1141,20 @@
 
 //               <div className="relative min-h-0 flex-1 p-3">
 //                 {isReading && <div className="absolute left-1/2 top-5 z-10 -translate-x-1/2 rounded-full border border-slate-200 bg-white/95 px-3 py-1.5 text-xs text-slate-600 shadow-sm">Reading...</div>}
-//                 <textarea value={capturedText} onChange={(e) => setCapturedText(e.target.value)} placeholder="Captured or extracted PDF text will appear here." className={`h-full min-h-[220px] w-full resize-none rounded-xl border border-slate-300 bg-white p-3 font-['Aptos','Segoe_UI',sans-serif] text-[12px] leading-5 text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 ${searchText ? "opacity-0" : ""}`} />
-//                 {searchText && <div className="pointer-events-none absolute inset-3 overflow-auto whitespace-pre-wrap rounded-xl border border-slate-300 bg-white p-3 font-['Aptos','Segoe_UI',sans-serif] text-[12px] leading-5 text-slate-800" dangerouslySetInnerHTML={{ __html: buildHighlightedHtml(capturedText || "Captured or extracted PDF text will appear here.", searchText) }} />}
+//                 <textarea value={capturedText} onChange={(e) => setCapturedText(e.target.value)} placeholder="Captured or extracted file text will appear here." className={`h-full min-h-[220px] w-full resize-none rounded-xl border border-slate-300 bg-white p-3 font-['Aptos','Segoe_UI',sans-serif] text-[12px] leading-5 text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 ${searchText ? "opacity-0" : ""}`} />
+//                 {searchText && <div className="pointer-events-none absolute inset-3 overflow-auto whitespace-pre-wrap rounded-xl border border-slate-300 bg-white p-3 font-['Aptos','Segoe_UI',sans-serif] text-[12px] leading-5 text-slate-800" dangerouslySetInnerHTML={{ __html: buildHighlightedHtml(capturedText || "Captured or extracted file text will appear here.", searchText) }} />}
 //               </div>
 //             </div>
 //           </div>
 //         </div>
 //       </div>
-//     </>
+//     </>,
+//     document.body
 //   );
 // };
 
 // export default PdfTextCaptureModal;
+
 
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -823,6 +1176,7 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { Document, Page, pdfjs } from "react-pdf";
+import { recognize } from "tesseract.js";
 import workerSrc from "pdfjs-dist/build/pdf.worker.min.js?url";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
@@ -837,6 +1191,7 @@ const SCALE_STEP = 0.15;
 const MAX_PDF_FILES = 5;
 const MAX_PDF_SIZE_MB = 25;
 const MAX_PDF_SIZE_BYTES = MAX_PDF_SIZE_MB * 1024 * 1024;
+const EMPTY_EXTERNAL_FILES = [];
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
@@ -847,36 +1202,114 @@ const cleanText = (value = "") =>
     .replace(/\n{4,}/g, "\n\n\n")
     .trim();
 
+const withTimeout = (promise, timeoutMs, message) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    }),
+  ]);
+
 const safeFileName = (name = "captured-text") =>
   String(name || "captured-text")
-    .replace(/\.pdf$/i, "")
+    .replace(/\.(pdf|png|jpg|jpeg|webp)$/i, "")
     .replace(/[\\/:*?"<>|]/g, "-")
     .trim() || "captured-text";
+
+const isImageFile = (file = {}) => {
+  const type = file.type || file.blob?.type || file.file?.type || "";
+  const name = String(file.name || file.file?.name || file.url || "").toLowerCase();
+
+  return (
+    type.startsWith("image/") ||
+    name.endsWith(".png") ||
+    name.endsWith(".jpg") ||
+    name.endsWith(".jpeg") ||
+    name.endsWith(".webp")
+  );
+};
+
+const isPdfFile = (file = {}) =>
+  file.type === "application/pdf" ||
+  file.blob?.type === "application/pdf" ||
+  file.file?.type === "application/pdf" ||
+  String(file.name || file.file?.name || file.url || "").toLowerCase().endsWith(".pdf");
+
+const getReadableFileKind = (file = {}) => {
+  if (isPdfFile(file)) return "pdf";
+  if (isImageFile(file)) return "image";
+  return "";
+};
+
+const getExternalFileSignature = (file = {}, index = 0) => {
+  const source = file.blob || file.file || file.url || file;
+  const name = file.name || source?.name || file.url || "";
+  const size = file.size || source?.size || "";
+  const lastModified = file.lastModified || source?.lastModified || "";
+  const type = file.type || source?.type || file.kind || "";
+
+  return [file.id || "", name, size, lastModified, type, index].join(":");
+};
+
+const getTextItemsByVisualRows = (items = [], rowTolerance = 5) => {
+  const textItems = items
+    .map((item) => ({
+      text: item.str || "",
+      x: item.transform?.[4] ?? 0,
+      y: item.transform?.[5] ?? 0,
+    }))
+    .filter((item) => item.text.trim());
+
+  const rows = [];
+
+  textItems
+    .sort((a, b) => b.y - a.y || a.x - b.x)
+    .forEach((item) => {
+      const row = rows.find((entry) => Math.abs(entry.y - item.y) <= rowTolerance);
+
+      if (row) {
+        row.items.push(item);
+        row.y = (row.y + item.y) / 2;
+      } else {
+        rows.push({
+          y: item.y,
+          items: [item],
+        });
+      }
+    });
+
+  return rows
+    .sort((a, b) => b.y - a.y)
+    .map((row) =>
+      row.items
+        .sort((a, b) => a.x - b.x)
+        .map((item) => item.text)
+        .join(" ")
+        .replace(/[ \t]+/g, " ")
+        .trim()
+    )
+    .filter(Boolean);
+};
 
 const getPdfTextByPage = async (pdf, pageNumber) => {
   const page = await pdf.getPage(pageNumber);
   const content = await page.getTextContent();
+  const lines = getTextItemsByVisualRows(content.items, 5);
 
-  let lastY = null;
-  const lines = [];
-  let currentLine = "";
-
-  content.items.forEach((item) => {
-    const text = item.str || "";
-    const y = item.transform?.[5] ?? 0;
-
-    if (lastY !== null && Math.abs(y - lastY) > 5) {
-      if (currentLine.trim()) lines.push(currentLine.trim());
-      currentLine = text;
-    } else {
-      currentLine += `${currentLine ? " " : ""}${text}`;
-    }
-
-    lastY = y;
-  });
-
-  if (currentLine.trim()) lines.push(currentLine.trim());
   return cleanText(lines.join("\n"));
+};
+
+const renderPdfPageToCanvas = async (pdf, pageNumber, scale = 2) => {
+  const page = await pdf.getPage(pageNumber);
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+
+  await page.render({ canvasContext: context, viewport }).promise;
+  return canvas;
 };
 
 const getRectFromPoints = (start, end) => {
@@ -892,6 +1325,54 @@ const rectsIntersect = (a, b) => {
   if (!a || !b) return false;
   return !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
 };
+
+const getSelectedSpanTextByRows = (spans = [], selectionBox = null, rowTolerance = 5) => {
+  const selectedSpans = spans
+    .filter((span) => rectsIntersect(selectionBox, span.getBoundingClientRect()))
+    .map((span) => {
+      const box = span.getBoundingClientRect();
+
+      return {
+        text: span.textContent || "",
+        x: box.left,
+        y: box.top,
+      };
+    })
+    .filter((item) => item.text.trim());
+
+  const rows = [];
+
+  selectedSpans
+    .sort((a, b) => a.y - b.y || a.x - b.x)
+    .forEach((item) => {
+      const row = rows.find((entry) => Math.abs(entry.y - item.y) <= rowTolerance);
+
+      if (row) {
+        row.items.push(item);
+        row.y = (row.y + item.y) / 2;
+      } else {
+        rows.push({
+          y: item.y,
+          items: [item],
+        });
+      }
+    });
+
+  return rows
+    .sort((a, b) => a.y - b.y)
+    .map((row) =>
+      row.items
+        .sort((a, b) => a.x - b.x)
+        .map((item) => item.text)
+        .join(" ")
+        .replace(/[ \t]+/g, " ")
+        .trim()
+    )
+    .filter(Boolean)
+    .join("\n");
+};
+
+
 
 const buildHighlightedHtml = (text, query) => {
   const q = String(query || "").trim();
@@ -911,7 +1392,7 @@ const PdfTextCaptureModal = ({
   initialText = "",
   onApply,
   externalFile = null,
-  externalFiles = [],
+  externalFiles = EMPTY_EXTERNAL_FILES,
 }) => {
   const [pdfFiles, setPdfFiles] = useState([]);
   const [activePdfId, setActivePdfId] = useState(null);
@@ -932,6 +1413,7 @@ const PdfTextCaptureModal = ({
   const [searchText, setSearchText] = useState("");
   const [rightPaneWidth, setRightPaneWidth] = useState(380);
   const [isPaneResizing, setIsPaneResizing] = useState(false);
+  const [isCapturedTextMaximized, setIsCapturedTextMaximized] = useState(false);
 
   const pdfDocsRef = useRef({});
   const fileInputRef = useRef(null);
@@ -960,10 +1442,18 @@ const PdfTextCaptureModal = ({
     [pdfFiles, activePdfId]
   );
 
-  const activePdfDoc = activePdf ? pdfDocsRef.current[activePdf.id] : null;
+  const activeFileKind = activePdf?.kind || getReadableFileKind(activePdf?.file || activePdf || {});
+  const isActiveImage = activeFileKind === "image";
+  const activePdfDoc = activeFileKind === "pdf" && activePdf ? pdfDocsRef.current[activePdf.id] : null;
   const pageNumber = activePdf?.pageNumber || 1;
-  const numPages = activePdf?.numPages || 0;
+  const numPages = isActiveImage ? 1 : activePdf?.numPages || 0;
   const fileUrl = activePdf?.url || "";
+  const externalSourceSignature =
+    Array.isArray(externalFiles) && externalFiles.length > 0
+      ? externalFiles.map(getExternalFileSignature).join("|")
+      : externalFile
+        ? getExternalFileSignature(externalFile)
+        : "";
 
   useEffect(() => {
     pageShellRef.current = activePdfId ? pageShellRefs.current[activePdfId] || null : null;
@@ -974,10 +1464,10 @@ const PdfTextCaptureModal = ({
 
     const timer = window.setTimeout(() => {
       setIsPageRendering(false);
-    }, 1800);
+    }, isActiveImage ? 300 : 1800);
 
     return () => window.clearTimeout(timer);
-  }, [isPageRendering, activePdfId, pageNumber, scale]);
+  }, [isPageRendering, activePdfId, pageNumber, scale, isActiveImage]);
 
   const updateActivePdf = (updates) => {
     if (!activePdfId) return;
@@ -1016,6 +1506,7 @@ const PdfTextCaptureModal = ({
     setSnipEnd(null);
     setSnipRect(null);
     setSearchText("");
+    setIsCapturedTextMaximized(false);
     setMagnifier({ visible: false, x: 0, y: 0, bg: "", bgWidth: 0, bgHeight: 0 });
     pdfDocsRef.current = {};
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -1039,22 +1530,31 @@ const PdfTextCaptureModal = ({
           : [];
 
       if (sourceFiles.length > 0) {
-        const nextTabs = sourceFiles.map((file, index) => ({
-          id: `ext-${Date.now()}-${index}`,
-          identity: `ext-${file.id || file.name || index}`,
-          file: file.blob || file.url,
-          name: file.name || `PDF ${index + 1}`,
-          url: file.url,
-          pageNumber: 1,
-          numPages: 0,
-        }));
+        const nextTabs = sourceFiles
+          .map((file, index) => {
+            const source = file.blob || file.file || file.url || file;
+            const kind = file.kind || getReadableFileKind(file) || getReadableFileKind(source);
+            if (!kind) return null;
+
+            return {
+              id: `ext-${Date.now()}-${index}`,
+              identity: `ext-${file.id || file.name || index}`,
+              file: source,
+              name: file.name || `${kind === "image" ? "Image" : "PDF"} ${index + 1}`,
+              url: file.url || (source instanceof Blob ? URL.createObjectURL(source) : source),
+              kind,
+              pageNumber: 1,
+              numPages: kind === "image" ? 1 : 0,
+            };
+          })
+          .filter(Boolean);
 
         setPdfFiles(nextTabs);
         setActivePdfId(nextTabs[0]?.id || null);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, initialText, externalFile, externalFiles]);
+  }, [isOpen, initialText, externalSourceSignature]);
 
   useEffect(() => {
     setSnipStart(null);
@@ -1067,14 +1567,14 @@ const PdfTextCaptureModal = ({
     }
 
     // When switching back to an already loaded tab, do not keep showing the loader.
-    setIsPageRendering(!pdfDocsRef.current[activePdfId]);
-  }, [activePdfId, fileUrl]);
+    setIsPageRendering(activeFileKind === "pdf" && !pdfDocsRef.current[activePdfId]);
+  }, [activePdfId, fileUrl, activeFileKind]);
 
   useEffect(() => {
-    if (!fileUrl || !activePdfDoc) return;
+    if (!fileUrl || !activePdfDoc || activeFileKind !== "pdf") return;
     window.requestAnimationFrame(() => fitPdfToViewer(activePdfDoc, pageNumber, activePdfId));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePdfId, pageNumber, rightPaneWidth, fileUrl]);
+  }, [activePdfId, pageNumber, rightPaneWidth, fileUrl, activeFileKind]);
 
   useEffect(() => {
     if (!isPaneResizing) return;
@@ -1120,9 +1620,10 @@ const PdfTextCaptureModal = ({
   };
 
   const pageLabel = useMemo(() => {
+    if (isActiveImage) return "Image file";
     if (!numPages) return "No PDF loaded";
     return `Page ${pageNumber} of ${numPages}`;
-  }, [numPages, pageNumber]);
+  }, [isActiveImage, numPages, pageNumber]);
 
   const modalClassName = isMaximized
     ? "grid h-[100dvh] w-screen grid-rows-[auto_minmax(0,1fr)] overflow-hidden border border-slate-200 bg-white shadow-2xl"
@@ -1133,12 +1634,10 @@ const PdfTextCaptureModal = ({
 
   const handleFileChange = (event) => {
     const rawFiles = Array.from(event.target.files || []);
-    const selectedFiles = rawFiles.filter(
-      (item) => item.type === "application/pdf" || item.name?.toLowerCase().endsWith(".pdf")
-    );
+    const selectedFiles = rawFiles.filter((item) => getReadableFileKind(item));
 
     if (!selectedFiles.length) {
-      setLoadError("Please select valid PDF file(s).");
+      setLoadError("Please select valid PDF or image file(s).");
       if (event.target) event.target.value = "";
       return;
     }
@@ -1146,7 +1645,7 @@ const PdfTextCaptureModal = ({
     const oversizedFile = selectedFiles.find((item) => item.size > MAX_PDF_SIZE_BYTES);
     if (oversizedFile) {
       setLoadError(
-        `"${oversizedFile.name}" is too large. Maximum PDF size is ${MAX_PDF_SIZE_MB}MB per file.`
+        `"${oversizedFile.name}" is too large. Maximum file size is ${MAX_PDF_SIZE_MB}MB per file.`
       );
       if (event.target) event.target.value = "";
       return;
@@ -1173,25 +1672,27 @@ const PdfTextCaptureModal = ({
       });
 
       if (!availableSlots && !tabToActivate) {
-        setLoadError(`Maximum of ${MAX_PDF_FILES} PDF files only.`);
+        setLoadError(`Maximum of ${MAX_PDF_FILES} files only.`);
         return prev;
       }
 
       if (uniqueNewFiles.length < selectedFiles.filter((selectedFile) => !existingByIdentity.has(getPdfIdentity(selectedFile))).length) {
-        setLoadError(`Only ${MAX_PDF_FILES} PDF files can be opened at a time.`);
+        setLoadError(`Only ${MAX_PDF_FILES} files can be opened at a time.`);
       } else {
         setLoadError("");
       }
 
       const newTabs = uniqueNewFiles.map(({ selectedFile, identity }) => {
+        const kind = getReadableFileKind(selectedFile);
         const nextTab = {
           id: `${Date.now()}-${Math.random().toString(36).slice(2)}-${selectedFile.name}`,
           identity,
           file: selectedFile,
           name: selectedFile.name,
           url: URL.createObjectURL(selectedFile),
+          kind,
           pageNumber: 1,
-          numPages: 0,
+          numPages: kind === "image" ? 1 : 0,
         };
         tabToActivate = nextTab.id;
         return nextTab;
@@ -1225,6 +1726,40 @@ const PdfTextCaptureModal = ({
     const selectedText = cleanText(window.getSelection?.().toString() || "");
     appendText(selectedText);
     window.getSelection?.().removeAllRanges?.();
+  };
+
+  const loadPdfDocumentFromSource = async (source) => {
+    if (!source) return null;
+
+    if (source instanceof Blob) {
+      const data = new Uint8Array(await source.arrayBuffer());
+      return pdfjs.getDocument({ data, disableWorker: true }).promise;
+    }
+
+    if (typeof source === "string") {
+      const response = await fetch(source);
+      const data = new Uint8Array(await response.arrayBuffer());
+      return pdfjs.getDocument({ data, disableWorker: true }).promise;
+    }
+
+    return pdfjs.getDocument({ data: source, disableWorker: true }).promise;
+  };
+
+  const ensureActivePdfDocument = async () => {
+    if (activePdfDoc) return activePdfDoc;
+    if (!activePdf || isActiveImage) return null;
+
+    const pdf = await loadPdfDocumentFromSource(activePdf.file || activePdf.url);
+    if (!pdf) return null;
+
+    pdfDocsRef.current[activePdf.id] = pdf;
+    setPdfFiles((prev) =>
+      prev.map((item) =>
+        item.id === activePdf.id ? { ...item, numPages: pdf.numPages || item.numPages || 0 } : item
+      )
+    );
+
+    return pdf;
   };
 
   const getPointFromEvent = (event) => {
@@ -1290,10 +1825,86 @@ const PdfTextCaptureModal = ({
     window.requestAnimationFrame(() => captureSnippedText(rect));
   };
 
-  const captureSnippedText = (overrideRect = null) => {
+  const recognizeImageSource = async (source) => {
+    const result = await recognize(source, "eng", {
+      logger: (message) => {
+        if (!message?.status) return;
+        if (message.status === "recognizing text") {
+          setLoadError(`Reading text... ${Math.round((message.progress || 0) * 100)}%`);
+        }
+      },
+    });
+
+    setLoadError("");
+    return cleanText(result?.data?.text || "");
+  };
+
+  const cropImageSelectionToCanvas = (shell, targetRect) => {
+    const image = shell?.querySelector("img");
+    if (!image || !targetRect || !image.naturalWidth || !image.naturalHeight) return null;
+
+    const shellBox = shell.getBoundingClientRect();
+    const imageBox = image.getBoundingClientRect();
+    const imageLeft = imageBox.left - shellBox.left;
+    const imageTop = imageBox.top - shellBox.top;
+    const displayLeft = clamp(targetRect.left - imageLeft, 0, imageBox.width);
+    const displayTop = clamp(targetRect.top - imageTop, 0, imageBox.height);
+    const displayRight = clamp(targetRect.left + targetRect.width - imageLeft, 0, imageBox.width);
+    const displayBottom = clamp(targetRect.top + targetRect.height - imageTop, 0, imageBox.height);
+    const displayWidth = displayRight - displayLeft;
+    const displayHeight = displayBottom - displayTop;
+
+    if (displayWidth < 2 || displayHeight < 2) return null;
+
+    const scaleX = image.naturalWidth / imageBox.width;
+    const scaleY = image.naturalHeight / imageBox.height;
+    const canvas = document.createElement("canvas");
+
+    canvas.width = Math.max(1, Math.round(displayWidth * scaleX));
+    canvas.height = Math.max(1, Math.round(displayHeight * scaleY));
+    canvas
+      .getContext("2d")
+      ?.drawImage(
+        image,
+        Math.round(displayLeft * scaleX),
+        Math.round(displayTop * scaleY),
+        canvas.width,
+        canvas.height,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+
+    return canvas;
+  };
+
+  const captureSnippedText = async (overrideRect = null) => {
     const shell = pageShellRef.current;
     const targetRect = overrideRect || snipRect;
     if (!shell || !targetRect) return;
+
+    if (isActiveImage) {
+      try {
+        setIsReading(true);
+        const canvas = cropImageSelectionToCanvas(shell, targetRect);
+        if (!canvas) {
+          setLoadError("Unable to read the selected image area.");
+          return;
+        }
+        appendText(await recognizeImageSource(canvas));
+      } catch (error) {
+        console.error("Unable to read selected image area:", error);
+        setLoadError("Unable to read the selected image area.");
+      } finally {
+        setIsReading(false);
+        setSnipStart(null);
+        setSnipEnd(null);
+        setSnipRect(null);
+        setIsSnipMode(false);
+      }
+      return;
+    }
 
     const shellBox = shell.getBoundingClientRect();
     const selectionBox = {
@@ -1304,10 +1915,7 @@ const PdfTextCaptureModal = ({
     };
 
     const spans = Array.from(shell.querySelectorAll(".react-pdf__Page__textContent span"));
-    const text = spans
-      .filter((span) => rectsIntersect(selectionBox, span.getBoundingClientRect()))
-      .map((span) => span.textContent || "")
-      .join(" ");
+    const text = getSelectedSpanTextByRows(spans, selectionBox, 5);
 
     const capturedValue = text || window.getSelection?.().toString() || "";
     appendText(capturedValue);
@@ -1320,31 +1928,138 @@ const PdfTextCaptureModal = ({
   };
 
   const readCurrentPage = async () => {
-    if (!activePdfDoc) return;
+    if (!activePdf && !isActiveImage) return;
     try {
       setIsReading(true);
-      appendText(await getPdfTextByPage(activePdfDoc, pageNumber));
+      setLoadError("");
+
+      if (isActiveImage) {
+        const imageSource = activePdf?.url || activePdf?.file;
+        if (!imageSource) {
+          setLoadError("No image is loaded.");
+          return;
+        }
+
+        const text = await recognizeImageSource(imageSource);
+        if (!text) {
+          setLoadError("No readable text was found in this image.");
+          return;
+        }
+
+        appendText(text);
+        return;
+      }
+
+      const pdf = await ensureActivePdfDocument();
+      if (!pdf) {
+        setLoadError("No PDF is loaded.");
+        return;
+      }
+
+      let text = await getPdfTextByPage(pdf, pageNumber);
+      if (!text) {
+        setLoadError("No selectable text found. Reading page with OCR...");
+        const canvas = await renderPdfPageToCanvas(pdf, pageNumber);
+        text = await recognizeImageSource(canvas);
+      }
+
+      if (!text) {
+        setLoadError("No readable text was found on this page.");
+        return;
+      }
+
+      appendText(text);
     } catch (error) {
-      console.error("Unable to read current page:", error);
-      setLoadError("Unable to read the current page.");
+      console.error("Unable to read current file:", error);
+      setLoadError(isActiveImage ? "Unable to read text from this image." : "Unable to read the current page.");
     } finally {
       setIsReading(false);
     }
   };
 
   const readEntirePdf = async () => {
-    if (!activePdfDoc || !numPages) return;
+    if (!activePdf && !isActiveImage) return;
     try {
       setIsReading(true);
-      const pageTexts = [];
-      for (let page = 1; page <= numPages; page += 1) {
-        const pageText = await getPdfTextByPage(activePdfDoc, page);
-        if (pageText) pageTexts.push(`Page ${page}\n${pageText}`);
+      setLoadError("");
+
+      if (isActiveImage) {
+        const imageSource = activePdf?.url || activePdf?.file;
+        if (!imageSource) {
+          setLoadError("No image is loaded.");
+          return;
+        }
+
+        const text = await recognizeImageSource(imageSource);
+        if (!text) {
+          setCapturedText("");
+          setLoadError("No readable text was found in this image.");
+          return;
+        }
+
+        setCapturedText(text);
+        return;
       }
+
+      const pdf = await ensureActivePdfDocument();
+      const totalPages = pdf?.numPages || numPages;
+      if (!pdf || !totalPages) {
+        setLoadError("No PDF is loaded.");
+        return;
+      }
+
+      const pageTexts = [];
+      setCapturedText("");
+      for (let page = 1; page <= totalPages; page += 1) {
+        setLoadError(`Reading page ${page} of ${totalPages}...`);
+        let pageText = "";
+
+        try {
+          pageText = await withTimeout(
+            getPdfTextByPage(pdf, page),
+            10000,
+            `Text extraction timed out on page ${page}.`
+          );
+        } catch (error) {
+          console.warn(error);
+        }
+
+        if (!pageText) {
+          try {
+            setLoadError(`No selectable text on page ${page}. Reading with OCR...`);
+            const canvas = await withTimeout(
+              renderPdfPageToCanvas(pdf, page),
+              15000,
+              `PDF page render timed out on page ${page}.`
+            );
+            pageText = await withTimeout(
+              recognizeImageSource(canvas),
+              45000,
+              `OCR timed out on page ${page}.`
+            );
+          } catch (error) {
+            console.warn(error);
+          }
+        }
+
+        if (pageText) {
+          const nextPageText = `Page ${page}\n${pageText}`;
+          pageTexts.push(nextPageText);
+          setCapturedText(cleanText(pageTexts.join("\n\n")));
+        }
+      }
+
+      if (!pageTexts.length) {
+        setCapturedText("");
+        setLoadError("No readable text was found in this PDF.");
+        return;
+      }
+
+      setLoadError("");
       setCapturedText(cleanText(pageTexts.join("\n\n")));
     } catch (error) {
-      console.error("Unable to read PDF:", error);
-      setLoadError("Unable to read the entire PDF.");
+      console.error("Unable to read file:", error);
+      setLoadError(isActiveImage ? "Unable to read text from this image." : "Unable to read the entire PDF.");
     } finally {
       setIsReading(false);
     }
@@ -1412,6 +2127,7 @@ const PdfTextCaptureModal = ({
     setActivePdfId(null);
     setCapturedText("");
     setSearchText("");
+    setIsCapturedTextMaximized(false);
     setLoadError("");
     setIsReading(false);
     setIsCopied(false);
@@ -1481,18 +2197,18 @@ const PdfTextCaptureModal = ({
                 <FileText className="h-4 w-4 text-slate-500" aria-hidden="true" />
                 <h2 className="truncate text-base font-semibold text-slate-900">{title}</h2>
               </div>
-              <p className="mt-0.5 text-xs text-slate-500">Preview, Shift + mouse wheel to zoom the active PDF, snip-highlight, capture selected text, or read the full PDF.</p>
+              <p className="mt-0.5 text-xs text-slate-500">Preview, Shift + mouse wheel to zoom the active file, snip-highlight, capture selected text, or read the full PDF.</p>
             </div>
             <div className="flex items-center gap-2">
-              <input ref={fileInputRef} type="file" accept="application/pdf" multiple className="hidden" onChange={handleFileChange} />
+              <input ref={fileInputRef} type="file" accept="application/pdf,image/*,.pdf,.png,.jpg,.jpeg,.webp" multiple className="hidden" onChange={handleFileChange} />
               <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => fileInputRef.current?.click()}>
-                <Upload className="h-3.5 w-3.5" /> Browse PDF
+                <Upload className="h-3.5 w-3.5" /> Browse PDF / Image
               </button>
               <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" disabled={!fileUrl || isReading} onClick={readEntirePdf}>
-                <BookOpen className="h-3.5 w-3.5" /> Read entire PDF
+                <BookOpen className="h-3.5 w-3.5" /> Read All
               </button>
               <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" disabled={!pdfFiles.length} onClick={removeAllPdf}>
-                <Trash2 className="h-3.5 w-3.5" /> Remove All PDF
+                <Trash2 className="h-3.5 w-3.5" /> Remove All
               </button>
               <button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50" onClick={() => setIsMinimized(true)} title="Minimize"><Minus className="h-4 w-4" /></button>
               <button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50" onClick={() => setIsMaximized((prev) => !prev)} title={isMaximized ? "Restore" : "Maximize"}>{isMaximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button>
@@ -1548,7 +2264,7 @@ const PdfTextCaptureModal = ({
                 )}
                 {!fileUrl ? (
                   <div className="flex h-full min-h-[420px] items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center">
-                    <div><Search className="mx-auto h-7 w-7 text-slate-300" /><div className="mt-3 text-sm font-medium text-slate-700">Select PDF file(s) to preview</div><div className="mt-1 text-xs text-slate-500">Multiple PDFs will appear as sheet-style tabs.</div></div>
+                    <div><Search className="mx-auto h-7 w-7 text-slate-300" /><div className="mt-3 text-sm font-medium text-slate-700">Select PDF or image file(s) to preview</div><div className="mt-1 text-xs text-slate-500">Multiple files will appear as sheet-style tabs.</div></div>
                   </div>
                 ) : (
                   <div className="inline-block min-w-full bg-white p-0 shadow-sm">
@@ -1568,6 +2284,24 @@ const PdfTextCaptureModal = ({
                             onMouseUp={isActiveTab ? handleSnipMouseUp : undefined}
                             onWheel={isActiveTab ? handleViewerWheel : undefined}
                           >
+                            {item.kind === "image" ? (
+                              <img
+                                src={item.url}
+                                alt={item.name || "Uploaded image"}
+                                draggable={false}
+                                className="block max-w-none select-none"
+                                style={{ width: `${Math.max(20, Math.round(scale * 100))}%`, userSelect: "none" }}
+                                onLoad={() => {
+                                  if (isActiveTab) setIsPageRendering(false);
+                                }}
+                                onError={() => {
+                                  if (isActiveTab) {
+                                    setLoadError("Unable to preview this image.");
+                                    setIsPageRendering(false);
+                                  }
+                                }}
+                              />
+                            ) : (
                             <Document
                               file={item.file}
                               loading={<div className="flex h-[360px] min-w-[260px] items-center justify-center text-xs text-slate-500">Loading PDF...</div>}
@@ -1599,6 +2333,7 @@ const PdfTextCaptureModal = ({
                                 onRenderError={() => { if (isActiveTab) setIsPageRendering(false); }}
                               />
                             </Document>
+                            )}
                             {isActiveTab && visibleSnipRect && <div className="pointer-events-none absolute border border-blue-500 bg-blue-400/20 shadow-[0_0_0_9999px_rgba(15,23,42,0.08)]" style={{ left: `${visibleSnipRect.left}px`, top: `${visibleSnipRect.top}px`, width: `${visibleSnipRect.width}px`, height: `${visibleSnipRect.height}px` }} />}
                             {isActiveTab && isMagnifierOn && magnifier.visible && <div className="pointer-events-none absolute z-40 h-52 w-72 overflow-hidden rounded-xl border border-slate-300 bg-white shadow-2xl ring-4 ring-white/80" style={{ left: `${magnifier.x + 20}px`, top: `${magnifier.y + 20}px`, backgroundImage: magnifier.bg ? `url(${magnifier.bg})` : undefined, backgroundRepeat: "no-repeat", backgroundSize: magnifier.bgWidth && magnifier.bgHeight ? `${magnifier.bgWidth}px ${magnifier.bgHeight}px` : undefined, backgroundPosition: magnifier.bg ? `${144 - magnifier.x * 3}px ${104 - magnifier.y * 3}px` : undefined }} />}
                           </div>
@@ -1612,11 +2347,21 @@ const PdfTextCaptureModal = ({
 
             <div className="relative cursor-col-resize bg-slate-100 hover:bg-blue-100" onMouseDown={() => setIsPaneResizing(true)} title="Drag to resize captured text panel"><div className="absolute left-1/2 top-1/2 h-12 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-300" /></div>
 
-            <div className="flex min-h-0 flex-col border-l border-slate-200 bg-white">
+            {isCapturedTextMaximized && <div className="fixed inset-0 z-[1000001] bg-slate-950/35" />}
+
+            <div className={`flex min-h-0 flex-col border-l border-slate-200 bg-white ${
+              isCapturedTextMaximized
+                ? "fixed inset-4 z-[1000002] rounded-2xl border border-slate-200 shadow-2xl"
+                : ""
+            }`}>
               <div className="border-b border-slate-200 px-3 py-2">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0"><div className="text-sm font-semibold text-slate-800">Captured Text</div><div className="text-xs text-slate-500">Capture or search text.</div></div>
+                  <div className="min-w-0" />
                   <div className="flex items-center gap-1.5">
+                    <button type="button" className="inline-flex min-w-[92px] items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => setIsCapturedTextMaximized((prev) => !prev)}>
+                      {isCapturedTextMaximized ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+                      {isCapturedTextMaximized ? "Restore" : "Maximize"}
+                    </button>
                     <button type="button" className="inline-flex min-w-[78px] items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50" disabled={!capturedText.trim()} onClick={copyCapturedText}><ClipboardCopy className="h-3.5 w-3.5" />{isCopied ? "Copied" : "Copy"}</button>
                     <button type="button" className="inline-flex min-w-[78px] items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50" disabled={!capturedText.trim()} onClick={downloadCapturedText}><Download className="h-3.5 w-3.5" />TXT</button>
                     <button type="button" className="inline-flex min-w-[78px] items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50" disabled={!capturedText || isReading} onClick={() => setCapturedText("")} title="Clear captured text"><Trash2 className="h-3.5 w-3.5" />Clear</button>
@@ -1635,8 +2380,8 @@ const PdfTextCaptureModal = ({
 
               <div className="relative min-h-0 flex-1 p-3">
                 {isReading && <div className="absolute left-1/2 top-5 z-10 -translate-x-1/2 rounded-full border border-slate-200 bg-white/95 px-3 py-1.5 text-xs text-slate-600 shadow-sm">Reading...</div>}
-                <textarea value={capturedText} onChange={(e) => setCapturedText(e.target.value)} placeholder="Captured or extracted PDF text will appear here." className={`h-full min-h-[220px] w-full resize-none rounded-xl border border-slate-300 bg-white p-3 font-['Aptos','Segoe_UI',sans-serif] text-[12px] leading-5 text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 ${searchText ? "opacity-0" : ""}`} />
-                {searchText && <div className="pointer-events-none absolute inset-3 overflow-auto whitespace-pre-wrap rounded-xl border border-slate-300 bg-white p-3 font-['Aptos','Segoe_UI',sans-serif] text-[12px] leading-5 text-slate-800" dangerouslySetInnerHTML={{ __html: buildHighlightedHtml(capturedText || "Captured or extracted PDF text will appear here.", searchText) }} />}
+                <textarea value={capturedText} onChange={(e) => setCapturedText(e.target.value)} placeholder="Captured or extracted file text will appear here." className={`h-full min-h-[220px] w-full resize-none rounded-xl border border-slate-300 bg-white p-3 font-['Aptos','Segoe_UI',sans-serif] text-[12px] leading-5 text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 ${searchText ? "opacity-0" : ""}`} />
+                {searchText && <div className="pointer-events-none absolute inset-3 overflow-auto whitespace-pre-wrap rounded-xl border border-slate-300 bg-white p-3 font-['Aptos','Segoe_UI',sans-serif] text-[12px] leading-5 text-slate-800" dangerouslySetInnerHTML={{ __html: buildHighlightedHtml(capturedText || "Captured or extracted file text will appear here.", searchText) }} />}
               </div>
             </div>
           </div>
