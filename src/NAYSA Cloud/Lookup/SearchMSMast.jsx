@@ -1,348 +1,582 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faTimes, faSpinner } from "@fortawesome/free-solid-svg-icons";
+import {
+  faCheckSquare,
+  faEraser,
+  faSearch,
+  faSort,
+  faSpinner,
+  faSyncAlt,
+  faTimes,
+} from "@fortawesome/free-solid-svg-icons";
 import { fetchData } from "../Configuration/BaseURL";
 
-const MSLookupModal = ({ isOpen, onClose, customParam }) => {
+function useDebounce(value, delay) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
+const columns = [
+  { key: "itemCode", label: "Item Code", width: "120px", classNames: "text-left" },
+  { key: "itemName", label: "Item Name", width: "250px", classNames: "text-left" },
+  { key: "uomCode", label: "UOM", width: "100px", classNames: "text-left" },
+  { key: "qtyOnHand", label: "Quantity on Hand", width: "140px", classNames: "text-right" },
+  { key: "categCode", label: "Category", width: "110px", classNames: "text-left" },
+  // { key: "categDesc", label: "Category Name", width: "200px", classNames: "text-left" },
+  { key: "classCode", label: "Classification", width: "110px", classNames: "text-left" },
+  // { key: "classDesc", label: "Class Name", width: "220px", classNames: "text-left" },
+];
+
+const createFilterObject = () =>
+  columns.reduce((acc, col) => {
+    acc[col.key] = "";
+    return acc;
+  }, {});
+
+const MSLookupModal = ({
+  isOpen,
+  onClose,
+  customParam,
+  enableMultiSelect = false,
+  onGetSelectedItems,
+  selectedItems: externalSelectedItems = [],
+}) => {
   const [items, setItems] = useState([]);
-  const [filtered, setFiltered] = useState([]);
-  const [filters, setFilters] = useState({
-    itemNo: "",
-    itemDesc: "",
-    categCode: "",
-    categDesc: "",
-    classCode: "",
-    classDesc: "",
-  });
+  const [filters, setFilters] = useState(createFilterObject);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
+  const [searchMode, setSearchMode] = useState("part");
+  const [sortConfig, setSortConfig] = useState({ key: "", direction: "asc" });
+  const [internalSelectedItems, setInternalSelectedItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // ===== LOAD DATA WHEN OPEN =====
-  useEffect(() => {
-    if (!isOpen) {
-      setItems([]);
-      setFiltered([]);
-      setFilters({
-        itemNo: "",
-        itemDesc: "",
-        categCode: "",
-        categDesc: "",
-        classCode: "",
-        classDesc: "",
-      });
-      setError(null);
-      return;
-    }
+  const debouncedFilters = useDebounce(filters, 300);
+  const selectedItems =
+    externalSelectedItems?.length > 0 ? externalSelectedItems : internalSelectedItems;
 
+  const getRowUniqueKey = (row) => String(row?.itemCode ?? row?.groupId ?? "");
+
+  const selectedItemKeys = useMemo(() => {
+    return new Set((selectedItems || []).map((item) => getRowUniqueKey(item)));
+  }, [selectedItems]);
+
+  const fetchMSItems = () => {
     setLoading(true);
     setError(null);
 
     const params = {
       PARAMS: JSON.stringify({
-        search: "", // currently only used to decide "Active" etc. in sproc
+        search: customParam || "",
         page: 1,
         pageSize: 10,
       }),
     };
 
-    console.log("📤 MS LOOKUP fetchData() ROUTE:", "lookupMSMast");
-console.log("📤 MS LOOKUP PARAMS (raw):", params);
-try {
-  console.log("📤 MS LOOKUP PARAMS.JSON_DATA:", JSON.parse(params?.PARAMS || "{}"));
-} catch (e) {
-  console.warn("⚠️ MS LOOKUP PARAMS is not valid JSON:", params?.PARAMS);
-}
+    fetchData("lookupMSMast", params)
+      .then((result) => {
+        if (result.success) {
+          const raw = result.data?.[0]?.result || "[]";
+          const msData = typeof raw === "string" ? JSON.parse(raw) : raw;
+          setItems(Array.isArray(msData) ? msData : []);
+          return;
+        }
 
-fetchData("lookupMSMast", params)
-  .then((result) => {
-    console.log("📥 MS LOOKUP RAW RESULT FROM API:", result);
-
-    if (result.success) {
-      // data is [{ result: '...[json]...' }]
-      const raw = result.data?.[0]?.result || "[]";
-
-      console.log("📥 MS LOOKUP result.data[0].result (raw string):", raw);
-
-      let msData = [];
-      try {
-        msData = JSON.parse(raw);
-      } catch (e) {
-        console.error("❌ MS LOOKUP JSON.parse FAILED. Raw was:", raw, e);
-        msData = [];
-      }
-
-      console.log("📊 MS LOOKUP PARSED msData (array):", msData);
-      console.log("📊 MS LOOKUP FIRST ROW SAMPLE:", msData?.[0]);
-
-      setItems(msData);
-      setFiltered(msData);
-    } else {
-      console.warn("⚠️ MS LOOKUP API returned success=false:", result.message);
-      setError(result.message || "Failed to fetch MS items.");
-      setItems([]);
-      setFiltered([]);
-    }
-  })
-  .catch((err) => {
-    console.error("❌ Failed to fetch MS items:", err);
-    setError(`Error: ${err.message || "An unexpected error occurred."}`);
-  })
-  .finally(() => setLoading(false));
-
-  }, [isOpen, customParam]);
-
-  // ===== FILTERING =====
-  useEffect(() => {
-    const toLower = (v) => (v ?? "").toString().toLowerCase();
-
-    const f = items.filter((row) => {
-      const itemNo = toLower(row.itemCode);
-      const itemDesc = toLower(row.itemName);
-      const categCode = toLower(row.categCode);
-      const categDesc = toLower(row.categDesc);
-      const classCode = toLower(row.classCode);
-      const classDesc = toLower(row.classDesc);
-
-      return (
-        itemNo.includes(filters.itemNo.toLowerCase()) &&
-        itemDesc.includes(filters.itemDesc.toLowerCase()) &&
-        categCode.includes(filters.categCode.toLowerCase()) &&
-        categDesc.includes(filters.categDesc.toLowerCase()) &&
-        classCode.includes(filters.classCode.toLowerCase()) &&
-        classDesc.includes(filters.classDesc.toLowerCase())
-      );
-    });
-
-    setFiltered(f);
-  }, [filters, items]);
-
-  const handleApply = (selectedItem) => {
-    onClose(selectedItem);
+        setError(result.message || "Failed to fetch MS items.");
+        setItems([]);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch MS items:", err);
+        setError(`Error: ${err.message || "An unexpected error occurred."}`);
+        setItems([]);
+      })
+      .finally(() => setLoading(false));
   };
 
-  const handleFilterChange = (e, key) => {
-    setFilters((prev) => ({ ...prev, [key]: e.target.value }));
+  useEffect(() => {
+    if (!isOpen) {
+      setItems([]);
+      setFilters(createFilterObject());
+      setSearchTerm("");
+      setAppliedSearch("");
+      setSearchMode("part");
+      setSortConfig({ key: "", direction: "asc" });
+      setInternalSelectedItems([]);
+      setError(null);
+      return;
+    }
+
+    setFilters(createFilterObject());
+    setSearchTerm("");
+    setAppliedSearch("");
+    setSortConfig({ key: "", direction: "asc" });
+    setInternalSelectedItems([]);
+    fetchMSItems();
+  }, [isOpen, customParam]);
+
+  const filteredAndSorted = useMemo(() => {
+    const toLower = (value) => String(value ?? "").toLowerCase();
+    const searchValue = toLower(appliedSearch.trim());
+
+    let result = items.filter((row) => {
+      const matchesSearch =
+        !searchValue ||
+        (searchMode === "start"
+          ? toLower(row.itemCode).startsWith(searchValue) ||
+            toLower(row.itemName).startsWith(searchValue)
+          : toLower(row.itemCode).includes(searchValue) ||
+            toLower(row.itemName).includes(searchValue));
+
+      const matchesColumns = columns.every((col) =>
+        toLower(row[col.key]).includes(toLower(debouncedFilters[col.key]))
+      );
+
+      return matchesSearch && matchesColumns;
+    });
+
+    if (sortConfig.key) {
+      result = [...result].sort((a, b) => {
+        const aRaw = a?.[sortConfig.key];
+        const bRaw = b?.[sortConfig.key];
+        const aNum = Number(aRaw);
+        const bNum = Number(bRaw);
+        const bothNumeric =
+          aRaw !== null &&
+          aRaw !== "" &&
+          bRaw !== null &&
+          bRaw !== "" &&
+          !Number.isNaN(aNum) &&
+          !Number.isNaN(bNum);
+
+        if (bothNumeric) {
+          return sortConfig.direction === "asc" ? aNum - bNum : bNum - aNum;
+        }
+
+        const aVal = String(aRaw ?? "");
+        const bVal = String(bRaw ?? "");
+        return sortConfig.direction === "asc"
+          ? aVal.localeCompare(bVal, undefined, { numeric: true, sensitivity: "base" })
+          : bVal.localeCompare(aVal, undefined, { numeric: true, sensitivity: "base" });
+      });
+    }
+
+    return result;
+  }, [items, appliedSearch, searchMode, debouncedFilters, sortConfig]);
+
+  const allVisibleSelected =
+    enableMultiSelect &&
+    filteredAndSorted.length > 0 &&
+    filteredAndSorted.every((row) => selectedItemKeys.has(getRowUniqueKey(row)));
+
+  const someVisibleSelected =
+    enableMultiSelect &&
+    filteredAndSorted.some((row) => selectedItemKeys.has(getRowUniqueKey(row)));
+
+  const hasActiveFilters =
+    searchTerm !== "" ||
+    appliedSearch !== "" ||
+    Object.values(filters).some((val) => val !== "");
+
+  const resetFilters = () => {
+    setSearchTerm("");
+    setAppliedSearch("");
+    setSortConfig({ key: "", direction: "asc" });
+    setFilters(createFilterObject());
+    setInternalSelectedItems([]);
+  };
+
+  const handleManualSearch = (e) => {
+    e.preventDefault();
+    setAppliedSearch(searchTerm);
+  };
+
+  const handleSort = (key) => {
+    setSortConfig((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
+    }));
+  };
+
+  const handleRowClick = (item) => {
+    if (enableMultiSelect) return;
+    onClose?.(item);
+  };
+
+  const handleToggleItem = (item) => {
+    const rowKey = getRowUniqueKey(item);
+    if (!rowKey) return;
+
+    setInternalSelectedItems((prevSelected) => {
+      const exists = prevSelected.some((x) => getRowUniqueKey(x) === rowKey);
+      if (exists) return prevSelected.filter((x) => getRowUniqueKey(x) !== rowKey);
+      return [...prevSelected, item];
+    });
+  };
+
+  const handleSelectAllVisible = () => {
+    if (allVisibleSelected) {
+      setInternalSelectedItems((prev) =>
+        prev.filter(
+          (selected) =>
+            !filteredAndSorted.some((row) => getRowUniqueKey(row) === getRowUniqueKey(selected))
+        )
+      );
+      return;
+    }
+
+    setInternalSelectedItems((prev) => {
+      const map = new Map(
+        prev
+          .filter((item) => getRowUniqueKey(item))
+          .map((item) => [getRowUniqueKey(item), item])
+      );
+
+      filteredAndSorted.forEach((row) => {
+        const rowKey = getRowUniqueKey(row);
+        if (rowKey) map.set(rowKey, row);
+      });
+
+      return Array.from(map.values());
+    });
+  };
+
+  const handleGetSelectedItems = () => {
+    const payload = {
+      records: Array.isArray(selectedItems) ? selectedItems : [],
+    };
+
+    if (onGetSelectedItems) {
+      onGetSelectedItems(payload);
+      return;
+    }
+
+    onClose?.(payload);
+  };
+
+  const formatCellValue = (key, value) => {
+    if (value == null || value === "") return "";
+
+    if (key === "qtyHand") {
+      const numericValue = Number(value);
+      return Number.isNaN(numericValue)
+        ? value
+        : numericValue.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 6,
+          });
+    }
+
+    return value;
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 sm:p-6 lg:p-8 animate-fade-in">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] flex flex-col relative overflow-hidden transform scale-95 animate-scale-in">
-        {/* Close Icon */}
-        <button
-          onClick={() => onClose(null)}
-          className="absolute top-3 right-3 text-blue-500 hover:text-blue-700 transition duration-200 focus:outline-none p-1 rounded-full hover:bg-blue-100"
-          aria-label="Close modal"
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 animate-fade-in font-sans">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-[80rem] max-h-[85vh] flex flex-col relative overflow-hidden border border-slate-200">
+        <div className="flex items-center justify-between px-4 py-3 bg-slate-100 border-b">
+          <h2 className="text-[16px] font-bold text-[#1e40af]">
+            {enableMultiSelect ? "Select Items" : "Select Item"}
+          </h2>
+
+          <div className="flex items-center gap-4">
+            <button
+              onClick={fetchMSItems}
+              className="text-slate-400 hover:text-blue-600 transition-colors"
+              type="button"
+            >
+              <FontAwesomeIcon icon={faSyncAlt} spin={loading} />
+            </button>
+
+            <button
+              onClick={() => onClose?.(null)}
+              className="text-slate-400 hover:text-red-600 transition-colors"
+              type="button"
+            >
+              <FontAwesomeIcon icon={faTimes} size="lg" />
+            </button>
+          </div>
+        </div>
+
+        <form
+          onSubmit={handleManualSearch}
+          className="px-4 py-3 bg-slate-50 border-b flex items-center gap-6 flex-wrap"
         >
-          <FontAwesomeIcon icon={faTimes} size="lg" />
-        </button>
+          <div className="flex items-center gap-2 w-full max-w-xl">
+            <div className="relative flex-grow">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                <FontAwesomeIcon icon={faSearch} size="sm" />
+              </span>
 
-        <h2 className="text-sm font-semibold text-blue-800 p-3 border-b border-gray-100">
-          Select Item (MS)
-        </h2>
+              <input
+                type="text"
+                placeholder="Search by item code or item name..."
+                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white transition-all"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
 
-        <div className="flex-grow overflow-hidden">
+            <button
+              type="submit"
+              className="px-6 py-2 bg-[#1e40af] text-white text-[11px] font-bold rounded-lg hover:bg-blue-700 flex items-center gap-2 shadow-sm uppercase tracking-wider"
+            >
+              {loading ? (
+                <FontAwesomeIcon icon={faSpinner} spin />
+              ) : (
+                <FontAwesomeIcon icon={faSearch} />
+              )}
+              Filter
+            </button>
+          </div>
+
+          <div className="flex items-center gap-5">
+            <label className="flex items-center gap-2 cursor-pointer text-[10px] font-bold text-slate-600 tracking-tight">
+              <input
+                type="radio"
+                value="start"
+                checked={searchMode === "start"}
+                onChange={(e) => setSearchMode(e.target.value)}
+                className="w-4 h-4 text-blue-600"
+              />
+              STARTS WITH
+            </label>
+
+            <label className="flex items-center gap-2 cursor-pointer text-[10px] font-bold text-slate-600 tracking-tight">
+              <input
+                type="radio"
+                value="part"
+                checked={searchMode === "part"}
+                onChange={(e) => setSearchMode(e.target.value)}
+                className="w-4 h-4 text-blue-600"
+              />
+              CONTAINS
+            </label>
+
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="ml-2 text-[10px] font-bold text-blue-600 hover:underline"
+              >
+                <FontAwesomeIcon icon={faEraser} className="mr-1" />
+                CLEAR ALL
+              </button>
+            )}
+          </div>
+        </form>
+
+        <div className="flex-grow overflow-auto custom-scrollbar bg-white">
           {loading ? (
-            <div className="flex items-center justify-center h-full min-h-[200px] text-blue-500">
-              <FontAwesomeIcon icon={faSpinner} spin size="2x" className="mr-3" />
-              <span>Loading items...</span>
+            <div className="flex flex-col items-center justify-center h-64 text-slate-400">
+              <FontAwesomeIcon icon={faSpinner} spin size="2x" className="mb-4 text-blue-500" />
+              <p className="text-sm font-medium">Fetching from server...</p>
             </div>
           ) : error ? (
-            <div className="p-4 text-center bg-red-100 border border-red-400 text-red-700" role="alert">
-              <strong className="font-bold">Error:</strong>
-              <span className="block sm:inline"> {error}</span>
+            <div className="p-6 text-center text-red-600 text-sm font-semibold" role="alert">
+              {error}
             </div>
           ) : (
-            <div className="overflow-auto max-h-[calc(90vh-120px)] custom-scrollbar">
-              <table className="min-w-full divide-y divide-gray-100">
-                <thead className="bg-gray-100 sticky top-0 z-10 shadow-sm">
-                  <tr>
-                    <th className="px-4 py-2 text-left text-xs font-bold text-blue-900 tracking-wider">
-                      Item No
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-bold text-blue-900 tracking-wider">
-                      Item Description
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-bold text-blue-900 tracking-wider">
-                      UOM
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-bold text-blue-900 tracking-wider">
-                      Qty Hand
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-bold text-blue-900 tracking-wider">
-                      Categ Code
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-bold text-blue-900 tracking-wider">
-                      Categ Description
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-bold text-blue-900 tracking-wider">
-                      Class Code
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-bold text-blue-900 tracking-wider">
-                      Class Description
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-bold text-blue-900">
-                      Action
-                    </th>
-                  </tr>
+            <table className="min-w-full border-separate border-spacing-0">
+              <thead className="sticky top-0 z-10 bg-slate-100 shadow-sm">
+                <tr>
+                  {enableMultiSelect && (
+                    <th
+                      style={{ width: "10px" }}
+                      className="px-4 py-3 text-left border-b border-slate-200 align-top"
+                    >
+                      <div className="mb-2">
+                        <span className="text-[12px] font-bold text-slate-600 uppercase tracking-tighter">
+                          Select
+                        </span>
+                      </div>
 
-                  {/* Filter row */}
-                  <tr className="bg-gray-100">
-                    <th className="px-3 py-1">
-                      <input
-                        type="text"
-                        value={filters.itemNo}
-                        onChange={(e) => handleFilterChange(e, "itemNo")}
-                        placeholder="Filter..."
-                        className="block w-full px-2 py-1 text-xs text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      />
+                      <label className="flex items-center gap-2 text-[11px] font-semibold text-slate-600 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={allVisibleSelected}
+                          ref={(el) => {
+                            if (el) {
+                              el.indeterminate = !allVisibleSelected && someVisibleSelected;
+                            }
+                          }}
+                          onChange={handleSelectAllVisible}
+                          className="w-4 h-4 accent-blue-600"
+                        />
+                        {/* <span>Select All</span> */}
+                      </label>
                     </th>
-                    <th className="px-3 py-1">
-                      <input
-                        type="text"
-                        value={filters.itemDesc}
-                        onChange={(e) => handleFilterChange(e, "itemDesc")}
-                        placeholder="Filter..."
-                        className="block w-full px-2 py-1 text-xs text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </th>
-                    <th></th>
-                    <th></th>
-                    <th className="px-3 py-1">
-                      <input
-                        type="text"
-                        value={filters.categCode}
-                        onChange={(e) => handleFilterChange(e, "categCode")}
-                        placeholder="Filter..."
-                        className="block w-full px-2 py-1 text-xs text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </th>
-                    <th className="px-3 py-1">
-                      <input
-                        type="text"
-                        value={filters.categDesc}
-                        onChange={(e) => handleFilterChange(e, "categDesc")}
-                        placeholder="Filter..."
-                        className="block w-full px-2 py-1 text-xs text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </th>
-                    <th className="px-3 py-1">
-                      <input
-                        type="text"
-                        value={filters.classCode}
-                        onChange={(e) => handleFilterChange(e, "classCode")}
-                        placeholder="Filter..."
-                        className="block w-full px-2 py-1 text-xs text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </th>
-                    <th className="px-3 py-1">
-                      <input
-                        type="text"
-                        value={filters.classDesc}
-                        onChange={(e) => handleFilterChange(e, "classDesc")}
-                        placeholder="Filter..."
-                        className="block w-full px-2 py-1 text-xs text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </th>
-                    <th></th>
-                  </tr>
-                </thead>
-
-                <tbody className="bg-white divide-y divide-gray-200 text-xs">
-                  {filtered.length > 0 ? (
-                    filtered.map((row, index) => (
-                      <tr
-                        key={index}
-                        className="hover:bg-blue-50 transition-colors duration-150 cursor-pointer"
-                        onClick={() => handleApply(row)}
-                      >
-                        <td className="px-4 py-1 whitespace-nowrap">
-                          {row.itemCode}
-                        </td>
-                        <td className="px-4 py-1 whitespace-nowrap">
-                          {row.itemName}
-                        </td>
-                        <td className="px-4 py-1 whitespace-nowrap">
-                          {row.uom}
-                        </td>
-                        <td className="px-4 py-1 whitespace-nowrap text-right">
-                          {row.qtyHand}
-                        </td>
-                        <td className="px-4 py-1 whitespace-nowrap">
-                          {row.categCode}
-                        </td>
-                        <td className="px-4 py-1 whitespace-nowrap">
-                          {row.categDesc}
-                        </td>
-                        <td className="px-4 py-1 whitespace-nowrap">
-                          {row.classCode}
-                        </td>
-                        <td className="px-4 py-1 whitespace-nowrap">
-                          {row.classDesc}
-                        </td>
-                        <td className="px-4 py-1 whitespace-nowrap">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleApply(row);
-                            }}
-                            className="px-4 py-1 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                          >
-                            Apply
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={9} className="px-4 py-6 text-center text-gray-500 text-sm">
-                        No matching items found.
-                      </td>
-                    </tr>
                   )}
-                </tbody>
-              </table>
-            </div>
+
+                  {columns.map((col) => (
+                    <th
+                      key={col.key}
+                      style={{ width: col.width || "180px" }}
+                      className="px-4 py-3 text-left border-b border-slate-200"
+                    >
+                      <div
+                        onClick={() => handleSort(col.key)}
+                        className="flex items-center gap-2 cursor-pointer mb-2 group"
+                      >
+                        <span className="text-[12px] font-bold text-slate-600 uppercase tracking-tighter">
+                          {col.label}
+                        </span>
+                        <FontAwesomeIcon
+                          icon={faSort}
+                          className={`text-[10px] ${
+                            sortConfig.key === col.key ? "text-blue-500" : "opacity-20"
+                          }`}
+                        />
+                      </div>
+
+                      <div className="relative">
+                        <span className="absolute inset-y-0 left-2.5 flex items-center text-slate-300">
+                          <FontAwesomeIcon icon={faSearch} className="text-[10px]" />
+                        </span>
+                        <input
+                          type="text"
+                          value={filters[col.key] || ""}
+                          onChange={(e) =>
+                            setFilters((prev) => ({
+                              ...prev,
+                              [col.key]: e.target.value,
+                            }))
+                          }
+                          placeholder="Filter..."
+                          className="w-full pl-7 pr-2 py-1.5 text-[11px] font-normal border border-slate-200 rounded-md bg-white focus:border-blue-400 outline-none"
+                        />
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-slate-100">
+                {filteredAndSorted.length > 0 ? (
+                  filteredAndSorted.map((item, idx) => {
+                    const rowKey = getRowUniqueKey(item);
+                    const isChecked = selectedItemKeys.has(rowKey);
+
+                    return (
+                      <tr
+                        key={`${rowKey || idx}-${idx}`}
+                        onClick={() => handleRowClick(item)}
+                        className={`transition-colors group ${
+                          enableMultiSelect
+                            ? isChecked
+                              ? "bg-blue-50 hover:bg-blue-100"
+                              : "hover:bg-slate-50"
+                            : "hover:bg-blue-50 cursor-pointer"
+                        }`}
+                      >
+                        {enableMultiSelect && (
+                          <td className="px-4 py-3 text-[12px] text-slate-700 font-medium">
+                            <div
+                              className="flex items-center"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => handleToggleItem(item)}
+                                className="w-4 h-4 accent-blue-600"
+                              />
+                            </div>
+                          </td>
+                        )}
+
+                        {columns.map((col) => (
+                          <td
+                            key={col.key}
+                            className={`px-4 py-3 text-[12px] text-slate-700 font-medium ${col.classNames || ""}`}
+                          >
+                            {col.key === "itemCode" ? (
+                              <span className="font-bold">
+                                {formatCellValue(col.key, item[col.key])}
+                              </span>
+                            ) : (
+                              formatCellValue(col.key, item[col.key])
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td
+                      colSpan={columns.length + (enableMultiSelect ? 1 : 0)}
+                      className="px-4 py-20 text-center text-slate-400 italic"
+                    >
+                      No records found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           )}
         </div>
 
-        <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end items-center text-xs text-gray-600">
-          <div className="font-semibold">
-            Showing <strong>{filtered.length}</strong> of {items.length} entries
+        <div className="px-4 py-3 border-t bg-slate-50 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-4">
+            <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">
+              Total Records: {filteredAndSorted.length}
+            </span>
+
+            {enableMultiSelect && (
+              <span className="text-[11px] text-blue-600 font-bold uppercase tracking-wider">
+                Selected: {selectedItems.length}
+              </span>
+            )}
           </div>
+
+          {enableMultiSelect && (
+            <button
+              type="button"
+              onClick={handleGetSelectedItems}
+              className="px-4 py-2 bg-[#1e40af] text-white text-[11px] font-bold rounded-lg hover:bg-blue-700 flex items-center gap-2 shadow-sm uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={selectedItems.length === 0}
+            >
+              <FontAwesomeIcon icon={faCheckSquare} />
+              Get Selected Items
+            </button>
+          )}
         </div>
       </div>
 
       <style jsx="true">{`
-        @keyframes fade-in {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes scale-in {
-          from { transform: scale(0.95); opacity: 0; }
-          to { transform: scale(1); opacity: 1; }
-        }
-        .animate-fade-in {
-          animation: fade-in 0.2s ease-out forwards;
-        }
-        .animate-scale-in {
-          animation: scale-in 0.3s ease-out forwards;
-        }
         .custom-scrollbar::-webkit-scrollbar {
           width: 8px;
           height: 8px;
         }
         .custom-scrollbar::-webkit-scrollbar-track {
           background: #f1f1f1;
-          border-radius: 10px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #888;
-          border-radius: 10px;
+          background: #cbd5e1;
+          border-radius: 4px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #555;
+          background: #94a3b8;
+        }
+        @keyframes fade-in {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .animate-fade-in {
+          animation: fade-in 0.2s ease-out forwards;
         }
       `}</style>
     </div>
