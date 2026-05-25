@@ -2549,6 +2549,24 @@ const UpdateUser = () => {
   const currentUserCode =
     user?.USER_CODE || user?.userCode || user?.code || "SYSTEM";
 
+  // Normalize userType to single-letter code regardless of what auth stores.
+  // Covers camelCase (userType), snake_case (user_type), and UPPER variants,
+  // plus full-label values like "Security Administrator".
+  const rawUserType =
+    user?.userType     ||
+    user?.USER_TYPE    ||
+    user?.user_type    ||
+    user?.usertype     ||
+    "";
+  const currentUserType = (() => {
+    const t = rawUserType.trim().toUpperCase();
+    if (t === "S" || t === "SYSTEM ADMINISTRATOR")   return "S";
+    if (t === "X" || t === "SECURITY ADMINISTRATOR") return "X";
+    if (t === "M" || t === "MANAGEMENT")             return "M";
+    if (t === "R" || t === "REGULAR")                return "R";
+    return t;
+  })();
+
   const activeLabel = (code) => {
     if (code === "Y") return "Yes";
     if (code === "P") return "Pending";
@@ -2762,6 +2780,7 @@ const UpdateUser = () => {
     mutationFn: async (targetUser) => {
       return apiClient.post("/users/delete", {
         userCode: targetUser.userCode,
+        doneBy:    currentUserCode, 
       });
     },
     onSuccess: async (response) => {
@@ -2926,7 +2945,7 @@ const UpdateUser = () => {
         editUprice: editUprice || "N",
         active: active === "Yes" ? "Y" : active === "Pending" ? "P" : "N",
         position: position ? position.trim() : "",
-        userCodeAudit: currentUserCode,
+        doneBy: currentUserCode, 
       },
     };
 
@@ -3073,21 +3092,27 @@ const UpdateUser = () => {
     if (!selectedUser?.userCode) return;
 
     const confirmRes = await useSwalDeleteConfirm(
-      "Release Account",
-      `Release account for ${selectedUser.userName} and reset failed login attempts?`,
+      "Release Locked Account",
+      `Release the locked account for <strong>${selectedUser.userName}</strong>?<br/>
+       The user will receive an email with a password reset link.`,
       "Yes, release it"
     );
 
     if (!confirmRes?.isConfirmed) return;
 
     try {
-      const { data } = await apiClient.post("/users/approve", {
+      const { data } = await apiClient.post("/users/release-locked", {
         userCode: selectedUser.userCode,
-        mode: "release",
+        doneBy:   currentUserCode,
       });
 
       if (data?.status === "success") {
-        await useSwalSuccessAlert("Released", "Account has been released successfully.");
+        await useSwalSuccessAlert(
+          "Account Released",
+          `The account for <strong>${selectedUser.userName}</strong> has been unlocked.<br/>
+           A password reset link has been sent to their email address.`
+        );
+        setActiveTab("active");
         setSelectedUser(null);
         setIsEditing(false);
         await queryClient.invalidateQueries({ queryKey: ["users"] });
@@ -3207,10 +3232,13 @@ const UpdateUser = () => {
       )
       .map((u) => ({
         ...u,
-        activeLabel: activeLabel(u.active),
-        branchDisplay: u.branchName || u.branchCode || "-",
-        rcDisplay: u.rcName || u.rcCode || "-",
+        stat:            u.stat ?? 0,
+        activeLabel:     activeLabel(u.active),
+        branchDisplay:   u.branchName || u.branchCode || "-",
+        rcDisplay:       u.rcName || u.rcCode || "-",
         userTypeDisplay: USER_TYPE_MAP[u.userType] ?? u.userType ?? "-",
+        // True when account was locked by exceeding max login attempts
+        isLocked:        u.active === "N" && (u.stat ?? 0) > 0,
       }));
   }, [users, activeTab]);
 
@@ -3358,6 +3386,30 @@ const UpdateUser = () => {
         sortable: true,
         className: "w-[70px] min-w-[70px] text-center overflow-hidden",
       },
+      {
+        key: "isLocked",
+        label: "Status",
+        sortable: false,
+        className: "w-[90px] min-w-[90px] text-center",
+        render: (row) => {
+          if (row.active === "Y") return null;
+          if (row.active === "P") return (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200">
+              Pending
+            </span>
+          );
+          return row.isLocked ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-red-700 border border-red-200">
+              <FontAwesomeIcon icon={faLockOpen} className="text-[10px]" />
+              Locked
+            </span>
+          ) : (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
+              Inactive
+            </span>
+          );
+        },
+      },
     ];
   }, [selectedUser, activeTab, users, isMobile]);
 
@@ -3466,41 +3518,46 @@ const UpdateUser = () => {
             )}
           </div>
 
-          <button
-            onClick={handleResetPassword}
-            title="Reset Password"
-            className={`bg-blue-600 text-white h-8 w-8 sm:w-auto sm:px-3 sm:py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-blue-700 transition-all ${!selectedUser || selectedUser.active !== "Y" ? "opacity-50 cursor-not-allowed" : ""
-              }`}
-            disabled={!selectedUser || selectedUser.active !== "Y"}
-          >
-            <FontAwesomeIcon icon={faKey} />
-            <span className="hidden sm:inline">Reset Password</span>
-          </button>
+          {["S", "X"].includes(currentUserType) && (
+            <button
+              onClick={handleResetPassword}
+              title="Reset Password"
+              className={`bg-blue-600 text-white h-8 w-8 sm:w-auto sm:px-3 sm:py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-blue-700 transition-all ${!selectedUser || selectedUser.active !== "Y" ? "opacity-50 cursor-not-allowed" : ""
+                }`}
+              disabled={!selectedUser || selectedUser.active !== "Y"}
+            >
+              <FontAwesomeIcon icon={faKey} />
+              <span className="hidden sm:inline">Reset Password</span>
+            </button>
+          )}
 
-          {selectedUser &&
+          {currentUserType === "X" &&
+            selectedUser &&
             selectedUser.active === "N" &&
             policy?.maxLog > 0 &&
             (selectedUser.stat ?? 0) >= policy.maxLog && (
             <button
               onClick={handleUnlockAccount}
               title="Release Locked Account"
-              className="bg-rose-600 text-white h-8 w-8 sm:w-auto sm:px-3 sm:py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-rose-700 transition-all"
+              className="bg-blue-600 text-white h-8 w-8 sm:w-auto sm:px-3 sm:py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-blue-700 transition-all"
             >
               <FontAwesomeIcon icon={faLockOpen} />
               <span className="hidden sm:inline">Release Account</span>
             </button>
           )}
 
-          <button
-            onClick={() => setShowLoginPolicyModal(true)}
-            title="Login / Password Policy"
-            className="bg-indigo-600 text-white h-8 w-8 sm:w-auto sm:px-3 sm:py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all"
-          >
-            <FontAwesomeIcon icon={faShieldHalved} />
-            <span className="hidden sm:inline">Login / Password Policy</span>
-          </button>
+          {currentUserType === "X" && (
+            <button
+              onClick={() => setShowLoginPolicyModal(true)}
+              title="Login / Password Policy"
+              className="bg-blue-600 text-white h-8 w-8 sm:w-auto sm:px-3 sm:py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-blue-700 transition-all"
+            >
+              <FontAwesomeIcon icon={faShieldHalved} />
+              <span className="hidden sm:inline">Login / Password Policy</span>
+            </button>
+          )}
 
-          {selectedUser && selectedUser.active === "P" && (
+          {currentUserType === "X" && selectedUser && selectedUser.active === "P" && (
             <button
               onClick={handleReleaseAccount}
               title="Approve"

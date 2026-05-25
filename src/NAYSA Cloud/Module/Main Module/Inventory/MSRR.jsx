@@ -8,6 +8,7 @@ import {
   faMagnifyingGlass,
   faPlus,
   faMinus,
+  faTrashAlt,
   faSpinner,
   faSearch,
   faBoxOpen,
@@ -91,12 +92,18 @@ import {
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
 import { useGetCurrentDay, useFormatToDate } from "@/NAYSA Cloud/Global/dates";
+import {
+  transactionActionsCellStyle,
+  transactionActionsHeaderStyle,
+  useResizableTableColumns,
+} from "@/NAYSA Cloud/Global/datatable.jsx";
 
 // Header
 import Header from "@/NAYSA Cloud/Components/Header";
 
 const MSRR = (item) => {
   const loadedFromUrlRef = useRef(false);
+  const detailRowsRef = useRef([]);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -111,7 +118,7 @@ const [isViewDocument, setIsViewDocument] = useState(false);
     }
   }, []);
 
-  const isViewDocumentUrl = isViewDocument;
+const isViewDocumentUrl = isViewDocument;
 
   const isGeneralLedgerEnabled =
     String(companyInfo?.msinvGLMode || "").toUpperCase() !== "D";
@@ -145,7 +152,7 @@ const [isViewDocument, setIsViewDocument] = useState(false);
     { key: "ItemCode", label: "Item Code", renderType: "text", width: 150 },
     { key: "ItemName", label: "Item Name", renderType: "text", width: 260 },
     { key: "RcCode", label: "Department", renderType: "text", width: 130 },
-    { key: "UOM", label: "UOM", renderType: "text", width: 90 },
+    { key: "uomCode", label: "UOM", renderType: "text", width: 90 },
     {
       key: "QtyOrdered",
       label: "Qty Ordered",
@@ -237,6 +244,9 @@ const [isViewDocument, setIsViewDocument] = useState(false);
     requestDept: "",
     vendCode: "",
     vendName: "",
+    vendVatCode: "",
+    vendVatName: "",
+    vendVatRate: "",
     refPoNo1: "",
     refPrNo2: "",
     remarks: "",
@@ -381,6 +391,9 @@ groupId,
 
     vendCode,
     vendName,
+    vendVatCode,
+    vendVatName,
+    vendVatRate,
     LocCode,
     LocName,
     WHCode,
@@ -466,9 +479,64 @@ groupId,
     CLOSED: "global-tran-stat-text-closed-ui",
   };
   const statusColor = statusMap[displayStatus] || "";
-  const isFormDisabled =
+  const isFormDisabled =
   isViewDocumentUrl ||
   ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+
+  const msrrDetailColumnDefs = [
+    { key: "ln", label: "LN", width: 56 },
+    { key: "rrStatus", label: "RR Status", width: 100 },
+    { key: "poNo", label: "PO No.", width: 140 },
+    { key: "itemCode", label: "Item Code", width: 120 },
+    { key: "itemName", label: "Item Description", width: 300 },
+    { key: "itemSpecs", label: "Specification", width: 300 },
+    { key: "uomCode", label: "UOM", width: 80 },
+    { key: "rrQty", label: "RR Quantity", width: 130 },
+    { key: "freeQty", label: "Free Quantity", width: 130 },
+    { key: "unitCost", label: "Unit Cost", width: 120 },
+    { key: "grossAmount", label: "Amount", width: 140 },
+    { key: "vatCode", label: "VAT", width: 110 },
+    { key: "vatRate", label: "VAT Rate", width: 120 },
+    { key: "vatAmount", label: "VAT Amount", width: 120 },
+    { key: "netAmount", label: "Net Amount", width: 120 },
+    { key: "lotNo", label: "Lot No", width: 200 },
+    { key: "bbDate", label: "BB Date", width: 130 },
+    { key: "qstatCode", label: "QC Status", width: 120 },
+    { key: "whouseCode", label: "Warehouse", width: 120 },
+    { key: "LocCode", label: "Location", width: 120 },
+  ];
+
+  const {
+    getColumnStyle: getMSRRDetailColumnStyle,
+    getFrozenColumnStyle: getMSRRDetailFrozenStyle,
+    getOrderedColumns: getOrderedMSRRDetailColumns,
+    getSortedRows: getSortedMSRRDetailRows,
+    clearZeroValueOnFocus: clearMSRRDetailZeroOnFocus,
+    focusNextRowInput: focusNextMSRRDetailRowInput,
+    renderHeaderContextMenu: renderMSRRDetailHeaderContextMenu,
+    renderResizableHeader: renderMSRRDetailHeader,
+  } = useResizableTableColumns(msrrDetailColumnDefs);
+
+  const visibleMSRRDetailColumns = getOrderedMSRRDetailColumns(msrrDetailColumnDefs);
+  const getMSRRDetailFallbackWidth = (key) =>
+    msrrDetailColumnDefs.find((column) => column.key === key)?.width || 120;
+  const getMSRRDetailCellStyle = (key, fallbackWidth) => ({
+    ...getMSRRDetailColumnStyle(key, fallbackWidth),
+    ...getMSRRDetailFrozenStyle(key, visibleMSRRDetailColumns, fallbackWidth, {
+      isHeader: false,
+    }),
+  });
+  const sortedMSRRDetailRows = getSortedMSRRDetailRows(
+    detailRows.map((row, originalIndex) => ({ row, originalIndex })),
+    (entry, sortKey) =>
+      sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? "",
+  );
+
+  const msrrDetailEnterNextRowZeroClearFields = ["rrQty", "freeQty", "unitCost"];
+
+  useEffect(() => {
+    detailRowsRef.current = detailRows || [];
+  }, [detailRows]);
 
 
   const updateTotalsDisplay = (input) => {
@@ -521,7 +589,7 @@ groupId,
     if (isFormDisabled) return;
 
     const current = detailRows?.[rowIndex]?.itemSpecs ?? "";
-    updateState({
+    updateState({
       specsModalOpen: true,
       specsRowIndex: rowIndex,
       specsTempText: current,
@@ -529,7 +597,7 @@ groupId,
   };
 
   const closeSpecsModal = () => {
-    updateState({
+    updateState({
       specsModalOpen: false,
       specsRowIndex: null,
       specsTempText: "",
@@ -1255,9 +1323,12 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
 
       const endpoint = "getPORR_OpenSummary";
       const response = await fetchDataJson(endpoint, { branchCode });
+      console.log("Open Reference PO - Summary API Response:", response);
       const rawRows = response?.data?.[0]?.result
         ? JSON.parse(response.data[0].result)
         : [];
+
+    console.log("Open Reference PO - Raw Summary Rows:", rawRows);
       const colConfig = await getSelectedHSColConfig(endpoint);
       const colConfigDetail =
         await getSelectedHSColConfig("getPORR_OpenDetail");
@@ -1272,6 +1343,8 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           return !statusText || statusText.includes("OPEN");
         })
         .map(normalizeOpenPOSummaryRow);
+
+console.log("Open Reference PO - Filtered Open Summary Rows:", openRows);
 
       if (openRows.length === 0) {
         await Swal.fire({
@@ -1328,6 +1401,13 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     const summaries = Array.isArray(selection.summary) ? selection.summary : [];
     const summary = summaries[0] || {};
     const details = selection.details || [];
+
+    console.log("Open Reference PO - Selected PO:", {
+  selection,
+  summaries,
+  summary,
+  details,
+});
 
     if (!(await validateOpenPOSameSupplier(summaries.length > 0 ? summaries : details))) {
       return;
@@ -1488,13 +1568,14 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
         bbDate: "",
         qstatCode: "",
 
-        whCode: poWhCode || "",
-        whName: poWhName || "",
-        whouseCode: poWhCode || "",
-        whouseName: poWhName || "",
-        LocCode: "",
-        locCode: "",
-        locName: "",
+        whCode: poWhCode || state.WHCode || state.WHcode || WHCode || WHcode || "",
+        whName: poWhName || state.WHName || WHName || "",
+        whouseCode: poWhCode || state.WHCode || state.WHcode || WHCode || WHcode || "",
+        whouseName: poWhName || state.WHName || WHName || "",
+        LocCode: state.LocCode || LocCode || "",
+        locCode: state.LocCode || LocCode || "",
+        LocName: state.LocName || LocName || "",
+        locName: state.LocName || LocName || "",
       };
     });
 
@@ -1509,6 +1590,8 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
       WHCode: poWhCode || WHCode || "",
       WHcode: poWhCode || WHcode || "",
       WHName: poWhName || WHName || "",
+      LocCode: state.LocCode || LocCode || "",
+      LocName: state.LocName || LocName || "",
       detailRows: newMappedRows,
     });
 
@@ -1811,10 +1894,31 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
       const parsedDocumentNo = parsed.rrNo || "";
       const parsedDocumentId = parsed.rrId || parsed.rrHdId;
 
-      const parsedWHCode = parsed.WHCode || parsed.whCode || parsed.warehouseCode || "";
-      const parsedWHName = parsed.WHName || parsed.whName || parsed.warehouseName || "";
-      const parsedLocCode = parsed.LocCode || parsed.locCode || parsed.locationCode || "";
-      const parsedLocName = parsed.LocName || parsed.locName || parsed.locationName || "";
+      const parsedWHCode =
+  parsed.whouseCode ||
+  parsed.WHCode ||
+  parsed.whCode ||
+  parsed.warehouseCode ||
+  "";
+
+const parsedWHName =
+  parsed.whouseName ||
+  parsed.WHName ||
+  parsed.whName ||
+  parsed.warehouseName ||
+  "";
+
+const parsedLocCode =
+  parsed.locCode ||
+  parsed.LocCode ||
+  parsed.locationCode ||
+  "";
+
+const parsedLocName =
+  parsed.locName ||
+  parsed.LocName ||
+  parsed.locationName ||
+  "";
 
       // ===========================
       // HEADER (MSRR)
@@ -1850,6 +1954,7 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
 
         remarks: parsed.remarks || "",
         documentStatus: parsed.rrStatus || "",
+        status: parsed.rrStatus || "OPEN",
       });
 
       // ===========================
@@ -1942,8 +2047,8 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
     }
   };
 
-  const handleCloseMSLookup = async (selectedItem) => {
-    if (!selectedItem) {
+  const handleCloseMSLookup = async (selectedPayload) => {
+    if (!selectedPayload) {
       updateState({ msLookupModalOpen: false, selectedRowIndex: null });
       return;
     }
@@ -1951,6 +2056,183 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
     const today = header.rr_date || new Date().toISOString().split("T")[0];
     const firstValue = (...values) =>
       values.find((value) => value !== undefined && value !== null && value !== "");
+    const selectedItems = Array.isArray(selectedPayload?.records)
+      ? selectedPayload.records
+      : Array.isArray(selectedPayload)
+        ? selectedPayload
+        : [selectedPayload];
+
+    if (!selectedItems.length) {
+      updateState({ msLookupModalOpen: false, selectedRowIndex: null });
+      return;
+    }
+
+    const getSelectedUomCode = (selectedItem = {}) =>
+      firstValue(
+        selectedItem.uomCode,
+        selectedItem.UomCode,
+        selectedItem.UOM_CODE,
+        selectedItem.uom_code,
+        selectedItem.uomcode,
+        selectedItem.UOMCODE,
+        selectedItem.uom,
+        selectedItem.UOM,
+        selectedItem.Uom,
+        selectedItem.uomName,
+        selectedItem.UomName,
+        selectedItem.UOM_NAME,
+        selectedItem.uom_name,
+        selectedItem.unitCode,
+        selectedItem.UnitCode,
+        selectedItem.UNIT_CODE,
+        selectedItem.unit_code,
+        selectedItem.unit,
+        selectedItem.Unit,
+        selectedItem.UNIT,
+        "",
+      );
+
+    const headerWhCode = state.WHCode || state.WHcode || WHCode || WHcode || "";
+    const headerWhName = state.WHName || WHName || "";
+    const headerLocCode = state.LocCode || LocCode || "";
+    const headerLocName = state.LocName || LocName || "";
+
+    const getHeaderWarehouseLocationFields = (baseRow = {}) => ({
+      ...baseRow,
+      whCode: baseRow.whCode || baseRow.whouseCode || headerWhCode,
+      whName: baseRow.whName || baseRow.whouseName || headerWhName,
+      whouseCode: baseRow.whouseCode || baseRow.whCode || headerWhCode,
+      whouseName: baseRow.whouseName || baseRow.whName || headerWhName,
+      LocCode: baseRow.LocCode || baseRow.locCode || headerLocCode,
+      locCode: baseRow.locCode || baseRow.LocCode || headerLocCode,
+      locName: baseRow.locName || headerLocName,
+      LocName: baseRow.LocName || headerLocName,
+    });
+
+    const buildMSRRRow = async (selectedItem) => {
+      const selectedUnitCost = firstValue(
+        selectedItem.unitCost,
+        selectedItem.UnitCost,
+        selectedItem.UNIT_COST,
+        selectedItem.unit_cost,
+        selectedItem.unitcost,
+        selectedItem.Unitcost,
+        selectedItem.UNITCOST,
+        selectedItem.uCost,
+        selectedItem.UCost,
+        selectedItem.UCOST,
+        selectedItem.ucost,
+        selectedItem.unitPrice,
+        selectedItem.UnitPrice,
+        selectedItem.UNIT_PRICE,
+        selectedItem.unit_price,
+        selectedItem.price,
+        selectedItem.Price,
+        selectedItem.PRICE,
+        selectedItem.stdCost,
+        selectedItem.StdCost,
+        selectedItem.STD_COST,
+        selectedItem.aveCost,
+        selectedItem.AveCost,
+        selectedItem.AVE_COST,
+        selectedItem.avgCost,
+        selectedItem.AvgCost,
+        selectedItem.AVG_COST,
+        selectedItem.lastCost,
+        selectedItem.LastCost,
+        selectedItem.LAST_COST,
+        selectedItem.itemCost,
+        selectedItem.ItemCost,
+        selectedItem.ITEM_COST,
+        selectedItem.cost,
+        selectedItem.Cost,
+        selectedItem.COST,
+        0,
+      );
+      const selectedVatCode =
+        firstValue(
+          selectedItem.vatCode,
+          selectedItem.VatCode,
+          selectedItem.VAT_CODE,
+          selectedItem.vat_code,
+          vendVatCode,
+          "",
+        );
+      const selectedVatName =
+        firstValue(
+          selectedItem.vatName,
+          selectedItem.VatName,
+          selectedItem.VAT_NAME,
+          selectedItem.vat_name,
+          vendVatName,
+          "",
+        );
+      const selectedVatLookupRate =
+        firstValue(
+          selectedItem.vatRate,
+          selectedItem.VatRate,
+          selectedItem.VAT_RATE,
+          selectedItem.vat_rate,
+          selectedItem.rate,
+          selectedItem.vatPerc,
+          selectedItem.vat_percent,
+          vendVatRate,
+          "",
+        );
+      const selectedVatFetchedRate = selectedVatCode
+        ? await fetchVatRate(selectedVatCode)
+        : "";
+      const selectedVatRate =
+        selectedVatLookupRate !== "" &&
+        selectedVatLookupRate !== null &&
+        selectedVatLookupRate !== undefined &&
+        parseFormattedNumber(selectedVatLookupRate) !== 0
+          ? selectedVatLookupRate
+          : selectedVatFetchedRate;
+
+      return recalcMSRRRow(getHeaderWarehouseLocationFields({
+        invType: "MS",
+        unitCost: formatNumber(parseFormattedNumber(selectedUnitCost), decUcost),
+        vatCode: selectedVatCode,
+        vatName: selectedVatName,
+        vatRate:
+          selectedVatRate !== "" && selectedVatRate !== null && selectedVatRate !== undefined
+            ? formatNumber(parseFormattedNumber(selectedVatRate), 2)
+            : "",
+        groupId: selectedItem.categCode || "",
+        poStatus: status || "",
+        itemCode: selectedItem.itemCode || "",
+        itemName: selectedItem.itemName || "",
+        uomCode: getSelectedUomCode(selectedItem),
+        qtyOnHand: formatNumber(selectedItem.qtyHand ?? 0, 6),
+        qtyAlloc: "0.000000",
+        qtyNeeded: "0.000000",
+        uomCode2: "",
+        uomQty2: "0.000000",
+        dateNeeded: today,
+        itemSpecs: "",
+        serviceCode: "",
+        serviceName: "",
+        poQty: "0.000000",
+        rrQty: "0.000000",
+        freeQty: "0.000000",
+      }));
+    };
+
+    if (selectedItems.length > 1 && selectedRowIndex === null) {
+      const newRows = await Promise.all(selectedItems.map(buildMSRRRow));
+      const updatedRows = [...detailRows, ...newRows];
+
+      updateState({
+        detailRows: updatedRows,
+        msLookupModalOpen: false,
+        selectedRowIndex: null,
+      });
+      updateTotalsDisplay(updatedRows);
+      return;
+    }
+
+    const selectedItem = selectedItems[0];
     const selectedUnitCost = firstValue(
       selectedItem.unitCost,
       selectedItem.UnitCost,
@@ -1991,26 +2273,35 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
       0,
     );
     const selectedVatCode =
-      selectedItem.vatCode ??
-      selectedItem.VatCode ??
-      selectedItem.VAT_CODE ??
-      selectedItem.vat_code ??
-      "";
+      firstValue(
+        selectedItem.vatCode,
+        selectedItem.VatCode,
+        selectedItem.VAT_CODE,
+        selectedItem.vat_code,
+        vendVatCode,
+        "",
+      );
     const selectedVatName =
-      selectedItem.vatName ??
-      selectedItem.VatName ??
-      selectedItem.VAT_NAME ??
-      selectedItem.vat_name ??
-      "";
+      firstValue(
+        selectedItem.vatName,
+        selectedItem.VatName,
+        selectedItem.VAT_NAME,
+        selectedItem.vat_name,
+        vendVatName,
+        "",
+      );
     const selectedVatLookupRate =
-      selectedItem.vatRate ??
-      selectedItem.VatRate ??
-      selectedItem.VAT_RATE ??
-      selectedItem.vat_rate ??
-      selectedItem.rate ??
-      selectedItem.vatPerc ??
-      selectedItem.vat_percent ??
-      "";
+      firstValue(
+        selectedItem.vatRate,
+        selectedItem.VatRate,
+        selectedItem.VAT_RATE,
+        selectedItem.vat_rate,
+        selectedItem.rate,
+        selectedItem.vatPerc,
+        selectedItem.vat_percent,
+        vendVatRate,
+        "",
+      );
     const selectedVatFetchedRate = selectedVatCode
       ? await fetchVatRate(selectedVatCode)
       : "";
@@ -2026,13 +2317,13 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
       const updatedRows = [...detailRows];
       const currentRow = updatedRows[selectedRowIndex] || {};
 
-      updatedRows[selectedRowIndex] = recalcMSRRRow({
+      updatedRows[selectedRowIndex] = recalcMSRRRow(getHeaderWarehouseLocationFields({
         ...currentRow,
         groupId: selectedItem.categCode || currentRow.groupId || "",
         categCode: selectedItem.categCode || currentRow.categCode || "",
         itemCode: selectedItem.itemCode || "",
         itemName: selectedItem.itemName || "",
-        uomCode: selectedItem.uomCode || selectedItem.uom || "",
+        uomCode: getSelectedUomCode(selectedItem),
         qtyOnHand: formatNumber(selectedItem.qtyHand ?? 0, 6),
         dateNeeded: currentRow.dateNeeded || today,
         unitCost: formatNumber(parseFormattedNumber(selectedUnitCost), decUcost),
@@ -2042,7 +2333,7 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
           selectedVatRate !== "" && selectedVatRate !== null && selectedVatRate !== undefined
             ? formatNumber(parseFormattedNumber(selectedVatRate), 2)
             : currentRow.vatRate || "",
-      });
+      }));
 
       updateState({
         detailRows: updatedRows,
@@ -2066,7 +2357,7 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
       poStatus: status || "",
       itemCode: selectedItem.itemCode || "",
       itemName: selectedItem.itemName || "",
-      uomCode: selectedItem.uom || "",
+      uomCode: getSelectedUomCode(selectedItem),
       qtyOnHand: formatNumber(selectedItem.qtyHand ?? 0, 6),
       qtyAlloc: "0.000000",
       qtyNeeded: "0.000000",
@@ -2081,7 +2372,7 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
       freeQty: "0.000000",
     };
 
-    const updatedRows = [...detailRows, recalcMSRRRow(newRow)];
+    const updatedRows = [...detailRows, recalcMSRRRow(getHeaderWarehouseLocationFields(newRow))];
     updateState({
       detailRows: updatedRows,
       msLookupModalOpen: false,
@@ -2189,6 +2480,14 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
       poQty: "0.000000",
       rrQty: "0.000000",
       freeQty: "0.000000",
+      whCode: state.WHCode || state.WHcode || WHCode || WHcode || "",
+      whName: state.WHName || WHName || "",
+      whouseCode: state.WHCode || state.WHcode || WHCode || WHcode || "",
+      whouseName: state.WHName || WHName || "",
+      LocCode: state.LocCode || LocCode || "",
+      locCode: state.LocCode || LocCode || "",
+      LocName: state.LocName || LocName || "",
+      locName: state.LocName || LocName || "",
     };
 
     const updatedRows = [...detailRows, newRow];
@@ -2256,8 +2555,12 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
             const updatedDetails = detailRows.map((item) => ({
               ...item,
               whouseCode: pickedWhCode,
+              whCode: pickedWhCode,
               whouseName: pickedWhName,
+              whName: pickedWhName,
               LocCode: "",
+              locCode: "",
+              LocName: "",
               locName: "",
             }));
             updateState({ detailRows: updatedDetails });
@@ -2283,6 +2586,8 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
           updated[idx] = {
             ...updated[idx],
             LocCode: pickedLocCode,
+            locCode: pickedLocCode,
+            LocName: pickedLocName,
             locName: pickedLocName, // optional display name if you want it
           };
           updateState({ detailRows: updated });
@@ -2309,6 +2614,8 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
               const updatedDetails = detailRows.map((item) => ({
                 ...item,
                 LocCode: pickedLocCode,
+                locCode: pickedLocCode,
+                LocName: pickedLocName,
                 locName: pickedLocName,
               }));
               updateState({ detailRows: updatedDetails });
@@ -2546,7 +2853,22 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
     };
   };
 
-  const handleDetailChange = async (index, field, value, extraData = {}) => {
+  const sanitizeMSRRNumeric = (value) => {
+    const raw = String(value ?? "");
+    const cleaned = raw.replace(/[^0-9.]/g, "");
+    const parts = cleaned.split(".");
+    return parts.length <= 1 ? cleaned : `${parts.shift()}.${parts.join("")}`;
+  };
+
+  const formatMSRRByField = (field, value) => {
+    if (!Number.isFinite(value)) return "";
+    if (["rrQty", "freeQty"].includes(field)) return formatNumber(value, decQty);
+    if (field === "unitCost") return formatNumber(value, decUcost);
+    if (field === "vatRate") return formatNumber(value, 2);
+    return formatNumber(value);
+  };
+
+ const handleDetailChange = async (index, field, value, extraData = {}) => {
     const rows = Array.isArray(detailRows) ? detailRows : [];
     const updatedRows = [...rows];
 
@@ -2649,10 +2971,14 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
     const shouldFormatNumeric = extraData === true;
 
     if (Object.prototype.hasOwnProperty.call(numericFieldDecimals, field)) {
-      const numericValue = parseFormattedNumber(normalizedValue ?? 0);
+      const sanitized = sanitizeMSRRNumeric(normalizedValue);
+      const numericValue = parseFormattedNumber(sanitized);
       row[field] = shouldFormatNumeric
-        ? formatNumber(numericValue, numericFieldDecimals[field])
-        : String(normalizedValue ?? "").replace(/[^0-9.]/g, "");
+        ? formatMSRRByField(
+            field,
+            Number.isFinite(numericValue) && numericValue > 0 ? numericValue : 0
+          )
+        : sanitized;
     } else {
       row[field] = normalizedValue ?? "";
     }
@@ -3261,22 +3587,56 @@ rrHdId: documentID || "",
     }
   };
 
-  const handleClosePayeeLookup = (row) => {
-    // closed/cancel
-    if (!row) {
-      updateState({ payeeLookupOpen: false });
-      return;
-    }
+const handleClosePayeeLookup = async (row) => {
+    if (!row) {
+      updateState({ payeeLookupOpen: false });
+      return;
+    }
 
-    updateState({
-      payeeLookupOpen: false,
-      vendCode: row?.vend_code ?? row?.vendCode ?? "", // keep both if you have the typo key
-      vendCode: row?.vend_code ?? row?.vendCode ?? "",
-      vendName: row?.vend_name ?? row?.vendName ?? "",
-    });
-  };
+    const nextVendCode = row?.vend_code ?? row?.vendCode ?? "";
+    const nextVendName = row?.vend_name ?? row?.vendName ?? "";
+    const nextVatCode =
+      row?.vatCode ?? row?.VatCode ?? row?.VAT_CODE ?? row?.vat_code ?? "";
+    const nextVatName =
+      row?.vatName ?? row?.VatName ?? row?.VAT_NAME ?? row?.vat_name ?? "";
+    const lookupVatRate =
+      row?.vatRate ?? row?.VatRate ?? row?.VAT_RATE ?? row?.vat_rate ?? row?.rate ?? "";
+    const fetchedVatRate = nextVatCode ? await fetchVatRate(nextVatCode) : "";
+    const nextVatRate =
+      lookupVatRate !== "" &&
+      lookupVatRate !== null &&
+      lookupVatRate !== undefined &&
+      parseFormattedNumber(lookupVatRate) !== 0
+        ? lookupVatRate
+        : fetchedVatRate;
+    const formattedVatRate =
+      nextVatRate !== "" && nextVatRate !== null && nextVatRate !== undefined
+        ? formatNumber(parseFormattedNumber(nextVatRate), 2)
+        : "";
+    const updatedDetails = (detailRows || []).map((item) =>
+      recalcMSRRRow({
+        ...item,
+        vatCode: nextVatCode,
+        vatName: nextVatName,
+        vatRate: formattedVatRate,
+      })
+    );
 
-  // ==========================
+    updateState({
+      payeeLookupOpen: false,
+      vendCode: nextVendCode,
+      vendName: nextVendName,
+      vendVatCode: nextVatCode,
+      vendVatName: nextVatName,
+      vendVatRate: formattedVatRate,
+      ...(updatedDetails.length > 0 ? { detailRows: updatedDetails } : {}),
+    });
+
+    if (updatedDetails.length > 0) {
+      detailRowsRef.current = updatedDetails;
+      updateTotalsDisplay(updatedDetails);
+    }
+  };
   // HISTORY – URL PARAM HANDLING
   // ==========================
 
@@ -3501,6 +3861,386 @@ rrHdId: documentID || "",
     0,
   );
 
+
+  const focusMSRRDetailCell = (field, nextIndex) => {
+    const nextEl = document.getElementById(`${field}-${nextIndex}`);
+    if (nextEl) {
+      nextEl.focus();
+      if (typeof nextEl.select === "function") nextEl.select();
+    }
+  };
+
+  const focusNextMSRRDetailCell = (index, field) => {
+    if (typeof focusNextMSRRDetailRowInput === "function") {
+      focusNextMSRRDetailRowInput(index, field, {
+        rows: detailRowsRef.current || detailRows,
+        zeroClearFields: msrrDetailEnterNextRowZeroClearFields,
+        parseValue: parseFormattedNumber,
+        onClearNextValue: (nextIndex, nextField, val) =>
+          handleDetailChange(nextIndex, nextField, val, false),
+      });
+      return;
+    }
+
+    const rows = detailRowsRef.current || detailRows || [];
+    const nextIndex = Math.min(rows.length - 1, index + 1);
+    if (nextIndex > index) {
+      focusMSRRDetailCell(field, nextIndex);
+    }
+  };
+
+  const handleMSRRGridKeyDown = (e, index, field, options = {}) => {
+    if (options.readOnly || options.disabled || isFormDisabled) return;
+
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleDetailChange(index, field, e.target.value, true);
+      setTimeout(() => focusNextMSRRDetailCell(index, field), 0);
+      return;
+    }
+
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      focusMSRRDetailCell(field, Math.max(0, index - 1));
+      return;
+    }
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      focusMSRRDetailCell(
+        field,
+        Math.min((detailRowsRef.current || detailRows || []).length - 1, index + 1),
+      );
+    }
+  };
+
+  const renderMSRRDetailCell = (columnKey, row, index) => {
+    const columnWidth = getMSRRDetailFallbackWidth(columnKey);
+    const style = getMSRRDetailCellStyle(columnKey, columnWidth);
+    const rowLocked = isFormDisabled || row.operation === "S";
+
+    const textInput = (field, options = {}) => (
+      <input
+        type="text"
+        id={`${field}-${index}`}
+        className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()}
+        value={options.value ?? row[field] ?? ""}
+        readOnly={options.readOnly ?? isFormDisabled}
+        disabled={options.disabled ?? false}
+        onChange={(e) => handleDetailChange(index, field, e.target.value)}
+        onKeyDown={(e) => handleMSRRGridKeyDown(e, index, field, options)}
+        maxLength={options.maxLength}
+        title={options.title}
+        onDoubleClick={options.onDoubleClick}
+      />
+    );
+
+    const readOnlyNumberInput = (field, value) => (
+      <input
+        type="text"
+        id={`${field}-${index}`}
+        className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
+        value={value}
+        readOnly
+      />
+    );
+
+    const lookupIcon = (onClick) =>
+      !rowLocked && (
+        <FontAwesomeIcon
+          icon={faMagnifyingGlass}
+          className="absolute right-2 text-blue-600 cursor-pointer hover:text-blue-900"
+          onClick={onClick}
+        />
+      );
+
+    const detailColumnRenderers = {
+      ln: () => (
+        <td key={columnKey} className="global-tran-td-ui text-center" style={style}>
+          {index + 1}
+        </td>
+      ),
+      rrStatus: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {textInput("rrStatus", {
+            value: getFullStatus(row.rrStatus || row.poStatus),
+            readOnly: true,
+            className: "text-center",
+          })}
+        </td>
+      ),
+      poNo: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {textInput("poNo", {
+            value: row.poNo || state.poNo || "",
+            readOnly: true,
+            className: "text-center",
+          })}
+        </td>
+      ),
+      itemCode: () => (
+        <td key={columnKey} className="global-tran-td-ui relative" style={style}>
+          <div className="flex items-center">
+            <input
+              type="text"
+              id={`itemCode-${index}`}
+              className="w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+              value={row.itemCode || ""}
+              readOnly
+              disabled={isFormDisabled}
+            />
+            {lookupIcon(() =>
+              updateState({
+                selectedRowIndex: index,
+                msLookupModalOpen: true,
+              })
+            )}
+          </div>
+        </td>
+      ),
+      itemName: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {textInput("itemName", { readOnly: isFormDisabled })}
+        </td>
+      ),
+      itemSpecs: () => (
+        <td key={columnKey} className="global-tran-td-ui relative" style={style}>
+          <div className="flex items-center">
+            <input
+              type="text"
+              id={`itemSpecs-${index}`}
+              className="w-full global-tran-td-inputclass-ui pr-6 cursor-pointer"
+              value={row.itemSpecs || ""}
+              readOnly
+              disabled={isFormDisabled}
+              onDoubleClick={() => openSpecsModal(index)}
+              title="Double-click to edit specification"
+            />
+            {!isFormDisabled && (
+              <FontAwesomeIcon
+                icon={faMagnifyingGlass}
+                className="absolute right-2 text-blue-600 cursor-pointer hover:text-blue-900"
+                onClick={() => openSpecsModal(index)}
+              />
+            )}
+          </div>
+        </td>
+      ),
+      uomCode: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {textInput("uomCode", { readOnly: true, className: "text-center" })}
+        </td>
+      ),
+      rrQty: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {msrrNumericInput(row, index, "rrQty")}
+        </td>
+      ),
+      freeQty: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {msrrNumericInput(row, index, "freeQty")}
+        </td>
+      ),
+      unitCost: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {msrrNumericInput(row, index, "unitCost")}
+        </td>
+      ),
+      grossAmount: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {readOnlyNumberInput(
+            "grossAmount",
+            formatNumber(parseFormattedNumber(row.grossAmount ?? row.amount ?? row.itemAmount)) || "",
+          )}
+        </td>
+      ),
+      vatCode: () => (
+        <td key={columnKey} className="global-tran-td-ui relative" style={style}>
+          <div className="flex items-center">
+            <input
+              type="text"
+              id={`vatCode-${index}`}
+              className="w-full global-tran-td-inputclass-ui pr-6 cursor-pointer"
+              value={row.vatCode || ""}
+              readOnly
+              disabled={isFormDisabled}
+            />
+            {lookupIcon(() => handleOpenVatLookup(index))}
+          </div>
+        </td>
+      ),
+      vatRate: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {readOnlyNumberInput(
+            "vatRate",
+            row.vatRate !== "" && row.vatRate !== null && row.vatRate !== undefined
+              ? formatNumber(parseFormattedNumber(row.vatRate), 2)
+              : "",
+          )}
+        </td>
+      ),
+      vatAmount: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {readOnlyNumberInput(
+            "vatAmount",
+            formatNumber(parseFormattedNumber(row.vatAmount)) || "",
+          )}
+        </td>
+      ),
+      netAmount: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {readOnlyNumberInput(
+            "netAmount",
+            formatNumber(parseFormattedNumber(row.netAmount)) || "",
+          )}
+        </td>
+      ),
+      lotNo: () => (
+        <td
+          key={columnKey}
+          className="global-tran-td-ui"
+          style={style}
+          onDoubleClick={() => handleOpenLotBreakdownModal(index)}
+        >
+          {textInput("lotNo", {
+            readOnly: isFormDisabled,
+            title: "Double-click to enter lot number breakdown",
+            onDoubleClick: () => handleOpenLotBreakdownModal(index),
+            maxLength: useGetFieldLength(tblFieldArray, "lot_no"),
+          })}
+        </td>
+      ),
+      bbDate: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          <input
+            type="date"
+            id={`bbDate-${index}`}
+            className="w-full global-tran-td-inputclass-ui text-center"
+            value={row.bbDate || ""}
+            readOnly={isFormDisabled}
+            disabled={isFormDisabled}
+            onChange={(e) => handleDetailChange(index, "bbDate", e.target.value)}
+            onKeyDown={(e) => handleMSRRGridKeyDown(e, index, "bbDate", { readOnly: isFormDisabled })}
+          />
+        </td>
+      ),
+      qstatCode: () => (
+        <td key={columnKey} className="global-tran-td-ui relative" style={style}>
+          <div className="flex items-center">
+            <input
+              type="text"
+              id={`qstatCode-${index}`}
+              className="w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+              value={row.qstatCode || ""}
+              readOnly
+              disabled={isFormDisabled}
+            />
+            {lookupIcon(() =>
+              updateState({
+                selectedRowIndex: index,
+                showQstatModal: true,
+              })
+            )}
+          </div>
+        </td>
+      ),
+      whouseCode: () => (
+        <td key={columnKey} className="global-tran-td-ui relative" style={style}>
+          <div className="flex items-center">
+            <input
+              type="text"
+              id={`whouseCode-${index}`}
+              className="w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+              value={row.whouseCode || row.whCode || ""}
+              readOnly
+              disabled={isFormDisabled}
+            />
+            {lookupIcon(() =>
+              updateState({
+                selectedRowIndex: index,
+                warehouseLookupOpen: true,
+                accountModalSource: "whouseCode",
+              })
+            )}
+          </div>
+        </td>
+      ),
+      LocCode: () => (
+        <td key={columnKey} className="global-tran-td-ui relative" style={style}>
+          <div className="flex items-center">
+            <input
+              type="text"
+              id={`LocCode-${index}`}
+              className="w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+              value={row.LocCode || row.locCode || ""}
+              readOnly
+              disabled={isFormDisabled}
+            />
+            {lookupIcon(() =>
+              updateState({
+                selectedRowIndex: index,
+                locationLookupOpen: true,
+                selectedWH: row.whouseCode || row.whCode || "",
+                accountModalSource: "LocCode",
+              })
+            )}
+          </div>
+        </td>
+      ),
+    };
+
+    return (
+      detailColumnRenderers[columnKey]?.() || (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {String(row[columnKey] ?? "")}
+        </td>
+      )
+    );
+  };
+
+  const msrrNumericInput = (row, index, field, options = {}) => {
+    const readOnly = options.readOnly ?? isFormDisabled;
+    const disabled = options.disabled ?? false;
+
+    return (
+      <input
+        type="text"
+        id={`${field}-${index}`}
+        className={`w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 ${options.className || ""}`.trim()}
+        value={row[field] || ""}
+        readOnly={readOnly}
+        disabled={disabled}
+        onChange={(e) => {
+          const sanitizedValue = e.target.value.replace(/[^0-9.]/g, "");
+          if (/^\d*\.?\d*$/.test(sanitizedValue) || sanitizedValue === "") {
+            handleDetailChange(index, field, sanitizedValue, false);
+          }
+        }}
+        onFocus={(e) => {
+          if (readOnly || disabled) return;
+
+          if (typeof clearMSRRDetailZeroOnFocus === "function") {
+            clearMSRRDetailZeroOnFocus(e, {
+              isEditable: true,
+              onClear: (val) => handleDetailChange(index, field, val, false),
+            });
+            return;
+          }
+
+          if (parseFormattedNumber(e.target.value) === 0) {
+            handleDetailChange(index, field, "", false);
+            setTimeout(() => e.target.select(), 0);
+          }
+        }}
+        onBlur={(e) => {
+          if (readOnly || disabled) return;
+          handleDetailChange(index, field, e.target.value, true);
+        }}
+        onKeyDown={(e) => handleMSRRGridKeyDown(e, index, field, { readOnly, disabled })}
+      />
+    );
+  };
+
   // ==========================
   // RENDER
   // ==========================
@@ -3682,13 +4422,7 @@ rrHdId: documentID || "",
                   disabled={isFormDisabled}
                 />
 
-              </div>
-
-              {/* Column 3: Currency */}
-              <div className="global-tran-textbox-group-div-ui">
-                {/* NEW FLEX CONTAINER FOR CURRENCY AND CURRENCY RATE */}
-                <div className="relative w-full">
-                  <FieldRenderer
+<FieldRenderer
                     id="SIdate"
                     label="SI Date"
                     type="date"
@@ -3701,6 +4435,14 @@ rrHdId: documentID || "",
                     }
                     disabled={isFormDisabled}
                   />
+
+              </div>
+
+              {/* Column 3: Currency */}
+              <div className="global-tran-textbox-group-div-ui">
+                {/* NEW FLEX CONTAINER FOR CURRENCY AND CURRENCY RATE */}
+              
+                  
 
                   {/* Currency */}
                   {/* <div className="relative flex-grow w-2/3"> 
@@ -3726,8 +4468,8 @@ rrHdId: documentID || "",
                             <FontAwesomeIcon icon={faMagnifyingGlass} />
                         </button>
                     </div> */}
-                  <div></div>
-                </div>
+             
+               
 
                 {/* WareHouse  */}
 
@@ -3785,7 +4527,11 @@ rrHdId: documentID || "",
                   label="Location"
                   required
                   type="lookup"
-                  value={LocName || LocCode || ""}
+                  value={
+  LocCode && LocName
+    ? `${LocCode} - ${LocName}`
+    : LocName || LocCode || ""
+}
                   readOnly
                   disabled={isFormDisabled || !WHCode}
                   lookupDisabled={isFetchDisabled}
@@ -3913,511 +4659,47 @@ rrHdId: documentID || "",
 
           <div className="global-tran-table-main-div-ui">
             <div className="global-tran-table-main-sub-div-ui">
-              <table className="min-w-full border-collapse">
+              <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
                 <thead className="global-tran-thead-div-ui">
                   <tr>
-                    <th className="global-tran-th-ui">LN</th>
-                    <th className="global-tran-th-ui">RR Status</th>
-                    <th className="global-tran-th-ui">PO No.</th>
-                    <th className="global-tran-th-ui">Item Code</th>
-                    <th className="global-tran-th-ui">Item Description</th>
-                    <th className="global-tran-th-ui">Specification</th>
-                    <th className="global-tran-th-ui">UOM</th>
-                    <th className="global-tran-th-ui">RR Quantity</th>
-                    <th className="global-tran-th-ui">Free Quantity</th>
-                    <th className="global-tran-th-ui">Unit Cost</th>
-                    <th className="global-tran-th-ui">Amount</th>
-                    <th className="global-tran-th-ui">VAT</th>
-                    <th className="global-tran-th-ui">VAT Rate</th>
-                    <th className="global-tran-th-ui">VAT Amount</th>
-                    <th className="global-tran-th-ui">Net Amount</th>
-                    <th className="global-tran-th-ui">Lot No</th>
-                    <th className="global-tran-th-ui">BB Date</th>
-                    <th className="global-tran-th-ui">QC Status</th>
-                    <th className="global-tran-th-ui">Warehouse</th>
-                    <th className="global-tran-th-ui">Location</th>
+                    {visibleMSRRDetailColumns.map((column) =>
+                      renderMSRRDetailHeader(column.label, column.key, column.width, {
+                        orderedColumns: visibleMSRRDetailColumns,
+                      })
+                    )}
                     {!isFormDisabled && (
-                      <th className="global-tran-th-ui sticky right-0 bg-blue-300 dark:bg-blue-900 z-30">
-                        Delete
+                    <th className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>
+                      Actions
                       </th>
                     )}
                   </tr>
                 </thead>
 
                 <tbody className="relative">
-                  {detailRows.map((row, index) => (
-                    <tr key={index} className="global-tran-tr-ui">
-                      {/* LN */}
-                      <td className="global-tran-td-ui text-center">
-                        {index + 1}
-                      </td>
-
-                    <td className="global-tran-td-ui">
-                      <input
-                        type="text"
-                        className="w-[90px] global-tran-td-inputclass-ui text-center"
-                        value={getFullStatus(row.rrStatus || row.poStatus)}
-                        readOnly
-                      />
-                    </td>
-
-                    <td className="global-tran-td-ui">
-                      <input
-                        type="text"
-                        className="w-[140px] global-tran-td-inputclass-ui text-center"
-                        value={row.poNo || state.poNo || ""}
-                        readOnly
-                      />
-                    </td>
-
-                      {/* Item Code */}
-                      <td className="global-tran-td-ui relative">
-                        <div className="flex items-center">
-                          <input
-                            type="text"
-                            className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
-                            value={row.itemCode || ""}
-                            readOnly
-                          />
-                          {!isFormDisabled && (
-                            <FontAwesomeIcon
-                              icon={faMagnifyingGlass}
-                              className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                              onClick={() => {
-                                updateState({
-                                  selectedRowIndex: index,
-                                  msLookupModalOpen: true,
-                                });
-                              }}
-                            />
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Item Description */}
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[200px] global-tran-td-inputclass-ui"
-                          value={row.itemName || ""}
-                          readOnly={isFormDisabled}
-                          onChange={(e) =>
-                            handleDetailChange(
-                              index,
-                              "itemName",
-                              e.target.value,
-                            )
-                          }
-                        />
-                      </td>
-
-                      {/* Specification */}
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[220px] global-tran-td-inputclass-ui cursor-pointer"
-                          value={row.itemSpecs || ""}
-                          readOnly
-                          onDoubleClick={() => openSpecsModal(index)}
-                          title="Double-click to edit specification"
-                        />
-                      </td>
-
-                      {/* UOM */}
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[50px] text-center global-tran-td-inputclass-ui"
-                          value={row.uomCode || ""}
-                          readOnly={isFormDisabled}
-                          onChange={(e) =>
-                            handleDetailChange(index, "uomCode", e.target.value)
-                          }
-                        />
-                      </td>
-
-                      {/* RR Quantity */}
-                      <td className="global-tran-td-ui text-right">
-                        <input
-                          type="text"
-                          className="w-[120px] global-tran-td-inputclass-ui text-right"
-                          value={row.rrQty || ""}
-                          disabled={isFormDisabled}
-                          onChange={(e) => {
-                            const inputValue = e.target.value;
-                            const sanitizedValue = inputValue.replace(
-                              /[^0-9.-]/g,
-                              "",
-                            );
-                            if (
-                                /^-?\d*\.?\d{0,6}$/.test(sanitizedValue) ||
-                              sanitizedValue === ""
-                            ) {
-                              handleDetailChange(
-                                index,
-                                "rrQty",
-                                sanitizedValue,
-                                false,
-                              );
-                            }
-                          }}
-                          onFocus={(e) => {
-                            if (
-                              e.target.value === "0.00" ||
-                              parseFormattedNumber(e.target.value) === 0
-                            ) {
-                              e.target.value = "";
-                            }
-                          }}
-                          onBlur={async (e) => {
-                            const value = e.target.value;
-                            const num = parseFormattedNumber(value);
-                            if (!isNaN(num)) {
-                              handleDetailChange(index, "rrQty", num, true);
-                            }
-                            setFocusedCell(null);
-                          }}
-                          onKeyDown={async (e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              const value = e.target.value;
-                              const num = parseFormattedNumber(value);
-                              if (!isNaN(num)) {
-                                handleDetailChange(index, "rrQty", num, true);
-                              }
-                              e.target.blur();
-                            }
-                          }}
-                        />
-                      </td>
-
-                      {/* Free Quantity */}
-                      <td className="global-tran-td-ui text-right">
-                        <input
-                          type="text"
-                          className="w-[120px] global-tran-td-inputclass-ui text-right"
-                          value={row.freeQty || ""}
-                          disabled={isFormDisabled}
-                          onChange={(e) => {
-                            const inputValue = e.target.value;
-                            const sanitizedValue = inputValue.replace(
-                              /[^0-9.-]/g,
-                              "",
-                            );
-                            if (
-                                /^-?\d*\.?\d{0,6}$/.test(sanitizedValue) ||
-                              sanitizedValue === ""
-                            ) {
-                              handleDetailChange(
-                                index,
-                                "freeQty",
-                                sanitizedValue,
-                                false,
-                              );
-                            }
-                          }}
-                          onFocus={(e) => {
-                            if (
-                              e.target.value === "0.00" ||
-                              parseFormattedNumber(e.target.value) === 0
-                            ) {
-                              e.target.value = "";
-                            }
-                          }}
-                          onBlur={async (e) => {
-                            const value = e.target.value;
-                            const num = parseFormattedNumber(value);
-                            if (!isNaN(num)) {
-                          handleDetailChange(index, "freeQty", num, true);
-                            }
-                            setFocusedCell(null);
-                          }}
-                          onKeyDown={async (e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              const value = e.target.value;
-                              const num = parseFormattedNumber(value);
-                              if (!isNaN(num)) {
-                                handleDetailChange(
-                                  index,
-                                  "freeQty",
-                                  num,
-                                  true,
-                                );
-                              }
-                              e.target.blur();
-                            }
-                          }}
-                        />
-                      </td>
-
-                      {/* Unit Cost */}
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
-                          value={row.unitCost || ""}
-                          readOnly={isFormDisabled}
-                          onChange={(e) => {
-                            const inputValue = e.target.value;
-                            const sanitizedValue = inputValue.replace(
-                              /[^0-9.]/g,
-                              "",
-                            );
-                            if (
-                                /^\d*\.?\d{0,6}$/.test(sanitizedValue) ||
-                              sanitizedValue === ""
-                            ) {
-                              handleDetailChange(
-                                index,
-                                "unitCost",
-                                sanitizedValue,
-                                false,
-                              );
-                            }
-                          }}
-                          onFocus={(e) => {
-                            if (
-                              e.target.value === "0.00" ||
-                              parseFormattedNumber(e.target.value) === 0
-                            ) {
-                              e.target.value = "";
-                            }
-                          }}
-                          onBlur={async (e) => {
-                            const value = e.target.value;
-                            const num = parseFormattedNumber(value);
-                            if (!isNaN(num)) {
-                              handleDetailChange(index, "unitCost", num, true);
-                            }
-                            setFocusedCell(null);
-                          }}
-                          onKeyDown={async (e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              const value = e.target.value;
-                              const num = parseFormattedNumber(value);
-                              if (!isNaN(num)) {
-                                handleDetailChange(
-                                  index,
-                                  "unitCost",
-                                  num,
-                                  true,
-                                );
-                              }
-                              e.target.blur();
-                            }
-                          }}
-                        />
-                      </td>
-
-                      {/* Amount (GROSS_AMOUNT) */}
-                      <td className="global-tran-td-ui text-right">
-                        <input
-                          type="text"
-                          className="w-[140px] global-tran-td-inputclass-ui text-right"
-                          value={
-                            formatNumber(
-                              parseFormattedNumber(
-                                row.grossAmount ?? row.amount ?? row.itemAmount,
-                              ),
-                            ) || ""
-                          }
-                        />
-                      </td>
-
-                      {/* VAT Code (lookup) */}
-                      <td className="global-tran-td-ui">
-                        <div className="relative w-fit">
-                          <input
-                            type="text"
-                            className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
-                            value={row.vatCode || ""}
-                            onChange={(e) =>
-                              handleDetailChange(
-                                index,
-                                "vatCode",
-                                e.target.value,
-                              )
-                            }
-                            readOnly
-                          />
-
-                          {!isFormDisabled &&
-                            (
-                              <FontAwesomeIcon
-                                icon={faMagnifyingGlass}
-                                className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                                onClick={() => {
-                                  handleOpenVatLookup(index);
-                                }}
-                              />
-                            )}
-                        </div>
-                      </td>
-
-                      {/* VAT Rate (from VAT lookup) */}
-                      <td className="global-tran-td-ui text-right">
-                        <input
-                          type="text"
-                          className="w-[120px] global-tran-td-inputclass-ui text-right"
-                          value={
-                            row.vatRate !== "" && row.vatRate !== null && row.vatRate !== undefined
-                              ? formatNumber(parseFormattedNumber(row.vatRate), 2)
-                              : ""
-                          }
-                          readOnly
-                          disabled
-                        />
-                      </td>
-
-                      {/* VAT Amount */}
-                      <td className="global-tran-td-ui text-right">
-                        <input
-                          type="text"
-                          className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 cursor-pointer"
-                          value={
-                            formatNumber(parseFormattedNumber(row.vatAmount)) ||
-                            ""
-                          }
-                          disabled={isFormDisabled}
-                        />
-                      </td>
-
-                      {/* Net Amount */}
-                      <td className="global-tran-td-ui text-right">
-                        <input
-                          type="text"
-                          className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 cursor-pointer"
-                          value={
-                            formatNumber(parseFormattedNumber(row.netAmount)) ||
-                            ""
-                          }
-                          disabled={isFormDisabled}
-                        />
-                      </td>
-
-                      <td
-                        className="global-tran-td-ui"
-                        onDoubleClick={() => handleOpenLotBreakdownModal(index)}
-                      >
-                        <input
-                          type="text"
-                          className="w-[200px] global-tran-td-inputclass-ui"
-                          value={row.lotNo || ""}
-                          readOnly={isFormDisabled}
-                          onDoubleClick={() => handleOpenLotBreakdownModal(index)}
-                          title="Double-click to enter lot number breakdown"
-                          onChange={(e) =>
-                            handleDetailChange(index, "lotNo", e.target.value)
-                          }
-                          maxLength={useGetFieldLength(tblFieldArray, "lot_no")}
-                        />
-                      </td>
-
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="date"
-                            className="w-[100px] global-tran-td-inputclass-ui"
-                          value={row.bbDate || ""}
-                          readOnly={isFormDisabled}
-                          onChange={(e) =>
-                            handleDetailChange(index, "bbDate", e.target.value)
-                          }
-                        />
-                      </td>
-
-                      {/* QC Status */}
-                      <td className="global-tran-td-ui relative">
-                        <div className="flex items-center">
-                          <input
-                            type="text"
-                            className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
-                            value={row.qstatCode || ""}
-                            readOnly
-                          />
-                          {!isFormDisabled && row.operation !== "S" && (
-                            <FontAwesomeIcon
-                              icon={faMagnifyingGlass}
-                              className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                              onClick={() => {
-                                updateState({
-                                  selectedRowIndex: index,
-                                  showQstatModal: true,
-                                });
-                              }}
-                            />
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Warehouse */}
-                      <td className="global-tran-td-ui relative">
-                        <div className="flex items-center">
-                          <input
-                            type="text"
-                            className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
-                            value={row.whouseCode || row.whCode || ""}
-                            readOnly
-                          />
-                          {!isFormDisabled && row.operation !== "S" && (
-                            <FontAwesomeIcon
-                              icon={faMagnifyingGlass}
-                              className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                              onClick={() => {
-                                updateState({
-                                  selectedRowIndex: index,
-                                  warehouseLookupOpen: true,
-                                  accountModalSource: "whouseCode",
-                                });
-                              }}
-                            />
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Location */}
-                      <td className="global-tran-td-ui relative">
-                        <div className="flex items-center">
-                          <input
-                            type="text"
-                            className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
-                            value={row.LocCode || row.locCode || ""}
-                            readOnly
-                          />
-                          {!isFormDisabled && row.operation !== "S" && (
-                            <FontAwesomeIcon
-                              icon={faMagnifyingGlass}
-                              className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                              onClick={() => {
-                                updateState({
-                                  selectedRowIndex: index,
-                                  locationLookupOpen: true,
-                                  selectedWH:
-                                    row.whouseCode || row.whCode || "",
-                                  accountModalSource: "LocCode",
-                                });
-                              }}
-                            />
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Delete */}
-                      {!isFormDisabled && (
-                        <td className="global-tran-td-ui text-center sticky right-0">
-                          <button
-                            className="global-tran-td-button-delete-ui"
-                            onClick={() => handleDeleteRow(index)}
-                          >
-                            -
-                          </button>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                  {sortedMSRRDetailRows.map(({ row, originalIndex }) => (
+                    <tr key={originalIndex} className="global-tran-tr-ui">
+                      {visibleMSRRDetailColumns.map((column) =>
+                        renderMSRRDetailCell(column.key, row, originalIndex)
+                      )}
+                      {!isFormDisabled && (
+                        <td
+                          className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black"
+                          style={transactionActionsCellStyle}
+                        >
+                          <button
+                            type="button"
+                            className="global-tran-td-button-delete-ui"
+                            onClick={() => handleDeleteRow(originalIndex)}
+                          >
+                            <FontAwesomeIcon icon={faTrashAlt} />
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {renderMSRRDetailHeaderContextMenu?.()}
             </div>
           </div>
 
@@ -4676,13 +4958,7 @@ rrHdId: documentID || "",
               <table className="min-w-full border-collapse">
                 <thead className="global-tran-thead-div-ui">
                   <tr>
-                    <th className="global-tran-th-ui">LN</th>
-                    <th className="global-tran-th-ui">Lot No</th>
                     <th className="global-tran-th-ui">Quantity</th>
-                    <th className="global-tran-th-ui">BB Date</th>
-                    <th className="global-tran-th-ui">QC Status</th>
-                    <th className="global-tran-th-ui">Warehouse</th>
-                    <th className="global-tran-th-ui">Location</th>
                     <th className="global-tran-th-ui"></th>
                     <th className="global-tran-th-ui">Delete</th>
                   </tr>
@@ -4995,7 +5271,9 @@ rrHdId: documentID || "",
         <MSLookupModal
           isOpen={msLookupModalOpen}
           onClose={handleCloseMSLookup}
-          customParam={null} // or pass something if you need it
+          onGetSelectedItems={handleCloseMSLookup}
+          enableMultiSelect
+          customParam="ActiveAll"
         />
       )}
 

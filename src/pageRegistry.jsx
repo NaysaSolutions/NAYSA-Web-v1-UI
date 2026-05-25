@@ -1,366 +1,150 @@
+import React, { lazy } from "react";
 
+// Maps DB componentKey -> lazy React component. Keep keys stable because the
+// backend stores them in menu-routes/menu-items.
+const lazyPage = (loader) => lazy(loader);
 
+const UniversalReportModal = lazyPage(() =>
+  import("./NAYSA Cloud/Printing/UniversalReportModal.jsx")
+);
 
-// Maps DB componentKey -> React component
-
-// --- ACCOUNTS RECEIVABLE ---
-import SVI from "./NAYSA Cloud/Module/Main Module/Accounts Receivable/SVI.jsx";
-import PostSVI from "./NAYSA Cloud/Module/Main Module/Accounts Receivable/PostSVI.jsx";
-import SOA from "./NAYSA Cloud/Module/Main Module/Accounts Receivable/SOA.jsx";
-import PostSOA from "./NAYSA Cloud/Module/Main Module/Accounts Receivable/PostSOA.jsx";
-import ARCM from "./NAYSA Cloud/Module/Main Module/Accounts Receivable/ARCM.jsx";
-import PostARCM from "./NAYSA Cloud/Module/Main Module/Accounts Receivable/PostARCM.jsx";
-import ARDM from "./NAYSA Cloud/Module/Main Module/Accounts Receivable/ARDM.jsx";
-import PostARDM from "./NAYSA Cloud/Module/Main Module/Accounts Receivable/PostARDM.jsx";
-import CR from "./NAYSA Cloud/Module/Main Module/Accounts Receivable/CR.jsx";
-import PostCR from "./NAYSA Cloud/Module/Main Module/Accounts Receivable/PostCR.jsx";
-import AR from "./NAYSA Cloud/Module/Main Module/Accounts Receivable/AR.jsx";
-import PostAR from "./NAYSA Cloud/Module/Main Module/Accounts Receivable/PostAR.jsx";
-import ARDS from "./NAYSA Cloud/Module/Main Module/Accounts Receivable/ARDS.jsx";
-
-// --- ACCOUNTS PAYABLE ---
-import APV from "./NAYSA Cloud/Module/Main Module/Accounts Payable/APV.jsx";
-import PostAPV from "./NAYSA Cloud/Module/Main Module/Accounts Payable/PostAPV.jsx";
-import APCM from "./NAYSA Cloud/Module/Main Module/Accounts Payable/APCM.jsx";
-import PostAPCM from "./NAYSA Cloud/Module/Main Module/Accounts Payable/PostAPCM.jsx";
-import APDM from "./NAYSA Cloud/Module/Main Module/Accounts Payable/APDM.jsx";
-import PostAPDM from "./NAYSA Cloud/Module/Main Module/Accounts Payable/PostAPDM.jsx";
-import PCV from "./NAYSA Cloud/Module/Main Module/Accounts Payable/PCV.jsx";
-import PostPCV from "./NAYSA Cloud/Module/Main Module/Accounts Payable/PostPCV.jsx";
-import CV from "./NAYSA Cloud/Module/Main Module/Accounts Payable/CV.jsx";
-import PostCV from "./NAYSA Cloud/Module/Main Module/Accounts Payable/PostCV.jsx";
-import CVHistory from "./NAYSA Cloud/Module/Main Module/Accounts Payable/CVHistory.jsx";
-
-// --- GENERAL LEDGER & MASTER DATA ---
-import JV from "./NAYSA Cloud/Module/Main Module/General Ledger/JV.jsx";
-import PostJV from "./NAYSA Cloud/Module/Main Module/General Ledger/PostJV.jsx";
-import COAMast from "./NAYSA Cloud/Master Data/ChartofAccounts/COAMast.jsx";
-import FSConso from "@/NAYSA Cloud/Master Data/ChartofAccounts/FSConsolidation.jsx";
-import GLFSMatching from "@/NAYSA Cloud/Master Data/ChartofAccounts/GLFSMatching.jsx";
-import CustMast from "./NAYSA Cloud/Master Data/CustMast.jsx";
-import VendMast from "./NAYSA Cloud/Master Data/VendMast.jsx";
-import BankMast from "./NAYSA Cloud/Master Data/BankMast.jsx";
-import MSMast from "./NAYSA Cloud/Master Data/MSMasterData/MSMast.jsx";
-import FGMast from "./NAYSA Cloud/Master Data/FGMasterData/FGMast.jsx";
-import RCMast from "./NAYSA Cloud/Master Data/RCMast.jsx";
-import SLMast from "./NAYSA Cloud/Master Data/SLMast.jsx";
-import WarehouseLocation from "./NAYSA Cloud/Master Data/Inventory/WareMast.jsx";
-import UOM from "./NAYSA Cloud/Master Data/Inventory/UOM.jsx";
-import QualityStat from "./NAYSA Cloud/Master Data/Inventory/QualityStat.jsx";
-
-// --- SALES ---
-import SO from "./NAYSA Cloud/Module/Main Module/Sales/SO.jsx";
-import DR from "./NAYSA Cloud/Module/Main Module/Sales/DR.jsx";
-import SI from "./NAYSA Cloud/Module/Main Module/Sales/SI.jsx";
-import PostSI from "./NAYSA Cloud/Module/Main Module/Sales/PostSI.jsx";
-
-
-// --- PURCHASING & INVENTORY ---
-import PR from "./NAYSA Cloud/Module/Main Module/Purchasing/PR.jsx";
-import PRApprovalModal from "./NAYSA Cloud/Approval/PRApprovalModal.jsx";
-import JOApprovalModal from "./NAYSA Cloud/Approval/JOApprovalModal.jsx";
-import POApprovalModal from "./NAYSA Cloud/Approval/POApprovalModal.jsx";
-import ApprovalMatrixModal from "./NAYSA Cloud/Approval/GlobalApprovalMatrix.jsx";
-import PO from "./NAYSA Cloud/Module/Main Module/Purchasing/PO.jsx";
-import JO from "./NAYSA Cloud/Module/Main Module/Purchasing/JO.jsx";
-import CAN from "./NAYSA Cloud/Module/Main Module/Purchasing/CAN.jsx";
-import MSRR from "./NAYSA Cloud/Module/Main Module/Inventory/MSRR.jsx";
-import MSIS from "./NAYSA Cloud/Module/Main Module/Inventory/MSIS.jsx";
-import MSST from "./NAYSA Cloud/Module/Main Module/Inventory/MSST.jsx";
-import MSAJ from "./NAYSA Cloud/Module/Main Module/Inventory/MSAJ.jsx";
-import MSRTV from "./NAYSA Cloud/Module/Main Module/Inventory/MSRTV.jsx";
-import FGRR from "./NAYSA Cloud/Module/Main Module/Inventory/FGRR.jsx";
-import PostMSRR from "./NAYSA Cloud/Module/Main Module/Inventory/PostMSRR.jsx";
-import PostMSRTV from "./NAYSA Cloud/Module/Main Module/Inventory/PostMSRTV.jsx";
-import PostMSAJ from "./NAYSA Cloud/Module/Main Module/Inventory/PostMSAJ.jsx";
-import MonthendGLProcessingModal from "@/NAYSA Cloud/Processing/MonthendProcessing.jsx";
-import YearendGLProcessingModal from "@/NAYSA Cloud/Processing/YearendProcessing.jsx";
-import BankReconProcessing from "@/NAYSA Cloud/Processing/BankReconProcessing.jsx";
-
-// --- REFERENCE FILES ---
-import Company from "./NAYSA Cloud/Reference File/Company.jsx";
-import BranchRef from "./NAYSA Cloud/Reference File/BranchRef.jsx";
-import BankRef from "./NAYSA Cloud/Reference File/BankRef.jsx";
-import CurrRef from "./NAYSA Cloud/Reference File/CurrRef.jsx";
-import ATaxCode from "./NAYSA Cloud/Reference File/ATCRef.jsx";
-import UpdateUser from "./NAYSA Cloud/Reference File/UpdateUser.jsx";
-import UserAccessRights from "./NAYSA Cloud/Reference File/UserAccessRights.jsx";
-import MasterAccessRights from "./NAYSA Cloud/Reference File/MasterAccessRights.jsx";
-import CutoffRef from "./NAYSA Cloud/Reference File/CutoffRef.jsx";
-import DForexRef from "./NAYSA Cloud/Reference File/DForexRef.jsx";
-import VATRef from "./NAYSA Cloud/Reference File/VATRef.jsx";
-import BillCodeRef from "./NAYSA Cloud/Reference File/BillCodeRef.jsx";
-import JobCodeRef from "./NAYSA Cloud/Reference File/JobCodeRef.jsx";
-
-// --- QUERIES & LOOKUPS ---
-import AllTranHistory from "./NAYSA Cloud/Lookup/SearchGlobalTranHistory.jsx";
-import GLINQ from "./NAYSA Cloud/Query/GLInq/GLInq.jsx";
-import ARINQ from "./NAYSA Cloud/Query/ARInq/ARINQ.jsx";
-import APINQ from "./NAYSA Cloud/Query/APInq/APINQ.jsx";
-import EWTINQ from "./NAYSA Cloud/Query/EWTInq/EWTINQ.jsx";
-import CWTINQ from "./NAYSA Cloud/Query/CWTInq/CWTINQ.jsx";
-import CheckRL from "./NAYSA Cloud/Query/CheckRL/CheckRL.jsx";
-import CWTMonitoring from "./NAYSA Cloud/Query/CWTInq/CWTMonitoring.jsx";
-import INTAXINQ from "./NAYSA Cloud/Query/INTAXInq/INTAXINQ.jsx";
-import OUTAXINQ from "./NAYSA Cloud/Query/OUTAXInq/OUTAXINQ.jsx";
-import AuditTrail from "./NAYSA Cloud/Query/AuditTrail/AuditTail.jsx";
-import MSINQ from "./NAYSA Cloud/Query/INVInq/MSStockCard.jsx";
-
-
-//Matrix
-import PRInquiry from "./NAYSA Cloud/Module/Main Module/Purchasing/PRInquiry.jsx";
-import SalesPMCustomerItem from "./NAYSA Cloud/Matrix/SalesPMCustomerItem.jsx"
-import CheckTemplateSetup from "./NAYSA Cloud/Matrix/CheckTemplateSetup.jsx"
-import PRInq from "./NAYSA Cloud/Module/Main Module/Purchasing/PRInq.jsx";
-import POInq from "./NAYSA Cloud/Module/Main Module/Purchasing/POInquiry.jsx";
-import JOInq from "./NAYSA Cloud/Module/Main Module/Purchasing/JOInquiry.jsx";
-// --- PRINTING / MODALS ---
-// import ARReportModal from "./NAYSA Cloud/Printing/ARReport.jsx";
-// import APReportModal from "./NAYSA Cloud/Printing/APReport.jsx";
-// import GLReportModal from "./NAYSA Cloud/Printing/GLReport.jsx";
-// import VIReportModal from "./NAYSA Cloud/Printing/VIReport.jsx";
-// import EWTReportModal from "./NAYSA Cloud/Printing/EWTReport.jsx";
-// import VOReportModal from "./NAYSA Cloud/Printing/VOReport.jsx";
-// import CWTReportModal from "./NAYSA Cloud/Printing/CWTReport.jsx";
-// import UniversalReportModal from "./NAYSA Cloud/Printing/UniversalReport"
-
-
-
-// export const pageRegistry = {
-//   // Accounts Receivable
-//   SVI,
-//   SOA,
-//   ARCM,
-//   ARDM,
-//   CR,
-//   AR,
-
-//   // Accounts Payable
-//   APV,
-//   APCM,
-//   APDM,
-//   PCV,
-//   CV,
-//   CVHistory,
-
-//   // Purchasing
-//   PR,
-//   PO,
-//   JO,
-
-//   // Inventory
-//   MSRR,
-//   MSIS,
-//   MSST,
-//   MSAJ,
-//   MSRTV,
-
-//   // General Ledger & Master Data
-//   JV,
-//   COAMast,
-//   BankMast,
-//   RCMast,
-//   CustMast,
-//   VendMast,
-
-//   // Global & Queries
-//   AllTranHistory,
-//   ARINQ,
-//   APINQ,
-//   EWTINQ,
-//   CWTINQ,
-//   INTAXINQ,
-//   OUTAXINQ,
-//   CWTMonitoring,
-//   CheckRL,
-//   GLINQ,
-
-//   // Global Reference
-//   Company,
-//   CutoffRef,
-//   VATRef,
-//   CurrRef,
-//   DForexRef,
-//   BranchRef,
-//   BankRef,
-//   UpdateUser,
-//   UserAccessRights,
-//   MasterAccessRights,
-//   ATaxCode,
-
-//   // Posting
-//   PostSVI,
-//   PostSOA,
-//   PostARCM,
-//   PostARDM,
-//   PostCR,
-//   PostAR,
-//   PostCV,
-//   PostPCV,
-//   PostJV,
-//   PostAPV,
-//   PostAPCM,
-//   PostAPDM,
-//   PostMSRR,
-//   PostMSRTV,
-//   PostMSAJ,
-
-//   // Printing
-//   // GLReportModal,
-//   // ARReportModal,
-//   // APReportModal,
-//   // VIReportModal,
-//   // EWTReportModal,
-//   // CWTReportModal,
-//   // VOReportModal,
-
-//   APReportModal: (props) => <UniversalReportModal {...props} module="AP" />,
-//   VIReportModal: (props) => <UniversalReportModal {...props} module="VI" />,
-//   EWTReportModal: (props) => <UniversalReportModal {...props} module="EWT" />,
-  
-//   ARReportModal: (props) => <UniversalReportModal {...props} module="AR" />,
-//   VOReportModal: (props) => <UniversalReportModal {...props} module="VO" />,
-//   CWTReportModal: (props) => <UniversalReportModal {...props} module="CWT" />,
-  
-//   GLReportModal: (props) => <UniversalReportModal {...props} module="GL" />,
-// };
-
-// import UniversalReportModal from "./NAYSA Cloud/Printing/UniversalReport"
-import UniversalReportModal from "./NAYSA Cloud/Printing/UniversalReportModal.jsx";
-
-
-
-
-// ... ensure all other components (SVI, SOA, etc.) are imported above ...
+const reportModal = (module) => {
+  const ReportModal = (props) => (
+    <UniversalReportModal {...props} module={module} />
+  );
+  ReportModal.displayName = `${module}ReportModal`;
+  return ReportModal;
+};
 
 export const pageRegistry = {
   // Accounts Receivable
-  SVI,
-  SOA,
-  ARCM,
-  ARDM,
-  CR,
-  AR,
-  ARDS,
+  SVI: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Receivable/SVI.jsx")),
+  SOA: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Receivable/SOA.jsx")),
+  ARCM: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Receivable/ARCM.jsx")),
+  ARDM: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Receivable/ARDM.jsx")),
+  CR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Receivable/CR.jsx")),
+  AR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Receivable/AR.jsx")),
+  ARDS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Receivable/ARDS.jsx")),
 
   // Accounts Payable
-  APV,
-  APCM,
-  APDM,
-  PCV,
-  CV,
-  CVHistory,
-  CheckTemplateSetup,
+  APV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Payable/APV.jsx")),
+  APCM: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Payable/APCM.jsx")),
+  APDM: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Payable/APDM.jsx")),
+  PCV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Payable/PCV.jsx")),
+  CV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Payable/CV.jsx")),
+  CVHistory: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Payable/CVHistory.jsx")),
+  CheckTemplateSetup: lazyPage(() => import("./NAYSA Cloud/Matrix/CheckTemplateSetup.jsx")),
 
   // Purchasing
-  PR,
-  PRApprovalModal,
-  JOApprovalModal,
-  POApprovalModal,
-  ApprovalMatrixModal,
-  PO,
-  JO,
-  JobCodeRef,
+  PR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Purchasing/PR.jsx")),
+  PRApprovalModal: lazyPage(() => import("./NAYSA Cloud/Approval/PRApprovalModal.jsx")),
+  JOApprovalModal: lazyPage(() => import("./NAYSA Cloud/Approval/JOApprovalModal.jsx")),
+  POApprovalModal: lazyPage(() => import("./NAYSA Cloud/Approval/POApprovalModal.jsx")),
+  ApprovalMatrixModal: lazyPage(() => import("./NAYSA Cloud/Approval/GlobalApprovalMatrix.jsx")),
+  PO: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Purchasing/PO.jsx")),
+  JO: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Purchasing/JO.jsx")),
+  JobCodeRef: lazyPage(() => import("./NAYSA Cloud/Reference File/JobCodeRef.jsx")),
 
-  //Sales
-  SO,
-  DR,
-  SI,
+  // Sales
+  SO: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/SO.jsx")),
+  DR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/DR.jsx")),
+  SI: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/SI.jsx")),
 
   // Inventory
-  MSRR,
-  MSIS,
-  MSST,
-  MSAJ,
-  MSRTV,
-  FGRR,
+  MSRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSRR.jsx")),
+  MSIS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSIS.jsx")),
+  MSST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSST.jsx")),
+  MSAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSAJ.jsx")),
+  MSRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSRTV.jsx")),
+  FGRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGRR.jsx")),
 
   // General Ledger & Master Data
-  JV,
-  COAMast,FSConso,GLFSMatching,
-  BankMast,
-  RCMast,
-  CustMast,
-  VendMast,
-  SLMast,
-  MSMast,
-  FGMast,
+  JV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/General Ledger/JV.jsx")),
+  COAMast: lazyPage(() => import("./NAYSA Cloud/Master Data/ChartofAccounts/COAMast.jsx")),
+  FSConso: lazyPage(() => import("./NAYSA Cloud/Master Data/ChartofAccounts/FSConsolidation.jsx")),
+  GLFSMatching: lazyPage(() => import("./NAYSA Cloud/Master Data/ChartofAccounts/GLFSMatching.jsx")),
+  BankMast: lazyPage(() => import("./NAYSA Cloud/Master Data/BankMast.jsx")),
+  RCMast: lazyPage(() => import("./NAYSA Cloud/Master Data/RCMast.jsx")),
+  CustMast: lazyPage(() => import("./NAYSA Cloud/Master Data/CustMast.jsx")),
+  VendMast: lazyPage(() => import("./NAYSA Cloud/Master Data/VendMast.jsx")),
+  SLMast: lazyPage(() => import("./NAYSA Cloud/Master Data/SLMast.jsx")),
+  MSMast: lazyPage(() => import("./NAYSA Cloud/Master Data/MSMasterData/MSMast.jsx")),
+  FGMast: lazyPage(() => import("./NAYSA Cloud/Master Data/FGMasterData/FGMast.jsx")),
 
   // Global & Queries
-  AllTranHistory,
-  ARINQ,
-  APINQ,
-  EWTINQ,
-  CWTINQ,
-  INTAXINQ,
-  OUTAXINQ,
-  CWTMonitoring,
-  CheckRL,
-  GLINQ,
-  AuditTrail,
-  MSINQ,
+  AllTranHistory: lazyPage(() => import("./NAYSA Cloud/Lookup/SearchGlobalTranHistory.jsx")),
+  ARINQ: lazyPage(() => import("./NAYSA Cloud/Query/ARInq/ARINQ.jsx")),
+  APINQ: lazyPage(() => import("./NAYSA Cloud/Query/APInq/APINQ.jsx")),
+  EWTINQ: lazyPage(() => import("./NAYSA Cloud/Query/EWTInq/EWTINQ.jsx")),
+  CWTINQ: lazyPage(() => import("./NAYSA Cloud/Query/CWTInq/CWTINQ.jsx")),
+  INTAXINQ: lazyPage(() => import("./NAYSA Cloud/Query/INTAXInq/INTAXINQ.jsx")),
+  OUTAXINQ: lazyPage(() => import("./NAYSA Cloud/Query/OUTAXInq/OUTAXINQ.jsx")),
+  CWTMonitoring: lazyPage(() => import("./NAYSA Cloud/Query/CWTInq/CWTMonitoring.jsx")),
+  CheckRL: lazyPage(() => import("./NAYSA Cloud/Query/CheckRL/CheckRL.jsx")),
+  GLINQ: lazyPage(() => import("./NAYSA Cloud/Query/GLInq/GLInq.jsx")),
+  AuditTrail: lazyPage(() => import("./NAYSA Cloud/Query/AuditTrail/AuditTail.jsx")),
+  SecurityAuditTrail: lazyPage(() => import("./NAYSA Cloud/Query/AuditTrail/SecurityAuditTrail.jsx")),
+  MSINQ: lazyPage(() => import("./NAYSA Cloud/Query/INVInq/MSStockCard.jsx")),
 
   // Global Reference
-  Company,
-  CutoffRef,
-  VATRef,
-  CurrRef,
-  DForexRef,
-  BranchRef,
-  BankRef,
-  UpdateUser,
-  UserAccessRights,
-  MasterAccessRights,
-  ATaxCode,
-  BillCodeRef,
-  WarehouseLocation,
-  UOM,
-  QualityStat,
+  Company: lazyPage(() => import("./NAYSA Cloud/Reference File/Company.jsx")),
+  CutoffRef: lazyPage(() => import("./NAYSA Cloud/Reference File/CutoffRef.jsx")),
+  VATRef: lazyPage(() => import("./NAYSA Cloud/Reference File/VATRef.jsx")),
+  CurrRef: lazyPage(() => import("./NAYSA Cloud/Reference File/CurrRef.jsx")),
+  DForexRef: lazyPage(() => import("./NAYSA Cloud/Reference File/DForexRef.jsx")),
+  BranchRef: lazyPage(() => import("./NAYSA Cloud/Reference File/BranchRef.jsx")),
+  BankRef: lazyPage(() => import("./NAYSA Cloud/Reference File/BankRef.jsx")),
+  UpdateUser: lazyPage(() => import("./NAYSA Cloud/Reference File/UpdateUser.jsx")),
+  UserAccessRights: lazyPage(() => import("./NAYSA Cloud/Reference File/UserAccessRights.jsx")),
+  MasterAccessRights: lazyPage(() => import("./NAYSA Cloud/Reference File/MasterAccessRights.jsx")),
+  ReportAccessRights: lazyPage(() => import("./NAYSA Cloud/Reference File/ReportAccessRights.jsx")),
+  ATaxCode: lazyPage(() => import("./NAYSA Cloud/Reference File/ATCRef.jsx")),
+  BillCodeRef: lazyPage(() => import("./NAYSA Cloud/Reference File/BillCodeRef.jsx")),
+  WarehouseLocation: lazyPage(() => import("./NAYSA Cloud/Master Data/Inventory/WareMast.jsx")),
+  UOM: lazyPage(() => import("./NAYSA Cloud/Master Data/Inventory/UOM.jsx")),
+  QualityStat: lazyPage(() => import("./NAYSA Cloud/Master Data/Inventory/QualityStat.jsx")),
 
   // Posting
-  PostSVI,
-  PostSOA,
-  PostARCM,
-  PostARDM,
-  PostCR,
-  PostAR,
-  PostCV,
-  PostPCV,
-  PostJV,
-  PostAPV,
-  PostAPCM,
-  PostAPDM,
-  PostMSRR,
-  PostMSRTV,
-  PostMSAJ,
-  PostSI,
-  MonthendGLProcessingModal,
-  YearendGLProcessingModal,
-  BankReconProcessing,
-  BankReconProcessingModal: BankReconProcessing,
+  PostSVI: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Receivable/PostSVI.jsx")),
+  PostSOA: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Receivable/PostSOA.jsx")),
+  PostARCM: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Receivable/PostARCM.jsx")),
+  PostARDM: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Receivable/PostARDM.jsx")),
+  PostCR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Receivable/PostCR.jsx")),
+  PostAR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Receivable/PostAR.jsx")),
+  PostCV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Payable/PostCV.jsx")),
+  PostPCV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Payable/PostPCV.jsx")),
+  PostJV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/General Ledger/PostJV.jsx")),
+  PostAPV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Payable/PostAPV.jsx")),
+  PostAPCM: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Payable/PostAPCM.jsx")),
+  PostAPDM: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Payable/PostAPDM.jsx")),
+  PostMSRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSRR.jsx")),
+  PostMSRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSRTV.jsx")),
+  PostMSAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSAJ.jsx")),
+  PostSI: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/PostSI.jsx")),
+  MonthendGLProcessingModal: lazyPage(() => import("./NAYSA Cloud/Processing/MonthendProcessing.jsx")),
+  YearendGLProcessingModal: lazyPage(() => import("./NAYSA Cloud/Processing/YearendProcessing.jsx")),
+  BankReconProcessing: lazyPage(() => import("./NAYSA Cloud/Processing/BankReconProcessing.jsx")),
+  BankReconProcessingModal: lazyPage(() => import("./NAYSA Cloud/Processing/BankReconProcessing.jsx")),
 
-
-  //Matrix
-  SalesPMCustomerItem,
-  CAN,
+  // Matrix
+  SalesPMCustomerItem: lazyPage(() => import("./NAYSA Cloud/Matrix/SalesPMCustomerItem.jsx")),
+  CAN: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Purchasing/CAN.jsx")),
 
   // Purchasing Inquiry (Unified/Merged)
-  PRInquiry: PRInquiry, 
-  PRInq: PRInquiry,     
-  POInq: POInq,    
-  JOInq: JOInq,        
+  PRInquiry: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Purchasing/PRInquiry.jsx")),
+  PRInq: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Purchasing/PRInquiry.jsx")),
+  POInq: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Purchasing/POInquiry.jsx")),
+  JOInq: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Purchasing/JOInquiry.jsx")),
 
   // Printing (Universal Modal Mapping)
-  APReportModal: (props) => <UniversalReportModal {...props} module="AP" />,
-  VIReportModal: (props) => <UniversalReportModal {...props} module="VI" />,
-  EWTReportModal: (props) => <UniversalReportModal {...props} module="EWT" />,
-  
-  ARReportModal: (props) => <UniversalReportModal {...props} module="AR" />,
-  VOReportModal: (props) => <UniversalReportModal {...props} module="VO" />,
-  CWTReportModal: (props) => <UniversalReportModal {...props} module="CWT" />,
-  
-  GLReportModal: (props) => <UniversalReportModal {...props} module="GL" />,
-  BIRReportModal: (props) => <UniversalReportModal {...props} module="BIR" />,
-  PURReportModal: (props) => <UniversalReportModal {...props} module="PUR" />,
-  MSINVReportModal: (props) => <UniversalReportModal {...props} module="MSINV" />,
+  APReportModal: reportModal("AP"),
+  VIReportModal: reportModal("VI"),
+  EWTReportModal: reportModal("EWT"),
+  ARReportModal: reportModal("AR"),
+  VOReportModal: reportModal("VO"),
+  CWTReportModal: reportModal("CWT"),
+  GLReportModal: reportModal("GL"),
+  BIRReportModal: reportModal("BIR"),
+  PURReportModal: reportModal("PUR"),
+  MSINVReportModal: reportModal("MSINV"),
 };

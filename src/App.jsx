@@ -382,7 +382,7 @@
 
 
 
-import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import React, { Suspense, useEffect, useState, useMemo, useRef, useCallback } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -412,6 +412,13 @@ import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import ElectronScannerPage from "@/NAYSA Cloud/Electron/ElectronScannerPage.jsx";
 
 const queryClient = new QueryClient();
+
+const PageFallback = ({ label = "Loading..." }) => (
+  <div className="flex flex-col items-center justify-center min-h-[60vh]">
+    <LoadingSpinner />
+    <p className="mt-4 text-gray-400 animate-pulse font-medium">{label}</p>
+  </div>
+);
 
 /* -------------------- Universal Registry Route (The Gatekeeper) -------------------- */
 const UniversalRegistryRoute = ({ routeRows, loadingMenu }) => {
@@ -459,7 +466,9 @@ const UniversalRegistryRoute = ({ routeRows, loadingMenu }) => {
 
   return (
     <ErrorBoundary>
-      <Component key={matchingComponentKey} />
+      <Suspense fallback={<PageFallback label="Loading Page..." />}>
+        <Component key={matchingComponentKey} />
+      </Suspense>
     </ErrorBoundary>
   );
 };
@@ -481,7 +490,9 @@ const ModalHost = ({ modalKey, onClose }) => {
         className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <Cmp isOpen={true} onClose={onClose} userCode={user?.USER_CODE} />
+        <Suspense fallback={<PageFallback label="Loading..." />}>
+          <Cmp isOpen={true} onClose={onClose} userCode={user?.USER_CODE} />
+        </Suspense>
       </div>
     </div>
   );

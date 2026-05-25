@@ -108,7 +108,7 @@ const LoginPassPolicy = ({ isOpen, onClose }) => {
             <div className="flex items-center gap-2">
               <FontAwesomeIcon
                 icon={faShieldHalved}
-                className="text-indigo-600 text-lg"
+                className="text-blue-600 text-lg"
               />
               <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">
                 Login / Password Policy
@@ -134,7 +134,7 @@ const LoginPassPolicy = ({ isOpen, onClose }) => {
 
               {/* Password Policy section */}
               <div>
-                <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wider mb-3">
+                <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-3">
                   Password Policy
                 </p>
 
@@ -151,7 +151,7 @@ const LoginPassPolicy = ({ isOpen, onClose }) => {
                       onChange={(e) =>
                         handleChange("minimChar", parseInt(e.target.value) || 0)
                       }
-                      className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm text-center bg-white dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm text-center bg-white dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400"
                     />
                   </div>
 
@@ -167,7 +167,7 @@ const LoginPassPolicy = ({ isOpen, onClose }) => {
                       onChange={(e) =>
                         handleChange("passExp", parseInt(e.target.value) || 0)
                       }
-                      className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm text-center bg-white dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm text-center bg-white dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400"
                     />
                   </div>
 
@@ -183,7 +183,7 @@ const LoginPassPolicy = ({ isOpen, onClose }) => {
                       onChange={(e) =>
                         handleChange("passHis", parseInt(e.target.value) || 0)
                       }
-                      className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm text-center bg-white dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm text-center bg-white dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400"
                     />
                   </div>
                 </div>
@@ -205,7 +205,7 @@ const LoginPassPolicy = ({ isOpen, onClose }) => {
                       </span>
                       <div
                         className={`relative flex-shrink-0 w-9 h-5 rounded-full transition-colors duration-200 ${
-                          policy[field] ? "bg-indigo-600" : "bg-gray-300 dark:bg-gray-600"
+                          policy[field] ? "bg-blue-600" : "bg-gray-300 dark:bg-gray-600"
                         }`}
                       >
                         <span
@@ -224,7 +224,7 @@ const LoginPassPolicy = ({ isOpen, onClose }) => {
 
               {/* Log-In Policy section */}
               <div>
-                <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wider mb-3">
+                <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-3">
                   Log-In Policy
                 </p>
 
@@ -239,7 +239,7 @@ const LoginPassPolicy = ({ isOpen, onClose }) => {
                     onChange={(e) =>
                       handleChange("maxLog", parseInt(e.target.value) || 0)
                     }
-                    className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm text-center bg-white dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm text-center bg-white dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400"
                   />
                   <p className="text-[10px] text-gray-400 mt-0.5">0 = unlimited</p>
                 </div>
@@ -258,7 +258,7 @@ const LoginPassPolicy = ({ isOpen, onClose }) => {
             <button
               onClick={handleSave}
               disabled={saveMutation.isPending}
-              className="px-4 py-2 text-xs rounded-lg bg-indigo-600 text-white flex items-center gap-2 hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 text-xs rounded-lg bg-blue-600 text-white flex items-center gap-2 hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saveMutation.isPending ? (
                 <FontAwesomeIcon icon={faSpinner} spin />

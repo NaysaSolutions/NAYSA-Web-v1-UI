@@ -4,14 +4,11 @@ import {
   faEye,
   faUndo,
   faCheck,
-  faPrint,
   faChevronDown,
-  faFileCsv,
-  faFileExcel,
   faFilePdf,
   faInfoCircle,
   faVideo,
-  faDatabase,
+  faFileAlt,
   faSquare,
   faCheckSquare,
   faShieldAlt,
@@ -51,40 +48,36 @@ function normalizeRows(data) {
   return Array.isArray(raw) ? raw : [];
 }
 
-export default function MasterAccessRights() {
-  const docType       = "MasterAccRight";
-  const documentTitle = reftables?.[docType]         ?? "Master Data Access Rights";
+export default function ReportAccessRights() {
+  const docType       = "ReportAccRight";
+  const documentTitle = reftables?.[docType]        ?? "Management Report Access Rights";
   const pdfLink       = reftablesPDFGuide?.[docType];
   const videoLink     = reftablesVideoGuide?.[docType];
 
   const exportRef = useRef(null);
   const guideRef  = useRef(null);
 
-  // always holds the latest masterData list — avoids stale closure
-  const masterDataRef = useRef([]);
+  // always holds the latest reportData list — avoids stale closure
+  const reportDataRef = useRef([]);
 
   const [isOpenExport, setOpenExport] = useState(false);
   const [isOpenGuide,  setOpenGuide]  = useState(false);
 
-  const [loading,           setLoading]          = useState(false);
-  const [saving,            setSaving]            = useState(false);
-  const [loadingMasterData, setLoadingMasterData] = useState(false);
+  const [loading,          setLoading]         = useState(false);
+  const [saving,           setSaving]          = useState(false);
+  const [loadingReports,   setLoadingReports]  = useState(false);
 
   const [users,      setUsers]      = useState([]);
-  const [masterData, setMasterData] = useState([]);
+  const [reportData, setReportData] = useState([]);
 
-  // mirrors RoleAccessTab:
-  //   selectedUsers     ↔ selectedRoles   (array of codes)
-  //   checkedMasterData ↔ checkedMenus    (Set of codes)
-  //   showMasterData    ↔ showMenus       (boolean gate)
-  const [selectedUsers,     setSelectedUsers]     = useState([]);
-  const [checkedMasterData, setCheckedMasterData] = useState(new Set());
-  const [showMasterData,    setShowMasterData]    = useState(false);
+  const [selectedUsers,    setSelectedUsers]    = useState([]);
+  const [checkedReports,   setCheckedReports]   = useState(new Set());
+  const [showReports,      setShowReports]      = useState(false);
 
-  const loadMasterDataEndpoint    = "/master-access-rights/load-master-data";
-  const getUserMasterDataEndpoint = "/master-access-rights/get-user-master-data";
-  const upsertEndpoint            = "/master-access-rights/upsert-user-master-data";
-  const deleteEndpoint            = "/master-access-rights/delete-user-master-data";
+  const loadReportsEndpoint    = "/report-access-rights/load-report-data";
+  const getUserReportsEndpoint = "/report-access-rights/get-user-report-data";
+  const upsertEndpoint         = "/report-access-rights/upsert-user-report-data";
+  const deleteEndpoint         = "/report-access-rights/delete-user-report-data";
 
   // close dropdowns on outside click
   useEffect(() => {
@@ -96,13 +89,13 @@ export default function MasterAccessRights() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const allMasterCodes = useMemo(
-    () => (Array.isArray(masterData) ? masterData : []).map((m) => m.masterCode).filter(Boolean),
-    [masterData]
+  const allReportIds = useMemo(
+    () => (Array.isArray(reportData) ? reportData : []).map((r) => r.reportId).filter(Boolean),
+    [reportData]
   );
 
   const allSelected =
-    allMasterCodes.length > 0 && checkedMasterData.size === allMasterCodes.length;
+    allReportIds.length > 0 && checkedReports.size === allReportIds.length;
 
   const selectedUserDetails = useMemo(
     () => (Array.isArray(users) ? users : []).filter((u) => selectedUsers.includes(u.userCode)),
@@ -132,112 +125,109 @@ export default function MasterAccessRights() {
     }
   };
 
-  // ── fetch master data list ───────────────────────────────────────────────────
-  const fetchMasterData = async () => {
+  // ── fetch report list ────────────────────────────────────────────────────────
+  const fetchReportData = async () => {
     try {
-      const { data } = await apiClient.get(loadMasterDataEndpoint);
+      const { data } = await apiClient.get(loadReportsEndpoint);
       const rows = normalizeRows(data).map((r) => ({
-        masterCode: r.masterCode ?? r.MASTER_CODE ?? r.master_code ?? "",
-        moduleName: r.moduleName ?? r.MODULE_NAME ?? r.module        ?? "",
-        subMenu:    r.subMenu    ?? r.SUB_MENU    ?? r.sub_menu      ?? "",
-        particular: r.particular ?? r.menuName    ?? r.MENU_NAME     ?? r.menu_name ?? "",
+        reportId:   r.reportId   ?? r.REPORT_ID   ?? r.report_id   ?? "",
+        moduleName: r.moduleName ?? r.MODULE_NAME  ?? r.module      ?? "",
+        reportName: r.reportName ?? r.REPORT_NAME  ?? r.report_name ?? "",
       }));
-      const filtered = rows.filter((r) => r.masterCode);
-      masterDataRef.current = filtered;
-      setMasterData(filtered);
+      const filtered = rows.filter((r) => r.reportId);
+      reportDataRef.current = filtered;
+      setReportData(filtered);
       return filtered;
     } catch (e) {
-      console.error("fetchMasterData failed", e);
-      setMasterData([]);
-      await useSwalErrorAlert("Error!", "Failed to fetch master data list.");
+      console.error("fetchReportData failed", e);
+      setReportData([]);
+      await useSwalErrorAlert("Error!", "Failed to fetch report list.");
       return [];
     }
   };
 
-  // ── fetch which masterCodes are checked for given users ──────────────────────
-  // mirrors loadRoleMenus: returns a Set of codes directly
-  const fetchUserMasterData = async (userCodes = []) => {
+  // ── fetch which reports are checked for given users ──────────────────────────
+  const fetchUserReportData = async (userCodes = []) => {
     if (!userCodes?.length) return new Set();
     try {
-      // sproc OPENJSON uses WITH (userCode NVARCHAR(100)) → must send [{userCode}] objects
-      const { data } = await apiClient.post(getUserMasterDataEndpoint, {
+      const { data } = await apiClient.post(getUserReportsEndpoint, {
         json_data: { users: userCodes.map((uc) => ({ userCode: uc })) },
       });
       const rows = normalizeRows(data);
       return new Set(
         rows
-          .map((r) => r.masterCode ?? r.MASTER_CODE ?? r.master_code ?? r.mastercode ?? null)
+          .map((r) => r.reportId ?? r.REPORT_ID ?? r.report_id ?? null)
           .filter(Boolean)
       );
     } catch (e) {
-      console.error("fetchUserMasterData failed", e);
+      console.error("fetchUserReportData failed", e);
       return new Set();
     }
   };
 
   useEffect(() => {
     fetchUsers();
-    fetchMasterData();
+    fetchReportData();
   }, []);
 
-  // ── toggles (mirrors RoleAccessTab) ─────────────────────────────────────────
+  // ── toggles ──────────────────────────────────────────────────────────────────
   const toggleUser = useCallback((userCode) => {
-    if (showMasterData) return; // lock users while master data panel is open
+    if (showReports) return; // lock users while report panel is open
     setSelectedUsers((prev) =>
       prev.includes(userCode)
         ? prev.filter((x) => x !== userCode)
         : [...prev, userCode]
     );
-  }, [showMasterData]);
+  }, [showReports]);
 
-  const toggleMasterData = useCallback((masterCode) => {
-    setCheckedMasterData((prev) => {
+  const toggleReport = useCallback((reportId) => {
+    setCheckedReports((prev) => {
       const next = new Set(prev);
-      if (next.has(masterCode)) next.delete(masterCode);
-      else next.add(masterCode);
+      if (next.has(reportId)) next.delete(reportId);
+      else next.add(reportId);
       return next;
     });
   }, []);
 
   const toggleSelectAll = useCallback(() => {
-    setCheckedMasterData((prev) =>
-      allMasterCodes.length > 0 && prev.size === allMasterCodes.length
+    setCheckedReports((prev) =>
+      allReportIds.length > 0 && prev.size === allReportIds.length
         ? new Set()
-        : new Set(allMasterCodes)
+        : new Set(allReportIds)
     );
-  }, [allMasterCodes]);
+  }, [allReportIds]);
 
-  // ── View Rights (mirrors handleViewMenus + loadRoleMenus) ───────────────────
+  // ── View Rights ──────────────────────────────────────────────────────────────
   const handleViewRights = useCallback(async () => {
     if (selectedUsers.length === 0) {
-      await useSwalWarningAlert("No Users Selected", "Please select at least one user before viewing master data.");
+      await useSwalWarningAlert("No Users Selected", "Please select at least one user before viewing report access.");
       return;
     }
 
-    setLoadingMasterData(true);
-    setShowMasterData(false);
-    setCheckedMasterData(new Set());
+    setLoadingReports(true);
+    setShowReports(false);
+    setCheckedReports(new Set());
 
     try {
-      if (masterDataRef.current.length === 0) {
-        await fetchMasterData();
+      if (reportDataRef.current.length === 0) {
+        await fetchReportData();
       }
-      const checkedSet = await fetchUserMasterData(selectedUsers);
-      setCheckedMasterData(checkedSet);
-      setShowMasterData(true);
+      const checkedSet = await fetchUserReportData(selectedUsers);
+      setCheckedReports(checkedSet);
+      setShowReports(true);
     } catch (e) {
       console.error("handleViewRights failed", e);
-      await useSwalErrorAlert("Error!", "Failed to load master data access.");
+      await useSwalErrorAlert("Error!", "Failed to load report access.");
     } finally {
-      setLoadingMasterData(false);
+      setLoadingReports(false);
     }
   }, [selectedUsers]);
 
   // ── Reset ────────────────────────────────────────────────────────────────────
   const handleReset = useCallback(() => {
     setSelectedUsers([]);
-    setCheckedMasterData(new Set());
-    setShowMasterData(false);
+    setCheckedReports(new Set());
+    setShowReports(false);
   }, []);
 
   // ── Apply ────────────────────────────────────────────────────────────────────
@@ -246,22 +236,22 @@ export default function MasterAccessRights() {
       await useSwalWarningAlert("No Users Selected", "Please select at least one user before applying.");
       return;
     }
-    if (!showMasterData) {
+    if (!showReports) {
       await useSwalWarningAlert("Nothing to Apply", "Click View Rights first, then modify and apply.");
       return;
     }
 
-    const checkedCodes   = Array.from(checkedMasterData);
-    const uncheckedCodes = masterDataRef.current
-      .map((m) => m.masterCode)
-      .filter((mc) => !checkedMasterData.has(mc));
+    const checkedIds   = Array.from(checkedReports);
+    const uncheckedIds = reportDataRef.current
+      .map((r) => r.reportId)
+      .filter((id) => !checkedReports.has(id));
 
     setSaving(true);
     try {
-      if (checkedCodes.length > 0) {
+      if (checkedIds.length > 0) {
         const { data: res } = await apiClient.post(upsertEndpoint, {
           json_data: {
-            dt1: checkedCodes.map((masterCode) => ({ masterCode })),
+            dt1: checkedIds.map((reportId) => ({ reportId })),
             dt2: selectedUsers.map((userCode)  => ({ userCode })),
           },
         });
@@ -272,35 +262,32 @@ export default function MasterAccessRights() {
         if (!ok) throw new Error(res?.message || "Upsert failed.");
       }
 
-      if (uncheckedCodes.length > 0) {
+      if (uncheckedIds.length > 0) {
         await apiClient.post(deleteEndpoint, {
           json_data: {
-            dt1: uncheckedCodes.map((masterCode) => ({ masterCode })),
-            dt2: selectedUsers.map((userCode)    => ({ userCode })),
+            dt1: uncheckedIds.map((reportId) => ({ reportId })),
+            dt2: selectedUsers.map((userCode)  => ({ userCode })),
           },
         });
       }
 
-      await useSwalSuccessAlert("Success!", "User Master Data Access updated successfully!");
+      await useSwalSuccessAlert("Success!", "User Report Access updated successfully!");
 
-      // refresh from server — same as loadRoleMenus after save
-      const refreshed = await fetchUserMasterData(selectedUsers);
-      setCheckedMasterData(refreshed);
+      // refresh from server
+      const refreshed = await fetchUserReportData(selectedUsers);
+      setCheckedReports(refreshed);
     } catch (e) {
       console.error("handleApply failed", e);
-      await useSwalErrorAlert("Error!", e?.response?.data?.message || "Error saving master data access.");
+      await useSwalErrorAlert("Error!", e?.response?.data?.message || "Error saving report access.");
     } finally {
       setSaving(false);
     }
-  }, [selectedUsers, showMasterData, checkedMasterData]);
+  }, [selectedUsers, showReports, checkedReports]);
 
-  const handleExport    = async (type) => {
-    await useSwalWarningAlert("Export", `Export (${type}) not yet wired for Master Access Rights.`);
-  };
   const handlePDFGuide   = () => pdfLink   && window.open(pdfLink,   "_blank");
   const handleVideoGuide = () => videoLink && window.open(videoLink, "_blank");
 
-  // ── columns (mirrors RoleAccessTab column definitions exactly) ───────────────
+  // ── columns ──────────────────────────────────────────────────────────────────
   const userColumns = useMemo(
     () => [
       {
@@ -315,7 +302,7 @@ export default function MasterAccessRights() {
               type="checkbox"
               className="h-6 w-6 md:h-4 md:w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
               checked={selectedUsers.includes(row.userCode)}
-              disabled={showMasterData}
+              disabled={showReports}
               onClick={(e) => e.stopPropagation()}
               onChange={() => toggleUser(row.userCode)}
             />
@@ -325,34 +312,33 @@ export default function MasterAccessRights() {
       { key: "userCode", label: "User Code", sortable: true, width: 140 },
       { key: "userName", label: "Username",  sortable: true, width: 260 },
     ],
-    [selectedUsers, showMasterData, toggleUser]
+    [selectedUsers, showReports, toggleUser]
   );
 
-  const masterDataColumns = useMemo(
+  const reportColumns = useMemo(
     () => [
       {
         key:        "__select",
-        label:      "Full Access",
+        label:      "Access",
         sortable:   false,
         filterable: false,
-        width:      100,
+        width:      80,
         render: (row) => (
           <div className="flex justify-end md:justify-center py-1">
             <input
               type="checkbox"
               className="h-6 w-6 md:h-4 md:w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              checked={checkedMasterData.has(row.masterCode)}
+              checked={checkedReports.has(row.reportId)}
               onClick={(e) => e.stopPropagation()}
-              onChange={() => toggleMasterData(row.masterCode)}
+              onChange={() => toggleReport(row.reportId)}
             />
           </div>
         ),
       },
-      { key: "moduleName", label: "Module",    sortable: true, width: 200 },
-      { key: "subMenu",    label: "Sub Menu",  sortable: true, width: 200 },
-      { key: "particular", label: "Menu Name", sortable: true, width: 360 },
+      { key: "moduleName", label: "Module",      sortable: true, width: 200 },
+      { key: "reportName", label: "Report Name", sortable: true, width: 360 },
     ],
-    [checkedMasterData, toggleMasterData]
+    [checkedReports, toggleReport]
   );
 
   const userTableData = useMemo(
@@ -360,15 +346,15 @@ export default function MasterAccessRights() {
     [users]
   );
 
-  const masterDataTableData = useMemo(
-    () => (Array.isArray(masterData) ? masterData : []).map((row, index) => ({ ...row, __idx: index })),
-    [masterData]
+  const reportTableData = useMemo(
+    () => (Array.isArray(reportData) ? reportData : []).map((row, index) => ({ ...row, __idx: index })),
+    [reportData]
   );
 
   // ── render ───────────────────────────────────────────────────────────────────
   return (
     <div className="global-ref-main-div-ui mt-24">
-      {(loading || saving || loadingMasterData) && <LoadingSpinner />}
+      {(loading || saving || loadingReports) && <LoadingSpinner />}
 
       {/* Header */}
       <div className="fixed mt-4 top-14 left-6 right-6 z-30 global-ref-header-ui flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
@@ -386,25 +372,6 @@ export default function MasterAccessRights() {
           <button onClick={handleApply} className="bg-green-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700">
             <FontAwesomeIcon icon={faCheck} /> Apply
           </button>
-
-          {/* <div ref={exportRef} className="relative">
-            <button onClick={() => setOpenExport((v) => !v)} className="bg-green-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700">
-              <FontAwesomeIcon icon={faPrint} /> Export <FontAwesomeIcon icon={faChevronDown} className="text-xs" />
-            </button>
-            {isOpenExport && (
-              <div className="absolute right-0 mt-1 w-40 rounded-lg shadow-lg bg-white ring-1 ring-black/10 z-[60] dark:bg-gray-800">
-                <button onClick={() => { handleExport("csv");   setOpenExport(false); }} className="block w-full text-left px-4 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-900">
-                  <FontAwesomeIcon icon={faFileCsv}   className="mr-2 text-green-600" /> CSV
-                </button>
-                <button onClick={() => { handleExport("excel"); setOpenExport(false); }} className="block w-full text-left px-4 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-900">
-                  <FontAwesomeIcon icon={faFileExcel} className="mr-2 text-green-600" /> Excel
-                </button>
-                <button onClick={() => { handleExport("pdf");   setOpenExport(false); }} className="block w-full text-left px-4 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-900">
-                  <FontAwesomeIcon icon={faFilePdf}   className="mr-2 text-red-600"   /> PDF
-                </button>
-              </div>
-            )}
-          </div> */}
 
           <div ref={guideRef} className="relative">
             <button onClick={() => setOpenGuide((v) => !v)} className="bg-blue-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700">
@@ -436,7 +403,7 @@ export default function MasterAccessRights() {
               <h2 className="text-lg font-semibold mb-2 text-gray-700">Users</h2>
               <div className="flex-1 min-h-0">
                 <SearchGlobalReferenceTable
-                  docType="MasterAccRight"
+                  docType="ReportAccRight"
                   columns={userColumns}
                   data={userTableData}
                   isLoading={loading}
@@ -453,13 +420,13 @@ export default function MasterAccessRights() {
             </div>
           </div>
 
-          {/* MASTER DATA PANEL */}
+          {/* REPORTS PANEL */}
           <div className="w-full md:w-1/2">
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 h-full flex flex-col">
 
               <div className="flex items-center justify-between mb-2 gap-3">
-                <h2 className="text-lg font-semibold text-gray-700">Master Data</h2>
-                {showMasterData && (
+                <h2 className="text-lg font-semibold text-gray-700">Management Reports</h2>
+                {showReports && (
                   <button
                     type="button"
                     onClick={toggleSelectAll}
@@ -471,9 +438,9 @@ export default function MasterAccessRights() {
                 )}
               </div>
 
-              {showMasterData ? (
+              {showReports ? (
                 <>
-                  {/* selected users badge — mirrors RoleAccessTab "Selected Role" badge */}
+                  {/* selected users badge */}
                   <div className="mb-2">
                     <div className="inline-flex max-w-full items-center gap-2 rounded-md border border-blue-100 bg-blue-50 px-3 py-2">
                       <FontAwesomeIcon icon={faShieldAlt} className="text-blue-600 text-sm shrink-0" />
@@ -510,16 +477,16 @@ export default function MasterAccessRights() {
 
                   <div className="flex-1 min-h-0">
                     <SearchGlobalReferenceTable
-                      docType="MasterAccRight"
-                      columns={masterDataColumns}
-                      data={masterDataTableData}
-                      isLoading={loadingMasterData}
+                      docType="ReportAccRight"
+                      columns={reportColumns}
+                      data={reportTableData}
+                      isLoading={loadingReports}
                       itemsPerPage={50}
                       showFilters={true}
-                      onRowClick={(row) => toggleMasterData(row.masterCode)}
-                      onRowDoubleClick={(row) => toggleMasterData(row.masterCode)}
+                      onRowClick={(row) => toggleReport(row.reportId)}
+                      onRowDoubleClick={(row) => toggleReport(row.reportId)}
                       mobileSelectable={true}
-                      selectedRowChecker={(row) => checkedMasterData.has(row.masterCode)}
+                      selectedRowChecker={(row) => checkedReports.has(row.reportId)}
                       tableSize="Half"
                       className="h-full"
                     />
@@ -528,10 +495,10 @@ export default function MasterAccessRights() {
               ) : (
                 <div className="h-full min-h-[320px] flex items-center justify-center text-center text-gray-500 bg-gray-50 rounded-lg border border-gray-200">
                   <div>
-                    <FontAwesomeIcon icon={faDatabase} className="text-xl mb-2 text-gray-400" />
-                    <h3 className="font-medium text-sm mb-1">Master Data Selection Hidden</h3>
+                    <FontAwesomeIcon icon={faFileAlt} className="text-xl mb-2 text-gray-400" />
+                    <h3 className="font-medium text-sm mb-1">Report Selection Hidden</h3>
                     <p className="text-xs px-4">
-                      Select user(s) and click "View Rights" to see and assign master data access.
+                      Select user(s) and click "View Rights" to see and assign report access.
                     </p>
                   </div>
                 </div>
@@ -542,15 +509,15 @@ export default function MasterAccessRights() {
 
         {selectedUsers.length > 0 && (
           <div className="mt-3 bg-blue-50 p-2 rounded text-xs">
-            {showMasterData
-              ? `Assigning master data access to ${selectedUsers.length} selected user(s). Select items and click Apply.`
+            {showReports
+              ? `Assigning report access to ${selectedUsers.length} selected user(s). Select items and click Apply.`
               : `${selectedUsers.length} user(s) selected. Click "View Rights" to continue.`}
           </div>
         )}
 
-        {showMasterData && checkedMasterData.size > 0 && (
+        {showReports && checkedReports.size > 0 && (
           <div className="mt-2 bg-green-50 p-2 rounded text-xs">
-            {`${checkedMasterData.size} master data item(s) selected for Full Access.`}
+            {`${checkedReports.size} report(s) selected for Access.`}
           </div>
         )}
       </div>
