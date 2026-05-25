@@ -28,9 +28,9 @@ const QstatLookupModal = ({ isOpen, onClose, customParam }) => {
         const { data: result } = await apiClient.get("/lookupQStat", {
           params: {
             PARAMS: JSON.stringify({
-              search: "",
-              page: 1,
-              pageSize: 50,
+              // search: "",
+              // page: 1,
+              // pageSize: 50,
             }),
           },
         });
