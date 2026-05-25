@@ -3234,7 +3234,7 @@ const BankReconProcessing = () => {
         </div>
       )}
 
-      <div className="global-ref-header-ui" style={{ zIndex: showActionMenu ? 100 : 50 }}>
+      <div className="global-ref-header-ui" style={{ zIndex: 45 }}>
         <div className="w-full flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="w-full lg:w-auto">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">

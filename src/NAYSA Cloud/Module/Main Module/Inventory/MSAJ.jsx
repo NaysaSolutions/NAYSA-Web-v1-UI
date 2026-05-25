@@ -184,6 +184,7 @@ const MSAJ = () => {
 
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
   const [showSingleUploadDropdown, setShowSingleUploadDropdown] = useState(false);
+  const [pendingHeaderLocationWH, setPendingHeaderLocationWH] = useState("");
   const { user } = useAuth();
   const { resetFlag } = useReset();
   const docType = docTypes.MSAJ;
@@ -536,6 +537,17 @@ useEffect(() => {
       setShowSingleUploadDropdown(false);
     }
   }, [canUseSingleUploadOptions]);
+
+  useEffect(() => {
+    if (!pendingHeaderLocationWH || isFormDisabled) return;
+    if (WHCode !== pendingHeaderLocationWH || !WHName) return;
+
+    updateState({
+      locationLookupOpen: true,
+      selectedWH: pendingHeaderLocationWH,
+    });
+    setPendingHeaderLocationWH("");
+  }, [pendingHeaderLocationWH, WHCode, WHName, isFormDisabled]);
 
 
 
@@ -2215,6 +2227,16 @@ const handleSaveAndPrint = async (documentID) => {
 
 
 const handleCloseWarehouseLookup = (row) => {
+  const isHeaderBBIGWarehouse =
+    row &&
+    !accountModalSource &&
+    (selectedAJType === "IG" || selectedAJType === "BB");
+
+  const queueHeaderLocationLookup = () => {
+    if (!isHeaderBBIGWarehouse) return;
+    setPendingHeaderLocationWH(row.whCode);
+  };
+
   if (row) {
     accountModalSource
       ? handleDetailChange(selectedRowIndex, 'whouseCode', row, false)
@@ -2245,11 +2267,18 @@ const handleCloseWarehouseLookup = (row) => {
           }));
           updateState({ detailRows: updatedDetails });
         }
+
+        queueHeaderLocationLookup();
       });
+    } else {
+      queueHeaderLocationLookup();
     }
   }
   
-  updateState({ warehouseLookupOpen: false,accountModalSource:"" });
+  updateState({
+    warehouseLookupOpen: false,
+    accountModalSource: "",
+  });
 };
 
 
