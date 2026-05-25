@@ -55,6 +55,7 @@ export const pageRegistry = {
   MSIS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSIS.jsx")),
   MSST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSST.jsx")),
   MSAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSAJ.jsx")),
+  FGAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGAJ.jsx")),
   MSRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSRTV.jsx")),
   FGRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGRR.jsx")),
 
@@ -120,6 +121,8 @@ export const pageRegistry = {
   PostMSRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSRR.jsx")),
   PostMSRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSRTV.jsx")),
   PostMSAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSAJ.jsx")),
+  PostFGAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGAJ.jsx")),
+  PostDR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/PostDR.jsx")),
   PostSI: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/PostSI.jsx")),
   MonthendGLProcessingModal: lazyPage(() => import("./NAYSA Cloud/Processing/MonthendProcessing.jsx")),
   YearendGLProcessingModal: lazyPage(() => import("./NAYSA Cloud/Processing/YearendProcessing.jsx")),

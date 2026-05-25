@@ -1,8 +1,6 @@
-import { useState, useEffect, useRef, useCallback, Fragment } from "react";
+import { useState, useEffect,useRef,useCallback, Fragment } from "react";
 import Swal from 'sweetalert2';
-import { useNavigate, useLocation } from "react-router-dom";
-import ExcelJS from "exceljs";
-import { saveAs } from "file-saver";
+import { useNavigate,useLocation  } from "react-router-dom";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -28,7 +26,7 @@ import ItemMastLookupModal from "../../../Lookup/SearchItemMast.jsx";
 
 
 // Configuration
-import { postRequest, fetchDataJson } from '../../../Configuration/BaseURL.jsx'
+import { postRequest,fetchDataJson} from '../../../Configuration/BaseURL.jsx'
 import { useReset } from "../../../Components/ResetContext";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import {
@@ -67,8 +65,15 @@ import {
 
 import DateFormatInput from '@/NAYSA Cloud/Global/DateFormatInput.jsx';
 import {
+  extractSingleUploadValidationResult,
+  getSingleUploadTemplateColumns as getGlobalSingleUploadTemplateColumns,
+  handleDownloadSingleUploadTemplate as downloadGlobalSingleUploadTemplate,
+  handleSingleUploadExcelFile,
+  showSingleUploadErrorList,
   transactionActionsCellStyle,
   transactionActionsHeaderStyle,
+  toSingleUploadDateValue,
+  toSingleUploadExcelDate,
   useResizableTableColumns,
 } from '@/NAYSA Cloud/Global/datatable.jsx';
 
@@ -86,6 +91,8 @@ import {
   formatNumber,
   parseFormattedNumber,
   useSwalshowSaveSuccessDialog,
+  useSwalHandleOpenSpecsModal,
+  useSwalSuccessAlert,
   useSwalErrorAlert,
   useSwalInfoAlert,
   useSwalvalidateRequiredFields
@@ -97,42 +104,6 @@ import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 // Header
 import Header from '@/NAYSA Cloud/Components/Header';
-
-/*
-================================================================================
-MSAJ TRANSACTION WORKFLOW
-================================================================================
-1. User prepares header values:
-   - Branch
-   - Adjustment Type
-   - Warehouse / Location
-   - Transaction Date
-
-2. User adds item detail rows by either:
-   A. Add Item lookup
-   B. Download Template -> Encode Excel -> Upload Transaction
-
-3. Single upload workflow:
-   - Download Template uses the current visible detail columns.
-   - Upload reads one .xlsx file only.
-   - Upload validates Excel headers against the current template.
-   - Upload sends parsed detail rows to SQL/Laravel ValidateUpload.
-   - SQL validates Item, Warehouse, Location, and optional Quality Status.
-   - If validation is clean, detail rows are loaded and GL rows are cleared.
-
-4. Save workflow:
-   - BB: saves item details only.
-   - Non-BB: generates GL entries if missing, then saves header/detail/GL.
-
-5. BB upload control:
-   - If BB record already exists for the branch using document no. 00000000,
-     Download Template and Upload Transaction are hidden.
-================================================================================
-*/
-
-/* --------------------------------------------------------------------------
- * Date helpers
- * -------------------------------------------------------------------------- */
 const toDateInputValue = (value) => {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -153,10 +124,7 @@ const toDateInputValue = (value) => {
 };
 
 
-/* --------------------------------------------------------------------------
- * Main Component
- * -------------------------------------------------------------------------- */
-const MSAJ = () => {
+const FGAJ = () => {
 
   // View Document Const
   const loadedFromUrlRef = useRef(false);
@@ -168,8 +136,8 @@ const MSAJ = () => {
   const location = useLocation(); 
   const [isViewDocument, setIsViewDocument] = useState(false);
   const { companyInfo, currentUserRow, getAllDropDown, refsLoaded, getAllTopHSDocRow } = useAuth();
-  const decQty = companyInfo?.itemDecqtyMS ?? 2;
-  const decUcost = companyInfo?.itemDecUcostMS ?? 6;
+  const decQty = companyInfo?.itemDecqtyFG ?? 2;
+  const decUcost = companyInfo?.itemDecUcostFG ?? 6;
 
 
   useEffect(() => {
@@ -184,16 +152,14 @@ const MSAJ = () => {
 
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
   const [showSingleUploadDropdown, setShowSingleUploadDropdown] = useState(false);
+  const [pendingHeaderLocationWH, setPendingHeaderLocationWH] = useState("");
   const { user } = useAuth();
   const { resetFlag } = useReset();
-  const docType = docTypes.MSAJ;
+  const docType = docTypes.FGAJ;
   const hsDoc = getAllTopHSDocRow(docType);
   const pdfLink = docTypePDFGuide[docType];
   const videoLink = docTypeVideoGuide[docType];
   const documentTitle = hsDoc?.docName + " Transaction";
-  /* ------------------------------------------------------------------------
-   * Main transaction state
-   * ------------------------------------------------------------------------ */
   const [state, setState] = useState({
 
 
@@ -415,9 +381,6 @@ const MSAJ = () => {
   }, [showSingleUploadDropdown]);
 
 
-  /* ------------------------------------------------------------------------
-   * Status and upload availability
-   * ------------------------------------------------------------------------ */
   //Status Global Setup
   const displayStatus = status || 'OPEN';
   const statusMap = {
@@ -537,12 +500,19 @@ useEffect(() => {
     }
   }, [canUseSingleUploadOptions]);
 
+  useEffect(() => {
+    if (!pendingHeaderLocationWH || isFormDisabled) return;
+    if (WHCode !== pendingHeaderLocationWH || !WHName) return;
+
+    updateState({
+      locationLookupOpen: true,
+      selectedWH: pendingHeaderLocationWH,
+    });
+    setPendingHeaderLocationWH("");
+  }, [pendingHeaderLocationWH, WHCode, WHName, isFormDisabled]);
 
 
-/* --------------------------------------------------------------------------
- * BB upload control
- * Checks if Beginning Balance was already uploaded for this branch.
- * -------------------------------------------------------------------------- */
+
 const handleCheckBBUploaded = useCallback(async (targetBranchCode) => {
   if (!targetBranchCode) return false;
 
@@ -553,7 +523,7 @@ const handleCheckBBUploaded = useCallback(async (targetBranchCode) => {
       }),
     };
 
-    const response = await postRequest("checkMSAJBBUploaded", payload);
+    const response = await postRequest("checkFGAJBBUploaded", payload);
     const result =
       response?.result ||
       response?.data?.result ||
@@ -597,12 +567,9 @@ useEffect(() => {
 
 
 
-/* --------------------------------------------------------------------------
- * Reset and initial loading
- * -------------------------------------------------------------------------- */
 const handleReset = () => {
-      clearMsajDetailSorting();
-      clearMsajGlSorting();
+      clearFgajDetailSorting();
+      clearFgajGlSorting();
 
       updateState({
         
@@ -647,7 +614,7 @@ const handleReset = () => {
    const loadCompanyData = async () => {
     updateState({isLoading:true})
     try {     
-     const tbls = 'msaj_hd,msaj_dt1,msaj_dt2'
+     const tbls = 'fgaj_hd,fgaj_dt1,fgaj_dt2'
      const hdtblcol_result = await useFieldLenghtCheck(tbls);
      if (hdtblcol_result){
        updateState({tblFieldArray :hdtblcol_result })
@@ -666,9 +633,6 @@ const handleReset = () => {
 
 
 
-/* --------------------------------------------------------------------------
- * Fetch existing transaction
- * -------------------------------------------------------------------------- */
 const fetchTranData = async (documentNo, branchCode,direction='') => {
   const resetState = () => {
     updateState({documentNo:'', documentID: '', isDocNoDisabled: false, isFetchDisabled: false });
@@ -678,8 +642,8 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
   updateState({ isLoading: true });
 
   try {
-    const data = await useFetchTranData(documentNo, branchCode,docType,"msajNo",direction);
-    if (!data?.msajId) {
+    const data = await useFetchTranData(documentNo, branchCode,docType,"fgajNo",direction);
+    if (!data?.fgajId) {
       Swal.fire({ icon: 'info', title: 'No Records Found', text: 'Transaction does not exist.' });
       return resetState();
     }
@@ -707,17 +671,17 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
   
     // Update state with fetched data
     updateState({
-      documentStatus: data.msajStatus,
+      documentStatus: data.fgajStatus,
       status: data.docStatus,
       noReprints:data.noReprints,
-      documentID: data.msajId,
-      documentNo: data.msajNo,
+      documentID: data.fgajId,
+      documentNo: data.fgajNo,
       branchCode: data.branchCode,
       WHCode:data.whCode,
       WHName:data.whName,
       LocCode:data.locCode,
       LocName:data.locName,
-      documentDate: useformatToDatev2(data.msajDate),
+      documentDate: useformatToDatev2(data.fgajDate),
       selectedAJType: data.ajtranType,
       refDocNo1: data.refDocNo1,
       refDocNo2: data.refDocNo2,   
@@ -758,11 +722,6 @@ const handleDocNoBlur = () => {
 };
 
 
-/* --------------------------------------------------------------------------
- * Main transaction actions
- * - GenerateGL: builds accounting entries
- * - Upsert: validates/saves transaction
- * -------------------------------------------------------------------------- */
 const handleActivityOption = async (action) => {
   if ((detailRows?.length || 0) + (detailRowsGL?.length || 0) === 0) {
     return;
@@ -790,9 +749,9 @@ const handleActivityOption = async (action) => {
 
     const buildGlData = (glRows) => ({
       branchCode,
-      msajNo: documentNo || "",
-      msajId: documentID || "",
-      msajDate: documentDate,
+      fgajNo: documentNo || "",
+      fgajId: documentID || "",
+      fgajDate: documentDate,
       ajtranType: selectedAJType,
       refDocNo1,
       refDocNo2,
@@ -889,13 +848,13 @@ const handleActivityOption = async (action) => {
         docType,
         buildGlData(finalDetailRowsGL),
         updateState,
-        "msajId",
-        "msajNo"
+        "fgajId",
+        "fgajNo"
       );
 
       if (response) {
-        const responseDocNo = response.data?.[0]?.msajNo || "";
-        const responseDocId = response.data?.[0]?.msajId || "";
+        const responseDocNo = response.data?.[0]?.fgajNo || "";
+        const responseDocId = response.data?.[0]?.fgajId || "";
 
         if (responseDocNo) {
           await fetchTranData(responseDocNo, branchCode);
@@ -910,8 +869,8 @@ const handleActivityOption = async (action) => {
       }
 
       updateState({
-        documentNo: response?.data?.[0]?.msajNo || "",
-        documentID: response?.data?.[0]?.msajId || "",
+        documentNo: response?.data?.[0]?.fgajNo || "",
+        documentID: response?.data?.[0]?.fgajId || "",
         isDocNoDisabled: true,
         isFetchDisabled: true,
       });
@@ -924,12 +883,145 @@ const handleActivityOption = async (action) => {
 };
 
 
+// const handleActivityOption = async (action) => {
+//   // Prevent execution if document is already processed
+//   console.log(documentStatus)
+//   if (documentStatus !== '') return;
+
+//   // 1. Helper function for formatting payload 
+//   // This is synchronous to prevent Babel 'await' errors during mapping
+//   const getFormattedPayload = (targetGLRows) => {
+//     const {
+//       branchCode,
+//       documentNo,
+//       documentID,
+//       documentDate,
+//       selectedAJType,
+//       refDocNo1,
+//       refDocNo2,
+//       remarks,
+//       userCode,
+//       detailRows
+//     } = state;
+
+//     return {
+//       branchCode: branchCode,
+//       fgajNo: documentNo || "",
+//       fgajId: documentID || "",
+//       fgajDate: documentDate,
+//       ajtranType: selectedAJType,
+//       refDocNo1: refDocNo1,
+//       refDocNo2: refDocNo2,
+//       remarks: remarks || "",
+//       whCode:WHCode||"",
+//       locCode:LocCode || "",
+//       userCode: userCode,
+//       dt1: detailRows.map((row, index) => ({
+//         lnNo: String(index + 1),
+//         itemCode: row.itemCode || "",
+//         itemName: row.itemName || "",
+//         categCode: row.categCode || "",
+//         oldValue:row.oldValue || "",
+//         quantity: parseFormattedNumber(row.quantity || 0),
+//         uomCode: row.uomCode || "",
+//         unitCost: parseFormattedNumber(row.unitCost || 0),
+//         itemAmount: parseFormattedNumber(row.itemAmount || 0),
+//         lotNo: row.lotNo || "",
+//         qstatCode: row.qstatCode || "",
+//         bbDate: row.bbDate ? new Date(row.bbDate).toISOString().split("T")[0] : null,
+//         qtyHand: parseFormattedNumber(row.qtyHand || 0),
+//         whouseCode: row.whouseCode || "",
+//         locCode: row.locCode || "",
+//         acctCode: row.acctCode || "",
+//         rcCode: row.rcCode || "",
+//         slTypeCode: row.sltypeCode || "",
+//         slCode: row.slCode || "",
+//         uniqueKey: row.uniqueKey || "",
+//         operation: row.operation || ""
+//       })),
+//       dt2: targetGLRows.map((entry, index) => ({
+//         recNo: String(index + 1),
+//         acctCode: entry.acctCode || "",
+//         rcCode: entry.rcCode || "",
+//         sltypeCode: entry.sltypeCode || "",
+//         slCode: entry.slCode || "",
+//         particular: entry.particular || "",
+//         vatCode: entry.vatCode || "",
+//         vatName: entry.vatName || "",
+//         atcCode: entry.atcCode || "",
+//         atcName: entry.atcName || "",
+//         debit: parseFormattedNumber(entry.debit || 0),
+//         credit: parseFormattedNumber(entry.credit || 0),
+//         debitFx1: parseFormattedNumber(entry.debitFx1 || 0),
+//         creditFx1: parseFormattedNumber(entry.creditFx1 || 0),
+//         debitFx2: parseFormattedNumber(entry.debitFx2 || 0),
+//         creditFx2: parseFormattedNumber(entry.creditFx2 || 0),
+//         slRefNo: entry.slRefNo || "",
+//         slRefDate: entry.slRefDate ? new Date(entry.slRefDate).toISOString().split("T")[0] : null,
+//         remarks: entry.remarks || ""
+//       }))
+//     };
+//   };
+
+//   updateState({ isLoading: true });
+
+//   try {
+//     let currentGL = state.detailRowsGL;
+
+//     // --- STEP 1: AUTO-GENERATE IF UPSERTING WITH EMPTY GL ---
+//     // This allows "Generate then Save" in one click
+//     if (action === "Upsert" && currentGL.length === 0 && selectedAJType !== "BB") {
+//       const genPayload = getFormattedPayload([]);
+//       const newGlEntries = await useGenerateGLEntries(docType, genPayload);
+
+//       if (newGlEntries && newGlEntries.length > 0) {
+//         currentGL = newGlEntries;
+//         updateState({ detailRowsGL: newGlEntries });
+//       } else {
+//         updateState({ isLoading: false });
+//         console.warn("GL Generation failed. Upsert cancelled.");
+//         return; 
+//       }
+
+//     }
+
+//     // --- STEP 2: MANUAL GENERATE GL ---
+//     if (action === "GenerateGL") {
+//       const genPayload = getFormattedPayload(currentGL);
+//       const newGlEntries = await useGenerateGLEntries(docType, genPayload);
+//       if (newGlEntries) {
+//         updateState({ detailRowsGL: newGlEntries });
+//       }
+//     }
+
+//     // --- STEP 3: UPSERT (SAVE) ---
+//     if (action === "Upsert") {
+//       // We use currentGL variable because state updates are async 
+//       // and wouldn't be available yet if we just generated them.
+//       const savePayload = getFormattedPayload(currentGL);
+//       const response = await useTransactionUpsert(docType, savePayload, updateState, 'fgajId', 'fgajNo');
+
+//       if (response) {
+//         const isZero = Number(noReprints) === 0;
+//         const onSaveAndPrint = isZero
+//           ? () => updateState({ showSignatoryModal: true })
+//           : () => handleSaveAndPrint(response.data[0].fgajId);
+
+//         useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
+//         updateState({ isDocNoDisabled: true, isFetchDisabled: true });
+//       }
+//     }
+//   } catch (error) {
+//     console.error("Error in transaction flow:", error);
+//   } finally {
+//     updateState({ isLoading: false });
+//   }
+// };
 
 
 
-/* --------------------------------------------------------------------------
- * Detail row helpers and item add/delete actions
- * -------------------------------------------------------------------------- */
+
+
 const createEmptyDetailRow = () => ({
   lnNo: "",
   itemCode: "",
@@ -980,6 +1072,7 @@ const handleGetItem = async (index = null) => {
     };
     const isValid = await useSwalvalidateRequiredFields(fieldsToCheck, "Add Item");
     if (!isValid) return;
+
 
     if (["BB", "IG"].includes(selectedAJType)) {
       updateState({
@@ -1151,9 +1244,6 @@ const handleCopy = async () => {
 
 
 
-/* --------------------------------------------------------------------------
- * UI behavior rules based on adjustment type and user access
- * -------------------------------------------------------------------------- */
 const handleFieldBehavior = (option) => {
   switch (option) {
 
@@ -1210,10 +1300,7 @@ const handleColumnLabel = (columnName) =>{
     detailRowsGLRef.current = detailRowsGL || [];
   }, [detailRows, detailRowsGL]);
 
-  /* ------------------------------------------------------------------------
-   * Item detail table columns
-   * ------------------------------------------------------------------------ */
-  const msajDetailColumnDefs = [
+  const fgajDetailColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
     { key: "itemCode", label: "Item Code", width: 120 },
     { key: "itemName", label: "Item Name", width: 260 },
@@ -1238,19 +1325,19 @@ const handleColumnLabel = (columnName) =>{
   ];
 
   const {
-    getColumnStyle: getMsajDetailColumnStyle,
-    getFrozenColumnStyle: getMsajDetailFrozenStyle,
-    getOrderedColumns: getOrderedMsajDetailColumns,
-    getSortedRows: getSortedMsajDetailRows,
-    clearAllSorting: clearMsajDetailSorting,
-    clearZeroValueOnFocus: clearMsajDetailZeroOnFocus,
-    focusNextRowInput: focusNextMsajDetailRowInput,
-    renderHeaderContextMenu: renderMsajDetailHeaderContextMenu,
-    renderResizableHeader: renderMsajDetailHeader,
-  } = useResizableTableColumns(msajDetailColumnDefs);
+    getColumnStyle: getFgajDetailColumnStyle,
+    getFrozenColumnStyle: getFgajDetailFrozenStyle,
+    getOrderedColumns: getOrderedFgajDetailColumns,
+    getSortedRows: getSortedFgajDetailRows,
+    clearAllSorting: clearFgajDetailSorting,
+    clearZeroValueOnFocus: clearFgajDetailZeroOnFocus,
+    focusNextRowInput: focusNextFgajDetailRowInput,
+    renderHeaderContextMenu: renderFgajDetailHeaderContextMenu,
+    renderResizableHeader: renderFgajDetailHeader,
+  } = useResizableTableColumns(fgajDetailColumnDefs);
 
-  const orderedMsajDetailColumns = getOrderedMsajDetailColumns(msajDetailColumnDefs);
-  const visibleMsajDetailColumns = orderedMsajDetailColumns.filter((column) => {
+  const orderedFgajDetailColumns = getOrderedFgajDetailColumns(fgajDetailColumnDefs);
+  const visibleFgajDetailColumns = orderedFgajDetailColumns.filter((column) => {
     if (["categCode", "oldValue", "uniqueKey", "operation", "sltypeCode"].includes(column.key)) return false;
     if (column.key === "quantity") return !handleFieldBehavior("hiddenCAMode");
     if (column.key === "unitCost") return !handleFieldBehavior("noViewCostamt");
@@ -1258,298 +1345,66 @@ const handleColumnLabel = (columnName) =>{
     if (["acctCode", "rcCode", "slCode"].includes(column.key)) return !handleFieldBehavior("hiddenBBMode");
     return true;
   });
-  const getMsajDetailFallbackWidth = (key) => msajDetailColumnDefs.find((column) => column.key === key)?.width || 120;
-  const getMsajDetailCellStyle = (key, fallbackWidth) => ({
-    ...getMsajDetailColumnStyle(key, fallbackWidth),
-    ...getMsajDetailFrozenStyle(key, visibleMsajDetailColumns, fallbackWidth, { isHeader: false }),
+  const getFgajDetailFallbackWidth = (key) => fgajDetailColumnDefs.find((column) => column.key === key)?.width || 120;
+  const getFgajDetailCellStyle = (key, fallbackWidth) => ({
+    ...getFgajDetailColumnStyle(key, fallbackWidth),
+    ...getFgajDetailFrozenStyle(key, visibleFgajDetailColumns, fallbackWidth, { isHeader: false }),
   });
-  const sortedMsajDetailRows = getSortedMsajDetailRows(
+  const sortedFgajDetailRows = getSortedFgajDetailRows(
     detailRows.map((row, originalIndex) => ({ row, originalIndex })),
     (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? ""
   );
 
-  // Step 1: Download the current item-detail columns as Excel template.
+  const getSingleUploadTemplateColumns = () =>
+    getGlobalSingleUploadTemplateColumns(visibleFgajDetailColumns, { excludeKeys: ["qtyHand"] });
+
   const handleDownloadSingleUploadTemplate = async () => {
-    const templateColumns = visibleMsajDetailColumns.filter((column) => column.key !== "qtyHand");
-    const headers = templateColumns.map((column) => column.label);
-    const decimalColumnFormats = {
-      quantity: decQty,
-      unitCost: decUcost,
-      itemAmount: 2,
-    };
-    const getExcelDecimalFormat = (decimalPlaces) =>
-      `#,##0${decimalPlaces > 0 ? "." + "0".repeat(decimalPlaces) : ""}`;
-    const toExcelDate = (value) => {
-      const normalizedDate = toDateInputValue(value);
-      if (!normalizedDate) return "";
-      const [year, month, day] = normalizedDate.split("-").map(Number);
-      return new Date(year, month - 1, day);
-    };
-    const rows = sortedMsajDetailRows.map(({ row, originalIndex }) =>
-      templateColumns.map((column) => {
+    await downloadGlobalSingleUploadTemplate({
+      columns: getSingleUploadTemplateColumns(),
+      rows: sortedFgajDetailRows,
+      fileName: "FG Adjustment Single Transaction Uploading Template.xlsx",
+      sheetName: "Item Details",
+      decimalColumnFormats: {
+        quantity: decQty,
+        unitCost: decUcost,
+        itemAmount: 2,
+      },
+      dateColumns: ["bbDate"],
+      rightAlignedColumns: ["quantity", "unitCost", "itemAmount"],
+      centerAlignedColumns: [
+        "ln",
+        "itemCode",
+        "uomCode",
+        "bbDate",
+        "qstatCode",
+        "whouseCode",
+        "locCode",
+        "acctCode",
+        "rcCode",
+        "slCode",
+      ],
+      getCellValue: ({ rowEntry, column }) => {
+        const { row, originalIndex } = rowEntry;
         switch (column.key) {
           case "ln":
             return originalIndex + 1;
           case "quantity":
-            return parseFormattedNumber(row.quantity || 0);
           case "unitCost":
-            return parseFormattedNumber(row.unitCost || 0);
           case "itemAmount":
-            return parseFormattedNumber(row.itemAmount || 0);
+            return parseFormattedNumber(row[column.key] || 0);
           case "bbDate":
-            return toExcelDate(row.bbDate);
+            return toSingleUploadExcelDate(row.bbDate, toDateInputValue);
           default:
             return String(row[column.key] ?? "");
         }
-      })
-    );
-
-    const rightAlignedColumns = new Set(["quantity", "unitCost", "itemAmount"]);
-    const centerAlignedColumns = new Set([
-      "ln",
-      "itemCode",
-      "uomCode",
-      "bbDate",
-      "qstatCode",
-      "whouseCode",
-      "locCode",
-      "acctCode",
-      "rcCode",
-      "slCode",
-    ]);
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("Item Details");
-
-    worksheet.columns = templateColumns.map((column) => ({
-      header: column.label,
-      key: column.key,
-      width: Math.max(12, Math.ceil((column.width || 120) / 8)),
-    }));
-
-    worksheet.getRow(1).eachCell((cell) => {
-      cell.font = { bold: true };
-      cell.alignment = { horizontal: "center", vertical: "middle" };
-    });
-
-    rows.forEach((rowValues) => {
-      const excelRow = worksheet.addRow(rowValues);
-      templateColumns.forEach((column, index) => {
-        const cell = excelRow.getCell(index + 1);
-        if (decimalColumnFormats[column.key] !== undefined) {
-          cell.numFmt = getExcelDecimalFormat(decimalColumnFormats[column.key]);
-        } else if (column.key === "bbDate") {
-          cell.numFmt = "mm/dd/yyyy";
-        } else if (column.key !== "ln") {
-          cell.numFmt = "@";
-        }
-        cell.alignment = {
-          horizontal: rightAlignedColumns.has(column.key)
-            ? "right"
-            : centerAlignedColumns.has(column.key)
-              ? "center"
-              : "left",
-          vertical: "middle",
-        };
-      });
-    });
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    saveAs(
-      new Blob([buffer], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      }),
-      "MS Adjustment Single Transaction Uploading Template.xlsx"
-    );
-  };
-
-  /* ------------------------------------------------------------------------
-   * Single transaction upload/download workflow
-   * ------------------------------------------------------------------------ */
-  const getSingleUploadTemplateColumns = () =>
-    visibleMsajDetailColumns.filter((column) => column.key !== "qtyHand");
-
-  const normalizeExcelHeader = (value) => String(value ?? "").trim();
-  const normalizeHeaderForCompare = (value) => normalizeExcelHeader(value).replace(/\s+/g, " ").toUpperCase();
-
-  const getExcelCellValue = (cell) => {
-    const value = cell?.value;
-    if (value === null || value === undefined) return "";
-    if (value instanceof Date) return toDateInputValue(value);
-    if (typeof value === "object") {
-      if (value.text !== undefined) return String(value.text ?? "").trim();
-      if (value.result !== undefined) return String(value.result ?? "").trim();
-      if (Array.isArray(value.richText)) return value.richText.map((part) => part.text || "").join("").trim();
-      if (value.hyperlink !== undefined && value.text !== undefined) return String(value.text ?? "").trim();
-    }
-    return String(value ?? "").trim();
-  };
-
-  const toExcelUploadDate = (value) => {
-    if (!value) return "";
-    if (value instanceof Date) return toDateInputValue(value);
-
-    // Excel stores dates as serial numbers when the cell is not read as a Date object.
-    // Example: 46167 = 05/24/2026. Convert it before sending to SQL.
-    if (typeof value === "number" && Number.isFinite(value)) {
-      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-      const utcDate = new Date(excelEpoch.getTime() + Math.floor(value) * 86400000);
-      return utcDate.toISOString().slice(0, 10);
-    }
-
-    const rawText = String(value || "").trim();
-    if (/^\d+(\.\d+)?$/.test(rawText)) {
-      const serialValue = Number(rawText);
-      if (serialValue > 25000 && serialValue < 90000) {
-        const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-        const utcDate = new Date(excelEpoch.getTime() + Math.floor(serialValue) * 86400000);
-        return utcDate.toISOString().slice(0, 10);
-      }
-    }
-
-    const normalized = toDateInputValue(value);
-    return normalized || rawText;
-  };
-
-  const safeJsonParse = (value) => {
-    if (typeof value !== "string") return value;
-    const trimmed = value.trim();
-    if (!trimmed) return "";
-    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return value;
-    try {
-      return JSON.parse(trimmed);
-    } catch {
-      return value;
-    }
-  };
-
-  const extractSprocJsonResult = (response) => {
-    const unwrap = (value, depth = 0) => {
-      if (depth > 8 || value === null || value === undefined) return null;
-
-      const parsedValue = safeJsonParse(value);
-      if (parsedValue !== value) return unwrap(parsedValue, depth + 1);
-
-      if (Array.isArray(value)) {
-        if (value.length === 0) return null;
-        return unwrap(value[0], depth + 1);
-      }
-
-      if (typeof value !== "object") return null;
-
-      if (value.rows !== undefined || value.errors !== undefined || value.errorCount !== undefined) {
-        return value;
-      }
-
-      if (value.result !== undefined) return unwrap(value.result, depth + 1);
-      if (value.Result !== undefined) return unwrap(value.Result, depth + 1);
-      if (value.data !== undefined) return unwrap(value.data, depth + 1);
-      if (value.Data !== undefined) return unwrap(value.Data, depth + 1);
-      if (value.payload !== undefined) return unwrap(value.payload, depth + 1);
-
-      return null;
-    };
-
-    const result = unwrap(response);
-    if (!result) {
-      console.error("Unable to read upload validation response:", response);
-    }
-    return result;
-  };
-
-  const showUploadErrorList = (title, errors) => {
-    const list = Array.isArray(errors) ? errors : [errors].filter(Boolean);
-    Swal.fire({
-      icon: "error",
-      title,
-      html: `<div style="text-align:left;max-height:420px;overflow:auto;white-space:pre-wrap;">${list
-        .map((err) => String(err || ""))
-        .join("<br/>")}</div>`,
-      width: 760,
+      },
     });
   };
 
-  const validateSingleUploadHeaders = (worksheet, templateColumns) => {
-    const expectedHeaders = templateColumns.map((column) => column.label);
-    const headerRow = worksheet.getRow(1);
-    const actualHeaders = expectedHeaders.map((_, index) => getExcelCellValue(headerRow.getCell(index + 1)));
-
-    const extraHeaderValues = [];
-    headerRow.eachCell({ includeEmpty: false }, (cell, columnNumber) => {
-      if (columnNumber > expectedHeaders.length && getExcelCellValue(cell)) {
-        extraHeaderValues.push(`Column ${columnNumber}: "${getExcelCellValue(cell)}"`);
-      }
-    });
-
-    const errors = [];
-    if (extraHeaderValues.length > 0) {
-      errors.push(`Excel has extra column(s): ${extraHeaderValues.join(", ")}`);
-    }
-
-    expectedHeaders.forEach((expectedHeader, index) => {
-      const actualHeader = actualHeaders[index];
-      if (normalizeHeaderForCompare(actualHeader) !== normalizeHeaderForCompare(expectedHeader)) {
-        errors.push(`Column ${index + 1} expected "${expectedHeader}" but found "${actualHeader || "blank"}".`);
-      }
-    });
-
-    return errors;
-  };
-
-  const parseSingleUploadRows = (worksheet, templateColumns) => {
-    const rows = [];
-
-    worksheet.eachRow({ includeEmpty: false }, (excelRow, rowNumber) => {
-      if (rowNumber === 1) return;
-
-      const rowData = createEmptyDetailRow();
-      let hasValue = false;
-
-      templateColumns.forEach((column, columnIndex) => {
-        const rawValue = getExcelCellValue(excelRow.getCell(columnIndex + 1));
-        if (String(rawValue || "").trim() !== "") hasValue = true;
-
-        switch (column.key) {
-          case "ln":
-            break;
-          case "quantity":
-          case "unitCost":
-          case "itemAmount":
-            rowData[column.key] = parseFormattedNumber(rawValue || 0) || 0;
-            break;
-          case "bbDate":
-            rowData.bbDate = toExcelUploadDate(excelRow.getCell(columnIndex + 1)?.value || rawValue);
-            break;
-          default:
-            rowData[column.key] = String(rawValue ?? "").trim();
-            break;
-        }
-      });
-
-      if (!hasValue) return;
-
-      const quantity = parseFormattedNumber(rowData.quantity || 0) || 0;
-      const unitCost = parseFormattedNumber(rowData.unitCost || 0) || 0;
-      rowData.lnNo = rows.length + 1;
-      rowData.quantity = quantity;
-      rowData.unitCost = unitCost;
-      rowData.itemAmount = +(quantity * unitCost).toFixed(2);
-      rowData.whouseCode = rowData.whouseCode || WHCode || "";
-      rowData.locCode = rowData.locCode || LocCode || "";
-      rowData.operation = "A";
-      rowData.qtyHand = 0;
-      rowData.uniqueKey = "";
-
-      rows.push(rowData);
-    });
-
-    return rows;
-  };
-
-  // Step 2: Build the server validation payload.
   const buildUploadValidationPayload = (rows) => ({
     json_data: {
       branchCode,
-      msajDate: documentDate,
+      fgajDate: documentDate,
       ajtranType: selectedAJType,
       whCode: WHCode || "",
       locCode: LocCode || "",
@@ -1580,16 +1435,48 @@ const handleColumnLabel = (columnName) =>{
     },
   });
 
-  // Step 4: Read Excel, validate template, validate master data, then load rows.
+  const parseSingleUploadRow = ({ rawValuesByKey }) => {
+    const rowData = createEmptyDetailRow();
+
+    getSingleUploadTemplateColumns().forEach((column) => {
+      const rawCell = rawValuesByKey[column.key];
+      const rawValue = rawCell?.value;
+
+      switch (column.key) {
+        case "ln":
+          break;
+        case "quantity":
+        case "unitCost":
+        case "itemAmount":
+          rowData[column.key] = parseFormattedNumber(rawValue || 0) || 0;
+          break;
+        case "bbDate":
+          rowData.bbDate = toSingleUploadDateValue(rawCell?.cell?.value || rawValue, toDateInputValue);
+          break;
+        default:
+          rowData[column.key] = String(rawValue ?? "").trim();
+          break;
+      }
+    });
+
+    const quantity = parseFormattedNumber(rowData.quantity || 0) || 0;
+    const unitCost = parseFormattedNumber(rowData.unitCost || 0) || 0;
+    rowData.quantity = quantity;
+    rowData.unitCost = unitCost;
+    rowData.itemAmount = +(quantity * unitCost).toFixed(2);
+    rowData.whouseCode = rowData.whouseCode || WHCode || "";
+    rowData.locCode = rowData.locCode || LocCode || "";
+    rowData.operation = "A";
+    rowData.qtyHand = 0;
+    rowData.uniqueKey = "";
+
+    return rowData;
+  };
+
   const handleUploadExcelFile = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-
-    if (!/\.xlsx$/i.test(file.name)) {
-      showUploadErrorList("Invalid File", ["Please upload an Excel .xlsx file generated from the latest template."]);
-      return;
-    }
 
     const fieldsToCheck = {
       "Header : Warehouse": WHCode,
@@ -1601,55 +1488,50 @@ const handleColumnLabel = (columnName) =>{
     updateState({ isLoading: true, showSpinner: true });
 
     try {
-      const workbook = new ExcelJS.Workbook();
-      const buffer = await file.arrayBuffer();
-      await workbook.xlsx.load(buffer);
-      const worksheet = workbook.worksheets?.[0];
+      const uploadResult = await handleSingleUploadExcelFile({
+        file,
+        columns: getSingleUploadTemplateColumns(),
+        createEmptyRow: createEmptyDetailRow,
+        parseRow: parseSingleUploadRow,
+        validateRows: async (uploadedRows) => {
+          const response = await postRequest("validateFGAJUpload", buildUploadValidationPayload(uploadedRows));
+          const result = extractSingleUploadValidationResult(response);
+          if (!result) {
+            console.error("Unable to read upload validation response:", response);
+          }
+          return result;
+        },
+      });
 
-      if (!worksheet) {
-        showUploadErrorList("Invalid Excel File", ["No worksheet found in the uploaded file."]);
+      if (uploadResult?.cancelled) return;
+
+      if (!uploadResult?.ok) {
+        showSingleUploadErrorList(uploadResult?.title || "Upload Error", uploadResult?.errors || []);
         return;
       }
 
-      const templateColumns = getSingleUploadTemplateColumns();
-      const headerErrors = validateSingleUploadHeaders(worksheet, templateColumns);
-      if (headerErrors.length > 0) {
-        showUploadErrorList("Not the Same Format", [
-          "Please download the latest template and upload again.",
-          "",
-          ...headerErrors,
-        ]);
-        return;
-      }
-
-      const uploadedRows = parseSingleUploadRows(worksheet, templateColumns);
-      if (uploadedRows.length === 0) {
-        showUploadErrorList("No Records Found", ["The uploaded Excel file has no detail rows."]);
-        return;
-      }
-
-      const response = await postRequest("validateMSAJUpload", buildUploadValidationPayload(uploadedRows));
-      const result = extractSprocJsonResult(response);
+      const uploadedRows = uploadResult.rows || [];
+      const result = uploadResult.validationResult;
       const errorRows = result?.errors || [];
       const validRows = result?.rows || [];
 
       if (!result) {
-        showUploadErrorList("Upload Validation Error", ["Unable to read validation response from the server."]);
+        showSingleUploadErrorList("Upload Validation Error", ["Unable to read validation response from the server."]);
         return;
       }
 
       if (Number(result.errorCount || 0) > 0 || errorRows.length > 0) {
-        showUploadErrorList("Upload Rejected", errorRows.map((row) => row.errorMsg || row.message || JSON.stringify(row)));
+        showSingleUploadErrorList("Upload Rejected", errorRows.map((row) => row.errorMsg || row.message || JSON.stringify(row)));
         return;
       }
 
       if (validRows.length === 0) {
-        showUploadErrorList("Upload Validation Error", [
+        showSingleUploadErrorList("Upload Validation Error", [
           "The server returned no validated rows.",
-          "Please check the Laravel validateMSAJUpload response and the SQL ValidateUpload block.",
+          "Please check the Laravel validateFGAJUpload response and the SQL ValidateUpload block.",
           "Uploaded rows read from Excel: " + uploadedRows.length,
         ]);
-        console.error("ValidateUpload returned zero rows:", { response, result, uploadedRows });
+        console.error("ValidateUpload returned zero rows:", { result, uploadedRows });
         return;
       }
 
@@ -1689,21 +1571,17 @@ const handleColumnLabel = (columnName) =>{
       });
     } catch (error) {
       console.error("Upload transaction error:", error);
-      showUploadErrorList("Upload Error", [error?.message || "Unable to process the uploaded Excel file."]);
+      showSingleUploadErrorList("Upload Error", [error?.message || "Unable to process the uploaded Excel file."]);
     } finally {
       updateState({ isLoading: false, showSpinner: false });
     }
   };
 
-  // Opens the hidden file input when user clicks Upload Transaction.
   const handleUploadSingleTransaction = () => {
     uploadInputRef.current?.click();
   };
 
-  /* ------------------------------------------------------------------------
-   * General ledger table columns
-   * ------------------------------------------------------------------------ */
-  const msajGlColumnDefs = [
+  const fgajGlColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
     { key: "acctCode", label: "Account Code", width: 120 },
     { key: "rcCode", label: "RC Code", width: 120 },
@@ -1729,33 +1607,33 @@ const handleColumnLabel = (columnName) =>{
     { key: "remarks", label: "Remarks", width: 160 },
   ];
   const {
-    getColumnStyle: getMsajGlColumnStyle,
-    getFrozenColumnStyle: getMsajGlFrozenStyle,
-    getOrderedColumns: getOrderedMsajGlColumns,
-    getSortedRows: getSortedMsajGlRows,
-    setColumnOrder: setMsajGlColumnOrder,
-    clearAllSorting: clearMsajGlSorting,
-    clearZeroValueOnFocus: clearMsajGlZeroOnFocus,
-    focusNextRowInput: focusNextMsajGlRowInput,
-    renderHeaderContextMenu: renderMsajGlHeaderContextMenu,
-    renderResizableHeader: renderMsajGlHeader,
-  } = useResizableTableColumns(msajGlColumnDefs);
-  const orderedMsajGlColumns = getOrderedMsajGlColumns(msajGlColumnDefs);
-  const getMsajGlFallbackWidth = (key) => msajGlColumnDefs.find((column) => column.key === key)?.width || 120;
-  const getMsajGlCellStyle = (key, fallbackWidth) => ({
-    ...getMsajGlColumnStyle(key, fallbackWidth),
-    ...getMsajGlFrozenStyle(key, orderedMsajGlColumns, fallbackWidth, { isHeader: false }),
+    getColumnStyle: getFgajGlColumnStyle,
+    getFrozenColumnStyle: getFgajGlFrozenStyle,
+    getOrderedColumns: getOrderedFgajGlColumns,
+    getSortedRows: getSortedFgajGlRows,
+    setColumnOrder: setFgajGlColumnOrder,
+    clearAllSorting: clearFgajGlSorting,
+    clearZeroValueOnFocus: clearFgajGlZeroOnFocus,
+    focusNextRowInput: focusNextFgajGlRowInput,
+    renderHeaderContextMenu: renderFgajGlHeaderContextMenu,
+    renderResizableHeader: renderFgajGlHeader,
+  } = useResizableTableColumns(fgajGlColumnDefs);
+  const orderedFgajGlColumns = getOrderedFgajGlColumns(fgajGlColumnDefs);
+  const getFgajGlFallbackWidth = (key) => fgajGlColumnDefs.find((column) => column.key === key)?.width || 120;
+  const getFgajGlCellStyle = (key, fallbackWidth) => ({
+    ...getFgajGlColumnStyle(key, fallbackWidth),
+    ...getFgajGlFrozenStyle(key, orderedFgajGlColumns, fallbackWidth, { isHeader: false }),
   });
   useEffect(() => {
-    setMsajGlColumnOrder(msajGlColumnDefs.map((column) => column.key));
-  }, [setMsajGlColumnOrder, withCurr2, withCurr3, glCurrDefault, currCode, glCurrGlobal2, glCurrGlobal3]);
-  const sortedMsajGlRows = getSortedMsajGlRows(
+    setFgajGlColumnOrder(fgajGlColumnDefs.map((column) => column.key));
+  }, [setFgajGlColumnOrder, withCurr2, withCurr3, glCurrDefault, currCode, glCurrGlobal2, glCurrGlobal3]);
+  const sortedFgajGlRows = getSortedFgajGlRows(
     detailRowsGL.map((row, originalIndex) => ({ row, originalIndex })),
     (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? ""
   );
 
-  const msajDetailEnterNextRowZeroClearFields = ["quantity", "unitCost"];
-  const msajGlEnterNextRowZeroClearFields = ["debit", "credit", "debitFx1", "creditFx1", "debitFx2", "creditFx2"];
+  const fgajDetailEnterNextRowZeroClearFields = ["quantity", "unitCost"];
+  const fgajGlEnterNextRowZeroClearFields = ["debit", "credit", "debitFx1", "creditFx1", "debitFx2", "creditFx2"];
 
   const getGLTotalsState = (rows) => {
     const sourceRows = Array.isArray(rows) ? rows : [];
@@ -1769,9 +1647,7 @@ const handleColumnLabel = (columnName) =>{
   };
 
 
-/* --------------------------------------------------------------------------
- * View document and transaction history retrieval
- * -------------------------------------------------------------------------- */
+//  ** View Document and Transaction History Retrieval ***
 const cleanUrl = useCallback(() => {
   window.history.replaceState({}, "", window.location.origin);
 }, []);
@@ -1792,7 +1668,7 @@ const handleHistoryRowPick = useCallback(
 
 useEffect(() => {
   const params = new URLSearchParams(location.search);
-  const docNo = params.get("msajNo");
+  const docNo = params.get("fgajNo");
   const branchCode = params.get("branchCode");
 
   if (!loadedFromUrlRef.current && docNo && branchCode) {
@@ -1812,10 +1688,7 @@ useEffect(() => {
 
  
 
-  /* --------------------------------------------------------------------------
- * Totals computation
- * -------------------------------------------------------------------------- */
-const updateTotals = (rows) => {
+  const updateTotals = (rows) => {
   //console.log("updateTotals received rows:", rows); // STEP 5: Check rows passed to updateTotals
 
   let totalQuantity = 0;
@@ -1833,11 +1706,110 @@ const updateTotals = (rows) => {
 
 
 
+// const handleDetailChange = async (index, field, value, runCalculations = true) => {
+//   const updatedRows = [...detailRows];
 
-/* --------------------------------------------------------------------------
- * Detail row editing
- * Recalculates amount, clears GL, and optionally copies values to blank rows.
- * -------------------------------------------------------------------------- */
+//   updatedRows[index] = {
+//     ...updatedRows[index],
+//     [field]: value,
+//   };
+
+//   const row = updatedRows[index];
+
+//   const autoFillBlanks = (fieldName, newValue, extraData = {}) => {
+//     if (index === 0) {
+//       updatedRows.forEach((r, i) => {
+//         if (i !== 0 && (!r[fieldName] || r[fieldName].toString().trim() === "")) {
+//           updatedRows[i] = {
+//             ...r,
+//             [fieldName]: newValue,
+//             ...extraData
+//           };
+//         }
+//       });
+//     }
+//   };
+
+//   if (field === 'acctCode') {
+//     row.acctCode = value.acctCode;
+//     autoFillBlanks('acctCode', value.acctCode);
+//   }
+
+//   if (field === 'rcCode') {
+//     row.rcCode = value.rcCode;
+//     autoFillBlanks('rcCode', value.rcCode);
+//   }
+
+//   if (field === 'slCode') {
+//     row.slCode = value.slCode;
+//     row.sltypeCode = value.sltypeCode;
+//     autoFillBlanks('slCode', value.slCode, { sltypeCode: value.sltypeCode });
+//   }
+
+//     if (field === 'whouseCode') {
+//     row.whouseCode = value.whCode;
+//     autoFillBlanks('whouseCode', value.whCode);
+//   }
+
+//   if (field === 'locCode') {
+//     row.locCode = value.locCode;
+//     autoFillBlanks('locCode', value.locCode);
+//   }
+
+  
+//   if (field === 'qstatCode') {
+//     row.qstatCode = value.qstatCode;
+//     autoFillBlanks('qstatCode', value.qstatCode);
+//   }
+
+
+
+  
+//    if (['bbDate'].includes(field)) {
+//         row[field] = value;
+//     }
+
+//   if (runCalculations) {
+//     const origQuantity = parseFormattedNumber(row.quantity) || 0;
+//     const origUnitCost = parseFormattedNumber(row.unitCost) || 0;
+//     const origQtyHand = parseFormattedNumber(row.qtyHand) || 0;
+//     const origOperation = row.operation;
+
+//     const recalcRow = async () => {
+//       let processedQty = Math.abs(origQuantity);
+
+//       if (origOperation === "S" && (selectedAJType === "IL" || selectedAJType === "IR")) {
+//         if (processedQty > origQtyHand) {
+//           useSwalErrorAlert('Exceeds Stock', `Quantity (${processedQty}) exceeds Quantity on Hand (${origQtyHand}). Value has been adjusted.`);
+//           processedQty = origQtyHand;
+//         }
+//         processedQty = processedQty * -1;
+//       } else {
+//         processedQty = Math.abs(processedQty);
+//       }
+
+//       const finalQtyForMath = (selectedAJType === "CA") ? 1 : processedQty;
+//       const calculatedAmount = +(finalQtyForMath * origUnitCost).toFixed(2);
+
+//       row.itemAmount = formatNumber(calculatedAmount);
+//       row.quantity = formatNumber(selectedAJType === "CA" ? 0 : processedQty, decQty);
+//       row.unitCost = formatNumber(origUnitCost, decUcost);
+//     };
+
+//     if (field === 'quantity' || field === 'unitCost') {
+//       await recalcRow();
+//     }
+//   }
+
+//   updatedRows[index] = row;
+//   updateState({ detailRows: updatedRows,
+//                 detailRowsGL :[],
+//    });
+//   updateTotals(updatedRows);
+// };
+
+
+
 const handleDetailChange = async (index, field, value, runCalculations = true) => {
   const updatedRows = [...(detailRowsRef.current || [])];
 
@@ -1980,9 +1952,6 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
 
 
 
-/* --------------------------------------------------------------------------
- * GL row editing
- * -------------------------------------------------------------------------- */
 const handleDetailChangeGL = async (index, field, value) => {
     const updatedRowsGL = [...(detailRowsGLRef.current || [])];
     let row = { ...updatedRowsGL[index] };
@@ -2083,9 +2052,6 @@ const handleBlurGL = async (index, field, value, autoCompute = false) => {
 
 
 
-/* --------------------------------------------------------------------------
- * Modal close handlers
- * -------------------------------------------------------------------------- */
 const handleCloseAccountModal = (selectedAccount) => {
 
     if (selectedAccount && selectedRowIndex !== null) {
@@ -2215,6 +2181,16 @@ const handleSaveAndPrint = async (documentID) => {
 
 
 const handleCloseWarehouseLookup = (row) => {
+  const isHeaderBBIGWarehouse =
+    row &&
+    !accountModalSource &&
+    (selectedAJType === "IG" || selectedAJType === "BB");
+
+  const queueHeaderLocationLookup = () => {
+    if (!isHeaderBBIGWarehouse) return;
+    setPendingHeaderLocationWH(row.whCode);
+  };
+
   if (row) {
     accountModalSource
       ? handleDetailChange(selectedRowIndex, 'whouseCode', row, false)
@@ -2224,7 +2200,7 @@ const handleCloseWarehouseLookup = (row) => {
           LocCode: "", 
           LocName: ""
         });
-    
+
 
     const hasDetails = detailRows && detailRows.length > 0;
     if (!accountModalSource && (selectedAJType === "IG" || selectedAJType === "BB") && hasDetails) {
@@ -2245,11 +2221,18 @@ const handleCloseWarehouseLookup = (row) => {
           }));
           updateState({ detailRows: updatedDetails });
         }
+
+        queueHeaderLocationLookup();
       });
+    } else {
+      queueHeaderLocationLookup();
     }
   }
   
-  updateState({ warehouseLookupOpen: false,accountModalSource:"" });
+  updateState({
+    warehouseLookupOpen: false,
+    accountModalSource: "",
+  });
 };
 
 
@@ -2317,9 +2300,6 @@ const handleCloseBranchModal = (selectedBranch) => {
 
 
   
-  /* ------------------------------------------------------------------------
-   * Inventory lookup handlers
-   * ------------------------------------------------------------------------ */
   const handleOpenMSLookup = async (itemSingleSelect) => {
     try {
 
@@ -2327,17 +2307,17 @@ const handleCloseBranchModal = (selectedBranch) => {
       updateState({ isLoading: true,
                     itemSingleSelect : itemSingleSelect });
   
-      const endpoint ="getInvLookupMS"
-      const response = await fetchDataJson(endpoint, { userCode, whouseCode :WHCode || "", locCode: LocCode || "", docType:"MSAJ" ,tranType :itemSingleSelect? "IRR" :selectedAJType });
+      const endpoint ="getInvLookupFG"
+      const response = await fetchDataJson(endpoint, { userCode, whouseCode :WHCode || "", locCode: LocCode || "", docType:"FGAJ" ,tranType :itemSingleSelect? "IRR" :selectedAJType });
       const custData = response?.data?.[0]?.result ? JSON.parse(response.data[0].result) : [];
   
 
       const lookupTypes = ["BB", "IG"];  
-      const colConfig = await useSelectedHSColConfig((lookupTypes.includes(selectedAJType) || itemSingleSelect) ? "AllMastItemLookup" : "getInvLookupMS");
+      const colConfig = await useSelectedHSColConfig((lookupTypes.includes(selectedAJType) || itemSingleSelect) ? "AllMastItemLookup" : "getInvLookupFG");
 
 
      if (custData.length === 0) {
-        useSwalInfoAlert(lookupTypes.includes(selectedAJType) ? "MS Master Data" : "MS Location Balance","No records found")
+        useSwalInfoAlert(lookupTypes.includes(selectedAJType) ? "FG Master Data" : "FG Location Balance","No records found")
          updateState({ isLoading: false });
         return; 
       }
@@ -2350,7 +2330,7 @@ const handleCloseBranchModal = (selectedBranch) => {
   
 
     } catch (error) {
-      useSwalErrorAlert(lookupTypes.includes(selectedAJType) ? "MS Master Data" : "MS Location Balance","No records found")
+      useSwalErrorAlert(lookupTypes.includes(selectedAJType) ? "FG Master Data" : "FG Location Balance","No records found")
       updateState({ 
           globalLookupRow: [] ,
           globalLookupHeader: [],
@@ -2366,6 +2346,78 @@ const handleCloseBranchModal = (selectedBranch) => {
 
 
 
+
+//   const handleCloseMSLookup = (selectedItems) => {
+//   updateState({ msLookupModalOpen: false });
+
+//   if (!selectedItems) return;
+
+//   const itemsArray = Array.isArray(selectedItems.records) ? selectedItems.records : [selectedItems.records];
+//   if (itemsArray.length === 0) return;
+
+//   const newRows = itemsArray.map((item) => ({
+//     itemCode: item?.itemCode ?? "",
+//     itemName: item?.itemName ?? "",
+//     categCode: item?.categCode ?? "",
+//     uomCode: item?.uomCode ?? "",
+//     quantity: formatNumber(0, decQty),
+//     unitCost: formatNumber(parseFormattedNumber(item?.unitCost ?? 0), decUcost),
+//     amount: formatNumber(0, 2),
+//     lotNo: item?.lotNo ?? "",
+//     bbDate: item?.bbDate ? new Date(item.bbDate).toISOString().split("T")[0] : "",
+//     qstatCode: item?.qstatCode ?? "",
+//     whouseCode: item?.whouseCode ?? WHCode ?? "",
+//     locCode: item?.locCode ?? LocCode ?? "",
+//     qtyHand: formatNumber(parseFormattedNumber(item?.qtyHand ?? 0), decQty),
+//     uniqueKey: item?.uniqueKey ?? "",
+//     operation:  (selectedAJType === "IL" || selectedAJType === "IR") ? "S" : "A",
+//     acctCode: "",
+//     sltypeCode: "",
+//     rcCode: "",
+//     slCode: ""
+//   }));
+
+
+// setState((prev) => {
+//     const updated = [...(prev.detailRows || []), ...newRows];
+//     updateTotalsDisplay(0,0);
+//     return { ...prev, detailRows: updated };
+//   });
+// };
+
+
+const handleAddBlankRow = (index) => {
+  const blankRow = {
+    itemCode: "",
+    oldValue: "",
+    itemName: "",
+    categCode: "",
+    uomCode: "",
+    unitCost: formatNumber(0, decUcost),
+    lotNo: "",
+    bbDate: "",
+    qstatCode: "",
+    whouseCode: WHCode ?? "",
+    locCode: LocCode ?? "",
+    acctCode: "",
+    sltypeCode: "",
+    rcCode: "",
+    slCode: "",
+    uniqueKey: "",
+    quantity: formatNumber(0, decQty),
+    qtyHand: formatNumber(0, decQty),
+    itemAmount: formatNumber(0, 2),
+    operation: "A"
+  };
+
+  setState((prev) => {
+    const updatedRows = [...(prev.detailRows || [])];
+    // Inserts the blankRow at the index + 1 position (immediately below)
+    updatedRows.splice(index + 1, 0, blankRow);
+    
+    return { ...prev, detailRows: updatedRows };
+  });
+};
 
 
 
@@ -2493,20 +2545,17 @@ const handleCloseItemMastLookup = (selectedItems) => {
 
 
 
-/* --------------------------------------------------------------------------
- * Render item detail table cell by column key
- * -------------------------------------------------------------------------- */
-const renderMsajDetailColumn = (columnKey, row, index) => {
-  const columnWidth = getMsajDetailFallbackWidth(columnKey);
-  const style = getMsajDetailCellStyle(columnKey, columnWidth);
+const renderFgajDetailColumn = (columnKey, row, index) => {
+  const columnWidth = getFgajDetailFallbackWidth(columnKey);
+  const style = getFgajDetailCellStyle(columnKey, columnWidth);
   const isNegative = parseFormattedNumber(row.quantity) < 0;
   const textColorClass = isNegative ? "text-red-600" : "";
   const canLookupStock = ["BB", "IG", "IR"].includes(selectedAJType) && !isFormDisabled && row.operation !== "S";
 
   const focusNextDetailCell = (field) => {
-    focusNextMsajDetailRowInput(index, field, {
+    focusNextFgajDetailRowInput(index, field, {
       rows: detailRows,
-      zeroClearFields: msajDetailEnterNextRowZeroClearFields,
+      zeroClearFields: fgajDetailEnterNextRowZeroClearFields,
       parseValue: parseFormattedNumber,
       onClearNextValue: (nextIndex, nextField, value) => handleDetailChange(nextIndex, nextField, value, false),
     });
@@ -2521,7 +2570,7 @@ const renderMsajDetailColumn = (columnKey, row, index) => {
   );
 
   const amountInput = (field, options = {}) => (
-    <input type="text" id={`${field}-${index}`} className={`w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 ${textColorClass}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? isFormDisabled} onChange={(e) => { const sanitizedValue = e.target.value.replace(options.allowNegative ? /[^0-9.-]/g : /[^0-9.]/g, ""); const pattern = options.allowNegative ? /^-?\d*\.?\d{0,2}$/ : /^\d*\.?\d{0,2}$/; if (pattern.test(sanitizedValue) || sanitizedValue === "") handleDetailChange(index, field, sanitizedValue, false); }} onFocus={(e) => clearMsajDetailZeroOnFocus(e, { isEditable: !(options.readOnly ?? isFormDisabled), onClear: (value) => handleDetailChange(index, field, value, false) })} onBlur={async (e) => { if (options.readOnly ?? isFormDisabled) return; const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, field, num, true); setFocusedCell(null); }} onKeyDown={async (e) => { if (e.key !== "Enter" || (options.readOnly ?? isFormDisabled)) return; e.preventDefault(); const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, field, num, true); focusNextMsajDetailRowInput(index, field, { rows: detailRows, zeroClearFields: msajDetailEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChange(nextIndex, nextField, value, false) }); }} />
+    <input type="text" id={`${field}-${index}`} className={`w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 ${textColorClass}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? isFormDisabled} onChange={(e) => { const sanitizedValue = e.target.value.replace(options.allowNegative ? /[^0-9.-]/g : /[^0-9.]/g, ""); const pattern = options.allowNegative ? /^-?\d*\.?\d{0,2}$/ : /^\d*\.?\d{0,2}$/; if (pattern.test(sanitizedValue) || sanitizedValue === "") handleDetailChange(index, field, sanitizedValue, false); }} onFocus={(e) => clearFgajDetailZeroOnFocus(e, { isEditable: !(options.readOnly ?? isFormDisabled), onClear: (value) => handleDetailChange(index, field, value, false) })} onBlur={async (e) => { if (options.readOnly ?? isFormDisabled) return; const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, field, num, true); setFocusedCell(null); }} onKeyDown={async (e) => { if (e.key !== "Enter" || (options.readOnly ?? isFormDisabled)) return; e.preventDefault(); const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, field, num, true); focusNextFgajDetailRowInput(index, field, { rows: detailRows, zeroClearFields: fgajDetailEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChange(nextIndex, nextField, value, false) }); }} />
   );
 
   const detailColumnRenderers = {
@@ -2551,17 +2600,14 @@ const renderMsajDetailColumn = (columnKey, row, index) => {
   return detailColumnRenderers[columnKey]?.() ?? <td key={columnKey} className="global-tran-td-ui" style={style}>{String(row[columnKey] ?? "")}</td>;
 };
 
-/* --------------------------------------------------------------------------
- * Render GL table cell by column key
- * -------------------------------------------------------------------------- */
-const renderMsajGlColumn = (columnKey, row, index) => {
-  const columnWidth = getMsajGlFallbackWidth(columnKey);
-  const style = getMsajGlCellStyle(columnKey, columnWidth);
-  const focusNextGlCell = (field) => focusNextMsajGlRowInput(index, field, { rows: detailRowsGL, zeroClearFields: msajGlEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChangeGL(nextIndex, nextField, value) });
+const renderFgajGlColumn = (columnKey, row, index) => {
+  const columnWidth = getFgajGlFallbackWidth(columnKey);
+  const style = getFgajGlCellStyle(columnKey, columnWidth);
+  const focusNextGlCell = (field) => focusNextFgajGlRowInput(index, field, { rows: detailRowsGL, zeroClearFields: fgajGlEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChangeGL(nextIndex, nextField, value) });
   const modalHandlers = { acctCode: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "acctCode" }), rcCode: () => updateState({ selectedRowIndex: index, showRcModal: true }), slCode: () => updateState({ selectedRowIndex: index, showSlModal: true }) };
   const textInput = (field, options = {}) => <input type="text" id={`${field}-${index}`} className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? isFormDisabled} maxLength={options.maxLength} onChange={(e) => handleDetailChangeGL(index, field, e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || options.readOnly || isFormDisabled) return; e.preventDefault(); focusNextGlCell(field); }} />;
   const lookupCell = (field, options = {}) => <td key={columnKey} className="global-tran-td-ui" style={style}><div className="relative w-full"><input type="text" id={`${field}-${index}`} className={`w-full pr-6 global-tran-td-inputclass-ui cursor-pointer ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? true} onChange={(e) => handleDetailChangeGL(index, field, e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); focusNextGlCell(field); }} />{!isFormDisabled && (options.alwaysShowIcon || String(row[field] || "").trim()) && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={modalHandlers[field]} />}</div></td>;
-  const amountInput = (field) => <input type="text" id={`${field}-${index}`} className="w-full global-tran-td-inputclass-ui text-right" value={row[field] || ""} readOnly={isFormDisabled} onChange={(e) => { const sanitizedValue = e.target.value.replace(/[^0-9.]/g, ""); if (/^\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") handleDetailChangeGL(index, field, sanitizedValue); }} onFocus={(e) => clearMsajGlZeroOnFocus(e, { isEditable: !isFormDisabled, onClear: (value) => handleDetailChangeGL(index, field, value) })} onBlur={(e) => { if (isFormDisabled) return; handleBlurGL(index, field, e.target.value); }} onKeyDown={async (e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); await handleBlurGL(index, field, e.target.value, true); focusNextGlCell(field); }} />;
+  const amountInput = (field) => <input type="text" id={`${field}-${index}`} className="w-full global-tran-td-inputclass-ui text-right" value={row[field] || ""} readOnly={isFormDisabled} onChange={(e) => { const sanitizedValue = e.target.value.replace(/[^0-9.]/g, ""); if (/^\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") handleDetailChangeGL(index, field, sanitizedValue); }} onFocus={(e) => clearFgajGlZeroOnFocus(e, { isEditable: !isFormDisabled, onClear: (value) => handleDetailChangeGL(index, field, value) })} onBlur={(e) => { if (isFormDisabled) return; handleBlurGL(index, field, e.target.value); }} onKeyDown={async (e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); await handleBlurGL(index, field, e.target.value, true); focusNextGlCell(field); }} />;
   const glColumnRenderers = {
     ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
     acctCode: () => lookupCell("acctCode", { alwaysShowIcon: true, readOnly: false }),
@@ -2586,9 +2632,6 @@ const renderMsajGlColumn = (columnKey, row, index) => {
   return glColumnRenderers[columnKey]?.() ?? <td key={columnKey} className="global-tran-td-ui" style={style}>{String(row[columnKey] ?? "")}</td>;
 };
 
-/* --------------------------------------------------------------------------
- * JSX Render
- * -------------------------------------------------------------------------- */
 return (
 <>
 <div className="global-tran-main-div-ui">
@@ -2631,7 +2674,7 @@ return (
         isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
         isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
         isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED" || displayStatus === "CLOSED"}
-        detailsRoute="/page/MSAJ"
+        detailsRoute="/page/FGAJ"
       />
       </div>
 
@@ -2677,8 +2720,8 @@ return (
             {/* Provision for Other Tabs */}
         </div>
 
-        {/* MSAJ Header Form Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 rounded-lg relative" id="msaj_hd">
+        {/* FGAJ Header Form Section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 rounded-lg relative" id="fgaj_hd">
           <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="global-tran-textbox-group-div-ui">
               <FieldRenderer
@@ -2693,8 +2736,8 @@ return (
               />
 
               <FieldRenderer
-                id="msajNo"
-                label="MSAJ No."
+                id="fgajNo"
+                label="FGAJ No."
                 type="lookup"
                 value={state.documentNo || ""}
                 disabled={state.isDocNoDisabled}
@@ -2704,7 +2747,7 @@ return (
                   if (e.key === "Enter") {
                     handleDocNoBlur();
                     e.preventDefault();
-                    document.getElementById("msajDate")?.focus();
+                    document.getElementById("fgajDate")?.focus();
                   }
                 }}
               />
@@ -2712,17 +2755,17 @@ return (
               <div className="relative w-full">
                 <div className={`flex items-stretch global-ref-textbox-ui ${!isFormDisabled ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"}`}>
                   <DateFormatInput
-                    id="msajDate"
+                    id="fgajDate"
                     className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
                     value={documentDate}
                     disabled={isFormDisabled}
                     updateState={(updates) => {
-                      if (updates.msajDate !== undefined) updateState({ documentDate: updates.msajDate });
+                      if (updates.fgajDate !== undefined) updateState({ documentDate: updates.fgajDate });
                       else updateState(updates);
                     }}
                   />
                 </div>
-                <label htmlFor="msajDate" className="global-ref-floating-label">MSAJ Date</label>
+                <label htmlFor="fgajDate" className="global-ref-floating-label">FGAJ Date</label>
               </div>
             </div>
 
@@ -2831,10 +2874,10 @@ return (
           <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
             <thead className="global-tran-thead-div-ui">
               <tr>
-                {visibleMsajDetailColumns.map((column) => (
+                {visibleFgajDetailColumns.map((column) => (
                   <Fragment key={`detail-header-${column.key}`}>
-                    {renderMsajDetailHeader(column.label, column.key, column.width, {
-                      orderedColumns: visibleMsajDetailColumns,
+                    {renderFgajDetailHeader(column.label, column.key, column.width, {
+                      orderedColumns: visibleFgajDetailColumns,
                     })}
                   </Fragment>
                 ))}
@@ -2842,12 +2885,12 @@ return (
                   <th key="detail-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
                 )}
               </tr>
-              {renderMsajDetailHeaderContextMenu()}
+              {renderFgajDetailHeaderContextMenu()}
             </thead>
             <tbody className="relative">
-              {sortedMsajDetailRows.map(({ row, originalIndex }) => (
+              {sortedFgajDetailRows.map(({ row, originalIndex }) => (
                 <tr key={`${row.uniqueKey || row.itemCode || "row"}-${originalIndex}`} className="global-tran-tr-ui">
-                  {visibleMsajDetailColumns.map((column) => renderMsajDetailColumn(column.key, row, originalIndex))}
+                  {visibleFgajDetailColumns.map((column) => renderFgajDetailColumn(column.key, row, originalIndex))}
                   {!isFormDisabled && (
                     <td className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black" style={transactionActionsCellStyle}>
                       <div className="flex items-center justify-center gap-1">
@@ -2873,12 +2916,7 @@ return (
     <div className="global-tran-tab-footer-main-div-ui">
 
 
-    {/*
-      Add Button Workflow:
-      - If upload is allowed, clicking Add opens a dropdown.
-      - Dropdown options: Add Item, Download Template, Upload Transaction.
-      - If upload is not allowed, clicking Add goes directly to Add Item.
-    */}
+    {/* Add Button */}
     <div className="global-tran-tab-footer-button-div-ui">
       <div ref={singleUploadDropdownRef} className="relative inline-block">
         {canUseSingleUploadOptions && showSingleUploadDropdown && !isFormDisabled && (
@@ -3047,10 +3085,10 @@ return (
             <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
               <thead className="global-tran-thead-div-ui">
                 <tr>
-                  {orderedMsajGlColumns.map((column) => (
+                  {orderedFgajGlColumns.map((column) => (
                     <Fragment key={`gl-header-${column.key}`}>
-                      {renderMsajGlHeader(column.label, column.key, column.width, {
-                        orderedColumns: orderedMsajGlColumns,
+                      {renderFgajGlHeader(column.label, column.key, column.width, {
+                        orderedColumns: orderedFgajGlColumns,
                       })}
                     </Fragment>
                   ))}
@@ -3058,12 +3096,12 @@ return (
                     <th key="gl-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
                   )}
                 </tr>
-                {renderMsajGlHeaderContextMenu()}
+                {renderFgajGlHeaderContextMenu()}
               </thead>
               <tbody className="relative">
-                {sortedMsajGlRows.map(({ row, originalIndex }) => (
+                {sortedFgajGlRows.map(({ row, originalIndex }) => (
                   <tr key={`${row.acctCode || "gl"}-${originalIndex}`} className="global-tran-tr-ui">
-                    {orderedMsajGlColumns.map((column) => renderMsajGlColumn(column.key, row, originalIndex))}
+                    {orderedFgajGlColumns.map((column) => renderFgajGlColumn(column.key, row, originalIndex))}
                     {!isFormDisabled && (
                       <td className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black" style={transactionActionsCellStyle}>
                         <div className="flex items-center justify-center gap-1">
@@ -3210,7 +3248,7 @@ return (
     {showAllTranDocNo && (
       <AllTranDocNo
         isOpen={showAllTranDocNo}
-        params={{branchCode,branchName,docType,documentTitle,fieldNo : "msajNo"}}
+        params={{branchCode,branchName,docType,documentTitle,fieldNo : "fgajNo"}}
         onRetrieve={handleTranDocNoRetrieval}
         onResponse={{documentNo}}
         onSelected={handleTranDocNoSelection}
@@ -3225,7 +3263,7 @@ return (
                 isOpen={msLookupModalOpen}
                 data={globalLookupRow}
                 btnCaption="Get Selected Items"
-                title="MS Location Balance"
+                title="FG Location Balance"
                 endpoint={globalLookupHeader}
                 onClose={handleCloseMSLookup}
                 onCancel={() => updateState({ msLookupModalOpen: false })}
@@ -3236,11 +3274,11 @@ return (
       {itemMastLookupOpen && (
         <ItemMastLookupModal
           isOpen={itemMastLookupOpen}
-          endpoint="getInvLookupMS"
+          endpoint="getInvLookupFG"
           onClose={handleCloseItemMastLookup}
           onCancel={() => updateState({ itemMastLookupOpen: false, itemSingleSelect: false })}
           enableMultiSelect={!itemSingleSelect}
-          docType="PRMS"
+          docType="PRFG"
         />
       )}
         
@@ -3261,6 +3299,7 @@ return (
           onClose={handleCloseLocationLookup}
           source={accountModalSource}
           filter={"ByWH" + selectedWH}
+          autoSelectSingle={!accountModalSource && (selectedAJType === "BB" || selectedAJType === "IG")}
         />
       )}
 
@@ -3280,15 +3319,15 @@ return (
     <div className={topTab === "history" ? "" : "hidden"}>
       <AllTranHistory
         showHeader={false}
-        endpoint="/getMSAJHistory"
-        cacheKey={`MSAJ:${state.branchCode || ""}:${state.docNo || ""}`}  // âœ… per-transaction
-        activeTabKey="MSAJ_Summary"
+        endpoint="/getFGAJHistory"
+        cacheKey={`FGAJ:${state.branchCode || ""}:${state.docNo || ""}`}  // âœ… per-transaction
+        activeTabKey="FGAJ_Summary"
         branchCode={state.branchCode}
         startDate={state.fromDate}
         endDate={state.toDate}
-         status="All"
-          onRowDoubleClick={handleHistoryRowPick}
-          historyExportName={`${documentTitle} History`} 
+        status="All"
+        onRowDoubleClick={handleHistoryRowPick}
+        historyExportName={`${documentTitle} History`} 
     />
   </div>
 
@@ -3315,4 +3354,4 @@ return (
 
 };
 
-export default MSAJ;
+export default FGAJ;

@@ -2731,13 +2731,22 @@
 
 
 
+// ==============================
+// Imports
+// ==============================
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ExportFileNameModal from "@/NAYSA Cloud/Lookup/SearchExport.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import { exportGenericQueryExcel } from "@/NAYSA Cloud/Global/report";
 import { Calculator, CheckCircle2, Columns3, Copy, Download, Eye, EyeOff, FileText, Filter, FilterX, ListX, Pin, PinOff, Rows3, X } from "lucide-react";
 import PdfTextCaptureModal from "@/NAYSA Cloud/Lookup/SearchPDFReader.jsx";
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
+import { useSwalErrorAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 
+// ==============================
+// Shared Table Constants
+// ==============================
 const MIN_VISIBLE_DATA_COLUMNS = 5;
 const TABLE_EDITABLE_CONTROL_SELECTOR =
   "input:not([disabled]), textarea:not([disabled]), select:not([disabled])";
@@ -2751,6 +2760,9 @@ const CALCULATOR_COLUMN_KEYWORDS = [
   "qty",
 ];
 
+// ==============================
+// Calculator Helpers
+// ==============================
 const isCalculatorColumnKey = (key) => {
   const normalizedKey = String(key ?? "")
     .replace(/[^a-z0-9]/gi, "")
@@ -2775,6 +2787,316 @@ const formatCalculatorResultValue = (value, targetInput, fallbackDecimals = 2) =
   return Number(value || 0).toFixed(decimalPlaces);
 };
 
+// ==============================
+// Single Excel Upload Package
+// ==============================
+
+// Builds the upload/download column list from the current visible table columns.
+export const getSingleUploadTemplateColumns = (
+  visibleColumns = [],
+  { excludeKeys = ["qtyHand"], excludeActionColumns = true } = {}
+) => {
+  const excluded = new Set(excludeKeys);
+
+  return visibleColumns.filter((column) => {
+    const key = String(column?.key ?? "");
+    const label = String(column?.label ?? "");
+    const normalizedKey = key.trim().toLowerCase();
+    const normalizedLabel = label.trim().toLowerCase();
+
+    if (excluded.has(key)) return false;
+    if (!excludeActionColumns) return true;
+
+    return !["action", "actions"].includes(normalizedKey) && normalizedLabel !== "actions";
+  });
+};
+
+const getExcelDecimalFormat = (decimalPlaces) =>
+  `#,##0${Number(decimalPlaces || 0) > 0 ? "." + "0".repeat(Number(decimalPlaces || 0)) : ""}`;
+
+const normalizeSingleUploadHeader = (value) => String(value ?? "").trim();
+const normalizeHeaderForCompare = (value) =>
+  normalizeSingleUploadHeader(value).replace(/\s+/g, " ").toUpperCase();
+
+// Reads a worksheet cell into the string/date value used by upload parsing.
+export const getSingleUploadExcelCellValue = (cell) => {
+  const value = cell?.value;
+  if (value === null || value === undefined) return "";
+  if (value instanceof Date) return value;
+  if (typeof value === "object") {
+    if (value.text !== undefined) return String(value.text ?? "").trim();
+    if (value.result !== undefined) return String(value.result ?? "").trim();
+    if (Array.isArray(value.richText)) return value.richText.map((part) => part.text || "").join("").trim();
+    if (value.hyperlink !== undefined && value.text !== undefined) return String(value.text ?? "").trim();
+  }
+  return String(value ?? "").trim();
+};
+
+// Converts app date values into real Excel date cells for template download.
+export const toSingleUploadExcelDate = (value, toDateInputValue) => {
+  const normalizedDate = toDateInputValue?.(value);
+  if (!normalizedDate) return "";
+  const [year, month, day] = normalizedDate.split("-").map(Number);
+  return new Date(year, month - 1, day);
+};
+
+// Converts uploaded Excel date cells or serial numbers back into app date values.
+export const toSingleUploadDateValue = (value, toDateInputValue) => {
+  if (!value) return "";
+  if (value instanceof Date) return toDateInputValue?.(value) || "";
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+    const utcDate = new Date(excelEpoch.getTime() + Math.floor(value) * 86400000);
+    return utcDate.toISOString().slice(0, 10);
+  }
+
+  const rawText = String(value || "").trim();
+  if (/^\d+(\.\d+)?$/.test(rawText)) {
+    const serialValue = Number(rawText);
+    if (serialValue > 25000 && serialValue < 90000) {
+      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+      const utcDate = new Date(excelEpoch.getTime() + Math.floor(serialValue) * 86400000);
+      return utcDate.toISOString().slice(0, 10);
+    }
+  }
+
+  return toDateInputValue?.(value) || rawText;
+};
+
+// Ensures the uploaded workbook matches the exact current transaction template.
+export const validateSingleUploadHeaders = (worksheet, templateColumns) => {
+  const expectedHeaders = templateColumns.map((column) => column.label);
+  const headerRow = worksheet.getRow(1);
+  const actualHeaders = expectedHeaders.map((_, index) =>
+    getSingleUploadExcelCellValue(headerRow.getCell(index + 1))
+  );
+
+  const extraHeaderValues = [];
+  headerRow.eachCell({ includeEmpty: false }, (cell, columnNumber) => {
+    if (columnNumber > expectedHeaders.length && getSingleUploadExcelCellValue(cell)) {
+      extraHeaderValues.push(`Column ${columnNumber}: "${getSingleUploadExcelCellValue(cell)}"`);
+    }
+  });
+
+  const errors = [];
+  if (extraHeaderValues.length > 0) {
+    errors.push(`Excel has extra column(s): ${extraHeaderValues.join(", ")}`);
+  }
+
+  expectedHeaders.forEach((expectedHeader, index) => {
+    const actualHeader = actualHeaders[index];
+    if (normalizeHeaderForCompare(actualHeader) !== normalizeHeaderForCompare(expectedHeader)) {
+      errors.push(`Column ${index + 1} expected "${expectedHeader}" but found "${actualHeader || "blank"}".`);
+    }
+  });
+
+  return errors;
+};
+
+// Downloads the current table format as an Excel template, including existing rows.
+export const handleDownloadSingleUploadTemplate = async ({
+  columns = [],
+  rows = [],
+  fileName = "Single Upload Template.xlsx",
+  sheetName = "Template",
+  decimalColumnFormats = {},
+  dateColumns = [],
+  rightAlignedColumns = [],
+  centerAlignedColumns = [],
+  getCellValue,
+} = {}) => {
+  const decimalFormats = decimalColumnFormats || {};
+  const dateColumnSet = new Set(dateColumns);
+  const rightAlignedSet = new Set(rightAlignedColumns);
+  const centerAlignedSet = new Set(centerAlignedColumns);
+
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet(sheetName);
+
+  worksheet.columns = columns.map((column) => ({
+    header: column.label,
+    key: column.key,
+    width: Math.max(12, Math.ceil((column.width || 120) / 8)),
+  }));
+
+  worksheet.getRow(1).eachCell((cell) => {
+    cell.font = { bold: true };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+  });
+
+  rows.forEach((rowEntry, rowIndex) => {
+    const rowValues = columns.map((column) =>
+      getCellValue ? getCellValue({ rowEntry, column, rowIndex }) : rowEntry?.[column.key] ?? ""
+    );
+    const excelRow = worksheet.addRow(rowValues);
+
+    columns.forEach((column, index) => {
+      const cell = excelRow.getCell(index + 1);
+      if (decimalFormats[column.key] !== undefined) {
+        cell.numFmt = getExcelDecimalFormat(decimalFormats[column.key]);
+      } else if (dateColumnSet.has(column.key)) {
+        cell.numFmt = "mm/dd/yyyy";
+      } else if (column.key !== "ln") {
+        cell.numFmt = "@";
+      }
+
+      cell.alignment = {
+        horizontal: rightAlignedSet.has(column.key)
+          ? "right"
+          : centerAlignedSet.has(column.key)
+            ? "center"
+            : "left",
+        vertical: "middle",
+      };
+    });
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  saveAs(
+    new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }),
+    fileName
+  );
+};
+
+// Safely unwraps API responses that may be returned as JSON strings or nested payloads.
+const safeJsonParse = (value) => {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed || (!trimmed.startsWith("{") && !trimmed.startsWith("["))) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+};
+
+// Normalizes transaction-specific validation responses into { rows, errors } shape.
+export const extractSingleUploadValidationResult = (response) => {
+  const unwrap = (value, depth = 0) => {
+    if (depth > 8 || value === null || value === undefined) return null;
+
+    const parsedValue = safeJsonParse(value);
+    if (parsedValue !== value) return unwrap(parsedValue, depth + 1);
+
+    if (Array.isArray(value)) {
+      if (value.length === 0) return null;
+      return unwrap(value[0], depth + 1);
+    }
+
+    if (typeof value !== "object") return null;
+
+    if (value.rows !== undefined || value.errors !== undefined || value.errorCount !== undefined) {
+      return value;
+    }
+
+    if (value.result !== undefined) return unwrap(value.result, depth + 1);
+    if (value.Result !== undefined) return unwrap(value.Result, depth + 1);
+    if (value.data !== undefined) return unwrap(value.data, depth + 1);
+    if (value.Data !== undefined) return unwrap(value.Data, depth + 1);
+    if (value.payload !== undefined) return unwrap(value.payload, depth + 1);
+
+    return null;
+  };
+
+  return unwrap(response);
+};
+
+// Handles file type checks, workbook reading, header validation, row parsing, and server validation.
+export const handleSingleUploadExcelFile = async ({
+  file,
+  columns = [],
+  createEmptyRow,
+  parseRow,
+  validateRows,
+  acceptExtensions = [".xlsx"],
+} = {}) => {
+  if (!file) return { cancelled: true };
+
+  const lowerFileName = String(file.name || "").toLowerCase();
+  if (!acceptExtensions.some((extension) => lowerFileName.endsWith(extension))) {
+    return {
+      ok: false,
+      title: "Invalid File",
+      errors: [`Please upload an Excel ${acceptExtensions.join(" or ")} file generated from the latest template.`],
+    };
+  }
+
+  const workbook = new ExcelJS.Workbook();
+  const buffer = await file.arrayBuffer();
+  await workbook.xlsx.load(buffer);
+  const worksheet = workbook.worksheets?.[0];
+
+  if (!worksheet) {
+    return {
+      ok: false,
+      title: "Invalid Excel File",
+      errors: ["No worksheet found in the uploaded file."],
+    };
+  }
+
+  const headerErrors = validateSingleUploadHeaders(worksheet, columns);
+  if (headerErrors.length > 0) {
+    return {
+      ok: false,
+      title: "Not the Same Format",
+      errors: ["Please download the latest template and upload again.", "", ...headerErrors],
+    };
+  }
+
+  const rows = [];
+  worksheet.eachRow({ includeEmpty: false }, (excelRow, rowNumber) => {
+    if (rowNumber === 1) return;
+
+    let hasValue = false;
+    const rawValuesByKey = {};
+    columns.forEach((column, columnIndex) => {
+      const cell = excelRow.getCell(columnIndex + 1);
+      const value = getSingleUploadExcelCellValue(cell);
+      rawValuesByKey[column.key] = { value, cell };
+      if (String(value || "").trim() !== "") hasValue = true;
+    });
+
+    if (!hasValue) return;
+
+    rows.push(
+      parseRow
+        ? parseRow({ excelRow, rowNumber, rawValuesByKey, columns, createEmptyRow })
+        : rawValuesByKey
+    );
+  });
+
+  if (rows.length === 0) {
+    return {
+      ok: false,
+      title: "No Records Found",
+      errors: ["The uploaded Excel file has no detail rows."],
+    };
+  }
+
+  const validationResult = validateRows ? await validateRows(rows) : { rows };
+
+  return {
+    ok: true,
+    rows,
+    validationResult,
+  };
+};
+
+// Displays upload validation errors through the standard SweetAlert error helper.
+export const showSingleUploadErrorList = (title, errors) => {
+  const list = Array.isArray(errors) ? errors : [errors].filter(Boolean);
+  return useSwalErrorAlert(
+    title,
+    list.map((err) => String(err || "")).join("\n")
+  );
+};
+
+// ==============================
+// Transaction Action Column Styles
+// ==============================
 export const transactionActionsHeaderStyle = {
   width: "110px",
   minWidth: "110px",
@@ -2797,7 +3119,11 @@ export const transactionActionsCellStyle = {
   backgroundImage: "none",
 };
 
+// ==============================
+// Resizable / Interactive Table Hook
+// ==============================
 export const useResizableTableColumns = (columns = []) => {
+  // State is grouped by table layout, menus/modals, copy feedback, and calculator behavior.
   const { companyInfo, currentUserRow } = useAuth();
   const [columnWidths, setColumnWidths] = useState({});
   const [columnOrder, setColumnOrder] = useState(() =>
@@ -2850,6 +3176,8 @@ export const useResizableTableColumns = (columns = []) => {
   const contextMenuDragRef = useRef(null);
   const calculatorDragRef = useRef(null);
   const calculatorResizeRef = useRef(null);
+
+  // Shared helpers for editable inputs and the table calculator.
   const setNativeControlValue = useCallback((control, value) => {
     if (!control) return;
 
@@ -2968,6 +3296,7 @@ export const useResizableTableColumns = (columns = []) => {
     };
   }, [handleResizeEnd, handleResizeMove]);
 
+  // Keep column-related state valid when the caller changes the column list.
   useEffect(() => {
     const nextKeys = columns.map((column) => column.key);
 
@@ -3012,6 +3341,7 @@ export const useResizableTableColumns = (columns = []) => {
     });
   }, [columns, isActionColumn]);
 
+  // Close menus from outside clicks, Escape, or other table instances.
   useEffect(() => {
     const handleCloseContextMenu = () => {
       setHeaderContextMenu((prev) =>
@@ -3047,6 +3377,7 @@ export const useResizableTableColumns = (columns = []) => {
     };
   }, []);
 
+  // Make floating context menus draggable within the viewport.
   useEffect(() => {
     const handleContextMenuDragMove = (e) => {
       if (!contextMenuDragRef.current) return;
@@ -3075,6 +3406,7 @@ export const useResizableTableColumns = (columns = []) => {
     };
   }, []);
 
+  // Handle calculator dragging and resizing.
   useEffect(() => {
     const handleCalculatorPointerMove = (e) => {
       if (calculatorDragRef.current) {
@@ -3210,6 +3542,7 @@ export const useResizableTableColumns = (columns = []) => {
     return () => document.removeEventListener("keydown", handleCalculatorKeyDown, true);
   }, [calculatorModal.visible]);
 
+  // Column layout, visibility, sorting, filtering, and grouping actions.
   const getColumnWidth = useCallback(
     (key, fallbackWidth) => columnWidths[key] || fallbackWidth,
     [columnWidths]
@@ -3580,6 +3913,7 @@ export const useResizableTableColumns = (columns = []) => {
     []
   );
 
+  // Arrow keys move between editable controls in the same table.
   useEffect(() => {
     const isVisibleControl = (control) => {
       if (!control || control.type === "hidden") return false;
@@ -3696,6 +4030,7 @@ export const useResizableTableColumns = (columns = []) => {
     };
   }, []);
 
+  // Row processing and ordered column helpers used by transaction tables.
   const normalizeSortValue = useCallback((value) => {
     if (value == null) return "";
     if (value instanceof Date) return value.getTime();
@@ -3862,6 +4197,7 @@ export const useResizableTableColumns = (columns = []) => {
     [columns, frozenColumnKeys, getColumnWidth]
   );
 
+  // Column drag/drop supports both reordering and grouping.
   const handleColumnDragStart = useCallback((e, key) => {
     draggedColumnKeyRef.current = key;
     if (e.dataTransfer) {
@@ -3988,6 +4324,7 @@ export const useResizableTableColumns = (columns = []) => {
     };
   }, []);
 
+  // Context menu positioning plus copy/export data extraction.
   const startContextMenuDrag = useCallback((e, menuType = "header") => {
     if (e.button !== 0) return;
     e.preventDefault();
@@ -4399,6 +4736,7 @@ export const useResizableTableColumns = (columns = []) => {
     [getTableExportValue]
   );
 
+  // Cell lookup helpers identify action columns and calculator-capable cells.
   const getCellColumnIndex = useCallback((cell) => {
     const row = cell?.closest?.("tr");
     if (!row || !cell) return -1;
@@ -4478,6 +4816,7 @@ export const useResizableTableColumns = (columns = []) => {
 
 
 
+  // Body menu commands and calculator actions.
   const closeBodyContextMenu = useCallback(() => {
     setCopyFeedback({ visible: false, label: "", x: 0, y: 0 });
     setBodyContextMenu({ visible: false, x: 0, y: 0 });
@@ -4692,6 +5031,7 @@ export const useResizableTableColumns = (columns = []) => {
     setHeaderContextMenu({ visible: false, x: 0, y: 0, key: null });
   }, [getTableClipboardText, writeTextToClipboard]);
 
+  // JSX render helpers for grouping UI, headers, menus, and table modals.
   const renderGroupColumnDropZone = useCallback(() => {
     if (!showGroupColumnDropZone && !groupedColumnKeys.length) return null;
 

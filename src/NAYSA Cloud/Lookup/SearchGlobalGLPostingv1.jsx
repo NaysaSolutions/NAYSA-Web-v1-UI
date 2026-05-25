@@ -27,6 +27,7 @@ import {
   formatNumber,
   useSwalErrorAlert,
 } from "../Global/behavior.jsx";
+import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import { Maximize2, Minimize2 } from "lucide-react";
 
 function useDebouncedValue(value, delay = 250) {
@@ -325,12 +326,7 @@ useEffect(() => {
         
         {/* INLINE LOADING OVERLAY (PREVENTS BLACK BACKGROUND) */}
         {isLoading && (
-          <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-white/70">
-            <div className="bg-white p-6 rounded-2xl shadow-xl border flex flex-col items-center animate-in fade-in zoom-in duration-200">
-               <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
-               <p className="mt-4 text-sm font-bold text-slate-700">Loading, please wait...</p>
-            </div>
-          </div>
+          <LoadingSpinner />
         )}
 
         <div className="sticky top-0 z-20">

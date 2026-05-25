@@ -34,10 +34,50 @@ const formatNumber = (value, decimals = numberDecimals) =>
     maximumFractionDigits: decimals,
   }).format(parseNumber(value));
 
+const formatDateMMDDYYYY = (value) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+
+  const isoMatch = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) {
+    const [, yyyy, mm, dd] = isoMatch;
+    return `${mm.padStart(2, "0")}/${dd.padStart(2, "0")}/${yyyy}`;
+  }
+
+  const slashMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slashMatch) {
+    const [, mm, dd, yyyy] = slashMatch;
+    return `${mm.padStart(2, "0")}/${dd.padStart(2, "0")}/${yyyy}`;
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+
+  const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+  const dd = String(parsed.getDate()).padStart(2, "0");
+  const yyyy = parsed.getFullYear();
+  return `${mm}/${dd}/${yyyy}`;
+};
+
 const includesFilter = (value, filterValue) => {
   const needle = String(filterValue || "").trim().toUpperCase();
   if (!needle) return true;
   return String(value ?? "").toUpperCase().includes(needle);
+};
+
+const getObjectValue = (source, keys = []) => {
+  if (!source || typeof source !== "object") return "";
+
+  for (const key of keys) {
+    if (source[key] !== undefined && source[key] !== null) return source[key];
+  }
+
+  const normalizedKeys = keys.map((key) => String(key).toLowerCase());
+  const match = Object.entries(source).find(([key]) =>
+    normalizedKeys.includes(String(key).toLowerCase())
+  );
+
+  return match?.[1] ?? "";
 };
 
 const MIN_COLUMN_WIDTH = 70;
@@ -56,177 +96,33 @@ const estimateColumnWidth = (label, values = [], minWidth = MIN_COLUMN_WIDTH) =>
 };
 
 const baseAllocationColumns = [
-  { key: "drag", label: "Drag", align: "center", minWidth: 56, filterable: false },
-  { key: "priorityNo", label: "Priority", align: "center", minWidth: 84 },
-  { key: "lotNo", label: "Lot No", align: "left", minWidth: 110 },
+  { key: "drag", label: "Drag", align: "center", minWidth: 56, filterable: false, sticky: true },
+  { key: "priorityNo", label: "Priority", align: "center", minWidth: 92, sticky: true },
+  { key: "lotNo", label: "Lot No", align: "left", minWidth: 110, sticky: true },
   { key: "qualityStatus", label: "Quality Status", align: "center", minWidth: 135 },
   { key: "bestBeforeDate", label: "Best Before Date", align: "center", minWidth: 145 },
   { key: "warehouseName", label: "Warehouse", align: "left", minWidth: 150 },
   { key: "locationCode", label: "Location", align: "left", minWidth: 105 },
-  { key: "onHandQty", label: "On Hand Qty", align: "right", minWidth: 120 },
-  { key: "allocatedQty", label: "Allocated Qty", align: "right", minWidth: 120 },
+  { key: "onHandQty", label: "On Hand Quantity", align: "right", minWidth: 145 },
+  { key: "allocatedQty", label: "Allocated Quantity", align: "right", minWidth: 150 },
   { key: "remainingAvailable", label: "Remaining Available", align: "right", minWidth: 160 },
-  { key: "pickQty", label: "Pick Qty", align: "right", minWidth: 100 },
+  { key: "pickQty", label: "Pick Quantity", align: "right", minWidth: 120 },
+  { key: "action", label: "Action", align: "center", minWidth: 110, filterable: false },
   { key: "notes", label: "Notes", align: "left", minWidth: 140 },
 ];
 
 const baseTransactionColumns = [
   { key: "view", label: "View", align: "center", minWidth: 64, filterable: false },
+  { key: "branch", label: "Branch", align: "left", minWidth: 120 },
   { key: "sourceType", label: "Transaction Type", align: "left", minWidth: 150 },
   { key: "sourceDocNo", label: "Transaction No", align: "left", minWidth: 150 },
   { key: "sourceLineNo", label: "Line No", align: "center", minWidth: 95 },
   { key: "customerName", label: "Customer / Business Partner", align: "left", minWidth: 220 },
   { key: "warehouseName", label: "Warehouse", align: "left", minWidth: 150 },
-  { key: "allocatedQty", label: "Allocated Qty", align: "right", minWidth: 125 },
+  { key: "allocatedQty", label: "Allocated Quantity", align: "right", minWidth: 155 },
   { key: "affectsCurrentLine", label: "Affects Current Line", align: "center", minWidth: 165 },
   { key: "date", label: "Date", align: "center", minWidth: 115 },
   { key: "status", label: "Status", align: "center", minWidth: 150 },
-];
-
-const buildSampleStockRows = (groupId = "DR-000145-LINE-2") => [
-  {
-    id: "STK-001",
-    stockCardRefId: "SC-2026-000001",
-    groupId,
-    priorityNo: 1,
-    lotNo: "LOT001",
-    qualityStatus: "Approved",
-    bestBeforeDate: "2026-06-15",
-    warehouseCode: "WH1",
-    warehouseName: "WH1 - Main",
-    locationCode: "A-01-01",
-    onHandQty: 80,
-    allocatedQty: 20,
-    remainingAvailable: 60,
-    pickQty: 30,
-    notes: "",
-    isBlocked: false,
-    blockedReason: "",
-  },
-  {
-    id: "STK-002",
-    stockCardRefId: "SC-2026-000002",
-    groupId,
-    priorityNo: 2,
-    lotNo: "LOT002",
-    qualityStatus: "Approved",
-    bestBeforeDate: "2026-06-22",
-    warehouseCode: "WH1",
-    warehouseName: "WH1 - Main",
-    locationCode: "A-01-02",
-    onHandQty: 70,
-    allocatedQty: 10,
-    remainingAvailable: 60,
-    pickQty: 40,
-    notes: "",
-    isBlocked: false,
-    blockedReason: "",
-  },
-  {
-    id: "STK-003",
-    stockCardRefId: "SC-2026-000003",
-    groupId,
-    priorityNo: 3,
-    lotNo: "LOT003",
-    qualityStatus: "Approved",
-    bestBeforeDate: "2026-05-28",
-    warehouseCode: "WH1",
-    warehouseName: "WH1 - Main",
-    locationCode: "A-02-01",
-    onHandQty: 50,
-    allocatedQty: 50,
-    remainingAvailable: 0,
-    pickQty: 0,
-    notes: "Fully Allocated",
-    isBlocked: true,
-    blockedReason: "Fully Allocated",
-  },
-  {
-    id: "STK-004",
-    stockCardRefId: "SC-2026-000004",
-    groupId,
-    priorityNo: 4,
-    lotNo: "LOT004",
-    qualityStatus: "Hold",
-    bestBeforeDate: "2026-06-05",
-    warehouseCode: "WH2",
-    warehouseName: "WH2 - Secondary",
-    locationCode: "B-01-01",
-    onHandQty: 10,
-    allocatedQty: 0,
-    remainingAvailable: 0,
-    pickQty: 0,
-    notes: "Blocked due to Quality",
-    isBlocked: true,
-    blockedReason: "Blocked due to Quality",
-  },
-  {
-    id: "STK-005",
-    stockCardRefId: "SC-2026-000005",
-    groupId,
-    priorityNo: 5,
-    lotNo: "LOT005",
-    qualityStatus: "Approved",
-    bestBeforeDate: "2026-06-30",
-    warehouseCode: "WH2",
-    warehouseName: "WH2 - Secondary",
-    locationCode: "B-02-01",
-    onHandQty: 45,
-    allocatedQty: 0,
-    remainingAvailable: 45,
-    pickQty: 0,
-    notes: "",
-    isBlocked: false,
-    blockedReason: "",
-  },
-];
-
-const buildSampleExistingAllocations = () => [
-  {
-    id: "ALLOC-001",
-    sourceType: "Delivery Receipt",
-    sourceDocNo: "DR-2026-000145",
-    sourceLineNo: "Line 1",
-    customerName: "ABC Trading Corporation",
-    itemCode: "ITEM-00125",
-    lotNo: "LOT001",
-    warehouseName: "WH1 - Main",
-    allocatedQty: 10,
-    affectsCurrentLine: "Yes",
-    date: "2026-05-18",
-    status: "Open",
-    isSameTransaction: true,
-  },
-  {
-    id: "ALLOC-002",
-    sourceType: "Sales Invoice",
-    sourceDocNo: "SI-2026-000088",
-    sourceLineNo: "Line 3",
-    customerName: "ABC Trading Corporation",
-    itemCode: "ITEM-00125",
-    lotNo: "LOT002",
-    warehouseName: "WH1 - Main",
-    allocatedQty: 20,
-    affectsCurrentLine: "Yes",
-    date: "2026-05-16",
-    status: "Open",
-    isSameTransaction: false,
-  },
-  {
-    id: "ALLOC-003",
-    sourceType: "Transfer",
-    sourceDocNo: "TR-2026-000031",
-    sourceLineNo: "Line 1",
-    customerName: "ABC Trading Corporation",
-    itemCode: "ITEM-00125",
-    lotNo: "LOT002",
-    warehouseName: "WH2 - Secondary",
-    allocatedQty: 10,
-    affectsCurrentLine: "Yes",
-    date: "2026-05-15",
-    status: "Open",
-    isSameTransaction: false,
-  },
 ];
 
 const statusBadgeClass = (status) => {
@@ -296,16 +192,16 @@ export default function SearchGlobalItemPickingModal({
   const quantityDecimals = Number(companyInfo?.itemDescQtyFG ?? 2);
 
   const resolvedTransaction = {
-    sourceDocType: "DR",
-    sourceDocTypeName: "Delivery Receipt",
-    sourceDocNo: "DR-2026-000145",
-    sourceLineNo: "Line 2",
-    groupId: "DR-000145-LINE-2",
-    customerCode: "CUST-0001",
-    customerName: "ABC Trading Corporation",
-    itemCode: "ITEM-00125",
-    itemName: "Fresh Milk 1L",
-    requestedQty: 100,
+    sourceDocType: "",
+    sourceDocTypeName: "",
+    sourceDocNo: "",
+    sourceLineNo: "",
+    groupId: "",
+    customerCode: "",
+    customerName: "",
+    itemCode: "",
+    itemName: "",
+    requestedQty: 0,
     ...transaction,
   };
 
@@ -319,6 +215,8 @@ export default function SearchGlobalItemPickingModal({
   const [allocationColumnWidths, setAllocationColumnWidths] = useState({});
   const [transactionColumnWidths, setTransactionColumnWidths] = useState({});
   const [draggedRowId, setDraggedRowId] = useState(null);
+  const [pickQtyDrafts, setPickQtyDrafts] = useState({});
+  const [hideFullyAllocatedRows, setHideFullyAllocatedRows] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const [modalBounds, setModalBounds] = useState({
@@ -335,9 +233,7 @@ export default function SearchGlobalItemPickingModal({
   useEffect(() => {
     if (!isOpen) return;
 
-    const initialRows = Array.isArray(stockRows) && stockRows.length > 0
-      ? stockRows
-      : buildSampleStockRows(resolvedTransaction.groupId);
+    const initialRows = Array.isArray(stockRows) ? stockRows : [];
 
     const normalizedRows = initialRows.map((row, index) => ({
       ...row,
@@ -354,11 +250,8 @@ export default function SearchGlobalItemPickingModal({
     }));
 
     setRows(normalizedRows);
-    setAllocations(
-      Array.isArray(existingAllocations) && existingAllocations.length > 0
-        ? existingAllocations
-        : buildSampleExistingAllocations()
-    );
+    setAllocations(Array.isArray(existingAllocations) ? existingAllocations : []);
+    setPickQtyDrafts({});
   }, [isOpen, stockRows, existingAllocations, resolvedTransaction.groupId]);
 
   useEffect(() => {
@@ -383,17 +276,23 @@ export default function SearchGlobalItemPickingModal({
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
+      const isFullyAllocated =
+        parseNumber(row.remainingAvailable) <= 0 && parseNumber(row.pickQty) <= 0;
+
+      if (hideFullyAllocatedRows && isFullyAllocated) return false;
+
       return (
         includesFilter(row.priorityNo, allocationFilters.priorityNo) &&
         includesFilter(row.lotNo, allocationFilters.lotNo) &&
         includesFilter(row.qualityStatus, allocationFilters.qualityStatus) &&
-        includesFilter(row.bestBeforeDate, allocationFilters.bestBeforeDate) &&
+        includesFilter(formatDateMMDDYYYY(row.bestBeforeDate), allocationFilters.bestBeforeDate) &&
         includesFilter(row.warehouseName || row.warehouseCode, allocationFilters.warehouseName) &&
         includesFilter(row.locationCode, allocationFilters.locationCode) &&
         includesFilter(formatNumber(row.onHandQty, quantityDecimals), allocationFilters.onHandQty) &&
         includesFilter(formatNumber(row.allocatedQty, quantityDecimals), allocationFilters.allocatedQty) &&
         includesFilter(formatNumber(row.remainingAvailable, quantityDecimals), allocationFilters.remainingAvailable) &&
         includesFilter(formatNumber(row.pickQty, quantityDecimals), allocationFilters.pickQty) &&
+        includesFilter(parseNumber(row.pickQty) > 0 ? "Release" : "Allocate", allocationFilters.action) &&
         includesFilter(row.blockedReason || row.notes, allocationFilters.notes)
       );
     });
@@ -401,51 +300,70 @@ export default function SearchGlobalItemPickingModal({
 
   const filteredAllocations = useMemo(() => {
     return allocations.filter((entry) => (
-      includesFilter(entry.sourceType, transactionFilters.sourceType) &&
-      includesFilter(entry.sourceDocNo, transactionFilters.sourceDocNo) &&
-      includesFilter(entry.sourceLineNo, transactionFilters.sourceLineNo) &&
-      includesFilter(entry.customerName, transactionFilters.customerName) &&
-      includesFilter(entry.warehouseName, transactionFilters.warehouseName) &&
-      includesFilter(formatNumber(entry.allocatedQty, quantityDecimals), transactionFilters.allocatedQty) &&
-      includesFilter(entry.affectsCurrentLine, transactionFilters.affectsCurrentLine) &&
-      includesFilter(entry.date, transactionFilters.date) &&
-      includesFilter(entry.isSameTransaction ? "Same Transaction" : entry.status, transactionFilters.status)
+      includesFilter(getTransactionCellValue(entry, "branch"), transactionFilters.branch) &&
+      includesFilter(getTransactionCellValue(entry, "sourceType"), transactionFilters.sourceType) &&
+      includesFilter(getTransactionCellValue(entry, "sourceDocNo"), transactionFilters.sourceDocNo) &&
+      includesFilter(getTransactionCellValue(entry, "sourceLineNo"), transactionFilters.sourceLineNo) &&
+      includesFilter(getTransactionCellValue(entry, "customerName"), transactionFilters.customerName) &&
+      includesFilter(getTransactionCellValue(entry, "warehouseName"), transactionFilters.warehouseName) &&
+      includesFilter(getTransactionCellValue(entry, "allocatedQty"), transactionFilters.allocatedQty) &&
+      includesFilter(getTransactionCellValue(entry, "affectsCurrentLine"), transactionFilters.affectsCurrentLine) &&
+      includesFilter(getTransactionCellValue(entry, "date"), transactionFilters.date) &&
+      includesFilter(getTransactionCellValue(entry, "status"), transactionFilters.status)
     ));
   }, [allocations, transactionFilters, quantityDecimals]);
 
   const getTransactionRoute = (entry) => {
-    const sourceType = String(entry?.sourceType || "").toUpperCase();
-    const docNo = String(entry?.sourceDocNo || "").toUpperCase();
+    const sourceType = String(getTransactionCellValue(entry, "sourceType") || "").toUpperCase();
+    const docNo = String(getTransactionCellValue(entry, "sourceDocNo") || "").toUpperCase();
 
-    if (docNo.startsWith("DR-") || sourceType.includes("DELIVERY")) {
-      return { page: "DR", docParam: "soNo" };
+    if (docNo.startsWith("DR-") || sourceType === "DR" || sourceType.includes("DELIVERY")) {
+      return { page: "DR", docParam: "drNo" };
     }
 
-    if (docNo.startsWith("SO-") || sourceType.includes("SALES ORDER")) {
+    if (docNo.startsWith("SO-") || sourceType === "SO" || sourceType.includes("SALES ORDER")) {
       return { page: "SO", docParam: "soNo" };
     }
 
-    if (docNo.startsWith("MSST-") || sourceType.includes("TRANSFER")) {
+    if (docNo.startsWith("MSST-") || sourceType === "MSST" || sourceType.includes("TRANSFER")) {
       return { page: "MSST", docParam: "msstNo" };
     }
 
-    if (docNo.startsWith("SI-") || sourceType.includes("SALES INVOICE")) {
-      return { page: "SVI", docParam: "sviNo" };
+    if (docNo.startsWith("SI-") || sourceType === "SI" || sourceType.includes("SALES INVOICE")) {
+      return { page: "SI", docParam: "siNo" };
     }
 
     return null;
   };
 
   const handleViewAllocatedTransaction = (entry) => {
+    const viewDocumentUrl = String(
+      getObjectValue(entry, ["viewDocument", "view_document", "ViewDocument"]) || ""
+    ).trim();
+
+    if (viewDocumentUrl) {
+      const url =
+        /^https?:\/\//i.test(viewDocumentUrl) || viewDocumentUrl.startsWith("/")
+          ? viewDocumentUrl
+          : `/${viewDocumentUrl}`;
+      window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
+
     const route = getTransactionRoute(entry);
-    if (!route || !entry?.sourceDocNo) {
+    const sourceDocNo = getTransactionCellValue(entry, "sourceDocNo");
+
+    if (!route || !sourceDocNo) {
       swalErrorAlert("View Transaction", "Unable to determine the transaction page for this record.");
       return;
     }
 
     const params = new URLSearchParams({
-      [route.docParam]: entry.sourceDocNo,
-      branchCode: entry.branchCode || entry.sourceBranchCode || resolvedTransaction.branchCode || "",
+      [route.docParam]: sourceDocNo,
+      branchCode:
+        getObjectValue(entry, ["branchCode", "sourceBranchCode", "branch_code"]) ||
+        resolvedTransaction.branchCode ||
+        "",
       viewDocument: "true",
     });
 
@@ -466,7 +384,7 @@ export default function SearchGlobalItemPickingModal({
 
   const transactionTableTotals = useMemo(() => {
     return filteredAllocations.reduce(
-      (sum, entry) => sum + parseNumber(entry.allocatedQty),
+      (sum, entry) => sum + parseNumber(getObjectValue(entry, ["allocatedQty", "qtyAllocated", "qty_allocated"])),
       0
     );
   }, [filteredAllocations]);
@@ -474,6 +392,7 @@ export default function SearchGlobalItemPickingModal({
   const getAllocationCellValue = (row, key) => {
     switch (key) {
       case "drag":
+      case "action":
         return "";
       case "warehouseName":
         return row.warehouseName || row.warehouseCode || "";
@@ -482,6 +401,8 @@ export default function SearchGlobalItemPickingModal({
       case "remainingAvailable":
       case "pickQty":
         return formatNumber(row[key], quantityDecimals);
+      case "bestBeforeDate":
+        return formatDateMMDDYYYY(row.bestBeforeDate);
       case "notes":
         return row.blockedReason || row.notes || "";
       default:
@@ -489,18 +410,36 @@ export default function SearchGlobalItemPickingModal({
     }
   };
 
-  const getTransactionCellValue = (entry, key) => {
+  function getTransactionCellValue(entry, key) {
     switch (key) {
       case "view":
         return "";
+      case "branch":
+        return getObjectValue(entry, ["branchName", "branchCode", "sourceBranchCode", "branch_code"]);
+      case "sourceType":
+        return getObjectValue(entry, ["sourceType", "docCode", "doc_code"]);
+      case "sourceDocNo":
+        return getObjectValue(entry, ["sourceDocNo", "docNo", "doc_no"]);
+      case "sourceLineNo":
+        return getObjectValue(entry, ["sourceLineNo", "lineNo", "line_no"]);
+      case "customerName":
+        return getObjectValue(entry, ["customerName", "custName", "cust_name", "customer", "businessPartnerName"]);
+      case "warehouseName":
+        return getObjectValue(entry, ["warehouseName", "whouseCode", "whouse_code", "warehouseCode"]);
+      case "affectsCurrentLine":
+        return getObjectValue(entry, ["affectsCurrentLine", "affects_current_line"]);
       case "allocatedQty":
-        return formatNumber(entry.allocatedQty, quantityDecimals);
+        return formatNumber(getObjectValue(entry, ["allocatedQty", "qtyAllocated", "qty_allocated"]), quantityDecimals);
+      case "date":
+        return formatDateMMDDYYYY(getObjectValue(entry, ["date", "docDate", "doc_date"]));
       case "status":
-        return entry.isSameTransaction ? "Same Transaction" : entry.status;
+        return entry.isSameTransaction
+          ? "Same Transaction"
+          : getObjectValue(entry, ["status", "pickStatus", "pick_status"]);
       default:
         return entry[key] ?? "";
     }
-  };
+  }
 
   useEffect(() => {
     if (!rows.length) return;
@@ -693,15 +632,15 @@ export default function SearchGlobalItemPickingModal({
     const pickedForThisLine = rows.reduce((sum, row) => sum + parseNumber(row.pickQty), 0);
 
     const sameTransactionOtherLines = allocations
-      .filter((entry) => entry.isSameTransaction)
+      .filter((entry) => entry.isSameTransaction && String(entry.affectsCurrentLine || "").toUpperCase() !== "CURRENT LINE")
       .reduce((sum, entry) => sum + parseNumber(entry.allocatedQty), 0);
 
     const otherTransactions = allocations
       .filter((entry) => !entry.isSameTransaction)
       .reduce((sum, entry) => sum + parseNumber(entry.allocatedQty), 0);
 
-    const availableForThisLine = Math.max(parseNumber(resolvedTransaction.requestedQty) - sameTransactionOtherLines - otherTransactions, 0);
-    const balanceToPick = parseNumber(resolvedTransaction.requestedQty) - sameTransactionOtherLines - otherTransactions - pickedForThisLine;
+    const availableForThisLine = parseNumber(resolvedTransaction.requestedQty);
+    const balanceToPick = parseNumber(resolvedTransaction.requestedQty) - pickedForThisLine;
 
     return {
       totalOnHand,
@@ -768,17 +707,22 @@ export default function SearchGlobalItemPickingModal({
     });
   };
 
+  const getMaxPickQtyForRow = (row) =>
+    Math.max(parseNumber(row.remainingAvailable), parseNumber(row.pickQty));
+
   const handlePickQtyChange = (rowId, value) => {
     const cleanValue = String(value).replace(/[^0-9.]/g, "");
     const regex = new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`);
 
     if (!regex.test(cleanValue) && cleanValue !== "") return;
 
+    setPickQtyDrafts((prev) => ({ ...prev, [rowId]: cleanValue }));
+
     setRows((prevRows) =>
       prevRows.map((row) => {
         if (row.id !== rowId) return row;
         const nextPickQty = parseNumber(cleanValue);
-        const maxQty = parseNumber(row.remainingAvailable);
+        const maxQty = getMaxPickQtyForRow(row);
 
         return {
           ...row,
@@ -788,6 +732,12 @@ export default function SearchGlobalItemPickingModal({
     );
   };
   const handlePickQtyBlur = (rowId) => {
+    setPickQtyDrafts((prev) => {
+      const next = { ...prev };
+      delete next[rowId];
+      return next;
+    });
+
     setRows((prevRows) =>
       prevRows.map((row) =>
         row.id === rowId
@@ -798,6 +748,66 @@ export default function SearchGlobalItemPickingModal({
           : row
       )
     );
+  };
+
+  const handlePickQtyFocus = (rowId) => {
+    setPickQtyDrafts((prev) => ({
+      ...prev,
+      [rowId]: parseNumber(rows.find((row) => row.id === rowId)?.pickQty) === 0
+        ? ""
+        : Number(parseNumber(rows.find((row) => row.id === rowId)?.pickQty)).toFixed(quantityDecimals),
+    }));
+  };
+
+  const focusNextPickQtyInput = (rowId) => {
+    const visibleIndex = filteredRows.findIndex((row) => row.id === rowId);
+    const nextRow = filteredRows.slice(visibleIndex + 1).find((row) => {
+      return allowManualAllocation && !row.isBlocked && getMaxPickQtyForRow(row) > 0;
+    });
+
+    if (!nextRow) return;
+    requestAnimationFrame(() => {
+      document.querySelector(`[data-pick-qty-input="${nextRow.id}"]`)?.focus();
+    });
+  };
+
+  const handlePickQtyKeyDown = (event, rowId) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    handlePickQtyBlur(rowId);
+    focusNextPickQtyInput(rowId);
+  };
+
+  const handleToggleRowAllocation = (rowId) => {
+    setRows((prevRows) => {
+      const currentTotal = prevRows.reduce((sum, row) => sum + parseNumber(row.pickQty), 0);
+
+      return prevRows.map((row) => {
+        if (row.id !== rowId) return row;
+
+        if (parseNumber(row.pickQty) > 0) {
+          return { ...row, pickQty: 0 };
+        }
+
+        if (row.isBlocked || getMaxPickQtyForRow(row) <= 0) {
+          return row;
+        }
+
+        const balanceForRow = Math.max(
+          parseNumber(resolvedTransaction.requestedQty) - currentTotal,
+          0
+        );
+        const nextPickQty = Math.min(getMaxPickQtyForRow(row), balanceForRow);
+
+        return { ...row, pickQty: nextPickQty };
+      });
+    });
+
+    setPickQtyDrafts((prev) => {
+      const next = { ...prev };
+      delete next[rowId];
+      return next;
+    });
   };
   const handleAutoAllocate = () => {
     let remainingQty = Math.max(totals.availableForThisLine, 0);
@@ -822,21 +832,13 @@ export default function SearchGlobalItemPickingModal({
 
     setRows(refreshPriorityNumbers(autoRows));
   };
-  const handleClearPick = () => {
-    setRows((prevRows) => prevRows.map((row) => ({ ...row, pickQty: 0 })));
-  };
-  const handleConfirm = () => {
-    if (!isBalanced) {
-      swalErrorAlert(
-        "Invalid Pick Quantity",
-        "Picked quantity does not match the available quantity for this line."
-      );
-      return;
-    }
+  const buildAllocationPayload = (sourceRows, { clearAllocation = false } = {}) => {
+    const payloadRows = Array.isArray(sourceRows) ? sourceRows : [];
+    const pickedRows = payloadRows.filter((row) => parseNumber(row.pickQty) > 0);
+    const totalPicked = payloadRows.reduce((sum, row) => sum + parseNumber(row.pickQty), 0);
+    const requestedQty = parseNumber(resolvedTransaction.requestedQty);
 
-    const pickedRows = rows.filter((row) => parseNumber(row.pickQty) > 0);
-
-    const payload = {
+    return {
       sourceDocType: resolvedTransaction.sourceDocType,
       sourceDocTypeName: resolvedTransaction.sourceDocTypeName,
       sourceDocNo: resolvedTransaction.sourceDocNo,
@@ -846,34 +848,68 @@ export default function SearchGlobalItemPickingModal({
       customerName: resolvedTransaction.customerName,
       itemCode: resolvedTransaction.itemCode,
       itemName: resolvedTransaction.itemName,
-      requestedQty: parseNumber(resolvedTransaction.requestedQty),
-      totalPicked: totals.pickedForThisLine,
-      balanceToPick: totals.balanceToPick,
+      requestedQty,
+      totalPicked,
+      balanceToPick: requestedQty - totalPicked,
+      clearAllocation,
       allocations: pickedRows.map((row) => ({
         groupId: resolvedTransaction.groupId,
         sourceDocType: resolvedTransaction.sourceDocType,
-        sourceDocNo: resolvedTransaction.sourceDocNo,
         sourceLineNo: resolvedTransaction.sourceLineNo,
         itemCode: resolvedTransaction.itemCode,
         stockCardRefId: row.stockCardRefId,
         lotNo: row.lotNo,
         qualityStatus: row.qualityStatus,
         bestBeforeDate: row.bestBeforeDate,
+        fgFifoLocId: row.fgFifoLocId || null,
+        fgWacLocId: row.fgWacLocId || null,
         warehouseCode: row.warehouseCode,
+        whouseCode: row.warehouseCode,
         warehouseName: row.warehouseName,
         locationCode: row.locationCode,
+        locCode: row.locationCode,
         priorityNo: row.priorityNo,
+        sourceDocCode: row.sourceDocCode || null,
+        sourceDocNo: row.sourceDocNo || null,
+        sourceDocDate: row.sourceDocDate || null,
+        sourceDocId: row.sourceDocId || null,
+        sourceGroupId: row.sourceGroupId || null,
+        fifoDocCode: row.fifoDocCode || null,
+        fifoDocNo: row.fifoDocNo || null,
+        orderId: row.orderId || null,
+        unitCost: parseNumber(row.unitCost || 0),
+        wacKey: row.wacKey || null,
+        wac: parseNumber(row.wac || 0),
         pickQty: parseNumber(row.pickQty),
       })),
-      orderedStockRows: rows.map((row) => ({
+      orderedStockRows: payloadRows.map((row) => ({
         stockCardRefId: row.stockCardRefId,
+        fgFifoLocId: row.fgFifoLocId || null,
+        fgWacLocId: row.fgWacLocId || null,
         lotNo: row.lotNo,
         priorityNo: row.priorityNo,
         pickQty: parseNumber(row.pickQty),
       })),
     };
+  };
 
-    onConfirm?.(payload);
+  const handleClearPick = () => {
+    const clearedRows = rows.map((row) => ({ ...row, pickQty: 0 }));
+    setPickQtyDrafts({});
+    setRows(clearedRows);
+    onConfirm?.(buildAllocationPayload(clearedRows, { clearAllocation: true }));
+  };
+
+  const handleConfirm = () => {
+    if (!isBalanced) {
+      swalErrorAlert(
+        "Invalid Pick Quantity",
+        "Picked quantity does not match the available quantity for this line."
+      );
+      return;
+    }
+
+    onConfirm?.(buildAllocationPayload(rows));
   };
 
   const renderColumnFilter = (filters, onChange, key, placeholder = "Filter...") => (
@@ -892,6 +928,34 @@ export default function SearchGlobalItemPickingModal({
   const getTextAlignClass = (align) =>
     align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left";
 
+  const getStickyColumnClass = (column, tone = "body") => {
+    if (!column.sticky) return "";
+    const zIndex = tone === "header" ? "z-40" : tone === "filter" ? "z-30" : "z-20";
+    const bgClass = tone === "body" ? "bg-inherit" : "bg-slate-200";
+    return `sticky left-0 ${zIndex} ${bgClass} shadow-[4px_0_6px_-6px_rgba(15,23,42,0.45)]`;
+  };
+
+  const getStickyLeftOffset = (table, column) => {
+    if (!column.sticky) return undefined;
+
+    const columns = table === "allocation" ? orderedAllocationColumns : orderedTransactionColumns;
+    const widths = table === "allocation" ? allocationColumnWidths : transactionColumnWidths;
+    const columnIndex = columns.findIndex((item) => item.key === column.key);
+
+    if (columnIndex <= 0) return 0;
+
+    return columns.slice(0, columnIndex).reduce(
+      (total, item) => total + (widths[item.key] || item.minWidth),
+      0
+    );
+  };
+
+  const getColumnSizingStyle = (table, column, width) => ({
+    width,
+    minWidth: column.minWidth,
+    ...(column.sticky ? { left: getStickyLeftOffset(table, column) } : {}),
+  });
+
   const renderResizableHeader = (table, column, width) => (
     <th
       key={column.key}
@@ -899,8 +963,8 @@ export default function SearchGlobalItemPickingModal({
       onDragStart={() => handleHeaderDragStart(table, column.key)}
       onDragOver={(event) => event.preventDefault()}
       onDrop={() => handleHeaderDrop(table, column.key)}
-      className={`global-lookup-th-ui relative border-r border-slate-300 bg-slate-200 ${getTextAlignClass(column.align)}`}
-      style={{ width, minWidth: column.minWidth }}
+      className={`global-lookup-th-ui relative border-r border-slate-300 bg-slate-200 ${getTextAlignClass(column.align)} ${getStickyColumnClass(column, "header")}`}
+      style={getColumnSizingStyle(table, column, width)}
       title="Drag to reorder column"
     >
       <span className="global-lookup-th-text-ui inline-flex min-w-0 items-center gap-1 truncate">
@@ -922,8 +986,8 @@ export default function SearchGlobalItemPickingModal({
     return (
       <td
         key={column.key}
-        className="bg-slate-200 px-2 py-1"
-        style={{ width, minWidth: column.minWidth }}
+        className={`bg-slate-200 px-2 py-1 ${getStickyColumnClass(column, "filter")}`}
+        style={getColumnSizingStyle(table, column, width)}
       >
         {column.filterable === false ? null : renderColumnFilter(filters, onChange, column.key)}
       </td>
@@ -931,12 +995,14 @@ export default function SearchGlobalItemPickingModal({
   };
 
   const renderAllocationCell = (row, column) => {
-    const commonClass = `whitespace-nowrap overflow-hidden text-ellipsis px-2 py-0.5 ${getTextAlignClass(column.align)}`;
+    const commonClass = `whitespace-nowrap overflow-hidden text-ellipsis px-2 py-0.5 ${getTextAlignClass(column.align)} ${getStickyColumnClass(column, "body")}`;
+    const width = allocationColumnWidths[column.key] || column.minWidth;
+    const cellStyle = getColumnSizingStyle("allocation", column, width);
 
     switch (column.key) {
       case "drag":
         return (
-          <td key={column.key} className={commonClass}>
+          <td key={column.key} className={commonClass} style={cellStyle}>
             <div className="inline-flex items-center gap-1">
               <button
                 type="button"
@@ -950,7 +1016,7 @@ export default function SearchGlobalItemPickingModal({
         );
       case "priorityNo":
         return (
-          <td key={column.key} className={commonClass}>
+          <td key={column.key} className={commonClass} style={cellStyle}>
             <div className="flex items-center justify-center gap-1">
               <button
                 type="button"
@@ -976,36 +1042,65 @@ export default function SearchGlobalItemPickingModal({
         );
       case "qualityStatus":
         return (
-          <td key={column.key} className={commonClass}>
+          <td key={column.key} className={commonClass} style={cellStyle}>
             <span className={`inline-flex rounded-md border px-2 py-0.5 text-xs ${statusBadgeClass(row.qualityStatus)}`}>
               {row.qualityStatus}
             </span>
           </td>
         );
       case "pickQty": {
-        const canPick = allowManualAllocation && !row.isBlocked && parseNumber(row.remainingAvailable) > 0;
+        const canPick = allowManualAllocation && !row.isBlocked && getMaxPickQtyForRow(row) > 0;
+        const draftValue = Object.prototype.hasOwnProperty.call(pickQtyDrafts, row.id)
+          ? pickQtyDrafts[row.id]
+          : Number(parseNumber(row.pickQty)).toFixed(quantityDecimals);
         return (
-          <td key={column.key} className={commonClass}>
+          <td key={column.key} className={commonClass} style={cellStyle}>
             <input
-              type="number"
-              min="0"
-              step={quantityDecimals > 0 ? `0.${"0".repeat(Math.max(quantityDecimals - 1, 0))}1` : "1"}
-              value={Number(parseNumber(row.pickQty)).toFixed(quantityDecimals)}
+              type="text"
+              inputMode="decimal"
+              data-pick-qty-input={row.id}
+              value={draftValue}
               disabled={!canPick}
+              onFocus={() => handlePickQtyFocus(row.id)}
               onChange={(event) => handlePickQtyChange(row.id, event.target.value)}
               onBlur={() => handlePickQtyBlur(row.id)}
+              onKeyDown={(event) => handlePickQtyKeyDown(event, row.id)}
               className={`h-7 w-20 bg-transparent px-1 text-right text-xs outline-none transition [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${
                 canPick
-                  ? "text-slate-900 focus:text-blue-700"
+                  ? "rounded border border-transparent text-slate-900 focus:border-blue-300 focus:bg-blue-50 focus:text-blue-700"
                   : "cursor-not-allowed text-slate-400"
               }`}
             />
           </td>
         );
       }
+      case "action": {
+        const isAllocated = parseNumber(row.pickQty) > 0;
+        const canToggle =
+          allowManualAllocation &&
+          !row.isBlocked &&
+          (isAllocated || (getMaxPickQtyForRow(row) > 0 && totals.balanceToPick > 0));
+
+        return (
+          <td key={column.key} className={commonClass} style={cellStyle}>
+            <button
+              type="button"
+              disabled={!canToggle}
+              onClick={() => handleToggleRowAllocation(row.id)}
+              className={`h-7 w-full rounded-full border text-[11px] font-semibold transition-colors ${
+                isAllocated
+                  ? "border-blue-500 bg-blue-500/15 text-blue-700 hover:bg-blue-500/25"
+                  : "border-slate-300 bg-white text-slate-600 hover:border-blue-400 hover:text-blue-700"
+              } ${canToggle ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}
+            >
+              {isAllocated ? "Release" : "Allocate"}
+            </button>
+          </td>
+        );
+      }
       case "notes":
         return (
-          <td key={column.key} className={commonClass}>
+          <td key={column.key} className={commonClass} style={cellStyle}>
             {row.blockedReason ? (
               <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-slate-600">
                 {row.blockedReason.toUpperCase().includes("QUALITY") && <AlertCircle size={13} />}
@@ -1018,7 +1113,7 @@ export default function SearchGlobalItemPickingModal({
         );
       default:
         return (
-          <td key={column.key} className={commonClass}>
+          <td key={column.key} className={commonClass} style={cellStyle}>
             {getAllocationCellValue(row, column.key)}
           </td>
         );
@@ -1212,7 +1307,7 @@ export default function SearchGlobalItemPickingModal({
             </div>
 
             <div className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-              <MetricBox label="Requested Qty" value={resolvedTransaction.requestedQty} decimals={quantityDecimals} />
+              <MetricBox label="Requested Quantity" value={resolvedTransaction.requestedQty} decimals={quantityDecimals} />
               <MetricBox label="Already Allocated to Other Transactions" value={totals.otherTransactions} tone="orange" decimals={quantityDecimals} />
               <MetricBox label="Already Allocated in Same Transaction (Other Lines)" value={totals.sameTransactionOtherLines} tone="orange" decimals={quantityDecimals} />
               <MetricBox label="Available for This Line" value={totals.availableForThisLine} tone="green" decimals={quantityDecimals} />
@@ -1267,6 +1362,21 @@ export default function SearchGlobalItemPickingModal({
                 <RotateCcw size={13} />
                 Clear Filters
               </button>
+              {activeTableTab === "allocationDetails" && (
+                <label className="inline-flex select-none items-center gap-2 self-stretch rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 sm:self-center">
+                  <span className="relative inline-flex h-5 w-9 items-center">
+                    <input
+                      type="checkbox"
+                      checked={hideFullyAllocatedRows}
+                      onChange={(event) => setHideFullyAllocatedRows(event.target.checked)}
+                      className="peer sr-only"
+                    />
+                    <span className="absolute inset-0 rounded-full bg-slate-300 transition-colors peer-checked:bg-blue-600" />
+                    <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform peer-checked:translate-x-4" />
+                  </span>
+                  {hideFullyAllocatedRows ? "Show Fully Allocated" : "Hide Fully Allocated"}
+                </label>
+              )}
             </div>
 
             {activeTableTab === "allocationDetails" ? (
@@ -1291,6 +1401,7 @@ export default function SearchGlobalItemPickingModal({
 
                 <tbody className="text-slate-700">
                   {filteredRows.map((row) => {
+                    const rowAllocated = parseNumber(row.pickQty) > 0;
                     return (
                       <tr
                         key={row.id}
@@ -1298,7 +1409,9 @@ export default function SearchGlobalItemPickingModal({
                         onDragStart={() => handleDragStart(row.id)}
                         onDragOver={handleDragOver}
                         onDrop={() => handleDrop(row.id)}
-                        className={`border-b border-slate-200 bg-white ${draggedRowId === row.id ? "opacity-60" : ""}`}
+                        className={`border-b border-slate-200 ${
+                          rowAllocated ? "bg-blue-50 text-blue-800" : "bg-white"
+                        } ${draggedRowId === row.id ? "opacity-60" : ""}`}
                       >
                         {orderedAllocationColumns.map((column) => renderAllocationCell(row, column))}
                       </tr>
@@ -1310,7 +1423,8 @@ export default function SearchGlobalItemPickingModal({
                     {orderedAllocationColumns.map((column, index) => (
                       <td
                         key={column.key}
-                        className={`whitespace-nowrap overflow-hidden text-ellipsis px-2 py-2 ${getTextAlignClass(index === 0 ? "right" : column.align)}`}
+                        className={`whitespace-nowrap overflow-hidden text-ellipsis px-2 py-2 ${getTextAlignClass(index === 0 ? "right" : column.align)} ${getStickyColumnClass(column, "body")}`}
+                        style={getColumnSizingStyle("allocation", column, allocationColumnWidths[column.key] || column.minWidth)}
                       >
                         {getAllocationFooterValue(column, index)}
                       </td>
@@ -1383,7 +1497,7 @@ export default function SearchGlobalItemPickingModal({
               className="inline-flex h-9 w-36 items-center justify-center gap-2 rounded-lg border border-blue-600 bg-blue-600 px-4 text-xs font-medium text-white hover:bg-blue-700"
             >
               <CircleX size={16} />
-              Clear Pick
+              Clear Allocation
             </button>
           </div>
 
