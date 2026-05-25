@@ -88,7 +88,6 @@ import {
   useSwalHandleOpenSpecsModal,
   useSwalvalidateRequiredFields,
   useSwalProceedConfirm,
-  useSwalConfirmAlert
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
 import { 
@@ -939,7 +938,7 @@ const PO = () => {
       };
 
       if ((detailRows?.length || 0) > 0) {
-        const result = await useSwalConfirmAlert(
+        const result = await useSwalProceedConfirm(
           "Apply Delivery Date changes?",
           "PO Detail already has record(s).\nDo you want to apply the updated Delivery Date to all PO Detail rows?",
           "Yes"
@@ -1583,7 +1582,7 @@ const PO = () => {
       const isCancel = value === "X";
       const actionWord = isCancel ? "CANCEL" : "CLOSE";
 
-      useSwalConfirmAlert(
+      useSwalProceedConfirm(
         `Confirm Full Document ${isCancel ? "Cancellation" : "Closing"}?`,
         `Are you sure you want to ${actionWord} this entire PO? This action is permanent and will affect all open line items.`
       ).then((result) => {
@@ -1980,7 +1979,7 @@ const PO = () => {
       };
 
       if (isDuplicate) {
-        useSwalConfirmAlert(
+        useSwalProceedConfirm(
           "Duplicate Item Detected",
           "This item is already in the list. Do you want to select it anyway?"
         ).then((result) => {
@@ -2045,7 +2044,7 @@ const PO = () => {
     };
 
     if (duplicateItems.length > 0) {
-      useSwalConfirmAlert(
+      useSwalProceedConfirm(
         "Duplicate Items Detected",
         "Some items are already in the list. Do you want to add them anyway?"
       ).then((result) => {
@@ -2235,7 +2234,7 @@ const PO = () => {
         const isCancel = value === "X";
         const actionText = isCancel ? "CANCEL" : "CLOSE";
 
-        useSwalConfirmAlert(
+        useSwalProceedConfirm(
           `Confirm Line ${isCancel ? "Cancellation" : "Closing"}?`,
           `Are you sure you want to ${actionText} this specific item? This action is permanent for this line and cannot be undone.`
         ).then((result) => {

@@ -81,7 +81,6 @@ import {
   useSwalshowSaveSuccessDialog,
   useSwalvalidateRequiredFields,
   useSwalInfoAlert,
-  useSwalConfirmAlert,
   useSwalProceedConfirm,
   useSwalHandleOpenSpecsModal,
   useSwalSuccessAlert,
@@ -543,7 +542,7 @@ useEffect(() => {
       const nextState = { dateNeeded: currentValue };
 
       if ((detailRows?.length || 0) > 0) {
-        const result = await useSwalConfirmAlert(
+        const result = await useSwalProceedConfirm(
           "Apply Date Needed changes?",
           "PR Detail already has record(s).\nDo you want to apply the updated Date Needed to all PR Detail rows?",
           "Yes"
@@ -946,7 +945,7 @@ const handleCloseItemLookup = async (selectedItems) => {
     };
 
     if (isDuplicate) {
-      useSwalConfirmAlert(
+      useSwalProceedConfirm(
         "Duplicate Item Detected",
         "This item is already in the list. Do you want to select it anyway?"
       ).then(async (result) => {
@@ -999,7 +998,7 @@ const handleCloseItemLookup = async (selectedItems) => {
   };
 
   if (duplicateItems.length > 0) {
-    useSwalConfirmAlert(
+    useSwalProceedConfirm(
       "Duplicate Items Detected",
       "Some items are already in the list. Do you want to add them anyway?"
     ).then(async (result) => {
@@ -1395,7 +1394,7 @@ if (field === 'prStatus') {
     const isCancel = value === "X";
     const actionText = isCancel ? "CANCEL" : "CLOSE";
     
-   useSwalConfirmAlert(
+   useSwalProceedConfirm(
       `Confirm Line ${isCancel ? "Cancellation" : "Closing"}?`, 
       `Are you sure you want to ${actionText} this specific item? This action is permanent for this line and cannot be undone.`
     ).then((result) => {
@@ -1614,7 +1613,7 @@ const handleHeaderStatusChange = (value) => {
     const isCancel = value === "X";
     const actionWord = isCancel ? "CANCEL" : "CLOSE";
 
-    useSwalConfirmAlert(
+    useSwalProceedConfirm(
       `Confirm Full Document ${isCancel ? "Cancellation" : "Closing"}?`,
       `Are you sure you want to ${actionWord} this entire PR? This action is permanent and will affect all open line items.`
     ).then((result) => {

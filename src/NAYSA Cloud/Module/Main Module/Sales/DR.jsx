@@ -73,7 +73,7 @@ import {
 import {
   formatNumber,
   parseFormattedNumber,
-  useSwalConfirmAlert,
+  useSwalProceedConfirm,
   useSwalInfoAlert,
   useSwalvalidateRequiredFields,
   useSwalshowSaveSuccessDialog,
@@ -549,7 +549,7 @@ const DR = () => {
       return false;
     }
 
-    const result = await useSwalConfirmAlert(
+    const result = await useSwalProceedConfirm(
       `Apply ${headerLabel} changes?`,
       `SO Detail already has record(s).\nDo you want to apply the updated ${headerLabel} to all SO Detail rows?`,
       "Yes"
@@ -1300,7 +1300,7 @@ const cancelPickingAllocationForDeletedRow = async (row) => {
     return false;
   }
 
-  const confirm = await useSwalConfirmAlert(
+  const confirm = await useSwalProceedConfirm(
     "Delete Picked DR Detail?",
     "This line already has picked quantity. Deleting it will release the FG picking allocation.",
     "Yes"
@@ -1870,7 +1870,7 @@ const handleBulkPickingAllocation = async (mode) => {
     return;
   }
 
-  const confirm = await useSwalConfirmAlert(
+  const confirm = await useSwalProceedConfirm(
     `${actionLabel}?`,
     isRelease
       ? "This will release all picking allocations for the DR details."
@@ -3201,10 +3201,8 @@ return (
           <FontAwesomeIcon icon={faPlus} className="mr-2" />Add
         </button>
       </div>
-    </div>
-
       {canUsePickingControls && (detailRows?.length || 0) > 0 && (
-        <div className="flex w-full items-center justify-center gap-2 sm:absolute sm:left-1/2 sm:top-1/2 sm:w-auto sm:-translate-x-1/2 sm:-translate-y-1/2">
+        <div className="ml-6 flex items-center gap-2">
           <button
             type="button"
             className="min-h-[36px] w-[132px] rounded-lg border border-blue-200 bg-blue-50 px-4 py-1.5 text-sm font-medium text-blue-700 shadow-sm transition-colors hover:border-blue-500 hover:bg-blue-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center whitespace-nowrap focus:outline-none"
@@ -3226,6 +3224,7 @@ return (
           </button>
         </div>
       )}
+    </div>
 
       <div
         className="global-tran-tab-footer-total-main-div-ui grid gap-1 grid-cols-2"
