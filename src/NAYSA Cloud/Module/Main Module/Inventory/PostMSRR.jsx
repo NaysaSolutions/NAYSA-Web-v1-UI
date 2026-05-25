@@ -92,18 +92,30 @@ const PostMSRR = ({ isOpen, onClose, userCode }) => {
 
 const pickDocAndBranch = (row) => {
   if (!row) return { docNo: null, branchCode: null };
-  const docNo = row.rrNo;
-  const branchCode = row.branchCode;
+  const docNo =
+    row.rrNo ||
+    row.rr_no ||
+    row.RR_NO ||
+    row.msrrNo ||
+    row.MSRR_NO ||
+    row.documentNo ||
+    row.docNo;
+  const branchCode =
+    row.branchCode ||
+    row.branch_code ||
+    row.BRANCH_CODE ||
+    row.bCode ||
+    row.BCode ||
+    row.BC;
   return { docNo, branchCode };
 };
   // =========================================
   // VIEW DOCUMENT
   // =========================================
   const handleViewDocument = (row) => {
-    const rrNo = row?.rrNo || row?.rr_no;
-    const branchCode = row?.branchCode || row?.branch_code;
+    const { docNo, branchCode } = pickDocAndBranch(row);
 
-    if (!rrNo || !branchCode) {
+    if (!docNo || !branchCode) {
       useSwalValidationAlert({
         icon: "warning",
         title: "Missing keys",
@@ -112,10 +124,13 @@ const pickDocAndBranch = (row) => {
       return;
     }
 
+    const TRAN_VIEW_URL = "/page/MSRR";
     const url =
-      `${window.location.origin}/tran-inv-msrr` +
-      `?rrNo=${encodeURIComponent(rrNo)}` +
-      `&branchCode=${encodeURIComponent(branchCode)}`;
+      `${window.location.origin}${TRAN_VIEW_URL}` +
+      `?rrNo=${encodeURIComponent(docNo)}` +
+      `&poNo=${encodeURIComponent(docNo)}` +
+      `&branchCode=${encodeURIComponent(branchCode)}` +
+      `&viewDocument=true`;
 
     window.open(url, "_blank", "noopener,noreferrer");
   };
