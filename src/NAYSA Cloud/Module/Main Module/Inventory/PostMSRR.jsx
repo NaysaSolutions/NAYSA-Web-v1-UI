@@ -5,8 +5,7 @@ import { useSelectedHSColConfig } from '@/NAYSA Cloud/Global/selectedData';
 import GlobalGLPostingModalv1 from "../../../Lookup/SearchGlobalGLPostingv1.jsx";
 import { useSwalValidationAlert } from '@/NAYSA Cloud/Global/behavior';
 import { useHandlePostTran } from '@/NAYSA Cloud/Global/procedure';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faSpinner } from '@fortawesome/free-solid-svg-icons';
+import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 const PostMSRR = ({ isOpen, onClose, userCode }) => {
   const [data, setData] = useState([]);
@@ -152,14 +151,7 @@ const pickDocAndBranch = (row) => {
       )}
 
       {ReactDOM.createPortal(
-        loading ? (
-          <div className="global-tran-spinner-main-div-ui">
-            <div className="global-tran-spinner-sub-div-ui">
-              <FontAwesomeIcon icon={faSpinner} spin size="2x" />
-              <p>Please wait...</p>
-            </div>
-          </div>
-        ) : null,
+        loading ? <LoadingSpinner /> : null,
         document.body
       )}
     </>

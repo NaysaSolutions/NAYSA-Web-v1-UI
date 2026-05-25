@@ -38,7 +38,7 @@ import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import {
   formatNumber,
   parseFormattedNumber,
-  useSwalConfirmAlert,
+  useSwalProceedConfirm,
   useSwalErrorAlert,
   useSwalInfoAlert,
   useSwalSuccessAlert,
@@ -1443,7 +1443,7 @@ const BankReconProcessing = () => {
   const handleClear = async () => {
     if (!validateHeader()) return;
 
-    const result = await useSwalConfirmAlert(
+    const result = await useSwalProceedConfirm(
       "Clear Bank Reconciliation?",
       "This will delete the current working details for this cut-off and bank."
     );
@@ -3234,7 +3234,7 @@ const BankReconProcessing = () => {
         </div>
       )}
 
-      <div className="global-ref-header-ui" style={{ zIndex: showActionMenu ? 100 : 50 }}>
+      <div className="global-ref-header-ui" style={{ zIndex: 45 }}>
         <div className="w-full flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="w-full lg:w-auto">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">

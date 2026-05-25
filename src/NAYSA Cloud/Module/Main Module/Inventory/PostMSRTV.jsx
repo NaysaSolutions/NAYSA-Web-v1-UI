@@ -4,9 +4,8 @@ import { useSelectedHSColConfig } from '@/NAYSA Cloud/Global/selectedData';
 import GlobalGLPostingModalv1 from "../../../Lookup/SearchGlobalGLPostingv1.jsx";
 import { useSwalValidationAlert } from '@/NAYSA Cloud/Global/behavior';
 import { useHandlePostTran } from '@/NAYSA Cloud/Global/procedure';
+import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import ReactDOM from 'react-dom';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faSpinner } from '@fortawesome/free-solid-svg-icons';
 
 const PostMSRTV = ({ isOpen, onClose, userCode }) => {
   const [data, setData] = useState([]);
@@ -115,14 +114,7 @@ const handleViewDocument = (row) => {
       )}
 
       {ReactDOM.createPortal(
-        loading ? (
-          <div className="global-tran-spinner-main-div-ui">
-            <div className="global-tran-spinner-sub-div-ui">
-              <FontAwesomeIcon icon={faSpinner} spin size="2x" className="text-blue-500 mb-2" />
-              <p>Please wait...</p>
-            </div>
-          </div>
-        ) : null,
+        loading ? <LoadingSpinner /> : null,
         document.body
       )}
     </>

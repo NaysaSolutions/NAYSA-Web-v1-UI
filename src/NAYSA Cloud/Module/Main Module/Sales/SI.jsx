@@ -83,7 +83,7 @@ import {
 import {
   formatNumber,
   parseFormattedNumber,
-  useSwalConfirmAlert,
+  useSwalProceedConfirm,
   useSwalvalidateRequiredFields,
   useSwalshowSaveSuccessDialog,
   useSwalSuccessAlert,
@@ -121,6 +121,8 @@ const SI = () => {
   const [showAddTypeDropdown, setShowAddTypeDropdown] = useState(false);
   const [showItemPickingModal, setShowItemPickingModal] = useState(false);
   const [itemPickingRowIndex, setItemPickingRowIndex] = useState(null);
+  const [itemPickingStockRows, setItemPickingStockRows] = useState([]);
+  const [itemPickingExistingAllocations, setItemPickingExistingAllocations] = useState([]);
   const docType = docTypes.SI;
   const hsDoc = getAllTopHSDocRow(docType) || {};
   const pdfLink = docTypePDFGuide[docType];
@@ -353,10 +355,19 @@ const SI = () => {
   };
 
   const statusColor = statusMap[displayStatus] || "";
-  const isFormDisabled = isViewDocumentUrl || ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);  
+  const normalizedDisplayStatus = String(displayStatus || "").toUpperCase();
+  const normalizedDocumentStatus = String(documentStatus || "").toUpperCase();
+  const isOpenStatus =
+    ["OPEN", "O"].includes(normalizedDisplayStatus) ||
+    ["OPEN", "O"].includes(normalizedDocumentStatus);
+  const isPosted = ["FINALIZED", "POSTED"].includes(normalizedDisplayStatus);
+  const isCancelled = normalizedDisplayStatus === "CANCELLED";
+  const isFormDisabled = isViewDocumentUrl || ["FINALIZED", "POSTED", "CANCELLED", "CLOSED"].includes(normalizedDisplayStatus);  
   const isHeaderSiStatusEditable = !!String(documentID || "").trim() && !isFormDisabled;
-  const isPosted = displayStatus === "FINALIZED";
   const totalSiQuantity = detailRows.reduce((total, row) => total + (parseFormattedNumber(row.siQuantity || 0) || 0),0);
+  const hasPickedQuantity = (detailRows || []).some(
+    (row) => (parseFormattedNumber(row.quantityPicked || 0) || 0) > 0
+  );
 
   const filteredHeaderSiStatusOptions =
     !isPosted && totalSiQuantity > 0
@@ -450,6 +461,7 @@ const SI = () => {
     { key: "uomCode", label: "UOM", width: 100 },
     { key: "siQuantity", label: "SI Quantity", width: 120 },
     { key: "quantityPicked", label: "Quantity Picked", width: 130 },
+    { key: "itemAmount", label: "Item Amount", width: 130 },
     { key: "unitPrice", label: "Unit Price", width: 130 },
     { key: "grossAmount", label: "Gross Amount", width: 130 },
     ...visibleDiscountRateFields.map((field, index) => ({
@@ -491,8 +503,11 @@ const SI = () => {
   const normalizedSiTranType = String(siTranType || "").toUpperCase();
   const isDirectSiType = normalizedSiTranType === "SI01";
   const isPickingSiType = normalizedSiTranType === "SI02";
+  const canUsePickingControls =
+    isPickingSiType && !isViewDocumentUrl && isOpenStatus && !isPosted && !isCancelled;
   const isAddItemDisabledBySiType = isDirectSiType;
   const isOpenDRDisabledBySiType = isPickingSiType;
+  const hasSiDetailRows = (detailRows || []).length > 0;
   const hasDRLinkedDetailRows = (detailRows || []).some((row) =>
     Boolean(String(row?.drNo || "").trim())
   );
@@ -511,8 +526,8 @@ const SI = () => {
   useEffect(() => {
     const hiddenColumnKeys = ["drId", "soId", "groupId", "vatRate"];
 
-    if (isDirectSiType) {
-      hiddenColumnKeys.push("siStat", "quantityPicked");
+    if (!isPickingSiType) {
+      hiddenColumnKeys.push("siStat", "quantityPicked", "itemAmount");
     }
 
     if (isPickingSiType) {
@@ -961,7 +976,7 @@ const SI = () => {
       return false;
     }
 
-    const result = await useSwalConfirmAlert(
+    const result = await useSwalProceedConfirm(
       `Apply ${headerLabel} changes?`,
       `SO Detail already has record(s).\nDo you want to apply the updated ${headerLabel} to all SO Detail rows?`,
       "Yes"
@@ -1181,6 +1196,7 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
       amountDue: formatNumber(item.amountDue ?? 0),
       netAmount: formatNumber(item.netAmount ?? 0),
       quantityPicked: formatNumber(item.quantityPicked ?? item.qtyPicked ?? 0, quantityDecimals),
+      itemAmount: item.itemAmount ?? formatNumber( 0),
       drQuantity: formatNumber(item.drQuantity ?? 0, quantityDecimals),
       linkedSiQuantity: formatNumber(item.siQuantity ?? 0, quantityDecimals), // Renamed to avoid confusion
     })), { atcCode: data.atcCode || "" });
@@ -1379,6 +1395,7 @@ const handleActivityOption = async (action) => {
           // No delivery date, customer PO, sales rep in SI details
           freeItem: row.freeItem || "",
           quantityPicked: parseFormattedNumber(row.quantityPicked || 0),
+          itemAmount: parseFormattedNumber(row.itemAmount || 0),
           drQuantity: parseFormattedNumber(row.drQuantity || 0),
         })),
         dt2: glRows.map((entry, index) => ({
@@ -1491,6 +1508,7 @@ const handleActivityOption = async (action) => {
       pmId: "",
       siQuantity: Number(0).toFixed(quantityDecimals),
       quantityPicked: Number(0).toFixed(quantityDecimals),
+      itemAmount: "0.00",
       unitPrice: Number(0).toFixed(sellingPriceDecimals),
       vatCode: "",
       vatRate: "0.00",
@@ -1668,6 +1686,7 @@ const handleActivityOption = async (action) => {
       pmId: item?.pmId || "",
       siQuantity: formatNumber(siQuantityValue, quantityDecimals),
       quantityPicked: formatNumber(item?.quantityPicked ?? siQuantityValue ?? 0, quantityDecimals),
+      itemAmount: formatNumber(item?.itemAmount ?? 0),
       unitPrice: formatNumber(item?.unitPrice ?? item?.sellPrice ?? item?.sellingPrice ?? 0, sellingPriceDecimals),
       vatCode: selectedVatCode,
       vatRate: formatNumber(item?.vatRate ?? selectedVatRow?.vatRate ?? 0),
@@ -2110,6 +2129,7 @@ const handleActivityOption = async (action) => {
       netAmount: formatNumber(item?.netAmount ?? 0),
       freeItem: item?.freeItem || "",
       quantityPicked: formatNumber(item?.quantityPicked ?? item?.qtyPicked ?? 0, quantityDecimals),
+      itemAmount: formatNumber(item?.itemAmount ?? 0),
       drQuantity: formatNumber(item?.drQuantity ?? 0, quantityDecimals),
     });
   };
@@ -2131,16 +2151,90 @@ const handleActivityOption = async (action) => {
 
 
 
+
+
+
+const cancelPickingAllocationForDeletedSIRow = async (row) => {
+  const pickedQty = parseFormattedNumber(row?.quantityPicked || 0) || 0;
+
+  // Only SI02 has FG picking allocation.
+  if (String(siTranType || "").toUpperCase() !== "SI02") {
+    return true;
+  }
+
+  // No picked quantity, no need to call allocation API.
+  if (pickedQty <= 0) {
+    return true;
+  }
+
+  if (!documentID || !row?.groupId) {
+    useSwalErrorAlert(
+      "Delete SI Detail",
+      "Cannot release picking allocation. SI ID or Group ID is missing."
+    );
+    return false;
+  }
+
+  const confirm = await useSwalProceedConfirm(
+    "Delete Picked SI Detail?",
+    "This line already has picked quantity. Deleting it will release the FG picking allocation.",
+    "Yes"
+  );
+
+  if (!confirm?.isConfirmed) {
+    return false;
+  }
+
+  try {
+    updateState({ isLoading: true, showSpinner: true });
+
+    await postRequest("getFGUpdateStockAllocation", {
+      mode: "CancelAlloc",
+      params: JSON.stringify({
+        json_data: {
+          docCode: "SI",
+          docId: documentID,
+          groupId: row.groupId,
+          userCode: userCode || currentUserRow?.userCode || "",
+          reason: "SI detail line deleted.",
+        },
+      }),
+    });
+
+    return true;
+  } catch (error) {
+    console.error("Failed to release SI FG picking allocation:", error);
+    useSwalErrorAlert("Delete SI Detail", getApiErrorMessage(error));
+    return false;
+  } finally {
+    updateState({ isLoading: false, showSpinner: false });
+  }
+};
+
+
 const handleDeleteRow = async (index) => {
-    const updatedRows = [...detailRows];
-    updatedRows.splice(index, 1);
+  const rowToDelete = detailRows?.[index];
 
-    updateState({
-        detailRows: updatedRows,
-        detailRowsGL: [] });
-    updateTotals(updatedRows);
+  if (!rowToDelete) {
+    return;
+  }
 
-  };
+  const canDelete = await cancelPickingAllocationForDeletedSIRow(rowToDelete);
+
+  if (!canDelete) {
+    return;
+  }
+
+  const updatedRows = [...detailRows];
+  updatedRows.splice(index, 1);
+
+  updateState({
+    detailRows: updatedRows,
+    detailRowsGL: [],
+  });
+
+  updateTotals(updatedRows);
+};
 
 const handleAddRowGL = (index = null) => {
   const newRow = {
@@ -2339,6 +2433,196 @@ const handlePrint = async () => {
     error?.response?.data?.error ||
     error?.message ||
     "Unknown server error";
+
+  const parseSprocJsonResult = (response) => {
+    const rawResult =
+      response?.data?.[0]?.result ??
+      response?.data?.data?.[0]?.result ??
+      response?.Data?.[0]?.result ??
+      response?.data?.result ??
+      response?.result;
+
+    if (!rawResult) return {};
+
+    if (typeof rawResult === "string") {
+      try {
+        return JSON.parse(rawResult);
+      } catch (error) {
+        console.error("Invalid JSON result:", rawResult, error);
+        return {};
+      }
+    }
+
+    return rawResult;
+  };
+
+  const getValueFromKeys = (source, keys = []) => {
+    if (!source || typeof source !== "object") return undefined;
+
+    for (const key of keys) {
+      if (source[key] !== undefined && source[key] !== null) {
+        return source[key];
+      }
+    }
+
+    const sourceEntries = Object.entries(source);
+    const normalizedKeys = keys.map((key) => String(key).toLowerCase());
+    const matchingEntry = sourceEntries.find(([key]) =>
+      normalizedKeys.includes(String(key).toLowerCase())
+    );
+
+    return matchingEntry?.[1];
+  };
+
+  const getPickingResultRows = (result) => {
+    if (Array.isArray(result)) return result;
+
+    return [
+      result?.dt1,
+      result?.detailRows,
+      result?.rows,
+      result?.data,
+      result?.allocations,
+    ].find(Array.isArray) || [];
+  };
+
+  const getPickingResultRow = (result, row, index) => {
+    const resultRows = getPickingResultRows(result);
+    if (!resultRows.length) return null;
+
+    const lineNo = String(index + 1);
+    const groupId = String(row?.groupId || "");
+    const itemCode = String(row?.itemCode || "");
+
+    return (
+      resultRows.find((resultRow) => {
+        const resultLineNo = String(
+          resultRow.lineNo ?? resultRow.lnNo ?? resultRow.ln ?? resultRow.recNo ?? ""
+        );
+        return resultLineNo && resultLineNo === lineNo;
+      }) ||
+      resultRows.find((resultRow) => {
+        const resultGroupId = String(resultRow.groupId ?? resultRow.groupID ?? "");
+        return groupId && resultGroupId === groupId;
+      }) ||
+      resultRows.find((resultRow) => {
+        const resultItemCode = String(resultRow.itemCode ?? resultRow.item_code ?? "");
+        return itemCode && resultItemCode === itemCode;
+      }) ||
+      resultRows[0]
+    );
+  };
+
+  const getPickingResultNumber = (result, row, index, keys, fallback = 0) => {
+    const detailResult = getPickingResultRow(result, row, index);
+    const value =
+      getValueFromKeys(detailResult, keys) ??
+      getValueFromKeys(result, keys) ??
+      fallback;
+
+    return parseFormattedNumber(value) || 0;
+  };
+
+  const getPickingAllocationAmount = (allocations = []) =>
+    (Array.isArray(allocations) ? allocations : []).reduce((total, allocation) => {
+      const pickedQty =
+        parseFormattedNumber(
+          allocation.pickQty ??
+            allocation.pickedQty ??
+            allocation.quantityPicked ??
+            allocation.qtyPicked ??
+            allocation.qty ??
+            0
+        ) || 0;
+      const unitCost =
+        parseFormattedNumber(
+          allocation.unitCost ??
+            allocation.wac ??
+            allocation.cost ??
+            allocation.itemCost ??
+            allocation.unitPrice ??
+            0
+        ) || 0;
+
+      return total + pickedQty * unitCost;
+    }, 0);
+
+  const buildPickingBasePayload = (row, index) => ({
+    docCode: "SI",
+    docNo: documentNo || "",
+    docId: documentID || "",
+    docDate: documentDate || null,
+    branchCode: branchCode || "",
+    groupId: row?.groupId || "",
+    lineNo: index + 1,
+    itemCode: row?.itemCode || "",
+    requestedQty: parseFormattedNumber(row?.siQuantity || 0) || 0,
+    userCode: userCode || currentUserRow?.userCode || "",
+  });
+
+  const buildAutoPickingAllocations = (stockRows = [], requestedQty = 0, row = {}) => {
+    let remainingQty = Math.max(parseFormattedNumber(requestedQty || 0) || 0, 0);
+
+    return [...(Array.isArray(stockRows) ? stockRows : [])]
+      .map((stockRow, index) => ({
+        ...stockRow,
+        priorityNo: stockRow.priorityNo || index + 1,
+        remainingAvailable: parseFormattedNumber(stockRow.remainingAvailable || 0) || 0,
+        isBlocked:
+          stockRow.isBlocked ||
+          (parseFormattedNumber(stockRow.remainingAvailable || 0) || 0) <= 0 ||
+          ["HOLD", "BLOCKED", "QUARANTINE"].includes(String(stockRow.qualityStatus || "").toUpperCase()),
+      }))
+      .sort((a, b) => {
+        const dateA = new Date(a.bestBeforeDate || "").getTime();
+        const dateB = new Date(b.bestBeforeDate || "").getTime();
+        const safeDateA = Number.isFinite(dateA) ? dateA : Number.MAX_SAFE_INTEGER;
+        const safeDateB = Number.isFinite(dateB) ? dateB : Number.MAX_SAFE_INTEGER;
+        if (safeDateA !== safeDateB) return safeDateA - safeDateB;
+        return Number(a.priorityNo || 0) - Number(b.priorityNo || 0);
+      })
+      .reduce((allocations, stockRow) => {
+        if (stockRow.isBlocked || remainingQty <= 0) return allocations;
+
+        const pickQty = Math.min(stockRow.remainingAvailable, remainingQty);
+        remainingQty -= pickQty;
+
+        if (pickQty <= 0) return allocations;
+
+        allocations.push({
+          groupId: row.groupId || "",
+          sourceDocType: "SI",
+          sourceLineNo: "",
+          itemCode: row.itemCode || "",
+          stockCardRefId: stockRow.stockCardRefId,
+          lotNo: stockRow.lotNo,
+          qualityStatus: stockRow.qualityStatus,
+          bestBeforeDate: stockRow.bestBeforeDate,
+          fgFifoLocId: stockRow.fgFifoLocId || null,
+          fgWacLocId: stockRow.fgWacLocId || null,
+          warehouseCode: stockRow.warehouseCode,
+          whouseCode: stockRow.warehouseCode,
+          warehouseName: stockRow.warehouseName,
+          locationCode: stockRow.locationCode,
+          locCode: stockRow.locationCode,
+          priorityNo: stockRow.priorityNo,
+          sourceDocCode: stockRow.sourceDocCode || null,
+          sourceDocNo: stockRow.sourceDocNo || null,
+          sourceDocDate: stockRow.sourceDocDate || null,
+          sourceDocId: stockRow.sourceDocId || null,
+          sourceGroupId: stockRow.sourceGroupId || null,
+          fifoDocCode: stockRow.fifoDocCode || null,
+          fifoDocNo: stockRow.fifoDocNo || null,
+          orderId: stockRow.orderId || null,
+          unitCost: parseFormattedNumber(stockRow.unitCost || 0) || 0,
+          wacKey: stockRow.wacKey || null,
+          wac: parseFormattedNumber(stockRow.wac || 0) || 0,
+          pickQty,
+        });
+
+        return allocations;
+      }, []);
+  };
 
   const handleOpenDRLookup = async (overrides = {}) => {
     const lookupCustCode = String(overrides.billToCustCode ?? billToCustCode ?? "").trim();
@@ -2795,6 +3079,7 @@ const handleSaveAndPrint = async (documentID) => {
         netAmount: parseFormattedNumber(row.netAmount || 0),
         freeItem: row.freeItem || "",
         quantityPicked: parseFormattedNumber(row.quantityPicked || 0),
+        itemAmount: parseFormattedNumber(row.itemAmount || 0),
         drQuantity: parseFormattedNumber(row.drQuantity || 0),
       })),
       dt2: glRows.map((entry, index) => ({
@@ -3147,9 +3432,16 @@ const handleCloseBillTermModal = async (selectedBillTerm) => {
     updateState({ billtermModalOpen: false });
 }
 
-const handleOpenItemPickingModal = (index) => {
+const handleOpenItemPickingModal = async (index) => {
   const row = detailRowsRef.current?.[index];
   const requestedQty = parseFormattedNumber(row?.siQuantity || 0) || 0;
+
+  if (!canUsePickingControls) return;
+
+  if (!documentID || !documentNo) {
+    useSwalErrorAlert("Item Picking", "Please save the SI first before opening the picking allocation.");
+    return;
+  }
 
   if (!row?.itemCode) {
     useSwalErrorAlert("Item Picking", "Please select an item before opening the picking allocation.");
@@ -3157,7 +3449,7 @@ const handleOpenItemPickingModal = (index) => {
   }
 
   if (!row?.groupId) {
-    useSwalErrorAlert("Item Picking", "Group ID is required for item picking allocation.");
+    useSwalErrorAlert("Item Picking", "Please save and reload the SI first before opening the picking allocation.");
     return;
   }
 
@@ -3166,42 +3458,198 @@ const handleOpenItemPickingModal = (index) => {
     return;
   }
 
-  setItemPickingRowIndex(index);
-  setShowItemPickingModal(true);
+  try {
+    updateState({ isLoading: true, showSpinner: true });
+
+    const response = await postRequest("getFGUpdateStockAllocation", {
+      mode: "GetOpenStock",
+      params: JSON.stringify({
+        json_data: buildPickingBasePayload(row, index),
+      }),
+    });
+
+    const result = parseSprocJsonResult(response);
+    setItemPickingStockRows(Array.isArray(result?.stockRows) ? result.stockRows : []);
+    setItemPickingExistingAllocations(
+      Array.isArray(result?.existingAllocations) ? result.existingAllocations : []
+    );
+    setItemPickingRowIndex(index);
+    setShowItemPickingModal(true);
+  } catch (error) {
+    console.error("Failed to load FG picking allocation:", error);
+    useSwalErrorAlert("Item Picking", getApiErrorMessage(error));
+  } finally {
+    updateState({ isLoading: false, showSpinner: false });
+  }
 };
 
 const handleCloseItemPickingModal = () => {
   setShowItemPickingModal(false);
   setItemPickingRowIndex(null);
+  setItemPickingStockRows([]);
+  setItemPickingExistingAllocations([]);
 };
 
-const handleConfirmItemPicking = (payload) => {
+const handleConfirmItemPicking = async (payload) => {
   if (itemPickingRowIndex === null || itemPickingRowIndex === undefined) return;
+  if (!canUsePickingControls) return;
 
   const updatedRows = [...(detailRowsRef.current || [])];
   const currentRow = updatedRows[itemPickingRowIndex];
   if (!currentRow) return;
 
-  const totalPicked = parseFormattedNumber(payload?.totalPicked || 0) || 0;
-  const siQuantityValue = parseFormattedNumber(currentRow?.siQuantity || 0) || 0;
+  try {
+    updateState({ isLoading: true, showSpinner: true });
 
-  updatedRows[itemPickingRowIndex] = {
-    ...currentRow,
-    siStat:
+    const basePayload = buildPickingBasePayload(currentRow, itemPickingRowIndex);
+    const pickedAllocations = Array.isArray(payload?.allocations) ? payload.allocations : [];
+
+    const response = await postRequest("getFGUpdateStockAllocation", {
+      mode: "SaveAlloc",
+      params: JSON.stringify({
+        json_data: {
+          ...basePayload,
+          dt1: pickedAllocations,
+        },
+      }),
+    });
+
+    const result = parseSprocJsonResult(response);
+    const totalPicked = getPickingResultNumber(
+      result,
+      currentRow,
+      itemPickingRowIndex,
+      ["totalAllocated"],
+      payload?.totalPicked ?? 0
+    );
+    const itemAmount = getPickingResultNumber(
+      result,
+      currentRow,
+      itemPickingRowIndex,
+      ["itemAmount"],
       totalPicked <= 0
-        ? "F"
-        : siQuantityValue > 0 && totalPicked >= siQuantityValue
-          ? "P"
-          : "T",
-    quantityPicked: formatNumber(totalPicked, quantityDecimals),
-    pickingAllocations: payload?.allocations || [],
-    pickingOrderedStockRows: payload?.orderedStockRows || [],
-  };
+        ? 0
+        : getPickingAllocationAmount(pickedAllocations) || currentRow?.itemAmount || 0
+    );
+    const siQuantityValue = parseFormattedNumber(currentRow?.siQuantity || 0) || 0;
 
-  detailRowsRef.current = updatedRows;
-  updateState({ detailRows: updatedRows });
-  updateTotals(updatedRows);
-  handleCloseItemPickingModal();
+    updatedRows[itemPickingRowIndex] = {
+      ...currentRow,
+      siStat:
+        totalPicked <= 0
+          ? "F"
+          : siQuantityValue > 0 && totalPicked >= siQuantityValue
+            ? "P"
+            : "T",
+      quantityPicked: formatNumber(totalPicked, quantityDecimals),
+      itemAmount: itemAmount,
+      pickingAllocations: pickedAllocations,
+      pickingOrderedStockRows: payload?.orderedStockRows || [],
+    };
+
+    detailRowsRef.current = updatedRows;
+    updateState({ detailRows: updatedRows });
+    updateTotals(updatedRows);
+    await fetchTranData(documentNo, branchCode);
+    handleCloseItemPickingModal();
+  } catch (error) {
+    console.error("Failed to save FG picking allocation:", error);
+    useSwalErrorAlert("Item Picking", getApiErrorMessage(error));
+  } finally {
+    updateState({ isLoading: false, showSpinner: false });
+  }
+};
+
+const handleBulkPickingAllocation = async (mode) => {
+  const isRelease = mode === "release";
+  const actionLabel = isRelease ? "Release All" : "Allocate All";
+  const rows = detailRowsRef.current || [];
+
+  if (!rows.length || !canUsePickingControls) return;
+
+  if (!documentID || !documentNo) {
+    useSwalErrorAlert("Item Picking", "Please save the SI first before using Allocate All or Release All.");
+    return;
+  }
+
+  const confirm = await useSwalProceedConfirm(
+    `${actionLabel}?`,
+    isRelease
+      ? "This will release all picking allocations for the SI details."
+      : "This will automatically pick available stock for all eligible SI details.",
+    "Yes"
+  );
+
+  if (!confirm?.isConfirmed) return;
+
+  try {
+    updateState({ isLoading: true, showSpinner: true });
+
+    const updatedRows = [...rows];
+
+    for (const [index, row] of rows.entries()) {
+      const requestedQty = parseFormattedNumber(row?.siQuantity || 0) || 0;
+      if (!row?.itemCode || !row?.groupId || requestedQty <= 0) continue;
+
+      const basePayload = buildPickingBasePayload(row, index);
+      let pickedAllocations = [];
+
+      if (!isRelease) {
+        const openStockResponse = await postRequest("getFGUpdateStockAllocation", {
+          mode: "GetOpenStock",
+          params: JSON.stringify({
+            json_data: basePayload,
+          }),
+        });
+
+        const openStockResult = parseSprocJsonResult(openStockResponse);
+        pickedAllocations = buildAutoPickingAllocations(openStockResult?.stockRows, requestedQty, row);
+      }
+
+      const saveResponse = await postRequest("getFGUpdateStockAllocation", {
+        mode: "SaveAlloc",
+        params: JSON.stringify({
+          json_data: {
+            ...basePayload,
+            dt1: pickedAllocations,
+          },
+        }),
+      });
+
+      const result = parseSprocJsonResult(saveResponse);
+      const totalPicked = getPickingResultNumber(result, row, index, ["totalAllocated"], 0);
+      const itemAmount = getPickingResultNumber(
+        result,
+        row,
+        index,
+        ["itemAmount"],
+        totalPicked <= 0 ? 0 : getPickingAllocationAmount(pickedAllocations) || row?.itemAmount || 0
+      );
+
+      updatedRows[index] = {
+        ...updatedRows[index],
+        siStat:
+          totalPicked <= 0
+            ? "F"
+            : requestedQty > 0 && totalPicked >= requestedQty
+              ? "P"
+              : "T",
+        quantityPicked: formatNumber(totalPicked, quantityDecimals),
+        itemAmount:itemAmount,
+        pickingAllocations: pickedAllocations,
+      };
+    }
+
+    detailRowsRef.current = updatedRows;
+    updateState({ detailRows: updatedRows });
+    updateTotals(updatedRows);
+    await fetchTranData(documentNo, branchCode);
+  } catch (error) {
+    console.error(`Failed to ${actionLabel.toLowerCase()} picking allocation:`, error);
+    useSwalErrorAlert("Item Picking", getApiErrorMessage(error));
+  } finally {
+    updateState({ isLoading: false, showSpinner: false });
+  }
 };
 
 const handleCloseItemModal = async (selectedItems) => {
@@ -3653,19 +4101,29 @@ const renderSIDetailCell = (columnKey, row, index) => {
               readOnly: true,
             })}
           </div>
-          {!isFormDisabled && (
+          {canUsePickingControls && (
             <button
               type="button"
               title="Open Item Picking / Allocation"
               aria-label="Open Item Picking / Allocation"
               className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-blue-200 bg-blue-50 text-[11px] text-blue-700 transition hover:border-blue-400 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-40"
-              disabled={!row?.groupId || !row?.itemCode || (parseFormattedNumber(row?.siQuantity || 0) || 0) <= 0}
+              disabled={!row?.itemCode || (parseFormattedNumber(row?.siQuantity || 0) || 0) <= 0}
               onClick={() => handleOpenItemPickingModal(index)}
             >
               <FontAwesomeIcon icon={faFolderOpen} />
             </button>
           )}
         </div>
+      </td>
+    ),
+    itemAmount: () => (
+      <td key={columnKey} className="global-tran-td-ui" style={style}>
+        <input
+          type="text"
+          value={formatNumber(row.itemAmount || 0)}
+          readOnly
+          className="w-full global-tran-td-inputclass-ui text-right"
+        />
       </td>
     ),
     unitPrice: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: sellingPriceDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${sellingPriceDecimals}}$`), blocked: () => !isSellingPriceAndDiscountEditable || row.freeItem === "Y", readOnly: isFormDisabled || !isSellingPriceAndDiscountEditable || row.freeItem === "Y" })}</td>,
@@ -3979,7 +4437,7 @@ return (
               label="SI Type"
               type="select"
               value={siTranType || ""}
-              disabled={isFormDisabled || hasDRLinkedDetailRows}
+              disabled={isFormDisabled || hasSiDetailRows}
               onChange={(val) => updateState({ siTranType: val })}
               options={(siTranTypeOptions || []).map((t) => ({
                 label: t.DROPDOWN_NAME,
@@ -4292,43 +4750,44 @@ return (
           </thead>
 
           <tbody className="relative">{sortedDetailRows.map(({ row, originalIndex }) => {
-            const hasDrQuantity = parseFormattedNumber(row.drQuantity || 0) > 0;
-            const canDeleteRow = !hasDrQuantity && (row.siStat || "F") === "F";
-
+            const pickedQty = parseFormattedNumber(row.quantityPicked || 0) || 0;
             return (
-            <tr key={originalIndex} className="global-tran-tr-ui">
-              {orderedDetailColumns.map((column) =>
-                renderSIDetailCell(column.key, row, originalIndex)
-              )}
+              <tr key={originalIndex} className="global-tran-tr-ui">
+                {orderedDetailColumns.map((column) =>
+                  renderSIDetailCell(column.key, row, originalIndex)
+                )}
 
-               {!isFormDisabled && (
-                    <td
-                      className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black"
-                      style={transactionActionsCellStyle}
-                    >
-                      <div className="flex items-center justify-center gap-1">
-                        {!isDirectSiType && (
-                          <button
-                            type="button"
-                            className="global-tran-td-button-add-ui"
-                            onClick={() => handleInsertBlankRow(originalIndex)}
-                          >
-                            <FontAwesomeIcon icon={faPlus} />
-                          </button>
-                        )}
-
+                {!isFormDisabled && (
+                  <td
+                    className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black"
+                    style={transactionActionsCellStyle}
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      {!isDirectSiType && (
                         <button
                           type="button"
-                          className="global-tran-td-button-delete-ui"
-                          onClick={() => handleDeleteRow(originalIndex)}
-                          disabled={!canDeleteRow}
+                          className="global-tran-td-button-add-ui"
+                          onClick={() => handleInsertBlankRow(originalIndex)}
                         >
-                          <FontAwesomeIcon icon={faTrashAlt} />
+                          <FontAwesomeIcon icon={faPlus} />
                         </button>
-                      </div>
-                    </td>
-                  )}
+                      )}
 
+                      <button
+                        type="button"
+                        className="global-tran-td-button-delete-ui"
+                        onClick={() => handleDeleteRow(originalIndex)}
+                        title={
+                          isPickingSiType && pickedQty > 0
+                            ? "Delete row and release picking allocation"
+                            : "Delete row"
+                        }
+                      >
+                        <FontAwesomeIcon icon={faTrashAlt} />
+                      </button>
+                    </div>
+                  </td>
+                )}
               </tr>
             );
           })}
@@ -4342,7 +4801,7 @@ return (
     {topTab === "details" && (
     <>
     {/* Invoice Details Footer */}
-    <div className="global-tran-tab-footer-main-div-ui">
+    <div className="global-tran-tab-footer-main-div-ui relative">
 
     {/* Add Button */}
     <div className="global-tran-tab-footer-button-div-ui">
@@ -4412,6 +4871,29 @@ return (
           <FontAwesomeIcon icon={faPlus} className="mr-2" />Add
         </button>
       </div>
+      {canUsePickingControls && (detailRows?.length || 0) > 0 && (
+      <div className="ml-6 flex items-center gap-2">
+        <button
+          type="button"
+          className="min-h-[36px] w-[132px] rounded-lg border border-blue-200 bg-blue-50 px-4 py-1.5 text-sm font-medium text-blue-700 shadow-sm transition-colors hover:border-blue-500 hover:bg-blue-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center whitespace-nowrap focus:outline-none"
+          disabled={isLoading}
+          onClick={() => handleBulkPickingAllocation("allocate")}
+        >
+          <FontAwesomeIcon icon={faFolderOpen} className="mr-2" />
+          Allocate All
+        </button>
+
+        <button
+          type="button"
+          className="min-h-[36px] w-[132px] rounded-lg border border-slate-300 bg-white px-4 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:border-red-400 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center whitespace-nowrap focus:outline-none"
+          disabled={isLoading || !hasPickedQuantity}
+          onClick={() => handleBulkPickingAllocation("release")}
+        >
+          <FontAwesomeIcon icon={faMinus} className="mr-2" />
+          Release All
+        </button>
+      </div>
+    )}
     </div>
 
       
@@ -4694,6 +5176,8 @@ return (
           itemName: selectedPickingRow?.itemName || selectedPickingRow?.itemSpecs || "",
           requestedQty: parseFormattedNumber(selectedPickingRow?.siQuantity || 0) || 0,
         }}
+        stockRows={itemPickingStockRows}
+        existingAllocations={itemPickingExistingAllocations}
         onConfirm={handleConfirmItemPicking}
       />
     )}

@@ -68,7 +68,7 @@ import {
 import {
   formatNumber,
   parseFormattedNumber,
-  useSwalConfirmAlert,
+  useSwalProceedConfirm,
   useSwalvalidateRequiredFields,
   useSwalshowSaveSuccessDialog,
   useSwalSuccessAlert,
@@ -613,7 +613,7 @@ const SO = () => {
       return false;
     }
 
-    const result = await useSwalConfirmAlert(
+    const result = await useSwalProceedConfirm(
       `Apply ${headerLabel} changes?`,
       `SO Detail already has record(s).\nDo you want to apply the updated ${headerLabel} to all SO Detail rows?`,
       "Yes"
@@ -635,7 +635,7 @@ const SO = () => {
       const isDuplicatePO = await checkDuplicateCustomerPO(currentValue);
 
       if (isDuplicatePO) {
-        const result = await useSwalConfirmAlert(
+        const result = await useSwalProceedConfirm(
           "Duplicate Customer PO",
           "Customer PO already exists for this customer. Do you want to proceed?"
         );

@@ -9,6 +9,9 @@ import { faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faFolderOpen, faSpinner
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
 import CustomerMastLookupModal from "../../../Lookup/SearchCustMast";
+import COAMastLookupModal from "../../../Lookup/SearchCOAMast.jsx";
+import RCLookupModal from "../../../Lookup/SearchRCMast.jsx";
+import SLMastLookupModal from "../../../Lookup/SearchSLMast.jsx";
 import ItemMastLookupModal from "../../../Lookup/SearchItemMast.jsx";
 import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
@@ -22,7 +25,7 @@ import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import SearchGlobalItemPickingModal from "../../../Lookup/SearchGlobalItemPickingModal.jsx";
 
 // Configuration
-import { apiClient, fetchDataJson, postRequest} from '../../../Configuration/BaseURL.jsx'
+import { fetchDataJson, postRequest} from '../../../Configuration/BaseURL.jsx'
 import { useReset } from "../../../Components/ResetContext";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import {
@@ -31,6 +34,8 @@ import {
 
 import {
   useTransactionUpsert,
+  useGenerateGLEntries,
+  useUpdateRowGLEntries,
   useFetchTranData,
   useHandleCancel,
   useFieldLenghtCheck,
@@ -60,13 +65,15 @@ import {
 
 import {
   useTopHSOption,
+  useTopRCRow,
+  useTopWarehouseRow,
 } from '@/NAYSA Cloud/Global/top1RefTable';
 
 
 import {
   formatNumber,
   parseFormattedNumber,
-  useSwalConfirmAlert,
+  useSwalProceedConfirm,
   useSwalInfoAlert,
   useSwalvalidateRequiredFields,
   useSwalshowSaveSuccessDialog,
@@ -80,30 +87,13 @@ import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 // Header
 import Header from '@/NAYSA Cloud/Components/Header';
-const toDateInputValue = (value) => {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-  const match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (match) {
-    const [, mm, dd, yyyy] = match;
-    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
-  }
-  const parsed = new Date(raw);
-  if (!Number.isNaN(parsed.getTime())) {
-    const yyyy = parsed.getFullYear();
-    const mm = String(parsed.getMonth() + 1).padStart(2, "0");
-    const dd = String(parsed.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  }
-  return "";
-};
 
 const DR = () => {
 
   // View Document Const
   const loadedFromUrlRef = useRef(false);
   const detailRowsRef = useRef([]);
+  const detailRowsGLRef = useRef([]);
   const detailSectionRef = useRef(null);
   const originalSOQuantityRef = useRef({});
   const addTypeDropdownRef = useRef(null);
@@ -160,6 +150,8 @@ const DR = () => {
     GLactiveTab: "invoice",
     isLoading: false,
     showSpinner: false,
+    triggerGLEntries: false,
+    isGeneratingGL: false,
     isDocNoDisabled: false,
     isSaveDisabled: false,
     isResetDisabled: false,
@@ -210,7 +202,11 @@ const DR = () => {
     showAttachModal:false,
     showSignatoryModal:false,
     showAllTranDocNo:false,
-    showOpenSOModal:false
+    showOpenSOModal:false,
+    showAccountModal:false,
+    showRcModal:false,
+    showSlModal:false,
+    accountModalSource:null
    });
 
   const updateState = (updates) => {
@@ -236,6 +232,8 @@ const DR = () => {
   GLactiveTab,
   isLoading,
   showSpinner,
+  triggerGLEntries,
+  isGeneratingGL,
 
   // UI states / disable flags
   isDocNoDisabled,
@@ -307,13 +305,19 @@ const DR = () => {
   showAttachModal,
   showSignatoryModal,
   showAllTranDocNo,
-  showOpenSOModal
+  showOpenSOModal,
+  showAccountModal,
+  showRcModal,
+  showSlModal,
+  accountModalSource
 
   } = state;
 
   const [showAddTypeDropdown, setShowAddTypeDropdown] = useState(false);
   const [showItemPickingModal, setShowItemPickingModal] = useState(false);
   const [itemPickingRowIndex, setItemPickingRowIndex] = useState(null);
+  const [itemPickingStockRows, setItemPickingStockRows] = useState([]);
+  const [itemPickingExistingAllocations, setItemPickingExistingAllocations] = useState([]);
 
   useEffect(() => {
     if (!showAddTypeDropdown) return;
@@ -329,7 +333,8 @@ const DR = () => {
 
   useEffect(() => {
     detailRowsRef.current = detailRows || [];
-  }, [detailRows]);
+    detailRowsGLRef.current = detailRowsGL || [];
+  }, [detailRows, detailRowsGL]);
 
   //Status Global Setup
   const displayStatus = status || 'OPEN';
@@ -342,9 +347,12 @@ const DR = () => {
 
 
   const statusColor = statusMap[displayStatus] || "";
-  const isFormDisabled = isViewDocumentUrl || ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+  const normalizedDisplayStatus = String(displayStatus || "").toUpperCase();
+  const isPosted = ["FINALIZED", "POSTED"].includes(normalizedDisplayStatus);
+  const isCancelled = normalizedDisplayStatus === "CANCELLED";
+  const isFormDisabled = isViewDocumentUrl || ["FINALIZED", "POSTED", "CANCELLED", "CLOSED"].includes(normalizedDisplayStatus);
   const isHeaderDrStatusEditable = !!String(documentID || "").trim() && !isFormDisabled;
-  const isPosted = displayStatus === "FINALIZED";
+  const canUsePickingControls = !isViewDocumentUrl && !isPosted && !isCancelled;
   const filteredHeaderDrStatusOptions = drStatusOptions || [];
   const getOptionalFieldLength = (fieldName) =>
     useGetFieldLength(tblFieldArray, fieldName) || undefined;
@@ -368,6 +376,8 @@ const DR = () => {
 
   // Derived UI flags
   const DR_ALLOW_DUPLICATE_ITEMS = salesAllowDuplicateItem === "E";
+  const canViewCostAmount =
+    String(currentUserRow?.viewCostamt || "").toUpperCase() !== "N";
 
   const detailColumnDefs = [
     { key: "groupId", label: "Group ID", width: 120 },
@@ -382,6 +392,7 @@ const DR = () => {
     { key: "soBalance", label: "SO Balance", width: 120 },
     { key: "drQuantity", label: "DR Quantity", width: 120 },
     { key: "quantityPicked", label: "Quantity Picked", width: 130 },
+    { key: "itemAmount", label: "Item Amount", width: 130 },
     { key: "deliveryDate", label: "Delivery Date", width: 130 },
     { key: "siNo", label: "SI No.", width: 140 },
     { key: "siDate", label: "SI Date", width: 130 },
@@ -412,8 +423,12 @@ const DR = () => {
   });
   useEffect(() => {
     setSoDetailColumnOrder(detailColumnDefs.map((column) => column.key));
-    setSoDetailHiddenColumnKeys(["groupId", "soId"]);
-  }, [setSoDetailColumnOrder, setSoDetailHiddenColumnKeys]);
+    setSoDetailHiddenColumnKeys([
+      "groupId",
+      "soId",
+      ...(canViewCostAmount ? [] : ["itemAmount"]),
+    ]);
+  }, [setSoDetailColumnOrder, setSoDetailHiddenColumnKeys, canViewCostAmount]);
   const sortedDetailRows = getSortedSoDetailRows(
     detailRows.map((row, originalIndex) => ({ row, originalIndex })),
     (entry, sortKey) => {
@@ -481,9 +496,13 @@ const DR = () => {
     (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? ""
   );
 
-  const hasPickedQuantity = (detailRows || []).some(
-    (row) => (parseFormattedNumber(row.quantityPicked || 0) || 0) > 0
-  );
+  const getTotalQuantityPicked = (rows = []) =>
+    (Array.isArray(rows) ? rows : []).reduce(
+      (total, row) => total + (parseFormattedNumber(row.quantityPicked || 0) || 0),
+      0
+    );
+
+  const hasPickedQuantity = getTotalQuantityPicked(detailRows) > 0;
 
   const getGLTotalsState = (rows) => {
     const sourceRows = Array.isArray(rows) ? rows : [];
@@ -530,7 +549,7 @@ const DR = () => {
       return false;
     }
 
-    const result = await useSwalConfirmAlert(
+    const result = await useSwalProceedConfirm(
       `Apply ${headerLabel} changes?`,
       `SO Detail already has record(s).\nDo you want to apply the updated ${headerLabel} to all SO Detail rows?`,
       "Yes"
@@ -616,6 +635,8 @@ useEffect(() => {
       isResetDisabled: false,
       isFetchDisabled: false,
       showOpenSOModal: false,
+      triggerGLEntries: false,
+      isGeneratingGL: false,
       status: "Open",
     });
     updateTotalsDisplay(0, 0);
@@ -690,6 +711,7 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       soBalance: formatNumber(item.soBalance ?? 0, quantityDecimals),
       drQuantity: formatNumber(item.drQuantity ?? 0, quantityDecimals),
       quantityPicked: formatNumber(item.quantityPicked ?? 0, quantityDecimals),
+      itemAmount:  item.itemAmount?? formatNumber(0),// formatNumber(item.itemAmount ?? 0),
       freeItem: item.freeItem || "",
       deliveryDate: useformatToDatev2(item.deliveryDate),
       siNo: item.siNo || "",
@@ -699,12 +721,13 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
 
     const formattedGLRows = (data.dt2 || []).map(glRow => ({
       ...glRow,
-      debit: formatNumber(glRow.debit),
-      credit: formatNumber(glRow.credit),
-      debitFx1: formatNumber(glRow.debitFx1),
-      creditFx1: formatNumber(glRow.creditFx1),
-      debitFx2: formatNumber(glRow.debitFx2),
-      creditFx2: formatNumber(glRow.creditFx2),
+      debit: formatNumber(parseFormattedNumber(glRow.debit)),
+      credit: formatNumber(parseFormattedNumber(glRow.credit)),
+      debitFx1: formatNumber(parseFormattedNumber(glRow.debitFx1)),
+      creditFx1: formatNumber(parseFormattedNumber(glRow.creditFx1)),
+      debitFx2: formatNumber(parseFormattedNumber(glRow.debitFx2)),
+      creditFx2: formatNumber(parseFormattedNumber(glRow.creditFx2)),
+      slRefDate: useformatToDatev2(glRow.slRefDate),
     }));
 
     updateState({
@@ -769,32 +792,26 @@ const moveFocusBeforeSave = async () => {
 
 
 
-
 const handleActivityOption = async (action) => {
-   if ((detailRows?.length || 0) === 0) {
+  if ((detailRows?.length || 0) === 0) {
     return;
   }
 
-
-
   if (action === "Upsert") {
-   await moveFocusBeforeSave();
+    await moveFocusBeforeSave();
   }
 
-
-
-  if (documentStatus === "O") {
+  if (documentStatus === "O" || action === "GenerateGL") {
     updateState({ isLoading: true, showSpinner: true });
 
-
     try {
-        const {
+      const {
         branchCode,
         documentNo,
         documentID,
-        shipToCode, // Keep shipToCode
-        shipToName, // Keep shipToName
-        shipToAddress, // Keep shipToAddress
+        shipToCode,
+        shipToName,
+        shipToAddress,
         drTranType,
         refDocNo1,
         refDocNo2,
@@ -802,13 +819,28 @@ const handleActivityOption = async (action) => {
         userCode,
         drStatus,
         detailRows,
+        detailRowsGL,
       } = state;
 
-      const buildSoData = () => ({
+      let finalDetailRowsGL = Array.isArray(detailRowsGL) ? [...detailRowsGL] : [];
+
+      const formatGeneratedGLRows = (rows = []) =>
+        (Array.isArray(rows) ? rows : []).map((row) => ({
+          ...row,
+          debit: formatNumber(parseFormattedNumber(row.debit)),
+          credit: formatNumber(parseFormattedNumber(row.credit)),
+          debitFx1: formatNumber(parseFormattedNumber(row.debitFx1)),
+          creditFx1: formatNumber(parseFormattedNumber(row.creditFx1)),
+          debitFx2: formatNumber(parseFormattedNumber(row.debitFx2)),
+          creditFx2: formatNumber(parseFormattedNumber(row.creditFx2)),
+          slRefDate: useformatToDatev2(row.slRefDate),
+        }));
+
+      const buildDrData = (glRows = []) => ({
         branchCode: branchCode,
-        drNo: documentNo || "", // Changed soNo to drNo
-        drId: documentID || "", // Changed soId to drId
-        drDate: documentDate, // Changed soDate to drDate
+        drNo: documentNo || "",
+        drId: documentID || "",
+        drDate: documentDate,
         drTranType: drTranType || "DR01",
         custCode: shipToCode,
         custName: shipToName,
@@ -820,16 +852,17 @@ const handleActivityOption = async (action) => {
         remarks: remarks || "",
         userCode: userCode,
         drStatus,
-        dt1: detailRows.map((row, index) => ({ // Changed dt1 to drdt1
+        dt1: detailRows.map((row, index) => ({
           lnNo: String(index + 1),
           pickStat: row.drStat || "F",
           itemCode: row.itemCode || "",
           itemName: row.itemName || "",
           uomCode: row.uomCode || "",
           freeItem: row.freeItem || "",
-          soBalance: parseFormattedNumber(row.soBalance || 0), 
+          soBalance: parseFormattedNumber(row.soBalance || 0),
           drQuantity: parseFormattedNumber(row.drQuantity || 0),
           quantityPicked: parseFormattedNumber(row.quantityPicked || 0),
+          itemAmount: parseFormattedNumber(row.itemAmount || 0),
           soNo: row.soNo || "",
           deliveryDate: row.deliveryDate || null,
           siNo: row.siNo || "",
@@ -838,33 +871,114 @@ const handleActivityOption = async (action) => {
           groupId: row.groupId || "",
           soId: row.soId || "",
         })),
+        dt2: glRows.map((entry, index) => ({
+          recNo: String(index + 1),
+          acctCode: entry.acctCode || "",
+          rcCode: entry.rcCode || "",
+          sltypeCode: entry.sltypeCode || "",
+          slCode: entry.slCode || "",
+          particular: entry.particular || "",
+          vatCode: entry.vatCode || "",
+          vatName: entry.vatName || "",
+          atcCode: entry.atcCode || "",
+          atcName: entry.atcName || "",
+          debit: parseFormattedNumber(entry.debit || 0),
+          credit: parseFormattedNumber(entry.credit || 0),
+          debitFx1: parseFormattedNumber(entry.debitFx1 || 0),
+          creditFx1: parseFormattedNumber(entry.creditFx1 || 0),
+          debitFx2: parseFormattedNumber(entry.debitFx2 || 0),
+          creditFx2: parseFormattedNumber(entry.creditFx2 || 0),
+          slRefNo: entry.slRefNo || "",
+          slRefDate: entry.slRefDate || null,
+          remarks: entry.remarks || "",
+          dt1Lineno: entry.dt1Lineno || "",
+        })),
       });
 
+      if (action === "GenerateGL") {
+        const totalPickedQuantity = getTotalQuantityPicked(detailRows);
 
+        if (totalPickedQuantity <= 0) {
+          updateState({
+            detailRowsGL: [],
+            ...getGLTotalsState([]),
+            isGeneratingGL: false,
+          });
+          return;
+        }
+
+        try {
+          updateState({ detailRowsGL: [], isGeneratingGL: true });
+
+          const newGlEntries = await useGenerateGLEntries(
+            docType,
+            buildDrData(finalDetailRowsGL)
+          );
+
+          const formattedGLRows = formatGeneratedGLRows(newGlEntries);
+
+          updateState({
+            detailRowsGL: formattedGLRows,
+            ...getGLTotalsState(formattedGLRows),
+            isGeneratingGL: false,
+          });
+        } catch (error) {
+          updateState({ detailRowsGL: [], isGeneratingGL: false });
+          console.error("Error generating DR GL entries:", error);
+          useSwalErrorAlert("Generate GL", getApiErrorMessage(error));
+        }
+
+        return;
+      }
 
       if (action === "Upsert") {
+        const totalPickedQuantity = getTotalQuantityPicked(detailRows);
+
+        /*
+          Important:
+          Do not regenerate GL during Save.
+          Save must preserve the current detailRowsGL because user may have manually edited GL entries.
+
+          GL is regenerated only by:
+          1. Generate GL Entries button
+          2. Picking allocation database flow using GenerateEntries + saveToTable = Y
+        */
+        if (totalPickedQuantity <= 0) {
+          finalDetailRowsGL = [];
+
+          updateState({
+            detailRowsGL: [],
+            ...getGLTotalsState([]),
+          });
+        } else {
+          finalDetailRowsGL = Array.isArray(detailRowsGL)
+            ? [...detailRowsGL]
+            : [];
+        }
+
         const response = await useTransactionUpsert(
           docType,
-          buildSoData(),
+          buildDrData(finalDetailRowsGL),
           updateState,
-          "drId", // Changed soId to drId
-          "drNo" // Changed soNo to drNo
+          "drId",
+          "drNo"
         );
 
         if (response) {
           const responseDocNo = response.data[0].drNo;
           const responseDocId = response.data[0].drId;
 
-          await fetchTranData(responseDocNo,branchCode);
+          await fetchTranData(responseDocNo, branchCode);
 
           const isZero = Number(noReprints) === 0;
           const onSaveAndPrint = isZero
             ? () => updateState({ showSignatoryModal: true })
             : () => handleSaveAndPrint(responseDocId);
 
-          useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint); 
-        } 
-        updateState({ // Changed soNo to drNo and soId to drId
+          useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
+        }
+
+        updateState({
           documentNo: response?.data?.[0]?.drNo || "",
           documentID: response?.data?.[0]?.drId || "",
           isDocNoDisabled: true,
@@ -873,6 +987,7 @@ const handleActivityOption = async (action) => {
       }
     } catch (error) {
       console.error(`Error during ${action}:`, error);
+      useSwalErrorAlert("Delivery Receipt", getApiErrorMessage(error));
     } finally {
       updateState({ isLoading: false, showSpinner: false });
     }
@@ -880,6 +995,15 @@ const handleActivityOption = async (action) => {
 };
 
 
+
+
+useEffect(() => {
+  if (!triggerGLEntries) return;
+
+  handleActivityOption("GenerateGL").finally(() => {
+    updateState({ triggerGLEntries: false });
+  });
+}, [triggerGLEntries]);
 
 
 
@@ -899,6 +1023,7 @@ const handleActivityOption = async (action) => {
       quantityPicked: Number(0).toFixed(quantityDecimals), 
       freeItem: "", 
       drQuantity: Number(0).toFixed(quantityDecimals),
+      itemAmount: formatNumber(0),
       ...overrides,
     });
 
@@ -1016,6 +1141,7 @@ const handleActivityOption = async (action) => {
     deliveryDate: useformatToDatev2(item?.deliveryDate),
     drQuantity: formatNumber(item?.drQuantity ?? 0, quantityDecimals),
     quantityPicked: formatNumber(item?.quantityPicked ?? 0, quantityDecimals),
+    itemAmount: formatNumber(item?.itemAmount ?? 0),
     siNo: item?.siNo || "",
     siDate: item?.siDate || "",
     freeItem: item?.freeItem || "",
@@ -1158,18 +1284,133 @@ const handleActivityOption = async (action) => {
 
 
 
+const cancelPickingAllocationForDeletedRow = async (row) => {
+  const pickedQty = parseFormattedNumber(row?.quantityPicked || 0) || 0;
+
+  // No picked quantity, no need to call allocation API.
+  if (pickedQty <= 0) {
+    return true;
+  }
+
+  if (!documentID || !row?.groupId) {
+    useSwalErrorAlert(
+      "Delete DR Detail",
+      "Cannot release picking allocation. DR ID or Group ID is missing."
+    );
+    return false;
+  }
+
+  const confirm = await useSwalProceedConfirm(
+    "Delete Picked DR Detail?",
+    "This line already has picked quantity. Deleting it will release the FG picking allocation.",
+    "Yes"
+  );
+
+  if (!confirm?.isConfirmed) {
+    return false;
+  }
+
+  try {
+    updateState({ isLoading: true, showSpinner: true });
+
+    await postRequest("getFGUpdateStockAllocation", {
+      mode: "CancelAlloc",
+      params: JSON.stringify({
+        json_data: {
+          docCode: "DR",
+          docId: documentID,
+          groupId: row.groupId,
+          userCode: userCode || currentUserRow?.userCode || "",
+          reason: "DR detail line deleted.",
+        },
+      }),
+    });
+
+    return true;
+  } catch (error) {
+    console.error("Failed to release FG picking allocation:", error);
+    useSwalErrorAlert("Delete DR Detail", getApiErrorMessage(error));
+    return false;
+  } finally {
+    updateState({ isLoading: false, showSpinner: false });
+  }
+};
 
 
 const handleDeleteRow = async (index) => {
-    const updatedRows = normalizeDetailLineNumbers(
-      detailRows.filter((_, rowIndex) => rowIndex !== index)
-    );
+  const rowToDelete = detailRows?.[index];
 
-    updateState({
-        detailRows: updatedRows });
-    updateTotals(updatedRows);
+  if (!rowToDelete) {
+    return;
+  }
 
+  const canDelete = await cancelPickingAllocationForDeletedRow(rowToDelete);
+
+  if (!canDelete) {
+    return;
+  }
+
+  const updatedRows = normalizeDetailLineNumbers(
+    detailRows.filter((_, rowIndex) => rowIndex !== index)
+  );
+
+  detailRowsRef.current = updatedRows;
+
+  updateState({
+    detailRows: updatedRows,
+    detailRowsGL: [],
+    triggerGLEntries: getTotalQuantityPicked(updatedRows) > 0,
+  });
+
+  updateTotals(updatedRows);
+};
+  
+
+const handleAddRowGL = (index = null) => {
+  const newRow = {
+    acctCode: "",
+    rcCode: "",
+    sltypeCode: "CU",
+    slCode: "",
+    particular: "",
+    vatCode: "",
+    vatName: "",
+    atcCode: "",
+    atcName: "",
+    debit: "0.00",
+    credit: "0.00",
+    debitFx1: "0.00",
+    creditFx1: "0.00",
+    debitFx2: "0.00",
+    creditFx2: "0.00",
+    slRefNo: "",
+    slRefDate: "",
+    remarks: "",
   };
+
+  const updatedRows = [...(detailRowsGL || [])];
+
+  if (index !== null && index >= 0) {
+    updatedRows.splice(index + 1, 0, newRow);
+  } else {
+    updatedRows.push(newRow);
+  }
+
+  updateState({
+    detailRowsGL: updatedRows,
+    ...getGLTotalsState(updatedRows),
+  });
+};
+
+const handleDeleteRowGL = (index) => {
+  const updatedRows = [...(detailRowsGL || [])];
+  updatedRows.splice(index, 1);
+
+  updateState({
+    detailRowsGL: updatedRows,
+    ...getGLTotalsState(updatedRows),
+  });
+};
 
 
 
@@ -1202,11 +1443,141 @@ const handlePrint = async () => {
     });
   };
 
+
+
   const getApiErrorMessage = (error) =>
     error?.response?.data?.message ||
     error?.response?.data?.error ||
     error?.message ||
     "Unknown server error";
+
+  const parseSprocJsonResult = (response) => {
+  const rawResult =
+    response?.data?.[0]?.result ??
+    response?.data?.data?.[0]?.result ??
+    response?.Data?.[0]?.result ??
+    response?.data?.result ??
+    response?.result;
+
+  if (!rawResult) return {};
+
+  if (typeof rawResult === "string") {
+    try {
+      return JSON.parse(rawResult);
+    } catch (error) {
+      console.error("Invalid JSON result:", rawResult, error);
+      return {};
+    }
+  }
+
+  return rawResult;
+};
+
+  const getValueFromKeys = (source, keys = []) => {
+    if (!source || typeof source !== "object") return undefined;
+
+    for (const key of keys) {
+      if (source[key] !== undefined && source[key] !== null) {
+        return source[key];
+      }
+    }
+
+    const sourceEntries = Object.entries(source);
+    const normalizedKeys = keys.map((key) => String(key).toLowerCase());
+    const matchingEntry = sourceEntries.find(([key]) =>
+      normalizedKeys.includes(String(key).toLowerCase())
+    );
+
+    return matchingEntry?.[1];
+  };
+
+  const getPickingResultRows = (result) => {
+    if (Array.isArray(result)) return result;
+
+    return [
+      result?.dt1,
+      result?.detailRows,
+      result?.rows,
+      result?.data,
+      result?.allocations,
+    ].find(Array.isArray) || [];
+  };
+
+  const getPickingResultRow = (result, row, index) => {
+    const resultRows = getPickingResultRows(result);
+    if (!resultRows.length) return null;
+
+    const lineNo = String(index + 1);
+    const groupId = String(row?.groupId || "");
+    const itemCode = String(row?.itemCode || "");
+
+    return (
+      resultRows.find((resultRow) => {
+        const resultLineNo = String(
+          resultRow.lineNo ?? resultRow.lnNo ?? resultRow.ln ?? resultRow.recNo ?? ""
+        );
+        return resultLineNo && resultLineNo === lineNo;
+      }) ||
+      resultRows.find((resultRow) => {
+        const resultGroupId = String(resultRow.groupId ?? resultRow.groupID ?? "");
+        return groupId && resultGroupId === groupId;
+      }) ||
+      resultRows.find((resultRow) => {
+        const resultItemCode = String(resultRow.itemCode ?? resultRow.item_code ?? "");
+        return itemCode && resultItemCode === itemCode;
+      }) ||
+      resultRows[0]
+    );
+  };
+
+  const getPickingResultNumber = (result, row, index, keys, fallback = 0) => {
+    const detailResult = getPickingResultRow(result, row, index);
+    const value =
+      getValueFromKeys(detailResult, keys) ??
+      getValueFromKeys(result, keys) ??
+      fallback;
+
+    return parseFormattedNumber(value) || 0;
+  };
+
+  const getPickingAllocationAmount = (allocations = []) =>
+    (Array.isArray(allocations) ? allocations : []).reduce((total, allocation) => {
+      const pickedQty =
+        parseFormattedNumber(
+          allocation.pickQty ??
+            allocation.pickedQty ??
+            allocation.quantityPicked ??
+            allocation.qtyPicked ??
+            allocation.qty ??
+            0
+        ) || 0;
+      const unitCost =
+        parseFormattedNumber(
+          allocation.unitCost ??
+            allocation.wac ??
+            allocation.cost ??
+            allocation.itemCost ??
+            allocation.unitPrice ??
+            0
+        ) || 0;
+
+      return total + pickedQty * unitCost;
+    }, 0);
+
+  const buildPickingBasePayload = (row, index) => ({
+    docCode: "DR",
+    docNo: documentNo || "",
+    docId: documentID || "",
+    docDate: documentDate || null,
+    branchCode: branchCode || "",
+    whouseCode: whseCode || "",
+    locCode: locCode || "",
+    groupId: row?.groupId || "",
+    lineNo: index + 1,
+    itemCode: row?.itemCode || "",
+    requestedQty: parseFormattedNumber(row?.drQuantity || 0) || 0,
+    userCode: userCode || currentUserRow?.userCode || "",
+  });
 
   const handleOpenSalesOrderLookup = async (overrides = {}) => {
     const lookupShipToCode = String(overrides.shipToCode ?? shipToCode ?? "").trim();
@@ -1309,9 +1680,16 @@ const handlePrint = async () => {
 
 
 
-const handleOpenItemPickingModal = (index) => {
+const handleOpenItemPickingModal = async (index) => {
   const row = detailRowsRef.current?.[index];
   const requestedQty = parseFormattedNumber(row?.drQuantity || 0) || 0;
+
+  if (!canUsePickingControls) return;
+
+  if (!documentID || !documentNo) {
+    useSwalErrorAlert("Item Picking", "Please save the DR first before opening the picking allocation.");
+    return;
+  }
 
   if (!row?.itemCode) {
     useSwalErrorAlert("Item Picking", "Please select an item before opening the picking allocation.");
@@ -1319,7 +1697,7 @@ const handleOpenItemPickingModal = (index) => {
   }
 
   if (!row?.groupId) {
-    useSwalErrorAlert("Item Picking", "Group ID is required for item picking allocation. Please make sure the detail row has a valid groupId.");
+    useSwalErrorAlert("Item Picking", "Group ID is required for item picking allocation. Please save or reload the document first.");
     return;
   }
 
@@ -1328,42 +1706,242 @@ const handleOpenItemPickingModal = (index) => {
     return;
   }
 
-  setItemPickingRowIndex(index);
-  setShowItemPickingModal(true);
+  try {
+    updateState({ isLoading: true, showSpinner: true });
+
+    const response = await postRequest("getFGUpdateStockAllocation", {
+      mode: "GetOpenStock",
+      params: JSON.stringify({
+        json_data: buildPickingBasePayload(row, index),
+      }),
+    });
+
+    const result = parseSprocJsonResult(response);
+
+    setItemPickingStockRows(Array.isArray(result?.stockRows) ? result.stockRows : []);
+    setItemPickingExistingAllocations(
+      Array.isArray(result?.existingAllocations) ? result.existingAllocations : []
+    );
+    setItemPickingRowIndex(index);
+    setShowItemPickingModal(true);
+  } catch (error) {
+    console.error("Failed to load FG picking allocation:", error);
+    useSwalErrorAlert("Item Picking", getApiErrorMessage(error));
+  } finally {
+    updateState({ isLoading: false, showSpinner: false });
+  }
 };
 
 const handleCloseItemPickingModal = () => {
   setShowItemPickingModal(false);
   setItemPickingRowIndex(null);
+  setItemPickingStockRows([]);
+  setItemPickingExistingAllocations([]);
 };
 
-const handleConfirmItemPicking = (payload) => {
+const handleConfirmItemPicking = async (payload) => {
   if (itemPickingRowIndex === null || itemPickingRowIndex === undefined) return;
+  if (!canUsePickingControls) return;
 
   const updatedRows = [...(detailRowsRef.current || [])];
   const currentRow = updatedRows[itemPickingRowIndex];
   if (!currentRow) return;
 
-  const totalPicked = parseFormattedNumber(payload?.totalPicked || 0) || 0;
-  const drQuantityValue = parseFormattedNumber(currentRow?.drQuantity || 0) || 0;
+  try {
+    updateState({ isLoading: true, showSpinner: true });
 
-  updatedRows[itemPickingRowIndex] = {
-    ...currentRow,
-    drStat:
-      totalPicked <= 0
-        ? "F"
-        : drQuantityValue > 0 && totalPicked >= drQuantityValue
-          ? "P"
-          : "T",
-    quantityPicked: formatNumber(totalPicked, quantityDecimals),
-    pickingAllocations: payload?.allocations || [],
-    pickingOrderedStockRows: payload?.orderedStockRows || [],
-  };
+    const basePayload = buildPickingBasePayload(currentRow, itemPickingRowIndex);
+    const pickedAllocations = Array.isArray(payload?.allocations) ? payload.allocations : [];
 
-  detailRowsRef.current = updatedRows;
-  updateState({ detailRows: updatedRows });
-  updateTotals(updatedRows);
-  handleCloseItemPickingModal();
+    const response = await postRequest("getFGUpdateStockAllocation", {
+      mode: "SaveAlloc",
+      params: JSON.stringify({
+        json_data: {
+          ...basePayload,
+          dt1: pickedAllocations,
+        },
+      }),
+    });
+
+    const result = parseSprocJsonResult(response);
+    const totalPicked = getPickingResultNumber(result,currentRow,itemPickingRowIndex, ["totalAllocated"],payload?.totalPicked ?? 0);
+    const itemAmount = getPickingResultNumber( result,currentRow,itemPickingRowIndex, ["itemAmount"],totalPicked <= 0 ? 0 : getPickingAllocationAmount(pickedAllocations) || currentRow?.itemAmount || 0);
+    const drQuantityValue = parseFormattedNumber(currentRow?.drQuantity || 0) || 0;
+
+    updatedRows[itemPickingRowIndex] = {
+      ...currentRow,
+      drStat:
+        totalPicked <= 0
+          ? "F"
+          : drQuantityValue > 0 && totalPicked >= drQuantityValue
+            ? "P"
+            : "T",
+      quantityPicked: formatNumber(totalPicked, quantityDecimals),
+      itemAmount: itemAmount,
+      pickingAllocations: pickedAllocations,
+      pickingOrderedStockRows: payload?.orderedStockRows || [],
+    };
+
+    detailRowsRef.current = updatedRows;
+    updateState({ detailRows: updatedRows, detailRowsGL: [], triggerGLEntries: true });
+    updateTotals(updatedRows);
+    handleCloseItemPickingModal();
+  } catch (error) {
+    console.error("Failed to save FG picking allocation:", error);
+    useSwalErrorAlert("Item Picking", getApiErrorMessage(error));
+  } finally {
+    updateState({ isLoading: false, showSpinner: false });
+  }
+};
+
+const buildAutoPickingAllocations = (stockRows = [], requestedQty = 0, row = {}) => {
+  let remainingQty = Math.max(parseFormattedNumber(requestedQty || 0) || 0, 0);
+
+  return [...(Array.isArray(stockRows) ? stockRows : [])]
+    .map((stockRow, index) => ({
+      ...stockRow,
+      priorityNo: stockRow.priorityNo || index + 1,
+      remainingAvailable: parseFormattedNumber(stockRow.remainingAvailable || 0) || 0,
+      isBlocked:
+        stockRow.isBlocked ||
+        (parseFormattedNumber(stockRow.remainingAvailable || 0) || 0) <= 0 ||
+        ["HOLD", "BLOCKED", "QUARANTINE"].includes(String(stockRow.qualityStatus || "").toUpperCase()),
+    }))
+    .sort((a, b) => {
+      const dateA = new Date(a.bestBeforeDate || "").getTime();
+      const dateB = new Date(b.bestBeforeDate || "").getTime();
+      const safeDateA = Number.isFinite(dateA) ? dateA : Number.MAX_SAFE_INTEGER;
+      const safeDateB = Number.isFinite(dateB) ? dateB : Number.MAX_SAFE_INTEGER;
+      if (safeDateA !== safeDateB) return safeDateA - safeDateB;
+      return Number(a.priorityNo || 0) - Number(b.priorityNo || 0);
+    })
+    .reduce((allocations, stockRow) => {
+      if (stockRow.isBlocked || remainingQty <= 0) return allocations;
+
+      const pickQty = Math.min(stockRow.remainingAvailable, remainingQty);
+      remainingQty -= pickQty;
+
+      if (pickQty <= 0) return allocations;
+
+      allocations.push({
+        groupId: row.groupId || "",
+        sourceDocType: "DR",
+        sourceLineNo: "",
+        itemCode: row.itemCode || "",
+        stockCardRefId: stockRow.stockCardRefId,
+        lotNo: stockRow.lotNo,
+        qualityStatus: stockRow.qualityStatus,
+        bestBeforeDate: stockRow.bestBeforeDate,
+        fgFifoLocId: stockRow.fgFifoLocId || null,
+        fgWacLocId: stockRow.fgWacLocId || null,
+        warehouseCode: stockRow.warehouseCode,
+        whouseCode: stockRow.warehouseCode,
+        warehouseName: stockRow.warehouseName,
+        locationCode: stockRow.locationCode,
+        locCode: stockRow.locationCode,
+        priorityNo: stockRow.priorityNo,
+        sourceDocCode: stockRow.sourceDocCode || null,
+        sourceDocNo: stockRow.sourceDocNo || null,
+        sourceDocDate: stockRow.sourceDocDate || null,
+        sourceDocId: stockRow.sourceDocId || null,
+        sourceGroupId: stockRow.sourceGroupId || null,
+        fifoDocCode: stockRow.fifoDocCode || null,
+        fifoDocNo: stockRow.fifoDocNo || null,
+        orderId: stockRow.orderId || null,
+        unitCost: parseFormattedNumber(stockRow.unitCost || 0) || 0,
+        wacKey: stockRow.wacKey || null,
+        wac: parseFormattedNumber(stockRow.wac || 0) || 0,
+        pickQty,
+      });
+
+      return allocations;
+    }, []);
+};
+
+const handleBulkPickingAllocation = async (mode) => {
+  const isRelease = mode === "release";
+  const actionLabel = isRelease ? "Release All" : "Allocate All";
+  const rows = detailRowsRef.current || [];
+
+  if (!rows.length || !canUsePickingControls) return;
+
+  if (!documentID || !documentNo) {
+    useSwalErrorAlert("Item Picking", "Please save the DR first before using Allocate All or Release All.");
+    return;
+  }
+
+  const confirm = await useSwalProceedConfirm(
+    `${actionLabel}?`,
+    isRelease
+      ? "This will release all picking allocations for the DR details."
+      : "This will automatically pick available stock for all eligible DR details.",
+    "Yes"
+  );
+
+  if (!confirm?.isConfirmed) return;
+
+  try {
+    updateState({ isLoading: true, showSpinner: true });
+
+    const updatedRows = [...rows];
+
+    for (const [index, row] of rows.entries()) {
+      const requestedQty = parseFormattedNumber(row?.drQuantity || 0) || 0;
+      if (!row?.itemCode || !row?.groupId || requestedQty <= 0) continue;
+
+      const basePayload = buildPickingBasePayload(row, index);
+      let pickedAllocations = [];
+
+      if (!isRelease) {
+        const openStockResponse = await postRequest("getFGUpdateStockAllocation", {
+          mode: "GetOpenStock",
+          params: JSON.stringify({
+            json_data: basePayload,
+          }),
+        });
+
+        const openStockResult = parseSprocJsonResult(openStockResponse);
+        pickedAllocations = buildAutoPickingAllocations(openStockResult?.stockRows, requestedQty, row);
+      }
+
+      const saveResponse = await postRequest("getFGUpdateStockAllocation", {
+        mode: "SaveAlloc",
+        params: JSON.stringify({
+          json_data: {
+            ...basePayload,
+            dt1: pickedAllocations,
+          },
+        }),
+      });
+
+      const result = parseSprocJsonResult(saveResponse);
+      const totalPicked = getPickingResultNumber(result,row,index,["totalAllocated"],0);
+      const itemAmount = getPickingResultNumber(result,row,index,["itemAmount"],totalPicked <= 0 ? 0 : getPickingAllocationAmount(pickedAllocations) || row?.itemAmount || 0);
+
+
+      updatedRows[index] = {
+        ...updatedRows[index],
+        drStat:
+          totalPicked <= 0
+            ? "F"
+            : requestedQty > 0 && totalPicked >= requestedQty
+              ? "P"
+              : "T",
+        quantityPicked: formatNumber(totalPicked, quantityDecimals),
+        itemAmount: itemAmount,
+        pickingAllocations: pickedAllocations,
+      };
+    }
+
+    detailRowsRef.current = updatedRows;
+    updateState({ detailRows: updatedRows, detailRowsGL: [], triggerGLEntries: true });
+    updateTotals(updatedRows);
+  } catch (error) {
+    console.error(`Failed to ${actionLabel.toLowerCase()} picking allocation:`, error);
+    useSwalErrorAlert("Item Picking", getApiErrorMessage(error));
+  } finally {
+    updateState({ isLoading: false, showSpinner: false });
+  }
 };
 
 const handleCancel = async () => {
@@ -1559,22 +2137,33 @@ const handleSaveAndPrint = async (documentID) => {
             let finalName = selectedData.custName || "";
             let finalCode = selectedData.custCode || "";
             let finalAddress = address;
+            let finalWhseCode = "";
+            let customerRow = {};
 
             if (response.success) {
-                const customerRow = JSON.parse(response.data[0].result)?.[0] || {};
+                customerRow = JSON.parse(response.data[0].result)?.[0] || {};
                 const fullAddress = [customerRow.custAddr1, customerRow.custAddr2, customerRow.custAddr3].filter(Boolean).join(' ').trim();
 
                 finalName = customerRow.custName || finalName;
                 finalCode = customerRow.custCode || finalCode;
                 finalAddress = fullAddress || finalAddress;
+                finalWhseCode = customerRow.whCode || finalWhseCode;
             } else {
                 console.warn("API call for getCustomer returned success: false", response.message);
             }
+
+            const selectedWarehouse = finalWhseCode
+              ? await useTopWarehouseRow(finalWhseCode)
+              : null;
 
             updateState({
                 shipToName: finalName,
                 shipToCode: finalCode,
                 shipToAddress: finalAddress,
+                whseCode: selectedWarehouse?.whouseCode || finalWhseCode || "",
+                whseName: selectedWarehouse?.whouseName || "",
+                locCode: "",
+                locName: "",
             });
 
             if (modalContext === "openSO") {
@@ -1795,15 +2384,81 @@ const handleSODetailRowChange = (index, field, value) => {
   if (field === "freeItem") {
     updatedRow = buildFreeItemRow(updatedRow, value === "Y");
     updatedRows[index] = updatedRow;
-    updateState({ detailRows: updatedRows });
+    updateState({ detailRows: updatedRows, detailRowsGL: [], triggerGLEntries: false });
     updateTotals(updatedRows); 
     return;
   }
 
   updatedRows[index] = updatedRow; 
 
-  updateState({ detailRows: updatedRows });
+  updateState({ detailRows: updatedRows, detailRowsGL: [], triggerGLEntries: false });
   updateTotals(updatedRows);
+};
+
+const handleDetailChangeGL = async (index, field, value) => {
+  const updatedRowsGL = [...(detailRowsGLRef.current || [])];
+  const row = { ...(updatedRowsGL[index] || {}) };
+
+  if (["acctCode", "slCode", "rcCode"].includes(field)) {
+    const data = await useUpdateRowGLEntries(row, field, value, shipToCode, docType);
+
+    if (data) {
+      row.acctCode = data.acctCode || "";
+      row.sltypeCode = data.sltypeCode || "";
+      row.slCode = data.slCode || "";
+      row.rcCode = data.rcCode || "";
+      row.vatCode = data.vatCode || "";
+      row.vatName = data.vatName || "";
+      row.atcCode = data.atcCode || "";
+      row.atcName = data.atcName || "";
+      row.particular = data.particular || "";
+    }
+  } else {
+    row[field] = value;
+  }
+
+  updatedRowsGL[index] = row;
+  updateState({
+    detailRowsGL: updatedRowsGL,
+    ...getGLTotalsState(updatedRowsGL),
+  });
+};
+
+const handleCloseAccountModal = (selectedAccount) => {
+  if (selectedAccount && selectedRowIndex !== null) {
+    handleDetailChangeGL(selectedRowIndex, "acctCode", selectedAccount);
+  }
+
+  updateState({
+    showAccountModal: false,
+    selectedRowIndex: null,
+    accountModalSource: null,
+  });
+};
+
+const handleCloseRcModalGL = async (selectedRc) => {
+  if (selectedRc && selectedRowIndex !== null) {
+    const result = await useTopRCRow(selectedRc.rcCode);
+    handleDetailChangeGL(selectedRowIndex, "rcCode", result || selectedRc);
+  }
+
+  updateState({
+    showRcModal: false,
+    selectedRowIndex: null,
+    accountModalSource: null,
+  });
+};
+
+const handleCloseSlModalGL = (selectedSl) => {
+  if (selectedSl && selectedRowIndex !== null) {
+    handleDetailChangeGL(selectedRowIndex, "slCode", selectedSl);
+  }
+
+  updateState({
+    showSlModal: false,
+    selectedRowIndex: null,
+    accountModalSource: null,
+  });
 };
 
 const enterNextRowZeroClearFields = [
@@ -1931,7 +2586,7 @@ const renderDRDetailCell = (columnKey, row, index) => {
               regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`),
             })}
           </div>
-          {!isFormDisabled && (
+          {canUsePickingControls && (
             <button
               type="button"
               title="Open Item Picking / Allocation"
@@ -1946,6 +2601,16 @@ const renderDRDetailCell = (columnKey, row, index) => {
         </div>
       </td>
     ),
+    itemAmount: () => (
+      <td key={columnKey} className="global-tran-td-ui" style={style}>
+        <input
+          type="text"
+          value={formatNumber(row.itemAmount || 0)}
+          readOnly
+          className="w-full global-tran-td-inputclass-ui text-right"
+        />
+      </td>
+    ),
     siNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { readOnly: true })}</td>,
     siDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><DateFormatInput id={`siDate-${index}`} name="siDate" value={row.siDate || ""} disabled updateState={() => {}} className="w-full h-7 text-xs bg-transparent focus:outline-none focus:ring-0" /></td>,
   };
@@ -1956,17 +2621,72 @@ const renderDRDetailCell = (columnKey, row, index) => {
 const renderDrGlColumn = (columnKey, row, index) => {
   const columnWidth = getDrGlFallbackWidth(columnKey);
   const style = getDrGlCellStyle(columnKey, columnWidth);
+  const glModalHandlers = {
+    acctCode: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "acctCode" }),
+    rcCode: () => updateState({ selectedRowIndex: index, showRcModal: true, accountModalSource: "rcCode" }),
+    slCode: () => updateState({ selectedRowIndex: index, showSlModal: true, accountModalSource: "slCode" }),
+  };
+
+  const focusNextGlCell = (field) => {
+    focusNextDrGlRowInput(index, field, {
+      rows: detailRowsGL,
+      zeroClearFields: [],
+      parseValue: parseFormattedNumber,
+      onClearNextValue: (nextIndex, nextField, value) => handleDetailChangeGL(nextIndex, nextField, value),
+    });
+  };
   
   const textInput = (field, options = {}) => (
-    <input type="text" id={`${field}-${index}`} className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={true} maxLength={options.maxLength} />
+    <input
+      type="text"
+      id={`${field}-${index}`}
+      className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()}
+      value={row[field] || ""}
+      readOnly={options.readOnly ?? isFormDisabled}
+      maxLength={options.maxLength}
+      onChange={(e) => handleDetailChangeGL(index, field, e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" || options.readOnly || isFormDisabled) return;
+        e.preventDefault();
+        focusNextGlCell(field);
+      }}
+    />
   );
-  const lookupCell = (field, options = {}) => (
-    <td key={columnKey} className="global-tran-td-ui" style={style}>
-      <div className="relative w-full">
-        <input type="text" id={`${field}-${index}`} className={`w-full pr-6 global-tran-td-inputclass-ui ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={true} />
-      </div>
-    </td>
-  );
+
+  const lookupCell = (field, options = {}) => {
+    const hasLookupValue = Boolean(String(row[field] || "").trim());
+    const showLookupIcon =
+      !isFormDisabled &&
+      glModalHandlers[field] &&
+      (!["rcCode", "slCode"].includes(field) || hasLookupValue);
+
+    return (
+      <td key={columnKey} className="global-tran-td-ui" style={style}>
+        <div className="relative w-full">
+          <input
+            type="text"
+            id={`${field}-${index}`}
+            className={`w-full ${showLookupIcon ? "pr-6" : ""} global-tran-td-inputclass-ui cursor-pointer ${options.className || ""}`.trim()}
+            value={row[field] || ""}
+            readOnly={true}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter" || isFormDisabled) return;
+              e.preventDefault();
+              focusNextGlCell(field);
+            }}
+          />
+          {showLookupIcon && (
+            <FontAwesomeIcon
+              icon={faMagnifyingGlass}
+              className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+              onClick={glModalHandlers[field]}
+            />
+          )}
+        </div>
+      </td>
+    );
+  };
+
   const amountInput = (field) => (
     <input type="text" id={`${field}-${index}`} className="w-full global-tran-td-inputclass-ui text-right" value={row[field] || ""} readOnly={true} />
   );
@@ -1989,7 +2709,7 @@ const renderDrGlColumn = (columnKey, row, index) => {
     debitFx2: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{amountInput("debitFx2")}</td>,
     creditFx2: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{amountInput("creditFx2")}</td>,
     slRefNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("slRefNo", { maxLength: useGetFieldLength(tblFieldArray, "slref_no") })}</td>,
-    slRefDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="date" id={`slRefDate-${index}`} className="w-full global-tran-td-inputclass-ui text-center" value={toDateInputValue(row.slRefDate)} readOnly={true} /></td>,
+    slRefDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><DateFormatInput id={`slRefDate-${index}`} name={`slRefDate-${index}`} value={row.slRefDate || ""} disabled={isFormDisabled} updateState={(updates) => handleDetailChangeGL(index, "slRefDate", updates[`slRefDate-${index}`] || updates.slRefDate || "")} className="w-full global-tran-td-inputclass-ui text-center pr-7" onKeyDownCustom={(e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); focusNextGlCell("slRefDate"); }} /></td>,
     remarks: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("remarks", { maxLength: useGetFieldLength(tblFieldArray, "remarks") })}</td>,
   };
   return glColumnRenderers[columnKey]?.() ?? <td key={columnKey} className="global-tran-td-ui" style={style}>{String(row[columnKey] ?? "")}</td>;
@@ -2038,10 +2758,8 @@ return (
       </div>
 
 
-      <div
-        className={topTab === "details" ? "" : "hidden"}
-        style={{ display: topTab === "details" ? undefined : "none" }}
-      >
+      {topTab === "details" && (
+      <div className="contents">
 
 
 
@@ -2226,6 +2944,7 @@ return (
               disabled={isFormDisabled}
               readOnly
               lookupDisabled={false}
+              editableLookup
               onLookup={() => updateState({ showWhseModal: true })}
               onClear={() =>
                 updateState({
@@ -2245,6 +2964,7 @@ return (
               disabled={isFormDisabled || !whseCode}
               readOnly
               lookupDisabled={!whseCode}
+              editableLookup
               onLookup={() =>
                 !isFormDisabled &&
                 whseCode &&
@@ -2313,9 +3033,6 @@ return (
           </div>
         </div>
 
- 
-    </div>
-
           {/* APV Detail Section */}
           <div id="apv_dtl" ref={detailSectionRef} className="global-tran-tab-div-ui">
 
@@ -2358,7 +3075,8 @@ return (
 
           <tbody className="relative">{sortedDetailRows.map(({ row, originalIndex }) => {
             const isPickingSelectedRow = showItemPickingModal && itemPickingRowIndex === originalIndex;
-            const canDeleteRow = !String(row.siNo || "").trim();
+            const pickedQty = parseFormattedNumber(row.quantityPicked || 0) || 0;
+            const canDeleteRow = pickedQty > 0 || !String(row.siNo || "").trim();
 
             return (
             <tr
@@ -2392,7 +3110,11 @@ return (
                           className="global-tran-td-button-delete-ui"
                           onClick={() => handleDeleteRow(originalIndex)} 
                           disabled={!canDeleteRow}
-                          title="Delete row"
+                          title={
+                            pickedQty > 0
+                              ? "Delete row and release picking allocation"
+                              : "Delete row"
+                          }
                         >
                           <FontAwesomeIcon icon={faTrashAlt} />
                         </button>
@@ -2412,12 +3134,8 @@ return (
       </div> 
       </div>
 
-
-
-    {topTab === "details" && (
-    <>
     {/* Invoice Details Footer */}
-    <div className="global-tran-tab-footer-main-div-ui">
+    <div className="global-tran-tab-footer-main-div-ui relative">
 
     {/* Add Button */}
     <div className="global-tran-tab-footer-button-div-ui">
@@ -2476,13 +3194,36 @@ return (
           </div>
         )}
 
-        <button
+      <button
           onClick={handleAddRowClick}
           className="global-tran-tab-footer-button-add-ui"
         >
           <FontAwesomeIcon icon={faPlus} className="mr-2" />Add
         </button>
       </div>
+      {canUsePickingControls && (detailRows?.length || 0) > 0 && (
+        <div className="ml-6 flex items-center gap-2">
+          <button
+            type="button"
+            className="min-h-[36px] w-[132px] rounded-lg border border-blue-200 bg-blue-50 px-4 py-1.5 text-sm font-medium text-blue-700 shadow-sm transition-colors hover:border-blue-500 hover:bg-blue-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center whitespace-nowrap focus:outline-none"
+            disabled={isLoading}
+            onClick={() => handleBulkPickingAllocation("allocate")}
+          >
+            <FontAwesomeIcon icon={faFolderOpen} className="mr-2" />
+            Allocate All
+          </button>
+
+          <button
+            type="button"
+            className="min-h-[36px] w-[132px] rounded-lg border border-slate-300 bg-white px-4 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:border-red-400 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center whitespace-nowrap focus:outline-none"
+            disabled={isLoading || !hasPickedQuantity}
+            onClick={() => handleBulkPickingAllocation("release")}
+          >
+            <FontAwesomeIcon icon={faMinus} className="mr-2" />
+            Release All
+          </button>
+        </div>
+      )}
     </div>
 
       <div
@@ -2497,12 +3238,10 @@ return (
         <div className="global-tran-tab-footer-total-value-ui">{totals.totalQuantityPicked}</div>
       </div>
     </div>
-    </>
-    )}
     </div>
 
       {/* General Ledger */}
-      {currentUserRow?.viewCostamt !== 'N' && hasPickedQuantity && (
+      {canViewCostAmount && hasPickedQuantity && (
       <div className="global-tran-tab-div-ui mt-3">
 
           {/* Tab Navigation */}
@@ -2521,6 +3260,20 @@ return (
               General Ledger
             </button>
           </div>
+
+          <div className="flex justify-end">
+            {!isFormDisabled && (
+              <button
+                type="button"
+                className="global-tran-button-generateGL"
+                disabled={isGeneratingGL}
+                onClick={() => handleActivityOption("GenerateGL")}
+              >
+                {isGeneratingGL ? <FontAwesomeIcon icon={faSpinner} className="mr-2 animate-spin" /> : null}
+                {isGeneratingGL ? "Generating..." : "Generate GL Entries"}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* GL Details Table */}
@@ -2536,6 +3289,14 @@ return (
                       })}
                     </Fragment>
                   ))}
+                  {!isFormDisabled && (
+                    <th
+                      className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900"
+                      style={transactionActionsHeaderStyle}
+                    >
+                      Actions
+                    </th>
+                  )}
                 </tr>
                 {renderDrGlHeaderContextMenu()}
               </thead>
@@ -2543,6 +3304,30 @@ return (
                 {sortedDrGlRows.map(({ row, originalIndex }) => (
                   <tr key={`${row.acctCode || "gl"}-${originalIndex}`} className="global-tran-tr-ui">
                     {orderedDrGlColumns.map((column) => renderDrGlColumn(column.key, row, originalIndex))}
+                    {!isFormDisabled && (
+                      <td
+                        className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black"
+                        style={transactionActionsCellStyle}
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            className="global-tran-td-button-add-ui"
+                            onClick={() => handleAddRowGL(originalIndex)}
+                          >
+                            <FontAwesomeIcon icon={faPlus} />
+                          </button>
+
+                          <button
+                            type="button"
+                            className="global-tran-td-button-delete-ui"
+                            onClick={() => handleDeleteRowGL(originalIndex)}
+                          >
+                            <FontAwesomeIcon icon={faTrashAlt} />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -2552,6 +3337,16 @@ return (
 
 
         <div className="global-tran-tab-footer-main-div-ui">          
+          <div className="global-tran-tab-footer-button-div-ui">
+            <button
+              onClick={() => handleAddRowGL()}
+              className="global-tran-tab-footer-button-add-ui"
+              style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
+            >
+              <FontAwesomeIcon icon={faPlus} className="mr-2" />Add
+            </button>
+          </div>
+
           {/* Totals Section */}
           <div className="global-tran-tab-footer-total-main-div-ui w-full">
 
@@ -2579,6 +3374,9 @@ return (
         </div>
       </div>
       )}
+
+    </div>
+    )}
 
     {branchModalOpen && (
             <BranchLookupModal
@@ -2694,7 +3492,7 @@ return (
         transaction={{
           sourceDocType: "DR",
           sourceDocTypeName: "Delivery Receipt",
-          sourceDocNo: documentNo || "DR-2026-000145",
+          sourceDocNo: documentNo || "",
           sourceLineNo: `Line ${Number(itemPickingRowIndex ?? 0) + 1}`,
           groupId: selectedPickingRow?.groupId || "",
           customerCode: shipToCode || "",
@@ -2703,7 +3501,32 @@ return (
           itemName: selectedPickingRow?.itemName || selectedPickingRow?.itemSpecs || "",
           requestedQty: parseFormattedNumber(selectedPickingRow?.drQuantity || 0) || 0,
         }}
+        stockRows={itemPickingStockRows}
+        existingAllocations={itemPickingExistingAllocations}
         onConfirm={handleConfirmItemPicking}
+      />
+    )}
+
+    {showAccountModal && (
+      <COAMastLookupModal
+        isOpen={showAccountModal}
+        onClose={handleCloseAccountModal}
+        source={accountModalSource}
+      />
+    )}
+
+    {showRcModal && (
+      <RCLookupModal
+        isOpen={showRcModal}
+        onClose={handleCloseRcModalGL}
+        source={accountModalSource}
+      />
+    )}
+
+    {showSlModal && (
+      <SLMastLookupModal
+        isOpen={showSlModal}
+        onClose={handleCloseSlModalGL}
       />
     )}
 
@@ -2754,11 +3577,9 @@ return (
         onClose={() => updateState({ showAllTranDocNo: false })}
       />
     )}
- 
-
-
       {showSpinner && <LoadingSpinner />}
     </div>
+    
   <div
     className={topTab === "history" ? "" : "hidden"}
     style={{ display: topTab === "history" ? undefined : "none" }}

@@ -166,6 +166,10 @@ const getFlowState = (row) => {
 };
 
 const getCurrentStatus = (flow, row = {}) => {
+  if (row.prStatus === "X" || String(row.prStatusDesc).toUpperCase() === "CANCELLED") {
+    return "Cancelled";
+  }
+
   const rrQty = Number(row.rrQty || row.totalRRQty || 0);
   const poQty = Number(row.poQty || row.totalPOQty || 0);
 
@@ -337,12 +341,14 @@ const aggregatePRInqRows = (rows) => {
       "RR Number": rr, "Ref PO": poNos[0] || joNos[0] || "", "RR Qty": formatNumber(group.totalRRQty, 6), Items: uniqueDetailLines.length, Details: itemDetails,
     }));
 
+    // ── ✅ Added Details Mapping Array to APV Document rows ──
     const apvDocs = apvNos.map((apv) => ({
-      "APV Number": apv, "Ref RR": rrNos[0] || joNos[0] || "", Items: uniqueDetailLines.length,
+      "APV Number": apv, "Ref RR": rrNos[0] || joNos[0] || "", Items: uniqueDetailLines.length, Details: itemDetails,
     }));
 
+    // ── ✅ Added Details Mapping Array to CV Document rows ──
     const cvDocs = cvNos.map((cv) => ({
-      "CV Number": cv, "Ref APV": apvNos[0] || "", Items: uniqueDetailLines.length,
+      "CV Number": cv, "Ref APV": apvNos[0] || "", Items: uniqueDetailLines.length, Details: itemDetails,
     }));
 
     const flowSeed = { invTypes, poNo: poNos.join("\n"), joNo: joNos.join("\n"), rrNo: rrNos.join("\n"), apvNo: apvNos.join("\n"), cvNo: cvNos.join("\n") };
@@ -352,7 +358,15 @@ const aggregatePRInqRows = (rows) => {
       id: prId || `${branchCode}-${prNo}`, prNo, prId, prDate: formatDateDisplay(prDate), prStatus, prStatusDesc, poNo: poNos.join("\n"), joNo: joNos.join("\n"),
       branch: branchCode, branchName: branchName || branchCode, department: rcCode, departmentName: rcName, departmentDisplay: joinCodeName(rcCode, rcName) || rcCode, supplier: "", supplierCode: "",
       supplierDisplay: "—", amount: formatNumber(group.totalPRQty, 6), requestor: preparedBy || "—", preparedDate: formatDateDisplay(preparedDate),
-      currentStatus: getCurrentStatus(flow, { ...flowSeed, rrQty: group.totalRRQty, totalRRQty: group.totalRRQty, poQty: group.totalPOQty, totalPOQty: group.totalPOQty }),
+      currentStatus: getCurrentStatus(flow, { 
+        ...flowSeed, 
+        prStatus, 
+        prStatusDesc, 
+        rrQty: group.totalRRQty, 
+        totalRRQty: group.totalRRQty, 
+        poQty: group.totalPOQty, 
+        totalPOQty: group.totalPOQty 
+      }),
       aging: "0 day", agingDays: 0, remarks: remarks || "", progress: getProgress(flow, flowSeed), flow, invTypes,
       counts: { pr: prDocs.length, po: poDocs.length, jo: joDocs.length, rr: rrDocs.length, apv: apvDocs.length, cv: cvDocs.length },
       stageDocs: { pr: prDocs, po: poDocs, jo: joDocs, rr: rrDocs, apv: apvDocs, cv: cvDocs }, detailLines: uniqueDetailLines,
@@ -539,7 +553,7 @@ export default function PRInq() {
     const docNo = String(selectedDocNo || config?.value || "").split("\n")[0].trim();
 
     if (!config || !docNo || !branchCode) return;
-    navigate(`${config.path}?${config.param}=${encodeURIComponent(docNo)}&branchCode=${encodeURIComponent(branchCode)}&viewDocument=true&viewOnly=Y&source=flowProgress`);
+    navigate(`${config.path}?${config.param}=${encodeURIComponent(docNo)}&branchCode=${encodeURIComponent(branchCode)}&viewDocument=true&viewOnly=Y&source=sourceFlow`);
   };
 
   const stageList = [
@@ -601,7 +615,6 @@ export default function PRInq() {
     ];
   }, [data]);
 
-  // ── ✅ Added PR Tracker Bottom Bottlenecks Dynamic Summary ─────────────────
   const bottlenecks = useMemo(() => {
     const pendingPOJO = data.filter(
       (x) => x.currentStatus === "For PO / JO" || x.currentStatus === "For PO" || x.currentStatus === "For JO"
@@ -686,6 +699,7 @@ export default function PRInq() {
   };
 
   const statusConfig = {
+    Cancelled: { cls: "bg-rose-100 text-rose-700 border border-rose-200", dot: "bg-rose-500" },
     Completed: { cls: "bg-emerald-100 text-emerald-700 border border-emerald-200", dot: "bg-emerald-500" },
     "For APV": { cls: "bg-violet-100 text-violet-700 border border-violet-200", dot: "bg-violet-500" },
     "For CV": { cls: "bg-indigo-100 text-indigo-700 border border-indigo-200", dot: "bg-indigo-500" },
@@ -759,7 +773,7 @@ export default function PRInq() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="relative"><Filter size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-10 w-full appearance-none rounded-2xl border border-slate-200 bg-slate-50 pl-9 pr-8 text-sm outline-none transition focus:border-blue-400 focus:bg-white">
-                    <option>All</option><option>Completed</option><option>For APV</option><option>For CV</option><option>Partial RR</option><option>For RR</option><option>For PO / JO</option><option>For PO</option><option>For JO</option><option>Open PR</option>
+                    <option>All</option><option>Cancelled</option><option>Completed</option><option>For APV</option><option>For CV</option><option>Partial RR</option><option>For RR</option><option>For PO / JO</option><option>For PO</option><option>For JO</option><option>Open PR</option>
                   </select>
                 </div>
                 <div className="relative"><Building2 size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -806,8 +820,8 @@ export default function PRInq() {
                 <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur">
                   <tr className="border-b border-slate-200 bg-slate-50/95">
                     <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">PR Details</th>
-                    <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">Branch / Department</th>
-                    <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-400">PR Qty</th>
+                    <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">Branch</th>
+                    <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">Department</th>
                     <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">Status</th>
                     <th className="min-w-[300px] px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">Flow Progress<span className="ml-2 text-[10px] font-normal normal-case text-slate-300">↑ click any stage</span></th>
                   </tr>
@@ -819,8 +833,8 @@ export default function PRInq() {
                       return (
                         <tr key={row.id} className="transition hover:bg-blue-50/40">
                           <td className="px-5 py-4"><div className="font-mono text-[13px] font-semibold text-blue-700">{row.prNo}</div><div className="mt-0.5 text-[11px] text-slate-400">{row.prDate}</div></td>
-                          <td className="max-w-[200px] px-5 py-4"><div className="text-[13px] font-medium leading-snug text-slate-800">{getBranchDisplay(row)} - {row.departmentName || "—"}</div></td>
-                          <td className="px-5 py-4 text-right"><div className="tabular-nums text-[15px] font-bold text-slate-900">{row.amount}</div></td>
+                          <td className="px-5 py-4"><div className="text-[13px] font-medium text-slate-800">{getBranchDisplay(row)}</div></td>
+                          <td className="px-5 py-4"><div className="text-[13px] font-medium text-slate-800">{row.departmentName || "—"}</div></td>
                           <td className="px-5 py-4"><span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold ${sc.cls}`}><span className={`h-1.5 w-1.5 rounded-full ${sc.dot}`} />{row.currentStatus}</span></td>
                           <td className="px-5 py-4">
                             <div className="flex items-center gap-1 flex-wrap">
@@ -852,7 +866,6 @@ export default function PRInq() {
           </div>
         </section>
 
-        {/* ── ✅ Added PR Analytical Pipeline Metrics Cards Segment Layout ──────── */}
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <div className="rounded-[30px] border border-white/70 bg-white/90 p-5 shadow-sm shadow-slate-200/70 ring-1 ring-slate-200/60 backdrop-blur">
             <div className="mb-4 flex items-center gap-2">
