@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Swal from "sweetalert2";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -9,6 +9,7 @@ import {
   faPlus,
   faSpinner,
   faSearch,
+  faTrashAlt,
 } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
@@ -26,10 +27,11 @@ import MSLookupModal from "../../../Lookup/SearchMSMast.jsx";
 import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
 import COAMastLookupModal from "../../../Lookup/SearchCOAMast.jsx";
-import MSInvLookup from "../../../Lookup/SearchMSInvLookup.jsx";
+import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
+import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 
 // Configuration
-import { postRequest } from "../../../Configuration/BaseURL.jsx";
+import { postRequest, fetchDataJson } from "../../../Configuration/BaseURL.jsx";
 import { useReset } from "../../../Components/ResetContext.jsx";
 
 import {
@@ -63,12 +65,34 @@ import {
   useSwalshowSaveSuccessDialog,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
+import {
+  useSelectedHSColConfig,
+} from "@/NAYSA Cloud/Global/selectedData";
+
 // Header
 import Header from "@/NAYSA Cloud/Components/Header";
+import {
+  transactionActionsCellStyle,
+  transactionActionsHeaderStyle,
+  useResizableTableColumns,
+} from "@/NAYSA Cloud/Global/datatable.jsx";
 
 const MSIS = () => {
   const loadedFromUrlRef = useRef(false);
+
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const [isViewDocument, setIsViewDocument] = useState(false);
+
+useEffect(() => {
+  const p = new URLSearchParams(location.search);
+  setIsViewDocument(p.get("viewDocument") === "true");
+}, [location.search]);
+
+  const isViewDocumentUrl = isViewDocument;
+  
+
   const { resetFlag } = useReset();
 
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
@@ -178,6 +202,8 @@ const MSIS = () => {
     rcLookupContext: "", // "rc" or "reqDept"
 
     msLookupModalOpen: false,
+    globalLookupRow: [],
+    globalLookupHeader: [],
   });
 
   const updateState = (updates) => {
@@ -278,6 +304,8 @@ const MSIS = () => {
     rcLookupContext,
 
     msLookupModalOpen,
+    globalLookupRow,
+    globalLookupHeader,
   } = state;
 
   const [header, setHeader] = useState({
@@ -403,6 +431,8 @@ const MSIS = () => {
       rcLookupModalOpen: false,
       rcLookupContext: "",
       msLookupModalOpen: false,
+      globalLookupRow: [],
+      globalLookupHeader: [],
       WHcode: "",
       WHname: "",
       locCode: "",
@@ -659,7 +689,7 @@ const MSIS = () => {
       }));
 
       const totalQty = retrievedDetailRows.reduce(
-        (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
+        (acc, r) => acc + (parseFormattedNumber(r.quantity ?? r.qtyNeeded ?? 0) || 0),
         0,
       );
       updateTotalsDisplay(totalQty);
@@ -705,68 +735,78 @@ const MSIS = () => {
   };
 
   const handleCloseMSLookup = (selectedItems) => {
-  console.log("MSIS ← MSInvLookup returned:", selectedItems);
+    updateState({ msLookupModalOpen: false });
 
-  // always close modal
-  updateState({ msLookupModalOpen: false });
+    if (!selectedItems) return;
 
-  if (!selectedItems) return;
+    const rawRecords = Array.isArray(selectedItems?.records)
+      ? selectedItems.records
+      : selectedItems?.records
+        ? [selectedItems.records]
+        : Array.isArray(selectedItems)
+          ? selectedItems
+          : [selectedItems];
 
-  // ✅ Multi-select support
-  const itemsArray = Array.isArray(selectedItems) ? selectedItems : [selectedItems];
-  if (itemsArray.length === 0) return;
-
-  // build new rows
-  const newRows = itemsArray.map((item) => ({
-    itemCode: item?.itemCode ?? "",
-    itemName: item?.itemName ?? "",
-    uomCode: item?.uomCode ?? "",
-
-    // MSIS uses "quantity" as issued qty
-    quantity: formatNumber(0, 6),
-
-    // from lookup
-    unitCost: formatNumber(parseFormattedNumber(item?.unitCost ?? 0), 6),
-    amount: formatNumber(0, 2),
-
-    lotNo: item?.lotNo ?? "",
-    bbDate: item?.bbDate ? new Date(item.bbDate).toISOString().split("T")[0] : "",
-
-    itemStat: item?.qstatCode ?? "",
-
-    whouseCode: item?.whouseCode ?? state.WHcode ?? "",
-    locCode: item?.locCode ?? state.locCode ?? "",
-
-    qtyOnHand: formatNumber(parseFormattedNumber(item?.qtyHand ?? 0), 6),
-
-    uniqueKey: item?.uniqueKey ?? "",
-
-    // keep existing fields your table expects
-    drAcctCode: "",
-    drAcctName: "",
-    rcCode: state.rcCode || "",
-    slCode: "",
-    mrsNo: "",
-    mrsQty: formatNumber(0, 6),
-
-    remarks: "",
-  }));
-
-  // ✅ Append to detailRows safely
-  setState((prev) => {
-    const updated = [...(prev.detailRows || []), ...newRows];
-
-    // ✅ recompute totals based on "quantity" (MSIS)
-    const totalQty = updated.reduce(
-      (acc, r) => acc + (parseFormattedNumber(r.quantity) || 0),
-      0
+    const itemsArray = rawRecords.filter(
+      (item) => (parseFormattedNumber(item?.qtyHand ?? item?.qtyOnHand ?? 0) || 0) > 0
     );
-    updateTotalsDisplay(totalQty);
 
-    return { ...prev, detailRows: updated };
-  });
-};
+    if (itemsArray.length === 0) {
+      Swal.fire({
+        icon: "info",
+        title: "No Stock Selected",
+        text: "Only items with Quantity on Hand can be selected.",
+        timer: 2500,
+        showConfirmButton: false,
+      });
+      return;
+    }
 
+    const newRows = itemsArray.map((item) => {
+      const rawQtyHand = parseFormattedNumber(item?.qtyHand ?? item?.qtyOnHand ?? 0) || 0;
+      const rawUnitCost = parseFormattedNumber(item?.unitCost ?? 0) || 0;
+
+      return {
+        itemCode: item?.itemCode ?? "",
+        itemName: item?.itemName ?? "",
+        uomCode: item?.uomCode ?? item?.uom ?? "",
+
+        quantity: formatNumber(0, 6),
+        unitCost: formatNumber(rawUnitCost, 6),
+        amount: formatNumber(0, 2),
+
+        lotNo: item?.lotNo ?? "",
+        bbDate: item?.bbDate ? new Date(item.bbDate).toISOString().split("T")[0] : "",
+        itemStat: item?.qstatCode ?? item?.itemStat ?? "",
+
+        whouseCode: item?.whouseCode ?? item?.whCode ?? state.WHcode ?? "",
+        whouseName: item?.whouseName ?? item?.whName ?? state.WHname ?? "",
+        locCode: item?.locCode ?? state.locCode ?? "",
+        locName: item?.locName ?? state.locName ?? "",
+
+        qtyOnHand: formatNumber(rawQtyHand, 6),
+        uniqueKey: item?.uniqueKey ?? "",
+
+        drAcctCode: "",
+        drAcctName: "",
+        rcCode: state.rcCode || "",
+        slCode: "",
+        mrsNo: "",
+        mrsQty: formatNumber(0, 6),
+        remarks: "",
+      };
+    });
+
+    setState((prev) => {
+      const updated = [...(prev.detailRows || []), ...newRows];
+      const totalQty = updated.reduce(
+        (acc, r) => acc + (parseFormattedNumber(r.quantity ?? r.qtyNeeded ?? 0) || 0),
+        0
+      );
+      updateTotalsDisplay(totalQty);
+      return { ...prev, detailRows: updated };
+    });
+  };
 
   const handlePrNoBlur = () => {
     if (!state.documentID && state.documentNo && state.branchCode) {
@@ -898,7 +938,7 @@ const MSIS = () => {
     updateState({ detailRows: updatedRows });
 
     const totalQty = updatedRows.reduce(
-      (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
+      (acc, r) => acc + (parseFormattedNumber(r.quantity ?? r.qtyNeeded ?? 0) || 0),
       0,
     );
     updateTotalsDisplay(totalQty);
@@ -906,16 +946,78 @@ const MSIS = () => {
     setShowTypeDropdown(false);
   };
 
-  const handleOpenMSLookup = () => {
-  console.log("MSIS → opening MSInvLookup with:", {
-    userCode: state.userCode,
-    whouseCode: state.WHcode,
-    locCode: state.locCode,
-    docType: "MSIS",
-  });
+  const handleOpenMSLookup = async () => {
+    if (isFormDisabled) return;
 
-  updateState({ msLookupModalOpen: true });
-};
+    if (!state.WHcode) {
+      Swal.fire({
+        icon: "warning",
+        title: "Required Header Field",
+        text: "Please select Warehouse before adding items.",
+        timer: 2500,
+        showConfirmButton: false,
+      });
+      return;
+    }
+
+    updateState({ isLoading: true });
+
+    try {
+      const response = await fetchDataJson("getInvLookupMS", {
+        userCode: state.userCode || "NSI",
+        whouseCode: state.WHcode || "",
+        locCode: state.locCode || "",
+        docType: "MSIS",
+        tranType: "IL",
+      });
+
+      const rawData = response?.data?.[0]?.result
+        ? JSON.parse(response.data[0].result)
+        : response?.data || [];
+
+      const balanceRows = (Array.isArray(rawData) ? rawData : []).filter(
+        (item) => (parseFormattedNumber(item?.qtyHand ?? item?.qtyOnHand ?? 0) || 0) > 0
+      );
+
+      if (balanceRows.length === 0) {
+        Swal.fire({
+          icon: "info",
+          title: "MS Location Balance",
+          text: "No items with Quantity on Hand were found for the selected warehouse/location.",
+          timer: 3000,
+          showConfirmButton: false,
+        });
+        updateState({
+          globalLookupRow: [],
+          globalLookupHeader: [],
+          msLookupModalOpen: false,
+        });
+        return;
+      }
+
+      const colConfig = await useSelectedHSColConfig("getInvLookupMS", state.userCode || "NSI");
+
+      updateState({
+        globalLookupRow: balanceRows,
+        globalLookupHeader: colConfig || [],
+        msLookupModalOpen: true,
+      });
+    } catch (error) {
+      console.error("MSIS item lookup error:", error);
+      Swal.fire({
+        icon: "error",
+        title: "MS Location Balance",
+        text: error?.response?.data?.message || error?.message || "No records found.",
+      });
+      updateState({
+        globalLookupRow: [],
+        globalLookupHeader: [],
+        msLookupModalOpen: false,
+      });
+    } finally {
+      updateState({ isLoading: false });
+    }
+  };
 
 
   const handleDeleteRow = (index) => {
@@ -925,7 +1027,7 @@ const MSIS = () => {
     updateState({ detailRows: updatedRows });
 
     const totalQty = updatedRows.reduce(
-      (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
+      (acc, r) => acc + (parseFormattedNumber(r.quantity ?? r.qtyNeeded ?? 0) || 0),
       0,
     );
     updateTotalsDisplay(totalQty);
@@ -963,7 +1065,7 @@ const MSIS = () => {
     updateState({ detailRows: updatedRows });
 
     const totalQty = updatedRows.reduce(
-      (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
+      (acc, r) => acc + (parseFormattedNumber(r.quantity ?? r.qtyNeeded ?? 0) || 0),
       0,
     );
     updateTotalsDisplay(totalQty);
@@ -1033,7 +1135,7 @@ const MSIS = () => {
         remarks: remarks || "",
         status: status || "OPEN",
         noReprints: parseInt(noReprints || 0, 10),
-        userCode: userCode || user?.USER_CODE || "NSI",
+        userCode: userCode || "NSI",
 
         // ✅ MSIS DT1 PAYLOAD (matches your Item Detail columns)
         dt1: (detailRows || []).map((row, idx) => ({
@@ -1288,6 +1390,16 @@ const MSIS = () => {
     updateState({ selectedJVType: selectedType });
   };
 
+  const handleCloseCustModal = (selectedCustomer) => {
+    if (selectedCustomer) {
+      updateState({
+        custCode: selectedCustomer.custCode || selectedCustomer.customerCode || "",
+        custName: selectedCustomer.custName || selectedCustomer.customerName || "",
+      });
+    }
+    updateState({ custModalOpen: false });
+  };
+
   const handleCloseCurrencyModal = async (selectedCurrency) => {
     if (selectedCurrency) {
       await handleSelectCurrency(selectedCurrency.currCode);
@@ -1331,6 +1443,244 @@ const MSIS = () => {
         });
       }
     }
+  };
+
+
+  const msisDetailColumnDefs = useMemo(() => [
+    { key: "ln", label: "LN", width: 56 },
+    { key: "itemCode", label: "Item Code", width: 130 },
+    { key: "itemName", label: "Item Description", width: 300 },
+    { key: "uomCode", label: "UOM", width: 90 },
+    { key: "quantity", label: "Quantity", width: 130 },
+    { key: "unitCost", label: "Unit Cost", width: 130 },
+    { key: "amount", label: "Amount", width: 140 },
+    { key: "lotNo", label: "Lot No", width: 130 },
+    { key: "bbDate", label: "BB Date", width: 140 },
+    { key: "itemStat", label: "Item Stat", width: 120 },
+    { key: "whouseCode", label: "Warehouse", width: 160 },
+    { key: "locCode", label: "Location", width: 160 },
+    { key: "drAcctCode", label: "DR Acct", width: 130 },
+    { key: "rcCode", label: "RC Code", width: 120 },
+    { key: "slCode", label: "SL Code", width: 120 },
+    { key: "qtyOnHand", label: "Qty on Hand", width: 130 },
+    { key: "mrsNo", label: "MRS No.", width: 130 },
+    { key: "mrsQty", label: "MRS Qty", width: 130 },
+  ], []);
+
+  const {
+    getColumnStyle: getMSISDetailColumnStyle,
+    getFrozenColumnStyle: getMSISDetailFrozenStyle,
+    getOrderedColumns: getOrderedMSISDetailColumns,
+    getSortedRows: getSortedMSISDetailRows,
+    renderHeaderContextMenu: renderMSISDetailHeaderContextMenu,
+    renderResizableHeader: renderMSISDetailHeader,
+  } = useResizableTableColumns(msisDetailColumnDefs);
+
+  const orderedMSISDetailColumns = useMemo(
+    () => getOrderedMSISDetailColumns(msisDetailColumnDefs),
+    [getOrderedMSISDetailColumns, msisDetailColumnDefs]
+  );
+
+  const getMSISDetailFallbackWidth = useCallback(
+    (key) => msisDetailColumnDefs.find((column) => column.key === key)?.width || 120,
+    [msisDetailColumnDefs]
+  );
+
+  const getMSISDetailCellStyle = useCallback(
+    (key, fallbackWidth) => ({
+      ...getMSISDetailColumnStyle(key, fallbackWidth),
+      ...getMSISDetailFrozenStyle(key, orderedMSISDetailColumns, fallbackWidth, { isHeader: false }),
+    }),
+    [getMSISDetailColumnStyle, getMSISDetailFrozenStyle, orderedMSISDetailColumns]
+  );
+
+  const msisDetailSortRows = useMemo(
+    () => detailRows.map((row, originalIndex) => ({ row, originalIndex })),
+    [detailRows]
+  );
+
+  const sortedMSISDetailRows = useMemo(
+    () => getSortedMSISDetailRows(
+      msisDetailSortRows,
+      (entry, sortKey) => (sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? "")
+    ),
+    [getSortedMSISDetailRows, msisDetailSortRows]
+  );
+
+  const msisEnterNextRowZeroClearFields = ["quantity", "unitCost", "mrsQty"];
+
+  const handleAddBlankRow = (index) => {
+    if (isFormDisabled) return;
+
+    const blankRow = {
+      itemCode: "",
+      itemName: "",
+      uomCode: "",
+      quantity: formatNumber(0, 6),
+      unitCost: formatNumber(0, 6),
+      amount: formatNumber(0, 2),
+      lotNo: "",
+      bbDate: "",
+      itemStat: "",
+      whouseCode: state.WHcode || "",
+      whouseName: state.WHname || "",
+      locCode: state.locCode || "",
+      locName: state.locName || "",
+      drAcctCode: "",
+      drAcctName: "",
+      rcCode: rcCode || "",
+      slCode: "",
+      qtyOnHand: formatNumber(0, 6),
+      mrsNo: "",
+      mrsQty: formatNumber(0, 6),
+      remarks: "",
+    };
+
+    const updatedRows = [...detailRows];
+    updatedRows.splice(index + 1, 0, blankRow);
+    updateState({ detailRows: updatedRows });
+    const totalQty = updatedRows.reduce(
+      (acc, r) => acc + (parseFormattedNumber(r.quantity ?? r.qtyNeeded ?? 0) || 0),
+      0
+    );
+    updateTotalsDisplay(totalQty);
+  };
+
+  const renderMSISDetailCell = (columnKey, row, index) => {
+    const columnWidth = getMSISDetailFallbackWidth(columnKey);
+    const style = getMSISDetailCellStyle(columnKey, columnWidth);
+    const rowLocked = isFormDisabled;
+
+    const focusDetailCell = (field, nextIndex) => {
+      const nextEl = document.getElementById(`${field}-${nextIndex}`);
+      if (nextEl) {
+        nextEl.focus();
+        if (typeof nextEl.select === "function") nextEl.select();
+      }
+    };
+
+    const focusNextDetailCell = (field) => {
+      const maxRowIndex = Math.max((detailRows || []).length - 1, 0);
+      const nextRowIndex = Math.min(maxRowIndex, index + 1);
+      focusDetailCell(field, nextRowIndex);
+    };
+
+    const handleGridKeyDown = (e, field, options = {}) => {
+      if (options.readOnly || options.disabled || rowLocked) return;
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (options.commitOnEnter) handleDetailChange(index, field, e.target.value, true);
+        focusNextDetailCell(field);
+        return;
+      }
+
+      if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) return;
+
+      e.preventDefault();
+      if (e.key === "ArrowUp") focusDetailCell(field, Math.max(0, index - 1));
+      if (e.key === "ArrowDown") focusDetailCell(field, Math.min((detailRows || []).length - 1, index + 1));
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        const editableColumns = orderedMSISDetailColumns
+          .map((column) => column.key)
+          .filter((key) => !["ln", "itemName", "uomCode", "amount", "qtyOnHand"].includes(key));
+        const currentColIndex = editableColumns.indexOf(field);
+        const nextColIndex = e.key === "ArrowLeft"
+          ? Math.max(0, currentColIndex - 1)
+          : Math.min(editableColumns.length - 1, currentColIndex + 1);
+        if (nextColIndex >= 0) focusDetailCell(editableColumns[nextColIndex], index);
+      }
+    };
+
+    const textInput = (field, options = {}) => (
+      <input
+        type="text"
+        id={`${field}-${index}`}
+        className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()}
+        value={options.value ?? row[field] ?? ""}
+        readOnly={options.readOnly ?? rowLocked}
+        disabled={options.disabled ?? false}
+        onChange={(e) => handleDetailChange(index, field, e.target.value)}
+        onKeyDown={(e) => handleGridKeyDown(e, field, options)}
+      />
+    );
+
+    const numericInput = (field, options = {}) => (
+      <input
+        type="text"
+        id={`${field}-${index}`}
+        className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
+        value={options.value ?? row[field] ?? ""}
+        readOnly={options.readOnly ?? rowLocked}
+        disabled={options.disabled ?? false}
+        onChange={(e) => {
+          const sanitizedValue = e.target.value.replace(/[^0-9.]/g, "");
+          if (/^\d*\.?\d*$/.test(sanitizedValue) || sanitizedValue === "") {
+            handleDetailChange(index, field, sanitizedValue);
+          }
+        }}
+        onFocus={(e) => {
+          if ((options.readOnly ?? rowLocked) || (options.disabled ?? false)) return;
+          if (msisEnterNextRowZeroClearFields.includes(field) && parseFormattedNumber(e.target.value || 0) === 0) {
+            handleDetailChange(index, field, "");
+          }
+        }}
+        onBlur={(e) => {
+          if ((options.readOnly ?? rowLocked) || (options.disabled ?? false)) return;
+          handleDetailChange(index, field, e.target.value);
+        }}
+        onKeyDown={(e) => handleGridKeyDown(e, field, { ...options, commitOnEnter: true })}
+      />
+    );
+
+    const lookupCell = (field, displayValue, onLookup, options = {}) => (
+      <td key={columnKey} className="global-tran-td-ui relative" style={style}>
+        <div className="flex items-center">
+          <input
+            type="text"
+            id={`${field}-${index}`}
+            className="w-full global-tran-td-inputclass-ui pr-6"
+            value={displayValue || ""}
+            readOnly
+            disabled={options.disabled ?? rowLocked}
+            onClick={() => !rowLocked && onLookup?.()}
+            onKeyDown={(e) => handleGridKeyDown(e, field, { readOnly: true })}
+          />
+          {!rowLocked && (
+            <FontAwesomeIcon
+              icon={faMagnifyingGlass}
+              className="absolute right-2 text-blue-600 cursor-pointer hover:text-blue-900"
+              onClick={onLookup}
+            />
+          )}
+        </div>
+      </td>
+    );
+
+    const detailColumnRenderers = {
+      ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
+      itemCode: () => lookupCell("itemCode", row.itemCode || "", () => handleOpenMSLookup()),
+      itemName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("itemName", { readOnly: true })}</td>,
+      uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("uomCode", { readOnly: true })}</td>,
+      quantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("quantity", { value: row.quantity ?? row.qtyNeeded ?? "0.000000" })}</td>,
+      unitCost: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("unitCost", { value: row.unitCost ?? "0.000000" })}</td>,
+      amount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("amount", { readOnly: true, value: row.amount ?? "0.00" })}</td>,
+      lotNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("lotNo", { readOnly: rowLocked })}</td>,
+      bbDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="date" id={`bbDate-${index}`} className="w-full global-tran-td-inputclass-ui text-center" value={row.bbDate || ""} readOnly={rowLocked} disabled={rowLocked} onChange={(e) => handleDetailChange(index, "bbDate", e.target.value)} onKeyDown={(e) => handleGridKeyDown(e, "bbDate", { readOnly: rowLocked })} /></td>,
+      itemStat: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("itemStat", { readOnly: rowLocked })}</td>,
+      whouseCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("whouseCode", { readOnly: true, value: row.whouseName ?? row.whName ?? row.whouseCode ?? row.WHname ?? row.WHcode ?? "" })}</td>,
+      locCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("locCode", { readOnly: true, value: row.locName ?? row.locCode ?? "" })}</td>,
+      drAcctCode: () => lookupCell("drAcctCode", row.drAcctCode || "", () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "drAcct" })),
+      rcCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("rcCode", { readOnly: rowLocked, value: row.rcCode || rcCode || "" })}</td>,
+      slCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("slCode", { readOnly: rowLocked })}</td>,
+      qtyOnHand: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("qtyOnHand", { readOnly: true, value: row.qtyOnHand || "0.000000" })}</td>,
+      mrsNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("mrsNo", { readOnly: rowLocked })}</td>,
+      mrsQty: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("mrsQty", { value: row.mrsQty || "0.000000" })}</td>,
+    };
+
+    return detailColumnRenderers[columnKey]?.() ?? (
+      <td key={columnKey} className="global-tran-td-ui" style={style}>{String(row[columnKey] ?? "")}</td>
+    );
   };
 
   // ==========================
@@ -1387,465 +1737,186 @@ const MSIS = () => {
                 ? "global-tran-tab-text_active-ui"
                 : "global-tran-tab-text_inactive-ui"
             }`}
-            onClick={() => setActiveTab("basic")}
+            onClick={() => updateState({ activeTab: "basic" })}
           >
             Basic Information
           </button>
           {/* Provision for Other Tabs */}
         </div>
 
-          {/* PR Header Form Section */}
+          {/* MSIS Header Form Section */}
           <div
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 rounded-lg relative"
-            id="pr_hd"
+            id="msis_hd"
           >
-            {/* Columns 1–3 (Header fields) */}
             <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Column 1: Branch / PR No / PR Date */}
+              {/* Column 1 */}
               <div className="global-tran-textbox-group-div-ui">
-                {/* Branch */}
-                <div className="relative">
-                  <input
-                    type="text"
-                    id="branchName"
-                    placeholder=" "
-                    value={branchName}
-                    readOnly
-                    onFocus={(e) => e.target.blur()}
-                    className="peer global-tran-textbox-ui cursor-pointer select-none"
-                  />
-                  <label
-                    htmlFor="branchName"
-                    className="global-tran-floating-label"
-                  >
-                    Branch
-                  </label>
-                  <button
-                    type="button"
-                    className={`global-tran-textbox-button-search-padding-ui ${
-                      isFetchDisabled
-                        ? "global-tran-textbox-button-search-disabled-ui"
-                        : "global-tran-textbox-button-search-enabled-ui"
-                    } global-tran-textbox-button-search-ui`}
-                    disabled={
-                      state.isFetchDisabled ||
-                      state.isDocNoDisabled ||
-                      isFormDisabled
+                <FieldRenderer
+                  id="branchName"
+                  label="Branch"
+                  type="lookup"
+                  value={branchName || ""}
+                  readOnly
+                  disabled={state.isFetchDisabled || state.isDocNoDisabled || isFormDisabled}
+                  lookupDisabled={state.isFetchDisabled || state.isDocNoDisabled || isFormDisabled}
+                  onLookup={() =>
+                    !(state.isFetchDisabled || state.isDocNoDisabled || isFormDisabled) &&
+                    updateState({ branchModalOpen: true })
+                  }
+                />
+
+                <FieldRenderer
+                  id="msisNo"
+                  label="MSIS No."
+                  type="text"
+                  value={state.documentNo || ""}
+                  disabled={state.isDocNoDisabled || isFormDisabled}
+                  onChange={(val) => updateState({ documentNo: val })}
+                  onBlur={handlePrNoBlur}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      if (!state.isDocNoDisabled && !isFormDisabled) handlePrNoBlur();
+                      document.getElementById("rr_date")?.focus();
                     }
-                    onClick={() =>
-                      !isFormDisabled && updateState({ branchModalOpen: true })
-                    }
-                  >
-                    <FontAwesomeIcon icon={faMagnifyingGlass} />
-                  </button>
-                </div>
+                  }}
+                />
 
-                {/* PR No */}
-                <div className="relative">
-                  <input
-                    type="text"
-                    id="poNo"
-                    value={state.documentNo}
-                    onChange={(e) =>
-                      updateState({ documentNo: e.target.value })
-                    }
-                    onBlur={handlePrNoBlur}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        document.getElementById("PRDate")?.focus();
-                      }
-                    }}
-                    placeholder=" "
-                    className={`peer global-tran-textbox-ui ${
-                      state.isDocNoDisabled
-                        ? "bg-blue-100 cursor-not-allowed"
-                        : ""
-                    }`}
-                    disabled={state.isDocNoDisabled}
-                  />
-                  <label htmlFor="poNo" className="global-tran-floating-label">
-                    MSIS NO.
-                  </label>
-                  <button
-                    className={`global-tran-textbox-button-search-padding-ui ${
-                      state.isFetchDisabled || state.isDocNoDisabled
-                        ? "global-tran-textbox-button-search-disabled-ui"
-                        : "global-tran-textbox-button-search-enabled-ui"
-                    } global-tran-textbox-button-search-ui`}
-                    disabled={state.isFetchDisabled || state.isDocNoDisabled}
-                    onClick={() => {
-                      if (!state.isDocNoDisabled) {
-                        fetchTranData(state.documentNo, state.branchCode);
-                      }
-                    }}
-                  >
-                    <FontAwesomeIcon icon={faMagnifyingGlass} />
-                  </button>
-                </div>
-
-                {/* PR Date */}
-                <div className="relative">
-                  <input
-                    type="date"
-                    id="RRDate"
-                    className="peer global-tran-textbox-ui"
-                    value={header.rr_date}
-                    onChange={(e) =>
-                      setHeader((prev) => ({
-                        ...prev,
-                        rr_date: e.target.value,
-                      }))
-                    }
-                    disabled={isFormDisabled}
-                  />
-                  <label
-                    htmlFor="RRDate"
-                    className="global-tran-floating-label"
-                  >
-                    MSIS Date
-                  </label>
-                </div>
-
-                <div className="relative">
-                  <input
-                    type="text"
-                    id="drNo"
-                    value={attention}
-                    placeholder=" "
-                    onChange={(e) => updateState({ vendName: e.target.value })}
-                    className="peer global-tran-textbox-ui"
-                    disabled={isFormDisabled}
-                  />
-                  <label htmlFor="drno" className="global-tran-floating-label">
-                    MSIS Ref No.
-                  </label>
-                </div>
-              </div>
-
-              {/* Column 2: Responsibility Center / Requesting Dept / Tran Type */}
-              <div className="global-tran-textbox-group-div-ui">
-                {/* Responsibility Center */}
-                <div className="relative">
-                  <input
-                    type="text"
-                    id="rcName"
-                    value={rcName}
-                    readOnly
-                    placeholder=" "
-                    className="peer global-tran-textbox-ui"
-                  />
-                  <label
-                    htmlFor="rcName"
-                    className="global-tran-floating-label"
-                  >
-                    Responsibility Center<span className="text-red-500">*</span>
-                  </label>
-                  <button
-                    type="button"
-                    className={`global-tran-textbox-button-search-padding-ui ${
-                      isFetchDisabled
-                        ? "global-tran-textbox-button-search-disabled-ui"
-                        : "global-tran-textbox-button-search-enabled-ui"
-                    } global-tran-textbox-button-search-ui`}
-                    disabled={isFormDisabled}
-                    onClick={() =>
-                      !isFormDisabled &&
-                      updateState({
-                        rcLookupModalOpen: true,
-                        rcLookupContext: "rc",
-                      })
-                    }
-                  >
-                    <FontAwesomeIcon icon={faMagnifyingGlass} />
-                  </button>
-                </div>
-
-                {/* Requesting Dept. */}
-                <div className="relative group flex-[1.3]">
-                  <input
-                    type="text"
-                    id="rcName"
-                    value={reqRcName}
-                    readOnly
-                    placeholder=" "
-                    className="peer global-tran-textbox-ui"
-                  />
-                  <label
-                    htmlFor="reqRcName"
-                    className="global-tran-floating-label"
-                  >
-                    Requesting Dept.<span className="text-red-500">*</span>
-                  </label>
-                  <button
-                    type="button"
-                    className={`global-tran-textbox-button-search-padding-ui ${
-                      isFetchDisabled
-                        ? "global-tran-textbox-button-search-disabled-ui"
-                        : "global-tran-textbox-button-search-enabled-ui"
-                    } global-tran-textbox-button-search-ui`}
-                    disabled={isFormDisabled}
-                    onClick={() =>
-                      !isFormDisabled &&
-                      updateState({
-                        rcLookupModalOpen: true,
-                        rcLookupContext: "reqDept",
-                      })
-                    }
-                  >
-                    <FontAwesomeIcon icon={faMagnifyingGlass} />
-                  </button>
-                </div>
-
-                <div className="relative group flex-[1.3]">
-                  <input
-                    type="text"
-                    id="WHcode"
-                    value={state.WHname || state.WHcode || ""}
-                    readOnly
-                    placeholder=" "
-                    className="peer global-tran-textbox-ui"
-                  />
-                  <label
-                    htmlFor="WHcode"
-                    className="global-tran-floating-label"
-                  >
-                    Warehouse <span className="text-red-500">*</span>
-                  </label>
-                  <button
-                    type="button"
-                    className={`global-tran-textbox-button-search-padding-ui ${
-                      isFetchDisabled
-                        ? "global-tran-textbox-button-search-disabled-ui"
-                        : "global-tran-textbox-button-search-enabled-ui"
-                    } global-tran-textbox-button-search-ui`}
-                    disabled={isFormDisabled}
-                    onClick={() =>
-                      !isFormDisabled &&
-                      updateState({ warehouseLookupOpen: true })
-                    }
-                  >
-                    <FontAwesomeIcon icon={faMagnifyingGlass} />
-                  </button>
-                </div>
-
-                <div className="relative group flex-[1.3]">
-                  <input
-                    type="text"
-                    id="locName"
-                    value={state.locName || state.locCode || ""}
-                    readOnly
-                    placeholder=" "
-                    className="peer global-tran-textbox-ui"
-                    onClick={() =>
-                      !isFormDisabled &&
-                      updateState({ locationLookupOpen: true })
-                    }
-                  />
-                  <label
-                    htmlFor="locName"
-                    className="global-tran-floating-label"
-                  >
-                    Location <span className="text-red-500">*</span>
-                  </label>
-                  <button
-                    type="button"
-                    className={`global-tran-textbox-button-search-padding-ui ${
-                      isFetchDisabled
-                        ? "global-tran-textbox-button-search-disabled-ui"
-                        : "global-tran-textbox-button-search-enabled-ui"
-                    } global-tran-textbox-button-search-ui`}
-                    disabled={isFormDisabled}
-                    onClick={() =>
-                      !isFormDisabled &&
-                      updateState({ locationLookupOpen: true })
-                    }
-                  >
-                    <FontAwesomeIcon icon={faMagnifyingGlass} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Column 3: Currency */}
-              <div className="global-tran-textbox-group-div-ui">
-                {/* NEW FLEX CONTAINER FOR CURRENCY AND CURRENCY RATE */}
-                {/* Employee Name */}
-                <div className="relative group flex-[1.3]">
-                  <input
-                    type="text"
-                    id="vendCode"
-                    value={vendCOde}
-                    readOnly
-                    placeholder=" "
-                    className="peer global-tran-textbox-ui"
-                  />
-                  <label
-                    htmlFor="vendCode"
-                    className="global-tran-floating-label"
-                  >
-                    Employee Code
-                  </label>
-                  <button
-                    type="button"
-                    className={`global-tran-textbox-button-search-padding-ui ${
-                      isFetchDisabled
-                        ? "global-tran-textbox-button-search-disabled-ui"
-                        : "global-tran-textbox-button-search-enabled-ui"
-                    } global-tran-textbox-button-search-ui`}
-                    disabled={isFormDisabled}
-                    onClick={() =>
-                      !isFormDisabled &&
-                      updateState({
-                        rcLookupModalOpen: true,
-                        rcLookupContext: "payeeCode",
-                      })
-                    }
-                  >
-                    <FontAwesomeIcon icon={faMagnifyingGlass} />
-                  </button>
-                </div>
-
-                {/* Employee Name */}
-                <div className="relative group flex-[1.3]">
-                  <input
-                    type="text"
-                    id="vendCode"
-                    value={vendCOde}
-                    readOnly
-                    placeholder=" "
-                    className="peer global-tran-textbox-ui"
-                  />
-                  <label
-                    htmlFor="vendCode"
-                    className="global-tran-floating-label"
-                  >
-                    Employee Name
-                  </label>
-                </div>
-
-                {/* Customer Code  */}
-                <div className="relative group flex-[1.3]">
-                  <input
-                    type="text"
-                    id="vendCode"
-                    value={vendCOde}
-                    readOnly
-                    placeholder=" "
-                    className="peer global-tran-textbox-ui"
-                  />
-                  <label
-                    htmlFor="vendCode"
-                    className="global-tran-floating-label"
-                  >
-                    Customer Code
-                  </label>
-                  <button
-                    type="button"
-                    className={`global-tran-textbox-button-search-padding-ui ${
-                      isFetchDisabled
-                        ? "global-tran-textbox-button-search-disabled-ui"
-                        : "global-tran-textbox-button-search-enabled-ui"
-                    } global-tran-textbox-button-search-ui`}
-                    disabled={isFormDisabled}
-                    onClick={() =>
-                      !isFormDisabled &&
-                      updateState({
-                        rcLookupModalOpen: true,
-                        rcLookupContext: "payeeCode",
-                      })
-                    }
-                  >
-                    <FontAwesomeIcon icon={faMagnifyingGlass} />
-                  </button>
-                </div>
-
-                {/* Customer Name  */}
-                <div className="relative group flex-[1.3]">
-                  <input
-                    type="text"
-                    id="vendCode"
-                    value={vendCOde}
-                    readOnly
-                    placeholder=" "
-                    className="peer global-tran-textbox-ui"
-                  />
-                  <label
-                    htmlFor="vendCode"
-                    className="global-tran-floating-label"
-                  >
-                    Customer Name
-                  </label>
-                </div>
-
-                {/* po type */}
-
-                {/* <div className="relative">
-                <select
-                  id="poType"
-                  className="peer global-tran-textbox-ui"
-                  value={selectedPoType}
-                  onChange={handlePrTypeChange}
+                <FieldRenderer
+                  id="rr_date"
+                  label="MSIS Date"
+                  type="date"
+                  value={state.header?.rr_date || header.rr_date || ""}
                   disabled={isFormDisabled}
-                >
-                  <option value="">Open</option>
-                  <option value="">Closed</option>
-                  <option value="">Cancelled</option>
-                </select>
-                <label htmlFor="prType" className="global-tran-floating-label">
-                  PO Status
-                </label>
-                <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
-                  <svg
-                    className="h-4 w-4 text-gray-500"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M19 9l-7 7-7-7"
-                    />
-                  </svg>
-                </div>
-              </div> */}
+                  onChange={(val) => {
+                    setHeader((prev) => ({ ...prev, rr_date: val }));
+                    updateState({ header: { ...(state.header || {}), rr_date: val } });
+                  }}
+                />
 
-                {/* colum 3 */}
-                {/* </div>
-              <div className="relative">
-                <select
-                  id="poType"
-                  className="peer global-tran-textbox-ui"
-                  value={selectedPoType}
-                  onChange={handlePrTypeChange}
+                <FieldRenderer
+                  id="msisRefNo"
+                  label="MSIS Ref No."
+                  type="text"
+                  value={attention || ""}
                   disabled={isFormDisabled}
-                >
-                  <option value="">Open</option>
-                  <option value="">Closed</option>
-                  <option value="">Cancelled</option>
-                </select>
-                <label htmlFor="prType" className="global-tran-floating-label">
-                  PO Status
-                </label>
-                <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
-                  <svg
-                    className="h-4 w-4 text-gray-500"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M19 9l-7 7-7-7"
-                    />
-                  </svg>
-                </div> */}
+                  onChange={(val) => updateState({ attention: val })}
+                />
               </div>
 
-              {/* Remarks (spans all 3 header columns) */}
+              {/* Column 2 */}
+              <div className="global-tran-textbox-group-div-ui">
+                <FieldRenderer
+                  id="rcName"
+                  label="Responsibility Center"
+                  type="lookup"
+                  value={rcName || ""}
+                  required
+                  readOnly
+                  disabled={isFormDisabled}
+                  lookupDisabled={isFormDisabled}
+                  onLookup={() =>
+                    !isFormDisabled &&
+                    updateState({
+                      rcLookupModalOpen: true,
+                      rcLookupContext: "rc",
+                    })
+                  }
+                />
+
+                <FieldRenderer
+                  id="reqRcName"
+                  label="Requesting Dept."
+                  type="lookup"
+                  value={reqRcName || ""}
+                  required
+                  readOnly
+                  disabled={isFormDisabled}
+                  lookupDisabled={isFormDisabled}
+                  onLookup={() =>
+                    !isFormDisabled &&
+                    updateState({
+                      rcLookupModalOpen: true,
+                      rcLookupContext: "reqDept",
+                    })
+                  }
+                />
+
+                <FieldRenderer
+                  id="WHcode"
+                  label="Warehouse"
+                  type="lookup"
+                  value={state.WHname || state.WHcode || ""}
+                  required
+                  readOnly
+                  disabled={isFormDisabled}
+                  lookupDisabled={isFormDisabled}
+                  onLookup={() => !isFormDisabled && updateState({ warehouseLookupOpen: true })}
+                />
+
+                <FieldRenderer
+                  id="locName"
+                  label="Location"
+                  type="lookup"
+                  value={state.locName || state.locCode || ""}
+                  required
+                  readOnly
+                  disabled={isFormDisabled}
+                  lookupDisabled={isFormDisabled}
+                  onLookup={() => !isFormDisabled && updateState({ locationLookupOpen: true })}
+                />
+              </div>
+
+              {/* Column 3 */}
+              <div className="global-tran-textbox-group-div-ui">
+                <FieldRenderer
+                  id="vendCode"
+                  label="Employee Code"
+                  type="lookup"
+                  value={vendCode || vendCOde || ""}
+                  readOnly
+                  disabled={isFormDisabled}
+                  lookupDisabled={isFormDisabled}
+                  onLookup={() =>
+                    !isFormDisabled &&
+                    updateState({
+                      rcLookupModalOpen: true,
+                      rcLookupContext: "payeeCode",
+                    })
+                  }
+                />
+
+                <FieldRenderer
+                  id="vendName"
+                  label="Employee Name"
+                  type="text"
+                  value={vendName || ""}
+                  disabled={isFormDisabled}
+                  onChange={(val) => updateState({ vendName: val })}
+                />
+
+                <FieldRenderer
+                  id="custCode"
+                  label="Customer Code"
+                  type="lookup"
+                  value={state.custCode || ""}
+                  readOnly
+                  disabled={isFormDisabled}
+                  lookupDisabled={isFormDisabled}
+                  onLookup={() => !isFormDisabled && updateState({ custModalOpen: true })}
+                />
+
+                <FieldRenderer
+                  id="custName"
+                  label="Customer Name"
+                  type="text"
+                  value={state.custName || ""}
+                  disabled={isFormDisabled}
+                  onChange={(val) => updateState({ custName: val })}
+                />
+              </div>
+
               <div className="col-span-full">
                 <div className="relative p-2">
                   <textarea
@@ -1857,10 +1928,7 @@ const MSIS = () => {
                     onChange={(e) => updateState({ remarks: e.target.value })}
                     disabled={isFormDisabled}
                   />
-                  <label
-                    htmlFor="remarks"
-                    className="global-tran-floating-label-remarks"
-                  >
+                  <label htmlFor="remarks" className="global-tran-floating-label-remarks">
                     Remarks
                   </label>
                 </div>
@@ -1870,7 +1938,7 @@ const MSIS = () => {
         </div>
 
         {/* =====================
-            PR DETAIL TABLE (DT1)
+            MSIS DETAIL TABLE (DT1)
            ===================== */}
         <div className="global-tran-tab-div-ui">
           <div className="global-tran-tab-nav-ui">
@@ -1883,378 +1951,58 @@ const MSIS = () => {
 
           <div className="global-tran-table-main-div-ui">
             <div className="global-tran-table-main-sub-div-ui">
-              <table className="min-w-full border-collapse">
+              <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
                 <thead className="global-tran-thead-div-ui">
                   <tr>
-                    <th className="global-tran-th-ui">LN</th>
-                    <th className="global-tran-th-ui">Item Code</th>
-                    <th className="global-tran-th-ui">Item Description</th>
-                    <th className="global-tran-th-ui">UOM</th>
-                    <th className="global-tran-th-ui">Quantity</th>
-                    <th className="global-tran-th-ui">Unit Cost</th>
-                    <th className="global-tran-th-ui">Amount</th>
-                    <th className="global-tran-th-ui">Lot No</th>
-                    <th className="global-tran-th-ui">BB Date</th>
-                    <th className="global-tran-th-ui">Item Stat</th>
-                    <th className="global-tran-th-ui">Warehouse</th>
-                    <th className="global-tran-th-ui">Location</th>
-                    <th className="global-tran-th-ui">DR Acct</th>
-                    <th className="global-tran-th-ui">RC Code</th>
-                    <th className="global-tran-th-ui">SL Code</th>
-                    <th className="global-tran-th-ui">Qty on Hand</th>
-                    <th className="global-tran-th-ui">MRS No.</th>
-                    <th className="global-tran-th-ui">MRS Qty</th>
-
+                    {orderedMSISDetailColumns.map((column) =>
+                      renderMSISDetailHeader(column.label, column.key, column.width, {
+                        orderedColumns: orderedMSISDetailColumns,
+                      })
+                    )}
                     {!isFormDisabled && (
-                      <th className="global-tran-th-ui sticky right-0 bg-blue-300 dark:bg-blue-900 z-30">
-                        Delete
+                      <th
+                        className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900"
+                        style={transactionActionsHeaderStyle}
+                      >
+                        Actions
                       </th>
                     )}
                   </tr>
                 </thead>
-
-                <tbody>
-                  {detailRows.map((row, index) => {
-                    // Fallback mapping (since your old MSIS rows use qtyNeeded, etc.)
-                    const qty = row.quantity ?? row.qtyNeeded ?? "0.000000";
-                    const unitCost = row.unitCost ?? "0.000000";
-
-                    // Compute amount if not provided
-                    const computedAmount =
-                      row.amount ??
-                      String(
-                        (parseFormattedNumber(qty) || 0) *
-                          (parseFormattedNumber(unitCost) || 0),
-                      );
-
-                    return (
-                      <tr key={index} className="global-tran-tr-ui">
-                        {/* LN */}
-                        <td className="global-tran-td-ui text-center">
-                          {index + 1}
-                        </td>
-
-                        {/* Item Code */}
-                        <td className="global-tran-td-ui">
-                          <input
-                            type="text"
-                            className="w-[120px] global-tran-td-inputclass-ui"
-                            value={row.itemCode || ""}
-                            onChange={(e) =>
-                              handleDetailChange(
-                                index,
-                                "itemCode",
-                                e.target.value,
-                              )
-                            }
-                            disabled={isFormDisabled}
-                          />
-                        </td>
-
-                        {/* Item Description */}
-                        <td className="global-tran-td-ui">
-                          <input
-                            type="text"
-                            className="w-[240px] global-tran-td-inputclass-ui"
-                            value={row.itemName || ""}
-                            onChange={(e) =>
-                              handleDetailChange(
-                                index,
-                                "itemName",
-                                e.target.value,
-                              )
-                            }
-                            disabled={isFormDisabled}
-                          />
-                        </td>
-
-                        {/* UOM */}
-                        <td className="global-tran-td-ui">
-                          <input
-                            type="text"
-                            className="w-[80px] global-tran-td-inputclass-ui"
-                            value={row.uomCode || ""}
-                            onChange={(e) =>
-                              handleDetailChange(
-                                index,
-                                "uomCode",
-                                e.target.value,
-                              )
-                            }
-                            disabled={isFormDisabled}
-                          />
-                        </td>
-
-                        {/* Quantity */}
-                        <td className="global-tran-td-ui text-right">
-                          <input
-                            type="text"
-                            className="w-[120px] global-tran-td-inputclass-ui text-right"
-                            value={qty}
-                            onChange={(e) =>
-                              handleDetailChange(
-                                index,
-                                "quantity",
-                                e.target.value,
-                              )
-                            }
-                            disabled={isFormDisabled}
-                          />
-                        </td>
-
-                        {/* Unit Cost */}
-                        <td className="global-tran-td-ui text-right">
-                          <input
-                            type="text"
-                            className="w-[120px] global-tran-td-inputclass-ui text-right"
-                            value={unitCost}
-                            onChange={(e) =>
-                              handleDetailChange(
-                                index,
-                                "unitCost",
-                                e.target.value,
-                              )
-                            }
-                            disabled={isFormDisabled}
-                          />
-                        </td>
-
-                        {/* Amount */}
-                        <td className="global-tran-td-ui text-right">
-                          <input
-                            type="text"
-                            className="w-[120px] global-tran-td-inputclass-ui text-right bg-blue-50"
-                            value={row.amount ?? "0.00"}
-                            readOnly
-                            disabled={isFormDisabled}
-                          />
-                        </td>
-
-                        {/* Lot No */}
-                        <td className="global-tran-td-ui">
-                          <input
-                            type="text"
-                            className="w-[120px] global-tran-td-inputclass-ui"
-                            value={row.lotNo || ""}
-                            onChange={(e) =>
-                              handleDetailChange(index, "lotNo", e.target.value)
-                            }
-                            disabled={isFormDisabled}
-                          />
-                        </td>
-
-                        {/* BB Date */}
-                        <td className="global-tran-td-ui">
-                          <input
-                            type="date"
-                            className="w-[140px] global-tran-td-inputclass-ui"
-                            value={row.bbDate || ""}
-                            onChange={(e) =>
-                              handleDetailChange(
-                                index,
-                                "bbDate",
-                                e.target.value,
-                              )
-                            }
-                            disabled={isFormDisabled}
-                          />
-                        </td>
-
-                        {/* Item Stat */}
-                        <td className="global-tran-td-ui">
-                          <input
-                            type="text"
-                            className="w-[110px] global-tran-td-inputclass-ui"
-                            value={row.itemStat || ""}
-                            onChange={(e) =>
-                              handleDetailChange(
-                                index,
-                                "itemStat",
-                                e.target.value,
-                              )
-                            }
-                            disabled={isFormDisabled}
-                          />
-                        </td>
-
-                        {/* Warehouse */}
-                        <td className="global-tran-td-ui">
-                          <input
-                            type="text"
-                            className="w-[160px] global-tran-td-inputclass-ui"
-                            value={
-                              row.whName ??
-                              row.whouseName ??
-                              row.whouseCode ??
-                              row.WHname ??
-                              row.WHcode ??
-                              ""
-                            }
-                            onChange={(e) =>
-                              handleDetailChange(
-                                index,
-                                "whName",
-                                e.target.value,
-                              )
-                            }
-                            disabled={isFormDisabled}
-                          />
-                        </td>
-
-                        {/* Location */}
-                        <td className="global-tran-td-ui">
-                          <input
-                            type="text"
-                            className="w-[160px] global-tran-td-inputclass-ui"
-                            value={row.locName ?? row.locCode ?? ""}
-                            onChange={(e) =>
-                              handleDetailChange(
-                                index,
-                                "locName",
-                                e.target.value,
-                              )
-                            }
-                            disabled={isFormDisabled}
-                          />
-                        </td>
-
-                        {/* DR Account */}
-                        <td className="global-tran-td-ui relative">
-                          <div className="flex items-center">
-                            <input
-                              type="text"
-                              className="global-tran-td-inputclass-ui"
-                              value={row.drAcctCode || ""} // ✅ FIXED
-                              readOnly
-                              onClick={() => {
-                                console.log(
-                                  "🟨 DR ACCT CLICK row:",
-                                  index,
-                                  " current:",
-                                  row.drAcctCode,
-                                  row.drAcctName,
-                                );
-                                updateState({
-                                  selectedRowIndex: index,
-                                  showAccountModal: true,
-                                  accountModalSource: "drAcct",
-                                });
-                              }}
-                            />
-
-                            {!isFormDisabled && (
-                              <FontAwesomeIcon
-                                icon={faMagnifyingGlass}
-                                className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                                onClick={() => {
-                                  updateState({
-                                    selectedRowIndex: index,
-                                    showAccountModal: true,
-                                    accountModalSource: "drAcct",
-                                  });
-                                }}
-                              />
-                            )}
+                <tbody className="relative">
+                  {sortedMSISDetailRows.map(({ row, originalIndex }) => (
+                    <tr key={originalIndex} className="global-tran-tr-ui">
+                      {orderedMSISDetailColumns.map((column) =>
+                        renderMSISDetailCell(column.key, row, originalIndex)
+                      )}
+                      {!isFormDisabled && (
+                        <td
+                          className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black"
+                          style={transactionActionsCellStyle}
+                        >
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              className="global-tran-td-button-add-ui"
+                              onClick={() => handleAddBlankRow(originalIndex)}
+                            >
+                              <FontAwesomeIcon icon={faPlus} />
+                            </button>
+                            <button
+                              type="button"
+                              className="global-tran-td-button-delete-ui"
+                              onClick={() => handleDeleteRow(originalIndex)}
+                            >
+                              <FontAwesomeIcon icon={faTrashAlt} />
+                            </button>
                           </div>
                         </td>
-
-                        {/* RC Code */}
-                        <td className="global-tran-td-ui">
-                          <input
-                            type="text"
-                            className="w-[110px] global-tran-td-inputclass-ui"
-                            value={row.rcCode || rcCode || ""}
-                            onChange={(e) =>
-                              handleDetailChange(
-                                index,
-                                "rcCode",
-                                e.target.value,
-                              )
-                            }
-                            disabled={isFormDisabled}
-                          />
-                        </td>
-
-                        {/* SL Code */}
-                        <td className="global-tran-td-ui">
-                          <input
-                            type="text"
-                            className="w-[110px] global-tran-td-inputclass-ui"
-                            value={row.slCode || ""}
-                            onChange={(e) =>
-                              handleDetailChange(
-                                index,
-                                "slCode",
-                                e.target.value,
-                              )
-                            }
-                            disabled={isFormDisabled}
-                          />
-                        </td>
-
-                        {/* Qty on Hand */}
-                        <td className="global-tran-td-ui text-right">
-                          <input
-                            type="text"
-                            className="w-[120px] global-tran-td-inputclass-ui text-right"
-                            value={row.qtyOnHand || "0.000000"}
-                            onChange={(e) =>
-                              handleDetailChange(
-                                index,
-                                "qtyOnHand",
-                                e.target.value,
-                              )
-                            }
-                            disabled={isFormDisabled}
-                          />
-                        </td>
-
-                        {/* MRS No. */}
-                        <td className="global-tran-td-ui">
-                          <input
-                            type="text"
-                            className="w-[130px] global-tran-td-inputclass-ui"
-                            value={row.mrsNo || ""}
-                            onChange={(e) =>
-                              handleDetailChange(index, "mrsNo", e.target.value)
-                            }
-                            disabled={isFormDisabled}
-                          />
-                        </td>
-
-                        {/* MRS Qty */}
-                        <td className="global-tran-td-ui text-right">
-                          <input
-                            type="text"
-                            className="w-[120px] global-tran-td-inputclass-ui text-right"
-                            value={row.mrsQty || "0.000000"}
-                            onChange={(e) =>
-                              handleDetailChange(
-                                index,
-                                "mrsQty",
-                                e.target.value,
-                              )
-                            }
-                            disabled={isFormDisabled}
-                          />
-                        </td>
-
-                        {/* Delete */}
-                        {!isFormDisabled && (
-                          <td className="global-tran-td-ui text-center sticky right-0">
-                            <button
-                              className="global-tran-td-button-delete-ui"
-                              onClick={() => handleDeleteRow(index)}
-                            >
-                              -
-                            </button>
-                          </td>
-                        )}
-                      </tr>
-                    );
-                  })}
+                      )}
+                    </tr>
+                  ))}
                 </tbody>
               </table>
+              {renderMSISDetailHeaderContextMenu?.()}
             </div>
           </div>
 
@@ -2264,9 +2012,9 @@ const MSIS = () => {
               <div className="inline-block">
                 <button
                   onClick={handleOpenMSLookup}
-                  disabled={isFormDisabled || !rcCode || !reqRcCode}
+                  disabled={isFormDisabled || !rcCode || !reqRcCode || !state.WHcode}
                   className={`global-tran-tab-footer-button-add-ui ${
-                    isFormDisabled || !rcCode || !reqRcCode
+                    isFormDisabled || !rcCode || !reqRcCode || !state.WHcode
                       ? "opacity-50 cursor-not-allowed"
                       : ""
                   }`}
@@ -2280,16 +2028,10 @@ const MSIS = () => {
 
             <div className="global-tran-tab-footer-total-main-div-ui">
               <div className="global-tran-tab-footer-total-div-ui">
-                <label
-                  htmlFor="TotalQty"
-                  className="global-tran-tab-footer-total-label-ui"
-                >
-                  Total Qty Needed:
+                <label htmlFor="TotalQty" className="global-tran-tab-footer-total-label-ui">
+                  Total Quantity:
                 </label>
-                <label
-                  htmlFor="TotalQty"
-                  className="global-tran-tab-footer-total-value-ui"
-                >
+                <label htmlFor="TotalQty" className="global-tran-tab-footer-total-value-ui">
                   {totals.totalQtyNeeded}
                 </label>
               </div>
@@ -2389,15 +2131,17 @@ const MSIS = () => {
       )}
 
       {msLookupModalOpen && (
-  <MSInvLookup
-    isOpen={msLookupModalOpen}
-    onClose={handleCloseMSLookup}
-    userCode={state.userCode || "NSI"}
-    whouseCode={state.WHcode || ""}
-    locCode={state.locCode || ""}
-    docType="MSIS"
-  />
-)}
+        <GlobalLookupModalv1
+          isOpen={msLookupModalOpen}
+          data={globalLookupRow}
+          btnCaption="Get Selected Items"
+          title="MS Location Balance"
+          endpoint={globalLookupHeader}
+          onClose={handleCloseMSLookup}
+          onCancel={() => updateState({ msLookupModalOpen: false })}
+          singleSelect={false}
+        />
+      )}
 
 
       {state.warehouseLookupOpen && (
