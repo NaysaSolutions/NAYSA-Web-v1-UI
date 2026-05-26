@@ -625,11 +625,19 @@ const getFormattedDateTime = () => {
 
 
 
+//  const STANDARD_FONT_COLOR = "FF000000";
+//  const STANDARD_HEADER_FILL = "FFD9D9D9";
+//  const STANDARD_SUBTOTAL_FILL = "FFF8F8F8";
+//  const STANDARD_TOTAL_FILL = "FFF3F3F3";
+//  const STANDARD_GROUP_FILL = "FFF5F5F5";
+
+ 
  const STANDARD_FONT_COLOR = "FF000000";
- const STANDARD_HEADER_FILL = "FFD9D9D9";
- const STANDARD_SUBTOTAL_FILL = "FFF8F8F8";
- const STANDARD_TOTAL_FILL = "FFF3F3F3";
- const STANDARD_GROUP_FILL = "FFF5F5F5";
+ const STANDARD_HEADER_FILL = "d7ecff";
+ const STANDARD_SUBTOTAL_FILL = "f0f8ff";
+ const STANDARD_TOTAL_FILL = "d7ecff";
+ const STANDARD_GROUP_FILL = "f0f8ff";
+
  const borderThin = {};
 
 
@@ -657,7 +665,7 @@ const getFormattedDateTime = () => {
 //   const workbook = new ExcelJS.Workbook();
 //   workbook.creator = UserCode || "System";
 //   workbook.created = new Date();
-//   workbook.properties.defaultFont = { name: "Aptos", size: 10 };
+//   workbook.properties.defaultFont = { name: "Calibri", size: 10 };
 
 //   const MAX_COL_WIDTH = 60;
 //   const MIN_COL_WIDTH = 10;
@@ -757,7 +765,7 @@ const getFormattedDateTime = () => {
 //       const cell = ws.getCell(r, c);
 //       cell.value = val;
 //       cell.font = {
-//         name: "Aptos",
+//         name: "Calibri",
 //         size: 10,
 //         bold,
 //         color: { argb: STANDARD_FONT_COLOR },
@@ -773,7 +781,7 @@ const getFormattedDateTime = () => {
 //       vertical: "middle",
 //     };
 //     ws.getCell(currentRowIndex, 1).font = {
-//       name: "Aptos",
+//       name: "Calibri",
 //       size: 16,
 //       bold: true,
 //       color: { argb: STANDARD_FONT_COLOR },
@@ -797,7 +805,7 @@ const getFormattedDateTime = () => {
 //       vertical: "middle",
 //     };
 //     ws.getCell(currentRowIndex, 1).font = {
-//       name: "Aptos",
+//       name: "Calibri",
 //       size: 11,
 //       bold: true,
 //       italic: true,
@@ -826,7 +834,7 @@ const getFormattedDateTime = () => {
 //       const cell = headerRow.getCell(idx + 1);
 //       cell.value = col.label || col.key;
 //       cell.font = {
-//         name: "Aptos",
+//         name: "Calibri",
 //         size: 10,
 //         bold: true,
 //         color: { argb: STANDARD_FONT_COLOR },
@@ -953,7 +961,7 @@ const getFormattedDateTime = () => {
 //         const type = col.renderType || "text";
 
 //         cell.font = {
-//           name: "Aptos",
+//           name: "Calibri",
 //           size: 10,
 //           bold: isSubtotalRow,
 //           color: { argb: STANDARD_FONT_COLOR },
@@ -1027,7 +1035,7 @@ const getFormattedDateTime = () => {
 
 //       totalLabelCell.value = isGroupedMode ? "GRAND TOTAL" : "TOTAL";
 //       totalLabelCell.font = {
-//         name: "Aptos",
+//         name: "Calibri",
 //         size: 10,
 //         bold: true,
 //         color: { argb: STANDARD_FONT_COLOR },
@@ -1061,7 +1069,7 @@ const getFormattedDateTime = () => {
 
 //         if (type === "number" || type === "currency") {
 //           cell.font = {
-//             name: "Aptos",
+//             name: "Calibri",
 //             size: 10,
 //             bold: true,
 //             color: { argb: STANDARD_FONT_COLOR },
@@ -1119,7 +1127,7 @@ export async function exportGenericHistoryExcel(payload, columnConfigsMap, group
   const workbook = new ExcelJS.Workbook();
   workbook.creator = UserCode || "System";
   workbook.created = new Date();
-  workbook.properties.defaultFont = { name: "Aptos", size: 10 };
+  workbook.properties.defaultFont = { name: "Calibri", size: 10 };
 
   const MAX_TEXT_CHAR_WIDTH = 40;
   const MAX_NUM_CHAR_WIDTH = 25;
@@ -1248,7 +1256,7 @@ export async function exportGenericHistoryExcel(payload, columnConfigsMap, group
       const cell = ws.getCell(r, c);
       cell.value = val;
       cell.font = {
-        name: "Aptos",
+        name: "Calibri",
         size: 10,
         bold,
         color: { argb: STANDARD_FONT_COLOR },
@@ -1264,7 +1272,7 @@ export async function exportGenericHistoryExcel(payload, columnConfigsMap, group
       vertical: "middle",
     };
     ws.getCell(currentRowIndex, 1).font = {
-      name: "Aptos",
+      name: "Calibri",
       size: 16,
       bold: true,
       color: { argb: STANDARD_FONT_COLOR },
@@ -1287,7 +1295,7 @@ export async function exportGenericHistoryExcel(payload, columnConfigsMap, group
       vertical: "middle",
     };
     ws.getCell(currentRowIndex, 1).font = {
-      name: "Aptos",
+      name: "Calibri",
       size: 11,
       bold: true,
       italic: true,
@@ -1316,7 +1324,7 @@ export async function exportGenericHistoryExcel(payload, columnConfigsMap, group
       const cell = headerRow.getCell(idx + 1);
       cell.value = col.label || col.key;
       cell.font = {
-        name: "Aptos",
+        name: "Calibri",
         size: 10,
         bold: true,
         color: { argb: STANDARD_FONT_COLOR },
@@ -1443,7 +1451,7 @@ export async function exportGenericHistoryExcel(payload, columnConfigsMap, group
         const type = col.renderType || "text";
 
         cell.font = {
-          name: "Aptos",
+          name: "Calibri",
           size: 10,
           bold: isSubtotalRow,
           color: { argb: STANDARD_FONT_COLOR },
@@ -1517,7 +1525,7 @@ export async function exportGenericHistoryExcel(payload, columnConfigsMap, group
 
       totalLabelCell.value = isGroupedMode ? "GRAND TOTAL" : "TOTAL";
       totalLabelCell.font = {
-        name: "Aptos",
+        name: "Calibri",
         size: 10,
         bold: true,
         color: { argb: STANDARD_FONT_COLOR },
@@ -1551,7 +1559,7 @@ export async function exportGenericHistoryExcel(payload, columnConfigsMap, group
 
         if (type === "number" || type === "currency") {
           cell.font = {
-            name: "Aptos",
+            name: "Calibri",
             size: 10,
             bold: true,
             color: { argb: STANDARD_FONT_COLOR },
@@ -1682,7 +1690,7 @@ export const exportGenericQueryExcel = async (
       numFmt,
       style: {
         font: {
-          name: "Aptos",
+          name: "Calibri",
           size: 10,
           color: { argb: STANDARD_FONT_COLOR },
         },
@@ -1694,7 +1702,7 @@ export const exportGenericQueryExcel = async (
     const cell = worksheet.getCell(r, c);
     cell.value = val;
     cell.font = {
-      name: "Aptos",
+      name: "Calibri",
       size: 10,
       bold,
       color: { argb: STANDARD_FONT_COLOR },
@@ -1710,7 +1718,7 @@ export const exportGenericQueryExcel = async (
     vertical: "middle",
   };
   worksheet.getCell(currentRowIndex, 1).font = {
-    name: "Aptos",
+    name: "Calibri",
     size: 16,
     bold: true,
     color: { argb: STANDARD_FONT_COLOR },
@@ -1730,7 +1738,7 @@ export const exportGenericQueryExcel = async (
     vertical: "middle",
   };
   worksheet.getCell(currentRowIndex, 1).font = {
-    name: "Aptos",
+    name: "Calibri",
     size: 11,
     bold: true,
     italic: true,
@@ -1751,7 +1759,7 @@ export const exportGenericQueryExcel = async (
 
   headerRow.eachCell((cell) => {
     cell.font = {
-      name: "Aptos",
+      name: "Calibri",
       size: 10,
       bold: true,
       color: { argb: STANDARD_FONT_COLOR },
@@ -1786,7 +1794,7 @@ export const exportGenericQueryExcel = async (
           columns.find((c) => c.key === node.key)?.label
         }: ${node.value} (${node.count} items)`;
         groupRow.getCell(1).font = {
-          name: "Aptos",
+          name: "Calibri",
           size: 10,
           bold: true,
           color: { argb: STANDARD_FONT_COLOR },
@@ -1808,6 +1816,7 @@ export const exportGenericQueryExcel = async (
             subtotalRow.getCell(i).fill = {
               type: "pattern",
               pattern: "solid",
+              bold: true,
               fgColor: { argb: STANDARD_SUBTOTAL_FILL },
             };
             subtotalRow.getCell(i).border = {
@@ -1818,7 +1827,7 @@ export const exportGenericQueryExcel = async (
 
           subtotalRow.getCell(1).value = "Subtotal:";
           subtotalRow.getCell(1).font = {
-            name: "Aptos",
+            name: "Calibri",
             size: 10,
             bold: true,
             color: { argb: STANDARD_FONT_COLOR },
@@ -1831,8 +1840,9 @@ export const exportGenericQueryExcel = async (
               const cell = subtotalRow.getCell(index + 1);
 
               cell.font = {
-                name: "Aptos",
+                name: "Calibri",
                 size: 10,
+                bold: true,
                 color: { argb: STANDARD_FONT_COLOR },
               };
 
@@ -1859,7 +1869,7 @@ export const exportGenericQueryExcel = async (
 
           cell.value = value;
           cell.font = {
-            name: "Aptos",
+            name: "Calibri",
             size: 10,
             color: { argb: STANDARD_FONT_COLOR },
           };
@@ -1889,7 +1899,7 @@ export const exportGenericQueryExcel = async (
 
     totalRow.getCell(1).value = groupBy.length > 0 ? "GRAND TOTAL" : "TOTAL";
     totalRow.getCell(1).font = {
-      name: "Aptos",
+      name: "Calibri",
       size: 10,
       bold: true,
       color: { argb: STANDARD_FONT_COLOR },
@@ -1910,8 +1920,9 @@ export const exportGenericQueryExcel = async (
         const cell = totalRow.getCell(index + 1);
 
         cell.font = {
-          name: "Aptos",
+          name: "Calibri",
           size: 10,
+          bold: true,
           color: { argb: STANDARD_FONT_COLOR },
         };
 

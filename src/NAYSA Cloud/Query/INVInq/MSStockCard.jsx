@@ -98,17 +98,24 @@ function TabButton({ active, label, icon: Icon, onClick }) {
       onClick={onClick}
       className={`relative inline-flex items-center gap-2 px-5 py-3 text-[13px] font-semibold transition-all duration-200 mt-4 rounded-t-lg focus:outline-none ${
         active
-          ? "text-blue-700 bg-gradient-to-b from-blue-50 to-white shadow-[inset_0_2px_0_0_#2563eb] border border-b-0 border-slate-200"
-          : "text-slate-500 hover:text-blue-600 hover:bg-slate-50 border border-transparent"
+          ? "text-blue-700 dark:text-blue-400 bg-gradient-to-b from-blue-50 to-white dark:from-blue-950/60 dark:to-slate-900 shadow-[inset_0_2px_0_0_#2563eb] border border-b-0 border-slate-200 dark:border-slate-700"
+          : "text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 border border-transparent"
       }`}
       style={active ? { marginBottom: "-1px", zIndex: 1 } : {}}
     >
       {Icon && (
-        <span className={`flex items-center justify-center w-5 h-5 rounded ${active ? "bg-blue-100 text-blue-600" : "text-slate-400"}`}>
+        <span className={`flex items-center justify-center w-5 h-5 rounded transition-colors duration-150 ${
+          active
+            ? "bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-400"
+            : "text-slate-400 dark:text-slate-500"
+        }`}>
           <Icon size={13} />
         </span>
       )}
       <span>{label}</span>
+      {active && (
+        <span className="absolute bottom-0 left-4 right-4 h-0.5 rounded-full bg-blue-600 dark:bg-blue-400" />
+      )}
     </button>
   );
 }
@@ -121,8 +128,8 @@ function SubTabButton({ active, label, onClick }) {
       onClick={onClick}
       className={`px-4 py-1.5 rounded-md text-[11px] font-semibold tracking-wide transition-all duration-150 border ${
         active
-          ? "bg-blue-600 text-white border-blue-700 shadow-sm shadow-blue-200"
-          : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300 hover:text-blue-600"
+          ? "bg-blue-600 text-white border-blue-700 shadow-sm shadow-blue-200 dark:shadow-blue-900/40"
+          : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:text-blue-600 dark:hover:text-blue-400"
       }`}
     >
       {label}
@@ -133,9 +140,9 @@ function SubTabButton({ active, label, onClick }) {
 // ─── Toolbar Button ───────────────────────────────────────────────────────────
 function ToolbarButton({ children, onClick, icon: Icon, variant = "default", className = "" }) {
   const variants = {
-    default: "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-slate-300 hover:text-slate-800 shadow-sm",
-    primary: "border-blue-500 bg-blue-600 text-white hover:bg-blue-700 hover:border-blue-600 shadow-sm shadow-blue-200",
-    ghost: "border-transparent bg-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-700",
+    default: "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:text-slate-800 dark:hover:text-slate-100 shadow-sm",
+    primary: "border-blue-500 dark:border-blue-600 bg-blue-600 dark:bg-blue-700 text-white hover:bg-blue-700 dark:hover:bg-blue-600 hover:border-blue-600 shadow-sm shadow-blue-200 dark:shadow-blue-900/40",
+    ghost: "border-transparent bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200",
   };
   return (
     <button
@@ -149,18 +156,59 @@ function ToolbarButton({ children, onClick, icon: Icon, variant = "default", cla
   );
 }
 
+
+// ─── Header Action Button (Bank Recon style) ────────────────────────────────
+function HeaderActionButton({ children, onClick, icon: Icon, disabled = false, title = "" }) {
+  return (
+    <button
+      type="button"
+      title={title || children}
+      onClick={onClick}
+      disabled={disabled}
+      className="inline-flex min-w-[36px] flex-col items-center justify-center gap-0.5 rounded-md border border-blue-600 bg-blue-600 px-2 py-1.5 text-[10px] font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-65 lg:h-8 lg:flex-row lg:gap-0 lg:px-3 lg:py-2 lg:text-xs"
+    >
+      {Icon && <Icon size={13} className="lg:mr-2" />}
+      {children && (
+        <>
+          <span className="block text-[8px] leading-none lg:hidden">{children}</span>
+          <span className="hidden lg:inline">{children}</span>
+        </>
+      )}
+    </button>
+  );
+}
+
+function HeaderStatusCard({ label, value }) {
+  return (
+    <div className="flex h-10 min-w-[112px] flex-col items-center justify-center rounded-md bg-blue-100 px-3 py-1 text-center shadow-sm dark:bg-blue-950/40">
+      <span className="text-xs font-bold leading-tight text-slate-600 dark:text-slate-300">{label}</span>
+      <span className="text-[16px] font-extrabold leading-tight text-blue-700 dark:text-blue-300">{value || "—"}</span>
+    </div>
+  );
+}
+
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 function KpiCard({ label, value, icon: Icon, accentClass = "text-slate-700", bgClass = "bg-white" }) {
+  const iconStyles = {
+    "text-emerald-700": "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400",
+    "text-rose-600":    "bg-rose-50 dark:bg-rose-950/50 text-rose-500 dark:text-rose-400",
+    "text-blue-700":    "bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400",
+  };
+  const iconClass = iconStyles[accentClass] || "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400";
+  const valueClass = accentClass === "text-emerald-700" ? "text-emerald-700 dark:text-emerald-400"
+    : accentClass === "text-rose-600" ? "text-rose-600 dark:text-rose-400"
+    : accentClass === "text-blue-700" ? "text-blue-700 dark:text-blue-400"
+    : "text-slate-700 dark:text-slate-200";
   return (
-    <div className={`flex items-center gap-3 rounded-lg border border-slate-200 ${bgClass} px-4 py-3 min-w-[170px] shadow-sm hover:shadow-md hover:border-slate-300 transition-all duration-200`}>
+    <div className="flex items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 min-w-[170px] shadow-sm hover:shadow-md hover:border-slate-300 dark:hover:border-slate-600 transition-all duration-200 group">
       {Icon && (
-        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${accentClass === "text-emerald-700" ? "bg-emerald-50 text-emerald-600" : accentClass === "text-rose-600" ? "bg-rose-50 text-rose-500" : accentClass === "text-blue-700" ? "bg-blue-50 text-blue-600" : "bg-slate-100 text-slate-500"}`}>
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-transform duration-200 group-hover:scale-110 ${iconClass}`}>
           <Icon size={16} />
         </div>
       )}
       <div className="min-w-0">
-        <div className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold truncate leading-tight">{label}</div>
-        <div className={`text-sm font-bold tabular-nums mt-0.5 ${accentClass}`}>{value}</div>
+        <div className="text-[10px] uppercase tracking-widest text-slate-400 dark:text-slate-500 font-semibold truncate leading-tight">{label}</div>
+        <div className={`text-sm font-bold tabular-nums mt-0.5 ${valueClass}`}>{value}</div>
       </div>
     </div>
   );
@@ -170,10 +218,10 @@ function KpiCard({ label, value, icon: Icon, accentClass = "text-slate-700", bgC
 function SectionHeader({ title, badge }) {
   return (
     <div className="flex items-center gap-2.5 mb-2 px-1">
-      <span className="h-4 w-1 rounded-full bg-blue-600 shrink-0" />
-      <span className="text-[13px] font-bold text-slate-700 tracking-tight">{title}</span>
+      <span className="h-4 w-1 rounded-full bg-blue-600 dark:bg-blue-500 shrink-0" />
+      <span className="text-[13px] font-bold text-slate-700 dark:text-slate-200 tracking-tight">{title}</span>
       {badge != null && (
-        <span className="ml-1 rounded-md bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white tracking-wide">
+        <span className="ml-1 rounded-md bg-blue-600 dark:bg-blue-700 px-2 py-0.5 text-[10px] font-bold text-white tracking-wide">
           {badge}
         </span>
       )}
@@ -182,67 +230,96 @@ function SectionHeader({ title, badge }) {
 }
 
 // ─── Item Info Strip ──────────────────────────────────────────────────────────
-function ItemInfoStrip({ itemCode, itemName, uomCode }) {
+function ItemInfoStrip({ itemCode, itemName, uomCode, quantity, qtyAllocated, qtyAvailable }) {
   if (!itemCode && !itemName && !uomCode) {
     return (
-      <div className="flex items-center gap-2.5 rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-4 py-3.5 text-xs text-slate-400">
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-200/60">
-          <Package size={13} className="text-slate-400" />
+      <div className="flex items-center gap-2.5 rounded-lg border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/50 px-4 py-3.5 text-xs text-slate-400 dark:text-slate-500">
+        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-200/60 dark:bg-slate-700">
+          <Package size={13} className="text-slate-400 dark:text-slate-500" />
         </div>
         <span>Select an item from the summary table to view its balance details.</span>
       </div>
     );
   }
   return (
-    <div className="flex flex-wrap items-stretch gap-0 rounded-lg border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50/40 overflow-hidden shadow-sm">
-      <div className="flex flex-col justify-center px-5 py-3 border-r border-blue-200 min-w-[120px]">
-        <span className="text-[9px] uppercase tracking-widest text-blue-400 font-bold">Item Code</span>
-        <span className="text-sm font-bold text-blue-800 font-mono mt-0.5">{itemCode || "—"}</span>
+    <div className="flex flex-wrap items-stretch gap-0 rounded-lg border border-blue-200 dark:border-blue-900/60 bg-gradient-to-r from-blue-50 to-indigo-50/40 dark:from-blue-950/40 dark:to-indigo-950/20 overflow-hidden shadow-sm">
+      <div className="flex flex-col justify-center px-5 py-3 border-r border-blue-200 dark:border-blue-900/60 min-w-[120px]">
+        <span className="text-[9px] uppercase tracking-widest text-blue-500 dark:text-blue-400 font-bold">Item Code</span>
+        <span className="text-sm font-semibold text-blue-700 dark:text-blue-300 truncate mt-0.5">{itemCode || "—"}</span>
       </div>
-      <div className="flex flex-col justify-center flex-1 px-5 py-3 border-r border-blue-200 min-w-[180px]">
-        <span className="text-[9px] uppercase tracking-widest text-blue-400 font-bold">Description</span>
-        <span className="text-sm font-semibold text-slate-700 truncate mt-0.5">{itemName || "—"}</span>
+      <div className="flex flex-col justify-center flex-1 px-5 py-3 border-r border-blue-200 dark:border-blue-900/60 min-w-[180px]">
+        <span className="text-[9px] uppercase tracking-widest text-blue-500 dark:text-blue-400 font-bold">Item Name</span>
+        <span className="text-sm font-semibold text-blue-700 dark:text-blue-300 truncate mt-0.5">{itemName || "—"}</span>
       </div>
-      <div className="flex flex-col justify-center px-5 py-3 min-w-[70px]">
-        <span className="text-[9px] uppercase tracking-widest text-blue-400 font-bold">UOM</span>
-        <span className="text-sm font-bold text-slate-700 mt-0.5">{uomCode || "—"}</span>
+      <div className="flex flex-col justify-center px-5 py-3 border-r border-blue-200 dark:border-blue-900/60 min-w-[70px]">
+        <span className="text-[9px] uppercase tracking-widest text-blue-500 dark:text-blue-400 font-bold">UOM</span>
+        <span className="text-sm font-bold text-blue-700 dark:text-blue-300 mt-0.5">{uomCode || "—"}</span>
       </div>
+      {quantity != null && (
+        <div className="flex flex-col justify-center px-5 py-3 border-r border-blue-200 dark:border-blue-900/60 min-w-[100px]">
+          <span className="text-[9px] uppercase tracking-widest text-blue-500 dark:text-blue-400 font-bold">On Hand</span>
+          <span className="text-sm font-bold text-slate-700 dark:text-slate-200 tabular-nums mt-0.5">{quantity}</span>
+        </div>
+      )}
+      {qtyAllocated != null && (
+        <div className="flex flex-col justify-center px-5 py-3 border-r border-blue-200 dark:border-blue-900/60 min-w-[100px]">
+          <span className="text-[9px] uppercase tracking-widest text-blue-500 dark:text-blue-400 font-bold">Allocated</span>
+          <span className="text-sm font-bold text-blue-700 dark:text-blue-400 tabular-nums mt-0.5">{qtyAllocated}</span>
+        </div>
+      )}
+      {qtyAvailable != null && (
+        <div className="flex flex-col justify-center px-5 py-3 min-w-[100px]">
+          <span className="text-[9px] uppercase tracking-widest text-emerald-600 dark:text-emerald-500 font-bold">Available</span>
+          <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400 tabular-nums mt-0.5">{qtyAvailable}</span>
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── Filter Panel ─────────────────────────────────────────────────────────────
 function FilterPanel({ children, actions }) {
+  const [collapsed, setCollapsed] = React.useState(false);
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="flex items-center gap-2 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white px-4 py-2">
-        <span className="flex h-5 w-5 items-center justify-center rounded bg-blue-600">
+    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setCollapsed((v) => !v)}
+        className="flex w-full items-center gap-2 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-slate-50 to-white dark:from-slate-800/60 dark:to-slate-900 px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors duration-150 focus:outline-none"
+      >
+        <span className="flex h-5 w-5 items-center justify-center rounded bg-blue-600 dark:bg-blue-700 shrink-0">
           <Search size={10} className="text-white" />
         </span>
-        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Filter Criteria</span>
-      </div>
-      <div className="p-3">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-          {children}
-        </div>
-        {actions && (
-          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-            {actions}
+        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 flex-1 text-left">Filter Criteria</span>
+        <span className={`text-slate-400 dark:text-slate-500 transition-transform duration-200 ${collapsed ? "rotate-180" : ""}`}>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4.5L6 8.5L10 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </span>
+      </button>
+      {!collapsed && (
+        <div className="p-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {children}
           </div>
-        )}
-      </div>
+          {actions && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 dark:border-slate-800 pt-3">
+              {actions}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── Table Panel ──────────────────────────────────────────────────────────────
-function TablePanel({ title, badge, children }) {
+function TablePanel({ title, badge, children, toolbar }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="flex items-center gap-2 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white px-4 py-2.5">
+    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+      <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-slate-50 to-white dark:from-slate-800/50 dark:to-slate-900 px-2 py-2">
         <SectionHeader title={title} badge={badge} />
+        {toolbar && <div className="ml-auto flex items-center gap-1.5 pr-1">{toolbar}</div>}
       </div>
-      <div className="p-2">{children}</div>
+      <div className="">{children}</div>
     </div>
   );
 }
@@ -643,55 +720,65 @@ function MSStockCardQuery() {
   // ─── Column Definitions ──────────────────────────────────────────────────
   const balanceSummaryColumns = useMemo(
     () => [
-      { key: "categName", header: "Category", size: 150, cellClassName: "text-left text-[11px]" },
-      { key: "className", header: "Classification", size: 150, cellClassName: "text-left text-[11px]" },
-      { key: "itemCode", header: "Item No", size: 150, cellClassName: "text-left text-[11px]" },
-      { key: "itemName", header: "Description", size: 300, cellClassName: "text-left text-[11px]" },
-      { key: "uomCode", header: "UOM", size: 90, cellClassName: "text-center text-[11px]" },
-      { key: "quantity", header: "Quantity", size: 100, cellClassName: "text-right text-[11px]", type: "amount", decimals: 4 },
-      { key: "qtyAllocated", header: "Allocated", size: 100, cellClassName: "text-right text-blue-700 text-[11px]", type: "amount", decimals: 4 },
-      { key: "qtyAvailable", header: "Available", size: 100, cellClassName: "text-right text-emerald-700  text-[11px] font-bold ", type: "amount", decimals: 4 },
+      { key: "categName", header: "Category", size: 150, width: 150, minWidth: 120, cellClassName: "text-left text-[11px]" },
+      { key: "className", header: "Classification", size: 150, width: 150, minWidth: 120, cellClassName: "text-left text-[11px]" },
+      { key: "itemCode", header: "Item Code", size: 120, width: 120, minWidth: 120, cellClassName: "text-left text-[11px]" },
+      { key: "itemName", header: "Item Name", size: 300, width: 300, minWidth: 120, cellClassName: "text-left text-[11px]" },
+      { key: "uomCode", header: "UOM", size: 100, width: 100, minWidth: 100, cellClassName: "text-center text-[11px]" },
+      { key: "quantity", header: "Quantity", size: 100, width: 100, minWidth: 100, cellClassName: "text-right text-[11px]", type: "amount", decimals: 4 },
+      { key: "qtyAllocated", header: "Allocated", size: 100, width: 100, minWidth: 100, cellClassName: "text-right text-blue-700 text-[11px]", type: "amount", decimals: 4 },
+      { key: "qtyAvailable", header: "Available", size: 100, width: 100, minWidth: 100, cellClassName: "text-right text-emerald-700  text-[11px] font-bold ", type: "amount", decimals: 4 },
     ],
     []
   );
 
   const fifoDetailColumns = useMemo(
     () => [
-      { key: "rrDate", header: "RR Date", size: 110, type: "date" },
-      { key: "rrNo", header: "RR No", size: 140, cellClassName: "font-mono text-xs" },
-      { key: "unitCost", header: "Unit Cost", size: 120, cellClassName: "text-right", type: "amount", decimals: 6 },
-      { key: "qtyIn", header: "Qty In", size: 100, cellClassName: "text-right text-emerald-700 font-semibold", type: "amount", decimals: 4 },
-      { key: "qtyOut", header: "Qty Out", size: 100, cellClassName: "text-right text-rose-600 font-semibold", type: "amount", decimals: 4 },
-      { key: "balance", header: "Balance", size: 100, cellClassName: "text-right font-bold", type: "amount", decimals: 4 },
-      { key: "whouseCode", header: "Warehouse", size: 110 },
-      { key: "locCode", header: "Location", size: 110 },
-      { key: "lotNo", header: "Lot No", size: 110 },
-      { key: "bbDate", header: "BB Date", size: 110, type: "date" },
-      { key: "qcStat", header: "QC Status", size: 110 },
-      { key: "poNo", header: "PO No", size: 110, cellClassName: "font-mono text-xs" },
+      { key: "itemCode", header: "Item Code", size: 120, width: 120, minWidth: 120, cellClassName: "text-left text-[11px]" },
+      { key: "itemName", header: "Item Name", size: 300, width: 300, minWidth: 120, cellClassName: "text-left text-[11px]" },
+      { key: "uomCode", header: "UOM", size: 100, width: 100, minWidth: 100, cellClassName: "text-center text-[11px]" },
+      { key: "rrDate", header: "RR Date", size: 90, width: 90, minWidth: 90, cellClassName: "text-center text-[11px]", type: "date" },
+      { key: "rrNo", header: "RR No", size: 140, width: 140, minWidth: 140, cellClassName: "text-[11px]" },
+      { key: "unitCost", header: "Unit Cost", size: 120, width: 120, minWidth: 120, cellClassName: "text-right", type: "amount", decimals: 6 },
+      { key: "qtyIn", header: "Qty In", size: 100, width: 100, minWidth: 100, cellClassName: "text-right text-emerald-700 font-semibold", type: "amount", decimals: 4 },
+      { key: "qtyOut", header: "Qty Out", size: 100, width: 100, minWidth: 100, cellClassName: "text-right text-rose-600 font-semibold", type: "amount", decimals: 4 },
+      { key: "balance", header: "Balance", size: 100, width: 100, minWidth: 100, cellClassName: "text-right font-bold", type: "amount", decimals: 4 },
+      { key: "whouseCode", header: "Warehouse", size: 110, width: 110, minWidth: 110, cellClassName: "text-left text-[11px]" },
+      { key: "locCode", header: "Location", size: 110, width: 110, minWidth: 110, cellClassName: "text-left text-[11px]" },
+      { key: "lotNo", header: "Lot No", size: 110, width: 110, minWidth: 110, cellClassName: "text-left text-[11px]" },
+      { key: "bbDate", header: "BB Date", size: 110, width: 110, minWidth: 110, cellClassName: "text-center text-[11px]", type: "date" },
+      { key: "qcStat", header: "QC Status", size: 110, width: 110, minWidth: 110, cellClassName: "text-left text-[11px]" },
+      { key: "poNo", header: "PO No", size: 110, width: 110, minWidth: 110, cellClassName: "text-[11px]" },
     ],
     []
   );
 
   const locationDetailColumns = useMemo(
     () => [
-      { key: "whouseCode", header: "Warehouse", size: 120, cellClassName: "text-left text-[11px]" },
-      { key: "locCode", header: "Location", size: 120, cellClassName: "text-left text-[11px]" },
-      { key: "lotNo", header: "Lot No", size: 110, cellClassName: "text-left text-[11px]" },
-      { key: "bbDate", header: "BB Date", size: 110, cellClassName: "text-left text-[11px]", type: "date" },
-      { key: "qcStat", header: "QC Status", size: 110, cellClassName: "text-left text-[11px]" },
-      { key: "qtyIn", header: "Qty In", size: 100, cellClassName: "text-right text-emerald-700 text-[11px]", type: "amount", decimals: 4 },
-      { key: "qtyOut", header: "Qty Out", size: 100, cellClassName: "text-right text-rose-600 text-[11px]", type: "amount", decimals: 4 },
-      { key: "balance", header: "Balance", size: 100, cellClassName: "text-right font-bold text-[11px]", type: "amount", decimals: 4 },
+      { key: "itemCode", header: "Item Code", size: 100, width: 100, minWidth: 100, cellClassName: "text-left text-[11px]" },
+      { key: "itemName", header: "Item Name", size: 280, width: 280, minWidth: 120, cellClassName: "text-left text-[11px]" },
+      { key: "uomCode", header: "UOM", size: 90, width: 90, minWidth: 90, cellClassName: "text-center text-[11px]" },
+      { key: "whouseCode", header: "Warehouse", size: 110, width: 110, minWidth: 110, cellClassName: "text-left text-[11px]" },
+      { key: "locCode", header: "Location", size: 110, width: 110, minWidth: 110, cellClassName: "text-left text-[11px]" },
+      { key: "lotNo", header: "Lot No", size: 110, width: 110, minWidth: 110, cellClassName: "text-left text-[11px]" },
+      { key: "bbDate", header: "BB Date", size: 90, width: 90, minWidth: 90, cellClassName: "text-center text-[11px]", type: "date" },
+      { key: "qcStat", header: "QC Status", size: 110, width: 110, minWidth: 110, cellClassName: "text-left text-[11px]" },
+      { key: "qtyIn", header: "Qty In", size: 100, width: 100, minWidth: 100, cellClassName: "text-right text-emerald-700 text-[11px]", type: "amount", decimals: 4 },
+      { key: "qtyOut", header: "Qty Out", size: 100, width: 100, minWidth: 100, cellClassName: "text-right text-rose-600 text-[11px]", type: "amount", decimals: 4 },
+      { key: "balance", header: "Balance", size: 100, width: 100, minWidth: 100, cellClassName: "text-right font-bold text-[11px]", type: "amount", decimals: 4 },
     ],
     []
   );
 
   const allocationColumns = useMemo(
     () => [
-      { key: "docNo", header: "Document No", size: 180, cellClassName: "text-[11px]" },
-      { key: "docType", header: "Type", size: 120 },
-      { key: "qtyPicked", header: "Qty Picked", size: 130, cellClassName: "text-right font-semibold text-blue-700 text-[11px]", type: "amount", decimals: 4 },
+      { key: "docType", header: "Document Type", size: 100, width: 100, minWidth: 100, cellClassName: "text-[11px]" },
+      { key: "docNo", header: "Document No", size: 100, width: 100, minWidth: 100, cellClassName: "text-[11px]" },
+      { key: "docDate", header: "Document Date", size: 100, width: 100, minWidth: 100, cellClassName: "text-left text-[11px]", type: "date" },
+      { key: "itemCode", header: "Item Code", size: 110, width: 110, minWidth: 110, cellClassName: "text-left text-[11px]" },
+      { key: "itemName", header: "Item Name", size: 280, width: 280, minWidth: 120, cellClassName: "text-left text-[11px]" },
+      { key: "uomCode", header: "UOM", size: 90, width: 90, minWidth: 90, cellClassName: "text-center text-[11px]" },
+      { key: "qtyPicked", header: "Qty Picked", size: 130, width: 130, minWidth: 130, cellClassName: "text-right font-semibold text-blue-700 text-[11px]", type: "amount", decimals: 4 },
     ],
     []
   );
@@ -795,6 +882,7 @@ function MSStockCardQuery() {
         // label: "View",
         // size: 50,
         width: 50,
+        minWidth: 50,
         filterable: false,
         sortable: false,
         className: "text-center",
@@ -826,6 +914,16 @@ function MSStockCardQuery() {
                 Find
               </ToolbarButton>
               <ToolbarButton
+                icon={Layers}
+                onClick={() => {
+                  setBalanceFilters((prev) => ({ ...prev, warehouseCode: "", warehouseName: "", locationCode: "", locationName: "" }));
+                  setSelectedBalanceItem(null);
+                  setShouldLoadBalance((p) => p + 1);
+                }}
+              >
+                All Warehouses
+              </ToolbarButton>
+              <ToolbarButton
                 icon={RefreshCcw}
                 onClick={() => {
                   setBalanceFilters(defaultBalanceFilters);
@@ -834,9 +932,6 @@ function MSStockCardQuery() {
               >
                 Reset
               </ToolbarButton>
-              {/* <ToolbarButton icon={Download} onClick={handleExportPlaceholder}>
-                Export
-              </ToolbarButton> */}
             </>
           }
         >
@@ -910,15 +1005,17 @@ function MSStockCardQuery() {
             type="text"
             label="Reference Date"
             name="refDate"
-            value={formatDateValue(balanceFilters.refDate)}
+            value={balanceFilters.refDate}
             onChange={(e) => setBalanceFilters((prev) => ({ ...prev, refDate: e.target.value }))}
           /> */}
+
+
+
         </FilterPanel>
 
         {/* Summary + Details side-by-side */}
-        <div className="grid grid-cols-1 gap-2 xl:grid-cols-12">
+        <div className="xl:col-span-12 space-y-2">
           {/* Summary Table */}
-          <div className="xl:col-span-6">
             <TablePanel title={tabLabel} badge={balanceSummaryRows.length || undefined}>
               
               <SearchGlobalReferenceTable
@@ -928,18 +1025,22 @@ function MSStockCardQuery() {
                 isFetching={balanceQuery.isFetching}
                 onRowClick={handleBalanceRowClick}
                 selectedRow={selectedBalanceItem}
-                tableSize="Half"
+                showPagination={false}
+                autoFillGrid = "true"
+                // tableSize="Half"
               />
             </TablePanel>
-          </div>
 
           {/* Right Column */}
-          <div className="xl:col-span-6 space-y-3">
+          <div className="xl:col-span-12 space-y-2">
             {/* Item Info Strip */}
             <ItemInfoStrip
               itemCode={selectedBalanceItem?.itemCode}
               itemName={selectedBalanceItem?.itemName}
               uomCode={selectedBalanceItem?.uomCode}
+              quantity={selectedBalanceItem?.quantity != null ? fmt4(selectedBalanceItem.quantity) : undefined}
+              qtyAllocated={selectedBalanceItem?.qtyAllocated != null ? fmt4(selectedBalanceItem.qtyAllocated) : undefined}
+              qtyAvailable={selectedBalanceItem?.qtyAvailable != null ? fmt4(selectedBalanceItem.qtyAvailable) : undefined}
             />
 
             {/* Balance Details */}
@@ -949,7 +1050,8 @@ function MSStockCardQuery() {
                 data={selectedDetailRows}
                 isLoading={balanceQuery.isLoading}
                 isFetching={balanceQuery.isFetching}
-                tableSize="Half"
+                showPagination={false}
+                autoFillGrid = "true"
               />
             </TablePanel>
 
@@ -960,8 +1062,8 @@ function MSStockCardQuery() {
                 data={selectedAllocatedRows}
                 isLoading={balanceQuery.isLoading}
                 isFetching={balanceQuery.isFetching}
+                showPagination={false}
                 autoFillGrid = "true"
-                tableSize="Half"
               />
             </TablePanel>
           </div>
@@ -1060,34 +1162,29 @@ function MSStockCardQuery() {
             editableLookup
             onClear={() => setStockCardFilters((prev) => ({ ...prev, endingCutoff: "" }))}
           />
+         
         </FilterPanel>
 
         {/* Toolbar + KPI Row */}
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
-          <div className="flex items-center gap-1.5 border-r border-slate-200 pr-3 mr-1">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 shadow-sm">
+          {/* <div className="flex items-center gap-1.5 border-r border-slate-200 dark:border-slate-700 pr-3 mr-1">
             <ToolbarButton variant="primary" icon={Search} onClick={() => setShouldLoadStockCard((p) => p + 1)}>
               Find
             </ToolbarButton>
-            <ToolbarButton
-              icon={RefreshCcw}
-              onClick={() => setStockCardFilters(defaultStockCardFilters)}
-            >
+            <ToolbarButton icon={RefreshCcw} onClick={() => setStockCardFilters(defaultStockCardFilters)}>
+              Reset
+            </ToolbarButton>
+          </div> */}
+           {/* Action column inside grid */}
+          <div className="flex flex-wrap items-end gap-2">
+            <ToolbarButton variant="primary" icon={Search} onClick={() => setShouldLoadStockCard((p) => p + 1)}>
+              Find
+            </ToolbarButton>
+            <ToolbarButton icon={RefreshCcw} onClick={() => setStockCardFilters(defaultStockCardFilters)}>
               Reset
             </ToolbarButton>
           </div>
-          <ToolbarButton icon={Printer} onClick={() => window.print()}>
-            Print
-          </ToolbarButton>
-          <ToolbarButton
-            onClick={() =>
-              useSwalErrorAlert("View Document", "Please connect the document viewer action.")
-            }
-          >
-            View Document
-          </ToolbarButton>
-          {/* <ToolbarButton icon={Download} onClick={handleExportPlaceholder}>
-            Export to Excel
-          </ToolbarButton> */}
+
 
           {/* KPI Cards */}
           <div className="ml-auto flex flex-wrap gap-2">
@@ -1119,7 +1216,15 @@ function MSStockCardQuery() {
         </div>
 
         {/* Movement Table */}
-        <TablePanel title="Stock Card Movement" badge={stockCardRows.length || undefined}>
+        <TablePanel
+          title="Stock Card Movement"
+          badge={stockCardRows.length || undefined}
+          // toolbar={
+          //   <ToolbarButton icon={Download} onClick={() => window.print()}>
+          //     Export
+          //   </ToolbarButton>
+          // }
+        >
           <SearchGlobalReportTable
             columns={stockCardColumnsForTable}
             data={stockCardRows}
@@ -1236,7 +1341,7 @@ function MSStockCardQuery() {
 
         {/* Sub-tab pills */}
         <div className="flex items-center gap-2 px-1 py-1">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mr-1">View:</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mr-1">View:</span>
           {STOCK_STATUS_SUBTABS.map((tab) => (
             <SubTabButton
               key={tab.key}
@@ -1246,7 +1351,7 @@ function MSStockCardQuery() {
             />
           ))}
           {stockStatusRows.length > 0 && (
-            <span className="ml-2 rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500 border border-slate-200">
+            <span className="ml-2 rounded-md bg-slate-100 dark:bg-slate-700/60 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-600">
               {stockStatusRows.length} record{stockStatusRows.length !== 1 ? "s" : ""}
             </span>
           )}
@@ -1267,6 +1372,55 @@ function MSStockCardQuery() {
     );
   };
 
+  const activeLoading =
+    setupQuery.isLoading ||
+    balanceQuery.isLoading ||
+    balanceQuery.isFetching ||
+    stockCardQuery.isLoading ||
+    stockCardQuery.isFetching ||
+    stockStatusQuery.isLoading ||
+    stockStatusQuery.isFetching;
+
+  const activeTabLabel =
+    mainTabs.find((tab) => tab.key === activeMainTab)?.label || "Inventory Inquiry";
+
+  const activeRecordCount =
+    activeMainTab === "stockCard"
+      ? stockCardRows.length
+      : activeMainTab === "stockStatus"
+        ? stockStatusRows.length
+        : balanceSummaryRows.length;
+
+  const handleHeaderFind = React.useCallback(() => {
+    if (activeMainTab === "stockCard") {
+      setShouldLoadStockCard((prev) => prev + 1);
+      return;
+    }
+
+    if (activeMainTab === "stockStatus") {
+      setShouldLoadStockStatus((prev) => prev + 1);
+      return;
+    }
+
+    setSelectedBalanceItem(null);
+    setShouldLoadBalance((prev) => prev + 1);
+  }, [activeMainTab]);
+
+  const handleHeaderReset = React.useCallback(() => {
+    if (activeMainTab === "stockCard") {
+      setStockCardFilters(defaultStockCardFilters);
+      return;
+    }
+
+    if (activeMainTab === "stockStatus") {
+      setStockStatusFilters(defaultStockStatusFilters);
+      return;
+    }
+
+    setBalanceFilters(defaultBalanceFilters);
+    setSelectedBalanceItem(null);
+  }, [activeMainTab, defaultBalanceFilters, defaultStockCardFilters, defaultStockStatusFilters]);
+
   // ─── Root ─────────────────────────────────────────────────────────────────
   const activeLookupFilters = getFiltersByScope(lookupState.scope);
   const warehouseLookupFilter = activeLookupFilters?.branchCode
@@ -1275,11 +1429,56 @@ function MSStockCardQuery() {
   const locationLookupWarehouse = activeLookupFilters?.warehouseCode || "";
 
   return (
-    <div className="global-content-ui p-3 sm:p-4 space-y-3">
-      {/* Main Tab Container */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        {/* Tab Bar */}
-        <div className="flex flex-wrap gap-1 border-b border-slate-200 bg-gradient-to-b from-slate-50/80 to-white px-3 pt-0">
+    <div className="global-ref-main-div-ui mt-24">
+      {activeLoading && (
+        <div className="fixed inset-0 z-[1000003] flex flex-col items-center justify-center bg-white/45 backdrop-blur-[1px] dark:bg-slate-950/35">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-100 border-t-blue-600" />
+          <div className="mt-3 rounded-full bg-white/95 px-4 py-1.5 text-xs font-semibold text-slate-700 shadow dark:bg-slate-900 dark:text-slate-200">
+            Loading inventory inquiry...
+          </div>
+        </div>
+      )}
+
+      <div className="global-ref-header-ui" style={{ zIndex: 45 }}>
+        <div className="w-full flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="w-full lg:w-auto">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
+              <h1 className="global-ref-headertext-ui w-full sm:w-auto truncate text-center sm:text-left">
+                MS Stock Card Inquiry
+              </h1>
+            </div>
+            <p className="mt-1 ml-2 text-center text-xs font-medium text-slate-500 dark:text-slate-400 sm:text-left">
+              View inventory balance, stock card movement, and stock status in one workspace.
+            </p>
+          </div>
+
+          <div className="w-full lg:w-auto flex justify-center lg:justify-end">
+            <div className="flex flex-wrap items-center justify-center lg:justify-end gap-2">
+              <HeaderStatusCard label="Costing Setup" value={inventorySetup || "FIFO"} />
+              <HeaderStatusCard label="Active View" value={activeTabLabel} />
+              <div className="flex h-10 min-w-[96px] flex-col items-center justify-center rounded-md bg-slate-100 px-3 py-1 text-center shadow-sm dark:bg-slate-800">
+                <span className="text-xs font-bold leading-tight text-slate-600 dark:text-slate-300">Records</span>
+                <span className="text-[16px] font-extrabold leading-tight text-slate-900 dark:text-slate-100">{activeRecordCount}</span>
+              </div>
+              {/* <HeaderActionButton icon={Search} onClick={handleHeaderFind} disabled={activeLoading}>
+                Find
+              </HeaderActionButton>
+              <HeaderActionButton icon={RefreshCcw} onClick={handleHeaderReset} disabled={activeLoading}>
+                Reset
+              </HeaderActionButton>
+              <HeaderActionButton icon={Printer} onClick={() => window.print()} disabled={activeLoading}>
+                Print
+              </HeaderActionButton>
+              <HeaderActionButton icon={Download} onClick={() => window.print()} disabled={activeLoading}>
+                Export
+              </HeaderActionButton> */}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex flex-wrap gap-1 border-b border-slate-200 bg-gradient-to-b from-slate-50/80 to-white px-3 pt-0 dark:border-slate-700 dark:from-slate-800/60 dark:to-slate-900">
           {mainTabs.map((tab) => (
             <TabButton
               key={tab.key}
@@ -1291,8 +1490,7 @@ function MSStockCardQuery() {
           ))}
         </div>
 
-        {/* Tab Content */}
-        <div className="p-3 bg-slate-50/30">
+        <div className="p-3 bg-slate-50/30 dark:bg-slate-800/20">
           {(activeMainTab === "fifo" || activeMainTab === "location") && renderBalanceTab()}
           {activeMainTab === "stockCard" && renderStockCardTab()}
           {activeMainTab === "stockStatus" && renderStockStatusTab()}
