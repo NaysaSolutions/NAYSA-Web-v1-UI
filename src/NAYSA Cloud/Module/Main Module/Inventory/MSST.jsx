@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, Fragment } from "react";
 import Swal from "sweetalert2";
 import { useNavigate, useLocation } from "react-router-dom";
 import ExcelJS from "exceljs";
@@ -79,6 +79,7 @@ import {
   useGetCurrentDayV2,
   useformatToDatev2,
 } from "@/NAYSA Cloud/Global/dates";
+import DateFormatInput from "@/NAYSA Cloud/Global/DateFormatInput.jsx";
 
 import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
 
@@ -130,7 +131,6 @@ const getResponseValue = (row, keys) => {
 const getMSSTSaveResult = (response) => {
   const row = response?.data?.[0] || {};
   
-  // Debug: Log the full response and row structure
   console.log("📋 MSST Save Response:", {
     fullResponse: response,
     responseData: response?.data,
@@ -250,7 +250,6 @@ const MSST = () => {
     remarks: "",
     selectedTranType: "IW",
     userCode: currentUserRow?.userCode || user?.USER_CODE || "",
-    // userCode: "AGA",
 
     //Detail 1-2
     detailRows: [],
@@ -297,7 +296,6 @@ const MSST = () => {
   };
 
   const {
-    // Document info
     documentName,
     documentSeries,
     documentDocLen,
@@ -309,13 +307,11 @@ const MSST = () => {
     userCode,
     noReprints,
 
-    // Tabs & loading
     activeTab,
     GLactiveTab,
     isLoading,
     showSpinner,
 
-    // UI states / disable flags
     isDocNoDisabled,
     isSaveDisabled,
     isResetDisabled,
@@ -323,7 +319,6 @@ const MSST = () => {
     triggerGLEntries,
     itemSingleSelect,
 
-    // Currency
     glCurrMode,
     glCurrDefault,
     withCurr2,
@@ -333,7 +328,6 @@ const MSST = () => {
     glCurrGlobal3,
     defaultCurrRate,
 
-    // Transaction Header
     branchCode,
     branchName,
     currCode,
@@ -347,7 +341,6 @@ const MSST = () => {
     remarks,
     selectedTranType,
 
-    // Transaction details
     tblFieldArray,
     detailRows,
     detailRowsGL,
@@ -360,13 +353,11 @@ const MSST = () => {
     totalDebitFx2,
     totalCreditFx2,
 
-    // Contexts
     modalContext,
     selectionContext,
     selectedRowIndex,
     accountModalSource,
 
-    // Modals
     showAccountModal,
     showRcModal,
     showVatModal,
@@ -388,9 +379,8 @@ const MSST = () => {
     locationLookupOpen,
   } = state;
 
-  const [focusedCell, setFocusedCell] = useState(null); // { index: number, field: string }
+  const [focusedCell, setFocusedCell] = useState(null);
 
-  //Status Global Setup
   const displayStatus = status || "OPEN";
   const statusMap = {
     FINALIZED: "global-tran-stat-text-finalized-ui",
@@ -401,8 +391,6 @@ const MSST = () => {
   const isFormDisabled =
     isViewDocumentUrl ||
     ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
-
-  //Variables
 
   const [totals, setTotals] = useState({
     totalQuantity: "0.00",
@@ -509,19 +497,6 @@ const MSST = () => {
     </div>
   );
 
-  const loadServerDate = async () => {
-    try {
-      const response = await fetchDataJson("getMSSTServerDate", {});
-      const row = Array.isArray(response?.data) ? response.data[0] : response?.data;
-      const serverDate = row?.serverDate || row?.SERVERDATE || row?.server_date || "";
-      if (serverDate) {
-        updateState({ documentDate: serverDate });
-      }
-    } catch (error) {
-      console.error("Unable to load MSST server date:", error);
-    }
-  };
-
   const handleReset = () => {
     updateState({
       branchCode: currentUserRow?.branchCode || "HO",
@@ -543,7 +518,6 @@ const MSST = () => {
       itemSingleSelect: false,
       selectedTranType: "IW",
 
-      // UI state
       activeTab: "basic",
       GLactiveTab: "invoice",
       isDocNoDisabled: false,
@@ -553,8 +527,6 @@ const MSST = () => {
       status: "Open",
     });
 
-    // Replace browser date with SQL Server date once loaded.
-    loadServerDate();
     updateTotalsDisplay(0, 0);
   };
 
@@ -562,7 +534,6 @@ const MSST = () => {
     updateState({ isLoading: true });
 
     try {
-      // 🔹 1. Run these in parallel since they don’t depend on each other
       const data = await useTopDocDropDown(docType, "TRAN_TYPE");
       if (data) {
         updateState({
@@ -571,7 +542,6 @@ const MSST = () => {
         });
       }
 
-      // 🔹 2. Document row (independent)
       const docRow = await useTopDocControlRow(docType);
 
       if (docRow) {
@@ -582,7 +552,6 @@ const MSST = () => {
         });
       }
 
-      // 🔹 3. HS Options + Currency row (dependent chain)
       const hsOption = await useTopHSOption();
       if (hsOption) {
         updateState({
@@ -662,13 +631,16 @@ const MSST = () => {
         return resetState();
       }
 
-      // Format rows
       const retrievedDetailRows = (data.dt1 || []).map((item) => ({
         ...item,
         quantity: formatNumber(item.quantity, decQty),
         unitCost: formatNumber(item.unitCost, decUcost),
         itemAmount: formatNumber(item.itemAmount, 2),
         qtyHand: formatNumber(item.qtyHand, decQty),
+        whouseCode: item.frmwhouseCode || item.whouseCode || "",
+        toWHcode: item.towhouseCode || item.toWHcode || "",
+        locCode: item.frmlocCode || item.locCode || "",
+        tolocCode: item.tolocCode || "",
       }));
 
       const formattedGLRows = (data.dt2 || []).map((glRow) => ({
@@ -681,7 +653,6 @@ const MSST = () => {
         creditFx2: formatNumber(glRow.creditFx2),
       }));
 
-      // Update state with fetched data
       updateState({
         documentStatus: data.msstStatus,
         status: data.docStatus,
@@ -723,8 +694,6 @@ const MSST = () => {
       return;
     }
 
-    // 1. Helper function for formatting payload
-    // This is synchronous to prevent Babel 'await' errors during mapping
     const getFormattedPayload = (targetGLRows) => {
       const {
         branchCode,
@@ -810,8 +779,6 @@ const MSST = () => {
     try {
       let currentGL = [...state.detailRowsGL];
 
-      // --- STEP 1: AUTO-GENERATE IF UPSERTING WITH EMPTY GL ---
-      // This allows "Generate then Save" in one click
       if (
         action === "Upsert" &&
         currentGL.length === 0 &&
@@ -830,7 +797,6 @@ const MSST = () => {
         }
       }
 
-      // --- STEP 2: MANUAL GENERATE GL ---
       if (action === "GenerateGL") {
         try {
           updateState({ detailRowsGL: [], isGeneratingGL: true });
@@ -848,13 +814,9 @@ const MSST = () => {
         return;
       }
 
-      // --- STEP 3: UPSERT (SAVE) ---
       if (action === "Upsert") {
-        // We use currentGL variable because state updates are async
-        // and wouldn't be available yet if we just generated them.
         const savePayload = getFormattedPayload(currentGL);
         console.log("🚀 Saving MSST with payload:", savePayload);
-        console.log("📊 Document Info - Series:", documentSeries, "DocLen:", documentDocLen, "Current DocNo:", documentNo);
         
         const response = await useTransactionUpsert(
           docType,
@@ -871,8 +833,6 @@ const MSST = () => {
             documentNo: responseDocNo,
             documentID: responseDocId,
           } = getMSSTSaveResult(response);
-
-          console.log("🔍 After getMSSTSaveResult:", { responseDocNo, responseDocId });
 
           if (responseDocNo) {
             await fetchTranData(responseDocNo, branchCode);
@@ -1145,7 +1105,6 @@ const MSST = () => {
     };
   };
 
-  //  ** View Document and Transaction History Retrieval ***
   const cleanUrl = useCallback(() => {
     window.history.replaceState({}, "", window.location.origin);
   }, []);
@@ -1158,7 +1117,7 @@ const MSST = () => {
 
       await fetchTranData(docNo, branchCode);
       setTopTab("details");
-      cleanUrl(); //
+      cleanUrl();
     },
     [fetchTranData, cleanUrl],
   );
@@ -1181,8 +1140,6 @@ const MSST = () => {
   };
 
   const updateTotals = (rows) => {
-    //console.log("updateTotals received rows:", rows); // STEP 5: Check rows passed to updateTotals
-
     let totalQuantity = 0;
     let totalItemAmount = 0;
 
@@ -1259,8 +1216,6 @@ const MSST = () => {
       }
     };
 
-    // --- MODIFIED autoFillBlanks END ---
-
     if (field === "acctCode") {
       row.acctCode = value.acctCode;
       await autoFillBlanks("acctCode", value.acctCode);
@@ -1323,7 +1278,6 @@ const MSST = () => {
       const origQuantity = parseFormattedNumber(row.quantity) || 0;
       const origUnitCost = parseFormattedNumber(row.unitCost) || 0;
       const origQtyHand = parseFormattedNumber(row.qtyHand) || 0;
-      const origOperation = row.operation;
 
       const recalcRow = async () => {
         let processedQty = Math.abs(origQuantity);
@@ -1772,7 +1726,6 @@ const MSST = () => {
         return [];
       }
 
-      // Base configuration shared by both rows
       const baseRow = {
         itemCode: item?.itemCode ?? "",
         itemName: item?.itemName ?? "",
@@ -1797,7 +1750,6 @@ const MSST = () => {
 
       if (selectedTranType === "IR") {
         return [
-          // 1st Record: Has uniqueKey, Quantity is negative qtyHand
           {
             ...baseRow,
             uniqueKey: originalKey,
@@ -1806,10 +1758,9 @@ const MSST = () => {
             itemAmount: formatNumber(rawQtyHand * rawUnitCost * -1, 2),
             operation: "S",
           },
-          // 2nd Record: No uniqueKey, Quantity is positive qtyHand
           {
             ...baseRow,
-            uniqueKey: "", // No value as requested
+            uniqueKey: "",
             quantity: formatNumber(rawQtyHand, decQty),
             qtyHand: formatNumber(0, decQty),
             itemAmount: formatNumber(rawQtyHand * rawUnitCost, 2),
@@ -1818,7 +1769,6 @@ const MSST = () => {
         ];
       }
 
-      // Default logic for other types (Single row, original key)
       return [
         {
           ...baseRow,
@@ -1872,9 +1822,6 @@ const MSST = () => {
       </div>
 
       <div className={topTab === "details" ? "" : "hidden"}>
-        {/* Page title and subheading */}
-
-        {/* Header Section */}
         <div className="global-tran-header-ui">
           <div className="global-tran-headertext-div-ui">
             <h1 className="global-tran-headertext-ui">{documentTitle}</h1>
@@ -1892,9 +1839,7 @@ const MSST = () => {
           </div>
         </div>
 
-        {/* Form Layout with Tabs */}
         <div className="global-tran-header-div-ui">
-          {/* Tab Navigation */}
           <div className="global-tran-header-tab-div-ui">
             <button
               className={`global-tran-tab-padding-ui ${
@@ -1906,19 +1851,14 @@ const MSST = () => {
             >
               Basic Information
             </button>
-            {/* Provision for Other Tabs */}
           </div>
 
-          {/* SVI Header Form Section - Main Grid Container */}
           <div
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 rounded-lg relative"
             id="pr_hd"
           >
-            {/* Columns 1–3 (Header fields) */}
             <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Column 1 */}
               <div className="global-tran-textbox-group-div-ui">
-                {/* Branch Name Input with lookup button */}
                 <div className="relative">
                   <input
                     type="text"
@@ -1953,7 +1893,6 @@ const MSST = () => {
                   </button>
                 </div>
 
-                {/* SVI Number Field */}
                 <div className="relative">
                   <input
                     type="text"
@@ -1962,7 +1901,6 @@ const MSST = () => {
                     onChange={(e) =>
                       updateState({ documentNo: e.target.value })
                     }
-                    // onBlur={handleDocNoBlur}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         handleDocNoBlur();
@@ -1986,7 +1924,6 @@ const MSST = () => {
                         ? "global-tran-textbox-button-search-disabled-ui"
                         : "global-tran-textbox-button-search-enabled-ui"
                     } global-tran-textbox-button-search-ui`}
-                    // disabled={state.isFetchDisabled || state.isDocNoDisabled}
                     onClick={() => {
                       updateState({ showAllTranDocNo: true });
                     }}
@@ -1995,28 +1932,30 @@ const MSST = () => {
                   </button>
                 </div>
 
-                {/* SVI Date Picker */}
-                <div className="relative">
-                  <input
-                    type="date"
-                    id="msstDate"
-                    className="peer global-tran-textbox-ui"
-                    value={documentDate}
-                    onChange={(e) =>
-                      updateState({ documentDate: e.target.value })
-                    }
-                    disabled={isFormDisabled}
-                  />
-                  <label
-                    htmlFor="msstDate"
-                    className="global-tran-floating-label"
-                  >
+                <div className="relative w-full">
+                  <div className={`flex items-stretch global-ref-textbox-ui ${!isFormDisabled ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"}`}>
+                    <DateFormatInput
+                      id="msstDate"
+                      className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
+                      value={documentDate}
+                      disabled={isFormDisabled}
+                      updateState={(updates) => {
+                        if (updates.msstDate !== undefined) {
+                          updateState({ documentDate: updates.msstDate });
+                        } else if (updates.documentDate !== undefined) {
+                          updateState({ documentDate: updates.documentDate });
+                        } else {
+                          updateState(updates);
+                        }
+                      }}
+                    />
+                  </div>
+                  <label htmlFor="msstDate" className="global-ref-floating-label">
                     MSST Date
                   </label>
                 </div>
               </div>
 
-              {/* Column 2 */}
               <div className="global-tran-textbox-group-div-ui">
                 <div className="relative">
                   <select
@@ -2106,7 +2045,6 @@ const MSST = () => {
                 </div>
               </div>
 
-              {/* Column 3 */}
               <div className="global-tran-textbox-group-div-ui">
                 <div className="relative group flex-[1.3]">
                   <input
@@ -2171,45 +2109,8 @@ const MSST = () => {
                     <FontAwesomeIcon icon={faMagnifyingGlass} />
                   </button>
                 </div>
-                {/*  
-                 <div className="relative group flex-[1.3]">
-                   <input
-                     type="text"
-                     id="locName"
-                     value={state.locName || state.locCode || ""}
-                     readOnly
-                     placeholder=" "
-                     className="peer global-tran-textbox-ui"
-                     onClick={() =>
-                       !isFormDisabled &&
-                       updateState({ locationLookupOpen: true })
-                     }
-                   />
-                   <label
-                     htmlFor="locName"
-                     className="global-tran-floating-label"
-                   >
-                     <span className="text-red-500">*</span> To Warehouse 
-                   </label>
-                   <button
-                     type="button"
-                     className={`global-tran-textbox-button-search-padding-ui ${
-                       isFetchDisabled
-                         ? "global-tran-textbox-button-search-disabled-ui"
-                         : "global-tran-textbox-button-search-enabled-ui"
-                     } global-tran-textbox-button-search-ui`}
-                     disabled={isFormDisabled}
-                     onClick={() =>
-                       !isFormDisabled &&
-                       updateState({ locationLookupOpen: true })
-                     }
-                   >
-                     <FontAwesomeIcon icon={faMagnifyingGlass} />
-                   </button>
-                 </div>                   */}
               </div>
 
-              {/* Remarks Section - Now inside the 3-column container, spanning all 3 */}
               <div className="col-span-full">
                 <div className="relative p-2">
                   <textarea
@@ -2230,18 +2131,13 @@ const MSST = () => {
                   </label>
                 </div>
               </div>
-            </div>{" "}
-            {/* End of the 3-column container */}
-            {/* Column 4 - Totals (remains unchanged, but its parent is now the main 4-column grid) */}
+            </div>
             <div className="global-tran-textbox-group-div-ui"></div>
           </div>
         </div>
 
-        {/* APV Detail Section */}
         <div id="apv_dtl" className="global-tran-tab-div-ui">
-          {/* Tab Navigation */}
           <div className="global-tran-tab-nav-ui">
-            {/* Tabs */}
             <div className="flex flex-row sm:flex-row">
               <button
                 className={`global-tran-tab-padding-ui ${
@@ -2249,14 +2145,11 @@ const MSST = () => {
                     ? "global-tran-tab-text_active-ui"
                     : "global-tran-tab-text_inactive-ui"
                 }`}
-                // onClick={() => setGLActiveTab('invoice')}
               >
                 Item Details
               </button>
             </div>
           </div>
-
-          {/* Invoice Details Button */}
 
           <div className="global-tran-table-main-div-ui">
             <div className="global-tran-table-main-sub-div-ui">
@@ -2329,12 +2222,10 @@ const MSST = () => {
                 <tbody className="relative">
                   {detailRows.map((row, index) => (
                     <tr key={index} className="global-tran-tr-ui">
-                      {/* LN */}
                       <td className="global-tran-td-ui text-center">
                         {index + 1}
                       </td>
 
-                      {/* Item Code */}
                       <td className="global-tran-td-ui relative">
                         <div className="flex items-center">
                           <input
@@ -2362,7 +2253,6 @@ const MSST = () => {
                         </div>
                       </td>
 
-                      {/* Description */}
                       <td className="global-tran-td-ui">
                         <input
                           type="text"
@@ -2379,7 +2269,6 @@ const MSST = () => {
                         />
                       </td>
 
-                      {/* UOM */}
                       <td className="global-tran-td-ui">
                         <input
                           type="text"
@@ -2464,11 +2353,7 @@ const MSST = () => {
                           type="text"
                           className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
                           value={row.unitCost || ""}
-                          readOnly={
-                            isFormDisabled ||
-                            selectedTranType === "IL" ||
-                            (selectedTranType === "IR" && row.operation === "S")
-                          }
+                          readOnly={true}
                           onChange={(e) => {
                             const inputValue = e.target.value;
                             const sanitizedValue = inputValue.replace(
@@ -2537,11 +2422,7 @@ const MSST = () => {
                           value={
                             formatNumber(
                               parseFormattedNumber(row.itemAmount),
-                            ) ||
-                            formatNumber(
-                              parseFormattedNumber(row.itemAmount),
-                            ) ||
-                            ""
+                            ) || ""
                           }
                           readOnly
                         />
@@ -2552,11 +2433,7 @@ const MSST = () => {
                           type="text"
                           className="w-[200px] global-tran-td-inputclass-ui"
                           value={row.lotNo || ""}
-                          readOnly={
-                            isFormDisabled ||
-                            selectedTranType === "IL" ||
-                            (selectedTranType === "IR" && row.operation === "S")
-                          }
+                          readOnly={true}
                           onChange={(e) =>
                             handleDetailChange(index, "lotNo", e.target.value)
                           }
@@ -2569,11 +2446,7 @@ const MSST = () => {
                           type="date"
                           className="w-[100px] global-tran-td-inputclass-ui"
                           value={toDateInputValue(row.bbDate)}
-                          readOnly={
-                            isFormDisabled ||
-                            selectedTranType === "IL" ||
-                            (selectedTranType === "IR" && row.operation === "S")
-                          }
+                          readOnly={true}
                           onChange={(e) =>
                             handleDetailChange(index, "bbDate", e.target.value)
                           }
@@ -2586,20 +2459,8 @@ const MSST = () => {
                             type="text"
                             className="w-[100px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
                             value={row.qstatCode || ""}
-                            readOnly
+                            readOnly={true}
                           />
-                          {!isFormDisabled && row.operation !== "S" && (
-                            <FontAwesomeIcon
-                              icon={faMagnifyingGlass}
-                              className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                              onClick={() => {
-                                updateState({
-                                  selectedRowIndex: index,
-                                  showQstatModal: true,
-                                });
-                              }}
-                            />
-                          )}
                         </div>
                       </td>
 
@@ -2860,9 +2721,7 @@ const MSST = () => {
             </div>
           </div>
 
-          {/* Invoice Details Footer */}
           <div className="global-tran-tab-footer-main-div-ui">
-            {/* Add Button */}
             <div className="global-tran-tab-footer-button-div-ui">
               <button
                 onClick={() => handleAddRow()}
@@ -2874,9 +2733,7 @@ const MSST = () => {
               </button>
             </div>
 
-            {/* Totals Section */}
             <div className="global-tran-tab-footer-total-main-div-ui">
-              {/* Total Invoice Amount */}
               <div className="global-tran-tab-footer-total-div-ui">
                 <label className="global-tran-tab-footer-total-label-ui">
                   Total Quantity:
@@ -2889,7 +2746,6 @@ const MSST = () => {
                 </label>
               </div>
 
-              {/* Total VAT Amount */}
               <div className="global-tran-tab-footer-total-div-ui">
                 <label className="global-tran-tab-footer-total-label-ui">
                   Total Amount:
@@ -2905,14 +2761,11 @@ const MSST = () => {
           </div>
         </div>
 
-        {/* General Ledger Button */}
         <div
           className="global-tran-tab-div-ui"
           hidden={handleFieldBehavior("hiddenBBMode")}
         >
-          {/* Tab Navigation */}
           <div className="global-tran-tab-nav-ui">
-            {/* Tabs */}
             <div className="flex flex-row sm:flex-row">
               <button
                 className={`global-tran-tab-padding-ui ${
@@ -2926,12 +2779,11 @@ const MSST = () => {
               </button>
             </div>
 
-            {/* Action Button */}
             <div className="flex justify-end">
               <button
                 onClick={() => handleActivityOption("GenerateGL")}
                 className="global-tran-button-generateGL"
-                disabled={isLoading} // Optionally disable button while loading
+                disabled={isLoading}
                 style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
               >
                 {isLoading ? "Generating..." : "Generate GL Entries"}
@@ -2939,7 +2791,6 @@ const MSST = () => {
             </div>
           </div>
 
-          {/* GL Details Table */}
           <div className="global-tran-table-main-div-ui">
             <div className="global-tran-table-main-sub-div-ui">
               <table className="min-w-full border-collapse">
@@ -3616,7 +3467,6 @@ const MSST = () => {
           </div>
 
           <div className="global-tran-tab-footer-main-div-ui">
-            {/* Add Button */}
             <div className="global-tran-tab-footer-button-div-ui">
               <button
                 onClick={handleAddRowGL}
@@ -3628,9 +3478,7 @@ const MSST = () => {
               </button>
             </div>
 
-            {/* Totals Section */}
             <div className="global-tran-tab-footer-total-main-div-ui">
-              {/* Total Debit */}
               <div className="global-tran-tab-footer-total-div-ui">
                 <label
                   htmlFor="TotalDebit"
@@ -3646,7 +3494,6 @@ const MSST = () => {
                 </label>
               </div>
 
-              {/* Total Credit */}
               <div className="global-tran-tab-footer-total-div-ui">
                 <label
                   htmlFor="TotalCredit"
@@ -3686,7 +3533,6 @@ const MSST = () => {
           />
         )}
 
-        {/* COA Account Modal */}
         {showAccountModal && (
           <COAMastLookupModal
             isOpen={showAccountModal}
@@ -3695,7 +3541,6 @@ const MSST = () => {
           />
         )}
 
-        {/* RC Code Modal */}
         {showRcModal && (
           <RCLookupModal
             isOpen={showRcModal}
@@ -3704,7 +3549,6 @@ const MSST = () => {
           />
         )}
 
-        {/* VAT Code Modal */}
         {showVatModal && (
           <VATLookupModal
             isOpen={showVatModal}
@@ -3713,12 +3557,10 @@ const MSST = () => {
           />
         )}
 
-        {/* ATC Code Modal */}
         {showAtcModal && (
           <ATCLookupModal isOpen={showAtcModal} onClose={handleCloseAtcModal} />
         )}
 
-        {/* SL Code Lookup Modal */}
         {showSlModal && (
           <SLMastLookupModal
             isOpen={showSlModal}
@@ -3726,7 +3568,6 @@ const MSST = () => {
           />
         )}
 
-        {/* Cancellation Modal */}
         {showCancelModal && (
           <CancelTranModal
             isOpen={showCancelModal}
@@ -3811,7 +3652,6 @@ const MSST = () => {
           />
         )}
 
-        {/* 2. Header Level: From Warehouse Lookup */}
         {fromwarehouseLookupOpen && (
           <WarehouseLookupModal
             isOpen={fromwarehouseLookupOpen}
@@ -3863,7 +3703,7 @@ const MSST = () => {
         <AllTranHistory
           showHeader={false}
           endpoint="/getMSSTHistory"
-          cacheKey={`MSST:${state.branchCode || ""}:${state.docNo || ""}`} // ✅ per-transaction
+          cacheKey={`MSST:${state.branchCode || ""}:${state.docNo || ""}`}
           activeTabKey="MSST_Summary"
           branchCode={state.branchCode}
           startDate={state.fromDate}
@@ -3882,7 +3722,6 @@ const MSST = () => {
       </div>
     </div>
   );
-  // End of Return
 };
 
 export default MSST;
