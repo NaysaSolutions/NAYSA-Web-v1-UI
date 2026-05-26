@@ -87,6 +87,7 @@ import {
   useSwalvalidateRequiredFields,
   useSwalshowSaveSuccessDialog,
   useSwalSuccessAlert,
+  useSwalInfoAlert,
   useSwalErrorAlert
 } from '@/NAYSA Cloud/Global/behavior.jsx';
 
@@ -1150,7 +1151,14 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
     updateTotals([]);
   };
 
-  updateState({ isLoading: true });
+  updateState({
+    isLoading: true,
+    detailRows: [],
+    detailRowsGL: [],
+    ...getGLTotalsState([]),
+  });
+
+
   
   try {
     const data = await useFetchTranData(documentNo, branchCode, docType, "siNo", direction);
@@ -3469,10 +3477,21 @@ const handleOpenItemPickingModal = async (index) => {
     });
 
     const result = parseSprocJsonResult(response);
-    setItemPickingStockRows(Array.isArray(result?.stockRows) ? result.stockRows : []);
-    setItemPickingExistingAllocations(
-      Array.isArray(result?.existingAllocations) ? result.existingAllocations : []
-    );
+    const stockRows = Array.isArray(result?.stockRows) ? result.stockRows : [];
+    const existingAllocations = Array.isArray(result?.existingAllocations)
+      ? result.existingAllocations
+      : [];
+
+    if (stockRows.length === 0 && existingAllocations.length === 0) {
+      useSwalInfoAlert(
+        "Item Picking",
+        "There are no available records for picking."
+      );
+      return;
+    }
+
+    setItemPickingStockRows(stockRows);
+    setItemPickingExistingAllocations(existingAllocations);
     setItemPickingRowIndex(index);
     setShowItemPickingModal(true);
   } catch (error) {
