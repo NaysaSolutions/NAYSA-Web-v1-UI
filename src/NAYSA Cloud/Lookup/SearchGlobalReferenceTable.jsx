@@ -1733,7 +1733,7 @@ const SearchGlobalReferenceTable = forwardRef(
                             return (
                               <td
                                 key={col.key}
-                                className={`global-tran-td-ui align-center bg-white ${
+                                className={`global-tran-td-ui py-[3px] px-2 align-center bg-white ${
                                   isStickyLeft ? "sticky z-10 shadow-[-1px_0_0_0_rgba(229,231,235,1)]" : ""
                                 } ${col.className || ""}`}
                                 style={{
