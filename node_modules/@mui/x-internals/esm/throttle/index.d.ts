@@ -1,1 +1,1 @@
-export { throttle } from "./throttle.js";
+export * from "./throttle.js";
