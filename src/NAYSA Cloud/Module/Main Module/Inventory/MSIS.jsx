@@ -1463,8 +1463,8 @@ useEffect(() => {
     { key: "rcCode", label: "RC Code", width: 120 },
     { key: "slCode", label: "SL Code", width: 120 },
     { key: "qtyOnHand", label: "Qty on Hand", width: 130 },
-    { key: "mrsNo", label: "MRS No.", width: 130 },
-    { key: "mrsQty", label: "MRS Qty", width: 130 },
+    // { key: "mrsNo", label: "MRS No.", width: 130 },
+    // { key: "mrsQty", label: "MRS Qty", width: 130 },
   ], []);
 
   const {

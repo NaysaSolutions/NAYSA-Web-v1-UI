@@ -2909,42 +2909,36 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
         ];
 
   setLotEntryRows(
-    seededLots.map((lot, lotIndex) => ({
-      id: lot.id || lotIndex + 1,
-      lotNo: lot.lotNo || "",
-      quantity: lot.quantity || lot.rrQuantity || lot.rrQty || "",
-      bbDate: lot.bbDate ? String(lot.bbDate).substring(0, 10) : "",
-      qstatCode: lot.qstatCode || lot.qsCode || "",
-      whouseCode:
-        lot.whouseCode ||
-        lot.whCode ||
-        row?.whouseCode ||
-        row?.whCode ||
-        WHCode ||
-        "",
-      LocCode:
-        lot.LocCode ||
-        lot.locCode ||
-        row?.LocCode ||
-        row?.locCode ||
-        LocCode ||
-        "",
+  seededLots.map((lot, lotIndex) => ({
+    id: lot.id || lotIndex + 1,
 
-      itemCode: lot.itemCode || lot.item_code || row?.itemCode || "",
-      item_code: lot.item_code || lot.itemCode || row?.itemCode || "",
-      rcCode: lot.rcCode || lot.rc_code || row?.rcCode || row?.rc_code || "",
-      rc_code: lot.rc_code || lot.rcCode || row?.rcCode || row?.rc_code || "",
-      unitCost: lot.unitCost || lot.unit_cost || row?.unitCost || 0,
-      unit_cost: lot.unit_cost || lot.unitCost || row?.unitCost || 0,
-      netAmount: lot.netAmount || lot.net_amount || row?.netAmount || 0,
-      net_amount: lot.net_amount || lot.netAmount || row?.netAmount || 0,
-      groupId: lot.groupId || lot.group_id || row?.groupId || "",
-      group_id: lot.group_id || lot.groupId || row?.groupId || "",
-      lnNo: lot.lnNo || lot.ln_no || row?.lnNo || "",
-      ln_no: lot.ln_no || lot.lnNo || row?.lnNo || "",
-      controlNo: lot.controlNo || "",
-    }))
-  );
+    lotNo: lot.lotNo || "",
+    quantity: lot.quantity || lot.rrQty || "",
+    bbDate: lot.bbDate || "",
+    qstatCode: lot.qstatCode || lot.qsCode || "",
+    whouseCode: lot.whouseCode || lot.whCode || row.whouseCode || "",
+    LocCode: lot.LocCode || lot.locCode || row.LocCode || row.locCode || "",
+
+    itemCode: lot.itemCode || lot.item_code || row.itemCode || row.item_code || "",
+    item_code: lot.item_code || lot.itemCode || row.item_code || row.itemCode || "",
+
+    rcCode: lot.rcCode || lot.rc_code || row.rcCode || row.rc_code || state.rcCode || "",
+    rc_code: lot.rc_code || lot.rcCode || row.rc_code || row.rcCode || state.rcCode || "",
+
+    unitCost: lot.unitCost || lot.unit_cost || row.unitCost || row.unit_cost || 0,
+    unit_cost: lot.unit_cost || lot.unitCost || row.unit_cost || row.unitCost || 0,
+
+    netAmount: lot.netAmount || lot.net_amount || row.netAmount || row.net_amount || 0,
+    net_amount: lot.net_amount || lot.netAmount || row.net_amount || row.netAmount || 0,
+
+    groupId: lot.groupId || lot.group_id || row.groupId || row.group_id || "",
+    group_id: lot.group_id || lot.groupId || row.group_id || row.groupId || "",
+
+    lineNo: lot.lineNo || lot.line_no || lot.lnNo || row.lineNo || row.line_no || row.lnNo || rowIndex + 1,
+    line_no: lot.line_no || lot.lineNo || lot.lnNo || row.line_no || row.lineNo || row.lnNo || rowIndex + 1,
+    lnNo: lot.lnNo || lot.lineNo || lot.line_no || row.lnNo || row.lineNo || row.line_no || rowIndex + 1,
+  }))
+);
 
   setLotPickingRowIndex(index);
   setShowLotPickingModal(true);
@@ -5172,8 +5166,8 @@ const handleClosePayeeLookup = async (row) => {
         <AllTranHistory
           showHeader={false}
           endpoint="/getMSRRHistory"
-          cacheKey={`PR:${state.branchCode || ""}:${state.documentNo || ""}`}
-          activeTabKey="PR_Summary"
+          cacheKey={`MSRR:${state.branchCode || ""}:${state.documentNo || ""}`}
+          activeTabKey="MSRR_Summary"
           branchCode={state.branchCode}
           startDate={null}
           endDate={null}
