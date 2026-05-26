@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Swal from "sweetalert2";
 import { useNavigate, useLocation } from "react-router-dom";
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -113,6 +115,53 @@ const toDateInputValue = (value) => {
     return `${yyyy}-${mm}-${dd}`;
   }
   return "";
+};
+
+const getResponseValue = (row, keys) => {
+  for (const key of keys) {
+    const value = row?.[key];
+    if (value !== undefined && value !== null && value !== "") {
+      return value;
+    }
+  }
+  return "";
+};
+
+const getMSSTSaveResult = (response) => {
+  const row = response?.data?.[0] || {};
+  
+  // Debug: Log the full response and row structure
+  console.log("📋 MSST Save Response:", {
+    fullResponse: response,
+    responseData: response?.data,
+    firstRow: row,
+    rowKeys: Object.keys(row)
+  });
+  
+  const documentNo = getResponseValue(row, [
+    "msstNo",
+    "MSSTNo",
+    "msst_no",
+    "MSST_NO",
+    "docNo",
+    "DOC_NO",
+    "documentNo",
+    "DOCUMENT_NO",
+  ]);
+  const documentID = getResponseValue(row, [
+    "msstId",
+    "MSSTId",
+    "msst_id",
+    "MSST_ID",
+    "docId",
+    "DOC_ID",
+    "documentID",
+    "DOCUMENT_ID",
+  ]);
+
+  console.log("📄 Extracted Values:", { documentNo, documentID });
+  
+  return { documentNo, documentID };
 };
 
 const MSST = () => {
@@ -460,6 +509,19 @@ const MSST = () => {
     </div>
   );
 
+  const loadServerDate = async () => {
+    try {
+      const response = await fetchDataJson("getMSSTServerDate", {});
+      const row = Array.isArray(response?.data) ? response.data[0] : response?.data;
+      const serverDate = row?.serverDate || row?.SERVERDATE || row?.server_date || "";
+      if (serverDate) {
+        updateState({ documentDate: serverDate });
+      }
+    } catch (error) {
+      console.error("Unable to load MSST server date:", error);
+    }
+  };
+
   const handleReset = () => {
     updateState({
       branchCode: currentUserRow?.branchCode || "HO",
@@ -490,6 +552,9 @@ const MSST = () => {
       isFetchDisabled: false,
       status: "Open",
     });
+
+    // Replace browser date with SQL Server date once loaded.
+    loadServerDate();
     updateTotalsDisplay(0, 0);
   };
 
@@ -625,9 +690,9 @@ const MSST = () => {
         documentNo: data.msstNo,
         branchCode: data.branchCode,
         documentDate: useformatToDatev2(data.msstDate),
-        selectedTranType: data.tranType,
-        fromWhCode: data.fromWhCode,
-        toWhCode: data.toWhCode,
+        selectedTranType: data.tranType || data.tran_type || "IW",
+        fromWhCode: data.frmwhouseCode || data.fromWhCode || data.from_wh || "",
+        toWhCode: data.towhouseCode || data.toWhCode || data.to_wh || "",
         refDocNo1: data.refDocNo1,
         refDocNo2: data.refDocNo2,
         remarks: data.remarks,
@@ -681,7 +746,7 @@ const MSST = () => {
         msstNo: documentNo || "",
         msstId: documentID || "",
         msstDate: documentDate,
-        tranType: selectedTranType,
+        tranType: selectedTranType || "IW",
         fromWhCode: fromWhCode || "",
         toWhCode: toWhCode || "",
         refDocNo1: refDocNo1,
@@ -701,9 +766,13 @@ const MSST = () => {
           qstatCode: row.qstatCode || "",
           bbDate: row.bbDate || null,
           qtyHand: parseFormattedNumber(row.qtyHand || 0),
-          whouseCode: row.whouseCode || "",
-          toWHcode: row.toWHcode || "",
-          locCode: row.locCode || "",
+          trantype: selectedTranType || "IW",
+          whouseCode: row.whouseCode || row.frmwhouseCode || fromWhCode || "",
+          toWHcode: row.toWHcode || row.towhouseCode || toWhCode || "",
+          locCode: row.locCode || row.frmlocCode || "",
+          frmwhouseCode: row.frmwhouseCode || row.whouseCode || fromWhCode || "",
+          towhouseCode: row.towhouseCode || row.toWHcode || toWhCode || "",
+          frmlocCode: row.frmlocCode || row.locCode || "",
           tolocCode: row.tolocCode || "",
           acctCode: row.acctCode || "",
           rcCode: row.rcCode || "",
@@ -784,6 +853,9 @@ const MSST = () => {
         // We use currentGL variable because state updates are async
         // and wouldn't be available yet if we just generated them.
         const savePayload = getFormattedPayload(currentGL);
+        console.log("🚀 Saving MSST with payload:", savePayload);
+        console.log("📊 Document Info - Series:", documentSeries, "DocLen:", documentDocLen, "Current DocNo:", documentNo);
+        
         const response = await useTransactionUpsert(
           docType,
           savePayload,
@@ -792,9 +864,15 @@ const MSST = () => {
           "msstNo",
         );
 
+        console.log("✅ Upsert Response Received:", response);
+
         if (response) {
-          const responseDocNo = response.data?.[0]?.msstNo || "";
-          const responseDocId = response.data?.[0]?.msstId || "";
+          const {
+            documentNo: responseDocNo,
+            documentID: responseDocId,
+          } = getMSSTSaveResult(response);
+
+          console.log("🔍 After getMSSTSaveResult:", { responseDocNo, responseDocId });
 
           if (responseDocNo) {
             await fetchTranData(responseDocNo, branchCode);
@@ -808,9 +886,14 @@ const MSST = () => {
           useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
         }
 
+        const {
+          documentNo: savedDocumentNo,
+          documentID: savedDocumentID,
+        } = getMSSTSaveResult(response);
+
         updateState({
-          documentNo: response?.data?.[0]?.msstNo || "",
-          documentID: response?.data?.[0]?.msstId || "",
+          ...(savedDocumentNo ? { documentNo: savedDocumentNo } : {}),
+          ...(savedDocumentID ? { documentID: savedDocumentID } : {}),
           isDocNoDisabled: true,
           isFetchDisabled: true,
         });
@@ -1669,7 +1752,6 @@ const MSST = () => {
       });
     }
   };
-
 
   const handleCloseMSLookup = (selectedItems) => {
     if (!selectedItems) return;
