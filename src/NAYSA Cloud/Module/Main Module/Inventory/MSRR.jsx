@@ -5274,6 +5274,7 @@ const handleClosePayeeLookup = async (row) => {
           onGetSelectedItems={handleCloseMSLookup}
           enableMultiSelect
           customParam="ActiveAll"
+          endpoint="/lookupMSMast"
         />
       )}
 

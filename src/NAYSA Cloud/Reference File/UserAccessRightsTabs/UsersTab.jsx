@@ -96,21 +96,24 @@ const UsersTab = forwardRef(
     const roleListQuery = useQuery({
       queryKey: ["accessRightsRoleList"],
       queryFn: async () => {
-        if (typeof fetchRoles === "function") {
-          const result = await fetchRoles();
-          return Array.isArray(result) ? result : roles || [];
+        if (Array.isArray(roles) && roles.length > 0) {
+          return roles;
         }
 
-        const res = await apiClient.get("/loadRole");
-        return extractRows(res);
+        if (typeof fetchRoles === "function") {
+          const result = await fetchRoles();
+          return Array.isArray(result) ? result : [];
+        }
+
+        return [];
       },
       initialData: Array.isArray(roles) ? roles : [],
+      enabled: !Array.isArray(roles) || roles.length === 0,
     });
 
     const roleList = useMemo(() => {
-      if (Array.isArray(roles) && roles.length > 0) return roles;
-      return roleListQuery.data || [];
-    }, [roles, roleListQuery.data]);
+      return Array.isArray(roles) && roles.length > 0 ? roles : [];
+    }, [roles]);
 
     /* ================= DUPLICATE CHECK ================= */
 
@@ -445,7 +448,7 @@ const UsersTab = forwardRef(
           <div className="w-full xl:w-[380px] xl:flex-shrink-0">
             <div className="w-full bg-white rounded-xl p-3 sm:p-4 border border-gray-100 shadow-sm">
               <div className="space-y-4">
-                
+
                 <FieldRenderer
                   label="Role Code"
                   required
@@ -461,7 +464,7 @@ const UsersTab = forwardRef(
                   maxLength={10} // Add this limit based on your DB schema
                 />
 
-               
+
                 <FieldRenderer
                   label="Role Name"
                   required
