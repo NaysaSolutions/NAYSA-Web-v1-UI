@@ -130,14 +130,7 @@ const getResponseValue = (row, keys) => {
 
 const getMSSTSaveResult = (response) => {
   const row = response?.data?.[0] || {};
-  
-  console.log("📋 MSST Save Response:", {
-    fullResponse: response,
-    responseData: response?.data,
-    firstRow: row,
-    rowKeys: Object.keys(row)
-  });
-  
+
   const documentNo = getResponseValue(row, [
     "msstNo",
     "MSSTNo",
@@ -159,8 +152,6 @@ const getMSSTSaveResult = (response) => {
     "DOCUMENT_ID",
   ]);
 
-  console.log("📄 Extracted Values:", { documentNo, documentID });
-  
   return { documentNo, documentID };
 };
 
@@ -623,11 +614,7 @@ const MSST = () => {
       );
 
       if (!data?.msstId) {
-        Swal.fire({
-          icon: "info",
-          title: "No Records Found",
-          text: "Transaction does not exist.",
-        });
+        useSwalInfoAlert("No Records Found", "Transaction does not exist.");
         return resetState();
       }
 
@@ -676,7 +663,7 @@ const MSST = () => {
       updateTotals(retrievedDetailRows);
     } catch (error) {
       console.error("Error fetching transaction data:", error);
-      Swal.fire({ icon: "error", title: "Fetch Error", text: error.message });
+      useSwalErrorAlert("Fetch Error", error?.message || "Unable to fetch transaction data.");
       resetState();
     } finally {
       updateState({ isLoading: false });
@@ -816,8 +803,7 @@ const MSST = () => {
 
       if (action === "Upsert") {
         const savePayload = getFormattedPayload(currentGL);
-        console.log("🚀 Saving MSST with payload:", savePayload);
-        
+
         const response = await useTransactionUpsert(
           docType,
           savePayload,
@@ -825,8 +811,6 @@ const MSST = () => {
           "msstId",
           "msstNo",
         );
-
-        console.log("✅ Upsert Response Received:", response);
 
         if (response) {
           const {
@@ -860,6 +844,7 @@ const MSST = () => {
       }
     } catch (error) {
       console.error("Error in transaction flow:", error);
+      useSwalErrorAlert("Transaction Error", error?.message || `Unable to complete ${action}.`);
     } finally {
       updateState({ isLoading: false });
     }
