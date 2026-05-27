@@ -2703,6 +2703,31 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
         row.whCode ?? row.WHCode ?? row.WH_CODE ?? row.whouseCode ?? "";
       const pickedWhName =
         row.whName ?? row.WHName ?? row.WH_NAME ?? row.whouseName ?? "";
+      if (accountModalSource === "lotWhouseCode") {
+        setLotEntryRows((prev) =>
+          prev.map((lot, lotIndex) =>
+            lotIndex === selectedRowIndex
+              ? {
+                  ...lot,
+                  whouseCode: pickedWhCode,
+                  whCode: pickedWhCode,
+                  whouseName: pickedWhName,
+                  whName: pickedWhName,
+                  LocCode: "",
+                  locCode: "",
+                  LocName: "",
+                  locName: "",
+                }
+              : lot,
+          ),
+        );
+        updateState({
+          warehouseLookupOpen: false,
+          accountModalSource: "",
+          selectedRowIndex: null,
+        });
+        return;
+      }
 
       accountModalSource
         ? handleDetailChange(selectedRowIndex, "whouseCode", pickedWhCode, {
@@ -2752,6 +2777,28 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
     if (row) {
       const pickedLocCode = row.locCode ?? row.LocCode ?? row.LOC_CODE ?? "";
       const pickedLocName = row.locName ?? row.LocName ?? row.LOC_NAME ?? "";
+      if (accountModalSource === "lotLocCode") {
+        setLotEntryRows((prev) =>
+          prev.map((lot, lotIndex) =>
+            lotIndex === selectedRowIndex
+              ? {
+                  ...lot,
+                  LocCode: pickedLocCode,
+                  locCode: pickedLocCode,
+                  LocName: pickedLocName,
+                  locName: pickedLocName,
+                }
+              : lot,
+          ),
+        );
+        updateState({
+          locationLookupOpen: false,
+          selectedWH: "",
+          accountModalSource: "",
+          selectedRowIndex: null,
+        });
+        return;
+      }
 
       // If Location lookup is opened from DETAIL row (accountModalSource = "LocCode")
       if (accountModalSource) {
@@ -2812,13 +2859,33 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
     if (picked && selectedRowIndex !== null && selectedRowIndex !== undefined) {
       const code = picked?.qstatCode ?? picked?.QSTAT_CODE ?? "";
       const name = picked?.qstatName ?? picked?.QSTAT_NAME ?? "";
+      if (accountModalSource === "lotQstatCode") {
+        setLotEntryRows((prev) =>
+          prev.map((lot, lotIndex) =>
+            lotIndex === selectedRowIndex
+              ? {
+                  ...lot,
+                  qstatCode: code,
+                  qsCode: code,
+                  qstatName: name,
+                }
+              : lot,
+          ),
+        );
+        updateState({
+          showQstatModal: false,
+          accountModalSource: "",
+          selectedRowIndex: null,
+        });
+        return;
+      }
 
       handleDetailChange(selectedRowIndex, "qstatCode", code, {
         qstatName: name,
       });
     }
 
-    updateState({ showQstatModal: false });
+    updateState({ showQstatModal: false, accountModalSource: "" });
   };
 
   const getLotBreakdownQty = (rows = lotEntryRows) =>
@@ -4252,6 +4319,13 @@ const handleClosePayeeLookup = async (row) => {
 
     if (e.key === "Enter") {
       e.preventDefault();
+      if (["rrQty", "freeQty", "unitCost", "vatRate"].includes(field)) {
+        const numericValue = parseFormattedNumber(e.target.value || 0);
+        e.target.value = formatMSRRByField(
+          field,
+          Number.isFinite(numericValue) ? numericValue : 0,
+        );
+      }
       handleDetailChange(index, field, e.target.value, true);
       setTimeout(() => focusNextMSRRDetailCell(index, field), 0);
       return;
@@ -5262,7 +5336,7 @@ const handleClosePayeeLookup = async (row) => {
       )}
 
       {showLotPickingModal && selectedLotPickingRow && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-[40] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-6xl rounded-lg border border-gray-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800">
             <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-slate-700">
               <div>
@@ -5364,43 +5438,69 @@ const handleClosePayeeLookup = async (row) => {
                           }
                         />
                       </td>
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[110px] global-tran-td-inputclass-ui"
-                          value={lot.qstatCode || ""}
-                          onChange={(e) =>
-                            handleLotEntryChange(
-                              index,
-                              "qstatCode",
-                              e.target.value,
-                            )
-                          }
-                        />
+                      <td className="global-tran-td-ui relative">
+                        <div className="flex items-center">
+                          <input
+                            type="text"
+                            className="w-[110px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                            value={lot.qstatCode || ""}
+                            readOnly
+                          />
+                          <FontAwesomeIcon
+                            icon={faMagnifyingGlass}
+                            className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                            onClick={() =>
+                              updateState({
+                                selectedRowIndex: index,
+                                showQstatModal: true,
+                                accountModalSource: "lotQstatCode",
+                              })
+                            }
+                          />
+                        </div>
                       </td>
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[110px] global-tran-td-inputclass-ui"
-                          value={lot.whouseCode || ""}
-                          onChange={(e) =>
-                            handleLotEntryChange(
-                              index,
-                              "whouseCode",
-                              e.target.value,
-                            )
-                          }
-                        />
+                      <td className="global-tran-td-ui relative">
+                        <div className="flex items-center">
+                          <input
+                            type="text"
+                            className="w-[110px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                            value={lot.whouseCode || lot.whCode || ""}
+                            readOnly
+                          />
+                          <FontAwesomeIcon
+                            icon={faMagnifyingGlass}
+                            className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                            onClick={() =>
+                              updateState({
+                                selectedRowIndex: index,
+                                warehouseLookupOpen: true,
+                                accountModalSource: "lotWhouseCode",
+                              })
+                            }
+                          />
+                        </div>
                       </td>
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[110px] global-tran-td-inputclass-ui"
-                          value={lot.LocCode || ""}
-                          onChange={(e) =>
-                            handleLotEntryChange(index, "LocCode", e.target.value)
-                          }
-                        />
+                      <td className="global-tran-td-ui relative">
+                        <div className="flex items-center">
+                          <input
+                            type="text"
+                            className="w-[110px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                            value={lot.LocCode || lot.locCode || ""}
+                            readOnly
+                          />
+                          <FontAwesomeIcon
+                            icon={faMagnifyingGlass}
+                            className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                            onClick={() =>
+                              updateState({
+                                selectedRowIndex: index,
+                                locationLookupOpen: true,
+                                selectedWH: lot.whouseCode || lot.whCode || "",
+                                accountModalSource: "lotLocCode",
+                              })
+                            }
+                          />
+                        </div>
                       </td>
                       <td className="global-tran-td-ui text-center">
                         <button
