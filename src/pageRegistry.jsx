@@ -59,6 +59,9 @@ export const pageRegistry = {
   MSRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSRTV.jsx")),
   FGRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGRR.jsx")),
 
+  // Fixed Assets
+  FARR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/FARR.jsx")),
+
   // General Ledger & Master Data
   JV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/General Ledger/JV.jsx")),
   COAMast: lazyPage(() => import("./NAYSA Cloud/Master Data/ChartofAccounts/COAMast.jsx")),
