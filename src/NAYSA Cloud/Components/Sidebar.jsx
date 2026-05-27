@@ -237,7 +237,7 @@ const MenuItem = ({
           type="button"
           onClick={() => {
             onNavigate?.();
-            onOpenModal?.(item?.componentKey || item);
+            onOpenModal?.(item?.componentKey || item, item?.permissionType);
           }}
           className={`${rowBase} w-full text-left`}
         >
@@ -252,6 +252,7 @@ const MenuItem = ({
     <li className="mb-1">
       <NavLink
         to={item?.path || "#"}
+        state={{ permissionType: item?.permissionType }}
         onClick={() => {
           onNavigate?.();
           if (item?.onOpenModal) onOpenModal?.(item);
