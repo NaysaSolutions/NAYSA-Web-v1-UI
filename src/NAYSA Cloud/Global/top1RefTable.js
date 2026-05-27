@@ -629,6 +629,37 @@ export const useTopPayTermRow = async (paytermCode) => {
 
 
 
+
+export const useTopWarehouseRow = async (whouseCode) => {
+  if (!whouseCode) return null;
+
+  try {
+      const response = await fetchData("warehouse/getWarehouse", {
+      whCode: whouseCode,
+    });
+
+    if (response.success) {
+      const warehouseData = JSON.parse(response.data[0].result);
+
+      return {
+        whouseCode:   warehouseData[0]?.whCode ||"",
+        whouseName:warehouseData[0]?.whName     
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error("Error fetching warehouse:", error);
+    return null;
+  }
+};
+
+
+
+
+
+
+
 export async function useTopDocDropDownAll() {
   try {
     // Change postRequest to fetchData to avoid the 405 Method Not Allowed error

@@ -787,6 +787,7 @@ const ItemMastLookupModal = ({
         }),
       };
 
+      console.log("Lookup payload:", payload);
 
       const { data: result } = await apiClient.get(endpoint, {
         params: payload,

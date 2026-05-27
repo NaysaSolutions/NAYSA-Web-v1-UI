@@ -50,6 +50,7 @@ import {
   useTopCurrencyRow,
   useTopHSOption,
   useTopDocControlRow,
+  useTopDocDropDown,
   useTopVatAmount,
   useTopATCAmount,
   useTopBillCodeRow,
@@ -188,6 +189,7 @@ const MSRTV = () => {
 
     //Other Header Info
     tblFieldArray :[],
+    ajTypes :[],
     refDocNo1: "",
     refDocNo2: "", 
     vendCode: "",
@@ -195,6 +197,7 @@ const MSRTV = () => {
     whCode: "",
     locCode: "",
     remarks: "",
+    selectedAJType : "REG",
     userCode: user.USER_CODE, 
 
     //Detail 1-2
@@ -288,6 +291,7 @@ const MSRTV = () => {
   currCode,
   currName,
   currRate,
+  ajTypes,
   refDocNo1,
   refDocNo2,
   vendCode,
@@ -297,6 +301,9 @@ const MSRTV = () => {
   locCode,
 
   remarks,
+  selectedAJType,
+
+
   // Transaction details
   tblFieldArray,
   detailRows,
@@ -544,7 +551,18 @@ useEffect(() => {
     updateState({isLoading:true})
 
     try {
-      // 🔹 1. Document row (independent)
+      // 🔹 1. Run these in parallel since they don’t depend on each other      
+      const data = await useTopDocDropDown(docType,"AJTRAN_TYPE");
+      if(data){
+        updateState({
+         ajTypes: data,
+         selectedAJType: "",
+          });
+        };   
+
+        
+
+      // 🔹 2. Document row (independent)
       const docRow = await useTopDocControlRow(docType);
 
       if (docRow) {
@@ -557,7 +575,7 @@ useEffect(() => {
 
 
 
-      // 🔹 2. HS Options + Currency row (dependent chain)
+      // 🔹 3. HS Options + Currency row (dependent chain)
       const hsOption = await useTopHSOption();
       if (hsOption) {
         updateState({
@@ -664,6 +682,7 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       documentNo: data.msrtvNo,
       branchCode: data.branchCode,
       documentDate: useformatToDatev2(data.msrtvDate),
+      // selectedAJType: data.ajtranType,
       vendCode: data.vendCode,
       vendName: data.vendName,
       refDocNo1: data.refDocNo1,
@@ -714,6 +733,7 @@ const handleActivityOption = async (action) => {
       documentNo,
       documentID,
       documentDate,
+      // selectedAJType,
       vendCode,
       vendName,
       WHcode,
@@ -730,6 +750,7 @@ const handleActivityOption = async (action) => {
       msrtvNo: documentNo || "",
       msrtvId: documentID || "",
       msrtvDate: documentDate,
+      // ajtranType: selectedAJType,
       vendCode: vendCode,
       vendName: vendName,
       whCode: WHcode,
@@ -865,6 +886,8 @@ const createEmptyDetailRow = () => ({
 });
 
 const handleGetItem = async (index = null) => {
+  if (!selectedAJType) return;
+
   const updatedRows = [...detailRows];
   const newRow = createEmptyDetailRow();
 
@@ -887,6 +910,7 @@ const handleGetItem = async (index = null) => {
     return;
 
   // const lookupTypes = ["IL", "IR", "CA"];  
+  // if (lookupTypes.includes(selectedAJType)) { 
   //   await handleOpenMSLookup();
   //   return;
   // }
@@ -945,6 +969,7 @@ const createEmptyGlRow = () => ({
 
 const handleAddRowGL = (index = null) => {
 
+//  if (!selectedAJType) {
 //     return;
 //   }
 
@@ -1075,14 +1100,39 @@ const handleCopy = async () => {
 
 
 const handleFieldBehavior = (option) => {
-  return false;
+  switch (option) {
+
+    case "disableInput":
+     return (
+        selectedAJType === "IL" || 
+        (selectedAJType === "IR" && row.operation === "S")
+       )
+
+    case "hiddenBBMode":
+     return (
+        selectedAJType === "BB" 
+      );
+
+      case "hiddenCAMode":
+     return (
+        selectedAJType === "CA" 
+      );
+
+
+    default:
+      return false; 
+  }
 };
+
 
 
 const handleColumnLabel = (columnName) =>{
   switch (columnName) {
 
      case "UnitCost":
+      if(selectedAJType === "CA") {
+        return "Amount"
+      }
       return "Unit Cost"
 
        default:
@@ -1460,6 +1510,7 @@ useEffect(() => {
 //     const recalcRow = async () => {
 //       let processedQty = Math.abs(origQuantity);
 
+//       if (origOperation === "S" && (selectedAJType === "IL" || selectedAJType === "IR")) {
 //         if (processedQty > origQtyHand) {
 //           useSwalErrorAlert('Exceeds Stock', `Quantity (${processedQty}) exceeds Quantity on Hand (${origQtyHand}). Value has been adjusted.`);
 //           processedQty = origQtyHand;
@@ -1469,9 +1520,11 @@ useEffect(() => {
 //         processedQty = Math.abs(processedQty);
 //       }
 
+//       const finalQtyForMath = (selectedAJType === "CA") ? 1 : processedQty;
 //       const calculatedAmount = +(finalQtyForMath * origUnitCost).toFixed(2);
 
 //       row.itemAmount = formatNumber(calculatedAmount);
+//       row.quantity = formatNumber(selectedAJType === "CA" ? 0 : processedQty, decQty);
 //       row.unitCost = formatNumber(origUnitCost, decUcost);
 //     };
 
@@ -1948,7 +2001,7 @@ const handleCloseBranchModal = (selectedBranch) => {
       updateState({ isLoading: true });
   
       const endpoint ="getInvLookupMS"
-      const response = await fetchDataJson(endpoint, { userCode, whouseCode: state.WHcode || state.whouseCode || "", locCode: state.locCode || "", docType: "MSRTV" });
+      const response = await fetchDataJson(endpoint, { userCode, whouseCode :state.whouseCode || "", locCode: state.locCode || "", docType:"MSRTV" ,tranType :selectedAJType });
       const custData = response?.data?.[0]?.result ? JSON.parse(response.data[0].result) : [];
   
 
@@ -2014,7 +2067,7 @@ const handleCloseBranchModal = (selectedBranch) => {
     locCode: item?.locCode ?? state.locCode ?? "",
     qtyHand: formatNumber(parseFormattedNumber(item?.qtyHand ?? 0), decQty),
     uniqueKey: item?.uniqueKey ?? "",
-    operation: "A",
+    operation:  (selectedAJType === "IL" || selectedAJType === "IR") ? "S" : "A",
     acctCode: "",
     sltypeCode: "SU",
     rcCode: "",
@@ -2274,7 +2327,33 @@ return (
 
                 {/* Column 2 */}
                 <div className="global-tran-textbox-group-div-ui">
-
+                    {/* <div className="relative">
+                        <select id="ajType"
+                            className="peer global-tran-textbox-ui"
+                            value={selectedAJType}
+                            onChange={(e) => updateState({ selectedAJType: e.target.value })}
+                            disabled={isFormDisabled} 
+                        >
+                            {ajTypes.length > 0 ?
+                            (
+                                <>
+                                    <option value="">Select Adjustment Type</option>
+                                    {ajTypes.map((type) =>
+                                    (
+                                        <option key={type.DROPDOWN_CODE} value={type.DROPDOWN_CODE}>
+                                            {type.DROPDOWN_NAME}
+                                        </option>
+                                    ))}
+                                </>
+                            ) : (<option value="">Loading Adjustment Types...</option>)}
+                        </select>
+                        <label htmlFor="sviType" className="global-tran-floating-label">Adj Type</label>
+                        <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
+                            <svg className="h-4 w-4 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </div>
+                    </div> */}
 
                 {/* Payee Code. */}
                 <div className="relative group flex-[1.3]">

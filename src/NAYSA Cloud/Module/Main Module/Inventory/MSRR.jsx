@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Swal from "sweetalert2";
 import { useNavigate, useLocation } from "react-router-dom";
 
@@ -28,7 +28,7 @@ import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import RCLookupModal from "../../../Lookup/SearchRCMast.jsx";
-import MSLookupModal from "../../../Lookup/SearchMSMast.jsx";
+import ItemMastLookupModal from "../../../Lookup/SearchItemMast.jsx";
 import PayeeMastLookupModal from "../../../Lookup/SearchVendMast";
 import PaytermLookupModal from "../../../Lookup/SearchPayTermRef.jsx";
 import GlobalCombinedLookup from "../../../Lookup/SearchGlobalCombinedLookup.jsx";
@@ -483,7 +483,8 @@ groupId,
   isViewDocumentUrl ||
   ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
 
-  const msrrDetailColumnDefs = [
+  const msrrDetailColumnDefs = useMemo(
+  () => [
     { key: "ln", label: "LN", width: 56 },
     { key: "rrStatus", label: "RR Status", width: 100 },
     { key: "poNo", label: "PO No.", width: 140 },
@@ -504,7 +505,9 @@ groupId,
     { key: "qstatCode", label: "QC Status", width: 120 },
     { key: "whouseCode", label: "Warehouse", width: 120 },
     { key: "LocCode", label: "Location", width: 120 },
-  ];
+  ],
+  []
+);
 
   const {
     getColumnStyle: getMSRRDetailColumnStyle,
@@ -517,7 +520,11 @@ groupId,
     renderResizableHeader: renderMSRRDetailHeader,
   } = useResizableTableColumns(msrrDetailColumnDefs);
 
-  const visibleMSRRDetailColumns = getOrderedMSRRDetailColumns(msrrDetailColumnDefs);
+  const visibleMSRRDetailColumns = useMemo(
+  () => getOrderedMSRRDetailColumns(msrrDetailColumnDefs),
+  [getOrderedMSRRDetailColumns, msrrDetailColumnDefs]
+);
+
   const getMSRRDetailFallbackWidth = (key) =>
     msrrDetailColumnDefs.find((column) => column.key === key)?.width || 120;
   const getMSRRDetailCellStyle = (key, fallbackWidth) => ({
@@ -526,17 +533,37 @@ groupId,
       isHeader: false,
     }),
   });
-  const sortedMSRRDetailRows = getSortedMSRRDetailRows(
-    detailRows.map((row, originalIndex) => ({ row, originalIndex })),
-    (entry, sortKey) =>
-      sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? "",
-  );
+ const sortedMSRRDetailRows = useMemo(
+  () =>
+    getSortedMSRRDetailRows(
+      (detailRows || []).map((row, originalIndex) => ({ row, originalIndex })),
+      (entry, sortKey) =>
+        sortKey === "ln"
+          ? entry.originalIndex + 1
+          : entry.row?.[sortKey] ?? ""
+    ),
+  [getSortedMSRRDetailRows, detailRows]
+)
 
   const msrrDetailEnterNextRowZeroClearFields = ["rrQty", "freeQty", "unitCost"];
 
   useEffect(() => {
     detailRowsRef.current = detailRows || [];
   }, [detailRows]);
+
+
+  const generateClientGroupId = () => {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID().toUpperCase();
+    }
+
+    return `MSRR-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`.toUpperCase();
+  };
+
+  const getRowGroupId = (row = {}) =>
+    row.groupId || row.group_id || row.GROUP_ID || row.GroupId || row.GROUPID || "";
+
+  const ensureClientGroupId = (row = {}) => getRowGroupId(row) || generateClientGroupId();
 
 
   const updateTotalsDisplay = (input) => {
@@ -572,8 +599,19 @@ groupId,
   }, [resetFlag, isLoading]);
 
   useEffect(() => {
-    updateState({ isDocNoDisabled: !!state.documentID });
-  }, [state.documentID]);
+  setState((prev) => {
+    const nextValue = !!prev.documentID;
+
+    if (prev.isDocNoDisabled === nextValue) {
+      return prev;
+    }
+
+    return {
+      ...prev,
+      isDocNoDisabled: nextValue,
+    };
+  });
+}, [state.documentID]);
 
   useEffect(() => {
     handleReset();
@@ -1461,7 +1499,7 @@ console.log("Open Reference PO - Filtered Open Summary Rows:", openRows);
         "whName",
         "wh_name",
         "whouseName",
-      );
+      )
 
     console.log("MSRR Reference PO warehouse fetch", {
       selection,
@@ -1476,6 +1514,29 @@ console.log("Open Reference PO - Filtered Open Summary Rows:", openRows);
         stateWHCode: state.WHCode,
         stateWHcode: state.WHcode,
         stateWHName: state.WHName,
+        rcCode:
+  d.rcCode ||
+  d.rc_code ||
+  d.RcCode ||
+  d.RC_CODE ||
+  summary.rcCode ||
+  summary.rc_code ||
+  summary.RcCode ||
+  summary.RC_CODE ||
+  state.rcCode ||
+  "",
+
+rc_code:
+  d.rc_code ||
+  d.rcCode ||
+  d.RcCode ||
+  d.RC_CODE ||
+  summary.rc_code ||
+  summary.rcCode ||
+  summary.RcCode ||
+  summary.RC_CODE ||
+  state.rcCode ||
+  "",
       },
     });
 
@@ -1684,6 +1745,7 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
       // ======================
       detailRows: [], // DT1
       detailRowsGL: [], // ✅ CLEAR GENERAL LEDGER (DT2)
+      dt3: [],
 
       // ======================
       // MODALS
@@ -1967,38 +2029,149 @@ const parsedLocName =
         vatCodes.map(async (code) => [code, await fetchVatRate(code)]),
       );
       const vatRateMap = Object.fromEntries(vatRatePairs);
+      const parseRetrievedArray = (value) => {
+        if (Array.isArray(value)) return value;
+        if (!value) return [];
 
-      const mappedDT1 = dt1.map((r, idx) => ({
-        lnNo: Number(r.lnNo ?? idx + 1),
-        rrStatus: r.rrStatus || r.poStatus || "",
-        poStatus: r.poStatus || r.rrStatus || "",
-        poNo: r.poNo || parsed.poNo || "",
-        itemCode: r.itemCode || r.itemNo || "",
-        itemName: r.itemName || r.itemDesc || "",
-        itemSpecs: r.itemSpecs || r.itemSpec || "",
+        if (typeof value === "string") {
+          try {
+            const parsedValue = JSON.parse(value);
+            return parseRetrievedArray(parsedValue);
+          } catch {
+            return [];
+          }
+        }
 
-        rrQty: formatNumber(r.rrQty || r.quantity || 0, decQty),
-        freeQty: formatNumber(r.freeQty || r.freeQuantity || 0, decQty),
+        if (Array.isArray(value?.data)) return value.data;
+        if (Array.isArray(value?.result)) return value.result;
+        if (typeof value?.result === "string") return parseRetrievedArray(value.result);
 
-        amount: formatNumber(r.itemAmount || r.grossAmount || 0),
-        itemAmount: formatNumber(r.itemAmount || r.grossAmount || 0),
-        grossAmount: formatNumber(r.itemAmount || r.grossAmount || 0),
-        vatCode: r.vatCode || "",
-        vatRate: r.vatCode ? formatNumber(vatRateMap[r.vatCode] ?? 0, 2) : "",
-        vatAmount: formatNumber(r.vatAmount ?? 0),
+        return [];
+      };
 
-        qsCode: r.qsCode || "",
-        whCode: r.whCode || r.whouseCode || parsed.WHCode || "",
-        whouseCode: r.whouseCode || r.whCode || parsed.WHCode || "",
-        locCode: r.locCode || parsedLocCode || "",
-        LocCode: r.locCode || parsedLocCode || "",
+      // DT3 is the official source of the Lot No Breakdown when retrieving.
+      // DT1 remains one row per item; DT3 contains one row per split lot quantity.
+      const dt3 = parseRetrievedArray(parsed.dt3);
 
-        uomCode: r.uomCode || "",
-        unitCost: formatNumber(r.unitCost || r.unitPrice || 0, decUcost),
-        netAmount: formatNumber(r.netAmount ?? 0),
-        lotNo: r.lotNo || "",
-        controlNo: r.controlNo || "",
-      }));
+      console.log("✅ FETCHED MSRR DT3:", dt3);
+      console.table(dt3);
+
+      const normalizeLotKey = (value) => String(value || "").trim().toUpperCase();
+      const normalizeLotLineKey = (value) => String(value || "").trim();
+      const dt3ByGroup = dt3.reduce((acc, lot) => {
+  const key = normalizeLotKey(lot.groupId || lot.group_id || lot.GROUP_ID || "");
+  if (!key) return acc;
+  if (!acc[key]) acc[key] = [];
+  acc[key].push(lot);
+  return acc;
+}, {});
+
+const dt3ByLine = dt3.reduce((acc, lot) => {
+  const key = normalizeLotLineKey(
+    lot.lnNo || lot.ln_no || lot.LN_NO || lot.lineNo || lot.LINE_NO || "",
+  );
+  if (!key) return acc;
+  if (!acc[key]) acc[key] = [];
+  acc[key].push(lot);
+  return acc;
+}, {});
+
+const dt3ByItem = dt3.reduce((acc, lot) => {
+  const key = normalizeLotKey(
+    lot.itemCode || lot.item_code || lot.ITEM_CODE || ""
+  );
+
+  if (!key) return acc;
+
+  if (!acc[key]) acc[key] = [];
+  acc[key].push(lot);
+
+  return acc;
+}, {});
+      const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
+        lots
+          .map((lot, lotIndex) => ({
+            id: lot.id || lotIndex + 1,
+            lotNo: String(lot.lotNo || "").trim(),
+            quantity: formatNumber(lot.quantity || lot.rrQuantity || 0, decQty),
+            rrQty: formatNumber(lot.rrQuantity || lot.quantity || 0, decQty),
+            bbDate: lot.bbDate ? String(lot.bbDate).substring(0, 10) : "",
+            qstatCode: lot.qstatCode || lot.qsCode || "",
+            whouseCode: lot.whouseCode || lot.whCode || sourceRow.whouseCode || sourceRow.whCode || parsed.WHCode || "",
+            whCode: lot.whCode || lot.whouseCode || sourceRow.whCode || sourceRow.whouseCode || parsed.WHCode || "",
+            LocCode: lot.LocCode || lot.locCode || sourceRow.LocCode || sourceRow.locCode || parsedLocCode || "",
+            locCode: lot.locCode || lot.LocCode || sourceRow.locCode || sourceRow.LocCode || parsedLocCode || "",
+
+            // Background fields for MSRR_DT3. These are kept in state/payload only and are not displayed in the Lot No Breakdown modal.
+            itemCode: lot.itemCode || lot.item_code || sourceRow.itemCode || sourceRow.item_code || "",
+            item_code: lot.item_code || lot.itemCode || sourceRow.item_code || sourceRow.itemCode || "",
+            rcCode: lot.rcCode || lot.rc_code || sourceRow.rcCode || sourceRow.rc_code || "",
+            rc_code: lot.rc_code || lot.rcCode || sourceRow.rc_code || sourceRow.rcCode || "",
+            unitCost: lot.unitCost || lot.unit_cost || sourceRow.unitCost || sourceRow.unit_cost || 0,
+            unit_cost: lot.unit_cost || lot.unitCost || sourceRow.unit_cost || sourceRow.unitCost || 0,
+            netAmount: lot.netAmount || lot.net_amount || sourceRow.netAmount || sourceRow.net_amount || 0,
+            net_amount: lot.net_amount || lot.netAmount || sourceRow.net_amount || sourceRow.netAmount || 0,
+            groupId: lot.groupId || lot.group_id || sourceRow.groupId || sourceRow.group_id || "",
+            group_id: lot.group_id || lot.groupId || sourceRow.group_id || sourceRow.groupId || "",
+            lnNo: lot.lnNo || lot.ln_no || sourceRow.lnNo || sourceRow.ln_no || "",
+            ln_no: lot.ln_no || lot.lnNo || sourceRow.ln_no || sourceRow.lnNo || "",
+            controlNo: lot.controlNo || "",
+          }))
+          .filter((lot) => lot.lotNo && (parseFormattedNumber(lot.quantity || lot.rrQty || 0) || 0) > 0);
+
+      const mappedDT1 = dt1.map((r, idx) => {
+        const rowLineNo = r.lnNo || r.ln_no || r.LN_NO || r.lineNo || r.LINE_NO || idx + 1;
+        const rowGroupId = r.groupId || r.group_id || r.GROUP_ID || "";
+        // Retrieve Lot No Breakdown from MSRR_DT3 by group_id only.
+        // DT1 and DT3 share the same generated group_id from SQL, so no line_no matching is needed.
+        const rowItemCode = r.itemCode || r.item_code || r.ITEM_CODE || "";
+
+const matchedLots =
+  dt3ByGroup[normalizeLotKey(rowGroupId)] ||
+  dt3ByLine[normalizeLotLineKey(rowLineNo)] ||
+  dt3ByItem[normalizeLotKey(rowItemCode)] ||
+  [];
+
+const lotDetails = normalizeRetrievedLots(matchedLots, r);
+        const retrievedLotNos = lotDetails.map((lot) => lot.lotNo).filter(Boolean);
+        const firstLot = lotDetails[0] || {};
+
+        return {
+          lnNo: Number(rowLineNo),
+          groupId: rowGroupId,
+          rrStatus: r.rrStatus || r.poStatus || "",
+          poStatus: r.poStatus || r.rrStatus || "",
+          poNo: r.poNo || parsed.poNo || "",
+          itemCode: r.itemCode || r.itemNo || "",
+          itemName: r.itemName || r.itemDesc || "",
+          itemSpecs: r.itemSpecs || r.itemSpec || "",
+
+          rrQty: formatNumber(r.rrQty || r.quantity || 0, decQty),
+          freeQty: formatNumber(r.freeQty || r.freeQuantity || 0, decQty),
+
+          amount: formatNumber(r.itemAmount || r.grossAmount || 0),
+          itemAmount: formatNumber(r.itemAmount || r.grossAmount || 0),
+          grossAmount: formatNumber(r.itemAmount || r.grossAmount || 0),
+          vatCode: r.vatCode || "",
+          vatRate: r.vatCode ? formatNumber(vatRateMap[r.vatCode] ?? 0, 2) : "",
+          vatAmount: formatNumber(r.vatAmount ?? 0),
+
+          qsCode: firstLot.qstatCode || r.qsCode || "",
+          qstatCode: firstLot.qstatCode || r.qstatCode || r.qsCode || "",
+          whCode: firstLot.whCode || r.whCode || r.whouseCode || parsed.WHCode || "",
+          whouseCode: firstLot.whouseCode || r.whouseCode || r.whCode || parsed.WHCode || "",
+          locCode: firstLot.locCode || r.locCode || parsedLocCode || "",
+          LocCode: firstLot.LocCode || r.locCode || parsedLocCode || "",
+
+          uomCode: r.uomCode || "",
+          unitCost: formatNumber(r.unitCost || r.unitPrice || 0, decUcost),
+          netAmount: formatNumber(r.netAmount ?? 0),
+          lotNo: retrievedLotNos.length > 0 ? retrievedLotNos.join(", ") : "",
+          bbDate: firstLot.bbDate || (r.bbDate ? String(r.bbDate).substring(0, 10) : ""),
+          controlNo: firstLot.controlNo || r.controlNo || "",
+          lotDetails,
+        };
+      });
 
       const dt2 = Array.isArray(parsed.dt2) ? parsed.dt2 : [];
       const normalizeGLDate = (value) => {
@@ -2038,6 +2211,7 @@ const parsedLocName =
       updateState({
         detailRows: mappedDT1,
         detailRowsGL: mappedDT2,
+        dt3,
       });
     } catch (e) {
       console.error("fetchTranData error:", e);
@@ -2199,7 +2373,8 @@ const parsedLocName =
           selectedVatRate !== "" && selectedVatRate !== null && selectedVatRate !== undefined
             ? formatNumber(parseFormattedNumber(selectedVatRate), 2)
             : "",
-        groupId: selectedItem.categCode || "",
+        groupId: generateClientGroupId(),
+        categCode: selectedItem.categCode || "",
         poStatus: status || "",
         itemCode: selectedItem.itemCode || "",
         itemName: selectedItem.itemName || "",
@@ -2319,7 +2494,7 @@ const parsedLocName =
 
       updatedRows[selectedRowIndex] = recalcMSRRRow(getHeaderWarehouseLocationFields({
         ...currentRow,
-        groupId: selectedItem.categCode || currentRow.groupId || "",
+        groupId: ensureClientGroupId(currentRow),
         categCode: selectedItem.categCode || currentRow.categCode || "",
         itemCode: selectedItem.itemCode || "",
         itemName: selectedItem.itemName || "",
@@ -2353,7 +2528,8 @@ const parsedLocName =
         selectedVatRate !== "" && selectedVatRate !== null && selectedVatRate !== undefined
           ? formatNumber(parseFormattedNumber(selectedVatRate), 2)
           : "",
-      groupId: selectedItem.categCode || "",
+      groupId: generateClientGroupId(),
+        categCode: selectedItem.categCode || "",
       poStatus: status || "",
       itemCode: selectedItem.itemCode || "",
       itemName: selectedItem.itemName || "",
@@ -2463,7 +2639,7 @@ const parsedLocName =
 
     const newRow = {
       invType: typeCode,
-      groupId: "",
+      groupId: generateClientGroupId(),
       poStatus: status || "",
       itemCode: "",
       itemName: "",
@@ -2659,61 +2835,120 @@ const parsedLocName =
     qstatCode: row.qstatCode || row.qsCode || "",
     whouseCode: row.whouseCode || row.whCode || WHCode || "",
     LocCode: row.LocCode || row.locCode || LocCode || "",
+
+    // Background fields for MSRR_DT3. Do not render these columns in the modal table.
+    itemCode: row.itemCode || row.item_code || "",
+    item_code: row.item_code || row.itemCode || "",
+    rcCode: row.rcCode || row.rc_code || "",
+    rc_code: row.rc_code || row.rcCode || "",
+    unitCost: row.unitCost || row.unit_cost || 0,
+    unit_cost: row.unit_cost || row.unitCost || 0,
+    netAmount: row.netAmount || row.net_amount || 0,
+    net_amount: row.net_amount || row.netAmount || 0,
+    groupId: row.groupId || row.group_id || "",
+    group_id: row.group_id || row.groupId || "",
+    lnNo: row.lnNo || row.ln_no || row.lineNo || row.LINE_NO || "",
+    ln_no: row.ln_no || row.lnNo || row.lineNo || row.LINE_NO || "",
   });
 
   const handleOpenLotBreakdownModal = (index) => {
-    if (isFormDisabled) return;
+  if (isFormDisabled) return;
 
-    const row = detailRows?.[index];
-    const rrQty = parseFormattedNumber(row?.rrQty || 0) || 0;
+  const row = detailRows?.[index];
+  if (!row) return;
 
-    if (!row?.itemCode) {
-      Swal.fire({
-        icon: "warning",
-        title: "Lot No Breakdown",
-        text: "Please select an item before entering multiple lot numbers.",
-      });
-      return;
-    }
+  const rawDt3 = Array.isArray(state.dt3) ? state.dt3 : [];
 
-    if (rrQty <= 0) {
-      Swal.fire({
-        icon: "warning",
-        title: "Lot No Breakdown",
-        text: "RR Quantity must be greater than zero before entering multiple lot numbers.",
-      });
-      return;
-    }
+  const selectedGroupId = String(
+    row?.groupId || row?.group_id || ""
+  ).trim().toUpperCase();
 
-    const existingLots = Array.isArray(row?.lotDetails) ? row.lotDetails : [];
-    const seededLots =
-      existingLots.length > 0
-        ? existingLots
-        : [
-            {
-              lotNo: row?.lotNo || "",
-              quantity: row?.rrQty || "",
-              bbDate: row?.bbDate || "",
-              qstatCode: row?.qstatCode || row?.qsCode || "",
-              whouseCode: row?.whouseCode || row?.whCode || WHCode || "",
-              LocCode: row?.LocCode || row?.locCode || LocCode || "",
-            },
-          ];
+  const selectedLnNo = String(
+    row?.lnNo || row?.ln_no || row?.lineNo || ""
+  ).trim();
 
-    setLotEntryRows(
-      seededLots.map((lot, lotIndex) => ({
-        id: lot.id || lotIndex + 1,
-        lotNo: lot.lotNo || "",
-        quantity: lot.quantity || lot.rrQty || "",
-        bbDate: lot.bbDate || "",
-        qstatCode: lot.qstatCode || lot.qsCode || "",
-        whouseCode: lot.whouseCode || lot.whCode || WHCode || "",
-        LocCode: lot.LocCode || lot.locCode || LocCode || "",
-      })),
+  const selectedItemCode = String(
+    row?.itemCode || row?.item_code || ""
+  ).trim().toUpperCase();
+
+  const matchedDt3 = rawDt3.filter((lot) => {
+    const lotGroupId = String(
+      lot?.groupId || lot?.group_id || ""
+    ).trim().toUpperCase();
+
+    const lotLnNo = String(
+      lot?.lnNo || lot?.ln_no || lot?.lineNo || ""
+    ).trim();
+
+    const lotItemCode = String(
+      lot?.itemCode || lot?.item_code || ""
+    ).trim().toUpperCase();
+
+    return (
+      (selectedGroupId && lotGroupId && selectedGroupId === lotGroupId) ||
+      (selectedLnNo && lotLnNo && selectedLnNo === lotLnNo) ||
+      (selectedItemCode && lotItemCode && selectedItemCode === lotItemCode)
     );
-    setLotPickingRowIndex(index);
-    setShowLotPickingModal(true);
-  };
+  });
+
+  console.log("✅ LOT BREAKDOWN OPENED - SELECTED ROW:", row);
+  console.log("✅ LOT BREAKDOWN OPENED - RAW STATE DT3:", rawDt3);
+  console.log("✅ LOT BREAKDOWN OPENED - MATCHED DT3:", matchedDt3);
+  console.table(matchedDt3);
+
+  const existingLots =
+    Array.isArray(row?.lotDetails) && row.lotDetails.length > 0
+      ? row.lotDetails
+      : matchedDt3;
+
+  const seededLots =
+    existingLots.length > 0
+      ? existingLots
+      : [
+          makeLotBreakdownRow(row, "")
+        ];
+
+  setLotEntryRows(
+    seededLots.map((lot, lotIndex) => ({
+      id: lot.id || lotIndex + 1,
+      lotNo: lot.lotNo || "",
+      quantity: lot.quantity || lot.rrQuantity || lot.rrQty || "",
+      bbDate: lot.bbDate ? String(lot.bbDate).substring(0, 10) : "",
+      qstatCode: lot.qstatCode || lot.qsCode || "",
+      whouseCode:
+        lot.whouseCode ||
+        lot.whCode ||
+        row?.whouseCode ||
+        row?.whCode ||
+        WHCode ||
+        "",
+      LocCode:
+        lot.LocCode ||
+        lot.locCode ||
+        row?.LocCode ||
+        row?.locCode ||
+        LocCode ||
+        "",
+
+      itemCode: lot.itemCode || lot.item_code || row?.itemCode || "",
+      item_code: lot.item_code || lot.itemCode || row?.itemCode || "",
+      rcCode: lot.rcCode || lot.rc_code || row?.rcCode || row?.rc_code || "",
+      rc_code: lot.rc_code || lot.rcCode || row?.rcCode || row?.rc_code || "",
+      unitCost: lot.unitCost || lot.unit_cost || row?.unitCost || 0,
+      unit_cost: lot.unit_cost || lot.unitCost || row?.unitCost || 0,
+      netAmount: lot.netAmount || lot.net_amount || row?.netAmount || 0,
+      net_amount: lot.net_amount || lot.netAmount || row?.netAmount || 0,
+      groupId: lot.groupId || lot.group_id || row?.groupId || "",
+      group_id: lot.group_id || lot.groupId || row?.groupId || "",
+      lnNo: lot.lnNo || lot.ln_no || row?.lnNo || "",
+      ln_no: lot.ln_no || lot.lnNo || row?.lnNo || "",
+      controlNo: lot.controlNo || "",
+    }))
+  );
+
+  setLotPickingRowIndex(index);
+  setShowLotPickingModal(true);
+};
 
   const handleCloseLotPickingModal = () => {
     setShowLotPickingModal(false);
@@ -2767,6 +3002,20 @@ const parsedLocName =
         ...lot,
         id: index + 1,
         quantity: parseFormattedNumber(lot.quantity || 0) || 0,
+
+        // Background fields for MSRR_DT3. Hidden in modal display.
+        itemCode: lot.itemCode || lot.item_code || currentRow.itemCode || currentRow.item_code || "",
+        item_code: lot.item_code || lot.itemCode || currentRow.item_code || currentRow.itemCode || "",
+        rcCode: lot.rcCode || lot.rc_code || currentRow.rcCode || currentRow.rc_code || "",
+        rc_code: lot.rc_code || lot.rcCode || currentRow.rc_code || currentRow.rcCode || "",
+        unitCost: lot.unitCost || lot.unit_cost || currentRow.unitCost || currentRow.unit_cost || 0,
+        unit_cost: lot.unit_cost || lot.unitCost || currentRow.unit_cost || currentRow.unitCost || 0,
+        netAmount: lot.netAmount || lot.net_amount || currentRow.netAmount || currentRow.net_amount || 0,
+        net_amount: lot.net_amount || lot.netAmount || currentRow.net_amount || currentRow.netAmount || 0,
+        groupId: lot.groupId || lot.group_id || currentRow.groupId || currentRow.group_id || "",
+        group_id: lot.group_id || lot.groupId || currentRow.group_id || currentRow.groupId || "",
+        lnNo: lot.lnNo || lot.ln_no || currentRow.lnNo || currentRow.ln_no || currentRow.lineNo || "",
+        ln_no: lot.ln_no || lot.lnNo || currentRow.ln_no || currentRow.lnNo || currentRow.lineNo || "",
       }))
       .filter((lot) => lot.lotNo || lot.quantity > 0);
     const totalLotQty = validLots.reduce((sum, lot) => sum + lot.quantity, 0);
@@ -2796,6 +3045,20 @@ const parsedLocName =
       ...lot,
       quantity: formatNumber(lot.quantity, decQty),
       rrQty: formatNumber(lot.quantity, decQty),
+
+      // Keep background fields available when modal is reopened and when saving DT3.
+      itemCode: lot.itemCode || lot.item_code || currentRow.itemCode || currentRow.item_code || "",
+      item_code: lot.item_code || lot.itemCode || currentRow.item_code || currentRow.itemCode || "",
+      rcCode: lot.rcCode || lot.rc_code || currentRow.rcCode || currentRow.rc_code || "",
+      rc_code: lot.rc_code || lot.rcCode || currentRow.rc_code || currentRow.rcCode || "",
+      unitCost: lot.unitCost || lot.unit_cost || currentRow.unitCost || currentRow.unit_cost || 0,
+      unit_cost: lot.unit_cost || lot.unitCost || currentRow.unit_cost || currentRow.unitCost || 0,
+      netAmount: lot.netAmount || lot.net_amount || currentRow.netAmount || currentRow.net_amount || 0,
+      net_amount: lot.net_amount || lot.netAmount || currentRow.net_amount || currentRow.netAmount || 0,
+      groupId: lot.groupId || lot.group_id || currentRow.groupId || currentRow.group_id || "",
+      group_id: lot.group_id || lot.groupId || currentRow.group_id || currentRow.groupId || "",
+      lnNo: lot.lnNo || lot.ln_no || currentRow.lnNo || currentRow.ln_no || currentRow.lineNo || "",
+      ln_no: lot.ln_no || lot.lnNo || currentRow.ln_no || currentRow.lnNo || currentRow.lineNo || "",
     }));
 
     updatedRows[lotPickingRowIndex] = recalcMSRRRow(
@@ -3067,83 +3330,179 @@ const parsedLocName =
         }
       }
 
-      const dt1Payload = [];
-      (state.detailRows || []).forEach((r) => {
-        const lotDetails = Array.isArray(r.lotDetails) ? r.lotDetails : [];
-        const sourceLots =
-          lotDetails.length > 0
-            ? lotDetails
-            : [
-                {
-                  lotNo: r.lotNo || "",
-                  quantity: r.rrQty || 0,
-                  bbDate: r.bbDate || null,
-                  qstatCode: r.qstatCode || r.qsCode || "",
-                  whouseCode:
-                    r.whouseCode ||
-                    r.whCode ||
-                    state.WHCode ||
-                    state.WHcode ||
-                    "",
-                  LocCode: r.LocCode || r.locCode || state.LocCode || "",
-                },
-              ];
+      const getRowLotEntriesForSave = (row = {}) => {
+        const lotDetails = Array.isArray(row.lotDetails) ? row.lotDetails : [];
 
-        sourceLots.forEach((lot) => {
-          const lotQty = parseFormattedNumber(lot.quantity || lot.rrQty || 0);
-          const rowQty = parseFormattedNumber(r.rrQty || 0) || 0;
-          const lotRatio = rowQty > 0 ? lotQty / rowQty : 1;
-          dt1Payload.push({
-  lnNo: String(dt1Payload.length + 1),
+        if (lotDetails.length > 0) {
+          return lotDetails
+            .map((lot) => ({
+              ...lot,
+              lotNo: String(lot.lotNo || "").trim(),
+              quantity: parseFormattedNumber(lot.quantity || lot.rrQty || 0) || 0,
+            }))
+            .filter((lot) => lot.lotNo && lot.quantity > 0);
+        }
 
-  poId: r.poId || r.po_id || r.PO_ID || "",
-  prId: r.prId || r.pr_id || r.PR_ID || "",
-  prNo: r.prNo || r.pr_no || r.PR_NO || "",
+        const fallbackLotNo = String(row.lotNo || "").trim();
+        const fallbackQty = parseFormattedNumber(row.rrQty || row.quantity || 0) || 0;
 
-  groupId:
-    r.groupId ||
-    r.group_id ||
-    r.GROUP_ID ||
-    r.GroupId ||
-    "",
+        if (!fallbackLotNo || fallbackQty <= 0) {
+          return [];
+        }
 
-  invType: r.invType || "MS",
-  itemCode: r.itemCode || "",
-  itemName: r.itemName || "",
-  uomCode: r.uomCode || "",
+        return [
+          {
+            lotNo: fallbackLotNo,
+            quantity: fallbackQty,
+            rrQty: fallbackQty,
+            bbDate: row.bbDate || null,
+            qstatCode: row.qstatCode || row.qsCode || "",
+            qsCode: row.qstatCode || row.qsCode || "",
+            whouseCode:
+              row.whouseCode ||
+              row.whCode ||
+              state.WHCode ||
+              state.WHcode ||
+              "",
+            whCode:
+              row.whCode ||
+              row.whouseCode ||
+              state.WHCode ||
+              state.WHcode ||
+              "",
+            LocCode: row.LocCode || row.locCode || state.LocCode || "",
+            locCode: row.locCode || row.LocCode || state.LocCode || "",
+            controlNo: row.controlNo || "",
 
-  quantity: parseFormattedNumber(r.rrQty || r.quantity || 0),
-  rrQuantity: parseFormattedNumber(r.rrQty || r.quantity || 0),
+            // Background fields for MSRR_DT3. Hidden in modal display.
+            itemCode: row.itemCode || row.item_code || "",
+            item_code: row.item_code || row.itemCode || "",
+            rcCode: row.rcCode || row.rc_code || state.rcCode || "",
+            rc_code: row.rc_code || row.rcCode || state.rcCode || "",
+            unitCost: row.unitCost || row.unit_cost || 0,
+            unit_cost: row.unit_cost || row.unitCost || 0,
+            netAmount: row.netAmount || row.net_amount || 0,
+            net_amount: row.net_amount || row.netAmount || 0,
+            groupId: row.groupId || row.group_id || "",
+            group_id: row.group_id || row.groupId || "",
+            lnNo: row.lnNo || row.ln_no || row.lineNo || "",
+            ln_no: row.ln_no || row.lnNo || row.lineNo || "",
+          },
+        ];
+      };
 
-  poNo: r.poNo || state.poNo || "",
-  poLineno: r.poLineno || r.poLineNo || r.lnNo || r.Ln || "",
-  poQty: parseFormattedNumber(r.poQty || r.poQuantity || r.PO_QUANTITY || 0),
-  poBalance: parseFormattedNumber(r.poBalance || r.qtyBalance || 0),
+      // DT1 must remain one row per MSRR item, even when lot quantities are split.
+      const getStableLotGroupId = (row = {}, index = 0) =>
+        row.groupId ||
+        row.group_id ||
+        row.GROUP_ID ||
+        row.GroupId ||
+        row.GROUPID ||
+        `MSRR-TEMP-${index + 1}`;
 
-  unitCost: parseFormattedNumber(r.unitCost || 0),
-  itemAmount: parseFormattedNumber(r.itemAmount || r.grossAmount || 0),
-  vatCode: r.vatCode || "",
-  vatAmount: parseFormattedNumber(r.vatAmount || 0),
-  netAmount: parseFormattedNumber(r.netAmount || 0),
+      const dt1Payload = (state.detailRows || []).map((r, index) => {
+        const sourceLots = getRowLotEntriesForSave(r);
+        const firstLot = sourceLots[0] || {};
+        const stableLotGroupId = getStableLotGroupId(r, index);
 
-  whouseCode:
-    r.whouseCode ||
-    r.whCode ||
-    state.WHCode ||
-    state.WHcode ||
-    "",
+        return {
+          lnNo: String(index + 1),
+          poId: r.poId || r.po_id || r.PO_ID || "",
+          prId: r.prId || r.pr_id || r.PR_ID || "",
+          prNo: r.prNo || r.pr_no || r.PR_NO || "",
+          groupId: stableLotGroupId,
+          invType: r.invType || "MS",
+          itemCode: r.itemCode || "",
+          itemName: r.itemName || "",
+          uomCode: r.uomCode || "",
+          quantity: parseFormattedNumber(r.rrQty || r.quantity || 0),
+          rrQuantity: parseFormattedNumber(r.rrQty || r.quantity || 0),
+          poNo: r.poNo || state.poNo || "",
+          poLineno: r.poLineno || r.poLineNo || r.lnNo || r.Ln || "",
+          poQty: parseFormattedNumber(r.poQty || r.poQuantity || r.PO_QUANTITY || 0),
+          poBalance: parseFormattedNumber(r.poBalance || r.qtyBalance || 0),
+          freeQuantity: parseFormattedNumber(r.freeQty || r.freeQuantity || 0),
+          unitCost: parseFormattedNumber(r.unitCost || 0),
+          unitCostFx: parseFormattedNumber(r.unitCostFx || r.unitCost || 0),
+          itemAmount: parseFormattedNumber(r.itemAmount || r.grossAmount || 0),
+          vatCode: r.vatCode || "",
+          vatAmount: parseFormattedNumber(r.vatAmount || 0),
+          currCode: r.currCode || state.currCode || "PHP",
+          currRate: Number(state.currRate || 1),
+          fxAmount: parseFormattedNumber(r.fxAmount || r.itemAmount || r.grossAmount || 0),
+          netAmount: parseFormattedNumber(r.netAmount || 0),
+          whouseCode: r.whouseCode || r.whCode || state.WHCode || state.WHcode || "",
+          locCode: r.locCode || r.LocCode || state.LocCode || "",
+          lotNo: firstLot.lotNo || r.lotNo || "",
+          bbDate: firstLot.bbDate || r.bbDate || null,
+          qstatCode: firstLot.qstatCode || firstLot.qsCode || r.qstatCode || r.qsCode || "",
+          controlNo: firstLot.controlNo || r.controlNo || "",
+          rcCode: r.rcCode || state.rcCode || "",
+          itemSpecs: r.itemSpecs || "",
+          categCode: r.categCode || "",
+          altItemno: r.altItemno || "",
+          itemStat: r.itemStat || "",
+          prLineno: r.prLineno || "",
+          shippingCost: parseFormattedNumber(r.shippingCost || 0),
+          landedCost: parseFormattedNumber(r.landedCost || 0),
+          unitShipcost: parseFormattedNumber(r.unitShipcost || 0),
+          unitLandedcost: parseFormattedNumber(r.unitLandedcost || 0),
+        };
+      });
 
-  locCode: r.locCode || r.LocCode || state.LocCode || "",
+      // DT3 saves one row per split lot. Example: 100 RR Qty -> 50/25/25 becomes three DT3 rows.
+      const dt3Payload = [];
+      (state.detailRows || []).forEach((r, rowIndex) => {
+        const sourceLots = getRowLotEntriesForSave(r);
 
-  lotNo: r.lotNo || "",
-  bbDate: r.bbDate || null,
-  qstatCode: r.qstatCode || r.qsCode || "",
-  rcCode: r.rcCode || state.rcCode || "",
-  itemSpecs: r.itemSpecs || "",
-  categCode: r.categCode || "",
+        sourceLots.forEach((lot, lotIndex) => {
+  const lotQty = parseFormattedNumber(lot.quantity || lot.rrQty || 0);
+  const lotNo = String(lot.lotNo || "").trim();
+
+  if (lotQty <= 0 || !lotNo) return;
+
+  const rrQty = parseFormattedNumber(r.rrQty || r.quantity || 0) || 0;
+  const rowNetAmount = parseFormattedNumber(r.netAmount || r.net_amount || 0) || 0;
+  const lotUnitNetAmount = rrQty > 0 ? rowNetAmount / rrQty : 0;
+
+  dt3Payload.push({
+    lnNo: String(rowIndex + 1),
+    lotLineNo: String(lotIndex + 1),
+
+    groupId: getStableLotGroupId(r, rowIndex),
+    itemCode: lot.itemCode || lot.item_code || r.itemCode || r.item_code || "",
+    item_code: lot.item_code || lot.itemCode || r.item_code || r.itemCode || "",
+
+    quantity: lotQty,
+    rrQuantity: lotQty,
+
+    unitCost: parseFormattedNumber(
+      lot.unitCost || lot.unit_cost || r.unitCost || r.unit_cost || 0
+    ),
+    unit_cost: parseFormattedNumber(
+      lot.unit_cost || lot.unitCost || r.unit_cost || r.unitCost || 0
+    ),
+
+    netAmount: lotUnitNetAmount,
+    net_amount: lotUnitNetAmount,
+
+    rcCode: lot.rcCode || lot.rc_code || r.rcCode || r.rc_code || state.rcCode || "",
+    rc_code: lot.rc_code || lot.rcCode || r.rc_code || r.rcCode || state.rcCode || "",
+
+    whouseCode: lot.whouseCode || lot.whCode || r.whouseCode || r.whCode || state.WHCode || state.WHcode || "",
+    whCode: lot.whCode || lot.whouseCode || r.whCode || r.whouseCode || state.WHCode || state.WHcode || "",
+
+    locCode: lot.locCode || lot.LocCode || r.locCode || r.LocCode || state.LocCode || "",
+    LocCode: lot.LocCode || lot.locCode || r.LocCode || r.locCode || state.LocCode || "",
+
+    lotNo,
+    qstatCode: lot.qstatCode || lot.qsCode || r.qstatCode || r.qsCode || "",
+    qsCode: lot.qsCode || lot.qstatCode || r.qsCode || r.qstatCode || "",
+    bbDate: lot.bbDate || r.bbDate || null,
+    controlNo: lot.controlNo || r.controlNo || "",
+  });
 });
-        });
-      });
+      });
 
       // Build payload (match your sproc params)
       const glData = {
@@ -3184,6 +3543,10 @@ rrHdId: documentID || "",
 
         // DT1
         dt1: dt1Payload,
+
+
+        // DT3 (Lot No split rows)
+        dt3: dt3Payload,
 
         // DT2 (GL)
         dt2: isGeneralLedgerEnabled ? (state.detailRowsGL || []).map((r, i) => ({
@@ -3232,7 +3595,40 @@ rrHdId: documentID || "",
         );
 
         console.log("MSRR upsert response:", res);
-        // normalize row (supports: array, axios response, unwrapped response)
+        
+        const getReturnedValue = (row, ...keys) => {
+          if (!row || typeof row !== "object") return "";
+
+          for (const key of keys) {
+            const value = row?.[key];
+            if (value !== undefined && value !== null && value !== "") {
+              return value;
+            }
+          }
+
+          const normalizeKey = (key) =>
+            String(key || "")
+              .replace(/[_\s-]/g, "")
+              .toLowerCase();
+          const normalizedEntries = Object.entries(row).reduce(
+            (acc, [key, value]) => {
+              acc[normalizeKey(key)] = value;
+              return acc;
+            },
+            {},
+          );
+
+          for (const key of keys) {
+            const value = normalizedEntries[normalizeKey(key)];
+            if (value !== undefined && value !== null && value !== "") {
+              return value;
+            }
+          }
+
+          return "";
+        };
+
+        // normalize row (supports: array, axios response, unwrapped response)
         const normalizeSaveRow = (value) => {
           if (!value) return null;
           if (Array.isArray(value)) return normalizeSaveRow(value[0]);
@@ -3291,39 +3687,7 @@ rrHdId: documentID || "",
           return value;
         };
 
-        const getReturnedValue = (row, ...keys) => {
-          if (!row || typeof row !== "object") return "";
-
-          for (const key of keys) {
-            const value = row?.[key];
-            if (value !== undefined && value !== null && value !== "") {
-              return value;
-            }
-          }
-
-          const normalizeKey = (key) =>
-            String(key || "")
-              .replace(/[_\s-]/g, "")
-              .toLowerCase();
-          const normalizedEntries = Object.entries(row).reduce(
-            (acc, [key, value]) => {
-              acc[normalizeKey(key)] = value;
-              return acc;
-            },
-            {},
-          );
-
-          for (const key of keys) {
-            const value = normalizedEntries[normalizeKey(key)];
-            if (value !== undefined && value !== null && value !== "") {
-              return value;
-            }
-          }
-
-          return "";
-        };
-
-        const row = normalizeSaveRow(
+        const row = normalizeSaveRow(
           (Array.isArray(res) ? res?.[0] : null) ??
           (Array.isArray(res?.data) ? res.data?.[0] : res?.data ?? null) ??
           (Array.isArray(res?.data?.data) ? res.data.data?.[0] : res?.data?.data ?? null) ??
@@ -4958,8 +5322,14 @@ const handleClosePayeeLookup = async (row) => {
               <table className="min-w-full border-collapse">
                 <thead className="global-tran-thead-div-ui">
                   <tr>
+                    <th className="global-tran-th-ui">#</th>
+                    <th className="global-tran-th-ui">Lot No</th>
                     <th className="global-tran-th-ui">Quantity</th>
-                    <th className="global-tran-th-ui"></th>
+                    <th className="global-tran-th-ui">BB Date</th>
+                    <th className="global-tran-th-ui">QC Status</th>
+                    <th className="global-tran-th-ui">Warehouse</th>
+                    <th className="global-tran-th-ui">Location</th>
+                    <th className="global-tran-th-ui">Add</th>
                     <th className="global-tran-th-ui">Delete</th>
                   </tr>
                 </thead>
@@ -5267,16 +5637,20 @@ const handleClosePayeeLookup = async (row) => {
         />
       )}
 
-      {msLookupModalOpen && (
-        <MSLookupModal
-          isOpen={msLookupModalOpen}
-          onClose={handleCloseMSLookup}
+      {msLookupModalOpen && (
+        <ItemMastLookupModal
+          isOpen={msLookupModalOpen}
+          endpoint="getInvLookupMS"
+          onClose={handleCloseMSLookup}
           onGetSelectedItems={handleCloseMSLookup}
+          onCancel={() =>
+            updateState({ msLookupModalOpen: false, selectedRowIndex: null })
+          }
           enableMultiSelect
           customParam="ActiveAll"
-          endpoint="/lookupMSMast"
-        />
-      )}
+          docType="PRMS"
+        />
+      )}
 
       {state.specsModalOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4">

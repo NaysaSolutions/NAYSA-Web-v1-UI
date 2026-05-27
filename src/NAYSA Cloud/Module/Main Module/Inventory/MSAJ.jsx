@@ -1,19 +1,17 @@
-import { useState, useEffect,useRef,useCallback, Fragment } from "react";
+import { useState, useEffect, useRef, useCallback, Fragment } from "react";
 import Swal from 'sweetalert2';
-import { useNavigate,useLocation  } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faFolderOpen } from "@fortawesome/free-solid-svg-icons";
+import { faDownload, faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faFolderOpen, faUpload } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
-import CurrLookupModal from "../../../Lookup/SearchCurrRef.jsx";
-import CustomerMastLookupModal from "../../../Lookup/SearchCustMast";
 import COAMastLookupModal from "../../../Lookup/SearchCOAMast.jsx";
 import RCLookupModal from "../../../Lookup/SearchRCMast.jsx";
-import VATLookupModal from "../../../Lookup/SearchVATRef.jsx";
-import ATCLookupModal from "../../../Lookup/SearchATCRef.jsx";
 import SLMastLookupModal from "../../../Lookup/SearchSLMast.jsx";
 import CancelTranModal from "../../../Lookup/SearchCancelRef.jsx";
 import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
@@ -30,7 +28,7 @@ import ItemMastLookupModal from "../../../Lookup/SearchItemMast.jsx";
 
 
 // Configuration
-import { postRequest,fetchDataJson} from '../../../Configuration/BaseURL.jsx'
+import { postRequest, fetchDataJson } from '../../../Configuration/BaseURL.jsx'
 import { useReset } from "../../../Components/ResetContext";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import {
@@ -43,8 +41,6 @@ import {
 
 
 import {
-  useTopVatRow,
-  useTopATCRow,
   useTopRCRow,
   useTopCurrencyRow,
   useTopHSOption,
@@ -90,8 +86,6 @@ import {
   formatNumber,
   parseFormattedNumber,
   useSwalshowSaveSuccessDialog,
-  useSwalHandleOpenSpecsModal,
-  useSwalSuccessAlert,
   useSwalErrorAlert,
   useSwalInfoAlert,
   useSwalvalidateRequiredFields
@@ -103,6 +97,42 @@ import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 // Header
 import Header from '@/NAYSA Cloud/Components/Header';
+
+/*
+================================================================================
+MSAJ TRANSACTION WORKFLOW
+================================================================================
+1. User prepares header values:
+   - Branch
+   - Adjustment Type
+   - Warehouse / Location
+   - Transaction Date
+
+2. User adds item detail rows by either:
+   A. Add Item lookup
+   B. Download Template -> Encode Excel -> Upload Transaction
+
+3. Single upload workflow:
+   - Download Template uses the current visible detail columns.
+   - Upload reads one .xlsx file only.
+   - Upload validates Excel headers against the current template.
+   - Upload sends parsed detail rows to SQL/Laravel ValidateUpload.
+   - SQL validates Item, Warehouse, Location, and optional Quality Status.
+   - If validation is clean, detail rows are loaded and GL rows are cleared.
+
+4. Save workflow:
+   - BB: saves item details only.
+   - Non-BB: generates GL entries if missing, then saves header/detail/GL.
+
+5. BB upload control:
+   - If BB record already exists for the branch using document no. 00000000,
+     Download Template and Upload Transaction are hidden.
+================================================================================
+*/
+
+/* --------------------------------------------------------------------------
+ * Date helpers
+ * -------------------------------------------------------------------------- */
 const toDateInputValue = (value) => {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -123,12 +153,17 @@ const toDateInputValue = (value) => {
 };
 
 
+/* --------------------------------------------------------------------------
+ * Main Component
+ * -------------------------------------------------------------------------- */
 const MSAJ = () => {
 
   // View Document Const
   const loadedFromUrlRef = useRef(false);
   const detailRowsRef = useRef([]);
   const detailRowsGLRef = useRef([]);
+  const singleUploadDropdownRef = useRef(null);
+  const uploadInputRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation(); 
   const [isViewDocument, setIsViewDocument] = useState(false);
@@ -148,6 +183,8 @@ const MSAJ = () => {
 
 
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
+  const [showSingleUploadDropdown, setShowSingleUploadDropdown] = useState(false);
+  const [pendingHeaderLocationWH, setPendingHeaderLocationWH] = useState("");
   const { user } = useAuth();
   const { resetFlag } = useReset();
   const docType = docTypes.MSAJ;
@@ -155,6 +192,9 @@ const MSAJ = () => {
   const pdfLink = docTypePDFGuide[docType];
   const videoLink = docTypeVideoGuide[docType];
   const documentTitle = hsDoc?.docName + " Transaction";
+  /* ------------------------------------------------------------------------
+   * Main transaction state
+   * ------------------------------------------------------------------------ */
   const [state, setState] = useState({
 
 
@@ -187,6 +227,7 @@ const MSAJ = () => {
     isLoading: false,
     showSpinner: false,
     triggerGLEntries:false,
+    bbUploadExists: false,
     isDocNoDisabled: false,
     isSaveDisabled: false,
     isResetDisabled: false,
@@ -243,16 +284,12 @@ const MSAJ = () => {
     accountModalSource: null,
     showAccountModal:false,
     showRcModal:false,
-    showVatModal:false,
-    showAtcModal:false,
     showSlModal:false,
     msLookupModalOpen:false,
     itemMastLookupOpen:false,
     warehouseLookupOpen:false,
 
-    currencyModalOpen:false,
     branchModalOpen:false,
-    custModalOpen:false,
     showCancelModal:false,
     showAttachModal:false,
     showSignatoryModal:false,
@@ -292,6 +329,7 @@ const MSAJ = () => {
   isFetchDisabled,
   triggerGLEntries,
   itemSingleSelect,
+  bbUploadExists,
 
 
 
@@ -347,12 +385,8 @@ const MSAJ = () => {
   // Modals
   showAccountModal,
   showRcModal,
-  showVatModal,
-  showAtcModal,
   showSlModal,
-  currencyModalOpen,
   branchModalOpen,
-  custModalOpen,
   showCancelModal,
   showAttachModal,
   showSignatoryModal,
@@ -369,7 +403,22 @@ const MSAJ = () => {
 
   const [focusedCell, setFocusedCell] = useState(null); // { index: number, field: string }
 
+  useEffect(() => {
+    if (!showSingleUploadDropdown) return;
 
+    const handleClickOutside = (event) => {
+      if (singleUploadDropdownRef.current?.contains(event.target)) return;
+      setShowSingleUploadDropdown(false);
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showSingleUploadDropdown]);
+
+
+  /* ------------------------------------------------------------------------
+   * Status and upload availability
+   * ------------------------------------------------------------------------ */
   //Status Global Setup
   const displayStatus = status || 'OPEN';
   const statusMap = {
@@ -381,6 +430,12 @@ const MSAJ = () => {
   const isFormDisabled =
   isViewDocumentUrl ||
   ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+  const canUseSingleUploadOptions =
+    String(hsDoc?.docUpload || "").toUpperCase() === "S" &&
+    (
+      selectedAJType === "IG" ||
+      (selectedAJType === "BB" && !bbUploadExists)
+    );
 
   //Variables
 
@@ -477,8 +532,86 @@ useEffect(() => {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  useEffect(() => {
+    if (!canUseSingleUploadOptions) {
+      setShowSingleUploadDropdown(false);
+    }
+  }, [canUseSingleUploadOptions]);
+
+  useEffect(() => {
+    if (!pendingHeaderLocationWH || isFormDisabled) return;
+    if (WHCode !== pendingHeaderLocationWH || !WHName) return;
+
+    updateState({
+      locationLookupOpen: true,
+      selectedWH: pendingHeaderLocationWH,
+    });
+    setPendingHeaderLocationWH("");
+  }, [pendingHeaderLocationWH, WHCode, WHName, isFormDisabled]);
 
 
+
+/* --------------------------------------------------------------------------
+ * BB upload control
+ * Checks if Beginning Balance was already uploaded for this branch.
+ * -------------------------------------------------------------------------- */
+const handleCheckBBUploaded = useCallback(async (targetBranchCode) => {
+  if (!targetBranchCode) return false;
+
+  try {
+    const payload = {
+      PARAMS: JSON.stringify({
+        branchCode: targetBranchCode,
+      }),
+    };
+
+    const response = await postRequest("checkMSAJBBUploaded", payload);
+    const result =
+      response?.result ||
+      response?.data?.result ||
+      response?.Data?.result ||
+      response?.data?.Data?.result ||
+      {};
+
+    return Boolean(result?.bbUploaded);
+  } catch (error) {
+    console.error("Error checking BB upload status:", error);
+    return false;
+  }
+}, []);
+
+
+
+useEffect(() => {
+  let isMounted = true;
+
+  const checkBBStatus = async () => {
+    if (selectedAJType !== "BB" || !branchCode) {
+      if (isMounted) {
+        updateState({ bbUploadExists: false });
+      }
+      return;
+    }
+
+    const exists = await handleCheckBBUploaded(branchCode);
+
+    if (isMounted) {
+      updateState({ bbUploadExists: exists });
+    }
+  };
+
+  checkBBStatus();
+
+  return () => {
+    isMounted = false;
+  };
+}, [selectedAJType, branchCode, handleCheckBBUploaded]);
+
+
+
+/* --------------------------------------------------------------------------
+ * Reset and initial loading
+ * -------------------------------------------------------------------------- */
 const handleReset = () => {
       clearMsajDetailSorting();
       clearMsajGlSorting();
@@ -545,6 +678,9 @@ const handleReset = () => {
 
 
 
+/* --------------------------------------------------------------------------
+ * Fetch existing transaction
+ * -------------------------------------------------------------------------- */
 const fetchTranData = async (documentNo, branchCode,direction='') => {
   const resetState = () => {
     updateState({documentNo:'', documentID: '', isDocNoDisabled: false, isFetchDisabled: false });
@@ -634,6 +770,11 @@ const handleDocNoBlur = () => {
 };
 
 
+/* --------------------------------------------------------------------------
+ * Main transaction actions
+ * - GenerateGL: builds accounting entries
+ * - Upsert: validates/saves transaction
+ * -------------------------------------------------------------------------- */
 const handleActivityOption = async (action) => {
   if ((detailRows?.length || 0) + (detailRowsGL?.length || 0) === 0) {
     return;
@@ -795,145 +936,12 @@ const handleActivityOption = async (action) => {
 };
 
 
-// const handleActivityOption = async (action) => {
-//   // Prevent execution if document is already processed
-//   console.log(documentStatus)
-//   if (documentStatus !== '') return;
-
-//   // 1. Helper function for formatting payload 
-//   // This is synchronous to prevent Babel 'await' errors during mapping
-//   const getFormattedPayload = (targetGLRows) => {
-//     const {
-//       branchCode,
-//       documentNo,
-//       documentID,
-//       documentDate,
-//       selectedAJType,
-//       refDocNo1,
-//       refDocNo2,
-//       remarks,
-//       userCode,
-//       detailRows
-//     } = state;
-
-//     return {
-//       branchCode: branchCode,
-//       msajNo: documentNo || "",
-//       msajId: documentID || "",
-//       msajDate: documentDate,
-//       ajtranType: selectedAJType,
-//       refDocNo1: refDocNo1,
-//       refDocNo2: refDocNo2,
-//       remarks: remarks || "",
-//       whCode:WHCode||"",
-//       locCode:LocCode || "",
-//       userCode: userCode,
-//       dt1: detailRows.map((row, index) => ({
-//         lnNo: String(index + 1),
-//         itemCode: row.itemCode || "",
-//         itemName: row.itemName || "",
-//         categCode: row.categCode || "",
-//         oldValue:row.oldValue || "",
-//         quantity: parseFormattedNumber(row.quantity || 0),
-//         uomCode: row.uomCode || "",
-//         unitCost: parseFormattedNumber(row.unitCost || 0),
-//         itemAmount: parseFormattedNumber(row.itemAmount || 0),
-//         lotNo: row.lotNo || "",
-//         qstatCode: row.qstatCode || "",
-//         bbDate: row.bbDate ? new Date(row.bbDate).toISOString().split("T")[0] : null,
-//         qtyHand: parseFormattedNumber(row.qtyHand || 0),
-//         whouseCode: row.whouseCode || "",
-//         locCode: row.locCode || "",
-//         acctCode: row.acctCode || "",
-//         rcCode: row.rcCode || "",
-//         slTypeCode: row.sltypeCode || "",
-//         slCode: row.slCode || "",
-//         uniqueKey: row.uniqueKey || "",
-//         operation: row.operation || ""
-//       })),
-//       dt2: targetGLRows.map((entry, index) => ({
-//         recNo: String(index + 1),
-//         acctCode: entry.acctCode || "",
-//         rcCode: entry.rcCode || "",
-//         sltypeCode: entry.sltypeCode || "",
-//         slCode: entry.slCode || "",
-//         particular: entry.particular || "",
-//         vatCode: entry.vatCode || "",
-//         vatName: entry.vatName || "",
-//         atcCode: entry.atcCode || "",
-//         atcName: entry.atcName || "",
-//         debit: parseFormattedNumber(entry.debit || 0),
-//         credit: parseFormattedNumber(entry.credit || 0),
-//         debitFx1: parseFormattedNumber(entry.debitFx1 || 0),
-//         creditFx1: parseFormattedNumber(entry.creditFx1 || 0),
-//         debitFx2: parseFormattedNumber(entry.debitFx2 || 0),
-//         creditFx2: parseFormattedNumber(entry.creditFx2 || 0),
-//         slRefNo: entry.slRefNo || "",
-//         slRefDate: entry.slRefDate ? new Date(entry.slRefDate).toISOString().split("T")[0] : null,
-//         remarks: entry.remarks || ""
-//       }))
-//     };
-//   };
-
-//   updateState({ isLoading: true });
-
-//   try {
-//     let currentGL = state.detailRowsGL;
-
-//     // --- STEP 1: AUTO-GENERATE IF UPSERTING WITH EMPTY GL ---
-//     // This allows "Generate then Save" in one click
-//     if (action === "Upsert" && currentGL.length === 0 && selectedAJType !== "BB") {
-//       const genPayload = getFormattedPayload([]);
-//       const newGlEntries = await useGenerateGLEntries(docType, genPayload);
-
-//       if (newGlEntries && newGlEntries.length > 0) {
-//         currentGL = newGlEntries;
-//         updateState({ detailRowsGL: newGlEntries });
-//       } else {
-//         updateState({ isLoading: false });
-//         console.warn("GL Generation failed. Upsert cancelled.");
-//         return; 
-//       }
-
-//     }
-
-//     // --- STEP 2: MANUAL GENERATE GL ---
-//     if (action === "GenerateGL") {
-//       const genPayload = getFormattedPayload(currentGL);
-//       const newGlEntries = await useGenerateGLEntries(docType, genPayload);
-//       if (newGlEntries) {
-//         updateState({ detailRowsGL: newGlEntries });
-//       }
-//     }
-
-//     // --- STEP 3: UPSERT (SAVE) ---
-//     if (action === "Upsert") {
-//       // We use currentGL variable because state updates are async 
-//       // and wouldn't be available yet if we just generated them.
-//       const savePayload = getFormattedPayload(currentGL);
-//       const response = await useTransactionUpsert(docType, savePayload, updateState, 'msajId', 'msajNo');
-
-//       if (response) {
-//         const isZero = Number(noReprints) === 0;
-//         const onSaveAndPrint = isZero
-//           ? () => updateState({ showSignatoryModal: true })
-//           : () => handleSaveAndPrint(response.data[0].msajId);
-
-//         useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
-//         updateState({ isDocNoDisabled: true, isFetchDisabled: true });
-//       }
-//     }
-//   } catch (error) {
-//     console.error("Error in transaction flow:", error);
-//   } finally {
-//     updateState({ isLoading: false });
-//   }
-// };
 
 
 
-
-
+/* --------------------------------------------------------------------------
+ * Detail row helpers and item add/delete actions
+ * -------------------------------------------------------------------------- */
 const createEmptyDetailRow = () => ({
   lnNo: "",
   itemCode: "",
@@ -984,8 +992,6 @@ const handleGetItem = async (index = null) => {
     };
     const isValid = await useSwalvalidateRequiredFields(fieldsToCheck, "Add Item");
     if (!isValid) return;
-
-    console.log(isValid)
 
     if (["BB", "IG"].includes(selectedAJType)) {
       updateState({
@@ -1157,6 +1163,9 @@ const handleCopy = async () => {
 
 
 
+/* --------------------------------------------------------------------------
+ * UI behavior rules based on adjustment type and user access
+ * -------------------------------------------------------------------------- */
 const handleFieldBehavior = (option) => {
   switch (option) {
 
@@ -1213,6 +1222,9 @@ const handleColumnLabel = (columnName) =>{
     detailRowsGLRef.current = detailRowsGL || [];
   }, [detailRows, detailRowsGL]);
 
+  /* ------------------------------------------------------------------------
+   * Item detail table columns
+   * ------------------------------------------------------------------------ */
   const msajDetailColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
     { key: "itemCode", label: "Item Code", width: 120 },
@@ -1268,6 +1280,441 @@ const handleColumnLabel = (columnName) =>{
     (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? ""
   );
 
+  // Step 1: Download the current item-detail columns as Excel template.
+  const handleDownloadSingleUploadTemplate = async () => {
+    const templateColumns = visibleMsajDetailColumns.filter((column) => column.key !== "qtyHand");
+    const headers = templateColumns.map((column) => column.label);
+    const decimalColumnFormats = {
+      quantity: decQty,
+      unitCost: decUcost,
+      itemAmount: 2,
+    };
+    const getExcelDecimalFormat = (decimalPlaces) =>
+      `#,##0${decimalPlaces > 0 ? "." + "0".repeat(decimalPlaces) : ""}`;
+    const toExcelDate = (value) => {
+      const normalizedDate = toDateInputValue(value);
+      if (!normalizedDate) return "";
+      const [year, month, day] = normalizedDate.split("-").map(Number);
+      return new Date(year, month - 1, day);
+    };
+    const rows = sortedMsajDetailRows.map(({ row, originalIndex }) =>
+      templateColumns.map((column) => {
+        switch (column.key) {
+          case "ln":
+            return originalIndex + 1;
+          case "quantity":
+            return parseFormattedNumber(row.quantity || 0);
+          case "unitCost":
+            return parseFormattedNumber(row.unitCost || 0);
+          case "itemAmount":
+            return parseFormattedNumber(row.itemAmount || 0);
+          case "bbDate":
+            return toExcelDate(row.bbDate);
+          default:
+            return String(row[column.key] ?? "");
+        }
+      })
+    );
+
+    const rightAlignedColumns = new Set(["quantity", "unitCost", "itemAmount"]);
+    const centerAlignedColumns = new Set([
+      "ln",
+      "itemCode",
+      "uomCode",
+      "bbDate",
+      "qstatCode",
+      "whouseCode",
+      "locCode",
+      "acctCode",
+      "rcCode",
+      "slCode",
+    ]);
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Item Details");
+
+    worksheet.columns = templateColumns.map((column) => ({
+      header: column.label,
+      key: column.key,
+      width: Math.max(12, Math.ceil((column.width || 120) / 8)),
+    }));
+
+    worksheet.getRow(1).eachCell((cell) => {
+      cell.font = { bold: true };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+    });
+
+    rows.forEach((rowValues) => {
+      const excelRow = worksheet.addRow(rowValues);
+      templateColumns.forEach((column, index) => {
+        const cell = excelRow.getCell(index + 1);
+        if (decimalColumnFormats[column.key] !== undefined) {
+          cell.numFmt = getExcelDecimalFormat(decimalColumnFormats[column.key]);
+        } else if (column.key === "bbDate") {
+          cell.numFmt = "mm/dd/yyyy";
+        } else if (column.key !== "ln") {
+          cell.numFmt = "@";
+        }
+        cell.alignment = {
+          horizontal: rightAlignedColumns.has(column.key)
+            ? "right"
+            : centerAlignedColumns.has(column.key)
+              ? "center"
+              : "left",
+          vertical: "middle",
+        };
+      });
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    saveAs(
+      new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }),
+      "MS Adjustment Single Transaction Uploading Template.xlsx"
+    );
+  };
+
+  /* ------------------------------------------------------------------------
+   * Single transaction upload/download workflow
+   * ------------------------------------------------------------------------ */
+  const getSingleUploadTemplateColumns = () =>
+    visibleMsajDetailColumns.filter((column) => column.key !== "qtyHand");
+
+  const normalizeExcelHeader = (value) => String(value ?? "").trim();
+  const normalizeHeaderForCompare = (value) => normalizeExcelHeader(value).replace(/\s+/g, " ").toUpperCase();
+
+  const getExcelCellValue = (cell) => {
+    const value = cell?.value;
+    if (value === null || value === undefined) return "";
+    if (value instanceof Date) return toDateInputValue(value);
+    if (typeof value === "object") {
+      if (value.text !== undefined) return String(value.text ?? "").trim();
+      if (value.result !== undefined) return String(value.result ?? "").trim();
+      if (Array.isArray(value.richText)) return value.richText.map((part) => part.text || "").join("").trim();
+      if (value.hyperlink !== undefined && value.text !== undefined) return String(value.text ?? "").trim();
+    }
+    return String(value ?? "").trim();
+  };
+
+  const toExcelUploadDate = (value) => {
+    if (!value) return "";
+    if (value instanceof Date) return toDateInputValue(value);
+
+    // Excel stores dates as serial numbers when the cell is not read as a Date object.
+    // Example: 46167 = 05/24/2026. Convert it before sending to SQL.
+    if (typeof value === "number" && Number.isFinite(value)) {
+      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+      const utcDate = new Date(excelEpoch.getTime() + Math.floor(value) * 86400000);
+      return utcDate.toISOString().slice(0, 10);
+    }
+
+    const rawText = String(value || "").trim();
+    if (/^\d+(\.\d+)?$/.test(rawText)) {
+      const serialValue = Number(rawText);
+      if (serialValue > 25000 && serialValue < 90000) {
+        const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+        const utcDate = new Date(excelEpoch.getTime() + Math.floor(serialValue) * 86400000);
+        return utcDate.toISOString().slice(0, 10);
+      }
+    }
+
+    const normalized = toDateInputValue(value);
+    return normalized || rawText;
+  };
+
+  const safeJsonParse = (value) => {
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return value;
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return value;
+    }
+  };
+
+  const extractSprocJsonResult = (response) => {
+    const unwrap = (value, depth = 0) => {
+      if (depth > 8 || value === null || value === undefined) return null;
+
+      const parsedValue = safeJsonParse(value);
+      if (parsedValue !== value) return unwrap(parsedValue, depth + 1);
+
+      if (Array.isArray(value)) {
+        if (value.length === 0) return null;
+        return unwrap(value[0], depth + 1);
+      }
+
+      if (typeof value !== "object") return null;
+
+      if (value.rows !== undefined || value.errors !== undefined || value.errorCount !== undefined) {
+        return value;
+      }
+
+      if (value.result !== undefined) return unwrap(value.result, depth + 1);
+      if (value.Result !== undefined) return unwrap(value.Result, depth + 1);
+      if (value.data !== undefined) return unwrap(value.data, depth + 1);
+      if (value.Data !== undefined) return unwrap(value.Data, depth + 1);
+      if (value.payload !== undefined) return unwrap(value.payload, depth + 1);
+
+      return null;
+    };
+
+    const result = unwrap(response);
+    if (!result) {
+      console.error("Unable to read upload validation response:", response);
+    }
+    return result;
+  };
+
+  const showUploadErrorList = (title, errors) => {
+    const list = Array.isArray(errors) ? errors : [errors].filter(Boolean);
+    Swal.fire({
+      icon: "error",
+      title,
+      html: `<div style="text-align:left;max-height:420px;overflow:auto;white-space:pre-wrap;">${list
+        .map((err) => String(err || ""))
+        .join("<br/>")}</div>`,
+      width: 760,
+    });
+  };
+
+  const validateSingleUploadHeaders = (worksheet, templateColumns) => {
+    const expectedHeaders = templateColumns.map((column) => column.label);
+    const headerRow = worksheet.getRow(1);
+    const actualHeaders = expectedHeaders.map((_, index) => getExcelCellValue(headerRow.getCell(index + 1)));
+
+    const extraHeaderValues = [];
+    headerRow.eachCell({ includeEmpty: false }, (cell, columnNumber) => {
+      if (columnNumber > expectedHeaders.length && getExcelCellValue(cell)) {
+        extraHeaderValues.push(`Column ${columnNumber}: "${getExcelCellValue(cell)}"`);
+      }
+    });
+
+    const errors = [];
+    if (extraHeaderValues.length > 0) {
+      errors.push(`Excel has extra column(s): ${extraHeaderValues.join(", ")}`);
+    }
+
+    expectedHeaders.forEach((expectedHeader, index) => {
+      const actualHeader = actualHeaders[index];
+      if (normalizeHeaderForCompare(actualHeader) !== normalizeHeaderForCompare(expectedHeader)) {
+        errors.push(`Column ${index + 1} expected "${expectedHeader}" but found "${actualHeader || "blank"}".`);
+      }
+    });
+
+    return errors;
+  };
+
+  const parseSingleUploadRows = (worksheet, templateColumns) => {
+    const rows = [];
+
+    worksheet.eachRow({ includeEmpty: false }, (excelRow, rowNumber) => {
+      if (rowNumber === 1) return;
+
+      const rowData = createEmptyDetailRow();
+      let hasValue = false;
+
+      templateColumns.forEach((column, columnIndex) => {
+        const rawValue = getExcelCellValue(excelRow.getCell(columnIndex + 1));
+        if (String(rawValue || "").trim() !== "") hasValue = true;
+
+        switch (column.key) {
+          case "ln":
+            break;
+          case "quantity":
+          case "unitCost":
+          case "itemAmount":
+            rowData[column.key] = parseFormattedNumber(rawValue || 0) || 0;
+            break;
+          case "bbDate":
+            rowData.bbDate = toExcelUploadDate(excelRow.getCell(columnIndex + 1)?.value || rawValue);
+            break;
+          default:
+            rowData[column.key] = String(rawValue ?? "").trim();
+            break;
+        }
+      });
+
+      if (!hasValue) return;
+
+      const quantity = parseFormattedNumber(rowData.quantity || 0) || 0;
+      const unitCost = parseFormattedNumber(rowData.unitCost || 0) || 0;
+      rowData.lnNo = rows.length + 1;
+      rowData.quantity = quantity;
+      rowData.unitCost = unitCost;
+      rowData.itemAmount = +(quantity * unitCost).toFixed(2);
+      rowData.whouseCode = rowData.whouseCode || WHCode || "";
+      rowData.locCode = rowData.locCode || LocCode || "";
+      rowData.operation = "A";
+      rowData.qtyHand = 0;
+      rowData.uniqueKey = "";
+
+      rows.push(rowData);
+    });
+
+    return rows;
+  };
+
+  // Step 2: Build the server validation payload.
+  const buildUploadValidationPayload = (rows) => ({
+    json_data: {
+      branchCode,
+      msajDate: documentDate,
+      ajtranType: selectedAJType,
+      whCode: WHCode || "",
+      locCode: LocCode || "",
+      userCode,
+      dt1: rows.map((row, index) => ({
+        lnNo: index + 1,
+        itemCode: row.itemCode || "",
+        itemName: row.itemName || "",
+        categCode: row.categCode || "",
+        quantity: parseFormattedNumber(row.quantity || 0) || 0,
+        uomCode: row.uomCode || "",
+        unitCost: parseFormattedNumber(row.unitCost || 0) || 0,
+        itemAmount: parseFormattedNumber(row.itemAmount || 0) || 0,
+        lotNo: row.lotNo || "",
+        qstatCode: row.qstatCode || "",
+        bbDate: row.bbDate || null,
+        qtyHand: 0,
+        whouseCode: row.whouseCode || WHCode || "",
+        locCode: row.locCode || LocCode || "",
+        acctCode: row.acctCode || "",
+        rcCode: row.rcCode || "",
+        slTypeCode: row.sltypeCode || row.slTypeCode || "",
+        slCode: row.slCode || "",
+        uniqueKey: "",
+        operation: row.operation || "A",
+        oldValue: row.oldValue || row.itemCode || "",
+      })),
+    },
+  });
+
+  // Step 4: Read Excel, validate template, validate master data, then load rows.
+  const handleUploadExcelFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    if (!/\.xlsx$/i.test(file.name)) {
+      showUploadErrorList("Invalid File", ["Please upload an Excel .xlsx file generated from the latest template."]);
+      return;
+    }
+
+    const fieldsToCheck = {
+      "Header : Warehouse": WHCode,
+      "Header : Adjustment Type": selectedAJType,
+    };
+    const isValid = await useSwalvalidateRequiredFields(fieldsToCheck, "Upload Transaction");
+    if (!isValid) return;
+
+    updateState({ isLoading: true, showSpinner: true });
+
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const buffer = await file.arrayBuffer();
+      await workbook.xlsx.load(buffer);
+      const worksheet = workbook.worksheets?.[0];
+
+      if (!worksheet) {
+        showUploadErrorList("Invalid Excel File", ["No worksheet found in the uploaded file."]);
+        return;
+      }
+
+      const templateColumns = getSingleUploadTemplateColumns();
+      const headerErrors = validateSingleUploadHeaders(worksheet, templateColumns);
+      if (headerErrors.length > 0) {
+        showUploadErrorList("Not the Same Format", [
+          "Please download the latest template and upload again.",
+          "",
+          ...headerErrors,
+        ]);
+        return;
+      }
+
+      const uploadedRows = parseSingleUploadRows(worksheet, templateColumns);
+      if (uploadedRows.length === 0) {
+        showUploadErrorList("No Records Found", ["The uploaded Excel file has no detail rows."]);
+        return;
+      }
+
+      const response = await postRequest("validateMSAJUpload", buildUploadValidationPayload(uploadedRows));
+      const result = extractSprocJsonResult(response);
+      const errorRows = result?.errors || [];
+      const validRows = result?.rows || [];
+
+      if (!result) {
+        showUploadErrorList("Upload Validation Error", ["Unable to read validation response from the server."]);
+        return;
+      }
+
+      if (Number(result.errorCount || 0) > 0 || errorRows.length > 0) {
+        showUploadErrorList("Upload Rejected", errorRows.map((row) => row.errorMsg || row.message || JSON.stringify(row)));
+        return;
+      }
+
+      if (validRows.length === 0) {
+        showUploadErrorList("Upload Validation Error", [
+          "The server returned no validated rows.",
+          "Please check the Laravel validateMSAJUpload response and the SQL ValidateUpload block.",
+          "Uploaded rows read from Excel: " + uploadedRows.length,
+        ]);
+        console.error("ValidateUpload returned zero rows:", { response, result, uploadedRows });
+        return;
+      }
+
+      const finalRows = validRows.map((row, index) => ({
+        lnNo: index + 1,
+        itemCode: row.itemCode || "",
+        itemName: row.itemName || "",
+        categCode: row.categCode || "",
+        oldValue: row.oldValue || row.itemCode || "",
+        quantity: formatNumber(parseFormattedNumber(row.quantity || 0), decQty),
+        uomCode: row.uomCode || "",
+        unitCost: formatNumber(parseFormattedNumber(row.unitCost || 0), decUcost),
+        itemAmount: formatNumber(parseFormattedNumber(row.itemAmount || 0), 2),
+        lotNo: row.lotNo || "",
+        qstatCode: row.qstatCode || "",
+        bbDate: toDateInputValue(row.bbDate),
+        qtyHand: formatNumber(parseFormattedNumber(row.qtyHand || 0), decQty),
+        whouseCode: row.whouseCode || "",
+        locCode: row.locCode || "",
+        acctCode: row.acctCode || "",
+        rcCode: row.rcCode || "",
+        sltypeCode: row.sltypeCode || row.slTypeCode || "",
+        slCode: row.slCode || "",
+        uniqueKey: row.uniqueKey || "",
+        operation: row.operation || "A",
+      }));
+
+      updateState({ detailRows: finalRows, detailRowsGL: [] });
+      updateTotals(finalRows);
+
+      Swal.fire({
+        icon: "success",
+        title: "Upload Completed",
+        text: `${finalRows.length} row(s) uploaded and validated successfully.`,
+        timer: 3000,
+        timerProgressBar: true,
+      });
+    } catch (error) {
+      console.error("Upload transaction error:", error);
+      showUploadErrorList("Upload Error", [error?.message || "Unable to process the uploaded Excel file."]);
+    } finally {
+      updateState({ isLoading: false, showSpinner: false });
+    }
+  };
+
+  // Opens the hidden file input when user clicks Upload Transaction.
+  const handleUploadSingleTransaction = () => {
+    uploadInputRef.current?.click();
+  };
+
+  /* ------------------------------------------------------------------------
+   * General ledger table columns
+   * ------------------------------------------------------------------------ */
   const msajGlColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
     { key: "acctCode", label: "Account Code", width: 120 },
@@ -1334,7 +1781,9 @@ const handleColumnLabel = (columnName) =>{
   };
 
 
-//  ** View Document and Transaction History Retrieval ***
+/* --------------------------------------------------------------------------
+ * View document and transaction history retrieval
+ * -------------------------------------------------------------------------- */
 const cleanUrl = useCallback(() => {
   window.history.replaceState({}, "", window.location.origin);
 }, []);
@@ -1375,7 +1824,10 @@ useEffect(() => {
 
  
 
-  const updateTotals = (rows) => {
+  /* --------------------------------------------------------------------------
+ * Totals computation
+ * -------------------------------------------------------------------------- */
+const updateTotals = (rows) => {
   //console.log("updateTotals received rows:", rows); // STEP 5: Check rows passed to updateTotals
 
   let totalQuantity = 0;
@@ -1393,110 +1845,11 @@ useEffect(() => {
 
 
 
-// const handleDetailChange = async (index, field, value, runCalculations = true) => {
-//   const updatedRows = [...detailRows];
 
-//   updatedRows[index] = {
-//     ...updatedRows[index],
-//     [field]: value,
-//   };
-
-//   const row = updatedRows[index];
-
-//   const autoFillBlanks = (fieldName, newValue, extraData = {}) => {
-//     if (index === 0) {
-//       updatedRows.forEach((r, i) => {
-//         if (i !== 0 && (!r[fieldName] || r[fieldName].toString().trim() === "")) {
-//           updatedRows[i] = {
-//             ...r,
-//             [fieldName]: newValue,
-//             ...extraData
-//           };
-//         }
-//       });
-//     }
-//   };
-
-//   if (field === 'acctCode') {
-//     row.acctCode = value.acctCode;
-//     autoFillBlanks('acctCode', value.acctCode);
-//   }
-
-//   if (field === 'rcCode') {
-//     row.rcCode = value.rcCode;
-//     autoFillBlanks('rcCode', value.rcCode);
-//   }
-
-//   if (field === 'slCode') {
-//     row.slCode = value.slCode;
-//     row.sltypeCode = value.sltypeCode;
-//     autoFillBlanks('slCode', value.slCode, { sltypeCode: value.sltypeCode });
-//   }
-
-//     if (field === 'whouseCode') {
-//     row.whouseCode = value.whCode;
-//     autoFillBlanks('whouseCode', value.whCode);
-//   }
-
-//   if (field === 'locCode') {
-//     row.locCode = value.locCode;
-//     autoFillBlanks('locCode', value.locCode);
-//   }
-
-  
-//   if (field === 'qstatCode') {
-//     row.qstatCode = value.qstatCode;
-//     autoFillBlanks('qstatCode', value.qstatCode);
-//   }
-
-
-
-  
-//    if (['bbDate'].includes(field)) {
-//         row[field] = value;
-//     }
-
-//   if (runCalculations) {
-//     const origQuantity = parseFormattedNumber(row.quantity) || 0;
-//     const origUnitCost = parseFormattedNumber(row.unitCost) || 0;
-//     const origQtyHand = parseFormattedNumber(row.qtyHand) || 0;
-//     const origOperation = row.operation;
-
-//     const recalcRow = async () => {
-//       let processedQty = Math.abs(origQuantity);
-
-//       if (origOperation === "S" && (selectedAJType === "IL" || selectedAJType === "IR")) {
-//         if (processedQty > origQtyHand) {
-//           useSwalErrorAlert('Exceeds Stock', `Quantity (${processedQty}) exceeds Quantity on Hand (${origQtyHand}). Value has been adjusted.`);
-//           processedQty = origQtyHand;
-//         }
-//         processedQty = processedQty * -1;
-//       } else {
-//         processedQty = Math.abs(processedQty);
-//       }
-
-//       const finalQtyForMath = (selectedAJType === "CA") ? 1 : processedQty;
-//       const calculatedAmount = +(finalQtyForMath * origUnitCost).toFixed(2);
-
-//       row.itemAmount = formatNumber(calculatedAmount);
-//       row.quantity = formatNumber(selectedAJType === "CA" ? 0 : processedQty, decQty);
-//       row.unitCost = formatNumber(origUnitCost, decUcost);
-//     };
-
-//     if (field === 'quantity' || field === 'unitCost') {
-//       await recalcRow();
-//     }
-//   }
-
-//   updatedRows[index] = row;
-//   updateState({ detailRows: updatedRows,
-//                 detailRowsGL :[],
-//    });
-//   updateTotals(updatedRows);
-// };
-
-
-
+/* --------------------------------------------------------------------------
+ * Detail row editing
+ * Recalculates amount, clears GL, and optionally copies values to blank rows.
+ * -------------------------------------------------------------------------- */
 const handleDetailChange = async (index, field, value, runCalculations = true) => {
   const updatedRows = [...(detailRowsRef.current || [])];
 
@@ -1639,6 +1992,9 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
 
 
 
+/* --------------------------------------------------------------------------
+ * GL row editing
+ * -------------------------------------------------------------------------- */
 const handleDetailChangeGL = async (index, field, value) => {
     const updatedRowsGL = [...(detailRowsGLRef.current || [])];
     let row = { ...updatedRowsGL[index] };
@@ -1739,6 +2095,9 @@ const handleBlurGL = async (index, field, value, autoCompute = false) => {
 
 
 
+/* --------------------------------------------------------------------------
+ * Modal close handlers
+ * -------------------------------------------------------------------------- */
 const handleCloseAccountModal = (selectedAccount) => {
 
     if (selectedAccount && selectedRowIndex !== null) {
@@ -1868,6 +2227,16 @@ const handleSaveAndPrint = async (documentID) => {
 
 
 const handleCloseWarehouseLookup = (row) => {
+  const isHeaderBBIGWarehouse =
+    row &&
+    !accountModalSource &&
+    (selectedAJType === "IG" || selectedAJType === "BB");
+
+  const queueHeaderLocationLookup = () => {
+    if (!isHeaderBBIGWarehouse) return;
+    setPendingHeaderLocationWH(row.whCode);
+  };
+
   if (row) {
     accountModalSource
       ? handleDetailChange(selectedRowIndex, 'whouseCode', row, false)
@@ -1898,11 +2267,18 @@ const handleCloseWarehouseLookup = (row) => {
           }));
           updateState({ detailRows: updatedDetails });
         }
+
+        queueHeaderLocationLookup();
       });
+    } else {
+      queueHeaderLocationLookup();
     }
   }
   
-  updateState({ warehouseLookupOpen: false,accountModalSource:"" });
+  updateState({
+    warehouseLookupOpen: false,
+    accountModalSource: "",
+  });
 };
 
 
@@ -1955,41 +2331,6 @@ const handleCloseQStatLookup = (row) => {
 
 
 
-const handleCloseVatModal = async (selectedVat) => { 
-  if (selectedVat && selectedRowIndex !== null) {
-    
-     const result = await useTopVatRow(selectedVat.vatCode);
-      if (!result) return;
-
-      handleDetailChangeGL(selectedRowIndex, 'vatCode', result);   
-  }
-  updateState({ showVatModal: false ,
-                selectedRowIndex: null,
-                accountModalSource: null });
-};
-
-
-
-
-
-
-const handleCloseAtcModal = async (selectedAtc) => {
-  if (selectedAtc && selectedRowIndex !== null) {  
-
-    const result = await useTopATCRow(selectedAtc.atcCode);
-      if (!result) return;
-
-      handleDetailChangeGL(selectedRowIndex, 'atcCode', result);   
-  }
-  updateState({ showAtcModal: false ,
-                selectedRowIndex: null,
-                accountModalSource: null });
-};
-
-
-
-  
-
 
 const handleCloseBranchModal = (selectedBranch) => {
     if (selectedBranch) {
@@ -2005,6 +2346,9 @@ const handleCloseBranchModal = (selectedBranch) => {
 
 
   
+  /* ------------------------------------------------------------------------
+   * Inventory lookup handlers
+   * ------------------------------------------------------------------------ */
   const handleOpenMSLookup = async (itemSingleSelect) => {
     try {
 
@@ -2051,78 +2395,6 @@ const handleCloseBranchModal = (selectedBranch) => {
 
 
 
-
-//   const handleCloseMSLookup = (selectedItems) => {
-//   updateState({ msLookupModalOpen: false });
-
-//   if (!selectedItems) return;
-
-//   const itemsArray = Array.isArray(selectedItems.records) ? selectedItems.records : [selectedItems.records];
-//   if (itemsArray.length === 0) return;
-
-//   const newRows = itemsArray.map((item) => ({
-//     itemCode: item?.itemCode ?? "",
-//     itemName: item?.itemName ?? "",
-//     categCode: item?.categCode ?? "",
-//     uomCode: item?.uomCode ?? "",
-//     quantity: formatNumber(0, decQty),
-//     unitCost: formatNumber(parseFormattedNumber(item?.unitCost ?? 0), decUcost),
-//     amount: formatNumber(0, 2),
-//     lotNo: item?.lotNo ?? "",
-//     bbDate: item?.bbDate ? new Date(item.bbDate).toISOString().split("T")[0] : "",
-//     qstatCode: item?.qstatCode ?? "",
-//     whouseCode: item?.whouseCode ?? WHCode ?? "",
-//     locCode: item?.locCode ?? LocCode ?? "",
-//     qtyHand: formatNumber(parseFormattedNumber(item?.qtyHand ?? 0), decQty),
-//     uniqueKey: item?.uniqueKey ?? "",
-//     operation:  (selectedAJType === "IL" || selectedAJType === "IR") ? "S" : "A",
-//     acctCode: "",
-//     sltypeCode: "",
-//     rcCode: "",
-//     slCode: ""
-//   }));
-
-
-// setState((prev) => {
-//     const updated = [...(prev.detailRows || []), ...newRows];
-//     updateTotalsDisplay(0,0);
-//     return { ...prev, detailRows: updated };
-//   });
-// };
-
-
-const handleAddBlankRow = (index) => {
-  const blankRow = {
-    itemCode: "",
-    oldValue: "",
-    itemName: "",
-    categCode: "",
-    uomCode: "",
-    unitCost: formatNumber(0, decUcost),
-    lotNo: "",
-    bbDate: "",
-    qstatCode: "",
-    whouseCode: WHCode ?? "",
-    locCode: LocCode ?? "",
-    acctCode: "",
-    sltypeCode: "",
-    rcCode: "",
-    slCode: "",
-    uniqueKey: "",
-    quantity: formatNumber(0, decQty),
-    qtyHand: formatNumber(0, decQty),
-    itemAmount: formatNumber(0, 2),
-    operation: "A"
-  };
-
-  setState((prev) => {
-    const updatedRows = [...(prev.detailRows || [])];
-    // Inserts the blankRow at the index + 1 position (immediately below)
-    updatedRows.splice(index + 1, 0, blankRow);
-    
-    return { ...prev, detailRows: updatedRows };
-  });
-};
 
 
 
@@ -2250,6 +2522,9 @@ const handleCloseItemMastLookup = (selectedItems) => {
 
 
 
+/* --------------------------------------------------------------------------
+ * Render item detail table cell by column key
+ * -------------------------------------------------------------------------- */
 const renderMsajDetailColumn = (columnKey, row, index) => {
   const columnWidth = getMsajDetailFallbackWidth(columnKey);
   const style = getMsajDetailCellStyle(columnKey, columnWidth);
@@ -2305,11 +2580,14 @@ const renderMsajDetailColumn = (columnKey, row, index) => {
   return detailColumnRenderers[columnKey]?.() ?? <td key={columnKey} className="global-tran-td-ui" style={style}>{String(row[columnKey] ?? "")}</td>;
 };
 
+/* --------------------------------------------------------------------------
+ * Render GL table cell by column key
+ * -------------------------------------------------------------------------- */
 const renderMsajGlColumn = (columnKey, row, index) => {
   const columnWidth = getMsajGlFallbackWidth(columnKey);
   const style = getMsajGlCellStyle(columnKey, columnWidth);
   const focusNextGlCell = (field) => focusNextMsajGlRowInput(index, field, { rows: detailRowsGL, zeroClearFields: msajGlEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChangeGL(nextIndex, nextField, value) });
-  const modalHandlers = { acctCode: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "acctCode" }), rcCode: () => updateState({ selectedRowIndex: index, showRcModal: true }), slCode: () => updateState({ selectedRowIndex: index, showSlModal: true }), vatCode: () => updateState({ selectedRowIndex: index, showVatModal: true }), atcCode: () => updateState({ selectedRowIndex: index, showAtcModal: true }) };
+  const modalHandlers = { acctCode: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "acctCode" }), rcCode: () => updateState({ selectedRowIndex: index, showRcModal: true }), slCode: () => updateState({ selectedRowIndex: index, showSlModal: true }) };
   const textInput = (field, options = {}) => <input type="text" id={`${field}-${index}`} className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? isFormDisabled} maxLength={options.maxLength} onChange={(e) => handleDetailChangeGL(index, field, e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || options.readOnly || isFormDisabled) return; e.preventDefault(); focusNextGlCell(field); }} />;
   const lookupCell = (field, options = {}) => <td key={columnKey} className="global-tran-td-ui" style={style}><div className="relative w-full"><input type="text" id={`${field}-${index}`} className={`w-full pr-6 global-tran-td-inputclass-ui cursor-pointer ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? true} onChange={(e) => handleDetailChangeGL(index, field, e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); focusNextGlCell(field); }} />{!isFormDisabled && (options.alwaysShowIcon || String(row[field] || "").trim()) && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={modalHandlers[field]} />}</div></td>;
   const amountInput = (field) => <input type="text" id={`${field}-${index}`} className="w-full global-tran-td-inputclass-ui text-right" value={row[field] || ""} readOnly={isFormDisabled} onChange={(e) => { const sanitizedValue = e.target.value.replace(/[^0-9.]/g, ""); if (/^\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") handleDetailChangeGL(index, field, sanitizedValue); }} onFocus={(e) => clearMsajGlZeroOnFocus(e, { isEditable: !isFormDisabled, onClear: (value) => handleDetailChangeGL(index, field, value) })} onBlur={(e) => { if (isFormDisabled) return; handleBlurGL(index, field, e.target.value); }} onKeyDown={async (e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); await handleBlurGL(index, field, e.target.value, true); focusNextGlCell(field); }} />;
@@ -2337,11 +2615,22 @@ const renderMsajGlColumn = (columnKey, row, index) => {
   return glColumnRenderers[columnKey]?.() ?? <td key={columnKey} className="global-tran-td-ui" style={style}>{String(row[columnKey] ?? "")}</td>;
 };
 
+/* --------------------------------------------------------------------------
+ * JSX Render
+ * -------------------------------------------------------------------------- */
 return (
 <>
 <div className="global-tran-main-div-ui">
 
       {showSpinner && <LoadingSpinner />}
+
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept=".xlsx"
+        className="hidden"
+        onChange={handleUploadExcelFile}
+      />
 
       <div className="global-tran-headerToolbar-ui">
       <Header 
@@ -2613,15 +2902,104 @@ return (
     <div className="global-tran-tab-footer-main-div-ui">
 
 
-    {/* Add Button */}
+    {/*
+      Add Button Workflow:
+      - If upload is allowed, clicking Add opens a dropdown.
+      - Dropdown options: Add Item, Download Template, Upload Transaction.
+      - If upload is not allowed, clicking Add goes directly to Add Item.
+    */}
     <div className="global-tran-tab-footer-button-div-ui">
-      <button
-        onClick={() =>handleAddRow()}
-        className="global-tran-tab-footer-button-add-ui"
-        style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
-      >
-        <FontAwesomeIcon icon={faPlus} className="mr-2" />Add
-      </button>
+      <div ref={singleUploadDropdownRef} className="relative inline-block">
+        {canUseSingleUploadOptions && showSingleUploadDropdown && !isFormDisabled && (
+          <div className="absolute bottom-[110%] left-0 mb-3 z-[9999] w-[260px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur-sm dark:border-slate-700 dark:bg-slate-800">
+            <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-700">
+              <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
+                Add Item
+              </div>
+            </div>
+
+            <div className="p-2">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
+                onClick={() => {
+                  setShowSingleUploadDropdown(false);
+                  handleAddRow();
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                    <FontAwesomeIcon icon={faFolderOpen} />
+                  </span>
+                  <div className="flex flex-col items-start">
+                    <span>Add Item</span>
+                    <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
+                      Select item details
+                    </span>
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-blue-700 transition-all duration-150 hover:bg-blue-50 hover:text-blue-900 dark:text-blue-300 dark:hover:bg-slate-700"
+                onClick={() => {
+                  setShowSingleUploadDropdown(false);
+                  handleDownloadSingleUploadTemplate();
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-slate-700 dark:text-blue-300">
+                    <FontAwesomeIcon icon={faDownload} />
+                  </span>
+                  <div className="flex flex-col items-start">
+                    <span>Download Template</span>
+                    <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
+                      Excel item columns
+                    </span>
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-blue-700 transition-all duration-150 hover:bg-blue-50 hover:text-blue-900 dark:text-blue-300 dark:hover:bg-slate-700"
+                onClick={() => {
+                  setShowSingleUploadDropdown(false);
+                  handleUploadSingleTransaction();
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-slate-700 dark:text-blue-300">
+                    <FontAwesomeIcon icon={faUpload} />
+                  </span>
+                  <div className="flex flex-col items-start">
+                    <span>Upload Transaction</span>
+                    <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
+                      Import Excel file
+                    </span>
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={() => {
+            if (canUseSingleUploadOptions) {
+              setShowSingleUploadDropdown((prev) => !prev);
+              return;
+            }
+
+            handleAddRow();
+          }}
+          className="global-tran-tab-footer-button-add-ui"
+          style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
+        >
+          <FontAwesomeIcon icon={faPlus} className="mr-2" />Add
+        </button>
+      </div>
     </div>
 
 
@@ -2793,24 +3171,6 @@ return (
             />
           )}
 
-
-    {currencyModalOpen && (
-            <CurrLookupModal 
-              isOpen={currencyModalOpen}
-              onClose={handleCloseCurrencyModal}
-            />
-          )}
-
-
-
-    {custModalOpen && (
-      <CustomerMastLookupModal
-        isOpen={custModalOpen}
-        onClose={handleCloseCustModal}
-      />
-    )}
-
-
     {/* COA Account Modal */}
     {showAccountModal && (
       <COAMastLookupModal
@@ -2833,25 +3193,6 @@ return (
 
 
     
-
-
-    {/* VAT Code Modal */}
-    {showVatModal && (
-      <VATLookupModal  
-        isOpen={showVatModal}
-        onClose={handleCloseVatModal}
-        customParam="OutputService"
-      />
-    )}
-
-
-    {/* ATC Code Modal */}
-    {showAtcModal && (
-      <ATCLookupModal  
-        isOpen={showAtcModal}
-        onClose={handleCloseAtcModal}
-      />
-    )}
 
 
     {/* SL Code Lookup Modal */}
@@ -2969,19 +3310,12 @@ return (
       <AllTranHistory
         showHeader={false}
         endpoint="/getMSAJHistory"
-        cacheKey={`MSAJ:${state.branchCode || ""}:${state.docNo || ""}`}  // ✅ per-transaction
+        cacheKey={`MSAJ:${state.branchCode || ""}:${state.docNo || ""}`}  // âœ… per-transaction
         activeTabKey="MSAJ_Summary"
         branchCode={state.branchCode}
         startDate={state.fromDate}
         endDate={state.toDate}
-          status={(() => {
-            const s = (state.status || "").toUpperCase();
-            if (s === "FINALIZED") return "F";
-            if (s === "CANCELLED") return "X";
-            if (s === "CLOSED")    return "C";
-            if (s === "OPEN")      return "";
-            return "All";
-          })()}
+         status="All"
           onRowDoubleClick={handleHistoryRowPick}
           historyExportName={`${documentTitle} History`} 
     />

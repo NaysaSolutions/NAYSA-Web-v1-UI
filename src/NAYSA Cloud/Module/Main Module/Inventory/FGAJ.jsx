@@ -4,33 +4,30 @@ import { useNavigate,useLocation  } from "react-router-dom";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faDownload, faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faFolderOpen, faSpinner, faUpload } from "@fortawesome/free-solid-svg-icons";
+import { faDownload, faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faFolderOpen, faUpload } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
-import BranchLookupModal from "../../../Lookup/SearchBranchRef.jsx";
-import CurrLookupModal from "../../../Lookup/SearchCurrRef.jsx";
-import CustomerMastLookupModal from "../../../Lookup/SearchCustMast.jsx";
+import BranchLookupModal from "../../../Lookup/SearchBranchRef";
 import COAMastLookupModal from "../../../Lookup/SearchCOAMast.jsx";
 import RCLookupModal from "../../../Lookup/SearchRCMast.jsx";
-import VATLookupModal from "../../../Lookup/SearchVATRef.jsx";
-import ATCLookupModal from "../../../Lookup/SearchATCRef.jsx";
 import SLMastLookupModal from "../../../Lookup/SearchSLMast.jsx";
 import CancelTranModal from "../../../Lookup/SearchCancelRef.jsx";
 import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
-import PostMSRTV from "../Inventory/PostMSRTV.jsx";
+import PostSVI from "../../../Module/Main Module/Accounts Receivable/PostSVI.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
+import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
 import QstatLookupModal from "../../../Lookup/SearchQStatRef.jsx";
-import PayeeMastLookupModal from "../../../Lookup/SearchVendMast";
+import ItemMastLookupModal from "../../../Lookup/SearchItemMast.jsx";
 
 
 // Configuration
 import { postRequest,fetchDataJson} from '../../../Configuration/BaseURL.jsx'
-import { useReset } from "../../../Components/ResetContext.jsx";
+import { useReset } from "../../../Components/ResetContext";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import {
   docTypeNames,
@@ -42,17 +39,10 @@ import {
 
 
 import {
-  useTopVatRow,
-  useTopATCRow,
   useTopRCRow,
-  useTopBillTermRow,
-  useTopForexRate,
   useTopCurrencyRow,
   useTopHSOption,
   useTopDocControlRow,
-  useTopVatAmount,
-  useTopATCAmount,
-  useTopBillCodeRow,
 } from '@/NAYSA Cloud/Global/top1RefTable';
 
 import {
@@ -67,9 +57,25 @@ import {
 } from '@/NAYSA Cloud/Global/procedure';
 
 import {
+  useGetCurrentDay,
+  useFormatToDate,
   useGetCurrentDayV2,
   useformatToDatev2,
 } from '@/NAYSA Cloud/Global/dates';
+
+import DateFormatInput from '@/NAYSA Cloud/Global/DateFormatInput.jsx';
+import {
+  extractSingleUploadValidationResult,
+  getSingleUploadTemplateColumns as getGlobalSingleUploadTemplateColumns,
+  handleDownloadSingleUploadTemplate as downloadGlobalSingleUploadTemplate,
+  handleSingleUploadExcelFile,
+  showSingleUploadErrorList,
+  transactionActionsCellStyle,
+  transactionActionsHeaderStyle,
+  toSingleUploadDateValue,
+  toSingleUploadExcelDate,
+  useResizableTableColumns,
+} from '@/NAYSA Cloud/Global/datatable.jsx';
 
 import {
   useSelectedHSColConfig,
@@ -85,40 +91,53 @@ import {
   formatNumber,
   parseFormattedNumber,
   useSwalshowSaveSuccessDialog,
+  useSwalHandleOpenSpecsModal,
+  useSwalSuccessAlert,
   useSwalErrorAlert,
-} from '@/NAYSA Cloud/Global/behavior';
+  useSwalInfoAlert,
+  useSwalvalidateRequiredFields
+} from '@/NAYSA Cloud/Global/behavior.jsx';
+
+import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
+
 
 
 // Header
 import Header from '@/NAYSA Cloud/Components/Header';
-import { faAdd } from "@fortawesome/free-solid-svg-icons/faAdd";
-import FieldRenderer from '@/NAYSA Cloud/Global/FieldRenderer.jsx';
-import DateFormatInput from '@/NAYSA Cloud/Global/DateFormatInput.jsx';
-import { User, Warehouse } from "lucide-react";
-import {
-  handleDownloadSingleUploadTemplate as downloadGlobalSingleUploadTemplate,
-  handleSingleUploadExcelFile,
-  showSingleUploadErrorList,
-  toSingleUploadDateValue,
-  toSingleUploadExcelDate,
-  transactionActionsCellStyle,
-  transactionActionsHeaderStyle,
-  useResizableTableColumns,
-} from '@/NAYSA Cloud/Global/datatable.jsx';
+const toDateInputValue = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (match) {
+    const [, mm, dd, yyyy] = match;
+    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+  }
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    const yyyy = parsed.getFullYear();
+    const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+    const dd = String(parsed.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  return "";
+};
 
 
-const MSRTV = () => {
+const FGAJ = () => {
 
   // View Document Const
   const loadedFromUrlRef = useRef(false);
+  const detailRowsRef = useRef([]);
+  const detailRowsGLRef = useRef([]);
   const singleUploadDropdownRef = useRef(null);
   const uploadInputRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation(); 
   const [isViewDocument, setIsViewDocument] = useState(false);
-  const { companyInfo, currentUserRow } = useAuth();
-  const decQty = companyInfo?.itemDecqtyMS ?? 2;
-  const decUcost = companyInfo?.itemDecUcostMS ?? 6;
+  const { companyInfo, currentUserRow, getAllDropDown, refsLoaded, getAllTopHSDocRow } = useAuth();
+  const decQty = companyInfo?.itemDecqtyFG ?? 2;
+  const decUcost = companyInfo?.itemDecUcostFG ?? 6;
 
 
   useEffect(() => {
@@ -133,28 +152,34 @@ const MSRTV = () => {
 
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
   const [showSingleUploadDropdown, setShowSingleUploadDropdown] = useState(false);
+  const [pendingHeaderLocationWH, setPendingHeaderLocationWH] = useState("");
   const { user } = useAuth();
   const { resetFlag } = useReset();
+  const docType = docTypes.FGAJ;
+  const hsDoc = getAllTopHSDocRow(docType);
+  const pdfLink = docTypePDFGuide[docType];
+  const videoLink = docTypeVideoGuide[docType];
+  const documentTitle = hsDoc?.docName + " Transaction";
   const [state, setState] = useState({
 
 
     // HS Option
-    glCurrMode:"M",
-    glCurrDefault:"PHP",
+    glCurrMode:companyInfo?.glCurrMode||"",
+    glCurrDefault:companyInfo?.currCode||"",
     withCurr2:false,
     withCurr3:false,
-    glCurrGlobal1:"",
-    glCurrGlobal2:"",
-    glCurrGlobal3:"",
+    glCurrGlobal1:companyInfo?.glCurrGlobal1||"",
+    glCurrGlobal2:companyInfo?.glCurrGlobal2||"",
+    glCurrGlobal3:companyInfo?.glCurrGlobal3||"",
 
 
     
     // Document information
-    documentName: "",
-    documentSeries: "Auto",
-    documentDocLen: 8,
+    documentName: hsDoc?.docName||"",
+    documentSeries: hsDoc?.docSeries||"Auto",
+    documentDocLen: hsDoc?.docLength||8,
     documentID: null,
-    documentDate: useGetCurrentDayV2(),
+    documentDate:useGetCurrentDay(),   
     documentNo: "",
     documentStatus:"",
     status: "OPEN",
@@ -167,6 +192,7 @@ const MSRTV = () => {
     isLoading: false,
     showSpinner: false,
     triggerGLEntries:false,
+    bbUploadExists: false,
     isDocNoDisabled: false,
     isSaveDisabled: false,
     isResetDisabled: false,
@@ -174,28 +200,31 @@ const MSRTV = () => {
 
 
 
-    branchCode: "HO",
-    branchName: "Head Office",
-    
+    branchCode: currentUserRow?.branchCode||"",
+    branchName: currentUserRow?.branchName||"",
+    WHCode:"",
+    WHName:"",
+    LocCode:"",
+    LocName:"",
+    itemSingleSelect:false,
+    selectedWH:"",
 
     
-    // Currency information
-    currCode: "PHP",
-    currName: "Philippine Peso",
-    currRate: "1.000000",
-    defaultCurrRate:"1.000000",
+     // Currency information
+    currCode: companyInfo?.currCode||"",
+    currName: companyInfo?.currName||"",
+    currRate: formatNumber(companyInfo?.currRate||1,6),
+    defaultCurrRate:formatNumber(companyInfo?.currRate||1,6),
 
 
     //Other Header Info
     tblFieldArray :[],
+    ajTypes :[],
     refDocNo1: "",
     refDocNo2: "", 
-    vendCode: "",
-    vendName: "",
-    whCode: "",
-    locCode: "",
     remarks: "",
-    userCode: user.USER_CODE, 
+    selectedAJType : "BB",
+    userCode: currentUserRow?.userCode||user?.USER_CODE||"", 
 
     //Detail 1-2
     detailRows  :[],
@@ -220,15 +249,12 @@ const MSRTV = () => {
     accountModalSource: null,
     showAccountModal:false,
     showRcModal:false,
-    showVatModal:false,
-    showAtcModal:false,
     showSlModal:false,
     msLookupModalOpen:false,
+    itemMastLookupOpen:false,
     warehouseLookupOpen:false,
 
-    currencyModalOpen:false,
     branchModalOpen:false,
-    custModalOpen:false,
     showCancelModal:false,
     showAttachModal:false,
     showSignatoryModal:false,
@@ -267,7 +293,8 @@ const MSRTV = () => {
   isResetDisabled,
   isFetchDisabled,
   triggerGLEntries,
-
+  itemSingleSelect,
+  bbUploadExists,
 
 
 
@@ -288,15 +315,17 @@ const MSRTV = () => {
   currCode,
   currName,
   currRate,
+  ajTypes,
   refDocNo1,
   refDocNo2,
-  vendCode,
-  vendName,
-
-  whCode,
-  locCode,
-
   remarks,
+  selectedAJType,
+  WHCode,
+  WHName,
+  LocCode,
+  LocName,
+
+
   // Transaction details
   tblFieldArray,
   detailRows,
@@ -316,16 +345,13 @@ const MSRTV = () => {
   selectionContext,
   selectedRowIndex,
   accountModalSource,
+  selectedWH,
 
   // Modals
   showAccountModal,
   showRcModal,
-  showVatModal,
-  showAtcModal,
   showSlModal,
-  currencyModalOpen,
   branchModalOpen,
-  custModalOpen,
   showCancelModal,
   showAttachModal,
   showSignatoryModal,
@@ -333,6 +359,7 @@ const MSRTV = () => {
   showAllTranDocNo,
   showQstatModal,
   msLookupModalOpen,
+  itemMastLookupOpen,
   warehouseLookupOpen,
   locationLookupOpen
 
@@ -353,13 +380,6 @@ const MSRTV = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showSingleUploadDropdown]);
 
-  //Document Global Setup
-  const docType = docTypes.MSRTV; 
-  const pdfLink = docTypePDFGuide[docType];
-  const videoLink = docTypeVideoGuide[docType];
-  const documentTitle = docTypeNames[docType] || 'Transaction';
- 
-
 
   //Status Global Setup
   const displayStatus = status || 'OPEN';
@@ -372,16 +392,19 @@ const MSRTV = () => {
   const isFormDisabled =
   isViewDocumentUrl ||
   ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
-  const canUseSingleUploadOptions = !isFormDisabled;
-
-  
+  const canUseSingleUploadOptions =
+    String(hsDoc?.docUpload || "").toUpperCase() === "S" &&
+    (
+      selectedAJType === "IG" ||
+      (selectedAJType === "BB" && !bbUploadExists)
+    );
 
   //Variables
 
 
   const [totals, setTotals] = useState({
   totalQuantity: '0.00',
-  totalAmount: '0.00',
+  totalItemAmount: '0.00',
   });
 
   const customParamMap = {
@@ -394,24 +417,16 @@ const MSRTV = () => {
   const updateTotalsDisplay = (quantity, amount) => {
     setTotals({
           totalQuantity: formatNumber(quantity,decQty),
-          totalAmount: formatNumber(amount),
+          totalItemAmount: formatNumber(amount),
       });
   };
 
 
 
   useEffect(() => {
-    const debitSum = detailRowsGL.reduce((acc, row) => acc + (parseFormattedNumber(row.debit) || 0), 0);
-    const creditSum = detailRowsGL.reduce((acc, row) => acc + (parseFormattedNumber(row.credit) || 0), 0);
-    const debitFx1Sum = detailRowsGL.reduce((acc, row) => acc + (parseFormattedNumber(row.debitFx1) || 0), 0);
-    const creditFx1Sum = detailRowsGL.reduce((acc, row) => acc + (parseFormattedNumber(row.creditFx1) || 0), 0);
-  updateState({
-    totalDebit: formatNumber(debitSum),
-    totalCredit: formatNumber(creditSum),
-    totalDebitFx1: formatNumber(debitFx1Sum),
-    totalCreditFx1: formatNumber(creditFx1Sum)
-  })
+    updateState(getGLTotalsState(detailRowsGL));
   }, [detailRowsGL]);
+
 
 
 
@@ -462,6 +477,15 @@ useEffect(() => {
 
 
 
+
+  useEffect(() => {
+    if (!refsLoaded) return;
+    const ajDrop = getAllDropDown("AJTRAN_TYPE", docType);
+    if (ajDrop.length > 0) {
+      updateState({ ajTypes: ajDrop, selectedAJType: "BB" });
+    }
+  }, [docType, refsLoaded]);
+
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "F1") { e.preventDefault(); updateState({showAllTranDocNo:true}); }
@@ -476,45 +500,86 @@ useEffect(() => {
     }
   }, [canUseSingleUploadOptions]);
 
+  useEffect(() => {
+    if (!pendingHeaderLocationWH || isFormDisabled) return;
+    if (WHCode !== pendingHeaderLocationWH || !WHName) return;
+
+    updateState({
+      locationLookupOpen: true,
+      selectedWH: pendingHeaderLocationWH,
+    });
+    setPendingHeaderLocationWH("");
+  }, [pendingHeaderLocationWH, WHCode, WHName, isFormDisabled]);
 
 
 
+const handleCheckBBUploaded = useCallback(async (targetBranchCode) => {
+  if (!targetBranchCode) return false;
+
+  try {
+    const payload = {
+      PARAMS: JSON.stringify({
+        branchCode: targetBranchCode,
+      }),
+    };
+
+    const response = await postRequest("checkFGAJBBUploaded", payload);
+    const result =
+      response?.result ||
+      response?.data?.result ||
+      response?.Data?.result ||
+      response?.data?.Data?.result ||
+      {};
+
+    return Boolean(result?.bbUploaded);
+  } catch (error) {
+    console.error("Error checking BB upload status:", error);
+    return false;
+  }
+}, []);
 
 
-  
+
+useEffect(() => {
+  let isMounted = true;
+
+  const checkBBStatus = async () => {
+    if (selectedAJType !== "BB" || !branchCode) {
+      if (isMounted) {
+        updateState({ bbUploadExists: false });
+      }
+      return;
+    }
+
+    const exists = await handleCheckBBUploaded(branchCode);
+
+    if (isMounted) {
+      updateState({ bbUploadExists: exists });
+    }
+  };
+
+  checkBBStatus();
+
+  return () => {
+    isMounted = false;
+  };
+}, [selectedAJType, branchCode, handleCheckBBUploaded]);
 
 
-  const LoadingSpinner = () => (
-    <div className="global-tran-spinner-main-div-ui">
-      <div className="global-tran-spinner-sub-div-ui">
-        <FontAwesomeIcon icon={faSpinner} spin size="2x" className="text-blue-500 mb-2" />
-        <p>Please wait...</p>
-      </div>
-    </div>
-  );
 
-  
-  const handleReset = () => {
-      clearMsrtvDetailSorting();
-      clearMsrtvGlSorting();
+const handleReset = () => {
+      clearFgajDetailSorting();
+      clearFgajGlSorting();
 
       updateState({
         
-      branchCode: "HO",
-      branchName: "Head Office",
-      userCode:user.USER_CODE,
-      documentDate: useGetCurrentDayV2(),
+      branchCode: currentUserRow?.branchCode||"",
+      branchName: currentUserRow?.branchName||"",
+      userCode:currentUserRow?.userCode||"",
+      documentDate:useGetCurrentDayV2(),
 
       refDocNo1: "",
       refDocNo2:"", 
-      vendCode: "",
-      vendName:"", 
-      whCode: "",
-      WHcode: "",
-      whName: "",
-      WHname: "",
-      locCode: "",
-      locName: "",
       remarks:"",
       noReprints:"0",   
       documentNo: "",
@@ -522,6 +587,13 @@ useEffect(() => {
       detailRows: [],
       detailRowsGL:[],
       documentStatus:"",
+      itemSingleSelect:false,
+      selectedAJType:"BB",
+      WHCode:"",
+      WHName:"",
+      LocCode:"",
+      LocName:"",
+
       
       
       // UI state
@@ -540,80 +612,24 @@ useEffect(() => {
 
 
    const loadCompanyData = async () => {
-
     updateState({isLoading:true})
-
-    try {
-      // 🔹 1. Document row (independent)
-      const docRow = await useTopDocControlRow(docType);
-
-      if (docRow) {
-        updateState({
-          documentName: docRow.docName,
-          documentSeries: docRow.docName,
-          documentDocLen: docRow.docName,
-        });
-      }
-
-
-
-      // 🔹 2. HS Options + Currency row (dependent chain)
-      const hsOption = await useTopHSOption();
-      if (hsOption) {
-        updateState({
-          glCurrMode: hsOption.glCurrMode,
-          glCurrDefault: hsOption.glCurrDefault,
-          currCode: hsOption.glCurrDefault,
-          glCurrGlobal1: hsOption.glCurrGlobal1,
-          glCurrGlobal2: hsOption.glCurrGlobal2,
-          glCurrGlobal3: hsOption.glCurrGlobal3,
-        });
-
-        const curr = await useTopCurrencyRow(hsOption.glCurrDefault);
-        if (curr) {
-          updateState({
-            currName: curr.currName,
-            currRate: formatNumber(1, 6),
-          });
-        }
-      }
-
-      
-     const tbls = 'MSRTV_hd,MSRTV_dt1,MSRTV_dt2'
+    try {     
+     const tbls = 'fgaj_hd,fgaj_dt1,fgaj_dt2'
      const hdtblcol_result = await useFieldLenghtCheck(tbls);
      if (hdtblcol_result){
        updateState({tblFieldArray :hdtblcol_result })
      }
-      
 
 
     } catch (err) {
       console.error("Error fetching data:", err);
     }
-
      updateState({isLoading:false})
   };
 
 
 
   
-const loadCurrencyMode = (
-
-      mode = glCurrMode,
-      defaultCurr = glCurrDefault,
-      curr = currCode
-    ) => {
-
-    const calcWithCurr3 = mode === "T";
-    const calcWithCurr2 = (mode === "M" && defaultCurr !== curr) || mode === "D" || calcWithCurr3;
-
-      updateState({
-        glCurrMode: mode,
-        withCurr2: calcWithCurr2,
-        withCurr3: calcWithCurr3,
-      });
-};
-
 
 
 
@@ -626,10 +642,8 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
   updateState({ isLoading: true });
 
   try {
-    const data = await useFetchTranData(documentNo, branchCode,docType,"msrtvNo",direction);
-
-
-    if (!data?.msrtvId) {
+    const data = await useFetchTranData(documentNo, branchCode,docType,"fgajNo",direction);
+    if (!data?.fgajId) {
       Swal.fire({ icon: 'info', title: 'No Records Found', text: 'Transaction does not exist.' });
       return resetState();
     }
@@ -657,23 +671,20 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
   
     // Update state with fetched data
     updateState({
-      documentStatus: data.rtvStatus,
+      documentStatus: data.fgajStatus,
       status: data.docStatus,
       noReprints:data.noReprints,
-      documentID: data.msrtvId,
-      documentNo: data.msrtvNo,
+      documentID: data.fgajId,
+      documentNo: data.fgajNo,
       branchCode: data.branchCode,
-      documentDate: useformatToDatev2(data.msrtvDate),
-      vendCode: data.vendCode,
-      vendName: data.vendName,
+      WHCode:data.whCode,
+      WHName:data.whName,
+      LocCode:data.locCode,
+      LocName:data.locName,
+      documentDate: useformatToDatev2(data.fgajDate),
+      selectedAJType: data.ajtranType,
       refDocNo1: data.refDocNo1,
       refDocNo2: data.refDocNo2,   
-      WHcode: data.whCode,
-      locCode: data.locCode, 
-      
-      WHname: data.whName,
-      locName: data.locName, 
-
       remarks: data.remarks,
       detailRows: retrievedDetailRows,
       detailRowsGL: formattedGLRows,
@@ -694,6 +705,15 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
 };
 
 
+
+
+
+
+
+
+
+
+
 const handleDocNoBlur = () => {
 
     if (!state.documentID && state.documentNo && state.branchCode) { 
@@ -703,64 +723,68 @@ const handleDocNoBlur = () => {
 
 
 const handleActivityOption = async (action) => {
-  // Prevent execution if document is already processed
-  if (documentStatus !== '') return;
+  if ((detailRows?.length || 0) + (detailRowsGL?.length || 0) === 0) {
+    return;
+  }
 
-  // 1. Helper function for formatting payload 
-  // This is synchronous to prevent Babel 'await' errors during mapping
-  const getFormattedPayload = (targetGLRows) => {
+
+  updateState({ isLoading: true });
+
+  try {
     const {
       branchCode,
       documentNo,
       documentID,
       documentDate,
-      vendCode,
-      vendName,
-      WHcode,
-      locCode,
+      selectedAJType,
       refDocNo1,
       refDocNo2,
       remarks,
       userCode,
-      detailRows
+      detailRows,
+      detailRowsGL,
     } = state;
 
-    return {
-      branchCode: branchCode,
-      msrtvNo: documentNo || "",
-      msrtvId: documentID || "",
-      msrtvDate: documentDate,
-      vendCode: vendCode,
-      vendName: vendName,
-      whCode: WHcode,
-      locCode: locCode,
-      refDocNo1: refDocNo1,
-      refDocNo2: refDocNo2,
+    let finalDetailRowsGL = [...detailRowsGL];
+
+    const buildGlData = (glRows) => ({
+      branchCode,
+      fgajNo: documentNo || "",
+      fgajId: documentID || "",
+      fgajDate: documentDate,
+      ajtranType: selectedAJType,
+      refDocNo1,
+      refDocNo2,
       remarks: remarks || "",
-      userCode: userCode,
+      whCode: WHCode || "",
+      locCode: LocCode || "",
+      userCode,
+
       dt1: detailRows.map((row, index) => ({
         lnNo: String(index + 1),
         itemCode: row.itemCode || "",
         itemName: row.itemName || "",
         categCode: row.categCode || "",
+        oldValue: row.oldValue || "",
         quantity: parseFormattedNumber(row.quantity || 0),
         uomCode: row.uomCode || "",
         unitCost: parseFormattedNumber(row.unitCost || 0),
         itemAmount: parseFormattedNumber(row.itemAmount || 0),
         lotNo: row.lotNo || "",
         qstatCode: row.qstatCode || "",
-        bbDate: row.bbDate ? new Date(row.bbDate).toISOString().split("T")[0] : null,
+        bbDate: row.bbDate || null,
         qtyHand: parseFormattedNumber(row.qtyHand || 0),
         whouseCode: row.whouseCode || "",
         locCode: row.locCode || "",
         acctCode: row.acctCode || "",
         rcCode: row.rcCode || "",
         slTypeCode: row.sltypeCode || "",
-        slCode: row.slCode || vendCode,
+        slCode: row.slCode || "",
         uniqueKey: row.uniqueKey || "",
-        operation: row.operation || "S"
+        operation: row.operation || "",
       })),
-      dt2: targetGLRows.map((entry, index) => ({
+
+      dt2: glRows.map((entry, index) => ({
         recNo: String(index + 1),
         acctCode: entry.acctCode || "",
         rcCode: entry.rcCode || "",
@@ -778,66 +802,223 @@ const handleActivityOption = async (action) => {
         debitFx2: parseFormattedNumber(entry.debitFx2 || 0),
         creditFx2: parseFormattedNumber(entry.creditFx2 || 0),
         slRefNo: entry.slRefNo || "",
-        slRefDate: entry.slRefDate ? new Date(entry.slRefDate).toISOString().split("T")[0] : null,
-        remarks: entry.remarks || ""
-      }))
-    };
-  };
+        slRefDate: entry.slRefDate || null,
+        remarks: entry.remarks || "",
+      })),
+    });
 
-  updateState({ isLoading: true });
-
-  try {
-    let currentGL = state.detailRowsGL;
-
-    // --- STEP 1: AUTO-GENERATE IF UPSERTING WITH EMPTY GL ---
-    // This allows "Generate then Save" in one click
-    if (action === "Upsert" && currentGL.length === 0) {
-      const genPayload = getFormattedPayload([]);
-      const newGlEntries = await useGenerateGLEntries(docType, genPayload);
-
-      if (newGlEntries && newGlEntries.length > 0) {
-        currentGL = newGlEntries;
-        updateState({ detailRowsGL: newGlEntries });
-      } else {
-        updateState({ isLoading: false });
-        console.warn("GL Generation failed. Upsert cancelled.");
-        return; 
-      }
-
-    }
-
-    // --- STEP 2: MANUAL GENERATE GL ---
     if (action === "GenerateGL") {
-      const genPayload = getFormattedPayload(currentGL);
-      const newGlEntries = await useGenerateGLEntries(docType, genPayload);
-      if (newGlEntries) {
-        updateState({ detailRowsGL: newGlEntries });
+      try {
+        updateState({ detailRowsGL: [], isGeneratingGL: true });
+
+        const newGlEntries = await useGenerateGLEntries(
+          docType,
+          buildGlData(finalDetailRowsGL)
+        );
+
+        updateState({
+          detailRowsGL: newGlEntries && newGlEntries.length > 0 ? newGlEntries : [],
+          isGeneratingGL: false,
+        });
+      } catch (error) {
+        updateState({ detailRowsGL: [], isGeneratingGL: false });
+        console.error(error);
       }
+
+      return;
     }
 
-    // --- STEP 3: UPSERT (SAVE) ---
     if (action === "Upsert") {
-      // We use currentGL variable because state updates are async 
-      // and wouldn't be available yet if we just generated them.
-      const savePayload = getFormattedPayload(currentGL);
-      const response = await useTransactionUpsert(docType, savePayload, updateState, 'msrtvId', 'msrtvNo');
+      if (finalDetailRowsGL.length === 0 && selectedAJType !== "BB") {
+        const newGlEntries = await useGenerateGLEntries(
+          docType,
+          buildGlData([])
+        );
+
+        if (!newGlEntries || newGlEntries.length === 0) {
+          console.warn("GL entries generation failed or returned no data.");
+          return;
+        }
+
+        finalDetailRowsGL = newGlEntries;
+        updateState({ detailRowsGL: newGlEntries });
+      }
+
+      const response = await useTransactionUpsert(
+        docType,
+        buildGlData(finalDetailRowsGL),
+        updateState,
+        "fgajId",
+        "fgajNo"
+      );
 
       if (response) {
+        const responseDocNo = response.data?.[0]?.fgajNo || "";
+        const responseDocId = response.data?.[0]?.fgajId || "";
+
+        if (responseDocNo) {
+          await fetchTranData(responseDocNo, branchCode);
+        }
+
         const isZero = Number(noReprints) === 0;
         const onSaveAndPrint = isZero
           ? () => updateState({ showSignatoryModal: true })
-          : () => handleSaveAndPrint(response.data[0].msrtvId);
+          : () => handleSaveAndPrint(responseDocId);
 
         useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
-        updateState({ isDocNoDisabled: true, isFetchDisabled: true });
       }
+
+      updateState({
+        documentNo: response?.data?.[0]?.fgajNo || "",
+        documentID: response?.data?.[0]?.fgajId || "",
+        isDocNoDisabled: true,
+        isFetchDisabled: true,
+      });
     }
   } catch (error) {
-    console.error("Error in transaction flow:", error);
+    console.error(`Error during ${action}:`, error);
   } finally {
     updateState({ isLoading: false });
   }
 };
+
+
+// const handleActivityOption = async (action) => {
+//   // Prevent execution if document is already processed
+//   console.log(documentStatus)
+//   if (documentStatus !== '') return;
+
+//   // 1. Helper function for formatting payload 
+//   // This is synchronous to prevent Babel 'await' errors during mapping
+//   const getFormattedPayload = (targetGLRows) => {
+//     const {
+//       branchCode,
+//       documentNo,
+//       documentID,
+//       documentDate,
+//       selectedAJType,
+//       refDocNo1,
+//       refDocNo2,
+//       remarks,
+//       userCode,
+//       detailRows
+//     } = state;
+
+//     return {
+//       branchCode: branchCode,
+//       fgajNo: documentNo || "",
+//       fgajId: documentID || "",
+//       fgajDate: documentDate,
+//       ajtranType: selectedAJType,
+//       refDocNo1: refDocNo1,
+//       refDocNo2: refDocNo2,
+//       remarks: remarks || "",
+//       whCode:WHCode||"",
+//       locCode:LocCode || "",
+//       userCode: userCode,
+//       dt1: detailRows.map((row, index) => ({
+//         lnNo: String(index + 1),
+//         itemCode: row.itemCode || "",
+//         itemName: row.itemName || "",
+//         categCode: row.categCode || "",
+//         oldValue:row.oldValue || "",
+//         quantity: parseFormattedNumber(row.quantity || 0),
+//         uomCode: row.uomCode || "",
+//         unitCost: parseFormattedNumber(row.unitCost || 0),
+//         itemAmount: parseFormattedNumber(row.itemAmount || 0),
+//         lotNo: row.lotNo || "",
+//         qstatCode: row.qstatCode || "",
+//         bbDate: row.bbDate ? new Date(row.bbDate).toISOString().split("T")[0] : null,
+//         qtyHand: parseFormattedNumber(row.qtyHand || 0),
+//         whouseCode: row.whouseCode || "",
+//         locCode: row.locCode || "",
+//         acctCode: row.acctCode || "",
+//         rcCode: row.rcCode || "",
+//         slTypeCode: row.sltypeCode || "",
+//         slCode: row.slCode || "",
+//         uniqueKey: row.uniqueKey || "",
+//         operation: row.operation || ""
+//       })),
+//       dt2: targetGLRows.map((entry, index) => ({
+//         recNo: String(index + 1),
+//         acctCode: entry.acctCode || "",
+//         rcCode: entry.rcCode || "",
+//         sltypeCode: entry.sltypeCode || "",
+//         slCode: entry.slCode || "",
+//         particular: entry.particular || "",
+//         vatCode: entry.vatCode || "",
+//         vatName: entry.vatName || "",
+//         atcCode: entry.atcCode || "",
+//         atcName: entry.atcName || "",
+//         debit: parseFormattedNumber(entry.debit || 0),
+//         credit: parseFormattedNumber(entry.credit || 0),
+//         debitFx1: parseFormattedNumber(entry.debitFx1 || 0),
+//         creditFx1: parseFormattedNumber(entry.creditFx1 || 0),
+//         debitFx2: parseFormattedNumber(entry.debitFx2 || 0),
+//         creditFx2: parseFormattedNumber(entry.creditFx2 || 0),
+//         slRefNo: entry.slRefNo || "",
+//         slRefDate: entry.slRefDate ? new Date(entry.slRefDate).toISOString().split("T")[0] : null,
+//         remarks: entry.remarks || ""
+//       }))
+//     };
+//   };
+
+//   updateState({ isLoading: true });
+
+//   try {
+//     let currentGL = state.detailRowsGL;
+
+//     // --- STEP 1: AUTO-GENERATE IF UPSERTING WITH EMPTY GL ---
+//     // This allows "Generate then Save" in one click
+//     if (action === "Upsert" && currentGL.length === 0 && selectedAJType !== "BB") {
+//       const genPayload = getFormattedPayload([]);
+//       const newGlEntries = await useGenerateGLEntries(docType, genPayload);
+
+//       if (newGlEntries && newGlEntries.length > 0) {
+//         currentGL = newGlEntries;
+//         updateState({ detailRowsGL: newGlEntries });
+//       } else {
+//         updateState({ isLoading: false });
+//         console.warn("GL Generation failed. Upsert cancelled.");
+//         return; 
+//       }
+
+//     }
+
+//     // --- STEP 2: MANUAL GENERATE GL ---
+//     if (action === "GenerateGL") {
+//       const genPayload = getFormattedPayload(currentGL);
+//       const newGlEntries = await useGenerateGLEntries(docType, genPayload);
+//       if (newGlEntries) {
+//         updateState({ detailRowsGL: newGlEntries });
+//       }
+//     }
+
+//     // --- STEP 3: UPSERT (SAVE) ---
+//     if (action === "Upsert") {
+//       // We use currentGL variable because state updates are async 
+//       // and wouldn't be available yet if we just generated them.
+//       const savePayload = getFormattedPayload(currentGL);
+//       const response = await useTransactionUpsert(docType, savePayload, updateState, 'fgajId', 'fgajNo');
+
+//       if (response) {
+//         const isZero = Number(noReprints) === 0;
+//         const onSaveAndPrint = isZero
+//           ? () => updateState({ showSignatoryModal: true })
+//           : () => handleSaveAndPrint(response.data[0].fgajId);
+
+//         useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
+//         updateState({ isDocNoDisabled: true, isFetchDisabled: true });
+//       }
+//     }
+//   } catch (error) {
+//     console.error("Error in transaction flow:", error);
+//   } finally {
+//     updateState({ isLoading: false });
+//   }
+// };
+
+
 
 
 
@@ -846,6 +1027,7 @@ const createEmptyDetailRow = () => ({
   itemCode: "",
   itemName: "",
   categCode: "",
+  oldValue: "",
   quantity: "1.00",
   uomCode: "",
   unitCost: "0.00",
@@ -865,6 +1047,8 @@ const createEmptyDetailRow = () => ({
 });
 
 const handleGetItem = async (index = null) => {
+  if (!selectedAJType) return;
+
   const updatedRows = [...detailRows];
   const newRow = createEmptyDetailRow();
 
@@ -881,53 +1065,55 @@ const handleGetItem = async (index = null) => {
 
 
   const handleAddRow = async () => {
-  // if (!vendCode) return;
 
-    await handleOpenMSLookup();
+    const fieldsToCheck = {
+      "Header : Warehouse": WHCode,
+      "Header : Adjustment Type": selectedAJType,
+    };
+    const isValid = await useSwalvalidateRequiredFields(fieldsToCheck, "Add Item");
+    if (!isValid) return;
+
+
+    if (["BB", "IG"].includes(selectedAJType)) {
+      updateState({
+        itemSingleSelect: false,
+        itemMastLookupOpen: true,
+      });
+      return;
+    }
+
+    await handleOpenMSLookup(false);
     return;
-
-  // const lookupTypes = ["IL", "IR", "CA"];  
-  //   await handleOpenMSLookup();
-  //   return;
-  // }
-
-
-  const newRow = {
-    lnNo: detailRows.length + 1, 
-    itemCode: "",
-    itemName: "",
-    categCode: "",   
-    quantity: "1.00",
-    uomCode: "",
-    unitCost: "0.00",
-    itemAmount: "0.00",    
-    lotNo: "",  
-    qstatCode: "",  
-    bbDate: "",  
-    qtyHand: "0.00",    
-    whouseCode: "",   
-    locCode: "",  
-    acctCode: "",  
-    rcCode: "",  
-    sltypeCode: "",       
-    slCode: "",
-    uniqueKey: ""
-  };
-
-  updateState({
-    detailRows: [...detailRows, newRow]
-  });
 };
 
+
+
+
+  const handleAddItem = async (index) => {
+  if (!selectedAJType) return;
+
+  if (["BB", "IG"].includes(selectedAJType)) {
+    updateState({
+      selectedRowIndex: index,
+      itemSingleSelect: true,
+      itemMastLookupOpen: true,
+    });
+    return;
+  }
+
+    updateState({ selectedRowIndex: index}); 
+    await handleOpenMSLookup(true);
+    return;
+};
 
 
 
 const createEmptyGlRow = () => ({
   acctCode: "",
   rcCode: "",
-  sltypeCode:"SU",
-  slCode: vendCode,
-  particular: "",
+  sltypeCode: "SU",
+  slCode: "",
+  particulars: "",
   vatCode: "",
   vatName: "",
   atcCode: "",
@@ -939,14 +1125,11 @@ const createEmptyGlRow = () => ({
   debitFx2: "0.00",
   creditFx2: "0.00",
   slRefNo: "",
-  slRefDate: "",
   remarks: "",
 });
 
 const handleAddRowGL = (index = null) => {
-
-//     return;
-//   }
+  if (!selectedAJType) return;
 
   const updatedRows = [...detailRowsGL];
   const newRow = createEmptyGlRow();
@@ -958,9 +1141,10 @@ const handleAddRowGL = (index = null) => {
   }
 
   updateState({
-      detailRowsGL: updatedRows
-    });
-  };
+    detailRowsGL: updatedRows,
+    ...getGLTotalsState(updatedRows),
+  });
+};
 
 
   
@@ -971,7 +1155,7 @@ const handleAddRowGL = (index = null) => {
 
     updateState({
         detailRows: updatedRows,
-        triggerGLEntries:true });
+        detailRowsGL:[] });
     updateTotals(updatedRows);
 
   };
@@ -1050,39 +1234,54 @@ const handleCopy = async () => {
                   documentID:"",
                   documentStatus:"",
                   status:"OPEN",
-                  documentDate: useGetCurrentDayV2(), 
+                  documentDate:useGetCurrentDay(), 
                   noReprints:"0",
      });
   }
 };
 
 
-  const handleClosePayeeLookup = (row) => {
-    // closed/cancel
-    if (!row) {
-      updateState({ payeeLookupOpen: false });
-      return;
-    }
-
-    updateState({
-      payeeLookupOpen: false,
-      vendCode: row?.vend_code ?? row?.vendCode ?? "",
-      vendName: row?.vend_name ?? row?.vendName ?? "",
-    });
-  };
-
 
 
 
 const handleFieldBehavior = (option) => {
-  return false;
+  switch (option) {
+
+    case "hiddenBBMode":
+     return (
+        selectedAJType === "BB" || currentUserRow?.viewCostamt ==='N'
+      );
+
+
+  case "noViewCostamt":
+     return ( currentUserRow?.viewCostamt ==='N'
+      );
+
+
+  case "allowInsert":
+      return ["BB", "IG", "IR"].includes(selectedAJType);
+
+
+      case "hiddenCAMode":
+     return (
+        selectedAJType === "CA" 
+      );
+
+
+    default:
+      return false; 
+  }
 };
+
 
 
 const handleColumnLabel = (columnName) =>{
   switch (columnName) {
 
      case "UnitCost":
+      if(selectedAJType === "CA") {
+        return "Amount"
+      }
       return "Unit Cost"
 
        default:
@@ -1091,7 +1290,17 @@ const handleColumnLabel = (columnName) =>{
 }
   
 
-  const msrtvDetailColumnDefs = [
+
+
+
+
+
+  useEffect(() => {
+    detailRowsRef.current = detailRows || [];
+    detailRowsGLRef.current = detailRowsGL || [];
+  }, [detailRows, detailRowsGL]);
+
+  const fgajDetailColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
     { key: "itemCode", label: "Item Code", width: 120 },
     { key: "itemName", label: "Item Name", width: 260 },
@@ -1110,41 +1319,269 @@ const handleColumnLabel = (columnName) =>{
     { key: "slCode", label: "SL Code", width: 120 },
     { key: "qtyHand", label: "Qty On Hand", width: 130 },
     { key: "categCode", label: "Category", width: 120 },
+    { key: "oldValue", label: "Old Value", width: 120 },
     { key: "uniqueKey", label: "Unique Key", width: 120 },
     { key: "operation", label: "Operation", width: 120 },
   ];
 
   const {
-    getColumnStyle: getMsrtvDetailColumnStyle,
-    getFrozenColumnStyle: getMsrtvDetailFrozenStyle,
-    getOrderedColumns: getOrderedMsrtvDetailColumns,
-    getSortedRows: getSortedMsrtvDetailRows,
-    clearAllSorting: clearMsrtvDetailSorting,
-    clearZeroValueOnFocus: clearMsrtvDetailZeroOnFocus,
-    focusNextRowInput: focusNextMsrtvDetailRowInput,
-    renderHeaderContextMenu: renderMsrtvDetailHeaderContextMenu,
-    renderResizableHeader: renderMsrtvDetailHeader,
-  } = useResizableTableColumns(msrtvDetailColumnDefs);
+    getColumnStyle: getFgajDetailColumnStyle,
+    getFrozenColumnStyle: getFgajDetailFrozenStyle,
+    getOrderedColumns: getOrderedFgajDetailColumns,
+    getSortedRows: getSortedFgajDetailRows,
+    clearAllSorting: clearFgajDetailSorting,
+    clearZeroValueOnFocus: clearFgajDetailZeroOnFocus,
+    focusNextRowInput: focusNextFgajDetailRowInput,
+    renderHeaderContextMenu: renderFgajDetailHeaderContextMenu,
+    renderResizableHeader: renderFgajDetailHeader,
+  } = useResizableTableColumns(fgajDetailColumnDefs);
 
-  const orderedMsrtvDetailColumns = getOrderedMsrtvDetailColumns(msrtvDetailColumnDefs);
-  const visibleMsrtvDetailColumns = orderedMsrtvDetailColumns.filter((column) => {
-    if (["categCode", "uniqueKey", "operation", "sltypeCode"].includes(column.key)) return false;
+  const orderedFgajDetailColumns = getOrderedFgajDetailColumns(fgajDetailColumnDefs);
+  const visibleFgajDetailColumns = orderedFgajDetailColumns.filter((column) => {
+    if (["categCode", "oldValue", "uniqueKey", "operation", "sltypeCode"].includes(column.key)) return false;
     if (column.key === "quantity") return !handleFieldBehavior("hiddenCAMode");
-    if (column.key === "itemAmount") return !handleFieldBehavior("hiddenCAMode");
+    if (column.key === "unitCost") return !handleFieldBehavior("noViewCostamt");
+    if (column.key === "itemAmount") return !handleFieldBehavior("hiddenCAMode") && !handleFieldBehavior("noViewCostamt");
     if (["acctCode", "rcCode", "slCode"].includes(column.key)) return !handleFieldBehavior("hiddenBBMode");
     return true;
   });
-  const getMsrtvDetailFallbackWidth = (key) => msrtvDetailColumnDefs.find((column) => column.key === key)?.width || 120;
-  const getMsrtvDetailCellStyle = (key, fallbackWidth) => ({
-    ...getMsrtvDetailColumnStyle(key, fallbackWidth),
-    ...getMsrtvDetailFrozenStyle(key, visibleMsrtvDetailColumns, fallbackWidth, { isHeader: false }),
+  const getFgajDetailFallbackWidth = (key) => fgajDetailColumnDefs.find((column) => column.key === key)?.width || 120;
+  const getFgajDetailCellStyle = (key, fallbackWidth) => ({
+    ...getFgajDetailColumnStyle(key, fallbackWidth),
+    ...getFgajDetailFrozenStyle(key, visibleFgajDetailColumns, fallbackWidth, { isHeader: false }),
   });
-  const sortedMsrtvDetailRows = getSortedMsrtvDetailRows(
+  const sortedFgajDetailRows = getSortedFgajDetailRows(
     detailRows.map((row, originalIndex) => ({ row, originalIndex })),
     (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? ""
   );
 
-  const msrtvGlColumnDefs = [
+  const getSingleUploadTemplateColumns = () =>
+    getGlobalSingleUploadTemplateColumns(visibleFgajDetailColumns, { excludeKeys: ["qtyHand"] });
+
+  const handleDownloadSingleUploadTemplate = async () => {
+    await downloadGlobalSingleUploadTemplate({
+      columns: getSingleUploadTemplateColumns(),
+      rows: sortedFgajDetailRows,
+      fileName: "FG Adjustment Single Transaction Uploading Template.xlsx",
+      sheetName: "Item Details",
+      decimalColumnFormats: {
+        quantity: decQty,
+        unitCost: decUcost,
+        itemAmount: 2,
+      },
+      dateColumns: ["bbDate"],
+      rightAlignedColumns: ["quantity", "unitCost", "itemAmount"],
+      centerAlignedColumns: [
+        "ln",
+        "itemCode",
+        "uomCode",
+        "bbDate",
+        "qstatCode",
+        "whouseCode",
+        "locCode",
+        "acctCode",
+        "rcCode",
+        "slCode",
+      ],
+      getCellValue: ({ rowEntry, column }) => {
+        const { row, originalIndex } = rowEntry;
+        switch (column.key) {
+          case "ln":
+            return originalIndex + 1;
+          case "quantity":
+          case "unitCost":
+          case "itemAmount":
+            return parseFormattedNumber(row[column.key] || 0);
+          case "bbDate":
+            return toSingleUploadExcelDate(row.bbDate, toDateInputValue);
+          default:
+            return String(row[column.key] ?? "");
+        }
+      },
+    });
+  };
+
+  const buildUploadValidationPayload = (rows) => ({
+    json_data: {
+      branchCode,
+      fgajDate: documentDate,
+      ajtranType: selectedAJType,
+      whCode: WHCode || "",
+      locCode: LocCode || "",
+      userCode,
+      dt1: rows.map((row, index) => ({
+        lnNo: index + 1,
+        itemCode: row.itemCode || "",
+        itemName: row.itemName || "",
+        categCode: row.categCode || "",
+        quantity: parseFormattedNumber(row.quantity || 0) || 0,
+        uomCode: row.uomCode || "",
+        unitCost: parseFormattedNumber(row.unitCost || 0) || 0,
+        itemAmount: parseFormattedNumber(row.itemAmount || 0) || 0,
+        lotNo: row.lotNo || "",
+        qstatCode: row.qstatCode || "",
+        bbDate: row.bbDate || null,
+        qtyHand: 0,
+        whouseCode: row.whouseCode || WHCode || "",
+        locCode: row.locCode || LocCode || "",
+        acctCode: row.acctCode || "",
+        rcCode: row.rcCode || "",
+        slTypeCode: row.sltypeCode || row.slTypeCode || "",
+        slCode: row.slCode || "",
+        uniqueKey: "",
+        operation: row.operation || "A",
+        oldValue: row.oldValue || row.itemCode || "",
+      })),
+    },
+  });
+
+  const parseSingleUploadRow = ({ rawValuesByKey }) => {
+    const rowData = createEmptyDetailRow();
+
+    getSingleUploadTemplateColumns().forEach((column) => {
+      const rawCell = rawValuesByKey[column.key];
+      const rawValue = rawCell?.value;
+
+      switch (column.key) {
+        case "ln":
+          break;
+        case "quantity":
+        case "unitCost":
+        case "itemAmount":
+          rowData[column.key] = parseFormattedNumber(rawValue || 0) || 0;
+          break;
+        case "bbDate":
+          rowData.bbDate = toSingleUploadDateValue(rawCell?.cell?.value || rawValue, toDateInputValue);
+          break;
+        default:
+          rowData[column.key] = String(rawValue ?? "").trim();
+          break;
+      }
+    });
+
+    const quantity = parseFormattedNumber(rowData.quantity || 0) || 0;
+    const unitCost = parseFormattedNumber(rowData.unitCost || 0) || 0;
+    rowData.quantity = quantity;
+    rowData.unitCost = unitCost;
+    rowData.itemAmount = +(quantity * unitCost).toFixed(2);
+    rowData.whouseCode = rowData.whouseCode || WHCode || "";
+    rowData.locCode = rowData.locCode || LocCode || "";
+    rowData.operation = "A";
+    rowData.qtyHand = 0;
+    rowData.uniqueKey = "";
+
+    return rowData;
+  };
+
+  const handleUploadExcelFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    const fieldsToCheck = {
+      "Header : Warehouse": WHCode,
+      "Header : Adjustment Type": selectedAJType,
+    };
+    const isValid = await useSwalvalidateRequiredFields(fieldsToCheck, "Upload Transaction");
+    if (!isValid) return;
+
+    updateState({ isLoading: true, showSpinner: true });
+
+    try {
+      const uploadResult = await handleSingleUploadExcelFile({
+        file,
+        columns: getSingleUploadTemplateColumns(),
+        createEmptyRow: createEmptyDetailRow,
+        parseRow: parseSingleUploadRow,
+        validateRows: async (uploadedRows) => {
+          const response = await postRequest("validateFGAJUpload", buildUploadValidationPayload(uploadedRows));
+          const result = extractSingleUploadValidationResult(response);
+          if (!result) {
+            console.error("Unable to read upload validation response:", response);
+          }
+          return result;
+        },
+      });
+
+      if (uploadResult?.cancelled) return;
+
+      if (!uploadResult?.ok) {
+        showSingleUploadErrorList(uploadResult?.title || "Upload Error", uploadResult?.errors || []);
+        return;
+      }
+
+      const uploadedRows = uploadResult.rows || [];
+      const result = uploadResult.validationResult;
+      const errorRows = result?.errors || [];
+      const validRows = result?.rows || [];
+
+      if (!result) {
+        showSingleUploadErrorList("Upload Validation Error", ["Unable to read validation response from the server."]);
+        return;
+      }
+
+      if (Number(result.errorCount || 0) > 0 || errorRows.length > 0) {
+        showSingleUploadErrorList("Upload Rejected", errorRows.map((row) => row.errorMsg || row.message || JSON.stringify(row)));
+        return;
+      }
+
+      if (validRows.length === 0) {
+        showSingleUploadErrorList("Upload Validation Error", [
+          "The server returned no validated rows.",
+          "Please check the Laravel validateFGAJUpload response and the SQL ValidateUpload block.",
+          "Uploaded rows read from Excel: " + uploadedRows.length,
+        ]);
+        console.error("ValidateUpload returned zero rows:", { result, uploadedRows });
+        return;
+      }
+
+      const finalRows = validRows.map((row, index) => ({
+        lnNo: index + 1,
+        itemCode: row.itemCode || "",
+        itemName: row.itemName || "",
+        categCode: row.categCode || "",
+        oldValue: row.oldValue || row.itemCode || "",
+        quantity: formatNumber(parseFormattedNumber(row.quantity || 0), decQty),
+        uomCode: row.uomCode || "",
+        unitCost: formatNumber(parseFormattedNumber(row.unitCost || 0), decUcost),
+        itemAmount: formatNumber(parseFormattedNumber(row.itemAmount || 0), 2),
+        lotNo: row.lotNo || "",
+        qstatCode: row.qstatCode || "",
+        bbDate: toDateInputValue(row.bbDate),
+        qtyHand: formatNumber(parseFormattedNumber(row.qtyHand || 0), decQty),
+        whouseCode: row.whouseCode || "",
+        locCode: row.locCode || "",
+        acctCode: row.acctCode || "",
+        rcCode: row.rcCode || "",
+        sltypeCode: row.sltypeCode || row.slTypeCode || "",
+        slCode: row.slCode || "",
+        uniqueKey: row.uniqueKey || "",
+        operation: row.operation || "A",
+      }));
+
+      updateState({ detailRows: finalRows, detailRowsGL: [] });
+      updateTotals(finalRows);
+
+      Swal.fire({
+        icon: "success",
+        title: "Upload Completed",
+        text: `${finalRows.length} row(s) uploaded and validated successfully.`,
+        timer: 3000,
+        timerProgressBar: true,
+      });
+    } catch (error) {
+      console.error("Upload transaction error:", error);
+      showSingleUploadErrorList("Upload Error", [error?.message || "Unable to process the uploaded Excel file."]);
+    } finally {
+      updateState({ isLoading: false, showSpinner: false });
+    }
+  };
+
+  const handleUploadSingleTransaction = () => {
+    uploadInputRef.current?.click();
+  };
+
+  const fgajGlColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
     { key: "acctCode", label: "Account Code", width: 120 },
     { key: "rcCode", label: "RC Code", width: 120 },
@@ -1169,160 +1606,45 @@ const handleColumnLabel = (columnName) =>{
     { key: "slRefDate", label: "SL Ref. Date", width: 130 },
     { key: "remarks", label: "Remarks", width: 160 },
   ];
-
   const {
-    getColumnStyle: getMsrtvGlColumnStyle,
-    getFrozenColumnStyle: getMsrtvGlFrozenStyle,
-    getOrderedColumns: getOrderedMsrtvGlColumns,
-    getSortedRows: getSortedMsrtvGlRows,
-    setColumnOrder: setMsrtvGlColumnOrder,
-    clearAllSorting: clearMsrtvGlSorting,
-    clearZeroValueOnFocus: clearMsrtvGlZeroOnFocus,
-    focusNextRowInput: focusNextMsrtvGlRowInput,
-    renderHeaderContextMenu: renderMsrtvGlHeaderContextMenu,
-    renderResizableHeader: renderMsrtvGlHeader,
-  } = useResizableTableColumns(msrtvGlColumnDefs);
-
-  const orderedMsrtvGlColumns = getOrderedMsrtvGlColumns(msrtvGlColumnDefs);
-  const getMsrtvGlFallbackWidth = (key) => msrtvGlColumnDefs.find((column) => column.key === key)?.width || 120;
-  const getMsrtvGlCellStyle = (key, fallbackWidth) => ({
-    ...getMsrtvGlColumnStyle(key, fallbackWidth),
-    ...getMsrtvGlFrozenStyle(key, orderedMsrtvGlColumns, fallbackWidth, { isHeader: false }),
+    getColumnStyle: getFgajGlColumnStyle,
+    getFrozenColumnStyle: getFgajGlFrozenStyle,
+    getOrderedColumns: getOrderedFgajGlColumns,
+    getSortedRows: getSortedFgajGlRows,
+    setColumnOrder: setFgajGlColumnOrder,
+    clearAllSorting: clearFgajGlSorting,
+    clearZeroValueOnFocus: clearFgajGlZeroOnFocus,
+    focusNextRowInput: focusNextFgajGlRowInput,
+    renderHeaderContextMenu: renderFgajGlHeaderContextMenu,
+    renderResizableHeader: renderFgajGlHeader,
+  } = useResizableTableColumns(fgajGlColumnDefs);
+  const orderedFgajGlColumns = getOrderedFgajGlColumns(fgajGlColumnDefs);
+  const getFgajGlFallbackWidth = (key) => fgajGlColumnDefs.find((column) => column.key === key)?.width || 120;
+  const getFgajGlCellStyle = (key, fallbackWidth) => ({
+    ...getFgajGlColumnStyle(key, fallbackWidth),
+    ...getFgajGlFrozenStyle(key, orderedFgajGlColumns, fallbackWidth, { isHeader: false }),
   });
   useEffect(() => {
-    setMsrtvGlColumnOrder(msrtvGlColumnDefs.map((column) => column.key));
-  }, [setMsrtvGlColumnOrder, withCurr2, withCurr3, glCurrDefault, currCode, glCurrGlobal2, glCurrGlobal3]);
-  const sortedMsrtvGlRows = getSortedMsrtvGlRows(
+    setFgajGlColumnOrder(fgajGlColumnDefs.map((column) => column.key));
+  }, [setFgajGlColumnOrder, withCurr2, withCurr3, glCurrDefault, currCode, glCurrGlobal2, glCurrGlobal3]);
+  const sortedFgajGlRows = getSortedFgajGlRows(
     detailRowsGL.map((row, originalIndex) => ({ row, originalIndex })),
     (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? ""
   );
 
-  const msrtvDetailEnterNextRowZeroClearFields = ["quantity", "unitCost"];
-  const msrtvGlEnterNextRowZeroClearFields = ["debit", "credit", "debitFx1", "creditFx1", "debitFx2", "creditFx2"];
+  const fgajDetailEnterNextRowZeroClearFields = ["quantity", "unitCost"];
+  const fgajGlEnterNextRowZeroClearFields = ["debit", "credit", "debitFx1", "creditFx1", "debitFx2", "creditFx2"];
 
-  const getSingleUploadTemplateColumns = () =>
-    visibleMsrtvDetailColumns.filter((column) => column.key !== "qtyHand");
-
-  const handleDownloadSingleUploadTemplate = async () => {
-    const templateColumns = getSingleUploadTemplateColumns();
-    await downloadGlobalSingleUploadTemplate({
-      columns: templateColumns,
-      rows: sortedMsrtvDetailRows,
-      fileName: "MS RTV Single Transaction Uploading Template.xlsx",
-      sheetName: "Item Details",
-      decimalColumnFormats: { quantity: decQty, unitCost: decUcost, itemAmount: 2 },
-      dateColumns: ["bbDate"],
-      rightAlignedColumns: ["quantity", "unitCost", "itemAmount"],
-      centerAlignedColumns: ["ln", "itemCode", "uomCode", "bbDate", "qstatCode", "whouseCode", "locCode", "acctCode", "rcCode", "slCode"],
-      getCellValue: ({ rowEntry, column }) => {
-        const row = rowEntry?.row || rowEntry || {};
-        switch (column.key) {
-          case "ln":
-            return (rowEntry?.originalIndex ?? 0) + 1;
-          case "quantity":
-          case "unitCost":
-          case "itemAmount":
-            return parseFormattedNumber(row[column.key] || 0);
-          case "bbDate":
-            return toSingleUploadExcelDate(row.bbDate);
-          default:
-            return String(row[column.key] ?? "");
-        }
-      },
-    });
+  const getGLTotalsState = (rows) => {
+    const sourceRows = Array.isArray(rows) ? rows : [];
+    const debitSum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.debit) || 0), 0);
+    const creditSum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.credit) || 0), 0);
+    const debitFx1Sum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.debitFx1) || 0), 0);
+    const creditFx1Sum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.creditFx1) || 0), 0);
+    const debitFx2Sum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.debitFx2) || 0), 0);
+    const creditFx2Sum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.creditFx2) || 0), 0);
+    return { totalDebit: formatNumber(debitSum), totalCredit: formatNumber(creditSum), totalDebitFx1: formatNumber(debitFx1Sum), totalCreditFx1: formatNumber(creditFx1Sum), totalDebitFx2: formatNumber(debitFx2Sum), totalCreditFx2: formatNumber(creditFx2Sum) };
   };
-
-  const parseSingleUploadRow = ({ rawValuesByKey, createEmptyRow }) => {
-    const rowData = createEmptyRow();
-
-    Object.entries(rawValuesByKey || {}).forEach(([key, raw]) => {
-      const rawValue = raw?.value ?? "";
-      switch (key) {
-        case "ln":
-          break;
-        case "quantity":
-        case "unitCost":
-        case "itemAmount":
-          rowData[key] = parseFormattedNumber(rawValue || 0) || 0;
-          break;
-        case "bbDate":
-          rowData.bbDate = toSingleUploadDateValue(raw?.cell?.value || rawValue);
-          break;
-        default:
-          rowData[key] = String(rawValue ?? "").trim();
-          break;
-      }
-    });
-
-    const quantity = parseFormattedNumber(rowData.quantity || 0) || 0;
-    const unitCost = parseFormattedNumber(rowData.unitCost || 0) || 0;
-    rowData.quantity = quantity;
-    rowData.unitCost = unitCost;
-    rowData.itemAmount = +(quantity * unitCost).toFixed(2);
-    rowData.whouseCode = rowData.whouseCode || state.WHcode || whCode || "";
-    rowData.locCode = rowData.locCode || locCode || "";
-    rowData.qtyHand = parseFormattedNumber(rowData.qtyHand || 0) || 0;
-    rowData.uniqueKey = rowData.uniqueKey || "";
-    rowData.operation = rowData.operation || "S";
-
-    return rowData;
-  };
-
-  const handleUploadExcelFile = async (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-
-    updateState({ isLoading: true, showSpinner: true });
-
-    try {
-      const result = await handleSingleUploadExcelFile({
-        file,
-        columns: getSingleUploadTemplateColumns(),
-        createEmptyRow: createEmptyDetailRow,
-        parseRow: parseSingleUploadRow,
-      });
-
-      if (result.cancelled) return;
-      if (!result.ok) {
-        showSingleUploadErrorList(result.title, result.errors);
-        return;
-      }
-
-      const finalRows = (result.validationResult?.rows || result.rows || []).map((row, index) => ({
-        ...row,
-        lnNo: index + 1,
-        quantity: formatNumber(parseFormattedNumber(row.quantity || 0), decQty),
-        unitCost: formatNumber(parseFormattedNumber(row.unitCost || 0), decUcost),
-        itemAmount: formatNumber(parseFormattedNumber(row.itemAmount || 0), 2),
-        qtyHand: formatNumber(parseFormattedNumber(row.qtyHand || 0), decQty),
-        bbDate: toSingleUploadDateValue(row.bbDate),
-      }));
-
-      updateState({ detailRows: finalRows, detailRowsGL: [] });
-      updateTotals(finalRows);
-
-      Swal.fire({
-        icon: "success",
-        title: "Upload Completed",
-        text: `${finalRows.length} row(s) uploaded successfully.`,
-        timer: 3000,
-        timerProgressBar: true,
-      });
-    } catch (error) {
-      console.error("Upload transaction error:", error);
-      showSingleUploadErrorList("Upload Error", [error?.message || "Unable to process the uploaded Excel file."]);
-    } finally {
-      updateState({ isLoading: false, showSpinner: false });
-    }
-  };
-
-  const handleUploadSingleTransaction = () => {
-    uploadInputRef.current?.click();
-  };
-
-
-
 
 
 //  ** View Document and Transaction History Retrieval ***
@@ -1346,7 +1668,7 @@ const handleHistoryRowPick = useCallback(
 
 useEffect(() => {
   const params = new URLSearchParams(location.search);
-  const docNo = params.get("msrtvNo");
+  const docNo = params.get("fgajNo");
   const branchCode = params.get("branchCode");
 
   if (!loadedFromUrlRef.current && docNo && branchCode) {
@@ -1358,15 +1680,11 @@ useEffect(() => {
 
 
 
-
-
   const printData = {
     apv_no: documentNo,
     branch: branchCode,
     doc_id: docType
   };
-
-
 
  
 
@@ -1460,6 +1778,7 @@ useEffect(() => {
 //     const recalcRow = async () => {
 //       let processedQty = Math.abs(origQuantity);
 
+//       if (origOperation === "S" && (selectedAJType === "IL" || selectedAJType === "IR")) {
 //         if (processedQty > origQtyHand) {
 //           useSwalErrorAlert('Exceeds Stock', `Quantity (${processedQty}) exceeds Quantity on Hand (${origQtyHand}). Value has been adjusted.`);
 //           processedQty = origQtyHand;
@@ -1469,9 +1788,11 @@ useEffect(() => {
 //         processedQty = Math.abs(processedQty);
 //       }
 
+//       const finalQtyForMath = (selectedAJType === "CA") ? 1 : processedQty;
 //       const calculatedAmount = +(finalQtyForMath * origUnitCost).toFixed(2);
 
 //       row.itemAmount = formatNumber(calculatedAmount);
+//       row.quantity = formatNumber(selectedAJType === "CA" ? 0 : processedQty, decQty);
 //       row.unitCost = formatNumber(origUnitCost, decUcost);
 //     };
 
@@ -1490,7 +1811,7 @@ useEffect(() => {
 
 
 const handleDetailChange = async (index, field, value, runCalculations = true) => {
-  const updatedRows = [...detailRows];
+  const updatedRows = [...(detailRowsRef.current || [])];
 
   updatedRows[index] = {
     ...updatedRows[index],
@@ -1561,6 +1882,7 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
 
   if (field === 'whouseCode') {
     row.whouseCode = value.whCode;
+    row.locCode = "";
     await autoFillBlanks('whouseCode', value.whCode);
   }
 
@@ -1578,6 +1900,16 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
     row[field] = value;
   }
 
+
+ if (field === 'itemCode') {
+    row["itemCode"] = value.itemCode;
+    row["itemName"] = value.itemName;
+    row["uomCode"] = value.uomCode;
+    row["categCode"] = value.categCode;   
+  }
+
+
+
   if (runCalculations) {
     const origQuantity = parseFormattedNumber(row.quantity) || 0;
     const origUnitCost = parseFormattedNumber(row.unitCost) || 0;
@@ -1587,21 +1919,21 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
     const recalcRow = async () => {
       let processedQty = Math.abs(origQuantity);
 
-      // if (origOperation === "S") {
+      if (origOperation === "S" && (selectedAJType === "IL" || selectedAJType === "IR")) {
         if (processedQty > origQtyHand) {
           useSwalErrorAlert('Exceeds Stock', `Quantity (${processedQty}) exceeds Quantity on Hand (${origQtyHand}). Value has been adjusted.`);
           processedQty = origQtyHand;
         }
-      //   processedQty = processedQty * -1;
-      // } else {
+        processedQty = processedQty * -1;
+      } else {
         processedQty = Math.abs(processedQty);
-      // }
+      }
 
-      const finalQtyForMath = processedQty;
+      const finalQtyForMath = (selectedAJType === "CA") ? 1 : processedQty;
       const calculatedAmount = +(finalQtyForMath * origUnitCost).toFixed(2);
 
       row.itemAmount = formatNumber(calculatedAmount);
-      row.quantity = formatNumber(processedQty, decQty);
+      row.quantity = formatNumber(selectedAJType === "CA" ? 0 : processedQty, decQty);
       row.unitCost = formatNumber(origUnitCost, decUcost);
     };
 
@@ -1621,7 +1953,7 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
 
 
 const handleDetailChangeGL = async (index, field, value) => {
-    const updatedRowsGL = [...state.detailRowsGL];
+    const updatedRowsGL = [...(detailRowsGLRef.current || [])];
     let row = { ...updatedRowsGL[index] };
 
 
@@ -1662,7 +1994,7 @@ const handleDetailChangeGL = async (index, field, value) => {
     }
     
     updatedRowsGL[index] = row;
-    updateState({ detailRowsGL: updatedRowsGL });
+    updateState({ detailRowsGL: updatedRowsGL, ...getGLTotalsState(updatedRowsGL) });
 };
 
 
@@ -1670,7 +2002,7 @@ const handleDetailChangeGL = async (index, field, value) => {
 
 const handleBlurGL = async (index, field, value, autoCompute = false) => {
   
-  const updatedRowsGL = [...state.detailRowsGL];
+  const updatedRowsGL = [...(detailRowsGLRef.current || [])];
   const row = { ...updatedRowsGL[index] };
 
   const parsedValue = parseFormattedNumber(value);
@@ -1706,7 +2038,7 @@ const handleBlurGL = async (index, field, value, autoCompute = false) => {
   }
 
   updatedRowsGL[index] = row;
-  updateState({ detailRowsGL: updatedRowsGL });
+  updateState({ detailRowsGL: updatedRowsGL, ...getGLTotalsState(updatedRowsGL) });
 };
 
 
@@ -1848,21 +2180,61 @@ const handleSaveAndPrint = async (documentID) => {
 
 
 
+const handleCloseWarehouseLookup = (row) => {
+  const isHeaderBBIGWarehouse =
+    row &&
+    !accountModalSource &&
+    (selectedAJType === "IG" || selectedAJType === "BB");
 
+  const queueHeaderLocationLookup = () => {
+    if (!isHeaderBBIGWarehouse) return;
+    setPendingHeaderLocationWH(row.whCode);
+  };
 
-  const handleCloseWarehouseLookup = (row) => {
   if (row) {
     accountModalSource
       ? handleDetailChange(selectedRowIndex, 'whouseCode', row, false)
       : updateState({
-          WHcode: row.whCode,
-          WHname: row.whName,
-          locCode: "", 
-          locName: ""
+          WHCode: row.whCode,
+          WHName: row.whName,
+          LocCode: "", 
+          LocName: ""
         });
+
+
+    const hasDetails = detailRows && detailRows.length > 0;
+    if (!accountModalSource && (selectedAJType === "IG" || selectedAJType === "BB") && hasDetails) {
+      
+      Swal.fire({
+        title: 'Apply to Details?',
+        text: "Do you want to apply this Warehouse to all detail items?",
+        icon: 'info',
+        showCancelButton: true,
+        confirmButtonText: 'Yes, update all',
+        cancelButtonText: 'No, header only'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          const updatedDetails = detailRows.map((item) => ({
+            ...item,
+            whouseCode: row.whCode,
+            locCode: "",
+          }));
+          updateState({ detailRows: updatedDetails });
+        }
+
+        queueHeaderLocationLookup();
+      });
+    } else {
+      queueHeaderLocationLookup();
+    }
   }
-  updateState({ warehouseLookupOpen: false });
+  
+  updateState({
+    warehouseLookupOpen: false,
+    accountModalSource: "",
+  });
 };
+
 
 
 
@@ -1872,10 +2244,30 @@ const handleCloseLocationLookup = (row) => {
   if (row) {
     accountModalSource
       ? handleDetailChange(selectedRowIndex, 'locCode', row, false)
-      : updateState({ locCode: row.locCode, locName: row.locName });
-  }
+      : updateState({ LocCode: row.locCode, LocName: row.locName });
 
-  updateState({ locationLookupOpen: false });
+     const hasDetails = detailRows && detailRows.length > 0;
+      if (!accountModalSource && (selectedAJType === "IG" || selectedAJType === "BB") && hasDetails) {
+        
+        Swal.fire({
+          title: 'Apply to Details?',
+          text: "Do you want to apply this Location to all detail items?",
+          icon: 'info',
+          showCancelButton: true,
+          confirmButtonText: 'Yes, update all',
+          cancelButtonText: 'No, header only'
+        }).then((result) => {
+          if (result.isConfirmed) {
+            const updatedDetails = detailRows.map((item) => ({
+              ...item,
+              locCode: row.locCode,
+            }));
+            updateState({ detailRows: updatedDetails });
+        }
+      });
+    }
+  }
+  updateState({ locationLookupOpen: false, selectedWH:"" ,accountModalSource:"" });
 };
 
 
@@ -1893,41 +2285,6 @@ const handleCloseQStatLookup = (row) => {
 
 
 
-const handleCloseVatModal = async (selectedVat) => { 
-  if (selectedVat && selectedRowIndex !== null) {
-    
-     const result = await useTopVatRow(selectedVat.vatCode);
-      if (!result) return;
-
-      handleDetailChangeGL(selectedRowIndex, 'vatCode', result);   
-  }
-  updateState({ showVatModal: false ,
-                selectedRowIndex: null,
-                accountModalSource: null });
-};
-
-
-
-
-
-
-const handleCloseAtcModal = async (selectedAtc) => {
-  if (selectedAtc && selectedRowIndex !== null) {  
-
-    const result = await useTopATCRow(selectedAtc.atcCode);
-      if (!result) return;
-
-      handleDetailChangeGL(selectedRowIndex, 'atcCode', result);   
-  }
-  updateState({ showAtcModal: false ,
-                selectedRowIndex: null,
-                accountModalSource: null });
-};
-
-
-
-  
-
 
 const handleCloseBranchModal = (selectedBranch) => {
     if (selectedBranch) {
@@ -1943,43 +2300,42 @@ const handleCloseBranchModal = (selectedBranch) => {
 
 
   
-  const handleOpenMSLookup = async () => {
+  const handleOpenMSLookup = async (itemSingleSelect) => {
     try {
-      updateState({ isLoading: true });
+
+      
+      updateState({ isLoading: true,
+                    itemSingleSelect : itemSingleSelect });
   
-      const endpoint ="getInvLookupMS"
-      const response = await fetchDataJson(endpoint, { userCode, whouseCode: state.WHcode || state.whouseCode || "", locCode: state.locCode || "", docType: "MSRTV" });
+      const endpoint ="getInvLookupFG"
+      const response = await fetchDataJson(endpoint, { userCode, whouseCode :WHCode || "", locCode: LocCode || "", docType:"FGAJ" ,tranType :itemSingleSelect? "IRR" :selectedAJType });
       const custData = response?.data?.[0]?.result ? JSON.parse(response.data[0].result) : [];
   
 
       const lookupTypes = ["BB", "IG"];  
-      const colConfig = await useSelectedHSColConfig(lookupTypes.includes("IG") ? "AllMastItemLookup" : "getInvLookupMS");
+      const colConfig = await useSelectedHSColConfig((lookupTypes.includes(selectedAJType) || itemSingleSelect) ? "AllMastItemLookup" : "getInvLookupFG");
 
 
      if (custData.length === 0) {
-        useSwalErrorAlert("MS Location Balance","No records found")
+        useSwalInfoAlert(lookupTypes.includes(selectedAJType) ? "FG Master Data" : "FG Location Balance","No records found")
          updateState({ isLoading: false });
         return; 
       }
   
       updateState({ globalLookupRow: custData,
                     globalLookupHeader:colConfig,
-                    msLookupModalOpen: true
+                    msLookupModalOpen: true,
+                    isLoading: false
         });
   
+
     } catch (error) {
-      console.error("Failed to fetch Open AR Balance:", error);
-      Swal.fire({
-        icon: "error",
-        title: "Error",
-        text: "Failed to fetch Open AR Balance.",
-      });
+      useSwalErrorAlert(lookupTypes.includes(selectedAJType) ? "FG Master Data" : "FG Location Balance","No records found")
       updateState({ 
           globalLookupRow: [] ,
-          globalLookupHeader: [] });
+          globalLookupHeader: [],
+          isLoading: false  });
     }
-  
-     updateState({ isLoading: false });
   };
   
   
@@ -1991,107 +2347,267 @@ const handleCloseBranchModal = (selectedBranch) => {
 
 
 
-  const handleCloseMSLookup = (selectedItems) => {
-  updateState({ msLookupModalOpen: false });
+//   const handleCloseMSLookup = (selectedItems) => {
+//   updateState({ msLookupModalOpen: false });
+
+//   if (!selectedItems) return;
+
+//   const itemsArray = Array.isArray(selectedItems.records) ? selectedItems.records : [selectedItems.records];
+//   if (itemsArray.length === 0) return;
+
+//   const newRows = itemsArray.map((item) => ({
+//     itemCode: item?.itemCode ?? "",
+//     itemName: item?.itemName ?? "",
+//     categCode: item?.categCode ?? "",
+//     uomCode: item?.uomCode ?? "",
+//     quantity: formatNumber(0, decQty),
+//     unitCost: formatNumber(parseFormattedNumber(item?.unitCost ?? 0), decUcost),
+//     amount: formatNumber(0, 2),
+//     lotNo: item?.lotNo ?? "",
+//     bbDate: item?.bbDate ? new Date(item.bbDate).toISOString().split("T")[0] : "",
+//     qstatCode: item?.qstatCode ?? "",
+//     whouseCode: item?.whouseCode ?? WHCode ?? "",
+//     locCode: item?.locCode ?? LocCode ?? "",
+//     qtyHand: formatNumber(parseFormattedNumber(item?.qtyHand ?? 0), decQty),
+//     uniqueKey: item?.uniqueKey ?? "",
+//     operation:  (selectedAJType === "IL" || selectedAJType === "IR") ? "S" : "A",
+//     acctCode: "",
+//     sltypeCode: "",
+//     rcCode: "",
+//     slCode: ""
+//   }));
+
+
+// setState((prev) => {
+//     const updated = [...(prev.detailRows || []), ...newRows];
+//     updateTotalsDisplay(0,0);
+//     return { ...prev, detailRows: updated };
+//   });
+// };
+
+
+const handleAddBlankRow = (index) => {
+  const blankRow = {
+    itemCode: "",
+    oldValue: "",
+    itemName: "",
+    categCode: "",
+    uomCode: "",
+    unitCost: formatNumber(0, decUcost),
+    lotNo: "",
+    bbDate: "",
+    qstatCode: "",
+    whouseCode: WHCode ?? "",
+    locCode: LocCode ?? "",
+    acctCode: "",
+    sltypeCode: "",
+    rcCode: "",
+    slCode: "",
+    uniqueKey: "",
+    quantity: formatNumber(0, decQty),
+    qtyHand: formatNumber(0, decQty),
+    itemAmount: formatNumber(0, 2),
+    operation: "A"
+  };
+
+  setState((prev) => {
+    const updatedRows = [...(prev.detailRows || [])];
+    // Inserts the blankRow at the index + 1 position (immediately below)
+    updatedRows.splice(index + 1, 0, blankRow);
+    
+    return { ...prev, detailRows: updatedRows };
+  });
+};
+
+
+
+
+const handleCloseMSLookup = (selectedItems) => {
+  
 
   if (!selectedItems) return;
 
   const itemsArray = Array.isArray(selectedItems.records) ? selectedItems.records : [selectedItems.records];
   if (itemsArray.length === 0) return;
 
-  const newRows = itemsArray.map((item) => ({
-    itemCode: item?.itemCode ?? "",
-    itemName: item?.itemName ?? "",
-    categCode: item?.categCode ?? "",
-    uomCode: item?.uomCode ?? "",
-    quantity: formatNumber(0, decQty),
-    unitCost: formatNumber(parseFormattedNumber(item?.unitCost ?? 0), decUcost),
-    amount: formatNumber(0, 2),
-    lotNo: item?.lotNo ?? "",
-    bbDate: item?.bbDate ? new Date(item.bbDate).toISOString().split("T")[0] : "",
-    qstatCode: item?.qstatCode ?? "",
-    whouseCode: item?.whouseCode ?? state.WHcode ?? "",
-    locCode: item?.locCode ?? state.locCode ?? "",
-    qtyHand: formatNumber(parseFormattedNumber(item?.qtyHand ?? 0), decQty),
-    uniqueKey: item?.uniqueKey ?? "",
-    operation: "A",
-    acctCode: "",
-    sltypeCode: "SU",
-    rcCode: "",
-    slCode: vendCode,
-  }));
+  const newRows = itemsArray.flatMap((item) => {
+  const rawQtyHand = parseFormattedNumber(item?.qtyHand ?? 0);
+  const rawUnitCost = parseFormattedNumber(item?.unitCost ?? 0);
+  const originalKey = item?.uniqueKey ?? "";
 
 
-setState((prev) => {
+
+
+  if(itemSingleSelect && selectedAJType ==="IR"){
+    
+      handleDetailChange(selectedRowIndex, 'itemCode', item, false)
+      updateState({itemSingleSelect: false,msLookupModalOpen: false });
+      return[];
+  }
+
+
+  
+
+
+    // Base configuration shared by both rows
+    const baseRow = {
+      itemCode: item?.itemCode ?? "",
+      oldValue: item?.itemCode ?? "",
+      itemName: item?.itemName ?? "",
+      categCode: item?.categCode ?? "",
+      uomCode: item?.uomCode ?? "",
+      unitCost: formatNumber(rawUnitCost, decUcost),     
+      lotNo: item?.lotNo ?? "",
+      bbDate: item?.bbDate ? new Date(item.bbDate).toISOString().split("T")[0] : "",
+      qstatCode: item?.qstatCode ?? "",
+      whouseCode: item?.whouseCode ?? WHCode ?? "",
+      locCode: item?.locCode ?? LocCode ?? "",
+      acctCode: "",
+      sltypeCode: "",
+      rcCode: "",
+      slCode: ""
+    };
+
+    if (selectedAJType === "IR") {
+      return [
+        // 1st Record: Has uniqueKey, Quantity is negative qtyHand
+        {
+          ...baseRow,
+          uniqueKey: originalKey,
+          quantity: formatNumber(rawQtyHand * -1, decQty),
+          qtyHand: formatNumber(rawQtyHand, decQty),
+          itemAmount: formatNumber((rawQtyHand * rawUnitCost)*-1, 2),
+          operation:"S"
+        },
+        // 2nd Record: No uniqueKey, Quantity is positive qtyHand
+        {
+          ...baseRow,
+          uniqueKey: "", // No value as requested
+          quantity: formatNumber(rawQtyHand, decQty),
+          qtyHand: formatNumber(0, decQty),
+          itemAmount: formatNumber((rawQtyHand), 2),
+          operation:"A"
+        }
+      ];
+    }
+
+    // Default logic for other types (Single row, original key)
+    return [
+      {
+        ...baseRow,
+        uniqueKey: originalKey,
+        qtyHand: formatNumber(rawQtyHand, decQty),
+        quantity: formatNumber(0, decQty),
+        itemAmount: formatNumber(0, 2),
+        operation: (selectedAJType === "IL") ? "S" : "A"
+      }
+    ];
+  });
+
+  setState((prev) => {
     const updated = [...(prev.detailRows || []), ...newRows];
-    updateTotalsDisplay(0,0);
+    updateTotalsDisplay(0, 0);
     return { ...prev, detailRows: updated };
   });
+
+
+   updateState({itemSingleSelect: false ,msLookupModalOpen: false });
+};
+
+const handleCloseItemMastLookup = (selectedItems) => {
+  if (!selectedItems) {
+    updateState({ itemMastLookupOpen: false, itemSingleSelect: false });
+    return;
+  }
+
+  const itemsArray = Array.isArray(selectedItems.records)
+    ? selectedItems.records
+    : selectedItems.records ? [selectedItems.records] : [];
+
+  if (itemSingleSelect) {
+    if (itemsArray.length > 0 && selectedRowIndex !== null) {
+      handleDetailChange(selectedRowIndex, "itemCode", itemsArray[0], false);
+    }
+    updateState({
+      itemMastLookupOpen: false,
+      itemSingleSelect: false,
+      selectedRowIndex: null,
+    });
+    return;
+  }
+
+  handleCloseMSLookup(selectedItems);
+  updateState({ itemMastLookupOpen: false });
 };
 
 
-const renderMsrtvDetailColumn = (columnKey, row, index) => {
-  const columnWidth = getMsrtvDetailFallbackWidth(columnKey);
-  const style = getMsrtvDetailCellStyle(columnKey, columnWidth);
+
+
+
+
+const renderFgajDetailColumn = (columnKey, row, index) => {
+  const columnWidth = getFgajDetailFallbackWidth(columnKey);
+  const style = getFgajDetailCellStyle(columnKey, columnWidth);
+  const isNegative = parseFormattedNumber(row.quantity) < 0;
+  const textColorClass = isNegative ? "text-red-600" : "";
+  const canLookupStock = ["BB", "IG", "IR"].includes(selectedAJType) && !isFormDisabled && row.operation !== "S";
+
   const focusNextDetailCell = (field) => {
-    focusNextMsrtvDetailRowInput(index, field, {
+    focusNextFgajDetailRowInput(index, field, {
       rows: detailRows,
-      zeroClearFields: msrtvDetailEnterNextRowZeroClearFields,
+      zeroClearFields: fgajDetailEnterNextRowZeroClearFields,
       parseValue: parseFormattedNumber,
       onClearNextValue: (nextIndex, nextField, value) => handleDetailChange(nextIndex, nextField, value, false),
     });
   };
 
   const textInput = (field, options = {}) => (
-    <input type="text" id={`${field}-${index}`} className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? isFormDisabled} disabled={options.disabled} maxLength={options.maxLength} onChange={(e) => handleDetailChange(index, field, e.target.value, false)} onKeyDown={(e) => { if (e.key !== "Enter" || options.readOnly || isFormDisabled) return; e.preventDefault(); focusNextDetailCell(field); }} />
+    <input type="text" id={`${field}-${index}`} className={`w-full global-tran-td-inputclass-ui ${textColorClass} ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? isFormDisabled} maxLength={options.maxLength} onChange={(e) => handleDetailChange(index, field, e.target.value, false)} onKeyDown={(e) => { if (e.key !== "Enter" || options.readOnly || isFormDisabled) return; e.preventDefault(); focusNextDetailCell(field); }} />
   );
+
   const lookupCell = (field, onClick, options = {}) => (
-    <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`${field}-${index}`} className={`w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer ${options.className || ""}`.trim()} value={row[field] || ""} readOnly onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); focusNextDetailCell(field); }} />{!isFormDisabled && !options.hideIcon && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={onClick} />}</div></td>
+    <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`${field}-${index}`} className={`w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer ${textColorClass}`.trim()} value={row[field] || ""} readOnly onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); focusNextDetailCell(field); }} />{!isFormDisabled && !options.hideIcon && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={onClick} />}</div></td>
   );
+
   const amountInput = (field, options = {}) => (
-    <input type="text" id={`${field}-${index}`} className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0" value={row[field] || ""} readOnly={options.readOnly ?? isFormDisabled} disabled={options.disabled} onChange={(e) => { const sanitizedValue = e.target.value.replace(options.allowNegative ? /[^0-9.-]/g : /[^0-9.]/g, ""); const pattern = options.allowNegative ? /^-?\d*\.?\d{0,2}$/ : /^\d*\.?\d{0,2}$/; if (pattern.test(sanitizedValue) || sanitizedValue === "") handleDetailChange(index, field, sanitizedValue, false); }} onFocus={(e) => clearMsrtvDetailZeroOnFocus(e, { isEditable: !(options.readOnly ?? isFormDisabled), onClear: (value) => handleDetailChange(index, field, value, false) })} onBlur={async (e) => { if (options.readOnly ?? isFormDisabled) return; const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, field, num, true); setFocusedCell(null); }} onKeyDown={async (e) => { if (e.key !== "Enter" || (options.readOnly ?? isFormDisabled)) return; e.preventDefault(); const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, field, num, true); focusNextDetailCell(field); }} />
+    <input type="text" id={`${field}-${index}`} className={`w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 ${textColorClass}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? isFormDisabled} onChange={(e) => { const sanitizedValue = e.target.value.replace(options.allowNegative ? /[^0-9.-]/g : /[^0-9.]/g, ""); const pattern = options.allowNegative ? /^-?\d*\.?\d{0,2}$/ : /^\d*\.?\d{0,2}$/; if (pattern.test(sanitizedValue) || sanitizedValue === "") handleDetailChange(index, field, sanitizedValue, false); }} onFocus={(e) => clearFgajDetailZeroOnFocus(e, { isEditable: !(options.readOnly ?? isFormDisabled), onClear: (value) => handleDetailChange(index, field, value, false) })} onBlur={async (e) => { if (options.readOnly ?? isFormDisabled) return; const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, field, num, true); setFocusedCell(null); }} onKeyDown={async (e) => { if (e.key !== "Enter" || (options.readOnly ?? isFormDisabled)) return; e.preventDefault(); const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, field, num, true); focusNextFgajDetailRowInput(index, field, { rows: detailRows, zeroClearFields: fgajDetailEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChange(nextIndex, nextField, value, false) }); }} />
   );
 
   const detailColumnRenderers = {
-    ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
-    itemCode: () => lookupCell("itemCode", () => handleAddRow(), { hideIcon: true }),
+    ln: () => <td key={columnKey} className={`global-tran-td-ui text-center ${textColorClass}`} style={style}>{index + 1}</td>,
+    itemCode: () => lookupCell("itemCode", () => handleAddItem(index), { hideIcon: !(["BB", "IG"].includes(selectedAJType) || (row.operation === "A" && selectedAJType === "IR")) }),
     itemName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("itemName", { readOnly: true })}</td>,
     uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("uomCode", { readOnly: true, className: "text-center" })}</td>,
     quantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("quantity", { allowNegative: true })}</td>,
-    unitCost: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("unitCost", { disabled: isFormDisabled })}</td>,
-    itemAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 cursor-pointer" value={formatNumber(parseFormattedNumber(row.itemAmount)) || ""} readOnly /></td>,
-    lotNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("lotNo", { readOnly: true, disabled: isFormDisabled, maxLength: useGetFieldLength(tblFieldArray, "lot_no") })}</td>,
-    bbDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="date" id={`bbDate-${index}`} className="w-full global-tran-td-inputclass-ui text-center" value={toSingleUploadDateValue(row.bbDate)} readOnly disabled={isFormDisabled} onChange={(e) => handleDetailChange(index, "bbDate", e.target.value, false)} /></td>,
-    qstatCode: () => lookupCell("qstatCode", () => updateState({ selectedRowIndex: index, showQstatModal: true }), { hideIcon: true }),
-    whouseCode: () => lookupCell("whouseCode", () => updateState({ selectedRowIndex: index, warehouseLookupOpen: true, accountModalSource: "whouseCode" }), { hideIcon: true }),
-    locCode: () => lookupCell("locCode", () => updateState({ selectedRowIndex: index, locationLookupOpen: true, accountModalSource: "locCode" }), { hideIcon: true }),
+    unitCost: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("unitCost", { readOnly: isFormDisabled || selectedAJType === "IL" || (selectedAJType === "IR" && row.operation === "S") })}</td>,
+    itemAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className={`w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 ${textColorClass}`.trim()} value={formatNumber(parseFormattedNumber(row.itemAmount)) || ""} readOnly /></td>,
+    lotNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("lotNo", { readOnly: isFormDisabled || selectedAJType === "IL" || selectedAJType === "CA" || (selectedAJType === "IR" && row.operation === "S"), maxLength: useGetFieldLength(tblFieldArray, "lot_no") })}</td>,
+    bbDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="date" id={`bbDate-${index}`} className={`w-full global-tran-td-inputclass-ui text-center ${textColorClass}`.trim()} value={toDateInputValue(row.bbDate)} readOnly={isFormDisabled || selectedAJType === "IL" || selectedAJType === "CA" || (selectedAJType === "IR" && row.operation === "S")} onChange={(e) => handleDetailChange(index, "bbDate", e.target.value, false)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("bbDate"); } }} /></td>,
+    qstatCode: () => lookupCell("qstatCode", () => updateState({ selectedRowIndex: index, showQstatModal: true }), { hideIcon: !canLookupStock }),
+    whouseCode: () => lookupCell("whouseCode", () => updateState({ selectedRowIndex: index, warehouseLookupOpen: true, accountModalSource: "whouseCode" }), { hideIcon: !canLookupStock }),
+    locCode: () => lookupCell("locCode", () => updateState({ selectedRowIndex: index, locationLookupOpen: true, selectedWH: row.whouseCode, accountModalSource: "locCode" }), { hideIcon: !canLookupStock }),
     acctCode: () => lookupCell("acctCode", () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "invAcct" })),
     rcCode: () => lookupCell("rcCode", () => updateState({ selectedRowIndex: index, showRcModal: true, accountModalSource: "rcCode" })),
     sltypeCode: () => <td key={columnKey} className="hidden" style={style}>{textInput("sltypeCode", { readOnly: true })}</td>,
     slCode: () => lookupCell("slCode", () => updateState({ selectedRowIndex: index, showSlModal: true, accountModalSource: "slCode" })),
-    qtyHand: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full global-tran-td-inputclass-ui text-right" value={row.qtyHand || ""} readOnly /></td>,
+    qtyHand: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className={`w-full global-tran-td-inputclass-ui text-right ${textColorClass}`.trim()} value={row.qtyHand || ""} readOnly /></td>,
     categCode: () => <td key={columnKey} className="hidden" style={style}>{String(row.categCode || "")}</td>,
+    oldValue: () => <td key={columnKey} className="hidden" style={style}>{String(row.oldValue || "")}</td>,
     uniqueKey: () => <td key={columnKey} className="hidden" style={style}>{String(row.uniqueKey || "")}</td>,
-    operation: () => <td key={columnKey} className="hidden" style={style}>{String(row.operation || "S")}</td>,
+    operation: () => <td key={columnKey} className="hidden" style={style}>{String(row.operation || "")}</td>,
   };
 
   return detailColumnRenderers[columnKey]?.() ?? <td key={columnKey} className="global-tran-td-ui" style={style}>{String(row[columnKey] ?? "")}</td>;
 };
 
-const renderMsrtvGlColumn = (columnKey, row, index) => {
-  const columnWidth = getMsrtvGlFallbackWidth(columnKey);
-  const style = getMsrtvGlCellStyle(columnKey, columnWidth);
-  const focusNextGlCell = (field) => focusNextMsrtvGlRowInput(index, field, { rows: detailRowsGL, zeroClearFields: msrtvGlEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChangeGL(nextIndex, nextField, value) });
-  const modalHandlers = {
-    acctCode: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "acctCode" }),
-    rcCode: () => updateState({ selectedRowIndex: index, showRcModal: true }),
-    slCode: () => updateState({ selectedRowIndex: index, showSlModal: true }),
-    vatCode: () => updateState({ selectedRowIndex: index, showVatModal: true }),
-    atcCode: () => updateState({ selectedRowIndex: index, showAtcModal: true }),
-  };
+const renderFgajGlColumn = (columnKey, row, index) => {
+  const columnWidth = getFgajGlFallbackWidth(columnKey);
+  const style = getFgajGlCellStyle(columnKey, columnWidth);
+  const focusNextGlCell = (field) => focusNextFgajGlRowInput(index, field, { rows: detailRowsGL, zeroClearFields: fgajGlEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChangeGL(nextIndex, nextField, value) });
+  const modalHandlers = { acctCode: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "acctCode" }), rcCode: () => updateState({ selectedRowIndex: index, showRcModal: true }), slCode: () => updateState({ selectedRowIndex: index, showSlModal: true }) };
   const textInput = (field, options = {}) => <input type="text" id={`${field}-${index}`} className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? isFormDisabled} maxLength={options.maxLength} onChange={(e) => handleDetailChangeGL(index, field, e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || options.readOnly || isFormDisabled) return; e.preventDefault(); focusNextGlCell(field); }} />;
   const lookupCell = (field, options = {}) => <td key={columnKey} className="global-tran-td-ui" style={style}><div className="relative w-full"><input type="text" id={`${field}-${index}`} className={`w-full pr-6 global-tran-td-inputclass-ui cursor-pointer ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? true} onChange={(e) => handleDetailChangeGL(index, field, e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); focusNextGlCell(field); }} />{!isFormDisabled && (options.alwaysShowIcon || String(row[field] || "").trim()) && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={modalHandlers[field]} />}</div></td>;
-  const amountInput = (field) => <input type="text" id={`${field}-${index}`} className="w-full global-tran-td-inputclass-ui text-right" value={row[field] || ""} readOnly={isFormDisabled} onChange={(e) => { const sanitizedValue = e.target.value.replace(/[^0-9.]/g, ""); if (/^\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") handleDetailChangeGL(index, field, sanitizedValue); }} onFocus={(e) => clearMsrtvGlZeroOnFocus(e, { isEditable: !isFormDisabled, onClear: (value) => handleDetailChangeGL(index, field, value) })} onBlur={(e) => { if (isFormDisabled) return; handleBlurGL(index, field, e.target.value); }} onKeyDown={async (e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); await handleBlurGL(index, field, e.target.value, true); focusNextGlCell(field); }} />;
+  const amountInput = (field) => <input type="text" id={`${field}-${index}`} className="w-full global-tran-td-inputclass-ui text-right" value={row[field] || ""} readOnly={isFormDisabled} onChange={(e) => { const sanitizedValue = e.target.value.replace(/[^0-9.]/g, ""); if (/^\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") handleDetailChangeGL(index, field, sanitizedValue); }} onFocus={(e) => clearFgajGlZeroOnFocus(e, { isEditable: !isFormDisabled, onClear: (value) => handleDetailChangeGL(index, field, value) })} onBlur={(e) => { if (isFormDisabled) return; handleBlurGL(index, field, e.target.value); }} onKeyDown={async (e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); await handleBlurGL(index, field, e.target.value, true); focusNextGlCell(field); }} />;
   const glColumnRenderers = {
     ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
     acctCode: () => lookupCell("acctCode", { alwaysShowIcon: true, readOnly: false }),
@@ -2110,18 +2626,14 @@ const renderMsrtvGlColumn = (columnKey, row, index) => {
     debitFx2: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{amountInput("debitFx2")}</td>,
     creditFx2: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{amountInput("creditFx2")}</td>,
     slRefNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("slRefNo", { maxLength: useGetFieldLength(tblFieldArray, "slref_no") })}</td>,
-    slRefDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="date" id={`slRefDate-${index}`} className="w-full global-tran-td-inputclass-ui text-center" value={toSingleUploadDateValue(row.slRefDate)} readOnly={isFormDisabled} onChange={(e) => handleDetailChangeGL(index, "slRefDate", e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextGlCell("slRefDate"); } }} /></td>,
+    slRefDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="date" id={`slRefDate-${index}`} className="w-full global-tran-td-inputclass-ui text-center" value={toDateInputValue(row.slRefDate)} readOnly={isFormDisabled} onChange={(e) => handleDetailChangeGL(index, "slRefDate", e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextGlCell("slRefDate"); } }} /></td>,
     remarks: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("remarks", { maxLength: useGetFieldLength(tblFieldArray, "remarks") })}</td>,
   };
   return glColumnRenderers[columnKey]?.() ?? <td key={columnKey} className="global-tran-td-ui" style={style}>{String(row[columnKey] ?? "")}</td>;
 };
 
-
-
-
-
 return (
-
+<>
 <div className="global-tran-main-div-ui">
 
       {showSpinner && <LoadingSpinner />}
@@ -2162,7 +2674,7 @@ return (
         isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
         isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
         isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED" || displayStatus === "CLOSED"}
-        detailsRoute="/page/MSRTV"
+        detailsRoute="/page/FGAJ"
       />
       </div>
 
@@ -2208,212 +2720,135 @@ return (
             {/* Provision for Other Tabs */}
         </div>
 
-        {/* MSRTV Header Form Section */}
-       <div
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 rounded-lg relative"
-            id="msrtv_hd"
-          >
-            {/* Columns 1–3 (Header fields) */}
-            <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-
-                {/* Column 1 */}
-                <div className="global-tran-textbox-group-div-ui">
-                    {/* Branch Name Input with lookup button */}
-                    <div className="relative">
-                      <FieldRenderer
-                        id="branchName"
-                        label="Branch"
-                        type="lookup"
-                        value={branchName || ""}
-                        onLookup={() => !isFormDisabled && updateState({ branchModalOpen: true })}
-                        disabled={state.isFetchDisabled || state.isDocNoDisabled || isFormDisabled}
-                        readOnly
-                        lookupDisabled={isFetchDisabled}
-                        placeholder=" "
-                      />
-                    </div>
-
-                    {/* SVI Number Field */}
-                    <div className="relative">
-                      <FieldRenderer
-                        id="msrtvNo"
-                        label="MSRTV No."
-                        type="lookup"
-                        value={state.documentNo || ""}
-                        onChange={(val) => updateState({ documentNo: val })}
-                        onLookup={() => updateState({ showAllTranDocNo: true })}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            handleDocNoBlur();
-                            e.preventDefault();
-                            document.getElementById("msrtvDate")?.focus();
-                          }
-                        }}
-                        placeholder=" "
-                        disabled={state.isDocNoDisabled}
-                      />
-                    </div>
-
-                    {/* SVI Date Picker */}
-                    <div className="relative w-full">
-                      <div className={`flex items-stretch global-ref-textbox-ui ${!isFormDisabled ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"}`}>
-                        <DateFormatInput
-                          id="msrtvDate"
-                          name="documentDate"
-                          className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
-                          value={documentDate}
-                          disabled={isFormDisabled}
-                          updateState={updateState}
-                        />
-                      </div>
-                      <label htmlFor="msrtvDate" className="global-ref-floating-label">MSRTV Date</label>
-                    </div>
-
-                   
-                </div>
-
-                {/* Column 2 */}
-                <div className="global-tran-textbox-group-div-ui">
-
-
-                {/* Payee Code. */}
-                <div className="relative group flex-[1.3]">
-                  <FieldRenderer
-                    id="vendCode"
-                    label="Payee Code"
-                    type="lookup"
-                    required
-                    value={vendCode || ""}
-                    onLookup={() => !isFormDisabled && updateState({ payeeLookupOpen: true })}
-                    disabled={isFormDisabled}
-                    readOnly
-                    lookupDisabled={isFormDisabled}
-                    placeholder=" "
-                  />
-                </div>
-
-                {/* Ref No (Payee Name) */}
-                <div className="relative">
-                  <FieldRenderer
-                    id="vendName"
-                    label="Payee Name"
-                    type="lookup"
-                    required
-                    value={vendName || ""}
-                    onLookup={() => !isFormDisabled && updateState({ payeeLookupOpen: true })}
-                    disabled={isFormDisabled}
-                    readOnly
-                    lookupDisabled={isFormDisabled}
-                    placeholder=" "
-                  />
-                </div>
-                    
-                     <div className="relative">
-                        <FieldRenderer
-                          id="refDocNo1"
-                          label="Ref Doc No. 1"
-                          type="text"
-                          value={refDocNo1 || ""}
-                          onChange={(val) => updateState({ refDocNo1: val })}
-                          placeholder=" "
-                          disabled={isFormDisabled}
-                          maxLength={useGetFieldLength(tblFieldArray, "refrtv_no1")}
-                        />
-                    </div>
-
-                   
-                </div>
-
-                {/* Column 3 */}
-                <div className="global-tran-textbox-group-div-ui">
-                   
-               <div className="relative group flex-[1.3]">
-                   <FieldRenderer
-                     id="WHcode"
-                     label="Warehouse"
-                     type="lookup"
-                     required
-                     value={state.WHname || state.WHcode || ""}
-                     onLookup={() =>
-                       !isFormDisabled &&
-                       updateState({ warehouseLookupOpen: true })
-                     }
-                     disabled={isFormDisabled}
-                     readOnly
-                     lookupDisabled={isFormDisabled}
-                     placeholder=" "
-                   />
-                 </div>
- 
-                 <div className="relative group flex-[1.3]">
-                   <FieldRenderer
-                     id="locName"
-                     label="Location"
-                     type="lookup"
-                     required
-                     value={state.locName || state.locCode || ""}
-                     onLookup={() =>
-                       !isFormDisabled && (state.WHname || state.WHcode) &&
-                       updateState({ locationLookupOpen: true })
-                     }
-                     disabled={isFormDisabled || !(state.WHname || state.WHcode)}
-                     readOnly
-                     lookupDisabled={isFormDisabled || !(state.WHname || state.WHcode)}
-                     placeholder=" "
-                   />
-                 </div> 
-
-                 
-                    <div className="relative">
-                        <FieldRenderer
-                          id="refDocNo2"
-                          label="Ref Doc No. 2"
-                          type="text"
-                          value={refDocNo2 || ""}
-                          onChange={(val) => updateState({ refDocNo2: val })}
-                          placeholder=" "
-                          disabled={isFormDisabled}
-                          maxLength={useGetFieldLength(tblFieldArray, "refrtv_no2")}
-                        />
-                    </div>                 
-        
-                </div>
-
-                {/* Remarks Section - Now inside the 3-column container, spanning all 3 */}
-               <div className="col-span-full">
-                <div className="relative p-2">
-                        <textarea
-                            id="remarks"
-                            placeholder=""
-                            rows={4}
-                            className="peer global-tran-textbox-remarks-ui pt-2"
-                            value={remarks}
-                            onChange={(e) => updateState({ remarks: e.target.value })}
-                            disabled={isFormDisabled}
-                            maxLength={useGetFieldLength(tblFieldArray, "remarks")} 
-                        />
-                        <label
-                            htmlFor="remarks"
-                            className="global-tran-floating-label-remarks"
-                        >
-                            Remarks
-                        </label>
-                    </div>
-                </div>
-
-            </div> {/* End of the 3-column container */}
-
-            {/* Column 4 - Totals (remains unchanged, but its parent is now the main 4-column grid) */}
+        {/* FGAJ Header Form Section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 rounded-lg relative" id="fgaj_hd">
+          <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="global-tran-textbox-group-div-ui">
-               
-              
-             
+              <FieldRenderer
+                id="branchName"
+                label="Branch"
+                type="lookup"
+                value={branchName || ""}
+                disabled={state.isFetchDisabled || state.isDocNoDisabled || isFormDisabled}
+                readOnly
+                lookupDisabled={isFetchDisabled}
+                onLookup={() => !isFormDisabled && updateState({ branchModalOpen: true })}
+              />
+
+              <FieldRenderer
+                id="fgajNo"
+                label="FGAJ No."
+                type="lookup"
+                value={state.documentNo || ""}
+                disabled={state.isDocNoDisabled}
+                onChange={(val) => updateState({ documentNo: val })}
+                onLookup={() => updateState({ showAllTranDocNo: true })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleDocNoBlur();
+                    e.preventDefault();
+                    document.getElementById("fgajDate")?.focus();
+                  }
+                }}
+              />
+
+              <div className="relative w-full">
+                <div className={`flex items-stretch global-ref-textbox-ui ${!isFormDisabled ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"}`}>
+                  <DateFormatInput
+                    id="fgajDate"
+                    className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
+                    value={documentDate}
+                    disabled={isFormDisabled}
+                    updateState={(updates) => {
+                      if (updates.fgajDate !== undefined) updateState({ documentDate: updates.fgajDate });
+                      else updateState(updates);
+                    }}
+                  />
+                </div>
+                <label htmlFor="fgajDate" className="global-ref-floating-label">FGAJ Date</label>
+              </div>
             </div>
 
+            <div className="global-tran-textbox-group-div-ui">
+              <FieldRenderer
+                id="ajType"
+                label="Adj Type"
+                type="select"
+                value={selectedAJType || ""}
+                disabled={isFormDisabled || detailRows.length > 0}
+                onChange={(val) => updateState({ selectedAJType: val })}
+                options={ajTypes
+                  .filter((type) => type?.DROPDOWN_CODE && !(type.DROPDOWN_CODE === "CA" && handleFieldBehavior("noViewCostamt")))
+                  .map((type) => ({ label: type.DROPDOWN_NAME, value: type.DROPDOWN_CODE }))}
+              />
+
+              <FieldRenderer
+                id="refDocNo1"
+                label="Ref Doc No. 1"
+                type="text"
+                value={refDocNo1 || ""}
+                disabled={isFormDisabled}
+                onChange={(val) => updateState({ refDocNo1: val })}
+                maxLength={useGetFieldLength(tblFieldArray, "refaj_no1")}
+              />
+
+              <FieldRenderer
+                id="refDocNo2"
+                label="Ref Doc No. 2"
+                type="text"
+                value={refDocNo2 || ""}
+                disabled={isFormDisabled}
+                onChange={(val) => updateState({ refDocNo2: val })}
+                maxLength={useGetFieldLength(tblFieldArray, "refaj_no2")}
+              />
+            </div>
+
+            <div className="global-tran-textbox-group-div-ui">
+              <FieldRenderer
+                id="WHcode"
+                label="Warehouse"
+                type="lookup"
+                required
+                value={WHName || WHCode || ""}
+                disabled={isFormDisabled}
+                readOnly
+                lookupDisabled={isFormDisabled}
+                onLookup={() => !isFormDisabled && updateState({ warehouseLookupOpen: true })}
+              />
+
+              <FieldRenderer
+                id="locName"
+                label="Location"
+                type="lookup"
+                value={LocName || ""}
+                disabled={isFormDisabled || WHName === ""}
+                readOnly
+                lookupDisabled={isFormDisabled || WHName === ""}
+                onLookup={() => !isFormDisabled && WHName !== "" && updateState({ locationLookupOpen: true, selectedWH: WHCode })}
+              />
+            </div>
+
+            <div className="col-span-full">
+              <div className="relative p-2">
+                <textarea
+                  id="remarks"
+                  placeholder=""
+                  rows={4}
+                  className="peer global-tran-textbox-remarks-ui pt-2"
+                  value={remarks}
+                  onChange={(e) => updateState({ remarks: e.target.value })}
+                  disabled={isFormDisabled}
+                  maxLength={useGetFieldLength(tblFieldArray, "remarks")}
+                />
+                <label htmlFor="remarks" className="global-tran-floating-label-remarks">Remarks</label>
+              </div>
+            </div>
+          </div>
         </div>
     </div>
-          
-          {/* APV Detail Section */}
+
+
+          {/* Item Details Section */}
           <div id="apv_dtl" className="global-tran-tab-div-ui">
 
           {/* Tab Navigation */}
@@ -2434,17 +2869,15 @@ return (
           </div>
         </div>
 
-      {/* Invoice Details Button */}
-    
       <div className="global-tran-table-main-div-ui">
         <div className="global-tran-table-main-sub-div-ui">
           <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
             <thead className="global-tran-thead-div-ui">
               <tr>
-                {visibleMsrtvDetailColumns.map((column) => (
+                {visibleFgajDetailColumns.map((column) => (
                   <Fragment key={`detail-header-${column.key}`}>
-                    {renderMsrtvDetailHeader(column.label, column.key, column.width, {
-                      orderedColumns: visibleMsrtvDetailColumns,
+                    {renderFgajDetailHeader(column.label, column.key, column.width, {
+                      orderedColumns: visibleFgajDetailColumns,
                     })}
                   </Fragment>
                 ))}
@@ -2452,18 +2885,20 @@ return (
                   <th key="detail-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
                 )}
               </tr>
-              {renderMsrtvDetailHeaderContextMenu()}
+              {renderFgajDetailHeaderContextMenu()}
             </thead>
             <tbody className="relative">
-              {sortedMsrtvDetailRows.map(({ row, originalIndex }) => (
+              {sortedFgajDetailRows.map(({ row, originalIndex }) => (
                 <tr key={`${row.uniqueKey || row.itemCode || "row"}-${originalIndex}`} className="global-tran-tr-ui">
-                  {visibleMsrtvDetailColumns.map((column) => renderMsrtvDetailColumn(column.key, row, originalIndex))}
+                  {visibleFgajDetailColumns.map((column) => renderFgajDetailColumn(column.key, row, originalIndex))}
                   {!isFormDisabled && (
                     <td className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black" style={transactionActionsCellStyle}>
                       <div className="flex items-center justify-center gap-1">
-                        <button type="button" className="global-tran-td-button-add-ui" onClick={() => handleGetItem(originalIndex)}>
-                          <FontAwesomeIcon icon={faPlus} />
-                        </button>
+                        {handleFieldBehavior("allowInsert") && (
+                          <button type="button" className="global-tran-td-button-add-ui" onClick={() => handleGetItem(originalIndex)}>
+                            <FontAwesomeIcon icon={faPlus} />
+                          </button>
+                        )}
                         <button type="button" className="global-tran-td-button-delete-ui" onClick={() => handleDeleteRow(originalIndex)}>
                           <FontAwesomeIcon icon={faTrashAlt} />
                         </button>
@@ -2476,8 +2911,8 @@ return (
           </table>
         </div>
       </div>
- 
-    {/* Invoice Details Footer */}
+
+
     <div className="global-tran-tab-footer-main-div-ui">
 
 
@@ -2592,15 +3027,16 @@ return (
       </div>
 
       {/* Total VAT Amount */}
+      { !handleFieldBehavior("noViewCostamt") && (
       <div className="global-tran-tab-footer-total-div-ui">
         <label className="global-tran-tab-footer-total-label-ui">
           Total Amount:
         </label>
         <label id="totalItemAmount" className="global-tran-tab-footer-total-value-ui">
-          {totals.totalAmount}
+          {totals.totalItemAmount}
         </label>
       </div>
-
+    )}
      
     </div>
     </div>
@@ -2649,10 +3085,10 @@ return (
             <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
               <thead className="global-tran-thead-div-ui">
                 <tr>
-                  {orderedMsrtvGlColumns.map((column) => (
+                  {orderedFgajGlColumns.map((column) => (
                     <Fragment key={`gl-header-${column.key}`}>
-                      {renderMsrtvGlHeader(column.label, column.key, column.width, {
-                        orderedColumns: orderedMsrtvGlColumns,
+                      {renderFgajGlHeader(column.label, column.key, column.width, {
+                        orderedColumns: orderedFgajGlColumns,
                       })}
                     </Fragment>
                   ))}
@@ -2660,12 +3096,12 @@ return (
                     <th key="gl-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
                   )}
                 </tr>
-                {renderMsrtvGlHeaderContextMenu()}
+                {renderFgajGlHeaderContextMenu()}
               </thead>
               <tbody className="relative">
-                {sortedMsrtvGlRows.map(({ row, originalIndex }) => (
+                {sortedFgajGlRows.map(({ row, originalIndex }) => (
                   <tr key={`${row.acctCode || "gl"}-${originalIndex}`} className="global-tran-tr-ui">
-                    {orderedMsrtvGlColumns.map((column) => renderMsrtvGlColumn(column.key, row, originalIndex))}
+                    {orderedFgajGlColumns.map((column) => renderFgajGlColumn(column.key, row, originalIndex))}
                     {!isFormDisabled && (
                       <td className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black" style={transactionActionsCellStyle}>
                         <div className="flex items-center justify-center gap-1">
@@ -2684,6 +3120,7 @@ return (
             </table>
           </div>
         </div>
+
 
         <div className="global-tran-tab-footer-main-div-ui">
 
@@ -2743,24 +3180,6 @@ return (
             />
           )}
 
-
-    {currencyModalOpen && (
-            <CurrLookupModal 
-              isOpen={currencyModalOpen}
-              onClose={handleCloseCurrencyModal}
-            />
-          )}
-
-
-
-    {custModalOpen && (
-      <CustomerMastLookupModal
-        isOpen={custModalOpen}
-        onClose={handleCloseCustModal}
-      />
-    )}
-
-
     {/* COA Account Modal */}
     {showAccountModal && (
       <COAMastLookupModal
@@ -2785,25 +3204,6 @@ return (
     
 
 
-    {/* VAT Code Modal */}
-    {showVatModal && (
-      <VATLookupModal  
-        isOpen={showVatModal}
-        onClose={handleCloseVatModal}
-        customParam="OutputService"
-      />
-    )}
-
-
-    {/* ATC Code Modal */}
-    {showAtcModal && (
-      <ATCLookupModal  
-        isOpen={showAtcModal}
-        onClose={handleCloseAtcModal}
-      />
-    )}
-
-
     {/* SL Code Lookup Modal */}
     {showSlModal && (
       <SLMastLookupModal
@@ -2821,25 +3221,6 @@ return (
       />
     )}
 
-
-
-    {showAttachModal && (
-      <AttachDocumentModal
-        isOpen={showAttachModal}
-        params={{
-          DocumentID: documentID,
-          DocumentName: documentName,
-          BranchName: branchName,
-          DocumentNo: documentNo,
-        }}
-        onClose={() => updateState({ showAttachModal: false })}
-      />
-    )}
-
-
-
-
-
     {showSignatoryModal && (
       <DocumentSignatories
         isOpen={showSignatoryModal}
@@ -2852,7 +3233,7 @@ return (
 
 
     {showPostingModal && (
-      <PostMSRTV
+      <PostSVI
         isOpen={showPostingModal}
         userCode={userCode}
         docType={docType}
@@ -2867,7 +3248,7 @@ return (
     {showAllTranDocNo && (
       <AllTranDocNo
         isOpen={showAllTranDocNo}
-        params={{branchCode,branchName,docType,documentTitle,fieldNo : "msrtvNo"}}
+        params={{branchCode,branchName,docType,documentTitle,fieldNo : "fgajNo"}}
         onRetrieve={handleTranDocNoRetrieval}
         onResponse={{documentNo}}
         onSelected={handleTranDocNoSelection}
@@ -2882,12 +3263,24 @@ return (
                 isOpen={msLookupModalOpen}
                 data={globalLookupRow}
                 btnCaption="Get Selected Items"
-                title="MS Location Balance"
+                title="FG Location Balance"
                 endpoint={globalLookupHeader}
                 onClose={handleCloseMSLookup}
                 onCancel={() => updateState({ msLookupModalOpen: false })}
+                singleSelect={itemSingleSelect}
               />
         )}
+
+      {itemMastLookupOpen && (
+        <ItemMastLookupModal
+          isOpen={itemMastLookupOpen}
+          endpoint="getInvLookupFG"
+          onClose={handleCloseItemMastLookup}
+          onCancel={() => updateState({ itemMastLookupOpen: false, itemSingleSelect: false })}
+          enableMultiSelect={!itemSingleSelect}
+          docType="PRFG"
+        />
+      )}
         
 
 
@@ -2895,7 +3288,7 @@ return (
             <WarehouseLookupModal
               isOpen={warehouseLookupOpen}
               onClose={handleCloseWarehouseLookup}
-              filter="ActiveAll"
+              filter={"ByBC" + branchCode}
               source={accountModalSource}
             />
           )}  
@@ -2905,7 +3298,8 @@ return (
           isOpen={locationLookupOpen}
           onClose={handleCloseLocationLookup}
           source={accountModalSource}
-          filter="ActiveAll"
+          filter={"ByWH" + selectedWH}
+          autoSelectSingle={!accountModalSource && (selectedAJType === "BB" || selectedAJType === "IG")}
         />
       )}
 
@@ -2918,41 +3312,41 @@ return (
         />
       )}
 
-     {state.payeeLookupOpen && (
-        <PayeeMastLookupModal
-          isOpen={state.payeeLookupOpen}
-          onClose={handleClosePayeeLookup}
-        />
-      )}
-
-      {showSpinner && <LoadingSpinner />}
+      
     </div>
 
 
     <div className={topTab === "history" ? "" : "hidden"}>
       <AllTranHistory
         showHeader={false}
-        endpoint="/getMSRTVHistory"
-        cacheKey={`MSRTV:${state.branchCode || ""}:${state.docNo || ""}`}  // ✅ per-transaction
-        activeTabKey="MSRTV_Summary"
+        endpoint="/getFGAJHistory"
+        cacheKey={`FGAJ:${state.branchCode || ""}:${state.docNo || ""}`}  // âœ… per-transaction
+        activeTabKey="FGAJ_Summary"
         branchCode={state.branchCode}
         startDate={state.fromDate}
         endDate={state.toDate}
-          status={(() => {
-            const s = (state.status || "").toUpperCase();
-            if (s === "FINALIZED") return "F";
-            if (s === "CANCELLED") return "X";
-            if (s === "CLOSED")    return "C";
-            if (s === "OPEN")      return "";
-            return "All";
-          })()}
-          onRowDoubleClick={handleHistoryRowPick}
-          historyExportName={`${documentTitle} History`} 
+        status="All"
+        onRowDoubleClick={handleHistoryRowPick}
+        historyExportName={`${documentTitle} History`} 
     />
   </div>
 
 
 </div>
+
+  {showAttachModal && (
+    <AttachDocumentModal
+      isOpen={showAttachModal}
+      params={{
+        DocumentID: documentID,
+        DocumentName: documentName,
+        BranchName: branchName,
+        DocumentNo: documentNo,
+      }}
+      onClose={() => updateState({ showAttachModal: false })}
+    />
+  )}
+</>
 );
 // End of Return
 
@@ -2960,5 +3354,4 @@ return (
 
 };
 
-export default MSRTV;
-
+export default FGAJ;

@@ -36,7 +36,7 @@ import { docTypePDFGuide, docTypeVideoGuide } from "@/NAYSA Cloud/Global/doctype
 import {
   formatNumber,
   parseFormattedNumber,
-  useSwalConfirmAlert,
+  useSwalProceedConfirm,
   useSwalErrorAlert,
   useSwalInfoAlert,
   useSwalSuccessAlert,
@@ -1250,7 +1250,7 @@ export const CAN = () => {
     const nextSelectedSupplierName = supplierWasSelected ? "" : selectedSupplierName;
     const nextSelectedOfferAmount = supplierWasSelected ? "0.00" : selectedOfferAmount;
 
-    const result = await useSwalConfirmAlert(
+    const result = await useSwalProceedConfirm(
       "Remove Supplier Offer?",
       hasSavedSupplier
         ? "This will also delete supplier quotation attachments linked to this supplier and re-save the Canvass transaction. Continue?"
@@ -2122,7 +2122,7 @@ export const CAN = () => {
       return;
     }
 
-    const result = await useSwalConfirmAlert(
+    const result = await useSwalProceedConfirm(
       "Award Supplier?",
       `Award this Canvass transaction to ${supplier.supplierName || supplier.supplierCode}?`,
       "Yes, Award"
@@ -2397,7 +2397,7 @@ export const CAN = () => {
       return;
     }
 
-    const result = await useSwalConfirmAlert(
+    const result = await useSwalProceedConfirm(
       "Generate Purchase Order?",
       `Create ${generatedPOCount} Purchase Order${generatedPOCount > 1 ? "s" : ""} using the existing PO save endpoint?`,
       "Generate PO"
@@ -2740,7 +2740,7 @@ export const CAN = () => {
   const submit = async () => {
     if (!canId) return useSwalInfoAlert("Submit Canvass", "Please save the Canvass transaction first.");
 
-    const result = await useSwalConfirmAlert("Submit Canvass?", "Submit this Canvass transaction for approval?", "Submit");
+    const result = await useSwalProceedConfirm("Submit Canvass?", "Submit this Canvass transaction for approval?", "Submit");
     if (!result?.isConfirmed) return;
 
     updateState({ isLoading: true });

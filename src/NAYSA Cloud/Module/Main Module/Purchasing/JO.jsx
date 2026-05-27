@@ -86,7 +86,6 @@ import {
   useSwalshowSaveSuccessDialog,
   useSwalvalidateRequiredFields,
   useSwalInfoAlert,
-  useSwalConfirmAlert,
   useSwalProceedConfirm,
   useSwalHandleOpenSpecsModal,
   useSwalSuccessAlert,
@@ -1230,7 +1229,7 @@ const handleCopy = async () => {
       const isCancel = value === "X";
       const actionWord = isCancel ? "CANCEL" : "CLOSE";
   
-      useSwalConfirmAlert(
+      useSwalProceedConfirm(
         `Confirm Full Document ${isCancel ? "Cancellation" : "Closing"}?`,
         `Are you sure you want to ${actionWord} this entire JO? This action is permanent and will affect all open line items.`
       ).then((result) => {

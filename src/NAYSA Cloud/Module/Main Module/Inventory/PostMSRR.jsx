@@ -5,8 +5,7 @@ import { useSelectedHSColConfig } from '@/NAYSA Cloud/Global/selectedData';
 import GlobalGLPostingModalv1 from "../../../Lookup/SearchGlobalGLPostingv1.jsx";
 import { useSwalValidationAlert } from '@/NAYSA Cloud/Global/behavior';
 import { useHandlePostTran } from '@/NAYSA Cloud/Global/procedure';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faSpinner } from '@fortawesome/free-solid-svg-icons';
+import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 const PostMSRR = ({ isOpen, onClose, userCode }) => {
   const [data, setData] = useState([]);
@@ -92,18 +91,30 @@ const PostMSRR = ({ isOpen, onClose, userCode }) => {
 
 const pickDocAndBranch = (row) => {
   if (!row) return { docNo: null, branchCode: null };
-  const docNo = row.rrNo;
-  const branchCode = row.branchCode;
+  const docNo =
+    row.rrNo ||
+    row.rr_no ||
+    row.RR_NO ||
+    row.msrrNo ||
+    row.MSRR_NO ||
+    row.documentNo ||
+    row.docNo;
+  const branchCode =
+    row.branchCode ||
+    row.branch_code ||
+    row.BRANCH_CODE ||
+    row.bCode ||
+    row.BCode ||
+    row.BC;
   return { docNo, branchCode };
 };
   // =========================================
   // VIEW DOCUMENT
   // =========================================
   const handleViewDocument = (row) => {
-    const rrNo = row?.rrNo || row?.rr_no;
-    const branchCode = row?.branchCode || row?.branch_code;
+    const { docNo, branchCode } = pickDocAndBranch(row);
 
-    if (!rrNo || !branchCode) {
+    if (!docNo || !branchCode) {
       useSwalValidationAlert({
         icon: "warning",
         title: "Missing keys",
@@ -112,10 +123,13 @@ const pickDocAndBranch = (row) => {
       return;
     }
 
+    const TRAN_VIEW_URL = "/page/MSRR";
     const url =
-      `${window.location.origin}/tran-inv-msrr` +
-      `?rrNo=${encodeURIComponent(rrNo)}` +
-      `&branchCode=${encodeURIComponent(branchCode)}`;
+      `${window.location.origin}${TRAN_VIEW_URL}` +
+      `?rrNo=${encodeURIComponent(docNo)}` +
+      `&poNo=${encodeURIComponent(docNo)}` +
+      `&branchCode=${encodeURIComponent(branchCode)}` +
+      `&viewDocument=true`;
 
     window.open(url, "_blank", "noopener,noreferrer");
   };
@@ -137,14 +151,7 @@ const pickDocAndBranch = (row) => {
       )}
 
       {ReactDOM.createPortal(
-        loading ? (
-          <div className="global-tran-spinner-main-div-ui">
-            <div className="global-tran-spinner-sub-div-ui">
-              <FontAwesomeIcon icon={faSpinner} spin size="2x" />
-              <p>Please wait...</p>
-            </div>
-          </div>
-        ) : null,
+        loading ? <LoadingSpinner /> : null,
         document.body
       )}
     </>
