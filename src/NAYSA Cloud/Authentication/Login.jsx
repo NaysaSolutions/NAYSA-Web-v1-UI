@@ -1112,9 +1112,9 @@ export default function Login({ onSwitchToRegister }) {
                   </motion.div>
 
                   {/* Sign In + Biometric row */}
-                  <motion.div
+                   <motion.div
                     variants={fadeUp}
-                    className="grid grid-cols-[1fr_auto_auto] items-center overflow-hidden rounded-xl bg-white/75 p-1 shadow-lg ring-1 ring-white/80 backdrop-blur-sm"
+                    className="grid grid-cols-[1fr_auto_auto] items-center"
                   >
                     <motion.button
                       type="submit"
@@ -1164,7 +1164,7 @@ export default function Login({ onSwitchToRegister }) {
                     onClick={onSwitchToRegister}
                     className="text-sm font-medium text-slate-700 transition-all duration-300 hover:text-slate-950 hover:tracking-wide"
                   >
-                    No account? <span className="font-bold text-sky-700 hover:text-blue-700">Register here</span>
+                    Don't have an account? <span className="font-bold text-sky-700 hover:text-blue-700">Sign Up</span>
                   </button>
                 </motion.div>
               </motion.div>

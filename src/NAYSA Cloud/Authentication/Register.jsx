@@ -905,7 +905,7 @@ export default function Register({ onRegister, onSwitchToLogin }) {
               className="text-sm text-slate-600 transition-all duration-300 hover:text-slate-800 hover:tracking-wide"
             >
               Already have an account?{" "}
-              <span className="font-semibold text-sky-700 hover:text-sky-600">Log in</span>
+              <span className="font-semibold text-sky-700 hover:text-sky-600">Sign in</span>
             </button>
           </motion.div>
         </motion.div>
