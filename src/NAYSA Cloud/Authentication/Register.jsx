@@ -668,8 +668,14 @@ export default function Register({ onRegister, onSwitchToLogin }) {
 
   return (
     <div
-      className="relative min-h-screen overflow-hidden flex items-center justify-center px-4 py-10"
-      style={{ background: "linear-gradient(to bottom, #7392b7, #d8e1e9)" }}
+      className="relative min-h-screen overflow-hidden px-4 pt-6 pb-20 text-slate-900 sm:px-6 lg:px-8"
+      style={{
+        backgroundImage:
+          "linear-gradient(rgba(2, 12, 32, 0.45), rgba(2, 12, 32, 0.58)), url('/NAYSABG.png')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+      }}
     >
       {/* Blobs */}
       <motion.div
@@ -683,49 +689,73 @@ export default function Register({ onRegister, onSwitchToLogin }) {
         style={{ background: "radial-gradient(circle, rgba(168,85,247,.22) 0%, rgba(217,70,239,.18) 100%)" }}
       />
 
-      <div className="relative w-full max-w-md">
+      <div className="relative mx-auto grid min-h-[calc(100vh-8.5rem)] w-full max-w-7xl items-center gap-8 lg:grid-cols-[1.08fr_.92fr]">
+        {/* ── Left marketing side ── */}
+        <motion.section
+          initial={{ opacity: 0, x: -34 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+          className="hidden lg:block"
+        >
+          <div className="mb-6 inline-flex items-center gap-3 rounded-full border border-white/50 bg-white/16 px-6 py-2.5 text-xs font-extrabold uppercase tracking-[0.28em] text-white shadow-xl backdrop-blur-md">
+            NAYSA-SOLUTIONS INCORPORATED
+          </div>
 
-        {/* ── Logo + Title ── */}
-        <div className="mb-5 flex flex-col items-center text-center">
-          <motion.div {...floatAnim} className="mb-2">
-            <img src="/naysa_logo.png" alt="NAYSA Logo" className="w-40 drop-shadow-md md:w-44" />
-          </motion.div>
-          <motion.h1
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.05 }}
-            className="mt-1 text-2xl font-bold tracking-tight text-blue-900 md:text-3xl"
-          >
-            NAYSA Financials Cloud
-          </motion.h1>
-          <motion.p
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.1 }}
-            className="mt-1.5 text-sm text-slate-700"
-          >
-            Create your account to get started.
-          </motion.p>
-        </div>
+          <h1 className="whitespace-nowrap text-4xl font-black uppercase leading-none tracking-[0.06em] text-white drop-shadow-[0_5px_18px_rgba(0,0,0,.45)] xl:text-5xl 2xl:text-6xl">
+            WE MAKE LIFE EASIER
+          </h1>
+
+          <h2 className="mt-5 max-w-2xl text-2xl font-bold uppercase tracking-[0.18em] text-sky-100 drop-shadow-[0_3px_12px_rgba(0,0,0,.45)]">
+            THROUGH BUSINESS APPLICATIONS
+          </h2>
+
+          <div className="my-7 h-1 w-28 rounded-full bg-sky-400 shadow-[0_0_22px_rgba(56,189,248,.8)]" />
+
+          <p className="max-w-2xl text-base font-medium leading-8 text-white/95 drop-shadow-[0_2px_10px_rgba(0,0,0,.55)]">
+            Powerful business applications built to streamline operations, support compliance, and help your team work faster with NAYSA Cloud.
+          </p>
+        </motion.section>
+
+        {/* ── Register card side ── */}
+        <div className="relative w-full max-w-md justify-self-center lg:justify-self-end">
+          {/* Logo + Title */}
+          <div className="mb-4 flex flex-col items-center text-center">
+            <motion.div {...floatAnim} className="mb-1">
+              <img
+                src="/naysa_logo.png"
+                alt="NAYSA Logo"
+                className="w-36 drop-shadow-[0_6px_18px_rgba(0,0,0,.35)] md:w-40"
+              />
+            </motion.div>
+            <motion.h1
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.05 }}
+              className="mt-1 whitespace-nowrap text-2xl font-extrabold tracking-tight text-white drop-shadow-[0_4px_15px_rgba(0,0,0,.5)] md:text-3xl"
+            >
+              NAYSA Financials Cloud
+            </motion.h1>
+          </div>
 
         {/* ── Card ── */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, x: 42, scale: 0.98 }}
+          animate={{ opacity: 1, x: 0, scale: 1 }}
+          exit={{ opacity: 0, x: -42, scale: 0.98 }}
           transition={{ duration: 0.45, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
-          className="relative w-full rounded-2xl p-7"
+          className="relative w-full rounded-3xl p-7"
           style={{
-            background: "rgba(255,255,255,0.52)",
-            border: "1px solid rgba(255,255,255,0.65)",
-            backdropFilter: "blur(20px)",
-            WebkitBackdropFilter: "blur(20px)",
-            boxShadow: "0 20px 60px rgba(55,90,140,.18), inset 0 1px 0 rgba(255,255,255,.85)",
+            background: "rgba(255,255,255,0.90)",
+            border: "1px solid rgba(255,255,255,0.68)",
+            backdropFilter: "blur(18px)",
+            WebkitBackdropFilter: "blur(18px)",
+            boxShadow: "0 24px 70px rgba(2,6,23,.32), inset 0 1px 0 rgba(255,255,255,.9)",
           }}
         >
           {/* Top shimmer line */}
           <div
             className="absolute top-0 left-10 right-10 h-px rounded-full"
-            style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,.9), transparent)" }}
+            style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,1), transparent)" }}
           />
 
           <motion.form
@@ -781,36 +811,37 @@ export default function Register({ onRegister, onSwitchToLogin }) {
               </div>
             </Field>
 
-            {/* User ID */}
-            <Field label="User ID" hint={userCodeHint}>
-              <InputBox icon={FiUser}>
-                <input
-                  type="text"
-                  name="USER_CODE"
-                  value={form.USER_CODE}
-                  onChange={handleChange}
-                  placeholder="Choose a user ID"
-                  className={userCodeExists ? inputErrorCls : inputCls}
-                  required
-                />
-              </InputBox>
-            </Field>
+            {/* User ID + Username */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="User ID" hint={userCodeHint}>
+                <InputBox icon={FiUser}>
+                  <input
+                    type="text"
+                    name="USER_CODE"
+                    value={form.USER_CODE}
+                    onChange={handleChange}
+                    placeholder="Choose a user ID"
+                    className={userCodeExists ? inputErrorCls : inputCls}
+                    required
+                  />
+                </InputBox>
+              </Field>
 
-            {/* Username */}
-            <Field label="Username">
-              <InputBox icon={FiUser}>
-                <input
-                  type="text"
-                  name="USER_NAME"
-                  value={form.USER_NAME}
-                  onChange={handleChange}
-                  autoComplete="username"
-                  placeholder="Your full name"
-                  className={inputCls}
-                  required
-                />
-              </InputBox>
-            </Field>
+              <Field label="User Name">
+                <InputBox icon={FiUser}>
+                  <input
+                    type="text"
+                    name="USER_NAME"
+                    value={form.USER_NAME}
+                    onChange={handleChange}
+                    autoComplete="name"
+                    placeholder="Your full name"
+                    className={inputCls}
+                    required
+                  />
+                </InputBox>
+              </Field>
+            </div>
 
             {/* Email */}
             <Field label="Email">
@@ -861,7 +892,7 @@ export default function Register({ onRegister, onSwitchToLogin }) {
 
           </motion.form>
 
-          {/* Footer */}
+          {/* Login link */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -871,17 +902,24 @@ export default function Register({ onRegister, onSwitchToLogin }) {
             <button
               type="button"
               onClick={goToLogin}
-              className="text-sm text-slate-600 hover:text-slate-800 transition-colors"
+              className="text-sm text-slate-600 transition-all duration-300 hover:text-slate-800 hover:tracking-wide"
             >
               Already have an account?{" "}
               <span className="font-semibold text-sky-700 hover:text-sky-600">Log in</span>
             </button>
-            <p className="mt-3 text-xs text-slate-400">
-              © {new Date().getFullYear()} NAYSA. All rights reserved.
-            </p>
           </motion.div>
         </motion.div>
       </div>
+      </div>
+
+      {/* Footer */}
+      <footer className="fixed bottom-0 left-0 right-0 z-30 w-full">
+        <div className="w-full border-t border-white/20 bg-slate-950/70 px-4 py-3 backdrop-blur-md shadow-lg">
+          <p className="text-center text-xs font-semibold tracking-wide text-white sm:text-sm">
+            © 2026 NAYSA-SOLUTIONS, INC. All rights reserved.
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 // src/NAYSA Cloud/Reference File/CustMast.jsx
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
+import { usePagePermission } from "@/NAYSA Cloud/Global/usePagePermission";
 import Swal from "sweetalert2";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -136,6 +137,20 @@ const CustMast = () => {
     const pdfLink = reftablesPDFGuide?.[docType] || "#";
     const videoLink = reftablesVideoGuide?.[docType] || "#";
     const [isOpenGuide, setOpenGuide] = useState(false);
+
+    const {
+        pagePermission,
+        isReadOnly,
+        isFullAccess,
+        canAdd,
+        canEdit,
+        canSave,
+        canDelete,
+    } = usePagePermission({
+        componentKey: "CustMast",
+        debug: true, // change to false after testing
+    });
+
 
     // --- DUPLICATE NAME LOGIC ---
     const allowedDuplicateCustNameRef = useRef("");
@@ -432,6 +447,11 @@ const CustMast = () => {
     };
 
     const deleteCustomer = async () => {
+        if (!canDelete) {
+            await useSwalErrorAlert("Read Only", "You only have read access. Deleting a customer is not allowed.");
+            return;
+        }
+
         const code = String(form?.custCode || "").trim();
 
         if (!code) {
@@ -487,6 +507,11 @@ const CustMast = () => {
     };
 
     const upsertCustomer = async () => {
+        if (!canSave) {
+            await useSwalErrorAlert("Read Only", "You only have read access. Saving customer changes is not allowed.");
+            return;
+        }
+
         // 1. DUPLICATE NAME CHECK
         const canProceed = await confirmDuplicateCustName(form.custName);
         if (!canProceed) return;
@@ -621,7 +646,12 @@ const CustMast = () => {
         setMasterFilters((p) => ({ ...p, [key]: value }));
     };
 
-    const handleAdd = () => {
+    const handleAdd = async () => {
+        if (!canAdd) {
+            await useSwalErrorAlert("Read Only", "You only have read access. Adding a customer is not allowed.");
+            return;
+        }
+
         allowedDuplicateCustNameRef.current = ""; // Reset ref
         const sl = normalizeSlType(form?.sltypeCode || "CU") || "CU";
         setSelectedCustCode("");
@@ -636,6 +666,11 @@ const CustMast = () => {
     };
 
     const handleEdit = async () => {
+        if (!canEdit) {
+            await useSwalErrorAlert("Read Only", "You only have read access. Editing a customer is not allowed.");
+            return;
+        }
+
         const code = String(form?.custCode || "").trim();
         if (!code) {
             await useSwalErrorAlert("Required", "Please select a Customer record first.");
@@ -670,6 +705,13 @@ const CustMast = () => {
     };
 
     const headerButtons = useMemo(() => {
+        const baseBtn = "flex items-center justify-center h-8 w-8 sm:w-auto sm:h-8 sm:px-4 text-[12px] font-medium rounded-md transition-all shadow-sm";
+        const primaryBtn = `${baseBtn} bg-blue-600 text-white hover:bg-blue-700`;
+        const disabledPrimaryBtn = `${baseBtn} bg-blue-500 opacity-50 cursor-not-allowed text-white`;
+        const resetBtn = `${baseBtn} bg-blue-500 text-white hover:bg-blue-600`;
+        const dangerBtn = `${baseBtn} bg-red-500 text-white hover:bg-red-600`;
+        const disabledDangerBtn = `${baseBtn} bg-red-400 opacity-50 cursor-not-allowed text-white`;
+
         if (activeTab === "setup") {
             const hasRecord = String(form?.custCode || "").trim() && !form.__isNew;
 
@@ -679,19 +721,16 @@ const CustMast = () => {
                     label: <span className="hidden sm:inline ml-1">Add</span>,
                     icon: faPlus,
                     onClick: handleAdd,
-                    disabled: isLoading,
-                    className: "flex items-center justify-center h-8 w-8 sm:w-auto sm:h-8 sm:px-4 text-[12px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-sm",
+                    disabled: isLoading || !canAdd,
+                    className: isLoading || !canAdd ? disabledPrimaryBtn : primaryBtn,
                 },
                 {
                     key: "save",
                     label: <span className="hidden sm:inline ml-1">Save</span>,
                     icon: faSave,
                     onClick: upsertCustomer,
-                    disabled: isLoading || !isEditing,
-                    className: `flex items-center justify-center h-8 w-8 sm:w-auto sm:h-8 sm:px-4 text-[12px] font-medium rounded-md transition-all shadow-sm ${isLoading || !isEditing
-                        ? "bg-blue-500 opacity-50 cursor-not-allowed text-white"
-                        : "bg-blue-600 text-white hover:bg-blue-700"
-                        }`,
+                    disabled: isLoading || !isEditing || !canSave,
+                    className: isLoading || !isEditing || !canSave ? disabledPrimaryBtn : primaryBtn,
                 },
                 {
                     key: "reset",
@@ -699,15 +738,15 @@ const CustMast = () => {
                     icon: faUndo,
                     onClick: handleResetSetup,
                     disabled: isLoading,
-                    className: "flex items-center justify-center h-8 w-8 sm:w-auto sm:h-8 sm:px-4 text-[12px] font-medium rounded-md bg-blue-500 text-white hover:bg-blue-600 transition-all shadow-sm",
+                    className: resetBtn,
                 },
                 {
                     key: "edit",
                     label: <span className="hidden sm:inline ml-1">Edit</span>,
                     icon: faPenToSquare,
                     onClick: handleEdit,
-                    disabled: isLoading,
-                    className: "flex items-center justify-center h-8 w-8 sm:w-auto sm:h-8 sm:px-4 text-[12px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-sm",
+                    disabled: isLoading || isEditing || !hasRecord || !canEdit,
+                    className: isLoading || isEditing || !hasRecord || !canEdit ? disabledPrimaryBtn : primaryBtn,
                 },
                 {
                     key: "attach",
@@ -715,18 +754,15 @@ const CustMast = () => {
                     icon: faPaperclip,
                     onClick: handleOpenAttach,
                     disabled: isLoading || !hasRecord,
-                    className: "flex items-center justify-center h-8 w-8 sm:w-auto sm:h-8 sm:px-4 text-[12px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-sm",
+                    className: isLoading || !hasRecord ? disabledPrimaryBtn : primaryBtn,
                 },
                 {
                     key: "delete",
                     label: <span className="hidden sm:inline ml-1">Delete</span>,
                     icon: faTrash,
                     onClick: deleteCustomer,
-                    disabled: isLoading || isEditing || !hasRecord,
-                    className: `flex items-center justify-center h-8 w-8 sm:w-auto sm:h-8 sm:px-4 text-[12px] font-medium rounded-md transition-all shadow-sm ${isLoading || isEditing || !hasRecord
-                        ? "bg-red-400 opacity-50 cursor-not-allowed text-white"
-                        : "bg-red-500 text-white hover:bg-red-600"
-                        }`,
+                    disabled: isLoading || isEditing || !hasRecord || !canDelete,
+                    className: isLoading || isEditing || !hasRecord || !canDelete ? disabledDangerBtn : dangerBtn,
                 },
             ];
         }
@@ -737,20 +773,29 @@ const CustMast = () => {
                     key: "add",
                     label: <span className="hidden sm:inline ml-1">Add</span>,
                     icon: faPlus,
-                    onClick: () => referenceCodesRef.current?.add?.(),
-                    disabled: isLoading,
-                    className: "flex items-center justify-center h-8 w-8 sm:w-auto sm:h-8 sm:px-4 text-[12px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-sm",
+                    onClick: async () => {
+                        if (!canAdd) {
+                            await useSwalErrorAlert("Read Only", "You only have read access. Adding reference codes is not allowed.");
+                            return;
+                        }
+                        referenceCodesRef.current?.add?.();
+                    },
+                    disabled: isLoading || !canAdd,
+                    className: isLoading || !canAdd ? disabledPrimaryBtn : primaryBtn,
                 },
                 {
                     key: "save",
                     label: <span className="hidden sm:inline ml-1">Save</span>,
                     icon: faSave,
-                    onClick: () => referenceCodesRef.current?.save?.(),
-                    disabled: isLoading || !refTabState?.canSave,
-                    className: `flex items-center justify-center h-8 w-8 sm:w-auto sm:h-8 sm:px-4 text-[12px] font-medium rounded-md transition-all shadow-sm ${isLoading || !refTabState?.canSave
-                        ? "bg-blue-500 opacity-50 cursor-not-allowed text-white"
-                        : "bg-blue-600 text-white hover:bg-blue-700"
-                        }`,
+                    onClick: async () => {
+                        if (!canSave) {
+                            await useSwalErrorAlert("Read Only", "You only have read access. Saving reference codes is not allowed.");
+                            return;
+                        }
+                        referenceCodesRef.current?.save?.();
+                    },
+                    disabled: isLoading || !refTabState?.canSave || !canSave,
+                    className: isLoading || !refTabState?.canSave || !canSave ? disabledPrimaryBtn : primaryBtn,
                 },
                 {
                     key: "reset",
@@ -758,14 +803,13 @@ const CustMast = () => {
                     icon: faUndo,
                     onClick: () => referenceCodesRef.current?.reset?.(),
                     disabled: isLoading,
-                    className: "flex items-center justify-center h-8 w-8 sm:w-auto sm:h-8 sm:px-4 text-[12px] font-medium rounded-md bg-blue-500 text-white hover:bg-blue-600 transition-all shadow-sm",
+                    className: resetBtn,
                 },
             ];
         }
 
         return [];
-    }, [activeTab, isLoading, isEditing, form, refTabState]);
-
+    }, [activeTab, isLoading, isEditing, form, refTabState, canAdd, canEdit, canSave, canDelete]);
     return (
         <div className="global-ref-main-div-ui">
             <div className="global-ref-header-ui">
@@ -773,10 +817,20 @@ const CustMast = () => {
                     {/* LEFT: title + tabs grouped together */}
                     <div className="flex flex-col lg:flex-row items-center lg:items-center gap-2 lg:gap-4 w-full lg:w-auto">
                         <div className="flex-shrink-0 text-center lg:text-left">
-                            <h1 className="global-ref-headertext-ui truncate">
-                                {activeTab === "setup" && "Customer Master Data"}
-                                {activeTab === "master" && "Customer Master Data"}
-                                {activeTab === "ref" && "Customer Master Data"}
+                            <h1 className="global-ref-headertext-ui truncate flex items-center gap-2">
+                                <span>
+                                    {activeTab === "setup" && "Customer Master Data"}
+                                    {activeTab === "master" && "Customer Master Data"}
+                                    {activeTab === "ref" && "Customer Master Data"}
+                                </span>
+                                <span
+                                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${isReadOnly
+                                            ? "bg-amber-100 text-amber-700"
+                                            : "bg-green-100 text-green-700"
+                                        }`}
+                                >
+                                    {isReadOnly ? "READ ONLY" : "FULL ACCESS"}
+                                </span>
                             </h1>
                         </div>
 
@@ -841,7 +895,9 @@ const CustMast = () => {
                 {activeTab === "setup" && (
                     <CustSetupTab
                         form={form}
-                        isEditing={isEditing}
+                        isEditing={isEditing && isFullAccess}
+                        isReadOnly={isReadOnly}
+                        pagePermission={pagePermission}
                         isLoading={isLoading}
                         onChangeForm={(patch) => {
                             // Reset name check memory if name changes manually
@@ -879,6 +935,11 @@ const CustMast = () => {
                     <ReferenceCodesTab
                         ref={referenceCodesRef}
                         variant="customer"
+                        isReadOnly={isReadOnly}
+                        canAdd={canAdd}
+                        canEdit={canEdit}
+                        canSave={canSave}
+                        canDelete={canDelete}
                         onStateChange={setRefTabState}
                     />
                 )}
