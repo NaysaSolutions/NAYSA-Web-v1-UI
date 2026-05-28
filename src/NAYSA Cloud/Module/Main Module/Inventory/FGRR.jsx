@@ -1409,6 +1409,188 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
 
     const vatRateMap = Object.fromEntries(vatRatePairs);
 
+    const parseRetrievedArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+
+  if (typeof value === "string") {
+    try {
+      const parsedValue = JSON.parse(value);
+      return parseRetrievedArray(parsedValue);
+    } catch {
+      return [];
+    }
+  }
+
+  if (Array.isArray(value?.data)) return value.data;
+  if (Array.isArray(value?.result)) return value.result;
+  if (typeof value?.result === "string") return parseRetrievedArray(value.result);
+
+  return [];
+};
+
+const dt3 = parseRetrievedArray(parsed.dt3);
+
+console.log("✅ FETCHED FGRR DT3:", dt3);
+console.table(dt3);
+
+const normalizeLotKey = (value) => String(value || "").trim().toUpperCase();
+const normalizeLotLineKey = (value) => String(value || "").trim();
+
+const dt3ByGroup = dt3.reduce((acc, lot) => {
+  const key = normalizeLotKey(lot.groupId || lot.group_id || lot.GROUP_ID || "");
+  if (!key) return acc;
+  if (!acc[key]) acc[key] = [];
+  acc[key].push(lot);
+  return acc;
+}, {});
+
+const dt3ByLine = dt3.reduce((acc, lot) => {
+  const key = normalizeLotLineKey(
+    lot.lnNo || lot.ln_no || lot.LN_NO || lot.lineNo || lot.LINE_NO || lot.line_no || ""
+  );
+  if (!key) return acc;
+  if (!acc[key]) acc[key] = [];
+  acc[key].push(lot);
+  return acc;
+}, {});
+
+const dt3ByItem = dt3.reduce((acc, lot) => {
+  const key = normalizeLotKey(lot.itemCode || lot.item_code || lot.ITEM_CODE || "");
+  if (!key) return acc;
+  if (!acc[key]) acc[key] = [];
+  acc[key].push(lot);
+  return acc;
+}, {});
+
+const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
+  lots
+    .map((lot, lotIndex) => ({
+      id: lot.id || lotIndex + 1,
+      lotNo: String(lot.lotNo || lot.lot_no || "").trim(),
+
+      // IMPORTANT: quantity should come from FGRR_DT3, not DT1
+      quantity: formatNumber(lot.quantity || lot.rrQuantity || lot.rrQty || 0, decQty),
+      rrQty: formatNumber(lot.rrQuantity || lot.quantity || lot.rrQty || 0, decQty),
+
+      bbDate: lot.bbDate ? String(lot.bbDate).substring(0, 10) : "",
+      qstatCode: lot.qstatCode || lot.qsCode || lot.qstat_code || "",
+      whouseCode:
+        lot.whouseCode ||
+        lot.whCode ||
+        lot.whouse_code ||
+        sourceRow.whouseCode ||
+        sourceRow.whCode ||
+        parsed.WHCode ||
+        "",
+      whCode:
+        lot.whCode ||
+        lot.whouseCode ||
+        lot.whouse_code ||
+        sourceRow.whCode ||
+        sourceRow.whouseCode ||
+        parsed.WHCode ||
+        "",
+      LocCode:
+        lot.LocCode ||
+        lot.locCode ||
+        lot.loc_code ||
+        sourceRow.LocCode ||
+        sourceRow.locCode ||
+        parsedLocCode ||
+        "",
+      locCode:
+        lot.locCode ||
+        lot.LocCode ||
+        lot.loc_code ||
+        sourceRow.locCode ||
+        sourceRow.LocCode ||
+        parsedLocCode ||
+        "",
+
+      itemCode:
+        lot.itemCode ||
+        lot.item_code ||
+        sourceRow.itemCode ||
+        sourceRow.item_code ||
+        "",
+      item_code:
+        lot.item_code ||
+        lot.itemCode ||
+        sourceRow.item_code ||
+        sourceRow.itemCode ||
+        "",
+      rcCode:
+        lot.rcCode ||
+        lot.rc_code ||
+        sourceRow.rcCode ||
+        sourceRow.rc_code ||
+        "",
+      rc_code:
+        lot.rc_code ||
+        lot.rcCode ||
+        sourceRow.rc_code ||
+        sourceRow.rcCode ||
+        "",
+      unitCost:
+        lot.unitCost ||
+        lot.unit_cost ||
+        sourceRow.unitCost ||
+        sourceRow.unit_cost ||
+        0,
+      unit_cost:
+        lot.unit_cost ||
+        lot.unitCost ||
+        sourceRow.unit_cost ||
+        sourceRow.unitCost ||
+        0,
+      netAmount:
+        lot.netAmount ||
+        lot.net_amount ||
+        sourceRow.netAmount ||
+        sourceRow.net_amount ||
+        0,
+      net_amount:
+        lot.net_amount ||
+        lot.netAmount ||
+        sourceRow.net_amount ||
+        sourceRow.netAmount ||
+        0,
+      groupId:
+        lot.groupId ||
+        lot.group_id ||
+        sourceRow.groupId ||
+        sourceRow.group_id ||
+        "",
+      group_id:
+        lot.group_id ||
+        lot.groupId ||
+        sourceRow.group_id ||
+        sourceRow.groupId ||
+        "",
+      lnNo:
+        lot.lnNo ||
+        lot.ln_no ||
+        lot.lineNo ||
+        lot.line_no ||
+        sourceRow.lnNo ||
+        sourceRow.ln_no ||
+        "",
+      ln_no:
+        lot.ln_no ||
+        lot.lnNo ||
+        lot.line_no ||
+        sourceRow.ln_no ||
+        sourceRow.lnNo ||
+        "",
+      controlNo: lot.controlNo || lot.control_no || "",
+    }))
+    .filter(
+      (lot) =>
+        lot.lotNo &&
+        (parseFormattedNumber(lot.quantity || lot.rrQty || 0) || 0) > 0
+    );
+
     const newMappedRows = details.map((d, idx) => {
       const poQty = parseFormattedNumber(d.poQuantity || 0);
       const prevRrQty = parseFormattedNumber(d.rrQty || 0);
@@ -1863,37 +2045,319 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
       );
       const vatRateMap = Object.fromEntries(vatRatePairs);
 
-      const mappedDT1 = dt1.map((r, idx) => ({
-        lnNo: Number(r.lnNo ?? idx + 1),
-        rrStatus: r.rrStatus || r.poStatus || "",
-        poStatus: r.poStatus || r.rrStatus || "",
-        poNo: r.poNo || parsed.poNo || "",
-        itemCode: r.itemCode || r.itemNo || "",
-        itemName: r.itemName || r.itemDesc || "",
-        itemSpecs: r.itemSpecs || r.itemSpec || "",
+      const parseRetrievedArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
 
-        rrQty: formatNumber(r.rrQty || r.quantity || 0, decQty),
-        freeQty: formatNumber(r.freeQty || r.freeQuantity || 0, decQty),
+  if (typeof value === "string") {
+    try {
+      const parsedValue = JSON.parse(value);
+      return parseRetrievedArray(parsedValue);
+    } catch {
+      return [];
+    }
+  }
 
-        amount: formatNumber(r.itemAmount || r.grossAmount || 0),
-        itemAmount: formatNumber(r.itemAmount || r.grossAmount || 0),
-        grossAmount: formatNumber(r.itemAmount || r.grossAmount || 0),
-        vatCode: r.vatCode || "",
-        vatRate: r.vatCode ? formatNumber(vatRateMap[r.vatCode] ?? 0, 2) : "",
-        vatAmount: formatNumber(r.vatAmount ?? 0),
+  if (Array.isArray(value?.data)) return value.data;
+  if (Array.isArray(value?.result)) return value.result;
+  if (typeof value?.result === "string") return parseRetrievedArray(value.result);
 
-        qsCode: r.qsCode || "",
-        whCode: r.whCode || r.whouseCode || parsed.WHCode || "",
-        whouseCode: r.whouseCode || r.whCode || parsed.WHCode || "",
-        locCode: r.locCode || parsedLocCode || "",
-        LocCode: r.locCode || parsedLocCode || "",
+  return [];
+};
 
-        uomCode: r.uomCode || "",
-        unitCost: formatNumber(r.unitCost || r.unitPrice || 0, decUcost),
-        netAmount: formatNumber(r.netAmount ?? 0),
-        lotNo: r.lotNo || "",
-        controlNo: r.controlNo || "",
-      }));
+const dt3 = parseRetrievedArray(parsed.dt3);
+
+console.log("✅ FETCHED FGRR DT3:", dt3);
+console.table(dt3);
+
+const normalizeLotKey = (value) => String(value || "").trim().toUpperCase();
+const normalizeLotLineKey = (value) => String(value || "").trim();
+
+const dt3ByGroup = dt3.reduce((acc, lot) => {
+  const key = normalizeLotKey(lot.groupId || lot.group_id || lot.GROUP_ID || "");
+  if (!key) return acc;
+
+  if (!acc[key]) acc[key] = [];
+  acc[key].push(lot);
+
+  return acc;
+}, {});
+
+const dt3ByLine = dt3.reduce((acc, lot) => {
+  const key = normalizeLotLineKey(
+    lot.lnNo ||
+      lot.ln_no ||
+      lot.LN_NO ||
+      lot.lineNo ||
+      lot.line_no ||
+      lot.LINE_NO ||
+      ""
+  );
+
+  if (!key) return acc;
+
+  if (!acc[key]) acc[key] = [];
+  acc[key].push(lot);
+
+  return acc;
+}, {});
+
+const dt3ByItem = dt3.reduce((acc, lot) => {
+  const key = normalizeLotKey(
+    lot.itemCode || lot.item_code || lot.ITEM_CODE || ""
+  );
+
+  if (!key) return acc;
+
+  if (!acc[key]) acc[key] = [];
+  acc[key].push(lot);
+
+  return acc;
+}, {});
+
+const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
+  lots
+    .map((lot, lotIndex) => ({
+      id: lot.id || lotIndex + 1,
+
+      lotNo: String(lot.lotNo || lot.lot_no || "").trim(),
+
+      quantity: formatNumber(
+        lot.quantity || lot.rrQuantity || lot.rrQty || 0,
+        decQty
+      ),
+
+      rrQty: formatNumber(
+        lot.rrQuantity || lot.quantity || lot.rrQty || 0,
+        decQty
+      ),
+
+      bbDate: lot.bbDate ? String(lot.bbDate).substring(0, 10) : "",
+
+      qstatCode:
+        lot.qstatCode ||
+        lot.qsCode ||
+        lot.qstat_code ||
+        "",
+
+      whouseCode:
+        lot.whouseCode ||
+        lot.whCode ||
+        lot.whouse_code ||
+        sourceRow.whouseCode ||
+        sourceRow.whCode ||
+        parsedWHCode ||
+        "",
+
+      whCode:
+        lot.whCode ||
+        lot.whouseCode ||
+        lot.whouse_code ||
+        sourceRow.whCode ||
+        sourceRow.whouseCode ||
+        parsedWHCode ||
+        "",
+
+      LocCode:
+        lot.LocCode ||
+        lot.locCode ||
+        lot.loc_code ||
+        sourceRow.LocCode ||
+        sourceRow.locCode ||
+        parsedLocCode ||
+        "",
+
+      locCode:
+        lot.locCode ||
+        lot.LocCode ||
+        lot.loc_code ||
+        sourceRow.locCode ||
+        sourceRow.LocCode ||
+        parsedLocCode ||
+        "",
+
+      itemCode:
+        lot.itemCode ||
+        lot.item_code ||
+        sourceRow.itemCode ||
+        sourceRow.item_code ||
+        "",
+
+      item_code:
+        lot.item_code ||
+        lot.itemCode ||
+        sourceRow.item_code ||
+        sourceRow.itemCode ||
+        "",
+
+      rcCode:
+        lot.rcCode ||
+        lot.rc_code ||
+        sourceRow.rcCode ||
+        sourceRow.rc_code ||
+        "",
+
+      rc_code:
+        lot.rc_code ||
+        lot.rcCode ||
+        sourceRow.rc_code ||
+        sourceRow.rcCode ||
+        "",
+
+      unitCost:
+        lot.unitCost ||
+        lot.unit_cost ||
+        sourceRow.unitCost ||
+        sourceRow.unit_cost ||
+        0,
+
+      unit_cost:
+        lot.unit_cost ||
+        lot.unitCost ||
+        sourceRow.unit_cost ||
+        sourceRow.unitCost ||
+        0,
+
+      netAmount:
+        lot.netAmount ||
+        lot.net_amount ||
+        sourceRow.netAmount ||
+        sourceRow.net_amount ||
+        0,
+
+      net_amount:
+        lot.net_amount ||
+        lot.netAmount ||
+        sourceRow.net_amount ||
+        sourceRow.netAmount ||
+        0,
+
+      groupId:
+        lot.groupId ||
+        lot.group_id ||
+        sourceRow.groupId ||
+        sourceRow.group_id ||
+        "",
+
+      group_id:
+        lot.group_id ||
+        lot.groupId ||
+        sourceRow.group_id ||
+        sourceRow.groupId ||
+        "",
+
+      lnNo:
+        lot.lnNo ||
+        lot.ln_no ||
+        lot.lineNo ||
+        lot.line_no ||
+        sourceRow.lnNo ||
+        sourceRow.ln_no ||
+        "",
+
+      ln_no:
+        lot.ln_no ||
+        lot.lnNo ||
+        lot.line_no ||
+        sourceRow.ln_no ||
+        sourceRow.lnNo ||
+        "",
+
+      controlNo: lot.controlNo || lot.control_no || "",
+    }))
+    .filter(
+      (lot) =>
+        lot.lotNo &&
+        (parseFormattedNumber(lot.quantity || lot.rrQty || 0) || 0) > 0
+    );
+
+      const mappedDT1 = dt1.map((r, idx) => {
+  const rowLineNo =
+    r.lnNo ||
+    r.ln_no ||
+    r.LN_NO ||
+    r.lineNo ||
+    r.LINE_NO ||
+    r.line_no ||
+    idx + 1;
+
+  const rowGroupId = r.groupId || r.group_id || r.GROUP_ID || "";
+  const rowItemCode = r.itemCode || r.item_code || r.ITEM_CODE || "";
+
+  const matchedLots =
+    dt3ByGroup[normalizeLotKey(rowGroupId)] ||
+    dt3ByLine[normalizeLotLineKey(rowLineNo)] ||
+    dt3ByItem[normalizeLotKey(rowItemCode)] ||
+    [];
+
+  const lotDetails = normalizeRetrievedLots(matchedLots, r);
+  const retrievedLotNos = lotDetails.map((lot) => lot.lotNo).filter(Boolean);
+  const firstLot = lotDetails[0] || {};
+
+  return {
+    lnNo: Number(rowLineNo),
+    groupId: rowGroupId,
+    rrStatus: r.rrStatus || r.poStatus || "",
+    poStatus: r.poStatus || r.rrStatus || "",
+    poNo: r.poNo || parsed.poNo || "",
+
+    itemCode: getPOField(r, "itemCode", "itemNo", "ITEM_CODE", "ITEM_NO") || "",
+    itemName:
+      getPOField(
+        r,
+        "itemName",
+        "itemDesc",
+        "itemDescription",
+        "description",
+        "ItemName",
+        "ItemDesc",
+        "ItemDescription",
+        "Description",
+        "ITEM_NAME",
+        "ITEM_DESC",
+        "ITEM_DESCRIPTION",
+        "DESCRIPTION",
+        "fgName",
+        "fgDesc",
+        "FG_NAME",
+        "FG_DESC"
+      ) || "",
+
+    itemSpecs: getPOField(r, "itemSpecs", "itemSpec", "ITEM_SPECS", "ITEM_SPEC") || "",
+
+    // DT1 stays the official item-row RR quantity
+    rrQty: formatNumber(r.rrQty || r.quantity || 0, decQty),
+    freeQty: formatNumber(r.freeQty || r.freeQuantity || 0, decQty),
+
+    amount: formatNumber(r.itemAmount || r.grossAmount || 0),
+    itemAmount: formatNumber(r.itemAmount || r.grossAmount || 0),
+    grossAmount: formatNumber(r.itemAmount || r.grossAmount || 0),
+    vatCode: r.vatCode || "",
+    vatRate: r.vatCode ? formatNumber(vatRateMap[r.vatCode] ?? 0, 2) : "",
+    vatAmount: formatNumber(r.vatAmount ?? 0),
+
+    qsCode: firstLot.qstatCode || r.qsCode || "",
+    qstatCode: firstLot.qstatCode || r.qstatCode || r.qsCode || "",
+
+    whCode: firstLot.whCode || r.whCode || r.whouseCode || parsedWHCode || "",
+    whouseCode: firstLot.whouseCode || r.whouseCode || r.whCode || parsedWHCode || "",
+
+    locCode: firstLot.locCode || r.locCode || parsedLocCode || "",
+    LocCode: firstLot.LocCode || r.locCode || parsedLocCode || "",
+
+    uomCode: r.uomCode || "",
+    unitCost: formatNumber(r.unitCost || r.unitPrice || 0, decUcost),
+    netAmount: formatNumber(r.netAmount ?? 0),
+
+    // Display summary only, actual breakdown is in lotDetails
+    lotNo: retrievedLotNos.length > 0 ? retrievedLotNos.join(", ") : "",
+    bbDate: firstLot.bbDate || (r.bbDate ? String(r.bbDate).substring(0, 10) : ""),
+    controlNo: firstLot.controlNo || r.controlNo || "",
+
+    // THIS is what the modal should open
+    lotDetails,
+  };
+});
 
       const dt2 = Array.isArray(parsed.dt2) ? parsed.dt2 : [];
       const normalizeGLDate = (value) => {
@@ -1933,6 +2397,7 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
       updateState({
         detailRows: mappedDT1,
         detailRowsGL: mappedDT2,
+        dt3,
       });
     } catch (e) {
       console.error("fetchTranData error:", e);
@@ -2228,6 +2693,31 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
         row.whCode ?? row.WHCode ?? row.WH_CODE ?? row.whouseCode ?? "";
       const pickedWhName =
         row.whName ?? row.WHName ?? row.WH_NAME ?? row.whouseName ?? "";
+      if (accountModalSource === "lotWhouseCode") {
+        setLotEntryRows((prev) =>
+          prev.map((lot, lotIndex) =>
+            lotIndex === selectedRowIndex
+              ? {
+                  ...lot,
+                  whouseCode: pickedWhCode,
+                  whCode: pickedWhCode,
+                  whouseName: pickedWhName,
+                  whName: pickedWhName,
+                  LocCode: "",
+                  locCode: "",
+                  LocName: "",
+                  locName: "",
+                }
+              : lot,
+          ),
+        );
+        updateState({
+          warehouseLookupOpen: false,
+          accountModalSource: "",
+          selectedRowIndex: null,
+        });
+        return;
+      }
 
       accountModalSource
         ? handleDetailChange(selectedRowIndex, "whouseCode", pickedWhCode, {
@@ -2273,6 +2763,28 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
     if (row) {
       const pickedLocCode = row.locCode ?? row.LocCode ?? row.LOC_CODE ?? "";
       const pickedLocName = row.locName ?? row.LocName ?? row.LOC_NAME ?? "";
+      if (accountModalSource === "lotLocCode") {
+        setLotEntryRows((prev) =>
+          prev.map((lot, lotIndex) =>
+            lotIndex === selectedRowIndex
+              ? {
+                  ...lot,
+                  LocCode: pickedLocCode,
+                  locCode: pickedLocCode,
+                  LocName: pickedLocName,
+                  locName: pickedLocName,
+                }
+              : lot,
+          ),
+        );
+        updateState({
+          locationLookupOpen: false,
+          selectedWH: "",
+          accountModalSource: "",
+          selectedRowIndex: null,
+        });
+        return;
+      }
 
       // If Location lookup is opened from DETAIL row (accountModalSource = "LocCode")
       if (accountModalSource) {
@@ -2329,13 +2841,33 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
     if (picked && selectedRowIndex !== null && selectedRowIndex !== undefined) {
       const code = picked?.qstatCode ?? picked?.QSTAT_CODE ?? "";
       const name = picked?.qstatName ?? picked?.QSTAT_NAME ?? "";
+      if (accountModalSource === "lotQstatCode") {
+        setLotEntryRows((prev) =>
+          prev.map((lot, lotIndex) =>
+            lotIndex === selectedRowIndex
+              ? {
+                  ...lot,
+                  qstatCode: code,
+                  qsCode: code,
+                  qstatName: name,
+                }
+              : lot,
+          ),
+        );
+        updateState({
+          showQstatModal: false,
+          accountModalSource: "",
+          selectedRowIndex: null,
+        });
+        return;
+      }
 
       handleDetailChange(selectedRowIndex, "qstatCode", code, {
         qstatName: name,
       });
     }
 
-    updateState({ showQstatModal: false });
+    updateState({ showQstatModal: false, accountModalSource: "" });
   };
 
   const getLotBreakdownQty = (rows = lotEntryRows) =>
@@ -3917,7 +4449,7 @@ rrHdId: documentID || "",
                 <thead className="global-tran-thead-div-ui">
                   <tr>
                     <th className="global-tran-th-ui">LN</th>
-                    <th className="global-tran-th-ui">RR Status</th>
+                    {/* <th className="global-tran-th-ui">RR Status</th> */}
                     <th className="global-tran-th-ui">PO No.</th>
                     <th className="global-tran-th-ui">Item Code</th>
                     <th className="global-tran-th-ui">Item Description</th>
@@ -3952,14 +4484,14 @@ rrHdId: documentID || "",
                         {index + 1}
                       </td>
 
-                    <td className="global-tran-td-ui">
+                    {/* <td className="global-tran-td-ui">
                       <input
                         type="text"
                         className="w-[90px] global-tran-td-inputclass-ui text-center"
                         value={getFullStatus(row.rrStatus || row.poStatus)}
                         readOnly
                       />
-                    </td>
+                    </td> */}
 
                     <td className="global-tran-td-ui">
                       <input
@@ -4073,7 +4605,8 @@ rrHdId: documentID || "",
                             const value = e.target.value;
                             const num = parseFormattedNumber(value);
                             if (!isNaN(num)) {
-                              handleDetailChange(index, "rrQty", num, true);
+                              e.target.value = formatNumber(num, decQty);
+                                  handleDetailChange(index, "rrQty", e.target.value, true);
                             }
                             setFocusedCell(null);
                           }}
@@ -4083,7 +4616,8 @@ rrHdId: documentID || "",
                               const value = e.target.value;
                               const num = parseFormattedNumber(value);
                               if (!isNaN(num)) {
-                                handleDetailChange(index, "rrQty", num, true);
+                                e.target.value = formatNumber(num, decQty);
+                                  handleDetailChange(index, "rrQty", e.target.value, true);
                               }
                               e.target.blur();
                             }
@@ -4128,7 +4662,8 @@ rrHdId: documentID || "",
                             const value = e.target.value;
                             const num = parseFormattedNumber(value);
                             if (!isNaN(num)) {
-                          handleDetailChange(index, "freeQty", num, true);
+                          e.target.value = formatNumber(num, decQty);
+                                handleDetailChange(index, "freeQty", e.target.value, true);
                             }
                             setFocusedCell(null);
                           }}
@@ -4188,7 +4723,8 @@ rrHdId: documentID || "",
                             const value = e.target.value;
                             const num = parseFormattedNumber(value);
                             if (!isNaN(num)) {
-                              handleDetailChange(index, "unitCost", num, true);
+                              e.target.value = formatNumber(num, decUcost);
+                                  handleDetailChange(index, "unitCost", e.target.value, true);
                             }
                             setFocusedCell(null);
                           }}
@@ -4622,7 +5158,7 @@ rrHdId: documentID || "",
       )}
 
       {showLotPickingModal && selectedLotPickingRow && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-[40] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-6xl rounded-lg border border-gray-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800">
             <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-slate-700">
               <div>
@@ -4724,43 +5260,69 @@ rrHdId: documentID || "",
                           }
                         />
                       </td>
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[110px] global-tran-td-inputclass-ui"
-                          value={lot.qstatCode || ""}
-                          onChange={(e) =>
-                            handleLotEntryChange(
-                              index,
-                              "qstatCode",
-                              e.target.value,
-                            )
-                          }
-                        />
+                      <td className="global-tran-td-ui relative">
+                        <div className="flex items-center">
+                          <input
+                            type="text"
+                            className="w-[110px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                            value={lot.qstatCode || ""}
+                            readOnly
+                          />
+                          <FontAwesomeIcon
+                            icon={faMagnifyingGlass}
+                            className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                            onClick={() =>
+                              updateState({
+                                selectedRowIndex: index,
+                                showQstatModal: true,
+                                accountModalSource: "lotQstatCode",
+                              })
+                            }
+                          />
+                        </div>
                       </td>
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[110px] global-tran-td-inputclass-ui"
-                          value={lot.whouseCode || ""}
-                          onChange={(e) =>
-                            handleLotEntryChange(
-                              index,
-                              "whouseCode",
-                              e.target.value,
-                            )
-                          }
-                        />
+                      <td className="global-tran-td-ui relative">
+                        <div className="flex items-center">
+                          <input
+                            type="text"
+                            className="w-[110px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                            value={lot.whouseCode || lot.whCode || ""}
+                            readOnly
+                          />
+                          <FontAwesomeIcon
+                            icon={faMagnifyingGlass}
+                            className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                            onClick={() =>
+                              updateState({
+                                selectedRowIndex: index,
+                                warehouseLookupOpen: true,
+                                accountModalSource: "lotWhouseCode",
+                              })
+                            }
+                          />
+                        </div>
                       </td>
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[110px] global-tran-td-inputclass-ui"
-                          value={lot.LocCode || ""}
-                          onChange={(e) =>
-                            handleLotEntryChange(index, "LocCode", e.target.value)
-                          }
-                        />
+                      <td className="global-tran-td-ui relative">
+                        <div className="flex items-center">
+                          <input
+                            type="text"
+                            className="w-[110px] global-tran-td-inputclass-ui text-center pr-6 cursor-pointer"
+                            value={lot.LocCode || lot.locCode || ""}
+                            readOnly
+                          />
+                          <FontAwesomeIcon
+                            icon={faMagnifyingGlass}
+                            className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                            onClick={() =>
+                              updateState({
+                                selectedRowIndex: index,
+                                locationLookupOpen: true,
+                                selectedWH: lot.whouseCode || lot.whCode || "",
+                                accountModalSource: "lotLocCode",
+                              })
+                            }
+                          />
+                        </div>
                       </td>
                       <td className="global-tran-td-ui text-center">
                         <button

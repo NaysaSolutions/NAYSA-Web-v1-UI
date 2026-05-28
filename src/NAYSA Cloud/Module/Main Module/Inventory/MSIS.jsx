@@ -23,6 +23,7 @@ import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import RCLookupModal from "../../../Lookup/SearchRCMast.jsx";
+import SLMastLookupModal from "../../../Lookup/SearchSLMast.jsx";
 import MSLookupModal from "../../../Lookup/SearchMSMast.jsx";
 import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
@@ -52,6 +53,9 @@ import {
 
 import {
   useTransactionUpsert,
+  useGenerateGLEntries,
+  useUpdateRowGLEntries,
+  useUpdateRowEditEntries,
   useFetchTranData,
   useHandleCancel,
   useHandlePost,
@@ -79,6 +83,7 @@ import {
 
 const MSIS = () => {
   const loadedFromUrlRef = useRef(false);
+  const detailRowsGLRef = useRef([]);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -176,6 +181,13 @@ useEffect(() => {
 
     // Detail lines (PR dt1)
     detailRows: [],
+    detailRowsGL: [],
+    totalDebit: "0.00",
+    totalCredit: "0.00",
+    totalDebitFx1: "0.00",
+    totalCreditFx1: "0.00",
+    totalDebitFx2: "0.00",
+    totalCreditFx2: "0.00",
 
     // Modal states
     modalContext: "",
@@ -190,6 +202,8 @@ useEffect(() => {
     showSignatoryModal: false,
     showPostModal: false,
     showAccountModal: false,
+    showRcModal: false,
+    showSlModal: false,
     accountModalSource: null,
     // Modal flags
     warehouseLookupOpen: false,
@@ -286,6 +300,13 @@ useEffect(() => {
     drno,
 
     detailRows,
+    detailRowsGL,
+    totalDebit,
+    totalCredit,
+    totalDebitFx1,
+    totalCreditFx1,
+    totalDebitFx2,
+    totalCreditFx2,
 
     // Modals
     currencyModalOpen,
@@ -297,6 +318,8 @@ useEffect(() => {
     showSignatoryModal,
     showPostModal,
     showAccountModal,
+    showRcModal,
+    showSlModal,
     accountModalSource,
 
     // RC Lookup
@@ -343,6 +366,24 @@ useEffect(() => {
     });
   };
 
+  const getGLTotalsState = (rows) => {
+    const sourceRows = Array.isArray(rows) ? rows : [];
+    const debitSum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.debit) || 0), 0);
+    const creditSum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.credit) || 0), 0);
+    const debitFx1Sum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.debitFx1) || 0), 0);
+    const creditFx1Sum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.creditFx1) || 0), 0);
+    const debitFx2Sum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.debitFx2) || 0), 0);
+    const creditFx2Sum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.creditFx2) || 0), 0);
+    return {
+      totalDebit: formatNumber(debitSum),
+      totalCredit: formatNumber(creditSum),
+      totalDebitFx1: formatNumber(debitFx1Sum),
+      totalCreditFx1: formatNumber(creditFx1Sum),
+      totalDebitFx2: formatNumber(debitFx2Sum),
+      totalCreditFx2: formatNumber(creditFx2Sum),
+    };
+  };
+
   // ==========================
   // EFFECTS
   // ==========================
@@ -363,6 +404,11 @@ useEffect(() => {
   useEffect(() => {
     updateState({ isDocNoDisabled: !!state.documentID });
   }, [state.documentID]);
+
+  useEffect(() => {
+    detailRowsGLRef.current = detailRowsGL || [];
+    updateState(getGLTotalsState(detailRowsGL));
+  }, [detailRowsGL]);
 
   useEffect(() => {
     handleReset();
@@ -428,8 +474,19 @@ useEffect(() => {
       noReprints: "0",
       poCancelled: "",
       detailRows: [],
+      detailRowsGL: [],
+      totalDebit: "0.00",
+      totalCredit: "0.00",
+      totalDebitFx1: "0.00",
+      totalCreditFx1: "0.00",
+      totalDebitFx2: "0.00",
+      totalCreditFx2: "0.00",
       rcLookupModalOpen: false,
       rcLookupContext: "",
+      showAccountModal: false,
+      showRcModal: false,
+      showSlModal: false,
+      accountModalSource: null,
       msLookupModalOpen: false,
       globalLookupRow: [],
       globalLookupHeader: [],
@@ -473,7 +530,60 @@ useEffect(() => {
     });
   };
 
-  const handleCloseAccountModal = (selectedAccount) => {
+  const replicateFirstRowValueToBlankRows = async (
+    rows,
+    index,
+    field,
+    value,
+    extraData = {},
+  ) => {
+    if (index !== 0) return rows;
+
+    const hasBlanks = rows.some(
+      (row, rowIndex) =>
+        rowIndex !== 0 &&
+        (!row[field] || row[field].toString().trim() === ""),
+    );
+
+    if (!hasBlanks) return rows;
+
+    const fieldLabels = {
+      drAcctCode: "DR Account",
+      rcCode: "RC Code",
+      slCode: "SL Code",
+      whouseCode: "Warehouse",
+      locCode: "Location",
+      itemStat: "Quality Status",
+      lotNo: "Lot No.",
+      bbDate: "BB Date",
+      mrsNo: "MRS No.",
+    };
+
+    const result = await Swal.fire({
+      title: "Replicate Data?",
+      text: `Do you want to copy this ${fieldLabels[field] || field} to all blank rows?`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonColor: "#3085d6",
+      cancelButtonColor: "#d33",
+      confirmButtonText: "Yes, copy it!",
+      cancelButtonText: "No",
+    });
+
+    if (!result.isConfirmed) return rows;
+
+    return rows.map((row, rowIndex) => {
+      if (
+        rowIndex !== 0 &&
+        (!row[field] || row[field].toString().trim() === "")
+      ) {
+        return { ...row, [field]: value, ...extraData };
+      }
+      return row;
+    });
+  };
+
+  const handleCloseAccountModal = async (selectedAccount) => {
     console.log("🟦 COA MODAL CLOSED");
     console.log(
       "🟦 source:",
@@ -503,26 +613,35 @@ useEffect(() => {
     if (accountModalSource === "drAcct") {
       console.log("✅ DR ACCT SELECTED:", { acctCode, acctName });
 
-      // ✅ IMPORTANT: update using prev state (no stale detailRows)
-      setState((prev) => {
-        const rows = [...(prev.detailRows || [])];
-        const row = { ...(rows[selectedRowIndex] || {}) };
+      const rows = [...(state.detailRows || [])];
+      const row = { ...(rows[selectedRowIndex] || {}) };
 
-        row.drAcctCode = acctCode;
-        row.drAcctName = acctName;
+      row.drAcctCode = acctCode;
+      row.drAcctName = acctName;
 
-        rows[selectedRowIndex] = row;
+      rows[selectedRowIndex] = row;
 
-        return {
-          ...prev,
-          detailRows: rows,
-          showAccountModal: false,
-          selectedRowIndex: null,
-          accountModalSource: null,
-        };
+      const updatedRows = await replicateFirstRowValueToBlankRows(
+        rows,
+        selectedRowIndex,
+        "drAcctCode",
+        acctCode,
+        { drAcctName: acctName },
+      );
+
+      updateState({
+        detailRows: updatedRows,
+        detailRowsGL: [],
+        showAccountModal: false,
+        selectedRowIndex: null,
+        accountModalSource: null,
       });
 
       return; // prevent the updateState below from re-closing again
+    }
+
+    if (accountModalSource === "acctCode") {
+      handleDetailChangeGL(selectedRowIndex, "acctCode", selectedAccount);
     }
 
     updateState({
@@ -688,6 +807,16 @@ useEffect(() => {
         drAcctName: item.drAcctName ?? "",
       }));
 
+      const formattedGLRows = (data.dt2 || []).map((glRow) => ({
+        ...glRow,
+        debit: formatNumber(glRow.debit),
+        credit: formatNumber(glRow.credit),
+        debitFx1: formatNumber(glRow.debitFx1),
+        creditFx1: formatNumber(glRow.creditFx1),
+        debitFx2: formatNumber(glRow.debitFx2),
+        creditFx2: formatNumber(glRow.creditFx2),
+      }));
+
       const totalQty = retrievedDetailRows.reduce(
         (acc, r) => acc + (parseFormattedNumber(r.quantity ?? r.qtyNeeded ?? 0) || 0),
         0,
@@ -718,6 +847,7 @@ useEffect(() => {
         poCancelled: data.poCancelled || "",
         noReprints: data.noReprints ?? "0",
         detailRows: retrievedDetailRows,
+        detailRowsGL: formattedGLRows,
         isDocNoDisabled: true,
         isFetchDisabled: true,
       });
@@ -845,7 +975,7 @@ useEffect(() => {
     console.log("✅ Row AFTER update:", row);
 
     updatedRows[rowIndex] = row;
-    updateState({ detailRows: updatedRows });
+    updateState({ detailRows: updatedRows, detailRowsGL: [] });
   };
 
   // ==========================
@@ -883,7 +1013,7 @@ useEffect(() => {
       debitAcct: "",
       debitAcctName: "",
     };
-    updateState({ detailRows: updatedRows });
+    updateState({ detailRows: updatedRows, detailRowsGL: [] });
   };
 
   // When user clicks the "Add Line" button
@@ -1033,7 +1163,121 @@ useEffect(() => {
     updateTotalsDisplay(totalQty);
   };
 
-  const handleDetailChange = (index, field, value) => {
+  const createEmptyGlRow = () => ({
+    acctCode: "",
+    rcCode: rcCode || "",
+    sltypeCode: "",
+    slCode: "",
+    particular: "",
+    vatCode: "",
+    vatName: "",
+    atcCode: "",
+    atcName: "",
+    debit: "0.00",
+    credit: "0.00",
+    debitFx1: "0.00",
+    creditFx1: "0.00",
+    debitFx2: "0.00",
+    creditFx2: "0.00",
+    slRefNo: "",
+    slRefDate: "",
+    remarks: "",
+  });
+
+  const handleAddRowGL = (index = null) => {
+    if (isFormDisabled) return;
+    const updatedRows = [...(detailRowsGL || [])];
+    if (index !== null && index !== undefined) {
+      updatedRows.splice(index + 1, 0, createEmptyGlRow());
+    } else {
+      updatedRows.push(createEmptyGlRow());
+    }
+    updateState({ detailRowsGL: updatedRows, ...getGLTotalsState(updatedRows) });
+  };
+
+  const handleDeleteRowGL = (index) => {
+    const updatedRows = [...(detailRowsGL || [])];
+    updatedRows.splice(index, 1);
+    updateState({ detailRowsGL: updatedRows, ...getGLTotalsState(updatedRows) });
+  };
+
+  const handleDetailChangeGL = async (index, field, value) => {
+    const updatedRowsGL = [...(detailRowsGLRef.current || [])];
+    let row = { ...(updatedRowsGL[index] || createEmptyGlRow()) };
+
+    if (["acctCode", "slCode", "rcCode", "sltypeCode", "vatCode", "atcCode"].includes(field)) {
+      const data = await useUpdateRowGLEntries(row, field, value, "", docType);
+      if (data) {
+        row = {
+          ...row,
+          acctCode: data.acctCode,
+          sltypeCode: data.sltypeCode,
+          slCode: data.slCode,
+          rcCode: data.rcCode,
+          vatCode: data.vatCode,
+          vatName: data.vatName,
+          atcCode: data.atcCode,
+          atcName: data.atcName,
+          particular: data.particular,
+        };
+      }
+    } else {
+      row[field] = value;
+    }
+
+    if (["debit", "credit", "debitFx1", "creditFx1", "debitFx2", "creditFx2"].includes(field)) {
+      row[field] = value;
+      const parsedValue = parseFormattedNumber(value);
+      const pairs = {
+        debit: "credit",
+        credit: "debit",
+        debitFx1: "creditFx1",
+        creditFx1: "debitFx1",
+        debitFx2: "creditFx2",
+        creditFx2: "debitFx2",
+      };
+      if (parsedValue > 0 && pairs[field]) row[pairs[field]] = "0.00";
+    }
+
+    updatedRowsGL[index] = row;
+    updateState({ detailRowsGL: updatedRowsGL, ...getGLTotalsState(updatedRowsGL) });
+  };
+
+  const handleBlurGL = async (index, field, value, autoCompute = false) => {
+    const updatedRowsGL = [...(detailRowsGLRef.current || [])];
+    const row = { ...(updatedRowsGL[index] || createEmptyGlRow()) };
+    const parsedValue = parseFormattedNumber(value);
+    row[field] = formatNumber(parsedValue);
+
+    if (autoCompute && ((withCurr2 && currCode !== glCurrDefault) || withCurr3)) {
+      const data = await useUpdateRowEditEntries(row, field, value, currCode, currRate, header?.rr_date);
+      if (data) {
+        row.debit = formatNumber(data.debit);
+        row.credit = formatNumber(data.credit);
+        row.debitFx1 = formatNumber(data.debitFx1);
+        row.creditFx1 = formatNumber(data.creditFx1);
+        row.debitFx2 = formatNumber(data.debitFx2);
+        row.creditFx2 = formatNumber(data.creditFx2);
+      }
+    } else {
+      const pairs = [["debit", "credit"], ["debitFx1", "creditFx1"], ["debitFx2", "creditFx2"]];
+      pairs.forEach(([a, b]) => {
+        if (field === a && parsedValue > 0) row[b] = formatNumber(0);
+        if (field === b && parsedValue > 0) row[a] = formatNumber(0);
+      });
+    }
+
+    updatedRowsGL[index] = row;
+    updateState({ detailRowsGL: updatedRowsGL, ...getGLTotalsState(updatedRowsGL) });
+  };
+
+  const getMSISDetailNumericDecimals = (field) => {
+    if (["quantity", "qtyOnHand", "mrsQty", "unitCost"].includes(field)) return 6;
+    if (field === "amount") return 2;
+    return 6;
+  };
+
+  const handleDetailChange = async (index, field, value, commit = false) => {
     const updatedRows = [...detailRows];
     const row = { ...updatedRows[index] };
 
@@ -1047,7 +1291,12 @@ useEffect(() => {
     ].includes(field);
     if (isNumeric) {
       const sanitized = String(value ?? "").replace(/[^0-9.]/g, "");
-      row[field] = sanitized;
+      row[field] = commit
+        ? formatNumber(
+            parseFormattedNumber(sanitized || 0),
+            getMSISDetailNumericDecimals(field),
+          )
+        : sanitized;
     } else {
       row[field] = value;
     }
@@ -1062,9 +1311,25 @@ useEffect(() => {
     }
 
     updatedRows[index] = row;
-    updateState({ detailRows: updatedRows });
 
-    const totalQty = updatedRows.reduce(
+    const replicateFields = [
+      "itemStat",
+      "whouseCode",
+      "locCode",
+      "drAcctCode",
+      "rcCode",
+      "slCode",
+      "lotNo",
+      "bbDate",
+      "mrsNo",
+    ];
+    const finalRows = replicateFields.includes(field)
+      ? await replicateFirstRowValueToBlankRows(updatedRows, index, field, row[field])
+      : updatedRows;
+
+    updateState({ detailRows: finalRows, detailRowsGL: [] });
+
+    const totalQty = finalRows.reduce(
       (acc, r) => acc + (parseFormattedNumber(r.quantity ?? r.qtyNeeded ?? 0) || 0),
       0,
     );
@@ -1075,8 +1340,8 @@ useEffect(() => {
   // SAVE / UPSERT (PR + DT1)
   // ==========================
   const handleActivityOption = async (action) => {
-    if (documentStatus !== "") return;
-    if (action !== "Upsert") return;
+    if (isFormDisabled) return;
+    if (!["Upsert", "GenerateGL"].includes(action)) return;
 
     updateState({ isLoading: true });
 
@@ -1106,12 +1371,13 @@ useEffect(() => {
         userCode,
 
         detailRows,
+        detailRowsGL,
       } = state;
 
       const isNew = !documentID;
 
       // ✅ MSIS HEADER PAYLOAD
-      const msisData = {
+      const buildMsisData = (glRows) => ({
         branchCode: branchCode,
 
         // Use MSIS naming (adjust keys to your sproc)
@@ -1166,7 +1432,54 @@ useEffect(() => {
           MRS_NO: row.mrsNo || "",
           MRS_QTY: parseFormattedNumber(row.mrsQty || 0),
         })),
-      };
+        dt2: (glRows || []).map((entry, index) => ({
+          recNo: String(index + 1),
+          acctCode: entry.acctCode || "",
+          rcCode: entry.rcCode || "",
+          sltypeCode: entry.sltypeCode || "",
+          slCode: entry.slCode || "",
+          particular: entry.particular || "",
+          vatCode: entry.vatCode || "",
+          vatName: entry.vatName || "",
+          atcCode: entry.atcCode || "",
+          atcName: entry.atcName || "",
+          debit: parseFormattedNumber(entry.debit || 0),
+          credit: parseFormattedNumber(entry.credit || 0),
+          debitFx1: parseFormattedNumber(entry.debitFx1 || 0),
+          creditFx1: parseFormattedNumber(entry.creditFx1 || 0),
+          debitFx2: parseFormattedNumber(entry.debitFx2 || 0),
+          creditFx2: parseFormattedNumber(entry.creditFx2 || 0),
+          slRefNo: entry.slRefNo || "",
+          slRefDate: entry.slRefDate || null,
+          remarks: entry.remarks || "",
+        })),
+      });
+
+      if (action === "GenerateGL") {
+        const newGlEntries = await useGenerateGLEntries(docType, buildMsisData(detailRowsGL || []));
+        const formattedEntries = (newGlEntries || []).map((glRow) => ({
+          ...glRow,
+          debit: formatNumber(glRow.debit),
+          credit: formatNumber(glRow.credit),
+          debitFx1: formatNumber(glRow.debitFx1),
+          creditFx1: formatNumber(glRow.creditFx1),
+          debitFx2: formatNumber(glRow.debitFx2),
+          creditFx2: formatNumber(glRow.creditFx2),
+        }));
+        updateState({ detailRowsGL: formattedEntries });
+        return;
+      }
+
+      let finalDetailRowsGL = [...(detailRowsGL || [])];
+      if (finalDetailRowsGL.length === 0) {
+        const newGlEntries = await useGenerateGLEntries(docType, buildMsisData([]));
+        if (newGlEntries?.length) {
+          finalDetailRowsGL = newGlEntries;
+          updateState({ detailRowsGL: newGlEntries });
+        }
+      }
+
+      const msisData = buildMsisData(finalDetailRowsGL);
 
       console.log("✅ MSIS Payload", msisData);
 
@@ -1385,6 +1698,20 @@ useEffect(() => {
     }
   };
 
+  const handleCloseRcModalGL = (selectedRC) => {
+    if (selectedRC && selectedRowIndex !== null) {
+      handleDetailChangeGL(selectedRowIndex, "rcCode", selectedRC);
+    }
+    updateState({ showRcModal: false, selectedRowIndex: null, accountModalSource: null });
+  };
+
+  const handleCloseSlModalGL = (selectedSL) => {
+    if (selectedSL && selectedRowIndex !== null) {
+      handleDetailChangeGL(selectedRowIndex, "slCode", selectedSL);
+    }
+    updateState({ showSlModal: false, selectedRowIndex: null, accountModalSource: null });
+  };
+
   const handlePOStatChange = (e) => {
     const selectedType = e.target.value;
     updateState({ selectedJVType: selectedType });
@@ -1463,8 +1790,8 @@ useEffect(() => {
     { key: "rcCode", label: "RC Code", width: 120 },
     { key: "slCode", label: "SL Code", width: 120 },
     { key: "qtyOnHand", label: "Qty on Hand", width: 130 },
-    { key: "mrsNo", label: "MRS No.", width: 130 },
-    { key: "mrsQty", label: "MRS Qty", width: 130 },
+    // { key: "mrsNo", label: "MRS No.", width: 130 },
+    // { key: "mrsQty", label: "MRS Qty", width: 130 },
   ], []);
 
   const {
@@ -1508,6 +1835,71 @@ useEffect(() => {
   );
 
   const msisEnterNextRowZeroClearFields = ["quantity", "unitCost", "mrsQty"];
+
+  const msisGlColumnDefs = [
+    { key: "ln", label: "LN", width: 56 },
+    { key: "acctCode", label: "Account Code", width: 120 },
+    { key: "rcCode", label: "RC Code", width: 120 },
+    { key: "sltypeCode", label: "SL Type", width: 120 },
+    { key: "slCode", label: "SL Code", width: 120 },
+    { key: "particular", label: "Particulars", width: 320 },
+    { key: "vatCode", label: "VAT Code", width: 120 },
+    { key: "vatName", label: "VAT Name", width: 220 },
+    { key: "atcCode", label: "ATC Code", width: 120 },
+    { key: "atcName", label: "ATC Name", width: 220 },
+    { key: "debit", label: `Debit (${glCurrDefault})`, width: 140 },
+    { key: "credit", label: `Credit (${glCurrDefault})`, width: 140 },
+    ...(withCurr2 ? [
+      { key: "debitFx1", label: `Debit (${withCurr3 ? glCurrGlobal2 : currCode})`, width: 140 },
+      { key: "creditFx1", label: `Credit (${withCurr3 ? glCurrGlobal2 : currCode})`, width: 140 },
+    ] : []),
+    ...(withCurr3 ? [
+      { key: "debitFx2", label: `Debit (${glCurrGlobal3})`, width: 140 },
+      { key: "creditFx2", label: `Credit (${glCurrGlobal3})`, width: 140 },
+    ] : []),
+    { key: "slRefNo", label: "SL Ref. No.", width: 120 },
+    { key: "slRefDate", label: "SL Ref. Date", width: 130 },
+    { key: "remarks", label: "Remarks", width: 160 },
+  ];
+
+  const {
+    getColumnStyle: getMSISGlColumnStyle,
+    getFrozenColumnStyle: getMSISGlFrozenStyle,
+    getOrderedColumns: getOrderedMSISGlColumns,
+    getSortedRows: getSortedMSISGlRows,
+    clearZeroValueOnFocus: clearMSISGlZeroOnFocus,
+    focusNextRowInput: focusNextMSISGlRowInput,
+    renderHeaderContextMenu: renderMSISGlHeaderContextMenu,
+    renderResizableHeader: renderMSISGlHeader,
+  } = useResizableTableColumns(msisGlColumnDefs);
+
+  const orderedMSISGlColumns = useMemo(
+    () => getOrderedMSISGlColumns(msisGlColumnDefs),
+    [getOrderedMSISGlColumns, msisGlColumnDefs]
+  );
+
+  const getMSISGlFallbackWidth = useCallback(
+    (key) => msisGlColumnDefs.find((column) => column.key === key)?.width || 120,
+    [msisGlColumnDefs]
+  );
+
+  const getMSISGlCellStyle = useCallback(
+    (key, fallbackWidth) => ({
+      ...getMSISGlColumnStyle(key, fallbackWidth),
+      ...getMSISGlFrozenStyle(key, orderedMSISGlColumns, fallbackWidth, { isHeader: false }),
+    }),
+    [getMSISGlColumnStyle, getMSISGlFrozenStyle, orderedMSISGlColumns]
+  );
+
+  const sortedMSISGlRows = useMemo(
+    () => getSortedMSISGlRows(
+      (detailRowsGL || []).map((row, originalIndex) => ({ row, originalIndex })),
+      (entry, sortKey) => (sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? "")
+    ),
+    [getSortedMSISGlRows, detailRowsGL]
+  );
+
+  const msisGlEnterNextRowZeroClearFields = ["debit", "credit", "debitFx1", "creditFx1", "debitFx2", "creditFx2"];
 
   const handleAddBlankRow = (index) => {
     if (isFormDisabled) return;
@@ -1570,7 +1962,14 @@ useEffect(() => {
 
       if (e.key === "Enter") {
         e.preventDefault();
-        if (options.commitOnEnter) handleDetailChange(index, field, e.target.value, true);
+        if (options.commitOnEnter) {
+          const formattedValue = formatNumber(
+            parseFormattedNumber(e.target.value || 0),
+            getMSISDetailNumericDecimals(field),
+          );
+          e.target.value = formattedValue;
+          handleDetailChange(index, field, formattedValue, true);
+        }
         focusNextDetailCell(field);
         return;
       }
@@ -1627,7 +2026,7 @@ useEffect(() => {
         }}
         onBlur={(e) => {
           if ((options.readOnly ?? rowLocked) || (options.disabled ?? false)) return;
-          handleDetailChange(index, field, e.target.value);
+          handleDetailChange(index, field, e.target.value, true);
         }}
         onKeyDown={(e) => handleGridKeyDown(e, field, { ...options, commitOnEnter: true })}
       />
@@ -1679,6 +2078,125 @@ useEffect(() => {
     };
 
     return detailColumnRenderers[columnKey]?.() ?? (
+      <td key={columnKey} className="global-tran-td-ui" style={style}>{String(row[columnKey] ?? "")}</td>
+    );
+  };
+
+  const renderMSISGlCell = (columnKey, row, index) => {
+    const columnWidth = getMSISGlFallbackWidth(columnKey);
+    const style = getMSISGlCellStyle(columnKey, columnWidth);
+
+    const focusNextGlCell = (field) => {
+      focusNextMSISGlRowInput(index, field, {
+        rows: detailRowsGL,
+        zeroClearFields: msisGlEnterNextRowZeroClearFields,
+        parseValue: parseFormattedNumber,
+        onClearNextValue: (nextIndex, nextField, value) => handleDetailChangeGL(nextIndex, nextField, value),
+      });
+    };
+
+    const modalHandlers = {
+      acctCode: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "acctCode" }),
+      rcCode: () => updateState({ selectedRowIndex: index, showRcModal: true }),
+      slCode: () => updateState({ selectedRowIndex: index, showSlModal: true }),
+    };
+
+    const textInput = (field, options = {}) => (
+      <input
+        type="text"
+        id={`${field}-${index}`}
+        className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()}
+        value={row[field] || ""}
+        readOnly={options.readOnly ?? isFormDisabled}
+        onChange={(e) => handleDetailChangeGL(index, field, e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" || options.readOnly || isFormDisabled) return;
+          e.preventDefault();
+          focusNextGlCell(field);
+        }}
+      />
+    );
+
+    const lookupCell = (field, options = {}) => (
+      <td key={columnKey} className="global-tran-td-ui" style={style}>
+        <div className="relative w-full">
+          <input
+            type="text"
+            id={`${field}-${index}`}
+            className={`w-full pr-6 global-tran-td-inputclass-ui cursor-pointer ${options.className || ""}`.trim()}
+            value={row[field] || ""}
+            readOnly={options.readOnly ?? true}
+            onChange={(e) => handleDetailChangeGL(index, field, e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter" || isFormDisabled) return;
+              e.preventDefault();
+              focusNextGlCell(field);
+            }}
+          />
+          {!isFormDisabled && (options.alwaysShowIcon || String(row[field] || "").trim()) && (
+            <FontAwesomeIcon
+              icon={faMagnifyingGlass}
+              className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+              onClick={modalHandlers[field]}
+            />
+          )}
+        </div>
+      </td>
+    );
+
+    const amountInput = (field) => (
+      <input
+        type="text"
+        id={`${field}-${index}`}
+        className="w-full global-tran-td-inputclass-ui text-right"
+        value={row[field] || ""}
+        readOnly={isFormDisabled}
+        onChange={(e) => {
+          const sanitizedValue = e.target.value.replace(/[^0-9.]/g, "");
+          if (/^\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") {
+            handleDetailChangeGL(index, field, sanitizedValue);
+          }
+        }}
+        onFocus={(e) => clearMSISGlZeroOnFocus(e, {
+          isEditable: !isFormDisabled,
+          onClear: (value) => handleDetailChangeGL(index, field, value),
+        })}
+        onBlur={(e) => {
+          if (isFormDisabled) return;
+          handleBlurGL(index, field, e.target.value);
+        }}
+        onKeyDown={async (e) => {
+          if (e.key !== "Enter" || isFormDisabled) return;
+          e.preventDefault();
+          await handleBlurGL(index, field, e.target.value, true);
+          focusNextGlCell(field);
+        }}
+      />
+    );
+
+    const glColumnRenderers = {
+      ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
+      acctCode: () => lookupCell("acctCode", { alwaysShowIcon: true, readOnly: false }),
+      rcCode: () => lookupCell("rcCode"),
+      sltypeCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("sltypeCode")}</td>,
+      slCode: () => lookupCell("slCode"),
+      particular: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("particular")}</td>,
+      vatCode: () => lookupCell("vatCode"),
+      vatName: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full global-tran-td-inputclass-ui" value={row.vatName || ""} readOnly /></td>,
+      atcCode: () => lookupCell("atcCode"),
+      atcName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("atcName")}</td>,
+      debit: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{amountInput("debit")}</td>,
+      credit: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{amountInput("credit")}</td>,
+      debitFx1: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{amountInput("debitFx1")}</td>,
+      creditFx1: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{amountInput("creditFx1")}</td>,
+      debitFx2: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{amountInput("debitFx2")}</td>,
+      creditFx2: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{amountInput("creditFx2")}</td>,
+      slRefNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("slRefNo")}</td>,
+      slRefDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="date" id={`slRefDate-${index}`} className="w-full global-tran-td-inputclass-ui text-center" value={row.slRefDate || ""} readOnly={isFormDisabled} onChange={(e) => handleDetailChangeGL(index, "slRefDate", e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextGlCell("slRefDate"); } }} /></td>,
+      remarks: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("remarks")}</td>,
+    };
+
+    return glColumnRenderers[columnKey]?.() ?? (
       <td key={columnKey} className="global-tran-td-ui" style={style}>{String(row[columnKey] ?? "")}</td>
     );
   };
@@ -2038,6 +2556,120 @@ useEffect(() => {
             </div>
           </div>
         </div>
+
+        <div className="global-tran-tab-div-ui">
+          <div className="global-tran-tab-nav-ui">
+            <div className="flex flex-row sm:flex-row">
+              <button
+                className="global-tran-tab-padding-ui global-tran-tab-text_active-ui"
+                onClick={() => updateState({ activeTab: "basic" })}
+              >
+                General Ledger
+              </button>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={() => handleActivityOption("GenerateGL")}
+                className="global-tran-button-generateGL"
+                disabled={isLoading || detailRows.length === 0}
+                style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
+              >
+                {isLoading ? "Generating..." : "Generate GL Entries"}
+              </button>
+            </div>
+          </div>
+
+          <div className="global-tran-table-main-div-ui">
+            <div className="global-tran-table-main-sub-div-ui">
+              <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
+                <thead className="global-tran-thead-div-ui">
+                  <tr>
+                    {orderedMSISGlColumns.map((column) =>
+                      renderMSISGlHeader(column.label, column.key, column.width, {
+                        orderedColumns: orderedMSISGlColumns,
+                      })
+                    )}
+                    {!isFormDisabled && (
+                      <th
+                        className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900"
+                        style={transactionActionsHeaderStyle}
+                      >
+                        Actions
+                      </th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody className="relative">
+                  {sortedMSISGlRows.map(({ row, originalIndex }) => (
+                    <tr key={`${row.acctCode || "gl"}-${originalIndex}`} className="global-tran-tr-ui">
+                      {orderedMSISGlColumns.map((column) =>
+                        renderMSISGlCell(column.key, row, originalIndex)
+                      )}
+                      {!isFormDisabled && (
+                        <td
+                          className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black"
+                          style={transactionActionsCellStyle}
+                        >
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              className="global-tran-td-button-add-ui"
+                              onClick={() => handleAddRowGL(originalIndex)}
+                            >
+                              <FontAwesomeIcon icon={faPlus} />
+                            </button>
+                            <button
+                              type="button"
+                              className="global-tran-td-button-delete-ui"
+                              onClick={() => handleDeleteRowGL(originalIndex)}
+                            >
+                              <FontAwesomeIcon icon={faTrashAlt} />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {renderMSISGlHeaderContextMenu?.()}
+            </div>
+          </div>
+
+          <div className="global-tran-tab-footer-main-div-ui">
+            <div className="global-tran-tab-footer-button-div-ui">
+              <button
+                onClick={() => handleAddRowGL()}
+                className="global-tran-tab-footer-button-add-ui"
+                style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
+              >
+                <FontAwesomeIcon icon={faPlus} className="mr-2" />
+                Add
+              </button>
+            </div>
+
+            <div className="global-tran-tab-footer-total-main-div-ui">
+              <div className="global-tran-tab-footer-total-div-ui">
+                <label htmlFor="TotalDebit" className="global-tran-tab-footer-total-label-ui">
+                  Total Debit ({glCurrDefault}):
+                </label>
+                <label htmlFor="TotalDebit" className="global-tran-tab-footer-total-value-ui">
+                  {totalDebit}
+                </label>
+              </div>
+
+              <div className="global-tran-tab-footer-total-div-ui">
+                <label htmlFor="TotalCredit" className="global-tran-tab-footer-total-label-ui">
+                  Total Credit ({glCurrDefault}):
+                </label>
+                <label htmlFor="TotalCredit" className="global-tran-tab-footer-total-value-ui">
+                  {totalCredit}
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* HISTORY TAB */}
@@ -2158,6 +2790,21 @@ useEffect(() => {
           isOpen={showAccountModal}
           onClose={handleCloseAccountModal}
           source={accountModalSource}
+        />
+      )}
+
+      {showRcModal && (
+        <RCLookupModal
+          isOpen={showRcModal}
+          onClose={handleCloseRcModalGL}
+          source={accountModalSource}
+        />
+      )}
+
+      {showSlModal && (
+        <SLMastLookupModal
+          isOpen={showSlModal}
+          onClose={handleCloseSlModalGL}
         />
       )}
 

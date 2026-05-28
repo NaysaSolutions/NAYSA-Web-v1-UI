@@ -24,10 +24,6 @@ import {
   faFileExport,
   faFileCsv,
   faSyncAlt,
-  faExpand,
-  faCompress,
-  faArrowsAltH,
-  faFilter,
   faPenToSquare,
   faTable,
   faIdCard,
@@ -55,17 +51,6 @@ const DEFAULT_MAX_COL_WIDTH = 260;
 const AUTO_FIT_MIN_WIDTH = 90;
 const AUTO_MEASURE_SAMPLE_SIZE = 1000;
 
-const parseAutoFillGrid = (value) => {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    if (["true", "1", "yes", "y"].includes(normalized)) return true;
-    if (["false", "0", "no", "n", ""].includes(normalized)) return false;
-  }
-  return false;
-};
-
-
 const TableLoader = ({ message = "Loading Report...", spinner = false }) => (
   <div className="flex items-center justify-center w-full h-full min-h-[220px]">
     <div className="flex flex-col items-center gap-3">
@@ -78,7 +63,7 @@ const TableLoader = ({ message = "Loading Report...", spinner = false }) => (
 const SearchGlobalReportTable = forwardRef(
   (
     {
-      columns: rawColumns = [],
+      columns = [],
       data = [],
       itemsPerPage = 1000,
       showFilters = true,
@@ -102,10 +87,6 @@ const SearchGlobalReportTable = forwardRef(
       docType = "Report",
       autoFit = false,
       pagination = false,
-      showPagination,
-      allowPaginationToggle = true,
-      tableHeight,
-      customTableHeight,
       autoFillGrid = false,
     },
     ref,
@@ -135,23 +116,8 @@ const SearchGlobalReportTable = forwardRef(
     const [rowsPerPage, setRowsPerPage] = useState(
       () => Number(initialState?.itemsPerPage ?? itemsPerPage ?? 1000),
     );
-    const [paginationEnabled, setPaginationEnabled] = useState(() => {
-      const raw = initialState?.pagination ?? showPagination ?? pagination;
-      if (typeof raw === "string") {
-        const normalized = raw.trim().toLowerCase();
-        return ["true", "1", "yes", "y"].includes(normalized);
-      }
-      return !!raw;
-    });
-    const [showAllRows, setShowAllRows] = useState(() =>
-      parseAutoFillGrid(initialState?.showAllRows),
-    );
-    const resolvedTableHeight = customTableHeight ?? tableHeight ?? initialState?.tableHeight ?? null;
-    const tableHeightStyle = resolvedTableHeight
-      ? { height: typeof resolvedTableHeight === "number" ? `${resolvedTableHeight}px` : resolvedTableHeight }
-      : undefined;
     const [autoFillGridState, setAutoFillGridState] = useState(
-      autoFit || parseAutoFillGrid(autoFillGrid),
+      autoFit || autoFillGrid,
     );
 
     const [columnOrder, setColumnOrder] = useState([]);
@@ -180,37 +146,6 @@ const SearchGlobalReportTable = forwardRef(
     });
 
     const { companyInfo, currentUserRow } = useAuth();
-
-    useEffect(() => {
-      setAutoFillGridState(autoFit || parseAutoFillGrid(autoFillGrid));
-    }, [autoFit, autoFillGrid]);
-
-    useEffect(() => {
-      const raw = showPagination ?? pagination;
-      if (raw === undefined) return;
-      if (typeof raw === "string") {
-        const normalized = raw.trim().toLowerCase();
-        setPaginationEnabled(["true", "1", "yes", "y"].includes(normalized));
-      } else {
-        setPaginationEnabled(!!raw);
-      }
-    }, [showPagination, pagination]);
-
-    const columns = useMemo(
-      () =>
-        (Array.isArray(rawColumns) ? rawColumns : []).map((col) => ({
-          ...col,
-          label: col.label || col.header || col.name || col.key || "",
-          renderType:
-            col.renderType ||
-            (col.type === "amount" ? "number" : col.type === "date" ? "date" : col.type),
-          roundingOff:
-            col.roundingOff ??
-            (typeof col.decimals === "number" ? col.decimals : undefined),
-          className: col.className || col.cellClassName || "",
-        })),
-      [rawColumns],
-    );
 
     useEffect(() => {
       const checkSmall = () => {
@@ -255,9 +190,6 @@ const SearchGlobalReportTable = forwardRef(
         autoExpandGroups,
         userHiddenCols,
         itemsPerPage: rowsPerPage,
-        pagination: paginationEnabled,
-        showAllRows,
-        tableHeight: resolvedTableHeight,
         globalSearch,
         mobileViewMode,
       });
@@ -269,9 +201,6 @@ const SearchGlobalReportTable = forwardRef(
       autoExpandGroups,
       userHiddenCols,
       rowsPerPage,
-      paginationEnabled,
-      showAllRows,
-      resolvedTableHeight,
       globalSearch,
       mobileViewMode,
       onStateChange,
@@ -574,31 +503,29 @@ const SearchGlobalReportTable = forwardRef(
       ? groupedStructure.length
       : filteredData.length;
 
-    const effectivePagination = paginationEnabled && !showAllRows;
-    const safeRowsPerPage = Math.max(1, Number(rowsPerPage) || Number(itemsPerPage) || 1000);
-    const totalPages = Math.max(1, Math.ceil(totalItems / safeRowsPerPage));
+    const totalPages = Math.max(1, Math.ceil(totalItems / rowsPerPage));
     const safePage = Math.min(Math.max(1, currentPage), totalPages);
 
     const displayRows = useMemo(() => {
-      if (!effectivePagination) {
+      if (!pagination) {
         return groupBy.length ? processRenderList(groupedStructure) : filteredData;
       }
 
-      const start = (safePage - 1) * safeRowsPerPage;
+      const start = (safePage - 1) * rowsPerPage;
       const paged = groupBy.length
-        ? groupedStructure.slice(start, start + safeRowsPerPage)
-        : filteredData.slice(start, start + safeRowsPerPage);
+        ? groupedStructure.slice(start, start + rowsPerPage)
+        : filteredData.slice(start, start + rowsPerPage);
 
       return groupBy.length ? processRenderList(paged) : paged;
     }, [
       safePage,
-      safeRowsPerPage,
+      rowsPerPage,
       filteredData,
       groupedStructure,
       autoExpandGroups,
       expandedGroups,
       groupBy,
-      effectivePagination,
+      pagination,
     ]);
 
     const grandTotals = useMemo(
@@ -1055,9 +982,6 @@ const SearchGlobalReportTable = forwardRef(
         groupBy,
         autoExpandGroups,
         userHiddenCols,
-        pagination: paginationEnabled,
-        showAllRows,
-        tableHeight: resolvedTableHeight,
         globalSearch,
         mobileViewMode,
       }),
@@ -1069,8 +993,6 @@ const SearchGlobalReportTable = forwardRef(
         setGlobalSearch("");
         setCurrentPage(1);
         setUserHiddenCols([]);
-        setPaginationEnabled(!!(showPagination ?? pagination));
-        setShowAllRows(false);
         setMobileViewMode("table");
         setExpandedMobileCards({});
         userResizedColsRef.current = new Set();
@@ -1078,15 +1000,6 @@ const SearchGlobalReportTable = forwardRef(
     }));
 
     const hasRows = filteredData.length > 0;
-    const hasDataFiltered = filteredData.length > 0;
-
-    const getIconBtnClass = (extra = "") =>
-      `inline-flex items-center justify-center rounded-md border transition disabled:opacity-50 disabled:cursor-not-allowed ${
-        tableSize === "Half" ? "h-7 w-7 text-[10px]" : "h-8 w-8 text-xs"
-      } ${extra}`;
-
-    const pageStart = totalItems === 0 ? 0 : (safePage - 1) * safeRowsPerPage + 1;
-    const pageEnd = effectivePagination ? Math.min(safePage * safeRowsPerPage, totalItems) : totalItems;
 
     return (
       <div
@@ -1273,7 +1186,7 @@ const SearchGlobalReportTable = forwardRef(
               )}
 
             {isMobileView ? (
-              <div className="w-full grid grid-cols-4 gap-2">
+              <div className="w-full grid grid-cols-3 gap-2">
                 <div className="relative" data-sgrt-export>
                   <button
                     onClick={() =>
@@ -1342,25 +1255,6 @@ const SearchGlobalReportTable = forwardRef(
                     Columns
                   </button>
                 </div>
-
-                {allowPaginationToggle && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAllRows((prev) => !prev);
-                      setPaginationEnabled(true);
-                      setCurrentPage(1);
-                    }}
-                    className={`w-full h-9 px-2 text-[10px] font-medium rounded-md border transition flex items-center justify-center ${
-                      showAllRows
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                    }`}
-                    title={showAllRows ? "Use Paged Rows" : "Show All Rows"}
-                  >
-                    All
-                  </button>
-                )}
 
                 <div className="flex rounded-md overflow-hidden border border-gray-300 bg-white min-w-0">
                   <button
@@ -1431,43 +1325,6 @@ const SearchGlobalReportTable = forwardRef(
                       </span>
                     </div>
                   </label>
-                )}
-
-                {allowPaginationToggle && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPaginationEnabled((prev) => !prev);
-                        setShowAllRows(false);
-                        setCurrentPage(1);
-                      }}
-                      className={getIconBtnClass(
-                        paginationEnabled
-                          ? "bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200"
-                          : "text-gray-600 hover:bg-gray-50 border-gray-300 bg-white"
-                      )}
-                      title={paginationEnabled ? "Hide Pagination" : "Show Pagination"}
-                    >
-                      <FontAwesomeIcon icon={paginationEnabled ? faCompress : faExpand} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowAllRows((prev) => !prev);
-                        setPaginationEnabled(true);
-                        setCurrentPage(1);
-                      }}
-                      className={getIconBtnClass(
-                        showAllRows
-                          ? "bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200"
-                          : "text-gray-600 hover:bg-gray-50 border-gray-300 bg-white"
-                      )}
-                      title={showAllRows ? "Use Paged Rows" : "Show All Rows"}
-                    >
-                      All
-                    </button>
-                  </>
                 )}
 
                 {onRefresh && (
@@ -1688,12 +1545,7 @@ const SearchGlobalReportTable = forwardRef(
           </div>
         )}
 
-        <div
-          className={`global-tran-table-main-sub-div-ui flex flex-col flex-1 relative bg-gray-50 border border-gray-200 rounded-sm ${
-            resolvedTableHeight ? "" : "min-h-[300px] max-h-[800px]"
-          }`}
-          style={tableHeightStyle}
-        >
+        <div className="global-tran-table-main-sub-div-ui flex flex-col flex-1 relative bg-gray-50 border border-gray-200 rounded-sm h-50 max-h-[600px]">
           {!areColumnsReady ? (
             <TableLoader message="Loading columns..." spinner />
           ) : isLoading ? (
@@ -2216,30 +2068,27 @@ const SearchGlobalReportTable = forwardRef(
           )}
         </div>
 
-        {paginationEnabled && (
+        {pagination && (
           <div className="p-2 bg-white border-t flex flex-col sm:flex-row items-center justify-between gap-2 shrink-0">
             <div className="text-[11px] text-gray-500">
               Showing{" "}
-              <span className="font-bold text-gray-800">{pageStart}</span>
+              <span className="font-bold text-gray-800">
+                {(safePage - 1) * rowsPerPage + 1}
+              </span>
               –
-              <span className="font-bold text-gray-800">{pageEnd}</span>{" "}
+              <span className="font-bold text-gray-800">
+                {Math.min(safePage * rowsPerPage, totalItems)}
+              </span>{" "}
               of <span className="font-bold text-gray-800">{totalItems}</span>{" "}
               items
-              {showAllRows && <span className="ml-1 text-blue-600 font-semibold">(All rows)</span>}
             </div>
 
             <div className="flex items-center gap-2 flex-wrap justify-center">
               <select
-                value={showAllRows ? "all" : safeRowsPerPage}
+                value={rowsPerPage === totalItems ? "all" : rowsPerPage}
                 onChange={(e) => {
                   const val = e.target.value;
-                  if (val === "all") {
-                    setShowAllRows(true);
-                    setPaginationEnabled(true);
-                  } else {
-                    setShowAllRows(false);
-                    setRowsPerPage(Number(val));
-                  }
+                  setRowsPerPage(val === "all" ? totalItems : Number(val));
                   setCurrentPage(1);
                 }}
                 className="h-8 border rounded text-[11px] px-2 outline-none"
@@ -2254,29 +2103,17 @@ const SearchGlobalReportTable = forwardRef(
 
               <div className="flex items-center gap-1">
                 <button
-                  type="button"
-                  onClick={() => {
-                    setPaginationEnabled(false);
-                    setShowAllRows(false);
-                    setCurrentPage(1);
-                  }}
-                  className="h-8 px-3 bg-white border rounded text-[11px] hover:bg-gray-50 transition"
-                  title="Hide pagination footer"
-                >
-                  Hide
-                </button>
-                <button
-                  disabled={showAllRows || safePage === 1}
+                  disabled={safePage === 1}
                   onClick={() => setCurrentPage((p) => p - 1)}
                   className="h-8 px-4 bg-gray-50 border rounded text-[11px] hover:bg-blue-50 transition disabled:opacity-40"
                 >
                   Prev
                 </button>
                 <span className="text-[11px] px-3 font-medium">
-                  {showAllRows ? "All Rows" : `Page ${safePage} of ${totalPages}`}
+                  Page {safePage} of {totalPages}
                 </span>
                 <button
-                  disabled={showAllRows || safePage >= totalPages}
+                  disabled={safePage >= totalPages}
                   onClick={() => setCurrentPage((p) => p + 1)}
                   className="h-8 px-4 bg-gray-50 border rounded text-[11px] hover:bg-blue-50 transition disabled:opacity-40"
                 >
