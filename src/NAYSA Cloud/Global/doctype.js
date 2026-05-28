@@ -22,6 +22,7 @@ export const docTypes = {
   FGAJ:"FGAJ",
   MSST:"MSST",
   MSRTV:"MSRTV",
+  FGRTV:"FGRTV",
   PR:"PR",
   JO:"JO",  
 
@@ -58,6 +59,7 @@ export const docTypeNames = {
     MSAJ: "MS Inventory Adjustment Transaction",
     FGAJ: "FG Inventory Adjustment Transaction",
     MSRTV: "MS Inventory Return to Vendor Transaction",
+    FGRTV: "FG Inventory Return to Vendor Transaction",
   };
 
 

@@ -857,13 +857,20 @@ function FGStockCardQuery() {
     []
   );
 
+
   const stockCardColumns = useMemo(
-    () => [
+    () => {
+      const costingMode = String(inventorySetup || "FIFO").toUpperCase();
+      const isWacCosting = costingMode === "WAC";
+
+      return [
       { key: "cutoff", header: "Cut-Off", size: 100 },
       { key: "docType", header: "Type", size: 90 },
       { key: "docNo", header: "Doc No", size: 110, cellClassName: "font-mono text-xs" },
       { key: "docDate", header: "Doc Date", size: 110, type: "date" },
-      { key: "rrNo", header: "RR No", size: 130, cellClassName: "font-mono text-xs" },
+      ...(!isWacCosting
+        ? [{ key: "rrNo", header: "RR No", size: 130, cellClassName: "font-mono text-xs" }]
+        : []),
       { key: "particular", header: "Particular", size: 260 },
       { key: "itemNo", header: "Item No", size: 120 },
       { key: "itemDescription", header: "Item Desc", size: 120 },
@@ -871,14 +878,20 @@ function FGStockCardQuery() {
       { key: "location", header: "Location", size: 120 },
       { key: "qtyIn", header: "Qty In", size: 110, cellClassName: "text-right text-emerald-700 font-semibold", type: "amount", decimals: 4 },
       { key: "qtyOut", header: "Qty Out", size: 110, cellClassName: "text-right text-rose-600 font-semibold", type: "amount", decimals: 4 },
+      { key: "balance", header: "Balance", size: 110, cellClassName: "text-right font-bold", type: "amount", decimals: 4 },
       { key: "runBal", header: "Run Bal", size: 110, cellClassName: "text-right font-bold", type: "amount", decimals: 4 },
       { key: "unitCost", header: "Unit Cost", size: 120, cellClassName: "text-right", type: "amount", decimals: 6 },
       { key: "amount", header: "Amount", size: 130, cellClassName: "text-right font-semibold", type: "amount", decimals: 2 },
+      ...(isWacCosting
+        ? [{ key: "wac", header: "WAC", size: 120, cellClassName: "text-right", type: "amount", decimals: 6 }]
+        : []),
+      { key: "stockVal", header: "Stock Value", size: 130, cellClassName: "text-right font-semibold", type: "amount", decimals: 2 },
       { key: "postedBy", header: "Posted By", size: 140 },
       { key: "dateStamp", header: "Date Stamp", size: 120, type: "date" },
       { key: "timeStamp", header: "Time Stamp", size: 110 },
-    ],
-    []
+    ];
+    },
+    [inventorySetup]
   );
 
   const stockStatusColumnsMap = useMemo(
