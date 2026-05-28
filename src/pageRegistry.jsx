@@ -89,6 +89,7 @@ export const pageRegistry = {
   AuditTrail: lazyPage(() => import("./NAYSA Cloud/Query/AuditTrail/AuditTail.jsx")),
   SecurityAuditTrail: lazyPage(() => import("./NAYSA Cloud/Query/AuditTrail/SecurityAuditTrail.jsx")),
   MSINQ: lazyPage(() => import("./NAYSA Cloud/Query/INVInq/MSStockCard.jsx")),
+  FGINQ: lazyPage(() => import("./NAYSA Cloud/Query/INVInq/FGStockCard.jsx")),
 
   // Global Reference
   Company: lazyPage(() => import("./NAYSA Cloud/Reference File/Company.jsx")),

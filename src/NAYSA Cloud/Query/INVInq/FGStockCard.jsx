@@ -389,7 +389,7 @@ function TablePanel({ title, badge, children, toolbar }) {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-function MSStockCardQuery() {
+function FGStockCardQuery() {
   const { companyInfo, currentUserRow, user } = useAuth();
   const defaultBranchCode =
     currentUserRow?.branchCode ||
@@ -407,7 +407,7 @@ function MSStockCardQuery() {
     "";
   const defaultReferenceDate = useGetCurrentDayV2();
   const defaultReportType = companyInfo?.stockStatusReportType || companyInfo?.reportType || "Daily";
-  const defaultInventorySetup = companyInfo?.msinvCosting || "";
+  const defaultInventorySetup = companyInfo?.fginvCosting || "";
 
   const defaultBalanceFilters = useMemo(
     () => ({
@@ -656,9 +656,9 @@ function MSStockCardQuery() {
   }, [inventorySetup]);
 
   const setupQuery = useQuery({
-    queryKey: ["ms-stock-card-setup", defaultInventorySetup],
+    queryKey: ["fg-stock-card-setup", defaultInventorySetup],
     queryFn: async () => {
-      const response = await apiClient.get("/ms/inventory/stock-card/setup");
+      const response = await apiClient.get("/fg/inventory/stock-card/setup");
       return response?.data?.data || { inventorySetup: defaultInventorySetup };
     },
     staleTime: Infinity,
@@ -672,8 +672,8 @@ function MSStockCardQuery() {
 
   const balanceEndpoint =
     inventorySetup === "FIFO"
-      ? "/ms/inventory/stock-card/fifo-balance"
-      : "/ms/inventory/stock-card/location-balance";
+      ? "/fg/inventory/stock-card/fifo-balance"
+      : "/fg/inventory/stock-card/location-balance";
 
   const balanceRequestParams = useMemo(
     () => ({
@@ -711,7 +711,7 @@ function MSStockCardQuery() {
   );
 
   const balanceQuery = useQuery({
-    queryKey: ["ms-stock-card-balance", inventorySetup, shouldLoadBalance, balanceFilters],
+    queryKey: ["fg", inventorySetup, shouldLoadBalance, balanceFilters],
     enabled: shouldLoadBalance > 0,
     queryFn: async () => {
       const response = await apiClient.get(balanceEndpoint, { params: balanceRequestParams });
@@ -720,10 +720,10 @@ function MSStockCardQuery() {
   });
 
   const stockCardQuery = useQuery({
-    queryKey: ["ms-stock-card-movement", shouldLoadStockCard, stockCardFilters],
+    queryKey: ["fg-stock-card-movement", shouldLoadStockCard, stockCardFilters],
     enabled: shouldLoadStockCard > 0,
     queryFn: async () => {
-      const response = await apiClient.get("/ms/inventory/stock-card/stock-card", {
+      const response = await apiClient.get("/fg/inventory/stock-card/stock-card", {
         params: stockCardRequestParams,
       });
       return response?.data?.data || { rows: [], totals: {} };
@@ -731,10 +731,10 @@ function MSStockCardQuery() {
   });
 
   const stockStatusQuery = useQuery({
-    queryKey: ["ms-stock-status", shouldLoadStockStatus],
+    queryKey: ["fg-stock-status", shouldLoadStockStatus],
     enabled: shouldLoadStockStatus > 0,
     queryFn: async () => {
-      const response = await apiClient.get("/ms/inventory/stock-card/stock-status", {
+      const response = await apiClient.get("/fg/inventory/stock-card/stock-status", {
         params: stockStatusRequestParams,
       });
       return response?.data?.data || { summary: [], perItem: [], perLot: [] };
@@ -1075,15 +1075,6 @@ function MSStockCardQuery() {
               }))
             }
           />
-          {/* <FieldRenderer
-            type="text"
-            label="Reference Date"
-            name="refDate"
-            value={balanceFilters.refDate}
-            onChange={(value) => setBalanceFilters((prev) => ({ ...prev, refDate: value }))}
-          /> */}
-
-
 
         </FilterPanel>
 
@@ -1402,7 +1393,7 @@ function MSStockCardQuery() {
             />
 
             <CalendarField
-              id="msStockStatusStartDate"
+              id="fgStockStatusStartDate"
               label="Start Date"
               name="startDate"
               value={stockStatusFilters.startDate}
@@ -1415,14 +1406,14 @@ function MSStockCardQuery() {
               }
             />
             <CalendarField
-              id="msStockStatusEndDate"
+              id="fgStockStatusEndDate"
               label="End Date"
               name="endDate"
               value={stockStatusFilters.endDate}
               disabled
               updateState={(patch) => setStockStatusFilters((prev) => ({ ...prev, ...patch }))}
             />
-            
+
           </div>
           
 
@@ -1548,7 +1539,7 @@ function MSStockCardQuery() {
           <div className="w-full lg:w-auto">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
               <h1 className="global-ref-headertext-ui w-full sm:w-auto truncate text-center sm:text-left">
-                MS Stock Card Inquiry
+                FG Stock Card Inquiry
               </h1>
             </div>
             <p className="mt-0 ml-2 text-center text-xs font-medium text-slate-500 dark:text-slate-400 sm:text-left">
@@ -1613,11 +1604,11 @@ function MSStockCardQuery() {
       {lookupState.type === "item" && (
         <ItemMastLookupModal
           isOpen
-          endpoint="getInvLookupMS"
+          endpoint="getInvLookupFG"
           onClose={handleItemLookupClose}
           onCancel={closeLookup}
           enableMultiSelect={false}
-          docType="PRMS"
+          docType="PRFG"
         />
       )}
 
@@ -1650,4 +1641,4 @@ function MSStockCardQuery() {
   );
 }
 
-export default MSStockCardQuery;
+export default FGStockCardQuery;
