@@ -31,12 +31,27 @@ const Card = ({ children, className = "" }) => (
   </div>
 );
 
-const MSMast_ReferenceCodeTab = forwardRef(({ onStateChange }, ref) => {
+const MSMast_ReferenceCodeTab = forwardRef(({
+  onStateChange,
+  isReadOnly = false,
+  canAdd = true,
+  canEdit = true,
+  canSave = true,
+  canDelete = true,
+}, ref) => {
   const categoryRef = useRef(null);
   const classRef = useRef(null);
   const subclassRef = useRef(null);
   const uomRef = useRef(null);
   const suppRef = useRef(null);
+
+  const permissionProps = {
+    isReadOnly,
+    canAdd,
+    canEdit,
+    canSave,
+    canDelete,
+  };
 
   const [collapseNav, setCollapseNav] = useState(false);
 
@@ -105,11 +120,11 @@ const MSMast_ReferenceCodeTab = forwardRef(({ onStateChange }, ref) => {
 
   const renderRight = () => {
     switch (activeRefTab) {
-      case "category":       return <CategoryCodes ref={categoryRef} onStateChange={childStateChange} />;
-      case "classification": return <ClassificationCodes ref={classRef} onStateChange={childStateChange} />;
-      case "subclass":       return <SubclassCodes ref={subclassRef} onStateChange={childStateChange} />;
-      case "uom":            return <UOMCodes ref={uomRef} onStateChange={childStateChange} />;
-      case "supplementary":  return <SupplementaryCodes ref={suppRef} onStateChange={childStateChange} />;
+      case "category":       return <CategoryCodes ref={categoryRef} onStateChange={childStateChange} {...permissionProps} />;
+      case "classification": return <ClassificationCodes ref={classRef} onStateChange={childStateChange} {...permissionProps} />;
+      case "subclass":       return <SubclassCodes ref={subclassRef} onStateChange={childStateChange} {...permissionProps} />;
+      case "uom":            return <UOMCodes ref={uomRef} onStateChange={childStateChange} {...permissionProps} />;
+      case "supplementary":  return <SupplementaryCodes ref={suppRef} onStateChange={childStateChange} {...permissionProps} />;
       default: return null;
     }
   };

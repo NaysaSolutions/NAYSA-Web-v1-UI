@@ -1,7 +1,7 @@
 // src/NAYSA Cloud/Reference File/CustMast.jsx
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
-import { usePagePermission } from "@/NAYSA Cloud/Global/usePagePermission";
+import { usePagePermission } from "@/NAYSA Cloud/Global/usePagePermission.js";
 import Swal from "sweetalert2";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -40,6 +40,7 @@ import {
 import CustSetupTab from "./CustSetupTab";
 import CustMasterDataTab from "@/NAYSA Cloud/Master Data/CustMasterDataTab.jsx";
 import ReferenceCodesTab from "@/NAYSA Cloud/Master Data/CustMastTabs/ReferenceCodesTab";
+import PermissionBadge from "@/NAYSA Cloud/Global/PermissionBadge.jsx";
 
 const normalizeSlType = (v) => {
     const s = String(v ?? "").toUpperCase().trim();
@@ -139,18 +140,18 @@ const CustMast = () => {
     const [isOpenGuide, setOpenGuide] = useState(false);
 
     const {
-        pagePermission,
-        isReadOnly,
-        isFullAccess,
-        canAdd,
-        canEdit,
-        canSave,
-        canDelete,
-    } = usePagePermission({
-        componentKey: "CustMast",
-        debug: true, // change to false after testing
-    });
-
+            pagePermission,
+            isReadOnly,
+            isFullAccess,
+            canAdd,
+            canEdit,
+            canSave,
+            canDelete,
+        } = usePagePermission({
+            componentKey: "CustMast",
+            debug: true, // change to false after testing
+        });
+    
 
     // --- DUPLICATE NAME LOGIC ---
     const allowedDuplicateCustNameRef = useRef("");
@@ -320,6 +321,11 @@ const CustMast = () => {
     };
 
     const handleOpenAttach = async () => {
+        if (!isFullAccess) {
+            await useSwalErrorAlert("Read Only", "You only have read access. Attaching files is not allowed.");
+            return;
+        }
+
         const code = String(form?.custCode || "").trim();
         if (!code) {
             await useSwalValidationAlert({
@@ -448,7 +454,7 @@ const CustMast = () => {
 
     const deleteCustomer = async () => {
         if (!canDelete) {
-            await useSwalErrorAlert("Read Only", "You only have read access. Deleting a customer is not allowed.");
+            await useSwalErrorAlert("Read Only", "You only have read access. Deleting customers is not allowed.");
             return;
         }
 
@@ -508,7 +514,7 @@ const CustMast = () => {
 
     const upsertCustomer = async () => {
         if (!canSave) {
-            await useSwalErrorAlert("Read Only", "You only have read access. Saving customer changes is not allowed.");
+            await useSwalErrorAlert("Read Only", "You only have read access. Saving customers is not allowed.");
             return;
         }
 
@@ -648,7 +654,7 @@ const CustMast = () => {
 
     const handleAdd = async () => {
         if (!canAdd) {
-            await useSwalErrorAlert("Read Only", "You only have read access. Adding a customer is not allowed.");
+            await useSwalErrorAlert("Read Only", "You only have read access. Adding customers is not allowed.");
             return;
         }
 
@@ -667,7 +673,7 @@ const CustMast = () => {
 
     const handleEdit = async () => {
         if (!canEdit) {
-            await useSwalErrorAlert("Read Only", "You only have read access. Editing a customer is not allowed.");
+            await useSwalErrorAlert("Read Only", "You only have read access. Editing customers is not allowed.");
             return;
         }
 
@@ -700,8 +706,8 @@ const CustMast = () => {
         const code = String(row?.custCode || row?.code || "").trim();
         if (!code) return;
         setActiveTab("setup");
-        setIsEditing(false);
         await fetchCustomerByCode(code);
+        setIsEditing(canEdit);
     };
 
     const headerButtons = useMemo(() => {
@@ -737,7 +743,7 @@ const CustMast = () => {
                     label: <span className="hidden sm:inline ml-1">Reset</span>,
                     icon: faUndo,
                     onClick: handleResetSetup,
-                    disabled: isLoading,
+                    disabled: false,
                     className: resetBtn,
                 },
                 {
@@ -753,8 +759,8 @@ const CustMast = () => {
                     label: <span className="hidden sm:inline ml-1">Attach File</span>,
                     icon: faPaperclip,
                     onClick: handleOpenAttach,
-                    disabled: isLoading || !hasRecord,
-                    className: isLoading || !hasRecord ? disabledPrimaryBtn : primaryBtn,
+                    disabled: isLoading || !hasRecord || !isFullAccess,
+                    className: isLoading || !hasRecord || !isFullAccess ? disabledPrimaryBtn : primaryBtn,
                 },
                 {
                     key: "delete",
@@ -802,14 +808,15 @@ const CustMast = () => {
                     label: <span className="hidden sm:inline ml-1">Reset</span>,
                     icon: faUndo,
                     onClick: () => referenceCodesRef.current?.reset?.(),
-                    disabled: isLoading,
+                    disabled: false,
                     className: resetBtn,
                 },
             ];
         }
 
         return [];
-    }, [activeTab, isLoading, isEditing, form, refTabState, canAdd, canEdit, canSave, canDelete]);
+    }, [activeTab, isLoading, isEditing, form, refTabState, canAdd, canEdit, canSave, canDelete, isFullAccess]);
+
     return (
         <div className="global-ref-main-div-ui">
             <div className="global-ref-header-ui">
@@ -817,22 +824,18 @@ const CustMast = () => {
                     {/* LEFT: title + tabs grouped together */}
                     <div className="flex flex-col lg:flex-row items-center lg:items-center gap-2 lg:gap-4 w-full lg:w-auto">
                         <div className="flex-shrink-0 text-center lg:text-left">
-                            <h1 className="global-ref-headertext-ui truncate flex items-center gap-2">
-                                <span>
-                                    {activeTab === "setup" && "Customer Master Data"}
-                                    {activeTab === "master" && "Customer Master Data"}
-                                    {activeTab === "ref" && "Customer Master Data"}
-                                </span>
-                                <span
-                                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${isReadOnly
-                                            ? "bg-amber-100 text-amber-700"
-                                            : "bg-green-100 text-green-700"
-                                        }`}
-                                >
-                                    {isReadOnly ? "READ ONLY" : "FULL ACCESS"}
-                                </span>
+                            <h1 className="global-ref-headertext-ui truncate">
+                                {activeTab === "setup" && "Customer Master Data"}
+                                {activeTab === "master" && "Customer Master Data"}
+                                {activeTab === "ref" && "Customer Master Data"}
                             </h1>
                         </div>
+
+                        <PermissionBadge
+                            permission={pagePermission}
+                            isReadOnly={isReadOnly}
+                            isFullAccess={isFullAccess}
+                        />
 
                         <div className="overflow-x-auto no-scrollbar">
                             <div className="flex flex-nowrap border-b border-blue-300 dark:border-gray-700">
@@ -884,6 +887,8 @@ const CustMast = () => {
                                 )}
                             </div>
                         )}
+
+                        
                     </div>
                 </div>
             </div>

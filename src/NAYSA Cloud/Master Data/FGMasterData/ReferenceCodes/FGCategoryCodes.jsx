@@ -83,11 +83,25 @@ const DEFAULT_FORM = {
 
 /* ================= COMPONENT ================= */
 
-const FGCategoryCodes = forwardRef(({ onStateChange }, ref) => {
+const FGCategoryCodes = forwardRef(({
+  onStateChange,
+  isReadOnly = false,
+  canAdd = true,
+  canEdit = true,
+  canSave = true,
+  canDelete = true,
+}, ref) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const userCode = user?.USER_CODE || user?.userCode || user?.code || "ADMIN";
+
+  const showReadOnlyAlert = useCallback(async (action = "perform this action") => {
+    await useSwalErrorAlert(
+      "Read Only",
+      `You are not allowed to ${action}.`
+    );
+  }, []);
 
   const codeInputRef = useRef(null);
   const enterValidatedRef = useRef(false);
@@ -223,7 +237,12 @@ const FGCategoryCodes = forwardRef(({ onStateChange }, ref) => {
     },
   });
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
+    if (isReadOnly || !canSave) {
+      await showReadOnlyAlert("save FG category codes");
+      return;
+    }
+
     if (!isEditing || saveMutation.isPending) return;
 
     const payload = {
@@ -245,7 +264,7 @@ const FGCategoryCodes = forwardRef(({ onStateChange }, ref) => {
     };
 
     saveMutation.mutate(payload);
-  }, [form, isEditing, saveMutation, userCode]);
+  }, [form, isEditing, saveMutation, userCode, isReadOnly, canSave, showReadOnlyAlert]);
 
   /* ================= DELETE ================= */
 
@@ -290,6 +309,11 @@ const FGCategoryCodes = forwardRef(({ onStateChange }, ref) => {
 
   const handleDelete = useCallback(
     async (row) => {
+      if (isReadOnly || !canDelete) {
+        await showReadOnlyAlert("delete FG category codes");
+        return;
+      }
+
       const code = row?.code || row?.categoryCode;
       if (!code) return;
 
@@ -301,12 +325,58 @@ const FGCategoryCodes = forwardRef(({ onStateChange }, ref) => {
 
       deleteMutation.mutate(code);
     },
-    [deleteMutation]
+    [deleteMutation, isReadOnly, canDelete, showReadOnlyAlert]
   );
 
-  /* ================= EDIT ================= */
+  /* ================= EDIT / RETRIEVE ================= */
+
+  const mapRowToForm = (row = {}) => ({
+        code:           row.code           || row.categoryCode    || "",
+        description:    row.description    || row.categoryDesc    || "",
+        uCostFlag:      row.uCostFlag      || row.u_cost_flag     || "N",
+        invAcct:        row.invAcct        || row.inv_acct        || "",
+        invAcctName:    row.invAcctName    || row.inv_acct_name   || "",
+        arAcct:         row.arAcct         || row.ar_acct         || "",
+        arAcctName:     row.arAcctName     || row.ar_acct_name    || "",
+        salesAcct:      row.salesAcct      || row.sales_acct      || "",
+        salesAcctName:  row.salesAcctName  || row.sales_acct_name || "",
+        sdiscAcct:      row.sdiscAcct      || row.sdisc_acct      || "",
+        sdiscAcctName:  row.sdiscAcctName  || row.sdisc_acct_name || "",
+        wipAcct:        row.wipAcct        || row.wip_acct        || "",
+        wipAcctName:    row.wipAcctName    || row.wip_acct_name   || "",
+        rrAcct:         row.rrAcct         || row.rr_acct         || "",
+        rrAcctName:     row.rrAcctName     || row.rr_acct_name    || "",
+        sretAcct:       row.sretAcct       || row.sret_acct       || "",
+        sretAcctName:   row.sretAcctName   || row.sret_acct_name  || "",
+        cosAcct:        row.cosAcct        || row.cos_acct        || "",
+        cosAcctName:    row.cosAcctName    || row.cos_acct_name   || "",
+        expAcct:        row.expAcct        || row.exp_acct        || "",
+        expAcctName:    row.expAcctName    || row.exp_acct_name   || "",
+        rcCode:         row.rcCode         || row.rc_code         || "",
+        rcName:         row.rcName         || row.rc_name         || "",
+        registeredBy:     row.registeredBy     || row.registered_by     || "",
+        registeredDate:   row.registeredDate   || row.registered_date   || "",
+        lastUpdatedBy:    row.lastUpdatedBy    || row.last_updated_by   || row.updatedBy    || row.updated_by    || "",
+        lastUpdatedDate:  row.lastUpdatedDate  || row.last_updated_date || row.updatedDate  || row.updated_date  || "",
+      });
+
+  const handleRetrieve = async (row) => {
+    try {
+      const normalizedRecord = mapRowToForm(row);
+      setForm({ ...DEFAULT_FORM, ...normalizedRecord, __existing: true });
+      setIsEditing(false);
+      setSelectedRow(row);
+    } catch {
+      Swal.fire("Error", "Could not load record.", "error");
+    }
+  };
 
   const handleEdit = async (row) => {
+    if (isReadOnly || !canEdit) {
+      await handleRetrieve(row);
+      return;
+    }
+
     try {
       const normalizedRecord = {
         code:           row.code           || row.categoryCode    || "",
@@ -346,6 +416,14 @@ const FGCategoryCodes = forwardRef(({ onStateChange }, ref) => {
     }
   };
 
+  const handleRowDoubleClick = async (row) => {
+    if (canEdit && !isReadOnly) {
+      await handleEdit(row);
+    } else {
+      await handleRetrieve(row);
+    }
+  };
+
   /* ================= COMBINED LOADING STATE ================= */
 
   const isLoading = isInitialLoading || saveMutation.isPending || deleteMutation.isPending;
@@ -363,14 +441,26 @@ const FGCategoryCodes = forwardRef(({ onStateChange }, ref) => {
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); handleEdit(row); }}
-              className="p-1 rounded-md bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-600 hover:text-white transition-colors"
+              disabled={isReadOnly || !canEdit}
+              className={`p-1 rounded-md border transition-colors ${
+                isReadOnly || !canEdit
+                  ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60"
+                  : "bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-600 hover:text-white"
+              }`}
+              title={isReadOnly || !canEdit ? "Read only" : "Edit"}
             >
               <Edit size={16} />
             </button>
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); handleDelete(row); }}
-              className="p-1 rounded-md bg-red-50 text-red-600 border border-red-200 hover:bg-red-600 hover:text-white transition-colors"
+              disabled={isReadOnly || !canDelete}
+              className={`p-1 rounded-md border transition-colors ${
+                isReadOnly || !canDelete
+                  ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60"
+                  : "bg-red-50 text-red-600 border-red-200 hover:bg-red-600 hover:text-white"
+              }`}
+              title={isReadOnly || !canDelete ? "Read only" : "Delete"}
             >
               <Trash2 size={16} />
             </button>
@@ -397,7 +487,7 @@ const FGCategoryCodes = forwardRef(({ onStateChange }, ref) => {
         render: (row) => (row.uCostFlag === "Y" ? "Y" : "N"),
       },
     ],
-    [handleEdit, handleDelete]
+    [handleEdit, handleDelete, isReadOnly, canEdit, canDelete]
   );
 
   const tableData = useMemo(() => {
@@ -438,15 +528,20 @@ const FGCategoryCodes = forwardRef(({ onStateChange }, ref) => {
     if (onStateChange) {
       onStateChange({
         isEditing,
-        canSave: isEditing && !isDupCode && !saveMutation.isPending,
+        canSave: !isReadOnly && canSave && isEditing && !isDupCode && !saveMutation.isPending,
       });
     }
-  }, [isEditing, isDupCode, saveMutation.isPending, onStateChange]);
+  }, [isEditing, isDupCode, saveMutation.isPending, onStateChange, isReadOnly, canSave]);
 
   /* ================= EXPOSE METHODS TO PARENT REF ================= */
 
   useImperativeHandle(ref, () => ({
-    add: () => {
+    add: async () => {
+      if (isReadOnly || !canAdd) {
+        await showReadOnlyAlert("add FG category codes");
+        return;
+      }
+
       setIsEditing(true);
       setSelectedRow(null);
       setIsDupCode(false);
@@ -502,7 +597,7 @@ const FGCategoryCodes = forwardRef(({ onStateChange }, ref) => {
               value={form.description}
               maxLength={150}
               onChange={(v) => setField("description", v ?? "")}
-              disabled={!isEditing}
+              disabled={!isEditing || isReadOnly}
             />
 
             <FieldRenderer
@@ -515,7 +610,7 @@ const FGCategoryCodes = forwardRef(({ onStateChange }, ref) => {
                 { value: "Y", label: "Yes" },
                 { value: "N", label: "No" },
               ]}
-              disabled={!isEditing}
+              disabled={!isEditing || isReadOnly}
             />
           </div>
         </Card>
@@ -530,22 +625,22 @@ const FGCategoryCodes = forwardRef(({ onStateChange }, ref) => {
               {/* Inventory Account */}
               <FieldRenderer label="Inventory Acct" type="lookup" required labelClassName="text-xs"
                 value={form.invAcct ? `${form.invAcct}${form.invAcctName ? ` — ${form.invAcctName}` : ""}` : ""}
-                onLookup={() => openCoaLookup("inv")} onChange={(v) => setField("invAcct", v ?? "")} disabled={!isEditing} />
+                onLookup={() => openCoaLookup("inv")} onChange={(v) => setField("invAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
 
               {/* AR Account */}
               <FieldRenderer label="AR Account" type="lookup" required labelClassName="text-xs"
                 value={form.arAcct ? `${form.arAcct}${form.arAcctName ? ` — ${form.arAcctName}` : ""}` : ""}
-                onLookup={() => openCoaLookup("ar")} onChange={(v) => setField("arAcct", v ?? "")} disabled={!isEditing} />
+                onLookup={() => openCoaLookup("ar")} onChange={(v) => setField("arAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
 
               {/* Sales Account */}
               <FieldRenderer label="Sales Account" type="lookup" required labelClassName="text-xs"
                 value={form.salesAcct ? `${form.salesAcct}${form.salesAcctName ? ` — ${form.salesAcctName}` : ""}` : ""}
-                onLookup={() => openCoaLookup("sales")} onChange={(v) => setField("salesAcct", v ?? "")} disabled={!isEditing} />
+                onLookup={() => openCoaLookup("sales")} onChange={(v) => setField("salesAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
 
               {/* SDiscount Account */}
               <FieldRenderer label="SDiscount Acct" type="lookup" required labelClassName="text-xs"
                 value={form.sdiscAcct ? `${form.sdiscAcct}${form.sdiscAcctName ? ` — ${form.sdiscAcctName}` : ""}` : ""}
-                onLookup={() => openCoaLookup("sdisc")} onChange={(v) => setField("sdiscAcct", v ?? "")} disabled={!isEditing} />
+                onLookup={() => openCoaLookup("sdisc")} onChange={(v) => setField("sdiscAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
             </div>
 
             {/* ── Column 2 (4 fields) ── */}
@@ -553,22 +648,22 @@ const FGCategoryCodes = forwardRef(({ onStateChange }, ref) => {
               {/* WIP Account */}
               <FieldRenderer label="WIP Account" type="lookup" required labelClassName="text-xs"
                 value={form.wipAcct ? `${form.wipAcct}${form.wipAcctName ? ` — ${form.wipAcctName}` : ""}` : ""}
-                onLookup={() => openCoaLookup("wip")} onChange={(v) => setField("wipAcct", v ?? "")} disabled={!isEditing} />
+                onLookup={() => openCoaLookup("wip")} onChange={(v) => setField("wipAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
 
               {/* RR Account */}
               <FieldRenderer label="RR Account" type="lookup" required labelClassName="text-xs"
                 value={form.rrAcct ? `${form.rrAcct}${form.rrAcctName ? ` — ${form.rrAcctName}` : ""}` : ""}
-                onLookup={() => openCoaLookup("rr")} onChange={(v) => setField("rrAcct", v ?? "")} disabled={!isEditing} />
+                onLookup={() => openCoaLookup("rr")} onChange={(v) => setField("rrAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
 
               {/* SRet Account */}
               <FieldRenderer label="SRet Account" type="lookup" required labelClassName="text-xs"
                 value={form.sretAcct ? `${form.sretAcct}${form.sretAcctName ? ` — ${form.sretAcctName}` : ""}` : ""}
-                onLookup={() => openCoaLookup("sret")} onChange={(v) => setField("sretAcct", v ?? "")} disabled={!isEditing} />
+                onLookup={() => openCoaLookup("sret")} onChange={(v) => setField("sretAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
 
               {/* COS Account */}
               <FieldRenderer label="COS Account" type="lookup" required labelClassName="text-xs"
                 value={form.cosAcct ? `${form.cosAcct}${form.cosAcctName ? ` — ${form.cosAcctName}` : ""}` : ""}
-                onLookup={() => openCoaLookup("cos")} onChange={(v) => setField("cosAcct", v ?? "")} disabled={!isEditing} />
+                onLookup={() => openCoaLookup("cos")} onChange={(v) => setField("cosAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
             </div>
 
             {/* ── Column 3 (3 fields) ── */}
@@ -576,12 +671,12 @@ const FGCategoryCodes = forwardRef(({ onStateChange }, ref) => {
               {/* Expense Account */}
               <FieldRenderer label="Expense Acct" type="lookup" required labelClassName="text-xs"
                 value={form.expAcct ? `${form.expAcct}${form.expAcctName ? ` — ${form.expAcctName}` : ""}` : ""}
-                onLookup={() => openCoaLookup("exp")} onChange={(v) => setField("expAcct", v ?? "")} disabled={!isEditing} />
+                onLookup={() => openCoaLookup("exp")} onChange={(v) => setField("expAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
 
               {/* RC Code */}
               <FieldRenderer label="RC Code" type="lookup" required labelClassName="text-xs"
                 value={form.rcCode ? `${form.rcCode}${form.rcName ? ` — ${form.rcName}` : ""}` : ""}
-                onLookup={() => setIsRcOpen(true)} onChange={(v) => setField("rcCode", v ?? "")} disabled={!isEditing} />
+                onLookup={() => setIsRcOpen(true)} onChange={(v) => setField("rcCode", v ?? "")} disabled={!isEditing || isReadOnly} />
             </div>
 
           </div>
@@ -600,7 +695,7 @@ const FGCategoryCodes = forwardRef(({ onStateChange }, ref) => {
           isLoading={isInitialLoading}
           docType="FG Category Codes"
           itemsPerPage={50}
-          onRowDoubleClick={handleEdit}
+          onRowDoubleClick={handleRowDoubleClick}
           onRowClick={(row) => setSelectedRow(row)}
           showFilters
           autoFillGrid={true}

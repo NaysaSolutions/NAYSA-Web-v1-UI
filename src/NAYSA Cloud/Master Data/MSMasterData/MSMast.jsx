@@ -437,7 +437,8 @@ import {
 
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
-import { usePagePermission } from "@/NAYSA Cloud/Global/usePagePermission";
+import { usePagePermission } from "@/NAYSA Cloud/Global/usePagePermission.js";
+import PermissionBadge from "@/NAYSA Cloud/Global/PermissionBadge.jsx";
 import MSMast_SetupTab from "@/NAYSA Cloud/Master Data/MSMasterData/MSMast_Setuptab.jsx";
 import MSMast_DataTab from "@/NAYSA Cloud/Master Data/MSMasterData/MSMast_DataTab.jsx";
 import MSMast_ReferenceCodeTab from "@/NAYSA Cloud/Master Data/MSMasterData/MSMast_ReferenceCodeTab.jsx";
@@ -625,7 +626,7 @@ const MSMast = () => {
     };
 
     const deleteItem = async () => {
-        if (isReadOnly) {
+        if (!canDelete) {
             await useSwalErrorAlert("Read Only", "You are not allowed to delete records.");
             return;
         }
@@ -665,7 +666,7 @@ const MSMast = () => {
     };
 
     const upsertItem = async () => {
-        if (isReadOnly) {
+        if (!canSave) {
             await useSwalErrorAlert("Read Only", "You are not allowed to save changes.");
             return;
         }
@@ -738,7 +739,7 @@ const MSMast = () => {
     };
 
     const handleAdd = async () => {
-        if (isReadOnly) {
+        if (!canAdd) {
             await useSwalErrorAlert("Read Only", "You only have read access.");
             return;
         }
@@ -750,7 +751,7 @@ const MSMast = () => {
     };
 
     const handleEdit = async () => {
-        if (isReadOnly) {
+        if (!canEdit) {
             await useSwalErrorAlert("Read Only", "You are not allowed to edit records.");
             return;
         }
@@ -877,20 +878,13 @@ const MSMast = () => {
                         <div className="flex-shrink-0 text-center lg:text-left">
                             <h1 className="global-ref-headertext-ui truncate flex items-center gap-2">
                                 MS Master Data
-                                <span
-                                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                                        isReadOnly
-                                            ? "bg-amber-100 text-amber-700"
-                                            : "bg-green-100 text-green-700"
-                                    }`}
-                                >
-                                    {isReadOnly ? "READ ONLY" : "FULL ACCESS"}
-                                </span>
+                               
                             </h1>
                         </div>
 
                         <div className="overflow-x-auto no-scrollbar">
                             <div className="flex flex-nowrap border-b border-blue-300">
+                                 
                                 {tabs.map((tab) => (
                                     <button
                                         key={tab.id}
@@ -903,9 +897,15 @@ const MSMast = () => {
                             </div>
                         </div>
                     </div>
+                    
 
                     {/* RIGHT: buttons stay on the far right */}
                     <div className="flex-shrink-0 w-full lg:w-auto flex flex-wrap items-center justify-center lg:justify-end gap-1.5">
+                        <PermissionBadge
+                                    permission={pagePermission}
+                                    isReadOnly={isReadOnly}
+                                    isFullAccess={isFullAccess}
+                                />
                         {!!headerButtons.length && <ButtonBar buttons={headerButtons} />}
                     </div>
                 </div>
@@ -930,10 +930,9 @@ const MSMast = () => {
                         isLoading={isLoading}
                         onFilter={loadMasterList}
                         onReset={loadMasterList}
-                        onRowDoubleClick={(row) => {
-                            fetchItemByCode(row.itemCode);
+                        onRowDoubleClick={async (row) => {
+                            await fetchItemByCode(row.itemCode, canEdit);
                             setActiveTab("setup");
-                            setIsEditing(false);
                         }}
                     />
                 )}
@@ -943,6 +942,10 @@ const MSMast = () => {
                         onStateChange={setRefState}
                         variant="ms"
                         isReadOnly={isReadOnly}
+                        canAdd={canAdd}
+                        canEdit={canEdit}
+                        canSave={canSave}
+                        canDelete={canDelete}
                     />
                 )}
             </div>
