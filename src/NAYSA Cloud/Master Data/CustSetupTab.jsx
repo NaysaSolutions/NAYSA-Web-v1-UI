@@ -351,16 +351,7 @@ const CustSetupTab = forwardRef(
             </div>
           </Card>
 
-          <RegistrationInfo
-            layout="straight"
-            disabled
-            data={{
-              registeredBy: form?.registeredBy || "",
-              registeredDate: form?.registeredDate || "",
-              lastUpdatedBy: form?.updatedBy || "",
-              lastUpdatedDate: form?.updatedDate || "",
-            }}
-          />
+         
 
           {/* ── MIDDLE CARD: Collapsible Sidebar ── */}
           <Card className="border border-blue-500/30 rounded-lg overflow-hidden !focus-within:ring-0 !focus-within:shadow-none !focus-within:-translate-y-0">
@@ -813,6 +804,17 @@ const CustSetupTab = forwardRef(
               </div>{/* end content area */}
             </div>{/* end flex row */}
           </Card>
+
+           <RegistrationInfo
+            layout="straight"
+            disabled
+            data={{
+              registeredBy: form?.registeredBy || "",
+              registeredDate: form?.registeredDate || "",
+              lastUpdatedBy: form?.updatedBy || "",
+              lastUpdatedDate: form?.updatedDate || "",
+            }}
+          />
 
         </div>
 

@@ -82,11 +82,25 @@ const DEFAULT_FORM = {
   __existing: false,
 };
 
-const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
+const CategoryCodes = forwardRef(({
+  onStateChange,
+  isReadOnly = false,
+  canAdd = true,
+  canEdit = true,
+  canSave = true,
+  canDelete = true,
+}, ref) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const userCode = user?.USER_CODE || user?.userCode || user?.code || "ADMIN";
+
+  const showReadOnlyAlert = useCallback(async (action = "perform this action") => {
+    await useSwalErrorAlert(
+      "Read Only",
+      `You only have read access. You are not allowed to ${action}.`
+    );
+  }, []);
 
   const codeInputRef = useRef(null);
   const enterValidatedRef = useRef(false);
@@ -216,6 +230,12 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
 
   /* ================= FILE PARSE (Excel → rows) ================= */
   const handleFileChange = (e) => {
+    if (isReadOnly || !canAdd) {
+      e.target.value = "";
+      showReadOnlyAlert("import category codes");
+      return;
+    }
+
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -297,6 +317,11 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
 
   /* ================= BULK IMPORT (valid rows only) ================= */
   const handleBulkImport = async () => {
+    if (isReadOnly || !canAdd) {
+      await showReadOnlyAlert("import category codes");
+      return;
+    }
+
     const toImport = validatedRows.filter((r) => r.status === "Valid");
     if (!toImport.length) return;
 
@@ -424,7 +449,12 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
 
   // No hardcoded frontend validation — the sproc handles required field checks
   // and returns errorcount + errormsg which onSuccess processes above.
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
+    if (isReadOnly || !canSave) {
+      await showReadOnlyAlert("save category codes");
+      return;
+    }
+
     if (!isEditing || saveMutation.isPending) return;
 
     const payload = {
@@ -441,7 +471,7 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
     };
 
     saveMutation.mutate(payload);
-  }, [form, isEditing, saveMutation, userCode]);
+  }, [form, isEditing, saveMutation, userCode, isReadOnly, canSave, showReadOnlyAlert]);
 
   /* ================= DELETE ================= */
   const deleteMutation = useMutation({
@@ -487,6 +517,11 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
 
   const handleDelete = useCallback(
     async (row) => {
+      if (isReadOnly || !canDelete) {
+        await showReadOnlyAlert("delete category codes");
+        return;
+      }
+
       const code = row?.code || row?.categoryCode;
       if (!code) return;
 
@@ -522,39 +557,66 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
 
       deleteMutation.mutate(code);
     },
-    [deleteMutation]
+    [deleteMutation, isReadOnly, canDelete, showReadOnlyAlert]
   );
 
   /* ================= EDIT ================= */
 
-  const handleEdit = async (row) => {
-    try {
-      const normalizedRecord = {
-        code: row.code || row.categoryCode || "",
-        description: row.description || row.categoryDesc || "",
-        uCostFlag: row.uCostFlag || row.u_cost_flag || "N",
-        invAcct: row.invAcct || row.inv_acct || "",
-        invAcctName: row.invAcctName || row.inv_acct_name || "",
-        expAcct: row.expAcct || row.exp_acct || "",
-        expAcctName: row.expAcctName || row.exp_acct_name || "",
-        rrAcct: row.rrAcct || row.rr_acct || "",
-        rrAcctName: row.rrAcctName || row.rr_acct_name || "",
-        lcAcct: row.lcAcct || row.lc_acct || "",
-        lcAcctName: row.lcAcctName || row.lc_acct_name || "",
-        rcCode: row.rcCode || row.rc_code || "",
-        rcName: row.rcName || row.rc_name || "",
-        registeredBy: row.registeredBy || row.registered_by || "",
-        registeredDate: row.registeredDate || row.registered_date || "",
-        lastUpdatedBy: row.lastUpdatedBy || row.last_updated_by || row.updatedBy || row.updated_by || "",
-        lastUpdatedDate: row.lastUpdatedDate || row.last_updated_date || row.updatedDate || row.updated_date || "",
-      };
+  const buildRecordFromRow = (row = {}) => ({
+    code: row.code || row.categoryCode || "",
+    description: row.description || row.categoryDesc || "",
+    uCostFlag: row.uCostFlag || row.u_cost_flag || "N",
+    invAcct: row.invAcct || row.inv_acct || "",
+    invAcctName: row.invAcctName || row.inv_acct_name || "",
+    expAcct: row.expAcct || row.exp_acct || "",
+    expAcctName: row.expAcctName || row.exp_acct_name || "",
+    rrAcct: row.rrAcct || row.rr_acct || "",
+    rrAcctName: row.rrAcctName || row.rr_acct_name || "",
+    lcAcct: row.lcAcct || row.lc_acct || "",
+    lcAcctName: row.lcAcctName || row.lc_acct_name || "",
+    rcCode: row.rcCode || row.rc_code || "",
+    rcName: row.rcName || row.rc_name || "",
+    registeredBy: row.registeredBy || row.registered_by || "",
+    registeredDate: row.registeredDate || row.registered_date || "",
+    lastUpdatedBy: row.lastUpdatedBy || row.last_updated_by || row.updatedBy || row.updated_by || "",
+    lastUpdatedDate: row.lastUpdatedDate || row.last_updated_date || row.updatedDate || row.updated_date || "",
+  });
 
+  const handleRetrieve = async (row) => {
+    try {
+      const normalizedRecord = buildRecordFromRow(row);
+      setForm({ ...DEFAULT_FORM, ...normalizedRecord, __existing: true });
+      setIsEditing(false);
+      setSelectedRow(row);
+    } catch {
+      Swal.fire("Error", "Could not fetch record", "error");
+    }
+  };
+
+  const handleEdit = async (row) => {
+    if (isReadOnly || !canEdit) {
+      await handleRetrieve(row);
+      await showReadOnlyAlert("edit category codes");
+      return;
+    }
+
+    try {
+      const normalizedRecord = buildRecordFromRow(row);
       setForm({ ...DEFAULT_FORM, ...normalizedRecord, __existing: true });
       setIsEditing(true);
       setSelectedRow(row);
     } catch {
       Swal.fire("Error", "Could not fetch record", "error");
     }
+  };
+
+  const handleRowDoubleClick = async (row) => {
+    if (canEdit && !isReadOnly) {
+      await handleEdit(row);
+      return;
+    }
+
+    await handleRetrieve(row);
   };
 
   /* ================= COMBINED LOADING STATE ================= */
@@ -573,14 +635,24 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); handleEdit(row); }}
-              className="p-1 rounded-md bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-600 hover:text-white transition-colors"
+              disabled={isReadOnly || !canEdit}
+              className={`p-1 rounded-md border transition-colors ${
+                isReadOnly || !canEdit
+                  ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60"
+                  : "bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-600 hover:text-white"
+              }`}
             >
               <Edit size={16} />
             </button>
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); handleDelete(row); }}
-              className="p-1 rounded-md bg-red-50 text-red-600 border border-red-200 hover:bg-red-600 hover:text-white transition-colors"
+              disabled={isReadOnly || !canDelete}
+              className={`p-1 rounded-md border transition-colors ${
+                isReadOnly || !canDelete
+                  ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60"
+                  : "bg-red-50 text-red-600 border-red-200 hover:bg-red-600 hover:text-white"
+              }`}
             >
               <Trash2 size={16} />
             </button>
@@ -602,7 +674,7 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
         render: (row) => (row.uCostFlag === "Y" ? "Y" : "N"),
       },
     ],
-    [handleEdit, handleDelete]
+    [handleEdit, handleDelete, isReadOnly, canEdit, canDelete]
   );
 
   const tableData = useMemo(() => {
@@ -640,13 +712,18 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
     if (onStateChange) {
       onStateChange({
         isEditing,
-        canSave: isEditing && !isDupCode && !saveMutation.isPending,
+        canSave: isEditing && canSave && !isDupCode && !saveMutation.isPending,
       });
     }
-  }, [isEditing, isDupCode, saveMutation.isPending, onStateChange]);
+  }, [isEditing, canSave, isDupCode, saveMutation.isPending, onStateChange]);
 
   useImperativeHandle(ref, () => ({
-    add: () => {
+    add: async () => {
+      if (isReadOnly || !canAdd) {
+        await showReadOnlyAlert("add category codes");
+        return;
+      }
+
       setIsEditing(true);
       setSelectedRow(null);
       setIsDupCode(false);
@@ -661,7 +738,14 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
       setIsDupCode(false);
     },
     downloadTemplate: handleDownloadTemplate,
-    triggerImport: () => fileInputRef.current?.click(),
+    triggerImport: async () => {
+      if (isReadOnly || !canAdd) {
+        await showReadOnlyAlert("import category codes");
+        return;
+      }
+
+      fileInputRef.current?.click();
+    },
   }));
 
   /* ================= LOOKUP HANDLERS ================= */
@@ -704,7 +788,7 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
               onChange={(v) => setField("code", v ?? "")}
               onBlur={handleCodeValidate}
               onKeyDown={handleCodeValidate}
-              disabled={!isEditing || form.__existing}
+              disabled={isReadOnly || !isEditing || form.__existing}
             />
 
             <FieldRenderer
@@ -713,7 +797,7 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
               value={form.description}
               maxLength={150}
               onChange={(v) => setField("description", v ?? "")}
-              disabled={!isEditing}
+              disabled={isReadOnly || !isEditing}
             />
 
             <FieldRenderer
@@ -728,7 +812,7 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
                 { value: "Y", label: "Yes" },
                 { value: "N", label: "No" },
               ]}
-              disabled={!isEditing}
+              disabled={isReadOnly || !isEditing}
             />
           </div>
         </Card>
@@ -746,7 +830,7 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
               required
               onLookup={() => openCoaLookup("inv")}
               onChange={(v) => setField("invAcct", v ?? "")}
-              disabled={!isEditing}
+              disabled={isReadOnly || !isEditing}
             />
 
             {/* Expense Account */}
@@ -757,7 +841,7 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
               required
               onLookup={() => openCoaLookup("exp")}
               onChange={(v) => setField("expAcct", v ?? "")}
-              disabled={!isEditing}
+              disabled={isReadOnly || !isEditing}
             />
 
             {/* RR Account */}
@@ -768,7 +852,7 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
               required
               onLookup={() => openCoaLookup("rr")}
               onChange={(v) => setField("rrAcct", v ?? "")}
-              disabled={!isEditing}
+              disabled={isReadOnly || !isEditing}
             />
 
             {/* Landed Cost Account
@@ -781,7 +865,7 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
                   required
                   onLookup={() => openCoaLookup("lc")}
                   onChange={(v) => setField("lcAcct", v ?? "")}
-                  disabled={!isEditing}
+                  disabled={isReadOnly || !isEditing}
                 />
               </div>
               <div className="col-span-2">
@@ -802,7 +886,7 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
               value={form.rcCode ? `${form.rcCode}${form.rcName ? ` — ${form.rcName}` : ""}` : ""}
               onLookup={() => setIsRcOpen(true)}
               onChange={(v) => setField("rcCode", v ?? "")}
-              disabled={!isEditing}
+              disabled={isReadOnly || !isEditing}
             />
           </div>
         </Card>
@@ -820,7 +904,7 @@ const CategoryCodes = forwardRef(({ onStateChange }, ref) => {
           isLoading={isInitialLoading}
           docType="Category Codes"
           itemsPerPage={50}
-          onRowDoubleClick={handleEdit}
+          onRowDoubleClick={handleRowDoubleClick}
           onRowClick={(row) => setSelectedRow(row)}
           showFilters
           autoFillGrid={true}

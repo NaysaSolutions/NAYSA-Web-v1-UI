@@ -24,6 +24,8 @@ import PostSVI from "../../../Module/Main Module/Accounts Receivable/PostSVI.jsx
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
+import { usePagePermission } from "@/NAYSA Cloud/Global/usePagePermission.js";
+import PermissionBadge from "@/NAYSA Cloud/Global/PermissionBadge.jsx";
 
 // Configuration
 import { postRequest} from '../../../Configuration/BaseURL.jsx'
@@ -149,6 +151,29 @@ const SVI = () => {
   const pdfLink = docTypePDFGuide[docType];
   const videoLink = docTypeVideoGuide[docType];
   const documentTitle = hsDoc.docName + ' Transaction';
+
+  const {
+    pagePermission,
+    isReadOnly,
+    isFullAccess,
+    canAdd,
+    canSave,
+    canDelete,
+    canPost,
+    canCancel,
+  } = usePagePermission({
+    componentKey: "SVI",
+    menuName: documentTitle,
+    debug: false,
+  });
+
+  const showReadOnlyAlert = useCallback((action = "perform this action") => {
+    Swal.fire({
+      icon: "warning",
+      title: "Read Only",
+      text: `You only have read access. You are not allowed to ${action}.`,
+    });
+  }, []);
 
   const [state, setState] = useState({
 
@@ -375,6 +400,7 @@ const SVI = () => {
   };
   const statusColor = statusMap[displayStatus] || "";
   const isFormDisabled =
+  isReadOnly ||
   isViewDocumentUrl ||
   ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
 
@@ -894,7 +920,15 @@ const handleActivityOption = async (action) => {
     return;
   }
 
+  if (action === "Upsert" && !canSave) {
+    showReadOnlyAlert("save this transaction");
+    return;
+  }
 
+  if (action === "GenerateGL" && !isFullAccess) {
+    showReadOnlyAlert("generate GL entries");
+    return;
+  }
 
   if (action === "Upsert") {
    await moveFocusBeforeSave();
@@ -1073,6 +1107,11 @@ const handleActivityOption = async (action) => {
 
 
   const handleAddRow = async (insertIndex = null) => {
+  if (!canAdd) {
+    showReadOnlyAlert("add invoice detail rows");
+    return;
+  }
+
   try {
     const items = await handleFetchDetail(custCode);
     const itemList = Array.isArray(items) ? items : [items];
@@ -1147,6 +1186,11 @@ const handleActivityOption = async (action) => {
 
 
 const handleAddRowGL = (index = null) => {
+    if (!canAdd) {
+    showReadOnlyAlert("add GL detail rows");
+    return;
+  }
+
     if (!Array.isArray(detailRows) || detailRows.length === 0) {
     return;
   }
@@ -1187,6 +1231,11 @@ const handleAddRowGL = (index = null) => {
   
 
   const handleDeleteRow = async (index) => {
+    if (!canDelete) {
+      showReadOnlyAlert("delete invoice detail rows");
+      return;
+    }
+
     const updatedRows = [...detailRows];
     updatedRows.splice(index, 1);
 
@@ -1201,6 +1250,11 @@ const handleAddRowGL = (index = null) => {
 
   
   const handleDeleteRowGL =  (index) => {
+    if (!canDelete) {
+      showReadOnlyAlert("delete GL detail rows");
+      return;
+    }
+
     const updatedRows = [...detailRowsGL];
     updatedRows.splice(index, 1);
     updateState({
@@ -1249,6 +1303,11 @@ const handlePrint = async () => {
 
 
 const handlePost = async () => {
+ if (!canPost) {
+      showReadOnlyAlert("post this transaction");
+      return;
+      }
+
  if (!detailRows || detailRows.length === 0) {
       return;
       }
@@ -1265,6 +1324,11 @@ const handlePost = async () => {
 
 
 const handleCancel = async () => {
+ if (!canCancel) {
+      showReadOnlyAlert("cancel this transaction");
+      return;
+      }
+
  if (!detailRows || detailRows.length === 0) {
       return;
       }
@@ -1279,6 +1343,11 @@ const handleCancel = async () => {
 
 
 const handleAttach = async () => {
+  if (!isFullAccess) {
+    showReadOnlyAlert("attach documents");
+    return;
+  }
+
   if (documentID ) {
     updateState({ showAttachModal: true });
    }
@@ -1289,6 +1358,11 @@ const handleAttach = async () => {
 
 
 const handleCopy = async () => {
+  if (!canAdd) {
+    showReadOnlyAlert("copy this transaction");
+    return;
+  }
+
   if (!detailRows || detailRows.length === 0) {
     return;
   }
@@ -2172,12 +2246,13 @@ return (
  
         detailsRoute="/page/SVI"
 
-        isSaveDisabled={state.isSaveDisabled || isFormDisabled ||  ((detailRows?.length || 0) + (detailRowsGL?.length || 0) === 0)} 
+        isSaveDisabled={!canSave || state.isSaveDisabled || isFormDisabled ||  ((detailRows?.length || 0) + (detailRowsGL?.length || 0) === 0)} 
         isResetDisabled={state.isResetDisabled}
-        isAttachDisabled={!documentID}
+        isAttachDisabled={!isFullAccess || !documentID}
         isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
-        isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
-        isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED"|| displayStatus === "CLOSED"}
+        isCopyDisabled={!canAdd || !documentID || displayStatus === "CANCELLED"}
+        isCancelDisabled={!canCancel || !documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED"|| displayStatus === "CLOSED"}
+        isPostDisabled={!canPost || !documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED" || displayStatus === "CLOSED"}
       />
       </div>
 
@@ -2191,7 +2266,12 @@ return (
         <div className={`global-tran-headertext-div-ui ${isViewDocument ? "max-md:!mb-1" : ""}`}>
           <h1 className="global-tran-headertext-ui">{documentTitle}</h1>
         </div>
-        <div className={`global-tran-headerstat-div-ui ${isViewDocument ? "max-md:!mt-0" : ""}`}>
+        <div className={`global-tran-headerstat-div-ui flex items-center gap-6 ${isViewDocument ? "max-md:!mt-0" : ""}`}>
+          <PermissionBadge
+            permission={pagePermission}
+            isReadOnly={isReadOnly}
+            isFullAccess={isFullAccess}
+          />
           <div>
             <p className="global-tran-headerstat-text-ui">Transaction Status</p>
             <h1 className={`global-tran-stat-text-ui ${statusColor}`}>{displayStatus}</h1>
@@ -2805,7 +2885,7 @@ return (
             <button
               onClick={() => handleActivityOption("GenerateGL")}
               className="global-tran-button-generateGL"
-              disabled={isLoading} // Optionally disable button while loading
+              disabled={isLoading || !isFullAccess}
               style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
             >
               {isLoading ? 'Generating...' : 'Generate GL Entries'}
