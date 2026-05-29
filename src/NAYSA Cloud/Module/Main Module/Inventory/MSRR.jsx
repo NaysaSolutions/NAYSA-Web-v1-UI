@@ -486,7 +486,7 @@ groupId,
   const msrrDetailColumnDefs = useMemo(
   () => [
     { key: "ln", label: "LN", width: 56 },
-    { key: "rrStatus", label: "RR Status", width: 100 },
+    // { key: "rrStatus", label: "RR Status", width: 100 },
     { key: "poNo", label: "PO No.", width: 140 },
     { key: "itemCode", label: "Item Code", width: 120 },
     { key: "itemName", label: "Item Description", width: 300 },
@@ -1501,44 +1501,44 @@ console.log("Open Reference PO - Filtered Open Summary Rows:", openRows);
         "whouseName",
       )
 
-    console.log("MSRR Reference PO warehouse fetch", {
-      selection,
-      summary,
-      firstDetail: details?.[0] || {},
-      poWhCode,
-      poWhName,
-      currentWarehouse: {
-        WHCode,
-        WHcode,
-        WHName,
-        stateWHCode: state.WHCode,
-        stateWHcode: state.WHcode,
-        stateWHName: state.WHName,
-        rcCode:
-  d.rcCode ||
-  d.rc_code ||
-  d.RcCode ||
-  d.RC_CODE ||
-  summary.rcCode ||
-  summary.rc_code ||
-  summary.RcCode ||
-  summary.RC_CODE ||
-  state.rcCode ||
-  "",
+//     console.log("MSRR Reference PO warehouse fetch", {
+//       selection,
+//       summary,
+//       firstDetail: details?.[0] || {},
+//       poWhCode,
+//       poWhName,
+//       currentWarehouse: {
+//         WHCode,
+//         WHcode,
+//         WHName,
+//         stateWHCode: state.WHCode,
+//         stateWHcode: state.WHcode,
+//         stateWHName: state.WHName,
+//         rcCode:
+//   d.rcCode ||
+//   d.rc_code ||
+//   d.RcCode ||
+//   d.RC_CODE ||
+//   summary.rcCode ||
+//   summary.rc_code ||
+//   summary.RcCode ||
+//   summary.RC_CODE ||
+//   state.rcCode ||
+//   "",
 
-rc_code:
-  d.rc_code ||
-  d.rcCode ||
-  d.RcCode ||
-  d.RC_CODE ||
-  summary.rc_code ||
-  summary.rcCode ||
-  summary.RcCode ||
-  summary.RC_CODE ||
-  state.rcCode ||
-  "",
-      },
-    });
+// rc_code:
+//   d.rc_code ||
+//   d.rcCode ||
+//   d.RcCode ||
+//   d.RC_CODE ||
+//   summary.rc_code ||
+//   summary.rcCode ||
+//   summary.RcCode ||
+//   summary.RC_CODE ||
+//   state.rcCode ||
+//   "",
+//       },
+//     });
 
     const vatCodes = [
       ...new Set(details.map((d) => d.vatCode).filter(Boolean)),

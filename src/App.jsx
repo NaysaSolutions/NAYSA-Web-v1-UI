@@ -805,8 +805,20 @@ const AppContent = () => {
 };
 
 /* -------------------- App Root -------------------- */
+// const App = () => (
+//   <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+//     <QueryClientProvider client={queryClient}>
+//       <AuthProvider>
+//         <ResetProvider>
+//           <AppContent />
+//         </ResetProvider>
+//       </AuthProvider>
+//     </QueryClientProvider>
+//   </Router>
+// );
+
 const App = () => (
-  <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+  <Router>
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <ResetProvider>
@@ -816,6 +828,9 @@ const App = () => (
     </QueryClientProvider>
   </Router>
 );
+
+
+
 
 export default App;
 
