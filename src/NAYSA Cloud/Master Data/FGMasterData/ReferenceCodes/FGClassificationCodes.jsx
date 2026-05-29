@@ -77,11 +77,25 @@ const DEFAULT_FORM = {
 
 /* ================= COMPONENT ================= */
 
-const FGClassificationCodes = forwardRef(({ onStateChange }, ref) => {
+const FGClassificationCodes = forwardRef(({
+  onStateChange,
+  isReadOnly = false,
+  canAdd = true,
+  canEdit = true,
+  canSave = true,
+  canDelete = true,
+}, ref) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const userCode = user?.USER_CODE || user?.userCode || user?.code || "ADMIN";
+
+  const showReadOnlyAlert = useCallback(async (action = "perform this action") => {
+    await useSwalErrorAlert(
+      "Read Only",
+      `You only have read access. You are not allowed to ${action}.`
+    );
+  }, []);
 
   const codeInputRef      = useRef(null);
   const enterValidatedRef = useRef(false);
@@ -206,7 +220,12 @@ const FGClassificationCodes = forwardRef(({ onStateChange }, ref) => {
     },
   });
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
+    if (isReadOnly || !canSave) {
+      await showReadOnlyAlert("save classification codes");
+      return;
+    }
+
     if (!isEditing || saveMutation.isPending) return;
 
     const payload = {
@@ -218,7 +237,7 @@ const FGClassificationCodes = forwardRef(({ onStateChange }, ref) => {
     };
 
     saveMutation.mutate(payload);
-  }, [form, isEditing, saveMutation, userCode]);
+  }, [form, isEditing, saveMutation, userCode, isReadOnly, canSave, showReadOnlyAlert]);
 
   /* ================= DELETE ================= */
 
@@ -253,6 +272,11 @@ const FGClassificationCodes = forwardRef(({ onStateChange }, ref) => {
 
   const handleDelete = useCallback(
     async (row) => {
+      if (isReadOnly || !canDelete) {
+        await showReadOnlyAlert("delete classification codes");
+        return;
+      }
+
       const code = row?.code || row?.classCode;
       if (!code) return;
 
@@ -287,13 +311,14 @@ const FGClassificationCodes = forwardRef(({ onStateChange }, ref) => {
 
       deleteMutation.mutate(code);
     },
-    [deleteMutation]
+    [deleteMutation, isReadOnly, canDelete, showReadOnlyAlert]
   );
 
   /* ================= EDIT ================= */
 
-  const handleEdit = async (row) => {
+  const loadRowToForm = useCallback((row) => {
     if (!row) return;
+
     setForm({
       code:            row.code        || row.classCode   || "",
       description:     row.description || row.classDesc   || "",
@@ -305,10 +330,34 @@ const FGClassificationCodes = forwardRef(({ onStateChange }, ref) => {
       lastUpdatedDate: row.lastUpdatedDate || "",
       __existing: true,
     });
-    setIsEditing(true);
     setSelectedRow(row);
     setIsDupCode(false);
-  };
+  }, []);
+
+  const handleRetrieve = useCallback((row) => {
+    loadRowToForm(row);
+    setIsEditing(false);
+  }, [loadRowToForm]);
+
+  const handleEdit = useCallback(async (row) => {
+    if (isReadOnly || !canEdit) {
+      await showReadOnlyAlert("edit classification codes");
+      handleRetrieve(row);
+      return;
+    }
+
+    loadRowToForm(row);
+    setIsEditing(true);
+  }, [isReadOnly, canEdit, showReadOnlyAlert, handleRetrieve, loadRowToForm]);
+
+  const handleRowDoubleClick = useCallback((row) => {
+    if (canEdit && !isReadOnly) {
+      handleEdit(row);
+      return;
+    }
+
+    handleRetrieve(row);
+  }, [canEdit, isReadOnly, handleEdit, handleRetrieve]);
 
   /* ================= LOADING ================= */
 
@@ -327,14 +376,26 @@ const FGClassificationCodes = forwardRef(({ onStateChange }, ref) => {
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); handleEdit(row); }}
-              className="p-1 rounded-md bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-600 hover:text-white transition-colors"
+              disabled={isReadOnly || !canEdit}
+              className={`p-1 rounded-md border transition-colors ${
+                isReadOnly || !canEdit
+                  ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60"
+                  : "bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-600 hover:text-white"
+              }`}
+              title={isReadOnly || !canEdit ? "Read only" : "Edit"}
             >
               <Edit size={16} />
             </button>
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); handleDelete(row); }}
-              className="p-1 rounded-md bg-red-50 text-red-600 border border-red-200 hover:bg-red-600 hover:text-white transition-colors"
+              disabled={isReadOnly || !canDelete}
+              className={`p-1 rounded-md border transition-colors ${
+                isReadOnly || !canDelete
+                  ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60"
+                  : "bg-red-50 text-red-600 border-red-200 hover:bg-red-600 hover:text-white"
+              }`}
+              title={isReadOnly || !canDelete ? "Read only" : "Delete"}
             >
               <Trash2 size={16} />
             </button>
@@ -346,7 +407,7 @@ const FGClassificationCodes = forwardRef(({ onStateChange }, ref) => {
       { key: "categCode",   label: "Category Code",                    sortable: true, width: 120 },
       { key: "categName",   label: "Category Name",                    sortable: true, width: 200 },
     ],
-    [handleEdit, handleDelete]
+    [handleEdit, handleDelete, isReadOnly, canEdit, canDelete]
   );
 
   /* ================= TABLE DATA ================= */
@@ -381,27 +442,32 @@ const FGClassificationCodes = forwardRef(({ onStateChange }, ref) => {
     if (onStateChange) {
       onStateChange({
         isEditing,
-        canSave: isEditing && !isDupCode && !saveMutation.isPending,
+        canSave: !isReadOnly && canSave && isEditing && !isDupCode && !saveMutation.isPending,
       });
     }
-  }, [isEditing, isDupCode, saveMutation.isPending, onStateChange]);
+  }, [isEditing, isDupCode, saveMutation.isPending, onStateChange, isReadOnly, canSave]);
 
   useImperativeHandle(ref, () => ({
-    add: () => {
+    add: async () => {
+      if (isReadOnly || !canAdd) {
+        await showReadOnlyAlert("add classification codes");
+        return;
+      }
+
       setIsEditing(true);
       setSelectedRow(null);
       setIsDupCode(false);
       resetForm({ ...DEFAULT_FORM, __existing: false });
       setTimeout(() => codeInputRef.current?.focus?.(), 0);
     },
-    save:  handleSave,
+    save: handleSave,
     reset: () => {
       resetForm(DEFAULT_FORM);
       setIsEditing(false);
       setSelectedRow(null);
       setIsDupCode(false);
     },
-  }));
+  }), [isReadOnly, canAdd, showReadOnlyAlert, handleSave, resetForm]);
 
   /* ================= RENDER ================= */
 
@@ -428,7 +494,7 @@ const FGClassificationCodes = forwardRef(({ onStateChange }, ref) => {
               onChange={(v) => setField("code", v ?? "")}
               onBlur={handleCodeValidate}
               onKeyDown={handleCodeValidate}
-              disabled={!isEditing || form.__existing}
+              disabled={isReadOnly || !isEditing || form.__existing}
             />
 
             <FieldRenderer
@@ -437,19 +503,19 @@ const FGClassificationCodes = forwardRef(({ onStateChange }, ref) => {
               value={form.description}
               maxLength={150}
               onChange={(v) => setField("description", v ?? "")}
-              disabled={!isEditing}
+              disabled={isReadOnly || !isEditing}
             />
 
             <FieldRenderer
               label="Category Code"
               type="lookup"
               value={form.categCode || ""}
-              onLookup={() => setIsCategOpen(true)}
+              onLookup={() => { if (!isReadOnly && isEditing) setIsCategOpen(true); }}
               onChange={(v) => {
                 setField("categCode", String(v ?? "").toUpperCase());
                 setField("categName", "");
               }}
-              disabled={!isEditing}
+              disabled={isReadOnly || !isEditing}
             />
 
             <FieldRenderer
@@ -475,7 +541,7 @@ const FGClassificationCodes = forwardRef(({ onStateChange }, ref) => {
           isLoading={isInitialLoading}
           docType="Classification Codes"
           itemsPerPage={50}
-          onRowDoubleClick={handleEdit}
+          onRowDoubleClick={handleRowDoubleClick}
           onRowClick={(row) => setSelectedRow(row)}
           showFilters
           autoFillGrid={true}

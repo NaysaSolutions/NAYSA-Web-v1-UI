@@ -279,18 +279,6 @@ const MSMast_SetupTab = ({
           </div>
         </Card>
 
-        {/* ── Registration Info ── */}
-        <RegistrationInfo
-          layout="straight"
-          disabled
-          data={{
-            registeredBy: form.registeredBy || "",
-            registeredDate: form.registeredDate || "",
-            lastUpdatedBy: form.updatedBy || "",
-            lastUpdatedDate: form.updatedDate || "",
-          }}
-        />
-
         {/* ── MIDDLE CARD: Collapsible Sidebar ── */}
         <Card className="border border-blue-500/30 rounded-lg overflow-hidden !focus-within:ring-0 !focus-within:shadow-none !focus-within:-translate-y-0">
           <div className="flex flex-col md:flex-row">
@@ -392,6 +380,18 @@ const MSMast_SetupTab = ({
             </div>
           </div>
         </Card>
+
+        {/* ── Registration Info ── */}
+        <RegistrationInfo
+          layout="straight"
+          disabled
+          data={{
+            registeredBy: form.registeredBy || "",
+            registeredDate: form.registeredDate || "",
+            lastUpdatedBy: form.updatedBy || "",
+            lastUpdatedDate: form.updatedDate || "",
+          }}
+        />
 
       </div>
 

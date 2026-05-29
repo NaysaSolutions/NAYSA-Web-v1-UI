@@ -57,6 +57,7 @@ export const pageRegistry = {
   MSAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSAJ.jsx")),
   FGAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGAJ.jsx")),
   MSRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSRTV.jsx")),
+  FGRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGRTV.jsx")),
   FGRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGRR.jsx")),
 
   // Fixed Assets
@@ -89,6 +90,7 @@ export const pageRegistry = {
   AuditTrail: lazyPage(() => import("./NAYSA Cloud/Query/AuditTrail/AuditTail.jsx")),
   SecurityAuditTrail: lazyPage(() => import("./NAYSA Cloud/Query/AuditTrail/SecurityAuditTrail.jsx")),
   MSINQ: lazyPage(() => import("./NAYSA Cloud/Query/INVInq/MSStockCard.jsx")),
+  FGINQ: lazyPage(() => import("./NAYSA Cloud/Query/INVInq/FGStockCard.jsx")),
 
   // Global Reference
   Company: lazyPage(() => import("./NAYSA Cloud/Reference File/Company.jsx")),
@@ -123,8 +125,11 @@ export const pageRegistry = {
   PostAPDM: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Payable/PostAPDM.jsx")),
   PostMSRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSRR.jsx")),
   PostMSRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSRTV.jsx")),
+  PostFGRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGRTV.jsx")),
   PostMSAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSAJ.jsx")),
   PostFGAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGAJ.jsx")),
+  PostFARR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/PostFARR.jsx")),
+  PostFAR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/PostFARR.jsx")),
   PostDR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/PostDR.jsx")),
   PostSI: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/PostSI.jsx")),
   MonthendGLProcessingModal: lazyPage(() => import("./NAYSA Cloud/Processing/MonthendProcessing.jsx")),
@@ -152,5 +157,6 @@ export const pageRegistry = {
   GLReportModal: reportModal("GL"),
   BIRReportModal: reportModal("BIR"),
   PURReportModal: reportModal("PUR"),
-  MSINVReportModal: reportModal("MSINV"),
+  MSINVReportModal: reportModal("MS"),
+  FGINVReportModal: reportModal("FG"),
 };

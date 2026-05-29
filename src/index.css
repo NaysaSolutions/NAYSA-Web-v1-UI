@@ -252,31 +252,69 @@ body {
     dark:text-gray-300;
   }
 
-  .global-tran-tr-ui {
-    @apply hover:bg-blue-50 border
-    dark:text-black dark:hover:bg-blue-700;
-  }
 
-  .global-tran-td-ui {
-    @apply px-3 border text-[10px] sm:text-[10px] lg:text-xs text-gray-900 whitespace-normal
-    dark:text-white;
-  }
+  
+  /* ============================================================
+   TRANSACTION TABLE ROW HEIGHT STANDARDIZATION
+   ------------------------------------------------------------
+   Purpose:
+   Keep transaction table row height consistent whether the
+   Action column is visible or hidden.
 
-  .global-tran-td-inputclass-ui {
-    @apply h-4 bg-transparent focus:outline-none focus:ring-0 whitespace-normal;
-  }
+   Reason:
+   Before this adjustment:
+   - Normal input cells used h-4, which made rows shorter.
+   - Action buttons used h-7 plus py-2, which made rows taller.
+   - When the Action column was hidden, the row height changed.
 
-  .global-tran-td-button-add-ui {
-    /* @apply bg-blue-500 text-white px-3 py-1 rounded-lg hover:bg-blue-700 transition w-[35px] */
-    @apply flex-1 h-7 md:flex-none flex items-center justify-center gap-1 py-2 md:py-2 px-3 md:px-2 bg-blue-50 border border-blue-100 text-blue-600 rounded-md hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-colors text-xs
-    dark:bg-black dark:hover:bg-blue-900;
-  }
+   Rule:
+   All transaction rows, cells, inputs, and action buttons should
+   follow the same height standard.
+   ============================================================ */
 
-  .global-tran-td-button-delete-ui {
-    /* @apply bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-700 transition w-[35px] */
-    @apply flex-1 h-7 md:flex-none flex items-center justify-center gap-1 py-2 md:py-2 px-3 md:px-2 bg-red-50 border border-red-100 text-red-600 rounded-md hover:bg-red-600 hover:text-white transition-colors text-xs
-    dark:bg-black dark:hover:bg-red-900;
-  }
+.global-tran-tr-ui {
+  /* Fixed row height for all transaction tables */
+  @apply h-[32px] min-h-[32px] hover:bg-blue-50 border
+  dark:text-black dark:hover:bg-blue-700;
+}
+
+.global-tran-td-ui {
+  /* 
+    Fixed cell height.
+    py-[2px] keeps the row compact while allowing input/button spacing.
+    align-middle keeps text, inputs, and buttons vertically centered.
+  */
+  @apply h-[32px] min-h-[32px] px-3 py-[2px] border text-[10px] sm:text-[10px] lg:text-xs text-gray-900 whitespace-normal align-middle
+  dark:text-white;
+}
+
+.global-tran-td-inputclass-ui {
+  /*
+    Input height is slightly smaller than the table row height
+    so it fits inside the 32px row without forcing the row taller.
+  */
+  @apply h-[26px] min-h-[26px] bg-transparent focus:outline-none focus:ring-0 whitespace-normal;
+}
+
+.global-tran-td-button-add-ui {
+  /*
+    Action button height must match input height.
+    Do not add py-2 here because vertical padding increases
+    the parent table row height.
+  */
+  @apply flex-1 h-[26px] min-h-[26px] md:flex-none flex items-center justify-center gap-1 px-2 bg-blue-50 border border-blue-100 text-blue-600 rounded-md hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-colors text-xs
+  dark:bg-black dark:hover:bg-blue-900;
+}
+
+.global-tran-td-button-delete-ui {
+  /*
+    Action button height must match input height.
+    Do not add py-2 here because vertical padding increases
+    the parent table row height.
+  */
+  @apply flex-1 h-[26px] min-h-[26px] md:flex-none flex items-center justify-center gap-1 px-2 bg-red-50 border border-red-100 text-red-600 rounded-md hover:bg-red-600 hover:text-white transition-colors text-xs
+  dark:bg-black dark:hover:bg-red-900;
+}
 
   
   /* TRANSACTION TAB FOOTER UI */

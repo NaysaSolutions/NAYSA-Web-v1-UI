@@ -13,10 +13,28 @@ import FGCategoryCodes from "@/NAYSA Cloud/Master Data/FGMasterData/ReferenceCod
 import FGClassificationCodes from "@/NAYSA Cloud/Master Data/FGMasterData/ReferenceCodes/FGClassificationCodes";
 
 // TEMPORARY PLACEHOLDER COMPONENT (Replace these with your actual FG Reference components when ready)
-const PlaceholderRef = forwardRef(({ label, onStateChange }, ref) => {
+const PlaceholderRef = forwardRef(({
+    label,
+    onStateChange,
+    isReadOnly = false,
+    canAdd = true,
+    canSave = true,
+}, ref) => {
     useImperativeHandle(ref, () => ({
-        add: () => alert(`Add ${label} (Not wired yet)`),
-        save: () => alert(`Save ${label} (Not wired yet)`),
+        add: () => {
+            if (isReadOnly || !canAdd) {
+                alert("Read Only: You are not allowed to add reference codes.");
+                return;
+            }
+            alert(`Add ${label} (Not wired yet)`);
+        },
+        save: () => {
+            if (isReadOnly || !canSave) {
+                alert("Read Only: You are not allowed to save reference codes.");
+                return;
+            }
+            alert(`Save ${label} (Not wired yet)`);
+        },
         reset: () => alert(`Reset ${label} (Not wired yet)`)
     }));
     return <div className="p-10 text-center text-slate-500 font-bold border border-slate-200 bg-white rounded shadow-sm h-full flex items-center justify-center">{label} - Component Not Created Yet</div>;
@@ -35,7 +53,14 @@ const Card = ({ children, className = "" }) => (
   </div>
 );
 
-const FGMast_ReferenceCodeTab = forwardRef(({ onStateChange }, ref) => {
+const FGMast_ReferenceCodeTab = forwardRef(({
+  onStateChange,
+  isReadOnly = false,
+  canAdd = true,
+  canEdit = true,
+  canSave = true,
+  canDelete = true,
+}, ref) => {
   const categoryRef = useRef(null);
   const classRef = useRef(null);
   const subclassRef = useRef(null);
@@ -53,6 +78,14 @@ const FGMast_ReferenceCodeTab = forwardRef(({ onStateChange }, ref) => {
   ], []);
 
   const [activeRefTab, setActiveRefTab] = useState(refTabs[0].id);
+
+  const permissionProps = {
+    isReadOnly,
+    canAdd,
+    canEdit,
+    canSave,
+    canDelete,
+  };
 
   useImperativeHandle(ref, () => ({
     add: () => {
@@ -81,15 +114,15 @@ const FGMast_ReferenceCodeTab = forwardRef(({ onStateChange }, ref) => {
   const renderRight = () => {
     switch (activeRefTab) {
       case "category":
-        return <FGCategoryCodes ref={categoryRef} onStateChange={onStateChange} />;
+        return <FGCategoryCodes ref={categoryRef} onStateChange={onStateChange} {...permissionProps} />;
       case "classification":
-        return <FGClassificationCodes ref={classRef} onStateChange={onStateChange} />;
+        return <FGClassificationCodes ref={classRef} onStateChange={onStateChange} {...permissionProps} />;
       case "subclass":
-        return <PlaceholderRef label="FG Sub Class Codes" ref={subclassRef} onStateChange={onStateChange} />;
+        return <PlaceholderRef label="FG Sub Class Codes" ref={subclassRef} onStateChange={onStateChange} {...permissionProps} />;
       case "uom":
-        return <PlaceholderRef label="FG UOM Codes" ref={uomRef} onStateChange={onStateChange} />;
+        return <PlaceholderRef label="FG UOM Codes" ref={uomRef} onStateChange={onStateChange} {...permissionProps} />;
       case "supplementary":
-        return <PlaceholderRef label="FG Supplementary Codes" ref={suppRef} onStateChange={onStateChange} />;
+        return <PlaceholderRef label="FG Supplementary Codes" ref={suppRef} onStateChange={onStateChange} {...permissionProps} />;
       default:
         return null;
     }
