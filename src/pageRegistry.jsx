@@ -157,5 +157,6 @@ export const pageRegistry = {
   GLReportModal: reportModal("GL"),
   BIRReportModal: reportModal("BIR"),
   PURReportModal: reportModal("PUR"),
-  MSINVReportModal: reportModal("MSINV"),
+  MSINVReportModal: reportModal("MS"),
+  FGINVReportModal: reportModal("FG"),
 };
