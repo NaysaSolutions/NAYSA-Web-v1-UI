@@ -12,3 +12,13 @@ dist/
 
 # Logs
 *.log
+
+# Exclude Laravel vendor folder accidentally copied in React
+vendor/
+/vendor/
+**/vendor/
+
+# Exclude React node modules
+node_modules/
+/node_modules/
+**/node_modules/
