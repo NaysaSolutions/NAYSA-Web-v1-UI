@@ -18,7 +18,7 @@ import SLMastLookupModal from "../../../Lookup/SearchSLMast.jsx";
 import CancelTranModal from "../../../Lookup/SearchCancelRef.jsx";
 import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
-import PostMSRTV from "../Inventory/PostMSRTV.jsx";
+import PostFGRTV from "../Inventory/PostFGRTV.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
@@ -50,7 +50,6 @@ import {
   useTopCurrencyRow,
   useTopHSOption,
   useTopDocControlRow,
-  useTopDocDropDown,
   useTopVatAmount,
   useTopATCAmount,
   useTopBillCodeRow,
@@ -65,6 +64,7 @@ import {
   useHandleCancel,
   useFieldLenghtCheck,
   useGetFieldLength,
+  useHandlePost,
 } from '@/NAYSA Cloud/Global/procedure';
 
 import {
@@ -86,9 +86,14 @@ import {
   formatNumber,
   parseFormattedNumber,
   useSwalshowSaveSuccessDialog,
+  useSwalHandleOpenSpecsModal,
+  useSwalSuccessAlert,
   useSwalErrorAlert,
-} from '@/NAYSA Cloud/Global/behavior';
+  useSwalInfoAlert,
+  useSwalvalidateRequiredFields
+} from '@/NAYSA Cloud/Global/behavior.jsx';
 
+import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 // Header
 import Header from '@/NAYSA Cloud/Components/Header';
@@ -108,7 +113,29 @@ import {
 } from '@/NAYSA Cloud/Global/datatable.jsx';
 
 
-const MSRTV = () => {
+const normalizeDateForInput = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) return raw;
+
+  const converted = useformatToDatev2(raw);
+  return converted && /^\d{2}\/\d{2}\/\d{4}$/.test(converted) ? converted : "";
+};
+
+const toDateInputValue = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+    const [month, day, year] = raw.split("/");
+    return `${year}-${month}-${day}`;
+  }
+
+  const converted = normalizeDateForInput(raw);
+  return converted ? toDateInputValue(converted) : raw;
+};
+
+const FGRTV = () => {
 
   // View Document Const
   const loadedFromUrlRef = useRef(false);
@@ -117,9 +144,9 @@ const MSRTV = () => {
   const navigate = useNavigate();
   const location = useLocation(); 
   const [isViewDocument, setIsViewDocument] = useState(false);
-  const { companyInfo, currentUserRow } = useAuth();
-  const decQty = companyInfo?.itemDecqtyMS ?? 2;
-  const decUcost = companyInfo?.itemDecUcostMS ?? 6;
+  const { companyInfo, currentUserRow,getAllDropDown,refsLoaded ,getAllTopATCRow, getAllTopVatRow,getAllTopVatAmount,getAllTopATCAmount,getAllTopHSDocRow } = useAuth();
+  const decQty = companyInfo?.itemDecqtyFG ?? 2;
+  const decUcost = companyInfo?.itemDecUcostFG ?? 6;
 
 
   useEffect(() => {
@@ -131,31 +158,38 @@ const MSRTV = () => {
   const isViewDocumentUrl = isViewDocument;
 
 
+   const [topTab, setTopTab] = useState("details"); // "details" | "history"
+   const { user } = useAuth();
+   const { resetFlag } = useReset();
+   
+  //Document Global Setup
+  const docType = docTypes.FGRTV; 
+  const hsDoc = getAllTopHSDocRow(docType);
+  const pdfLink = docTypePDFGuide[docType];
+  const videoLink = docTypeVideoGuide[docType];
+  const documentTitle = hsDoc.docName + ' Transaction';
 
-  const [topTab, setTopTab] = useState("details"); // "details" | "history"
   const [showSingleUploadDropdown, setShowSingleUploadDropdown] = useState(false);
-  const { user } = useAuth();
-  const { resetFlag } = useReset();
   const [state, setState] = useState({
 
 
     // HS Option
-    glCurrMode:"M",
-    glCurrDefault:"PHP",
+    glCurrMode:companyInfo?.glCurrMode||"",
+    glCurrDefault:companyInfo?.currCode||"",
     withCurr2:false,
     withCurr3:false,
-    glCurrGlobal1:"",
-    glCurrGlobal2:"",
-    glCurrGlobal3:"",
+    glCurrGlobal1:companyInfo?.glCurrGlobal1||"",
+    glCurrGlobal2:companyInfo?.glCurrGlobal2||"",
+    glCurrGlobal3:companyInfo?.glCurrGlobal3||"",
 
 
     
     // Document information
-    documentName: "",
-    documentSeries: "Auto",
-    documentDocLen: 8,
+    documentName: hsDoc?.docName||"",
+    documentSeries: hsDoc?.docSeries||"Auto",
+    documentDocLen: hsDoc?.docLength||8,
     documentID: null,
-    documentDate: useGetCurrentDayV2(),
+    documentDate:useGetCurrentDayV2(),   
     documentNo: "",
     documentStatus:"",
     status: "OPEN",
@@ -175,21 +209,20 @@ const MSRTV = () => {
 
 
 
-    branchCode: "HO",
-    branchName: "Head Office",
+    branchCode: currentUserRow?.branchCode||"",
+    branchName: currentUserRow?.branchName||"",
     
 
     
     // Currency information
-    currCode: "PHP",
-    currName: "Philippine Peso",
-    currRate: "1.000000",
-    defaultCurrRate:"1.000000",
+    currCode: companyInfo?.currCode||"",
+    currName: companyInfo?.currName||"",
+    currRate: formatNumber(companyInfo?.currRate||1,6),
+    defaultCurrRate:formatNumber(companyInfo?.currRate||1,6),
 
 
     //Other Header Info
     tblFieldArray :[],
-    ajTypes :[],
     refDocNo1: "",
     refDocNo2: "", 
     vendCode: "",
@@ -197,8 +230,7 @@ const MSRTV = () => {
     whCode: "",
     locCode: "",
     remarks: "",
-    selectedAJType : "REG",
-    userCode: user.USER_CODE, 
+    userCode: currentUserRow?.userCode||"", 
 
     //Detail 1-2
     detailRows  :[],
@@ -226,7 +258,7 @@ const MSRTV = () => {
     showVatModal:false,
     showAtcModal:false,
     showSlModal:false,
-    msLookupModalOpen:false,
+    fgLookupModalOpen:false,
     warehouseLookupOpen:false,
 
     currencyModalOpen:false,
@@ -291,7 +323,6 @@ const MSRTV = () => {
   currCode,
   currName,
   currRate,
-  ajTypes,
   refDocNo1,
   refDocNo2,
   vendCode,
@@ -301,9 +332,6 @@ const MSRTV = () => {
   locCode,
 
   remarks,
-  selectedAJType,
-
-
   // Transaction details
   tblFieldArray,
   detailRows,
@@ -339,7 +367,7 @@ const MSRTV = () => {
   showPostingModal,
   showAllTranDocNo,
   showQstatModal,
-  msLookupModalOpen,
+  fgLookupModalOpen,
   warehouseLookupOpen,
   locationLookupOpen
 
@@ -360,11 +388,6 @@ const MSRTV = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showSingleUploadDropdown]);
 
-  //Document Global Setup
-  const docType = docTypes.MSRTV; 
-  const pdfLink = docTypePDFGuide[docType];
-  const videoLink = docTypeVideoGuide[docType];
-  const documentTitle = docTypeNames[docType] || 'Transaction';
  
 
 
@@ -395,6 +418,15 @@ const MSRTV = () => {
         invAcct: glAccountFilter.ActiveAll,
   };
   const customParam = customParamMap[accountModalSource] || null;
+
+  const applyDocumentSlRefDate = (rows, sourceDate = documentDate) => {
+    const slDate = toDateInputValue(sourceDate);
+    return (rows || []).map((row) => ({
+      ...row,
+      slRefDate: slDate,
+      slrefDate: slDate,
+    }));
+  };
   
 
 
@@ -456,6 +488,19 @@ useEffect(() => {
   useEffect(() => {
       updateState({isDocNoDisabled: !!state.documentID });
   }, [state.documentID]);
+
+  useEffect(() => {
+    const slDate = toDateInputValue(documentDate);
+    if (!slDate || detailRowsGL.length === 0) return;
+
+    const hasDifferentDate = detailRowsGL.some(
+      (row) => toDateInputValue(row.slRefDate || row.slrefDate) !== slDate
+    );
+
+    if (hasDifferentDate) {
+      updateState({ detailRowsGL: applyDocumentSlRefDate(detailRowsGL, documentDate) });
+    }
+  }, [documentDate]);
   
 
 
@@ -490,20 +535,10 @@ useEffect(() => {
 
   
 
-
-  const LoadingSpinner = () => (
-    <div className="global-tran-spinner-main-div-ui">
-      <div className="global-tran-spinner-sub-div-ui">
-        <FontAwesomeIcon icon={faSpinner} spin size="2x" className="text-blue-500 mb-2" />
-        <p>Please wait...</p>
-      </div>
-    </div>
-  );
-
   
   const handleReset = () => {
-      clearMsrtvDetailSorting();
-      clearMsrtvGlSorting();
+      clearFgrtvDetailSorting();
+      clearFgrtvGlSorting();
 
       updateState({
         
@@ -551,18 +586,7 @@ useEffect(() => {
     updateState({isLoading:true})
 
     try {
-      // 🔹 1. Run these in parallel since they don’t depend on each other      
-      const data = await useTopDocDropDown(docType,"AJTRAN_TYPE");
-      if(data){
-        updateState({
-         ajTypes: data,
-         selectedAJType: "",
-          });
-        };   
-
-        
-
-      // 🔹 2. Document row (independent)
+      // 🔹 1. Document row (independent)
       const docRow = await useTopDocControlRow(docType);
 
       if (docRow) {
@@ -575,7 +599,7 @@ useEffect(() => {
 
 
 
-      // 🔹 3. HS Options + Currency row (dependent chain)
+      // 🔹 2. HS Options + Currency row (dependent chain)
       const hsOption = await useTopHSOption();
       if (hsOption) {
         updateState({
@@ -597,7 +621,7 @@ useEffect(() => {
       }
 
       
-     const tbls = 'MSRTV_hd,MSRTV_dt1,MSRTV_dt2'
+     const tbls = 'FGRTV_hd,FGRTV_dt1,FGRTV_dt2'
      const hdtblcol_result = await useFieldLenghtCheck(tbls);
      if (hdtblcol_result){
        updateState({tblFieldArray :hdtblcol_result })
@@ -644,10 +668,10 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
   updateState({ isLoading: true });
 
   try {
-    const data = await useFetchTranData(documentNo, branchCode,docType,"msrtvNo",direction);
+    const data = await useFetchTranData(documentNo, branchCode,docType,"fgrtvNo",direction);
 
 
-    if (!data?.msrtvId) {
+    if (!data?.fgrtvId) {
       Swal.fire({ icon: 'info', title: 'No Records Found', text: 'Transaction does not exist.' });
       return resetState();
     }
@@ -670,6 +694,8 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       creditFx1: formatNumber(glRow.creditFx1),
       debitFx2: formatNumber(glRow.debitFx2),
       creditFx2: formatNumber(glRow.creditFx2),
+      slRefDate: toDateInputValue(data.fgrtvDate),
+      slrefDate: toDateInputValue(data.fgrtvDate),
     }));
 
   
@@ -678,11 +704,10 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       documentStatus: data.rtvStatus,
       status: data.docStatus,
       noReprints:data.noReprints,
-      documentID: data.msrtvId,
-      documentNo: data.msrtvNo,
+      documentID: data.fgrtvId,
+      documentNo: data.fgrtvNo,
       branchCode: data.branchCode,
-      documentDate: useformatToDatev2(data.msrtvDate),
-      // selectedAJType: data.ajtranType,
+      documentDate: useformatToDatev2(data.fgrtvDate),
       vendCode: data.vendCode,
       vendName: data.vendName,
       refDocNo1: data.refDocNo1,
@@ -733,7 +758,6 @@ const handleActivityOption = async (action) => {
       documentNo,
       documentID,
       documentDate,
-      // selectedAJType,
       vendCode,
       vendName,
       WHcode,
@@ -747,10 +771,9 @@ const handleActivityOption = async (action) => {
 
     return {
       branchCode: branchCode,
-      msrtvNo: documentNo || "",
-      msrtvId: documentID || "",
-      msrtvDate: documentDate,
-      // ajtranType: selectedAJType,
+      fgrtvNo: documentNo || "",
+      fgrtvId: documentID || "",
+      fgrtvDate: documentDate,
       vendCode: vendCode,
       vendName: vendName,
       whCode: WHcode,
@@ -799,7 +822,7 @@ const handleActivityOption = async (action) => {
         debitFx2: parseFormattedNumber(entry.debitFx2 || 0),
         creditFx2: parseFormattedNumber(entry.creditFx2 || 0),
         slRefNo: entry.slRefNo || "",
-        slRefDate: entry.slRefDate ? new Date(entry.slRefDate).toISOString().split("T")[0] : null,
+        slrefDate: toDateInputValue(documentDate),
         remarks: entry.remarks || ""
       }))
     };
@@ -817,8 +840,8 @@ const handleActivityOption = async (action) => {
       const newGlEntries = await useGenerateGLEntries(docType, genPayload);
 
       if (newGlEntries && newGlEntries.length > 0) {
-        currentGL = newGlEntries;
-        updateState({ detailRowsGL: newGlEntries });
+        currentGL = applyDocumentSlRefDate(newGlEntries);
+        updateState({ detailRowsGL: currentGL });
       } else {
         updateState({ isLoading: false });
         console.warn("GL Generation failed. Upsert cancelled.");
@@ -832,7 +855,7 @@ const handleActivityOption = async (action) => {
       const genPayload = getFormattedPayload(currentGL);
       const newGlEntries = await useGenerateGLEntries(docType, genPayload);
       if (newGlEntries) {
-        updateState({ detailRowsGL: newGlEntries });
+        updateState({ detailRowsGL: applyDocumentSlRefDate(newGlEntries) });
       }
     }
 
@@ -841,13 +864,13 @@ const handleActivityOption = async (action) => {
       // We use currentGL variable because state updates are async 
       // and wouldn't be available yet if we just generated them.
       const savePayload = getFormattedPayload(currentGL);
-      const response = await useTransactionUpsert(docType, savePayload, updateState, 'msrtvId', 'msrtvNo');
+      const response = await useTransactionUpsert(docType, savePayload, updateState, 'fgrtvId', 'fgrtvNo');
 
       if (response) {
         const isZero = Number(noReprints) === 0;
         const onSaveAndPrint = isZero
           ? () => updateState({ showSignatoryModal: true })
-          : () => handleSaveAndPrint(response.data[0].msrtvId);
+          : () => handleSaveAndPrint(response.data[0].fgrtvId);
 
         useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
         updateState({ isDocNoDisabled: true, isFetchDisabled: true });
@@ -886,8 +909,6 @@ const createEmptyDetailRow = () => ({
 });
 
 const handleGetItem = async (index = null) => {
-  if (!selectedAJType) return;
-
   const updatedRows = [...detailRows];
   const newRow = createEmptyDetailRow();
 
@@ -906,12 +927,11 @@ const handleGetItem = async (index = null) => {
   const handleAddRow = async () => {
   // if (!vendCode) return;
 
-    await handleOpenMSLookup();
+    await handleOpenFGLookup();
     return;
 
   // const lookupTypes = ["IL", "IR", "CA"];  
-  // if (lookupTypes.includes(selectedAJType)) { 
-  //   await handleOpenMSLookup();
+  //   await handleOpenFGLookup();
   //   return;
   // }
 
@@ -963,13 +983,13 @@ const createEmptyGlRow = () => ({
   debitFx2: "0.00",
   creditFx2: "0.00",
   slRefNo: "",
-  slRefDate: "",
+  slRefDate: toDateInputValue(documentDate),
+  slrefDate: toDateInputValue(documentDate),
   remarks: "",
 });
 
 const handleAddRowGL = (index = null) => {
 
-//  if (!selectedAJType) {
 //     return;
 //   }
 
@@ -1100,39 +1120,14 @@ const handleCopy = async () => {
 
 
 const handleFieldBehavior = (option) => {
-  switch (option) {
-
-    case "disableInput":
-     return (
-        selectedAJType === "IL" || 
-        (selectedAJType === "IR" && row.operation === "S")
-       )
-
-    case "hiddenBBMode":
-     return (
-        selectedAJType === "BB" 
-      );
-
-      case "hiddenCAMode":
-     return (
-        selectedAJType === "CA" 
-      );
-
-
-    default:
-      return false; 
-  }
+  return false;
 };
-
 
 
 const handleColumnLabel = (columnName) =>{
   switch (columnName) {
 
      case "UnitCost":
-      if(selectedAJType === "CA") {
-        return "Amount"
-      }
       return "Unit Cost"
 
        default:
@@ -1141,7 +1136,7 @@ const handleColumnLabel = (columnName) =>{
 }
   
 
-  const msrtvDetailColumnDefs = [
+  const fgrtvDetailColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
     { key: "itemCode", label: "Item Code", width: 120 },
     { key: "itemName", label: "Item Name", width: 260 },
@@ -1165,36 +1160,36 @@ const handleColumnLabel = (columnName) =>{
   ];
 
   const {
-    getColumnStyle: getMsrtvDetailColumnStyle,
-    getFrozenColumnStyle: getMsrtvDetailFrozenStyle,
-    getOrderedColumns: getOrderedMsrtvDetailColumns,
-    getSortedRows: getSortedMsrtvDetailRows,
-    clearAllSorting: clearMsrtvDetailSorting,
-    clearZeroValueOnFocus: clearMsrtvDetailZeroOnFocus,
-    focusNextRowInput: focusNextMsrtvDetailRowInput,
-    renderHeaderContextMenu: renderMsrtvDetailHeaderContextMenu,
-    renderResizableHeader: renderMsrtvDetailHeader,
-  } = useResizableTableColumns(msrtvDetailColumnDefs);
+    getColumnStyle: getFgrtvDetailColumnStyle,
+    getFrozenColumnStyle: getFgrtvDetailFrozenStyle,
+    getOrderedColumns: getOrderedFgrtvDetailColumns,
+    getSortedRows: getSortedFgrtvDetailRows,
+    clearAllSorting: clearFgrtvDetailSorting,
+    clearZeroValueOnFocus: clearFgrtvDetailZeroOnFocus,
+    focusNextRowInput: focusNextFgrtvDetailRowInput,
+    renderHeaderContextMenu: renderFgrtvDetailHeaderContextMenu,
+    renderResizableHeader: renderFgrtvDetailHeader,
+  } = useResizableTableColumns(fgrtvDetailColumnDefs);
 
-  const orderedMsrtvDetailColumns = getOrderedMsrtvDetailColumns(msrtvDetailColumnDefs);
-  const visibleMsrtvDetailColumns = orderedMsrtvDetailColumns.filter((column) => {
+  const orderedFgrtvDetailColumns = getOrderedFgrtvDetailColumns(fgrtvDetailColumnDefs);
+  const visibleFgrtvDetailColumns = orderedFgrtvDetailColumns.filter((column) => {
     if (["categCode", "uniqueKey", "operation", "sltypeCode"].includes(column.key)) return false;
     if (column.key === "quantity") return !handleFieldBehavior("hiddenCAMode");
     if (column.key === "itemAmount") return !handleFieldBehavior("hiddenCAMode");
     if (["acctCode", "rcCode", "slCode"].includes(column.key)) return !handleFieldBehavior("hiddenBBMode");
     return true;
   });
-  const getMsrtvDetailFallbackWidth = (key) => msrtvDetailColumnDefs.find((column) => column.key === key)?.width || 120;
-  const getMsrtvDetailCellStyle = (key, fallbackWidth) => ({
-    ...getMsrtvDetailColumnStyle(key, fallbackWidth),
-    ...getMsrtvDetailFrozenStyle(key, visibleMsrtvDetailColumns, fallbackWidth, { isHeader: false }),
+  const getFgrtvDetailFallbackWidth = (key) => fgrtvDetailColumnDefs.find((column) => column.key === key)?.width || 120;
+  const getFgrtvDetailCellStyle = (key, fallbackWidth) => ({
+    ...getFgrtvDetailColumnStyle(key, fallbackWidth),
+    ...getFgrtvDetailFrozenStyle(key, visibleFgrtvDetailColumns, fallbackWidth, { isHeader: false }),
   });
-  const sortedMsrtvDetailRows = getSortedMsrtvDetailRows(
+  const sortedFgrtvDetailRows = getSortedFgrtvDetailRows(
     detailRows.map((row, originalIndex) => ({ row, originalIndex })),
     (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? ""
   );
 
-  const msrtvGlColumnDefs = [
+  const fgrtvGlColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
     { key: "acctCode", label: "Account Code", width: 120 },
     { key: "rcCode", label: "RC Code", width: 120 },
@@ -1221,44 +1216,44 @@ const handleColumnLabel = (columnName) =>{
   ];
 
   const {
-    getColumnStyle: getMsrtvGlColumnStyle,
-    getFrozenColumnStyle: getMsrtvGlFrozenStyle,
-    getOrderedColumns: getOrderedMsrtvGlColumns,
-    getSortedRows: getSortedMsrtvGlRows,
-    setColumnOrder: setMsrtvGlColumnOrder,
-    clearAllSorting: clearMsrtvGlSorting,
-    clearZeroValueOnFocus: clearMsrtvGlZeroOnFocus,
-    focusNextRowInput: focusNextMsrtvGlRowInput,
-    renderHeaderContextMenu: renderMsrtvGlHeaderContextMenu,
-    renderResizableHeader: renderMsrtvGlHeader,
-  } = useResizableTableColumns(msrtvGlColumnDefs);
+    getColumnStyle: getFgrtvGlColumnStyle,
+    getFrozenColumnStyle: getFgrtvGlFrozenStyle,
+    getOrderedColumns: getOrderedFgrtvGlColumns,
+    getSortedRows: getSortedFgrtvGlRows,
+    setColumnOrder: setFgrtvGlColumnOrder,
+    clearAllSorting: clearFgrtvGlSorting,
+    clearZeroValueOnFocus: clearFgrtvGlZeroOnFocus,
+    focusNextRowInput: focusNextFgrtvGlRowInput,
+    renderHeaderContextMenu: renderFgrtvGlHeaderContextMenu,
+    renderResizableHeader: renderFgrtvGlHeader,
+  } = useResizableTableColumns(fgrtvGlColumnDefs);
 
-  const orderedMsrtvGlColumns = getOrderedMsrtvGlColumns(msrtvGlColumnDefs);
-  const getMsrtvGlFallbackWidth = (key) => msrtvGlColumnDefs.find((column) => column.key === key)?.width || 120;
-  const getMsrtvGlCellStyle = (key, fallbackWidth) => ({
-    ...getMsrtvGlColumnStyle(key, fallbackWidth),
-    ...getMsrtvGlFrozenStyle(key, orderedMsrtvGlColumns, fallbackWidth, { isHeader: false }),
+  const orderedFgrtvGlColumns = getOrderedFgrtvGlColumns(fgrtvGlColumnDefs);
+  const getFgrtvGlFallbackWidth = (key) => fgrtvGlColumnDefs.find((column) => column.key === key)?.width || 120;
+  const getFgrtvGlCellStyle = (key, fallbackWidth) => ({
+    ...getFgrtvGlColumnStyle(key, fallbackWidth),
+    ...getFgrtvGlFrozenStyle(key, orderedFgrtvGlColumns, fallbackWidth, { isHeader: false }),
   });
   useEffect(() => {
-    setMsrtvGlColumnOrder(msrtvGlColumnDefs.map((column) => column.key));
-  }, [setMsrtvGlColumnOrder, withCurr2, withCurr3, glCurrDefault, currCode, glCurrGlobal2, glCurrGlobal3]);
-  const sortedMsrtvGlRows = getSortedMsrtvGlRows(
+    setFgrtvGlColumnOrder(fgrtvGlColumnDefs.map((column) => column.key));
+  }, [setFgrtvGlColumnOrder, withCurr2, withCurr3, glCurrDefault, currCode, glCurrGlobal2, glCurrGlobal3]);
+  const sortedFgrtvGlRows = getSortedFgrtvGlRows(
     detailRowsGL.map((row, originalIndex) => ({ row, originalIndex })),
     (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? ""
   );
 
-  const msrtvDetailEnterNextRowZeroClearFields = ["quantity", "unitCost"];
-  const msrtvGlEnterNextRowZeroClearFields = ["debit", "credit", "debitFx1", "creditFx1", "debitFx2", "creditFx2"];
+  const fgrtvDetailEnterNextRowZeroClearFields = ["quantity", "unitCost"];
+  const fgrtvGlEnterNextRowZeroClearFields = ["debit", "credit", "debitFx1", "creditFx1", "debitFx2", "creditFx2"];
 
   const getSingleUploadTemplateColumns = () =>
-    visibleMsrtvDetailColumns.filter((column) => column.key !== "qtyHand");
+    visibleFgrtvDetailColumns.filter((column) => column.key !== "qtyHand");
 
   const handleDownloadSingleUploadTemplate = async () => {
     const templateColumns = getSingleUploadTemplateColumns();
     await downloadGlobalSingleUploadTemplate({
       columns: templateColumns,
-      rows: sortedMsrtvDetailRows,
-      fileName: "MS RTV Single Transaction Uploading Template.xlsx",
+      rows: sortedFgrtvDetailRows,
+      fileName: "FG RTV Single Transaction Uploading Template.xlsx",
       sheetName: "Item Details",
       decimalColumnFormats: { quantity: decQty, unitCost: decUcost, itemAmount: 2 },
       dateColumns: ["bbDate"],
@@ -1396,7 +1391,7 @@ const handleHistoryRowPick = useCallback(
 
 useEffect(() => {
   const params = new URLSearchParams(location.search);
-  const docNo = params.get("msrtvNo");
+  const docNo = params.get("fgrtvNo");
   const branchCode = params.get("branchCode");
 
   if (!loadedFromUrlRef.current && docNo && branchCode) {
@@ -1510,7 +1505,6 @@ useEffect(() => {
 //     const recalcRow = async () => {
 //       let processedQty = Math.abs(origQuantity);
 
-//       if (origOperation === "S" && (selectedAJType === "IL" || selectedAJType === "IR")) {
 //         if (processedQty > origQtyHand) {
 //           useSwalErrorAlert('Exceeds Stock', `Quantity (${processedQty}) exceeds Quantity on Hand (${origQtyHand}). Value has been adjusted.`);
 //           processedQty = origQtyHand;
@@ -1520,11 +1514,9 @@ useEffect(() => {
 //         processedQty = Math.abs(processedQty);
 //       }
 
-//       const finalQtyForMath = (selectedAJType === "CA") ? 1 : processedQty;
 //       const calculatedAmount = +(finalQtyForMath * origUnitCost).toFixed(2);
 
 //       row.itemAmount = formatNumber(calculatedAmount);
-//       row.quantity = formatNumber(selectedAJType === "CA" ? 0 : processedQty, decQty);
 //       row.unitCost = formatNumber(origUnitCost, decUcost);
 //     };
 
@@ -1710,7 +1702,12 @@ const handleDetailChangeGL = async (index, field, value) => {
     }
   }
 
-    if (['slRefNo', 'slRefDate', 'remarks'].includes(field)) {
+    if (field === 'slRefDate') {
+        row.slRefDate = toDateInputValue(documentDate);
+        row.slrefDate = toDateInputValue(documentDate);
+    }
+
+    if (['slRefNo', 'remarks'].includes(field)) {
         row[field] = value;
     }
     
@@ -1889,6 +1886,7 @@ const handleCloseSignatory = async (mode) => {
 
 
 const handleSaveAndPrint = async (documentID) => {
+
     updateState({ showSpinner: true });
     await useHandlePrint(documentID, docType);
 
@@ -1996,28 +1994,28 @@ const handleCloseBranchModal = (selectedBranch) => {
 
 
   
-  const handleOpenMSLookup = async () => {
+  const handleOpenFGLookup = async () => {
     try {
       updateState({ isLoading: true });
   
-      const endpoint ="getInvLookupMS"
-      const response = await fetchDataJson(endpoint, { userCode, whouseCode :state.whouseCode || "", locCode: state.locCode || "", docType:"MSRTV" ,tranType :selectedAJType });
+      const endpoint ="getInvLookupFG"
+      const response = await fetchDataJson(endpoint, { userCode, whouseCode: state.WHcode || state.whouseCode || "", locCode: state.locCode || "", docType: "FGRTV" });
       const custData = response?.data?.[0]?.result ? JSON.parse(response.data[0].result) : [];
   
 
-      const lookupTypes = ["BB", "IG"];  
-      const colConfig = await useSelectedHSColConfig(lookupTypes.includes("IG") ? "AllMastItemLookup" : "getInvLookupMS");
+      const lookupTypes = [""];  
+      const colConfig = await useSelectedHSColConfig("getInvLookupFG");
 
 
      if (custData.length === 0) {
-        useSwalErrorAlert("MS Location Balance","No records found")
+        useSwalErrorAlert("FG Location Balance","No records found")
          updateState({ isLoading: false });
         return; 
       }
   
       updateState({ globalLookupRow: custData,
                     globalLookupHeader:colConfig,
-                    msLookupModalOpen: true
+                    fgLookupModalOpen: true
         });
   
     } catch (error) {
@@ -2044,8 +2042,8 @@ const handleCloseBranchModal = (selectedBranch) => {
 
 
 
-  const handleCloseMSLookup = (selectedItems) => {
-  updateState({ msLookupModalOpen: false });
+  const handleCloseFGLookup = (selectedItems) => {
+  updateState({ fgLookupModalOpen: false });
 
   if (!selectedItems) return;
 
@@ -2067,8 +2065,8 @@ const handleCloseBranchModal = (selectedBranch) => {
     locCode: item?.locCode ?? state.locCode ?? "",
     qtyHand: formatNumber(parseFormattedNumber(item?.qtyHand ?? 0), decQty),
     uniqueKey: item?.uniqueKey ?? "",
-    operation:  (selectedAJType === "IL" || selectedAJType === "IR") ? "S" : "A",
-    acctCode: "",
+    operation: "A",
+    acctCode: item?.rrAcctCode ?? "",
     sltypeCode: "SU",
     rcCode: "",
     slCode: vendCode,
@@ -2083,13 +2081,13 @@ setState((prev) => {
 };
 
 
-const renderMsrtvDetailColumn = (columnKey, row, index) => {
-  const columnWidth = getMsrtvDetailFallbackWidth(columnKey);
-  const style = getMsrtvDetailCellStyle(columnKey, columnWidth);
+const renderFgrtvDetailColumn = (columnKey, row, index) => {
+  const columnWidth = getFgrtvDetailFallbackWidth(columnKey);
+  const style = getFgrtvDetailCellStyle(columnKey, columnWidth);
   const focusNextDetailCell = (field) => {
-    focusNextMsrtvDetailRowInput(index, field, {
+    focusNextFgrtvDetailRowInput(index, field, {
       rows: detailRows,
-      zeroClearFields: msrtvDetailEnterNextRowZeroClearFields,
+      zeroClearFields: fgrtvDetailEnterNextRowZeroClearFields,
       parseValue: parseFormattedNumber,
       onClearNextValue: (nextIndex, nextField, value) => handleDetailChange(nextIndex, nextField, value, false),
     });
@@ -2102,7 +2100,7 @@ const renderMsrtvDetailColumn = (columnKey, row, index) => {
     <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`${field}-${index}`} className={`w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer ${options.className || ""}`.trim()} value={row[field] || ""} readOnly onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); focusNextDetailCell(field); }} />{!isFormDisabled && !options.hideIcon && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={onClick} />}</div></td>
   );
   const amountInput = (field, options = {}) => (
-    <input type="text" id={`${field}-${index}`} className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0" value={row[field] || ""} readOnly={options.readOnly ?? isFormDisabled} disabled={options.disabled} onChange={(e) => { const sanitizedValue = e.target.value.replace(options.allowNegative ? /[^0-9.-]/g : /[^0-9.]/g, ""); const pattern = options.allowNegative ? /^-?\d*\.?\d{0,2}$/ : /^\d*\.?\d{0,2}$/; if (pattern.test(sanitizedValue) || sanitizedValue === "") handleDetailChange(index, field, sanitizedValue, false); }} onFocus={(e) => clearMsrtvDetailZeroOnFocus(e, { isEditable: !(options.readOnly ?? isFormDisabled), onClear: (value) => handleDetailChange(index, field, value, false) })} onBlur={async (e) => { if (options.readOnly ?? isFormDisabled) return; const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, field, num, true); setFocusedCell(null); }} onKeyDown={async (e) => { if (e.key !== "Enter" || (options.readOnly ?? isFormDisabled)) return; e.preventDefault(); const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, field, num, true); focusNextDetailCell(field); }} />
+    <input type="text" id={`${field}-${index}`} className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0" value={row[field] || ""} readOnly={options.readOnly ?? isFormDisabled} disabled={options.disabled} onChange={(e) => { const sanitizedValue = e.target.value.replace(options.allowNegative ? /[^0-9.-]/g : /[^0-9.]/g, ""); const pattern = options.allowNegative ? /^-?\d*\.?\d{0,2}$/ : /^\d*\.?\d{0,2}$/; if (pattern.test(sanitizedValue) || sanitizedValue === "") handleDetailChange(index, field, sanitizedValue, false); }} onFocus={(e) => clearFgrtvDetailZeroOnFocus(e, { isEditable: !(options.readOnly ?? isFormDisabled), onClear: (value) => handleDetailChange(index, field, value, false) })} onBlur={async (e) => { if (options.readOnly ?? isFormDisabled) return; const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, field, num, true); setFocusedCell(null); }} onKeyDown={async (e) => { if (e.key !== "Enter" || (options.readOnly ?? isFormDisabled)) return; e.preventDefault(); const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, field, num, true); focusNextDetailCell(field); }} />
   );
 
   const detailColumnRenderers = {
@@ -2131,10 +2129,10 @@ const renderMsrtvDetailColumn = (columnKey, row, index) => {
   return detailColumnRenderers[columnKey]?.() ?? <td key={columnKey} className="global-tran-td-ui" style={style}>{String(row[columnKey] ?? "")}</td>;
 };
 
-const renderMsrtvGlColumn = (columnKey, row, index) => {
-  const columnWidth = getMsrtvGlFallbackWidth(columnKey);
-  const style = getMsrtvGlCellStyle(columnKey, columnWidth);
-  const focusNextGlCell = (field) => focusNextMsrtvGlRowInput(index, field, { rows: detailRowsGL, zeroClearFields: msrtvGlEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChangeGL(nextIndex, nextField, value) });
+const renderFgrtvGlColumn = (columnKey, row, index) => {
+  const columnWidth = getFgrtvGlFallbackWidth(columnKey);
+  const style = getFgrtvGlCellStyle(columnKey, columnWidth);
+  const focusNextGlCell = (field) => focusNextFgrtvGlRowInput(index, field, { rows: detailRowsGL, zeroClearFields: fgrtvGlEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChangeGL(nextIndex, nextField, value) });
   const modalHandlers = {
     acctCode: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "acctCode" }),
     rcCode: () => updateState({ selectedRowIndex: index, showRcModal: true }),
@@ -2144,7 +2142,7 @@ const renderMsrtvGlColumn = (columnKey, row, index) => {
   };
   const textInput = (field, options = {}) => <input type="text" id={`${field}-${index}`} className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? isFormDisabled} maxLength={options.maxLength} onChange={(e) => handleDetailChangeGL(index, field, e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || options.readOnly || isFormDisabled) return; e.preventDefault(); focusNextGlCell(field); }} />;
   const lookupCell = (field, options = {}) => <td key={columnKey} className="global-tran-td-ui" style={style}><div className="relative w-full"><input type="text" id={`${field}-${index}`} className={`w-full pr-6 global-tran-td-inputclass-ui cursor-pointer ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? true} onChange={(e) => handleDetailChangeGL(index, field, e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); focusNextGlCell(field); }} />{!isFormDisabled && (options.alwaysShowIcon || String(row[field] || "").trim()) && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={modalHandlers[field]} />}</div></td>;
-  const amountInput = (field) => <input type="text" id={`${field}-${index}`} className="w-full global-tran-td-inputclass-ui text-right" value={row[field] || ""} readOnly={isFormDisabled} onChange={(e) => { const sanitizedValue = e.target.value.replace(/[^0-9.]/g, ""); if (/^\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") handleDetailChangeGL(index, field, sanitizedValue); }} onFocus={(e) => clearMsrtvGlZeroOnFocus(e, { isEditable: !isFormDisabled, onClear: (value) => handleDetailChangeGL(index, field, value) })} onBlur={(e) => { if (isFormDisabled) return; handleBlurGL(index, field, e.target.value); }} onKeyDown={async (e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); await handleBlurGL(index, field, e.target.value, true); focusNextGlCell(field); }} />;
+  const amountInput = (field) => <input type="text" id={`${field}-${index}`} className="w-full global-tran-td-inputclass-ui text-right" value={row[field] || ""} readOnly={isFormDisabled} onChange={(e) => { const sanitizedValue = e.target.value.replace(/[^0-9.]/g, ""); if (/^\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") handleDetailChangeGL(index, field, sanitizedValue); }} onFocus={(e) => clearFgrtvGlZeroOnFocus(e, { isEditable: !isFormDisabled, onClear: (value) => handleDetailChangeGL(index, field, value) })} onBlur={(e) => { if (isFormDisabled) return; handleBlurGL(index, field, e.target.value); }} onKeyDown={async (e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); await handleBlurGL(index, field, e.target.value, true); focusNextGlCell(field); }} />;
   const glColumnRenderers = {
     ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
     acctCode: () => lookupCell("acctCode", { alwaysShowIcon: true, readOnly: false }),
@@ -2163,7 +2161,7 @@ const renderMsrtvGlColumn = (columnKey, row, index) => {
     debitFx2: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{amountInput("debitFx2")}</td>,
     creditFx2: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{amountInput("creditFx2")}</td>,
     slRefNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("slRefNo", { maxLength: useGetFieldLength(tblFieldArray, "slref_no") })}</td>,
-    slRefDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="date" id={`slRefDate-${index}`} className="w-full global-tran-td-inputclass-ui text-center" value={toSingleUploadDateValue(row.slRefDate)} readOnly={isFormDisabled} onChange={(e) => handleDetailChangeGL(index, "slRefDate", e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextGlCell("slRefDate"); } }} /></td>,
+    slRefDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="date" id={`slRefDate-${index}`} className="w-full global-tran-td-inputclass-ui text-center" value={toDateInputValue(documentDate)} readOnly disabled onChange={() => {}} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextGlCell("slRefDate"); } }} /></td>,
     remarks: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("remarks", { maxLength: useGetFieldLength(tblFieldArray, "remarks") })}</td>,
   };
   return glColumnRenderers[columnKey]?.() ?? <td key={columnKey} className="global-tran-td-ui" style={style}>{String(row[columnKey] ?? "")}</td>;
@@ -2215,7 +2213,7 @@ return (
         isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
         isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
         isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED" || displayStatus === "CLOSED"}
-        detailsRoute="/page/MSRTV"
+        detailsRoute="/page/FGRTV"
       />
       </div>
 
@@ -2261,10 +2259,10 @@ return (
             {/* Provision for Other Tabs */}
         </div>
 
-        {/* MSRTV Header Form Section */}
+        {/* FGRTV Header Form Section */}
        <div
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 rounded-lg relative"
-            id="msrtv_hd"
+            id="fgrtv_hd"
           >
             {/* Columns 1–3 (Header fields) */}
             <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -2289,8 +2287,8 @@ return (
                     {/* SVI Number Field */}
                     <div className="relative">
                       <FieldRenderer
-                        id="msrtvNo"
-                        label="MSRTV No."
+                        id="fgrtvNo"
+                        label="FGRTV No."
                         type="lookup"
                         value={state.documentNo || ""}
                         onChange={(val) => updateState({ documentNo: val })}
@@ -2299,7 +2297,7 @@ return (
                           if (e.key === "Enter") {
                             handleDocNoBlur();
                             e.preventDefault();
-                            document.getElementById("msrtvDate")?.focus();
+                            document.getElementById("fgrtvDate")?.focus();
                           }
                         }}
                         placeholder=" "
@@ -2311,7 +2309,7 @@ return (
                     <div className="relative w-full">
                       <div className={`flex items-stretch global-ref-textbox-ui ${!isFormDisabled ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"}`}>
                         <DateFormatInput
-                          id="msrtvDate"
+                          id="fgrtvDate"
                           name="documentDate"
                           className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
                           value={documentDate}
@@ -2319,7 +2317,7 @@ return (
                           updateState={updateState}
                         />
                       </div>
-                      <label htmlFor="msrtvDate" className="global-ref-floating-label">MSRTV Date</label>
+                      <label htmlFor="fgrtvDate" className="global-ref-floating-label">FGRTV Date</label>
                     </div>
 
                    
@@ -2327,33 +2325,7 @@ return (
 
                 {/* Column 2 */}
                 <div className="global-tran-textbox-group-div-ui">
-                    {/* <div className="relative">
-                        <select id="ajType"
-                            className="peer global-tran-textbox-ui"
-                            value={selectedAJType}
-                            onChange={(e) => updateState({ selectedAJType: e.target.value })}
-                            disabled={isFormDisabled} 
-                        >
-                            {ajTypes.length > 0 ?
-                            (
-                                <>
-                                    <option value="">Select Adjustment Type</option>
-                                    {ajTypes.map((type) =>
-                                    (
-                                        <option key={type.DROPDOWN_CODE} value={type.DROPDOWN_CODE}>
-                                            {type.DROPDOWN_NAME}
-                                        </option>
-                                    ))}
-                                </>
-                            ) : (<option value="">Loading Adjustment Types...</option>)}
-                        </select>
-                        <label htmlFor="sviType" className="global-tran-floating-label">Adj Type</label>
-                        <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
-                            <svg className="h-4 w-4 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                            </svg>
-                        </div>
-                    </div> */}
+
 
                 {/* Payee Code. */}
                 <div className="relative group flex-[1.3]">
@@ -2520,23 +2492,23 @@ return (
           <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
             <thead className="global-tran-thead-div-ui">
               <tr>
-                {visibleMsrtvDetailColumns.map((column) => (
+                {visibleFgrtvDetailColumns.map((column) => (
                   <Fragment key={`detail-header-${column.key}`}>
-                    {renderMsrtvDetailHeader(column.label, column.key, column.width, {
-                      orderedColumns: visibleMsrtvDetailColumns,
+                    {renderFgrtvDetailHeader(column.label, column.key, column.width, {
+                      orderedColumns: visibleFgrtvDetailColumns,
                     })}
                   </Fragment>
                 ))}
                 {!isFormDisabled && (
-                  <th key="detail-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
+                  <th key="detail-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
                 )}
               </tr>
-              {renderMsrtvDetailHeaderContextMenu()}
+              {renderFgrtvDetailHeaderContextMenu()}
             </thead>
             <tbody className="relative">
-              {sortedMsrtvDetailRows.map(({ row, originalIndex }) => (
+              {sortedFgrtvDetailRows.map(({ row, originalIndex }) => (
                 <tr key={`${row.uniqueKey || row.itemCode || "row"}-${originalIndex}`} className="global-tran-tr-ui">
-                  {visibleMsrtvDetailColumns.map((column) => renderMsrtvDetailColumn(column.key, row, originalIndex))}
+                  {visibleFgrtvDetailColumns.map((column) => renderFgrtvDetailColumn(column.key, row, originalIndex))}
                   {!isFormDisabled && (
                     <td className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black" style={transactionActionsCellStyle}>
                       <div className="flex items-center justify-center gap-1">
@@ -2728,23 +2700,23 @@ return (
             <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
               <thead className="global-tran-thead-div-ui">
                 <tr>
-                  {orderedMsrtvGlColumns.map((column) => (
+                  {orderedFgrtvGlColumns.map((column) => (
                     <Fragment key={`gl-header-${column.key}`}>
-                      {renderMsrtvGlHeader(column.label, column.key, column.width, {
-                        orderedColumns: orderedMsrtvGlColumns,
+                      {renderFgrtvGlHeader(column.label, column.key, column.width, {
+                        orderedColumns: orderedFgrtvGlColumns,
                       })}
                     </Fragment>
                   ))}
                   {!isFormDisabled && (
-                    <th key="gl-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
+                    <th key="gl-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
                   )}
                 </tr>
-                {renderMsrtvGlHeaderContextMenu()}
+                {renderFgrtvGlHeaderContextMenu()}
               </thead>
               <tbody className="relative">
-                {sortedMsrtvGlRows.map(({ row, originalIndex }) => (
+                {sortedFgrtvGlRows.map(({ row, originalIndex }) => (
                   <tr key={`${row.acctCode || "gl"}-${originalIndex}`} className="global-tran-tr-ui">
-                    {orderedMsrtvGlColumns.map((column) => renderMsrtvGlColumn(column.key, row, originalIndex))}
+                    {orderedFgrtvGlColumns.map((column) => renderFgrtvGlColumn(column.key, row, originalIndex))}
                     {!isFormDisabled && (
                       <td className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black" style={transactionActionsCellStyle}>
                         <div className="flex items-center justify-center gap-1">
@@ -2931,7 +2903,7 @@ return (
 
 
     {showPostingModal && (
-      <PostMSRTV
+      <PostFGRTV
         isOpen={showPostingModal}
         userCode={userCode}
         docType={docType}
@@ -2946,7 +2918,7 @@ return (
     {showAllTranDocNo && (
       <AllTranDocNo
         isOpen={showAllTranDocNo}
-        params={{branchCode,branchName,docType,documentTitle,fieldNo : "msrtvNo"}}
+        params={{branchCode,branchName,docType,documentTitle,fieldNo : "fgrtvNo"}}
         onRetrieve={handleTranDocNoRetrieval}
         onResponse={{documentNo}}
         onSelected={handleTranDocNoSelection}
@@ -2956,15 +2928,15 @@ return (
 
 
 
-      {msLookupModalOpen && (
+      {fgLookupModalOpen && (
               <GlobalLookupModalv1
-                isOpen={msLookupModalOpen}
+                isOpen={fgLookupModalOpen}
                 data={globalLookupRow}
                 btnCaption="Get Selected Items"
-                title="MS Location Balance"
+                title="FG Location Balance"
                 endpoint={globalLookupHeader}
-                onClose={handleCloseMSLookup}
-                onCancel={() => updateState({ msLookupModalOpen: false })}
+                onClose={handleCloseFGLookup}
+                onCancel={() => updateState({ fgLookupModalOpen: false })}
               />
         )}
         
@@ -3011,9 +2983,9 @@ return (
     <div className={topTab === "history" ? "" : "hidden"}>
       <AllTranHistory
         showHeader={false}
-        endpoint="/getMSRTVHistory"
-        cacheKey={`MSRTV:${state.branchCode || ""}:${state.docNo || ""}`}  // ✅ per-transaction
-        activeTabKey="MSRTV_Summary"
+        endpoint="/getFGRTVHistory"
+        cacheKey={`FGRTV:${state.branchCode || ""}:${state.docNo || ""}`}  // ✅ per-transaction
+        activeTabKey="FGRTV_Summary"
         branchCode={state.branchCode}
         startDate={state.fromDate}
         endDate={state.toDate}
@@ -3039,5 +3011,5 @@ return (
 
 };
 
-export default MSRTV;
+export default FGRTV;
 

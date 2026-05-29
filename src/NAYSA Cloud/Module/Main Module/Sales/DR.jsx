@@ -1717,21 +1717,11 @@ const handleOpenItemPickingModal = async (index) => {
     });
 
     const result = parseSprocJsonResult(response);
-    const stockRows = Array.isArray(result?.stockRows) ? result.stockRows : [];
-    const existingAllocations = Array.isArray(result?.existingAllocations)
-      ? result.existingAllocations
-      : [];
 
-    if (stockRows.length === 0 && existingAllocations.length === 0) {
-      useSwalInfoAlert(
-        "Item Picking",
-        "There are no available records for picking."
-      );
-      return;
-    }
-
-    setItemPickingStockRows(stockRows);
-    setItemPickingExistingAllocations(existingAllocations);
+    setItemPickingStockRows(Array.isArray(result?.stockRows) ? result.stockRows : []);
+    setItemPickingExistingAllocations(
+      Array.isArray(result?.existingAllocations) ? result.existingAllocations : []
+    );
     setItemPickingRowIndex(index);
     setShowItemPickingModal(true);
   } catch (error) {
@@ -2037,7 +2027,7 @@ const handleHistoryRowPick = useCallback(
 
 useEffect(() => {
   const params = new URLSearchParams(location.search);
-  const docNo = params.get("drNo");
+  const docNo = params.get("soNo");
   const branchCode = params.get("branchCode");
 
   if (!loadedFromUrlRef.current && docNo && branchCode) {

@@ -64,6 +64,7 @@ import {
   useHandleCancel,
   useFieldLenghtCheck,
   useGetFieldLength,
+  useHandlePost,
 } from '@/NAYSA Cloud/Global/procedure';
 
 import {
@@ -85,9 +86,14 @@ import {
   formatNumber,
   parseFormattedNumber,
   useSwalshowSaveSuccessDialog,
+  useSwalHandleOpenSpecsModal,
+  useSwalSuccessAlert,
   useSwalErrorAlert,
-} from '@/NAYSA Cloud/Global/behavior';
+  useSwalInfoAlert,
+  useSwalvalidateRequiredFields
+} from '@/NAYSA Cloud/Global/behavior.jsx';
 
+import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 // Header
 import Header from '@/NAYSA Cloud/Components/Header';
@@ -107,6 +113,28 @@ import {
 } from '@/NAYSA Cloud/Global/datatable.jsx';
 
 
+const normalizeDateForInput = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) return raw;
+
+  const converted = useformatToDatev2(raw);
+  return converted && /^\d{2}\/\d{2}\/\d{4}$/.test(converted) ? converted : "";
+};
+
+const toDateInputValue = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+    const [month, day, year] = raw.split("/");
+    return `${year}-${month}-${day}`;
+  }
+
+  const converted = normalizeDateForInput(raw);
+  return converted ? toDateInputValue(converted) : raw;
+};
+
 const MSRTV = () => {
 
   // View Document Const
@@ -116,7 +144,7 @@ const MSRTV = () => {
   const navigate = useNavigate();
   const location = useLocation(); 
   const [isViewDocument, setIsViewDocument] = useState(false);
-  const { companyInfo, currentUserRow } = useAuth();
+  const { companyInfo, currentUserRow,getAllDropDown,refsLoaded ,getAllTopATCRow, getAllTopVatRow,getAllTopVatAmount,getAllTopATCAmount,getAllTopHSDocRow } = useAuth();
   const decQty = companyInfo?.itemDecqtyMS ?? 2;
   const decUcost = companyInfo?.itemDecUcostMS ?? 6;
 
@@ -130,31 +158,38 @@ const MSRTV = () => {
   const isViewDocumentUrl = isViewDocument;
 
 
+   const [topTab, setTopTab] = useState("details"); // "details" | "history"
+   const { user } = useAuth();
+   const { resetFlag } = useReset();
+   
+  //Document Global Setup
+  const docType = docTypes.MSRTV; 
+  const hsDoc = getAllTopHSDocRow(docType);
+  const pdfLink = docTypePDFGuide[docType];
+  const videoLink = docTypeVideoGuide[docType];
+  const documentTitle = hsDoc.docName + ' Transaction';
 
-  const [topTab, setTopTab] = useState("details"); // "details" | "history"
   const [showSingleUploadDropdown, setShowSingleUploadDropdown] = useState(false);
-  const { user } = useAuth();
-  const { resetFlag } = useReset();
   const [state, setState] = useState({
 
 
     // HS Option
-    glCurrMode:"M",
-    glCurrDefault:"PHP",
+    glCurrMode:companyInfo?.glCurrMode||"",
+    glCurrDefault:companyInfo?.currCode||"",
     withCurr2:false,
     withCurr3:false,
-    glCurrGlobal1:"",
-    glCurrGlobal2:"",
-    glCurrGlobal3:"",
+    glCurrGlobal1:companyInfo?.glCurrGlobal1||"",
+    glCurrGlobal2:companyInfo?.glCurrGlobal2||"",
+    glCurrGlobal3:companyInfo?.glCurrGlobal3||"",
 
 
     
     // Document information
-    documentName: "",
-    documentSeries: "Auto",
-    documentDocLen: 8,
+    documentName: hsDoc?.docName||"",
+    documentSeries: hsDoc?.docSeries||"Auto",
+    documentDocLen: hsDoc?.docLength||8,
     documentID: null,
-    documentDate: useGetCurrentDayV2(),
+    documentDate:useGetCurrentDayV2(),   
     documentNo: "",
     documentStatus:"",
     status: "OPEN",
@@ -174,16 +209,16 @@ const MSRTV = () => {
 
 
 
-    branchCode: "HO",
-    branchName: "Head Office",
+    branchCode: currentUserRow?.branchCode||"",
+    branchName: currentUserRow?.branchName||"",
     
 
     
     // Currency information
-    currCode: "PHP",
-    currName: "Philippine Peso",
-    currRate: "1.000000",
-    defaultCurrRate:"1.000000",
+    currCode: companyInfo?.currCode||"",
+    currName: companyInfo?.currName||"",
+    currRate: formatNumber(companyInfo?.currRate||1,6),
+    defaultCurrRate:formatNumber(companyInfo?.currRate||1,6),
 
 
     //Other Header Info
@@ -195,7 +230,7 @@ const MSRTV = () => {
     whCode: "",
     locCode: "",
     remarks: "",
-    userCode: user.USER_CODE, 
+    userCode: currentUserRow?.userCode||"", 
 
     //Detail 1-2
     detailRows  :[],
@@ -353,11 +388,6 @@ const MSRTV = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showSingleUploadDropdown]);
 
-  //Document Global Setup
-  const docType = docTypes.MSRTV; 
-  const pdfLink = docTypePDFGuide[docType];
-  const videoLink = docTypeVideoGuide[docType];
-  const documentTitle = docTypeNames[docType] || 'Transaction';
  
 
 
@@ -388,6 +418,15 @@ const MSRTV = () => {
         invAcct: glAccountFilter.ActiveAll,
   };
   const customParam = customParamMap[accountModalSource] || null;
+
+  const applyDocumentSlRefDate = (rows, sourceDate = documentDate) => {
+    const slDate = toDateInputValue(sourceDate);
+    return (rows || []).map((row) => ({
+      ...row,
+      slRefDate: slDate,
+      slrefDate: slDate,
+    }));
+  };
   
 
 
@@ -449,6 +488,19 @@ useEffect(() => {
   useEffect(() => {
       updateState({isDocNoDisabled: !!state.documentID });
   }, [state.documentID]);
+
+  useEffect(() => {
+    const slDate = toDateInputValue(documentDate);
+    if (!slDate || detailRowsGL.length === 0) return;
+
+    const hasDifferentDate = detailRowsGL.some(
+      (row) => toDateInputValue(row.slRefDate || row.slrefDate) !== slDate
+    );
+
+    if (hasDifferentDate) {
+      updateState({ detailRowsGL: applyDocumentSlRefDate(detailRowsGL, documentDate) });
+    }
+  }, [documentDate]);
   
 
 
@@ -482,16 +534,6 @@ useEffect(() => {
 
 
   
-
-
-  const LoadingSpinner = () => (
-    <div className="global-tran-spinner-main-div-ui">
-      <div className="global-tran-spinner-sub-div-ui">
-        <FontAwesomeIcon icon={faSpinner} spin size="2x" className="text-blue-500 mb-2" />
-        <p>Please wait...</p>
-      </div>
-    </div>
-  );
 
   
   const handleReset = () => {
@@ -652,6 +694,8 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       creditFx1: formatNumber(glRow.creditFx1),
       debitFx2: formatNumber(glRow.debitFx2),
       creditFx2: formatNumber(glRow.creditFx2),
+      slRefDate: toDateInputValue(data.msrtvDate),
+      slrefDate: toDateInputValue(data.msrtvDate),
     }));
 
   
@@ -778,7 +822,7 @@ const handleActivityOption = async (action) => {
         debitFx2: parseFormattedNumber(entry.debitFx2 || 0),
         creditFx2: parseFormattedNumber(entry.creditFx2 || 0),
         slRefNo: entry.slRefNo || "",
-        slRefDate: entry.slRefDate ? new Date(entry.slRefDate).toISOString().split("T")[0] : null,
+        slrefDate: toDateInputValue(documentDate),
         remarks: entry.remarks || ""
       }))
     };
@@ -796,8 +840,8 @@ const handleActivityOption = async (action) => {
       const newGlEntries = await useGenerateGLEntries(docType, genPayload);
 
       if (newGlEntries && newGlEntries.length > 0) {
-        currentGL = newGlEntries;
-        updateState({ detailRowsGL: newGlEntries });
+        currentGL = applyDocumentSlRefDate(newGlEntries);
+        updateState({ detailRowsGL: currentGL });
       } else {
         updateState({ isLoading: false });
         console.warn("GL Generation failed. Upsert cancelled.");
@@ -811,7 +855,7 @@ const handleActivityOption = async (action) => {
       const genPayload = getFormattedPayload(currentGL);
       const newGlEntries = await useGenerateGLEntries(docType, genPayload);
       if (newGlEntries) {
-        updateState({ detailRowsGL: newGlEntries });
+        updateState({ detailRowsGL: applyDocumentSlRefDate(newGlEntries) });
       }
     }
 
@@ -939,7 +983,8 @@ const createEmptyGlRow = () => ({
   debitFx2: "0.00",
   creditFx2: "0.00",
   slRefNo: "",
-  slRefDate: "",
+  slRefDate: toDateInputValue(documentDate),
+  slrefDate: toDateInputValue(documentDate),
   remarks: "",
 });
 
@@ -1657,7 +1702,12 @@ const handleDetailChangeGL = async (index, field, value) => {
     }
   }
 
-    if (['slRefNo', 'slRefDate', 'remarks'].includes(field)) {
+    if (field === 'slRefDate') {
+        row.slRefDate = toDateInputValue(documentDate);
+        row.slrefDate = toDateInputValue(documentDate);
+    }
+
+    if (['slRefNo', 'remarks'].includes(field)) {
         row[field] = value;
     }
     
@@ -1836,6 +1886,7 @@ const handleCloseSignatory = async (mode) => {
 
 
 const handleSaveAndPrint = async (documentID) => {
+
     updateState({ showSpinner: true });
     await useHandlePrint(documentID, docType);
 
@@ -1952,8 +2003,8 @@ const handleCloseBranchModal = (selectedBranch) => {
       const custData = response?.data?.[0]?.result ? JSON.parse(response.data[0].result) : [];
   
 
-      const lookupTypes = ["BB", "IG"];  
-      const colConfig = await useSelectedHSColConfig(lookupTypes.includes("IG") ? "AllMastItemLookup" : "getInvLookupMS");
+      const lookupTypes = [""];  
+      const colConfig = await useSelectedHSColConfig("getInvLookupMS");
 
 
      if (custData.length === 0) {
@@ -2015,7 +2066,7 @@ const handleCloseBranchModal = (selectedBranch) => {
     qtyHand: formatNumber(parseFormattedNumber(item?.qtyHand ?? 0), decQty),
     uniqueKey: item?.uniqueKey ?? "",
     operation: "A",
-    acctCode: "",
+    acctCode: item?.rrAcctCode ?? "",
     sltypeCode: "SU",
     rcCode: "",
     slCode: vendCode,
@@ -2110,7 +2161,7 @@ const renderMsrtvGlColumn = (columnKey, row, index) => {
     debitFx2: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{amountInput("debitFx2")}</td>,
     creditFx2: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{amountInput("creditFx2")}</td>,
     slRefNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("slRefNo", { maxLength: useGetFieldLength(tblFieldArray, "slref_no") })}</td>,
-    slRefDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="date" id={`slRefDate-${index}`} className="w-full global-tran-td-inputclass-ui text-center" value={toSingleUploadDateValue(row.slRefDate)} readOnly={isFormDisabled} onChange={(e) => handleDetailChangeGL(index, "slRefDate", e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextGlCell("slRefDate"); } }} /></td>,
+    slRefDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="date" id={`slRefDate-${index}`} className="w-full global-tran-td-inputclass-ui text-center" value={toDateInputValue(documentDate)} readOnly disabled onChange={() => {}} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextGlCell("slRefDate"); } }} /></td>,
     remarks: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("remarks", { maxLength: useGetFieldLength(tblFieldArray, "remarks") })}</td>,
   };
   return glColumnRenderers[columnKey]?.() ?? <td key={columnKey} className="global-tran-td-ui" style={style}>{String(row[columnKey] ?? "")}</td>;
@@ -2449,7 +2500,7 @@ return (
                   </Fragment>
                 ))}
                 {!isFormDisabled && (
-                  <th key="detail-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
+                  <th key="detail-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
                 )}
               </tr>
               {renderMsrtvDetailHeaderContextMenu()}
@@ -2657,7 +2708,7 @@ return (
                     </Fragment>
                   ))}
                   {!isFormDisabled && (
-                    <th key="gl-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
+                    <th key="gl-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
                   )}
                 </tr>
                 {renderMsrtvGlHeaderContextMenu()}

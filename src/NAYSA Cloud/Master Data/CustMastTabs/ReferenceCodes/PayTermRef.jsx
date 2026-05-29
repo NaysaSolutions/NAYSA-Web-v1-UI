@@ -73,13 +73,27 @@ const DEFAULT_FORM = {
 };
 
 // 1. ADDED onStateChange TO DESTRUCTURED PROPS
-const PayTermRef = forwardRef(({ onStateChange }, ref) => {
+const PayTermRef = forwardRef(({
+  onStateChange,
+  isReadOnly = false,
+  canAdd = true,
+  canEdit = true,
+  canSave = true,
+  canDelete = true,
+}, ref) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const tableSize = "Half";
 
   const userCode =
     user?.USER_CODE || user?.userCode || user?.code || "ADMIN";
+
+  const showReadOnlyAlert = useCallback(async (action = "perform this action") => {
+    await useSwalErrorAlert(
+      "Read Only",
+      `You only have read access. You are not allowed to ${action}.`
+    );
+  }, []);
 
   const codeInputRef = useRef(null);
   const enterValidatedRef = useRef(false);
@@ -227,7 +241,12 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
     },
   });
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
+    if (!canSave || isReadOnly) {
+      await showReadOnlyAlert("save payment terms");
+      return;
+    }
+
     if (!isEditing || saveMutation.isPending) return;
 
     const dueDays = form.daysDue === "" || form.daysDue === null
@@ -251,7 +270,7 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
     };
 
     saveMutation.mutate(payload);
-  }, [form, isEditing, saveMutation, userCode]);
+  }, [form, isEditing, saveMutation, userCode, canSave, isReadOnly, showReadOnlyAlert]);
 
   /* ================= DELETE ================= */
   const deleteMutation = useMutation({
@@ -296,6 +315,11 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
 
   const handleDelete = useCallback(
     async (row) => {
+      if (!canDelete || isReadOnly) {
+        await showReadOnlyAlert("delete payment terms");
+        return;
+      }
+
       const code = row?.paytermCode;
       if (!code) return;
 
@@ -317,12 +341,12 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
 
       deleteMutation.mutate(code);
     },
-    [deleteMutation]
+    [deleteMutation, canDelete, isReadOnly, showReadOnlyAlert]
   );
 
   /* ================= EDIT ================= */
 
-  const handleEdit = async (row) => {
+  const loadRecord = useCallback(async (row, editMode = false) => {
     try {
       const res = await apiClient.get("/getPayterm", {
         params: { PAYTERM_CODE: row.paytermCode },
@@ -337,12 +361,34 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
       };
 
       setForm({ ...DEFAULT_FORM, ...normalizedRecord, __existing: true });
-      setIsEditing(true);
+      setIsEditing(Boolean(editMode));
       setSelectedRow(row);
     } catch {
       Swal.fire("Error", "Could not fetch record", "error");
     }
-  };
+  }, []);
+
+  const handleRetrieve = useCallback(async (row) => {
+    await loadRecord(row, false);
+  }, [loadRecord]);
+
+  const handleEdit = useCallback(async (row) => {
+    if (!canEdit || isReadOnly) {
+      await showReadOnlyAlert("edit payment terms");
+      return;
+    }
+
+    await loadRecord(row, true);
+  }, [canEdit, isReadOnly, loadRecord, showReadOnlyAlert]);
+
+  const handleRowDoubleClick = useCallback(async (row) => {
+    if (canEdit && !isReadOnly) {
+      await loadRecord(row, true);
+      return;
+    }
+
+    await loadRecord(row, false);
+  }, [canEdit, isReadOnly, loadRecord]);
 
   /* ================= TABLE ================= */
 
@@ -357,8 +403,11 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
 
             <button
               onClick={(e) => { e.stopPropagation(); handleEdit(row); }}
-              className="global-ref-td-button-edit-ui"
-              title="Edit"
+              disabled={isReadOnly || !canEdit}
+              className={`global-ref-td-button-edit-ui ${
+                isReadOnly || !canEdit ? "opacity-50 cursor-not-allowed" : ""
+              }`}
+              title={isReadOnly || !canEdit ? "Read Only" : "Edit"}
             >
               <FontAwesomeIcon icon={faEdit} />
               <span className="md:hidden">Edit</span>
@@ -366,8 +415,11 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
 
             <button
               onClick={(e) => { e.stopPropagation(); handleDelete(row); }}
-              className="global-ref-td-button-delete-ui"
-              title="Delete"
+              disabled={isReadOnly || !canDelete}
+              className={`global-ref-td-button-delete-ui ${
+                isReadOnly || !canDelete ? "opacity-50 cursor-not-allowed" : ""
+              }`}
+              title={isReadOnly || !canDelete ? "Read Only" : "Delete"}
             >
               <FontAwesomeIcon icon={faTrashAlt} />
               <span className="md:hidden">Delete</span>
@@ -387,7 +439,7 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
         render: (row) => (row.advances === "Y" ? "Yes" : "No"),
       },
     ],
-    [handleEdit, handleDelete]
+    [handleEdit, handleDelete, isReadOnly, canEdit, canDelete]
   );
 
   const tableData = useMemo(
@@ -419,15 +471,20 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
     if (onStateChange) {
       onStateChange({
         isEditing,
-        canSave: isEditing && !isDupCode && !saveMutation.isPending,
+        canSave: isEditing && !isDupCode && !saveMutation.isPending && canSave && !isReadOnly,
       });
     }
-  }, [isEditing, isDupCode, saveMutation.isPending, onStateChange]);
+  }, [isEditing, isDupCode, saveMutation.isPending, onStateChange, canSave, isReadOnly]);
 
 
   // 3. THIS ALLOWS VENDMAST TO CALL THESE FUNCTIONS WHEN BUTTONS ARE CLICKED
   useImperativeHandle(ref, () => ({
-    add: () => {
+    add: async () => {
+      if (!canAdd || isReadOnly) {
+        await showReadOnlyAlert("add payment terms");
+        return;
+      }
+
       setIsEditing(true);
       setSelectedRow(null);
       setIsDupCode(false);
@@ -462,7 +519,7 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
             onChange={(v) => setField("paytermCode", String(v ?? "").toUpperCase())}
             onBlur={handleCodeValidate}
             onKeyDown={handleCodeValidate}
-            disabled={!isEditing || form.__existing}
+            disabled={isReadOnly || !isEditing || form.__existing}
           />
 
           <FieldRenderer
@@ -471,7 +528,7 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
             value={form.paytermName}
             maxLength={20}
             onChange={(v) => setField("paytermName", v ?? "")}
-            disabled={!isEditing}
+            disabled={isReadOnly || !isEditing}
           />
 
           <FieldRenderer
@@ -496,7 +553,7 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
 
               setField("daysDue", value);
             }}
-            disabled={!isEditing}
+            disabled={isReadOnly || !isEditing}
           />
           <FieldRenderer
             label="AP Advances"
@@ -509,7 +566,7 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
               { value: "N", label: "No" },
               { value: "Y", label: "Yes" },
             ]}
-            disabled={!isEditing}
+            disabled={isReadOnly || !isEditing}
           />
 
           <RegistrationInfo data={form} layout="stacked" />
@@ -525,7 +582,7 @@ const PayTermRef = forwardRef(({ onStateChange }, ref) => {
             isLoading={isInitialLoading}
             docType="Payment Terms"
             itemsPerPage={10}
-            onRowDoubleClick={handleEdit}
+            onRowDoubleClick={handleRowDoubleClick}
             onRowClick={(row) => setSelectedRow(row)}
             showFilters
             tableSize={tableSize}

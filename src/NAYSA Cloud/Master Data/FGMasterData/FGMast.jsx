@@ -14,6 +14,8 @@ import {
 
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
+import { usePagePermission } from "@/NAYSA Cloud/Global/usePagePermission.js";
+import PermissionBadge from "@/NAYSA Cloud/Global/PermissionBadge.jsx";
 import FGMast_SetupTab from "./FGMast_SetupTab.jsx";
 import FGMast_DataTab from "./FGMast_DataTab.jsx";
 import FGMast_ReferenceCodeTab from "./FGMast_ReferenceCodeTab.jsx";
@@ -85,6 +87,20 @@ const FGMast = () => {
 
     const { user } = useAuth();
     const userCode = user?.USER_CODE || user?.userCode || user?.code || "";
+
+    const {
+        pagePermission,
+        isReadOnly,
+        isFullAccess,
+        canAdd,
+        canEdit,
+        canSave,
+        canDelete,
+    } = usePagePermission({
+        componentKey: "FGMast",
+        menuName: "FG Master Data",
+        debug: true,
+    });
 
     const [form, setForm] = useState({ ...emptyForm });
     const [selectedItemCode, setSelectedItemCode] = useState("");
@@ -216,6 +232,11 @@ const FGMast = () => {
     };
 
     const deleteItem = async () => {
+        if (!canDelete) {
+            await useSwalErrorAlert("Read Only", "You are not allowed to delete this item.");
+            return;
+        }
+
         const code = String(form?.itemCode || "").trim();
         if (!code) return;
 
@@ -251,6 +272,11 @@ const FGMast = () => {
     };
 
     const upsertItem = async () => {
+        if (!canSave) {
+            await useSwalErrorAlert("Read Only", "You are not allowed to save this item.");
+            return;
+        }
+
         const code = String(form?.itemCode || "").trim();
 
         // Extra duplicate guard on save for new records
@@ -294,7 +320,12 @@ const FGMast = () => {
         }
     };
 
-    const handleAdd = () => {
+    const handleAdd = async () => {
+        if (!canAdd) {
+            await useSwalErrorAlert("Read Only", "You are not allowed to add items.");
+            return;
+        }
+
         setSelectedItemCode("");
         setForm({ ...emptyForm, __isNew: true });
         setIsEditing(true);
@@ -302,6 +333,11 @@ const FGMast = () => {
     };
 
     const handleEdit = async () => {
+        if (!canEdit) {
+            await useSwalErrorAlert("Read Only", "You are not allowed to edit this item.");
+            return;
+        }
+
         if (!form?.itemCode) {
             await useSwalErrorAlert({ title: "Required", message: "Select an Item first." });
             return;
@@ -328,24 +364,24 @@ const FGMast = () => {
         if (activeTab === "setup") {
             const hasRecord = String(form?.itemCode || "").trim() && !form.__isNew;
             return [
-                { key: "add",    label: <span className="hidden sm:inline ml-1">Add</span>,    icon: faPlus,        onClick: handleAdd,        disabled: isLoading,                              className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
-                { key: "save",   label: <span className="hidden sm:inline ml-1">Save</span>,   icon: faSave,        onClick: upsertItem,       disabled: isLoading || !isEditing,                className: `${baseBtn} ${!isEditing ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
-                { key: "reset",  label: <span className="hidden sm:inline ml-1">Reset</span>,  icon: faUndo,        onClick: handleResetSetup, disabled: isLoading,                              className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
-                { key: "edit",   label: <span className="hidden sm:inline ml-1">Edit</span>,   icon: faPenToSquare, onClick: handleEdit,       disabled: isLoading || isEditing || !hasRecord,   className: `${baseBtn} ${isEditing || !hasRecord ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
-                { key: "delete", label: <span className="hidden sm:inline ml-1">Delete</span>, icon: faTrash,       onClick: deleteItem,       disabled: isLoading || isEditing || !hasRecord,   className: `${baseBtn} ${isEditing || !hasRecord ? "bg-red-400 cursor-not-allowed opacity-50" : "bg-red-500 hover:bg-red-600"}` },
+                { key: "add",    label: <span className="hidden sm:inline ml-1">Add</span>,    icon: faPlus,        onClick: handleAdd,        disabled: isLoading || !canAdd,                              className: `${baseBtn} ${!canAdd ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
+                { key: "save",   label: <span className="hidden sm:inline ml-1">Save</span>,   icon: faSave,        onClick: upsertItem,       disabled: isLoading || !isEditing || !canSave,                className: `${baseBtn} ${!isEditing || !canSave ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
+                { key: "reset",  label: <span className="hidden sm:inline ml-1">Reset</span>,  icon: faUndo,        onClick: handleResetSetup, disabled: false,                              className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
+                { key: "edit",   label: <span className="hidden sm:inline ml-1">Edit</span>,   icon: faPenToSquare, onClick: handleEdit,       disabled: isLoading || isEditing || !hasRecord || !canEdit,   className: `${baseBtn} ${isEditing || !hasRecord || !canEdit ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
+                { key: "delete", label: <span className="hidden sm:inline ml-1">Delete</span>, icon: faTrash,       onClick: deleteItem,       disabled: isLoading || isEditing || !hasRecord || !canDelete,   className: `${baseBtn} ${isEditing || !hasRecord || !canDelete ? "bg-red-400 cursor-not-allowed opacity-50" : "bg-red-500 hover:bg-red-600"}` },
             ];
         }
 
         if (activeTab === "ref") {
             return [
-                { key: "add",   label: <span className="hidden sm:inline ml-1">Add</span>,   icon: faPlus, onClick: () => refTabRef.current?.add?.(),   className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
-                { key: "save",  label: <span className="hidden sm:inline ml-1">Save</span>,  icon: faSave, onClick: () => refTabRef.current?.save?.(),  disabled: !refState.canSave, className: `${baseBtn} ${!refState.canSave ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
-                { key: "reset", label: <span className="hidden sm:inline ml-1">Reset</span>, icon: faUndo, onClick: () => refTabRef.current?.reset?.(), className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
+                { key: "add",   label: <span className="hidden sm:inline ml-1">Add</span>,   icon: faPlus, onClick: () => refTabRef.current?.add?.(), disabled: !canAdd, className: `${baseBtn} ${!canAdd ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
+                { key: "save",  label: <span className="hidden sm:inline ml-1">Save</span>,  icon: faSave, onClick: () => refTabRef.current?.save?.(),  disabled: !canSave || !refState.canSave, className: `${baseBtn} ${!canSave || !refState.canSave ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
+                { key: "reset", label: <span className="hidden sm:inline ml-1">Reset</span>, icon: faUndo, onClick: () => refTabRef.current?.reset?.(), disabled: false, className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
             ];
         }
 
         return [];
-    }, [activeTab, isLoading, isEditing, form, refState]);
+    }, [activeTab, isLoading, isEditing, form, refState, canAdd, canEdit, canSave, canDelete]);
 
     return (
         <div className="global-ref-main-div-ui">
@@ -354,7 +390,9 @@ const FGMast = () => {
                     {/* LEFT: title + tabs grouped together */}
                     <div className="flex flex-col lg:flex-row items-center lg:items-center gap-2 lg:gap-4 w-full lg:w-auto">
                         <div className="flex-shrink-0 text-center lg:text-left">
-                            <h1 className="global-ref-headertext-ui truncate">FG Master Data</h1>
+                            <div className="flex items-center gap-2">
+                                <h1 className="global-ref-headertext-ui truncate">FG Master Data</h1>
+                            </div>
                         </div>
 
                         <div className="overflow-x-auto no-scrollbar">
@@ -371,9 +409,16 @@ const FGMast = () => {
                             </div>
                         </div>
                     </div>
+                    
 
                     {/* RIGHT: buttons stay on the far right */}
                     <div className="flex-shrink-0 w-full lg:w-auto flex flex-wrap items-center justify-center lg:justify-end gap-1.5">
+                        <PermissionBadge
+                                    variant="reference"
+                                    permission={pagePermission}
+                                    isReadOnly={isReadOnly}
+                                    isFullAccess={isFullAccess}
+                                />
                         {!!headerButtons.length && <ButtonBar buttons={headerButtons} />}
                     </div>
                 </div>
@@ -383,12 +428,12 @@ const FGMast = () => {
                 {activeTab === "setup" && (
                     <FGMast_SetupTab
                         form={form}
-                        isEditing={isEditing}
+                        isEditing={isEditing && isFullAccess}
                         isLoading={isLoading}
                         generationMode={generationMode}
                         onChangeForm={updateForm}
-                        onLookupSelect={(itemCode) => fetchItemByCode(itemCode, true)}
-                        onBlurItemCode={checkDuplicate}
+                        onLookupSelect={(itemCode) => fetchItemByCode(itemCode, canEdit)}
+                        onBlurItemCode={isReadOnly ? undefined : checkDuplicate}
                     />
                 )}
                 {activeTab === "master" && (
@@ -397,15 +442,23 @@ const FGMast = () => {
                         isLoading={isLoading}
                         onFilter={loadMasterList}
                         onReset={loadMasterList}
-                        onRowDoubleClick={(row) => {
-                            fetchItemByCode(row.itemCode);
+                        onRowDoubleClick={async (row) => {
+                            await fetchItemByCode(row.itemCode, canEdit);
                             setActiveTab("setup");
-                            setIsEditing(false);
+                            setIsEditing(canEdit);
                         }}
                     />
                 )}
                 {activeTab === "ref" && (
-                    <FGMast_ReferenceCodeTab ref={refTabRef} onStateChange={setRefState} />
+                    <FGMast_ReferenceCodeTab
+                        ref={refTabRef}
+                        onStateChange={setRefState}
+                        isReadOnly={isReadOnly}
+                        canAdd={canAdd}
+                        canEdit={canEdit}
+                        canSave={canSave}
+                        canDelete={canDelete}
+                    />
                 )}
             </div>
         </div>
