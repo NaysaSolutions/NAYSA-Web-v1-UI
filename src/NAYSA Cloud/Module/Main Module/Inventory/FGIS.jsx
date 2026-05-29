@@ -26,7 +26,7 @@ import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import RCLookupModal from "../../../Lookup/SearchRCMast.jsx";
 import SLMastLookupModal from "../../../Lookup/SearchSLMast.jsx";
-import MSLookupModal from "../../../Lookup/SearchMSMast.jsx";
+import FGLookupModal from "../../../Lookup/SearchFGMast.jsx";
 import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
 import COAMastLookupModal from "../../../Lookup/SearchCOAMast.jsx";
@@ -84,7 +84,7 @@ import {
   useResizableTableColumns,
 } from "@/NAYSA Cloud/Global/datatable.jsx";
 
-const MSIS = () => {
+const FGIS = () => {
   const loadedFromUrlRef = useRef(false);
   const detailRowsGLRef = useRef([]);
   const categoryAccountCacheRef = useRef({});
@@ -348,13 +348,13 @@ useEffect(() => {
     totalQtyNeeded: "",
   });
 
-  // MSIS.jsx
-  const docType = docTypes?.MSIS || "MSIS";
+  // FGIS.jsx
+  const docType = docTypes?.FGIS || "FGIS";
 
   const pdfLink = docTypePDFGuide[docType];
   const videoLink = docTypeVideoGuide[docType];
   const documentTitle =
-    docTypeNames[docType] || "Material Supplies Issuance Slip";
+    docTypeNames[docType] || "Finished Goods Issuance Slip";
 
   const displayStatus = status || "OPEN";
   const statusMap = {
@@ -758,7 +758,7 @@ useEffect(() => {
   };
 
   // ==========================
-  // FETCH (GET) – MSIS HEADER + DT1 + DT2
+  // FETCH (GET) – FGIS HEADER + DT1 + DT2
   // ==========================
 
   const formatDateOnly = (value) => {
@@ -831,7 +831,7 @@ useEffect(() => {
     return "";
   };
 
-  const fetchTranData = async (msisNo, branchCode, direction = "") => {
+  const fetchTranData = async (fgisNo, branchCode, direction = "") => {
     const resetState = () => {
       updateState({
         documentNo: "",
@@ -853,14 +853,14 @@ useEffect(() => {
     updateState({ isLoading: true });
 
     try {
-      const rawData = await useFetchTranData(msisNo, branchCode, docType, "msisNo", direction);
+      const rawData = await useFetchTranData(fgisNo, branchCode, docType, "fgisNo", direction);
       const data = normalizeFetchedTransaction(rawData);
 
-      console.log("✅ MSIS Retrieved Data:", data);
-      console.log("✅ MSIS Retrieved DT1:", parseRetrievedArray(data.dt1));
-      console.log("✅ MSIS Retrieved DT2:", parseRetrievedArray(data.dt2));
+      console.log("✅ FGIS Retrieved Data:", data);
+      console.log("✅ FGIS Retrieved DT1:", parseRetrievedArray(data.dt1));
+      console.log("✅ FGIS Retrieved DT2:", parseRetrievedArray(data.dt2));
 
-      if (!data?.msisId && !data?.msisNo) {
+      if (!data?.fgisId && !data?.fgisNo) {
         Swal.fire({
           icon: "info",
           title: "No Records Found",
@@ -869,7 +869,7 @@ useEffect(() => {
         return resetState();
       }
 
-      const msisDateForHeader = formatDateOnly(data.msisDate || data.msis_date || data.documentDate) || new Date().toISOString().split("T")[0];
+      const fgisDateForHeader = formatDateOnly(data.fgisDate || data.fgis_date || data.documentDate) || new Date().toISOString().split("T")[0];
       const dt1 = parseRetrievedArray(data.dt1);
       const dt2 = parseRetrievedArray(data.dt2);
 
@@ -959,6 +959,8 @@ useEffect(() => {
       const retrievedReqRcCode = getFirstValue(
         data.reqRcCode,
         data.req_rc_code,
+        data.reqDept,
+        data.req_dept,
         data.requestDeptCode,
         retrievedRcCode,
       );
@@ -971,7 +973,7 @@ useEffect(() => {
           const rcRow = await useTopRCRow(retrievedRcCode);
           retrievedRcName = getFirstValue(rcRow?.rcName, rcRow?.RC_NAME, rcRow?.rc_name, retrievedRcCode);
         } catch (rcError) {
-          console.warn("Unable to fetch MSIS RC name:", rcError);
+          console.warn("Unable to fetch FGIS RC name:", rcError);
           retrievedRcName = retrievedRcCode;
         }
       }
@@ -984,7 +986,7 @@ useEffect(() => {
             const reqRcRow = await useTopRCRow(retrievedReqRcCode);
             retrievedReqRcName = getFirstValue(reqRcRow?.rcName, reqRcRow?.RC_NAME, reqRcRow?.rc_name, retrievedReqRcCode);
           } catch (reqRcError) {
-            console.warn("Unable to fetch MSIS Requesting Dept name:", reqRcError);
+            console.warn("Unable to fetch FGIS Requesting Dept name:", reqRcError);
             retrievedReqRcName = retrievedReqRcCode;
           }
         }
@@ -995,14 +997,14 @@ useEffect(() => {
       const retrievedLocCode = getFirstValue(data.locCode, data.LocCode, data.locationCode, data.loc_code);
       const retrievedLocName = getFirstValue(data.locName, data.LocName, data.locationName, data.loc_name, retrievedLocCode);
 
-      setHeader((prev) => ({ ...prev, rr_date: msisDateForHeader }));
+      setHeader((prev) => ({ ...prev, rr_date: fgisDateForHeader }));
       updateState({
-        documentStatus: getFirstValue(data.msisStatus, data.msis_status),
-        status: getFirstValue(data.docStatus, data.msisStatus, data.status, "OPEN"),
-        documentID: getFirstValue(data.msisId, data.msis_id),
-        documentNo: getFirstValue(data.msisNo, data.msis_no, msisNo),
+        documentStatus: getFirstValue(data.fgisStatus, data.fgis_status),
+        status: getFirstValue(data.docStatus, data.fgisStatus, data.status, "OPEN"),
+        documentID: getFirstValue(data.fgisId, data.fgis_id),
+        documentNo: getFirstValue(data.fgisNo, data.fgis_no, fgisNo),
         branchCode: getFirstValue(data.branchCode, data.branch_code, branchCode),
-        header: { rr_date: msisDateForHeader },
+        header: { rr_date: fgisDateForHeader },
         rcCode: retrievedRcCode || "",
         rcName: retrievedRcName || retrievedRcCode || "",
         reqRcCode: retrievedReqRcCode || "",
@@ -1015,14 +1017,14 @@ useEffect(() => {
         locCode: retrievedLocCode || "",
         locName: retrievedLocName || retrievedLocCode || "",
         noReprints: data.noReprints ?? "0",
-        poCancelled: data.msisCancelled || "",
+        poCancelled: data.fgisCancelled || "",
         detailRows: retrievedDetailRows,
         detailRowsGL: formattedGLRows,
         isDocNoDisabled: true,
         isFetchDisabled: true,
       });
     } catch (error) {
-      console.error("Error fetching MSIS transaction data:", error);
+      console.error("Error fetching FGIS transaction data:", error);
       Swal.fire({
         icon: "error",
         title: "Fetch Error",
@@ -1380,11 +1382,11 @@ useEffect(() => {
     updateState({ isLoading: true });
 
     try {
-      const response = await fetchDataJson("getInvLookupMS", {
+      const response = await fetchDataJson("getInvLookupFG", {
         userCode: state.userCode,
         whouseCode: state.WHcode || "",
         locCode: state.locCode || "",
-        docType: "MSIS",
+        docType: "FGIS",
         tranType: "IL",
       });
 
@@ -1399,7 +1401,7 @@ useEffect(() => {
       if (balanceRows.length === 0) {
         Swal.fire({
           icon: "info",
-          title: "MS Location Balance",
+          title: "FG Location Balance",
           text: "No items with Quantity on Hand were found for the selected warehouse/location.",
           timer: 3000,
           showConfirmButton: false,
@@ -1412,7 +1414,7 @@ useEffect(() => {
         return;
       }
 
-      const colConfig = await useSelectedHSColConfig("getInvLookupMS", state.userCode || "NSI");
+      const colConfig = await useSelectedHSColConfig("getInvLookupFG", state.userCode || "NSI");
 
       updateState({
         globalLookupRow: balanceRows,
@@ -1420,10 +1422,10 @@ useEffect(() => {
         msLookupModalOpen: true,
       });
     } catch (error) {
-      console.error("MSIS item lookup error:", error);
+      console.error("FGIS item lookup error:", error);
       Swal.fire({
         icon: "error",
-        title: "MS Location Balance",
+        title: "FG Location Balance",
         text: error?.response?.data?.message || error?.message || "No records found.",
       });
       updateState({
@@ -1558,7 +1560,7 @@ useEffect(() => {
     updateState({ detailRowsGL: updatedRowsGL, ...getGLTotalsState(updatedRowsGL) });
   };
 
-  const getMSISDetailNumericDecimals = (field) => {
+  const getFGISDetailNumericDecimals = (field) => {
     if (["quantity", "qtyOnHand", "mrsQty", "unitCost"].includes(field)) return 6;
     if (field === "amount") return 2;
     return 6;
@@ -1581,7 +1583,7 @@ useEffect(() => {
       row[field] = commit
         ? formatNumber(
             parseFormattedNumber(sanitized || 0),
-            getMSISDetailNumericDecimals(field),
+            getFGISDetailNumericDecimals(field),
           )
         : sanitized;
     } else {
@@ -1684,14 +1686,15 @@ useEffect(() => {
 
       return {
         branchCode: branchCode || "",
-        msisNo: documentID ? documentNo || "" : "",
-        msisId: documentID || "",
-        msisDate: header?.rr_date || new Date().toISOString().split("T")[0],
+        fgisNo: documentID ? documentNo || "" : "",
+        fgisId: documentID || "",
+        fgisDate: header?.rr_date || new Date().toISOString().split("T")[0],
         cutoffCode: cutoffCode || "",
 
         refNo: attention || "",
         rcCode: rcCode || "",
         reqRcCode: reqRcCode || "",
+        reqDept: reqRcCode || "",
         reqRcName: reqRcName || "",
 
         whouseCode: WHcode || "",
@@ -1704,6 +1707,7 @@ useEffect(() => {
         empName: vendName || "",
 
         remarks: remarks || "",
+        fgisStatus: status || "OPEN",
         status: status || "OPEN",
         noReprints: parseInt(noReprints || 0, 10),
         userCode: userCode || "NSI",
@@ -1731,7 +1735,7 @@ useEffect(() => {
             qstatCode: row.qstatCode || row.itemStat || "",
             bbDate: formatDateForSql(row.bbDate),
 
-            // MSIS sproc/table uses qty_hand as quantity.
+            // FGIS sproc/table uses qty_hand as quantity.
             qtyHand: quantityValue,
 
             whouseCode: row.whouseCode || WHcode || "",
@@ -1791,7 +1795,7 @@ useEffect(() => {
           currentGL = formatGeneratedGLRows(newGlEntries);
           updateState({ detailRowsGL: currentGL });
         } else {
-          console.warn("MSIS GL generation failed. Upsert cancelled.");
+          console.warn("FGIS GL generation failed. Upsert cancelled.");
           return;
         }
       }
@@ -1809,30 +1813,30 @@ useEffect(() => {
 
       // Save / upsert.
       if (action === "Upsert") {
-        const msisData = getFormattedPayload(currentGL);
-        console.log("✅ MSIS Payload", msisData);
+        const fgisData = getFormattedPayload(currentGL);
+        console.log("✅ FGIS Payload", fgisData);
 
         const response = await useTransactionUpsert(
           docType,
-          msisData,
+          fgisData,
           updateState,
-          "msisId",
-          "msisNo",
+          "fgisId",
+          "fgisNo",
         );
 
         if (response) {
-          const savedMsisId = response?.data?.[0]?.msisId || response?.data?.[0]?.poId || documentID;
+          const savedFgisId = response?.data?.[0]?.fgisId || response?.data?.[0]?.poId || documentID;
           const isZero = Number(noReprints) === 0;
           const onSaveAndPrint = isZero
-            ? () => updateState({ showSignatoryModal: true, documentID: savedMsisId })
-            : () => handleSaveAndPrint(savedMsisId);
+            ? () => updateState({ showSignatoryModal: true, documentID: savedFgisId })
+            : () => handleSaveAndPrint(savedFgisId);
 
           useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
           updateState({ isDocNoDisabled: true, isFetchDisabled: true });
         }
       }
     } catch (error) {
-      console.error("Error in MSIS transaction flow:", error);
+      console.error("Error in FGIS transaction flow:", error);
     } finally {
       updateState({ isLoading: false });
     }
@@ -1894,7 +1898,7 @@ useEffect(() => {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const docNo = params.get("msisNo");
+    const docNo = params.get("fgisNo");
     const brCode = params.get("branchCode");
 
     if (!loadedFromUrlRef.current && docNo && brCode) {
@@ -1905,7 +1909,7 @@ useEffect(() => {
   }, [location.search, handleHistoryRowPick, cleanUrl]);
 
   const printData = {
-    msis_no: documentNo,
+    fgis_no: documentNo,
     branch: branchCode,
     doc_id: docType,
   };
@@ -1932,7 +1936,7 @@ useEffect(() => {
       state.userCode ||
       "NSI";
 
-    console.log("MSIS Cancel Payload:", {
+    console.log("FGIS Cancel Payload:", {
       docType,
       documentID,
       userCode: currentUserCode,
@@ -2129,7 +2133,7 @@ useEffect(() => {
   };
 
 
-  const msisDetailColumnDefs = useMemo(() => [
+  const fgisDetailColumnDefs = useMemo(() => [
     { key: "ln", label: "LN", width: 56 },
     { key: "itemCode", label: "Item Code", width: 130 },
     { key: "itemName", label: "Item Description", width: 300 },
@@ -2151,48 +2155,48 @@ useEffect(() => {
   ], []);
 
   const {
-    getColumnStyle: getMSISDetailColumnStyle,
-    getFrozenColumnStyle: getMSISDetailFrozenStyle,
-    getOrderedColumns: getOrderedMSISDetailColumns,
-    getSortedRows: getSortedMSISDetailRows,
-    renderHeaderContextMenu: renderMSISDetailHeaderContextMenu,
-    renderResizableHeader: renderMSISDetailHeader,
-  } = useResizableTableColumns(msisDetailColumnDefs);
+    getColumnStyle: getFGISDetailColumnStyle,
+    getFrozenColumnStyle: getFGISDetailFrozenStyle,
+    getOrderedColumns: getOrderedFGISDetailColumns,
+    getSortedRows: getSortedFGISDetailRows,
+    renderHeaderContextMenu: renderFGISDetailHeaderContextMenu,
+    renderResizableHeader: renderFGISDetailHeader,
+  } = useResizableTableColumns(fgisDetailColumnDefs);
 
-  const orderedMSISDetailColumns = useMemo(
-    () => getOrderedMSISDetailColumns(msisDetailColumnDefs),
-    [getOrderedMSISDetailColumns, msisDetailColumnDefs]
+  const orderedFGISDetailColumns = useMemo(
+    () => getOrderedFGISDetailColumns(fgisDetailColumnDefs),
+    [getOrderedFGISDetailColumns, fgisDetailColumnDefs]
   );
 
-  const getMSISDetailFallbackWidth = useCallback(
-    (key) => msisDetailColumnDefs.find((column) => column.key === key)?.width || 120,
-    [msisDetailColumnDefs]
+  const getFGISDetailFallbackWidth = useCallback(
+    (key) => fgisDetailColumnDefs.find((column) => column.key === key)?.width || 120,
+    [fgisDetailColumnDefs]
   );
 
-  const getMSISDetailCellStyle = useCallback(
+  const getFGISDetailCellStyle = useCallback(
     (key, fallbackWidth) => ({
-      ...getMSISDetailColumnStyle(key, fallbackWidth),
-      ...getMSISDetailFrozenStyle(key, orderedMSISDetailColumns, fallbackWidth, { isHeader: false }),
+      ...getFGISDetailColumnStyle(key, fallbackWidth),
+      ...getFGISDetailFrozenStyle(key, orderedFGISDetailColumns, fallbackWidth, { isHeader: false }),
     }),
-    [getMSISDetailColumnStyle, getMSISDetailFrozenStyle, orderedMSISDetailColumns]
+    [getFGISDetailColumnStyle, getFGISDetailFrozenStyle, orderedFGISDetailColumns]
   );
 
-  const msisDetailSortRows = useMemo(
+  const fgisDetailSortRows = useMemo(
     () => detailRows.map((row, originalIndex) => ({ row, originalIndex })),
     [detailRows]
   );
 
-  const sortedMSISDetailRows = useMemo(
-    () => getSortedMSISDetailRows(
-      msisDetailSortRows,
+  const sortedFGISDetailRows = useMemo(
+    () => getSortedFGISDetailRows(
+      fgisDetailSortRows,
       (entry, sortKey) => (sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? "")
     ),
-    [getSortedMSISDetailRows, msisDetailSortRows]
+    [getSortedFGISDetailRows, fgisDetailSortRows]
   );
 
-  const msisEnterNextRowZeroClearFields = ["quantity", "unitCost", "mrsQty"];
+  const fgisEnterNextRowZeroClearFields = ["quantity", "unitCost", "mrsQty"];
 
-  const msisGlColumnDefs = [
+  const fgisGlColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
     { key: "acctCode", label: "Account Code", width: 120 },
     { key: "rcCode", label: "RC Code", width: 120 },
@@ -2219,43 +2223,43 @@ useEffect(() => {
   ];
 
   const {
-    getColumnStyle: getMSISGlColumnStyle,
-    getFrozenColumnStyle: getMSISGlFrozenStyle,
-    getOrderedColumns: getOrderedMSISGlColumns,
-    getSortedRows: getSortedMSISGlRows,
-    clearZeroValueOnFocus: clearMSISGlZeroOnFocus,
-    focusNextRowInput: focusNextMSISGlRowInput,
-    renderHeaderContextMenu: renderMSISGlHeaderContextMenu,
-    renderResizableHeader: renderMSISGlHeader,
-  } = useResizableTableColumns(msisGlColumnDefs);
+    getColumnStyle: getFGISGlColumnStyle,
+    getFrozenColumnStyle: getFGISGlFrozenStyle,
+    getOrderedColumns: getOrderedFGISGlColumns,
+    getSortedRows: getSortedFGISGlRows,
+    clearZeroValueOnFocus: clearFGISGlZeroOnFocus,
+    focusNextRowInput: focusNextFGISGlRowInput,
+    renderHeaderContextMenu: renderFGISGlHeaderContextMenu,
+    renderResizableHeader: renderFGISGlHeader,
+  } = useResizableTableColumns(fgisGlColumnDefs);
 
-  const orderedMSISGlColumns = useMemo(
-    () => getOrderedMSISGlColumns(msisGlColumnDefs),
-    [getOrderedMSISGlColumns, msisGlColumnDefs]
+  const orderedFGISGlColumns = useMemo(
+    () => getOrderedFGISGlColumns(fgisGlColumnDefs),
+    [getOrderedFGISGlColumns, fgisGlColumnDefs]
   );
 
-  const getMSISGlFallbackWidth = useCallback(
-    (key) => msisGlColumnDefs.find((column) => column.key === key)?.width || 120,
-    [msisGlColumnDefs]
+  const getFGISGlFallbackWidth = useCallback(
+    (key) => fgisGlColumnDefs.find((column) => column.key === key)?.width || 120,
+    [fgisGlColumnDefs]
   );
 
-  const getMSISGlCellStyle = useCallback(
+  const getFGISGlCellStyle = useCallback(
     (key, fallbackWidth) => ({
-      ...getMSISGlColumnStyle(key, fallbackWidth),
-      ...getMSISGlFrozenStyle(key, orderedMSISGlColumns, fallbackWidth, { isHeader: false }),
+      ...getFGISGlColumnStyle(key, fallbackWidth),
+      ...getFGISGlFrozenStyle(key, orderedFGISGlColumns, fallbackWidth, { isHeader: false }),
     }),
-    [getMSISGlColumnStyle, getMSISGlFrozenStyle, orderedMSISGlColumns]
+    [getFGISGlColumnStyle, getFGISGlFrozenStyle, orderedFGISGlColumns]
   );
 
-  const sortedMSISGlRows = useMemo(
-    () => getSortedMSISGlRows(
+  const sortedFGISGlRows = useMemo(
+    () => getSortedFGISGlRows(
       (detailRowsGL || []).map((row, originalIndex) => ({ row, originalIndex })),
       (entry, sortKey) => (sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? "")
     ),
-    [getSortedMSISGlRows, detailRowsGL]
+    [getSortedFGISGlRows, detailRowsGL]
   );
 
-  const msisGlEnterNextRowZeroClearFields = ["debit", "credit", "debitFx1", "creditFx1", "debitFx2", "creditFx2"];
+  const fgisGlEnterNextRowZeroClearFields = ["debit", "credit", "debitFx1", "creditFx1", "debitFx2", "creditFx2"];
 
   const handleAddBlankRow = (index) => {
     if (isFormDisabled) return;
@@ -2294,9 +2298,9 @@ useEffect(() => {
     updateTotalsDisplay(totalQty);
   };
 
-  const renderMSISDetailCell = (columnKey, row, index) => {
-    const columnWidth = getMSISDetailFallbackWidth(columnKey);
-    const style = getMSISDetailCellStyle(columnKey, columnWidth);
+  const renderFGISDetailCell = (columnKey, row, index) => {
+    const columnWidth = getFGISDetailFallbackWidth(columnKey);
+    const style = getFGISDetailCellStyle(columnKey, columnWidth);
     const rowLocked = isFormDisabled;
 
     const focusDetailCell = (field, nextIndex) => {
@@ -2321,7 +2325,7 @@ useEffect(() => {
         if (options.commitOnEnter) {
           const formattedValue = formatNumber(
             parseFormattedNumber(e.target.value || 0),
-            getMSISDetailNumericDecimals(field),
+            getFGISDetailNumericDecimals(field),
           );
           e.target.value = formattedValue;
           handleDetailChange(index, field, formattedValue, true);
@@ -2336,7 +2340,7 @@ useEffect(() => {
       if (e.key === "ArrowUp") focusDetailCell(field, Math.max(0, index - 1));
       if (e.key === "ArrowDown") focusDetailCell(field, Math.min((detailRows || []).length - 1, index + 1));
       if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-        const editableColumns = orderedMSISDetailColumns
+        const editableColumns = orderedFGISDetailColumns
           .map((column) => column.key)
           .filter((key) => !["ln", "itemName", "uomCode", "amount", "qtyOnHand"].includes(key));
         const currentColIndex = editableColumns.indexOf(field);
@@ -2376,7 +2380,7 @@ useEffect(() => {
         }}
         onFocus={(e) => {
           if ((options.readOnly ?? rowLocked) || (options.disabled ?? false)) return;
-          if (msisEnterNextRowZeroClearFields.includes(field) && parseFormattedNumber(e.target.value || 0) === 0) {
+          if (fgisEnterNextRowZeroClearFields.includes(field) && parseFormattedNumber(e.target.value || 0) === 0) {
             handleDetailChange(index, field, "");
           }
         }}
@@ -2438,14 +2442,14 @@ useEffect(() => {
     );
   };
 
-  const renderMSISGlCell = (columnKey, row, index) => {
-    const columnWidth = getMSISGlFallbackWidth(columnKey);
-    const style = getMSISGlCellStyle(columnKey, columnWidth);
+  const renderFGISGlCell = (columnKey, row, index) => {
+    const columnWidth = getFGISGlFallbackWidth(columnKey);
+    const style = getFGISGlCellStyle(columnKey, columnWidth);
 
     const focusNextGlCell = (field) => {
-      focusNextMSISGlRowInput(index, field, {
+      focusNextFGISGlRowInput(index, field, {
         rows: detailRowsGL,
-        zeroClearFields: msisGlEnterNextRowZeroClearFields,
+        zeroClearFields: fgisGlEnterNextRowZeroClearFields,
         parseValue: parseFormattedNumber,
         onClearNextValue: (nextIndex, nextField, value) => handleDetailChangeGL(nextIndex, nextField, value),
       });
@@ -2513,7 +2517,7 @@ useEffect(() => {
             handleDetailChangeGL(index, field, sanitizedValue);
           }
         }}
-        onFocus={(e) => clearMSISGlZeroOnFocus(e, {
+        onFocus={(e) => clearFGISGlZeroOnFocus(e, {
           isEditable: !isFormDisabled,
           onClear: (value) => handleDetailChangeGL(index, field, value),
         })}
@@ -2581,7 +2585,7 @@ useEffect(() => {
           onAttach={handleAttach}
           onDetails={() => setTopTab("details")}
           onHistory={() => setTopTab("history")}
-          detailsRoute="/page/MSIS"
+          detailsRoute="/page/FGIS"
           isSaveDisabled={isSaveDisabled}
           isResetDisabled={isResetDisabled}
           isViewDocument={isViewDocument}
@@ -2622,10 +2626,10 @@ useEffect(() => {
           {/* Provision for Other Tabs */}
         </div>
 
-          {/* MSIS Header Form Section */}
+          {/* FGIS Header Form Section */}
           <div
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 rounded-lg relative"
-            id="msis_hd"
+            id="fgis_hd"
           >
             <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {/* Column 1 */}
@@ -2645,8 +2649,8 @@ useEffect(() => {
                 />
 
                 <FieldRenderer
-                  id="msisNo"
-                  label="MSIS No."
+                  id="fgisNo"
+                  label="FGIS No."
                   type="lookup"
                   value={state.documentNo || ""}
                   disabled={state.isDocNoDisabled || isFormDisabled}
@@ -2665,7 +2669,7 @@ useEffect(() => {
 
                 <FieldRenderer
                   id="rr_date"
-                  label="MSIS Date"
+                  label="FGIS Date"
                   type="date"
                   value={state.header?.rr_date || header.rr_date || ""}
                   disabled={isFormDisabled}
@@ -2676,12 +2680,12 @@ useEffect(() => {
                 />
 
                 <FieldRenderer
-                  id="msisRefNo"
-                  label="MSIS Ref No."
+                  id="cutoffCode"
+                  label="Cutoff Code"
                   type="text"
-                  value={attention || ""}
+                  value={cutoffCode || ""}
                   disabled={isFormDisabled}
-                  onChange={(val) => updateState({ attention: val })}
+                  onChange={(val) => updateState({ cutoffCode: val })}
                 />
               </div>
 
@@ -2748,52 +2752,24 @@ useEffect(() => {
                 />
               </div>
 
-              {/* Column 3 */}
+              {/* Column 3 - reserved for FGIS header extension fields */}
               <div className="global-tran-textbox-group-div-ui">
                 <FieldRenderer
-                  id="vendCode"
-                  label="Employee Code"
-                  type="lookup"
-                  value={vendCode || vendCOde || ""}
-                  readOnly
-                  disabled={isFormDisabled}
-                  lookupDisabled={isFormDisabled}
-                  onLookup={() =>
-                    !isFormDisabled &&
-                    updateState({
-                      rcLookupModalOpen: true,
-                      rcLookupContext: "payeeCode",
-                    })
-                  }
-                />
-
-                <FieldRenderer
-                  id="vendName"
-                  label="Employee Name"
+                  id="fgisStatus"
+                  label="FGIS Status"
                   type="text"
-                  value={vendName || ""}
-                  disabled={isFormDisabled}
-                  onChange={(val) => updateState({ vendName: val })}
-                />
-
-                <FieldRenderer
-                  id="custCode"
-                  label="Customer Code"
-                  type="lookup"
-                  value={state.custCode || ""}
+                  value={displayStatus || "OPEN"}
                   readOnly
-                  disabled={isFormDisabled}
-                  lookupDisabled={isFormDisabled}
-                  onLookup={() => !isFormDisabled && updateState({ custModalOpen: true })}
+                  disabled
                 />
 
                 <FieldRenderer
-                  id="custName"
-                  label="Customer Name"
+                  id="noReprints"
+                  label="No. Reprints"
                   type="text"
-                  value={state.custName || ""}
-                  disabled={isFormDisabled}
-                  onChange={(val) => updateState({ custName: val })}
+                  value={noReprints || "0"}
+                  readOnly
+                  disabled
                 />
               </div>
 
@@ -2818,7 +2794,7 @@ useEffect(() => {
         </div>
 
         {/* =====================
-            MSIS DETAIL TABLE (DT1)
+            FGIS DETAIL TABLE (DT1)
            ===================== */}
         <div className="global-tran-tab-div-ui">
           <div className="global-tran-tab-nav-ui">
@@ -2834,9 +2810,9 @@ useEffect(() => {
               <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
                 <thead className="global-tran-thead-div-ui">
                   <tr>
-                    {orderedMSISDetailColumns.map((column) =>
-                      renderMSISDetailHeader(column.label, column.key, column.width, {
-                        orderedColumns: orderedMSISDetailColumns,
+                    {orderedFGISDetailColumns.map((column) =>
+                      renderFGISDetailHeader(column.label, column.key, column.width, {
+                        orderedColumns: orderedFGISDetailColumns,
                       })
                     )}
                     {!isFormDisabled && (
@@ -2850,10 +2826,10 @@ useEffect(() => {
                   </tr>
                 </thead>
                 <tbody className="relative">
-                  {sortedMSISDetailRows.map(({ row, originalIndex }) => (
+                  {sortedFGISDetailRows.map(({ row, originalIndex }) => (
                     <tr key={originalIndex} className="global-tran-tr-ui">
-                      {orderedMSISDetailColumns.map((column) =>
-                        renderMSISDetailCell(column.key, row, originalIndex)
+                      {orderedFGISDetailColumns.map((column) =>
+                        renderFGISDetailCell(column.key, row, originalIndex)
                       )}
                       {!isFormDisabled && (
                         <td
@@ -2882,7 +2858,7 @@ useEffect(() => {
                   ))}
                 </tbody>
               </table>
-              {renderMSISDetailHeaderContextMenu?.()}
+              {renderFGISDetailHeaderContextMenu?.()}
             </div>
           </div>
 
@@ -2947,9 +2923,9 @@ useEffect(() => {
               <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
                 <thead className="global-tran-thead-div-ui">
                   <tr>
-                    {orderedMSISGlColumns.map((column) =>
-                      renderMSISGlHeader(column.label, column.key, column.width, {
-                        orderedColumns: orderedMSISGlColumns,
+                    {orderedFGISGlColumns.map((column) =>
+                      renderFGISGlHeader(column.label, column.key, column.width, {
+                        orderedColumns: orderedFGISGlColumns,
                       })
                     )}
                     {!isFormDisabled && (
@@ -2963,10 +2939,10 @@ useEffect(() => {
                   </tr>
                 </thead>
                 <tbody className="relative">
-                  {sortedMSISGlRows.map(({ row, originalIndex }) => (
+                  {sortedFGISGlRows.map(({ row, originalIndex }) => (
                     <tr key={`${row.acctCode || "gl"}-${originalIndex}`} className="global-tran-tr-ui">
-                      {orderedMSISGlColumns.map((column) =>
-                        renderMSISGlCell(column.key, row, originalIndex)
+                      {orderedFGISGlColumns.map((column) =>
+                        renderFGISGlCell(column.key, row, originalIndex)
                       )}
                       {!isFormDisabled && (
                         <td
@@ -2995,7 +2971,7 @@ useEffect(() => {
                   ))}
                 </tbody>
               </table>
-              {renderMSISGlHeaderContextMenu?.()}
+              {renderFGISGlHeaderContextMenu?.()}
             </div>
           </div>
 
@@ -3038,9 +3014,9 @@ useEffect(() => {
       <div className={topTab === "history" ? "" : "hidden"}>
         <AllTranHistory
           showHeader={false}
-          endpoint="/getMSISHistory"
-          cacheKey={`MSIS:${state.branchCode || ""}:${state.documentNo || ""}`}
-          activeTabKey="MSIS_Summary"
+          endpoint="/getFGISHistory"
+          cacheKey={`FGIS:${state.branchCode || ""}:${state.documentNo || ""}`}
+          activeTabKey="FGIS_Summary"
           branchCode={state.branchCode}
           startDate={null}
           endDate={null}
@@ -3127,7 +3103,7 @@ useEffect(() => {
       {showAllTranDocNo && (
         <AllTranDocNo
           isOpen={showAllTranDocNo}
-          params={{ branchCode, branchName, docType, documentTitle, fieldNo: "msisNo" }}
+          params={{ branchCode, branchName, docType, documentTitle, fieldNo: "fgisNo" }}
           onRetrieve={handleTranDocNoRetrieval}
           onResponse={{ documentNo }}
           onSelected={handleTranDocNoSelection}
@@ -3140,7 +3116,7 @@ useEffect(() => {
           isOpen={msLookupModalOpen}
           data={globalLookupRow}
           btnCaption="Get Selected Items"
-          title="MS Location Balance"
+          title="FG Location Balance"
           endpoint={globalLookupHeader}
           onClose={handleCloseMSLookup}
           onCancel={() => updateState({ msLookupModalOpen: false })}
@@ -3194,4 +3170,4 @@ useEffect(() => {
   );
 };
 
-export default MSIS;
+export default FGIS;
