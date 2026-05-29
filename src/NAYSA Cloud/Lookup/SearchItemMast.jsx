@@ -649,7 +649,7 @@
 // export default ItemMastLookupModal;
 
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -725,6 +725,8 @@ const ItemMastLookupModal = ({
   const [searchMode, setSearchMode] = useState("part");
   const [sortConfig, setSortConfig] = useState({ key: "", direction: "asc" });
   const [internalSelectedItems, setInternalSelectedItems] = useState([]);
+  const [isSubmittingSelectedItems, setIsSubmittingSelectedItems] = useState(false);
+  const selectedItemsSubmitRef = useRef(false);
   const [filters, setFilters] = useState({});
   const [hasSubmittedSearch, setHasSubmittedSearch] = useState(false);
 
@@ -937,6 +939,10 @@ const ItemMastLookupModal = ({
   };
 
   const handleGetSelectedItems = () => {
+    if (selectedItemsSubmitRef.current || selectedItems.length === 0) return;
+    selectedItemsSubmitRef.current = true;
+    setIsSubmittingSelectedItems(true);
+
     const payload = {
       records: Array.isArray(selectedItems) ? selectedItems : [],
     };
@@ -1004,6 +1010,8 @@ const ItemMastLookupModal = ({
       setFilters(createFilterObject(visibleColumns));
       setSortConfig({ key: "", direction: "asc" });
       setInternalSelectedItems([]);
+      setIsSubmittingSelectedItems(false);
+      selectedItemsSubmitRef.current = false;
     } else {
       setSearchTerm("");
       setAppliedSearch("");
@@ -1012,6 +1020,8 @@ const ItemMastLookupModal = ({
       setInternalSelectedItems([]);
       setFilters(createFilterObject(visibleColumns));
       setHasSubmittedSearch(false);
+      setIsSubmittingSelectedItems(false);
+      selectedItemsSubmitRef.current = false;
     }
   }, [isOpen, visibleColumns]);
 
@@ -1292,7 +1302,7 @@ const ItemMastLookupModal = ({
               type="button"
               onClick={handleGetSelectedItems}
               className="px-4 py-2 bg-[#1e40af] text-white text-[11px] font-bold rounded-lg hover:bg-blue-700 flex items-center gap-2 shadow-sm uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={selectedItems.length === 0}
+              disabled={selectedItems.length === 0 || isSubmittingSelectedItems}
             >
               <FontAwesomeIcon icon={faCheckSquare} />
               Get Selected Items

@@ -806,7 +806,7 @@ const AppContent = () => {
 
 /* -------------------- App Root -------------------- */
 const App = () => (
-  <Router>
+  <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <ResetProvider>

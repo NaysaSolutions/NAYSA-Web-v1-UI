@@ -336,12 +336,14 @@ const SO = () => {
 
   // Company sales settings
   const salesDiscountMode = String(companyInfo?.salesDiscountMode || "").toUpperCase();
+  const priceDiscountMode = String(companyInfo?.salesAllowOpwnEditPrice || "").toUpperCase();
   const salesAllowDuplicateItem = String(
     companyInfo?.salesAllowDuplicateItem || ""
   ).toUpperCase();
 
   // Derived UI flags
-  const isSellingPriceAndDiscountEditable = salesDiscountMode === "MANUAL";
+  const isDiscountEditable = salesDiscountMode === "MANUAL";
+  const isSellPriceOpenEditable = priceDiscountMode === "E";
   const SO_ALLOW_DUPLICATE_ITEMS = salesAllowDuplicateItem === "E";
 
   // Discount configuration
@@ -2190,7 +2192,7 @@ const validateSOQuantity = (index, inputValue) => {
 };
 
 
-const handleSODetailRowChange = (index, field, value) => {
+const handleSODetailRowChange = async (index, field, value) => {
   const discountRateFields = [
     "discRate1",
     "discRate2",
@@ -2324,6 +2326,16 @@ const handleSODetailRowChange = (index, field, value) => {
   }
 
   if (field === "freeItem") {
+    if (updatedRows[index]?.freeItem !== "Y" && value === "Y") {
+      const result = await useSwalProceedConfirm(
+        "Confirm Free Item",
+        "Do you want to mark this item as a free item?",
+        "Yes"
+      );
+
+      if (!result?.isConfirmed) return;
+    }
+
     updatedRow = buildFreeItemRow(updatedRow, value === "Y");
     updatedRows[index] = updatedRow;
     updateState({ detailRows: updatedRows });
@@ -2537,7 +2549,7 @@ const renderSODetailCell = (columnKey, row, index, soStatusOptions) => {
     itemSpecs: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey)}</td>,
     uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { className: "text-center" })}<input type="hidden" value={row.pmType || ""} readOnly /><input type="hidden" value={row.groupId || ""} readOnly /><input type="hidden" value={row.pmId || ""} readOnly /></td>,
     soQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), onFocus: () => { originalSOQuantityRef.current[index] = row.soQuantity; }, onBlur: (e) => validateSOQuantity(index, e.target.value), onKeyDown: (e) => validateSOQuantity(index, e.target.value) })}</td>,
-    sellingPrice: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: sellingPriceDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${sellingPriceDecimals}}$`), blocked: () => !isSellingPriceAndDiscountEditable || row.freeItem === "Y", readOnly: isFormDisabled || !isSellingPriceAndDiscountEditable || row.freeItem === "Y" })}</td>,
+    sellingPrice: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: sellingPriceDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${sellingPriceDecimals}}$`), blocked: () => !isSellPriceOpenEditable || row.freeItem === "Y", readOnly: isFormDisabled || !isDiscountEditable || row.freeItem === "Y" })}</td>,
     grossAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
     totDiscount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
     netAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
@@ -2550,7 +2562,7 @@ const renderSODetailCell = (columnKey, row, index, soStatusOptions) => {
   };
 
   if (visibleDiscountRateFields.includes(columnKey) || visibleDiscountAmountFields.includes(columnKey)) {
-    detailColumnRenderers[columnKey] = () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { blocked: () => !isSellingPriceAndDiscountEditable || row.freeItem === "Y", readOnly: isFormDisabled || !isSellingPriceAndDiscountEditable || row.freeItem === "Y" })}</td>;
+    detailColumnRenderers[columnKey] = () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { blocked: () => !isDiscountEditable || row.freeItem === "Y", readOnly: isFormDisabled || !isDiscountEditable || row.freeItem === "Y" })}</td>;
   }
 
   return detailColumnRenderers[columnKey]?.() ?? null;

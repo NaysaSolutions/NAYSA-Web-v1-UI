@@ -26,12 +26,14 @@ function useDebounce(value, delay) {
 const SearchFAClass = ({
   isOpen,
   onClose,
+  categCode,
   title = "Search Fixed Asset Class Codes",
   withPagination = false,
 }) => {
   const [filters, setFilters] = useState({
     code:        "",
     description: "",
+    eul:         "",
     categCode:   "",
   });
 
@@ -43,6 +45,7 @@ const SearchFAClass = ({
   const [currentPage, setCurrentPage] = useState(1);
 
   const pageSize = withPagination ? 100 : 999999;
+  const normalizedCategCode = String(categCode || "").trim();
 
   const hasActiveFilters = Object.values(filters).some((val) => val !== "");
 
@@ -50,6 +53,7 @@ const SearchFAClass = ({
     setFilters({
       code:        "",
       description: "",
+      eul:         "",
       categCode:   "",
     });
 
@@ -59,6 +63,18 @@ const SearchFAClass = ({
     setCurrentPage(1);
   }, [debouncedFilters]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+
+    setFilters({
+      code:        "",
+      description: "",
+      eul:         "",
+      categCode:   "",
+    });
+    setCurrentPage(1);
+  }, [isOpen, normalizedCategCode]);
+
   // Fetch fixed asset class list
   const {
     data: assetClasses = [],
@@ -66,9 +82,17 @@ const SearchFAClass = ({
     isFetching,
     refetch,
   } = useQuery({
-    queryKey: ["lookupFAClass"],
+    queryKey: ["lookupFAClass", normalizedCategCode],
     queryFn: async () => {
-      const res = await apiClient.get("/faClass");
+      const params = {
+        PARAMS: JSON.stringify({
+          json_data: {
+            categCode: normalizedCategCode,
+          },
+        }),
+      };
+
+      const res = await apiClient.get("/lookupFAClass", { params });
 
       const rawData =
         res?.data?.data?.[0]?.result ??
@@ -101,7 +125,10 @@ const SearchFAClass = ({
         (item.description || "")
           .toLowerCase()
           .includes(debouncedFilters.description.toLowerCase()) &&
-        (item.categCode || "")
+        String(item.eul ?? "")
+          .toLowerCase()
+          .includes(debouncedFilters.eul.toLowerCase()) &&
+        String(item.categCode ?? item.categ_code ?? item.categoryCode ?? "")
           .toLowerCase()
           .includes(debouncedFilters.categCode.toLowerCase())
       );
@@ -204,16 +231,17 @@ const SearchFAClass = ({
               <thead className="sticky top-0 z-10 bg-slate-200">
                 <tr>
                   {[
-                    { label: "Class Code",       key: "code",        width: "w-[150px]" },
-                    { label: "Class Description", key: "description"                     },
-                    { label: "Category Code",             key: "categCode",   width: "w-[120px]" },
+                    { label: "Class Code", key: "code", width: "w-[150px]" },
+                    { label: "Class Description", key: "description" },
+                    { label: "EUL (Month)", key: "eul", width: "w-[110px]", align: "text-center" },
+                    { label: "Category Code", key: "categCode", width: "w-[120px]" },
                   ].map((col) => (
                     <th key={col.key} className={`global-lookup-th-ui ${col.width || ""}`}>
                       <div
                         onClick={() => handleSort(col.key)}
                         className="flex items-center gap-3 cursor-pointer group mb-1"
                       >
-                        <span className="global-lookup-th-text-ui">{col.label}</span>
+                        <span className={`global-lookup-th-text-ui ${col.align || ""}`.trim()}>{col.label}</span>
                         <FontAwesomeIcon
                           icon={faSort}
                           className={`mb-1 text-[10px] ${
@@ -231,7 +259,7 @@ const SearchFAClass = ({
                             setFilters((prev) => ({ ...prev, [col.key]: e.target.value }))
                           }
                           placeholder="Filter..."
-                          className="global-lookup-filter-text-ui"
+                          className={`global-lookup-filter-text-ui ${col.align || ""}`.trim()}
                         />
                         <FontAwesomeIcon
                           icon={faSearch}
@@ -253,12 +281,13 @@ const SearchFAClass = ({
                     >
                       <td className="global-lookup-td-ui font-bold">{assetClass.code}</td>
                       <td className="global-lookup-td-ui">{assetClass.description}</td>
-                      <td className="global-lookup-td-ui">{assetClass.categCode}</td>
+                      <td className="global-lookup-td-ui text-center">{Number.parseInt(assetClass.eul ?? 0, 10) || 0}</td>
+                      <td className="global-lookup-td-ui">{assetClass.categCode ?? assetClass.categ_code ?? assetClass.categoryCode ?? ""}</td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="3" className="px-4 py-20 text-center text-slate-400 italic text-sm">
+                    <td colSpan="4" className="px-4 py-20 text-center text-slate-400 italic text-sm">
                       No matching records found.
                     </td>
                   </tr>
