@@ -274,7 +274,16 @@ const FGRTV = () => {
    });
 
   const updateState = (updates) => {
-      setState(prev => ({ ...prev, ...updates }));
+      setState((prev) => {
+        const patch = typeof updates === "function" ? updates(prev) : updates;
+        if (!patch || typeof patch !== "object") return prev;
+
+        const hasChanges = Object.keys(patch).some(
+          (key) => !Object.is(prev[key], patch[key])
+        );
+
+        return hasChanges ? { ...prev, ...patch } : prev;
+      });
     };
 
   const {
@@ -760,6 +769,7 @@ const handleActivityOption = async (action) => {
       documentDate,
       vendCode,
       vendName,
+      whCode,
       WHcode,
       locCode,
       refDocNo1,
@@ -769,19 +779,22 @@ const handleActivityOption = async (action) => {
       detailRows
     } = state;
 
+    const headerWhCode = WHcode || whCode || "";
+
     return {
-      branchCode: branchCode,
+      branchCode: branchCode || "",
       fgrtvNo: documentNo || "",
       fgrtvId: documentID || "",
       fgrtvDate: documentDate,
-      vendCode: vendCode,
-      vendName: vendName,
-      whCode: WHcode,
-      locCode: locCode,
-      refDocNo1: refDocNo1,
-      refDocNo2: refDocNo2,
+      vendCode: vendCode || "",
+      vendName: vendName || "",
+      whCode: headerWhCode,
+      locCode: locCode || "",
+      refDocNo1: refDocNo1 || "",
+      refDocNo2: refDocNo2 || "",
       remarks: remarks || "",
-      userCode: userCode,
+      userCode: userCode || "",
+
       dt1: detailRows.map((row, index) => ({
         lnNo: String(index + 1),
         itemCode: row.itemCode || "",
@@ -795,20 +808,24 @@ const handleActivityOption = async (action) => {
         qstatCode: row.qstatCode || "",
         bbDate: row.bbDate ? new Date(row.bbDate).toISOString().split("T")[0] : null,
         qtyHand: parseFormattedNumber(row.qtyHand || 0),
-        whouseCode: row.whouseCode || "",
-        locCode: row.locCode || "",
+
+        // important fallback
+        whouseCode: row.whouseCode || headerWhCode,
+        locCode: row.locCode || locCode || "",
+
         acctCode: row.acctCode || "",
         rcCode: row.rcCode || "",
-        slTypeCode: row.sltypeCode || "",
-        slCode: row.slCode || vendCode,
+        slTypeCode: row.sltypeCode || row.slTypeCode || "",
+        slCode: row.slCode || vendCode || "",
         uniqueKey: row.uniqueKey || "",
         operation: row.operation || "S"
       })),
+
       dt2: targetGLRows.map((entry, index) => ({
         recNo: String(index + 1),
         acctCode: entry.acctCode || "",
         rcCode: entry.rcCode || "",
-        sltypeCode: entry.sltypeCode || "",
+        sltypeCode: entry.sltypeCode || entry.slTypeCode || "",
         slCode: entry.slCode || "",
         particular: entry.particular || "",
         vatCode: entry.vatCode || "",
@@ -822,7 +839,10 @@ const handleActivityOption = async (action) => {
         debitFx2: parseFormattedNumber(entry.debitFx2 || 0),
         creditFx2: parseFormattedNumber(entry.creditFx2 || 0),
         slRefNo: entry.slRefNo || "",
-        slrefDate: toDateInputValue(documentDate),
+
+        // FIX: SQL expects slRefDate, not slrefDate
+        slRefDate: entry.slRefDate || toDateInputValue(documentDate),
+
         remarks: entry.remarks || ""
       }))
     };
@@ -1372,8 +1392,8 @@ const handleColumnLabel = (columnName) =>{
 
 //  ** View Document and Transaction History Retrieval ***
 const cleanUrl = useCallback(() => {
-  window.history.replaceState({}, "", window.location.origin);
-}, []);
+  navigate({ pathname: location.pathname, search: "" }, { replace: true });
+}, [navigate, location.pathname]);
 
 const handleHistoryRowPick = useCallback(
   async (row) => {
@@ -1621,6 +1641,12 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
 
   if (['bbDate'].includes(field)) {
     row[field] = value;
+  }
+
+  if (!runCalculations && (field === 'quantity' || field === 'unitCost')) {
+    const currentQuantity = parseFormattedNumber(row.quantity) || 0;
+    const currentUnitCost = parseFormattedNumber(row.unitCost) || 0;
+    row.itemAmount = formatNumber(currentQuantity * currentUnitCost, 2);
   }
 
   if (runCalculations) {
@@ -1907,6 +1933,7 @@ const handleSaveAndPrint = async (documentID) => {
       ? handleDetailChange(selectedRowIndex, 'whouseCode', row, false)
       : updateState({
           WHcode: row.whCode,
+          whCode: row.whCode,
           WHname: row.whName,
           locCode: "", 
           locName: ""
@@ -2072,12 +2099,10 @@ const handleCloseBranchModal = (selectedBranch) => {
     slCode: vendCode,
   }));
 
-
-setState((prev) => {
-    const updated = [...(prev.detailRows || []), ...newRows];
-    updateTotalsDisplay(0,0);
-    return { ...prev, detailRows: updated };
-  });
+  updateState((prev) => ({
+    detailRows: [...(prev.detailRows || []), ...newRows],
+  }));
+  updateTotalsDisplay(0,0);
 };
 
 

@@ -27,7 +27,7 @@ import SLMastLookupModal from "../../../Lookup/SearchSLMast.jsx";
 import CancelTranModal from "../../../Lookup/SearchCancelRef.jsx";
 import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
-import PostMSST from "./PostMSST.jsx";
+import PostFGST from "./PostMSST.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
@@ -129,24 +129,24 @@ const getResponseValue = (row, keys) => {
   return "";
 };
 
-const getMSSTSaveResult = (response) => {
+const getFGSTSaveResult = (response) => {
   const row = response?.data?.[0] || {};
 
   const documentNo = getResponseValue(row, [
-    "msstNo",
-    "MSSTNo",
-    "msst_no",
-    "MSST_NO",
+    "fgstNo",
+    "FGSTNo",
+    "fgst_no",
+    "FGST_NO",
     "docNo",
     "DOC_NO",
     "documentNo",
     "DOCUMENT_NO",
   ]);
   const documentID = getResponseValue(row, [
-    "msstId",
-    "MSSTId",
-    "msst_id",
-    "MSST_ID",
+    "fgstId",
+    "FGSTId",
+    "fgst_id",
+    "FGST_ID",
     "docId",
     "DOC_ID",
     "documentID",
@@ -192,7 +192,7 @@ const getWarehouseBranchCode = (warehouse) =>
       "",
   ).trim();
 
-const MSST = () => {
+const FGST = () => {
   // View Document Const
   const loadedFromUrlRef = useRef(false);
   const detailRowsRef = useRef([]);
@@ -221,7 +221,7 @@ const MSST = () => {
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
   const { user } = useAuth();
   const { resetFlag } = useReset();
-  const docType = docTypes.MSST;
+  const docType = (docTypes.FGST || "FGST");
   const hsDoc = getAllTopHSDocRow?.(docType);
   const pdfLink = docTypePDFGuide[docType];
   const videoLink = docTypeVideoGuide[docType];
@@ -616,7 +616,7 @@ const MSST = () => {
         }
       }
 
-      const tbls = "msst_hd,msst_dt1,msst_dt2";
+      const tbls = "fgst_hd,fgst_dt1,fgst_dt2";
       const hdtblcol_result = await useFieldLenghtCheck(tbls);
       if (hdtblcol_result) {
         updateState({ tblFieldArray: hdtblcol_result });
@@ -662,11 +662,11 @@ const MSST = () => {
         documentNo,
         branchCode,
         docType,
-        "msstNo",
+        "fgstNo",
         direction,
       );
 
-      if (!data?.msstId) {
+      if (!data?.fgstId) {
         useSwalInfoAlert("No Records Found", "Transaction does not exist.");
         return resetState();
       }
@@ -694,13 +694,13 @@ const MSST = () => {
       }));
 
       updateState({
-        documentStatus: data.msstStatus,
+        documentStatus: data.fgstStatus,
         status: data.docStatus,
         noReprints: data.noReprints,
-        documentID: data.msstId,
-        documentNo: data.msstNo,
+        documentID: data.fgstId,
+        documentNo: data.fgstNo,
         branchCode: data.branchCode,
-        documentDate: useformatToDatev2(data.msstDate),
+        documentDate: useformatToDatev2(data.fgstDate),
         selectedTranType: data.tranType || data.tran_type || "IW",
         toBranchCode: data.toBranchCode || data.to_branch_code || "",
        toBranchName: data.toBranchName || data.to_branch_name || "",
@@ -784,9 +784,9 @@ const MSST = () => {
         branchCode: branchCode,
         toBranchCode: selectedTranType === "IB" ? toBranchCode || "" : "",
         toBranchName: selectedTranType === "IB" ? toBranchName || "" : "",
-        msstNo: documentNo || "",
-        msstId: documentID || "",
-        msstDate: documentDate,
+        fgstNo: documentNo || "",
+        fgstId: documentID || "",
+        fgstDate: documentDate,
         tranType: selectedTranType || "IW",
         fromWhCode: fromWhCode || "",
         toWhCode: toWhCode || "",
@@ -894,13 +894,13 @@ const MSST = () => {
           docType,
           savePayload,
           updateState,
-          "msstId",
-          "msstNo",
+          "fgstId",
+          "fgstNo",
         );
 
         if (response) {
           const { documentNo: responseDocNo, documentID: responseDocId } =
-            getMSSTSaveResult(response);
+            getFGSTSaveResult(response);
 
           if (responseDocNo) {
             await fetchTranData(responseDocNo, branchCode);
@@ -915,7 +915,7 @@ const MSST = () => {
         }
 
         const { documentNo: savedDocumentNo, documentID: savedDocumentID } =
-          getMSSTSaveResult(response);
+          getFGSTSaveResult(response);
 
         updateState({
           ...(savedDocumentNo ? { documentNo: savedDocumentNo } : {}),
@@ -1222,7 +1222,7 @@ const MSST = () => {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const docNo = params.get("msstNo");
+    const docNo = params.get("fgstNo");
     const branchCode = params.get("branchCode");
 
     if (!loadedFromUrlRef.current && docNo && branchCode) {
@@ -1978,23 +1978,23 @@ const MSST = () => {
     try {
       updateState({ isLoading: true, itemSingleSelect: itemSingleSelect });
 
-      const endpoint = "getInvLookupMS";
+      const endpoint = "getInvLookupFG";
       const response = await fetchDataJson(endpoint, {
         userCode,
         branchCode: branchCode || "",
         whouseCode: fromWhCode || "",
         locCode: "",
-        docType: "MSST",
+        docType: "FGST",
         tranType: itemSingleSelect ? "IRR" : selectedTranType,
       });
       const custData = response?.data?.[0]?.result
         ? JSON.parse(response.data[0].result)
         : [];
 
-      const colConfig = await useSelectedHSColConfig("getInvLookupMS");
+      const colConfig = await useSelectedHSColConfig("getInvLookupFG");
 
       if (custData.length === 0) {
-        useSwalInfoAlert("MS Location Balance", "No records found");
+        useSwalInfoAlert("FG Stock Balance", "No records found");
         updateState({ isLoading: false });
         return;
       }
@@ -2006,7 +2006,7 @@ const MSST = () => {
         isLoading: false,
       });
     } catch (error) {
-      useSwalErrorAlert("MS Location Balance", "No records found");
+      useSwalErrorAlert("FG Stock Balance", "No records found");
       updateState({
         globalLookupRow: [],
         globalLookupHeader: [],
@@ -2125,7 +2125,7 @@ const MSST = () => {
           disableRouteNavigation={true}
           isSaveDisabled={isSaveDisabled}
           isResetDisabled={isResetDisabled}
-          detailsRoute="/page/MSST"
+          detailsRoute="/page/FGST"
         />
       </div>
 
@@ -2166,7 +2166,7 @@ const MSST = () => {
             id="pr_hd"
           >
             <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Column 1: Branch, MSST No., MSST Date */}
+              {/* Column 1: Branch, FGST No., FGST Date */}
               <div className="global-tran-textbox-group-div-ui">
                 <div className="relative">
                   <input
@@ -2205,7 +2205,7 @@ const MSST = () => {
                 <div className="relative">
                   <input
                     type="text"
-                    id="msstNo"
+                    id="fgstNo"
                     value={state.documentNo}
                     onChange={(e) =>
                       updateState({ documentNo: e.target.value })
@@ -2214,15 +2214,15 @@ const MSST = () => {
                       if (e.key === "Enter") {
                         handleDocNoBlur();
                         e.preventDefault();
-                        document.getElementById("msstDate")?.focus();
+                        document.getElementById("fgstDate")?.focus();
                       }
                     }}
                     placeholder=" "
                     className={`peer global-tran-textbox-ui ${state.isDocNoDisabled ? "bg-blue-100 cursor-not-allowed" : ""}`}
                     disabled={state.isDocNoDisabled}
                   />
-                  <label htmlFor="msstNo" className="global-tran-floating-label">
-                    MSST No.
+                  <label htmlFor="fgstNo" className="global-tran-floating-label">
+                    FGST No.
                   </label>
                   <button
                     className={`global-tran-textbox-button-search-padding-ui ${
@@ -2243,13 +2243,13 @@ const MSST = () => {
                     className={`flex items-stretch global-ref-textbox-ui ${!isFormDisabled ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"}`}
                   >
                     <DateFormatInput
-                      id="msstDate"
+                      id="fgstDate"
                       className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
                       value={documentDate}
                       disabled={isFormDisabled}
                       updateState={(updates) => {
-                        if (updates.msstDate !== undefined) {
-                          updateState({ documentDate: updates.msstDate });
+                        if (updates.fgstDate !== undefined) {
+                          updateState({ documentDate: updates.fgstDate });
                         } else if (updates.documentDate !== undefined) {
                           updateState({ documentDate: updates.documentDate });
                         } else {
@@ -2258,8 +2258,8 @@ const MSST = () => {
                       }}
                     />
                   </div>
-                  <label htmlFor="msstDate" className="global-ref-floating-label">
-                    MSST Date
+                  <label htmlFor="fgstDate" className="global-ref-floating-label">
+                    FGST Date
                   </label>
                 </div>
               </div>
@@ -3944,7 +3944,7 @@ const MSST = () => {
         )}
 
         {showPostingModal && (
-          <PostMSST
+          <PostFGST
             isOpen={showPostingModal}
             userCode={userCode}
             docType={docType}
@@ -3961,7 +3961,7 @@ const MSST = () => {
               branchName,
               docType,
               documentTitle,
-              fieldNo: "msstNo",
+              fieldNo: "fgstNo",
             }}
             onRetrieve={handleTranDocNoRetrieval}
             onResponse={{ documentNo }}
@@ -3975,7 +3975,7 @@ const MSST = () => {
             isOpen={msLookupModalOpen}
             data={globalLookupRow}
             btnCaption="Get Selected Items"
-            title="MS Location Balance"
+            title="FG Stock Balance"
             endpoint={globalLookupHeader}
             onClose={handleCloseMSLookup}
             onCancel={() => updateState({ msLookupModalOpen: false })}
@@ -4048,9 +4048,9 @@ const MSST = () => {
       <div className={topTab === "history" ? "" : "hidden"}>
         <AllTranHistory
           showHeader={false}
-          endpoint="/getMSSTHistory"
-          cacheKey={`MSST:${state.branchCode || ""}:${state.docNo || ""}`}
-          activeTabKey="MSST_Summary"
+          endpoint="/getFGSTHistory"
+          cacheKey={`FGST:${state.branchCode || ""}:${state.docNo || ""}`}
+          activeTabKey="FGST_Summary"
           branchCode={state.branchCode}
           startDate={state.fromDate}
           endDate={state.toDate}
@@ -4070,4 +4070,4 @@ const MSST = () => {
   );
 };
 
-export default MSST;
+export default FGST;
