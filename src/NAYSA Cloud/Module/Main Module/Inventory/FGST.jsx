@@ -1978,7 +1978,7 @@ const FGST = () => {
     try {
       updateState({ isLoading: true, itemSingleSelect: itemSingleSelect });
 
-      const endpoint = "getInvLookupMS";
+      const endpoint = "getInvLookupFG";
       const response = await fetchDataJson(endpoint, {
         userCode,
         branchCode: branchCode || "",
@@ -1991,7 +1991,7 @@ const FGST = () => {
         ? JSON.parse(response.data[0].result)
         : [];
 
-      const colConfig = await useSelectedHSColConfig("getInvLookupMS");
+      const colConfig = await useSelectedHSColConfig("getInvLookupFG");
 
       if (custData.length === 0) {
         useSwalInfoAlert("FG Stock Balance", "No records found");
