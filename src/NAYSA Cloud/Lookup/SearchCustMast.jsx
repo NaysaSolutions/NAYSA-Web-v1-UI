@@ -19,12 +19,12 @@ function useDebounce(value, delay) {
 
 const CustomerMastLookupModal = ({ isOpen, onClose, customParam }) => {
     const columnConfig = [
-        { key: 'custCode', label: 'Customer Code', width: '140px' },
+        { key: 'custCode', label: 'Customer Code', width: '120px' },
         { key: 'custName', label: 'Customer Name', width: '350px' },
-        { key: 'source',   label: 'Source',        width: '100px' },
-        { key: 'custTin',  label: 'TIN',           width: '180px' },
-        { key: 'atcCode',  label: 'ATC',           width: '100px' },
-        { key: 'vatCode',  label: 'VAT',           width: '100px' },
+        { key: 'source',   label: 'Source',        width: '85px' },
+        { key: 'custTin',  label: 'TIN',           width: '150px' },
+        { key: 'atcCode',  label: 'ATC',           width: '85px' },
+        { key: 'vatCode',  label: 'VAT',           width: '85px' },
         { key: 'addr',     label: 'Address',       width: 'auto'  }
     ];
 
@@ -55,7 +55,6 @@ const CustomerMastLookupModal = ({ isOpen, onClose, customParam }) => {
                     searchMode: searchMode,
                 }
             };
-            console.log(JSON.stringify(payload))
             const { data: result } = await apiClient.get("/lookupCustomer", {
                 params: { json_data: JSON.stringify(payload) },
             });
@@ -98,13 +97,15 @@ const CustomerMastLookupModal = ({ isOpen, onClose, customParam }) => {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/55 p-4 animate-fade-in font-sans backdrop-blur-[1px]">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 animate-fade-in font-sans">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl max-h-[85vh] flex flex-col relative overflow-hidden border border-slate-200">
                 
                 {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 bg-slate-100 border-b">
+                <div className="flex items-center justify-between px-4 py-2 bg-slate-100 border-b">
                     <h2 className="text-[16px] font-bold text-[#1e40af]">Select Customer</h2>
+                          
                     <div className="flex items-center gap-4">
+                        {isFetching && <span className="text-[10px] text-blue-500 animate-pulse font-bold uppercase tracking-widest italic">Syncing...</span>}
                         <button onClick={() => refetch()} className="text-slate-400 hover:text-blue-600 transition-colors">
                             <FontAwesomeIcon icon={faSyncAlt} spin={isFetching} />
                         </button>
@@ -112,10 +113,11 @@ const CustomerMastLookupModal = ({ isOpen, onClose, customParam }) => {
                             <FontAwesomeIcon icon={faTimes} size="lg" />
                         </button>
                     </div>
-                </div>
+                    
+               </div>
 
                 {/* Main Search Bar */}
-                <form onSubmit={handleManualSearch} className="px-4 py-3 bg-slate-50 border-b flex items-center gap-6">
+                <form onSubmit={handleManualSearch} className="px-4 py-2 bg-slate-50 border-b flex items-center gap-6">
                     <div className="flex items-center gap-2 w-full max-w-xl">
                         <div className="relative flex-grow">
                             <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
@@ -124,12 +126,12 @@ const CustomerMastLookupModal = ({ isOpen, onClose, customParam }) => {
                             <input
                                 type="text"
                                 placeholder="Search by name or code..."
-                                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white transition-all"
+                                className="w-full pl-9 pr-4 py-1.5 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white transition-all"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
                         </div>
-                        <button type="submit" className="px-6 py-2 bg-[#1e40af] text-white text-[11px] font-bold rounded-lg hover:bg-blue-700 flex items-center gap-2 shadow-sm uppercase tracking-wider">
+                        <button type="submit" className="px-4 py-1.5 bg-[#1e40af] text-white text-[11px] font-bold rounded-lg hover:bg-blue-700 flex items-center gap-2 shadow-sm uppercase tracking-wider">
                             {isFetching ? <FontAwesomeIcon icon={faSpinner} spin /> : <FontAwesomeIcon icon={faSearch} />}
                             Filter
                         </button>
@@ -164,9 +166,9 @@ const CustomerMastLookupModal = ({ isOpen, onClose, customParam }) => {
                             <thead className="sticky top-0 z-10 bg-slate-100 shadow-sm">
                                 <tr>
                                     {columnConfig.map((col) => (
-                                        <th key={col.key} style={{ width: col.width }} className="px-4 py-3 text-left border-b border-slate-200">
+                                        <th key={col.key} style={{ width: col.width }} className="px-3 py-2 text-left border-b border-slate-200">
                                             <div onClick={() => setSortConfig(prev => ({ key: col.key, direction: prev.key === col.key && prev.direction === 'asc' ? 'desc' : 'asc' }))} className="flex items-center gap-2 cursor-pointer mb-2 group">
-                                                <span className="text-[12px] font-bold text-slate-600 uppercase tracking-tighter">{col.label}</span>
+                                                <span className="text-[12px] font-semibold text-slate-600 tracking-tighter">{col.label}</span>
                                                 <FontAwesomeIcon icon={faSort} className={`text-[10px] ${sortConfig.key === col.key ? 'text-blue-500' : 'opacity-20'}`} />
                                             </div>
                                             <div className="relative">
@@ -177,8 +179,8 @@ const CustomerMastLookupModal = ({ isOpen, onClose, customParam }) => {
                                                     type="text" 
                                                     value={filters[col.key]} 
                                                     onChange={(e) => setFilters(prev => ({ ...prev, [col.key]: e.target.value }))} 
-                                                    placeholder="Filter..." 
-                                                    className="w-full pl-7 pr-2 py-1.5 text-[11px] font-normal border border-slate-200 rounded-md bg-white focus:border-blue-400 outline-none" 
+                                                    placeholder="Filter" 
+                                                    className="w-full pl-6 pr-0 py-1.5 text-[10px] font-normal border border-slate-200 rounded-md bg-white focus:border-blue-400 outline-none" 
                                                 />
                                             </div>
                                         </th>
@@ -187,16 +189,16 @@ const CustomerMastLookupModal = ({ isOpen, onClose, customParam }) => {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {filteredAndSorted.length > 0 ? filteredAndSorted.map((cust, idx) => (
-                                    <tr key={idx} onClick={() => onClose(cust)} className="hover:bg-blue-50 cursor-pointer transition-colors group">
+                                    <tr key={idx} onClick={() => onClose(cust)} className="hover:bg-blue-100 cursor-pointer transition-colors group">
                                         {columnConfig.map(col => (
-                                            <td key={col.key} className="px-4 py-3 text-[12px] text-slate-700 font-medium">
+                                            <td key={col.key} className="px-3 py-1.5 text-[11px] text-slate-700">
                                                 {col.key === "custCode" ? <span className="font-bold">{cust[col.key]}</span> : cust[col.key]}
                                             </td>
                                         ))}
                                     </tr>
                                 )) : (
                                     <tr>
-                                        <td colSpan={columnConfig.length} className="px-4 py-20 text-center text-slate-400 italic">No records found.</td>
+                                        <td colSpan={columnConfig.length} className="px-3 py-20 text-center text-slate-400 italic">No records found.</td>
                                     </tr>
                                 )}
                             </tbody>
@@ -207,7 +209,6 @@ const CustomerMastLookupModal = ({ isOpen, onClose, customParam }) => {
                 {/* Footer */}
                 <div className="px-4 py-2.5 border-t bg-slate-50 flex items-center justify-between">
                     <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Total Records: {filteredAndSorted.length}</span>
-                    {isFetching && <span className="text-[10px] text-blue-500 animate-pulse font-bold uppercase tracking-widest italic">Syncing with server...</span>}
                 </div>
             </div>
             
