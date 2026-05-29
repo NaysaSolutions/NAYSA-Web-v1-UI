@@ -65,7 +65,7 @@ const PostMSRTV = ({ isOpen, onClose, userCode }) => {
   }, [isOpen, onClose]);
 
   const handlePost = async (selectedData, userPw) => {
-    await useHandlePostTran(selectedData, userPw, "MSAJ", userCode, setLoading, onClose);
+    await useHandlePostTran(selectedData, userPw, "MSRTV", userCode, setLoading, onClose);
   };
 
  
@@ -89,36 +89,40 @@ const handleViewDocument = (row) => {
     return;
   }
 
-    const MSRTV_VIEW_URL = "/tran/MSRTV";
-    const url =
-      `${window.location.origin}${MSRTV_VIEW_URL}` +
-      `?rtvNo=${encodeURIComponent(rtvNo)}&branchCode=${encodeURIComponent(branchCode)}`;
-
+  const MSRTV_VIEW_URL = "/tran/MSRTV";
+  const url =
+    `${window.location.origin}${MSRTV_VIEW_URL}` +
+    `?rtvNo=${encodeURIComponent(rtvNo)}&branchCode=${encodeURIComponent(branchCode)}`;
     window.open(url, "_blank", "noopener,noreferrer");
-  };
 
-  return (
-    <>
-      {modalReady && (
-        <GlobalGLPostingModalv1
-          data={data}
-          colConfigData={colConfigData}
-          title="Post MS Return to Vendor"
-          userPassword={userPassword}
-          btnCaption="Okay"
-          onClose={onClose}
-          onPost={handlePost}
-          onViewDocument={handleViewDocument}
-          remoteLoading={loading}
-        />
-      )}
+};
 
-      {ReactDOM.createPortal(
-        loading ? <LoadingSpinner /> : null,
-        document.body
-      )}
-    </>
-  );
+
+
+return (
+  <>
+    {/* Mount the modal only when ready */}
+    {modalReady && (
+      <GlobalGLPostingModalv1
+      data={data}
+      colConfigData={colConfigData}
+      title="Post MS Return to Vendor"
+      userPassword={userPassword}
+      btnCaption="Okay"
+      onClose={onClose}
+      onPost={handlePost}
+      onViewDocument={handleViewDocument}
+      remoteLoading={loading}
+      />
+    )}
+
+    {/* Always allow the overlay to render while loading (no modalReady / isOpen gate) */}
+    {ReactDOM.createPortal(
+      loading ? <LoadingSpinner /> : null,
+      document.body
+    )}
+  </>
+);
 };
 
 export default PostMSRTV;

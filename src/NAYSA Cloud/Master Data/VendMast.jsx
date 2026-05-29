@@ -38,6 +38,8 @@ import {
 import PayeeSetupTab from "@/NAYSA Cloud/Master Data/CustMastTabs/PayeeSetupTab";
 import PayeeMasterDataTab from "@/NAYSA Cloud/Master Data/CustMastTabs/PayeeMasterDataTab";
 import ReferenceCodesTab from "@/NAYSA Cloud/Master Data/CustMastTabs/ReferenceCodesTab";
+import { usePagePermission } from "@/NAYSA Cloud/Global/usePagePermission.js";
+import PermissionBadge from "@/NAYSA Cloud/Global/PermissionBadge.jsx";
 
 const normalizeSlType = (v) => {
   const s = String(v ?? "").toUpperCase().trim();
@@ -116,6 +118,28 @@ const VendMast = () => {
 
   const { user } = useAuth();
   const userCode = user?.userCode || user?.USER_CODE || user?.code || "";
+
+  const {
+    pagePermission,
+    isReadOnly,
+    isFullAccess,
+    canAdd,
+    canEdit,
+    canSave,
+    canDelete,
+  } = usePagePermission({
+    componentKey: "VendMast",
+    menuName: "Payee Master Data",
+    debug: true,
+  });
+
+  const showReadOnlyAlert = async (action = "perform this action") => {
+    await Swal.fire({
+      icon: "warning",
+      title: "Read Only",
+      text: `You only have read access. You are not allowed to ${action}.`,
+    });
+  };
 
   const [form, setForm] = useState({ ...emptyForm });
   const [selectedVendCode, setSelectedVendCode] = useState("");
@@ -288,6 +312,11 @@ const VendMast = () => {
   }, []);
 
   const handleOpenAttach = async () => {
+    if (isReadOnly) {
+      await showReadOnlyAlert("attach documents");
+      return;
+    }
+
     const code = String(form?.vendCode || form?.custCode || "").trim();
     if (!code) {
       await useSwalValidationAlert({
@@ -367,6 +396,11 @@ const VendMast = () => {
   };
 
   const deleteVendor = async () => {
+    if (!canDelete) {
+      await showReadOnlyAlert("delete payee records");
+      return;
+    }
+
     const code = String(form?.vendCode || form?.custCode || "").trim();
     if (!code) {
       await showValidation("Missing Required Field(s)", ["• Payee Code"]);
@@ -421,6 +455,11 @@ const VendMast = () => {
   };
 
   const upsertVendor = async () => {
+    if (!canSave) {
+      await showReadOnlyAlert("save payee records");
+      return;
+    }
+
     // 1. DUPLICATE NAME CHECK
     // const canProceed = await confirmDuplicatePayeeName(form.vendName || form.custName);
     // if (!canProceed) return;
@@ -529,7 +568,12 @@ const VendMast = () => {
     setMasterFilters((p) => ({ ...p, [key]: value }));
   };
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
+    if (!canAdd) {
+      await showReadOnlyAlert("add payee records");
+      return;
+    }
+
     allowedDuplicatePayeeNameRef.current = ""; // Reset ref memory
     const sl = normalizeSlType(form?.sltypeCode || "SU") || "SU";
     setSelectedVendCode("");
@@ -545,6 +589,11 @@ const VendMast = () => {
   };
 
   const handleEdit = async () => {
+    if (!canEdit) {
+      await showReadOnlyAlert("edit payee records");
+      return;
+    }
+
     const code = String(form?.vendCode || "").trim();
     if (!code) {
       await useSwalErrorAlert({
@@ -577,9 +626,13 @@ const VendMast = () => {
   const handleMasterRowDoubleClick = async (row) => {
     const code = String(row?.vendCode || row?.code || "").trim();
     if (!code) return;
+
     setActiveTab("setup");
-    setIsEditing(false);
     await fetchVendorByCode(code);
+
+    // READ ONLY = retrieve/view only
+    // FULL ACCESS = retrieve and edit
+    setIsEditing(canEdit);
   };
 
   const headerButtons = useMemo(() => {
@@ -594,16 +647,16 @@ const VendMast = () => {
           label: <span className="hidden sm:inline ml-1">Add</span>,
           icon: faPlus,
           onClick: handleAdd,
-          disabled: isLoading,
-          className: `${baseBtn} bg-blue-600 text-white hover:bg-blue-700`,
+          disabled: isLoading || !canAdd,
+          className: `${baseBtn} ${isLoading || !canAdd ? "bg-blue-400 opacity-50 cursor-not-allowed text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`,
         },
         {
           key: "save",
           label: <span className="hidden sm:inline ml-1">Save</span>,
           icon: faSave,
           onClick: upsertVendor,
-          disabled: isLoading || !isEditing,
-          className: `${baseBtn} ${isLoading || !isEditing ? "bg-blue-500 opacity-50 cursor-not-allowed text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`,
+          disabled: isLoading || !isEditing || !canSave,
+          className: `${baseBtn} ${isLoading || !isEditing || !canSave ? "bg-blue-500 opacity-50 cursor-not-allowed text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`,
         },
         {
           key: "reset",
@@ -618,24 +671,24 @@ const VendMast = () => {
           label: <span className="hidden sm:inline ml-1">Edit</span>,
           icon: faPenToSquare,
           onClick: handleEdit,
-          disabled: isLoading || isEditing || !hasRecord,
-          className: `${baseBtn} ${isLoading || isEditing || !hasRecord ? "bg-blue-400 opacity-50 cursor-not-allowed text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`,
+          disabled: isLoading || isEditing || !hasRecord || !canEdit,
+          className: `${baseBtn} ${isLoading || isEditing || !hasRecord || !canEdit ? "bg-blue-400 opacity-50 cursor-not-allowed text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`,
         },
         {
           key: "attach",
           label: <span className="hidden sm:inline ml-1">Attach</span>,
           icon: faPaperclip,
           onClick: handleOpenAttach,
-          disabled: isLoading || !hasRecord,
-          className: `${baseBtn} ${isLoading || !hasRecord ? "bg-blue-400 opacity-50 cursor-not-allowed text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`,
+          disabled: isLoading || !hasRecord || isReadOnly,
+          className: `${baseBtn} ${isLoading || !hasRecord || isReadOnly ? "bg-blue-400 opacity-50 cursor-not-allowed text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`,
         },
         {
           key: "delete",
           label: <span className="hidden sm:inline ml-1">Delete</span>,
           icon: faTrash,
           onClick: deleteVendor,
-          disabled: isLoading || isEditing || !hasRecord,
-          className: `${baseBtn} ${isLoading || isEditing || !hasRecord ? "bg-red-400 opacity-50 cursor-not-allowed text-white" : "bg-red-500 text-white hover:bg-red-600"}`,
+          disabled: isLoading || isEditing || !hasRecord || !canDelete,
+          className: `${baseBtn} ${isLoading || isEditing || !hasRecord || !canDelete ? "bg-red-400 opacity-50 cursor-not-allowed text-white" : "bg-red-500 text-white hover:bg-red-600"}`,
         },
       ];
     }
@@ -646,16 +699,29 @@ const VendMast = () => {
           key: "add",
           label: <span className="hidden sm:inline ml-1">Add</span>,
           icon: faPlus,
-          onClick: () => refTabRef.current?.add?.(),
-          className: `${baseBtn} bg-blue-600 text-white hover:bg-blue-700`,
+          onClick: async () => {
+            if (!canAdd) {
+              await showReadOnlyAlert("add reference codes");
+              return;
+            }
+            refTabRef.current?.add?.();
+          },
+          disabled: !canAdd,
+          className: `${baseBtn} ${!canAdd ? "bg-blue-400 opacity-50 cursor-not-allowed text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`,
         },
         {
           key: "save",
           label: <span className="hidden sm:inline ml-1">Save</span>,
           icon: faSave,
-          onClick: () => refTabRef.current?.save?.(),
-          disabled: !refState.canSave,
-          className: `${baseBtn} ${!refState.canSave ? "bg-blue-500 opacity-50 cursor-not-allowed text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`,
+          onClick: async () => {
+            if (!canSave) {
+              await showReadOnlyAlert("save reference codes");
+              return;
+            }
+            refTabRef.current?.save?.();
+          },
+          disabled: !refState.canSave || !canSave,
+          className: `${baseBtn} ${!refState.canSave || !canSave ? "bg-blue-500 opacity-50 cursor-not-allowed text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`,
         },
         {
           key: "reset",
@@ -668,7 +734,7 @@ const VendMast = () => {
     }
 
     return [];
-  }, [activeTab, isLoading, isEditing, form, refState]);
+  }, [activeTab, isLoading, isEditing, form, refState, canAdd, canEdit, canSave, canDelete, isReadOnly]);
 
   return (
     <div className="global-ref-main-div-ui">
@@ -677,15 +743,16 @@ const VendMast = () => {
           {/* LEFT: title + tabs grouped together */}
           <div className="flex flex-col lg:flex-row items-center lg:items-center gap-2 lg:gap-4 w-full lg:w-auto">
             <div className="flex-shrink-0 text-center lg:text-left">
-              <h1 className="global-ref-headertext-ui truncate">
+              <h1 className="global-ref-headertext-ui truncate flex items-center gap-2">
                 {activeTab === "setup" && "Payee Master Data"}
                 {activeTab === "master" && "Payee Master Data"}
-                {activeTab === "ref" && "Payee Master Data"}
+                {activeTab === "ref" && "Payee Master Data"} 
               </h1>
             </div>
 
             <div className="overflow-x-auto no-scrollbar">
               <div className="flex flex-nowrap border-b border-blue-300 dark:border-gray-700">
+                
                 {tabs.map((tab) => (
                   <button
                     key={tab.id}
@@ -697,6 +764,7 @@ const VendMast = () => {
                         : "border-transparent text-gray-500 hover:text-blue-500"
                       }`}
                   >
+                    
                     <FontAwesomeIcon icon={tab.icon} className="mr-1.5" />
                     {tab.label}
                   </button>
@@ -707,6 +775,11 @@ const VendMast = () => {
 
           {/* RIGHT: buttons stay on the far right */}
           <div className="flex-shrink-0 w-full lg:w-auto flex flex-wrap items-center justify-center lg:justify-end gap-1.5">
+            <PermissionBadge
+                  permission={pagePermission}
+                  isReadOnly={isReadOnly}
+                  isFullAccess={isFullAccess}
+                />
             {!!headerButtons.length && <ButtonBar buttons={headerButtons} />}
             {activeTab === "setup" && (
               <div ref={guideRef} className="relative z-[60]">
@@ -741,7 +814,12 @@ const VendMast = () => {
         {activeTab === "setup" && (
           <PayeeSetupTab
             isLoading={isLoading}
-            isEditing={isEditing}
+            isEditing={isEditing && canEdit}
+            isReadOnly={isReadOnly}
+            canAdd={canAdd}
+            canEdit={canEdit}
+            canSave={canSave}
+            canDelete={canDelete}
             form={form}
             sltypeOptions={[
               { value: "AG", label: "AGENCY" },
@@ -786,7 +864,16 @@ const VendMast = () => {
         )}
 
         {activeTab === "ref" && (
-          <ReferenceCodesTab ref={refTabRef} onStateChange={setRefState} variant="vendor" />
+          <ReferenceCodesTab
+            ref={refTabRef}
+            onStateChange={setRefState}
+            variant="vendor"
+            isReadOnly={isReadOnly}
+            canAdd={canAdd}
+            canEdit={canEdit}
+            canSave={canSave}
+            canDelete={canDelete}
+          />
         )}
       </div>
 

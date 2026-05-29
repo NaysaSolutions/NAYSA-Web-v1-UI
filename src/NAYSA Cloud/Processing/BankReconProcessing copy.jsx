@@ -78,7 +78,7 @@ import html2canvas from "html2canvas";
   -----------------------
   A. Constants and formatting helpers
   B. Reusable UI components
-  C. Main BankReconProcessing component
+  C. Main BankReconProcessing1 component
   D. API/loading handlers
   E. Save/Post/Unpost/Clear handlers
   F. Table/export/report/email helpers
@@ -655,7 +655,7 @@ const PasswordConfirmationModal = ({
 // C. Main page component
 // =====================================================
 
-const BankReconProcessing = () => {
+const BankReconProcessing1 = () => {
   const { companyInfo, currentUserRow } = useAuth();
 
   const [state, setState] = useState({
@@ -688,8 +688,6 @@ const BankReconProcessing = () => {
   const [showColumnChooser, setShowColumnChooser] = useState(false);
   const [columnChooserSearch, setColumnChooserSearch] = useState("");
   const [hiddenColumnsByTab, setHiddenColumnsByTab] = useState({});
-  const [mobileTableViewByTab, setMobileTableViewByTab] = useState({});
-  const [showMobileTabDropdown, setShowMobileTabDropdown] = useState(false);
   const [exportModal, setExportModal] = useState({
     isOpen: false,
     title: "Export File",
@@ -1788,7 +1786,6 @@ const BankReconProcessing = () => {
   };
   const activeTableConfig = tableConfigs[activeTab] || tableConfigs.bankstmt;
   const activeHiddenColumns = hiddenColumnsByTab[activeTab] || [];
-  const activeMobileTableView = mobileTableViewByTab[activeTab] || "cards";
   const activeTableHasRows = activeTableConfig.rows.length > 0;
   const exportAllHasRows = checkRows.length > 0 || receiptRows.length > 0 || journalRows.length > 0 || summaryRows.length > 0;
   const hasBankReconSummaryRows = summaryRows.length > 0;
@@ -2823,7 +2820,6 @@ const BankReconProcessing = () => {
         ? "border-slate-200 border-b-white bg-white text-blue-700 shadow-sm"
         : "border-transparent bg-slate-100 text-slate-600 hover:border-slate-200 hover:bg-white hover:text-blue-700"
     }`;
-  const activeTabItem = tabItems.find((tab) => tab.key === activeTab) || tabItems[0];
 
   const runAction = (handler) => {
     updateState({ showActionMenu: false });
@@ -3134,215 +3130,7 @@ const BankReconProcessing = () => {
     </tfoot>
   );
 
-  const renderMobileCardControl = (column, row, originalIndex, renderActions) => {
-    if (column.key === "view") {
-      const isHistory = activeTab === "history";
-      const allowedDocCodes =
-        activeTab === "checks" ? ["CV", "DS"] :
-        activeTab === "receipts" ? ["AR", "CR"] :
-        activeTab === "jv" ? ["JV"] :
-        [];
-      const canView = isHistory || hasViewableSourceDocument(row, allowedDocCodes);
-      if (!canView) return null;
-
-      return (
-        <button
-          type="button"
-          title="View"
-          onClick={() => isHistory ? handleViewHistoryRow(row) : handleViewSourceDocument(row, allowedDocCodes)}
-          className="inline-flex h-8 items-center justify-center rounded-md bg-blue-600 px-3 text-[11px] font-semibold text-white shadow-sm hover:bg-blue-700"
-        >
-          <FontAwesomeIcon icon={faEye} className="mr-1.5 text-[10px]" />
-          View
-        </button>
-      );
-    }
-
-    if (activeTab === "checks" && column.key === "selected") {
-      const rowLocked = isPosted || String(row.status || "").toUpperCase() === "REV" || String(row.status || "").toUpperCase() === "S";
-      return (
-        <label className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-semibold text-slate-700">
-          <input
-            type="checkbox"
-            checked={Boolean(row.selected)}
-            disabled={rowLocked}
-            onChange={(e) => handleCheckFieldChange(originalIndex, "selected", e.target.checked)}
-            className="h-4 w-4 accent-blue-600"
-          />
-          Select
-        </label>
-      );
-    }
-
-    if (renderActions && activeTab === "summary") {
-      const actions = renderActions(row, originalIndex);
-      if (!actions) return null;
-      return <div className="inline-flex h-8 items-center">{actions}</div>;
-    }
-
-    return null;
-  };
-
-  const renderMobileCardValue = (column, row, originalIndex) => {
-    if (column.key === "ln") return originalIndex + 1;
-
-    if (activeTab === "checks" && column.key === "status") {
-      return (
-        <span className={`inline-flex min-h-7 items-center rounded-md border px-2 text-[11px] font-bold ${statusClass(row.status)}`}>
-          {getStatusLabel(row.status)}
-        </span>
-      );
-    }
-
-    if (activeTab === "checks" && column.key === "clearDate") {
-      const rowLocked = isPosted || String(row.status || "").toUpperCase() === "REV" || String(row.status || "").toUpperCase() === "S";
-      const isOutstanding = isOutstandingStatus(row.status);
-      const clearDateValue = isOutstanding ? "" : toDateInput(row.clearDate);
-
-      return isOutstanding ? (
-        <span className="text-slate-400">mm/dd/yyyy</span>
-      ) : (
-        <input
-          type="date"
-          value={clearDateValue}
-          min={cutoffDateRange.start}
-          max={cutoffDateRange.end}
-          disabled={rowLocked}
-          onChange={(e) => handleCheckFieldChange(originalIndex, "clearDate", toMMDDYYYY(e.target.value))}
-          className="h-8 w-full rounded-md border border-slate-200 px-2 text-[12px] disabled:bg-slate-50 disabled:text-slate-600"
-        />
-      );
-    }
-
-    if (activeTab === "summary") {
-      const isUdRow = isUserDefinedSummaryRow(row);
-      const editable =
-        !isPosted &&
-        column.key !== "ln" &&
-        column.key !== "variance" &&
-        (column.key === "perBank" || isUdRow);
-
-      if (editable) {
-        const isNumericInput = ["integer", "number"].includes(column.renderType);
-        const inputType = column.renderType === "date" ? "date" : "text";
-        const rawValue = row?.[column.key] ?? "";
-        const value = column.renderType === "date"
-          ? toDateInput(rawValue)
-          : column.renderType === "integer"
-            ? String(Math.trunc(normalizeNumber(rawValue)))
-            : column.renderType === "number"
-              ? formatNumber(normalizeNumber(rawValue), 2)
-              : rawValue;
-
-        return (
-          <input
-            type={inputType}
-            inputMode={column.renderType === "integer" ? "numeric" : column.renderType === "number" ? "decimal" : undefined}
-            value={value}
-            onChange={(e) => {
-              const nextValue = e.target.value;
-              if (column.renderType === "integer" && !/^-?\d*$/.test(nextValue)) return;
-              if (column.renderType === "number" && !/^-?\d*(\.\d{0,2})?$/.test(nextValue.replace(/,/g, ""))) return;
-              handleSummaryFieldChange(
-                originalIndex,
-                column.key,
-                column.renderType === "date" ? toMMDDYYYY(nextValue) : nextValue
-              );
-            }}
-            onFocus={() => {
-              if (isNumericInput && normalizeNumber(rawValue) === 0) {
-                handleSummaryFieldChange(originalIndex, column.key, "");
-              }
-            }}
-            onBlur={(e) => {
-              if (isNumericInput) {
-                handleSummaryNumberBlur(originalIndex, column.key, column.renderType, e.target.value);
-              }
-            }}
-            className={`h-8 w-full rounded-md border border-slate-200 px-2 text-[12px] outline-none focus:border-blue-500 ${["integer", "number"].includes(column.renderType) ? "text-right" : "text-left"}`}
-            maxLength={summaryFieldLengthMap[column.key]}
-          />
-        );
-      }
-
-      const value = column.key === "variance" && isUdRow
-        ? normalizeNumber(row?.perBank) - normalizeNumber(row?.perBook)
-        : formatTableValue(row, column);
-      return ["integer", "number"].includes(column.renderType) ? <Amount value={value} className="font-semibold text-slate-900" /> : value;
-    }
-
-    if (["integer", "number"].includes(column.renderType)) {
-      return <Amount value={row?.[column.key]} className="font-semibold text-slate-900" />;
-    }
-
-    return formatTableValue(row, column);
-  };
-
-  const renderMobileCards = ({ orderedColumns, sortedRows, emptyText, renderActions, hiddenColumnKeys = [] }) => {
-    const visibleColumns = orderedColumns.filter((column) => !hiddenColumnKeys.includes(column.key));
-    const actionColumns = visibleColumns.filter((column) => ["view", "selected"].includes(column.key));
-    const fieldColumns = visibleColumns.filter((column) => !["view", "selected"].includes(column.key));
-
-    if (sortedRows.length === 0) {
-      return (
-        <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-[12px] font-medium text-slate-500">
-          {emptyText}
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-3">
-        {sortedRows.map(({ row, originalIndex }) => {
-          const manualRow = isUserDefinedSummaryRow(row);
-          const controls = [
-            ...actionColumns.map((column) => renderMobileCardControl(column, row, originalIndex, renderActions)),
-            renderMobileCardControl({ key: "__actions" }, row, originalIndex, renderActions),
-          ].filter(Boolean);
-
-          return (
-            <div
-              key={`mobile-${row?.sequence || row?.tranId || row?.bkCheckId || row?.bkIntransitId || row?.bkId || row?.referenceNo || "row"}-${originalIndex}`}
-              className={`rounded-lg border p-3 shadow-sm ${manualRow ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white"}`}
-            >
-              <div className="mb-3 flex items-start justify-between gap-2 border-b border-slate-100 pb-2">
-                <div className="min-w-0">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">
-                    {activeTableConfig.title}
-                  </div>
-                  <div className="mt-0.5 truncate text-[13px] font-extrabold text-slate-900">
-                    {row?.docNo || row?.referenceNo || row?.sequence || row?.checkNo || row?.bankCode || `Line ${originalIndex + 1}`}
-                  </div>
-                </div>
-                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">
-                  #{originalIndex + 1}
-                </span>
-              </div>
-
-              {controls.length > 0 && (
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  {controls}
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 gap-2">
-                {fieldColumns.map((column) => (
-                  <div key={column.key} className="grid grid-cols-[112px_1fr] items-start gap-2 rounded-md bg-slate-50 px-2 py-1.5 text-[12px]">
-                    <span className="font-bold text-slate-500">{column.label}</span>
-                    <span className={`min-w-0 break-words text-slate-900 ${["integer", "number"].includes(column.renderType) ? "text-right" : "text-left"}`}>
-                      {renderMobileCardValue(column, row, originalIndex)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
-  const renderDesktopTable = ({
+  const renderDataTable = ({
     orderedColumns,
     sortedRows,
     rows,
@@ -3434,26 +3222,6 @@ const BankReconProcessing = () => {
       </div>
     </div>
   );
-
-  const renderDataTable = (tableProps) => {
-    const mobileTableProps = {
-      ...tableProps,
-      tableClassName: `${tableProps.tableClassName || ""} max-h-[62vh]`,
-    };
-
-    return (
-      <>
-        <div className="lg:hidden">
-          {activeMobileTableView === "cards"
-            ? renderMobileCards(tableProps)
-            : renderDesktopTable(mobileTableProps)}
-        </div>
-        <div className="hidden lg:block">
-          {renderDesktopTable(tableProps)}
-        </div>
-      </>
-    );
-  };
 
   return (
     <div className="global-ref-main-div-ui">
@@ -3785,44 +3553,7 @@ const BankReconProcessing = () => {
 
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50">
-            <div className="relative w-full px-3 pt-3 lg:hidden">
-              <button
-                type="button"
-                onClick={() => setShowMobileTabDropdown((open) => !open)}
-                className="flex h-9 w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 text-[12px] font-bold text-slate-700 shadow-sm"
-              >
-                <span className="flex min-w-0 items-center gap-2">
-                  <FontAwesomeIcon icon={activeTabItem.icon} className="text-[12px] text-blue-600" />
-                  <span className="truncate">{activeTabItem.label}</span>
-                </span>
-                <FontAwesomeIcon icon={faChevronDown} className="ml-2 shrink-0 text-[11px] text-slate-400" />
-              </button>
-
-              {showMobileTabDropdown && (
-                <div className="absolute left-3 right-3 z-[120] mt-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl ring-1 ring-black/5">
-                  {tabItems.map((tab) => (
-                    <button
-                      key={tab.key}
-                      type="button"
-                      onClick={() => {
-                        tab.onClick();
-                        setShowMobileTabDropdown(false);
-                      }}
-                      className={`flex h-10 w-full items-center gap-2 px-3 text-left text-[12px] font-bold transition ${
-                        activeTab === tab.key
-                          ? "bg-blue-50 text-blue-700"
-                          : "text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      <FontAwesomeIcon icon={tab.icon} className="w-4 text-[12px]" />
-                      <span className="min-w-0 flex-1 truncate">{tab.label}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="hidden flex-wrap gap-1 px-3 pt-3 lg:flex">
+            <div className="flex flex-wrap gap-1 px-3 pt-3">
               {tabItems.map((tab) => (
                 <button
                   key={tab.key}
@@ -3836,7 +3567,7 @@ const BankReconProcessing = () => {
               ))}
             </div>
 
-            <div className="flex w-full flex-wrap items-center justify-between gap-2 px-3 py-2 lg:w-auto lg:justify-end">
+            <div className="flex flex-wrap gap-2 px-3 py-2">
               {activeTab === "checks" && (
                 <>
                   <ActionButton
@@ -3870,29 +3601,28 @@ const BankReconProcessing = () => {
                   </ActionButton>
                 </>
               )}
-              <div className="ml-auto flex items-center gap-2">
-                <div
-                  className={`relative ${showTableActionMenu ? "z-[130]" : ""}`}
-                  ref={tableActionMenuRef}
-                  onClick={(event) => event.stopPropagation()}
+              <div
+                className={`relative ${showTableActionMenu ? "z-[130]" : ""}`}
+                ref={tableActionMenuRef}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <ActionButton
+                  icon={faFileExport}
+                  variant="soft"
+                  disabled={!activeTableHasRows}
+                  onClick={(event) => {
+                    event?.stopPropagation?.();
+                    if (!activeTableHasRows) return;
+                    setShowTableActionMenu((open) => !open);
+                    updateState({ showActionMenu: false });
+                  }}
+                  title="Columns and Export"
                 >
-                  <ActionButton
-                    icon={faFileExport}
-                    variant="soft"
-                    disabled={!activeTableHasRows}
-                    onClick={(event) => {
-                      event?.stopPropagation?.();
-                      if (!activeTableHasRows) return;
-                      setShowTableActionMenu((open) => !open);
-                      updateState({ showActionMenu: false });
-                    }}
-                    title="Columns and Export"
-                  >
-                    Table Tools
-                  </ActionButton>
+                  Table Tools
+                </ActionButton>
 
-                  {showTableActionMenu && activeTableHasRows && (
-                    <div className="absolute right-0 z-[140] mt-2 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl ring-1 ring-black/5">
+                {showTableActionMenu && activeTableHasRows && (
+                  <div className="absolute right-0 z-[140] mt-2 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl ring-1 ring-black/5">
                     <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-slate-50 px-3 py-2">
                       <div className="min-w-0">
                         <div className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
@@ -3983,28 +3713,8 @@ const BankReconProcessing = () => {
                         </span>
                       </button>
                     </div>
-                    </div>
-                  )}
-                </div>
-                <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm lg:hidden">
-                  {[
-                    { key: "cards", label: "Cards" },
-                    { key: "table", label: "Table" },
-                  ].map((option) => (
-                    <button
-                      key={option.key}
-                      type="button"
-                      onClick={() => setMobileTableViewByTab((prev) => ({ ...prev, [activeTab]: option.key }))}
-                      className={`h-8 min-w-[70px] rounded-md px-3 text-[11px] font-bold transition ${
-                        activeMobileTableView === option.key
-                          ? "bg-blue-600 text-white shadow-sm"
-                          : "text-slate-600 hover:bg-slate-50"
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -4594,4 +4304,4 @@ const BankReconProcessing = () => {
   );
 };
 
-export default BankReconProcessing;
+export default BankReconProcessing1;

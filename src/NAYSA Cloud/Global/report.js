@@ -286,6 +286,138 @@ export async function useHandleDownloadExcelAPReport(params) {
 }
 
 
+export async function useHandlePrintFGINVReport(params) {
+  try {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      throw new Error("Popup blocked â€” please allow popups for this site.");
+    }
+
+    injectLoadingSpinner(printWindow);
+
+    const responseDocRpt = await useTopHSRptRow(params.reportId);
+    const formName = responseDocRpt?.reportName;
+    if (!formName) {
+      throw new Error("Report Name not defined");
+    }
+
+    const payload = {
+      branchCode: params.branchCode,
+      startDate: params.startDate,
+      endDate: params.endDate,
+      itemCode: params.itemCode,
+      wwhCode: params.wwhCode || params.whCode,
+      whCode: params.whCode,
+      locCode: params.locCode,
+      reportName: formName,
+      sprocMode: "",
+      sprocName: "",
+      export: "",
+    };
+
+    const pdfBlob = await postPdfRequest("/printFGINVReport", payload);
+
+    if (!(pdfBlob instanceof Blob) || pdfBlob.type !== "application/pdf") {
+      throw new Error("Expected a PDF file but received something else.");
+    }
+
+    const fileURL = URL.createObjectURL(pdfBlob);
+    printWindow.location.href = fileURL;
+  } catch (error) {
+    console.error("Error printing FG inventory report:", error);
+  }
+}
+
+
+export async function useHandleDownloadExcelFGINVReport(params) {
+  try {
+    const payload = {
+      PARAMS: JSON.stringify({
+        mode: params.mode,
+        branchCode: params.branchCode,
+        startDate: params.startDate,
+        endDate: params.endDate,
+        itemCode: params.itemCode,
+        wwhCode: params.wwhCode || params.whCode,
+        whCode: params.whCode,
+        locCode: params.locCode,
+      })
+    };
+
+    return await postRequest("getFGINVReport", payload);
+  } catch (error) {
+    console.error("Error downloading FG inventory report:", error);
+    return { Data: {} };
+  }
+}
+
+
+export async function useHandlePrintMSINVReport(params) {
+  try {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      throw new Error("Popup blocked Ã¢â‚¬â€ please allow popups for this site.");
+    }
+
+    injectLoadingSpinner(printWindow);
+
+    const responseDocRpt = await useTopHSRptRow(params.reportId);
+    const formName = responseDocRpt?.reportName;
+    if (!formName) {
+      throw new Error("Report Name not defined");
+    }
+
+    const payload = {
+      branchCode: params.branchCode,
+      startDate: params.startDate,
+      endDate: params.endDate,
+      itemCode: params.itemCode,
+      wwhCode: params.wwhCode || params.whCode,
+      whCode: params.whCode,
+      locCode: params.locCode,
+      reportName: formName,
+      sprocMode: "",
+      sprocName: "",
+      export: "",
+    };
+
+    const pdfBlob = await postPdfRequest("/printMSINVReport", payload);
+
+    if (!(pdfBlob instanceof Blob) || pdfBlob.type !== "application/pdf") {
+      throw new Error("Expected a PDF file but received something else.");
+    }
+
+    const fileURL = URL.createObjectURL(pdfBlob);
+    printWindow.location.href = fileURL;
+  } catch (error) {
+    console.error("Error printing MS inventory report:", error);
+  }
+}
+
+
+export async function useHandleDownloadExcelMSINVReport(params) {
+  try {
+    const payload = {
+      PARAMS: JSON.stringify({
+        mode: params.mode,
+        branchCode: params.branchCode,
+        startDate: params.startDate,
+        endDate: params.endDate,
+        itemCode: params.itemCode,
+        wwhCode: params.wwhCode || params.whCode,
+        whCode: params.whCode,
+        locCode: params.locCode,
+      })
+    };
+
+    return await postRequest("getMSINVReport", payload);
+  } catch (error) {
+    console.error("Error downloading MS inventory report:", error);
+    return { Data: {} };
+  }
+}
+
+
 
 export async function useHandleDownloadExcelPURReport(params) {
   const { mode, branchCode, startDate, endDate, payeeCode, rcCode } = params;

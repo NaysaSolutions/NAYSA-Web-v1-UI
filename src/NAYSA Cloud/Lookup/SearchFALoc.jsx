@@ -8,11 +8,17 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 
-const SearchFALoc = ({ isOpen, onClose, title = "Search Fixed Asset Location Codes" }) => {
+const SearchFALoc = ({
+  isOpen,
+  onClose,
+  branchCode,
+  title = "Search Fixed Asset Location Codes",
+}) => {
   const [locations, setLocations] = useState([]);
   const [filtered, setFiltered] = useState([]);
   const [filters, setFilters] = useState({ code: "", description: "", branchCode: "" });
   const [loading, setLoading] = useState(false);
+  const normalizedBranchCode = String(branchCode || "").trim();
 
   const hasActiveFilters = Object.values(filters).some((val) => val !== "");
 
@@ -32,7 +38,15 @@ const SearchFALoc = ({ isOpen, onClose, title = "Search Fixed Asset Location Cod
       setLoading(true);
 
       try {
-        const { data: result } = await apiClient.get("/faLoc");
+        const params = {
+          PARAMS: JSON.stringify({
+            json_data: {
+              branchCode: normalizedBranchCode,
+            },
+          }),
+        };
+
+        const { data: result } = await apiClient.get("/lookupFALoc", { params });
 
         const rawData =
           result?.data?.[0]?.result ??
@@ -61,7 +75,7 @@ const SearchFALoc = ({ isOpen, onClose, title = "Search Fixed Asset Location Cod
     return () => {
       alive = false;
     };
-  }, [isOpen]);
+  }, [isOpen, normalizedBranchCode]);
 
   useEffect(() => {
     const newFiltered = locations.filter((item) => {
