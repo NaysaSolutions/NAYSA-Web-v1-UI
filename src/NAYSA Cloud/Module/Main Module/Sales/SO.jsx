@@ -72,7 +72,8 @@ import {
   useSwalvalidateRequiredFields,
   useSwalshowSaveSuccessDialog,
   useSwalSuccessAlert,
-  useSwalErrorAlert
+  useSwalErrorAlert,
+  useSwalHandleOpenSpecsModal
 } from '@/NAYSA Cloud/Global/behavior.jsx';
 
 
@@ -81,6 +82,42 @@ import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 // Header
 import Header from '@/NAYSA Cloud/Components/Header';
+
+const formatDateValue = (date) => {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${month}/${day}/${year}`;
+};
+
+const getNextDayDateValue = (value) => {
+  if (!value) return null;
+
+  const normalizedValue = String(value).trim();
+  const mmddyyyyMatch = normalizedValue.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const yyyymmddMatch = normalizedValue.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+
+  const [, first, second, third] = mmddyyyyMatch || [];
+  const [, isoYear, isoMonth, isoDay] = yyyymmddMatch || [];
+  const month = mmddyyyyMatch ? Number(first) : Number(isoMonth);
+  const day = mmddyyyyMatch ? Number(second) : Number(isoDay);
+  const year = mmddyyyyMatch ? Number(third) : Number(isoYear);
+
+  if (!month || !day || !year) return null;
+
+  const parsedDate = new Date(year, month - 1, day);
+  if (
+    parsedDate.getFullYear() !== year ||
+    parsedDate.getMonth() !== month - 1 ||
+    parsedDate.getDate() !== day
+  ) {
+    return null;
+  }
+
+  parsedDate.setDate(parsedDate.getDate() + 1);
+  return formatDateValue(parsedDate);
+};
+
 const SO = () => {
 
   // View Document Const
@@ -92,6 +129,8 @@ const SO = () => {
   const suppressDeliveryDatePromptRef = useRef(true);
   const salesRepRef = useRef({ code: "", name: "" });
   const detailRowsRef = useRef([]);
+  const documentDateBeforeManualEditRef = useRef("");
+  const documentDateConfirmOpenRef = useRef(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { companyInfo, currentUserRow,getAllDropDown,refsLoaded,getAllTopHSDocRow } = useAuth();
@@ -113,6 +152,8 @@ const SO = () => {
   const pdfLink = docTypePDFGuide[docType];
   const videoLink = docTypeVideoGuide[docType];
   const documentTitle = hsDoc.docName + ' Transaction';
+  const initialDocumentDate = useGetCurrentDayV2();
+  const initialDeliveryDate = getNextDayDateValue(initialDocumentDate);
 
   const [state, setState] = useState({
     // Document information
@@ -120,7 +161,7 @@ const SO = () => {
     documentSeries: hsDoc?.docSeries||"Auto",
     documentDocLen: hsDoc?.docLength||8,
     documentID: null,
-    documentDate:useGetCurrentDayV2(),
+    documentDate: initialDocumentDate,
     documentNo: "",
     documentStatus:"O",
     status: "OPEN",
@@ -151,7 +192,7 @@ const SO = () => {
     contactPerson: "",
     customerPoNo: "",
     customerPoDate: null,
-    deliveryDate: null,
+    deliveryDate: initialDeliveryDate,
     rcCode: "",
     rcName: "",
     salesRepCode: "",
@@ -343,7 +384,7 @@ const SO = () => {
 
   // Derived UI flags
   const isDiscountEditable = salesDiscountMode === "MANUAL";
-  const isSellPriceOpenEditable = priceDiscountMode === "E";
+  const isSellPriceOpenEditable = priceDiscountMode === "E" || salesDiscountMode === "MANUAL";
   const SO_ALLOW_DUPLICATE_ITEMS = salesAllowDuplicateItem === "E";
 
   // Discount configuration
@@ -516,8 +557,87 @@ const SO = () => {
     return candidateDate < soDate;
   };
 
+  const handleDocumentDateFocus = () => {
+    documentDateBeforeManualEditRef.current = documentDate || "";
+  };
+
+  const handleDocumentDateChange = (updates) => {
+    const nextDocumentDate = updates.documentDate;
+    const currentDefaultDeliveryDate = getNextDayDateValue(documentDate);
+    const nextDefaultDeliveryDate = getNextDayDateValue(nextDocumentDate);
+    const shouldUpdateDefaultDeliveryDate =
+      (detailRows?.length || 0) === 0 &&
+      (!deliveryDate || deliveryDate === currentDefaultDeliveryDate);
+
+    if (shouldUpdateDefaultDeliveryDate) {
+      deliveryDateRef.current = nextDefaultDeliveryDate || "";
+      suppressDeliveryDatePromptRef.current = true;
+    }
+
+    updateState({
+      documentDate: nextDocumentDate,
+      ...(shouldUpdateDefaultDeliveryDate ? { deliveryDate: nextDefaultDeliveryDate } : {}),
+    });
+  };
+
+  const handleDocumentDateBlur = async (_event, { value: nextDocumentDate, isValid } = {}) => {
+    const originalDocumentDate =
+      documentDateBeforeManualEditRef.current || documentDate || "";
+    const isCompleteDocumentDate =
+      isValid &&
+      /^\d{2}\/\d{2}\/\d{4}$/.test(String(nextDocumentDate || "")) &&
+      !!parseComparableDate(nextDocumentDate);
+    const hasMatrixPricedRows = (detailRowsRef.current || []).some((row) =>
+      String(row?.pmId || "").trim()
+    );
+
+    if (
+      !documentDateConfirmOpenRef.current &&
+      hasMatrixPricedRows &&
+      isCompleteDocumentDate &&
+      String(nextDocumentDate || "") !== String(originalDocumentDate || "")
+    ) {
+      documentDateConfirmOpenRef.current = true;
+
+      try {
+        const result = await useSwalProceedConfirm(
+          "Update SO Date?",
+          "Editing of SO Date will update the Price and Discount based on matrix.",
+          "Yes",
+          "No"
+        );
+
+        if (!result?.isConfirmed) {
+          documentDateBeforeManualEditRef.current = originalDocumentDate;
+          updateState({ documentDate: originalDocumentDate });
+          return;
+        }
+
+        documentDateBeforeManualEditRef.current = nextDocumentDate;
+        updateState({ documentDate: nextDocumentDate });
+        await refreshDetailRowsFromPriceMatrix({
+          rows: detailRowsRef.current,
+          docDate: nextDocumentDate,
+        });
+      } finally {
+        documentDateConfirmOpenRef.current = false;
+      }
+
+      return;
+    }
+
+    if (isCompleteDocumentDate) {
+      documentDateBeforeManualEditRef.current = nextDocumentDate;
+    }
+  };
+
+
+
+  
+
   const clearHeaderAndDetailDeliveryDates = ({ showAlert = false } = {}) => {
-    const updatedRows = detailRows.map((row) => ({
+    const sourceRows = detailRowsRef.current?.length ? detailRowsRef.current : detailRows;
+    const updatedRows = (sourceRows || []).map((row) => ({
       ...row,
       delDate: "",
     }));
@@ -536,11 +656,13 @@ const SO = () => {
       deliveryDate: null,
       detailRows: updatedRows,
     });
+    detailRowsRef.current = updatedRows;
     updateTotals(updatedRows);
   };
 
   const clearHeaderAndDetailCustomerPO = () => {
-    const updatedRows = detailRows.map((row) => ({
+    const sourceRows = detailRowsRef.current?.length ? detailRowsRef.current : detailRows;
+    const updatedRows = (sourceRows || []).map((row) => ({
       ...row,
       customerPoNo: "",
     }));
@@ -552,6 +674,7 @@ const SO = () => {
       customerPoDate: null,
       detailRows: updatedRows,
     });
+    detailRowsRef.current = updatedRows;
     updateTotals(updatedRows);
   };
 
@@ -597,11 +720,13 @@ const SO = () => {
   };
 
   const applyHeaderValueToDetailRows = (detailField, detailValue) => {
-    const updatedRows = detailRows.map((row) => ({
+    const sourceRows = detailRowsRef.current?.length ? detailRowsRef.current : detailRows;
+    const updatedRows = (sourceRows || []).map((row) => ({
       ...row,
       [detailField]: detailValue,
     }));
 
+    detailRowsRef.current = updatedRows;
     updateState({ detailRows: updatedRows });
     updateTotals(updatedRows);
   };
@@ -611,7 +736,8 @@ const SO = () => {
     detailField,
     detailValue,
   }) => {
-    if ((detailRows?.length || 0) === 0) {
+    const sourceRows = detailRowsRef.current?.length ? detailRowsRef.current : detailRows;
+    if ((sourceRows?.length || 0) === 0) {
       return false;
     }
 
@@ -798,9 +924,11 @@ useEffect(() => {
         filteredTypes.find((type) => type.DROPDOWN_CODE === "SO01")?.DROPDOWN_CODE ||
         filteredTypes[0]?.DROPDOWN_CODE ||
         "";
+      const nextDocumentDate = useGetCurrentDayV2();
+      const nextDeliveryDate = getNextDayDateValue(nextDocumentDate);
 
       customerPoNoRef.current = "";
-      deliveryDateRef.current = "";
+      deliveryDateRef.current = nextDeliveryDate || "";
       suppressDeliveryDatePromptRef.current = true;
       salesRepRef.current = { code: "", name: "" };
 
@@ -810,7 +938,7 @@ useEffect(() => {
       branchCode: currentUserRow?.branchCode||"",
       branchName: currentUserRow?.branchName||"",
       userCode:currentUserRow?.userCode||"",
-      documentDate:useGetCurrentDayV2(),
+      documentDate: nextDocumentDate,
       currCode:companyInfo?.currCode||"",
       glCurrDefault:companyInfo?.currCode||"",
       currName:companyInfo?.currName||"",
@@ -831,7 +959,7 @@ useEffect(() => {
       contactPerson:"",
       customerPoNo:"",
       customerPoDate:null,
-      deliveryDate:null,
+      deliveryDate: nextDeliveryDate,
       rcCode:"",
       rcName:"",
       salesRepCode:"",
@@ -1668,10 +1796,11 @@ const handleCopy = async () => {
 
   if (documentID) {
     const nextDocumentDate = useGetCurrentDayV2();
+    const nextDeliveryDate = getNextDayDateValue(nextDocumentDate);
     const copiedDetailRows = detailRows.map((row) => ({
       ...row,
       soStat: "O",
-      delDate: "",
+      delDate: nextDeliveryDate || "",
       customerPoNo: "",
       drQuantity: formatNumber(0, quantityDecimals),
       siQuantity: formatNumber(0, quantityDecimals),
@@ -1681,7 +1810,7 @@ const handleCopy = async () => {
     }));
 
     customerPoNoRef.current = "";
-    deliveryDateRef.current = "";
+    deliveryDateRef.current = nextDeliveryDate || "";
     suppressDeliveryDatePromptRef.current = true;
 
     updateState({
@@ -1693,7 +1822,7 @@ const handleCopy = async () => {
       documentDate: nextDocumentDate,
       customerPoNo: "",
       customerPoDate: null,
-      deliveryDate: null,
+      deliveryDate: nextDeliveryDate,
       refDocNo1: "",
       refDocNo2: "",
       noReprints: "0",
@@ -2546,7 +2675,7 @@ const renderSODetailCell = (columnKey, row, index, soStatusOptions) => {
     soStat: () => { const isStatusLocked = !documentID || ["X", "C"].includes(row.soStat || "O"); return <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`soStat-${index}`} className="w-full global-tran-td-inputclass-ui text-left" value={row.soStat || "O"} disabled={isFormDisabled || isStatusLocked} onChange={(e) => handleSODetailRowChange(index, "soStat", e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled || isStatusLocked) return; e.preventDefault(); focusNextDetailCell("soStat"); }}>{soStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></td>; }, 
     itemCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}><div className="flex items-center gap-1"><input type="text" value={row.itemCode || ""} readOnly className="w-full h-7 text-xs bg-transparent focus:outline-none focus:ring-0" />{canSearchItem && <button type="button" className="text-blue-600 hover:text-blue-800" onClick={() => updateState({ selectedRowIndex: index, selectionContext: "rowItemLookup", insertAfterIndex: null, showItemModal: true })}><FontAwesomeIcon icon={faSearch} /></button>}</div></td>, 
     itemName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey)}</td>,
-    itemSpecs: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey)}</td>,
+    itemSpecs: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="relative flex items-center">{textInput(columnKey, { className: "pr-8", readOnly: isFormDisabled })}{!isFormDisabled && <FontAwesomeIcon icon={faSearch} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={() => useSwalHandleOpenSpecsModal(index, detailRows, handleSODetailRowChange, row.itemSpecs, "Specification", "itemSpecs", `Enter specification for ${row.itemCode || "this item"}...`)} />}</div></td>,
     uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { className: "text-center" })}<input type="hidden" value={row.pmType || ""} readOnly /><input type="hidden" value={row.groupId || ""} readOnly /><input type="hidden" value={row.pmId || ""} readOnly /></td>,
     soQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), onFocus: () => { originalSOQuantityRef.current[index] = row.soQuantity; }, onBlur: (e) => validateSOQuantity(index, e.target.value), onKeyDown: (e) => validateSOQuantity(index, e.target.value) })}</td>,
     sellingPrice: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: sellingPriceDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${sellingPriceDecimals}}$`), blocked: () => !isSellPriceOpenEditable || row.freeItem === "Y", readOnly: isFormDisabled || !isDiscountEditable || row.freeItem === "Y" })}</td>,
@@ -2691,7 +2820,9 @@ return (
                   className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
                   value={documentDate}
                   disabled={isFormDisabled}
-                  updateState={updateState}
+                  updateState={handleDocumentDateChange}
+                  onFocus={handleDocumentDateFocus}
+                  onBlurCustom={handleDocumentDateBlur}
                 />
               </div>
               <label
@@ -2987,7 +3118,7 @@ return (
               value={refDocNo1 || ""}
               disabled={isFormDisabled}
               onChange={(val) => updateState({ refDocNo1: val })}
-              maxLength={useGetFieldLength(tblFieldArray, "refsvi_no1")}
+              maxLength={useGetFieldLength(tblFieldArray, "refso_no1")}
             />
 
             <FieldRenderer
@@ -2997,7 +3128,7 @@ return (
               value={refDocNo2 || ""}
               disabled={isFormDisabled}
               onChange={(val) => updateState({ refDocNo2: val })}
-              maxLength={useGetFieldLength(tblFieldArray, "refsvi_no2")}
+              maxLength={useGetFieldLength(tblFieldArray, "refso_no2")}
             />
 
             <FieldRenderer

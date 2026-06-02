@@ -503,8 +503,10 @@ useEffect(() => {
   useEffect(() => {
     if (suppressHeaderDateNeededPromptRef.current) {
       suppressHeaderDateNeededPromptRef.current = false;
-      headerDateNeededRef.current = headerDateNeeded || "";
-      return;
+
+      if ((headerDateNeeded || "") === headerDateNeededRef.current) {
+        return;
+      }
     }
 
     const currentValue = headerDateNeeded || "";
@@ -518,7 +520,8 @@ useEffect(() => {
 
     if (currentValue && isDateBeforeDate(currentValue, documentDate)) {
       const fallbackDate = documentDate || useGetCurrentDayV2();
-      const updatedRows = (detailRows || []).map((row) => ({
+      const sourceRows = detailRowsRef.current?.length ? detailRowsRef.current : detailRows;
+      const updatedRows = (sourceRows || []).map((row) => ({
         ...row,
         dateNeeded: fallbackDate,
       }));
@@ -540,8 +543,9 @@ useEffect(() => {
 
     const run = async () => {
       const nextState = { dateNeeded: currentValue };
+      const sourceRows = detailRowsRef.current?.length ? detailRowsRef.current : detailRows;
 
-      if ((detailRows?.length || 0) > 0) {
+      if ((sourceRows?.length || 0) > 0) {
         const result = await useSwalProceedConfirm(
           "Apply Date Needed changes?",
           "PR Detail already has record(s).\nDo you want to apply the updated Date Needed to all PR Detail rows?",
@@ -549,7 +553,7 @@ useEffect(() => {
         );
 
         if (result?.isConfirmed) {
-          const updatedRows = (detailRows || []).map((row) => ({
+          const updatedRows = (sourceRows || []).map((row) => ({
             ...row,
             dateNeeded: currentValue,
           }));
