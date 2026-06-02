@@ -720,7 +720,8 @@ export const useSwalDeleteConfirm = async (
 export const useSwalProceedConfirm = async (
   title = "Confirm Logout",
   text = "Are you sure you want to logout?",
-  confirmText = "Yes, logout!"
+  confirmText = "Yes, logout!",
+  cancelText = "Cancel"
 ) => {
   return await Swal.fire({
     title: "",
@@ -815,7 +816,7 @@ export const useSwalProceedConfirm = async (
     `,
     showCancelButton: true,
     confirmButtonText: confirmText,
-    cancelButtonText: "Cancel",
+    cancelButtonText: cancelText,
     buttonsStyling: false,
 
     width: 360,

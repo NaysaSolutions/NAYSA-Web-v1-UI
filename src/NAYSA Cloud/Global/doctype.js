@@ -23,6 +23,14 @@ export const docTypes = {
   MSST:"MSST",
   MSRTV:"MSRTV",
   FGRTV:"FGRTV",
+  FARR:"FARR",
+  FAAD:"FAAD",
+  FADP:"FADP",
+  FADS:"FADS",
+  FAMG:"FAMG",
+  FARC:"FARC",
+  FASP:"FASP",
+  FATR:"FATR",
   PR:"PR",
   JO:"JO",  
 
@@ -60,6 +68,16 @@ export const docTypeNames = {
     FGAJ: "FG Inventory Adjustment Transaction",
     MSRTV: "MS Inventory Return to Vendor Transaction",
     FGRTV: "FG Inventory Return to Vendor Transaction",
+
+    // Fixed Assets Module
+    FARR: "Fixed Assets Receiving Transaction",
+    FAAD: "Fixed Asset Adjustment Transaction",
+    FADP: "Fixed Asset Depreciation Transaction",
+    FADS: "Fixed Asset Disposal Transaction",
+    FAMG: "Fixed Asset Merge Transaction",
+    FARC: "Fixed Asset Reclassification Transaction",
+    FASP: "Fixed Asset Split Transaction",
+    FATR: "Fixed Asset Transfer Location Transaction",
   };
 
 
@@ -86,6 +104,16 @@ export const docTypeNames = {
     CR: "Collection Receipt Transaction",
     SOA: "Statement of Account Transaction",
 
+    // Fixed Assets Module
+    FARR: "",
+    FAAD: "",
+    FADP: "",
+    FADS: "",
+    FAMG: "",
+    FARC: "",
+    FASP: "",
+    FATR: "",
+
   };
 
   export const docTypePDFGuide = {
@@ -108,6 +136,16 @@ export const docTypeNames = {
     ARCM: "AR Credit Memo Voucher Transaction",
     CR: "Collection Receipt Transaction",
     SOA: "Statement of Account Transaction",
+
+    // Fixed Assets Module
+    FARR: "",
+    FAAD: "",
+    FADP: "",
+    FADS: "",
+    FAMG: "",
+    FARC: "",
+    FASP: "",
+    FATR: "",
   };
 
 

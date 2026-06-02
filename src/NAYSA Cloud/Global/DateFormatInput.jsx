@@ -144,6 +144,96 @@ export const formatDateToYYYYMMDD = (value) => {
   return `${year}-${month}-${day}`;
 };
 
+const dateSegments = [
+  { key: "month", start: 0, end: 2, maxLength: 2 },
+  { key: "day", start: 3, end: 5, maxLength: 2 },
+  { key: "year", start: 6, end: 10, maxLength: 4 },
+];
+
+const getDateSegmentByPosition = (selectionStart = 0) => {
+  if (selectionStart <= 2) {
+    return dateSegments[0];
+  }
+
+  if (selectionStart <= 5) {
+    return dateSegments[1];
+  }
+
+  return dateSegments[2];
+};
+
+const getDateSegmentByKey = (key) =>
+  dateSegments.find((segment) => segment.key === key) || null;
+
+const getNextDateSegment = (segment) => {
+  const currentIndex = dateSegments.findIndex(
+    (dateSegment) => dateSegment.key === segment?.key
+  );
+
+  return currentIndex >= 0 ? dateSegments[currentIndex + 1] || null : null;
+};
+
+const getSelectedDateSegment = (input) => {
+  if (!input) return null;
+
+  return (
+    dateSegments.find(
+      (segment) =>
+        input.selectionStart === segment.start &&
+        input.selectionEnd === segment.end
+    ) || null
+  );
+};
+
+const selectDateSegment = (input, selectionStart) => {
+  if (!input || typeof input.setSelectionRange !== "function") return;
+
+  const segment = getDateSegmentByPosition(selectionStart);
+
+  window.requestAnimationFrame(() => {
+    input.setSelectionRange(segment.start, segment.end);
+  });
+};
+
+const setDateSegmentSelection = (input, segment, shouldSelect) => {
+  if (!input || !segment || typeof input.setSelectionRange !== "function") return;
+
+  window.requestAnimationFrame(() => {
+    if (shouldSelect) {
+      input.setSelectionRange(segment.start, segment.end);
+    } else {
+      input.setSelectionRange(segment.end, segment.end);
+    }
+  });
+};
+
+const replaceDateSegment = (dateValue, segment, segmentValue) => {
+  const normalizedValue = String(dateValue || "");
+
+  if (!/^\d{2}\/\d{2}\/\d{4}$/.test(normalizedValue)) {
+    return "";
+  }
+
+  const month = normalizedValue.slice(0, 2);
+  const day = normalizedValue.slice(3, 5);
+  const year = normalizedValue.slice(6, 10);
+  const nextParts = { month, day, year, [segment.key]: segmentValue };
+
+  return `${nextParts.month}/${nextParts.day}/${nextParts.year}`;
+};
+
+const getNextSegmentBuffer = (segment, currentBuffer, digit) => {
+  if (!currentBuffer && segment.key === "month" && !["0", "1"].includes(digit)) {
+    return `0${digit}`;
+  }
+
+  if (!currentBuffer && segment.key === "day" && !["0", "1", "2", "3"].includes(digit)) {
+    return `0${digit}`;
+  }
+
+  return `${currentBuffer || ""}${digit}`.slice(0, segment.maxLength);
+};
+
 const DateFormatInput = ({
   id,
   name,
@@ -156,14 +246,18 @@ const DateFormatInput = ({
   onBlurCustom,
   onKeyDownCustom,
   showCalendar = true,
+  onClick,
+  onFocus,
   ...props
 }) => {
   const fieldName = name || id;
   const nativeDateRef = useRef(null);
+  const segmentEditRef = useRef({ key: "", buffer: "" });
 
   const { minYear, currentYear, maxYear } = getAllowedYearRange();
 
   const handleBlur = (e) => {
+    segmentEditRef.current = { key: "", buffer: "" };
     const currentValue = e?.target?.value || value || "";
     const isValid = usehandleDateBlur(currentValue, fieldName, updateState);
 
@@ -208,8 +302,83 @@ const DateFormatInput = ({
     }
   };
 
+  const handleFocus = (e) => {
+    if (onFocus) {
+      onFocus(e);
+    }
+  };
+
+  const handleClick = (e) => {
+    if (onClick) {
+      onClick(e);
+    }
+
+    if (disabled) return;
+
+    const segment = getDateSegmentByPosition(e.currentTarget.selectionStart || 0);
+    segmentEditRef.current = { key: segment.key, buffer: "" };
+    selectDateSegment(e.currentTarget, e.currentTarget.selectionStart || 0);
+  };
+
   const handleKeyDown = (e) => {
+    if (!disabled && e.key === "Enter") {
+      const selectedSegment = getSelectedDateSegment(e.currentTarget);
+      const activeSegment = getDateSegmentByKey(segmentEditRef.current.key);
+      const segment = activeSegment || selectedSegment;
+      const nextSegment = getNextDateSegment(segment);
+
+      if (nextSegment) {
+        e.preventDefault();
+        segmentEditRef.current = { key: nextSegment.key, buffer: "" };
+        setDateSegmentSelection(e.currentTarget, nextSegment, true);
+        return;
+      }
+    }
+
+    if (!disabled && /^\d$/.test(e.key) && /^\d{2}\/\d{2}\/\d{4}$/.test(String(value || ""))) {
+      const selectedSegment = getSelectedDateSegment(e.currentTarget);
+      const activeSegment = getDateSegmentByKey(segmentEditRef.current.key);
+      const segment = activeSegment || selectedSegment;
+
+      if (segment) {
+        e.preventDefault();
+
+        const currentBuffer =
+          segmentEditRef.current.key === segment.key ? segmentEditRef.current.buffer : "";
+        const nextBuffer = getNextSegmentBuffer(segment, currentBuffer, e.key);
+        const isSegmentComplete = nextBuffer.length >= segment.maxLength;
+
+        if (isSegmentComplete) {
+          const nextDateValue = replaceDateSegment(value, segment, nextBuffer);
+
+          if (!nextDateValue || !isStrictDateAllowed({ value: nextDateValue })) {
+            segmentEditRef.current = { key: "", buffer: "" };
+            setDateSegmentSelection(e.currentTarget, segment, true);
+            return;
+          }
+
+          updateState({ [fieldName]: nextDateValue });
+
+          if (onChangeCustom) {
+            onChangeCustom(nextDateValue.replace(/\D/g, ""), fieldName, nextDateValue);
+          }
+
+          const nextSegment = getNextDateSegment(segment);
+          segmentEditRef.current = nextSegment
+            ? { key: nextSegment.key, buffer: "" }
+            : { key: "", buffer: "" };
+          setDateSegmentSelection(e.currentTarget, nextSegment || segment, !!nextSegment);
+          return;
+        }
+
+        segmentEditRef.current = { key: segment.key, buffer: nextBuffer };
+        setDateSegmentSelection(e.currentTarget, segment, true);
+        return;
+      }
+    }
+
     if (e.key === "Delete" && fieldName !== "documentDate") {
+      segmentEditRef.current = { key: "", buffer: "" };
       e.preventDefault();
       updateState({ [fieldName]: "" });
 
@@ -240,6 +409,7 @@ const DateFormatInput = ({
         disabled={disabled}
         isAllowed={isStrictDateAllowed}
         onValueChange={(values) => {
+          segmentEditRef.current = { key: "", buffer: "" };
           usehandleDateChange(values.value, fieldName, updateState);
 
           if (onChangeCustom) {
@@ -247,6 +417,8 @@ const DateFormatInput = ({
           }
         }}
         onBlur={handleBlur}
+        onFocus={handleFocus}
+        onClick={handleClick}
         onKeyDown={handleKeyDown}
         {...props}
       />

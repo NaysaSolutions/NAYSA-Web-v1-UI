@@ -3001,9 +3001,9 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
     groupId: lot.groupId || lot.group_id || row.groupId || row.group_id || "",
     group_id: lot.group_id || lot.groupId || row.group_id || row.groupId || "",
 
-    lineNo: lot.lineNo || lot.line_no || lot.lnNo || row.lineNo || row.line_no || row.lnNo || rowIndex + 1,
-    line_no: lot.line_no || lot.lineNo || lot.lnNo || row.line_no || row.lineNo || row.lnNo || rowIndex + 1,
-    lnNo: lot.lnNo || lot.lineNo || lot.line_no || row.lnNo || row.lineNo || row.line_no || rowIndex + 1,
+    lineNo: lot.lineNo || lot.line_no || lot.lnNo || row.lineNo || row.line_no || row.lnNo || index + 1,
+    line_no: lot.line_no || lot.lineNo || lot.lnNo || row.line_no || row.lineNo || row.lnNo || index + 1,
+    lnNo: lot.lnNo || lot.lineNo || lot.line_no || row.lnNo || row.lineNo || row.line_no || index + 1,
   }))
 );
 

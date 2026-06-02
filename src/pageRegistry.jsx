@@ -1,5 +1,4 @@
 import React, { lazy } from "react";
-import PostMSST from "./NAYSA Cloud/Module/Main Module/Inventory/PostMSST.jsx";
 
 // Maps DB componentKey -> lazy React component. Keep keys stable because the
 // backend stores them in menu-routes/menu-items.
@@ -64,7 +63,14 @@ export const pageRegistry = {
   FGST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGST.jsx")),
 
   // Fixed Assets
+  FAAD: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/FAAD.jsx")),
+  FADP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/FADP.jsx")),
+  FADS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/FADS.jsx")),
+  FAMG: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/FAMG.jsx")),
+  FARC: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/FARC.jsx")),
   FARR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/FARR.jsx")),
+  FASP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/FASP.jsx")),
+  FATR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/FATR.jsx")),
 
   // General Ledger & Master Data
   JV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/General Ledger/JV.jsx")),
@@ -94,6 +100,8 @@ export const pageRegistry = {
   SecurityAuditTrail: lazyPage(() => import("./NAYSA Cloud/Query/AuditTrail/SecurityAuditTrail.jsx")),
   MSINQ: lazyPage(() => import("./NAYSA Cloud/Query/INVInq/MSStockCard.jsx")),
   FGINQ: lazyPage(() => import("./NAYSA Cloud/Query/INVInq/FGStockCard.jsx")),
+  FAINQ: lazyPage(() => import("./NAYSA Cloud/Query/FAInq/FAAssetInquiry.jsx")),
+  FAAssetInquiry: lazyPage(() => import("./NAYSA Cloud/Query/FAInq/FAAssetInquiry.jsx")),
 
   // Global Reference
   Company: lazyPage(() => import("./NAYSA Cloud/Reference File/Company.jsx")),
@@ -129,10 +137,18 @@ export const pageRegistry = {
   PostMSRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSRR.jsx")),
   PostMSRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSRTV.jsx")),
   PostMSST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSST.jsx")),
+  PostFGRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGRTV.jsx")),
   PostMSAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSAJ.jsx")),
   PostFGAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGAJ.jsx")),
+  PostFAAD: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/PostFAAD.jsx")),
+  PostFADP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/PostFADP.jsx")),
+  PostFADS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/PostFADS.jsx")),
+  PostFAMG: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/PostFAMG.jsx")),
+  PostFARC: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/PostFARC.jsx")),
   PostFARR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/PostFARR.jsx")),
   PostFAR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/PostFARR.jsx")),
+  PostFASP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/PostFASP.jsx")),
+  PostFATR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/PostFATR.jsx")),
   PostDR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/PostDR.jsx")),
   PostSI: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/PostSI.jsx")),
   MonthendGLProcessingModal: lazyPage(() => import("./NAYSA Cloud/Processing/MonthendProcessing.jsx")),
