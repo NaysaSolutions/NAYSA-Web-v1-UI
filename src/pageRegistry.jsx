@@ -128,11 +128,7 @@ export const pageRegistry = {
   PostAPDM: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Payable/PostAPDM.jsx")),
   PostMSRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSRR.jsx")),
   PostMSRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSRTV.jsx")),
-<<<<<<< HEAD
   PostMSST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSST.jsx")),
-=======
-  PostFGRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGRTV.jsx")),
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
   PostMSAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSAJ.jsx")),
   PostFGAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGAJ.jsx")),
   PostFARR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/PostFARR.jsx")),
