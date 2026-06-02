@@ -1,4 +1,5 @@
 import React, { lazy } from "react";
+import PostMSST from "./NAYSA Cloud/Module/Main Module/Inventory/PostMSST.jsx";
 
 // Maps DB componentKey -> lazy React component. Keep keys stable because the
 // backend stores them in menu-routes/menu-items.
@@ -59,6 +60,8 @@ export const pageRegistry = {
   MSRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSRTV.jsx")),
   FGRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGRTV.jsx")),
   FGRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGRR.jsx")),
+  FGAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGAJ.jsx")),
+  FGST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGST.jsx")),
 
   // Fixed Assets
   FAAD: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/FAAD.jsx")),
@@ -134,7 +137,11 @@ export const pageRegistry = {
   PostAPDM: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Payable/PostAPDM.jsx")),
   PostMSRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSRR.jsx")),
   PostMSRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSRTV.jsx")),
+<<<<<<< HEAD
+  PostMSST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSST.jsx")),
+=======
   PostFGRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGRTV.jsx")),
+>>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
   PostMSAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSAJ.jsx")),
   PostFGAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGAJ.jsx")),
   PostFAAD: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/PostFAAD.jsx")),

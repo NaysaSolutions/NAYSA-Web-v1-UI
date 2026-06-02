@@ -1101,7 +1101,7 @@ const handleExportExcelClick = async () => {
         role="dialog"
         aria-modal="true"
       >
-        <div className="flex items-center justify-between bg-slate-100 border-b border-slate-200 py-2">
+        <div className="flex items-center justify-between bg-slate-100 border-b border-slate-200 py-1">
           <div className="flex items-center gap-2 pl-2 sm:pl-3">
             <div className="global-lookup-headertext-ui">
               {title}
@@ -1110,7 +1110,7 @@ const handleExportExcelClick = async () => {
 
           <button
             onClick={() => onCancel?.()}
-            className="p-2 text-slate-400 hover:text-red-600 transition-colors"
+            className="p-2 mr-2 text-slate-400 hover:text-red-600 transition-colors"
             aria-label="Close modal"
           >
             <FontAwesomeIcon icon={faTimes} size="lg" />

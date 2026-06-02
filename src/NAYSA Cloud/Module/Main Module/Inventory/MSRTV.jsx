@@ -274,7 +274,16 @@ const MSRTV = () => {
    });
 
   const updateState = (updates) => {
-      setState(prev => ({ ...prev, ...updates }));
+      setState((prev) => {
+        const patch = typeof updates === "function" ? updates(prev) : updates;
+        if (!patch || typeof patch !== "object") return prev;
+
+        const hasChanges = Object.keys(patch).some(
+          (key) => !Object.is(prev[key], patch[key])
+        );
+
+        return hasChanges ? { ...prev, ...patch } : prev;
+      });
     };
 
   const {
@@ -1372,8 +1381,8 @@ const handleColumnLabel = (columnName) =>{
 
 //  ** View Document and Transaction History Retrieval ***
 const cleanUrl = useCallback(() => {
-  window.history.replaceState({}, "", window.location.origin);
-}, []);
+  navigate({ pathname: location.pathname, search: "" }, { replace: true });
+}, [navigate, location.pathname]);
 
 const handleHistoryRowPick = useCallback(
   async (row) => {
@@ -1621,6 +1630,12 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
 
   if (['bbDate'].includes(field)) {
     row[field] = value;
+  }
+
+  if (!runCalculations && (field === 'quantity' || field === 'unitCost')) {
+    const currentQuantity = parseFormattedNumber(row.quantity) || 0;
+    const currentUnitCost = parseFormattedNumber(row.unitCost) || 0;
+    row.itemAmount = formatNumber(currentQuantity * currentUnitCost, 2);
   }
 
   if (runCalculations) {
@@ -2073,11 +2088,10 @@ const handleCloseBranchModal = (selectedBranch) => {
   }));
 
 
-setState((prev) => {
-    const updated = [...(prev.detailRows || []), ...newRows];
-    updateTotalsDisplay(0,0);
-    return { ...prev, detailRows: updated };
-  });
+updateState((prev) => ({
+    detailRows: [...(prev.detailRows || []), ...newRows],
+  }));
+  updateTotalsDisplay(0,0);
 };
 
 
