@@ -169,7 +169,7 @@ const BankRef = forwardRef(
         }
 
         await queryClient.invalidateQueries({ queryKey: ["bankTypeList"] });
-        useSwalSuccessAlert("Success!", "Record saved successfully.");
+        useSwalSuccessAlert("Success!", "Bank Type Code saved successfully.");
         setIsEditing(false);
         setSelectedRow(null);
         setIsDupCode(false);

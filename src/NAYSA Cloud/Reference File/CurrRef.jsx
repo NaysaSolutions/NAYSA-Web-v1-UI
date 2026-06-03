@@ -139,7 +139,7 @@ const CurrRef = () => {
       }
 
       queryClient.invalidateQueries({ queryKey: ["currencyList"] });
-      useSwalSuccessAlert("Success!", "Currency saved successfully!");
+      useSwalSuccessAlert("Success!", "Currency Code saved successfully!");
       resetForm();
     },
     onError: (error) => {

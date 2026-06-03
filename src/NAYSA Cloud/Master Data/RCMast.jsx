@@ -161,7 +161,7 @@ const RCMast = () => {
         return;
       }
       queryClient.invalidateQueries({ queryKey: ["rcList"] });
-      useSwalSuccessAlert("Success!", "RC saved successfully!");
+      useSwalSuccessAlert("Success!", "RC Code saved successfully!");
       resetForm();
     },
     onError: (error) => useSwalErrorAlertAPI("System Error", error),

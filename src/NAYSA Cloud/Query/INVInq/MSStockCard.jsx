@@ -19,13 +19,9 @@ import {
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import { useGetCurrentDayV2 } from "@/NAYSA Cloud/Global/dates";
-<<<<<<< HEAD
-import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer";
-=======
 import DateFormatInput from "@/NAYSA Cloud/Global/DateFormatInput.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
 import BranchLookupModal from "@/NAYSA Cloud/Lookup/SearchBranchRef";
 import CutoffLookupModal from "@/NAYSA Cloud/Lookup/SearchCutoffRef";
 import ItemMastLookupModal from "@/NAYSA Cloud/Lookup/SearchItemMast.jsx";
@@ -37,8 +33,6 @@ import { useSwalErrorAlert } from "@/NAYSA Cloud/Global/behavior";
 
 const safeArray = (value) => (Array.isArray(value) ? value : []);
 const formatDateValue = (value) => value || "";
-<<<<<<< HEAD
-=======
 const parseDateValue = (value) => {
   if (!value) return null;
   const parts = String(value).split("/");
@@ -83,7 +77,6 @@ const getStockStatusEndDate = (reportType, startDate) => {
 
   return startDate;
 };
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
 const formatLookupValue = (code, name) => {
   if (!code && !name) return "";
   if (!name) return code || "";
@@ -149,11 +142,7 @@ function TabButton({ active, label, icon: Icon, onClick }) {
     <button
       type="button"
       onClick={onClick}
-<<<<<<< HEAD
-      className={`relative inline-flex items-center gap-2 px-5 py-3 text-[13px] font-semibold transition-all duration-200 mt-4 rounded-t-lg focus:outline-none ${
-=======
       className={`relative inline-flex items-center gap-2 px-5 py-3 text-[13px] font-semibold transition-all duration-200 mt-2 rounded-t-lg focus:outline-none ${
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
         active
           ? "text-blue-700 dark:text-blue-400 bg-gradient-to-b from-blue-50 to-white dark:from-blue-950/60 dark:to-slate-900 shadow-[inset_0_2px_0_0_#2563eb] border border-b-0 border-slate-200 dark:border-slate-700"
           : "text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 border border-transparent"
@@ -237,11 +226,7 @@ function HeaderActionButton({ children, onClick, icon: Icon, disabled = false, t
 
 function HeaderStatusCard({ label, value }) {
   return (
-<<<<<<< HEAD
-    <div className="flex h-10 min-w-[112px] flex-col items-center justify-center rounded-md bg-blue-100 px-3 py-1 text-center shadow-sm dark:bg-blue-950/40">
-=======
     <div className="flex h-10 min-w-[112px] flex-col items-center justify-center rounded-md bg-blue-50 px-3 py-1 text-center shadow-sm dark:bg-blue-950/40">
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
       <span className="text-xs font-bold leading-tight text-slate-600 dark:text-slate-300">{label}</span>
       <span className="text-[16px] font-extrabold leading-tight text-blue-700 dark:text-blue-300">{value || "—"}</span>
     </div>
@@ -373,8 +358,6 @@ function FilterPanel({ children, actions }) {
 }
 
 // ─── Table Panel ──────────────────────────────────────────────────────────────
-<<<<<<< HEAD
-=======
 function CalendarField({ id, label, name, value, updateState, disabled = false }) {
   return (
     <div className="relative w-full">
@@ -393,7 +376,6 @@ function CalendarField({ id, label, name, value, updateState, disabled = false }
   );
 }
 
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
 function TablePanel({ title, badge, children, toolbar }) {
   return (
     <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
@@ -411,31 +393,6 @@ function MSStockCardQuery() {
   const { companyInfo, currentUserRow, user } = useAuth();
   const defaultBranchCode =
     currentUserRow?.branchCode ||
-<<<<<<< HEAD
-    currentUserRow?.BranchCode ||
-    currentUserRow?.BRANCH_CODE ||
-    user?.branchCode ||
-    user?.BranchCode ||
-    user?.BRANCH_CODE ||
-    "";
-  const defaultBranchName =
-    currentUserRow?.branchName ||
-    currentUserRow?.BranchName ||
-    currentUserRow?.BRANCH_NAME ||
-    user?.branchName ||
-    user?.BranchName ||
-    user?.BRANCH_NAME ||
-    "";
-  const defaultCutoffCode =
-    companyInfo?.cutoffCode ||
-    companyInfo?.cutOffCode ||
-    companyInfo?.CutoffCode ||
-    companyInfo?.cutoff_code ||
-    "";
-  const defaultReferenceDate = useGetCurrentDayV2();
-  const defaultReportType = companyInfo?.stockStatusReportType || companyInfo?.reportType || "Daily";
-  const defaultInventorySetup = companyInfo?.inventorySetup || companyInfo?.inventory_setup || "";
-=======
     user?.branchCode ||
     "";
   const defaultBranchName =
@@ -451,7 +408,6 @@ function MSStockCardQuery() {
   const defaultReferenceDate = useGetCurrentDayV2();
   const defaultReportType = companyInfo?.stockStatusReportType || companyInfo?.reportType || "Daily";
   const defaultInventorySetup = companyInfo?.msinvCosting || "";
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
 
   const defaultBalanceFilters = useMemo(
     () => ({
@@ -479,17 +435,11 @@ function MSStockCardQuery() {
       locationCode: "",
       locationName: "",
       startingCutoff: defaultCutoffCode,
-<<<<<<< HEAD
-      endingCutoff: defaultCutoffCode,
-    }),
-    [defaultBranchCode, defaultBranchName, defaultCutoffCode]
-=======
       startingCutoffName: defaultCutoffName,
       endingCutoff: defaultCutoffCode,
       endingCutoffName: defaultCutoffName,
     }),
     [defaultBranchCode, defaultBranchName, defaultCutoffCode, defaultCutoffName]
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
   );
 
   const defaultStockStatusFilters = useMemo(
@@ -501,12 +451,8 @@ function MSStockCardQuery() {
       warehouseName: "",
       locationCode: "",
       locationName: "",
-<<<<<<< HEAD
-      referenceDate: defaultReferenceDate,
-=======
       startDate: defaultReferenceDate,
       endDate: getStockStatusEndDate(defaultReportType, defaultReferenceDate),
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
     }),
     [defaultBranchCode, defaultBranchName, defaultReferenceDate, defaultReportType]
   );
@@ -565,28 +511,20 @@ function MSStockCardQuery() {
       branchCode: prev.branchCode || defaultStockCardFilters.branchCode,
       branchName: prev.branchName || defaultStockCardFilters.branchName,
       startingCutoff: prev.startingCutoff || defaultStockCardFilters.startingCutoff,
-<<<<<<< HEAD
-      endingCutoff: prev.endingCutoff || defaultStockCardFilters.endingCutoff,
-=======
       startingCutoffName: prev.startingCutoffName || defaultStockCardFilters.startingCutoffName,
       endingCutoff: prev.endingCutoff || defaultStockCardFilters.endingCutoff,
       endingCutoffName: prev.endingCutoffName || defaultStockCardFilters.endingCutoffName,
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
     }));
     setStockStatusFilters((prev) => ({
       ...prev,
       reportType: prev.reportType || defaultStockStatusFilters.reportType,
       branchCode: prev.branchCode || defaultStockStatusFilters.branchCode,
       branchName: prev.branchName || defaultStockStatusFilters.branchName,
-<<<<<<< HEAD
-      referenceDate: prev.referenceDate || defaultStockStatusFilters.referenceDate,
-=======
       startDate: prev.startDate || prev.referenceDate || defaultStockStatusFilters.startDate,
       endDate: getStockStatusEndDate(
         prev.reportType || defaultStockStatusFilters.reportType,
         prev.startDate || prev.referenceDate || defaultStockStatusFilters.startDate
       ),
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
     }));
   }, [defaultBalanceFilters, defaultStockCardFilters, defaultStockStatusFilters]);
 
@@ -690,10 +628,6 @@ function MSStockCardQuery() {
   const handleCutoffLookupClose = React.useCallback(
     (row) => {
       if (row && lookupState.cutoffTarget) {
-<<<<<<< HEAD
-        patchFiltersByScope(lookupState.scope, {
-          [lookupState.cutoffTarget]: row.cutoffCode || row.cutOffCode || row.CutoffCode || "",
-=======
         const cutoffCode = row.cutoffCode || row.cutOffCode || row.CutoffCode || "";
         const cutoffName = row.cutoffName || row.cutOffName || row.CutoffName || "";
         const cutoffNameTarget =
@@ -704,7 +638,6 @@ function MSStockCardQuery() {
         patchFiltersByScope(lookupState.scope, {
           [lookupState.cutoffTarget]: cutoffCode,
           [cutoffNameTarget]: cutoffName,
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
         });
       }
       closeLookup();
@@ -725,11 +658,7 @@ function MSStockCardQuery() {
   const setupQuery = useQuery({
     queryKey: ["ms-stock-card-setup", defaultInventorySetup],
     queryFn: async () => {
-<<<<<<< HEAD
-      const response = await apiClient.get("/inventory/stock-card/setup");
-=======
       const response = await apiClient.get("/ms/inventory/stock-card/setup");
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
       return response?.data?.data || { inventorySetup: defaultInventorySetup };
     },
     staleTime: Infinity,
@@ -743,13 +672,8 @@ function MSStockCardQuery() {
 
   const balanceEndpoint =
     inventorySetup === "FIFO"
-<<<<<<< HEAD
-      ? "/inventory/stock-card/fifo-balance"
-      : "/inventory/stock-card/location-balance";
-=======
       ? "/ms/inventory/stock-card/fifo-balance"
       : "/ms/inventory/stock-card/location-balance";
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
 
   const balanceRequestParams = useMemo(
     () => ({
@@ -780,12 +704,8 @@ function MSStockCardQuery() {
       branchCode: stockStatusFilters.branchCode,
       whouseCode: stockStatusFilters.warehouseCode,
       locCode: stockStatusFilters.locationCode,
-<<<<<<< HEAD
-      dateTo: stockStatusFilters.referenceDate,
-=======
       dateFrom: stockStatusFilters.startDate,
       dateTo: stockStatusFilters.endDate,
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
     }),
     [stockStatusFilters]
   );
@@ -803,11 +723,7 @@ function MSStockCardQuery() {
     queryKey: ["ms-stock-card-movement", shouldLoadStockCard, stockCardFilters],
     enabled: shouldLoadStockCard > 0,
     queryFn: async () => {
-<<<<<<< HEAD
-      const response = await apiClient.get("/inventory/stock-card/stock-card", {
-=======
       const response = await apiClient.get("/ms/inventory/stock-card/stock-card", {
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
         params: stockCardRequestParams,
       });
       return response?.data?.data || { rows: [], totals: {} };
@@ -815,17 +731,10 @@ function MSStockCardQuery() {
   });
 
   const stockStatusQuery = useQuery({
-<<<<<<< HEAD
-    queryKey: ["ms-stock-status", shouldLoadStockStatus, stockStatusFilters],
-    enabled: shouldLoadStockStatus > 0,
-    queryFn: async () => {
-      const response = await apiClient.get("/inventory/stock-card/stock-status", {
-=======
     queryKey: ["ms-stock-status", shouldLoadStockStatus],
     enabled: shouldLoadStockStatus > 0,
     queryFn: async () => {
       const response = await apiClient.get("/ms/inventory/stock-card/stock-status", {
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
         params: stockStatusRequestParams,
       });
       return response?.data?.data || { summary: [], perItem: [], perLot: [] };
@@ -949,26 +858,18 @@ function MSStockCardQuery() {
   );
 
   const stockCardColumns = useMemo(
-<<<<<<< HEAD
-    () => [
-=======
     () => {
       const costingMode = String(inventorySetup || "FIFO").toUpperCase();
       const isWacCosting = costingMode === "WAC";
 
       return [
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
       { key: "cutoff", header: "Cut-Off", size: 100 },
       { key: "docType", header: "Type", size: 90 },
       { key: "docNo", header: "Doc No", size: 110, cellClassName: "font-mono text-xs" },
       { key: "docDate", header: "Doc Date", size: 110, type: "date" },
-<<<<<<< HEAD
-      { key: "rrNo", header: "RR No", size: 130, cellClassName: "font-mono text-xs" },
-=======
       ...(!isWacCosting
         ? [{ key: "rrNo", header: "RR No", size: 130, cellClassName: "font-mono text-xs" }]
         : []),
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
       { key: "particular", header: "Particular", size: 260 },
       { key: "itemNo", header: "Item No", size: 120 },
       { key: "itemDescription", header: "Item Desc", size: 120 },
@@ -976,16 +877,6 @@ function MSStockCardQuery() {
       { key: "location", header: "Location", size: 120 },
       { key: "qtyIn", header: "Qty In", size: 110, cellClassName: "text-right text-emerald-700 font-semibold", type: "amount", decimals: 4 },
       { key: "qtyOut", header: "Qty Out", size: 110, cellClassName: "text-right text-rose-600 font-semibold", type: "amount", decimals: 4 },
-<<<<<<< HEAD
-      { key: "runBal", header: "Run Bal", size: 110, cellClassName: "text-right font-bold", type: "amount", decimals: 4 },
-      { key: "unitCost", header: "Unit Cost", size: 120, cellClassName: "text-right", type: "amount", decimals: 6 },
-      { key: "amount", header: "Amount", size: 130, cellClassName: "text-right font-semibold", type: "amount", decimals: 2 },
-      { key: "postedBy", header: "Posted By", size: 140 },
-      { key: "dateStamp", header: "Date Stamp", size: 120, type: "date" },
-      { key: "timeStamp", header: "Time Stamp", size: 110 },
-    ],
-    []
-=======
       { key: "balance", header: "Balance", size: 110, cellClassName: "text-right font-bold", type: "amount", decimals: 4 },
       { key: "runBal", header: "Run Bal", size: 110, cellClassName: "text-right font-bold", type: "amount", decimals: 4 },
       { key: "unitCost", header: "Unit Cost", size: 120, cellClassName: "text-right", type: "amount", decimals: 6 },
@@ -1000,7 +891,6 @@ function MSStockCardQuery() {
     ];
     },
     [inventorySetup]
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
   );
 
   const stockStatusColumnsMap = useMemo(
@@ -1202,11 +1092,7 @@ function MSStockCardQuery() {
             label="Reference Date"
             name="refDate"
             value={balanceFilters.refDate}
-<<<<<<< HEAD
-            onChange={(e) => setBalanceFilters((prev) => ({ ...prev, refDate: e.target.value }))}
-=======
             onChange={(value) => setBalanceFilters((prev) => ({ ...prev, refDate: value }))}
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
           /> */}
 
 
@@ -1299,24 +1185,6 @@ function MSStockCardQuery() {
           />
           <FieldRenderer
             type="lookup"
-<<<<<<< HEAD
-            label="Item"
-            name="itemCode"
-            value={formatLookupValue(stockCardFilters.itemCode, stockCardFilters.itemName)}
-            onLookup={() => openLookup("item", "stockCard")}
-            editableLookup
-            onClear={() =>
-              setStockCardFilters((prev) => ({
-                ...prev,
-                itemCode: "",
-                itemName: "",
-              }))
-            }
-          />
-          <FieldRenderer
-            type="lookup"
-=======
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
             label="Warehouse"
             name="warehouseCode"
             value={formatLookupValue(stockCardFilters.warehouseCode, stockCardFilters.warehouseName)}
@@ -1349,23 +1217,6 @@ function MSStockCardQuery() {
           />
           <FieldRenderer
             type="lookup"
-<<<<<<< HEAD
-            label="Starting Cut-Off"
-            name="startingCutoff"
-            value={stockCardFilters.startingCutoff}
-            onLookup={() => openLookup("cutoff", "stockCard", "startingCutoff")}
-            editableLookup
-            onClear={() => setStockCardFilters((prev) => ({ ...prev, startingCutoff: "" }))}
-          />
-          <FieldRenderer
-            type="lookup"
-            label="Ending Cut-Off"
-            name="endingCutoff"
-            value={stockCardFilters.endingCutoff}
-            onLookup={() => openLookup("cutoff", "stockCard", "endingCutoff")}
-            editableLookup
-            onClear={() => setStockCardFilters((prev) => ({ ...prev, endingCutoff: "" }))}
-=======
             label="Item"
             name="itemCode"
             value={formatLookupValue(stockCardFilters.itemCode, stockCardFilters.itemName)}
@@ -1408,7 +1259,6 @@ function MSStockCardQuery() {
                 endingCutoffName: "",
               }))
             }
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
           />
          
         </FilterPanel>
@@ -1502,9 +1352,6 @@ function MSStockCardQuery() {
               { value: "Weekly", label: "Weekly" },
               { value: "Monthly", label: "Monthly" },
             ]}
-<<<<<<< HEAD
-            onChange={(e) => setStockStatusFilters((prev) => ({ ...prev, reportType: e.target.value }))}
-=======
             onChange={(value) =>
               setStockStatusFilters((prev) => ({
                 ...prev,
@@ -1512,7 +1359,6 @@ function MSStockCardQuery() {
                 endDate: getStockStatusEndDate(value, prev.startDate),
               }))
             }
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
           />
           <FieldRenderer
             type="lookup"
@@ -1533,47 +1379,6 @@ function MSStockCardQuery() {
               }))
             }
           />
-<<<<<<< HEAD
-          <FieldRenderer
-            type="lookup"
-            label="Warehouse"
-            name="warehouseCode"
-            value={formatLookupValue(stockStatusFilters.warehouseCode, stockStatusFilters.warehouseName)}
-            onLookup={() => openLookup("warehouse", "stockStatus")}
-            editableLookup
-            onClear={() =>
-              setStockStatusFilters((prev) => ({
-                ...prev,
-                warehouseCode: "",
-                warehouseName: "",
-                locationCode: "",
-                locationName: "",
-              }))
-            }
-          />
-          <FieldRenderer
-            type="lookup"
-            label="Location"
-            name="locationCode"
-            value={formatLookupValue(stockStatusFilters.locationCode, stockStatusFilters.locationName)}
-            onLookup={() => openLookup("location", "stockStatus")}
-            editableLookup
-            onClear={() =>
-              setStockStatusFilters((prev) => ({
-                ...prev,
-                locationCode: "",
-                locationName: "",
-              }))
-            }
-          />
-          <FieldRenderer
-            type="text"
-            label="Reference Date"
-            name="referenceDate"
-            value={stockStatusFilters.referenceDate}
-            onChange={(e) => setStockStatusFilters((prev) => ({ ...prev, referenceDate: e.target.value }))}
-          />
-=======
           <div className="grid grid-cols-1 gap-3 md:col-span-2 md:grid-cols-2 xl:col-span-2">
             <FieldRenderer
               type="lookup"
@@ -1632,7 +1437,6 @@ function MSStockCardQuery() {
             
           </div>
           
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
 
           {/* Action column inside grid */}
           <div className="flex flex-wrap items-end gap-2">
@@ -1644,11 +1448,7 @@ function MSStockCardQuery() {
               Load &amp; Process
             </ToolbarButton>
             <ToolbarButton onClick={() => setShouldLoadStockStatus((p) => p + 1)} icon={Layers}>
-<<<<<<< HEAD
-              All Warehouses
-=======
               All Warehouse
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
             </ToolbarButton>
             <ToolbarButton
               icon={RefreshCcw}
@@ -1753,18 +1553,7 @@ function MSStockCardQuery() {
 
   return (
     <div className="global-ref-main-div-ui mt-24">
-<<<<<<< HEAD
-      {activeLoading && (
-        <div className="fixed inset-0 z-[1000003] flex flex-col items-center justify-center bg-white/45 backdrop-blur-[1px] dark:bg-slate-950/35">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-100 border-t-blue-600" />
-          <div className="mt-3 rounded-full bg-white/95 px-4 py-1.5 text-xs font-semibold text-slate-700 shadow dark:bg-slate-900 dark:text-slate-200">
-            Loading inventory inquiry...
-          </div>
-        </div>
-      )}
-=======
       {activeLoading && <LoadingSpinner />}
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
 
       <div className="global-ref-header-ui" style={{ zIndex: 45 }}>
         <div className="w-full flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -1774,11 +1563,7 @@ function MSStockCardQuery() {
                 MS Stock Card Inquiry
               </h1>
             </div>
-<<<<<<< HEAD
-            <p className="mt-1 ml-2 text-center text-xs font-medium text-slate-500 dark:text-slate-400 sm:text-left">
-=======
             <p className="mt-0 ml-2 text-center text-xs font-medium text-slate-500 dark:text-slate-400 sm:text-left">
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
               View inventory balance, stock card movement, and stock status in one workspace.
             </p>
           </div>
@@ -1808,11 +1593,7 @@ function MSStockCardQuery() {
         </div>
       </div>
 
-<<<<<<< HEAD
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden dark:border-slate-700 dark:bg-slate-900">
-=======
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden dark:border-slate-700 dark:bg-slate-900 mt-2">
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738
         <div className="flex flex-wrap gap-1 border-b border-slate-200 bg-gradient-to-b from-slate-50/80 to-white px-3 pt-0 dark:border-slate-700 dark:from-slate-800/60 dark:to-slate-900">
           {mainTabs.map((tab) => (
             <TabButton
@@ -1881,8 +1662,4 @@ function MSStockCardQuery() {
   );
 }
 
-<<<<<<< HEAD
 export default MSStockCardQuery;
-=======
-export default MSStockCardQuery;
->>>>>>> 85c17961c086f0992a0d239386f21bc7c8398738

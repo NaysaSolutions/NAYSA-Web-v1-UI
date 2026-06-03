@@ -490,13 +490,13 @@ const WareMast = () => {
       },
       {
         key: "branchCode",
-        label: "Branch",
+        label: "Branch Code",
         sortable: true,
         render: (row) =>
           row.branchCode ? `${row.branchCode} - ${row.branchName || ""}` : "",
         width: 120,
       },
-      { key: "whCode", label: "Code", sortable: true, width: 100 },
+      { key: "whCode", label: "Warehouse Code", sortable: true, width: 100 },
       {
         key: "whName",
         label: "Warehouse Name",
@@ -533,8 +533,8 @@ const WareMast = () => {
         <div className="w-full flex flex-col gap-3 md:grid md:grid-cols-3 md:items-center md:gap-0">
           <div className="w-full md:w-auto md:justify-start flex">
             <h1 className="global-ref-headertext-ui w-full md:w-auto truncate text-center md:text-left">
-              {activeTab === "warehouse" && "Warehouse Master"}
-              {activeTab === "location" && "Location Master"}
+              {activeTab === "warehouse" && "Warehouse Codes"}
+              {activeTab === "location" && "Location Codes"}
               {activeTab === "parameter" && "Warehouse Parameter"}
             </h1>
           </div>
@@ -543,8 +543,8 @@ const WareMast = () => {
             <div className="w-full md:w-auto">
               <div className="flex flex-nowrap overflow-x-auto no-scrollbar border-b border-blue-300 dark:border-gray-700">
                 {[
-                  { id: "warehouse", label: "Warehouse Master" },
-                  { id: "location", label: "Location Master" },
+                  { id: "warehouse", label: "Warehouse Codes" },
+                  { id: "location", label: "Location Codes" },
                   { id: "parameter", label: "Warehouse Parameter" }, // <-- NEW TAB
                 ].map((tab) => (
                   <button
@@ -664,7 +664,7 @@ const WareMast = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
                   <div className="space-y-6">
                     <FieldRenderer
-                      label="Branch"
+                      label="Branch Code"
                       type="lookup"
                       value={
                         form.branchCode
