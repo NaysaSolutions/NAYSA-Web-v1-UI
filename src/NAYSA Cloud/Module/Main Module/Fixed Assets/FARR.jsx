@@ -100,7 +100,7 @@ const serialBreakdownColumns = [
   { key: "serialGroupId", label: "Serial Group ID", width: 150 },
   { key: "empNo", label: "Emp No.", width: 120 },
   { key: "serialNo", label: "Serial No.", width: 132 },
-  { key: "assetTag", label: "Asset Tag", width: 150 },
+  { key: "assetTag", label: "Property Tag", width: 150 },
   { key: "assignedTo", label: "Assigned To", width: 180 },
   { key: "rcCode", label: "Department", width: 118, align: "text-center" },
   { key: "location", label: "Location", width: 105, align: "text-center" },

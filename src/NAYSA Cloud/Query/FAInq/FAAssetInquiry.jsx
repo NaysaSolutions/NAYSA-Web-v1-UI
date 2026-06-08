@@ -25,9 +25,9 @@ import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import { useTopUserRow } from "@/NAYSA Cloud/Global/top1RefTable";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
+import { useSwalErrorAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 
 // Lookups
-import SearchFAAsset from "@/NAYSA Cloud/Lookup/SearchFAAsset.jsx";
 import SearchBranchRef from "@/NAYSA Cloud/Lookup/SearchBranchRef.jsx";
 import SearchRCMast from "@/NAYSA Cloud/Lookup/SearchRCMast.jsx";
 import SearchFACateg from "@/NAYSA Cloud/Lookup/SearchFACateg.jsx";
@@ -36,6 +36,7 @@ import SearchFALoc from "@/NAYSA Cloud/Lookup/SearchFALoc.jsx";
 import SearchCutOffRef from "@/NAYSA Cloud/Lookup/SearchCutOffRef.jsx";
 import SearchGlobalReportTable from "@/NAYSA Cloud/Lookup/SearchGlobalReportTable.jsx";
 import SearchFAFind from "@/NAYSA Cloud/Lookup/SearchFAFind.jsx";
+import GlobalLookupModalv1 from "@/NAYSA Cloud/Lookup/SearchGlobalLookupv1.jsx";
 
 const DASHBOARD_AMOUNT_FIELDS = [
   { key: "acqCost", label: "Acq. Cost" },
@@ -49,7 +50,7 @@ const LAPSING_LABEL_MAP = {
   rowNo: "Row No.",
   ROW_NO: "Row No.",
   faCode: "Asset Code",
-  tagNo: "Tag No.",
+  tagNo: "Property Tag No.",
   barCode: "Barcode",
   qrCode: "QR Code",
   faName: "Asset Name",
@@ -79,6 +80,47 @@ const LAPSING_LABEL_MAP = {
 
 const LAPSING_DATE_FIELDS = ["periodStart", "periodEnd", "acqDate"];
 const LAPSING_AMOUNT_FIELDS = ["acqCost", "deprMonth", "accumDepr", "salvageValue", "nbValue"];
+
+const FA_STATUS_OPTIONS = [
+  { value: "All", label: "All Assets" },
+  { value: "A", label: "Active" },
+  { value: "M", label: "Merged" },
+  { value: "S", label: "Split" },
+  { value: "D", label: "Disposed" },
+  { value: "H", label: "Hold" },
+];
+
+const parseLookupRows = (value) => {
+  if (!value) return [];
+  if (typeof value === "string") {
+    try {
+      return parseLookupRows(JSON.parse(value));
+    } catch {
+      return [];
+    }
+  }
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.data)) return value.data;
+  if (Array.isArray(value?.rows)) return value.rows;
+  if (Array.isArray(value?.dt1)) return value.dt1;
+  if (value?.result) return parseLookupRows(value.result);
+  if (typeof value === "object" && Object.keys(value).length > 0) return [value];
+  return [];
+};
+
+const extractLookupRows = (response) => {
+  const resultValue =
+    response?.data?.[0]?.result ??
+    response?.data?.[0]?.RESULT ??
+    response?.data?.result ??
+    response?.data?.RESULT ??
+    response?.result ??
+    response?.RESULT ??
+    response?.data ??
+    response;
+
+  return parseLookupRows(resultValue);
+};
 
 const REPORT_TABLE_MIN_HEIGHT = 320;
 const REPORT_TABLE_MAX_HEIGHT = 560;
@@ -127,6 +169,7 @@ const FAAssetInquiry = () => {
   const [showSpinner, setShowSpinner] = useState(false);
   const [isSwitchingTab, setIsSwitchingTab] = useState(false);
   const [showFAFindModal, setShowFAFindModal] = useState(false);
+  const [faFindTagNo, setFaFindTagNo] = useState("");
   const tabSwitchTimerRef = useRef(null);
   const tabSwitchEndTimerRef = useRef(null);
 
@@ -136,25 +179,25 @@ const FAAssetInquiry = () => {
       label: "Asset Query",
       icon: faSearch,
       endpoint: "getFAAssetQuery",
-      filters: ["Branch", "Location", "Department", "Category", "Sub Category", "Asset Code"]
+      filters: ["Branch", "Location", "Department", "Category", "Sub Category", "Asset Code", "FA Status"]
     },
     assetHistory: {
       label: "Asset History",
       icon: faHistory,
       endpoint: "getFAAssetHistory",
-      filters: ["Branch", "Location", "Department", "Category", "Sub Category", "Asset Code", "Start Cut Off", "End Cut Off"]
+      filters: ["Branch", "Location", "Department", "Category", "Sub Category", "Asset Code", "Start Cut Off", "End Cut Off", "FA Status"]
     },
     deprHistory: {
       label: "Depreciation History",
       icon: faCalculator,
       endpoint: "getFADeprHistory",
-      filters: ["Branch", "Location", "Department", "Category", "Sub Category", "Asset Code", "Start Cut Off", "End Cut Off"]
+      filters: ["Branch", "Location", "Department", "Category", "Sub Category", "Asset Code", "Start Cut Off", "End Cut Off", "FA Status"]
     },
     lapsingSchedule: {
       label: "Lapsing Schedule",
       icon: faTableList,
       endpoint: "getFALapsingSchedule",
-      filters: ["Branch", "Location", "Department", "Category", "Sub Category", "Start Cut Off", "End Cut Off"]
+      filters: ["Branch", "Location", "Department", "Category", "Sub Category", "Start Cut Off", "End Cut Off", "FA Status"]
     },
   }), []);
 
@@ -171,6 +214,7 @@ const FAAssetInquiry = () => {
     cutoffStartName: companyInfo?.cutoffName || "",
     cutoffEndCode: companyInfo?.cutoffCode || "",
     cutoffEndName: companyInfo?.cutoffName || "",
+    faStatus: "",
     showLookupModal: false,
     lookupType: "",
     modalType: "",
@@ -212,6 +256,10 @@ const FAAssetInquiry = () => {
     if (activeFilters.rcCode) contextParts.push(`Department: ${activeFilters.rcCode}`);
     if (activeFilters.categCode) contextParts.push(`Category: ${activeFilters.categCode}`);
     if (activeFilters.classCode) contextParts.push(`Sub Category: ${activeFilters.classCode}`);
+    if (activeFilters.faStatus) {
+      const statusLabel = FA_STATUS_OPTIONS.find((option) => option.value === activeFilters.faStatus)?.label || activeFilters.faStatus;
+      contextParts.push(`FA Status: ${statusLabel}`);
+    }
     if (activeFilters.cutoffEndCode) {
       contextParts.push(`Cut Off: ${activeFilters.cutoffEndCode}`);
     }
@@ -303,6 +351,7 @@ const FAAssetInquiry = () => {
     if (filters.includes("Asset Code")) data.faCode = f.faCode;
     if (filters.includes("Start Cut Off")) data.startingCutoff = f.cutoffStartCode;
     if (filters.includes("End Cut Off")) data.endingCutoff = f.cutoffEndCode;
+    if (filters.includes("FA Status")) data.faStatus = f.faStatus || "";
 
     return data;
   };
@@ -468,12 +517,27 @@ const FAAssetInquiry = () => {
 
   const handleAction = (id) => {
     if (id === "find") setShowFilterModal(true);
-    if (id === "assetFind") setShowFAFindModal(true);
+    if (id === "assetFind") {
+      setFaFindTagNo("");
+      setShowFAFindModal(true);
+    }
     if (id === "reset") {
       updateFilters(DEFAULT_FILTERS);
       setViews((prev) => ({ ...prev, [activeTab]: { ...EMPTY_VIEW } }));
     }
   };
+
+  const handleViewAssetQueryRow = useCallback((row = {}) => {
+    const selectedTagNo = String(row.tagNo || row.TAG_NO || row.assetTag || row.ASSET_TAG || "").trim();
+
+    if (!selectedTagNo) {
+      useSwalErrorAlert("Asset Query", "Property Tag No. is required to view the asset.");
+      return;
+    }
+
+    setFaFindTagNo(selectedTagNo);
+    setShowFAFindModal(true);
+  }, []);
 
   return (
     <div className="global-ref-main-div-ui">
@@ -632,7 +696,11 @@ const FAAssetInquiry = () => {
                     className="min-h-[220px] max-h-[560px]"
                     style={{ height: `min(${tableViewportHeight}px, calc(100vh - 260px))` }}
                   >
-                    <ActiveTabReportTable activeTab={activeTab} view={view} />
+                    <ActiveTabReportTable
+                      activeTab={activeTab}
+                      view={view}
+                      onAssetQueryView={handleViewAssetQueryRow}
+                    />
                   </div>
                 )}
               </div>
@@ -670,6 +738,7 @@ const FAAssetInquiry = () => {
         onClose={() => setShowFAFindModal(false)}
         initialBranchCode={activeFilters.branchCode}
         initialBranchName={activeFilters.branchName}
+        initialTagNo={faFindTagNo}
         endingCutoff={activeFilters.cutoffEndCode}
       />
     </div>
@@ -715,12 +784,14 @@ const ReportNavList = ({ activeTab, tabConfigs, handleSelect, collapsed }) => (
 
 const getReportTableKey = (tabKey, view) => `${tabKey}-${view.loadedAt || "idle"}`;
 
-const AssetQueryReportTable = ({ view }) => (
+const AssetQueryReportTable = ({ view, onView }) => (
   <SearchGlobalReportTable
     key={getReportTableKey("assetQuery", view)}
     columns={view.cols}
     data={view.rows}
     itemsPerPage={50}
+    rightActionLabel="View"
+    onRowAction={onView}
   />
 );
 
@@ -753,7 +824,7 @@ const LapsingScheduleReportTable = ({ view }) => (
   />
 );
 
-const ActiveTabReportTable = ({ activeTab, view }) => {
+const ActiveTabReportTable = ({ activeTab, view, onAssetQueryView }) => {
   switch (activeTab) {
     case "assetHistory":
       return <AssetHistoryReportTable view={view} />;
@@ -763,7 +834,7 @@ const ActiveTabReportTable = ({ activeTab, view }) => {
       return <LapsingScheduleReportTable view={view} />;
     case "assetQuery":
     default:
-      return <AssetQueryReportTable view={view} />;
+      return <AssetQueryReportTable view={view} onView={onAssetQueryView} />;
   }
 };
 
@@ -881,19 +952,6 @@ const FilterModal = ({
                 />
               )}
 
-              {tabConfig.filters.includes("Asset Code") && (
-                <DualFilterInput
-                  labelCode="Asset Code"
-                  labelName="Asset Name"
-                  codeValue={filters.faCode}
-                  nameValue={filters.faName}
-                  modalType="asset"
-                  updateLookupState={updateLookupState}
-                  disabled={isLoading}
-                  onClear={() => updateLookupState({ faCode: "", faName: "" })}
-                />
-              )}
-
               {tabConfig.filters.includes("Category") && (
                 <DualFilterInput
                   labelCode="Category Code"
@@ -921,6 +979,24 @@ const FilterModal = ({
                 />
               )}
 
+              {tabConfig.filters.includes("Asset Code") && (
+                <DualFilterInput
+                  labelCode="Asset Code"
+                  labelName="Asset Name"
+                  codeValue={filters.faCode}
+                  nameValue={filters.faName}
+                  modalType="asset"
+                  updateLookupState={updateLookupState}
+                  disabled={isLoading}
+                  onClear={() => updateLookupState({ faCode: "", faName: "" })}
+                  beforeLookup={() => {
+                    if (String(filters.categCode || "").trim()) return true;
+                    useSwalErrorAlert("Asset Code", "Category Code is required before selecting Asset Code.");
+                    return false;
+                  }}
+                />
+              )}
+
             </ModalSection>
           )}
 
@@ -929,7 +1005,7 @@ const FilterModal = ({
               {tabConfig.filters.includes("Location") && (
                 <DualFilterInput
                   labelCode="Location Code"
-                  labelName="FA Location"
+                  labelName="Location Name"
                   codeValue={filters.flocCode}
                   nameValue={filters.flocName}
                   modalType="location"
@@ -989,6 +1065,20 @@ const FilterModal = ({
               )}
             </ModalSection>
           )}
+
+          {tabConfig.filters.includes("FA Status") && (
+            <ModalSection title="FA Status">
+              <FieldRenderer
+                id="faStatus"
+                label="FA Status"
+                type="select"
+                value={filters.faStatus || ""}
+                disabled={isLoading}
+                onChange={(value) => updateLookupState({ faStatus: value })}
+                options={FA_STATUS_OPTIONS}
+              />
+            </ModalSection>
+          )}
         </div>
 
         <div className="border-t bg-gray-50 px-3 py-2.5 sm:px-4">
@@ -1034,12 +1124,14 @@ const DualFilterInput = ({
   disabled,
   onClear,
   allowClear = true,
+  beforeLookup,
 }) => {
   const codeId = `${modalType}_code`;
   const nameId = `${modalType}_name`;
 
   const openLookup = () => {
     if (disabled) return;
+    if (beforeLookup && !beforeLookup()) return;
     updateLookupState({
       showLookupModal: true,
       lookupType: codeId,
@@ -1081,9 +1173,85 @@ const DualFilterInput = ({
 
 const LookupManager = ({ filters, updateFilters }) => {
   const { showLookupModal, modalType } = filters;
+  const { currentUserRow } = useAuth();
+  const [faLookupRows, setFaLookupRows] = useState([]);
+  const [faLookupColumns, setFaLookupColumns] = useState([]);
+  const [isFaLookupLoading, setIsFaLookupLoading] = useState(false);
+
+  useEffect(() => {
+    if (!showLookupModal || modalType !== "asset") return;
+
+    let isMounted = true;
+
+    const loadAssetLookup = async () => {
+      setIsFaLookupLoading(true);
+      try {
+        const lookupParams = {
+          branchCode: filters.branchCode || "",
+          flocCode: filters.flocCode || "",
+          rcCode: filters.rcCode || "",
+          categCode: filters.categCode || "",
+          classCode: filters.classCode || "",
+          filter: "",
+        };
+
+        const [response, colConfig] = await Promise.all([
+          postRequest("lookupFAMast", {
+            PARAMS: JSON.stringify({
+              json_data: lookupParams,
+            }),
+          }),
+          useSelectedHSColConfig("lookupFAMast", currentUserRow?.userCode || ""),
+        ]);
+
+        if (!isMounted) return;
+
+        const lookupRows = extractLookupRows(response).map((row, index) => ({
+          ...row,
+          groupId: row?.groupId || row?.faCode || row?.FA_CODE || String(index + 1),
+        }));
+
+        if (lookupRows.length === 0) {
+          useSwalErrorAlert("Fixed Asset Lookup", "No fixed assets found for the selected filters.");
+        }
+
+        setFaLookupRows(lookupRows);
+        setFaLookupColumns(Array.isArray(colConfig) ? colConfig : []);
+      } catch (error) {
+        console.error("Failed to load fixed asset lookup:", error);
+        if (isMounted) {
+          setFaLookupRows([]);
+          setFaLookupColumns([]);
+          useSwalErrorAlert("Fixed Asset Lookup", "Unable to load fixed asset records.");
+        }
+      } finally {
+        if (isMounted) setIsFaLookupLoading(false);
+      }
+    };
+
+    loadAssetLookup();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    currentUserRow?.userCode,
+    filters.branchCode,
+    filters.categCode,
+    filters.classCode,
+    filters.flocCode,
+    filters.rcCode,
+    modalType,
+    showLookupModal,
+  ]);
+
   if (!showLookupModal) return null;
 
-  const close = () => updateFilters({ showLookupModal: false, modalType: "" });
+  const close = () => {
+    setFaLookupRows([]);
+    setFaLookupColumns([]);
+    updateFilters({ showLookupModal: false, modalType: "" });
+  };
 
   switch (modalType) {
     case "branch":
@@ -1092,10 +1260,33 @@ const LookupManager = ({ filters, updateFilters }) => {
         close();
       }} />;
     case "asset":
-      return <SearchFAAsset isOpen={showLookupModal} branchCode={filters.branchCode} onClose={(row) => {
-        if (row) updateFilters({ faCode: row.faCode, faName: row.faName });
-        close();
-      }} />;
+      return (
+        <>
+          {isFaLookupLoading && <LoadingSpinner />}
+          <GlobalLookupModalv1
+            isOpen={showLookupModal && !isFaLookupLoading}
+            title="Fixed Asset Master"
+            data={faLookupRows}
+            endpoint={faLookupColumns}
+            btnCaption="Get Selected Asset"
+            onClose={(selectedItems) => {
+              const selectedRow = Array.isArray(selectedItems?.records)
+                ? selectedItems.records[0]
+                : selectedItems?.records;
+
+              if (selectedRow) {
+                updateFilters({
+                  faCode: selectedRow.faCode || selectedRow.FA_CODE || "",
+                  faName: selectedRow.faName || selectedRow.assetDescription || selectedRow.FA_NAME || "",
+                });
+              }
+              close();
+            }}
+            onCancel={close}
+            singleSelect
+          />
+        </>
+      );
     case "category":
       return <SearchFACateg isOpen={showLookupModal} onClose={(row) => {
         if (row) {

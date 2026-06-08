@@ -174,7 +174,7 @@ const AssetTagPreviewCard = ({ tagInfo, onOpenPreview }) => {
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2 text-xs font-bold text-blue-700">
           <FontAwesomeIcon icon={faTag} />
-          <span className="truncate">Asset Tag Preview</span>
+          <span className="truncate">Property Tag Preview</span>
         </div>
 
         <button
@@ -278,7 +278,7 @@ const SearchField = ({
           className="inline-flex h-8 w-10 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-transparent text-slate-600 transition hover:bg-blue-50 hover:text-blue-700 disabled:opacity-60"
           onClick={onQr}
           disabled={disabled}
-          title="Scan Tag No. QR Code"
+          title="Scan Property Tag No. QR Code"
         >
           <FontAwesomeIcon icon={faQrcode} className="text-[16px]" />
         </button>
@@ -348,6 +348,21 @@ const SearchFAFind = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, initialAssetCode, initialTagNo]);
+
+  useEffect(() => {
+    if (!isOpen || !isMaximized) return;
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, [isOpen, isMaximized]);
 
   const visibleHistoryCols = useMemo(() => {
     const source = Array.isArray(historyCols) ? historyCols : [];
@@ -433,7 +448,7 @@ const SearchFAFind = ({
     const cleanTagNo = String(searchTagNo || "").trim();
 
     if (!cleanFaCode && !cleanTagNo) {
-      setMessage("Please enter Asset Code or Tag No.");
+      setMessage("Please enter Asset Code or Property Tag No.");
       return;
     }
 
@@ -588,15 +603,15 @@ const SearchFAFind = ({
       {isLoading && <LoadingSpinner />}
 
       <div
-        className={`fixed inset-0 z-[80] flex items-center justify-center bg-black/45 backdrop-blur-[1px] ${
-          isMaximized ? "p-0" : "p-2 sm:p-4"
+        className={`fixed inset-0 flex items-center justify-center bg-black/45 backdrop-blur-[1px] ${
+          isMaximized ? "z-[9999] h-[100dvh] w-screen overflow-hidden p-0" : "z-[80] p-2 sm:p-4"
         }`}
         onClick={onClose}
       >
         <div
           className={`flex w-full flex-col overflow-hidden bg-white shadow-2xl ${
             isMaximized
-              ? "h-screen max-h-screen max-w-none rounded-none"
+              ? "h-[100dvh] max-h-[100dvh] max-w-none rounded-none"
               : "max-h-[88vh] max-w-6xl rounded-xl"
           }`}
           onClick={(e) => e.stopPropagation()}
@@ -645,7 +660,7 @@ const SearchFAFind = ({
               />
 
               <SearchField
-                label="Tag No."
+                label="Property Tag No."
                 value={tagNo}
                 onChange={setTagNo}
                 onSearch={(value) => loadAsset({ tagNo: value, searchSource: "tagNo" })}
@@ -693,7 +708,7 @@ const SearchFAFind = ({
               {!asset ? (
                 <div className="flex items-center gap-2 p-8 text-sm text-gray-500">
                   <FontAwesomeIcon icon={faDatabase} className="text-blue-300" />
-                  Search by Asset Code, Tag No., lookup, or QR reader to display asset details.
+                  Search by Asset Code, Property Tag No., lookup, or QR reader to display asset details.
                 </div>
               ) : (
                 <div className="p-3">
@@ -702,7 +717,7 @@ const SearchFAFind = ({
                       <DetailSection title="Asset Identity">
                         <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
                           <ReadOnlyField id="fa_find_code" label="Asset Code" value={asset.faCode} />
-                          <ReadOnlyField id="fa_find_tag" label="Tag No." value={asset.tagNo} />
+                          <ReadOnlyField id="fa_find_tag" label="Property Tag No." value={asset.tagNo} />
                           <ReadOnlyField id="fa_find_barcode" label="Bar Code" value={asset.barCode} />
                           <ReadOnlyField id="fa_find_status" label="Status" value={getStatusLabel(asset)} />
                           <ReadOnlyField id="fa_find_name" label="Asset Name" value={asset.faName} className="md:col-span-2" />
@@ -858,7 +873,7 @@ const SearchFAFind = ({
       {showQrReader && (
         <BarcodeQrReaderModal
           isOpen={showQrReader}
-          title="Scan Asset Tag QR Code"
+          title="Scan Property Tag QR Code"
           scanOnce={true}
           onScan={handleQrScan}
           onClose={() => setShowQrReader(false)}

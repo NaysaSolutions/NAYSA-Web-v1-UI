@@ -45,7 +45,7 @@
 // };
 
 // const defaultDisplayFields = [
-//   { key: "propertyTagNo", label: "Tag No.", visible: true, emphasis: true },
+//   { key: "propertyTagNo", label: "Property Tag No.", visible: true, emphasis: true },
 //   { key: "serialNo", label: "Serial No.", visible: true },
 //   { key: "location", label: "Location", visible: true },
 //   { key: "assignedTo", label: "Assigned To", visible: true },
@@ -3321,8 +3321,8 @@
 //                 {isEditMode
 //                   ? "Configure one master tag layout and apply it consistently to every selected asset."
 //                   : isMultipleTags
-//                     ? `Review, print, and export ${tagInfos.length} fixed asset tags using the saved master layout.`
-//                     : "Review, print, and export the selected fixed asset tag using the saved master layout."}
+//                     ? `Review, print, and export ${tagInfos.length} fixed property tags using the saved master layout.`
+//                     : "Review, print, and export the selected fixed property tag using the saved master layout."}
 //               </p>
 
 //               {showTagFeatureInfo && (
@@ -3334,7 +3334,7 @@
 //                     <div>
 //                       <p className="text-sm font-extrabold text-slate-800">Property Tag Designer Features</p>
 //                       <p className="text-[11px] font-medium leading-relaxed text-slate-500">
-//                         Design, preview, print, and export asset tags with a consistent master layout.
+//                         Design, preview, print, and export property tags with a consistent master layout.
 //                       </p>
 //                     </div>
 //                   </div>
@@ -3369,7 +3369,7 @@
 //                     <div>
 //                       <p className="text-sm font-extrabold text-slate-800">How the Tag Workflow Works</p>
 //                       <p className="text-[11px] font-medium leading-relaxed text-slate-500">
-//                         A saved master layout controls every selected asset tag, then the system exports or prints the final high-resolution output.
+//                         A saved master layout controls every selected property tag, then the system exports or prints the final high-resolution output.
 //                       </p>
 //                     </div>
 //                   </div>
@@ -3377,7 +3377,7 @@
 //                   <div className="space-y-2 text-[11px] font-semibold text-slate-600">
 //                     {[
 //                       { step: "1", title: "Design Master Layout", desc: "Adjust one tag format: paper size, logo, fields, QR/barcode, titles, fonts, colors, and positions." },
-//                       { step: "2", title: "Apply to Selected Assets", desc: "The same approved layout is automatically used for all selected fixed asset tags in Preview mode." },
+//                       { step: "2", title: "Apply to Selected Assets", desc: "The same approved layout is automatically used for all selected fixed property tags in Preview mode." },
 //                       { step: "3", title: "Generate Image Output", desc: "The preview is captured as a high-resolution image to preserve layout, colors, italic fonts, QR code, and barcode quality." },
 //                       { step: "4", title: "Print or Export", desc: "Use Download PDF, Download PNG ZIP, or Print Preview. PDF and Print Preview use the image-based output for consistent results." },
 //                     ].map((item, index, rows) => (
@@ -4596,7 +4596,7 @@ const normalizeTagRows = ({ serialRow = {}, serialRows = [] }) => {
 };
 
 const defaultDisplayFields = [
-  { key: "propertyTagNo", label: "Tag No.", visible: true, emphasis: true },
+  { key: "propertyTagNo", label: "Property Tag No.", visible: true, emphasis: true },
   { key: "serialNo", label: "Serial No.", visible: true },
   { key: "location", label: "Location", visible: true },
   { key: "assignedTo", label: "Assigned To", visible: true },
@@ -7909,8 +7909,8 @@ ${barcodeZpl}
                 {isEditMode
                   ? "Configure one master tag layout and apply it consistently to every selected asset."
                   : isMultipleTags
-                    ? `Review, print, and export ${tagInfos.length} fixed asset tags using the saved master layout.`
-                    : "Review, print, and export the selected fixed asset tag using the saved master layout."}
+                    ? `Review, print, and export ${tagInfos.length} fixed property tags using the saved master layout.`
+                    : "Review, print, and export the selected fixed property tag using the saved master layout."}
               </p>
 
               {showTagFeatureInfo && (
@@ -7922,7 +7922,7 @@ ${barcodeZpl}
                     <div>
                       <p className="text-sm font-extrabold text-slate-800">Property Tag Designer Features</p>
                       <p className="text-[11px] font-medium leading-relaxed text-slate-500">
-                        Design, preview, print, and export asset tags with a consistent master layout.
+                        Design, preview, print, and export property tags with a consistent master layout.
                       </p>
                     </div>
                   </div>
@@ -7957,7 +7957,7 @@ ${barcodeZpl}
                     <div>
                       <p className="text-sm font-extrabold text-slate-800">How the Tag Workflow Works</p>
                       <p className="text-[11px] font-medium leading-relaxed text-slate-500">
-                        A saved master layout controls every selected asset tag, then the system exports or prints the final high-resolution output.
+                        A saved master layout controls every selected property tag, then the system exports or prints the final high-resolution output.
                       </p>
                     </div>
                   </div>
@@ -7965,7 +7965,7 @@ ${barcodeZpl}
                   <div className="space-y-2 text-[11px] font-semibold text-slate-600">
                     {[
                       { step: "1", title: "Design Master Layout", desc: "Adjust one tag format: paper size, logo, fields, QR/barcode, titles, fonts, colors, and positions." },
-                      { step: "2", title: "Apply to Selected Assets", desc: "The same approved layout is automatically used for all selected fixed asset tags in Preview mode." },
+                      { step: "2", title: "Apply to Selected Assets", desc: "The same approved layout is automatically used for all selected fixed property tags in Preview mode." },
                       { step: "3", title: "Generate Image Output", desc: "The preview is captured as a high-resolution image to preserve layout, colors, italic fonts, QR code, and barcode quality." },
                       { step: "4", title: "Print or Export", desc: "Use Download PDF, Download PNG ZIP, or Print Preview. PDF and Print Preview use the image-based output for consistent results." },
                     ].map((item, index, rows) => (

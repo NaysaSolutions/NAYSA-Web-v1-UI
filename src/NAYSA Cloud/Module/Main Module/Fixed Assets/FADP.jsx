@@ -55,7 +55,7 @@ import { postRequest } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 const detailColumns = [
   { key: "ln", label: "LN", width: 48, align: "text-center" },
   { key: "faCode", label: "Asset No.", width: 140 },
-  { key: "tagNo", label: "Asset Tag", width: 200 },
+  { key: "tagNo", label: "Property Tag", width: 200 },
   { key: "assetDescription", label: "Asset Description", width: 260 },
   { key: "flocCode", label: "Location Code", width: 100 },
   { key: "flocName", label: "Location", width: 250 },

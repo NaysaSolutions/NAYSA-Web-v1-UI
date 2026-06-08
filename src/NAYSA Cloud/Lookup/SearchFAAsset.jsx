@@ -179,7 +179,7 @@ const SearchFAAsset = ({
                 value={filters.search}
                 onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
                 onKeyDown={handleScanKeyDown}
-                placeholder="Input / scan asset tag, QR code, barcode, asset no., serial no."
+                placeholder="Input / scan property tag, QR code, barcode, asset no., serial no."
                 className="w-full h-9 rounded-lg border border-slate-300 px-9 text-xs focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
               />
               <FontAwesomeIcon icon={faSearch} className="absolute left-3 top-3 text-slate-400 text-xs" />
@@ -229,7 +229,7 @@ const SearchFAAsset = ({
               <thead className="sticky top-0 z-10 bg-slate-200">
                 <tr>
                   {[
-                    "Asset No.", "Tag No.", "Barcode", "Asset Name", "Serial No.", "Category", "Class",
+                    "Asset No.", "Property Tag No.", "Barcode", "Asset Name", "Serial No.", "Category", "Class",
                     "Branch", "Location", "RC", "Custodian", "Cost", "Book Value", "Status"
                   ].map((label) => (
                     <th key={label} className="global-lookup-th-ui whitespace-nowrap">{label}</th>

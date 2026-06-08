@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMagnifyingGlass, faPlus, faTrashAlt } from "@fortawesome/free-solid-svg-icons";
@@ -26,9 +26,9 @@ import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import {
   formatNumber,
   parseFormattedNumber,
-  useSwalHandleOpenSpecsModal,
   useSwalshowSaveSuccessDialog,
   useSwalErrorAlert,
+  useSwalProceedConfirm,
   useSwalvalidateRequiredFields as validateRequiredFields,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
@@ -59,7 +59,7 @@ import { postRequest } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 const sourceColumns = [
   { key: "ln", label: "LN", width: 48, align: "text-center" },
   { key: "faCode", label: "Asset No.", width: 140 },
-  { key: "tagNo", label: "Asset Tag", width: 160 },
+  { key: "tagNo", label: "Property Tag", width: 160 },
   { key: "assetDescription", label: "Asset Description", width: 260 },
   { key: "categCode", label: "Category Code", width: 130 },
   { key: "categName", label: "Category", width: 200 },
@@ -82,7 +82,7 @@ const sourceColumns = [
 const resultColumns = [
   { key: "ln", label: "LN", width: 48, align: "text-center" },
   { key: "faCode", label: "Asset No.", width: 140 },
-  { key: "tagNo", label: "Asset Tag", width: 160 },
+  { key: "tagNo", label: "Property Tag", width: 160 },
   { key: "assetDescription", label: "Asset Description", width: 260 },
   { key: "categCode", label: "Category Code", width: 130 },
   { key: "categName", label: "Category", width: 200 },
@@ -102,29 +102,7 @@ const resultColumns = [
   { key: "remarks", label: "Remarks", width: 180 },
 ];
 
-const glColumns = [
-  { key: "ln", label: "LN", width: 56, align: "text-center" },
-  { key: "acctCode", label: "Account Code", width: 120 },
-  { key: "rcCode", label: "RC Code", width: 120 },
-  { key: "sltypeCode", label: "SL Type Code", width: 120 },
-  { key: "slCode", label: "SL Code", width: 120 },
-  { key: "particular", label: "Particulars", width: 320 },
-  { key: "debit", label: "Debit", width: 140, align: "text-right" },
-  { key: "credit", label: "Credit", width: 140, align: "text-right" },
-  { key: "debitFx1", label: "Debit Fx1", width: 140, align: "text-right" },
-  { key: "creditFx1", label: "Credit Fx1", width: 140, align: "text-right" },
-  { key: "debitFx2", label: "Debit Fx2", width: 140, align: "text-right" },
-  { key: "creditFx2", label: "Credit Fx2", width: 140, align: "text-right" },
-  { key: "slRefNo", label: "SL Ref. No.", width: 120 },
-  { key: "slRefDate", label: "SL Ref. Date", width: 120 },
-  { key: "remarks", label: "Remarks", width: 140 },
-];
 
-const defaultRestructuringTypes = [
-  { DROPDOWN_CODE: "FARS01", DROPDOWN_NAME: "Merge" },
-  { DROPDOWN_CODE: "FARS02", DROPDOWN_NAME: "Split" },
-  { DROPDOWN_CODE: "FARS03", DROPDOWN_NAME: "Reclass" },
-];
 
 const areDropdownListsEqual = (left = [], right = []) => {
   if (left.length !== right.length) return false;
@@ -184,7 +162,7 @@ const formatAssetRow = (item = {}) => ({
   rcName: item.rcName || item.departmentName || "",
   empNo: item.empNo || item.empCode || item.employeeCode || "",
   empName: item.empName || item.empFullName || item.employeeName || "",
-  acqCost: formatNumber(item.acqCost || item.assetCost || 0),
+  acqCost: formatNumber(item.acqCost || 0),
   deprMonth: formatNumber(item.deprMonth || 0),
   accumDepr: formatNumber(item.accumDepr || 0),
   salvageValue: formatNumber(item.salvageValue || 0),
@@ -206,7 +184,7 @@ const buildResultRowFromSource = (source = {}) => ({
   rcName: source.rcName || "",
   empNo: source.empNo || "",
   empName: source.empName || "",
-  acqCost: source.acqCost || source.assetCost || "0.00",
+  acqCost: source.acqCost || "0.00",
   deprMonth: source.deprMonth || "0.00",
   accumDepr: source.accumDepr || "0.00",
   salvageValue: source.salvageValue || "0.00",
@@ -214,7 +192,63 @@ const buildResultRowFromSource = (source = {}) => ({
   remarks: "",
 });
 
+const buildSplitResultRowFromSource = (source = {}) => ({
+  ...buildResultRowFromSource(source),
+  acqCost: "0.00",
+  deprMonth: "0.00",
+  accumDepr: "0.00",
+  salvageValue: "0.00",
+  netbookValue: "0.00",
+});
+
+const buildReclassResultRowFromSource = (source = {}) => ({
+  ...buildResultRowFromSource(source),
+  faCode: source.faCode || "",
+  tagNo: source.tagNo || "",
+  categCode: "",
+  categName: "",
+  classCode: "",
+  className: "",
+});
+
+const mirrorReclassResultRows = (sourceRows = [], currentRows = []) => {
+  const currentByAssetCode = new Map(
+    currentRows
+      .filter((row) => String(row.faCode || "").trim())
+      .map((row) => [String(row.faCode || "").trim().toUpperCase(), row])
+  );
+
+  return sourceRows.map((source, index) => {
+    const sourceAssetCode = String(source.faCode || "").trim().toUpperCase();
+    const current = currentByAssetCode.get(sourceAssetCode) || currentRows[index] || {};
+
+    return {
+      ...buildReclassResultRowFromSource(source),
+      ...current,
+      faCode: source.faCode || "",
+      tagNo: source.tagNo || "",
+      assetDescription: source.assetDescription || source.faName || current.assetDescription || "",
+      categCode: current.categCode || "",
+      categName: current.categName || "",
+      classCode: current.classCode || "",
+      className: current.className || "",
+      acqCost: source.acqCost || current.acqCost || "0.00",
+      deprMonth: source.deprMonth || current.deprMonth || "0.00",
+      accumDepr: source.accumDepr || current.accumDepr || "0.00",
+      salvageValue: source.salvageValue || current.salvageValue || "0.00",
+      netbookValue: source.netbookValue || source.nbValue || current.netbookValue || "0.00",
+    };
+  });
+};
+
 const amountKeys = ["acqCost", "deprMonth", "accumDepr", "salvageValue", "netbookValue"];
+const amountTotalLabels = {
+  acqCost: "Total Acq. Cost",
+  deprMonth: "Total Depr. Month",
+  accumDepr: "Total Accum. Depr",
+  salvageValue: "Total Salvage Value",
+  netbookValue: "Total NB Value",
+};
 
 const formatAmountRowValues = (row = {}) =>
   amountKeys.reduce((acc, key) => {
@@ -227,6 +261,28 @@ const sumAssetAmounts = (rows = []) =>
     totals[key] = rows.reduce((sum, row) => sum + (parseFormattedNumber(row[key]) || 0), 0);
     return totals;
   }, {});
+
+const splitAllocatedAmountKeys = ["deprMonth", "accumDepr", "salvageValue", "netbookValue"];
+
+const getSplitAllocatedAmounts = (sourceTotals = {}, acqCostValue = 0) => {
+  const sourceAcqCost = parseFormattedNumber(sourceTotals.acqCost || 0) || 0;
+  const acqCost = Math.max(0, parseFormattedNumber(acqCostValue || 0) || 0);
+  const ratio = sourceAcqCost > 0 ? acqCost / sourceAcqCost : 0;
+
+  return splitAllocatedAmountKeys.reduce((updates, key) => {
+    updates[key] = formatNumber((sourceTotals[key] || 0) * ratio);
+    return updates;
+  }, {});
+};
+
+const applySplitAllocatedAmounts = (rows = [], sourceRows = []) => {
+  const sourceTotals = sumAssetAmounts(sourceRows);
+
+  return rows.map((row) => ({
+    ...row,
+    ...getSplitAllocatedAmounts(sourceTotals, row.acqCost),
+  }));
+};
 
 const buildMergedResultRow = (sourceRows = [], current = {}) => {
   const firstSource = sourceRows[0] || {};
@@ -293,7 +349,7 @@ const FARS = () => {
     userCode: currentUserRow?.userCode || "",
     documentID: "",
     restructuringType: "FARS01",
-    restructuringTypeList: defaultRestructuringTypes,
+    restructuringTypeList: [],
     referenceNo: "",
     currCode: companyInfo?.currCode || "",
     currName: companyInfo?.currName || "",
@@ -353,12 +409,17 @@ const FARS = () => {
   };
   const statusColor = statusMap[displayStatus] || "";
   const isFormDisabled = isViewDocument || isPostedOrCancelled;
-  const resultAllowsMultiple = String(state.restructuringType || "").toUpperCase() === "FARS02";
-  const isSplitType = String(state.restructuringType || "").toUpperCase() === "FARS02";
-  const isMergeType = String(state.restructuringType || "").toUpperCase() === "FARS01";
+  const withCostAmount = currentUserRow?.viewCostamt !== "N";
+  const restructuringTypeCode = String(state.restructuringType || "").toUpperCase();
+  const isSplitType = restructuringTypeCode === "FARS02";
+  const isMergeType = restructuringTypeCode === "FARS01";
+  const isReclassType = restructuringTypeCode === "FARS03";
+  const resultAllowsMultiple = isSplitType || isReclassType;
+  const showGeneralLedgerSection = !isMergeType && !isSplitType;
   const hasSourceAssets = (sourceRows?.length || 0) > 0;
   const hasAssetDetails = (sourceRows?.length || 0) > 0 || (resultRows?.length || 0) > 0;
-  const canAddResultRow = hasSourceAssets && (resultAllowsMultiple || (resultRows?.length || 0) === 0);
+  const canAddResultRow = hasSourceAssets && !isReclassType && (isSplitType || (resultRows?.length || 0) === 0);
+  const hideAssetDeleteActions = sourceRows.length === 3 && resultRows.length === 3;
 
   const updateState = useCallback((updates) => {
     setState((prev) => {
@@ -379,8 +440,14 @@ const FARS = () => {
     });
   }, [state.currCode, state.glCurrDefault, state.glCurrMode, updateState]);
 
-  const visibleSourceColumns = useMemo(() => sourceColumns, []);
-  const visibleResultColumns = useMemo(() => resultColumns, []);
+  const visibleSourceColumns = useMemo(
+    () => sourceColumns.filter((column) => withCostAmount || !amountKeys.includes(column.key)),
+    [withCostAmount]
+  );
+  const visibleResultColumns = useMemo(
+    () => resultColumns.filter((column) => withCostAmount || !amountKeys.includes(column.key)),
+    [withCostAmount]
+  );
 
   const glColumns = useMemo(() => [
     { key: "ln", label: "LN", width: 56, align: "text-center" },
@@ -515,6 +582,16 @@ const FARS = () => {
     };
   }, [glRows]);
 
+  const sourceTotals = useMemo(
+    () => formatAmountRowValues(sumAssetAmounts(sourceRows)),
+    [sourceRows]
+  );
+
+  const resultTotals = useMemo(
+    () => formatAmountRowValues(sumAssetAmounts(resultRows)),
+    [resultRows]
+  );
+
   useEffect(() => {
     if (!isMergeType || sourceRows.length === 0) return;
 
@@ -525,10 +602,23 @@ const FARS = () => {
   }, [isMergeType, sourceRows]);
 
   useEffect(() => {
+    if (!isReclassType || sourceRows.length === 0) return;
+
+    setResultRows((prev) => {
+      return mirrorReclassResultRows(sourceRows, prev);
+    });
+  }, [isReclassType, sourceRows]);
+
+  useEffect(() => {
+    if (showGeneralLedgerSection || glRows.length === 0) return;
+    setGlRows([]);
+  }, [showGeneralLedgerSection, glRows.length]);
+
+  useEffect(() => {
     if (!refsLoaded) return;
-    const filteredTypes = getAllDropDown?.("FARSTRAN_TYPE", docType) || defaultRestructuringTypes;
+    const filteredTypes = getAllDropDown?.("FARSTRAN_TYPE", docType) || [];
     updateState((prev) => {
-      const nextType = prev.restructuringType || filteredTypes[0]?.DROPDOWN_CODE || "FARS01";
+      const nextType = prev.restructuringType || filteredTypes[0]?.DROPDOWN_CODE || "";
       if (
         prev.restructuringType === nextType &&
         areDropdownListsEqual(prev.restructuringTypeList || [], filteredTypes)
@@ -686,8 +776,7 @@ const FARS = () => {
       empNo: row.empNo || "",
       empName: row.empName || "",
       acqDate: row.acqDate || "",
-      acqCost: parseFormattedNumber(row.acqCost || row.assetCost || 0),
-      assetCost: parseFormattedNumber(row.assetCost || row.acqCost || 0),
+      acqCost: parseFormattedNumber(row.acqCost || 0),
       deprMonth: parseFormattedNumber(row.deprMonth || 0),
       accumDepr: parseFormattedNumber(row.accumDepr || 0),
       salvageValue: parseFormattedNumber(row.salvageValue || 0),
@@ -740,8 +829,7 @@ const FARS = () => {
       empNo: row.empNo || "",
       empName: row.empName || "",
       acqDate: row.acqDate || "",
-      acqCost: parseFormattedNumber(row.acqCost || row.assetCost || 0),
-      assetCost: parseFormattedNumber(row.assetCost || row.acqCost || 0),
+      acqCost: parseFormattedNumber(row.acqCost || 0),
       deprMonth: parseFormattedNumber(row.deprMonth || 0),
       accumDepr: parseFormattedNumber(row.accumDepr || 0),
       salvageValue: parseFormattedNumber(row.salvageValue || 0),
@@ -762,9 +850,25 @@ const FARS = () => {
       return false;
     }
 
-    if (!resultAllowsMultiple && resultRows.length > 1) {
-      useSwalErrorAlert("Save FARS", "Merge and Reclass can only have one Result Asset.");
+    if (isMergeType && resultRows.length > 1) {
+      useSwalErrorAlert("Save FARS", "Merge can only have one Result Asset.");
       return false;
+    }
+
+    if (isReclassType && sourceRows.length !== resultRows.length) {
+      useSwalErrorAlert("Save FARS", "Reclass Result Assets must match the number of Source Assets.");
+      return false;
+    }
+
+    if (isReclassType) {
+      const invalidReclassIndex = resultRows.findIndex((row) => hasSameSourceCategoryClass(row));
+      if (invalidReclassIndex >= 0) {
+        useSwalErrorAlert(
+          "Save FARS",
+          `Result Asset category and sub category cannot be the same as Source Asset on line ${invalidReclassIndex + 1}.`
+        );
+        return false;
+      }
     }
 
     if (hasDuplicateAssetCode(sourceRows)) {
@@ -792,7 +896,7 @@ const FARS = () => {
       return false;
     }
 
-    const sourceAcqCost = sourceRows.reduce((sum, row) => sum + (parseFormattedNumber(row.acqCost || row.assetCost || 0) || 0), 0);
+    const sourceAcqCost = sourceRows.reduce((sum, row) => sum + (parseFormattedNumber(row.acqCost || 0) || 0), 0);
     const resultAcqCost = resultRows.reduce((sum, row) => sum + (parseFormattedNumber(row.acqCost || 0) || 0), 0);
     const negativeResultIndex = resultRows.findIndex((row) => (parseFormattedNumber(row.acqCost || 0) || 0) < 0);
 
@@ -829,29 +933,53 @@ const FARS = () => {
     return validateRequiredFields(requiredFields, "Save FARS");
   };
 
-  const handleActivityOption = async (action) => {
-    if (isFormDisabled) return;
 
-    updateState({ isLoading: true });
+ const handleActivityOption = async (action) => {
+  if (isFormDisabled) return;
+  if (action === "GenerateGL" && !showGeneralLedgerSection) return;
 
-    try {
-      let finalGlRows = [...glRows];
+  try {
+    let finalGlRows = showGeneralLedgerSection ? [...glRows] : [];
 
-      if (action === "GenerateGL") {
+    if (action === "GenerateGL") {
+      updateState({ isLoading: true, isGeneratingGL: true });
+
+      try {
         setGlRows([]);
-        updateState({ isGeneratingGL: true });
-        const newGlEntries = await useGenerateGLEntries(docType, buildTransactionPayload([]));
+        const newGlEntries = await useGenerateGLEntries(
+          docType,
+          buildTransactionPayload([])
+        );
+
         setGlRows(newGlEntries && newGlEntries.length > 0 ? newGlEntries : []);
-        updateState({ isGeneratingGL: false });
+      } finally {
+        updateState({ isLoading: false, isGeneratingGL: false });
+      }
+
+      return;
+    }
+
+    if (action === "Upsert") {
+      /*
+        Validate first before showing the global spinner.
+        This prevents the spinner from staying visible while
+        validation alerts like missing Reference No. are displayed.
+      */
+      const isValid = await validateBeforeSave();
+      if (!isValid) {
+        updateState({ isLoading: false, isGeneratingGL: false });
         return;
       }
 
-      if (action === "Upsert") {
-        const isValid = await validateBeforeSave();
-        if (!isValid) return;
+      updateState({ isLoading: true });
 
-        if (finalGlRows.length === 0) {
-          const newGlEntries = await useGenerateGLEntries(docType, buildTransactionPayload([]));
+      try {
+        if (showGeneralLedgerSection && finalGlRows.length === 0) {
+          const newGlEntries = await useGenerateGLEntries(
+            docType,
+            buildTransactionPayload([])
+          );
+
           if (newGlEntries && newGlEntries.length > 0) {
             finalGlRows = newGlEntries;
             setGlRows(newGlEntries);
@@ -878,6 +1006,7 @@ const FARS = () => {
             : () => handleSaveAndPrint(responseDocId);
 
           useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
+
           updateState({
             farsNo: responseDocNo,
             documentID: responseDocId,
@@ -885,14 +1014,16 @@ const FARS = () => {
             isFetchDisabled: true,
           });
         }
+      } finally {
+        updateState({ isLoading: false, isGeneratingGL: false });
       }
-    } catch (error) {
-      console.error(`Error during ${action}:`, error);
-    } finally {
-      updateState({ isLoading: false, isGeneratingGL: false });
     }
-  };
-
+  } catch (error) {
+    console.error(`Error during ${action}:`, error);
+    updateState({ isLoading: false, isGeneratingGL: false });
+  }
+};
+  
   const handleSave = () => handleActivityOption("Upsert");
   const handleGenerateGL = () => handleActivityOption("GenerateGL");
 
@@ -959,6 +1090,7 @@ const FARS = () => {
       setGlRows([]);
       setSelectedRowIndex(0);
       setSelectedResultIndex(0);
+      setDetailTab("source");
       updateState({
         branchCode: currentUserRow?.branchCode || "HO",
         branchName: currentUserRow?.branchName || "HO - Head Office",
@@ -1003,7 +1135,8 @@ const FARS = () => {
   const handleRestructuringTypeChange = (value) => {
     if (hasAssetDetails) return;
 
-    const nextType = value || "FARS01";
+    const nextType = value || state.restructuringTypeList?.[0]?.DROPDOWN_CODE || "";
+    if (!nextType) return;
     updateState({ restructuringType: nextType });
     clearGeneratedGLEntries();
     if (nextType !== "FARS02") {
@@ -1018,7 +1151,7 @@ const FARS = () => {
     rcCode: state.assetDepartmentCode || "",
     categCode: state.categCode || "",
     classCode: state.classCode || "",
-    filter: "OpenTransfer",
+    filter: "OpenRestructuring",
   });
 
   const handleOpenFAMastLookup = async (insertIndex = null) => {
@@ -1090,9 +1223,9 @@ const FARS = () => {
       setSourceRows(selectedRows);
       setResultRows((prev) => {
         const source = selectedRows[0] || {};
-        const baseRows = prev.length > 0 ? prev : [buildResultRowFromSource(source)];
+        const baseRows = prev.length > 0 ? prev : [buildSplitResultRowFromSource(source)];
 
-        return baseRows.map((row) => ({
+        const nextRows = baseRows.map((row) => ({
           ...row,
           assetDescription: row.assetDescription || source.assetDescription || source.faName || "",
           categCode: source.categCode || row.categCode || "",
@@ -1106,10 +1239,12 @@ const FARS = () => {
           empNo: source.empNo || row.empNo || "",
           empName: source.empName || row.empName || "",
         }));
+
+        return applySplitAllocatedAmounts(nextRows, selectedRows);
       });
     } else {
-      setSourceRows((prev) => {
-        const updatedRows = [...prev];
+      const buildNextSourceRows = (rows = []) => {
+        const updatedRows = [...rows];
         const insertIndex = state.faLookupInsertIndex;
 
         if (insertIndex !== null && insertIndex >= 0) {
@@ -1119,13 +1254,22 @@ const FARS = () => {
         }
 
         return updatedRows;
-      });
+      };
+      const nextSourceRows = buildNextSourceRows(sourceRows);
+
+      setSourceRows(nextSourceRows);
+
+      if (isReclassType) {
+        setResultRows((prev) => mirrorReclassResultRows(nextSourceRows, prev));
+      }
     }
 
-    if (!isSplitType) {
+    if (!isSplitType && !isReclassType) {
       setResultRows((prev) => {
         if (prev.length > 0) return prev;
-        return [buildResultRowFromSource(selectedRows[0] || {})];
+        return [
+          buildResultRowFromSource(selectedRows[0] || {})
+        ];
       });
     }
 
@@ -1146,25 +1290,35 @@ const FARS = () => {
 
   const handleDeleteSourceRow = (index) => {
     if (isFormDisabled) return;
-    setSourceRows((prev) => prev.filter((_, rowIndex) => rowIndex !== index));
+    const nextSourceRows = sourceRows.filter((_, rowIndex) => rowIndex !== index);
+    setSourceRows(nextSourceRows);
+    if (isReclassType) {
+      setResultRows((prev) => mirrorReclassResultRows(nextSourceRows, prev));
+    }
     clearGeneratedGLEntries();
     setSelectedRowIndex((prev) => Math.max(0, Math.min(prev, sourceRows.length - 2)));
   };
 
   const handleAddResultRow = (index = null) => {
     if (isFormDisabled) return;
+    if (isReclassType) {
+      useSwalErrorAlert("Result Assets", "Reclass Result Assets are copied from Source Assets.");
+      return;
+    }
     if ((sourceRows?.length || 0) === 0) {
       useSwalErrorAlert("Result Assets", "Please add at least one Source Asset before adding Result Assets.");
       return;
     }
 
     if (!resultAllowsMultiple && resultRows.length >= 1) {
-      useSwalErrorAlert("Result Assets", "Merge and Reclass can only have one Result Asset.");
+      useSwalErrorAlert("Result Assets", "Merge can only have one Result Asset.");
       return;
     }
 
     const source = sourceRows[0] || {};
-    const newRow = buildResultRowFromSource(source);
+    const newRow = isSplitType
+      ? buildSplitResultRowFromSource(source)
+      : buildResultRowFromSource(source);
 
     setResultRows((prev) => {
       const updatedRows = [...prev];
@@ -1178,6 +1332,10 @@ const FARS = () => {
 
   const handleDeleteResultRow = (index) => {
     if (isFormDisabled) return;
+    if (isReclassType) {
+      useSwalErrorAlert("Result Assets", "Remove the Source Asset to remove the copied Reclass Result Asset.");
+      return;
+    }
     setResultRows((prev) => prev.filter((_, rowIndex) => rowIndex !== index));
     clearGeneratedGLEntries();
     setSelectedResultIndex((prev) => Math.max(0, Math.min(prev, resultRows.length - 2)));
@@ -1188,8 +1346,56 @@ const FARS = () => {
     clearGeneratedGLEntries();
   };
 
-  const handleResultModalChange = (index, field, value) => {
-    updateResultRow(index, { [field]: value });
+  const getSourceRowForResultRow = (resultRow = {}) => {
+    const assetCode = String(resultRow.faCode || "").trim().toUpperCase();
+    if (!assetCode) return {};
+    return sourceRows.find((row) => String(row.faCode || "").trim().toUpperCase() === assetCode) || {};
+  };
+
+  const hasSameSourceCategoryClass = (resultRow = {}, updates = {}) => {
+    if (!isReclassType) return false;
+    const source = getSourceRowForResultRow(resultRow);
+    const nextCategCode = String(updates.categCode ?? resultRow.categCode ?? "").trim().toUpperCase();
+    const nextClassCode = String(updates.classCode ?? resultRow.classCode ?? "").trim().toUpperCase();
+    const sourceCategCode = String(source.categCode || "").trim().toUpperCase();
+    const sourceClassCode = String(source.classCode || "").trim().toUpperCase();
+
+    return Boolean(nextCategCode && nextClassCode && nextCategCode === sourceCategCode && nextClassCode === sourceClassCode);
+  };
+
+  const validateReclassResultChange = (targetIndexes = [], updates = {}) => {
+    if (!isReclassType) return true;
+
+    const invalidIndex = targetIndexes.findIndex((rowIndex) =>
+      hasSameSourceCategoryClass(resultRows[rowIndex] || {}, updates)
+    );
+
+    if (invalidIndex >= 0) {
+      const rowIndex = targetIndexes[invalidIndex];
+      useSwalErrorAlert(
+        "Result Assets",
+        `Result Asset category and sub category cannot be the same as Source Asset on line ${rowIndex + 1}.`
+      );
+      return false;
+    }
+
+    return true;
+  };
+
+  const applyResultRowsChange = (targetIndexes = [], updates = {}) => {
+    setResultRows((prev) =>
+      prev.map((row, rowIndex) =>
+        targetIndexes.includes(rowIndex) ? { ...row, ...updates } : row
+      )
+    );
+    clearGeneratedGLEntries();
+  };
+
+  const getReclassTargetIndexes = async (index, title, message) => {
+    if (!isReclassType || index !== 0 || resultRows.length <= 1) return [index];
+
+    const confirm = await useSwalProceedConfirm(title, message, "Yes", "No");
+    return confirm?.isConfirmed ? resultRows.map((_, rowIndex) => rowIndex) : [index];
   };
 
   const focusResultCell = (index, columnKey) => {
@@ -1208,7 +1414,13 @@ const FARS = () => {
 
   const commitResultAcqCost = (index, value, { moveNext = false } = {}) => {
     const amount = Math.max(0, parseFormattedNumber(value || 0) || 0);
-    updateResultRow(index, { acqCost: formatNumber(amount) });
+    const updates = { acqCost: formatNumber(amount) };
+
+    if (isSplitType) {
+      Object.assign(updates, getSplitAllocatedAmounts(sumAssetAmounts(sourceRows), amount));
+    }
+
+    updateResultRow(index, updates);
 
     if (moveNext) moveToNextResultCell(index, "acqCost");
   };
@@ -1465,7 +1677,7 @@ const FARS = () => {
     });
   };
 
-  const handleCloseFaCategoryModal = (selectedCategory) => {
+  const handleCloseFaCategoryModal = async (selectedCategory) => {
     if (selectedCategory && state.accountModalSource === "headerCategory") {
       const categCode = selectedCategory.code || selectedCategory.categCode || "";
       const categName = selectedCategory.description || selectedCategory.categName || selectedCategory.code || "";
@@ -1485,12 +1697,21 @@ const FARS = () => {
     if (selectedCategory && state.accountModalSource === "resultCategory") {
       const categCode = selectedCategory.code || selectedCategory.categCode || "";
       const categName = selectedCategory.description || selectedCategory.categName || selectedCategory.code || "";
-      updateResultRow(selectedResultIndex, {
+      const updates = {
         categCode,
         categName,
         classCode: "",
         className: "",
-      });
+      };
+      const targetIndexes = await getReclassTargetIndexes(
+        selectedResultIndex,
+        "Copy Category?",
+        "Do you want to copy the selected Category to the other Result Asset rows?"
+      );
+
+      if (!validateReclassResultChange(targetIndexes, updates)) return;
+
+      applyResultRowsChange(targetIndexes, updates);
       updateState({
         showFaCategoryModal: false,
         showFaClassModal: true,
@@ -1503,7 +1724,7 @@ const FARS = () => {
     updateState({ showFaCategoryModal: false, accountModalSource: null });
   };
 
-  const handleCloseFaClassModal = (selectedClass) => {
+  const handleCloseFaClassModal = async (selectedClass) => {
     if (selectedClass && state.accountModalSource === "headerClass") {
       updateState({
         classCode: selectedClass.code || selectedClass.classCode || "",
@@ -1513,11 +1734,22 @@ const FARS = () => {
     }
 
     if (selectedClass && state.accountModalSource === "resultClass") {
-      updateResultRow(selectedResultIndex, {
+      const selectedRow = resultRows[selectedResultIndex] || {};
+      const updates = {
         classCode: selectedClass.code || selectedClass.classCode || "",
         className: selectedClass.description || selectedClass.className || selectedClass.code || "",
-        categCode: selectedClass.categCode || resultRows[selectedResultIndex]?.categCode || "",
-      });
+        categCode: selectedClass.categCode || selectedRow.categCode || "",
+        categName: selectedClass.categName || selectedRow.categName || "",
+      };
+      const targetIndexes = await getReclassTargetIndexes(
+        selectedResultIndex,
+        "Copy Sub Category?",
+        "Do you want to copy the selected Category and Sub Category to the other Result Asset rows?"
+      );
+
+      if (!validateReclassResultChange(targetIndexes, updates)) return;
+
+      applyResultRowsChange(targetIndexes, updates);
     }
     updateState({ showFaClassModal: false, faClassLookupCategCode: "", accountModalSource: null });
   };
@@ -1646,39 +1878,16 @@ const FARS = () => {
     }
 
     if (columnKey === "assetDescription") {
-      const openSpecsModal = () => {
-        if (isFormDisabled) return;
-        useSwalHandleOpenSpecsModal(
-          index,
-          resultRows,
-          handleResultModalChange,
-          row.assetDescription || "",
-          "Asset Description",
-          "assetDescription",
-          "Enter asset description..."
-        );
-      };
-
       return (
         <td key={columnKey} className="global-tran-td-ui" style={style}>
-          <div className="relative w-full">
-            <input
-              type="text"
-              id={`result-assetDescription-${index}`}
-              className={`w-full pr-6 global-tran-td-inputclass-ui cursor-pointer ${alignClass}`}
-              value={row.assetDescription || ""}
-              readOnly
-              disabled={isFormDisabled}
-              onClick={openSpecsModal}
-            />
-            {!isFormDisabled && (
-              <FontAwesomeIcon
-                icon={faMagnifyingGlass}
-                className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                onClick={openSpecsModal}
-              />
-            )}
-          </div>
+          <input
+            type="text"
+            id={`result-assetDescription-${index}`}
+            className={`w-full global-tran-td-inputclass-ui ${alignClass}`}
+            value={row.assetDescription || ""}
+            readOnly
+            disabled
+          />
         </td>
       );
     }
@@ -1686,9 +1895,6 @@ const FARS = () => {
     const lookupConfig = {
       categName: { source: "resultCategory", valueKey: "categName" },
       className: { source: "resultClass", valueKey: "className" },
-      flocCode: { source: "resultLocation", valueKey: "flocCode" },
-      rcCode: { source: "resultDepartment", valueKey: "rcCode" },
-      empNo: { source: "resultEmployee", valueKey: "empNo" },
     }[columnKey];
 
     if (lookupConfig) {
@@ -1718,7 +1924,9 @@ const FARS = () => {
 
     const readOnlyGenerated = columnKey === "faCode" || columnKey === "tagNo";
     const readOnlyMergeCategoryClass = isMergeType && ["categCode", "categName", "classCode", "className"].includes(columnKey);
-    const isReadOnly = isFormDisabled || readOnlyGenerated || readOnlyMergeCategoryClass;
+    const readOnlyReclassCategoryClassCodes = isReclassType && ["categCode", "classCode"].includes(columnKey);
+    const readOnlyAssignmentFields = ["flocCode", "flocName", "rcCode", "rcName", "empNo", "empName"].includes(columnKey);
+    const isReadOnly = isFormDisabled || readOnlyGenerated || readOnlyMergeCategoryClass || readOnlyReclassCategoryClassCodes || readOnlyAssignmentFields;
 
     if (amountFields.includes(columnKey)) {
       const isAmountReadOnly =
@@ -1739,12 +1947,20 @@ const FARS = () => {
               if (isAmountReadOnly) return;
               const sanitizedValue = event.target.value.replace(/[^0-9.]/g, "");
               if (/^\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") {
-                updateResultRow(index, { [columnKey]: sanitizedValue });
+                const updates = { [columnKey]: sanitizedValue };
+                if (isSplitType && columnKey === "acqCost") {
+                  Object.assign(updates, getSplitAllocatedAmounts(sumAssetAmounts(sourceRows), sanitizedValue));
+                }
+                updateResultRow(index, updates);
               }
             }}
             onFocus={(event) => {
               if (!isAmountReadOnly && parseFormattedNumber(event.target.value || 0) === 0) {
-                updateResultRow(index, { [columnKey]: "" });
+                const updates = { [columnKey]: "" };
+                if (isSplitType && columnKey === "acqCost") {
+                  Object.assign(updates, getSplitAllocatedAmounts(sumAssetAmounts(sourceRows), 0));
+                }
+                updateResultRow(index, updates);
               }
             }}
             onBlur={(event) => {
@@ -1899,6 +2115,21 @@ const FARS = () => {
     );
   };
 
+  const renderAssetTotals = (totals) => {
+    if (!withCostAmount) return null;
+
+    return (
+      <div className="global-tran-tab-footer-total-main-div-ui grid gap-1 grid-cols-[auto_auto]">
+        {amountKeys.map((key) => (
+          <Fragment key={key}>
+            <div className="global-tran-tab-footer-total-label-ui">{amountTotalLabels[key]}:</div>
+            <div className="global-tran-tab-footer-total-value-ui">{totals[key]}</div>
+          </Fragment>
+        ))}
+      </div>
+    );
+  };
+
   const renderSourceTable = () => (
     <>
       <div className="global-tran-table-main-div-ui">
@@ -1931,9 +2162,11 @@ const FARS = () => {
                           <button type="button" className="global-tran-td-button-add-ui" onClick={() => handleOpenFAMastLookup(originalIndex)}>
                             <FontAwesomeIcon icon={faPlus} />
                           </button>
-                          <button type="button" className="global-tran-td-button-delete-ui" onClick={() => handleDeleteSourceRow(originalIndex)}>
-                            <FontAwesomeIcon icon={faTrashAlt} />
-                          </button>
+                          {!hideAssetDeleteActions && (
+                            <button type="button" className="global-tran-td-button-delete-ui" onClick={() => handleDeleteSourceRow(originalIndex)}>
+                              <FontAwesomeIcon icon={faTrashAlt} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     )}
@@ -1951,6 +2184,7 @@ const FARS = () => {
             <FontAwesomeIcon icon={faPlus} className="mr-2" />Add
           </button>
         </div>
+        {renderAssetTotals(sourceTotals)}
       </div>
     </>
   );
@@ -1989,9 +2223,11 @@ const FARS = () => {
                               <FontAwesomeIcon icon={faPlus} />
                             </button>
                           )}
-                          <button type="button" className="global-tran-td-button-delete-ui" onClick={() => handleDeleteResultRow(originalIndex)}>
-                            <FontAwesomeIcon icon={faTrashAlt} />
-                          </button>
+                          {!hideAssetDeleteActions && !isReclassType && (
+                            <button type="button" className="global-tran-td-button-delete-ui" onClick={() => handleDeleteResultRow(originalIndex)}>
+                              <FontAwesomeIcon icon={faTrashAlt} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     )}
@@ -2009,6 +2245,7 @@ const FARS = () => {
             <FontAwesomeIcon icon={faPlus} className="mr-2" />Add
           </button>
         </div>
+        {renderAssetTotals(resultTotals)}
       </div>
     </>
   );
@@ -2079,7 +2316,6 @@ const FARS = () => {
                     value={state.branchName}
                     disabled={isFormDisabled}
                     readOnly
-                    editableLookup
                     onLookup={() => updateState({ branchModalOpen: true })}
                   />
                   <FieldRenderer
@@ -2115,7 +2351,7 @@ const FARS = () => {
                     value={state.restructuringType || "FARS01"}
                     disabled={isFormDisabled || hasAssetDetails}
                     onChange={handleRestructuringTypeChange}
-                    options={(state.restructuringTypeList || defaultRestructuringTypes).map((type) => ({
+                    options={(state.restructuringTypeList || []).map((type) => ({
                       label: type.DROPDOWN_NAME,
                       value: type.DROPDOWN_CODE,
                     }))}
@@ -2263,6 +2499,7 @@ const FARS = () => {
           {detailTab === "source" ? renderSourceTable() : renderResultTable()}
         </div>
 
+        {showGeneralLedgerSection && (
         <div className="global-tran-tab-div-ui">
           <div className="global-tran-tab-nav-ui">
             <div className="flex flex-row sm:flex-row">
@@ -2354,6 +2591,7 @@ const FARS = () => {
             </div>
           </div>
         </div>
+        )}
       </div>
 
       <div className={topTab === "history" ? "" : "hidden"}>

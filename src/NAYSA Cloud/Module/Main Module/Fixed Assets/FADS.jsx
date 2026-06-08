@@ -58,7 +58,7 @@ import { postRequest } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 const detailColumns = [
   { key: "ln", label: "LN", width: 48, align: "text-center" },
   { key: "faCode", label: "Asset No.", width: 140 },
-  { key: "tagNo", label: "Asset Tag", width: 200 },
+  { key: "tagNo", label: "Property Tag", width: 200 },
   { key: "assetDescription", label: "Asset Description", width: 260 },
   { key: "acqCost", label: "Acq. Cost", width: 120, align: "text-right" },
   { key: "accumDepr", label: "Accum. Depr", width: 120, align: "text-right" },
@@ -1084,6 +1084,7 @@ const FADS = () => {
     rcCode: state.assetDepartmentCode || "",
     categCode: state.categCode || "",
     classCode: state.classCode || "",
+     filter:  "OpenDisposal",
   });
 
   const getApiErrorMessage = (error) =>
