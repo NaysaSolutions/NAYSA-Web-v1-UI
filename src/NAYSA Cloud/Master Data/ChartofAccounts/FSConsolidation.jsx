@@ -44,8 +44,6 @@ import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferen
 import SearchCOAMast from "@/NAYSA Cloud/Lookup/SearchCOAMast.jsx";
 import SearchFSConso from "@/NAYSA Cloud/Lookup/SearchFSConso.jsx";
 
-const DOC_TYPE = "FSConso";
-
 const EMPTY_ROW = {
   fsConsoCode: "",
   fsConsoName: "",
@@ -87,9 +85,10 @@ const FSConsolidation = forwardRef(function FSConsolidation(
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
+  const docType = "FSConso";
   const guideRef = useRef(null);
-  const pdfLink = reftablesPDFGuide[DOC_TYPE];
-  const videoLink = reftablesVideoGuide[DOC_TYPE];
+  const pdfLink = reftablesPDFGuide[docType];
+  const videoLink = reftablesVideoGuide[docType];
 
   const [isOpenGuide, setOpenGuide] = useState(false);
   const [rows, setRows] = useState([]);
@@ -689,6 +688,7 @@ const FSConsolidation = forwardRef(function FSConsolidation(
         label: "FS Type",
         width: 170,
         sortable: true,
+        requiredVisible: true ,
         autoWidthValue: (row) =>
           row.fsType === "BS"
             ? "Balance Sheet"
@@ -715,6 +715,7 @@ const FSConsolidation = forwardRef(function FSConsolidation(
         label: "FS Conso Code",
         width: 150,
         sortable: true,
+        requiredVisible: true ,
         render: (row) => {
           const rowKey = getRowKey(row);
           return (
@@ -736,6 +737,7 @@ const FSConsolidation = forwardRef(function FSConsolidation(
         label: "FS Conso Name",
         width: 350,
         sortable: true,
+        requiredVisible: true ,
         render: (row) => {
           const rowKey = getRowKey(row);
           return (
@@ -1012,7 +1014,7 @@ const FSConsolidation = forwardRef(function FSConsolidation(
       <div className="mt-4 flex flex-col gap-3">
         <div className="global-tran-table-main-div-ui">
           <SearchGlobalReferenceTable
-            docType={DOC_TYPE}
+            docType={docType}
             columns={columns}
             data={tableRows}
             isLoading={isListLoading}

@@ -274,6 +274,23 @@ const SearchGlobalReferenceTable = forwardRef(
           .trim();
       }
       if (React.isValidElement(node)) {
+        if (node.type === "select") {
+          const selectedValue = String(node.props?.value ?? "");
+          const options = React.Children.toArray(node.props?.children);
+          const selectedOption = options.find(
+            (child) =>
+              React.isValidElement(child) &&
+              String(child.props?.value ?? "") === selectedValue,
+          );
+          return selectedOption
+            ? extractTextFromNode(selectedOption.props?.children)
+            : "";
+        }
+
+        if (node.type === "input") {
+          return String(node.props?.value ?? "");
+        }
+
         return extractTextFromNode(node.props?.children);
       }
       return "";
@@ -281,6 +298,20 @@ const SearchGlobalReferenceTable = forwardRef(
 
     const getCellDisplayText = (row, col) => {
       if (!col) return "";
+
+      if (typeof col.displayValue === "function") {
+        const displayValue = col.displayValue(row);
+        if (displayValue !== undefined && displayValue !== null) {
+          return String(displayValue);
+        }
+      }
+
+      if (typeof col.autoWidthValue === "function") {
+        const displayValue = col.autoWidthValue(row);
+        if (displayValue !== undefined && displayValue !== null) {
+          return String(displayValue);
+        }
+      }
 
       if (typeof col.render === "function") {
         const rendered = col.render(row);
@@ -446,11 +477,13 @@ const SearchGlobalReferenceTable = forwardRef(
 
       if (active.length) {
         rows = rows.filter((r) =>
-          active.every(([k, v]) =>
-            String(r?.[k] ?? "")
-              .toLowerCase()
-              .includes(String(v).toLowerCase()),
-          ),
+          active.every(([k, v]) => {
+            const col = columns.find((c) => c.key === k);
+            const rawText = String(r?.[k] ?? "");
+            const displayText = getCellDisplayText(r, col);
+            const haystack = `${rawText} ${displayText}`.toLowerCase();
+            return haystack.includes(String(v).toLowerCase());
+          }),
         );
       }
 
@@ -461,11 +494,12 @@ const SearchGlobalReferenceTable = forwardRef(
         const keys = (visibleCols || []).map((c) => c.key).filter(Boolean);
 
         rows = rows.filter((r) =>
-          keys.some((k) =>
-            String(r?.[k] ?? "")
-              .toLowerCase()
-              .includes(q),
-          ),
+          keys.some((k) => {
+            const col = columns.find((c) => c.key === k);
+            const rawText = String(r?.[k] ?? "");
+            const displayText = getCellDisplayText(r, col);
+            return `${rawText} ${displayText}`.toLowerCase().includes(q);
+          }),
         );
       }
 
@@ -478,8 +512,12 @@ const SearchGlobalReferenceTable = forwardRef(
           isNumeric ? parseNumber(val) || 0 : String(val ?? "").toLowerCase();
 
         rows = [...rows].sort((a, b) => {
-          const A = norm(a?.[key]);
-          const B = norm(b?.[key]);
+          const A = isNumeric
+            ? norm(a?.[key])
+            : getCellDisplayText(a, col).toLowerCase();
+          const B = isNumeric
+            ? norm(b?.[key])
+            : getCellDisplayText(b, col).toLowerCase();
           const cmp = isNumeric
             ? A - B
             : String(A).localeCompare(String(B), undefined, { numeric: true });
@@ -1451,7 +1489,7 @@ const SearchGlobalReferenceTable = forwardRef(
                 </button>
 
                 {showExportMenu && (
-                  <div className="absolute right-0 mt-1 w-32 rounded-lg shadow-lg bg-white ring-1 ring-black/5 z-[60] overflow-hidden py-1">
+                  <div className="absolute right-0 mt-1 w-32 rounded-lg shadow-lg bg-white ring-1 ring-black/5 z-[30] overflow-hidden py-1">
                     <button
                       type="button"
                       onClick={() => { setShowExportMenu(false); openExportModal("excel"); }}
@@ -1496,45 +1534,57 @@ const SearchGlobalReferenceTable = forwardRef(
                 </button>
 
                 {showColumnChooser && (
-                  <div className="absolute right-0 mt-1 bg-white border rounded shadow-lg p-2 max-h-64 overflow-auto z-50 min-w-[200px]">
-                    <div className="flex items-center justify-between text-[11px] font-semibold mb-2 border-b pb-1">
-                      <span>Columns</span>
-                      <div className="flex items-center gap-2">
+                  <div className="absolute right-0 top-full mt-2 w-60 max-w-[calc(100vw-2rem)] rounded-lg border border-gray-200 bg-white p-2 shadow-xl z-[30]">
+                    <div className="mb-2 border-b border-gray-100 pb-2">
+                      <div className="flex items-center justify-between gap-3 text-[11px] font-semibold text-gray-700">
+                        <span className="truncate">Columns</span>
                         {userHiddenCols.length > 0 && (
-                          <button type="button" className="text-blue-600 hover:underline" onClick={() => setUserHiddenCols([])}>
+                          <button
+                            type="button"
+                            className="shrink-0 text-blue-600 hover:underline"
+                            onClick={() => setUserHiddenCols([])}
+                          >
                             All
                           </button>
                         )}
-                        <label className="flex items-center gap-1 cursor-pointer">
-                          <input type="checkbox" className="h-3 w-3" checked={allChecked} onChange={toggleSelectAll} />
-                        </label>
                       </div>
-                    </div>
-
-                    {chooserColumns.map((col) => (
-                      <label
-                        key={col.key}
-                        className={`flex items-center text-[11px] gap-2 mb-1.5 cursor-pointer ${
-                          isRequiredVisibleColumn(col) ? "opacity-60 cursor-not-allowed" : ""
-                        }`}
-                      >
+                      <label className="mt-2 flex min-h-[24px] w-full cursor-pointer items-center gap-2 rounded px-1 text-[11px] text-gray-600 hover:bg-blue-50">
                         <input
                           type="checkbox"
-                          className="h-3 w-3"
-                          checked={isRequiredVisibleColumn(col) || !userHiddenCols.includes(col.key)}
-                          disabled={isRequiredVisibleColumn(col)}
-                          onChange={(e) => {
-                            if (isRequiredVisibleColumn(col)) return;
-                            const checked = e.target.checked;
-                            setUserHiddenCols((prev) => {
-                              if (checked) return prev.filter((k) => k !== col.key);
-                              return prev.includes(col.key) ? prev : [...prev, col.key];
-                            });
-                          }}
+                          className="h-3.5 w-3.5 shrink-0"
+                          checked={allChecked}
+                          onChange={toggleSelectAll}
                         />
-                        <span className="truncate">{col.label}</span>
+                        <span className="min-w-0 flex-1 truncate">Show all columns</span>
                       </label>
-                    ))}
+                    </div>
+
+                    <div className="max-h-56 overflow-y-auto pr-1">
+                      {chooserColumns.map((col) => (
+                        <label
+                          key={col.key}
+                          className={`mb-1 flex min-h-[24px] cursor-pointer items-center gap-2 rounded px-1 text-[11px] hover:bg-blue-50 ${
+                            isRequiredVisibleColumn(col) ? "cursor-not-allowed opacity-60 hover:bg-transparent" : ""
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="h-3.5 w-3.5 shrink-0"
+                            checked={isRequiredVisibleColumn(col) || !userHiddenCols.includes(col.key)}
+                            disabled={isRequiredVisibleColumn(col)}
+                            onChange={(e) => {
+                              if (isRequiredVisibleColumn(col)) return;
+                              const checked = e.target.checked;
+                              setUserHiddenCols((prev) => {
+                                if (checked) return prev.filter((k) => k !== col.key);
+                                return prev.includes(col.key) ? prev : [...prev, col.key];
+                              });
+                            }}
+                          />
+                          <span className="min-w-0 flex-1 truncate">{col.label}</span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1569,7 +1619,7 @@ const SearchGlobalReferenceTable = forwardRef(
                     : "table-auto min-w-max w-max"
                 }`}
               >
-                <thead className="global-tran-thead-div-ui text-[11px] sticky top-0 z-30 bg-white shadow-sm">
+                <thead className="global-tran-thead-div-ui text-[11px] sticky top-0 z-20 bg-white shadow-sm">
                   <tr>
                     {visibleCols.map((col, index) => {
                       const isStickyLeft = isPinnedColumn(col, index);

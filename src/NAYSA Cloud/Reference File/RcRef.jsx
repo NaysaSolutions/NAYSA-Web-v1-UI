@@ -517,7 +517,7 @@ const RcRef = forwardRef(
       isLoading;
 
     return (
-      <div className={embedded ? "w-full" : "global-ref-main-div-ui"}>
+      <div className={embedded ? "w-full" : ""}>
         {/* Modern Loading Overlay */}
         {isLoadingState && (
           <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center">

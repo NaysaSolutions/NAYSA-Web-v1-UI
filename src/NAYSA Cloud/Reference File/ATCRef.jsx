@@ -109,6 +109,35 @@ const parseResultFlag = (res) => {
   }
 };
 
+const pickValue = (row, keys, fallback = "") => {
+  for (const key of keys) {
+    const value = row?.[key];
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return fallback;
+};
+
+const getRegistrationValue = (row = {}, keys = []) => {
+  const direct = pickValue(row, keys);
+  if (direct) return direct;
+
+  // Some controllers / FOR JSON AUTO outputs can wrap aliases under table aliases.
+  for (const value of Object.values(row || {})) {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const nested = pickValue(value, keys);
+      if (nested) return nested;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const nested = pickValue(item, keys);
+        if (nested) return nested;
+      }
+    }
+  }
+
+  return "";
+};
+
 const mapAtcRow = (row) => ({
   atcCode: row?.atccode ?? row?.ATCCODE ?? row?.atcCode ?? "",
   atcName: row?.atcname ?? row?.ATCNAME ?? row?.atcName ?? "",
@@ -138,21 +167,11 @@ const mapAtcRow = (row) => ({
     row?.clAcctname ??
     "",
 
-  registeredBy: row?.registeredby ?? row?.REGISTEREDBY ?? row?.registeredBy ?? "",
-  registeredDate: formatDate(
-    row?.registereddate ?? row?.REGISTEREDDATE ?? row?.registeredDate
-  ),
-  lastUpdatedBy:
-    row?.lastupdatedby ??
-    row?.LASTUPDATEDBY ??
-    row?.lastupdatedBy ??
-    "",
-  lastUpdatedDate: formatDate(
-    row?.lastupdateddate ??
-    row?.LASTUPDATEDDATE ??
-    row?.lastupdateDate ??
-    ""
-  ),
+  registeredBy: getRegistrationValue(row, ["registeredBy",]) || "",
+  registeredDate: getRegistrationValue(row, ["registeredDate",]) || "",
+  lastUpdatedBy:getRegistrationValue(row, ["lastUpdatedBy",]) || "",
+  lastUpdatedDate:getRegistrationValue(row, ["lastUpdatedDate",]) || "",
+  
   __existing: true,
 });
 

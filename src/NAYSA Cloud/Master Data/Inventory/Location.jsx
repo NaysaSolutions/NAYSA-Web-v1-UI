@@ -323,10 +323,10 @@ const Location = forwardRef(
           </div>
         ),
       },
-      { key: "whCode", label: "Warehouse Code", sortable: true, width: 140 },
-      { key: "whName", label: "Warehouse Name", sortable: true, width: 200 },
       { key: "locCode", label: "Location Code", sortable: true, width: 140 },
       { key: "locName", label: "Location Name", sortable: true, width: 200 },
+      { key: "whCode", label: "Warehouse Code", sortable: true, width: 140 },
+      { key: "whName", label: "Warehouse Name", sortable: true, width: 200 },
       {
         key: "locType",
         label: "Type",

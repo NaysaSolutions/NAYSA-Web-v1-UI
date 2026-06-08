@@ -19,6 +19,7 @@ import SearchSalesRepRef from "@/NAYSA Cloud/Lookup/SearchSalesRepRef.jsx";
 import CustTypeLookupModal from "@/NAYSA Cloud/Lookup/SearchCustType.jsx";
 import AreaLookupModal from "@/NAYSA Cloud/Lookup/SearchArea.jsx";
 import ZoneLookupModal from "@/NAYSA Cloud/Lookup/SearchZone.jsx";
+import WarehouseLookupModal from "@/NAYSA Cloud/Lookup/SearchWareMast.jsx";
 import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
 import {
   useFieldLenghtCheck,
@@ -155,12 +156,19 @@ const CustSetupTab = forwardRef(
       return n || fallback;
     };
 
+    const sl = useMemo(
+      () => normalizeUpper(form?.sltypeCode || ""),
+      [form?.sltypeCode]
+    );
+
     const taxClass = useMemo(
       () => normalizeUpper(form?.taxClass || ""),
       [form?.taxClass]
     );
 
-    const isIndividual = taxClass === "WI";
+    const isCustomer = ["CU", "CUST", "CUSTOMER"].includes(sl);
+    const isEmployee = ["EM", "EMP", "EMPLOYEE"].includes(sl);
+    const isIndividual = isEmployee || taxClass === "WI";
 
     const buildRegisteredName = (fn, mn, ln) => {
       return [fn, mn, ln]
@@ -171,21 +179,87 @@ const CustSetupTab = forwardRef(
 
     const nameAutoRef = useRef({ businessTouched: false });
 
+    const mappedSltypeOptions = useMemo(() => {
+      const base = [
+        { value: "CUSTOMER", label: "CUSTOMER" },
+        { value: "AGENCY", label: "AGENCY" },
+        { value: "OTHERS", label: "OTHERS" },
+        { value: "EM", label: "EMPLOYEE" },
+      ];
+
+      const normalizeOption = (o) => {
+        const value = normalizeUpper(
+          typeof o === "string"
+            ? o
+            : o?.value ?? o?.code ?? o?.sltypeCode ?? o?.sltype_code ?? ""
+        );
+
+        if (!value) return null;
+
+        const rawLabel = normalizeUpper(
+          typeof o === "string"
+            ? value
+            : o?.label ?? o?.name ?? o?.sltypeName ?? o?.sltype_name ?? value
+        );
+
+        // Display EMPLOYEE but save EM, so code generation becomes EM000001.
+        if (["EM", "EMP", "EMPLOYEE"].includes(value) || rawLabel === "EMPLOYEE") {
+          return { value: "EM", label: "EMPLOYEE" };
+        }
+
+        return { value, label: rawLabel };
+      };
+
+      const extra = (Array.isArray(sltypeOptions) ? sltypeOptions : [])
+        .map(normalizeOption)
+        .filter(Boolean);
+
+      const seen = new Set();
+      return [...extra, ...base].filter((x) => {
+        const key = x.label || x.value;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    }, [sltypeOptions]);
+
+    useEffect(() => {
+      if (!isEditing) return;
+
+      if (["EMP", "EMPLOYEE"].includes(sl)) {
+        onChangeForm({ sltypeCode: "EM" });
+        return;
+      }
+
+      const desiredTaxClass = isCustomer ? "WC" : isEmployee ? "WI" : "";
+      if (desiredTaxClass && taxClass !== desiredTaxClass) {
+        onChangeForm({ taxClass: desiredTaxClass });
+      }
+    }, [isEditing, isCustomer, isEmployee, sl, taxClass, onChangeForm]);
+
     useEffect(() => {
       if (!isEditing || !isIndividual) return;
       const reg = buildRegisteredName(form.firstName, form.middleName, form.lastName);
-      if (reg && (form.custName || "") !== reg) {
-        const updates = { custName: reg };
-        if (!nameAutoRef.current.businessTouched || !form.businessName) {
-          updates.businessName = reg;
-        }
-        onChangeForm(updates);
+      if (reg && ((form.custName || "") !== reg || (form.businessName || "") !== reg)) {
+        onChangeForm({
+          custName: reg,
+          businessName: reg,
+        });
       }
-    }, [isEditing, isIndividual, form.firstName, form.middleName, form.lastName]);
+    }, [
+      isEditing,
+      isIndividual,
+      form.firstName,
+      form.middleName,
+      form.lastName,
+      form.custName,
+      form.businessName,
+      onChangeForm,
+    ]);
 
     const mappedTaxClassOptions = useMemo(() => {
       const base = [
-        { value: "WC", label: "Corporate" },
+        { value: "WC", label: "Corporation" },
         { value: "WI", label: "Individual" },
       ];
       const extra = (Array.isArray(taxClassOptions) ? taxClassOptions : [])
@@ -213,6 +287,8 @@ const CustSetupTab = forwardRef(
     const [isCustTypeLookupOpen, setIsCustTypeLookupOpen] = useState(false);
     const [isAreaLookupOpen, setIsAreaLookupOpen] = useState(false);
     const [isZoneLookupOpen, setIsZoneLookupOpen] = useState(false);
+    const [isWarehouseLookupOpen, setIsWarehouseLookupOpen] = useState(false);
+    const [isChainCustomerLookupOpen, setIsChainCustomerLookupOpen] = useState(false);
 
     return (
       <>
@@ -228,8 +304,20 @@ const CustSetupTab = forwardRef(
                 label="SL Type"
                 type="select"
                 value={form?.sltypeCode || ""}
-                options={sltypeOptions}
-                onChange={(v) => onChangeForm({ sltypeCode: getValue(v) })}
+                options={mappedSltypeOptions}
+                onChange={(v) => {
+                  const nextSl = normalizeUpper(getValue(v));
+                  const updates = { sltypeCode: nextSl };
+
+                  if (["EM", "EMP", "EMPLOYEE"].includes(nextSl)) {
+                    updates.sltypeCode = "EM";
+                    updates.taxClass = "WI";
+                  } else if (["CU", "CUST", "CUSTOMER"].includes(nextSl)) {
+                    updates.taxClass = "WC";
+                  }
+
+                  onChangeForm(updates);
+                }}
                 readOnly={isReadOnly}
                 disabled={isDisabled}
               />
@@ -308,8 +396,13 @@ const CustSetupTab = forwardRef(
                 type="text"
                 value={form?.businessName || ""}
                 onChange={(v) => {
+                  const businessName = getValue(v);
                   nameAutoRef.current.businessTouched = true;
-                  onChangeForm({ businessName: getValue(v) });
+                  const updates = { businessName };
+                  if (!isIndividual) {
+                    updates.custName = businessName;
+                  }
+                  onChangeForm(updates);
                 }}
                 readOnly={isReadOnly}
                 disabled={isDisabled}
@@ -596,10 +689,10 @@ const CustSetupTab = forwardRef(
 
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       <FieldRenderer
-                        label="Sales Rep."
+                        label="Agent"
                         required
                         type="lookup"
-                        value={form?.salesRep || ""}
+                        value={form?.salesRep || form?.salesRepCode || ""}
                         onLookup={isDisabled ? undefined : () => setIsSalesRepLookupOpen(true)}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
@@ -609,34 +702,6 @@ const CustSetupTab = forwardRef(
                         type="lookup"
                         value={form?.customerType || ""}
                         onLookup={isDisabled ? undefined : () => setIsCustTypeLookupOpen(true)}
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
-                      <FieldRenderer
-                        label="Area"
-                        type="lookup"
-                        value={form?.area || ""}
-                        onLookup={isDisabled ? undefined : () => setIsAreaLookupOpen(true)}
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      <FieldRenderer
-                        label="Zone"
-                        type="lookup"
-                        value={form?.zone || ""}
-                        onLookup={isDisabled ? undefined : () => setIsZoneLookupOpen(true)}
-                        readOnly={isReadOnly}
-                        disabled={isDisabled}
-                      />
-                      <FieldRenderer
-                        label="Chain Flag"
-                        type="select"
-                        value={form?.chainFlag || ""}
-                        options={[]}
-                        onChange={(v) => onChangeForm({ chainFlag: getValue(v) })}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
                       />
@@ -655,18 +720,18 @@ const CustSetupTab = forwardRef(
 
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       <FieldRenderer
-                        label="Chain Code"
+                        label="Area"
                         type="lookup"
-                        value={form?.chainCode || ""}
-                        onLookup={isDisabled ? undefined : () => {}}
+                        value={form?.area || form?.areaCode || ""}
+                        onLookup={isDisabled ? undefined : () => setIsAreaLookupOpen(true)}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
                       />
                       <FieldRenderer
-                        label="Chain Customer"
+                        label="Zone"
                         type="lookup"
-                        value={form?.chainCustomer || ""}
-                        onLookup={isDisabled ? undefined : () => {}}
+                        value={form?.zone || form?.zoneCode || ""}
+                        onLookup={isDisabled ? undefined : () => setIsZoneLookupOpen(true)}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
                       />
@@ -678,6 +743,62 @@ const CustSetupTab = forwardRef(
                         onChange={(v) => onChangeForm({ priceGroup: getValue(v) })}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <FieldRenderer
+                        label="Chain Flag"
+                        type="select"
+                        value={form?.chainFlag || ""}
+                        options={[
+                          { value: "Y", label: "Yes" },
+                          { value: "N", label: "No" },
+                        ]}
+                        onChange={(v) => {
+                          const chainFlag = getValue(v);
+
+                          if (chainFlag !== "Y") {
+                            onChangeForm({
+                              chainFlag: "N",
+                              chainCode: "",
+                              chainCustomer: "",
+                              chainCustomerCode: "",
+                              chainCustomerName: "",
+                              custGroup: "",
+                            });
+                            return;
+                          }
+
+                          const selfCode = form?.custCode || "";
+                          const selfName = form?.custName || form?.businessName || "";
+
+                          onChangeForm({
+                            chainFlag: "Y",
+                            chainCode: selfCode,
+                            chainCustomerCode: selfCode,
+                            chainCustomer: selfName,
+                            chainCustomerName: selfName,
+                            custGroup: selfCode,
+                          });
+                        }}
+                        readOnly={isReadOnly}
+                        disabled={isDisabled}
+                      />
+                      <FieldRenderer
+                        label="Chain Code"
+                        type="text"
+                        value={form?.chainCode || form?.chainCustomerCode || ""}
+                        readOnly
+                        disabled
+                      />
+                      <FieldRenderer
+                        label="Chain Customer"
+                        type="lookup"
+                        value={form?.chainCustomer || form?.chainCustomerName || ""}
+                        onLookup={isDisabled || form?.chainFlag !== "Y" ? undefined : () => setIsChainCustomerLookupOpen(true)}
+                        readOnly={isReadOnly}
+                        disabled={isDisabled || form?.chainFlag !== "Y"}
                       />
                     </div>
 
@@ -694,8 +815,8 @@ const CustSetupTab = forwardRef(
                     <FieldRenderer
                       label="Direct SI/DR WH"
                       type="lookup"
-                      value={form?.directWarehouse || ""}
-                      onLookup={isDisabled ? undefined : () => {}}
+                      value={form?.whCode || form?.directWarehouse || ""}
+                      onLookup={isDisabled ? undefined : () => setIsWarehouseLookupOpen(true)}
                       readOnly={isReadOnly}
                       disabled={isDisabled}
                     />
@@ -833,6 +954,38 @@ const CustSetupTab = forwardRef(
           }}
         />
 
+        <SearchCusMast
+          isOpen={isChainCustomerLookupOpen}
+          customParam="ActiveChain"
+          onClose={(selected) => {
+            setIsChainCustomerLookupOpen(false);
+            if (!selected) return;
+
+            const chainCode =
+              getValue(selected?.custCode) ||
+              getValue(selected?.cust_code) ||
+              getValue(selected?.chainCode) ||
+              getValue(selected?.code);
+
+            const chainCustomer =
+              getValue(selected?.custName) ||
+              getValue(selected?.cust_name) ||
+              getValue(selected?.chainCustomer) ||
+              getValue(selected?.name);
+
+            if (!chainCode) return;
+
+            onChangeForm({
+              chainFlag: "Y",
+              chainCode,
+              chainCustomerCode: chainCode,
+              chainCustomer,
+              chainCustomerName: chainCustomer,
+              custGroup: chainCode,
+            });
+          }}
+        />
+
         <SearchBranchRef
           isOpen={isBranchLookupOpen}
           onClose={(selected) => {
@@ -897,9 +1050,23 @@ const CustSetupTab = forwardRef(
           onClose={(selected) => {
             setIsSalesRepLookupOpen(false);
             if (!selected) return;
+
+            const salesRepCode =
+              getValue(selected?.salesRepCode) ||
+              getValue(selected?.agentCode) ||
+              getValue(selected?.agent_code) ||
+              getValue(selected?.code);
+
+            const salesRepName =
+              getValue(selected?.salesRepName) ||
+              getValue(selected?.agentName) ||
+              getValue(selected?.agent_name) ||
+              getValue(selected?.name);
+
             onChangeForm({
-              salesRep: getValue(selected?.salesRepCode),
-              salesRepName: getValue(selected?.salesRepName),
+              salesRep: salesRepCode,
+              salesRepCode,
+              salesRepName,
             });
           }}
         />
@@ -936,6 +1103,34 @@ const CustSetupTab = forwardRef(
             onChangeForm({
               zone: getValue(selected?.zoneCode),
               zoneName: getValue(selected?.zoneName),
+            });
+          }}
+        />
+
+        <WarehouseLookupModal
+          isOpen={isWarehouseLookupOpen}
+          filter="ActiveAll"
+          onClose={(selected) => {
+            setIsWarehouseLookupOpen(false);
+            if (!selected) return;
+
+            const whCode =
+              getValue(selected?.whCode) ||
+              getValue(selected?.wh_code) ||
+              getValue(selected?.whouseCode) ||
+              getValue(selected?.whouse_code);
+
+            const whName =
+              getValue(selected?.whName) ||
+              getValue(selected?.wh_name) ||
+              getValue(selected?.whouseName) ||
+              getValue(selected?.whouse_name);
+
+            onChangeForm({
+              whCode,
+              directWarehouse: whCode,
+              whName,
+              directWarehouseName: whName,
             });
           }}
         />

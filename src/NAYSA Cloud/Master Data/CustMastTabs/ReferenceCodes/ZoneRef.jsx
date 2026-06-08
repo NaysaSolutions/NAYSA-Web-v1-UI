@@ -213,7 +213,7 @@ const ZoneRef = forwardRef(({ onStateChange }, ref) => {
             }
 
             queryClient.invalidateQueries({ queryKey: ["zoneList"] });
-            await useSwalSuccessAlert("Success!", "Zone saved successfully.");
+            await useSwalSuccessAlert("Success!", "Zone Code saved successfully.");
 
             setIsEditing(false);
             setSelectedRow(null);
@@ -356,7 +356,7 @@ const ZoneRef = forwardRef(({ onStateChange }, ref) => {
                 ),
             },
             { key: "zoneCode", label: "Zone Code", sortable: true, width: 80 },
-            { key: "zoneName", label: "Zone Description", sortable: true, width: 150 },
+            { key: "zoneName", label: "Zone Name", sortable: true, width: 150 },
         ],
         [handleEdit, handleDelete]
     );
@@ -419,7 +419,7 @@ const ZoneRef = forwardRef(({ onStateChange }, ref) => {
                     disabled={!isEditing || form.__existing}
                 />
                 <FieldRenderer
-                    label="Zone Description"
+                    label="Zone Name"
                     required
                     value={form.zoneName}
                     maxLength={50}

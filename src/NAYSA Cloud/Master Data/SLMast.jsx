@@ -1288,7 +1288,7 @@ const handleDeleteSLType = async (row) => {
 
               <div className="text-sm font-semibold text-blue-800 mb-2">
                   <span className="block text-sm font-extrabold text-blue-800 bg-blue-100 px-2 py-1.5 rounded-md">
-                    SL Type - {selectedSLType.slTypeName}
+                    SL Type - {selectedSLType?.slTypeName || "No SL Type Selected"}
                   </span>
               </div>
 

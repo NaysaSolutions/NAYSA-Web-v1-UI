@@ -161,7 +161,7 @@ const RCMast = () => {
         return;
       }
       queryClient.invalidateQueries({ queryKey: ["rcList"] });
-      useSwalSuccessAlert("Success!", "RC saved successfully!");
+      useSwalSuccessAlert("Success!", "RC Code saved successfully!");
       resetForm();
     },
     onError: (error) => useSwalErrorAlertAPI("System Error", error),
@@ -334,8 +334,8 @@ const RCMast = () => {
           </div>
         ),
       },
-      { key: "rcCode", label: "RC Code", sortable: true, width: 120 },
-      { key: "rcName", label: "RC Name", sortable: true, width: 350, maxWidth: 350 },
+      { key: "rcCode", label: "RC Code", sortable: true, width: 120, requiredVisible: true  },
+      { key: "rcName", label: "RC Name", sortable: true, width: 350, maxWidth: 350, requiredVisible: true  },
       {
         key: "rcTypeCode",
         label: "RC Type",

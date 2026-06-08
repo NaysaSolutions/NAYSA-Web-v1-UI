@@ -314,6 +314,7 @@ const GLFSMatching = forwardRef(function GLFSMatching(
         label: "GL Account Code",
         width: 180,
         sortable: true,
+        requiredVisible: true ,
         render: (row) => (
           <span className="block px-2 py-1 text-[11px]">{row.acctCode || ""}</span>
         ),
@@ -323,6 +324,7 @@ const GLFSMatching = forwardRef(function GLFSMatching(
         label: "GL Account Name",
         width: 260,
         sortable: true,
+        requiredVisible: true ,
         render: (row) => (
           <span className="block px-2 py-1 text-[11px]">{row.acctName || ""}</span>
         ),

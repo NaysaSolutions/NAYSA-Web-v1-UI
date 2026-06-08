@@ -134,8 +134,10 @@ const BillTermRef = forwardRef(({ onStateChange }, ref) => {
     const c = String(billtermCode || "").trim();
     if (!c) return false;
     const res = await apiClient.post("/checkDuplicateBillterm", { json_data: { billtermCode: c } });
-    const raw = res?.data?.data?.[0]?.result ?? '{"result":"0"}';
-    return String(JSON.parse(raw)?.result) === "1";
+    const row0 = res?.data?.data?.[0] || {};
+    const raw = row0?.result ?? row0?.[""] ?? '{"result":"0"}';
+    const parsed = JSON.parse(raw);
+    return String(parsed?.result) === "1";
   };
 
   const checkInUsed = async (billtermCode) => {
@@ -152,7 +154,12 @@ const BillTermRef = forwardRef(({ onStateChange }, ref) => {
 
   const handleCodeValidate = async (arg) => {
     const isEvent = arg && typeof arg === "object" && "type" in arg;
-    if (isEvent && arg.key === "Enter") enterValidatedRef.current = true;
+
+    if (isEvent && arg.type === "keydown") {
+      if (arg.key !== "Enter") return;
+      enterValidatedRef.current = true;
+    }
+
     if (isEvent && arg.type === "blur" && enterValidatedRef.current) {
       enterValidatedRef.current = false;
       return;
@@ -277,7 +284,7 @@ const BillTermRef = forwardRef(({ onStateChange }, ref) => {
       },
       {
         key: "billtermCode",
-        label: "Code",
+        label: "Bill Term Code",
         sortable: true,
         width: 100, 
         minWidth: 100,
@@ -285,7 +292,7 @@ const BillTermRef = forwardRef(({ onStateChange }, ref) => {
       },
       {
         key: "billtermName",
-        label: "Name",
+        label: "Bill Term Name",
         sortable: true,
         width: 200, 
         minWidth: 150,
@@ -330,7 +337,7 @@ const BillTermRef = forwardRef(({ onStateChange }, ref) => {
       {/* LEFT SIDE: FORM (Now taking only 4/12 of the width) */}
       <div className="xl:col-span-4"> 
         <Card>
-          <SectionHeader title="Basic Information" />
+          <SectionHeader title="Billing Term Information" />
           <div className="space-y-4">
             <FieldRenderer
               label="Billing Term Code"
@@ -340,6 +347,7 @@ const BillTermRef = forwardRef(({ onStateChange }, ref) => {
               maxLength={5}
               onChange={(v) => setField("billtermCode", String(v ?? "").toUpperCase())}
               onBlur={handleCodeValidate}
+              onKeyDown={handleCodeValidate}
               disabled={!isEditing || form.__existing}
             />
             <FieldRenderer
@@ -354,7 +362,14 @@ const BillTermRef = forwardRef(({ onStateChange }, ref) => {
               label="Due Days"
               type="number"
               value={form.daysDue}
-              onChange={(v) => setField("daysDue", v ?? "")}
+              min={0}
+              onChange={(v) => {
+                const value = v ?? "";
+                if (value === "") { setField("daysDue", ""); return; }
+                const numValue = Number(value);
+                if (numValue < 0) { setField("daysDue", 0); return; }
+                setField("daysDue", value);
+              }}
               disabled={!isEditing}
             />
             <RegistrationInfo data={form} layout="stacked" />

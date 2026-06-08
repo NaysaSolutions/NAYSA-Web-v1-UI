@@ -428,8 +428,8 @@ const PayTermRef = forwardRef(({
           </div>
         ),
       },
-      { key: "paytermCode", label: "Code", sortable: true, width: 100 },
-      { key: "paytermName", label: "Name", sortable: true, width: 220 },
+      { key: "paytermCode", label: "Payment Term Code", sortable: true, width: 100 },
+      { key: "paytermName", label: "Payment Term Name", sortable: true, width: 220 },
       { key: "daysDue", label: "Due Days", sortable: true, width: 90 },
       {
         key: "advances",
@@ -526,7 +526,7 @@ const PayTermRef = forwardRef(({
             label="Payment Term Name"
             required
             value={form.paytermName}
-            maxLength={20}
+            maxLength={50}
             onChange={(v) => setField("paytermName", v ?? "")}
             disabled={isReadOnly || !isEditing}
           />

@@ -221,7 +221,7 @@ const QualityStat = () => {
         return;
       }
       await queryClient.invalidateQueries({ queryKey: ["qstatList"] });
-      useSwalSuccessAlert("Success!", "Quality Stat saved successfully.");
+      useSwalSuccessAlert("Success!", "Quality Status Code saved successfully.");
       handleReset();
     },
     onError: (error) => useSwalErrorAlertAPI("Error", error),
@@ -447,7 +447,7 @@ const QualityStat = () => {
         <div className="w-full flex flex-col gap-3 md:grid md:grid-cols-3 md:items-center md:gap-0">
           <div className="w-full md:w-auto md:justify-start flex">
             <h1 className="global-ref-headertext-ui w-full md:w-auto truncate text-center md:text-left">
-              {reftables[docType] || "Quality Status"}
+              {reftables[docType] || "Quality Status Codes"}
             </h1>
           </div>
           <div className="hidden md:flex justify-center w-full" />

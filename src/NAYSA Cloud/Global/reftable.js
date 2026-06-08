@@ -23,6 +23,8 @@ export const reftables = {
     VATRef: "VAT Codes",
     Cutoff: "Cycle Period",
     Currency: "Currency Codes",
+    FSConso: "FS Consolidation",
+    GLFSMatching: "GL-FS Matching",
     COAMast: "Chart of Accounts",
     UserUpdate: "User Management",
     BankMast: "Bank Master Data",

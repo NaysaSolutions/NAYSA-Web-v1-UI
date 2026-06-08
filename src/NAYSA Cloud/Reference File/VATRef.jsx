@@ -173,7 +173,7 @@ const VATRef = () => {
       }
 
       queryClient.invalidateQueries({ queryKey: ["vatList"] });
-      useSwalSuccessAlert("Success!", "VAT Code Saved Successfully!");
+      useSwalSuccessAlert("Success!", "VAT Code saved successfully!");
       resetForm();
     },
 
