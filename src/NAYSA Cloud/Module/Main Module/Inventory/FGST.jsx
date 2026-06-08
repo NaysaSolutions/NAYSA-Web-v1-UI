@@ -9,7 +9,6 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faMagnifyingGlass,
   faPlus,
-  faMinus,
   faTrashAlt,
   faFolderOpen,
 } from "@fortawesome/free-solid-svg-icons";
@@ -201,7 +200,7 @@ const getWarehouseBranchCode = (warehouse) =>
       "",
   ).trim();
 
-const PostFGST = ({ isOpen, onClose, userCode }) => {
+const PostFGST = ({ isOpen, onClose, userCode, docType = "FGST", documentTitle = "FG Stock Transfer", detailsRoute = "/page/FGST", fieldNo = "fgstNo" }) => {
   const [data, setData] = useState([]);
   const [colConfigData, setcolConfigData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -257,11 +256,11 @@ const PostFGST = ({ isOpen, onClose, userCode }) => {
   }, [isOpen, onClose]);
 
   const handlePost = async (selectedData, userPw) => {
-    await useHandlePostTran(selectedData, userPw, "FGST", userCode, setLoading, onClose);
+    await useHandlePostTran(selectedData, userPw, docType, userCode, setLoading, onClose);
   };
 
   const pickDocAndBranch = (row) => ({
-    docNo: row?.fgstNo || null,
+    docNo: row?.[fieldNo] || row?.fgstNo || row?.docNo || null,
     branchCode: row?.branchCode || null,
   });
 
@@ -277,8 +276,8 @@ const PostFGST = ({ isOpen, onClose, userCode }) => {
     }
 
     const url =
-      `${window.location.origin}/page/FGST` +
-      `?fgstNo=${encodeURIComponent(docNo)}&branchCode=${encodeURIComponent(branchCode)}`;
+      `${window.location.origin}${detailsRoute}` +
+      `?${fieldNo}=${encodeURIComponent(docNo)}&branchCode=${encodeURIComponent(branchCode)}`;
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
@@ -288,7 +287,7 @@ const PostFGST = ({ isOpen, onClose, userCode }) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post FG Stock Transfer"
+          title={`Post ${documentTitle}`}
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}
@@ -360,13 +359,13 @@ const FGST = () => {
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
   const { user } = useAuth();
   const { resetFlag } = useReset();
-  const docType = docTypes.FGST;
+  const docType = docTypes.FGST || "FGST";
   const hsDoc = getAllTopHSDocRow?.(docType);
   const pdfLink = docTypePDFGuide[docType];
   const videoLink = docTypeVideoGuide[docType];
-  const documentTitle = hsDoc?.docName
-    ? `${hsDoc.docName} Transaction`
-    : docTypeNames[docType] || "Transaction";
+  const documentTitle = hsDoc?.docName || docTypeNames[docType] || "FG Stock Transfer";
+  const detailsRoute = "/page/FGST";
+  const documentNoField = "fgstNo";
   const [state, setState] = useState({
     // HS Option
     glCurrMode: companyInfo?.glCurrMode || "M",
@@ -758,23 +757,20 @@ const FGST = () => {
   };
 
   const loadTranTypes = async () => {
-  // Siguraduhing may laman ang document type, kung wala, force "FGST"
-  const safeDocType = docType || "FGST"; 
-
-  const cached1 = getAllDropDown?.("TRAN_TYPE", safeDocType) || [];
-  const cached2 = getAllDropDown?.(safeDocType, "TRAN_TYPE") || [];
+  const cached1 = getAllDropDown?.("TRAN_TYPE", docType) || [];
+  const cached2 = getAllDropDown?.(docType, "TRAN_TYPE") || [];
 
   let dbRows1 = [];
   let dbRows2 = [];
 
   try {
-    dbRows1 = await useTopDocDropDown(safeDocType, "TRAN_TYPE");
+    dbRows1 = await useTopDocDropDown(docType, "TRAN_TYPE");
   } catch (error) {
     console.warn("Unable to load TRAN_TYPE.", error);
   }
 
   try {
-    dbRows2 = await useTopDocDropDown("TRAN_TYPE", safeDocType);
+    dbRows2 = await useTopDocDropDown("TRAN_TYPE", docType);
   } catch (error) {
     console.warn("Unable to load TRAN_TYPE alternate.", error);
   }
@@ -1032,7 +1028,7 @@ const FGST = () => {
         documentNo,
         branchCode,
         docType,
-        "fgstNo",
+        documentNoField,
         direction,
       );
 
@@ -1265,7 +1261,7 @@ const FGST = () => {
           savePayload,
           updateState,
           "fgstId",
-          "fgstNo",
+          documentNoField,
         );
 
         if (response) {
@@ -1672,7 +1668,7 @@ const FGST = () => {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const docNo = params.get("fgstNo");
+    const docNo = params.get(documentNoField);
     const branchCode = params.get("branchCode");
 
     if (!loadedFromUrlRef.current && docNo && branchCode) {
@@ -2655,7 +2651,7 @@ const FGST = () => {
           onHistory={() => setTopTab("history")}
           disableRouteNavigation={true}
           
-          // --- Updated transaction header and table features ---
+          // --- UPDATED FEATURES FROM MSST ---
           isSaveDisabled={isSaveDisabled || isFormDisabled || ((detailRows?.length || 0) + (detailRowsGL?.length || 0) === 0)}
           isResetDisabled={isResetDisabled}
           isAttachDisabled={!documentID}
@@ -2663,7 +2659,7 @@ const FGST = () => {
           isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
           isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED" || displayStatus === "CLOSED"}
           
-          detailsRoute="/page/FGST"
+          detailsRoute={detailsRoute}
         />
       </div>
 
@@ -2937,10 +2933,7 @@ const FGST = () => {
                       </Fragment>
                     ))}
                     {!isFormDisabled && (
-                      <>
-                        <th className="global-tran-th-ui sticky top-0 right-10 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Add</th>
-                        <th className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Delete</th>
-                      </>
+                      <th key="detail-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
                     )}
                   </tr>
                   <tr className="hidden">
@@ -3483,24 +3476,15 @@ const FGST = () => {
                       </td>
 
                       {!isFormDisabled && (
-                        <td className="global-tran-td-ui text-center sticky right-10 bg-white dark:bg-black" style={transactionActionsCellStyle}>
-                          <button
-                            className="global-tran-td-button-add-ui"
-                            onClick={() => handleAddRow(index)}
-                          >
-                            <FontAwesomeIcon icon={faPlus} />
-                          </button>
-                        </td>
-                      )}
-
-                      {!isFormDisabled && (
                         <td className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black" style={transactionActionsCellStyle}>
-                          <button
-                            className="global-tran-td-button-delete-ui"
-                            onClick={() => handleDeleteRow(index)}
-                          >
-                            <FontAwesomeIcon icon={faMinus} />
-                          </button>
+                          <div className="flex items-center justify-center gap-1">
+                            <button type="button" className="global-tran-td-button-add-ui" onClick={() => handleAddRow(index)}>
+                              <FontAwesomeIcon icon={faPlus} />
+                            </button>
+                            <button type="button" className="global-tran-td-button-delete-ui" onClick={() => handleDeleteRow(index)}>
+                              <FontAwesomeIcon icon={faTrashAlt} />
+                            </button>
+                          </div>
                         </td>
                       )}
                     </tr>
@@ -3593,10 +3577,7 @@ const FGST = () => {
                       </Fragment>
                     ))}
                     {!isFormDisabled && (
-                      <>
-                        <th className="global-tran-th-ui sticky top-0 right-10 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Add</th>
-                        <th className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Delete</th>
-                      </>
+                      <th key="gl-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
                     )}
                   </tr>
                   <tr className="hidden">
@@ -4244,24 +4225,15 @@ const FGST = () => {
                       </td>
 
                       {!isFormDisabled && (
-                        <td className="global-tran-td-ui text-center sticky right-10 bg-white dark:bg-black" style={transactionActionsCellStyle}>
-                          <button
-                            className="global-tran-td-button-add-ui"
-                            onClick={() => handleAddRowGL(index)}
-                          >
-                            <FontAwesomeIcon icon={faPlus} />
-                          </button>
-                        </td>
-                      )}
-
-                      {!isFormDisabled && (
                         <td className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black" style={transactionActionsCellStyle}>
-                          <button
-                            className="global-tran-td-button-delete-ui"
-                            onClick={() => handleDeleteRowGL(index)}
-                          >
-                            <FontAwesomeIcon icon={faMinus} />
-                          </button>
+                          <div className="flex items-center justify-center gap-1">
+                            <button type="button" className="global-tran-td-button-add-ui" onClick={() => handleAddRowGL(index)}>
+                              <FontAwesomeIcon icon={faPlus} />
+                            </button>
+                            <button type="button" className="global-tran-td-button-delete-ui" onClick={() => handleDeleteRowGL(index)}>
+                              <FontAwesomeIcon icon={faTrashAlt} />
+                            </button>
+                          </div>
                         </td>
                       )}
                     </tr>
@@ -4414,6 +4386,9 @@ const FGST = () => {
             isOpen={showPostingModal}
             userCode={userCode}
             docType={docType}
+            documentTitle={documentTitle}
+            detailsRoute={detailsRoute}
+            fieldNo={documentNoField}
             branchCode={branchCode}
             onClose={() => updateState({ showPostingModal: false })}
           />
@@ -4427,7 +4402,7 @@ const FGST = () => {
               branchName,
               docType,
               documentTitle,
-              fieldNo: "fgstNo",
+              fieldNo: documentNoField,
             }}
             onRetrieve={handleTranDocNoRetrieval}
             onResponse={{ documentNo }}
