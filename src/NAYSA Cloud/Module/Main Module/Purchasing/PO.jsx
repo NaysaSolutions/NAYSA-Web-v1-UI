@@ -899,13 +899,16 @@ const PO = () => {
   }, [glCurrMode, glCurrDefault, currCode]);
 
   useEffect(() => {
+    const currentValue = delDate || "";
+
     if (suppressDeliveryDatePromptRef.current) {
       suppressDeliveryDatePromptRef.current = false;
-      deliveryDateRef.current = delDate || "";
-      return;
-    }
 
-    const currentValue = delDate || "";
+      if (!currentValue || currentValue === deliveryDateRef.current) {
+        deliveryDateRef.current = currentValue;
+        return;
+      }
+    }
 
     if (currentValue === deliveryDateRef.current) return;
 
@@ -2336,12 +2339,12 @@ const PO = () => {
 
 
 
+  
 
 const handleActivityOption = async (action) => {
   if (originalDocStatus !== "O" || detailRows.length === 0) {
     return;
   }
-
 
   updateState({ isLoading: true });
 
@@ -2354,7 +2357,6 @@ const handleActivityOption = async (action) => {
       refPoNo1,
       refPoNo2,
       refPrNo2,
-      cutoffCode,
       rcCode,
       vendCode,
       vendNameHeader,
@@ -2363,58 +2365,79 @@ const handleActivityOption = async (action) => {
       detailRows,
     } = state;
 
-    const normalizedDeliveryDate = state.delDate || getDefaultDeliveryDate();
+    /*
+     * Delivery Date is optional.
+     * Preserve blank dates as null.
+     */
+    const normalizedDeliveryDate = state.delDate || null;
+
     const rowsForSave = (detailRows || []).map((row) => ({
       ...row,
-      dateNeeded: row.dateNeeded || normalizedDeliveryDate,
+      dateNeeded: row.dateNeeded || null,
     }));
-    const deliveryDateWasAdjusted =
-      !state.delDate ||
-      rowsForSave.some((row, index) => row.dateNeeded !== (detailRows || [])[index]?.dateNeeded);
 
-    if (deliveryDateWasAdjusted) {
+    /*
+     * Validate header Delivery Date only when it has a value.
+     */
+    if (
+      normalizedDeliveryDate &&
+      isDeliveryDateEarlierThanPoDate(normalizedDeliveryDate)
+    ) {
       useSwalErrorAlert(
         "Invalid Delivery Date",
-        "Delivery Date is required. Delivery Date has been adjusted to match the PO Date."
+        "Header Delivery Date cannot be earlier than the PO Date."
       );
-      detailRowsRef.current = rowsForSave;
-      updateState({
-        delDate: normalizedDeliveryDate,
-        dateNeeded: normalizedDeliveryDate,
-        header: { ...(state.header || {}), delDate: normalizedDeliveryDate },
-        detailRows: rowsForSave,
-      });
+      return;
+    }
+
+    /*
+     * Validate detail Delivery Dates only when they have a value.
+     */
+    const invalidDetailIndex = rowsForSave.findIndex(
+      (row) =>
+        row.dateNeeded &&
+        isDeliveryDateEarlierThanPoDate(row.dateNeeded)
+    );
+
+    if (invalidDetailIndex >= 0) {
+      useSwalErrorAlert(
+        "Invalid Delivery Date",
+        `Item Detail LN # ${invalidDetailIndex + 1} Delivery Date cannot be earlier than the PO Date.`
+      );
+      return;
     }
 
     const poGrossAmount = rowsForSave.reduce(
-      (sum, row) => sum + (parseFormattedNumber(row.grossAmt || 0) || 0),
+      (sum, row) =>
+        sum + (parseFormattedNumber(row.grossAmt || 0) || 0),
       0
     );
 
     const poDiscountAmount = rowsForSave.reduce(
-      (sum, row) => sum + (parseFormattedNumber(row.discAmt || 0) || 0),
+      (sum, row) =>
+        sum + (parseFormattedNumber(row.discAmt || 0) || 0),
       0
     );
 
     const poVatAmount = rowsForSave.reduce(
-      (sum, row) => sum + (parseFormattedNumber(row.vatAmt || 0) || 0),
+      (sum, row) =>
+        sum + (parseFormattedNumber(row.vatAmt || 0) || 0),
       0
     );
 
     const poAmount = poGrossAmount - poDiscountAmount;
 
+    const normalizedDetailRows = rowsForSave.map((row) => ({
+      ...row,
+      status: row.poStatus || "O",
+    }));
 
+    const hasOpenDetail = normalizedDetailRows.some(
+      (row) =>
+        String(row.poStatus || "O").toUpperCase() === "O"
+    );
 
-    const normalizedDetailRows = (detailRows || []).map((row) => ({
-        ...row,
-        status: row.poStatus || "O",
-      }));
-      const hasOpenDetail = normalizedDetailRows.some(
-        (row) => String(row.poStatus || "O").toUpperCase() === "O"
-      );
-      const finalHeaderPOStatus = hasOpenDetail ? "O" : "C";
-
-
+    const finalHeaderPOStatus = hasOpenDetail ? "O" : "C";
 
     const poData = {
       branchCode: branchCode,
@@ -2426,7 +2449,7 @@ const handleActivityOption = async (action) => {
       vendName: vendNameHeader || "",
       whCode: state.WHcode || "",
       whName: state.WHname || "",
-      delAddress: delAddress || state.delAddress || "",
+      delAddress: state.delAddress || "",
       address1: state.address1 || "",
       address2: state.address2 || "",
       address3: state.address3 || "",
@@ -2444,7 +2467,7 @@ const handleActivityOption = async (action) => {
       discAmount: parseFormattedNumber(poDiscountAmount || 0),
       advAmount: 0,
       remarks: remarks || "",
-      poStatus: finalHeaderPOStatus || "O",
+      poStatus: finalHeaderPOStatus,
       userCode: currentUserRow?.userCode,
 
       dt1: rowsForSave.map((row, index) => ({
@@ -2500,26 +2523,24 @@ const handleActivityOption = async (action) => {
       })),
     };
 
-    const response = await useTransactionUpsert(
-      docType,
-      poData,
-      updateState,
-      "poId",
-      "poNo"
-    );
+
+    const response = await useTransactionUpsert(docType,poData,updateState,"poId","poNo");
+
 
     if (response) {
       const responseDocNo = response.data[0]?.poNo;
       const responseDocId = response.data[0]?.poId;
 
       await fetchTranData(responseDocNo, branchCode);
-
       const isZero = Number(noReprints) === 0;
       const onSaveAndPrint = isZero
         ? () => updateState({ showSignatoryModal: true })
         : () => handleSaveAndPrint(responseDocId);
 
-      useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
+      useSwalshowSaveSuccessDialog(
+        handleReset,
+        onSaveAndPrint
+      );
     }
 
     updateState({
@@ -2532,7 +2553,6 @@ const handleActivityOption = async (action) => {
     updateState({ isLoading: false });
   }
 };
-
 
 
 

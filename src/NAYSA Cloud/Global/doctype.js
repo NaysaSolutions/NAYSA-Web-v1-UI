@@ -24,6 +24,7 @@ export const docTypes = {
   MSRTV:"MSRTV",
   FGRTV:"FGRTV",
   FARR:"FARR",
+  FARS:"FARS",
   FAAD:"FAAD",
   FADP:"FADP",
   FADS:"FADS",
@@ -71,6 +72,7 @@ export const docTypeNames = {
 
     // Fixed Assets Module
     FARR: "Fixed Assets Receiving Transaction",
+    FARS: "Fixed Asset Restructuring Transaction",
     FAAD: "Fixed Asset Adjustment Transaction",
     FADP: "Fixed Asset Depreciation Transaction",
     FADS: "Fixed Asset Disposal Transaction",
@@ -106,6 +108,7 @@ export const docTypeNames = {
 
     // Fixed Assets Module
     FARR: "",
+    FARS: "",
     FAAD: "",
     FADP: "",
     FADS: "",
@@ -139,6 +142,7 @@ export const docTypeNames = {
 
     // Fixed Assets Module
     FARR: "",
+    FARS: "",
     FAAD: "",
     FADP: "",
     FADS: "",

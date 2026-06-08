@@ -14,7 +14,9 @@ export const useSelectedHSColConfig = async (endpoint,userCode, all = "") => {
       endpoint,userCode,all
     }
   }
+
     const response = await fetchData("getHSColConfig", { json_data: JSON.stringify(payload) });
+    
     if (response?.success && response.data?.[0]?.result) {
       return JSON.parse(response.data[0].result);
     }

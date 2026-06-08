@@ -18,7 +18,7 @@ import {
 import Swal from "sweetalert2";
 
 // --- Project Imports ---
-import { fetchData } from "@/NAYSA Cloud/Configuration/BaseURL";
+import { fetchData, postRequest } from "@/NAYSA Cloud/Configuration/BaseURL";
 import { useTopUserRow, useTopHSRptRow } from "@/NAYSA Cloud/Global/top1RefTable";
 import {
   useHandlePrintAPReport,
@@ -33,6 +33,7 @@ import {
   useHandleDownloadExcelFGINVReport,
   useHandlePrintMSINVReport,
   useHandleDownloadExcelMSINVReport,
+  useHandleDownloadExcelFAReport,
 } from "@/NAYSA Cloud/Global/report";
 import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
 import { exportGenericHistoryExcel } from "@/NAYSA Cloud/Global/report";
@@ -52,6 +53,10 @@ import FGLookupModal from "@/NAYSA Cloud/Lookup/SearchFGMast";
 import MSLookupModal from "@/NAYSA Cloud/Lookup/SearchMSMast";
 import WarehouseLookupModal from "@/NAYSA Cloud/Lookup/SearchWareMast";
 import LocationLookupModal from "@/NAYSA Cloud/Lookup/SearchLocation";
+import SearchFACateg from "@/NAYSA Cloud/Lookup/SearchFACateg.jsx";
+import SearchFAClass from "@/NAYSA Cloud/Lookup/SearchFAClass.jsx";
+import SearchFALoc from "@/NAYSA Cloud/Lookup/SearchFALoc.jsx";
+import GlobalLookupModalv1 from "@/NAYSA Cloud/Lookup/SearchGlobalLookupv1.jsx";
 
 // ─── MODULE CONFIGURATION ────────────────────────────────────────────────────
 
@@ -67,6 +72,7 @@ const MODULE_DEFS = {
   BIR: { label: "",         lookup: null,                    print: useHandlePrintGLReport,    excel: useHandleDownloadExcelBIRReport,   hasExtra: false, hasCutoff: true,  hasReportType: true },
   FG:  { label: "Item",     lookup: FGLookupModal,           print: useHandlePrintFGINVReport,  excel: useHandleDownloadExcelFGINVReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasInventory: true, hasSingleMain: true },
   MS:  { label: "Item",     lookup: MSLookupModal,           print: useHandlePrintMSINVReport,  excel: useHandleDownloadExcelMSINVReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasInventory: true, hasSingleMain: true },
+  FA:  { label: "Asset",    lookup: null,                    print: useHandlePrintGLReport,     excel: useHandleDownloadExcelFAReport,    hasExtra: false, hasCutoff: false, hasReportType: false, hasFA: true, hasSingleMain: true, hasSingleRc: true, rcLabel: "Department/RC" },
 };
 
 // ─── SYSTEM COLOR THEME (blue) ────────────────────────────────────────────────
@@ -120,6 +126,33 @@ const convertRowsToTxt = (rows = []) => {
   if (!rows.length) return "";
   const h = Object.keys(rows[0]);
   return rows.map(r => h.map(k => r?.[k] == null ? "" : String(r[k])).join("\t")).join("\r\n");
+};
+
+const parseLookupRows = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      return parseLookupRows(JSON.parse(value));
+    } catch {
+      return [];
+    }
+  }
+  if (value?.data) return parseLookupRows(value.data);
+  if (value?.result) return parseLookupRows(value.result);
+  return [];
+};
+
+const extractLookupRows = (response) => {
+  const resultValue =
+    response?.data?.[0]?.result ??
+    response?.data?.data?.[0]?.result ??
+    response?.data?.result ??
+    response?.data ??
+    response?.result ??
+    response;
+
+  return parseLookupRows(resultValue);
 };
 
 // ─── REUSABLE COMPONENTS ──────────────────────────────────────────────────────
@@ -200,6 +233,12 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
     rcModal: false,
     warehouseModal: false,
     locationModal: false,
+    faCategoryModal: false,
+    faClassModal: false,
+    faLocationModal: false,
+    faAssetModal: false,
+    faAssetRows: [],
+    faAssetColumns: [],
     cutoffModal: false,
     cutoffLookupMode: "S",
     selected: { id: 0, name: "" },
@@ -220,6 +259,8 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
     sRcCode: "", sRcName: "", eRcCode: "", eRcName: "",
     rcCode: "", rcName: "",
     whCode: "", whName: "", locCode: "", locName: "",
+    categCode: "", categName: "", classCode: "", className: "",
+    faCode: "", faName: "",
     userName: currentUserRow.userName,
     sCutOff: companyInfo.cutoffCode, sCutOffName: companyInfo.cutoffName,
     eCutOff: companyInfo.cutoffCode, eCutOffName: companyInfo.cutoffName,
@@ -263,6 +304,7 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
         sAccCode:   filters.sCode, eAccCode:   config.hasSingleMain ? filters.sCode : filters.eCode,
         payeeCode: filters.sCode, vendCode: filters.sCode, departmentCode: filters.rcCode,
         itemCode: filters.sCode, whCode: filters.whCode, wwhCode: filters.whCode, locCode: filters.locCode,
+        categCode: filters.categCode, classCode: filters.classCode, faCode: filters.faCode,
         sSLCode: filters.sSlCode, eSLCode: filters.eSlCode,
         sRcCode: config.hasSingleRc ? filters.rcCode : filters.sRcCode,
         eRcCode: config.hasSingleRc ? filters.rcCode : filters.eRcCode,
@@ -338,8 +380,48 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
     sSlCode: "", sSlName: "", eSlCode: "", eSlName: "",
     sRcCode: "", sRcName: "", eRcCode: "", eRcName: "",
     rcCode: "", rcName: "", whCode: "", whName: "", locCode: "", locName: "",
+    categCode: "", categName: "", classCode: "", className: "", faCode: "", faName: "",
     sCutOff: "", sCutOffName: "", eCutOff: "", eCutOffName: "", reportType: "TEXT",
   });
+
+  const openFAAssetLookup = async () => {
+    try {
+      const [response, colConfig] = await Promise.all([
+        postRequest("lookupFAMast", {
+          PARAMS: JSON.stringify({
+            json_data: {
+              branchCode: filters.branchCode || "",
+              flocCode: filters.locCode || "",
+              rcCode: filters.rcCode || "",
+              categCode: filters.categCode || "",
+              classCode: filters.classCode || "",
+              filter: "ActiveAll",
+            },
+          }),
+        }),
+        useSelectedHSColConfig("lookupFAMast", userCode || currentUserRow?.userCode || ""),
+      ]);
+
+      const rows = extractLookupRows(response).map((row, index) => ({
+        ...row,
+        groupId: row?.groupId || row?.faCode || row?.FA_CODE || String(index + 1),
+      }));
+
+      if (rows.length === 0) {
+        Swal.fire("Fixed Asset Lookup", "No fixed assets found for the selected filters.", "info");
+        return;
+      }
+
+      updateUi({
+        faAssetRows: rows,
+        faAssetColumns: Array.isArray(colConfig) ? colConfig : [],
+        faAssetModal: true,
+      });
+    } catch (error) {
+      console.error("Failed to load fixed asset lookup:", error);
+      Swal.fire("Fixed Asset Lookup", "Unable to load fixed asset records.", "error");
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4"
@@ -588,7 +670,7 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
                       )}
 
                       {/* Main lookup: single or range */}
-                      {!config.hasCutoff && !config.hasInventory && (
+                      {!config.hasCutoff && !config.hasInventory && !config.hasFA && (
                         config.hasSingleMain ? (
                           <LookupField label={config.label}
                             value={filters.sName} placeholder={`Select ${config.label}…`}
@@ -604,6 +686,36 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
                           ))
                         )
                       )}
+
+                      {/* Fixed Assets fields */}
+                      {config.hasFA && (<>
+                        <LookupField label="Category" value={filters.categName || filters.categCode}
+                          placeholder="Select Category..."
+                          onOpen={() => updateUi({ faCategoryModal: true })}
+                          ring={ring} btnClass={btnCls} />
+                        <LookupField label="Sub Category" value={filters.className || filters.classCode}
+                          placeholder="Select Sub Category..."
+                          onOpen={() => {
+                            if (!filters.categCode) {
+                              Swal.fire("Sub Category", "Please select a Category first.", "info");
+                              return;
+                            }
+                            updateUi({ faClassModal: true });
+                          }}
+                          ring={ring} btnClass={btnCls} />
+                        <LookupField label={config.rcLabel || "Department/RC"} value={filters.rcName || filters.rcCode}
+                          placeholder={`Select ${config.rcLabel || "Department/RC"}...`}
+                          onOpen={() => updateUi({ rcLookupMode: "SINGLE", rcModal: true })}
+                          ring={ring} btnClass={btnCls} />
+                        <LookupField label="Location" value={filters.locName || filters.locCode}
+                          placeholder="Select Location..."
+                          onOpen={() => updateUi({ faLocationModal: true })}
+                          ring={ring} btnClass={btnCls} />
+                        <LookupField label="Asset" value={filters.faName || filters.faCode}
+                          placeholder="Select Fixed Asset..."
+                          onOpen={openFAAssetLookup}
+                          ring={ring} btnClass={btnCls} />
+                      </>)}
 
                       {/* Inventory fields */}
                       {config.hasInventory && (<>
@@ -622,7 +734,7 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
                       </>)}
 
                       {/* PUR: single RC/Dept */}
-                      {config.hasSingleRc && (
+                      {config.hasSingleRc && !config.hasFA && (
                         <LookupField label={config.rcLabel || "Dept/RC"}
                           value={filters.rcName} placeholder={`Select ${config.rcLabel || "Dept/RC"}…`}
                           onOpen={() => updateUi({ rcLookupMode: "SINGLE", rcModal: true })}
@@ -714,6 +826,63 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
           }
           updateUi({ mainLookup: false });
         }} />
+      )}
+
+      {config.hasFA && ui.faCategoryModal && (
+        <SearchFACateg isOpen={ui.faCategoryModal} onClose={p => {
+          if (p) {
+            const code = p.code || p.categCode || "";
+            const name = p.description || p.categName || p.code || "";
+            updateFilters({ categCode: code, categName: name, classCode: "", className: "", faCode: "", faName: "" });
+          }
+          updateUi({ faCategoryModal: false });
+        }} />
+      )}
+
+      {config.hasFA && ui.faClassModal && (
+        <SearchFAClass isOpen={ui.faClassModal} categCode={filters.categCode || ""} onClose={p => {
+          if (p) {
+            updateFilters({
+              classCode: p.code || p.classCode || "",
+              className: p.description || p.className || p.code || "",
+              categCode: p.categCode || filters.categCode || "",
+              faCode: "",
+              faName: "",
+            });
+          }
+          updateUi({ faClassModal: false });
+        }} />
+      )}
+
+      {config.hasFA && ui.faLocationModal && (
+        <SearchFALoc isOpen={ui.faLocationModal} branchCode={filters.branchCode} onClose={p => {
+          if (p) updateFilters({ locCode: p.flocCode || p.code || "", locName: p.flocName || p.description || p.code || "", faCode: "", faName: "" });
+          updateUi({ faLocationModal: false });
+        }} />
+      )}
+
+      {config.hasFA && ui.faAssetModal && (
+        <GlobalLookupModalv1
+          isOpen={ui.faAssetModal}
+          title="Fixed Asset Master"
+          data={ui.faAssetRows}
+          endpoint={ui.faAssetColumns}
+          btnCaption="Select Asset"
+          idKey="groupId"
+          singleSelect
+          onClose={selectedItems => {
+            const records = selectedItems?.records;
+            const row = Array.isArray(records) ? records[0] : records;
+            if (row) {
+              updateFilters({
+                faCode: row.faCode || row.FA_CODE || "",
+                faName: row.faName || row.assetDescription || row.FA_NAME || row.description || row.faCode || "",
+              });
+            }
+            updateUi({ faAssetModal: false, faAssetRows: [], faAssetColumns: [] });
+          }}
+          onCancel={() => updateUi({ faAssetModal: false, faAssetRows: [], faAssetColumns: [] })}
+        />
       )}
 
       {ui.cutoffModal && (

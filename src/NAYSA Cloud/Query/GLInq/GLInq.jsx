@@ -1147,6 +1147,7 @@ import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
 import { fetchData } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
+import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 
 import SearchGlobalReportTable from "@/NAYSA Cloud/Lookup/SearchGlobalReportTable.jsx";
 import SearchBranchRef from "@/NAYSA Cloud/Lookup/SearchBranchRef.jsx";
@@ -2033,13 +2034,13 @@ export default function GLINQ() {
       </div>
 
       <div className="mt-32 px-0 sm:mt-24">
-        <div className="flex gap-3">
+        <div className="flex items-stretch gap-3">
           <aside
             className={`hidden transition-all duration-200 lg:block ${
               hideNav ? "w-[88px]" : "w-[290px]"
             }`}
           >
-            <div className="global-tran-tab-div-ui h-full">
+            <div className="global-tran-tab-div-ui h-full !m-0 !p-4">
               <div className="h-full overflow-hidden rounded-2xl border bg-white shadow-sm">
                 <div className="border-b px-4 py-4">
                   {!hideNav ? (
@@ -2070,8 +2071,8 @@ export default function GLINQ() {
             </div>
           </aside>
 
-          <div className="min-w-0 flex-1">
-            <div className="global-tran-tab-div-ui">
+          <div className="flex min-w-0 flex-1 flex-col gap-3">
+            <div className="global-tran-tab-div-ui !m-0 !p-4">
               <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
                 <div className="border-b bg-gradient-to-r from-blue-50 to-white px-4 py-3">
                   <div className="flex flex-col gap-1.5 md:flex-row md:items-center md:justify-between">
@@ -2080,13 +2081,8 @@ export default function GLINQ() {
                         {activeTabConfig.label}
                       </div>
                       <div className="mt-0.5 text-[11px] text-gray-500">
-                        Review balances, movements, and drilldown results using your
-                        selected filters.
+                        {currentContext}
                       </div>
-                    </div>
-
-                    <div className="text-[10px] leading-4 text-gray-600 md:text-right">
-                      {currentContext}
                     </div>
                   </div>
                 </div>
@@ -2097,7 +2093,7 @@ export default function GLINQ() {
               </div>
             </div>
 
-            <div className="global-tran-tab-div-ui">
+            <div className="global-tran-tab-div-ui !m-0 !p-4">
               <div className="global-tran-tab-nav-ui">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
@@ -2753,41 +2749,38 @@ const FilterModal = ({
             <ModalSection title="Comparison">
               <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-12">
                 <div className="md:col-span-4">
-                  <div className="relative">
-                    <select
-                      value={clampCompareYears(filters.compareYears)}
-                      disabled={isLoading}
-                      onChange={(e) =>
-                        updateLookupState({
-                          compareYears: clampCompareYears(e.target.value),
-                        })
-                      }
-                      className="peer global-tran-textbox-ui py-2 text-xs sm:text-sm"
-                    >
-                      <option value={1}>1 Year</option>
-                      <option value={2}>2 Years</option>
-                      <option value={3}>3 Years</option>
-                      <option value={4}>4 Years</option>
-                      <option value={5}>5 Years</option>
-                    </select>
-                    <label className="global-tran-floating-label text-[10px] sm:text-xs">
-                      Compare Years
-                    </label>
-                  </div>
+                  <FieldRenderer
+                    id="compareYears"
+                    label="Compare Years"
+                    type="select"
+                    value={String(clampCompareYears(filters.compareYears))}
+                    disabled={isLoading}
+                    onChange={(value) =>
+                      updateLookupState({
+                        compareYears: clampCompareYears(value),
+                      })
+                    }
+                    options={[
+                      { value: "1", label: "1 Year" },
+                      { value: "2", label: "2 Years" },
+                      { value: "3", label: "3 Years" },
+                      { value: "4", label: "4 Years" },
+                      { value: "5", label: "5 Years" },
+                    ]}
+                    labelClassName="text-[10px] sm:text-xs"
+                  />
                 </div>
 
                 <div className="md:col-span-8">
-                  <div className="relative">
-                    <input
-                      type="text"
-                      readOnly
-                      value="Maximum 5 years. Same month as selected cut off."
-                      className="peer global-tran-textbox-ui bg-slate-50 py-2 text-xs sm:text-sm"
-                    />
-                    <label className="global-tran-floating-label text-[10px] sm:text-xs">
-                      Notes
-                    </label>
-                  </div>
+                  <FieldRenderer
+                    id="compareYearsNote"
+                    label="Notes"
+                    type="text"
+                    value="Maximum 5 years. Same month as selected cut off."
+                    disabled
+                    readOnly
+                    labelClassName="text-[10px] sm:text-xs"
+                  />
                 </div>
               </div>
             </ModalSection>
@@ -2798,7 +2791,7 @@ const FilterModal = ({
           <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
             <button
               onClick={onClose}
-              className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-100 sm:min-w-[110px] sm:w-auto sm:text-sm"
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border bg-white px-3 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-100 sm:min-w-[110px] sm:w-auto"
               disabled={isLoading}
             >
               <FontAwesomeIcon icon={faTimes} className="h-3.5 w-3.5" />
@@ -2807,7 +2800,7 @@ const FilterModal = ({
 
             <button
               onClick={onApply}
-              className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60 sm:min-w-[110px] sm:w-auto sm:text-sm"
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-blue-700 disabled:opacity-60 sm:min-w-[110px] sm:w-auto"
               disabled={isLoading}
             >
               <FontAwesomeIcon icon={faMagnifyingGlass} className="h-3.5 w-3.5" />
@@ -2840,95 +2833,42 @@ const DualFilterInput = ({
   const codeId = `${modalType}_code`;
   const nameId = `${modalType}_name`;
 
-  const hasValue =
-    (codeValue ?? "").toString().trim() !== "" ||
-    (nameValue ?? "").toString().trim() !== "";
+  const openLookup = () => {
+    if (disabled) return;
+    updateLookupState({
+      showLookupModal: true,
+      lookupType: codeId,
+      cutoffModalType: modalType,
+    });
+  };
 
   return (
     <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-12">
       <div className="md:col-span-4">
-        <div className="relative">
-          <input
-            type="text"
-            id={codeId}
-            placeholder=" "
-            value={codeValue || ""}
-            readOnly
-            className="peer global-tran-textbox-ui cursor-pointer py-2 pr-20 text-xs sm:text-sm"
-            disabled={disabled}
-            onClick={() =>
-              !disabled &&
-              updateLookupState({
-                showLookupModal: true,
-                lookupType: codeId,
-                cutoffModalType: modalType,
-              })
-            }
-          />
-          <label
-            htmlFor={codeId}
-            className="global-tran-floating-label text-[10px] sm:text-xs"
-          >
-            {labelCode}
-          </label>
-
-          <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
-            {hasValue && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClear?.();
-                }}
-                disabled={disabled}
-                className="flex h-5 w-5 items-center justify-center rounded-full border border-gray-300 bg-white text-[10px] text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
-                title={`Clear ${labelCode}`}
-              >
-                <FontAwesomeIcon icon={faTimes} className="text-[9px]" />
-              </button>
-            )}
-
-            <button
-              type="button"
-              className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-600 text-white transition hover:bg-blue-700 disabled:opacity-60"
-              onClick={(e) => {
-                e.stopPropagation();
-                updateLookupState({
-                  showLookupModal: true,
-                  lookupType: codeId,
-                  cutoffModalType: modalType,
-                });
-              }}
-              disabled={disabled}
-              title={`Find ${labelCode}`}
-            >
-              <FontAwesomeIcon
-                icon={faMagnifyingGlass}
-                className="text-[11px]"
-              />
-            </button>
-          </div>
-        </div>
+        <FieldRenderer
+          id={codeId}
+          label={labelCode}
+          type="lookup"
+          value={codeValue || ""}
+          disabled={disabled}
+          readOnly
+          editableLookup
+          onLookup={openLookup}
+          onClear={onClear}
+          labelClassName="text-[10px] sm:text-xs"
+        />
       </div>
 
       <div className="md:col-span-8">
-        <div className="relative">
-          <input
-            type="text"
-            id={nameId}
-            placeholder=" "
-            value={nameValue || ""}
-            readOnly
-            className="peer global-tran-textbox-ui py-2 text-xs sm:text-sm"
-            disabled={disabled}
-          />
-          <label
-            htmlFor={nameId}
-            className="global-tran-floating-label text-[10px] sm:text-xs"
-          >
-            {labelName}
-          </label>
-        </div>
+        <FieldRenderer
+          id={nameId}
+          label={labelName}
+          type="text"
+          value={nameValue || ""}
+          disabled
+          readOnly
+          labelClassName="text-[10px] sm:text-xs"
+        />
       </div>
     </div>
   );

@@ -17,13 +17,14 @@ import GlobalCombinedLookup from "../../../Lookup/SearchGlobalCombinedLookup.jsx
 import SearchFACateg from "../../../Lookup/SearchFACateg.jsx";
 import SearchFAClass from "../../../Lookup/SearchFAClass.jsx";
 import SearchFALoc from "../../../Lookup/SearchFALoc.jsx";
+import SearchCutoffRef from "../../../Lookup/SearchCutoffRef.jsx";
 import CancelTranModal from "../../../Lookup/SearchCancelRef.jsx";
 import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
 import SearchPPETag from "../../../Lookup/SearchPPETag.jsx";
-import { fetchDataJson, postRequest } from "../../../Configuration/BaseURL.jsx";
+import { apiClient, fetchDataJson, postRequest } from "../../../Configuration/BaseURL.jsx";
 
 // Global / NAYSA components
 import Header from "@/NAYSA Cloud/Components/Header";
@@ -43,7 +44,7 @@ import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import { docTypePDFGuide, docTypeVideoGuide, glAccountFilter } from "@/NAYSA Cloud/Global/doctype";
 import { useGetCurrentDayV2, useformatToDatev2 } from "@/NAYSA Cloud/Global/dates";
 import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
-import { useTopPayeeRow } from "@/NAYSA Cloud/Global/top1RefTable";
+import { useTopCutOffRow, useTopPayeeRow } from "@/NAYSA Cloud/Global/top1RefTable";
 import {
   useFetchTranData,
   useFieldLenghtCheck as fieldLenghtCheck,
@@ -74,12 +75,16 @@ const assetDetailColumns = [
   { key: "vat", label: "VAT", width: 90 },
   { key: "vatAmount", label: "VAT Amount", width: 120, align: "text-right" },
   { key: "netAmount", label: "Net Amount", width: 120, align: "text-right" },
-  { key: "acqCost", label: "Acq Cost", width: 120, align: "text-right" },
   { key: "categCode", label: "Category Code", width: 130 },
   { key: "categName", label: "Category", width: 200 },
   { key: "classCode", label: "Class Code", width: 130 },
   { key: "className", label: "Sub Category", width: 200 },
   { key: "eul", label: "EUL (Month)", width: 105, align: "text-center" },
+  { key: "depStartCutoff", label: "Depreciation Start Code", width: 145, align: "text-center" },
+  { key: "depStartCutoffName", label: "Depreciation Start", width: 180, align: "text-center" },
+  { key: "acqCost", label: "Acq. Cost (per Unit)", width: 150, align: "text-right" },
+  { key: "salvagePercent", label: "Salvage Value %", width: 125, align: "text-right" },
+  { key: "salvageValue", label: "Salvage Val (per Unit)", width: 155, align: "text-right" },
   { key: "serialNo", label: "Serial No.", width: 145 },
   { key: "brandModel", label: "Brand / Model", width: 155 },
   { key: "location", label: "Location", width: 150, align: "text-center" },
@@ -90,7 +95,7 @@ const assetDetailColumns = [
 
 const serialBreakdownColumns = [
   { key: "ln", label: "LN", width: 48, align: "text-center" },
-  { key: "acqCost", label: "Acq Cost", width: 120, align: "text-right" },
+  { key: "acqCost", label: "Acq. Cost (per Unit)", width: 150, align: "text-right" },
   { key: "groupId", label: "Group ID", width: 140 },
   { key: "serialGroupId", label: "Serial Group ID", width: 150 },
   { key: "empNo", label: "Emp No.", width: 120 },
@@ -110,6 +115,9 @@ const calculateAcqCost = (row, overrides = {}) => {
   return formatNumber(netAmount / rrQuantity);
 };
 
+const capSalvageValue = (salvageValue, acqCost) =>
+  Math.min(Math.max(parseFormattedNumber(salvageValue || 0), 0), Math.max(parseFormattedNumber(acqCost || 0), 0));
+
 const extractLookupRows = (value) => {
   if (!value) return [];
 
@@ -124,6 +132,70 @@ const extractLookupRows = (value) => {
   }
 
   return [];
+};
+
+const getNextMonthCutoff = (dateValue) => {
+  const fallbackDate = new Date();
+  let sourceDate = fallbackDate;
+
+  if (dateValue) {
+    const value = String(dateValue).trim();
+    const displayParts = value.split("/");
+
+    if (displayParts.length === 3) {
+      const [month, day, year] = displayParts.map((part) => Number(part));
+      const parsedDate = new Date(year, month - 1, day);
+
+      if (
+        parsedDate.getFullYear() === year &&
+        parsedDate.getMonth() === month - 1 &&
+        parsedDate.getDate() === day
+      ) {
+        sourceDate = parsedDate;
+      }
+    } else {
+      const parsedDate = new Date(value);
+      if (!Number.isNaN(parsedDate.getTime())) sourceDate = parsedDate;
+    }
+  }
+
+  const nextMonthIndex = sourceDate.getMonth() + 1;
+  const nextMonthDate = new Date(sourceDate.getFullYear(), nextMonthIndex, 1);
+  const year = nextMonthDate.getFullYear();
+  const month = String(nextMonthDate.getMonth() + 1).padStart(2, "0");
+
+  return `${year}${month}`;
+};
+
+const getCutoffFromDate = (dateValue) => {
+  const fallbackDate = new Date();
+  let sourceDate = fallbackDate;
+
+  if (dateValue) {
+    const value = String(dateValue).trim();
+    const displayParts = value.split("/");
+
+    if (displayParts.length === 3) {
+      const [month, day, year] = displayParts.map((part) => Number(part));
+      const parsedDate = new Date(year, month - 1, day);
+
+      if (
+        parsedDate.getFullYear() === year &&
+        parsedDate.getMonth() === month - 1 &&
+        parsedDate.getDate() === day
+      ) {
+        sourceDate = parsedDate;
+      }
+    } else {
+      const parsedDate = new Date(value);
+      if (!Number.isNaN(parsedDate.getTime())) sourceDate = parsedDate;
+    }
+  }
+
+  const year = sourceDate.getFullYear();
+  const month = String(sourceDate.getMonth() + 1).padStart(2, "0");
+
+  return `${year}${month}`;
 };
 
 
@@ -207,6 +279,7 @@ const FARR = () => {
     showFaClassModal: false,
     faClassLookupCategCode: "",
     showFaLocModal: false,
+    showCutoffModal: false,
     itemLookupModalOpen: false,
     itemLookupEndPoint: "getInvLookupMS",
     selectedDocType: "FARR",
@@ -305,10 +378,10 @@ const FARR = () => {
     }
   );
   useEffect(() => {
-    const hiddenColumns = ["poId", "groupId", "acqCost", "categCode", "classCode"];
+    const hiddenColumns = ["poId", "groupId", "categCode", "classCode", "depStartCutoff", "salvagePercent"];
 
     if (!withCostAmount) {
-      hiddenColumns.push("unitCost", "amount", "vatAmount", "netAmount", "acqCost");
+      hiddenColumns.push("unitCost", "amount", "vatAmount", "netAmount", "acqCost", "salvageValue");
     }
 
     if (String(state.rrType || "").toUpperCase() === "FARR02") {
@@ -423,6 +496,8 @@ const FARR = () => {
     "amount",
     "vatAmount",
     "netAmount",
+    "salvagePercent",
+    "salvageValue",
     "poQty",
   ];
   const farrGlEnterNextRowZeroClearFields = [
@@ -554,9 +629,10 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
       return resetState();
     }
 
-    const retrievedDetailRows = (data.dt1 || []).map((item) => {
+    const retrievedDetailRows = await Promise.all((data.dt1 || []).map(async (item) => {
       const rrQuantity = parseFormattedNumber(item.rrQuantity || 0);
       const netAmount = parseFormattedNumber(item.netAmount || 0);
+      const cutoffRow = await useTopCutOffRow(item.depStartCutoff || "");
 
       return {
         ...item,
@@ -577,12 +653,16 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
         vatRate: formatNumber(item.vatRate || 0),
         vatAmount: formatNumber(item.vatAmount || 0),
         netAmount: formatNumber(item.netAmount || 0),
-        acqCost: formatNumber(rrQuantity ? netAmount / rrQuantity : 0),
+        acqCost: formatNumber(item.acqCost ?? (rrQuantity ? netAmount / rrQuantity : 0)),
         categCode: item.categCode || "",
         categName: item.categName || "",
         classCode: item.classCode || "",
         className: item.className || "",
         eul: item.eul || "0",
+        depStartCutoff: item.depStartCutoff || "",
+        depStartCutoffName: cutoffRow?.cutoffName || "",
+        salvagePercent: formatNumber(item.salvagePercent || 0),
+        salvageValue: formatNumber(item.salvageValue || 0),
         serialNo: item.serialNo || "",
         brandModel: item.brandModel || "",
         location: item.flocCode || "",
@@ -591,7 +671,7 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
         warrantyMonths: item.warrantyMonths || "",
         warrantyNotes: item.warrantyNotes || "",
       };
-    });
+    }));
 
     const formattedGLRows = (data.dt2 || []).map((glRow) => ({
       ...glRow,
@@ -669,17 +749,32 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
 
 
 
-  const createTempGroupId = (prefix = "FARR") => {
-    const randomId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    return `${prefix}-${randomId}`;
+  const createTempGroupId = () => {
+    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
+      const randomValue = Math.floor(Math.random() * 16);
+      const value = char === "x" ? randomValue : (randomValue & 0x3) | 0x8;
+      return value.toString(16);
+    });
   };
 
   const getDetailRowGroupId = (row = {}) =>
     String(row.groupId || "").trim();
 
+  const getDepStartCutoffFields = async (dateValue = state.farrDate) => {
+    const depStartCutoff = getNextMonthCutoff(dateValue);
+    const cutoffRow = await useTopCutOffRow(depStartCutoff);
+
+    return {
+      depStartCutoff,
+      depStartCutoffName: cutoffRow?.cutoffName || "",
+    };
+  };
+
   const syncAssetDetailRowsForSave = () => {
     const finalDetailRows = detailRows.map((row) => {
-      const groupId = getDetailRowGroupId(row) || "";
+      const groupId = getDetailRowGroupId(row) || createTempGroupId();
       return { ...row, groupId };
     });
 
@@ -777,6 +872,9 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
           serialNo: row.serialNo || "",
           brandModel: row.brandModel || "",
           eul: parseFormattedNumber(row.eul || 0),
+          depStartCutoff: row.depStartCutoff || "",
+          salvagePercent: parseFormattedNumber(row.salvagePercent || 0),
+          salvageValue: parseFormattedNumber(row.salvageValue || 0),
           flocCode: row.location || "",
           warrantyStartDate: row.warrantyStartDate || "",
           warrantyExpiryDate: row.warrantyExpiry || "",
@@ -844,12 +942,25 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
         const eulRequiredFields = Array.isArray(detailRows)
           ? detailRows.reduce((fields, row, index) => {
               fields[`Receiving Details Line ${index + 1}: EUL`] = row?.eul;
+              fields[`Receiving Details Line ${index + 1}: Depreciation Start`] = row?.depStartCutoff;
               return fields;
             }, {})
           : {};
 
         const eulIsValid = await validateRequiredFields(eulRequiredFields, "Save FARR");
         if (!eulIsValid) return;
+
+        const invalidSalvageIndex = detailRows.findIndex(
+          (row) => parseFormattedNumber(row.salvageValue || 0) > parseFormattedNumber(row.acqCost || 0)
+        );
+
+        if (invalidSalvageIndex >= 0) {
+          useSwalErrorAlert(
+            "Invalid Salvage Value",
+            `Salvage Val (per Unit) must not exceed Acq. Cost (per Unit) on line ${invalidSalvageIndex + 1}.`
+          );
+          return;
+        }
 
         if (finalDetailRowsGL.length === 0) {
           const newGlEntries = await useGenerateGLEntries(
@@ -986,6 +1097,10 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
       serialNo: "",
       brandModel: "",
       eul: "0",
+      depStartCutoff: getNextMonthCutoff(state.farrDate),
+      depStartCutoffName: "",
+      salvagePercent: "0.00",
+      salvageValue: "0.00",
       location: "",
       warrantyStartDate: "",
       warrantyExpiry: "",
@@ -1010,9 +1125,9 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
   const payeeLookupCustomParam =
   state.accountModalSource === "serialAssignedTo"
     ? "Employee"
-    : String(state.rrType || "").toUpperCase() === "FARR01"
-      ? "OpenFARR"
-      : "ActiveAll";
+    : String(state.rrType || "").toUpperCase() === "FARR02"
+      ? "ActiveAll"
+    : "OpenFARR";
 
   const getPayeeVatDefaults = async (payeeCode) => {
     const selectedPayeeCode = String(payeeCode || state.PayeeCode || "").trim();
@@ -1075,11 +1190,12 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
     }
 
     const payeeVat = await getPayeeVatDefaults();
+    const depStartCutoffFields = await getDepStartCutoffFields();
     const newRows = itemsArray.map((item) => {
       const unitCost = parseFormattedNumber(item.unitCost || 0);
 
       return recalcAssetDetailRow(createAssetDetailRow({
-        groupId: item.groupId || "",
+        ...depStartCutoffFields,
         itemCode: item.itemCode || "",
         assetDescription: item.itemName || "",
         unit: item.uomCode || "",
@@ -1096,6 +1212,8 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
         className: "",
         assetCategory: "",
         assetSubCategory: "",
+        salvagePercent: "0.00",
+        salvageValue: "0.00",
       }));
     });
 
@@ -1138,7 +1256,7 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
 
       const endpoint = "getPORR_OpenSummary";
       const detailEndpoint = "getPORR_OpenDetail";
-      const response = await fetchDataJson(endpoint, { branchCode: state.branchCode });
+      const response = await fetchDataJson(endpoint, { branchCode: state.branchCode,vendCode: state.PayeeCode,invType :"FA" });
       const rawRows = response?.data?.[0]?.result ? JSON.parse(response.data[0].result) : [];
       const openRows = Array.isArray(rawRows) ? rawRows : [];
       const [colConfigSummary, colConfigDetail] = await Promise.all([
@@ -1191,6 +1309,7 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
       return;
     }
 
+    const depStartCutoffFields = await getDepStartCutoffFields();
     const newRows = selection.details.map((item) => {
       const poQty = parseFormattedNumber(item.qtyBalance || 0);
       const receivedQty = poQty > 0 ? poQty : parseFormattedNumber(item.rrQty || 0);
@@ -1198,6 +1317,7 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
       const amount = receivedQty * unitCost;
 
       return recalcAssetDetailRow(createAssetDetailRow({
+        ...depStartCutoffFields,
         poId: header.groupId || "",
         groupId: item.groupId || "",
         poNo: item.poNo || header.poNo || "",
@@ -1218,6 +1338,8 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
         classCode: item.classCode || "",
         className: item.className || "",
         eul: String(item.eul || "0"),
+        salvagePercent: formatNumber(item.salvagePercent || 0),
+        salvageValue: formatNumber(item.salvageValue || 0),
       }));
     });
 
@@ -1481,6 +1603,20 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
     setDetailRows((prev) => prev.map((item, rowIndex) => (rowIndex === index ? { ...item, ...updates } : item)));
   };
 
+  const handleFarrDateChange = async (updates) => {
+    if (isFormDisabled) return;
+    const nextFarrDate = updates.farrDate || "";
+    const depStartCutoffFields = await getDepStartCutoffFields(nextFarrDate);
+
+    updateState({ farrDate: nextFarrDate });
+    setDetailRows((prev) =>
+      prev.map((row) => ({
+        ...row,
+        ...depStartCutoffFields,
+      }))
+    );
+  };
+
   const recalcAssetDetailRow = (row, overrides = {}) => {
     const nextRow = { ...row, ...overrides };
     const quantity = parseFormattedNumber(nextRow.receivedQty || 0);
@@ -1488,13 +1624,16 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
     const amount = quantity * unitCost;
     const vatAmount = nextRow.vat ? getAllTopVatAmount?.(nextRow.vat, amount) || 0 : 0;
     const netAmount = amount - vatAmount;
+    const acqCost = calculateAcqCost(nextRow, { netAmount });
+    const salvageValue = capSalvageValue(nextRow.salvageValue, acqCost);
 
     return {
       ...nextRow,
       amount: formatNumber(amount),
       vatAmount: formatNumber(vatAmount),
       netAmount: formatNumber(netAmount),
-      acqCost: calculateAcqCost(nextRow, { netAmount }),
+      acqCost,
+      salvageValue: formatNumber(salvageValue),
     };
   };
 
@@ -1527,6 +1666,7 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
       detailFaCategory: "showFaCategoryModal",
       detailFaClass: "showFaClassModal",
       detailFaLoc: "showFaLocModal",
+      detailDepStartCutoff: "showCutoffModal",
     };
     updateState({ accountModalSource: source, [modalMap[source]]: true });
   };
@@ -1567,9 +1707,7 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
   const handleOpenPayeeLookup = async () => {
   if (isPayeeLookupDisabled) return;
 
-  const isRegularFARR = String(state.rrType || "").toUpperCase() === "FARR01";
-
-  if (!isRegularFARR) {
+  if (String(state.rrType || "").toUpperCase() === "FARR02") {
     updateState({ payeeModalOpen: true });
     return;
   }
@@ -1577,12 +1715,16 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
   try {
     updateState({ isLoading: true });
 
-    const response = await fetchDataJson("vendMast", {
-      filter: "OpenFARR",
-      search: "",
-      searchMode: "part",
-      page: 1,
-      pageSize: 1,
+    const payload = {
+      json_data: {
+        search: null,
+        filter: "OpenFARR",
+        searchMode: "part",
+      },
+    };
+
+    const { data: response } = await apiClient.get("/lookupVendMast", {
+      params: { json_data: JSON.stringify(payload) },
     });
 
     const rows = response?.data?.[0]?.result
@@ -1751,6 +1893,7 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
         classCode: "",
         className: "",
         assetSubCategory: "",
+        salvagePercent: "0.00",
       });
 
       updateState({
@@ -1767,12 +1910,18 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
 
   const handleCloseFaClassModal = (selectedClass) => {
     if (selectedClass && selectedRowIndex !== null) {
+      const salvagePercent = parseFormattedNumber(selectedClass.salvagePercent || 0);
+      const acqCost = parseFormattedNumber(detailRows[selectedRowIndex]?.acqCost || 0);
+      const computedSalvageValue = capSalvageValue(acqCost * (salvagePercent / 100), acqCost);
+
       updateDetailRow(selectedRowIndex, {
         classCode: selectedClass.code || "",
         className: selectedClass.description || selectedClass.code || "",
         categCode: selectedClass.categCode || detailRows[selectedRowIndex]?.categCode || "",
         assetSubCategory: selectedClass.description || selectedClass.code || "",
         eul: String(selectedClass.eul ?? "0"),
+        salvagePercent: formatNumber(salvagePercent),
+        salvageValue: formatNumber(computedSalvageValue),
       });
     }
     updateState({ showFaClassModal: false, faClassLookupCategCode: "", accountModalSource: null });
@@ -1792,6 +1941,28 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
     }
     updateState({ showFaLocModal: false, accountModalSource: null });
     if (isSerialLookup) setSelectedSerialRowIndex(null);
+  };
+
+  const handleCloseCutoffModal = (selectedCutoff) => {
+    if (selectedCutoff && selectedRowIndex !== null && state.accountModalSource === "detailDepStartCutoff") {
+      const selectedCutoffCode = selectedCutoff.cutoffCode || "";
+      const rrCutoffCode = getCutoffFromDate(state.farrDate);
+
+      if (selectedCutoffCode && rrCutoffCode && selectedCutoffCode < rrCutoffCode) {
+        useSwalErrorAlert(
+          "Invalid Depreciation Start Cut Off",
+          "Dep. Start Cut Off must not be earlier than RR Date."
+        );
+        updateState({ showCutoffModal: false, accountModalSource: null });
+        return;
+      }
+
+      updateDetailRow(selectedRowIndex, {
+        depStartCutoff: selectedCutoffCode,
+        depStartCutoffName: selectedCutoff.cutoffName || "",
+      });
+    }
+    updateState({ showCutoffModal: false, accountModalSource: null });
   };
 
   const handleCancel = async () => {
@@ -1943,6 +2114,29 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
         return;
       }
 
+      if (field === "salvageValue") {
+        const sanitizedValue = value.replace(/[^0-9.]/g, "");
+        if (!/^\d*\.?\d{0,2}$/.test(sanitizedValue) && sanitizedValue !== "") return;
+
+        const acqCost = parseFormattedNumber(row.acqCost || 0);
+        const salvageValue = parseFormattedNumber(sanitizedValue || 0);
+
+        if (salvageValue > acqCost) {
+          updateDetailRow(index, { salvageValue: formatNumber(acqCost) });
+          return;
+        }
+
+        updateDetailRow(index, { salvageValue: sanitizedValue });
+        return;
+      }
+
+      if (field === "salvagePercent") {
+        const sanitizedValue = value.replace(/[^0-9.]/g, "");
+        if (!/^\d*\.?\d{0,2}$/.test(sanitizedValue) && sanitizedValue !== "") return;
+        updateDetailRow(index, { salvagePercent: sanitizedValue });
+        return;
+      }
+
       if (field === "eul") {
         const sanitizedValue = value.replace(/[^0-9]/g, "");
         updateDetailRow(index, { eul: sanitizedValue });
@@ -1969,6 +2163,20 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
         return true;
       }
 
+      if (field === "salvageValue") {
+        const acqCost = parseFormattedNumber(row.acqCost || 0);
+        const salvageValue = parseFormattedNumber(value || 0);
+        const cappedSalvageValue = capSalvageValue(salvageValue, acqCost);
+
+        updateDetailRow(index, { salvageValue: formatNumber(cappedSalvageValue) });
+        return true;
+      }
+
+      if (field === "salvagePercent") {
+        updateDetailRow(index, { salvagePercent: formatNumber(parseFormattedNumber(value || 0)) });
+        return true;
+      }
+
       if (field === "eul") {
         updateDetailRow(index, { eul: String(value || "").trim() === "" ? "0" : value });
         return true;
@@ -1985,6 +2193,7 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
         value={row[field] || ""}
         maxLength={options.maxLength}
         readOnly={options.readOnly ?? isFormDisabled}
+        onClick={options.onClick}
         onChange={(e) => handleDetailInputChange(field, e.target.value)}
         onBlur={(e) => {
           if (isFormDisabled || options.readOnly) return;
@@ -2034,30 +2243,60 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
     );
     };
 
-    const detailSpecsInput = (field, title, placeholder) => (
+    const detailDisplayLookupInput = (field, displayValue, source, options = {}) => (
       <td key={columnKey} className="global-tran-td-ui" style={style}>
         <div className="relative w-full">
-          {detailInput(field, { className: `${alignClass} pr-6` })}
+          <input
+            type="text"
+            id={`${field}-${index}`}
+            className={`w-full global-tran-td-inputclass-ui ${options.className || alignClass} pr-6 cursor-pointer`.trim()}
+            value={displayValue || ""}
+            readOnly
+          />
           {!isFormDisabled && (
             <FontAwesomeIcon
               icon={faMagnifyingGlass}
               className="absolute top-1/2 right-0 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-              onClick={() =>
-                useSwalHandleOpenSpecsModal(
-                  index,
-                  detailRows,
-                  handleDetailModalChange,
-                  row[field] || "",
-                  title,
-                  field,
-                  placeholder
-                )
-              }
+              onClick={() => openDetailLookup(index, source)}
             />
           )}
         </div>
       </td>
     );
+
+    const detailSpecsInput = (field, title, placeholder) => {
+      const openSpecsModal = () => {
+        if (isFormDisabled) return;
+        useSwalHandleOpenSpecsModal(
+          index,
+          detailRows,
+          handleDetailModalChange,
+          row[field] || "",
+          title,
+          field,
+          placeholder
+        );
+      };
+
+      return (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          <div className="relative w-full">
+            {detailInput(field, {
+              readOnly: true,
+              className: `${alignClass} pr-6 cursor-pointer`,
+              onClick: openSpecsModal,
+            })}
+            {!isFormDisabled && (
+              <FontAwesomeIcon
+                icon={faMagnifyingGlass}
+                className="absolute top-1/2 right-0 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                onClick={openSpecsModal}
+              />
+            )}
+          </div>
+        </td>
+      );
+    };
 
     const detailColumnRenderers = {
       ln: () => (
@@ -2079,10 +2318,19 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
       vatAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{detailInput("vatAmount", { readOnly: true })}</td>,
       netAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{detailInput("netAmount", { readOnly: true })}</td>,
       acqCost: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{detailInput("acqCost", { readOnly: true })}</td>,
+      salvagePercent: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{detailInput("salvagePercent")}</td>,
+      salvageValue: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{detailInput("salvageValue")}</td>,
       serialNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{detailInput("serialNo", { readOnly: true, maxLength: serialNoMaxLength })}</td>,
       categName: () => detailLookupInput("categName", "detailFaCategory"),
       className: () => detailLookupInput("className", "detailFaClass"),
       eul: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{detailInput("eul", { className: "text-center" })}</td>,
+      depStartCutoffName: () =>
+        detailDisplayLookupInput(
+          "depStartCutoffName",
+          row.depStartCutoffName || "",
+          "detailDepStartCutoff",
+          { className: "text-center" }
+        ),
       location: () => detailLookupInput("location", "detailFaLoc", { className: "text-left" }),
       warrantyExpiry: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{detailInput("warrantyExpiry", { readOnly: true, className: "text-center" })}</td>,
     };
@@ -2440,10 +2688,7 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
                       className={`peer flex-grow bg-transparent border-none px-3 focus:outline-none ${isFormDisabled ? "cursor-not-allowed" : "cursor-pointer"}`}
                       value={state.farrDate}
                       disabled={isFormDisabled}
-                      updateState={(updates) => {
-                        if (isFormDisabled) return;
-                        updateState({ farrDate: updates.farrDate });
-                      }}
+                      updateState={handleFarrDateChange}
                     />
                   </div>
                   <label htmlFor="farrDate" className="global-ref-floating-label global-ref-label-enabled">FARR Date</label>
@@ -3081,6 +3326,14 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
           isOpen={state.showFaLocModal}
           onClose={handleCloseFaLocModal}
           branchCode="HO"
+        />
+      )}
+
+      {state.showCutoffModal && (
+        <SearchCutoffRef
+          isOpen={state.showCutoffModal}
+          onClose={handleCloseCutoffModal}
+          source={state.accountModalSource}
         />
       )}
 

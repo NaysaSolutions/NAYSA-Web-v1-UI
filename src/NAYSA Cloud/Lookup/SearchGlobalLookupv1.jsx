@@ -52,6 +52,7 @@ const GlobalLookupModalv1 = ({
   onSelectionReset,
   singleSelect = false,
   modalMaxWidthClass = "max-w-8xl",
+  overlayZIndexClass = "z-50",
 }) => {
   const [records, setRecords] = useState([]);
   const [filtered, setFiltered] = useState([]);
@@ -1091,7 +1092,7 @@ const handleExportExcelClick = async () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 sm:p-6 lg:p-8 animate-fade-in"
+      className={`fixed inset-0 ${overlayZIndexClass} flex items-center justify-center bg-black bg-opacity-50 p-4 sm:p-6 lg:p-8 animate-fade-in`}
       onKeyDown={onKeyDown}
     >
       <div

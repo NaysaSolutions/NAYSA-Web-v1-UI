@@ -8,8 +8,9 @@ import PayeeMastLookupModal from "../../../Lookup/SearchVendMast";
 import COAMastLookupModal from "../../../Lookup/SearchCOAMast.jsx";
 import RCLookupModal from "../../../Lookup/SearchRCMast.jsx";
 import SLMastLookupModal from "../../../Lookup/SearchSLMast.jsx";
-import SearchFAAsset from "../../../Lookup/SearchFAAsset.jsx";
 import SearchFALoc from "../../../Lookup/SearchFALoc.jsx";
+import SearchFACateg from "../../../Lookup/SearchFACateg.jsx";
+import SearchFAClass from "../../../Lookup/SearchFAClass.jsx";
 import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
 import CancelTranModal from "../../../Lookup/SearchCancelRef.jsx";
 import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
@@ -191,13 +192,14 @@ const FATR = () => {
     assetLocationName: "",
     assetDepartmentCode: "",
     assetDepartmentName: "",
-    assetNo: "",
-    tagNo: "",
+    categCode: "",
+    categName: "",
+    classCode: "",
+    className: "",
     referenceNo: "",
     remarks: "",
     accountModalSource: null,
     branchModalOpen: false,
-    showAssetModal: false,
     showFAMastLookup: false,
     faLookupRows: [],
     faLookupColumns: [],
@@ -207,6 +209,9 @@ const FATR = () => {
     showSlModal: false,
     payeeModalOpen: false,
     showFaLocModal: false,
+    showFaCategoryModal: false,
+    showFaClassModal: false,
+    faClassLookupCategCode: "",
     showCancelModal: false,
     showAttachModal: false,
     showAllTranDocNo: false,
@@ -515,12 +520,14 @@ const FATR = () => {
           : data.assetLocationName || data.flocName || "",
         assetDepartmentCode: data.assetDepartmentCode || data.rcCode || "",
         assetDepartmentName: data.assetDepartmentName || data.rcName || "",
+        categCode: data.categCode || "",
+        categName: data.categName || "",
+        classCode: data.classCode || "",
+        className: data.className || "",
         currCode: data.currCode || companyInfo?.currCode || "",
         currName: data.currName || companyInfo?.currName || "",
         currRate: formatNumber(data.currRate || companyInfo?.currRate || 1, 6),
         referenceNo: data.referenceNo || "",
-        assetNo: data.assetNo || "",
-        tagNo: data.tagNo || "",
         remarks: data.remarks || "",
         isDocNoDisabled: true,
         isFetchDisabled: true,
@@ -553,7 +560,6 @@ const FATR = () => {
       Branch: state.branchCode,
       "FATR Date": state.fatrDate,
       "Transfer Type": state.transferType,
-      "Reference No.": state.referenceNo,
     };
 
     const isValid = await validateRequiredFields(requiredFields, "Save FATR");
@@ -622,12 +628,14 @@ const FATR = () => {
           assetLocationName,
           assetDepartmentCode,
           assetDepartmentName,
+          categCode,
+          categName,
+          classCode,
+          className,
           currCode,
           currName,
           currRate,
           referenceNo,
-          assetNo,
-          tagNo,
           remarks,
           noReprints,
           userCode,
@@ -648,12 +656,14 @@ const FATR = () => {
           assetLocationName: assetLocationName || "",
           assetDepartmentCode: assetDepartmentCode || "",
           assetDepartmentName: assetDepartmentName || "",
+          categCode: categCode || "",
+          categName: categName || "",
+          classCode: classCode || "",
+          className: className || "",
           currCode: currCode || companyInfo?.currCode || "",
           currName: currName || companyInfo?.currName || "",
           currRate: parseFormattedNumber(currRate || 1),
           referenceNo: referenceNo || "",
-          assetNo: assetNo || "",
-          tagNo: tagNo || "",
           remarks: remarks || "",
           noReprints: parseFormattedNumber(noReprints || 0),
           userCode: userCode || currentUserRow?.userCode || "",
@@ -882,6 +892,10 @@ const FATR = () => {
         assetLocationName: "",
         assetDepartmentCode: "",
         assetDepartmentName: "",
+        categCode: "",
+        categName: "",
+        classCode: "",
+        className: "",
         currCode: companyInfo?.currCode || "",
         currName: companyInfo?.currName || "",
         currRate: formatNumber(companyInfo?.currRate || 1, 6),
@@ -893,8 +907,6 @@ const FATR = () => {
         glCurrGlobal1: companyInfo?.glCurrGlobal1 || "",
         glCurrGlobal2: companyInfo?.glCurrGlobal2 || "",
         glCurrGlobal3: companyInfo?.glCurrGlobal3 || "",
-        assetNo: "",
-        tagNo: "",
         referenceNo: "",
         remarks: "",
         accountModalSource: null,
@@ -1093,7 +1105,9 @@ const FATR = () => {
     branchCode: state.branchCode || "",
     flocCode: state.assetLocationCode || "",
     rcCode: state.assetDepartmentCode || "",
-    faCode: state.assetNo || "",
+    categCode: state.categCode || "",
+    classCode: state.classCode || "",
+    filter:  "OpenTransfer",
   });
 
   const handleOpenFAMastLookup = async (insertIndex = null) => {
@@ -1397,11 +1411,6 @@ const FATR = () => {
     setDetailRows((prev) => prev.map((item, rowIndex) => rowIndex === index ? { ...item, ...updates } : item));
   };
 
-  const handleOpenAssetLookup = () => {
-    if (isFormDisabled) return;
-    updateState({ showAssetModal: true });
-  };
-
   const handleOpenHeaderLocationLookup = () => {
     if (isFormDisabled || isIntransitTransferType(state.transferType)) return;
     updateState({ accountModalSource: "headerToFlocCode", showFaLocModal: true });
@@ -1412,50 +1421,56 @@ const FATR = () => {
     updateState({ accountModalSource: "headerToRcCode", showRcModal: true });
   };
 
-  const handleCloseAssetModal = (selectedAsset) => {
-    if (selectedAsset) {
-      const targetIndex = detailRows[selectedRowIndex] ? selectedRowIndex : 0;
-      const assetRow = applyIntransitLocationToRow(buildTransferDetailRow(selectedAsset));
-      const nextRows = detailRows.length ? [...detailRows] : [buildTransferDetailRow()];
-      nextRows[targetIndex] = {
-        ...(nextRows[targetIndex] || {}),
-        ...assetRow,
-      };
+  const handleOpenFaCategoryModal = () => {
+    if (isFormDisabled) return;
+    updateState({ accountModalSource: "headerFaCategory", showFaCategoryModal: true });
+  };
 
-      if (hasDuplicateAssetCode(nextRows)) {
-        useSwalErrorAlert("Duplicate Asset", "Duplicate asset code is not allowed in Transfer Details.");
-        updateState({ showAssetModal: false });
-        return;
-      }
+  const handleOpenFaClassModal = () => {
+    if (isFormDisabled) return;
 
-      setDetailRows((prev) => {
-        const rows = prev.length ? [...prev] : [buildTransferDetailRow()];
-        rows[targetIndex] = {
-          ...(rows[targetIndex] || {}),
-          ...assetRow,
-          fromBranchCode: selectedAsset.branchCode || state.branchCode || "",
-          fromBranchName: selectedAsset.branchName || state.branchName || "",
-          fromFlocCode: selectedAsset.flocCode || "",
-          fromFlocName: selectedAsset.flocName || "",
-          fromRcCode: selectedAsset.rcCode || "",
-          fromRcName: selectedAsset.rcName || "",
-          fromEmpCode: selectedAsset.empNo || "",
-          fromEmpName: selectedAsset.empName || "",
-          assetCost: formatNumber(selectedAsset.acqCost || 0),
-          accumDepr: formatNumber(selectedAsset.accumDepr || 0),
-          nbValue: formatNumber(selectedAsset.nbValue || 0),
-          ...(isIntransitTransferType(state.transferType) ? getIntransitLocationFields() : {}),
-        };
-        return rows;
-      });
-      updateState({
-        assetNo: selectedAsset.faCode || selectedAsset.assetNo || "",
-        tagNo: selectedAsset.tagNo || selectedAsset.assetTag || "",
-      });
-      clearGeneratedGLEntries();
-      setSelectedRowIndex(targetIndex);
+    if (!String(state.categCode || "").trim()) {
+      useSwalErrorAlert("Sub Category", "Please select a Category first.");
+      return;
     }
-    updateState({ showAssetModal: false });
+
+    updateState({
+      accountModalSource: "headerFaClass",
+      showFaClassModal: true,
+      faClassLookupCategCode: state.categCode || "",
+    });
+  };
+
+  const handleCloseFaCategoryModal = (selectedCategory) => {
+    if (selectedCategory) {
+      const selectedCategCode = selectedCategory.code || selectedCategory.categCode || "";
+      const selectedCategName = selectedCategory.description || selectedCategory.categName || selectedCategory.code || "";
+
+      updateState({
+        categCode: selectedCategCode,
+        categName: selectedCategName,
+        classCode: "",
+        className: "",
+        showFaCategoryModal: false,
+        showFaClassModal: true,
+        faClassLookupCategCode: selectedCategCode,
+        accountModalSource: "headerFaClass",
+      });
+      return;
+    }
+
+    updateState({ showFaCategoryModal: false, accountModalSource: null });
+  };
+
+  const handleCloseFaClassModal = (selectedClass) => {
+    if (selectedClass) {
+      updateState({
+        classCode: selectedClass.code || selectedClass.classCode || "",
+        className: selectedClass.description || selectedClass.className || selectedClass.code || "",
+        categCode: selectedClass.categCode || state.categCode || "",
+      });
+    }
+    updateState({ showFaClassModal: false, faClassLookupCategCode: "", accountModalSource: null });
   };
 
   const openDetailLookup = (index, source) => {
@@ -1907,7 +1922,9 @@ const FATR = () => {
                     }
                     disabled={isFormDisabled || isIntransitTransferType(state.transferType)}
                     readOnly
+                    editableLookup
                     onLookup={handleOpenHeaderLocationLookup}
+                    onClear={() => updateState({ assetLocationCode: "", assetLocationName: "" })}
                   />
                   <FieldRenderer
                     id="assetDepartment"
@@ -1920,25 +1937,33 @@ const FATR = () => {
                     }
                     disabled={isFormDisabled}
                     readOnly
+                    editableLookup
                     onLookup={handleOpenHeaderDepartmentLookup}
+                    onClear={() => updateState({ assetDepartmentCode: "", assetDepartmentName: "" })}
                   />
+                  <input type="hidden" id="categCode" value={state.categCode || ""} readOnly />
                   <FieldRenderer
-                    id="assetNo"
-                    label="Asset No."
+                    id="categName"
+                    label="Asset Category"
                     type="lookup"
-                    value={state.assetNo}
+                    value={state.categName}
                     disabled={isFormDisabled}
                     readOnly
-                    onLookup={handleOpenAssetLookup}
+                    editableLookup
+                    onLookup={handleOpenFaCategoryModal}
+                    onClear={() => updateState({ categCode: "", categName: "", classCode: "", className: "" })}
                   />
+                  <input type="hidden" id="classCode" value={state.classCode || ""} readOnly />
                   <FieldRenderer
-                    id="tagNo"
-                    label="Asset Tag"
+                    id="className"
+                    label="Asset Sub Category"
                     type="lookup"
-                    value={state.tagNo}
+                    value={state.className}
                     disabled={isFormDisabled}
                     readOnly
-                    onLookup={handleOpenAssetLookup}
+                    editableLookup
+                    onLookup={handleOpenFaClassModal}
+                    onClear={() => updateState({ classCode: "", className: "" })}
                   />
                 </div>
 
@@ -1946,7 +1971,6 @@ const FATR = () => {
                   <FieldRenderer
                     id="referenceNo"
                     label="Reference No."
-                    required
                     type="text"
                     value={state.referenceNo}
                     disabled={isFormDisabled}
@@ -2253,14 +2277,6 @@ const FATR = () => {
         />
       )}
 
-      {state.showAssetModal && (
-        <SearchFAAsset
-          isOpen={state.showAssetModal}
-          onClose={handleCloseAssetModal}
-          branchCode={state.branchCode}
-        />
-      )}
-
       {state.showFAMastLookup && (
         <GlobalLookupModalv1
           isOpen={state.showFAMastLookup}
@@ -2272,6 +2288,21 @@ const FATR = () => {
           onClose={handleCloseFAMastLookup}
           onCancel={() => updateState({ showFAMastLookup: false, faLookupInsertIndex: null })}
           singleSelect={false}
+        />
+      )}
+
+      {state.showFaCategoryModal && (
+        <SearchFACateg
+          isOpen={state.showFaCategoryModal}
+          onClose={handleCloseFaCategoryModal}
+        />
+      )}
+
+      {state.showFaClassModal && (
+        <SearchFAClass
+          isOpen={state.showFaClassModal}
+          onClose={handleCloseFaClassModal}
+          categCode={state.faClassLookupCategCode || state.categCode || ""}
         />
       )}
 

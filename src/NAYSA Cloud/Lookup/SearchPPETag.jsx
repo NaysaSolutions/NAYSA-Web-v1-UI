@@ -4484,6 +4484,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Barcode from "react-barcode";
+import QRCode from "react-qr-code";
 import { renderToStaticMarkup } from "react-dom/server";
 import QRCodeImpl from "qr.js/lib/QRCode";
 import ErrorCorrectLevel from "qr.js/lib/ErrorCorrectLevel";
@@ -4827,6 +4828,7 @@ const sheetTagCountOptions = [
   { value: "6", label: "x6 / 6 tags per sheet", columns: 2, rows: 3 },
   { value: "8", label: "x8 / 8 tags per sheet", columns: 2, rows: 4 },
   { value: "10", label: "x10 / 10 tags per sheet", columns: 2, rows: 5 },
+  { value: "12", label: "x12 / 12 tags per sheet", columns: 2, rows: 6 },
 ];
 
 const getSheetPaperPreset = (key) =>
@@ -4949,6 +4951,9 @@ const SearchPPETag = ({
   const [layoutStatus, setLayoutStatus] = useState("Layout settings are not loaded yet.");
   const [isLayoutBusy, setIsLayoutBusy] = useState(false);
   const [showLogo, setShowLogo] = useState(false);
+  const [showQrCode, setShowQrCode] = useState(true);
+  const [showBarcode, setShowBarcode] = useState(true);
+  const [qrType, setQrType] = useState("dotted");
   const [logoDataUrl, setLogoDataUrl] = useState("");
   const [logoLayout, setLogoLayout] = useState(getDefaultLogoLayout);
   const dragFieldRef = useRef(null);
@@ -4982,6 +4987,9 @@ const SearchPPETag = ({
     orientation,
     showBorder,
     showLogo,
+    showQrCode,
+    showBarcode,
+    qrType,
     logoDataUrl,
     logoLayout,
     designZoom,
@@ -5024,6 +5032,9 @@ const SearchPPETag = ({
     setOrientation(settings.orientation || "landscape");
     setShowBorder(settings.showBorder !== false);
     setShowLogo(Boolean(settings.showLogo && settings.logoDataUrl));
+    setShowQrCode(settings.showQrCode !== false);
+    setShowBarcode(settings.showBarcode !== false);
+    setQrType(settings.qrType === "standard" ? "standard" : "dotted");
     setLogoDataUrl(settings.logoDataUrl || "");
     setLogoLayout(normalizeLogoLayout(settings.logoLayout));
     setDesignZoom(String(settings.designZoom || settings.previewZoom || 140));
@@ -5440,13 +5451,18 @@ const SearchPPETag = ({
   const getCodeMarkup = (tagInfo) => {
     const tagNoValue = tagInfo.propertyTagNo;
     const qrValue = tagNoValue;
+    const printQrSize = 112;
+    const printQrElement =
+      qrType === "standard" ? (
+        <QRCode value={qrValue} size={printQrSize} bgColor="#ffffff" fgColor="#111827" level="M" />
+      ) : (
+        <DottedQRCode value={qrValue} size={printQrSize} bgColor="#ffffff" fgColor="#111827" level="M" />
+      );
 
     return {
       qrValue,
       tagNoValue,
-      printQrMarkup: renderToStaticMarkup(
-        <DottedQRCode value={qrValue} size={112} bgColor="#ffffff" fgColor="#111827" level="M" />
-      ),
+      printQrMarkup: renderToStaticMarkup(printQrElement),
       printBarcodeMarkup: renderToStaticMarkup(
         <Barcode
           value={tagNoValue}
@@ -6190,9 +6206,9 @@ const SearchPPETag = ({
             </div>
           </div>
           <div class="code-panel print-section code-section">
-            <div class="qr-box">${printQrMarkup}</div>
-            <div class="barcode-box">${printBarcodeMarkup}</div>
-            <div class="barcode-text">${safeTagInfo.propertyTagNo}</div>
+            ${showQrCode ? `<div class="qr-box">${printQrMarkup}</div>` : ""}
+            ${showBarcode ? `<div class="barcode-box">${printBarcodeMarkup}</div>` : ""}
+            ${showBarcode ? `<div class="barcode-text">${safeTagInfo.propertyTagNo}</div>` : ""}
           </div>
         </div>
       </div>
@@ -6257,13 +6273,13 @@ const SearchPPETag = ({
             </div>
 
             <div class="preview-code" style="transform:${getPreviewSectionTransform("code")};">
-              <div class="preview-qr-box" style="left:${Number(getCodeItem("qr").x) || 0}px;top:${Number(getCodeItem("qr").y) || 0}px;width:${Math.max(24, Number(getCodeItem("qr").width) || 144)}px;height:${Math.max(24, Number(getCodeItem("qr").height) || 144)}px;">
+              ${showQrCode ? `<div class="preview-qr-box" style="left:${Number(getCodeItem("qr").x) || 0}px;top:${Number(getCodeItem("qr").y) || 0}px;width:${Math.max(24, Number(getCodeItem("qr").width) || 144)}px;height:${Math.max(24, Number(getCodeItem("qr").height) || 144)}px;">
                 ${printQrMarkup}
-              </div>
-              <div class="preview-barcode-box" style="left:${Number(getCodeItem("barcode").x) || 0}px;top:${Number(getCodeItem("barcode").y) || 0}px;width:${Math.max(24, Number(getCodeItem("barcode").width) || 168)}px;height:${Math.max(18, Number(getCodeItem("barcode").height) || 51)}px;">
+              </div>` : ""}
+              ${showBarcode ? `<div class="preview-barcode-box" style="left:${Number(getCodeItem("barcode").x) || 0}px;top:${Number(getCodeItem("barcode").y) || 0}px;width:${Math.max(24, Number(getCodeItem("barcode").width) || 168)}px;height:${Math.max(18, Number(getCodeItem("barcode").height) || 51)}px;">
                 ${printBarcodeMarkup}
-              </div>
-              <div class="preview-barcode-text" style="left:${Number(getCodeItem("barcode").x) || 0}px;top:${(Number(getCodeItem("barcode").y) || 0) + Math.max(18, Number(getCodeItem("barcode").height) || 51) + 4}px;width:${Math.max(24, Number(getCodeItem("barcode").width) || 168)}px;">${safeTagInfo.propertyTagNo}</div>
+              </div>` : ""}
+              ${showBarcode ? `<div class="preview-barcode-text" style="left:${Number(getCodeItem("barcode").x) || 0}px;top:${(Number(getCodeItem("barcode").y) || 0) + Math.max(18, Number(getCodeItem("barcode").height) || 51) + 4}px;width:${Math.max(24, Number(getCodeItem("barcode").width) || 168)}px;">${safeTagInfo.propertyTagNo}</div>` : ""}
             </div>
           </div>
         </div>
@@ -7389,6 +7405,13 @@ const SearchPPETag = ({
     const qrX = widthDots - mmToDots(30, dpi);
     const qrY = mmToDots(5, dpi);
     const barcodeY = heightDots - mmToDots(14, dpi);
+    const qrZpl = showQrCode
+      ? `^FO${qrX},${qrY}^BQN,2,4^FDQA,${zplSafe(tagInfo.propertyTagNo)}^FS`
+      : "";
+    const barcodeZpl = showBarcode
+      ? `^FO${qrX - mmToDots(2, dpi)},${barcodeY}^BY2,2,${Math.round(42 * scale)}^BCN,${Math.round(42 * scale)},N,N,N^FD${zplSafe(tagInfo.propertyTagNo)}^FS
+^FO${qrX - mmToDots(2, dpi)},${heightDots - mmToDots(5, dpi)}^A0N,${Math.round(15 * scale)},${Math.round(14 * scale)}^FD${zplSafe(tagInfo.propertyTagNo).slice(0, 24)}^FS`
+      : "";
     const fields = visibleDisplayFields
       .slice(0, 6)
       .map((field, index) => {
@@ -7411,9 +7434,8 @@ const SearchPPETag = ({
 ^FO${x},${y + mmToDots(10, dpi)}^A0N,${Math.round((Number(companyTextStyle.fontSize) || 14) * scale)},${Math.round((Number(companyTextStyle.fontSize) || 14) * 0.95 * scale)}^FD${zplSafe(tagInfo.companyName).slice(0, 40)}^FS
 ^FO${x},${y + mmToDots(15, dpi)}^A0N,${Math.round((Number(assetTextStyle.fontSize) || 15) * scale)},${Math.round((Number(assetTextStyle.fontSize) || 15) * 0.95 * scale)}^FD${zplSafe(tagInfo.assetDescription).slice(0, 42)}^FS
 ${fields}
-^FO${qrX},${qrY}^BQN,2,4^FDQA,${zplSafe(tagInfo.propertyTagNo)}^FS
-^FO${qrX - mmToDots(2, dpi)},${barcodeY}^BY2,2,${Math.round(42 * scale)}^BCN,${Math.round(42 * scale)},N,N,N^FD${zplSafe(tagInfo.propertyTagNo)}^FS
-^FO${qrX - mmToDots(2, dpi)},${heightDots - mmToDots(5, dpi)}^A0N,${Math.round(15 * scale)},${Math.round(14 * scale)}^FD${zplSafe(tagInfo.propertyTagNo).slice(0, 24)}^FS
+${qrZpl}
+${barcodeZpl}
 ^XZ
 `;
   };
@@ -7674,75 +7696,91 @@ ${fields}
             </div>
 
             <div className="relative min-w-0" style={{ ...getSectionTransformStyle("code"), height: "100%" }}>
-              <div
-                className={`relative flex items-center justify-center border-2 border-slate-900 bg-white p-[6px] ring-blue-300 ${
-                  isEditMode ? "hover:ring-2" : ""
-                }`}
-                style={getCodeItemStyle("qr", { draggable: isEditMode })}
-                onPointerDown={isEditMode ? (event) => handleCodeDragStart(event, "qr") : undefined}
-                onPointerMove={isEditMode ? handleCodeDragMove : undefined}
-                onPointerUp={isEditMode ? handleCodeDragEnd : undefined}
-                onPointerCancel={isEditMode ? handleCodeDragEnd : undefined}
-                title={isEditMode ? "Drag QR code to move it" : "Switch to Edit Mode to move QR code"}
-              >
-                <DottedQRCode
-                  value={qrValue}
-                  size={Math.max(16, Math.min(getCodeItem("qr").width, getCodeItem("qr").height) - 16)}
-                  bgColor="#ffffff"
-                  fgColor="#111827"
-                  level="M"
-                />
-                {isEditMode && (
-                  <span
-                    className="ppe-edit-control absolute bottom-[-7px] right-[-7px] h-4 w-4 cursor-nwse-resize rounded-sm border border-blue-700 bg-white shadow ring-1 ring-blue-200"
-                    title="Drag to resize QR code"
-                    onPointerDown={(event) => handleCodeResizeStart(event, "qr")}
-                    onPointerMove={handleCodeDragMove}
-                    onPointerUp={handleCodeDragEnd}
-                    onPointerCancel={handleCodeDragEnd}
-                  />
-                )}
-              </div>
-              <div
-                className={`relative overflow-hidden bg-white ring-blue-300 ${isEditMode ? "hover:ring-2" : ""}`}
-                style={getCodeItemStyle("barcode", { draggable: isEditMode })}
-                onPointerDown={isEditMode ? (event) => handleCodeDragStart(event, "barcode") : undefined}
-                onPointerMove={isEditMode ? handleCodeDragMove : undefined}
-                onPointerUp={isEditMode ? handleCodeDragEnd : undefined}
-                onPointerCancel={isEditMode ? handleCodeDragEnd : undefined}
-                title={isEditMode ? "Drag barcode to move it" : "Switch to Edit Mode to move barcode"}
-              >
-                <Barcode
-                  value={tagNoValue}
-                  format="CODE128"
-                  height={Math.max(12, Number(getCodeItem("barcode").height) - 9)}
-                  width={1.45}
-                  margin={0}
-                  displayValue={false}
-                  background="#ffffff"
-                  lineColor="#111827"
-                />
-                {isEditMode && (
-                  <span
-                    className="ppe-edit-control absolute bottom-[-7px] right-[-7px] h-4 w-4 cursor-nwse-resize rounded-sm border border-blue-700 bg-white shadow ring-1 ring-blue-200"
-                    title="Drag to resize barcode"
-                    onPointerDown={(event) => handleCodeResizeStart(event, "barcode")}
-                    onPointerMove={handleCodeDragMove}
-                    onPointerUp={handleCodeDragEnd}
-                    onPointerCancel={handleCodeDragEnd}
-                  />
-                )}
-              </div>
-              <div
-                className="absolute whitespace-nowrap overflow-visible text-center text-[12px] font-black leading-none"
-                style={{
-                  left: `${Number(getCodeItem("barcode").x) || 0}px`,
-                  top: `${(Number(getCodeItem("barcode").y) || 0) + Math.max(18, Number(getCodeItem("barcode").height) || 51) + 4}px`,
-                  width: `${Math.max(24, Number(getCodeItem("barcode").width) || 168)}px`,
-                }}
-              >
-                {tagNoValue}
-              </div>
+              {showQrCode && (
+                <div
+                  className={`relative flex items-center justify-center border-2 border-slate-900 bg-white p-[6px] ring-blue-300 ${
+                    isEditMode ? "hover:ring-2" : ""
+                  }`}
+                  style={getCodeItemStyle("qr", { draggable: isEditMode })}
+                  onPointerDown={isEditMode ? (event) => handleCodeDragStart(event, "qr") : undefined}
+                  onPointerMove={isEditMode ? handleCodeDragMove : undefined}
+                  onPointerUp={isEditMode ? handleCodeDragEnd : undefined}
+                  onPointerCancel={isEditMode ? handleCodeDragEnd : undefined}
+                  title={isEditMode ? "Drag QR code to move it" : "Switch to Edit Mode to move QR code"}
+                >
+                  {qrType === "standard" ? (
+                    <QRCode
+                      value={qrValue}
+                      size={Math.max(16, Math.min(getCodeItem("qr").width, getCodeItem("qr").height) - 16)}
+                      bgColor="#ffffff"
+                      fgColor="#111827"
+                      level="M"
+                    />
+                  ) : (
+                    <DottedQRCode
+                      value={qrValue}
+                      size={Math.max(16, Math.min(getCodeItem("qr").width, getCodeItem("qr").height) - 16)}
+                      bgColor="#ffffff"
+                      fgColor="#111827"
+                      level="M"
+                    />
+                  )}
+                  {isEditMode && (
+                    <span
+                      className="ppe-edit-control absolute bottom-[-7px] right-[-7px] h-4 w-4 cursor-nwse-resize rounded-sm border border-blue-700 bg-white shadow ring-1 ring-blue-200"
+                      title="Drag to resize QR code"
+                      onPointerDown={(event) => handleCodeResizeStart(event, "qr")}
+                      onPointerMove={handleCodeDragMove}
+                      onPointerUp={handleCodeDragEnd}
+                      onPointerCancel={handleCodeDragEnd}
+                    />
+                  )}
+                </div>
+              )}
+              {showBarcode && (
+                <>
+                  <div
+                    className={`relative overflow-hidden bg-white ring-blue-300 ${isEditMode ? "hover:ring-2" : ""}`}
+                    style={getCodeItemStyle("barcode", { draggable: isEditMode })}
+                    onPointerDown={isEditMode ? (event) => handleCodeDragStart(event, "barcode") : undefined}
+                    onPointerMove={isEditMode ? handleCodeDragMove : undefined}
+                    onPointerUp={isEditMode ? handleCodeDragEnd : undefined}
+                    onPointerCancel={isEditMode ? handleCodeDragEnd : undefined}
+                    title={isEditMode ? "Drag barcode to move it" : "Switch to Edit Mode to move barcode"}
+                  >
+                    <Barcode
+                      value={tagNoValue}
+                      format="CODE128"
+                      height={Math.max(12, Number(getCodeItem("barcode").height) - 9)}
+                      width={1.45}
+                      margin={0}
+                      displayValue={false}
+                      background="#ffffff"
+                      lineColor="#111827"
+                    />
+                    {isEditMode && (
+                      <span
+                        className="ppe-edit-control absolute bottom-[-7px] right-[-7px] h-4 w-4 cursor-nwse-resize rounded-sm border border-blue-700 bg-white shadow ring-1 ring-blue-200"
+                        title="Drag to resize barcode"
+                        onPointerDown={(event) => handleCodeResizeStart(event, "barcode")}
+                        onPointerMove={handleCodeDragMove}
+                        onPointerUp={handleCodeDragEnd}
+                        onPointerCancel={handleCodeDragEnd}
+                      />
+                    )}
+                  </div>
+                  <div
+                    className="absolute whitespace-nowrap overflow-visible text-center text-[12px] font-black leading-none"
+                    style={{
+                      left: `${Number(getCodeItem("barcode").x) || 0}px`,
+                      top: `${(Number(getCodeItem("barcode").y) || 0) + Math.max(18, Number(getCodeItem("barcode").height) || 51) + 4}px`,
+                      width: `${Math.max(24, Number(getCodeItem("barcode").width) || 168)}px`,
+                    }}
+                  >
+                    {tagNoValue}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -8472,6 +8510,39 @@ ${fields}
                       Remove
                     </button>
                   </div>
+                  <div className="mt-3 border-t border-slate-200 pt-3">
+                    <p className="mb-2 text-[10px] font-semibold text-slate-500">QR / Barcode Display</p>
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 text-[11px] font-semibold text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={showQrCode}
+                          onChange={(event) => setShowQrCode(event.target.checked)}
+                        />
+                        Show QR Code
+                      </label>
+                      <label className="flex items-center gap-2 text-[11px] font-semibold text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={showBarcode}
+                          onChange={(event) => setShowBarcode(event.target.checked)}
+                        />
+                        Show Bar Code
+                      </label>
+                      <label className="block text-[11px] font-semibold text-slate-600">
+                        <span className="mb-1 block text-[10px] text-slate-500">QR Type</span>
+                        <select
+                          className="h-8 w-full rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          value={qrType}
+                          disabled={!showQrCode}
+                          onChange={(event) => setQrType(event.target.value === "standard" ? "standard" : "dotted")}
+                        >
+                          <option value="dotted">Dotted</option>
+                          <option value="standard">Standard</option>
+                        </select>
+                      </label>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -9030,6 +9101,3 @@ ${fields}
 };
 
 export default SearchPPETag;
-
-
-

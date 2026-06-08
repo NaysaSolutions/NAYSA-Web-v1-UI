@@ -247,6 +247,7 @@ const FieldRenderer = ({
   disabled,
   lookupDisabled = false,
   editableLookup = false,
+  allowLookupInput = false,
   options = [],
   readOnly = false,
   placeholder = " ",
@@ -385,14 +386,16 @@ const FieldRenderer = ({
           <Input
             id={inputId}
             value={getDisplayValue(value, "lookup")}
-            readOnly
+            readOnly={!allowLookupInput}
             placeholder={placeholder}
-            className={`${sharedClasses} cursor-pointer ${
+            className={`${sharedClasses} ${allowLookupInput ? "" : "cursor-pointer"} ${
               !lookupActionDisabled && editableLookup && getDisplayValue(value, "lookup")
                 ? "pr-20"
                 : "pr-10"
             }`}
-            onClick={() => !lookupActionDisabled && onLookup?.()}
+            onChange={allowLookupInput ? handleChange : undefined}
+            onKeyDown={onKeyDown}
+            onClick={() => !allowLookupInput && !lookupActionDisabled && onLookup?.()}
           />
 
           {!lookupActionDisabled && editableLookup && getDisplayValue(value, "lookup") && (
