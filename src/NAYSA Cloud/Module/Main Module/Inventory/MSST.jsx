@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, Fragment } from "react";
+ import { useState, useEffect, useRef, useCallback, Fragment } from "react";
 import Swal from "sweetalert2";
 import { useNavigate, useLocation } from "react-router-dom";
 import ExcelJS from "exceljs";
@@ -9,7 +9,6 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faMagnifyingGlass,
   faPlus,
-  faMinus,
   faTrashAlt,
   faFolderOpen,
 } from "@fortawesome/free-solid-svg-icons";
@@ -189,6 +188,26 @@ const isIntransitWarehouse = (warehouse) => {
   );
 };
 
+const getWarehouseDefaultLocCode = (warehouse) => {
+  if (!warehouse || typeof warehouse === "string") return "";
+
+  return (
+    warehouse?.locCode ||
+    warehouse?.LOC_CODE ||
+    warehouse?.loc_code ||
+    warehouse?.locationCode ||
+    warehouse?.LOCATION_CODE ||
+    warehouse?.defaultLocCode ||
+    warehouse?.DEFAULT_LOC_CODE ||
+    warehouse?.default_location_code ||
+    warehouse?.firstLocCode ||
+    warehouse?.FIRST_LOC_CODE ||
+    warehouse?.tagLocCode ||
+    warehouse?.TAG_LOC_CODE ||
+    ""
+  );
+};
+
 const getWarehouseBranchCode = (warehouse) =>
   String(
     warehouse?.branchCode ??
@@ -203,6 +222,7 @@ const MSST = () => {
   const loadedFromUrlRef = useRef(false);
   const detailRowsRef = useRef([]);
   const detailRowsGLRef = useRef([]);
+  const defaultLocationCacheRef = useRef({});
   const navigate = useNavigate();
   const location = useLocation();
   const [isViewDocument, setIsViewDocument] = useState(false);
@@ -313,8 +333,10 @@ const MSST = () => {
     refDocNo2: "",
     fromWhCode: "",
     fromWhName: "",
+    fromWhDefaultLocCode: "",
     toWhCode: "",
     toWhName: "",
+    toWhDefaultLocCode: "",
     remarks: "",
     selectedTranType: "",
     userCode: getCurrentUserCode(),
@@ -409,8 +431,10 @@ const MSST = () => {
     refDocNo2,
     fromWhCode,
     fromWhName,
+    fromWhDefaultLocCode,
     toWhCode,
     toWhName,
+    toWhDefaultLocCode,
     remarks,
     selectedTranType,
 
@@ -456,6 +480,104 @@ const MSST = () => {
   const [focusedCell, setFocusedCell] = useState(null);
 
   const displayStatus = status || "OPEN";
+
+  const getLocationCodeFromRow = (row) =>
+    String(
+      row?.locCode ??
+        row?.LOC_CODE ??
+        row?.locationCode ??
+        row?.LOCATION_CODE ??
+        row?.code ??
+        row?.CODE ??
+        "",
+    ).trim();
+
+  const normalizeLookupRows = (value) => {
+    if (!value) return [];
+
+    if (Array.isArray(value)) {
+      return value.flatMap((item) => normalizeLookupRows(item));
+    }
+
+    if (typeof value === "string") {
+      try {
+        return normalizeLookupRows(JSON.parse(value));
+      } catch {
+        return [];
+      }
+    }
+
+    const resultValue =
+      value?.result ??
+      value?.RESULT ??
+      value?.data?.[0]?.result ??
+      value?.data?.[0]?.RESULT ??
+      value?.data?.result ??
+      value?.data?.RESULT;
+
+    if (resultValue) {
+      return normalizeLookupRows(resultValue);
+    }
+
+    if (Array.isArray(value?.data)) {
+      return value.data.flatMap((item) => normalizeLookupRows(item));
+    }
+
+    return [value];
+  };
+
+  const getFirstLocationCodeByWarehouse = async (whCode) => {
+    const warehouseCode = String(whCode || "").trim();
+    if (!warehouseCode) return "";
+    if (isIntransitWarehouse(warehouseCode)) return "INTRANSIT";
+
+    const cacheKey = normalizeCode(warehouseCode);
+    if (defaultLocationCacheRef.current[cacheKey] !== undefined) {
+      return defaultLocationCacheRef.current[cacheKey];
+    }
+
+    const requestPayload = {
+      userCode,
+      branchCode,
+      filter: "ActiveAll",
+      whCode: warehouseCode,
+      whouseCode: warehouseCode,
+      warehouseCode,
+    };
+
+    const endpoints = ["getLocation", "getLocationRef", "getLocRef", "getWarehouseLocation"];
+
+    for (const endpoint of endpoints) {
+      try {
+        const response = await fetchDataJson(endpoint, requestPayload);
+        const rows = normalizeLookupRows(response).filter((item) => {
+          const locCode = getLocationCodeFromRow(item);
+          const itemWhCode = String(
+            item?.whCode ??
+              item?.WH_CODE ??
+              item?.whouseCode ??
+              item?.WHOUSE_CODE ??
+              item?.warehouseCode ??
+              item?.WAREHOUSE_CODE ??
+              "",
+          ).trim();
+
+          return locCode && (!itemWhCode || normalizeCode(itemWhCode) === cacheKey);
+        });
+
+        const firstLocCode = getLocationCodeFromRow(rows[0]);
+        if (firstLocCode) {
+          defaultLocationCacheRef.current[cacheKey] = firstLocCode;
+          return firstLocCode;
+        }
+      } catch {
+        // Try the next possible location endpoint.
+      }
+    }
+
+    defaultLocationCacheRef.current[cacheKey] = "";
+    return "";
+  };
 
   const getDropdownValue = (row, keys) => {
     for (const key of keys) {
@@ -521,9 +643,30 @@ const MSST = () => {
     if (!row) return false;
     const name = getTranTypeName(row);
     const code = getTranTypeCode(row);
-    // 🌟 FIX: Tinanggal na ang INW at MSST01 dito para hindi lumabas ang Branch selection box kapag Intransit to WAREHOUSE lang
+    // INW/MSST01 is Intransit to Warehouse only, so it should not require Branch selection.
     return normalizeCode(name).includes("INTRANSIT TO BRANCH") || normalizeCode(code) === "MSST03" || normalizeCode(code) === "INB";
   };
+
+  const isIntransitToWarehouse = (tranTypeCode = selectedTranType, list = tranTypes) => {
+    const row = (list || []).find(
+      (x) => normalizeCode(getTranTypeCode(x)) === normalizeCode(tranTypeCode),
+    );
+    if (!row) return false;
+    const name = normalizeCode(getTranTypeName(row));
+    const code = normalizeCode(getTranTypeCode(row));
+    return (
+      name.includes("INTRANSIT TO WAREHOUSE") ||
+      name.includes("INTRANSIT TO WARE HOUSE") ||
+      code === "MSST01" ||
+      code === "INW"
+    );
+  };
+
+  const isIntransitTransfer = (tranTypeCode = selectedTranType, list = tranTypes) =>
+    isIntransitToWarehouse(tranTypeCode, list) || isIntransitToBranch(tranTypeCode, list);
+
+  const isBranchTransfer = (tranTypeCode = selectedTranType, list = tranTypes) =>
+    isInterBranch(tranTypeCode, list) || isIntransitToBranch(tranTypeCode, list);
 
   const requiresBranchSelection = (tranTypeCode = selectedTranType, list = tranTypes) => {
     return isInterBranch(tranTypeCode, list) || isIntransitToBranch(tranTypeCode, list);
@@ -532,6 +675,28 @@ const MSST = () => {
   const isWarehouseTransfer = (tranTypeCode = selectedTranType, list = tranTypes) =>
     getTranTypeColumn(tranTypeCode, list) === "WH_TRANSFER" || 
     getTranTypeColumn(tranTypeCode, list) === "BRANCH_TRANSFER";
+
+  // Disable detail lookup/search buttons for Inter Warehouse and Inter Branch flows.
+  // Uses code, name, and dropdown_column so it still works even if the setup code changes.
+  const isInterWarehouseOrInterBranch = (tranTypeCode = selectedTranType, list = tranTypes) => {
+    const normalizedCode = normalizeCode(tranTypeCode);
+    const column = getTranTypeColumn(tranTypeCode, list);
+    const row = (list || []).find(
+      (x) => normalizeCode(getTranTypeCode(x)) === normalizedCode,
+    );
+    const name = normalizeCode(getTranTypeName(row));
+
+    return (
+      ["IW", "IB", "MSST02", "MSST04"].includes(normalizedCode) ||
+      ["WH_TRANSFER", "BRANCH_TRANSFER"].includes(column) ||
+      name.includes("INTER WAREHOUSE") ||
+      name.includes("INTER WARE HOUSE") ||
+      name.includes("INTER BRANCH")
+    );
+  };
+
+  const hideFromWarehouseAndLocationSearch = (tranTypeCode = selectedTranType, list = tranTypes) =>
+    isInterWarehouseOrInterBranch(tranTypeCode, list) || isIntransitTransfer(tranTypeCode, list);
 
 
   const normalizeTranDropDownResponse = (value) => {
@@ -569,6 +734,40 @@ const MSST = () => {
     return [value];
   };
 
+  const getTranTypeUserCode = (row) =>
+    normalizeCode(
+      getDropdownValue(row, [
+        "USER_CODE",
+        "userCode",
+        "user_code",
+        "USERID",
+        "userId",
+      ]),
+    );
+
+  const getTranTypeBranchCode = (row) =>
+    normalizeCode(
+      getDropdownValue(row, [
+        "BRANCH_CODE",
+        "branchCode",
+        "branch_code",
+        "BRANCH",
+        "branch",
+      ]),
+    );
+
+  const isTranTypeAllowedForUser = (row) => {
+    const rowUserCode = getTranTypeUserCode(row);
+    const rowBranchCode = getTranTypeBranchCode(row);
+    const currentUserCode = normalizeCode(getCurrentUserCode());
+    const currentBranchCode = normalizeCode(getCurrentUserBranchCode());
+
+    const isUserMatched = !rowUserCode || !currentUserCode || rowUserCode === currentUserCode;
+    const isBranchMatched = !rowBranchCode || !currentBranchCode || rowBranchCode === currentBranchCode;
+
+    return isUserMatched && isBranchMatched;
+  };
+
   const mergeTranTypes = (...sources) => {
     const merged = [];
     const seen = new Set();
@@ -603,6 +802,7 @@ const MSST = () => {
 
         if (docCode && docCode !== normalizeCode(docType)) return;
         if (type && type !== "TRAN_TYPE") return;
+        if (!isTranTypeAllowedForUser(row)) return;
 
         const key = normalizeCode(code);
         if (seen.has(key)) return;
@@ -635,35 +835,47 @@ const MSST = () => {
     );
   };
 
-  const loadTranTypes = async () => {
+  const applyTranTypes = (rows) => {
+    updateState({
+      tranTypes: rows,
+      selectedTranType:
+        selectedTranType && rows.some((x) => getTranTypeCode(x) === selectedTranType)
+          ? selectedTranType
+          : getDefaultTranType(rows),
+    });
+  };
+
+  const loadTranTypes = async ({ allowDbFallback = true } = {}) => {
     const cached1 = getAllDropDown?.("TRAN_TYPE", docType) || [];
     const cached2 = getAllDropDown?.(docType, "TRAN_TYPE") || [];
+    const cachedRows = mergeTranTypes(cached1, cached2);
 
-    let dbRows1 = [];
-    let dbRows2 = [];
-
-    try {
-      dbRows1 = await useTopDocDropDown(docType, "TRAN_TYPE");
-    } catch (error) {
-      console.warn("Unable to load MSST TRAN_TYPE using docType/type order.", error);
+    // Use the AuthContext cached dropdown first so transaction page loading is shorter.
+    if (cachedRows.length > 0) {
+      applyTranTypes(cachedRows);
+      return cachedRows;
     }
 
-    try {
-      dbRows2 = await useTopDocDropDown("TRAN_TYPE", docType);
-    } catch (error) {
-      console.warn("Unable to load MSST TRAN_TYPE using type/docType order.", error);
+    if (!allowDbFallback) {
+      updateState({ tranTypes: [], selectedTranType: "" });
+      return [];
     }
 
-    const rows = mergeTranTypes(cached1, cached2, dbRows1, dbRows2);
+    const [dbRows1, dbRows2] = await Promise.all([
+      useTopDocDropDown(docType, "TRAN_TYPE").catch((error) => {
+        console.warn("Unable to load MSST TRAN_TYPE using docType/type order.", error);
+        return [];
+      }),
+      useTopDocDropDown("TRAN_TYPE", docType).catch((error) => {
+        console.warn("Unable to load MSST TRAN_TYPE using type/docType order.", error);
+        return [];
+      }),
+    ]);
+
+    const rows = mergeTranTypes(dbRows1, dbRows2);
 
     if (rows.length > 0) {
-      updateState({
-        tranTypes: rows,
-        selectedTranType:
-          selectedTranType && rows.some((x) => getTranTypeCode(x) === selectedTranType)
-            ? selectedTranType
-            : getDefaultTranType(rows),
-      });
+      applyTranTypes(rows);
     } else {
       updateState({ tranTypes: [], selectedTranType: "" });
     }
@@ -729,7 +941,7 @@ const MSST = () => {
     }
     let timer;
     if (isLoading) {
-      timer = setTimeout(() => updateState({ showSpinner: true }), 200);
+      timer = setTimeout(() => updateState({ showSpinner: true }), 600);
     } else {
       updateState({ showSpinner: false });
     }
@@ -749,9 +961,10 @@ const MSST = () => {
   }, [state.documentID]);
 
   useEffect(() => {
+    if (!currentUserRow && !user) return;
     loadCompanyData();
     handleReset();
-  }, []);
+  }, [currentUserRow, user]);
 
   useEffect(() => {
     const userBranchCode = getCurrentUserBranchCode();
@@ -768,8 +981,8 @@ const MSST = () => {
 
   useEffect(() => {
     if (!refsLoaded) return;
-    loadTranTypes();
-  }, [docType, refsLoaded]);
+    loadTranTypes({ allowDbFallback: false });
+  }, [docType, refsLoaded, currentUserRow]);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -794,8 +1007,10 @@ const MSST = () => {
 
       fromWhCode: "",
       fromWhName: "",
+      fromWhDefaultLocCode: "",
       toWhCode: "",
       toWhName: "",
+      toWhDefaultLocCode: "",
       toBranchCode: "",
       toBranchName: "",
       refDocNo1: "",
@@ -826,48 +1041,55 @@ const MSST = () => {
     updateState({ isLoading: true });
 
     try {
-      await loadTranTypes();
+      const tbls = "msst_hd,msst_dt1,msst_dt2";
+      const [loadedTranTypes, docRow, hsOption, hdtblcol_result] = await Promise.all([
+        loadTranTypes(),
+        useTopDocControlRow(docType),
+        useTopHSOption(),
+        useFieldLenghtCheck(tbls),
+      ]);
 
-      const docRow = await useTopDocControlRow(docType);
+      const updates = {
+        userCode: getCurrentUserCode(),
+        branchCode: getCurrentUserBranchCode() || branchCode,
+        branchName: getCurrentUserBranchName() || branchName,
+      };
 
       if (docRow) {
-        updateState({
-          documentName: docRow.docName,
-          documentSeries: docRow.docSeries,
-          documentDocLen: docRow.docLength,
-        });
+        updates.documentName = docRow.docName;
+        updates.documentSeries = docRow.docSeries;
+        updates.documentDocLen = docRow.docLength;
       }
 
-      const hsOption = await useTopHSOption();
       if (hsOption) {
-        updateState({
-          glCurrMode: hsOption.glCurrMode,
-          glCurrDefault: hsOption.glCurrDefault,
-          currCode: hsOption.glCurrDefault,
-          glCurrGlobal1: hsOption.glCurrGlobal1,
-          glCurrGlobal2: hsOption.glCurrGlobal2,
-          glCurrGlobal3: hsOption.glCurrGlobal3,
-        });
+        updates.glCurrMode = hsOption.glCurrMode;
+        updates.glCurrDefault = hsOption.glCurrDefault;
+        updates.currCode = hsOption.glCurrDefault;
+        updates.glCurrGlobal1 = hsOption.glCurrGlobal1;
+        updates.glCurrGlobal2 = hsOption.glCurrGlobal2;
+        updates.glCurrGlobal3 = hsOption.glCurrGlobal3;
 
         const curr = await useTopCurrencyRow(hsOption.glCurrDefault);
         if (curr) {
-          updateState({
-            currName: curr.currName,
-            currRate: formatNumber(1, 6),
-          });
+          updates.currName = curr.currName;
+          updates.currRate = formatNumber(1, 6);
         }
       }
 
-      const tbls = "msst_hd,msst_dt1,msst_dt2";
-      const hdtblcol_result = await useFieldLenghtCheck(tbls);
       if (hdtblcol_result) {
-        updateState({ tblFieldArray: hdtblcol_result });
+        updates.tblFieldArray = hdtblcol_result;
       }
+
+      if (!selectedTranType && loadedTranTypes.length > 0) {
+        updates.selectedTranType = getDefaultTranType(loadedTranTypes);
+      }
+
+      updateState(updates);
     } catch (err) {
       console.error("Error fetching data:", err);
+    } finally {
+      updateState({ isLoading: false });
     }
-
-    updateState({ isLoading: false });
   };
 
   const loadCurrencyMode = (
@@ -948,8 +1170,10 @@ const MSST = () => {
         toBranchName: data.toBranchName || data.to_branch_name || "",
         fromWhCode: data.frmwhouseCode || data.fromWhCode || data.from_wh || "",
         fromWhName: data.frmwhouseName || data.fromWhName || data.from_wh_name || "",
+        fromWhDefaultLocCode: "",
         toWhCode: data.towhouseCode || data.toWhCode || data.to_wh || "",
         toWhName: data.towhouseName || data.toWhName || data.to_wh_name || "",
+        toWhDefaultLocCode: "",
         refDocNo1: data.refDocNo1,
         refDocNo2: data.refDocNo2,
         remarks: data.remarks,
@@ -1190,8 +1414,8 @@ const MSST = () => {
     qtyHand: "0.00",
     whouseCode: fromWhCode || "",
     toWHcode: toWhCode || "",
-    locCode: isIntransitWarehouse(fromWhCode || "") ? "INTRANSIT" : "", 
-    tolocCode: isIntransitWarehouse(toWhCode || "") ? "INTRANSIT" : "", 
+    locCode: isIntransitWarehouse(fromWhCode || "") ? "INTRANSIT" : (fromWhDefaultLocCode || ""), 
+    tolocCode: isIntransitWarehouse(toWhCode || "") ? "INTRANSIT" : (toWhDefaultLocCode || ""), 
     acctCode: "",
     rcCode: "",
     sltypeCode: "",
@@ -1653,25 +1877,32 @@ const MSST = () => {
     }
 
     if (field === "whouseCode") {
+      const defaultLocCode = isIntransitWarehouse(value)
+        ? "INTRANSIT"
+        : getWarehouseDefaultLocCode(value) || await getFirstLocationCodeByWarehouse(value.whCode);
+
       row.whouseCode = value.whCode;
-      if (isIntransitWarehouse(value)) {
-        row.locCode = "INTRANSIT";
-      }
+      row.frmwhouseCode = value.whCode;
+      row.locCode = defaultLocCode || "";
+      row.frmlocCode = defaultLocCode || "";
+
       await autoFillBlanks("whouseCode", value.whCode);
-      if (isIntransitWarehouse(value)) {
-        await autoFillBlanks("locCode", "INTRANSIT");
-      }
+      await autoFillBlanks("locCode", defaultLocCode || "", {
+        frmlocCode: defaultLocCode || "",
+      });
     }
 
     if (field === "toWHcode") {
+      const defaultLocCode = isIntransitWarehouse(value)
+        ? "INTRANSIT"
+        : getWarehouseDefaultLocCode(value) || await getFirstLocationCodeByWarehouse(value.whCode);
+
       row.toWHcode = value.whCode;
-      if (isIntransitWarehouse(value)) {
-        row.tolocCode = "INTRANSIT";
-      }
+      row.towhouseCode = value.whCode;
+      row.tolocCode = defaultLocCode || "";
+
       await autoFillBlanks("toWHcode", value.whCode);
-      if (isIntransitWarehouse(value)) {
-        await autoFillBlanks("tolocCode", "INTRANSIT");
-      }
+      await autoFillBlanks("tolocCode", defaultLocCode || "");
     }
 
     if (field === "locCode") {
@@ -1693,11 +1924,20 @@ const MSST = () => {
       row[field] = value;
     }
 
-    if (field === "itemCode") {
+if (field === "itemCode") {
       row["itemCode"] = value.itemCode;
       row["itemName"] = value.itemName;
       row["uomCode"] = value.uomCode;
       row["categCode"] = value.categCode;
+      
+
+      const invAccountCode = value.invAcct ?? value.invAcctCode ?? value.INV_ACCT ?? value.acctCode ?? value.ACCT_CODE ?? "";
+      if (invAccountCode) {
+        row["acctCode"] = invAccountCode;
+
+        autoFillBlanks("acctCode", invAccountCode);
+      }
+
       row["unitCost"] = formatNumber(
         parseFormattedNumber(value.unitCost || row.unitCost || 0),
         decUcost,
@@ -1981,10 +2221,10 @@ const MSST = () => {
     let autoToWhCode = "";
     let autoToWhName = "";
 
-    if (["INW", "MSST01", "MSST03"].includes(newTranType)) {
+    if (isIntransitTransfer(newTranType)) {
       autoFromWhCode = "INT";
       autoFromWhName = "INT - INTRANSIT";
-    } else if (["IW", "MSST02", "MSST04"].includes(newTranType)) {
+    } else if (isInterWarehouseOrInterBranch(newTranType)) {
       autoToWhCode = "INT";
       autoToWhName = "INT - INTRANSIT";
     }
@@ -1995,8 +2235,10 @@ const MSST = () => {
       toBranchName: "",
       fromWhCode: autoFromWhCode,
       fromWhName: autoFromWhName,
+      fromWhDefaultLocCode: autoFromWhCode === "INT" ? "INTRANSIT" : "",
       toWhCode: autoToWhCode,
       toWhName: autoToWhName,
+      toWhDefaultLocCode: autoToWhCode === "INT" ? "INTRANSIT" : "",
       detailRows: [],
       detailRowsGL: [],
     });
@@ -2019,10 +2261,10 @@ const MSST = () => {
       let autoToWhCode = "";
       let autoToWhName = "";
 
-      if (["INW", "MSST01", "MSST03"].includes(selectedTranType)) {
+      if (isIntransitTransfer()) {
         autoFromWhCode = "INT";
         autoFromWhName = "INT - INTRANSIT";
-      } else if (["IW", "MSST02", "MSST04"].includes(selectedTranType)) {
+      } else if (isInterWarehouseOrInterBranch()) {
         autoToWhCode = "INT";
         autoToWhName = "INT - INTRANSIT";
       }
@@ -2036,12 +2278,12 @@ const MSST = () => {
         fromWhName: autoFromWhName,
         detailRows: (detailRows || []).map((item) => ({
           ...item,
-          toWHcode: "",
-          towhouseCode: "",
-          whouseCode: "",
-          frmwhouseCode: "",
-          tolocCode: "",
-          locCode: "",
+          toWHcode: autoToWhCode,
+          towhouseCode: autoToWhCode,
+          whouseCode: autoFromWhCode,
+          frmwhouseCode: autoFromWhCode,
+          tolocCode: autoToWhCode === "INT" ? "INTRANSIT" : "",
+          locCode: autoFromWhCode === "INT" ? "INTRANSIT" : "",
         })),
         detailRowsGL: [],
       });
@@ -2056,10 +2298,10 @@ const MSST = () => {
       let autoToWhCode = "";
       let autoToWhName = "";
 
-      if (["INW", "MSST01", "MSST03"].includes(selectedTranType)) {
+      if (isIntransitTransfer()) {
         autoFromWhCode = "INT";
         autoFromWhName = "INT - INTRANSIT";
-      } else if (["IW", "MSST02", "MSST04"].includes(selectedTranType)) {
+      } else if (isInterWarehouseOrInterBranch()) {
         autoToWhCode = "INT";
         autoToWhName = "INT - INTRANSIT";
       }
@@ -2095,9 +2337,9 @@ const MSST = () => {
     let filterStr = "ActiveOnly";
 
     if (targetBranchCode) {
-      if (["IW", "MSST02", "MSST04"].includes(selectedTranType)) {
+      if (isInterWarehouseOrInterBranch()) {
         filterStr = `ByBC${targetBranchCode}`;
-      } else if (["INW", "MSST01", "MSST03"].includes(selectedTranType)) {
+      } else if (isIntransitTransfer()) {
         filterStr = `IntransitOnly`; 
       }
     }
@@ -2117,9 +2359,9 @@ const MSST = () => {
     let filterStr = "ActiveOnly";
 
     if (targetBranchCode) {
-      if (["INW", "MSST01", "MSST03"].includes(selectedTranType)) {
+      if (isIntransitTransfer()) {
         filterStr = `ByBC${targetBranchCode}`;
-      } else if (["IW", "MSST02", "MSST04"].includes(selectedTranType)) {
+      } else if (isInterWarehouseOrInterBranch()) {
         filterStr = `IntransitOnly`;
       }
     }
@@ -2178,7 +2420,7 @@ const MSST = () => {
       return;
     }
 
-    if (["IW", "MSST02", "MSST04"].includes(selectedTranType) && !fromWhCode) {
+    if (isInterWarehouseOrInterBranch() && !fromWhCode) {
        useSwalInfoAlert(
          "From Warehouse Required", 
          "Please select From Warehouse first."
@@ -2198,19 +2440,20 @@ const MSST = () => {
     updateState({ warehouseLookupOpen: false, accountModalSource: null });
   };
 
- const handleCloseFromWarehouseLookup = (row) => {
+ const handleCloseFromWarehouseLookup = async (row) => {
     if (row) {
       const selectedIsTransit = isIntransitWarehouse(row);
       const selectedBranchCode = getWarehouseBranchCode(row);
       const targetBranchCode = isIntransitToBranch() ? toBranchCode : branchCode;
+      const defaultLocCode = selectedIsTransit ? "INTRANSIT" : getWarehouseDefaultLocCode(row) || await getFirstLocationCodeByWarehouse(row.whCode);
 
-      if (["INW", "MSST01", "MSST03"].includes(selectedTranType) && !selectedIsTransit) {
+      if (isIntransitTransfer() && !selectedIsTransit) {
         useSwalInfoAlert("Invalid From Warehouse", "Kapag Intransit to Branch/Warehouse ang transaction, dapat INTRANSIT ang From Warehouse.");
         updateState({ fromwarehouseLookupOpen: false });
         return;
       }
 
-      if (["IW", "MSST02", "MSST04"].includes(selectedTranType) && selectedIsTransit) {
+      if (isInterWarehouseOrInterBranch() && selectedIsTransit) {
         useSwalInfoAlert("Invalid From Warehouse", "Kapag Inter Branch/Warehouse ang transaction, dapat physical warehouse ang From Warehouse, hindi Intransit.");
         updateState({ fromwarehouseLookupOpen: false });
         return;
@@ -2220,7 +2463,7 @@ const MSST = () => {
       let newToWhCode = toWhCode;
       let newToWhName = toWhName;
 
-      if (["IW", "MSST02", "MSST04"].includes(selectedTranType)) {
+      if (isInterWarehouseOrInterBranch()) {
         newToWhCode = "INT";
         newToWhName = "INT - INTRANSIT";
       } else {
@@ -2229,19 +2472,25 @@ const MSST = () => {
         newToWhName = "";
       }
 
+      const defaultToLocCode = isIntransitWarehouse(newToWhCode)
+        ? "INTRANSIT"
+        : await getFirstLocationCodeByWarehouse(newToWhCode);
+
       updateState({
         fromWhCode: row.whCode,
         fromWhName: row.whName,
+        fromWhDefaultLocCode: defaultLocCode,
         toWhCode: newToWhCode, // Ginamit ang preserved logic
         toWhName: newToWhName,
+        toWhDefaultLocCode: defaultToLocCode,
         detailRows: (detailRows || []).map((item) => ({
           ...item,
           whouseCode: row.whCode,
           frmwhouseCode: row.whCode,
-          locCode: selectedIsTransit ? "INTRANSIT" : "",
+          locCode: defaultLocCode || "",
           toWHcode: newToWhCode, // Panatilihin din sa mga item rows
           towhouseCode: newToWhCode,
-          tolocCode: newToWhCode === "INT" ? "INTRANSIT" : "", 
+          tolocCode: defaultToLocCode, 
         })),
         detailRowsGL: [],
       });
@@ -2249,11 +2498,12 @@ const MSST = () => {
     updateState({ fromwarehouseLookupOpen: false });
   };
 
-  const handleCloseToWarehouseLookup = (row) => {
+  const handleCloseToWarehouseLookup = async (row) => {
     if (row) {
       const selectedIsTransit = isIntransitWarehouse(row);
       const selectedBranchCode = getWarehouseBranchCode(row);
       const targetBranchCode = isInterBranch() ? toBranchCode : branchCode;
+      const defaultLocCode = selectedIsTransit ? "INTRANSIT" : getWarehouseDefaultLocCode(row) || await getFirstLocationCodeByWarehouse(row.whCode);
 
       if (normalizeCode(fromWhCode) === normalizeCode(row.whCode)) {
         useSwalInfoAlert(
@@ -2264,13 +2514,13 @@ const MSST = () => {
         return;
       }
 
-      if (["IW", "MSST02", "MSST04"].includes(selectedTranType) && !selectedIsTransit) {
+      if (isInterWarehouseOrInterBranch() && !selectedIsTransit) {
         useSwalInfoAlert("Invalid To Warehouse", "Kapag Inter Branch/Warehouse ang transaction, dapat INTRANSIT ang To Warehouse.");
         updateState({ towarehouseLookupOpen: false });
         return;
       }
 
-      if (["INW", "MSST01", "MSST03"].includes(selectedTranType) && selectedIsTransit) {
+      if (isIntransitTransfer() && selectedIsTransit) {
         useSwalInfoAlert("Invalid To Warehouse", "Kapag Intransit to Branch/Warehouse ang transaction, dapat physical warehouse ang To Warehouse, hindi Intransit.");
         updateState({ towarehouseLookupOpen: false });
         return;
@@ -2279,11 +2529,12 @@ const MSST = () => {
       updateState({
         toWhCode: row.whCode,
         toWhName: row.whName,
+        toWhDefaultLocCode: defaultLocCode,
         detailRows: (detailRows || []).map((item) => ({
           ...item,
           toWHcode: row.whCode,
           towhouseCode: row.whCode,
-          tolocCode: selectedIsTransit ? "INTRANSIT" : "",
+          tolocCode: defaultLocCode || "",
         })),
         detailRowsGL: [],
       });
@@ -2295,22 +2546,29 @@ const MSST = () => {
     try {
       updateState({ isLoading: true, itemSingleSelect: itemSingleSelect });
 
-      // 🌟 FIX: Ayusin ang mapping ng SOURCE at TARGET branch para sa INTRANSIT
+      // Match MS_INT SOURCE_BRANCH and TO_BRANCH exactly for Intransit receiver lookup.
       let apiSourceBranch = branchCode || "";
-      let apiToBranch = toBranchCode || branchCode || "";
+      let apiToBranch = isInterBranch() ? (toBranchCode || "") : (branchCode || "");
 
-      // Kapag Receiver Flow (Intransit to Branch), ang nag-send ay yung nasa "toBranchCode" state (From Branch UI)
-      // at ang tatanggap ay ang current branch ("branchCode")
-      if (["INW", "MSST01", "MSST03"].includes(selectedTranType)) {
+      // Intransit to Branch: selected branch field is treated as From/Source Branch,
+      // while the current login branch is the receiving/target branch.
+      if (isIntransitToBranch()) {
         apiSourceBranch = toBranchCode || "";
+        apiToBranch = branchCode || "";
+      }
+
+      // Intransit to Warehouse: source and target branch are the current branch.
+      if (isIntransitToWarehouse()) {
+        apiSourceBranch = branchCode || "";
         apiToBranch = branchCode || "";
       }
 
       const endpoint = "getInvLookupMS";
       const response = await fetchDataJson(endpoint, {
         userCode,
-        branchCode: apiSourceBranch,      // Exact SOURCE_BRANCH
-        toBranchCode: apiToBranch,        // Exact TO_BRANCH
+        branchCode: apiSourceBranch,
+        sourceBranchCode: apiSourceBranch,
+        toBranchCode: apiToBranch,
         whouseCode: fromWhCode || "",
         toWHcode: toWhCode || "",
         locCode: "",
@@ -2322,9 +2580,28 @@ const MSST = () => {
         wtNo: refDocNo1 || ""
       });
 
-      const custData = response?.data?.[0]?.result
+      const rawCustData = response?.data?.[0]?.result
         ? JSON.parse(response.data[0].result)
         : [];
+
+      // Make every lookup row key unique.
+      // Intransit rows can share the same Transfer Ref No / WT_NO, and the global lookup
+      // checkbox selection can treat rows with the same groupId as one selection.
+      const custData = rawCustData.map((row, index) => {
+        const transferRefNo = row?.transferRefNo || row?.wtNo || row?.groupId || "";
+        const rowUniqueKey = row?.uniqueKey || row?.controlNo || row?.CONTROL_NO || "";
+        const itemCodeKey = row?.itemCode || row?.ITEM_NO || "";
+        const lotKey = row?.lotNo || row?.LOT_NO || "";
+        const locKey = row?.locCode || row?.LOC_CODE || "";
+
+        return {
+          ...row,
+          transferRefNo,
+          groupId: [transferRefNo, rowUniqueKey, itemCodeKey, lotKey, locKey, index]
+            .filter((value) => value !== undefined && value !== null && value !== "")
+            .join("|"),
+        };
+      });
 
       const colConfig = await useSelectedHSColConfig("getInvLookupMS");
 
@@ -2350,13 +2627,21 @@ const MSST = () => {
     }
   };
 
-  const handleCloseMSLookup = (selectedItems) => {
+  const handleCloseMSLookup = async (selectedItems) => {
     if (!selectedItems) return;
 
     const itemsArray = Array.isArray(selectedItems.records)
       ? selectedItems.records
       : [selectedItems.records];
     if (itemsArray.length === 0) return;
+
+const firstValue = (...values) =>
+      values.find((value) => value !== undefined && value !== null && value !== "");
+
+
+    const defaultToLocCode = isIntransitWarehouse(toWhCode ?? "")
+      ? "INTRANSIT"
+      : await getFirstLocationCodeByWarehouse(toWhCode);
 
     const newRows = itemsArray.flatMap((item) => {
       const rawQtyHand = parseFormattedNumber(item?.qtyHand ?? 0);
@@ -2368,7 +2653,25 @@ const MSST = () => {
         updateState({ itemSingleSelect: false, msLookupModalOpen: false });
         return [];
       }
+const invAccountCode = firstValue(
+        item?.invAcct,
+        item?.invAcctCode,
+        item?.INV_ACCT,
+        item?.INV_ACCT_CODE,
+        item?.acctCode,
+        item?.ACCT_CODE,
+        ""
+      );
 
+      if (itemSingleSelect && selectedTranType === "IR") {
+        handleDetailChange(selectedRowIndex, "itemCode", item, false);
+        // Ensure account code is populated on single select as well
+        if (invAccountCode) {
+          handleDetailChange(selectedRowIndex, "acctCode", { acctCode: invAccountCode }, false);
+        }
+        updateState({ itemSingleSelect: false, msLookupModalOpen: false });
+        return [];
+      }
       const baseRow = {
         itemCode: item?.itemCode ?? "",
         itemName: item?.itemName ?? "",
@@ -2383,9 +2686,9 @@ const MSST = () => {
         qstatCode: item?.qstatCode ?? "",
         whouseCode: item?.whouseCode ?? fromWhCode ?? "",
         toWHcode: toWhCode ?? "",
-        locCode: item?.locCode ?? (isIntransitWarehouse(item?.whouseCode ?? fromWhCode ?? "") ? "INTRANSIT" : ""), 
-        tolocCode: isIntransitWarehouse(toWhCode ?? "") ? "INTRANSIT" : "", 
-        acctCode: "",
+        locCode: item?.locCode ?? (isIntransitWarehouse(item?.whouseCode ?? fromWhCode ?? "") ? "INTRANSIT" : (fromWhDefaultLocCode || "")), 
+        tolocCode: defaultToLocCode || toWhDefaultLocCode || "", 
+        acctCode: invAccountCode,
         sltypeCode: "",
         rcCode: "",
         slCode: "",
@@ -2612,15 +2915,15 @@ const MSST = () => {
                   <FieldRenderer
                     id="fromWhCode"
                     label="From Warehouse"
-                    type="lookup"
+                    type={isIntransitTransfer() ? "text" : "lookup"}
                     required
                     value={fromWhName ? fromWhName : fromWhCode || ""}
                     readOnly
                     placeholder=" "
-                    disabled={isFormDisabled || ["INW", "MSST01", "MSST03"].includes(selectedTranType)}
-                    lookupDisabled={isFetchDisabled || ["INW", "MSST01", "MSST03"].includes(selectedTranType)}
+                    disabled={isFormDisabled || isIntransitTransfer()}
+                    lookupDisabled={isFetchDisabled || isIntransitTransfer()}
                     onLookup={() => {
-                        if (isFormDisabled || ["INW", "MSST01", "MSST03"].includes(selectedTranType)) return;
+                        if (isFormDisabled || isIntransitTransfer()) return;
                         if (isIntransitToBranch() && !toBranchCode) {
                             useSwalInfoAlert("From Branch Required", "Please select From Branch first before selecting From Warehouse.");
                             return;
@@ -2639,10 +2942,10 @@ const MSST = () => {
                     value={toWhName ? toWhName : toWhCode || ""}
                     readOnly
                     placeholder=" "
-                    disabled={isFormDisabled || ["IW", "MSST02", "MSST04"].includes(selectedTranType)}
-                    lookupDisabled={isFetchDisabled || ["IW", "MSST02", "MSST04"].includes(selectedTranType)}
+                    disabled={isFormDisabled || isInterWarehouseOrInterBranch()}
+                    lookupDisabled={isFetchDisabled || isInterWarehouseOrInterBranch()}
                     onLookup={() => {
-                      if (isFormDisabled || ["IW", "MSST02", "MSST04"].includes(selectedTranType)) return;
+                      if (isFormDisabled || isInterWarehouseOrInterBranch()) return;
                       handleOpenToWarehouseLookup();
                     }}
                   />
@@ -2757,10 +3060,7 @@ const MSST = () => {
                       </Fragment>
                     ))}
                     {!isFormDisabled && (
-                      <>
-                        <th className="global-tran-th-ui sticky top-0 right-10 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Add</th>
-                        <th className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Delete</th>
-                      </>
+                      <th key="detail-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
                     )}
                   </tr>
                   <tr className="hidden">
@@ -2814,14 +3114,8 @@ const MSST = () => {
                     <th className="global-tran-th-ui hidden">Unique Key</th>
                     <th className="global-tran-th-ui hidden">Operation</th>
                     {!isFormDisabled && (
-                      <th className="global-tran-th-ui sticky right-[43px] bg-blue-300 dark:bg-blue-900 z-30">
-                        Add
-                      </th>
-                    )}
-
-                    {!isFormDisabled && (
                       <th className="global-tran-th-ui sticky right-0 bg-blue-300 dark:bg-blue-900 z-30">
-                        Delete
+                        Actions
                       </th>
                     )}
                   </tr>
@@ -3073,7 +3367,7 @@ const MSST = () => {
                         </div>
                       </td>
 
-                      <td className="global-tran-td-ui relative">
+<td className="global-tran-td-ui relative">
                         <div className="flex items-center">
                           <input
                             type="text"
@@ -3081,7 +3375,8 @@ const MSST = () => {
                             value={row.whouseCode || ""}
                             readOnly
                           />
-                          {!isFormDisabled && row.operation !== "S" && (
+                          {/* FOOLPROOF CHECK: IW = Inter-Warehouse, IB = Inter-Branch */}
+                          {!isFormDisabled && row.operation !== "S" && !hideFromWarehouseAndLocationSearch() && (
                             <FontAwesomeIcon
                               icon={faMagnifyingGlass}
                               className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
@@ -3097,7 +3392,7 @@ const MSST = () => {
                         </div>
                       </td>
 
-                      <td className="global-tran-td-ui relative">
+<td className="global-tran-td-ui relative">
                         <div className="flex items-center">
                           <input
                             type="text"
@@ -3105,7 +3400,7 @@ const MSST = () => {
                             value={row.toWHcode || ""}
                             readOnly
                           />
-                          {!isFormDisabled && row.operation !== "S" && (
+                          {!isFormDisabled && row.operation !== "S" && !isInterWarehouseOrInterBranch() && (
                             <FontAwesomeIcon
                               icon={faMagnifyingGlass}
                               className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
@@ -3121,7 +3416,7 @@ const MSST = () => {
                         </div>
                       </td>
 
-                      <td className="global-tran-td-ui relative">
+<td className="global-tran-td-ui relative">
                         <div className="flex items-center">
                           <input
                             type="text"
@@ -3129,7 +3424,7 @@ const MSST = () => {
                             value={row.locCode || ""}
                             readOnly
                           />
-                          {!isFormDisabled && row.operation !== "S" && !isIntransitWarehouse(row.whouseCode) && (
+                          {!isFormDisabled && row.operation !== "S" && !hideFromWarehouseAndLocationSearch() && !isIntransitWarehouse(row.whouseCode) && (
                             <FontAwesomeIcon
                               icon={faMagnifyingGlass}
                               className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
@@ -3153,7 +3448,7 @@ const MSST = () => {
                             value={row.tolocCode || ""}
                             readOnly
                           />
-                          {!isFormDisabled && row.operation !== "S" && !isIntransitWarehouse(row.toWHcode) && (
+                         {!isFormDisabled && row.operation !== "S" && !isIntransitWarehouse(row.toWHcode) && !isWarehouseTransfer(selectedTranType, tranTypes) && (
                             <FontAwesomeIcon
                               icon={faMagnifyingGlass}
                               className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
@@ -3303,24 +3598,15 @@ const MSST = () => {
                       </td>
 
                       {!isFormDisabled && (
-                        <td className="global-tran-td-ui text-center sticky right-10 bg-white dark:bg-black" style={transactionActionsCellStyle}>
-                          <button
-                            className="global-tran-td-button-add-ui"
-                            onClick={() => handleAddRow(index)}
-                          >
-                            <FontAwesomeIcon icon={faPlus} />
-                          </button>
-                        </td>
-                      )}
-
-                      {!isFormDisabled && (
                         <td className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black" style={transactionActionsCellStyle}>
-                          <button
-                            className="global-tran-td-button-delete-ui"
-                            onClick={() => handleDeleteRow(index)}
-                          >
-                            <FontAwesomeIcon icon={faMinus} />
-                          </button>
+                          <div className="flex items-center justify-center gap-1">
+                            <button type="button" className="global-tran-td-button-add-ui" onClick={() => handleAddRow(index)}>
+                              <FontAwesomeIcon icon={faPlus} />
+                            </button>
+                            <button type="button" className="global-tran-td-button-delete-ui" onClick={() => handleDeleteRow(index)}>
+                              <FontAwesomeIcon icon={faTrashAlt} />
+                            </button>
+                          </div>
                         </td>
                       )}
                     </tr>
@@ -3413,10 +3699,7 @@ const MSST = () => {
                       </Fragment>
                     ))}
                     {!isFormDisabled && (
-                      <>
-                        <th className="global-tran-th-ui sticky top-0 right-10 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Add</th>
-                        <th className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Delete</th>
-                      </>
+                      <th key="gl-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
                     )}
                   </tr>
                   <tr className="hidden">
@@ -3466,14 +3749,9 @@ const MSST = () => {
                     <th className="global-tran-th-ui">Remarks</th>
 
                     {!isFormDisabled && (
-                      <>
-                        <th className="global-tran-th-ui sticky right-[43px] bg-blue-300 dark:bg-blue-900 z-30">
-                          Add
-                        </th>
-                        <th className="global-tran-th-ui sticky right-0 bg-blue-300 dark:bg-blue-900 z-30">
-                          Delete
-                        </th>
-                      </>
+                      <th className="global-tran-th-ui sticky right-0 bg-blue-300 dark:bg-blue-900 z-30">
+                        Actions
+                      </th>
                     )}
                   </tr>
                   {renderMsstGlHeaderContextMenu()}
@@ -4064,24 +4342,15 @@ const MSST = () => {
                       </td>
 
                       {!isFormDisabled && (
-                        <td className="global-tran-td-ui text-center sticky right-10 bg-white dark:bg-black" style={transactionActionsCellStyle}>
-                          <button
-                            className="global-tran-td-button-add-ui"
-                            onClick={() => handleAddRowGL(index)}
-                          >
-                            <FontAwesomeIcon icon={faPlus} />
-                          </button>
-                        </td>
-                      )}
-
-                      {!isFormDisabled && (
                         <td className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black" style={transactionActionsCellStyle}>
-                          <button
-                            className="global-tran-td-button-delete-ui"
-                            onClick={() => handleDeleteRowGL(index)}
-                          >
-                            <FontAwesomeIcon icon={faMinus} />
-                          </button>
+                          <div className="flex items-center justify-center gap-1">
+                            <button type="button" className="global-tran-td-button-add-ui" onClick={() => handleAddRowGL(index)}>
+                              <FontAwesomeIcon icon={faPlus} />
+                            </button>
+                            <button type="button" className="global-tran-td-button-delete-ui" onClick={() => handleDeleteRowGL(index)}>
+                              <FontAwesomeIcon icon={faTrashAlt} />
+                            </button>
+                          </div>
                         </td>
                       )}
                     </tr>
