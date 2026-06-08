@@ -442,6 +442,30 @@ export async function useHandleDownloadExcelPURReport(params) {
 }
 
 
+export async function useHandleDownloadExcelFAReport(params) {
+  try {
+    const payload = {
+      PARAMS: JSON.stringify({
+        mode: params.mode,
+        branchcode: params.branchCode,
+        startdate: params.startDate,
+        enddate: params.endDate,
+        categCode: params.categCode,
+        classCode: params.classCode,
+        rcCode: params.rcCode,
+        locCode: params.locCode,
+        faCode: params.faCode,
+      }),
+    };
+
+    return await postRequest("getFAReport", payload);
+  } catch (error) {
+    console.error("Error downloading Fixed Asset report:", error);
+    return { Data: {} };
+  }
+}
+
+
 
 
 

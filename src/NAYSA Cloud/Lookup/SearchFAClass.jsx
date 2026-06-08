@@ -23,6 +23,12 @@ function useDebounce(value, delay) {
   return debouncedValue;
 }
 
+const formatSalvagePercent = (value) => {
+  const numericValue = Number.parseFloat(String(value ?? "").replace(/,/g, ""));
+  if (!Number.isFinite(numericValue)) return "";
+  return `${numericValue.toFixed(2)}%`;
+};
+
 const SearchFAClass = ({
   isOpen,
   onClose,
@@ -35,6 +41,7 @@ const SearchFAClass = ({
     description: "",
     eul:         "",
     categCode:   "",
+    salvagePercent: "",
   });
 
   const [sortConfig, setSortConfig] = useState({
@@ -55,6 +62,7 @@ const SearchFAClass = ({
       description: "",
       eul:         "",
       categCode:   "",
+      salvagePercent: "",
     });
 
   const debouncedFilters = useDebounce(filters, 300);
@@ -71,6 +79,7 @@ const SearchFAClass = ({
       description: "",
       eul:         "",
       categCode:   "",
+      salvagePercent: "",
     });
     setCurrentPage(1);
   }, [isOpen, normalizedCategCode]);
@@ -130,7 +139,10 @@ const SearchFAClass = ({
           .includes(debouncedFilters.eul.toLowerCase()) &&
         String(item.categCode ?? item.categ_code ?? item.categoryCode ?? "")
           .toLowerCase()
-          .includes(debouncedFilters.categCode.toLowerCase())
+          .includes(debouncedFilters.categCode.toLowerCase()) &&
+        formatSalvagePercent(item.salvagePercent)
+          .toLowerCase()
+          .includes(debouncedFilters.salvagePercent.toLowerCase())
       );
     });
 
@@ -170,7 +182,7 @@ const SearchFAClass = ({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 animate-fade-in">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col relative overflow-hidden transform animate-scale-in border border-slate-200">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col relative overflow-hidden transform animate-scale-in border border-slate-200">
 
         {/* Header Section */}
         <div className="flex items-center justify-between bg-slate-100 border-b border-slate-200">
@@ -234,6 +246,7 @@ const SearchFAClass = ({
                     { label: "Class Code", key: "code", width: "w-[150px]" },
                     { label: "Class Description", key: "description" },
                     { label: "EUL (Month)", key: "eul", width: "w-[110px]", align: "text-center" },
+                    { label: "Salvage Value %", key: "salvagePercent", width: "w-[125px]", align: "text-right" },
                     { label: "Category Code", key: "categCode", width: "w-[120px]" },
                   ].map((col) => (
                     <th key={col.key} className={`global-lookup-th-ui ${col.width || ""}`}>
@@ -282,12 +295,13 @@ const SearchFAClass = ({
                       <td className="global-lookup-td-ui font-bold">{assetClass.code}</td>
                       <td className="global-lookup-td-ui">{assetClass.description}</td>
                       <td className="global-lookup-td-ui text-center">{Number.parseInt(assetClass.eul ?? 0, 10) || 0}</td>
+                      <td className="global-lookup-td-ui text-right">{formatSalvagePercent(assetClass.salvagePercent)}</td>
                       <td className="global-lookup-td-ui">{assetClass.categCode ?? assetClass.categ_code ?? assetClass.categoryCode ?? ""}</td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="4" className="px-4 py-20 text-center text-slate-400 italic text-sm">
+                    <td colSpan="5" className="px-4 py-20 text-center text-slate-400 italic text-sm">
                       No matching records found.
                     </td>
                   </tr>

@@ -7,7 +7,7 @@ import { useHandlePostTran } from "@/NAYSA Cloud/Global/procedure";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import { useSwalValidationAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 
-const PostFARC = ({ isOpen, onClose, userCode = "" }) => {
+const PostFARS = ({ isOpen, onClose, userCode = "" }) => {
   const [data, setData] = useState([]);
   const [colConfigData, setColConfigData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -25,7 +25,7 @@ const PostFARC = ({ isOpen, onClose, userCode = "" }) => {
       alertFired.current = false;
 
       try {
-        const endpoint = "postingFARC";
+        const endpoint = "postingFARS";
         const response = await fetchDataJson(endpoint);
 
         const postingRows = response?.data?.[0]?.result
@@ -36,7 +36,7 @@ const PostFARC = ({ isOpen, onClose, userCode = "" }) => {
           useSwalValidationAlert({
             icon: "info",
             title: "No Records Found",
-            message: "There are no FA Reclassification records to post.",
+            message: "There are no Asset Restructuring records to post.",
           });
 
           alertFired.current = true;
@@ -52,12 +52,12 @@ const PostFARC = ({ isOpen, onClose, userCode = "" }) => {
           setModalReady(true);
         }
       } catch (error) {
-        console.error("Error fetching FARC posting data:", error);
+        console.error("Error fetching FARS posting data:", error);
 
         useSwalValidationAlert({
           icon: "error",
           title: "Posting Load Error",
-          message: "Unable to load FA Reclassification records for posting.",
+          message: "Unable to load Asset Restructuring records for posting.",
         });
 
         onClose?.();
@@ -78,7 +78,7 @@ const PostFARC = ({ isOpen, onClose, userCode = "" }) => {
     await useHandlePostTran(
       selectedData,
       userPw,
-      "FARC",
+      "FARS",
       userCode,
       setLoading,
       onClose
@@ -88,7 +88,7 @@ const PostFARC = ({ isOpen, onClose, userCode = "" }) => {
   const pickDocAndBranch = (row) => {
     if (!row) return { docNo: null, branchCode: null };
 
-    const docNo = row.farcNo || row.docNo || row.FARCNo || row.FARC_NO || null;
+    const docNo = row.farsNo || row.docNo || row.FARSNo || row.FARS_NO || null;
     const branchCode = row.branchCode || row.branch_code || null;
 
     return { docNo, branchCode };
@@ -101,15 +101,15 @@ const PostFARC = ({ isOpen, onClose, userCode = "" }) => {
       useSwalValidationAlert({
         icon: "warning",
         title: "Missing Keys",
-        message: "Cannot determine FARC No. or Branch Code.",
+        message: "Cannot determine FARS No. or Branch Code.",
       });
       return;
     }
 
-    const VIEW_URL = "/page/FARC";
+    const VIEW_URL = "/page/FARS";
     const url =
       `${window.location.origin}${VIEW_URL}` +
-      `?farcNo=${encodeURIComponent(docNo)}` +
+      `?farsNo=${encodeURIComponent(docNo)}` +
       `&branchCode=${encodeURIComponent(branchCode)}` +
       `&viewDocument=true`;
 
@@ -122,7 +122,7 @@ const PostFARC = ({ isOpen, onClose, userCode = "" }) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post FA Reclassification"
+          title="Post Asset Restructuring"
           btnCaption="Okay"
           onClose={onClose}
           onPost={handlePost}
@@ -139,4 +139,4 @@ const PostFARC = ({ isOpen, onClose, userCode = "" }) => {
   );
 };
 
-export default PostFARC;
+export default PostFARS;

@@ -18,7 +18,7 @@ const SearchFAAsset = ({
   isOpen,
   onClose,
   branchCode = "",
-  title = "Search Fixed Asset",
+  title = "Asset Finder",
   activeOnly = true,
 }) => {
   const scanInputRef = useRef(null);

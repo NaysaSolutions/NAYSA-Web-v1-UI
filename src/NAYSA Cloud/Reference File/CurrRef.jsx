@@ -357,8 +357,8 @@ const CurrRef = () => {
           </div>
         ),
       },
-      { key: "currCode", label: "Currency Code", sortable: true, width: 100,  },
-      { key: "currName", label: "Currency Name", sortable: true, width: 400, maxWidth: 400 },
+      { key: "currCode", label: "Currency Code", sortable: true, width: 100, requiredVisible: true },
+      { key: "currName", label: "Currency Name", sortable: true, width: 400, maxWidth: 400, requiredVisible: true  },
     ],
     [isMobile]
   );
@@ -557,6 +557,7 @@ const CurrRef = () => {
             onRowDoubleClick={handleEdit}
             itemsPerPage={50}
             onMobileRowOpen={openMobileActionSheet}
+            autoFillGrid={true}
           />
         </div>
 

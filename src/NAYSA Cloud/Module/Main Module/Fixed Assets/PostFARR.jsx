@@ -49,7 +49,7 @@ const PostFATR = ({ isOpen, onClose, userCode }) => {
       alertFired.current = false;
 
       try {
-        const endpoint = "postingFATR";
+        const endpoint = "postingFARR";
         const response = await fetchDataJson(endpoint);
 
         const postingRows = response?.data?.[0]?.result
@@ -60,7 +60,7 @@ const PostFATR = ({ isOpen, onClose, userCode }) => {
           useSwalValidationAlert({
             icon: "info",
             title: "No Records Found",
-            message: "There are no Fixed Asset Transfer records to post.",
+            message: "There are no Fixed Asset Receiving records to post.",
           });
 
           alertFired.current = true;
@@ -76,12 +76,12 @@ const PostFATR = ({ isOpen, onClose, userCode }) => {
           setModalReady(true);
         }
       } catch (error) {
-        console.error("Error fetching FATR posting data:", error);
+        console.error("Error fetching FARR posting data:", error);
 
         useSwalValidationAlert({
           icon: "error",
           title: "Posting Load Error",
-          message: "Unable to load Fixed Asset Transfer records for posting.",
+          message: "Unable to load Fixed Asset Receiving records for posting.",
         });
 
         onClose?.();
@@ -104,13 +104,13 @@ const PostFATR = ({ isOpen, onClose, userCode }) => {
   |--------------------------------------------------------------------------
   | Post selected records
   |--------------------------------------------------------------------------
-  | useHandlePostTran will call posting API/procedure using doc code FATR.
+  | useHandlePostTran will call posting API/procedure using doc code FARR.
   */
   const handlePost = async (selectedData, userPw) => {
     await useHandlePostTran(
       selectedData,
       userPw,
-      "FATR",
+      "FARR",
       userCode,
       setLoading,
       onClose
@@ -128,7 +128,7 @@ const PostFATR = ({ isOpen, onClose, userCode }) => {
   const pickDocAndBranch = (row) => {
     if (!row) return { docNo: null, branchCode: null };
 
-    const docNo = row.fatrNo || row.docNo || row.FATRNo || row.FATR_NO || null;
+    const docNo = row.farNo || row.docNo || row.FARRNo || row.FARR_NO || null;
     const branchCode = row.branchCode || row.branch_code || null;
 
     return { docNo, branchCode };
@@ -147,12 +147,12 @@ const PostFATR = ({ isOpen, onClose, userCode }) => {
       useSwalValidationAlert({
         icon: "warning",
         title: "Missing Keys",
-        message: "Cannot determine FATR No. or Branch Code.",
+        message: "Cannot determine FARR No. or Branch Code.",
       });
       return;
     }
 
-    const FATR_VIEW_URL = "/page/FATR";
+    const FARR_VIEW_URL = "/page/FARR";
     const url =
       `${window.location.origin}${FATR_VIEW_URL}` +
       `?fatrNo=${encodeURIComponent(docNo)}` +
@@ -168,7 +168,7 @@ const PostFATR = ({ isOpen, onClose, userCode }) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post Fixed Asset Transfer"
+          title="Post Fixed Asset Receiving"
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}

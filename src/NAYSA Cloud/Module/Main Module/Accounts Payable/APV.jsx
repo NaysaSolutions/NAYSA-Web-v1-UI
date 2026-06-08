@@ -96,6 +96,9 @@ import {
   useSelectedHSColConfig as selectedHSColConfig
 } from "@/NAYSA Cloud/Global/selectedData";
 
+
+import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
+
 // Header
 import Header from "@/NAYSA Cloud/Components/Header";
 
@@ -685,19 +688,19 @@ const APV = () => {
 };
 
   // Loading spinner component
-  const LoadingSpinner = () => (
-    <div className="global-tran-spinner-main-div-ui">
-      <div className="global-tran-spinner-sub-div-ui">
-        <FontAwesomeIcon
-          icon={faSpinner}
-          spin
-          size="2x"
-          className="text-blue-500 mb-2"
-        />
-        <p>Please wait...</p>
-      </div>
-    </div>
-  );
+  // const LoadingSpinner = () => (
+  //   <div className="global-tran-spinner-main-div-ui">
+  //     <div className="global-tran-spinner-sub-div-ui">
+  //       <FontAwesomeIcon
+  //         icon={faSpinner}
+  //         spin
+  //         size="2x"
+  //         className="text-blue-500 mb-2"
+  //       />
+  //       <p>Please wait...</p>
+  //     </div>
+  //   </div>
+  // );
 
   useEffect(() => {
     if (triggerGLEntries) {
@@ -1087,17 +1090,20 @@ const APV = () => {
       }
 
       const resolvedStatus =
-        data.apvCancelled === "Y"
+        data.docStatus ||
+        (data.apvCancelled === "Y"
           ? "CANCELLED"
           : data.apvStatus === "F"
             ? "FINALIZED"
             : data.apvStatus === "C"
               ? "CLOSED"
-              : "OPEN";
+              : "OPEN");
 
-      // Update state with fetched data
+      // Align with CV:
+      // documentStatus keeps the raw DB status for validations/posting/cancel.
+      // status keeps the display status from dbo.fnGetDocumentStatus.
       const stateUpdates = {
-        documentStatus: resolvedStatus,
+        documentStatus: data.apvStatus || "",
         status: resolvedStatus,
         documentID: data.apvId,
         documentNo: data.apvNo,
