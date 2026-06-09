@@ -604,7 +604,7 @@ const RoleAccessTab = forwardRef(({ roles = [], tableSize = "Half" }, ref) => {
         >
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 h-full flex flex-col">
             <div className="flex flex-col gap-3 mb-3">
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col gap-2">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-800">
                     Role Access Matrix
@@ -615,30 +615,30 @@ const RoleAccessTab = forwardRef(({ roles = [], tableSize = "Half" }, ref) => {
                 </div>
 
                 {showMenus && (
-                  <div className="flex flex-wrap justify-end gap-2">
+                  <div className="grid grid-cols-3 gap-1.5">
                     <button
                       type="button"
                       onClick={toggleSelectAllMenus}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 text-xs font-medium hover:bg-blue-100 transition-colors"
+                      className="inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 text-[11px] font-medium hover:bg-blue-100 transition-colors"
                     >
-                      <FontAwesomeIcon icon={allMenusSelected ? faSquare : faCheckSquare} />
-                      {allMenusSelected ? "Unselect All" : "Select All"}
+                      <FontAwesomeIcon icon={allMenusSelected ? faSquare : faCheckSquare} className="shrink-0" />
+                      <span className="truncate">{allMenusSelected ? "Unselect All" : "Select All"}</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => applyBulkPreset("FULL")}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-green-200 bg-green-50 text-green-700 text-xs font-medium hover:bg-green-100 transition-colors"
+                      className="inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg border border-green-200 bg-green-50 text-green-700 text-[11px] font-medium hover:bg-green-100 transition-colors"
                     >
-                      <FontAwesomeIcon icon={faLockOpen} />
-                      All Full Access
+                      <FontAwesomeIcon icon={faLockOpen} className="shrink-0" />
+                      <span className="truncate">All Full</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => applyBulkPreset("READ")}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-xs font-medium hover:bg-amber-100 transition-colors"
+                      className="inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-[11px] font-medium hover:bg-amber-100 transition-colors"
                     >
-                      <FontAwesomeIcon icon={faEye} />
-                      All Read Only
+                      <FontAwesomeIcon icon={faEye} className="shrink-0" />
+                      <span className="truncate">All Read</span>
                     </button>
                   </div>
                 )}
@@ -647,39 +647,39 @@ const RoleAccessTab = forwardRef(({ roles = [], tableSize = "Half" }, ref) => {
               {showMenus && (
                 <>
                   {/* Summary stats */}
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     <div
                       onClick={() => setTableFilter(null)}
-                      className={`rounded-xl border p-3 transition-all ${
+                      className={`rounded-xl border p-2 transition-all ${
                         tableFilter === null
                           ? "border-gray-400 bg-gray-100 ring-2 ring-gray-300"
                           : "border-gray-100 bg-gray-50 hover:border-gray-300 hover:bg-gray-100 cursor-pointer"
                       }`}
                     >
-                      <p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">Total Menus</p>
-                      <p className="text-lg font-bold text-gray-800">{normalizedMenus.length}</p>
+                      <p className="text-[9px] uppercase tracking-wide text-gray-500 font-semibold leading-tight">Total Menus</p>
+                      <p className="text-base font-bold text-gray-800">{normalizedMenus.length}</p>
                     </div>
                     <div
                       onClick={() => setTableFilter(tableFilter === "FULL" ? null : "FULL")}
-                      className={`rounded-xl border p-3 transition-all cursor-pointer ${
+                      className={`rounded-xl border p-2 transition-all cursor-pointer ${
                         tableFilter === "FULL"
                           ? "border-blue-400 bg-blue-100 ring-2 ring-blue-300"
                           : "border-blue-100 bg-blue-50 hover:border-blue-300 hover:bg-blue-100"
                       }`}
                     >
-                      <p className="text-[10px] uppercase tracking-wide text-blue-600 font-semibold">Full Access</p>
-                      <p className="text-lg font-bold text-blue-700">{fullAccessCount}</p>
+                      <p className="text-[9px] uppercase tracking-wide text-blue-600 font-semibold leading-tight">Full Access</p>
+                      <p className="text-base font-bold text-blue-700">{fullAccessCount}</p>
                     </div>
                     <div
                       onClick={() => setTableFilter(tableFilter === "READ" ? null : "READ")}
-                      className={`rounded-xl border p-3 transition-all cursor-pointer ${
+                      className={`rounded-xl border p-2 transition-all cursor-pointer ${
                         tableFilter === "READ"
                           ? "border-amber-400 bg-amber-100 ring-2 ring-amber-300"
                           : "border-amber-100 bg-amber-50 hover:border-amber-300 hover:bg-amber-100"
                       }`}
                     >
-                      <p className="text-[10px] uppercase tracking-wide text-amber-600 font-semibold">Read Only</p>
-                      <p className="text-lg font-bold text-amber-700">{readOnlyCount}</p>
+                      <p className="text-[9px] uppercase tracking-wide text-amber-600 font-semibold leading-tight">Read Only</p>
+                      <p className="text-base font-bold text-amber-700">{readOnlyCount}</p>
                     </div>
                   </div>
 

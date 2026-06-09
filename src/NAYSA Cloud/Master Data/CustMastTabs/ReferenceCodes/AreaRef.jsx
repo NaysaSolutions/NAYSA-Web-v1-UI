@@ -344,7 +344,7 @@ const handleEdit = useCallback(async (row) => {
         ),
       },
       { key: "areaCode", label: "Area Code", sortable: true, width: 80 },
-      { key: "areaName", label: "Area Description", sortable: true, width: 150 },
+      { key: "areaName", label: "Area Name", sortable: true, width: 150 },
     ],
     [handleEdit, handleDelete]
   );
@@ -408,7 +408,7 @@ const handleEdit = useCallback(async (row) => {
           disabled={!isEditing || form.__existing}
         />
         <FieldRenderer
-          label="Area Description"
+          label="Area Name"
           required
           value={form.areaName}
           maxLength={50}

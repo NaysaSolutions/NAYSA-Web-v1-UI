@@ -257,7 +257,7 @@ const BillCodeRef = React.forwardRef((props, ref) => {
       }
 
       await queryClient.invalidateQueries({ queryKey: ["billCodeList"] });
-      useSwalSuccessAlert("Success!", "Bill code saved successfully.");
+      useSwalSuccessAlert("Success!", "Bill Code saved successfully.");
       setIsEditing(false);
       resetForm(DEFAULT_FORM);
       setSelectedRow(null);
@@ -488,7 +488,7 @@ const BillCodeRef = React.forwardRef((props, ref) => {
       },
       {
         key: "billName",
-        label: "Description",
+        label: "Bill Name",
         sortable: true,
         className:
           "sticky left-[120px] z-10 shadow-[1px_0_0_0_#e2e8f0]",
@@ -654,7 +654,7 @@ const BillCodeRef = React.forwardRef((props, ref) => {
                 />
 
                 <FieldRenderer
-                  label="Description"
+                  label="Bill Name"
                   value={form.billName}
                   maxLength={100}
                   onChange={(val) => setField("billName", val)}

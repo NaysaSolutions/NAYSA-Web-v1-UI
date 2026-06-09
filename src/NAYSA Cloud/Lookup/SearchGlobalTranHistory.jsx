@@ -431,6 +431,42 @@ const AllTranHistory = (props) => {
     }
   }, [baseKey, statusProp, branchCodeProp, navState.branchCode, initialDates]);
 
+  useEffect(() => {
+    if (branchCodeProp === undefined) return;
+
+    const nextBranchCode = branchCodeProp || "";
+
+    setBranchCode((prev) => {
+      if (prev === nextBranchCode) return prev;
+      return nextBranchCode;
+    });
+
+    setAppliedFilters((prev) => {
+      if (!prev) return prev;
+      if (prev.branchCode === nextBranchCode) return prev;
+
+      hydratedFromCacheRef.current = false;
+
+      setTabData({});
+      setTabConfigs({});
+      setActiveTab(null);
+      setShowColumnChooser(false);
+      setShowExportMenu(false);
+      setGroupByByTab({});
+      setExpandedGroupsByTab({});
+      setAutoExpandGroupsByTab({});
+      setColumnOrderByTab({});
+      setColWidthsByTab({});
+      setUserHiddenColsByTab({});
+      setSortConfig({ key: null, direction: "asc", tabKey: null });
+
+      return {
+        ...prev,
+        branchCode: nextBranchCode,
+      };
+    });
+  }, [branchCodeProp]);
+
   /* ---------------- keep window cache updated ---------------- */
   useEffect(() => {
     const cache = getGlobalCache();

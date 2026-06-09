@@ -21,11 +21,12 @@ import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
 import PostPCV from "../../../Module/Main Module/Accounts Payable/PostPCV.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
+import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 
 
 // Configuration
-import { postRequest} from '../../../Configuration/BaseURL.jsx'
+import { fetchData, fetchDataJson, postRequest} from '../../../Configuration/BaseURL.jsx'
 import { useReset } from "../../../Components/ResetContext";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 
@@ -85,6 +86,7 @@ import {
   useSwalshowSaveSuccessDialog,
   useSwalErrorAlert,
   useSwalSuccessAlert,
+  useSwalProceedConfirm,
 } from '@/NAYSA Cloud/Global/behavior.jsx';
 
 
@@ -252,6 +254,8 @@ const PCV = () => {
     showSignatoryModal:false,
     showPostingModal:false,
     showAllTranDocNo:false,
+    showRRRefModal:false,
+    globalLookupRow:[],
    });
 
   const updateState = (updates) => {
@@ -346,7 +350,9 @@ const PCV = () => {
   showAttachModal,
   showSignatoryModal,
   showPostingModal,
-  showAllTranDocNo
+  showAllTranDocNo,
+  showRRRefModal,
+  globalLookupRow
 
 } = state;
 
@@ -495,6 +501,24 @@ const PCV = () => {
     "creditFx1",
     "debitFx2",
     "creditFx2",
+  ];
+
+  const openRRLookupColumns = [
+    { key: "type", label: "Type", width: 60 },
+    { key: "branchCode", label: "BC", width: 60 },
+    { key: "rrNo", label: "RR No", width: 110 },
+    { key: "rrDate", label: "RR Date", width: 100 },
+    { key: "poNo", label: "PO No", width: 110 },
+    { key: "vendCode", label: "Payee Code", width: 100 },
+    { key: "vendName", label: "Payee Name", width: 200 },
+    { key: "siNo", label: "SI No", width: 110 },
+    { key: "siDate", label: "SI Date", width: 100 },
+    { key: "siAmount", label: "SI Amt", width: 110, type: "amount" },
+    { key: "drAcct", label: "DR Account", width: 90 },
+    { key: "rcCode", label: "Responsibility Code", width: 90 },
+    { key: "vatCode", label: "VAT Code", width: 90 },
+    { key: "vatDesc", label: "VAT Desc", width: 200 },
+    { key: "vatAmount", label: "VAT Amount", width: 110, type: "amount" },
   ];
 
 
@@ -1127,6 +1151,222 @@ const handleAddRow = async (index = null) => {
 };
 
 
+const extractOpenRRRows = (value) => {
+  if (!value) return [];
+
+  if (typeof value === "string") {
+    try {
+      return extractOpenRRRows(JSON.parse(value));
+    } catch {
+      return [];
+    }
+  }
+
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.dt1)) return value.dt1;
+  if (Array.isArray(value?.data)) return value.data;
+  if (Array.isArray(value?.rows)) return value.rows;
+  if (value?.result) return extractOpenRRRows(value.result);
+  if (typeof value === "object" && Object.keys(value).length > 0) return [value];
+
+  return [];
+};
+
+
+const extractOpenRRResponseRows = (response) => {
+  const resultValue =
+    response?.data?.[0]?.result ??
+    response?.data?.[0]?.RESULT ??
+    response?.data?.[0]?.JsonResult ??
+    response?.data?.result ??
+    response?.data?.RESULT ??
+    response?.result ??
+    response?.RESULT ??
+    response?.JsonResult ??
+    response?.data ??
+    response;
+
+  return extractOpenRRRows(resultValue);
+};
+
+
+const addLookupGroupId = (row, index) => ({
+  ...row,
+  groupId:
+    row?.groupId ||
+    row?.GROUP_ID ||
+    row?.rrId ||
+    row?.rrNo ||
+    row?.RR_NO ||
+    row?.poNo ||
+    row?.PO_NO ||
+    String(index + 1),
+});
+
+
+const handleOpenReferenceRR = async () => {
+  if (isFormDisabled) return;
+
+  const lookupVendCode = String(vendCode || "").trim();
+  const lookupBranchCode = String(branchCode || "").trim();
+
+  if (!lookupVendCode) {
+    useSwalErrorAlert("Open RR", "Please select a Payee first.");
+    return;
+  }
+
+  try {
+    updateState({ isLoading: true, showSpinner: true });
+
+    const lookupPayload = {
+      branchCode: lookupBranchCode,
+      vendCode: "",
+    };
+
+    const requestAttempts = [
+      async () => fetchDataJson("getAPVRR_OpenSummary", lookupPayload),
+      async () =>
+        fetchData("getAPVRR_OpenSummary", {
+          PARAMS: JSON.stringify({ json_data: lookupPayload }),
+        }),
+      async () =>
+        fetchData("getAPVRR_OpenSummary", {
+          PARAMS: JSON.stringify(lookupPayload),
+        }),
+    ];
+
+    let rawRows = [];
+
+    for (const requestOpenReference of requestAttempts) {
+      try {
+        rawRows = extractOpenRRResponseRows(await requestOpenReference());
+        if (rawRows.length > 0) break;
+      } catch (requestError) {
+        console.warn("Open RR lookup attempt failed:", requestError);
+      }
+    }
+
+    if (rawRows.length === 0) {
+      useSwalErrorAlert("Open RR", "No open RR found for this payee.");
+      return;
+    }
+
+    updateState({
+      globalLookupRow: rawRows.map(addLookupGroupId),
+      showRRRefModal: true,
+    });
+  } catch (error) {
+    console.error("Failed to fetch Open RR:", error);
+    useSwalErrorAlert("Open RR", "Unable to load open RR references.");
+  } finally {
+    updateState({ isLoading: false, showSpinner: false });
+  }
+};
+
+
+const handleInvoiceDetailAddClick = async () => {
+  if (String(selectedPCVType || "").toUpperCase() === "RR") {
+    await handleOpenReferenceRR();
+    return;
+  }
+
+  await handleAddRow();
+};
+
+
+const handleCloseRRRefModal = async (selectedItems) => {
+  if (!selectedItems || !selectedItems.records) {
+    updateState({ showRRRefModal: false });
+    return;
+  }
+
+  const itemsArray = Array.isArray(selectedItems.records)
+    ? selectedItems.records
+    : [selectedItems.records];
+
+  const mappedRows = itemsArray.map((item) => {
+    const origAmount = parseFormattedNumber(item.siAmount || item.amount || 0);
+    const vatAmount = parseFormattedNumber(item.vatAmount || 0);
+    const atcAmount = parseFormattedNumber(item.atcAmount || 0);
+    const netAmount = +(origAmount - atcAmount).toFixed(2);
+
+    return {
+      lnNo: "",
+      vendCode: item.vendCode || "",
+      vendName: item.vendName || "",
+      siNo: item.siNo || "",
+      siDate: item.siDate || item.rrDate || "",
+      origAmount: formatNumber(origAmount),
+      drAcct: item.drAcct || item.debitAcct || "",
+      acctCode: item.acctCode || item.drAcct || item.debitAcct || "",
+      rcCode: item.rcCode || "",
+      rcName: item.rcName || "",
+      slCode: item.slCode || "",
+      slName: item.slName || "",
+      vatCode: item.vatCode || "",
+      vatName: item.vatName || item.vatDesc || "",
+      vatAmount: formatNumber(vatAmount),
+      atcCode: item.atcCode || "",
+      atcName: item.atcName || "",
+      atcAmount: formatNumber(atcAmount),
+      netAmount: formatNumber(netAmount),
+      address1: item.address1 || "",
+      address2: item.address2 || "",
+      address3: item.address3 || "",
+      tin: item.tin || "",
+      remarks: item.rrNo || item.poNo ? `RR: ${item.rrNo || ""} PO: ${item.poNo || ""}`.trim() : "",
+      groupId: item.groupId || "",
+    };
+  });
+
+  const updatedRows = [...detailRows, ...mappedRows];
+
+  updateState({
+    detailRows: updatedRows,
+    detailRowsGL: [],
+    showRRRefModal: false,
+  });
+
+  updateTotals(updatedRows);
+};
+
+
+const handleCopyDetailRow = (index) => {
+  const updatedRows = [...(detailRowsRef.current || [])];
+  const sourceRow = updatedRows[index];
+
+  if (!sourceRow) return;
+
+  updatedRows.splice(index + 1, 0, { ...sourceRow });
+
+  updateState({
+    detailRows: updatedRows,
+    detailRowsGL: [],
+  });
+
+  updateTotals(updatedRows);
+};
+
+
+const handleInsertDetailRowClick = async (index) => {
+  const result = await useSwalProceedConfirm(
+    "Insert Detail Row",
+    "Do you want to copy the selected record or insert a new record?",
+    "Copy Record",
+    "Insert New Record"
+  );
+
+  if (result.isConfirmed) {
+    handleCopyDetailRow(index);
+    return;
+  }
+
+  if (result.dismiss === Swal.DismissReason.cancel) {
+    await handleAddRow(index);
+  }
+};
+
+
 
 const handleAddRowGL = (index = null) => {
    if (!Array.isArray(detailRows) || detailRows.length === 0) {
@@ -1274,9 +1514,10 @@ const handleCopy = async () => {
      const updatedRows = detailRows.map((row) => ({
             ...row,
             siNo: "",
-            siDate: null
+            siDate: ""
           }));
 
+    detailRowsRef.current = updatedRows;
 
     updateState({ documentNo:"",
                   documentID:"",
@@ -1952,6 +2193,38 @@ const handleBlurGL = async (index, field, value, autoCompute = false) => {
   });
 };
 
+
+const handleInvoiceNoCommit = (index, value) => {
+  const updatedRows = [...(detailRowsRef.current || [])];
+  const sourceRow = updatedRows[index];
+
+  if (!sourceRow) return;
+
+  const row = { ...sourceRow };
+  const originalRow = { ...sourceRow };
+
+  row.siNo = value;
+
+  if (!String(value || "").trim()) {
+    row.siDate = "";
+  } else if (!row.siDate) {
+    row.siDate = documentDate;
+  }
+
+  updatedRows[index] = row;
+
+  const hasChanges = JSON.stringify(originalRow) !== JSON.stringify(row);
+
+  if (!hasChanges) return;
+
+  updateState({
+    detailRows: updatedRows,
+    detailRowsGL: [],
+  });
+
+  updateTotals(updatedRows);
+};
+
 // Detail table cell renderers.
 // Keep each key aligned with pcvDetailColumnDefs.
 const renderPcvDetailCell = (columnKey, row, index) => {
@@ -1976,9 +2249,17 @@ const renderPcvDetailCell = (columnKey, row, index) => {
       readOnly={options.readOnly}
       maxLength={options.maxLength}
       onChange={(e) => handleDetailChange(index, field, e.target.value)}
+      onBlur={(e) => {
+        if (options.onCommit && !options.readOnly && !options.disabled && !isFormDisabled) {
+          options.onCommit(e.target.value);
+        }
+      }}
       onKeyDown={(e) => {
         if (e.key !== "Enter" || options.readOnly || options.disabled || isFormDisabled) return;
         e.preventDefault();
+        if (options.onCommit) {
+          options.onCommit(e.currentTarget.value);
+        }
         focusNextPcvDetailRowInput(index, field, {
           rows: detailRows,
           zeroClearFields: pcvDetailEnterNextRowZeroClearFields,
@@ -2031,7 +2312,7 @@ const renderPcvDetailCell = (columnKey, row, index) => {
       </td>
     ),
     vendName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("vendName", { maxLength: pcvFieldLengths.vendName })}</td>,
-    siNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("siNo", { maxLength: pcvFieldLengths.siNo })}</td>,
+    siNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("siNo", { maxLength: pcvFieldLengths.siNo, onCommit: (value) => handleInvoiceNoCommit(index, value) })}</td>,
     siDate: () => (
       <td key={columnKey} className="global-tran-td-ui" style={style}>
         <DateFormatInput id={`siDate${index}`} value={row.siDate || ""} disabled={isFormDisabled} className="w-full global-tran-td-inputclass-ui text-center pr-7" updateState={(updates) => { if (updates[`siDate${index}`] !== undefined) handleDetailChange(index, "siDate", updates[`siDate${index}`], false); }} onKeyDownCustom={(e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); focusNextPcvDetailRowInput(index, "siDate", { rows: detailRows, zeroClearFields: pcvDetailEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChange(nextIndex, nextField, value, false) }); }} />
@@ -2574,6 +2855,7 @@ const handleCloseBranchModal = (selectedBranch) => {
         type="select"
         value={selectedPCVType}
         disabled={isFormDisabled}
+        onChange={(val) => updateState({ selectedPCVType: val })}
         options={pcvTypes.map((t) => ({
                       label: t.DROPDOWN_NAME,
                       value: t.DROPDOWN_CODE,
@@ -2739,7 +3021,7 @@ const handleCloseBranchModal = (selectedBranch) => {
                 <button
                   type="button"
                   className="global-tran-td-button-add-ui"
-                  onClick={() => handleAddRow(originalIndex)}
+                  onClick={() => handleInsertDetailRowClick(originalIndex)}
                 >
                   <FontAwesomeIcon icon={faPlus} />
                 </button>
@@ -2773,7 +3055,7 @@ const handleCloseBranchModal = (selectedBranch) => {
 {/* Add Button */}
 <div className="global-tran-tab-footer-button-div-ui">
   <button
-     onClick={() =>handleAddRow()}
+     onClick={handleInvoiceDetailAddClick}
      className="global-tran-tab-footer-button-add-ui"
      style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
   >
@@ -3135,6 +3417,20 @@ const handleCloseBranchModal = (selectedBranch) => {
   />
 )}
 
+{showRRRefModal && (
+  <GlobalLookupModalv1
+    isOpen={showRRRefModal}
+    title="Open Purchases from Posted Receiving"
+    data={globalLookupRow}
+    endpoint={openRRLookupColumns}
+    btnCaption="Get Selected RR"
+    idKey="groupId"
+    onClose={handleCloseRRRefModal}
+    onCancel={() => updateState({ showRRRefModal: false })}
+    singleSelect={false}
+  />
+)}
+
 
 
 
@@ -3242,14 +3538,7 @@ const handleCloseBranchModal = (selectedBranch) => {
     branchCode={state.branchCode}
     startDate={state.fromDate}
     endDate={state.toDate}
-    status={(() => {
-      const s = (state.status || "").toUpperCase();
-      if (s === "FINALIZED") return "F";
-      if (s === "CANCELLED") return "X";
-      if (s === "CLOSED") return "C";
-      if (s === "OPEN") return "";
-      return "All";
-    })()}
+    status="All"
     onRowDoubleClick={handleHistoryRowPick}
     historyExportName={`${documentTitle} History`}
   />

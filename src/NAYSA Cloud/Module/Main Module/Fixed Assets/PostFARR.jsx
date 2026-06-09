@@ -9,19 +9,20 @@ import ReactDOM from "react-dom";
 
 /*
 ================================================================================
-POST FARR WORKFLOW
+POST FATR WORKFLOW
 ================================================================================
-1. Modal opens from FARR transaction page.
-2. System loads open Fixed Asset Receiving records from endpoint: postingFARR.
-3. System loads table column setup from hs_colconfig using endpoint postingFARR.
-4. User selects one or more FARR records.
+1. Modal opens from FATR transaction page.
+2. System loads open Fixed Asset Transfer records from endpoint: postingFATR.
+3. System loads table column setup from hs_colconfig using endpoint postingFATR.
+4. User selects one or more FATR records.
 5. User clicks Okay/Post.
-6. System calls global posting function with doc code FARR.
-7. Posting procedure finalizes selected records and updates FG inventory movement.
+6. System calls global posting function with doc code FATR.
+7. Posting procedure finalizes selected records and updates fixed asset master location,
+   department, branch, and employee/custodian based on transfer details.
 ================================================================================
 */
 
-const PostFARR = ({ isOpen, onClose, userCode }) => {
+const PostFATR = ({ isOpen, onClose, userCode }) => {
   const [data, setData] = useState([]);
   const [colConfigData, setColConfigData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -34,8 +35,8 @@ const PostFARR = ({ isOpen, onClose, userCode }) => {
   |--------------------------------------------------------------------------
   | Load records for posting
   |--------------------------------------------------------------------------
-  | endpoint: postingFARR
-  | This should call sproc_PHP_FARR @mode = 'Posting'
+  | endpoint: postingFATR
+  | This should call sproc_PHP_FATR @mode = 'Posting'
   */
   useEffect(() => {
     let isMounted = true;
@@ -121,13 +122,13 @@ const PostFARR = ({ isOpen, onClose, userCode }) => {
   | View document helper
   |--------------------------------------------------------------------------
   | Accepts both possible key names:
-  | - farrNo from FARR posting endpoint
+  | - fatrNo from FATR posting endpoint
   | - docNo from generic posting endpoint
   */
   const pickDocAndBranch = (row) => {
     if (!row) return { docNo: null, branchCode: null };
 
-    const docNo = row.farrNo || row.docNo || row.FARRNo || row.FARR_NO || null;
+    const docNo = row.farNo || row.docNo || row.FARRNo || row.FARR_NO || null;
     const branchCode = row.branchCode || row.branch_code || null;
 
     return { docNo, branchCode };
@@ -135,7 +136,7 @@ const PostFARR = ({ isOpen, onClose, userCode }) => {
 
   /*
   |--------------------------------------------------------------------------
-  | Open FARR document in new tab
+  | Open FATR document in new tab
   |--------------------------------------------------------------------------
   | Make sure this route matches your React Router path.
   */
@@ -153,8 +154,8 @@ const PostFARR = ({ isOpen, onClose, userCode }) => {
 
     const FARR_VIEW_URL = "/page/FARR";
     const url =
-      `${window.location.origin}${FARR_VIEW_URL}` +
-      `?farrNo=${encodeURIComponent(docNo)}` +
+      `${window.location.origin}${FATR_VIEW_URL}` +
+      `?fatrNo=${encodeURIComponent(docNo)}` +
       `&branchCode=${encodeURIComponent(branchCode)}` +
       `&viewDocument=true`;
 
@@ -185,4 +186,4 @@ const PostFARR = ({ isOpen, onClose, userCode }) => {
   );
 };
 
-export default PostFARR;
+export default PostFATR;

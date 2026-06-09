@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Save, Undo2 } from "lucide-react";
 
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
@@ -13,6 +12,9 @@ import {
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
+  faPlus,
+  faSave,
+  faUndo,
   faEdit,
   faTrashAlt,
   faInfoCircle,
@@ -29,6 +31,7 @@ import {
 } from "@/NAYSA Cloud/Global/reftable";
 
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
+import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar.jsx";
 import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
 import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable.jsx";
 import SearchCurrencyRef from "@/NAYSA Cloud/Lookup/SearchCurrRef.jsx";
@@ -81,6 +84,14 @@ const formatDate = (value) => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
+const pickValue = (row, keys, fallback = "") => {
+  for (const key of keys) {
+    const value = row?.[key];
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return fallback;
+};
+
 const getMonthName = (month) =>
   new Date(2000, month - 1, 1).toLocaleString("en-US", {
     month: "long",
@@ -93,16 +104,8 @@ const minDate = (a, b) => (a < b ? a : b);
 
 const mapRowToForm = (row = {}) => ({
   tranID: getId(row) || "",
-  fromDate: formatDate(
-    row.FROM_DATE ??
-      row.fromDate ??
-      row.fDate ??
-      row.sourceFromDate ??
-      row.dateFrom
-  ),
-  toDate: formatDate(
-    row.TO_DATE ?? row.toDate ?? row.tDate ?? row.sourceToDate ?? row.dateTo
-  ),
+  fromDate: formatDate(getRawFromDate(row)),
+  toDate: formatDate(getRawToDate(row)),
   currCode: row.CURR_CODE ?? row.currCode ?? "",
   fCurrName: row.FCURR_NAME ?? row.fCurrName ?? row.currName ?? "",
   currName: row.CURR_NAME ?? row.currName ?? row.fCurrName ?? "",
@@ -111,74 +114,124 @@ const mapRowToForm = (row = {}) => ({
   tCurrName: row.TCURR_NAME ?? row.tCurrName ?? row.currName2 ?? "",
   currName2: row.CURR_NAME2 ?? row.currName2 ?? row.tCurrName ?? "",
   currRate2: row.CURR_RATE2 ?? row.currRate2 ?? "",
-  registeredBy: row.REGISTERED_BY ?? row.registeredBy ?? "",
-  registeredDate: row.REGISTERED_DATE ?? row.registeredDate ?? "",
-  updatedBy:
-    row.UPDATED_BY ??
-    row.updatedBy ??
-    row.lastUpdatedBy ??
-    row.LAST_UPDATED_BY ??
-    "",
-  updatedDate:
-    row.UPDATED_DATE ??
-    row.updatedDate ??
-    row.lastUpdatedDate ??
-    row.LAST_UPDATED_DATE ??
-    "",
+  registeredBy: getRegistrationValue(row, ["registeredBy",]) || "",
+  registeredDate: getRegistrationValue(row, ["registeredDate",]) || "",
+  lastUpdatedBy:getRegistrationValue(row, ["lastUpdatedBy",]) || "",
+  lastUpdatedDate:getRegistrationValue(row, ["lastUpdatedDate",]) || "",
   __existing: true,
 });
 
-const buildSummaryRowsFromForex = (rows = []) => {
-  const summaryRows = [];
+const getRawFromDate = (row = {}) =>
+  row.FROM_DATE ?? row.fromDate ?? row.fDate ?? row.dateFrom ?? row.sourceFromDate;
 
-  rows.forEach((row) => {
-    const sourceFrom = parseDate(row.FROM_DATE ?? row.fromDate ?? row.fDate);
-    const sourceTo = parseDate(row.TO_DATE ?? row.toDate ?? row.tDate);
+const getRawToDate = (row = {}) =>
+  row.TO_DATE ?? row.toDate ?? row.tDate ?? row.dateTo ?? row.sourceToDate;
 
-    if (!sourceFrom || !sourceTo) return;
+const getRegistrationValue = (row = {}, keys = []) => {
+  const direct = pickValue(row, keys);
+  if (direct) return direct;
 
-    let year = sourceFrom.getFullYear();
-    let month = sourceFrom.getMonth() + 1;
-
-    const lastYear = sourceTo.getFullYear();
-    const lastMonth = sourceTo.getMonth() + 1;
-
-    while (year < lastYear || (year === lastYear && month <= lastMonth)) {
-      const monthStart = startOfMonth(year, month);
-      const monthEnd = endOfMonth(year, month);
-
-      const displayFrom = maxDate(sourceFrom, monthStart);
-      const displayTo = minDate(sourceTo, monthEnd);
-
-      if (displayFrom <= displayTo) {
-        summaryRows.push({
-          rangeKey: `${getId(row) ?? "NOID"}-${year}-${String(month).padStart(
-            2,
-            "0"
-          )}`,
-          tranID: getId(row),
-          year,
-          month,
-          monthName: getMonthName(month),
-          dateFrom: formatDate(displayFrom),
-          dateTo: formatDate(displayTo),
-          sourceFromDate: formatDate(sourceFrom),
-          sourceToDate: formatDate(sourceTo),
-        });
-      }
-
-      month += 1;
-      if (month > 12) {
-        month = 1;
-        year += 1;
+  // Some controllers / FOR JSON AUTO outputs can wrap aliases under table aliases.
+  for (const value of Object.values(row || {})) {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const nested = pickValue(value, keys);
+      if (nested) return nested;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const nested = pickValue(item, keys);
+        if (nested) return nested;
       }
     }
+  }
+
+  return "";
+};
+
+const expandForexRowByMonth = (row = {}) => {
+  const sourceFrom = parseDate(getRawFromDate(row));
+  const sourceTo = parseDate(getRawToDate(row));
+  const expandedRows = [];
+
+  if (!sourceFrom || !sourceTo) return expandedRows;
+
+  sourceFrom.setHours(0, 0, 0, 0);
+  sourceTo.setHours(0, 0, 0, 0);
+
+  let year = sourceFrom.getFullYear();
+  let month = sourceFrom.getMonth() + 1;
+
+  const lastYear = sourceTo.getFullYear();
+  const lastMonth = sourceTo.getMonth() + 1;
+
+  while (year < lastYear || (year === lastYear && month <= lastMonth)) {
+    const monthStart = startOfMonth(year, month);
+    const monthEnd = endOfMonth(year, month);
+
+    const displayFrom = maxDate(sourceFrom, monthStart);
+    const displayTo = minDate(sourceTo, monthEnd);
+
+    if (displayFrom <= displayTo) {
+      expandedRows.push({
+        ...row,
+        rangeKey: `${year}-${String(month).padStart(2, "0")}-${formatDate(
+          displayFrom
+        )}-${formatDate(displayTo)}`,
+        year,
+        month,
+        monthName: getMonthName(month),
+        dateFrom: formatDate(displayFrom),
+        dateTo: formatDate(displayTo),
+        sourceFromDate: formatDate(sourceFrom),
+        sourceToDate: formatDate(sourceTo),
+      });
+    }
+
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
+  }
+
+  return expandedRows;
+};
+
+const buildSummaryRowsFromForex = (rows = []) => {
+  const grouped = new Map();
+
+  rows.forEach((row) => {
+    expandForexRowByMonth(row).forEach((expandedRow) => {
+      const key = expandedRow.rangeKey;
+      const existing = grouped.get(key);
+      const tranID = getId(row);
+
+      if (existing) {
+        existing.rowCount += 1;
+        if (tranID && !existing.tranIDs.includes(tranID)) {
+          existing.tranIDs.push(tranID);
+        }
+        return;
+      }
+
+      grouped.set(key, {
+        rangeKey: key,
+        year: expandedRow.year,
+        month: expandedRow.month,
+        monthName: expandedRow.monthName,
+        dateFrom: expandedRow.dateFrom,
+        dateTo: expandedRow.dateTo,
+        rowCount: 1,
+        tranIDs: tranID ? [tranID] : [],
+      });
+    });
   });
 
-  return summaryRows.sort((a, b) => {
+  return Array.from(grouped.values()).sort((a, b) => {
     if (a.year !== b.year) return b.year - a.year;
     if (a.month !== b.month) return b.month - a.month;
-    return String(a.tranID ?? "").localeCompare(String(b.tranID ?? ""));
+    if (a.dateFrom !== b.dateFrom) return String(a.dateFrom).localeCompare(String(b.dateFrom));
+    return String(a.dateTo).localeCompare(String(b.dateTo));
   });
 };
 
@@ -196,8 +249,8 @@ const DEFAULT_FORM = {
   currRate2: "",
   registeredBy: "",
   registeredDate: "",
-  updatedBy: "",
-  updatedDate: "",
+  lastUpdatedBy: "",
+  lastUpdatedDate: "",
   __existing: false,
 };
 
@@ -318,28 +371,15 @@ const DForexRef = ({ onSelect }) => {
   const filteredForexRows = useMemo(() => {
     if (!selectedDateRangeRow || !forexRows.length) return [];
 
-    const selFrom = new Date(selectedDateRangeRow.dateFrom);
-    const selTo = new Date(selectedDateRangeRow.dateTo);
-
-    selFrom.setHours(0, 0, 0, 0);
-    selTo.setHours(23, 59, 59, 999);
-
-    return forexRows.filter((row) => {
-      const rawFrom = row.FROM_DATE ?? row.fromDate ?? row.fDate;
-      const rawTo = row.TO_DATE ?? row.toDate ?? row.tDate;
-
-      if (!rawFrom || !rawTo) return false;
-
-      const rFrom = new Date(rawFrom);
-      const rTo = new Date(rawTo);
-
-      if (isNaN(rFrom.getTime()) || isNaN(rTo.getTime())) return false;
-
-      rFrom.setHours(0, 0, 0, 0);
-      rTo.setHours(0, 0, 0, 0);
-
-      return rFrom <= selTo && rTo >= selFrom;
-    });
+    return forexRows
+      .flatMap((row) => expandForexRowByMonth(row))
+      .filter((row) => row.rangeKey === selectedDateRangeRow.rangeKey)
+      .sort((a, b) => {
+        const aFrom = String(getRawFromDate(a) || "");
+        const bFrom = String(getRawFromDate(b) || "");
+        if (aFrom !== bFrom) return aFrom.localeCompare(bFrom);
+        return String(getId(a) || "").localeCompare(String(getId(b) || ""));
+      });
   }, [forexRows, selectedDateRangeRow]);
 
   /* ================= MUTATIONS ================= */
@@ -523,6 +563,7 @@ const DForexRef = ({ onSelect }) => {
     if (!form.fromDate) missing.push("• Start Date");
     if (!form.toDate) missing.push("• End Date");
     if (!String(form.currCode || "").trim()) missing.push("• Currency");
+    if (!String(form.currRate || "").trim()) missing.push("• Currency Rate");
     if (!String(form.currCode2 || "").trim()) missing.push("• Currency 2");
     if (!String(form.currRate2 || "").trim()) missing.push("• Currency Rate 2");
 
@@ -566,10 +607,17 @@ const DForexRef = ({ onSelect }) => {
 
   const dateRangeColumns = useMemo(
     () => [
-      { key: "year", label: "Year", sortable: true },
-      { key: "monthName", label: "Month", sortable: true },
-      { key: "dateFrom", label: "Date From", sortable: true },
-      { key: "dateTo", label: "Date To", sortable: true },
+      { key: "year", label: "Year", sortable: true, width: 80, minWidth: 80, requiredVisible: true },
+      {
+        key: "monthName",
+        label: "Month",
+        sortable: true,
+        width: 80, minWidth: 80, requiredVisible: true ,
+        render: (row) => row.monthName || getMonthName(row.month),
+      },
+      { key: "dateFrom", label: "Date From", sortable: true, width: 80, minWidth: 80, requiredVisible: true  },
+      { key: "dateTo", label: "Date To", sortable: true, width: 80, minWidth: 80, requiredVisible: true  },
+      { key: "rowCount", label: "Records", sortable: true, width: 80, minWidth: 80},
     ],
     []
   );
@@ -580,8 +628,10 @@ const DForexRef = ({ onSelect }) => {
         key: "__actions",
         label: <span className="hidden md:inline">Actions</span>,
         sortable: false,
+        width: 100,
+        minWidth: 100,
         render: (row) => (
-          <div className="flex items-center justify-center gap-3">
+          <div className="flex items-center justify-center gap-1">
             <button
               type="button"
               onClick={(e) => {
@@ -618,35 +668,57 @@ const DForexRef = ({ onSelect }) => {
           </div>
         ),
       },
+      { key: "year", label: "Year", sortable: true, width: 80, minWidth: 80},
+      {
+        key: "monthName",
+        label: "Month",
+        sortable: true,
+        render: (row) => row.monthName || getMonthName(row.month),
+        width: 80, minWidth: 80
+      },
+      { key: "dateFrom", label: "Date From", sortable: true, width: 100, minWidth: 80},
+      { key: "dateTo", label: "Date To", sortable: true, width: 100, minWidth: 80},
       {
         key: "currCode",
         label: "Currency",
         sortable: true,
-        render: (row) => row.currCode || "",
+        render: (row) => row.currCode || row.CURR_CODE || "",
+        width: 80, minWidth: 80, requiredVisible: true 
       },
       {
         key: "fCurrName",
         label: "From Currency",
         sortable: true,
         render: (row) => row.fCurrName ?? row.FCURR_NAME ?? "",
+        width: 130, minWidth: 80, requiredVisible: true 
+      },
+      {
+        key: "currRate",
+        label: "Curr Rate",
+        sortable: true,
+        render: (row) => row.currRate ?? row.CURR_RATE ?? "",
+        width: 100, minWidth: 80, requiredVisible: true 
       },
       {
         key: "currCode2",
         label: "Currency 2",
         sortable: true,
         render: (row) => row.currCode2 ?? row.CURR_CODE2 ?? "",
+        width: 90, minWidth: 80, requiredVisible: true 
       },
       {
         key: "tCurrName",
         label: "To Currency",
         sortable: true,
         render: (row) => row.tCurrName ?? row.TCURR_NAME ?? "",
+        width: 130, minWidth: 80, requiredVisible: true 
       },
       {
         key: "currRate2",
-        label: "Currency Rate 2",
+        label: "Curr Rate 2",
         sortable: true,
         render: (row) => row.currRate2 ?? row.CURR_RATE2 ?? "",
+        width: 100, minWidth: 80, requiredVisible: true 
       },
     ],
     [handleEdit, handleDelete, isMobile, openMobileActionSheet]
@@ -655,102 +727,114 @@ const DForexRef = ({ onSelect }) => {
   /* ================= RENDER ================= */
 
   return (
-    <div className="global-ref-main-div-ui mt-24">
+    <div className="global-ref-main-div-ui">
       {isBusy && <LoadingSpinner />}
 
-      <div className="global-ref-header-ui fixed left-6 right-6 top-14 z-30 mt-4 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm backdrop-blur sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="global-ref-headertext-ui">{documentTitle}</h1>
+      <div className="global-ref-header-ui">
+        <div className="w-full flex flex-col gap-3 md:grid md:grid-cols-3 md:items-center md:gap-0">
+          <div className="w-full md:w-auto md:justify-start flex">
+            <h1 className="global-ref-headertext-ui w-full md:w-auto truncate text-center md:text-left">
+              {documentTitle}
+            </h1>
+          </div>
 
-        <div className="flex flex-wrap justify-center gap-2 text-xs">
-          <button
-            type="button"
-            onClick={startNew}
-            className={`flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 ${
-              isEditing || isBusy ? "cursor-not-allowed opacity-50" : ""
-            }`}
-            disabled={isEditing || isBusy}
-          >
-            <Plus size={16} /> <span className="hidden sm:inline">Add</span>
-          </button>
+          <div className="hidden md:flex justify-center w-full" />
 
-          <button
-            type="button"
-            onClick={handleSave}
-            className={`flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 ${
-              !isEditing || saveMutation.isPending || isBusy
-                ? "cursor-not-allowed opacity-50"
-                : ""
-            }`}
-            disabled={!isEditing || saveMutation.isPending || isBusy}
-            title="Ctrl+S to Save"
-          >
-            <Save size={16} />
-            <span className="hidden sm:inline">Save</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleReset}
-            className={`flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 ${
-              isBusy ? "cursor-not-allowed opacity-50" : ""
-            }`}
-            disabled={isBusy}
-          >
-            <Undo2 size={16} /> <span className="hidden sm:inline">Reset</span>
-          </button>
-
-          {/* Info Dropdown */}
-          <div ref={guideRef} className="relative">
-            <button
-              onClick={() => setOpenGuide((v) => !v)}
-              className="bg-blue-600 text-white h-full sm:h-8 sm:px-4 rounded-md flex items-center justify-center gap-1 hover:bg-blue-700 transition-all px-3"
-            >
-              <FontAwesomeIcon icon={faInfoCircle} className="text-[12px]" />
-              <span className="hidden sm:inline ml-1 text-[11px] font-medium">
-                Info
-              </span>
-              <FontAwesomeIcon
-                icon={faChevronDown}
-                className="hidden sm:inline text-[10px] opacity-80"
-              />
-            </button>
-            
-            {isOpenGuide && (
-              <div className="absolute right-0 mt-2 w-52 rounded-md shadow-xl bg-white ring-1 ring-black/10 z-[60] dark:bg-gray-800 overflow-hidden">
-                <button
-                  onClick={() => {
-                    window.open(pdfLink, "_blank");
-                    setOpenGuide(false);
-                  }}
-                  className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 dark:hover:bg-blue-900 border-b border-gray-100 dark:border-gray-700"
-                >
-                  <FontAwesomeIcon
-                    icon={faFilePdf}
-                    className="mr-2 text-red-500"
-                  />{" "}
-                  PDF Guide
-                </button>
-                <button
-                  onClick={() => {
-                    window.open(videoLink, "_blank");
-                    setOpenGuide(false);
-                  }}
-                  className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 dark:hover:bg-blue-900"
-                >
-                  <FontAwesomeIcon
-                    icon={faVideo}
-                    className="mr-2 text-blue-500"
-                  />{" "}
-                  Video Guide
-                </button>
+          <div className="w-full md:w-auto flex md:justify-end">
+            <div className="w-full md:w-auto flex items-center justify-center md:justify-end gap-2 flex-wrap">
+              <div className="flex flex-wrap justify-center md:justify-end gap-2">
+                <ButtonBar
+                  buttons={[
+                    {
+                      key: "add",
+                      label: <span className="sm:inline ml-1">Add</span>,
+                      icon: faPlus,
+                      onClick: startNew,
+                      disabled: isEditing || isBusy,
+                      className: `flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md transition-all ${
+                        isEditing || isBusy
+                          ? "bg-blue-500 opacity-50 cursor-not-allowed text-white"
+                          : "bg-blue-600 text-white hover:bg-blue-700"
+                      }`,
+                    },
+                    {
+                      key: "save",
+                      label: <span className="sm:inline ml-1">Save</span>,
+                      icon: faSave,
+                      onClick: handleSave,
+                      disabled: !isEditing || saveMutation.isPending || isBusy,
+                      className: `flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md transition-all ${
+                        !isEditing || saveMutation.isPending || isBusy
+                          ? "bg-blue-500 opacity-50 cursor-not-allowed text-white"
+                          : "bg-blue-600 text-white hover:bg-blue-700"
+                      }`,
+                    },
+                    {
+                      key: "reset",
+                      label: <span className="sm:inline ml-1">Reset</span>,
+                      icon: faUndo,
+                      onClick: handleReset,
+                      disabled: isBusy,
+                      className: `flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md transition-all ${
+                        isBusy
+                          ? "bg-blue-500 opacity-50 cursor-not-allowed text-white"
+                          : "bg-blue-600 text-white hover:bg-blue-700"
+                      }`,
+                    },
+                  ]}
+                />
               </div>
-            )}
+
+              <div ref={guideRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setOpenGuide((v) => !v)}
+                  className="bg-blue-600 text-white h-7 w-16 sm:w-auto sm:h-8 sm:px-4 rounded-md flex items-center justify-center gap-1 hover:bg-blue-700 transition-all"
+                >
+                  <FontAwesomeIcon icon={faInfoCircle} className="text-[12px]" />
+                  <span className="sm:inline ml-1 text-[11px] font-medium">
+                    Info
+                  </span>
+                  <FontAwesomeIcon
+                    icon={faChevronDown}
+                    className="hidden sm:inline text-[10px] opacity-80"
+                  />
+                </button>
+
+                {isOpenGuide && (
+                  <div className="absolute right-0 mt-2 w-52 rounded-md shadow-xl bg-white ring-1 ring-black/10 z-[60] dark:bg-gray-800 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.open(pdfLink, "_blank");
+                        setOpenGuide(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 dark:hover:bg-blue-900 border-b border-gray-100 dark:border-gray-700"
+                    >
+                      <FontAwesomeIcon icon={faFilePdf} className="mr-2 text-red-500" />
+                      PDF Guide
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.open(videoLink, "_blank");
+                        setOpenGuide(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 dark:hover:bg-blue-900"
+                    >
+                      <FontAwesomeIcon icon={faVideo} className="mr-2 text-blue-500" />
+                      Video Guide
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       <div
-        className="global-tran-tab-div-ui mt-8 p-6"
+        className="global-tran-tab-div-ui mt-24 p-6"
         style={{ minHeight: "calc(100vh - 170px)" }}
       >
         <div className="grid grid-cols-1 gap-6 md:grid-cols-12">
@@ -762,7 +846,7 @@ const DForexRef = ({ onSelect }) => {
                   type="date"
                   value={form.fromDate}
                   inputRef={fromDateRef}
-                  onChange={(e) => setField("fromDate", e.target.value)}
+                  onChange={(value) => setField("fromDate", value)}
                   disabled={!isEditing || isBusy}
                   required
                 />
@@ -771,7 +855,7 @@ const DForexRef = ({ onSelect }) => {
                   label="End Date"
                   type="date"
                   value={form.toDate}
-                  onChange={(e) => setField("toDate", e.target.value)}
+                  onChange={(value) => setField("toDate", value)}
                   disabled={!isEditing || isBusy}
                   required
                 />
@@ -790,6 +874,16 @@ const DForexRef = ({ onSelect }) => {
                   disabled={!isEditing || isBusy}
                   required
                   readOnly
+                />
+
+                <FieldRenderer
+                  label="Currency Rate"
+                  type="number"
+                  value={form.currRate}
+                  onChange={(value) => setField("currRate", value)}
+                  disabled={!isEditing || isBusy}
+                  required
+                  step="0.000001"
                 />
               </div>
 
@@ -814,9 +908,10 @@ const DForexRef = ({ onSelect }) => {
                   label="Currency Rate 2"
                   type="number"
                   value={form.currRate2}
-                  onChange={(e) => setField("currRate2", e.target.value)}
+                  onChange={(value) => setField("currRate2", value)}
                   disabled={!isEditing || isBusy}
                   required
+                  step="0.000001"
                 />
               </div>
             </div>
@@ -828,8 +923,8 @@ const DForexRef = ({ onSelect }) => {
                 data={{
                   registeredBy: form.registeredBy,
                   registeredDate: form.registeredDate,
-                  updatedBy: form.updatedBy,
-                  updatedDate: form.updatedDate,
+                  lastUpdatedBy: form.lastUpdatedBy,
+                  lastUpdatedDate: form.lastUpdatedDate,
                 }}
                 layout="minimize"
               />
@@ -838,13 +933,12 @@ const DForexRef = ({ onSelect }) => {
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-12">
-          <div className="xl:col-span-5">
+          <div className="xl:col-span-4">
             <div className="global-tran-table-main-div-ui relative overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
               <SearchGlobalReferenceTable
                 docType={`${docType}_DateRange`}
                 columns={dateRangeColumns}
                 data={dateRangeRows}
-                itemsPerPage={50}
                 showFilters
                 showGlobalSearch={false}
                 showExport={false}
@@ -856,17 +950,19 @@ const DForexRef = ({ onSelect }) => {
                 onRowDoubleClick={handleDateRangeClick}
                 selectedRow={selectedDateRangeRow}
                 isLoading={isInitialLoading} 
+                showPagination={false}
+                autoFillGrid={true}
+                tableSize="Half"
               />
             </div>
           </div>
 
-          <div className="xl:col-span-7">
+          <div className="xl:col-span-8">
             <div className="global-tran-table-main-div-ui relative overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
               <SearchGlobalReferenceTable
                 docType={docType}
                 columns={columns}
                 data={filteredForexRows}
-                itemsPerPage={50}
                 showFilters
                 isLoading={isInitialLoading}
                 onRowDoubleClick={handleEdit}
@@ -877,9 +973,11 @@ const DForexRef = ({ onSelect }) => {
                 showColumnChooser={true}
                 showAutoFitToggle={true}
                 showGroupBy={true}
+                initialState={{ groupBy: ["year", "monthName", "dateFrom", "dateTo"] }}
                 isFetching={forexListQuery.isFetching}
                 onRefresh={() => forexListQuery.refetch()}
                 onMobileRowOpen={openMobileActionSheet} // Piped into global table!
+                showPagination={false}
               />
             </div>
           </div>

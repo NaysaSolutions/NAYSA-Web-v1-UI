@@ -8,7 +8,7 @@ import { useNavigate,useLocation  } from "react-router-dom";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faFolderOpen, faSpinner,faSearch } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faClipboardCheck, faSpinner,faSearch } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
@@ -462,7 +462,7 @@ const SI = () => {
     { key: "siQuantity", label: "SI Quantity", width: 120 },
     { key: "quantityPicked", label: "Quantity Picked", width: 130 },
     { key: "itemAmount", label: "Item Amount", width: 130 },
-    { key: "unitPrice", label: "Unit Price", width: 130 },
+    { key: "unitPrice", label: "Selling Price", width: 130 },
     { key: "grossAmount", label: "Gross Amount", width: 130 },
     ...visibleDiscountRateFields.map((field, index) => ({
       key: field,
@@ -4110,7 +4110,7 @@ const renderSIDetailCell = (columnKey, row, index) => {
               disabled={!row?.itemCode || (parseFormattedNumber(row?.siQuantity || 0) || 0) <= 0}
               onClick={() => handleOpenItemPickingModal(index)}
             >
-              <FontAwesomeIcon icon={faFolderOpen} />
+              <FontAwesomeIcon icon={faClipboardCheck} />
             </button>
           )}
         </div>
@@ -4850,7 +4850,7 @@ return (
               >
                 <div className="flex items-center gap-3">
                   <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-slate-700 dark:text-blue-300">
-                    <FontAwesomeIcon icon={faFolderOpen} />
+                    <FontAwesomeIcon icon={faClipboardCheck} />
                   </span>
                   <div className="flex flex-col items-start">
                     <span>Open DR</span>
@@ -4879,7 +4879,7 @@ return (
           disabled={isLoading}
           onClick={() => handleBulkPickingAllocation("allocate")}
         >
-          <FontAwesomeIcon icon={faFolderOpen} className="mr-2" />
+          <FontAwesomeIcon icon={faClipboardCheck} className="mr-2" />
           Allocate All
         </button>
 

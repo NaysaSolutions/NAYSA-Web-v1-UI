@@ -3290,14 +3290,7 @@ const renderCrGlCell = (columnKey, row, index) => {
     branchCode={state.branchCode}
     startDate={state.fromDate}
     endDate={state.toDate}
-    status={(() => {
-      const s = (state.status || "").toUpperCase();
-      if (s === "FINALIZED") return "F";
-      if (s === "CANCELLED") return "X";
-      if (s === "CLOSED") return "C";
-      if (s === "OPEN") return "";
-      return "All";
-    })()}
+     status="All"
     onRowDoubleClick={handleHistoryRowPick}
     historyExportName={`${documentTitle} History`}
   />

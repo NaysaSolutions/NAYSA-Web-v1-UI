@@ -4,7 +4,7 @@ import { useNavigate,useLocation  } from "react-router-dom";
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faFolderOpen, faSpinner,faSearch } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faClipboardCheck, faSpinner,faSearch } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
@@ -2595,7 +2595,7 @@ const renderDRDetailCell = (columnKey, row, index) => {
               disabled={!row?.groupId || !row?.itemCode || (parseFormattedNumber(row?.drQuantity || 0) || 0) <= 0}
               onClick={() => handleOpenItemPickingModal(index)}
             >
-              <FontAwesomeIcon icon={faFolderOpen} />
+              <FontAwesomeIcon icon={faClipboardCheck} />
             </button>
           )}
         </div>
@@ -3180,7 +3180,7 @@ return (
               >
                 <div className="flex items-center gap-3">
                   <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-slate-700 dark:text-blue-300">
-                    <FontAwesomeIcon icon={faFolderOpen} />
+                    <FontAwesomeIcon icon={faClipboardCheck} />
                   </span>
                   <div className="flex flex-col items-start">
                     <span>Open Sales Order</span>
@@ -3209,7 +3209,7 @@ return (
             disabled={isLoading}
             onClick={() => handleBulkPickingAllocation("allocate")}
           >
-            <FontAwesomeIcon icon={faFolderOpen} className="mr-2" />
+            <FontAwesomeIcon icon={faClipboardCheck} className="mr-2" />
             Allocate All
           </button>
 

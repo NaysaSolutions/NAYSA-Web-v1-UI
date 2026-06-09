@@ -174,17 +174,15 @@ const TEMPLATE_COLUMNS = [
   { key: "itemName", label: "Item Name", width: 240 },
   { key: "uomCode", label: "UOM", width: 90 },
   { key: "sellingPrice", label: "Selling Price", width: 130 },
-  { key: "discRate1", label: "Discount Rate 1", width: 110 },
-  { key: "discRate2", label: "Discount Rate 2", width: 110 },
-  { key: "discRate3", label: "Discount Rate 3", width: 110 },
-  { key: "discRate4", label: "Discount Rate 4", width: 110 },
-  { key: "discRate5", label: "Discount Rate 5", width: 110 },
-  { key: "discRate6", label: "Discount Rate 6", width: 110 },
-  { key: "discRate7", label: "Discount Rate 7", width: 110 },
-  { key: "discRate8", label: "Discount Rate 8", width: 110 },
+  { key: "discRate1", label: "Disc. Rate 1", width: 110 },
+  { key: "discRate2", label: "Disc. Rate 2", width: 110 },
+  { key: "discRate3", label: "Disc. Rate 3", width: 110 },
+  { key: "discRate4", label: "Disc. Rate 4", width: 110 },
+  { key: "discRate5", label: "Disc. Rate 5", width: 110 },
+  { key: "discRate6", label: "Disc. Rate 6", width: 110 },
+  { key: "discRate7", label: "Disc. Rate 7", width: 110 },
+  { key: "discRate8", label: "Disc. Rate 8", width: 110 },
 ];
-
-const TEMPLATE_HEADER_LABELS = TEMPLATE_COLUMNS.map((col) => col.label);
 
 const safeArray = (value) => {
   if (Array.isArray(value)) return value;
@@ -437,6 +435,35 @@ export default function SalesPMCustomerItem() {
 
   const sellPriceDecimals = Number(companyInfo?.item_decsellprice ?? 2);
   const rateDecimals = 2;
+  const discountLevel = Math.min(
+    Math.max(Number(companyInfo?.salesDiscLevel ?? 8), 1),
+    8
+  );
+  const visiblePriceKeys = useMemo(
+    () =>
+      PRICE_KEYS.filter((key) => {
+        if (key === "sellingPrice") return true;
+
+        const rateNo = Number(String(key).replace("discRate", ""));
+        return rateNo <= discountLevel;
+      }),
+    [discountLevel]
+  );
+  const templateColumns = useMemo(
+    () =>
+      TEMPLATE_COLUMNS.filter((column) => {
+        if (!RATE_KEYS.includes(column.key)) return true;
+
+        const rateNo = Number(String(column.key).replace("discRate", ""));
+        return rateNo <= discountLevel;
+      }),
+    [discountLevel]
+  );
+  const templateHeaderLabels = useMemo(
+    () => templateColumns.map((column) => column.label),
+    [templateColumns]
+  );
+  
 
   const matrixMeta = MATRIX_TYPE_META[header.pmType] || MATRIX_TYPE_META.PMCUST;
   const historyTypeMeta =
@@ -1173,6 +1200,18 @@ export default function SalesPMCustomerItem() {
     }
   };
 
+  const handleHistoryRowRetrieve = async (row) => {
+    if (historyActionLoading) return;
+
+    setHistoryActionLoading(true);
+    try {
+      await handleHistoryEdit(row);
+      setActiveTab("details");
+    } finally {
+      setHistoryActionLoading(false);
+    }
+  };
+
   const handleHistoryDelete = async (row, source = "type") => {
     const code = row?.pmCode || "";
     const name = row?.pmName || "";
@@ -1244,7 +1283,7 @@ export default function SalesPMCustomerItem() {
         uomCode: row.uomCode || "",
       };
 
-      PRICE_KEYS.forEach((key) => {
+      visiblePriceKeys.forEach((key) => {
         const raw = stripCommas(row[key]);
         out[key] = raw === "" ? 0 : Number(raw);
       });
@@ -1252,7 +1291,7 @@ export default function SalesPMCustomerItem() {
       return out;
     });
 
-    const exportCols = TEMPLATE_COLUMNS.map((col) => ({
+    const exportCols = templateColumns.map((col) => ({
       ...col,
       renderType:
         col.key === "sellingPrice" || RATE_KEYS.includes(col.key)
@@ -1365,7 +1404,7 @@ export default function SalesPMCustomerItem() {
 
       const headerRowIndex = rowsAsArray.findIndex((row) => {
         const normalized = row.map(normalizeHeaderText);
-        return TEMPLATE_HEADER_LABELS.every(
+        return templateHeaderLabels.every(
           (label, idx) =>
             normalizeHeaderText(label) === normalizeHeaderText(normalized[idx])
         );
@@ -1384,8 +1423,8 @@ export default function SalesPMCustomerItem() {
       );
 
       const expectedHeadersMatched =
-        headerRow.length >= TEMPLATE_HEADER_LABELS.length &&
-        TEMPLATE_HEADER_LABELS.every(
+        headerRow.length >= templateHeaderLabels.length &&
+        templateHeaderLabels.every(
           (label, idx) =>
             normalizeHeaderText(label) === normalizeHeaderText(headerRow[idx])
         );
@@ -1410,7 +1449,7 @@ export default function SalesPMCustomerItem() {
         return;
       }
 
-      const headerMap = TEMPLATE_COLUMNS.reduce((acc, col, idx) => {
+      const headerMap = templateColumns.reduce((acc, col, idx) => {
         acc[col.key] = idx;
         return acc;
       }, {});
@@ -1506,12 +1545,12 @@ export default function SalesPMCustomerItem() {
       { key: "itemCode", label: "Item Code", sortable: true, width: 130 },
       { key: "itemName", label: "Item Name", sortable: true, width: 240 },
       { key: "uomCode", label: "UOM", sortable: true, width: 90 },
-      ...PRICE_KEYS.map((key) => ({
+      ...visiblePriceKeys.map((key) => ({
         key,
         label:
           key === "sellingPrice"
             ? "Selling Price"
-            : key.replace("discRate", "Discount Rate "),
+            : key.replace("discRate", "Disc Rate "),
         sortable: false,
         width: key === "sellingPrice" ? 130 : 110,
         render: (row) => (
@@ -1533,7 +1572,7 @@ export default function SalesPMCustomerItem() {
         ),
       })),
     ],
-    [visibleRows, sellPriceDecimals]
+    [visibleRows, sellPriceDecimals, visiblePriceKeys]
   );
 
   const buildHistoryColumns = (meta, source) => [
@@ -1550,13 +1589,7 @@ export default function SalesPMCustomerItem() {
           type="button"
           onClick={async (event) => {
             event.stopPropagation();
-            setHistoryActionLoading(true);
-            try {
-              await handleHistoryEdit(row);
-              setActiveTab("details");
-            } finally {
-              setHistoryActionLoading(false);
-            }
+            await handleHistoryRowRetrieve(row);
           }}
           disabled={historyActionLoading}
           className="flex h-7 w-7 items-center justify-center rounded-md border border-blue-100 bg-blue-50 text-blue-600 transition-colors hover:border-blue-600 hover:bg-blue-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
@@ -1636,13 +1669,7 @@ const historyTypeColumns = useMemo(
             type="button"
             onClick={async (event) => {
               event.stopPropagation();
-              setHistoryActionLoading(true);
-              try {
-                await handleHistoryEdit(row);
-                setActiveTab("details");
-              } finally {
-                setHistoryActionLoading(false);
-              }
+              await handleHistoryRowRetrieve(row);
             }}
             disabled={historyActionLoading}
             className="flex h-7 w-7 items-center justify-center rounded-md border border-blue-100 bg-blue-50 text-blue-600 transition-colors hover:border-blue-600 hover:bg-blue-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
@@ -1729,13 +1756,7 @@ const historyItemColumns = useMemo(
             type="button"
             onClick={async (event) => {
               event.stopPropagation();
-              setHistoryActionLoading(true);
-              try {
-                await handleHistoryEdit(row);
-                setActiveTab("details");
-              } finally {
-                setHistoryActionLoading(false);
-              }
+              await handleHistoryRowRetrieve(row);
             }}
             disabled={historyActionLoading}
             className="flex h-7 w-7 items-center justify-center rounded-md border border-blue-100 bg-blue-50 text-blue-600 transition-colors hover:border-blue-600 hover:bg-blue-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
@@ -1803,7 +1824,7 @@ const historyItemColumns = useMemo(
     },
     {
       key: "discRate1",
-      label: "Discount Rate 1",
+      label: "Disc. Rate 1",
       sortable: true,
       width: 120,
       className: "text-right",
@@ -1811,7 +1832,7 @@ const historyItemColumns = useMemo(
     },
     {
       key: "discRate2",
-      label: "Discount Rate 2",
+      label: "Disc. Rate 2",
       sortable: true,
       width: 120,
       className: "text-right",
@@ -1819,7 +1840,7 @@ const historyItemColumns = useMemo(
     },
     {
       key: "discRate3",
-      label: "Discount Rate 3",
+      label: "Disc. Rate 3",
       sortable: true,
       width: 120,
       className: "text-right",
@@ -1827,7 +1848,7 @@ const historyItemColumns = useMemo(
     },
     {
       key: "discRate4",
-      label: "Discount Rate 4",
+      label: "Disc. Rate 4",
       sortable: true,
       width: 120,
       className: "text-right",
@@ -1835,7 +1856,7 @@ const historyItemColumns = useMemo(
     },
     {
       key: "discRate5",
-      label: "Discount Rate 5",
+      label: "Disc. Rate 5",
       sortable: true,
       width: 120,
       className: "text-right",
@@ -1843,7 +1864,7 @@ const historyItemColumns = useMemo(
     },
     {
       key: "discRate6",
-      label: "Discount Rate 6",
+      label: "Disc. Rate 6",
       sortable: true,
       width: 120,
       className: "text-right",
@@ -1851,7 +1872,7 @@ const historyItemColumns = useMemo(
     },
     {
       key: "discRate7",
-      label: "Discount Rate 7",
+      label: "Disc. Rate 7",
       sortable: true,
       width: 120,
       className: "text-right",
@@ -1859,7 +1880,7 @@ const historyItemColumns = useMemo(
     },
     {
       key: "discRate8",
-      label: "Discount Rate 8",
+      label: "Disc. Rate 8",
       sortable: true,
       width: 120,
       className: "text-right",
@@ -2347,6 +2368,7 @@ const historyItemColumns = useMemo(
           showGlobalSearch
           selectedRow={null}
           onRowClick={() => {}}
+          onRowDoubleClick={handleHistoryRowRetrieve}
           isLoading={historyLoading || historyActionLoading}
           isFetching={historyLoading || historyActionLoading}
         />
@@ -2461,6 +2483,7 @@ const historyItemColumns = useMemo(
         showGlobalSearch
         selectedRow={null}
         onRowClick={() => {}}
+        onRowDoubleClick={handleHistoryRowRetrieve}
         isLoading={historyLoading || historyActionLoading}
         isFetching={historyLoading || historyActionLoading}
       />

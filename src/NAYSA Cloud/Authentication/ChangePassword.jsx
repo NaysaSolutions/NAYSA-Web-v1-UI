@@ -526,68 +526,94 @@ const ChangePassword = () => {
 
   return (
     <div
-      className="relative min-h-screen overflow-hidden flex items-center justify-center px-4 py-10"
-      style={{ background: "linear-gradient(to bottom, #7392b7, #d8e1e9)" }}
+      className="relative min-h-screen overflow-hidden px-4 pt-8 pb-20 text-slate-900"
+      style={{
+        backgroundImage:
+          "linear-gradient(rgba(2,12,32,0.58), rgba(2,12,32,0.68)), url('/NAYSABG.png')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+      }}
     >
-      {/* Blobs */}
-      <motion.div
-        {...blob1}
-        className="pointer-events-none absolute -top-24 -left-24 h-72 w-72 rounded-full blur-3xl"
-        style={{ background: "radial-gradient(circle, rgba(99,102,241,.28) 0%, rgba(56,189,248,.18) 100%)" }}
-      />
-      <motion.div
-        {...blob2}
-        className="pointer-events-none absolute -bottom-24 -right-24 h-80 w-80 rounded-full blur-3xl"
-        style={{ background: "radial-gradient(circle, rgba(168,85,247,.22) 0%, rgba(217,70,239,.18) 100%)" }}
-      />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_35%_20%,rgba(56,189,248,0.18),transparent_38%),radial-gradient(circle_at_80%_65%,rgba(29,78,216,0.18),transparent_42%)]" />
 
-      <div className="relative w-full max-w-md">
+      <main className="relative z-10 mx-auto flex min-h-[calc(100vh-7rem)] w-full max-w-7xl items-center justify-between gap-10">
+        {/* Left marketing side */}
+        <motion.section
+          initial={{ opacity: 0, x: -28 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+          className="hidden flex-1 text-white lg:block"
+        >
+          <div className="max-w-4xl">
+            <div className="mb-8 inline-flex rounded-full border border-white/35 bg-slate-950/20 px-8 py-3 text-xs font-bold uppercase tracking-[0.42em] text-white shadow-lg backdrop-blur-sm">
+              NAYSA-SOLUTIONS INCORPORATED
+            </div>
 
-        {/* ── Logo + Title ── */}
-        <div className="mb-5 flex flex-col items-center text-center">
-          <motion.div {...floatAnim} className="mb-2">
-            <img src="/naysa_logo.png" alt="NAYSA Logo" className="w-40 drop-shadow-md md:w-44" />
-          </motion.div>
-          <motion.h1
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.05 }}
-            className="mt-1 text-2xl font-bold tracking-tight text-blue-900 md:text-3xl"
-          >
-            NAYSA Financials Cloud
-          </motion.h1>
-          <motion.p
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.1 }}
-            className="mt-1.5 text-sm text-slate-700"
-          >
-            {mode === "reset" && "Reset your password to continue."}
-            {mode === "release" && "Set a new password to unlock your account."}
-            {mode === "expired" && "Your password has expired. Please set a new one to continue."}  {/* ADD THIS */}
-            {mode === "unlock" && "Your account has been released. Please set a new password to continue."}
-            {!mode && "Update your account password."}
-          </motion.p>
-        </div>
+            <h1 className="whitespace-nowrap text-5xl font-extrabold uppercase tracking-[0.18em] text-white drop-shadow-xl xl:text-6xl">
+              WE MAKE LIFE EASIER
+            </h1>
+
+            <p className="mt-7 text-2xl font-bold uppercase tracking-[0.38em] text-white/85 drop-shadow-md xl:text-3xl">
+              THROUGH BUSINESS APPLICATIONS
+            </p>
+
+            <div className="mt-10 h-1 w-36 rounded-full bg-sky-400 shadow-[0_0_22px_rgba(56,189,248,0.75)]" />
+
+            <p className="mt-10 max-w-4xl text-lg font-semibold leading-9 text-white drop-shadow-lg xl:text-xl">
+              Powerful business applications built to streamline operations, support compliance,
+              and help your team work faster with NAYSA Cloud.
+            </p>
+          </div>
+        </motion.section>
+
+        {/* Right form side */}
+        <section className="flex w-full flex-1 justify-center lg:justify-end">
+          <div className="w-full max-w-xl">
+            <div className="mb-5 flex flex-col items-center text-center">
+              <motion.div {...floatAnim} className="mb-2">
+                <img src="/naysa_logo.png" alt="NAYSA Logo" className="w-28 drop-shadow-md md:w-32" />
+              </motion.div>
+              <motion.h1
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.05 }}
+                className="text-2xl font-bold tracking-tight text-white drop-shadow-lg md:text-3xl"
+              >
+                NAYSA Financials Cloud
+              </motion.h1>
+              <motion.p
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.1 }}
+                className="mt-1.5 text-sm font-medium text-white/75"
+              >
+                {mode === "reset" && "Reset your password to continue."}
+                {mode === "release" && "Set a new password to unlock your account."}
+                {mode === "expired" && "Your password has expired. Please set a new one to continue."}
+                {mode === "unlock" && "Your account has been released. Please set a new password to continue."}
+                {!mode && "Update your account password."}
+              </motion.p>
+            </div>
 
         {/* ── Card ── */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
-          className="relative w-full rounded-2xl p-7"
+          className="relative w-full rounded-[2rem] p-7 sm:p-8"
           style={{
-            background: "rgba(255,255,255,0.52)",
-            border: "1px solid rgba(255,255,255,0.65)",
+            background: "rgba(255,255,255,0.92)",
+            border: "1px solid rgba(255,255,255,0.8)",
             backdropFilter: "blur(20px)",
             WebkitBackdropFilter: "blur(20px)",
-            boxShadow: "0 20px 60px rgba(55,90,140,.18), inset 0 1px 0 rgba(255,255,255,.85)",
+            boxShadow: "0 24px 70px rgba(2,12,32,.28), inset 0 1px 0 rgba(255,255,255,.85)",
           }}
         >
           {/* Top shimmer line */}
           <div
             className="absolute top-0 left-10 right-10 h-px rounded-full"
-            style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,.9), transparent)" }}
+            style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,1), transparent)" }}
           />
 
           <motion.div
@@ -775,17 +801,19 @@ const ChangePassword = () => {
 
           </motion.form>
 
-          {/* Footer */}
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5, duration: 0.4 }}
-            className="mt-5 text-center text-xs text-slate-400"
-          >
-            © {new Date().getFullYear()} NAYSA. All rights reserved.
-          </motion.p>
         </motion.div>
-      </div>
+          </div>
+        </section>
+      </main>
+
+      {/* Footer */}
+      <footer className="fixed bottom-0 left-0 right-0 z-30 w-full">
+        <div className="w-full border-t border-white/20 bg-slate-950/75 px-4 py-3 backdrop-blur-md shadow-lg">
+          <p className="text-center text-xs font-semibold tracking-wide text-white sm:text-sm">
+            © 2026 NAYSA-SOLUTIONS, INC. All rights reserved.
+          </p>
+        </div>
+      </footer>
     </div>
   );
 };

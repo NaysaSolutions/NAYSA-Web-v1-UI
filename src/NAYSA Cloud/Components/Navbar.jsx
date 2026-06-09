@@ -34,7 +34,7 @@ import {
 } from "../Global/behavior";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import apiClient, { ensureCsrf } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
-import { Link } from "react-router-dom"; // Add this import
+import { Link, useNavigate } from "react-router-dom";
 
 const DEFAULT_AVATAR = "/3135715.png";
 
@@ -62,6 +62,7 @@ const Navbar = ({
   const dropdownRef = useRef(null);
   const webcamRef = useRef(null);
   const fileInputRef = useRef(null);
+  const navigate = useNavigate();
 
   const { user, setUser } = useAuth();
 
@@ -240,14 +241,16 @@ const Navbar = ({
   const handleBiometricAction = useCallback(
     (row) => {
       const isAbsolute = row.pathUrl.startsWith("http");
-      const url = isAbsolute
-        ? row.pathUrl
-        : `${window.location.origin}${row.pathUrl}`;
 
-      window.open(url, "_blank", "noopener,noreferrer");
+      if (isAbsolute) {
+        window.location.href = row.pathUrl;
+      } else {
+        navigate(row.pathUrl);
+      }
+
       onBiometricClick?.(row);
     },
-    [onBiometricClick]
+    [navigate, onBiometricClick]
   );
 
   const handleLogoutClick = async () => {

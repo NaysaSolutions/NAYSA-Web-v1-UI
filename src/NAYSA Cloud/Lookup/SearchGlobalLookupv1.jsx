@@ -52,6 +52,7 @@ const GlobalLookupModalv1 = ({
   onSelectionReset,
   singleSelect = false,
   modalMaxWidthClass = "max-w-8xl",
+  overlayZIndexClass = "z-50",
 }) => {
   const [records, setRecords] = useState([]);
   const [filtered, setFiltered] = useState([]);
@@ -87,7 +88,31 @@ const GlobalLookupModalv1 = ({
 
   // Bottom scrollbar (source of truth for horizontal scroll)
   const bottomXRef = useRef(null);
-  const [scrollLeft, setScrollLeft] = useState(0);
+  const headerTrackRef = useRef(null);
+  const bodyTrackRef = useRef(null);
+  const scrollLeftRef = useRef(0);
+  const scrollRafRef = useRef(null);
+
+  const applyHorizontalScroll = useCallback((nextLeft = 0) => {
+    scrollLeftRef.current = nextLeft;
+    const transform = `translate3d(${-nextLeft}px, 0, 0)`;
+
+    if (headerTrackRef.current) headerTrackRef.current.style.transform = transform;
+    if (bodyTrackRef.current) bodyTrackRef.current.style.transform = transform;
+  }, []);
+
+  const handleHorizontalScroll = useCallback(
+    (e) => {
+      const nextLeft = e.currentTarget.scrollLeft;
+
+      if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
+      scrollRafRef.current = requestAnimationFrame(() => {
+        scrollRafRef.current = null;
+        applyHorizontalScroll(nextLeft);
+      });
+    },
+    [applyHorizontalScroll]
+  );
 
   // Keyboard nav
   const modalKeyScopeRef = useRef(null);
@@ -96,7 +121,7 @@ const GlobalLookupModalv1 = ({
   const [highlightIndex, setHighlightIndex] = useState(0);
 
 
-  const tableViewportRef = useRef(null);
+  const tableMeasureRef = useRef(null);
   const [viewportWidth, setViewportWidth] = useState(0);
 
 
@@ -469,7 +494,7 @@ const baseVisibleCols = useMemo(() => {
       setColumnConfig([]);
       setSortConfig({ key: "", direction: "asc" });
       setCurrentPage(1);
-      setScrollLeft(0);
+      scrollLeftRef.current = 0;
       setHighlightIndex(0);
       rowRefs.current = [];
       return;
@@ -502,7 +527,19 @@ const baseVisibleCols = useMemo(() => {
 
     // set auto widths for missing keys only
     const auto = computeAutoWidths(columnConfig, records);
-    setColWidths((prev) => ({ ...auto, ...prev }));
+    setColWidths((prev) => {
+      let changed = false;
+      const next = { ...prev };
+
+      Object.entries(auto).forEach(([key, width]) => {
+        if (next[key] == null) {
+          next[key] = width;
+          changed = true;
+        }
+      });
+
+      return changed ? next : prev;
+    });
   }, [isOpen, columnConfig, records, computeAutoWidths, baseVisibleCols]);
 
   // filter/sort
@@ -670,19 +707,24 @@ const baseVisibleCols = useMemo(() => {
   const effectiveSelectColWidth = singleSelect ? 0 : selectColWidth * fitFactor;
  
 
-  // keep bottom scrollbar in sync when scrollLeft changes
-  useEffect(() => {
-    const el = bottomXRef.current;
-    if (!el) return;
-    if (Math.abs(el.scrollLeft - scrollLeft) > 1) el.scrollLeft = scrollLeft;
-  }, [scrollLeft]);
-
   // reset horizontal scroll if width/page changes
   useEffect(() => {
     if (!isOpen) return;
-    setScrollLeft(0);
+    scrollLeftRef.current = 0;
+    applyHorizontalScroll(0);
     if (bottomXRef.current) bottomXRef.current.scrollLeft = 0;
-  }, [tableMinWidth, isOpen, safePage]);
+  }, [tableMinWidth, isOpen, safePage, applyHorizontalScroll]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    applyHorizontalScroll(scrollLeftRef.current);
+  }, [isOpen, tableMinWidth, fitFactor, applyHorizontalScroll]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
+    };
+  }, []);
 
   // =========================
   // Keyboard navigation
@@ -702,12 +744,12 @@ const baseVisibleCols = useMemo(() => {
 
   useEffect(() => {
   if (!isOpen) return;
-  const el = tableViewportRef.current;
+  const el = tableMeasureRef.current;
   if (!el) return;
 
   const ro = new ResizeObserver((entries) => {
     const w = entries?.[0]?.contentRect?.width || 0;
-    setViewportWidth(w);
+    setViewportWidth((prev) => (Math.abs(prev - w) < 1 ? prev : w));
   });
 
   ro.observe(el);
@@ -1043,7 +1085,6 @@ const handleExportExcelClick = async () => {
   const viewportStyle = { overflow: "hidden", width: "100%" };
   const trackStyle = {
     width: tableMinWidth * fitFactor,
-    transform: `translateX(${-scrollLeft}px)`,
     willChange: "transform",
   };
 
@@ -1051,7 +1092,7 @@ const handleExportExcelClick = async () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 sm:p-6 lg:p-8 animate-fade-in"
+      className={`fixed inset-0 ${overlayZIndexClass} flex items-center justify-center bg-black bg-opacity-50 p-4 sm:p-6 lg:p-8 animate-fade-in`}
       onKeyDown={onKeyDown}
     >
       <div
@@ -1334,8 +1375,8 @@ const handleExportExcelClick = async () => {
                   FROZEN HEADER (ALWAYS VISIBLE)
                  ========================= */}
               <div className="border-b border-slate-200 bg-slate-200">
-                <div ref={tableViewportRef} style={viewportStyle}>
-                  <div style={trackStyle}>
+                <div ref={tableMeasureRef} style={viewportStyle}>
+                  <div ref={headerTrackRef} style={trackStyle}>
                     <table className="w-full table-fixed divide-y divide-gray-100">
                       <thead>
                         <tr className="bg-slate-200">
@@ -1445,8 +1486,8 @@ const handleExportExcelClick = async () => {
                 className="flex-grow overflow-y-auto overflow-x-hidden custom-scrollbar bg-white"
                 style={{ maxHeight: BODY_MAX_H }}
               >
-                <div ref={tableViewportRef} style={viewportStyle}>
-                  <div style={trackStyle}>
+                <div style={viewportStyle}>
+                  <div ref={bodyTrackRef} style={trackStyle}>
                     <table className="w-full table-fixed divide-y divide-gray-100">
                       <tbody className="bg-white divide-y divide-slate-100">
                         {paginatedData.length > 0 ? (
@@ -1582,7 +1623,7 @@ const handleExportExcelClick = async () => {
               <div
                 ref={bottomXRef}
                 className="overflow-x-auto overflow-y-hidden border-t border-gray-200 bg-white"
-                onScroll={(e) => setScrollLeft(e.currentTarget.scrollLeft)}
+                onScroll={handleHorizontalScroll}
               >
                 <div style={{ width: tableMinWidth, height: 14 }} />
               </div>

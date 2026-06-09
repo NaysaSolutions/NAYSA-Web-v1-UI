@@ -490,13 +490,13 @@ const WareMast = () => {
       },
       {
         key: "branchCode",
-        label: "Branch",
+        label: "Branch Code",
         sortable: true,
         render: (row) =>
           row.branchCode ? `${row.branchCode} - ${row.branchName || ""}` : "",
         width: 120,
       },
-      { key: "whCode", label: "Code", sortable: true, width: 100 },
+      { key: "whCode", label: "Warehouse Code", sortable: true, width: 100 },
       {
         key: "whName",
         label: "Warehouse Name",
@@ -664,7 +664,7 @@ const WareMast = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
                   <div className="space-y-6">
                     <FieldRenderer
-                      label="Branch"
+                      label="Branch Code"
                       type="lookup"
                       value={
                         form.branchCode

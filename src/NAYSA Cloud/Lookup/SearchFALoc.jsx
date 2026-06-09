@@ -8,10 +8,33 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 
+const INTRANSIT_LOCATION_CODE = "LOC_INT";
+const INTRANSIT_LOCATION_NAME = "Intransit Location";
+
+const isIncludeIntransit = (value) =>
+  value === true || String(value || "").toUpperCase() === "YES";
+
+const buildIntransitLocationRow = (branchCode = "") => ({
+  code: INTRANSIT_LOCATION_CODE,
+  description: INTRANSIT_LOCATION_NAME,
+  branchCode,
+});
+
+const withOptionalIntransitLocation = (rows = [], includeIntransit, branchCode = "") => {
+  if (!isIncludeIntransit(includeIntransit)) return rows;
+
+  const withoutDuplicate = rows.filter(
+    (row) => String(row?.code || "").toUpperCase() !== INTRANSIT_LOCATION_CODE
+  );
+
+  return [buildIntransitLocationRow(branchCode), ...withoutDuplicate];
+};
+
 const SearchFALoc = ({
   isOpen,
   onClose,
   branchCode,
+  includeIntransit = false,
   title = "Search Fixed Asset Location Codes",
 }) => {
   const [locations, setLocations] = useState([]);
@@ -54,7 +77,11 @@ const SearchFALoc = ({
           result?.data ??
           "[]";
 
-        const rows = Array.isArray(rawData) ? rawData : JSON.parse(rawData || "[]");
+        const rows = withOptionalIntransitLocation(
+          Array.isArray(rawData) ? rawData : JSON.parse(rawData || "[]"),
+          includeIntransit,
+          normalizedBranchCode
+        );
 
         if (!alive) return;
 
@@ -75,7 +102,7 @@ const SearchFALoc = ({
     return () => {
       alive = false;
     };
-  }, [isOpen, normalizedBranchCode]);
+  }, [includeIntransit, isOpen, normalizedBranchCode]);
 
   useEffect(() => {
     const newFiltered = locations.filter((item) => {
