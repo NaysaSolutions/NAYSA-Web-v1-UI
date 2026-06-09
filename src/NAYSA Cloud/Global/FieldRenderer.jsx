@@ -378,6 +378,25 @@ const FieldRenderer = ({
 
   return (
     <div className="relative w-full">
+      <style>{`
+        .field-renderer-date-input {
+          position: relative;
+          padding-right: 2rem !important;
+        }
+
+        .field-renderer-date-input::-webkit-calendar-picker-indicator {
+          position: absolute;
+          right: 0.5rem;
+          top: 50%;
+          transform: translateY(-50%);
+          margin: 0;
+          cursor: pointer;
+        }
+
+        .field-renderer-date-input::-webkit-datetime-edit {
+          padding-right: 1.25rem;
+        }
+      `}</style>
 
       {/* ── LOOKUP ─────────────────────────────────────────────── */}
       {type === "lookup" && (
@@ -455,6 +474,8 @@ const FieldRenderer = ({
             className={`${sharedClasses} ${
               type === "number" ? "text-right" : ""
             } ${
+              type === "date" ? "field-renderer-date-input" : ""
+            } ${
               canClear && getDisplayValue(value, type)
                 ? type === "number" ? "pl-8" : "pr-8"
                 : ""
@@ -463,7 +484,7 @@ const FieldRenderer = ({
             onPaste={onPaste}
             {...props}
           />
-          {renderClearButton(value, type)}
+          {/* {renderClearButton(value, type)} */}
           {renderLabel()}
         </>
       )}

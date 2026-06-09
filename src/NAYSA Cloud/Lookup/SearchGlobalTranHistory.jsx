@@ -2327,13 +2327,13 @@ const handleExportConfirm = async (enteredFileName) => {
                                 {allChecked ? `UnSelect All (${chooserColumns.length})` : `Select All (${chooserColumns.length})`}
                               </label>
                               <div className="h-5 shrink-0 border-l border-gray-300" />
-                              <button
+                              {/* <button
                                 type="button"
                                 className="h-7 shrink-0 px-1.5 text-[11px] font-medium text-blue-600 hover:text-blue-700"
                                 onClick={handleResetColumnChooser}
                               >
                                 Reset
-                              </button>
+                              </button> */}
                               <button
                                 type="button"
                                 className="h-7 shrink-0 rounded-md border border-gray-300 px-2 text-[11px] font-medium text-slate-600 hover:bg-gray-50"

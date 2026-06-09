@@ -93,7 +93,7 @@ const WareMast = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const docType = "WareMast";
-  const documentTitle = reftables?.[docType] || "Warehouse Master";
+  const documentTitle = reftables?.[docType] || "Warehouse";
 
   const guideRef = useRef(null);
   const pdfLink = reftablesPDFGuide?.[docType] || "#";
@@ -533,9 +533,9 @@ const WareMast = () => {
         <div className="w-full flex flex-col gap-3 md:grid md:grid-cols-3 md:items-center md:gap-0">
           <div className="w-full md:w-auto md:justify-start flex">
             <h1 className="global-ref-headertext-ui w-full md:w-auto truncate text-center md:text-left">
-              {activeTab === "warehouse" && "Warehouse Master"}
-              {activeTab === "location" && "Location Master"}
-              {activeTab === "parameter" && "Warehouse Parameter"}
+              {activeTab === "warehouse" && "Warehouse"}
+              {activeTab === "location" && "Location"}
+              {activeTab === "parameter" && "Reference Codes"}
             </h1>
           </div>
 
@@ -543,9 +543,9 @@ const WareMast = () => {
             <div className="w-full md:w-auto">
               <div className="flex flex-nowrap overflow-x-auto no-scrollbar border-b border-blue-300 dark:border-gray-700">
                 {[
-                  { id: "warehouse", label: "Warehouse Master" },
-                  { id: "location", label: "Location Master" },
-                  { id: "parameter", label: "Warehouse Parameter" }, // <-- NEW TAB
+                  { id: "warehouse", label: "Warehouse" },
+                  { id: "location", label: "Location" },
+                  { id: "parameter", label: "Reference Codes" }, // <-- NEW TAB
                 ].map((tab) => (
                   <button
                     key={tab.id}
