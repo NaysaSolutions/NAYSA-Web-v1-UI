@@ -891,11 +891,7 @@ const CustMast = () => {
                             </h1>
                         </div>
 
-                        <PermissionBadge
-                            permission={pagePermission}
-                            isReadOnly={isReadOnly}
-                            isFullAccess={isFullAccess}
-                        />
+                        
 
                         <div className="overflow-x-auto no-scrollbar">
                             <div className="flex flex-nowrap border-b border-blue-300 dark:border-gray-700">
@@ -920,6 +916,11 @@ const CustMast = () => {
 
                     {/* RIGHT: buttons stay on the far right */}
                     <div className="flex-shrink-0 w-full lg:w-auto flex flex-wrap items-center justify-center lg:justify-end gap-1.5">
+                        <PermissionBadge
+                            permission={pagePermission}
+                            isReadOnly={isReadOnly}
+                            isFullAccess={isFullAccess}
+                        />
                         {!!headerButtons.length && (
                             <ButtonBar buttons={headerButtons} />
                         )}
