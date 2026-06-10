@@ -34,7 +34,11 @@ export const docTypes = {
   FATR:"FATR",
   PR:"PR",
   JO:"JO",  
-  RMRR:"RMRR"
+  RMRR:"RMRR",
+  RMIS:"RMIS",
+  RMRTV:"RMRTV",
+  RMAJ:"RMAJ",
+  RMST:"RMST",
 
 };
 
@@ -69,8 +73,10 @@ export const docTypeNames = {
     MSST: "MS Stock Transfer Transaction",
     MSAJ: "MS Inventory Adjustment Transaction",
     FGAJ: "FG Inventory Adjustment Transaction",
+    RMAJ: "RM Inventory Adjustment Transaction",
     MSRTV: "MS Inventory Return to Vendor Transaction",
     FGRTV: "FG Inventory Return to Vendor Transaction",
+    RMRTV: "RM Inventory Return to Vendor Transaction",
 
     // Fixed Assets Module
     FARR: "Fixed Assets Receiving Transaction",
