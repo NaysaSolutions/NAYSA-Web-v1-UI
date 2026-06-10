@@ -86,9 +86,11 @@ import {
 import { useHandlePrint } from "@/NAYSA Cloud/Global/report";
 
 import {
-  formatNumber,
-  parseFormattedNumber,
-  useSwalshowSaveSuccessDialog,
+  formatNumber,
+  parseFormattedNumber,
+  useSwalshowSaveSuccessDialog,
+  useSwalvalidateRequiredFields,
+  useSwalValidationAlert,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
 import { useGetCurrentDay, useFormatToDate } from "@/NAYSA Cloud/Global/dates";
@@ -1372,6 +1374,12 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         await getSelectedHSColConfig("getPORR_OpenDetail");
 
       const rows = Array.isArray(rawRows) ? rawRows : [];
+      const selectedPayeeCode = String(state.vendCode || vendCode || "")
+        .trim()
+        .toUpperCase();
+      const selectedPayeeName = String(state.vendName || vendName || "")
+        .trim()
+        .toUpperCase();
       const openRows = rows
         .filter((row) => {
           const statusText = String(
@@ -1380,7 +1388,18 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
 
           return !statusText || statusText.includes("OPEN");
         })
-        .map(normalizeOpenPOSummaryRow);
+        .map(normalizeOpenPOSummaryRow)
+        .filter((row) => {
+          if (!selectedPayeeCode && !selectedPayeeName) return true;
+
+          const rowPayeeCode = getOpenPOVendorCode(row);
+          const rowPayeeName = getOpenPOVendorName(row).toUpperCase();
+
+          return (
+            (selectedPayeeCode && rowPayeeCode === selectedPayeeCode) ||
+            (selectedPayeeName && rowPayeeName === selectedPayeeName)
+          );
+        });
 
 console.log("Open Reference PO - Filtered Open Summary Rows:", openRows);
 
@@ -1388,7 +1407,10 @@ console.log("Open Reference PO - Filtered Open Summary Rows:", openRows);
         await Swal.fire({
           icon: "info",
           title: "Open Purchase Order",
-          text: "No open PO records found.",
+          text:
+            selectedPayeeCode || selectedPayeeName
+              ? "No open PO records found for the selected payee."
+              : "No open PO records found.",
         });
         updateState({
           isLoading: false,
@@ -1587,7 +1609,15 @@ groupId:
 categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
 
         poNo: d.poNo || summary.poNo || "",
-        poLineno: d.lnNo || d.ln || idx + 1,
+        poLineno:
+  d.poLineno ||
+  d.poLineNo ||
+  d.lineNo ||
+  d.LINE_NO ||
+  d.lnNo ||
+  d.ln ||
+  d.Ln ||
+  idx + 1,
 
         itemCode: d.itemCode || "",
         itemName: d.itemName || "",
@@ -3360,13 +3390,85 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
   // SAVE / UPSERT (MSRR + DT1 + DT2)
   // ==========================
   const handleActivityOption = async (action) => {
-    // If already posted/cancelled/finalized, do not allow save / generate
-    if (documentStatus !== "") return;
+  // If already posted/cancelled/finalized, do not allow save / generate
+  if (documentStatus !== "") return;
 
-    updateState({ isLoading: true });
+  // ✅ VALIDATE FIRST BEFORE LOADING
+  if (action === "Upsert") {
+    const headerWhCode = state.WHCode || state.WHcode || "";
+    const headerLocCode = state.LocCode || "";
+    const referenceNo =
+      state.refRrNo1 ||
+      state.refDocNo1 ||
+      state.refPoNo1 ||
+      state.drNo ||
+      state.drno ||
+      "";
 
-    try {
-      const isNew = !state.documentID;
+    const headerValid = await useSwalvalidateRequiredFields(
+      {
+        "Header - Warehouse": headerWhCode,
+        "Header - Location": headerLocCode,
+        "Header - Reference No": referenceNo,
+      },
+      "Missing required fields"
+    );
+
+    if (!headerValid) return;
+
+    const detailRequiredErrors = [];
+
+    (state.detailRows || []).forEach((row, index) => {
+      const lineNo = row.lnNo || index + 1;
+
+      const rowWhCode =
+        row.whouseCode ||
+        row.whCode ||
+        state.WHCode ||
+        state.WHcode ||
+        "";
+
+      const rowLocCode =
+        row.locCode ||
+        row.LocCode ||
+        state.LocCode ||
+        "";
+
+        const rrQty =
+        row.rrQty ||
+        row.rrQuantity ||
+        state.rrQty ||
+        "";
+
+      if (!rowWhCode) {
+        detailRequiredErrors.push(`- RR Detail Line # ${lineNo} - Warehouse`);
+      }
+
+      if (!rowLocCode) {
+        detailRequiredErrors.push(`- RR Detail Line # ${lineNo} - Location`);
+      }
+      if (!rrQty || parseFormattedNumber(rrQty) <= 0) {
+        detailRequiredErrors.push(`- RR Detail Line # ${lineNo} - RR Quantity must be greater than zero`);
+      }
+    });
+
+    if (detailRequiredErrors.length > 0) {
+      useSwalValidationAlert({
+        icon: "warning",
+        title: "The following fields are required:\n",
+        message:
+          detailRequiredErrors.join("\n"),
+      });
+
+      return;
+    }
+  }
+
+  // ✅ ONLY LOAD AFTER VALIDATION PASSED
+  updateState({ isLoading: true });
+
+  try {
+    const isNew = !state.documentID;
 
       // Optional front-end guard: prevent save when GL is unbalanced
     if (isGeneralLedgerEnabled && action === "Upsert") {
@@ -3479,7 +3581,7 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
           quantity: parseFormattedNumber(r.rrQty || r.quantity || 0),
           rrQuantity: parseFormattedNumber(r.rrQty || r.quantity || 0),
           poNo: r.poNo || state.poNo || "",
-          poLineno: r.poLineno || r.poLineNo || r.lnNo || r.Ln || "",
+          poLineno: r.poLineno || r.poLineNo || r.lnNo || r.Ln || r.lineNo || "",
           poQty: parseFormattedNumber(r.poQty || r.poQuantity || r.PO_QUANTITY || 0),
           poBalance: parseFormattedNumber(r.poBalance || r.qtyBalance || 0),
           freeQuantity: parseFormattedNumber(r.freeQty || r.freeQuantity || 0),
@@ -3583,9 +3685,21 @@ rrHdId: documentID || "",
         vendCode: state.vendCode || "",
         vendName: state.vendName || "",
 
-        drNo: state.drNo || state.drno || "",
+        drNo: state.drNo || state.drNo || "",
         siNo: state.siNo || "",
         siDate: null,
+
+        refRrNo1:
+        state.refRrNo1 ||
+        state.refDocNo1 ||
+        state.refPoNo1 ||
+          "",
+
+        refRrNo2:
+        state.refRrNo2 ||
+        state.refDocNo2 ||
+        state.refPrNo2 ||
+        "",
 
         currCode: state.currCode || "PHP",
         currRate: Number(state.currRate || 1),
@@ -4699,6 +4813,8 @@ const handleClosePayeeLookup = async (row) => {
           onCancel={handleCancel}
           onCopy={handleCopy}
           onAttach={handleAttach}
+          activeTopTab={topTab}
+          showActions={topTab === "details"}
           onDetails={() => setTopTab("details")}
           onHistory={() => setTopTab("history")}
           disableRouteNavigation={true}

@@ -34,6 +34,7 @@ export const docTypes = {
   FATR:"FATR",
   PR:"PR",
   JO:"JO",  
+  RMRR:"RMRR"
 
 };
 
@@ -63,6 +64,7 @@ export const docTypeNames = {
 
 
     MSRR: "MS Receiving Report Transaction",
+    RMRR: "RM Receiving Report Transaction",
     MSIS: "MS Issue Slip Transaction",
     MSST: "MS Stock Transfer Transaction",
     MSAJ: "MS Inventory Adjustment Transaction",
