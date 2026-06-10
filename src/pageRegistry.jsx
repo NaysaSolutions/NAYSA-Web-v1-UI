@@ -62,6 +62,9 @@ export const pageRegistry = {
   FGAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGAJ.jsx")),
   FGST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGST.jsx")),
 
+  // Importation
+  LC: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Importation/LC.jsx")),
+
   // Fixed Assets
   FADP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/FADP.jsx")),
   FADS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/FADS.jsx")),
@@ -97,6 +100,7 @@ export const pageRegistry = {
   SecurityAuditTrail: lazyPage(() => import("./NAYSA Cloud/Query/AuditTrail/SecurityAuditTrail.jsx")),
   MSINQ: lazyPage(() => import("./NAYSA Cloud/Query/INVInq/MSStockCard.jsx")),
   FGINQ: lazyPage(() => import("./NAYSA Cloud/Query/INVInq/FGStockCard.jsx")),
+  SalesTracker: lazyPage(() => import("./NAYSA Cloud/Query/SOInq/SalesTracker.jsx")),
   FAINQ: lazyPage(() => import("./NAYSA Cloud/Query/FAInq/FAAssetInquiry.jsx")),
   FAAssetInquiry: lazyPage(() => import("./NAYSA Cloud/Query/FAInq/FAAssetInquiry.jsx")),
   SearchFAFind: lazyPage(() => import("./NAYSA Cloud/Lookup/SearchFAFind.jsx")),

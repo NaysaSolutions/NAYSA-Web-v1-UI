@@ -180,6 +180,7 @@ const SI = () => {
     atcName: "",
     vatCode: "",
     vatName: "",
+    vatCodeFADisposal:"",
 
     // Currency information
     currCode: companyInfo?.currCode||"",
@@ -300,6 +301,7 @@ const SI = () => {
   billtermName,
   dueDate,
   daysDue,
+  vatCodeFADisposal,
 
   // Transaction details
   tblFieldArray,
@@ -530,12 +532,21 @@ const SI = () => {
       hiddenColumnKeys.push("siStat", "quantityPicked", "itemAmount");
     }
 
-    if (isPickingSiType) {
+   if (isPickingSiType || normalizedSiTranType === "SI03") {
       hiddenColumnKeys.push("drNo");
     }
 
+
+    if (normalizedSiTranType === "SI03") {
+      hiddenColumnKeys.push("discRate1", "discRate2", "discRate3", "discRate4", "discRate5", "discRate6", "discRate7", "discRate8", "discAmount1", "discAmount2", "discAmount3", "discAmount4", "discAmount5", "discAmount6", "discAmount7", "discAmount8", "totDiscount","freeItem");
+    }
+
+
+
     setSoDetailHiddenColumnKeys(hiddenColumnKeys);
-  }, [setSoDetailHiddenColumnKeys, isDirectSiType, isPickingSiType]);
+  }, [setSoDetailHiddenColumnKeys, isDirectSiType, isPickingSiType,normalizedSiTranType]);
+
+
   const sortedDetailRows = getSortedSoDetailRows(
     detailRows.map((row, originalIndex) => ({ row, originalIndex })),
     (entry, sortKey) => {
@@ -1665,7 +1676,23 @@ const handleActivityOption = async (action) => {
       updates.customerPoDate = useformatToDatev2(nextCustPoDate);
     }
 
+    if (siTranType === "SI03") {
+       const data = await useFetchTranData(topRecord?.drNo, branchCode, "FADS", "fadsNo", "");
+       updateState({
+        vatCodeFADisposal: data?.vatCode || "",
+        billToCustName: data?.custName || "",
+        customerPoNo: data?.fadsNo ? `FADS-${data.fadsNo}` : "",
+        customerPoDate: data?.fadsDate ? useformatToDatev2(data.fadsDate) : "",
+       })
+    }
+
+
+
+    
+
     return updates;
+
+
   };
 
   const mapOpenDRRecordToDetailRow = (item = {}) => {
@@ -1780,6 +1807,10 @@ const handleActivityOption = async (action) => {
     try {
       updateState({ isLoading: true, showSpinner: true });
       const response = await postRequest("getDRSI_Selected", JSON.stringify(requestPayload));
+
+     
+
+
       const rawRows = response?.data?.[0]?.result
         ? JSON.parse(response.data[0].result)
         : response?.data || response;
@@ -2005,7 +2036,20 @@ const handleActivityOption = async (action) => {
     const discountRateFields = visibleDiscountRateFields;
     const discountAmountFields = visibleDiscountAmountFields;
     const quantity = parseFormattedNumber(row.siQuantity || 0) || 0;
-    const unitPrice = parseFormattedNumber(row.unitPrice || 0) || 0;
+    let unitPrice = parseFormattedNumber(row.unitPrice || 0) || 0;
+   
+
+    if (vatCodeFADisposal) {
+       const vatRow = getAllTopVatRow(vatCodeFADisposal);
+      const vatRate = parseFormattedNumber(vatRow?.vatRate || 0) || 0;
+      
+
+      unitPrice = vatRate > 0
+        ? toFormattedAmountNumber(unitPrice + (unitPrice * (vatRate * 0.01)))
+        : unitPrice;
+    }
+
+
     const grossAmount = toFormattedAmountNumber(quantity * unitPrice);
     let runningBase = grossAmount;
     let totalDiscount = 0;
@@ -2025,6 +2069,7 @@ const handleActivityOption = async (action) => {
 
     return {
       ...row,
+      unitPrice: formatNumber(unitPrice, sellingPriceDecimals),
       grossAmount: formatNumber(grossAmount),
       ...updatedAmounts,
       totDiscount: formatNumber(totalDiscount),
@@ -2420,10 +2465,11 @@ const handlePrint = async () => {
       return;
     }
 
-    if (String(siTranType || "").toUpperCase() === "SI01") {
-      await handleOpenDRLookup();
-      return;
-    }
+
+  if (["SI01", "SI03"].includes(String(siTranType || "").toUpperCase())) {
+    await handleOpenDRLookup();
+    return;
+  }
 
     await handleOpenAddItemModal();
   };
@@ -2637,7 +2683,7 @@ const handlePrint = async () => {
 
       updateState({
         custModalOpen: true,
-        modalContext: "openDR",
+        modalContext: siTranType === "SI03" ? "openFADS" : "openDR",
       });
       return;
     }
@@ -2654,11 +2700,15 @@ const handlePrint = async () => {
       updateState({ isLoading: true, showSpinner: true });
 
       const endpoint = "getDRSI_OpenSummary";
-      const response = await fetchDataJson(endpoint, {
-        custCode: lookupCustCode,
-        billToCustCode: lookupCustCode,
-        branchCode: lookupBranchCode,
-      });
+      const payload = {
+          custCode: lookupCustCode,
+          billToCustCode: lookupCustCode,
+          branchCode: lookupBranchCode,
+          siTranType: siTranType || "",
+        };
+
+     console.log("GetDRSI_OpenSummary payload:", payload);
+      const response = await fetchDataJson(endpoint, payload);
 
       const drRows = response?.data?.[0]?.result
         ? JSON.parse(response.data[0].result).map(normalizeOpenDRLookupRow)
@@ -2928,7 +2978,7 @@ const handleSaveAndPrint = async (documentID) => {
           const nextBillTermCode = custDetails.billtermCode || "";
           const nextSalesRepCode = custDetails.salesRepCode || "";
 
-          if (String(siTranType || "").toUpperCase() === "SI01" || modalContext === "openDR") {
+          if (["SI01", "SI03"].includes(String(siTranType || "").toUpperCase()) || modalContext === "openDR") {
             await handleOpenDRLookup({
               billToCustCode: nextCustomerCode,
               branchCode,
@@ -4126,7 +4176,7 @@ const renderSIDetailCell = (columnKey, row, index) => {
         />
       </td>
     ),
-    unitPrice: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: sellingPriceDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${sellingPriceDecimals}}$`), blocked: () => !isSellingPriceAndDiscountEditable || row.freeItem === "Y", readOnly: isFormDisabled || !isSellingPriceAndDiscountEditable || row.freeItem === "Y" })}</td>,
+    unitPrice: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: sellingPriceDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${sellingPriceDecimals}}$`), blocked: () => !isSellingPriceAndDiscountEditable || normalizedSiTranType === "SI03" || row.freeItem === "Y", readOnly: isFormDisabled || !isSellingPriceAndDiscountEditable || row.freeItem === "Y" })}</td>,
     grossAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
     vatCode: () => (
       <td key={columnKey} className="global-tran-td-ui" style={style}>
@@ -5075,7 +5125,13 @@ return (
       <CustomerMastLookupModal
         isOpen={custModalOpen}
         onClose={handleCloseCustModal}
-        customParam={siTranType === "SI01" ? "openDR" : undefined}
+        customParam={
+          String(siTranType || "").toUpperCase() === "SI03"
+            ? "openFADS"
+            : String(siTranType || "").toUpperCase() === "SI01"
+              ? "openDR"
+              : undefined
+        }
       />
     )}
 

@@ -3803,42 +3803,15 @@ const handleActivityOption = async (action) => {
 
               <div className="global-tran-tab-footer-main-div-ui">
                 <div className="global-tran-tab-footer-button-div-ui" />
-                <div className="global-tran-tab-footer-total-main-div-ui">
-                  <div className="global-tran-tab-footer-total-div-ui">
-                    <label className="global-tran-tab-footer-total-label-ui">
-                      Total Gross Amount:
-                    </label>
-                    <label className="global-tran-tab-footer-total-value-ui">
-                      {poSummaryTotals.totalGross}
-                    </label>
-                  </div>
-
-                  <div className="global-tran-tab-footer-total-div-ui">
-                    <label className="global-tran-tab-footer-total-label-ui">
-                      Total Discount Amount:
-                    </label>
-                    <label className="global-tran-tab-footer-total-value-ui">
-                      {poSummaryTotals.totalDiscount}
-                    </label>
-                  </div>
-
-                  <div className="global-tran-tab-footer-total-div-ui">
-                    <label className="global-tran-tab-footer-total-label-ui">
-                      Total VAT Amount:
-                    </label>
-                    <label className="global-tran-tab-footer-total-value-ui">
-                      {poSummaryTotals.totalVat}
-                    </label>
-                  </div>
-
-                  <div className="global-tran-tab-footer-total-div-ui">
-                    <label className="global-tran-tab-footer-total-label-ui">
-                      Total Net Amount:
-                    </label>
-                    <label className="global-tran-tab-footer-total-value-ui">
-                      {poSummaryTotals.totalNet}
-                    </label>
-                  </div>
+                <div className="global-tran-tab-footer-total-main-div-ui grid gap-1 grid-cols-[auto_auto]">
+                  <div className="global-tran-tab-footer-total-label-ui">Total Gross Amount:</div>
+                  <div className="global-tran-tab-footer-total-value-ui">{poSummaryTotals.totalGross}</div>
+                  <div className="global-tran-tab-footer-total-label-ui">Total Discount Amount:</div>
+                  <div className="global-tran-tab-footer-total-value-ui">{poSummaryTotals.totalDiscount}</div>
+                  <div className="global-tran-tab-footer-total-label-ui">Total VAT Amount:</div>
+                  <div className="global-tran-tab-footer-total-value-ui">{poSummaryTotals.totalVat}</div>
+                  <div className="global-tran-tab-footer-total-label-ui">Total Net Amount:</div>
+                  <div className="global-tran-tab-footer-total-value-ui">{poSummaryTotals.totalNet}</div>
                 </div>
               </div>
             </>
@@ -4021,42 +3994,15 @@ const handleActivityOption = async (action) => {
                   </div>
                 </div>
 
-                <div className="global-tran-tab-footer-total-main-div-ui">
-                  <div className="global-tran-tab-footer-total-div-ui">
-                    <label className="global-tran-tab-footer-total-label-ui">
-                      Total Gross Amount:
-                    </label>
-                    <label className="global-tran-tab-footer-total-value-ui">
-                      {totals.totalGross}
-                    </label>
-                  </div>
-
-                  <div className="global-tran-tab-footer-total-div-ui">
-                    <label className="global-tran-tab-footer-total-label-ui">
-                      Total Discount Amount:
-                    </label>
-                    <label className="global-tran-tab-footer-total-value-ui">
-                      {totals.totalDiscount}
-                    </label>
-                  </div>
-
-                  <div className="global-tran-tab-footer-total-div-ui">
-                    <label className="global-tran-tab-footer-total-label-ui">
-                      VAT Amount:
-                    </label>
-                    <label className="global-tran-tab-footer-total-value-ui">
-                      {totals.totalVat}
-                    </label>
-                  </div>
-
-                  <div className="global-tran-tab-footer-total-div-ui">
-                    <label className="global-tran-tab-footer-total-label-ui">
-                      Net Amount:
-                    </label>
-                    <label className="global-tran-tab-footer-total-value-ui">
-                      {totals.totalNet}
-                    </label>
-                  </div>
+                <div className="global-tran-tab-footer-total-main-div-ui grid gap-1 grid-cols-[auto_auto]">
+                  <div className="global-tran-tab-footer-total-label-ui">Total Gross Amount:</div>
+                  <div className="global-tran-tab-footer-total-value-ui">{totals.totalGross}</div>
+                  <div className="global-tran-tab-footer-total-label-ui">Total Discount Amount:</div>
+                  <div className="global-tran-tab-footer-total-value-ui">{totals.totalDiscount}</div>
+                  <div className="global-tran-tab-footer-total-label-ui">VAT Amount:</div>
+                  <div className="global-tran-tab-footer-total-value-ui">{totals.totalVat}</div>
+                  <div className="global-tran-tab-footer-total-label-ui">Net Amount:</div>
+                  <div className="global-tran-tab-footer-total-value-ui">{totals.totalNet}</div>
                 </div>
               </div>
             </>

@@ -14,9 +14,13 @@ import {
   faListOl,
   faHistory,
   faCalculator,
+  faChartLine,
   faTableList,
   faSearch,
   faIdCard,
+  faPesoSign,
+  faRecycle,
+  faScaleBalanced,
 } from "@fortawesome/free-solid-svg-icons";
 
 import { fetchData, postRequest } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
@@ -39,11 +43,11 @@ import SearchFAFind from "@/NAYSA Cloud/Lookup/SearchFAFind.jsx";
 import GlobalLookupModalv1 from "@/NAYSA Cloud/Lookup/SearchGlobalLookupv1.jsx";
 
 const DASHBOARD_AMOUNT_FIELDS = [
-  { key: "acqCost", label: "Acq. Cost" },
-  { key: "deprMonth", label: "Depr. Month" },
-  { key: "accumDepr", label: "Accum. Depr." },
-  { key: "salvageValue", label: "Salvage Value" },
-  { key: "nbValue", label: "NB Value" },
+  { key: "acqCost", label: "Acq. Cost", icon: faPesoSign, tone: "blue" },
+  { key: "deprMonth", label: "Depr. Month", icon: faCalculator, tone: "sky" },
+  { key: "accumDepr", label: "Accum. Depr.", icon: faChartLine, tone: "violet" },
+  { key: "salvageValue", label: "Salvage Value", icon: faRecycle, tone: "green" },
+  { key: "nbValue", label: "NB Value", icon: faScaleBalanced, tone: "navy" },
 ];
 
 const LAPSING_LABEL_MAP = {
@@ -661,13 +665,17 @@ const FAAssetInquiry = () => {
                     <SummaryMetricCard
                       label="Records Loaded"
                       value={view.hasLoaded ? view.rows.length.toLocaleString("en-US") : "0"}
-                      accent
+                      icon={faDatabase}
+                      tone="blue"
+                      sub="Records"
                     />
                     {DASHBOARD_AMOUNT_FIELDS.map((field) => (
                       <SummaryMetricCard
                         key={field.key}
                         label={field.label}
                         value={formatDashboardAmount(dashboardTotals[field.key] || 0)}
+                        icon={field.icon}
+                        tone={field.tone}
                       />
                     ))}
                   </div>
@@ -838,30 +846,58 @@ const ActiveTabReportTable = ({ activeTab, view, onAssetQueryView }) => {
   }
 };
 
-const SummaryMetricCard = ({ label, value, accent = false }) => (
-  <div
-    className={`min-w-0 rounded-lg border px-3 py-2 shadow-sm ${
-      accent ? "border-blue-100 bg-blue-50" : "border-gray-200 bg-white"
-    }`}
-  >
-    <div
-      className={`truncate text-[10px] font-medium uppercase tracking-wide ${
-        accent ? "text-blue-700" : "text-gray-500"
-      }`}
-      title={label}
-    >
-      {label}
+const SummaryMetricCard = ({ label, value, icon, tone, sub = "" }) => {
+  const toneClass = {
+    blue: {
+      card: "border-blue-100 border-t-blue-600",
+      icon: "bg-blue-50 text-blue-700",
+      label: "text-blue-700",
+    },
+    sky: {
+      card: "border-sky-100 border-t-sky-500",
+      icon: "bg-sky-50 text-sky-700",
+      label: "text-sky-700",
+    },
+    green: {
+      card: "border-emerald-100 border-t-emerald-500",
+      icon: "bg-emerald-50 text-emerald-700",
+      label: "text-emerald-700",
+    },
+    violet: {
+      card: "border-violet-100 border-t-violet-500",
+      icon: "bg-violet-50 text-violet-700",
+      label: "text-violet-700",
+    },
+    navy: {
+      card: "border-blue-100 border-t-blue-800",
+      icon: "bg-slate-100 text-blue-900",
+      label: "text-blue-900",
+    },
+  }[tone] || {
+    card: "border-slate-100 border-t-slate-400",
+    icon: "bg-slate-50 text-slate-700",
+    label: "text-slate-700",
+  };
+
+  return (
+    <div className={`flex min-h-[72px] min-w-0 flex-col justify-between rounded-lg border border-t-2 bg-white px-3 py-2 shadow-sm ${toneClass.card}`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm ${toneClass.icon}`}>
+          <FontAwesomeIcon icon={icon || faDatabase} />
+        </div>
+        <div className={`min-w-0 truncate text-right text-[10px] font-bold uppercase ${toneClass.label}`} title={label}>
+          {label}
+        </div>
+      </div>
+      <div className="min-w-0">
+        <div className="truncate text-right text-[15px] font-extrabold tabular-nums text-gray-900" title={value}>
+          {value}
+        </div>
+        {sub ? <div className="truncate text-right text-[10px] text-slate-500">{sub}</div> : null}
+      </div>
     </div>
-    <div
-      className={`mt-1 truncate text-right text-[11px] font-semibold tabular-nums sm:text-xs ${
-        accent ? "text-blue-900" : "text-gray-800"
-      }`}
-      title={value}
-    >
-      {value}
-    </div>
-  </div>
-);
+  );
+};
 
 const NoRecordsState = ({ title, subtitle, hint }) => (
   <div className="flex items-center justify-center p-10">
