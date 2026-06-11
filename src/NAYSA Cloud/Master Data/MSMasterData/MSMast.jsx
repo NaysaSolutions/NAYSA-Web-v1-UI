@@ -931,7 +931,7 @@ const MSMast = () => {
                         onFilter={loadMasterList}
                         onReset={loadMasterList}
                         onRowDoubleClick={async (row) => {
-                            await fetchItemByCode(row.itemCode, canEdit);
+                            await fetchItemByCode(row.itemCode, false);
                             setActiveTab("setup");
                         }}
                     />

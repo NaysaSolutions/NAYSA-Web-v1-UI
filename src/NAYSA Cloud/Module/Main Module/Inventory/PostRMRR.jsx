@@ -31,7 +31,6 @@ const PostRMRR = ({ isOpen, onClose, userCode }) => {
         let rawData = [];
 
         if (Array.isArray(response?.data)) {
-          // Case 1: JSON string response
           if (response.data?.[0]?.result) {
             try {
               rawData = JSON.parse(response.data[0].result || "[]");
@@ -39,9 +38,7 @@ const PostRMRR = ({ isOpen, onClose, userCode }) => {
               console.error("JSON parse error:", err);
               rawData = [];
             }
-          }
-          // Case 2: direct SQL rows
-          else {
+          } else {
             rawData = response.data;
           }
         }
@@ -58,10 +55,11 @@ const PostRMRR = ({ isOpen, onClose, userCode }) => {
           return;
         }
 
+        const normalizedRawData = rawData.map((row, index) => normalizePostingRow(row, index));
         const colConfig = await useSelectedHSColConfig(endpoint);
 
         if (isMounted) {
-          setData(rawData);
+          setData(normalizedRawData);
           setcolConfigData(colConfig);
           setModalReady(true);
         }
@@ -80,11 +78,107 @@ const PostRMRR = ({ isOpen, onClose, userCode }) => {
     };
   }, [isOpen, onClose]);
 
+  const getRowValue = (row, keys = []) => {
+    for (const key of keys) {
+      const value = row?.[key];
+      if (value !== undefined && value !== null && String(value).trim() !== "") {
+        return value;
+      }
+    }
+    return "";
+  };
+
+  const normalizePostingRow = (row = {}, index = 0) => {
+    const rrId = getRowValue(row, [
+      "rrId",
+      "RR_ID",
+      "rr_id",
+      "documentID",
+      "DOCUMENT_ID",
+      "documentId",
+      "docId",
+      "DOC_ID",
+      "tranId",
+      "TranId",
+      "TRAN_ID",
+      "id",
+      "ID",
+    ]);
+
+    const rrNo = getRowValue(row, [
+      "rrNo",
+      "RR_NO",
+      "rr_no",
+      "rmrrNo",
+      "RMRR_NO",
+      "documentNo",
+      "DOCUMENT_NO",
+      "docNo",
+      "DOC_NO",
+    ]);
+
+    const branchCode = getRowValue(row, [
+      "branchCode",
+      "BRANCH_CODE",
+      "branch_code",
+      "bCode",
+      "BCode",
+      "BCODE",
+      "BC",
+      "bc",
+    ]);
+
+    const oldGroupId = getRowValue(row, [
+      "groupId",
+      "GROUP_ID",
+      "group_id",
+      "GroupId",
+      "GROUPID",
+    ]);
+
+    /*
+      IMPORTANT:
+      The posting sproc Finalize checks the selected key against rmrr_hd.rr_id.
+      Therefore, groupId must be the HEADER rr_id when available.
+      If your posting lookup only returns DT1 group_id, also apply the SQL patch
+      named sproc_PHP_Posting_RMRR_resolve_posting_key_patch.sql.
+    */
+    const postingKey = rrId || oldGroupId || rrNo;
+
+    return {
+      ...row,
+      lnNo: getRowValue(row, ["lnNo", "ln", "LN", "lineNo", "LINE_NO"]) || index + 1,
+      groupId: postingKey,
+      rrId: rrId || postingKey,
+      documentID: rrId || postingKey,
+      rrNo,
+      branchCode,
+    };
+  };
+
+  const normalizePostingRows = (selectedData) => {
+    const rows = Array.isArray(selectedData) ? selectedData : [selectedData];
+    return rows
+      .filter(Boolean)
+      .map((row, index) => normalizePostingRow(row, index));
+  };
+
   // =========================================
   // POST RMRR
   // =========================================
   const handlePost = async (selectedData, userPw) => {
-    await useHandlePostTran(selectedData, userPw, "RMRR", userCode, setLoading, onClose);
+    const rowsForPosting = normalizePostingRows(selectedData);
+
+    console.log("✅ RMRR POST normalized rows:", rowsForPosting);
+
+    await useHandlePostTran(
+      rowsForPosting,
+      userPw,
+      "RMRR",
+      userCode,
+      setLoading,
+      onClose
+    );
   };
 
   const pickDocAndBranch = (row) => {
@@ -129,7 +223,6 @@ const PostRMRR = ({ isOpen, onClose, userCode }) => {
     const url =
       `${window.location.origin}${TRAN_VIEW_URL}` +
       `?rrNo=${encodeURIComponent(docNo)}` +
-      `&poNo=${encodeURIComponent(docNo)}` +
       `&branchCode=${encodeURIComponent(branchCode)}` +
       `&viewDocument=true`;
 

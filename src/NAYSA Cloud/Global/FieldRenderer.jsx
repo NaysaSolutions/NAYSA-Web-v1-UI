@@ -1,5 +1,5 @@
 // import React from "react";
-// import { Search, X } from "lucide-react";
+// import { Search, X, ChevronDown } from "lucide-react";
 
 // import { Input } from "@/components/ui/input";
 // import {
@@ -221,7 +221,7 @@
 
 // export default FieldRenderer;
 import React from "react";
-import { Search, X } from "lucide-react";
+import { Search, X, ChevronDown } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import {
@@ -521,7 +521,7 @@ const FieldRenderer = ({
       {/* ── SELECT ─────────────────────────────────────────────── */}
       {type === "select" && (
         <>
-          <div className="relative w-full">
+          <div className="relative flex items-center w-full">
             <Select
               value={getDisplayValue(value, "select")}
               onValueChange={(newVal) => handleChange(newVal)}
@@ -529,10 +529,25 @@ const FieldRenderer = ({
             >
               <SelectTrigger
                 id={inputId}
-                className={`${sharedClasses} flex items-center justify-between bg-transparent !leading-none`}
+                className={`${sharedClasses} flex items-center justify-between bg-transparent !leading-none !pr-12 [&>svg]:hidden`}
               >
                 <SelectValue placeholder={placeholder} />
               </SelectTrigger>
+
+              {/* right-side dropdown button styled like lookup button */}
+              <div
+                className={`
+                  pointer-events-none absolute right-0 top-0 h-8 sm:h-8 w-10 flex items-center justify-center
+                  rounded-r-lg border border-l-0 transition-colors
+                  ${
+                    !(disabled || readOnly || isAudit)
+                      ? "bg-blue-50 text-blue-600"
+                      : "bg-gray-100 text-gray-400"
+                  }
+                `}
+              >
+                <ChevronDown className="h-4 w-4" strokeWidth={3} />
+              </div>
 
               <SelectContent className="rounded-xl">
                 {options.map((opt) => (
