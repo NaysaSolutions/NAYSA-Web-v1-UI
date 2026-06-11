@@ -134,6 +134,48 @@ const getResponseValue = (row, keys) => {
   return "";
 };
 
+const refDocNo1Keys = [
+  "refDocNo1",
+  "refdocNo1",
+  "refdoc_no1",
+  "ref_doc_no1",
+  "REF_DOC_NO1",
+  "REFDOC_NO1",
+  "REFDOCNO1",
+];
+
+const refDocNo2Keys = [
+  "refDocNo2",
+  "refdocNo2",
+  "refdoc_no2",
+  "ref_doc_no2",
+  "REF_DOC_NO2",
+  "REFDOC_NO2",
+  "REFDOCNO2",
+];
+
+const normalizeRefDocNo = (value) => String(value ?? "").trim();
+
+const getRefDocPayloadAliases = (refDocNo1, refDocNo2) => {
+  const normalizedRefDocNo1 = normalizeRefDocNo(refDocNo1);
+  const normalizedRefDocNo2 = normalizeRefDocNo(refDocNo2);
+
+  return {
+    refDocNo1: normalizedRefDocNo1,
+    refDocNo2: normalizedRefDocNo2,
+    refdocNo1: normalizedRefDocNo1,
+    refdocNo2: normalizedRefDocNo2,
+    refdoc_no1: normalizedRefDocNo1,
+    refdoc_no2: normalizedRefDocNo2,
+    ref_doc_no1: normalizedRefDocNo1,
+    ref_doc_no2: normalizedRefDocNo2,
+    REF_DOC_NO1: normalizedRefDocNo1,
+    REF_DOC_NO2: normalizedRefDocNo2,
+    REFDOC_NO1: normalizedRefDocNo1,
+    REFDOC_NO2: normalizedRefDocNo2,
+  };
+};
+
 const getRMSTSaveResult = (response) => {
   const row = response?.data?.[0] || {};
 
@@ -188,26 +230,6 @@ const isIntransitWarehouse = (warehouse) => {
   );
 };
 
-const getWarehouseDefaultLocCode = (warehouse) => {
-  if (!warehouse || typeof warehouse === "string") return "";
-
-  return (
-    warehouse?.locCode ||
-    warehouse?.LOC_CODE ||
-    warehouse?.loc_code ||
-    warehouse?.locationCode ||
-    warehouse?.LOCATION_CODE ||
-    warehouse?.defaultLocCode ||
-    warehouse?.DEFAULT_LOC_CODE ||
-    warehouse?.default_location_code ||
-    warehouse?.firstLocCode ||
-    warehouse?.FIRST_LOC_CODE ||
-    warehouse?.tagLocCode ||
-    warehouse?.TAG_LOC_CODE ||
-    ""
-  );
-};
-
 const getWarehouseBranchCode = (warehouse) =>
   String(
     warehouse?.branchCode ??
@@ -222,7 +244,6 @@ const RMST = () => {
   const loadedFromUrlRef = useRef(false);
   const detailRowsRef = useRef([]);
   const detailRowsGLRef = useRef([]);
-  const defaultLocationCacheRef = useRef({});
   const navigate = useNavigate();
   const location = useLocation();
   const [isViewDocument, setIsViewDocument] = useState(false);
@@ -333,10 +354,8 @@ const RMST = () => {
     refDocNo2: "",
     fromWhCode: "",
     fromWhName: "",
-    fromWhDefaultLocCode: "",
     toWhCode: "",
     toWhName: "",
-    toWhDefaultLocCode: "",
     remarks: "",
     selectedTranType: "",
     userCode: getCurrentUserCode(),
@@ -431,10 +450,8 @@ const RMST = () => {
     refDocNo2,
     fromWhCode,
     fromWhName,
-    fromWhDefaultLocCode,
     toWhCode,
     toWhName,
-    toWhDefaultLocCode,
     remarks,
     selectedTranType,
 
@@ -480,104 +497,6 @@ const RMST = () => {
   const [focusedCell, setFocusedCell] = useState(null);
 
   const displayStatus = status || "OPEN";
-
-  const getLocationCodeFromRow = (row) =>
-    String(
-      row?.locCode ??
-        row?.LOC_CODE ??
-        row?.locationCode ??
-        row?.LOCATION_CODE ??
-        row?.code ??
-        row?.CODE ??
-        "",
-    ).trim();
-
-  const normalizeLookupRows = (value) => {
-    if (!value) return [];
-
-    if (Array.isArray(value)) {
-      return value.flatMap((item) => normalizeLookupRows(item));
-    }
-
-    if (typeof value === "string") {
-      try {
-        return normalizeLookupRows(JSON.parse(value));
-      } catch {
-        return [];
-      }
-    }
-
-    const resultValue =
-      value?.result ??
-      value?.RESULT ??
-      value?.data?.[0]?.result ??
-      value?.data?.[0]?.RESULT ??
-      value?.data?.result ??
-      value?.data?.RESULT;
-
-    if (resultValue) {
-      return normalizeLookupRows(resultValue);
-    }
-
-    if (Array.isArray(value?.data)) {
-      return value.data.flatMap((item) => normalizeLookupRows(item));
-    }
-
-    return [value];
-  };
-
-  const getFirstLocationCodeByWarehouse = async (whCode) => {
-    const warehouseCode = String(whCode || "").trim();
-    if (!warehouseCode) return "";
-    if (isIntransitWarehouse(warehouseCode)) return "INTRANSIT";
-
-    const cacheKey = normalizeCode(warehouseCode);
-    if (defaultLocationCacheRef.current[cacheKey] !== undefined) {
-      return defaultLocationCacheRef.current[cacheKey];
-    }
-
-    const requestPayload = {
-      userCode,
-      branchCode,
-      filter: "ActiveAll",
-      whCode: warehouseCode,
-      whouseCode: warehouseCode,
-      warehouseCode,
-    };
-
-    const endpoints = ["getLocation", "getLocationRef", "getLocRef", "getWarehouseLocation"];
-
-    for (const endpoint of endpoints) {
-      try {
-        const response = await fetchDataJson(endpoint, requestPayload);
-        const rows = normalizeLookupRows(response).filter((item) => {
-          const locCode = getLocationCodeFromRow(item);
-          const itemWhCode = String(
-            item?.whCode ??
-              item?.WH_CODE ??
-              item?.whouseCode ??
-              item?.WHOUSE_CODE ??
-              item?.warehouseCode ??
-              item?.WAREHOUSE_CODE ??
-              "",
-          ).trim();
-
-          return locCode && (!itemWhCode || normalizeCode(itemWhCode) === cacheKey);
-        });
-
-        const firstLocCode = getLocationCodeFromRow(rows[0]);
-        if (firstLocCode) {
-          defaultLocationCacheRef.current[cacheKey] = firstLocCode;
-          return firstLocCode;
-        }
-      } catch {
-        // Try the next possible location endpoint.
-      }
-    }
-
-    defaultLocationCacheRef.current[cacheKey] = "";
-    return "";
-  };
 
   const getDropdownValue = (row, keys) => {
     for (const key of keys) {
@@ -1007,10 +926,8 @@ const RMST = () => {
 
       fromWhCode: "",
       fromWhName: "",
-      fromWhDefaultLocCode: "",
       toWhCode: "",
       toWhName: "",
-      toWhDefaultLocCode: "",
       toBranchCode: "",
       toBranchName: "",
       refDocNo1: "",
@@ -1170,12 +1087,10 @@ const RMST = () => {
         toBranchName: data.toBranchName || data.to_branch_name || "",
         fromWhCode: data.frmwhouseCode || data.fromWhCode || data.from_wh || "",
         fromWhName: data.frmwhouseName || data.fromWhName || data.from_wh_name || "",
-        fromWhDefaultLocCode: "",
         toWhCode: data.towhouseCode || data.toWhCode || data.to_wh || "",
         toWhName: data.towhouseName || data.toWhName || data.to_wh_name || "",
-        toWhDefaultLocCode: "",
-        refDocNo1: data.refDocNo1,
-        refDocNo2: data.refDocNo2,
+        refDocNo1: normalizeRefDocNo(getResponseValue(data, refDocNo1Keys)),
+        refDocNo2: normalizeRefDocNo(getResponseValue(data, refDocNo2Keys)),
         remarks: data.remarks,
         detailRows: retrievedDetailRows,
         detailRowsGL: formattedGLRows,
@@ -1251,16 +1166,16 @@ const RMST = () => {
         toBranchName: requiresBranchSelection() ? toBranchName || "" : "",
         rmstNo: documentNo || "",
         rmstId: documentID || "",
-        rmstDate: documentDate,
+        rmstDate: toDateInputValue(documentDate),
         tranType: selectedTranType || getDefaultTranType(),
         fromWhCode: fromWhCode || "",
         toWhCode: toWhCode || "",
-        refDocNo1: refDocNo1,
-        refDocNo2: refDocNo2,
+        ...getRefDocPayloadAliases(refDocNo1, refDocNo2),
         remarks: remarks || "",
         userCode: userCode,
         dt1: detailRows.map((row, index) => ({
-          lnNo: String(index + 1),
+          lnNo: String(row.lnNo || row.lineNo || row.line_no || row.LINE_NO || index + 1),
+          invType: row.invType || row.INV_TYPE || "RM",
           itemCode: row.itemCode || "",
           itemName: row.itemName || "",
           categCode: row.categCode || "",
@@ -1270,7 +1185,7 @@ const RMST = () => {
           itemAmount: parseFormattedNumber(row.itemAmount || 0),
           lotNo: row.lotNo || "",
           qstatCode: row.qstatCode || "",
-          bbDate: row.bbDate || null,
+          bbDate: toDateInputValue(row.bbDate) || null,
           qtyHand: parseFormattedNumber(row.qtyHand || 0),
           trantype: selectedTranType || getDefaultTranType(),
           whouseCode: row.whouseCode || row.frmwhouseCode || fromWhCode || "",
@@ -1285,6 +1200,11 @@ const RMST = () => {
           slTypeCode: row.sltypeCode || "",
           slCode: row.slCode || "",
           uniqueKey: row.uniqueKey || "",
+          groupId: row.groupId || row.group_id || "",
+          group_id: row.group_id || row.groupId || "",
+          transferRefNo: row.transferRefNo || "",
+          wtNo: row.wtNo || row.transferRefNo || "",
+          controlNo: row.controlNo || "",
           operation: row.operation || "",
         })),
         dt2: targetGLRows.map((entry, index) => ({
@@ -1305,11 +1225,22 @@ const RMST = () => {
           debitFx2: parseFormattedNumber(entry.debitFx2 || 0),
           creditFx2: parseFormattedNumber(entry.creditFx2 || 0),
           slRefNo: entry.slRefNo || "",
-          slRefDate: entry.slRefDate || null,
+          slRefDate: toDateInputValue(entry.slRefDate) || null,
           remarks: entry.remarks || "",
         })),
       };
     };
+
+    const normalizeGeneratedGLRows = (rows) =>
+      (Array.isArray(rows) ? rows : []).map((entry) => ({
+        ...entry,
+        debit: formatNumber(parseFormattedNumber(entry.debit || 0)),
+        credit: formatNumber(parseFormattedNumber(entry.credit || 0)),
+        debitFx1: formatNumber(parseFormattedNumber(entry.debitFx1 || 0)),
+        creditFx1: formatNumber(parseFormattedNumber(entry.creditFx1 || 0)),
+        debitFx2: formatNumber(parseFormattedNumber(entry.debitFx2 || 0)),
+        creditFx2: formatNumber(parseFormattedNumber(entry.creditFx2 || 0)),
+      }));
 
     updateState({ isLoading: true });
 
@@ -1323,10 +1254,14 @@ const RMST = () => {
       ) {
         const genPayload = getFormattedPayload([]);
         const newGlEntries = await useGenerateGLEntries(docType, genPayload);
+        const normalizedGlEntries = normalizeGeneratedGLRows(newGlEntries);
 
-        if (newGlEntries && newGlEntries.length > 0) {
-          currentGL = newGlEntries;
-          updateState({ detailRowsGL: newGlEntries });
+        if (normalizedGlEntries.length > 0) {
+          currentGL = normalizedGlEntries;
+          updateState({
+            detailRowsGL: normalizedGlEntries,
+            ...getGLTotalsState(normalizedGlEntries),
+          });
         } else {
           updateState({ isLoading: false });
           console.warn("GL Generation failed. Upsert cancelled.");
@@ -1339,9 +1274,10 @@ const RMST = () => {
           updateState({ detailRowsGL: [], isGeneratingGL: true });
           const genPayload = getFormattedPayload(currentGL);
           const newGlEntries = await useGenerateGLEntries(docType, genPayload);
+          const normalizedGlEntries = normalizeGeneratedGLRows(newGlEntries);
           updateState({
-            detailRowsGL:
-              newGlEntries && newGlEntries.length > 0 ? newGlEntries : [],
+            detailRowsGL: normalizedGlEntries,
+            ...getGLTotalsState(normalizedGlEntries),
             isGeneratingGL: false,
           });
         } catch (error) {
@@ -1414,8 +1350,8 @@ const RMST = () => {
     qtyHand: "0.00",
     whouseCode: fromWhCode || "",
     toWHcode: toWhCode || "",
-    locCode: isIntransitWarehouse(fromWhCode || "") ? "INTRANSIT" : (fromWhDefaultLocCode || ""), 
-    tolocCode: isIntransitWarehouse(toWhCode || "") ? "INTRANSIT" : (toWhDefaultLocCode || ""), 
+    locCode: isIntransitWarehouse(fromWhCode || "") ? "INTRANSIT" : "", 
+    tolocCode: isIntransitWarehouse(toWhCode || "") ? "INTRANSIT" : "", 
     acctCode: "",
     rcCode: "",
     sltypeCode: "",
@@ -1877,32 +1813,28 @@ const RMST = () => {
     }
 
     if (field === "whouseCode") {
-      const defaultLocCode = isIntransitWarehouse(value)
-        ? "INTRANSIT"
-        : getWarehouseDefaultLocCode(value) || await getFirstLocationCodeByWarehouse(value.whCode);
-
       row.whouseCode = value.whCode;
       row.frmwhouseCode = value.whCode;
-      row.locCode = defaultLocCode || "";
-      row.frmlocCode = defaultLocCode || "";
-
+      if (isIntransitWarehouse(value)) {
+        row.locCode = "INTRANSIT";
+        row.frmlocCode = "INTRANSIT";
+      }
       await autoFillBlanks("whouseCode", value.whCode);
-      await autoFillBlanks("locCode", defaultLocCode || "", {
-        frmlocCode: defaultLocCode || "",
-      });
+      if (isIntransitWarehouse(value)) {
+        await autoFillBlanks("locCode", "INTRANSIT", { frmlocCode: "INTRANSIT" });
+      }
     }
 
     if (field === "toWHcode") {
-      const defaultLocCode = isIntransitWarehouse(value)
-        ? "INTRANSIT"
-        : getWarehouseDefaultLocCode(value) || await getFirstLocationCodeByWarehouse(value.whCode);
-
       row.toWHcode = value.whCode;
       row.towhouseCode = value.whCode;
-      row.tolocCode = defaultLocCode || "";
-
+      if (isIntransitWarehouse(value)) {
+        row.tolocCode = "INTRANSIT";
+      }
       await autoFillBlanks("toWHcode", value.whCode);
-      await autoFillBlanks("tolocCode", defaultLocCode || "");
+      if (isIntransitWarehouse(value)) {
+        await autoFillBlanks("tolocCode", "INTRANSIT");
+      }
     }
 
     if (field === "locCode") {
@@ -2280,10 +2212,8 @@ if (field === "itemCode") {
       toBranchName: "",
       fromWhCode: autoFromWhCode,
       fromWhName: autoFromWhName,
-      fromWhDefaultLocCode: autoFromWhCode === "INT" ? "INTRANSIT" : "",
       toWhCode: autoToWhCode,
       toWhName: autoToWhName,
-      toWhDefaultLocCode: autoToWhCode === "INT" ? "INTRANSIT" : "",
       detailRows: [],
       detailRowsGL: [],
     });
@@ -2485,12 +2415,11 @@ if (field === "itemCode") {
     updateState({ warehouseLookupOpen: false, accountModalSource: null });
   };
 
- const handleCloseFromWarehouseLookup = async (row) => {
+  const handleCloseFromWarehouseLookup = (row) => {
     if (row) {
       const selectedIsTransit = isIntransitWarehouse(row);
       const selectedBranchCode = getWarehouseBranchCode(row);
       const targetBranchCode = isIntransitToBranch() ? toBranchCode : branchCode;
-      const defaultLocCode = selectedIsTransit ? "INTRANSIT" : getWarehouseDefaultLocCode(row) || await getFirstLocationCodeByWarehouse(row.whCode);
 
       if (isIntransitTransfer() && !selectedIsTransit) {
         useSwalInfoAlert("Invalid From Warehouse", "Kapag Intransit to Branch/Warehouse ang transaction, dapat INTRANSIT ang From Warehouse.");
@@ -2504,7 +2433,8 @@ if (field === "itemCode") {
         return;
       }
 
-      // 🌟 FIX: I-preserve o i-auto-fill ulit ang INT kung Sender (Inter Branch/Warehouse)
+      // Same behavior as FGST: no extra location API call during warehouse selection.
+      // Only INTRANSIT gets an automatic location value.
       let newToWhCode = toWhCode;
       let newToWhName = toWhName;
 
@@ -2512,30 +2442,24 @@ if (field === "itemCode") {
         newToWhCode = "INT";
         newToWhName = "INT - INTRANSIT";
       } else {
-        // Kung hindi Sender, i-clear ang To Warehouse para pumili ulit ang user
         newToWhCode = "";
         newToWhName = "";
       }
 
-      const defaultToLocCode = isIntransitWarehouse(newToWhCode)
-        ? "INTRANSIT"
-        : await getFirstLocationCodeByWarehouse(newToWhCode);
-
       updateState({
         fromWhCode: row.whCode,
         fromWhName: row.whName,
-        fromWhDefaultLocCode: defaultLocCode,
-        toWhCode: newToWhCode, // Ginamit ang preserved logic
+        toWhCode: newToWhCode,
         toWhName: newToWhName,
-        toWhDefaultLocCode: defaultToLocCode,
         detailRows: (detailRows || []).map((item) => ({
           ...item,
           whouseCode: row.whCode,
           frmwhouseCode: row.whCode,
-          locCode: defaultLocCode || "",
-          toWHcode: newToWhCode, // Panatilihin din sa mga item rows
+          locCode: selectedIsTransit ? "INTRANSIT" : "",
+          frmlocCode: selectedIsTransit ? "INTRANSIT" : "",
+          toWHcode: newToWhCode,
           towhouseCode: newToWhCode,
-          tolocCode: defaultToLocCode, 
+          tolocCode: newToWhCode === "INT" ? "INTRANSIT" : "",
         })),
         detailRowsGL: [],
       });
@@ -2543,12 +2467,11 @@ if (field === "itemCode") {
     updateState({ fromwarehouseLookupOpen: false });
   };
 
-  const handleCloseToWarehouseLookup = async (row) => {
+  const handleCloseToWarehouseLookup = (row) => {
     if (row) {
       const selectedIsTransit = isIntransitWarehouse(row);
       const selectedBranchCode = getWarehouseBranchCode(row);
       const targetBranchCode = isInterBranch() ? toBranchCode : branchCode;
-      const defaultLocCode = selectedIsTransit ? "INTRANSIT" : getWarehouseDefaultLocCode(row) || await getFirstLocationCodeByWarehouse(row.whCode);
 
       if (normalizeCode(fromWhCode) === normalizeCode(row.whCode)) {
         useSwalInfoAlert(
@@ -2574,12 +2497,11 @@ if (field === "itemCode") {
       updateState({
         toWhCode: row.whCode,
         toWhName: row.whName,
-        toWhDefaultLocCode: defaultLocCode,
         detailRows: (detailRows || []).map((item) => ({
           ...item,
           toWHcode: row.whCode,
           towhouseCode: row.whCode,
-          tolocCode: defaultLocCode || "",
+          tolocCode: selectedIsTransit ? "INTRANSIT" : "",
         })),
         detailRowsGL: [],
       });
@@ -2609,7 +2531,7 @@ if (field === "itemCode") {
       }
 
       const endpoint = "getInvLookupRM";
-      const response = await fetchDataJson(endpoint, {
+      const lookupPayload = {
         userCode,
         branchCode: apiSourceBranch,
         sourceBranchCode: apiSourceBranch,
@@ -2619,11 +2541,14 @@ if (field === "itemCode") {
         locCode: "",
         docType: "RMST",
         tranType: itemSingleSelect ? "IRR" : selectedTranType,
-        
-        // 🌟 BAGO: Ipasa ang Ref Doc No 1 para magamit ng backend na filter sa WT_NO (optional but recommended)
-        refDocNo: refDocNo1 || "",        
-        wtNo: refDocNo1 || ""
-      });
+        refDocNo: refDocNo1 || "",
+        wtNo: refDocNo1 || "",
+      };
+
+      const [response, colConfig] = await Promise.all([
+        fetchDataJson(endpoint, lookupPayload),
+        useSelectedHSColConfig(endpoint),
+      ]);
 
       const rawCustData = response?.data?.[0]?.result
         ? JSON.parse(response.data[0].result)
@@ -2648,8 +2573,6 @@ if (field === "itemCode") {
         };
       });
 
-      const colConfig = await useSelectedHSColConfig("getInvLookupRM");
-
       if (custData.length === 0) {
         useSwalInfoAlert("RM Location Balance", "No records found");
         updateState({ isLoading: false });
@@ -2672,7 +2595,7 @@ if (field === "itemCode") {
     }
   };
 
-  const handleCloseRMLookup = async (selectedItems) => {
+  const handleCloseRMLookup = (selectedItems) => {
     if (!selectedItems) return;
 
     const itemsArray = Array.isArray(selectedItems.records)
@@ -2684,20 +2607,29 @@ const firstValue = (...values) =>
       values.find((value) => value !== undefined && value !== null && value !== "");
 
 
-    const defaultToLocCode = isIntransitWarehouse(toWhCode ?? "")
-      ? "INTRANSIT"
-      : await getFirstLocationCodeByWarehouse(toWhCode);
-
     const newRows = itemsArray.flatMap((item) => {
       const rawQtyHand = parseFormattedNumber(item?.qtyHand ?? 0);
       const rawUnitCost = parseFormattedNumber(item?.unitCost ?? 0);
-      const originalKey = item?.uniqueKey ?? "";
-
-      if (itemSingleSelect && selectedTranType === "IR") {
-        handleDetailChange(selectedRowIndex, "itemCode", item, false);
-        updateState({ itemSingleSelect: false, rmLookupModalOpen: false });
-        return [];
-      }
+      const originalKey = firstValue(item?.uniqueKey, item?.controlNo, item?.CONTROL_NO, "");
+      const selectedGroupId = firstValue(item?.groupId, item?.group_id, item?.GROUP_ID, "");
+      const selectedTransferRefNo = firstValue(
+        item?.transferRefNo,
+        item?.wtNo,
+        item?.WT_NO,
+        item?.refDocNo,
+        selectedGroupId,
+        "",
+      );
+      const selectedControlNo = firstValue(item?.controlNo, item?.CONTROL_NO, "");
+      const selectedLineNo = firstValue(
+        item?.lnNo,
+        item?.lineNo,
+        item?.line_no,
+        item?.LINE_NO,
+        item?.recNo,
+        item?.REC_NO,
+        "",
+      );
 const invAccountCode = firstValue(
         item?.invAcct,
         item?.invAcctCode,
@@ -2731,12 +2663,19 @@ const invAccountCode = firstValue(
         qstatCode: item?.qstatCode ?? "",
         whouseCode: item?.whouseCode ?? fromWhCode ?? "",
         toWHcode: toWhCode ?? "",
-        locCode: item?.locCode ?? (isIntransitWarehouse(item?.whouseCode ?? fromWhCode ?? "") ? "INTRANSIT" : (fromWhDefaultLocCode || "")), 
-        tolocCode: defaultToLocCode || toWhDefaultLocCode || "", 
+        locCode: item?.locCode ?? (isIntransitWarehouse(item?.whouseCode ?? fromWhCode ?? "") ? "INTRANSIT" : ""), 
+        tolocCode: isIntransitWarehouse(toWhCode ?? "") ? "INTRANSIT" : "", 
         acctCode: invAccountCode,
         sltypeCode: "",
         rcCode: "",
         slCode: "",
+        invType: "RM",
+        groupId: selectedGroupId,
+        group_id: selectedGroupId,
+        transferRefNo: selectedTransferRefNo,
+        wtNo: firstValue(item?.wtNo, item?.WT_NO, selectedTransferRefNo, ""),
+        controlNo: selectedControlNo,
+        lnNo: selectedLineNo,
       };
 
       if (selectedTranType === "IR") {
@@ -4355,7 +4294,7 @@ const invAccountCode = firstValue(
                         <input
                           type="date"
                           className="w-[100px] global-tran-td-inputclass-ui"
-                          value={row.slRefDate || ""}
+                          value={toDateInputValue(row.slRefDate) || ""}
                           readOnly={isFormDisabled}
                           onChange={(e) =>
                             handleDetailChangeGL(
