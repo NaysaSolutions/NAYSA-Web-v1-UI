@@ -26,7 +26,7 @@ import {
 import { apiClient, postRequest } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
-const {companyInfo} = useAuth();
+
 const formatDisplayValue = (value, fallback = "-") => {
   const text = String(value ?? "").trim();
   return text || fallback;
@@ -439,13 +439,16 @@ const getQzEndpointLabel = () => {
 const SearchPPETag = ({
   isOpen,
   onClose,
-
+  companyInfo: companyInfoProp = {},
   documentInfo = {},
   detailRow = {},
   serialRow = {},
   serialRows = [],
   viewMode = false,
 }) => {
+  const { companyInfo: authCompanyInfo = {} } = useAuth();
+  const companyInfo = Object.keys(companyInfoProp || {}).length > 0 ? companyInfoProp : authCompanyInfo;
+
   const [paperWidth, setPaperWidth] = useState("90");
   const [paperHeight, setPaperHeight] = useState("50");
   const [paperPreset, setPaperPreset] = useState("90mm x 50mm");
@@ -913,12 +916,12 @@ const SearchPPETag = ({
       const rows = normalizeApiRows(response);
       const normalizedRows = rows.map((row, index) => ({
         ...row,
-        assetTag: row?.assetTag || row?.tagNo || row?.TAG_NO || "",
-        serialNo: row?.serialNo || row?.serial_no || "",
-        location: row?.flocName || row?.flocCode || row?.location || "",
-        assignedTo: row?.empName || row?.empNo || row?.assignedTo || "",
-        rcCode: row?.rcName || row?.rcCode || "",
-        brandModel: row?.brandModel || row?.modelNo || "",
+        assetTag: row?.tagNo ||"",
+        serialNo: row?.serialNo || "",
+        location: row?.flocName|| "",
+        assignedTo: row?.empName || "",
+        rcCode: row?.rcName  || "",
+        brandModel: row?.modelNo|| "",
         rowKey: row?.faCode || row?.tagNo || String(index + 1),
       }));
 
@@ -953,7 +956,7 @@ const SearchPPETag = ({
       const brandModel = formatDisplayValue(row.brandModel || detailRow.brandModel, "-");
       const acqCost = formatDisplayValue(row.acqCost || detailRow.acqCost, "-");
       const companyName = formatDisplayValue(companyInfo.compName);
-      const branchName = formatDisplayValue(documentInfo.branchName);
+      const branchName = formatDisplayValue(row.branchName || companyInfo.branchName);
 
       return {
         rowKey: `${propertyTagNo}-${serialNo}-${index}`,
