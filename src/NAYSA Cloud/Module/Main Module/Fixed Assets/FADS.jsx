@@ -100,6 +100,7 @@ const FADS = () => {
 
   const location = useLocation();
   const loadedFromUrlRef = useRef(false);
+  const customerNameBeforeEditRef = useRef("");
   const docType = "FADS";
   const hsDoc = getAllTopHSDocRow?.(docType) || {};
   const pdfLink = docTypePDFGuide[docType] || "";
@@ -198,6 +199,8 @@ const FADS = () => {
   };
   const statusColor = statusMap[displayStatus] || "";
   const isFormDisabled = isViewDocument || isPostedOrCancelled;
+  const isCashSalesType = String(state.salesType || "CASH").toUpperCase() === "CASH";
+  const isHeaderVatLookupDisabled = isFormDisabled || isCashSalesType;
   const withCostAmount = currentUserRow?.viewCostamt !== "N";
   const selectedDisposalType = String(state.disposalType || "FSDP06").toUpperCase();
   const referenceNoLabel = {
@@ -405,6 +408,11 @@ const FADS = () => {
       };
     });
   }, [getAllDropDown, refsLoaded, updateState]);
+
+  useEffect(() => {
+    if (!isCashSalesType || (!state.vatCode && !state.vatName)) return;
+    updateState({ vatCode: "", vatName: "", showVatModal: false });
+  }, [isCashSalesType, state.vatCode, state.vatName, updateState]);
 
   const loadCompanyData = async () => {
     updateState({ isLoading: true });
@@ -973,6 +981,45 @@ const FADS = () => {
     }
   };
 
+  const handleSalesTypeChange = (value) => {
+    const nextSalesType = value || "CASH";
+    const currentSalesType = state.salesType || "CASH";
+
+    if (nextSalesType === currentSalesType) return;
+
+    updateState({
+      salesType: nextSalesType,
+      ...(String(nextSalesType).toUpperCase() === "CASH"
+        ? { vatCode: "", vatName: "", showVatModal: false }
+        : {}),
+    });
+
+    if (selectedDisposalType === "FSDP01") {
+      clearGeneratedGLEntries();
+    }
+  };
+
+  const handleCustomerNameFocus = () => {
+    customerNameBeforeEditRef.current = state.custName || "";
+  };
+
+  const handleCustomerNameBlur = (event) => {
+    if (isFormDisabled) return;
+
+    const nextCustomerName = String(event.target.value || "").trim();
+    const previousCustomerName = String(customerNameBeforeEditRef.current || "").trim();
+
+    if (nextCustomerName === previousCustomerName) {
+      if (nextCustomerName !== state.custName) {
+        updateState({ custName: nextCustomerName });
+      }
+      return;
+    }
+
+    updateState({ custName: nextCustomerName });
+    clearGeneratedGLEntries();
+  };
+
   const getAssetCode = (row = {}) => String(row.faCode || "").trim().toUpperCase();
 
   const hasDuplicateAssetCode = (rows = []) => {
@@ -1441,11 +1488,12 @@ const FADS = () => {
 
   const handleCloseCustModal = (selectedCustomer) => {
     if (selectedCustomer) {
+      const shouldKeepVatBlank = String(state.salesType || "CASH").toUpperCase() === "CASH";
       updateState({
         custCode: selectedCustomer.custCode || selectedCustomer.cust_code || "",
         custName: selectedCustomer.custName || selectedCustomer.cust_name || "",
-        vatCode: selectedCustomer.vatCode || selectedCustomer.vat_code || state.vatCode || "",
-        vatName: selectedCustomer.vatName || selectedCustomer.vat_name || state.vatName || "",
+        vatCode: shouldKeepVatBlank ? "" : selectedCustomer.vatCode || selectedCustomer.vat_code || state.vatCode || "",
+        vatName: shouldKeepVatBlank ? "" : selectedCustomer.vatName || selectedCustomer.vat_name || state.vatName || "",
       });
     }
     updateState({ custModalOpen: false });
@@ -1462,6 +1510,11 @@ const FADS = () => {
   };
 
   const handleCloseVatModal = (selectedVat) => {
+    if (isHeaderVatLookupDisabled) {
+      updateState({ showVatModal: false });
+      return;
+    }
+
     if (selectedVat) {
       updateState({
         vatCode: selectedVat.vatCode || selectedVat.vat_code || selectedVat.code || "",
@@ -2053,6 +2106,8 @@ const FADS = () => {
                             value={state.custName}
                             disabled={isFormDisabled}
                             onChange={(e) => updateState({ custName: e.target.value })}
+                            onFocus={handleCustomerNameFocus}
+                            onBlur={handleCustomerNameBlur}
                           />
                           <button
                             type="button"
@@ -2079,9 +2134,12 @@ const FADS = () => {
                             label="VAT Code"
                             type="lookup"
                             value={state.vatName}
-                            disabled={isFormDisabled}
+                            disabled={isHeaderVatLookupDisabled}
                             readOnly
-                            onLookup={() => updateState({ showVatModal: true })}
+                            onLookup={() => {
+                              if (isHeaderVatLookupDisabled) return;
+                              updateState({ showVatModal: true });
+                            }}
                           />
                         </div>
                         <div className="min-w-0">
@@ -2091,7 +2149,7 @@ const FADS = () => {
                             type="select"
                             value={state.salesType || "CASH"}
                             disabled={isFormDisabled}
-                            onChange={(val) => updateState({ salesType: val })}
+                            onChange={handleSalesTypeChange}
                             options={[
                               { label: "CASH", value: "CASH" },
                               { label: "CHARGE", value: "CHARGE" },

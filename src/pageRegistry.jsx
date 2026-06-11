@@ -59,9 +59,14 @@ export const pageRegistry = {
   FGAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGAJ.jsx")),
   MSRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSRTV.jsx")),
   FGRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGRTV.jsx")),
+  RMRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMRTV.jsx")),
   FGRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGRR.jsx")),
   RMRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMRR.jsx")),
   FGST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGST.jsx")),
+  RMAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMAJ.jsx")),
+
+  // Importation
+  LC: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Importation/LC.jsx")),
 
   // Fixed Assets
   FADP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/FADP.jsx")),
@@ -98,6 +103,8 @@ export const pageRegistry = {
   SecurityAuditTrail: lazyPage(() => import("./NAYSA Cloud/Query/AuditTrail/SecurityAuditTrail.jsx")),
   MSINQ: lazyPage(() => import("./NAYSA Cloud/Query/INVInq/MSStockCard.jsx")),
   FGINQ: lazyPage(() => import("./NAYSA Cloud/Query/INVInq/FGStockCard.jsx")),
+  RMINQ: lazyPage(() => import("./NAYSA Cloud/Query/INVInq/RMStockCard.jsx")),
+  SalesTracker: lazyPage(() => import("./NAYSA Cloud/Query/SOInq/SalesTracker.jsx")),
   FAINQ: lazyPage(() => import("./NAYSA Cloud/Query/FAInq/FAAssetInquiry.jsx")),
   FAAssetInquiry: lazyPage(() => import("./NAYSA Cloud/Query/FAInq/FAAssetInquiry.jsx")),
   SearchFAFind: lazyPage(() => import("./NAYSA Cloud/Lookup/SearchFAFind.jsx")),
@@ -142,9 +149,11 @@ export const pageRegistry = {
   PostFGRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGRTV.jsx")),
   PostFGST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGST.jsx")),
   PostMSIS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSIS.jsx")),
+  PostRMRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostRMRTV.jsx")),
   PostFGRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGRR.jsx")),
   PostMSAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSAJ.jsx")),
   PostFGAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGAJ.jsx")),
+  PostRMAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostRMAJ.jsx")),
   PostFADP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/PostFADP.jsx")),
   PostFADS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/PostFADS.jsx")),
   PostFARR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/PostFARR.jsx")),
@@ -180,5 +189,6 @@ export const pageRegistry = {
   PURReportModal: reportModal("PUR"),
   MSINVReportModal: reportModal("MS"),
   FGINVReportModal: reportModal("FG"),
+  RMINVReportModal: reportModal("RM"),
   FAReportModal: reportModal("FA"),
 };
