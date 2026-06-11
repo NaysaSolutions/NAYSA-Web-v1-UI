@@ -781,26 +781,27 @@ const SearchFAFind = ({
                         {withCostAmount ? (
                           <div className="grid grid-cols-2 gap-2">
                             <FinancialMetricCard
-                              label="NB Value"
-                              value={formatAmount(asset.nbValue)}
-                              accent
-                            />
-                            <FinancialMetricCard
                               label="Acq. Cost"
                               value={formatAmount(asset.acqCost)}
                             />
-                            <FinancialMetricCard
+                             <FinancialMetricCard
                               label="Depr. Month"
                               value={formatAmount(asset.deprMonth)}
                             />
-                            <FinancialMetricCard
+                              <FinancialMetricCard
                               label="Accum. Depr."
                               value={formatAmount(asset.accumDepr)}
                             />
-                            <FinancialMetricCard
+                              <FinancialMetricCard
                               label="Salvage Value"
                               value={formatAmount(asset.salvageValue)}
                             />
+
+                            <FinancialMetricCard
+                              label="NB Value"
+                              value={formatAmount(asset.nbValue)}
+                              accent
+                            />                                              
                           </div>
                         ) : (
                           <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-center text-xs text-slate-500">
@@ -865,7 +866,7 @@ const SearchFAFind = ({
           idKey="groupId"
           onClose={handleCloseFAMastLookup}
           onCancel={() => setShowFAMastLookup(false)}
-          singleSelect={false}
+          singleSelect={true}
           overlayZIndexClass="z-[120]"
         />
       )}
@@ -887,6 +888,7 @@ const SearchFAFind = ({
           documentInfo={assetTagPreviewInfo.documentInfo}
           detailRow={assetTagPreviewInfo.detailRow}
           serialRow={assetTagPreviewInfo.serialRow}
+          viewMode={true}
           onClose={() => setShowPpeTagPreview(false)}
         />
       )}

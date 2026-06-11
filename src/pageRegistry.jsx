@@ -105,6 +105,7 @@ export const pageRegistry = {
   FAAssetInquiry: lazyPage(() => import("./NAYSA Cloud/Query/FAInq/FAAssetInquiry.jsx")),
   SearchFAFind: lazyPage(() => import("./NAYSA Cloud/Lookup/SearchFAFind.jsx")),
   AssetFinder: lazyPage(() => import("./NAYSA Cloud/Lookup/SearchFAFind.jsx")),
+  SearchPPETag: lazyPage(() => import("./NAYSA Cloud/Lookup/SearchPPETag.jsx")),
 
   // Global Reference
   Company: lazyPage(() => import("./NAYSA Cloud/Reference File/Company.jsx")),
