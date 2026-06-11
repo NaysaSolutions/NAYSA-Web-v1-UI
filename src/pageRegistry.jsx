@@ -88,6 +88,8 @@ export const pageRegistry = {
   MSMast: lazyPage(() => import("./NAYSA Cloud/Master Data/MSMasterData/MSMast.jsx")),
   FGMast: lazyPage(() => import("./NAYSA Cloud/Master Data/FGMasterData/FGMast.jsx")),
   RMMast: lazyPage(() => import("./NAYSA Cloud/Master Data/RMMasterData/RMMast.jsx")),
+  RMMast: lazyPage(() => import("./NAYSA Cloud/Master Data/RMMasterData/RMMast.jsx")),
+  FAMast: lazyPage(() => import("./NAYSA Cloud/Master Data/FAMasterData/FAMast.jsx")),
   // Global & Queries
   AllTranHistory: lazyPage(() => import("./NAYSA Cloud/Lookup/SearchGlobalTranHistory.jsx")),
   ARINQ: lazyPage(() => import("./NAYSA Cloud/Query/ARInq/ARINQ.jsx")),

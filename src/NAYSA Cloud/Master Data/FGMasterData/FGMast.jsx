@@ -432,7 +432,7 @@ const FGMast = () => {
                         isLoading={isLoading}
                         generationMode={generationMode}
                         onChangeForm={updateForm}
-                        onLookupSelect={(itemCode) => fetchItemByCode(itemCode, canEdit)}
+                        onLookupSelect={(itemCode) => fetchItemByCode(itemCode, false)}
                         onBlurItemCode={isReadOnly ? undefined : checkDuplicate}
                     />
                 )}
@@ -443,9 +443,8 @@ const FGMast = () => {
                         onFilter={loadMasterList}
                         onReset={loadMasterList}
                         onRowDoubleClick={async (row) => {
-                            await fetchItemByCode(row.itemCode, canEdit);
+                            await fetchItemByCode(row.itemCode, false);
                             setActiveTab("setup");
-                            setIsEditing(canEdit);
                         }}
                     />
                 )}

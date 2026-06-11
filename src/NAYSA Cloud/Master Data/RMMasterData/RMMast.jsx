@@ -35,17 +35,16 @@ import PermissionBadge from "@/NAYSA Cloud/Global/PermissionBadge.jsx";
 //  Empty form — mirrors rm_mast columns exactly (camelCase aliases from sproc)
 // ─────────────────────────────────────────────────────────────────────────────
 const emptyForm = {
-    itemCode:    "",                    // rm_code
-    itemDesc:    "",                    // rm_name
+    itemCode:    "",                    // item_code
+    itemDesc:    "",                    // item_name
     itemDesc2:   "",                    // rm2_name
     itemDesc3:   "",                    // rm3_name
-    uom:         "", uomName:     "",   // rmuom_code
-    uom2:        "",                    // rmuom2_code
-    qtyPerUom2:  "0.000000",            // rmuom2_qty
-    categoryCode: "", categoryName: "", // rmcateg_code
-    classCode:    "", className:   "",  // rmclass_code
-    active:      "Y",                   // rm_stat
-    inUse:       "N",                   // in_use
+    uom:         "", uomName:     "",   // uom_code
+    uom2:        "",                    // uom2_code
+    qtyPerUom2:  "0.000000",            // uom2_qty
+    categoryCode: "", categoryName: "", // categ_code
+    classCode:    "", className:   "",  // class_code
+    active:      "Y",                   // active
     status:      "New",
 
     subClass1Code: "", subClass1Name: "",   // rmsubclass1_code
@@ -106,7 +105,7 @@ const emptyForm = {
 const RMMast = () => {
     const [activeTab, setActiveTab]       = useState("setup");
     const [isLoading, setIsLoading]       = useState(false);
-    const generationMode                  = "Manual";   // rm_code is always user-supplied
+    const generationMode                  = "Manual";   // item_code is always user-supplied
 
     const { user } = useAuth();
     const userCode = user?.USER_CODE || user?.userCode || user?.code || "";
@@ -304,7 +303,6 @@ const RMMast = () => {
                     uomCode2:           form.uom2            || null,
                     uomQty2:            form.qtyPerUom2      || null,
                     active:             form.active          || "Y",
-                    inUse:              form.inUse           || "N",
                     qtyOnHand:          form.qtyOnHand       || null,
                     qtyOrder:           form.qtyOrder        || null,
                     qtyAvail:           form.qtyAvail        || null,
@@ -567,7 +565,7 @@ const RMMast = () => {
                         onFilter={loadMasterList}
                         onReset={loadMasterList}
                         onRowDoubleClick={async (row) => {
-                            await fetchItemByCode(row.itemCode, canEdit);
+                            await fetchItemByCode(row.itemCode, false);
                             setActiveTab("setup");
                         }}
                     />

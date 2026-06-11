@@ -121,7 +121,7 @@ const RMMast_SetupTab = ({
       const input = overrideRef.current.querySelector("input");
       if (!input) return;
       if (canType) {
-        const maxLen = getLen("rm_code", 30);
+        const maxLen = getLen("item_code", 30);
         input.removeAttribute("readonly");
         input.setAttribute("maxlength", maxLen);
         input.onclick = (e) => e.stopPropagation();
@@ -174,7 +174,7 @@ const RMMast_SetupTab = ({
               onLookup={canType ? undefined : () => !isLoading && setIsItemLookupOpen(true)}
               readOnly={true}
               disabled={isLoading}
-              maxLength={getLen("rm_code", 30)}
+              maxLength={getLen("item_code", 30)}
             />
           </div>
 
@@ -187,7 +187,7 @@ const RMMast_SetupTab = ({
             onChange={(v) => onChangeForm({ itemDesc: getValue(v) })}
             readOnly={isReadOnly}
             disabled={isDisabled}
-            maxLength={getLen("rm_name", 200)}
+            maxLength={getLen("item_name", 200)}
           />
           <FieldRenderer
             label="Item Description 2"
@@ -322,27 +322,7 @@ const RMMast_SetupTab = ({
               readOnly={isReadOnly}
               disabled={isDisabled}
             />
-            <FieldRenderer
-              label="Status"
-              type="select"
-              options={[{ value: "New", label: "New" }]}
-              value={form.status || ""}
-              onChange={(v) => onChangeForm({ status: getValue(v) })}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-            />
           </div>
-
-          {/* Barcode */}
-          <FieldRenderer
-            label="Barcode"
-            type="text"
-            value={form.barcode || ""}
-            onChange={(v) => onChangeForm({ barcode: getValue(v) })}
-            readOnly={isReadOnly}
-            disabled={isDisabled}
-            maxLength={getLen("barcode", 100)}
-          />
         </Card>
 
         {/* ── MIDDLE CARD: Collapsible Sidebar Tabs ── */}

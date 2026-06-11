@@ -30,7 +30,6 @@ const RMMast_DataTab = ({
   const tableColumns = useMemo(() => [
     { key: "itemCode",        label: "RM No",                sortable: true, width: 130 },
     { key: "itemDesc",        label: "RM Description",       sortable: true, width: 260 },
-    { key: "itemDesc2",       label: "Description 2",        sortable: true, width: 200 },
     { key: "uom",             label: "UOM",                  sortable: true, width: 80  },
     { key: "uom2",            label: "UOM2",                 sortable: true, width: 80  },
     { key: "qtyPerUom2",      label: "Qty Per UOM2",         sortable: true, width: 110 },
@@ -49,7 +48,6 @@ const RMMast_DataTab = ({
     { key: "planType",        label: "Plan Type",            sortable: true, width: 120 },
     { key: "mrpFlag",         label: "MRP",                  sortable: true, width: 70  },
     { key: "active",          label: "Active",               sortable: true, width: 80  },
-    { key: "inUse",           label: "In Use",               sortable: true, width: 80  },
   ], []);
 
   const handleLoad = useCallback(() => {
@@ -64,39 +62,44 @@ const RMMast_DataTab = ({
 
   // 1. DATA MAPPING: Format raw SQL rows into standard React camelCase properties.
   //    Load mode returns rm.* (raw snake_case) + categoryName + className from joins.
-  //    Exact SQL columns: rm_code, rm_name, rm2_name, rmuom_code, rmuom2_code,
-  //    rmuom2_qty, qty_onhand, qty_order, qty_avail, lastpur_price, reorder_qty,
-  //    rmcateg_code, rmclass_code, rmsubclass1_code, rmsubclass2_code,
-  //    rmsubclass3_code, plan_type, mrp_flag, rm_stat, in_use
+  //    Exact SQL columns: item_code, item_name, rm2_name, uom_code, uom2_code,
+  //    uom2_qty, qty_onhand, qty_order, qty_avail, lastpur_price, reorder_qty,
+  //    categ_code, class_code, subclass1_code, subclass2_code,
+  //    subclass3_code, plan_type, mrp_flag, active
   const tableDataRaw = useMemo(() => {
-    const list = Array.isArray(rows) ? rows : [];
+  const list = Array.isArray(rows) ? rows : [];
 
-    return list.map((r) => ({
-      ...r,
-      itemCode:      pick(r, ["rm_code",         "RM_CODE",        "rmCode",       "itemCode"]),
-      itemDesc:      pick(r, ["rm_name",          "RM_NAME",        "rmName",       "itemDesc"]),
-      itemDesc2:     pick(r, ["rm2_name",         "RM2_NAME",       "rm2Name",      "itemDesc2"]),
-      uom:           pick(r, ["rmuom_code",       "RMUOM_CODE",     "rmuomCode",    "uom"]),
-      uom2:          pick(r, ["rmuom2_code",      "RMUOM2_CODE",    "rmuom2Code",   "uom2"]),
-      qtyPerUom2:    pick(r, ["rmuom2_qty",       "RMUOM2_QTY",     "rmuom2Qty",    "qtyPerUom2"]),
-      qtyOnHand:     pick(r, ["qty_onhand",       "QTY_ONHAND",     "qtyOnhand",    "qtyOnHand"]),
-      qtyOrder:      pick(r, ["qty_order",        "QTY_ORDER",      "qtyOrder"]),
-      qtyAvail:      pick(r, ["qty_avail",        "QTY_AVAIL",      "qtyAvail"]),
-      lastPurPrice:  pick(r, ["lastpur_price",    "LASTPUR_PRICE",  "lastpurPrice", "lastPurPrice"]),
-      reOrderLevel:  pick(r, ["reorder_qty",      "REORDER_QTY",    "reorderQty",   "reOrderLevel"]),
-      categoryCode:  pick(r, ["rmcateg_code",     "RMCATEG_CODE",   "rmcategCode",  "categoryCode"]),
-      categoryName:  pick(r, ["categoryName",     "categoryname",   "categ_name",   "CATEG_NAME",  "categName"]),
-      classCode:     pick(r, ["rmclass_code",     "RMCLASS_CODE",   "rmclassCode",  "classCode"]),
-      className:     pick(r, ["className",        "classname",      "class_name",   "CLASS_NAME"]),
-      subClass1Code: pick(r, ["rmsubclass1_code", "RMSUBCLASS1_CODE","rmsubclass1Code","subClass1Code"]),
-      subClass2Code: pick(r, ["rmsubclass2_code", "RMSUBCLASS2_CODE","rmsubclass2Code","subClass2Code"]),
-      subClass3Code: pick(r, ["rmsubclass3_code", "RMSUBCLASS3_CODE","rmsubclass3Code","subClass3Code"]),
-      planType:      pick(r, ["plan_type",        "PLAN_TYPE",      "planType"]),
-      mrpFlag:       pick(r, ["mrp_flag",         "MRP_FLAG",       "mrpFlag"]),
-      active:        pick(r, ["rm_stat",          "RM_STAT",        "rmStat",       "active"]),
-      inUse:         pick(r, ["in_use",           "IN_USE",         "inUse"]),
-    }));
-  }, [rows]);
+  return list.map((r) => ({
+    ...r,
+    itemCode:      pick(r, ["item_code",       "ITEM_CODE",       "itemCode"]),
+    itemDesc:      pick(r, ["item_name",       "ITEM_NAME",       "itemName",      "itemDesc"]),
+
+    uom:           pick(r, ["uom_code",        "UOM_CODE",        "uomCode",       "uom"]),
+    uom2:          pick(r, ["uom_code2",       "UOM_CODE2",       "uomCode2",      "uom2"]),
+    qtyPerUom2:    pick(r, ["uom_qty2",        "UOM_QTY2",        "uomQty2",       "qtyPerUom2"]),
+
+    qtyOnHand:     pick(r, ["qty_onhand",      "QTY_ONHAND",      "qtyOnhand",     "qtyOnHand"]),
+    qtyOrder:      pick(r, ["qty_order",       "QTY_ORDER",       "qtyOrder"]),
+    qtyAvail:      pick(r, ["qty_avail",       "QTY_AVAIL",       "qtyAvail"]),
+
+    lastPurPrice:  pick(r, ["lastpur_price",   "LASTPUR_PRICE",   "lastpurPrice",  "lastPurPrice"]),
+    reOrderLevel:  pick(r, ["reorder_qty",     "REORDER_QTY",     "reorderQty",    "reOrderLevel"]),
+
+    categoryCode:  pick(r, ["categ_code",      "CATEG_CODE",      "categCode",     "categoryCode"]),
+    categoryName:  pick(r, ["categoryName",    "categoryname",    "categ_name",    "CATEG_NAME",    "categName"]),
+
+    classCode:     pick(r, ["class_code",      "CLASS_CODE",      "classCode"]),
+    className:     pick(r, ["className",       "classname",       "class_name",    "CLASS_NAME"]),
+
+    subClass1Code: pick(r, ["subclass1_code",  "SUBCLASS1_CODE",  "subclass1Code", "subClass1Code"]),
+    subClass2Code: pick(r, ["subclass2_code",  "SUBCLASS2_CODE",  "subclass2Code", "subClass2Code"]),
+    subClass3Code: pick(r, ["subclass3_code",  "SUBCLASS3_CODE",  "subclass3Code", "subClass3Code"]),
+
+    planType:      pick(r, ["plan_type",       "PLAN_TYPE",       "planType"]),
+    mrpFlag:       pick(r, ["mrp_flag",        "MRP_FLAG",        "mrpFlag"]),
+    active:        pick(r, ["active",          "ACTIVE"]),
+  }));
+}, [rows]);
 
   // 2. SEARCH LOGIC
   const tableDataFiltered = useMemo(() => {
