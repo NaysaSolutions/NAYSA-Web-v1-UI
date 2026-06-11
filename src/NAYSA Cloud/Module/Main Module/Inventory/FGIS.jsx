@@ -26,7 +26,6 @@ import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import RCLookupModal from "../../../Lookup/SearchRCMast.jsx";
 import SLMastLookupModal from "../../../Lookup/SearchSLMast.jsx";
-import FGLookupModal from "../../../Lookup/SearchFGMast.jsx";
 import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
 import COAMastLookupModal from "../../../Lookup/SearchCOAMast.jsx";
@@ -363,9 +362,9 @@ useEffect(() => {
     CLOSED: "global-tran-stat-text-closed-ui",
   };
   const statusColor = statusMap[displayStatus] || "";
-  const isFormDisabled = ["FINALIZED", "CANCELLED", "CLOSED"].includes(
-    displayStatus,
-  );
+  const isFormDisabled =
+    isViewDocumentUrl ||
+    ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
   const isOpenDocumentStatus = (value) =>
     ["", "O", "OPEN"].includes(String(value ?? "").trim().toUpperCase());
 
@@ -959,8 +958,6 @@ useEffect(() => {
       const retrievedReqRcCode = getFirstValue(
         data.reqRcCode,
         data.req_rc_code,
-        data.reqDept,
-        data.req_dept,
         data.requestDeptCode,
         retrievedRcCode,
       );
@@ -1127,7 +1124,7 @@ useEffect(() => {
     try {
       // Backend should return ms_categ.expacct_code and the COA name for the selected category.
       // Suggested endpoint payload: { categCode: "OS" }
-      const response = await fetchDataJson("getMSCategoryAccount", { categCode: category });
+      const response = await fetchDataJson("getFGCategoryAccount", { categCode: category });
       const rows = parseLookupResultRows(response);
       const row = rows[0] || {};
       const account = getDefaultDrAccountFromItem(row);
@@ -1148,7 +1145,7 @@ useEffect(() => {
     return fetchDefaultDrAccountByCategory(categoryCode);
   };
 
-  const handleCloseMSLookup = async (selectedItems) => {
+  const handleCloseFGLookup = async (selectedItems) => {
     updateState({ msLookupModalOpen: false });
 
     if (!selectedItems) return;
@@ -1325,12 +1322,12 @@ useEffect(() => {
     setShowTypeDropdown((prev) => !prev);
   };
 
-  // When user picks FG / MS / RM
+  // When user adds FG row
   const handleSelectTypeAndAddRow = () => {
     const today = header.rr_date || new Date().toISOString().split("T")[0];
 
     const newRow = {
-      invType: typeCode,
+      invType: "FG",
       groupId: "",
       poStatus: status || "",
       itemCode: "",
@@ -1365,7 +1362,7 @@ useEffect(() => {
     setShowTypeDropdown(false);
   };
 
-  const handleOpenMSLookup = async () => {
+  const handleOpenFGLookup = async () => {
     if (isFormDisabled) return;
 
     if (!state.WHcode) {
@@ -1694,7 +1691,6 @@ useEffect(() => {
         refNo: attention || "",
         rcCode: rcCode || "",
         reqRcCode: reqRcCode || "",
-        reqDept: reqRcCode || "",
         reqRcName: reqRcName || "",
 
         whouseCode: WHcode || "",
@@ -1707,7 +1703,6 @@ useEffect(() => {
         empName: vendName || "",
 
         remarks: remarks || "",
-        fgisStatus: status || "OPEN",
         status: status || "OPEN",
         noReprints: parseInt(noReprints || 0, 10),
         userCode: userCode || "NSI",
@@ -2418,7 +2413,7 @@ useEffect(() => {
 
     const detailColumnRenderers = {
       ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
-      itemCode: () => lookupCell("itemCode", row.itemCode || "", () => handleOpenMSLookup()),
+      itemCode: () => lookupCell("itemCode", row.itemCode || "", () => handleOpenFGLookup()),
       itemName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("itemName", { readOnly: true })}</td>,
       uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("uomCode", { readOnly: true })}</td>,
       quantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("quantity", { value: row.quantity ?? row.qtyNeeded ?? "0.000000" })}</td>,
@@ -2586,8 +2581,24 @@ useEffect(() => {
           onDetails={() => setTopTab("details")}
           onHistory={() => setTopTab("history")}
           detailsRoute="/page/FGIS"
-          isSaveDisabled={isSaveDisabled}
+          showActions={topTab === "details"}
+          showBIRForm={false}
+          showCopyForm={false}
+          isSaveDisabled={
+            isSaveDisabled ||
+            isFormDisabled ||
+            ((detailRows?.length || 0) + (detailRowsGL?.length || 0) === 0)
+          }
           isResetDisabled={isResetDisabled}
+          isAttachDisabled={!documentID}
+          isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
+          isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
+          isCancelDisabled={
+            !documentID ||
+            displayStatus === "CANCELLED" ||
+            displayStatus === "FINALIZED" ||
+            displayStatus === "CLOSED"
+          }
           isViewDocument={isViewDocument}
         />
       </div>
@@ -2680,12 +2691,12 @@ useEffect(() => {
                 />
 
                 <FieldRenderer
-                  id="cutoffCode"
-                  label="Cutoff Code"
+                  id="fgisRefNo"
+                  label="FGIS Ref No."
                   type="text"
-                  value={cutoffCode || ""}
+                  value={attention || ""}
                   disabled={isFormDisabled}
-                  onChange={(val) => updateState({ cutoffCode: val })}
+                  onChange={(val) => updateState({ attention: val })}
                 />
               </div>
 
@@ -2752,24 +2763,52 @@ useEffect(() => {
                 />
               </div>
 
-              {/* Column 3 - reserved for FGIS header extension fields */}
+              {/* Column 3 */}
               <div className="global-tran-textbox-group-div-ui">
                 <FieldRenderer
-                  id="fgisStatus"
-                  label="FGIS Status"
-                  type="text"
-                  value={displayStatus || "OPEN"}
+                  id="vendCode"
+                  label="Employee Code"
+                  type="lookup"
+                  value={vendCode || vendCOde || ""}
                   readOnly
-                  disabled
+                  disabled={isFormDisabled}
+                  lookupDisabled={isFormDisabled}
+                  onLookup={() =>
+                    !isFormDisabled &&
+                    updateState({
+                      rcLookupModalOpen: true,
+                      rcLookupContext: "payeeCode",
+                    })
+                  }
                 />
 
                 <FieldRenderer
-                  id="noReprints"
-                  label="No. Reprints"
+                  id="vendName"
+                  label="Employee Name"
                   type="text"
-                  value={noReprints || "0"}
+                  value={vendName || ""}
+                  disabled={isFormDisabled}
+                  onChange={(val) => updateState({ vendName: val })}
+                />
+
+                <FieldRenderer
+                  id="custCode"
+                  label="Customer Code"
+                  type="lookup"
+                  value={state.custCode || ""}
                   readOnly
-                  disabled
+                  disabled={isFormDisabled}
+                  lookupDisabled={isFormDisabled}
+                  onLookup={() => !isFormDisabled && updateState({ custModalOpen: true })}
+                />
+
+                <FieldRenderer
+                  id="custName"
+                  label="Customer Name"
+                  type="text"
+                  value={state.custName || ""}
+                  disabled={isFormDisabled}
+                  onChange={(val) => updateState({ custName: val })}
                 />
               </div>
 
@@ -2867,7 +2906,7 @@ useEffect(() => {
             <div className="global-tran-tab-footer-button-div-ui">
               <div className="inline-block">
                 <button
-                  onClick={handleOpenMSLookup}
+                  onClick={handleOpenFGLookup}
                   disabled={isFormDisabled || !rcCode || !reqRcCode || !state.WHcode}
                   className={`global-tran-tab-footer-button-add-ui ${
                     isFormDisabled || !rcCode || !reqRcCode || !state.WHcode
@@ -3118,7 +3157,7 @@ useEffect(() => {
           btnCaption="Get Selected Items"
           title="FG Location Balance"
           endpoint={globalLookupHeader}
-          onClose={handleCloseMSLookup}
+          onClose={handleCloseFGLookup}
           onCancel={() => updateState({ msLookupModalOpen: false })}
           singleSelect={false}
         />

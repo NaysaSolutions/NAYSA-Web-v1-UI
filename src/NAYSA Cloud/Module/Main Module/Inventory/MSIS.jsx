@@ -363,9 +363,9 @@ useEffect(() => {
     CLOSED: "global-tran-stat-text-closed-ui",
   };
   const statusColor = statusMap[displayStatus] || "";
-  const isFormDisabled = ["FINALIZED", "CANCELLED", "CLOSED"].includes(
-    displayStatus,
-  );
+  const isFormDisabled =
+    isViewDocumentUrl ||
+    ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
   const isOpenDocumentStatus = (value) =>
     ["", "O", "OPEN"].includes(String(value ?? "").trim().toUpperCase());
 
@@ -1594,7 +1594,10 @@ useEffect(() => {
       const cost = parseFormattedNumber(row.unitCost || 0) || 0;
 
       // store formatted result (2 decimals for amount)
-      row.amount = formatNumber(qty * cost, 2);
+      // store formatted result (2 decimals for amount)
+const computedAmount = formatNumber(qty * cost, 2);
+row.amount = computedAmount;
+row.itemAmount = computedAmount;
     }
 
     updatedRows[index] = row;
@@ -1639,15 +1642,43 @@ useEffect(() => {
     };
 
     const formatGeneratedGLRows = (rows) =>
-      (rows || []).map((glRow) => ({
-        ...glRow,
-        debit: formatNumber(glRow.debit || 0),
-        credit: formatNumber(glRow.credit || 0),
-        debitFx1: formatNumber(glRow.debitFx1 || 0),
-        creditFx1: formatNumber(glRow.creditFx1 || 0),
-        debitFx2: formatNumber(glRow.debitFx2 || 0),
-        creditFx2: formatNumber(glRow.creditFx2 || 0),
-      }));
+  (rows || []).map((glRow, index) => ({
+    ...glRow,
+    id: glRow.id || index + 1,
+    recNo: glRow.recNo || glRow.rec_no || String(index + 1),
+
+    acctCode: glRow.acctCode || glRow.acct_code || "",
+    acctName: glRow.acctName || glRow.acct_name || "",
+
+    rcCode: glRow.rcCode || glRow.rc_code || "",
+    rcName: glRow.rcName || glRow.rc_name || "",
+
+    sltypeCode: glRow.sltypeCode || glRow.slTypeCode || glRow.sltype_code || "",
+    slTypeCode: glRow.slTypeCode || glRow.sltypeCode || glRow.sltype_code || "",
+
+    slCode: glRow.slCode || glRow.sl_code || "",
+    slName: glRow.slName || glRow.sl_name || "",
+
+    particular: glRow.particular || glRow.particulars || "",
+
+    vatCode: glRow.vatCode || glRow.vat_code || "",
+    vatName: glRow.vatName || glRow.vat_name || "",
+
+    atcCode: glRow.atcCode || glRow.atc_code || "",
+    atcName: glRow.atcName || glRow.atc_name || "",
+
+    debit: formatNumber(parseFormattedNumber(glRow.debit ?? 0), 2),
+    credit: formatNumber(parseFormattedNumber(glRow.credit ?? 0), 2),
+    debitFx1: formatNumber(parseFormattedNumber(glRow.debitFx1 ?? glRow.debit_fx1 ?? 0), 2),
+    creditFx1: formatNumber(parseFormattedNumber(glRow.creditFx1 ?? glRow.credit_fx1 ?? 0), 2),
+    debitFx2: formatNumber(parseFormattedNumber(glRow.debitFx2 ?? glRow.debit_fx2 ?? 0), 2),
+    creditFx2: formatNumber(parseFormattedNumber(glRow.creditFx2 ?? glRow.credit_fx2 ?? 0), 2),
+
+    slRefNo: glRow.slRefNo || glRow.slref_no || "",
+    slRefDate: formatDateForSql(glRow.slRefDate || glRow.slref_date),
+    remarks: glRow.remarks || "",
+    dt1Lineno: glRow.dt1Lineno || glRow.dt1LineNo || glRow.dt1_lineno || "",
+  }));
 
     // Same flow as MSRTV:
     // 1. Build one payload formatter.
@@ -1711,7 +1742,8 @@ useEffect(() => {
         dt1: (detailRows || []).map((row, index) => {
           const quantityValue = parseFormattedNumber(row.quantity || 0);
           const unitCostValue = parseFormattedNumber(row.unitCost || 0);
-          const itemAmountValue = parseFormattedNumber(row.itemAmount ?? row.amount ?? 0);
+          const parsedItemAmount = parseFormattedNumber(row.itemAmount ?? row.amount ?? 0);
+const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValue).toFixed(2));
 
           return {
             lnNo: String(index + 1),
@@ -2582,8 +2614,24 @@ useEffect(() => {
           onDetails={() => setTopTab("details")}
           onHistory={() => setTopTab("history")}
           detailsRoute="/page/MSIS"
-          isSaveDisabled={isSaveDisabled}
+          showActions={topTab === "details"}
+          showBIRForm={false}
+          showCopyForm={false}
+          isSaveDisabled={
+            isSaveDisabled ||
+            isFormDisabled ||
+            ((detailRows?.length || 0) + (detailRowsGL?.length || 0) === 0)
+          }
           isResetDisabled={isResetDisabled}
+          isAttachDisabled={!documentID}
+          isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
+          isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
+          isCancelDisabled={
+            !documentID ||
+            displayStatus === "CANCELLED" ||
+            displayStatus === "FINALIZED" ||
+            displayStatus === "CLOSED"
+          }
           isViewDocument={isViewDocument}
         />
       </div>

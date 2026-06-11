@@ -28,7 +28,7 @@ import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import RCLookupModal from "../../../Lookup/SearchRCMast.jsx";
-import FGLookupModal from "../../../Lookup/SearchFGMast.jsx";
+import ItemMastLookupModal from "../../../Lookup/SearchItemMast.jsx";
 import PayeeMastLookupModal from "../../../Lookup/SearchVendMast";
 import PaytermLookupModal from "../../../Lookup/SearchPayTermRef.jsx";
 import GlobalCombinedLookup from "../../../Lookup/SearchGlobalCombinedLookup.jsx";
@@ -103,6 +103,7 @@ import Header from "@/NAYSA Cloud/Components/Header";
 
 const FGRR = (item) => {
   const detailRowsRef = useRef([]);
+  const detailRowsGLRef = useRef([]);
   const loadedFromUrlRef = useRef(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -110,6 +111,7 @@ const FGRR = (item) => {
   const { resetFlag } = useReset();
   const { user, companyInfo } = useAuth();
 const [isViewDocument, setIsViewDocument] = useState(false);
+  const [fgInvGLModeSetting, setFgInvGLModeSetting] = useState("");
 
   useEffect(() => {
     const p = new URLSearchParams(location.search);
@@ -120,8 +122,28 @@ const [isViewDocument, setIsViewDocument] = useState(false);
 
   const isViewDocumentUrl = isViewDocument;
 
-  const isGeneralLedgerEnabled =
-    String(companyInfo?.msinvGLMode || "").toUpperCase() !== "D";
+  const resolveGLMode = (...values) =>
+    String(
+      values.find(
+        (value) => value !== undefined && value !== null && String(value).trim() !== "",
+      ) ?? "D",
+    )
+      .trim()
+      .toUpperCase();
+
+  const fgInvGLMode = resolveGLMode(
+    companyInfo?.fginvGLMode,
+    companyInfo?.fgInvGLMode,
+    companyInfo?.FGINV_GLMODE,
+    companyInfo?.fginv_glmode,
+    companyInfo?.FGINVGLMODE,
+    fgInvGLModeSetting,
+  );
+
+  // FGINV_GLMODE rules from hs_option:
+  // E = show/enable General Ledger / Entries / DT2.
+  // D = hide/disable General Ledger / Entries / DT2.
+  const isGeneralLedgerEnabled = fgInvGLMode === "E";
 
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
 
@@ -419,6 +441,7 @@ groupId,
     GLactiveTab,
 
     detailRows,
+    detailRowsGL,
 
     // Modals
     currencyModalOpen,
@@ -548,9 +571,104 @@ groupId,
 
   const fgrrDetailEnterNextRowZeroClearFields = ["rrQty", "freeQty", "unitCost"];
 
+  const fgrrGlColumnDefs = useMemo(
+    () => [
+      { key: "ln", label: "LN", width: 56 },
+      { key: "acctCode", label: "Account Code", width: 120 },
+      { key: "rcCode", label: "RC Code", width: 120 },
+      { key: "sltypeCode", label: "SL Type", width: 120 },
+      { key: "slCode", label: "SL Code", width: 120 },
+      { key: "particular", label: "Particulars", width: 320 },
+      { key: "vatCode", label: "VAT Code", width: 120 },
+      { key: "vatName", label: "VAT Name", width: 220 },
+      { key: "atcCode", label: "ATC Code", width: 120 },
+      { key: "atcName", label: "ATC Name", width: 220 },
+      { key: "debit", label: `Debit (${glCurrDefault})`, width: 140 },
+      { key: "credit", label: `Credit (${glCurrDefault})`, width: 140 },
+      ...(withCurr2
+        ? [
+            {
+              key: "debitFx1",
+              label: `Debit (${withCurr3 ? glCurrGlobal2 : currCode})`,
+              width: 140,
+            },
+            {
+              key: "creditFx1",
+              label: `Credit (${withCurr3 ? glCurrGlobal2 : currCode})`,
+              width: 140,
+            },
+          ]
+        : []),
+      ...(withCurr3
+        ? [
+            { key: "debitFx2", label: `Debit (${glCurrGlobal3})`, width: 140 },
+            { key: "creditFx2", label: `Credit (${glCurrGlobal3})`, width: 140 },
+          ]
+        : []),
+      { key: "slRefNo", label: "SL Ref. No.", width: 120 },
+      { key: "slRefDate", label: "SL Ref. Date", width: 130 },
+      { key: "remarks", label: "Remarks", width: 160 },
+    ],
+    [currCode, glCurrDefault, glCurrGlobal2, glCurrGlobal3, withCurr2, withCurr3],
+  );
+
+  const {
+    getColumnStyle: getFGRRGlColumnStyle,
+    getFrozenColumnStyle: getFGRRGlFrozenStyle,
+    getOrderedColumns: getOrderedFGRRGlColumns,
+    getSortedRows: getSortedFGRRGlRows,
+    clearZeroValueOnFocus: clearFGRRGlZeroOnFocus,
+    focusNextRowInput: focusNextFGRRGlRowInput,
+    renderHeaderContextMenu: renderFGRRGlHeaderContextMenu,
+    renderResizableHeader: renderFGRRGlHeader,
+  } = useResizableTableColumns(fgrrGlColumnDefs);
+
+  const orderedFGRRGlColumns = useMemo(
+    () => getOrderedFGRRGlColumns(fgrrGlColumnDefs),
+    [getOrderedFGRRGlColumns, fgrrGlColumnDefs],
+  );
+
+  const getFGRRGlFallbackWidth = useCallback(
+    (key) => fgrrGlColumnDefs.find((column) => column.key === key)?.width || 120,
+    [fgrrGlColumnDefs],
+  );
+
+  const getFGRRGlCellStyle = useCallback(
+    (key, fallbackWidth) => ({
+      ...getFGRRGlColumnStyle(key, fallbackWidth),
+      ...getFGRRGlFrozenStyle(key, orderedFGRRGlColumns, fallbackWidth, {
+        isHeader: false,
+      }),
+    }),
+    [getFGRRGlColumnStyle, getFGRRGlFrozenStyle, orderedFGRRGlColumns],
+  );
+
+  const sortedFGRRGlRows = useMemo(
+    () =>
+      getSortedFGRRGlRows(
+        (detailRowsGL || []).map((row, originalIndex) => ({ row, originalIndex })),
+        (entry, sortKey) =>
+          sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? "",
+      ),
+    [getSortedFGRRGlRows, detailRowsGL],
+  );
+
+  const fgrrGlEnterNextRowZeroClearFields = [
+    "debit",
+    "credit",
+    "debitFx1",
+    "creditFx1",
+    "debitFx2",
+    "creditFx2",
+  ];
+
   useEffect(() => {
     detailRowsRef.current = detailRows || [];
   }, [detailRows]);
+
+  useEffect(() => {
+    detailRowsGLRef.current = detailRowsGL || [];
+  }, [detailRowsGL]);
 
 
   const updateTotalsDisplay = (input) => {
@@ -1785,6 +1903,16 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
         const defaultCurr =
           hs.glCurrDefault ?? hs.GLCURR_DEFAULT ?? state.currCode ?? "PHP";
 
+        const loadedFGInvGLMode = resolveGLMode(
+          hs.fginvGLMode,
+          hs.fgInvGLMode,
+          hs.FGINV_GLMODE,
+          hs.fginv_glmode,
+          hs.FGINVGLMODE,
+        );
+
+        setFgInvGLModeSetting(loadedFGInvGLMode);
+
         updateState({
           glCurrMode: hs.glCurrMode ?? hs.GLCURR_MODE ?? state.glCurrMode,
           glCurrDefault: defaultCurr,
@@ -2327,8 +2455,8 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
     }
   };
 
-  const handleCloseFGLookup = async (selectedItem) => {
-    if (!selectedItem) {
+  const handleCloseFGLookup = async (selectedPayload) => {
+    if (!selectedPayload) {
       updateState({ msLookupModalOpen: false, selectedRowIndex: null });
       return;
     }
@@ -2336,6 +2464,17 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
     const today = header.rr_date || new Date().toISOString().split("T")[0];
     const firstValue = (...values) =>
       values.find((value) => value !== undefined && value !== null && value !== "");
+    const selectedItems = Array.isArray(selectedPayload?.records)
+      ? selectedPayload.records
+      : Array.isArray(selectedPayload)
+        ? selectedPayload
+        : [selectedPayload];
+
+    if (!selectedItems.length) {
+      updateState({ msLookupModalOpen: false, selectedRowIndex: null });
+      return;
+    }
+
     const getSelectedUomCode = (selectedItem = {}) =>
       firstValue(
         selectedItem.uomCode,
@@ -2375,104 +2514,119 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
       locName: baseRow.locName || headerLocName,
       LocName: baseRow.LocName || headerLocName,
     });
-    const selectedUnitCost = firstValue(
-      selectedItem.unitCost,
-      selectedItem.UnitCost,
-      selectedItem.UNIT_COST,
-      selectedItem.unit_cost,
-      selectedItem.unitcost,
-      selectedItem.Unitcost,
-      selectedItem.UNITCOST,
-      selectedItem.uCost,
-      selectedItem.UCost,
-      selectedItem.UCOST,
-      selectedItem.ucost,
-      selectedItem.unitPrice,
-      selectedItem.UnitPrice,
-      selectedItem.UNIT_PRICE,
-      selectedItem.unit_price,
-      selectedItem.price,
-      selectedItem.Price,
-      selectedItem.PRICE,
-      selectedItem.stdCost,
-      selectedItem.StdCost,
-      selectedItem.STD_COST,
-      selectedItem.aveCost,
-      selectedItem.AveCost,
-      selectedItem.AVE_COST,
-      selectedItem.avgCost,
-      selectedItem.AvgCost,
-      selectedItem.AVG_COST,
-      selectedItem.lastCost,
-      selectedItem.LastCost,
-      selectedItem.LAST_COST,
-      selectedItem.itemCost,
-      selectedItem.ItemCost,
-      selectedItem.ITEM_COST,
-      selectedItem.cost,
-      selectedItem.Cost,
-      selectedItem.COST,
-      0,
-    );
-    const selectedVatCode = firstValue(
-      selectedItem.vatCode,
-      selectedItem.VatCode,
-      selectedItem.VAT_CODE,
-      selectedItem.vat_code,
-      vendVatCode,
-      "",
-    );
-    const selectedVatName = firstValue(
-      selectedItem.vatName,
-      selectedItem.VatName,
-      selectedItem.VAT_NAME,
-      selectedItem.vat_name,
-      vendVatName,
-      "",
-    );
-    const selectedVatLookupRate = firstValue(
-      selectedItem.vatRate,
-      selectedItem.VatRate,
-      selectedItem.VAT_RATE,
-      selectedItem.vat_rate,
-      selectedItem.rate,
-      selectedItem.vatPerc,
-      selectedItem.vat_percent,
-      vendVatRate,
-      "",
-    );
-    const selectedVatFetchedRate = selectedVatCode
-      ? await fetchVatRate(selectedVatCode)
-      : "";
-    const selectedVatRate =
-      selectedVatLookupRate !== "" &&
-      selectedVatLookupRate !== null &&
-      selectedVatLookupRate !== undefined &&
-      parseFormattedNumber(selectedVatLookupRate) !== 0
-        ? selectedVatLookupRate
-        : selectedVatFetchedRate;
 
-    if (selectedRowIndex !== null && selectedRowIndex !== undefined) {
-      const updatedRows = [...detailRows];
-      const currentRow = updatedRows[selectedRowIndex] || {};
+    const buildFGRRRow = async (selectedItem, baseRow = {}) => {
+      const selectedUnitCost = firstValue(
+        selectedItem.unitCost,
+        selectedItem.UnitCost,
+        selectedItem.UNIT_COST,
+        selectedItem.unit_cost,
+        selectedItem.unitcost,
+        selectedItem.Unitcost,
+        selectedItem.UNITCOST,
+        selectedItem.uCost,
+        selectedItem.UCost,
+        selectedItem.UCOST,
+        selectedItem.ucost,
+        selectedItem.unitPrice,
+        selectedItem.UnitPrice,
+        selectedItem.UNIT_PRICE,
+        selectedItem.unit_price,
+        selectedItem.price,
+        selectedItem.Price,
+        selectedItem.PRICE,
+        selectedItem.stdCost,
+        selectedItem.StdCost,
+        selectedItem.STD_COST,
+        selectedItem.aveCost,
+        selectedItem.AveCost,
+        selectedItem.AVE_COST,
+        selectedItem.avgCost,
+        selectedItem.AvgCost,
+        selectedItem.AVG_COST,
+        selectedItem.lastCost,
+        selectedItem.LastCost,
+        selectedItem.LAST_COST,
+        selectedItem.itemCost,
+        selectedItem.ItemCost,
+        selectedItem.ITEM_COST,
+        selectedItem.cost,
+        selectedItem.Cost,
+        selectedItem.COST,
+        0,
+      );
+      const selectedVatCode = firstValue(
+        selectedItem.vatCode,
+        selectedItem.VatCode,
+        selectedItem.VAT_CODE,
+        selectedItem.vat_code,
+        vendVatCode,
+        "",
+      );
+      const selectedVatName = firstValue(
+        selectedItem.vatName,
+        selectedItem.VatName,
+        selectedItem.VAT_NAME,
+        selectedItem.vat_name,
+        vendVatName,
+        "",
+      );
+      const selectedVatLookupRate = firstValue(
+        selectedItem.vatRate,
+        selectedItem.VatRate,
+        selectedItem.VAT_RATE,
+        selectedItem.vat_rate,
+        selectedItem.rate,
+        selectedItem.vatPerc,
+        selectedItem.vat_percent,
+        vendVatRate,
+        "",
+      );
+      const selectedVatFetchedRate = selectedVatCode
+        ? await fetchVatRate(selectedVatCode)
+        : "";
+      const selectedVatRate =
+        selectedVatLookupRate !== "" &&
+        selectedVatLookupRate !== null &&
+        selectedVatLookupRate !== undefined &&
+        parseFormattedNumber(selectedVatLookupRate) !== 0
+          ? selectedVatLookupRate
+          : selectedVatFetchedRate;
 
-      updatedRows[selectedRowIndex] = recalcFGRRRow(getHeaderWarehouseLocationFields({
-        ...currentRow,
-        groupId: selectedItem.categCode || currentRow.groupId || "",
-        categCode: selectedItem.categCode || currentRow.categCode || "",
+      return recalcFGRRRow(getHeaderWarehouseLocationFields({
+        ...baseRow,
+        invType: "FG",
+        unitCost: formatNumber(parseFormattedNumber(selectedUnitCost), decUcost),
+        vatCode: selectedVatCode || baseRow.vatCode || "",
+        vatName: selectedVatName || baseRow.vatName || "",
+        vatRate:
+          selectedVatRate !== "" && selectedVatRate !== null && selectedVatRate !== undefined
+            ? formatNumber(parseFormattedNumber(selectedVatRate), 2)
+            : baseRow.vatRate || "",
+        groupId: selectedItem.categCode || baseRow.groupId || "",
+        categCode: selectedItem.categCode || baseRow.categCode || "",
+        poStatus: baseRow.poStatus || status || "",
         itemCode: selectedItem.itemCode || "",
         itemName: selectedItem.itemName || "",
         uomCode: getSelectedUomCode(selectedItem),
         qtyOnHand: formatNumber(selectedItem.qtyHand ?? 0, 6),
-        dateNeeded: currentRow.dateNeeded || today,
-        unitCost: formatNumber(parseFormattedNumber(selectedUnitCost), decUcost),
-        vatCode: selectedVatCode || currentRow.vatCode || "",
-        vatName: selectedVatName || currentRow.vatName || "",
-        vatRate:
-          selectedVatRate !== "" && selectedVatRate !== null && selectedVatRate !== undefined
-            ? formatNumber(parseFormattedNumber(selectedVatRate), 2)
-            : currentRow.vatRate || "",
+        qtyAlloc: baseRow.qtyAlloc || "0.000000",
+        qtyNeeded: baseRow.qtyNeeded || "0.000000",
+        uomCode2: baseRow.uomCode2 || "",
+        uomQty2: baseRow.uomQty2 || "0.000000",
+        dateNeeded: baseRow.dateNeeded || today,
+        itemSpecs: baseRow.itemSpecs || "",
+        serviceCode: baseRow.serviceCode || "",
+        serviceName: baseRow.serviceName || "",
+        poQty: baseRow.poQty || "0.000000",
+        rrQty: baseRow.rrQty || "0.000000",
+        freeQty: baseRow.freeQty || "0.000000",
       }));
+    };
+
+    if (selectedItems.length > 1 && selectedRowIndex === null) {
+      const newRows = await Promise.all(selectedItems.map((item) => buildFGRRRow(item)));
+      const updatedRows = [...detailRows, ...newRows];
 
       updateState({
         detailRows: updatedRows,
@@ -2483,38 +2637,29 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
       return;
     }
 
-    const newRow = {
-      invType: "FG",
-      unitCost: formatNumber(parseFormattedNumber(selectedUnitCost), decUcost),
-      vatCode: selectedVatCode,
-      vatName: selectedVatName,
-      vatRate:
-        selectedVatRate !== "" && selectedVatRate !== null && selectedVatRate !== undefined
-          ? formatNumber(parseFormattedNumber(selectedVatRate), 2)
-          : "",
-      groupId: selectedItem.categCode || "",
-      poStatus: status || "",
-      itemCode: selectedItem.itemCode || "",
-      itemName: selectedItem.itemName || "",
-      uomCode: getSelectedUomCode(selectedItem),
-      qtyOnHand: formatNumber(selectedItem.qtyHand ?? 0, 6),
-      qtyAlloc: "0.000000",
-      qtyNeeded: "0.000000",
-      uomCode2: "",
-      uomQty2: "0.000000",
-      dateNeeded: today,
-      itemSpecs: "",
-      serviceCode: "",
-      serviceName: "",
-      poQty: "0.000000",
-      rrQty: "0.000000",
-    freeQty: "0.000000",
-    };
+    const selectedItem = selectedItems[0];
 
-    const updatedRows = [...detailRows, recalcFGRRRow(getHeaderWarehouseLocationFields(newRow))];
+    if (selectedRowIndex !== null && selectedRowIndex !== undefined) {
+      const updatedRows = [...detailRows];
+      const currentRow = updatedRows[selectedRowIndex] || {};
+
+      updatedRows[selectedRowIndex] = await buildFGRRRow(selectedItem, currentRow);
+
+      updateState({
+        detailRows: updatedRows,
+        msLookupModalOpen: false,
+        selectedRowIndex: null,
+      });
+      updateTotalsDisplay(updatedRows);
+      return;
+    }
+
+    const newRow = await buildFGRRRow(selectedItem);
+    const updatedRows = [...detailRows, newRow];
     updateState({
       detailRows: updatedRows,
       msLookupModalOpen: false,
+      selectedRowIndex: null,
     });
 
     const totalQty = updatedRows.reduce(
@@ -4541,6 +4686,227 @@ const handleClosePayeeLookup = async (row) => {
     );
   };
 
+  const renderFGRRGlCell = (columnKey, row, index) => {
+    const columnWidth = getFGRRGlFallbackWidth(columnKey);
+    const style = getFGRRGlCellStyle(columnKey, columnWidth);
+    const rowLocked = isFormDisabled || row.operation === "S";
+
+    const focusNextGlCell = (field) => {
+      if (typeof focusNextFGRRGlRowInput === "function") {
+        focusNextFGRRGlRowInput(index, field, {
+          rows: detailRowsGLRef.current || detailRowsGL,
+          zeroClearFields: fgrrGlEnterNextRowZeroClearFields,
+          parseValue: parseFormattedNumber,
+          onClearNextValue: (nextIndex, nextField, value) =>
+            handleGLFieldChange(nextIndex, nextField, value),
+        });
+        return;
+      }
+
+      const rows = detailRowsGLRef.current || detailRowsGL || [];
+      const nextIndex = Math.min(rows.length - 1, index + 1);
+      const nextEl = document.getElementById(`${field}-${nextIndex}`);
+      if (nextEl) {
+        nextEl.focus();
+        if (typeof nextEl.select === "function") nextEl.select();
+      }
+    };
+
+    const modalHandlers = {
+      acctCode: () => openGLModal(index, "showCOALookup"),
+      rcCode: () => openGLModal(index, "showRCLookupGL"),
+      slCode: () => openGLModal(index, "showSLLookup"),
+      vatCode: () => openGLModal(index, "showVATLookupGL"),
+      atcCode: () => openGLModal(index, "showATCLookupGL"),
+    };
+
+    const textInput = (field, options = {}) => (
+      <input
+        type="text"
+        id={`${field}-${index}`}
+        className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()}
+        value={options.value ?? row[field] ?? ""}
+        readOnly={options.readOnly ?? rowLocked}
+        disabled={options.disabled ?? false}
+        onChange={(e) => handleGLFieldChange(index, field, e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" || options.readOnly || rowLocked) return;
+          e.preventDefault();
+          focusNextGlCell(field);
+        }}
+      />
+    );
+
+    const lookupCell = (field, options = {}) => (
+      <td key={columnKey} className="global-tran-td-ui" style={style}>
+        <div className="relative w-full">
+          <input
+            type="text"
+            id={`${field}-${index}`}
+            className={`w-full pr-6 global-tran-td-inputclass-ui cursor-pointer ${options.className || ""}`.trim()}
+            value={options.value ?? row[field] ?? ""}
+            readOnly={options.readOnly ?? true}
+            disabled={options.disabled ?? rowLocked}
+            onClick={() => !rowLocked && modalHandlers[field]?.()}
+            onChange={(e) => handleGLFieldChange(index, field, e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter" || rowLocked) return;
+              e.preventDefault();
+              focusNextGlCell(field);
+            }}
+          />
+          {!rowLocked && (options.alwaysShowIcon || String(row[field] || "").trim()) && (
+            <FontAwesomeIcon
+              icon={faMagnifyingGlass}
+              className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+              onClick={modalHandlers[field]}
+            />
+          )}
+        </div>
+      </td>
+    );
+
+    const amountInput = (field) => (
+      <input
+        type="text"
+        id={`${field}-${index}`}
+        className="w-full global-tran-td-inputclass-ui text-right"
+        value={row[field] || ""}
+        readOnly={rowLocked}
+        onChange={(e) => {
+          const sanitizedValue = e.target.value.replace(/[^0-9.]/g, "");
+          if (/^\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") {
+            handleGLFieldChange(index, field, sanitizedValue);
+          }
+        }}
+        onFocus={(e) => {
+          if (rowLocked) return;
+
+          if (typeof clearFGRRGlZeroOnFocus === "function") {
+            clearFGRRGlZeroOnFocus(e, {
+              isEditable: true,
+              onClear: (value) => handleGLFieldChange(index, field, value),
+            });
+            return;
+          }
+
+          if (parseFormattedNumber(e.target.value || 0) === 0) {
+            handleGLFieldChange(index, field, "");
+          }
+        }}
+        onBlur={(e) => {
+          if (rowLocked) return;
+          handleGLAmountChange(index, field, e.target.value);
+        }}
+        onKeyDown={async (e) => {
+          if (e.key !== "Enter" || rowLocked) return;
+          e.preventDefault();
+          await handleGLAmountChange(index, field, e.target.value);
+          focusNextGlCell(field);
+        }}
+      />
+    );
+
+    const glColumnRenderers = {
+      ln: () => (
+        <td key={columnKey} className="global-tran-td-ui text-center" style={style}>
+          {index + 1}
+        </td>
+      ),
+      acctCode: () => lookupCell("acctCode", { alwaysShowIcon: true, readOnly: false }),
+      rcCode: () => lookupCell("rcCode", { alwaysShowIcon: true }),
+      sltypeCode: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {textInput("sltypeCode")}
+        </td>
+      ),
+      slCode: () => lookupCell("slCode", { alwaysShowIcon: true }),
+      particular: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {textInput("particular")}
+        </td>
+      ),
+      vatCode: () => lookupCell("vatCode", { alwaysShowIcon: true }),
+      vatName: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {textInput("vatName", { readOnly: true })}
+        </td>
+      ),
+      atcCode: () => lookupCell("atcCode", { alwaysShowIcon: true }),
+      atcName: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {textInput("atcName")}
+        </td>
+      ),
+      debit: () => (
+        <td key={columnKey} className="global-tran-td-ui text-right" style={style}>
+          {amountInput("debit")}
+        </td>
+      ),
+      credit: () => (
+        <td key={columnKey} className="global-tran-td-ui text-right" style={style}>
+          {amountInput("credit")}
+        </td>
+      ),
+      debitFx1: () => (
+        <td key={columnKey} className="global-tran-td-ui text-right" style={style}>
+          {amountInput("debitFx1")}
+        </td>
+      ),
+      creditFx1: () => (
+        <td key={columnKey} className="global-tran-td-ui text-right" style={style}>
+          {amountInput("creditFx1")}
+        </td>
+      ),
+      debitFx2: () => (
+        <td key={columnKey} className="global-tran-td-ui text-right" style={style}>
+          {amountInput("debitFx2")}
+        </td>
+      ),
+      creditFx2: () => (
+        <td key={columnKey} className="global-tran-td-ui text-right" style={style}>
+          {amountInput("creditFx2")}
+        </td>
+      ),
+      slRefNo: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {textInput("slRefNo")}
+        </td>
+      ),
+      slRefDate: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          <input
+            type="date"
+            id={`slRefDate-${index}`}
+            className="w-full global-tran-td-inputclass-ui text-center"
+            value={row.slRefDate || ""}
+            readOnly={rowLocked}
+            disabled={rowLocked}
+            onChange={(e) => handleGLFieldChange(index, "slRefDate", e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter" || rowLocked) return;
+              e.preventDefault();
+              focusNextGlCell("slRefDate");
+            }}
+          />
+        </td>
+      ),
+      remarks: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {textInput("remarks")}
+        </td>
+      ),
+    };
+
+    return (
+      glColumnRenderers[columnKey]?.() || (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {String(row[columnKey] ?? "")}
+        </td>
+      )
+    );
+  };
+
   // ==========================
   // RENDER
   // ==========================
@@ -5606,9 +5972,134 @@ const handleClosePayeeLookup = async (row) => {
                   {totals.rrQty}
                 </label>
               </div>
-            </div>
+          </div>
           </div>
         </div>
+
+        {isGeneralLedgerEnabled && (
+          <div className="global-tran-tab-div-ui">
+            <div className="global-tran-tab-nav-ui">
+              <div className="flex flex-row sm:flex-row">
+                <button
+                  className={`global-tran-tab-padding-ui ${
+                    GLactiveTab === "invoice"
+                      ? "global-tran-tab-text_active-ui"
+                      : "global-tran-tab-text_inactive-ui"
+                  }`}
+                  onClick={() => updateState({ GLactiveTab: "invoice" })}
+                >
+                  General Ledger
+                </button>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => handleActivityOption("GenerateGL")}
+                  className="global-tran-button-generateGL"
+                  disabled={isLoading || isFormDisabled}
+                  style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
+                >
+                  {isLoading ? "Generating..." : "Generate GL Entries"}
+                </button>
+              </div>
+            </div>
+
+            <div className="global-tran-table-main-div-ui">
+              <div className="global-tran-table-main-sub-div-ui">
+                <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
+                  <thead className="global-tran-thead-div-ui">
+                    <tr>
+                      {orderedFGRRGlColumns.map((column) =>
+                        renderFGRRGlHeader(column.label, column.key, column.width, {
+                          orderedColumns: orderedFGRRGlColumns,
+                        }),
+                      )}
+                      {!isFormDisabled && (
+                        <th
+                          className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900"
+                          style={transactionActionsHeaderStyle}
+                        >
+                          Actions
+                        </th>
+                      )}
+                    </tr>
+                  </thead>
+
+                  <tbody className="relative">
+                    {sortedFGRRGlRows.map(({ row, originalIndex }) => (
+                      <tr
+                        key={`${row.acctCode || row.id || "gl"}-${originalIndex}`}
+                        className="global-tran-tr-ui"
+                      >
+                        {orderedFGRRGlColumns.map((column) =>
+                          renderFGRRGlCell(column.key, row, originalIndex),
+                        )}
+                        {!isFormDisabled && (
+                          <td
+                            className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black"
+                            style={transactionActionsCellStyle}
+                          >
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                className="global-tran-td-button-add-ui"
+                                onClick={() => handleAddGLRow(originalIndex)}
+                              >
+                                <FontAwesomeIcon icon={faPlus} />
+                              </button>
+                              <button
+                                type="button"
+                                className="global-tran-td-button-delete-ui"
+                                onClick={() => handleDeleteGLRow(originalIndex)}
+                              >
+                                <FontAwesomeIcon icon={faTrashAlt} />
+                              </button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {renderFGRRGlHeaderContextMenu?.()}
+              </div>
+            </div>
+
+            <div className="global-tran-tab-footer-main-div-ui">
+              <div className="global-tran-tab-footer-button-div-ui">
+                <button
+                  type="button"
+                  onClick={() => handleAddGLRow()}
+                  className="global-tran-tab-footer-button-add-ui"
+                  style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
+                >
+                  <FontAwesomeIcon icon={faPlus} className="mr-2" />
+                  Add
+                </button>
+              </div>
+
+              <div className="global-tran-tab-footer-total-main-div-ui">
+                <div className="global-tran-tab-footer-total-div-ui">
+                  <label className="global-tran-tab-footer-total-label-ui">
+                    Total Debit ({glCurrDefault}):
+                  </label>
+                  <label className="global-tran-tab-footer-total-value-ui">
+                    {formatNumber(totalDebitGL)}
+                  </label>
+                </div>
+                <div className="global-tran-tab-footer-total-div-ui">
+                  <label className="global-tran-tab-footer-total-label-ui">
+                    Total Credit ({glCurrDefault}):
+                  </label>
+                  <label className="global-tran-tab-footer-total-value-ui">
+                    {formatNumber(totalCreditGL)}
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
 
@@ -6110,10 +6601,17 @@ const handleClosePayeeLookup = async (row) => {
       )}
 
       {msLookupModalOpen && (
-        <FGLookupModal
+        <ItemMastLookupModal
           isOpen={msLookupModalOpen}
+          endpoint="getInvLookupFG"
           onClose={handleCloseFGLookup}
-          customParam={null} // or pass something if you need it
+          onGetSelectedItems={handleCloseFGLookup}
+          onCancel={() =>
+            updateState({ msLookupModalOpen: false, selectedRowIndex: null })
+          }
+          enableMultiSelect
+          customParam="ActiveAll"
+          docType="PRFG"
         />
       )}
 
