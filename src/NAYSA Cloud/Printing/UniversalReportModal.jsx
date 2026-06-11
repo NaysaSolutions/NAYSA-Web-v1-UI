@@ -33,6 +33,8 @@ import {
   useHandleDownloadExcelFGINVReport,
   useHandlePrintMSINVReport,
   useHandleDownloadExcelMSINVReport,
+  useHandlePrintRMINVReport,
+  useHandleDownloadExcelRMINVReport,
   useHandleDownloadExcelFAReport,
 } from "@/NAYSA Cloud/Global/report";
 import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
@@ -51,6 +53,7 @@ import RCLookupModal from "@/NAYSA Cloud/Lookup/SearchRCMast";
 import CutoffLookupModal from "@/NAYSA Cloud/Lookup/SearchCutoffRef";
 import FGLookupModal from "@/NAYSA Cloud/Lookup/SearchFGMast";
 import MSLookupModal from "@/NAYSA Cloud/Lookup/SearchMSMast";
+import ItemMastLookupModal from "@/NAYSA Cloud/Lookup/SearchItemMast.jsx";
 import WarehouseLookupModal from "@/NAYSA Cloud/Lookup/SearchWareMast";
 import LocationLookupModal from "@/NAYSA Cloud/Lookup/SearchLocation";
 import SearchFACateg from "@/NAYSA Cloud/Lookup/SearchFACateg.jsx";
@@ -59,6 +62,15 @@ import SearchFALoc from "@/NAYSA Cloud/Lookup/SearchFALoc.jsx";
 import GlobalLookupModalv1 from "@/NAYSA Cloud/Lookup/SearchGlobalLookupv1.jsx";
 
 // ─── MODULE CONFIGURATION ────────────────────────────────────────────────────
+
+const RMLookupModal = (props) => (
+  <ItemMastLookupModal
+    {...props}
+    endpoint="getInvLookupRM"
+    docType="PRRM"
+    enableMultiSelect={false}
+  />
+);
 
 const MODULE_DEFS = {
   AP:  { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelPURReport,    hasExtra: false, hasCutoff: false, hasReportType: false },
@@ -72,6 +84,7 @@ const MODULE_DEFS = {
   BIR: { label: "",         lookup: null,                    print: useHandlePrintGLReport,    excel: useHandleDownloadExcelBIRReport,   hasExtra: false, hasCutoff: true,  hasReportType: true },
   FG:  { label: "Item",     lookup: FGLookupModal,           print: useHandlePrintFGINVReport,  excel: useHandleDownloadExcelFGINVReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasInventory: true, hasSingleMain: true },
   MS:  { label: "Item",     lookup: MSLookupModal,           print: useHandlePrintMSINVReport,  excel: useHandleDownloadExcelMSINVReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasInventory: true, hasSingleMain: true },
+  RM:  { label: "Item",     lookup: RMLookupModal,           print: useHandlePrintRMINVReport,  excel: useHandleDownloadExcelRMINVReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasInventory: true, hasSingleMain: true },
   FA:  { label: "Asset",    lookup: null,                    print: useHandlePrintGLReport,     excel: useHandleDownloadExcelFAReport,    hasExtra: false, hasCutoff: false, hasReportType: false, hasFA: true, hasSingleMain: true, hasSingleRc: true, rcLabel: "Department/RC" },
 };
 

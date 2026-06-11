@@ -7,10 +7,10 @@ import { useSwalValidationAlert } from '@/NAYSA Cloud/Global/behavior';
 import { useHandlePostTran } from '@/NAYSA Cloud/Global/procedure';
 import { LoadingSpinner } from '@/NAYSA Cloud/Global/utilities.jsx';
 
-const POSTING_ENDPOINT = 'postingMSIS';
-const DOC_TYPE = 'MSIS';
+const POSTING_ENDPOINT = 'postingRMIS';
+const DOC_TYPE = 'RMIS';
 
-const PostMSIS = ({ isOpen, onClose, userCode }) => {
+const PostRMIS = ({ isOpen, onClose, userCode }) => {
   const [data, setData] = useState([]);
   const [colConfigData, setcolConfigData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -36,7 +36,7 @@ const PostMSIS = ({ isOpen, onClose, userCode }) => {
       const parsed = typeof value === 'string' ? JSON.parse(value) : value;
       return parsed ?? fallback;
     } catch (error) {
-      console.error('MSIS posting JSON parse error:', error, value);
+      console.error('RMIS posting JSON parse error:', error, value);
       return fallback;
     }
   };
@@ -80,19 +80,9 @@ const PostMSIS = ({ isOpen, onClose, userCode }) => {
   };
 
   const toAmount = (value) => {
-  if (value === null || value === undefined || value === '') return 0;
-
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : 0;
-  }
-
-  const cleaned = String(value)
-    .replace(/,/g, '')
-    .trim();
-
-  const num = Number(cleaned);
-  return Number.isFinite(num) ? num : 0;
-};
+    const num = Number(value ?? 0);
+    return Number.isNaN(num) ? 0 : num;
+  };
 
   const toBool = (value) => {
   if (value === true) return true;
@@ -180,8 +170,8 @@ const normalizeColumnConfig = (columns) =>
 
   const getFallbackColConfig = () => [
     makeFallbackCol('Branch', 'Branch', 90),
-    makeFallbackCol('MSIS No', 'MSIS No', 120),
-    makeFallbackCol('MSIS Date', 'MSIS Date', 120, 'date'),
+    makeFallbackCol('RMIS No', 'RMIS No', 120),
+    makeFallbackCol('RMIS Date', 'RMIS Date', 120, 'date'),
     makeFallbackCol('Warehouse', 'Warehouse', 130),
     makeFallbackCol('Warehouse Name', 'Warehouse Name', 180),
     makeFallbackCol('Location', 'Location', 120),
@@ -205,31 +195,31 @@ const normalizeColumnConfig = (columns) =>
         row.group_id,
         row.GroupId,
         row.GROUP_ID,
-        row.msisId,
-        row.msis_id,
-        row.MSIS_ID,
-        row.msisHdId,
-        row.msis_hd_id,
+        row.rmisId,
+        row.rmis_id,
+        row.RMIS_ID,
+        row.rmisHdId,
+        row.rmis_hd_id,
         row.documentID,
         row.documentId,
         row.docId,
         row.tranId
       );
 
-      const msisNo = getValue(
-        row['MSIS No'],
-        row.msisNo,
-        row.msis_no,
-        row.MSIS_NO,
+      const rmisNo = getValue(
+        row['RMIS No'],
+        row.rmisNo,
+        row.rmis_no,
+        row.RMIS_NO,
         row.docNo,
         row.documentNo
       );
 
-      const msisDate = getValue(
-        row['MSIS Date'],
-        row.msisDate,
-        row.msis_date,
-        row.MSIS_DATE,
+      const rmisDate = getValue(
+        row['RMIS Date'],
+        row.rmisDate,
+        row.rmis_date,
+        row.RMIS_DATE,
         row.docDate
       );
 
@@ -307,8 +297,8 @@ const normalizeColumnConfig = (columns) =>
       const docStatus = getValue(
         row['Doc Status'],
         row.docStatus,
-        row.msisStatus,
-        row.msis_status,
+        row.rmisStatus,
+        row.rmis_status,
         row.DOC_STATUS
       );
 
@@ -317,12 +307,12 @@ const normalizeColumnConfig = (columns) =>
 
         lnNo: row.lnNo || row.lineNo || index + 1,
         lineNo: row.lineNo || row.lnNo || index + 1,
-        _rowKey: `${groupId || msisNo || 'MSIS'}-${index}`,
+        _rowKey: `${groupId || rmisNo || 'RMIS'}-${index}`,
 
         groupId,
         group_id: groupId,
-        msisId: groupId,
-        msis_id: groupId,
+        rmisId: groupId,
+        rmis_id: groupId,
         documentID: groupId,
         documentId: groupId,
         docId: groupId,
@@ -332,16 +322,16 @@ const normalizeColumnConfig = (columns) =>
         branchCode,
         branch_code: branchCode,
 
-        'MSIS No': msisNo,
-        msisNo,
-        msis_no: msisNo,
-        docNo: msisNo,
-        documentNo: msisNo,
+        'RMIS No': rmisNo,
+        rmisNo,
+        rmis_no: rmisNo,
+        docNo: rmisNo,
+        documentNo: rmisNo,
 
-        'MSIS Date': formatDateOnly(msisDate),
-        msisDate: formatDateOnly(msisDate),
-        msis_date: formatDateOnly(msisDate),
-        docDate: formatDateOnly(msisDate),
+        'RMIS Date': formatDateOnly(rmisDate),
+        rmisDate: formatDateOnly(rmisDate),
+        rmis_date: formatDateOnly(rmisDate),
+        docDate: formatDateOnly(rmisDate),
 
         Warehouse: whCode,
         whCode,
@@ -401,16 +391,16 @@ const normalizeColumnConfig = (columns) =>
         const rawData = unwrapPostingPayload(response);
         const normalizedData = normalizePostingRows(rawData);
 
-        console.log('MSIS Posting Full Response:', response);
-        console.log('MSIS Posting Raw Data:', rawData);
-        console.log('MSIS Posting Normalized Data:', normalizedData);
+        console.log('RMIS Posting Full Response:', response);
+        console.log('RMIS Posting Raw Data:', rawData);
+        console.log('RMIS Posting Normalized Data:', normalizedData);
 
         if (!normalizedData.length) {
           if (!alertFired.current) {
             useSwalValidationAlert({
               icon: 'info',
               title: 'No Records Found',
-              message: 'There are no MSIS records available for posting.',
+              message: 'There are no RMIS records available for posting.',
             });
 
             alertFired.current = true;
@@ -424,7 +414,7 @@ const normalizeColumnConfig = (columns) =>
         try {
           colConfig = normalizeColumnConfig(await useSelectedHSColConfig(POSTING_ENDPOINT));
         } catch (configError) {
-          console.warn('MSIS Posting column config error:', configError);
+          console.warn('RMIS Posting column config error:', configError);
         }
 
         if (!colConfig.length) {
@@ -437,7 +427,7 @@ const normalizeColumnConfig = (columns) =>
           setModalReady(true);
         }
       } catch (error) {
-        console.error('Error fetching MSIS posting records:', error);
+        console.error('Error fetching RMIS posting records:', error);
 
         useSwalValidationAlert({
           icon: 'error',
@@ -446,7 +436,7 @@ const normalizeColumnConfig = (columns) =>
             error?.response?.data?.details ||
             error?.response?.data?.message ||
             error?.message ||
-            'Unable to load MSIS records for posting.',
+            'Unable to load RMIS records for posting.',
         });
       } finally {
         if (isMounted) setLoading(false);
@@ -469,7 +459,7 @@ const normalizeColumnConfig = (columns) =>
       useSwalValidationAlert({
         icon: 'warning',
         title: 'No Selected Records',
-        message: 'Please select at least one MSIS record to post.',
+        message: 'Please select at least one RMIS record to post.',
       });
       return;
     }
@@ -478,22 +468,12 @@ const normalizeColumnConfig = (columns) =>
       useSwalValidationAlert({
         icon: 'warning',
         title: 'Missing Document ID',
-        message: 'One or more selected MSIS records do not have a valid document ID for posting.',
+        message: 'One or more selected RMIS records do not have a valid document ID for posting.',
       });
       return;
     }
 
     setUserPassword(userPw || null);
-
-    console.log('✅ MSIS Selected for Posting:', normalizedSelected);
-console.log('✅ MSIS Posting Payload Expected:', {
-  userCode,
-  dt1: normalizedSelected.map((row, index) => ({
-    lnNo: row.lnNo || index + 1,
-    groupId: row.groupId,
-  })),
-});
-
     await useHandlePostTran(
       normalizedSelected,
       userPw,
@@ -508,10 +488,10 @@ console.log('✅ MSIS Posting Payload Expected:', {
     if (!row) return { docNo: null, branchCode: null };
 
     const docNo = getValue(
-      row['MSIS No'],
-      row.msisNo,
-      row.msis_no,
-      row.MSIS_NO,
+      row['RMIS No'],
+      row.rmisNo,
+      row.rmis_no,
+      row.RMIS_NO,
       row.docNo,
       row.documentNo
     );
@@ -533,15 +513,15 @@ console.log('✅ MSIS Posting Payload Expected:', {
       useSwalValidationAlert({
         icon: 'warning',
         title: 'Missing keys',
-        message: 'Cannot determine MSIS No or Branch Code.',
+        message: 'Cannot determine RMIS No or Branch Code.',
       });
       return;
     }
 
-    const TRAN_VIEW_URL = '/page/MSIS';
+    const TRAN_VIEW_URL = '/page/RMIS';
     const url =
       `${window.location.origin}${TRAN_VIEW_URL}` +
-      `?msisNo=${encodeURIComponent(docNo)}` +
+      `?rmisNo=${encodeURIComponent(docNo)}` +
       `&branchCode=${encodeURIComponent(branchCode)}` +
       `&viewDocument=true`;
 
@@ -554,7 +534,7 @@ console.log('✅ MSIS Posting Payload Expected:', {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post MS Issuance Slip"
+          title="Post RM Issuance Slip"
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}
@@ -572,4 +552,4 @@ console.log('✅ MSIS Posting Payload Expected:', {
   );
 };
 
-export default PostMSIS;
+export default PostRMIS;
