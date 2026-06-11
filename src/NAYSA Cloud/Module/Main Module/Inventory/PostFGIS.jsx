@@ -7,10 +7,10 @@ import { useSwalValidationAlert } from '@/NAYSA Cloud/Global/behavior';
 import { useHandlePostTran } from '@/NAYSA Cloud/Global/procedure';
 import { LoadingSpinner } from '@/NAYSA Cloud/Global/utilities.jsx';
 
-const POSTING_ENDPOINT = 'postingMSIS';
-const DOC_TYPE = 'MSIS';
+const POSTING_ENDPOINT = 'postingFGIS';
+const DOC_TYPE = 'FGIS';
 
-const PostMSIS = ({ isOpen, onClose, userCode }) => {
+const PostFGIS = ({ isOpen, onClose, userCode }) => {
   const [data, setData] = useState([]);
   const [colConfigData, setcolConfigData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -36,7 +36,7 @@ const PostMSIS = ({ isOpen, onClose, userCode }) => {
       const parsed = typeof value === 'string' ? JSON.parse(value) : value;
       return parsed ?? fallback;
     } catch (error) {
-      console.error('MSIS posting JSON parse error:', error, value);
+      console.error('FGIS posting JSON parse error:', error, value);
       return fallback;
     }
   };
@@ -80,19 +80,9 @@ const PostMSIS = ({ isOpen, onClose, userCode }) => {
   };
 
   const toAmount = (value) => {
-  if (value === null || value === undefined || value === '') return 0;
-
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : 0;
-  }
-
-  const cleaned = String(value)
-    .replace(/,/g, '')
-    .trim();
-
-  const num = Number(cleaned);
-  return Number.isFinite(num) ? num : 0;
-};
+    const num = Number(value ?? 0);
+    return Number.isNaN(num) ? 0 : num;
+  };
 
   const toBool = (value) => {
   if (value === true) return true;
@@ -180,8 +170,8 @@ const normalizeColumnConfig = (columns) =>
 
   const getFallbackColConfig = () => [
     makeFallbackCol('Branch', 'Branch', 90),
-    makeFallbackCol('MSIS No', 'MSIS No', 120),
-    makeFallbackCol('MSIS Date', 'MSIS Date', 120, 'date'),
+    makeFallbackCol('FGIS No', 'FGIS No', 120),
+    makeFallbackCol('FGIS Date', 'FGIS Date', 120, 'date'),
     makeFallbackCol('Warehouse', 'Warehouse', 130),
     makeFallbackCol('Warehouse Name', 'Warehouse Name', 180),
     makeFallbackCol('Location', 'Location', 120),
@@ -205,31 +195,31 @@ const normalizeColumnConfig = (columns) =>
         row.group_id,
         row.GroupId,
         row.GROUP_ID,
-        row.msisId,
-        row.msis_id,
-        row.MSIS_ID,
-        row.msisHdId,
-        row.msis_hd_id,
+        row.fgisId,
+        row.fgis_id,
+        row.FGIS_ID,
+        row.fgisHdId,
+        row.fgis_hd_id,
         row.documentID,
         row.documentId,
         row.docId,
         row.tranId
       );
 
-      const msisNo = getValue(
-        row['MSIS No'],
-        row.msisNo,
-        row.msis_no,
-        row.MSIS_NO,
+      const fgisNo = getValue(
+        row['FGIS No'],
+        row.fgisNo,
+        row.fgis_no,
+        row.FGIS_NO,
         row.docNo,
         row.documentNo
       );
 
-      const msisDate = getValue(
-        row['MSIS Date'],
-        row.msisDate,
-        row.msis_date,
-        row.MSIS_DATE,
+      const fgisDate = getValue(
+        row['FGIS Date'],
+        row.fgisDate,
+        row.fgis_date,
+        row.FGIS_DATE,
         row.docDate
       );
 
@@ -307,8 +297,8 @@ const normalizeColumnConfig = (columns) =>
       const docStatus = getValue(
         row['Doc Status'],
         row.docStatus,
-        row.msisStatus,
-        row.msis_status,
+        row.fgisStatus,
+        row.fgis_status,
         row.DOC_STATUS
       );
 
@@ -317,12 +307,12 @@ const normalizeColumnConfig = (columns) =>
 
         lnNo: row.lnNo || row.lineNo || index + 1,
         lineNo: row.lineNo || row.lnNo || index + 1,
-        _rowKey: `${groupId || msisNo || 'MSIS'}-${index}`,
+        _rowKey: `${groupId || fgisNo || 'FGIS'}-${index}`,
 
         groupId,
         group_id: groupId,
-        msisId: groupId,
-        msis_id: groupId,
+        fgisId: groupId,
+        fgis_id: groupId,
         documentID: groupId,
         documentId: groupId,
         docId: groupId,
@@ -332,16 +322,16 @@ const normalizeColumnConfig = (columns) =>
         branchCode,
         branch_code: branchCode,
 
-        'MSIS No': msisNo,
-        msisNo,
-        msis_no: msisNo,
-        docNo: msisNo,
-        documentNo: msisNo,
+        'FGIS No': fgisNo,
+        fgisNo,
+        fgis_no: fgisNo,
+        docNo: fgisNo,
+        documentNo: fgisNo,
 
-        'MSIS Date': formatDateOnly(msisDate),
-        msisDate: formatDateOnly(msisDate),
-        msis_date: formatDateOnly(msisDate),
-        docDate: formatDateOnly(msisDate),
+        'FGIS Date': formatDateOnly(fgisDate),
+        fgisDate: formatDateOnly(fgisDate),
+        fgis_date: formatDateOnly(fgisDate),
+        docDate: formatDateOnly(fgisDate),
 
         Warehouse: whCode,
         whCode,
@@ -401,16 +391,16 @@ const normalizeColumnConfig = (columns) =>
         const rawData = unwrapPostingPayload(response);
         const normalizedData = normalizePostingRows(rawData);
 
-        console.log('MSIS Posting Full Response:', response);
-        console.log('MSIS Posting Raw Data:', rawData);
-        console.log('MSIS Posting Normalized Data:', normalizedData);
+        console.log('FGIS Posting Full Response:', response);
+        console.log('FGIS Posting Raw Data:', rawData);
+        console.log('FGIS Posting Normalized Data:', normalizedData);
 
         if (!normalizedData.length) {
           if (!alertFired.current) {
             useSwalValidationAlert({
               icon: 'info',
               title: 'No Records Found',
-              message: 'There are no MSIS records available for posting.',
+              message: 'There are no FGIS records available for posting.',
             });
 
             alertFired.current = true;
@@ -424,7 +414,7 @@ const normalizeColumnConfig = (columns) =>
         try {
           colConfig = normalizeColumnConfig(await useSelectedHSColConfig(POSTING_ENDPOINT));
         } catch (configError) {
-          console.warn('MSIS Posting column config error:', configError);
+          console.warn('FGIS Posting column config error:', configError);
         }
 
         if (!colConfig.length) {
@@ -437,7 +427,7 @@ const normalizeColumnConfig = (columns) =>
           setModalReady(true);
         }
       } catch (error) {
-        console.error('Error fetching MSIS posting records:', error);
+        console.error('Error fetching FGIS posting records:', error);
 
         useSwalValidationAlert({
           icon: 'error',
@@ -446,7 +436,7 @@ const normalizeColumnConfig = (columns) =>
             error?.response?.data?.details ||
             error?.response?.data?.message ||
             error?.message ||
-            'Unable to load MSIS records for posting.',
+            'Unable to load FGIS records for posting.',
         });
       } finally {
         if (isMounted) setLoading(false);
@@ -469,7 +459,7 @@ const normalizeColumnConfig = (columns) =>
       useSwalValidationAlert({
         icon: 'warning',
         title: 'No Selected Records',
-        message: 'Please select at least one MSIS record to post.',
+        message: 'Please select at least one FGIS record to post.',
       });
       return;
     }
@@ -478,22 +468,12 @@ const normalizeColumnConfig = (columns) =>
       useSwalValidationAlert({
         icon: 'warning',
         title: 'Missing Document ID',
-        message: 'One or more selected MSIS records do not have a valid document ID for posting.',
+        message: 'One or more selected FGIS records do not have a valid document ID for posting.',
       });
       return;
     }
 
     setUserPassword(userPw || null);
-
-    console.log('✅ MSIS Selected for Posting:', normalizedSelected);
-console.log('✅ MSIS Posting Payload Expected:', {
-  userCode,
-  dt1: normalizedSelected.map((row, index) => ({
-    lnNo: row.lnNo || index + 1,
-    groupId: row.groupId,
-  })),
-});
-
     await useHandlePostTran(
       normalizedSelected,
       userPw,
@@ -508,10 +488,10 @@ console.log('✅ MSIS Posting Payload Expected:', {
     if (!row) return { docNo: null, branchCode: null };
 
     const docNo = getValue(
-      row['MSIS No'],
-      row.msisNo,
-      row.msis_no,
-      row.MSIS_NO,
+      row['FGIS No'],
+      row.fgisNo,
+      row.fgis_no,
+      row.FGIS_NO,
       row.docNo,
       row.documentNo
     );
@@ -533,15 +513,15 @@ console.log('✅ MSIS Posting Payload Expected:', {
       useSwalValidationAlert({
         icon: 'warning',
         title: 'Missing keys',
-        message: 'Cannot determine MSIS No or Branch Code.',
+        message: 'Cannot determine FGIS No or Branch Code.',
       });
       return;
     }
 
-    const TRAN_VIEW_URL = '/page/MSIS';
+    const TRAN_VIEW_URL = '/page/FGIS';
     const url =
       `${window.location.origin}${TRAN_VIEW_URL}` +
-      `?msisNo=${encodeURIComponent(docNo)}` +
+      `?fgisNo=${encodeURIComponent(docNo)}` +
       `&branchCode=${encodeURIComponent(branchCode)}` +
       `&viewDocument=true`;
 
@@ -554,7 +534,7 @@ console.log('✅ MSIS Posting Payload Expected:', {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post MS Issuance Slip"
+          title="Post FG Issuance Slip"
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}
@@ -572,4 +552,4 @@ console.log('✅ MSIS Posting Payload Expected:', {
   );
 };
 
-export default PostMSIS;
+export default PostFGIS;
