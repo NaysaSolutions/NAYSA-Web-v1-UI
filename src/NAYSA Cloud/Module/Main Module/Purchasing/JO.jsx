@@ -2122,51 +2122,13 @@ const renderJoDetailColumn = (columnKey, row, index) => {
               </div>
             </div>
 
-            <div className="global-tran-tab-footer-total-main-div-ui">
-              <div className="global-tran-tab-footer-total-div-ui">
-                <label
-                  htmlFor="TotalGross"
-                  className="global-tran-tab-footer-total-label-ui"
-                >
-                  Gross Amount:
-                </label>
-                <label
-                  htmlFor="TotalGross"
-                  className="global-tran-tab-footer-total-value-ui"
-                >
-                  {totals.totalGross}
-                </label>
-              </div>
-
-              <div className="global-tran-tab-footer-total-div-ui">
-                <label
-                  htmlFor="TotalVat"
-                  className="global-tran-tab-footer-total-label-ui"
-                >
-                  VAT Amount:
-                </label>
-                <label
-                  htmlFor="TotalVat"
-                  className="global-tran-tab-footer-total-value-ui"
-                >
-                  {totals.totalVat}
-                </label>
-              </div>
-
-              <div className="global-tran-tab-footer-total-div-ui">
-                <label
-                  htmlFor="TotalNet"
-                  className="global-tran-tab-footer-total-label-ui"
-                >
-                  Net Amount:
-                </label>
-                <label
-                  htmlFor="TotalNet"
-                  className="global-tran-tab-footer-total-value-ui"
-                >
-                  {totals.totalNet}
-                </label>
-              </div>
+            <div className="global-tran-tab-footer-total-main-div-ui grid gap-1 grid-cols-[auto_auto]">
+              <div className="global-tran-tab-footer-total-label-ui">Gross Amount:</div>
+              <div className="global-tran-tab-footer-total-value-ui">{totals.totalGross}</div>
+              <div className="global-tran-tab-footer-total-label-ui">VAT Amount:</div>
+              <div className="global-tran-tab-footer-total-value-ui">{totals.totalVat}</div>
+              <div className="global-tran-tab-footer-total-label-ui">Net Amount:</div>
+              <div className="global-tran-tab-footer-total-value-ui">{totals.totalNet}</div>
             </div>
           </div>
         </div>
