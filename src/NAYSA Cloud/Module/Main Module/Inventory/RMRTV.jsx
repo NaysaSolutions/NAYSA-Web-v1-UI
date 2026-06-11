@@ -887,6 +887,25 @@ const handleActivityOption = async (action) => {
       const response = await useTransactionUpsert(docType, savePayload, updateState, 'rmrtvId', 'rmrtvNo');
 
       if (response) {
+        console.log("RMRTV UPSERT RESPONSE:", response);
+
+      const savedRow =
+        response?.data?.data?.[0] ||
+        response?.data?.[0] ||
+        response?.[0] ||
+        response?.data ||
+        {};
+
+      const savedRmrtvId = savedRow.rmrtvId || response?.rmrtvId || "";
+      const savedRmrtvNo = savedRow.rmrtvNo || response?.rmrtvNo || "";
+
+      updateState({
+        documentID: savedRmrtvId,
+        documentNo: savedRmrtvNo,
+        isDocNoDisabled: true,
+        isFetchDisabled: true,
+      });
+
         const isZero = Number(noReprints) === 0;
         const onSaveAndPrint = isZero
           ? () => updateState({ showSignatoryModal: true })

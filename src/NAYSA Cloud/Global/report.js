@@ -306,7 +306,6 @@ export async function useHandlePrintFGINVReport(params) {
       startDate: params.startDate,
       endDate: params.endDate,
       itemCode: params.itemCode,
-      wwhCode: params.wwhCode || params.whCode,
       whCode: params.whCode,
       locCode: params.locCode,
       reportName: formName,
@@ -338,7 +337,6 @@ export async function useHandleDownloadExcelFGINVReport(params) {
         startDate: params.startDate,
         endDate: params.endDate,
         itemCode: params.itemCode,
-        wwhCode: params.wwhCode || params.whCode,
         whCode: params.whCode,
         locCode: params.locCode,
       })
@@ -372,7 +370,6 @@ export async function useHandlePrintMSINVReport(params) {
       startDate: params.startDate,
       endDate: params.endDate,
       itemCode: params.itemCode,
-      wwhCode: params.wwhCode || params.whCode,
       whCode: params.whCode,
       locCode: params.locCode,
       reportName: formName,
@@ -404,7 +401,6 @@ export async function useHandleDownloadExcelMSINVReport(params) {
         startDate: params.startDate,
         endDate: params.endDate,
         itemCode: params.itemCode,
-        wwhCode: params.wwhCode || params.whCode,
         whCode: params.whCode,
         locCode: params.locCode,
       })
@@ -438,7 +434,6 @@ export async function useHandlePrintRMINVReport(params) {
       startDate: params.startDate,
       endDate: params.endDate,
       itemCode: params.itemCode,
-      wwhCode: params.wwhCode || params.whCode,
       whCode: params.whCode,
       locCode: params.locCode,
       reportName: formName,
@@ -470,7 +465,6 @@ export async function useHandleDownloadExcelRMINVReport(params) {
         startDate: params.startDate,
         endDate: params.endDate,
         itemCode: params.itemCode,
-        wwhCode: params.wwhCode || params.whCode,
         whCode: params.whCode,
         locCode: params.locCode,
       })
