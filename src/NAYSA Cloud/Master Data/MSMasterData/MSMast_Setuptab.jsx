@@ -267,15 +267,6 @@ const MSMast_SetupTab = ({
               readOnly={isReadOnly}
               disabled={isDisabled}
             />
-            <FieldRenderer
-              label="Status"
-              type="select"
-              options={[{ value: "New", label: "New" }]}
-              value={form.status || ""}
-              onChange={(v) => onChangeForm({ status: getValue(v) })}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-            />
           </div>
         </Card>
 

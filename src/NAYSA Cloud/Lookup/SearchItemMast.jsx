@@ -24,18 +24,44 @@ function useDebounce(value, delay) {
   return debouncedValue;
 }
 
-const usageColumnConfig = [
-  { key: "itemCode", label: "Item Code", width: "140px", hidden: 0, classNames: "text-left" },
-  { key: "itemName", label: "Item Name", width: "320px", hidden: 0, classNames: "text-left" },
-  { key: "uomCode", label: "UOM", width: "80px", hidden: 0, classNames: "text-left" },
-  { key: "qtyHand", label: "Qty On Hand", width: "120px", hidden: 0, classNames: "text-right" },
-  { key: "unitCost", label: "Unit Cost", width: "130px", hidden: 0, classNames: "text-right" },
-  { key: "categCode", label: "Category Code", width: "150px", hidden: 0, classNames: "text-left" },
-  { key: "categName", label: "Category Name", width: "200px", hidden: 0, classNames: "text-left" },
-  { key: "classCode", label: "Class Code", width: "140px", hidden: 0, classNames: "text-left" },
-  { key: "className", label: "Class Name", width: "220px", hidden: 0, classNames: "text-left" },
-  { key: "groupId", label: "Group ID", width: "120px", hidden: 1, classNames: "text-left" },
+// ── Inventory item columns (FG / RM / MS) ────────────────────────────────────
+const invColumnConfig = [
+  { key: "itemCode",  label: "Item Code",     width: "140px", hidden: 0, classNames: "text-left"  },
+  { key: "itemName",  label: "Item Name",     width: "320px", hidden: 0, classNames: "text-left"  },
+  { key: "uomCode",   label: "UOM",           width: "80px",  hidden: 0, classNames: "text-left"  },
+  { key: "qtyHand",   label: "Qty On Hand",   width: "120px", hidden: 0, classNames: "text-right" },
+  { key: "unitCost",  label: "Unit Cost",     width: "130px", hidden: 0, classNames: "text-right" },
+  { key: "categCode", label: "Category Code", width: "150px", hidden: 0, classNames: "text-left"  },
+  { key: "categName", label: "Category Name", width: "200px", hidden: 0, classNames: "text-left"  },
+  { key: "classCode", label: "Class Code",    width: "140px", hidden: 0, classNames: "text-left"  },
+  { key: "className", label: "Class Name",    width: "220px", hidden: 0, classNames: "text-left"  },
+  { key: "groupId",   label: "Group ID",      width: "120px", hidden: 1, classNames: "text-left"  },
 ];
+
+// ── Fixed Asset columns (FA) ─────────────────────────────────────────────────
+const faColumnConfig = [
+  { key: "faCode",    label: "Asset Code",       width: "160px", hidden: 0, classNames: "text-left"  },
+  { key: "faName",    label: "Asset Name",    width: "300px", hidden: 0, classNames: "text-left"  },
+  { key: "categCode", label: "Category Code", width: "140px", hidden: 0, classNames: "text-left"  },
+  { key: "categName", label: "Category Name", width: "200px", hidden: 0, classNames: "text-left"  },
+  { key: "classCode", label: "Class Code",    width: "130px", hidden: 0, classNames: "text-left"  },
+  { key: "className", label: "Class Name",    width: "200px", hidden: 0, classNames: "text-left"  },
+  { key: "flocCode",  label: "Location Code", width: "130px", hidden: 0, classNames: "text-left"  },
+  { key: "flocName",  label: "Location Name", width: "200px", hidden: 0, classNames: "text-left"  },
+  { key: "serialNo",  label: "Serial No",     width: "150px", hidden: 0, classNames: "text-left"  },
+  { key: "faStatus",  label: "Status",        width: "90px",  hidden: 0, classNames: "text-left"  },
+  { key: "groupId",   label: "Group ID",      width: "120px", hidden: 1, classNames: "text-left"  },
+];
+
+// ── Pick the right config based on docType ───────────────────────────────────
+const getColumnConfig = (docType) => {
+  const dt = String(docType || "").toUpperCase();
+  if (dt === "FA") return faColumnConfig;
+  return invColumnConfig;
+};
+
+// Keep for legacy callers that import usageColumnConfig directly
+const usageColumnConfig = invColumnConfig;
 
 const createFilterObject = (cols = []) =>
   cols.reduce((acc, col) => {
@@ -51,6 +77,7 @@ const ItemMastLookupModal = ({
   onGetSelectedItems,
   endpoint = "/getInvLookupMS",
   docType=null,
+  method = "get",
   selectedItems: externalSelectedItems = [],
 }) => {
   const { companyInfo, currentUserRow } = useAuth();
@@ -58,8 +85,9 @@ const ItemMastLookupModal = ({
   const visibleColumns = useMemo(() => {
     const normalizedDocType = String(docType || "").toUpperCase();
     const hideQtyHandDocTypes = new Set(["PRMS", "PRRM", "PRFG", "FGRM"]);
+    const colConfig = getColumnConfig(normalizedDocType);
 
-    return usageColumnConfig.filter((col) => {
+    return colConfig.filter((col) => {
       if (Number(col.hidden)) return false;
       if (col.key === "qtyHand" && hideQtyHandDocTypes.has(normalizedDocType)) return false;
       if (col.key === "unitCost" && currentUserRow?.view_costamt !== "Y") return false;
@@ -85,20 +113,27 @@ const ItemMastLookupModal = ({
     externalSelectedItems?.length > 0 ? externalSelectedItems : internalSelectedItems;
 
   const itemSelectTitle = useMemo(() => {
+    const normalizedDocType = String(docType || "").toUpperCase();
+    if (normalizedDocType === "FA") {
+      return enableMultiSelect ? "Select FA Assets" : "Select FA Asset";
+    }
     const endpointItemType = String(endpoint || "").slice(-2).toUpperCase();
     const docTypeItemType = String(docType || "").slice(-2).toUpperCase();
     const itemType = ["FG", "RM", "MS"].includes(endpointItemType)
       ? endpointItemType
       : docTypeItemType;
-
     if (["FG", "RM", "MS"].includes(itemType)) {
       return enableMultiSelect ? `Select ${itemType} Items` : `Select ${itemType} Item`;
     }
-
     return enableMultiSelect ? "Select Items" : "Select Item";
   }, [docType, enableMultiSelect, endpoint]);
 
-  const getRowUniqueKey = (row) => String(row?.groupId ?? "");
+  // For FA records use faCode as the unique key; inventory uses groupId
+  const getRowUniqueKey = (row) => {
+    const dt = String(docType || "").toUpperCase();
+    if (dt === "FA") return String(row?.faCode ?? "");
+    return String(row?.groupId ?? "");
+  };
 
   const selectedItemKeys = useMemo(() => {
     return new Set((selectedItems || []).map((item) => getRowUniqueKey(item)));
@@ -135,6 +170,7 @@ const ItemMastLookupModal = ({
     queryKey: [
       "itemMastLookup",
       endpoint,
+      method,
       appliedSearch,
       searchMode,
       customParam,
@@ -154,9 +190,10 @@ const ItemMastLookupModal = ({
 
       console.log("Lookup payload:", payload);
 
-      const { data: result } = await apiClient.get(endpoint, {
-        params: payload,
-      });
+      const { data: result } =
+        method === "post"
+          ? await apiClient.post(endpoint, payload)
+          : await apiClient.get(endpoint, { params: payload });
 
       if (!result?.success) {
         throw new Error(result?.message || "Failed to fetch item lookup records.");
@@ -430,7 +467,7 @@ const ItemMastLookupModal = ({
 
               <input
                 type="text"
-                placeholder="Search by item code or item name..."
+                placeholder={String(docType || "").toUpperCase() === "FA" ? "Search by FA code or asset name..." : "Search by item code or item name..."}
                 className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white transition-all"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
