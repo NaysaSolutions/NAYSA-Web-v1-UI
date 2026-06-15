@@ -11,8 +11,6 @@ import React, {
 } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Edit,
-  Trash2,
   Upload,
   Download,
   CheckCircle2,
@@ -21,6 +19,8 @@ import {
   FileSpreadsheet,
   Loader2,
 } from "lucide-react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faEdit, faTrashAlt } from "@fortawesome/free-solid-svg-icons";
 import * as XLSX from "xlsx";
 import Swal from "sweetalert2";
 
@@ -719,10 +719,10 @@ const FACategCodes = forwardRef(
     const tableColumns = useMemo(() => [
       {
         key: "__actions",
-        label: "Actions",
+        label: <span className="hidden md:inline">Actions</span>,
         width: 90,
         render: (row) => (
-          <div className="flex items-center justify-center gap-2">
+          <div className="flex gap-2 justify-center w-full">
             <button
               type="button"
               onClick={(e) => {
@@ -730,15 +730,17 @@ const FACategCodes = forwardRef(
                 handleEdit(row);
               }}
               disabled={isReadOnly || !canEdit}
-              className={`p-1 rounded-md border transition-colors ${
+              className={`flex-1 h-7 md:flex-none flex items-center justify-center gap-1 py-2 md:py-2 px-3 md:px-2 rounded-md border transition-colors text-xs ${
                 isReadOnly || !canEdit
                   ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60"
-                  : "bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-600 hover:text-white"
+                  : "bg-blue-50 border-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white hover:border-blue-600"
               }`}
               title="Edit"
             >
-              <Edit size={16} />
+              <FontAwesomeIcon icon={faEdit} />
+              <span className="md:hidden">Edit</span>
             </button>
+
             <button
               type="button"
               onClick={(e) => {
@@ -746,14 +748,15 @@ const FACategCodes = forwardRef(
                 handleDelete(row);
               }}
               disabled={isReadOnly || !canDelete}
-              className={`p-1 rounded-md border transition-colors ${
+              className={`flex-1 h-7 md:flex-none flex items-center justify-center gap-1 py-2 md:py-2 px-3 md:px-2 rounded-md border transition-colors text-xs ${
                 isReadOnly || !canDelete
                   ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60"
-                  : "bg-red-50 text-red-600 border-red-200 hover:bg-red-600 hover:text-white"
+                  : "bg-red-50 border-red-100 text-red-600 hover:bg-red-600 hover:text-white"
               }`}
               title="Delete"
             >
-              <Trash2 size={16} />
+              <FontAwesomeIcon icon={faTrashAlt} />
+              <span className="md:hidden">Delete</span>
             </button>
           </div>
         ),
@@ -906,37 +909,6 @@ const FACategCodes = forwardRef(
         </div>
 
         <div className="flex-1 bg-white rounded-md shadow-sm border border-slate-200 overflow-hidden min-h-[300px] flex flex-col">
-          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-slate-200 bg-slate-50 shrink-0">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search code, description, accounts…"
-              className="text-xs border border-slate-300 rounded-md px-3 py-1.5 w-64 focus:outline-none focus:ring-2 focus:ring-blue-400"
-            />
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleDownloadTemplate}
-                className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
-              >
-                <Download size={13} /> Template
-              </button>
-              <button
-                type="button"
-                disabled={isReadOnly || !canAdd}
-                onClick={() => fileInputRef.current?.click()}
-                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-                  isReadOnly || !canAdd
-                    ? "border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed"
-                    : "border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
-                }`}
-              >
-                <Upload size={13} /> Import
-              </button>
-            </div>
-          </div>
-
           <SearchGlobalReferenceTable
             columns={tableColumns}
             data={tableData}

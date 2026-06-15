@@ -10,7 +10,8 @@ import React, {
   useCallback,
 } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Edit, Trash2 } from "lucide-react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faEdit, faTrashAlt } from "@fortawesome/free-solid-svg-icons";
 import Swal from "sweetalert2";
 
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
@@ -434,35 +435,44 @@ const FGCategoryCodes = forwardRef(({
     () => [
       {
         key: "__actions",
-        label: "Actions",
+        label: <span className="hidden md:inline">Actions</span>,
         width: 90,
         render: (row) => (
-          <div className="flex items-center justify-center gap-2">
+          <div className="flex gap-2 justify-center w-full">
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); handleEdit(row); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleEdit(row);
+              }}
               disabled={isReadOnly || !canEdit}
-              className={`p-1 rounded-md border transition-colors ${
+              className={`flex-1 h-7 md:flex-none flex items-center justify-center gap-1 py-2 md:py-2 px-3 md:px-2 rounded-md border transition-colors text-xs ${
                 isReadOnly || !canEdit
                   ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60"
-                  : "bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-600 hover:text-white"
+                  : "bg-blue-50 border-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white hover:border-blue-600"
               }`}
               title={isReadOnly || !canEdit ? "Read only" : "Edit"}
             >
-              <Edit size={16} />
+              <FontAwesomeIcon icon={faEdit} />
+              <span className="md:hidden">Edit</span>
             </button>
+
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); handleDelete(row); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDelete(row);
+              }}
               disabled={isReadOnly || !canDelete}
-              className={`p-1 rounded-md border transition-colors ${
+              className={`flex-1 h-7 md:flex-none flex items-center justify-center gap-1 py-2 md:py-2 px-3 md:px-2 rounded-md border transition-colors text-xs ${
                 isReadOnly || !canDelete
                   ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60"
-                  : "bg-red-50 text-red-600 border-red-200 hover:bg-red-600 hover:text-white"
+                  : "bg-red-50 border-red-100 text-red-600 hover:bg-red-600 hover:text-white"
               }`}
               title={isReadOnly || !canDelete ? "Read only" : "Delete"}
             >
-              <Trash2 size={16} />
+              <FontAwesomeIcon icon={faTrashAlt} />
+              <span className="md:hidden">Delete</span>
             </button>
           </div>
         ),

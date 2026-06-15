@@ -43,14 +43,35 @@ const RegistrationInfo = ({ data = {}, layout = "stacked", showHeader = true }) 
     )}:${pad(d.getMinutes())}:${pad(d.getSeconds())} ${ampm}`;
   };
 
-  // Define fields as pairs for the minimize mode
+  const firstValue = (...values) =>
+    values.find((value) => String(value ?? "").trim() !== "") ?? "";
+
+  // Display user names when provided by the stored procedure,
+  // then fall back to the existing user code for backward compatibility.
   const registrationFields = [
-    { label: "Registered By", value: v.registeredBy },
+    {
+      label: "Registered By",
+      value: firstValue(
+        v.registeredByName,
+        v.registeredByUserName,
+        v.registeredName,
+        v.registeredBy
+      ),
+    },
     { label: "Registered Date", value: formatDateTime(v.registeredDate) },
   ];
 
   const updateFields = [
-    { label: "Updated By", value: v.lastUpdatedBy },
+    {
+      label: "Updated By",
+      value: firstValue(
+        v.updatedByName,
+        v.updatedByUserName,
+        v.lastUpdatedByName,
+        v.lastUpdatedName,
+        v.lastUpdatedBy
+      ),
+    },
     { label: "Updated Date", value: formatDateTime(v.lastUpdatedDate) },
   ];
 

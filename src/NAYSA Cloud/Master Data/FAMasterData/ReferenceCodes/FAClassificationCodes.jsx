@@ -10,7 +10,8 @@ import React, {
   useCallback,
 } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Edit, Trash2 } from "lucide-react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faEdit, faTrashAlt } from "@fortawesome/free-solid-svg-icons";
 
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
@@ -150,7 +151,7 @@ const FAClassCodes = forwardRef(({
     const dup = await checkDuplicate(code);
     if (dup) {
       setIsDupCode(true);
-      await useSwalErrorAlert("Duplicate Entry", `Classification Code "${code}" already exists.`);
+      await useSwalErrorAlert("Duplicate Entry", `Sub Category Code "${code}" already exists.`);
       setField("code", "");
       setTimeout(() => codeInputRef.current?.focus?.(), 0);
     } else {
@@ -184,7 +185,7 @@ const FAClassCodes = forwardRef(({
       }
 
       queryClient.invalidateQueries({ queryKey: ["faClassList"] });
-      await useSwalSuccessAlert("Success!", "FA Classification Code saved successfully.");
+      await useSwalSuccessAlert("Success!", "Sub Category Code saved successfully.");
 
       setIsEditing(false);
       setSelectedRow(null);
@@ -196,14 +197,14 @@ const FAClassCodes = forwardRef(({
         error?.response?.data?.message ||
         error?.response?.data?.errormsg ||
         error?.message ||
-        "Failed to save FA classification code.";
+        "Failed to save Sub Category code.";
       await useSwalErrorAlert("Validation Error", msg);
     },
   });
 
   const handleSave = useCallback(async () => {
     if (isReadOnly || !canSave) {
-      await showReadOnlyAlert("save classification codes");
+      await showReadOnlyAlert("save sub category codes");
       return;
     }
     if (!isEditing || saveMutation.isPending) return;
@@ -231,7 +232,7 @@ const FAClassCodes = forwardRef(({
       queryClient.invalidateQueries({ queryKey: ["faClassList"] });
       await useSwalDeleteRecord(
         "Deleted",
-        `FA Classification Code "${deletedCode}" has been successfully removed.`
+        `Sub Category Code "${deletedCode}" has been successfully removed.`
       );
       resetForm(DEFAULT_FORM);
       setIsEditing(false);
@@ -242,14 +243,14 @@ const FAClassCodes = forwardRef(({
         error?.response?.data?.message ||
         error?.response?.data?.errormsg ||
         error?.message ||
-        "Failed to delete FA classification code.";
+        "Failed to delete Sub Category code.";
       await useSwalErrorAlert("Error", msg);
     },
   });
 
   const handleDelete = useCallback(async (row) => {
     if (isReadOnly || !canDelete) {
-      await showReadOnlyAlert("delete classification codes");
+      await showReadOnlyAlert("delete sub category codes");
       return;
     }
 
@@ -269,7 +270,7 @@ const FAClassCodes = forwardRef(({
       if (result === "1") {
         await useSwalErrorAlert(
           "Cannot Delete",
-          `FA Classification Code "${code}" is currently in use and cannot be deleted.`
+          `Sub Category Code "${code}" is currently in use and cannot be deleted.`
         );
         return;
       }
@@ -313,7 +314,7 @@ const FAClassCodes = forwardRef(({
 
   const handleEdit = useCallback(async (row) => {
     if (isReadOnly || !canEdit) {
-      await showReadOnlyAlert("edit classification codes");
+      await showReadOnlyAlert("edit sub category codes");
       return;
     }
     fillFormFromRow(row);
@@ -338,39 +339,50 @@ const FAClassCodes = forwardRef(({
   const tableColumns = useMemo(() => [
     {
       key: "__actions",
-      label: "Actions",
+      label: <span className="hidden md:inline">Actions</span>,
       width: 90,
       render: (row) => (
-        <div className="flex items-center justify-center gap-2">
+        <div className="flex gap-2 justify-center w-full">
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); handleEdit(row); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleEdit(row);
+            }}
             disabled={isReadOnly || !canEdit}
-            className={`p-1 rounded-md border transition-colors ${
+            className={`flex-1 h-7 md:flex-none flex items-center justify-center gap-1 py-2 md:py-2 px-3 md:px-2 rounded-md border transition-colors text-xs ${
               isReadOnly || !canEdit
-                ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
-                : "bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-600 hover:text-white"
+                ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60"
+                : "bg-blue-50 border-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white hover:border-blue-600"
             }`}
+            title={isReadOnly || !canEdit ? "Read only" : "Edit"}
           >
-            <Edit size={16} />
+            <FontAwesomeIcon icon={faEdit} />
+            <span className="md:hidden">Edit</span>
           </button>
+
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); handleDelete(row); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDelete(row);
+            }}
             disabled={isReadOnly || !canDelete}
-            className={`p-1 rounded-md border transition-colors ${
+            className={`flex-1 h-7 md:flex-none flex items-center justify-center gap-1 py-2 md:py-2 px-3 md:px-2 rounded-md border transition-colors text-xs ${
               isReadOnly || !canDelete
-                ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
-                : "bg-red-50 text-red-600 border-red-200 hover:bg-red-600 hover:text-white"
+                ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60"
+                : "bg-red-50 border-red-100 text-red-600 hover:bg-red-600 hover:text-white"
             }`}
+            title={isReadOnly || !canDelete ? "Read only" : "Delete"}
           >
-            <Trash2 size={16} />
+            <FontAwesomeIcon icon={faTrashAlt} />
+            <span className="md:hidden">Delete</span>
           </button>
         </div>
       ),
     },
-    { key: "code",        label: "Classification Code",               sortable: true, width: 150 },
-    { key: "description", label: "Classification Description / Name", sortable: true, width: 280 },
+    { key: "code",        label: "Sub Category Code",               sortable: true, width: 150 },
+    { key: "description", label: "Sub Category Description / Name", sortable: true, width: 280 },
     { key: "categCode",   label: "Category Code",                     sortable: true, width: 120 },
     { key: "categName",   label: "Category Name",                     sortable: true, width: 200 },
   ], [handleEdit, handleDelete, isReadOnly, canEdit, canDelete]);
@@ -415,7 +427,7 @@ const FAClassCodes = forwardRef(({
   useImperativeHandle(ref, () => ({
     add: async () => {
       if (isReadOnly || !canAdd) {
-        await showReadOnlyAlert("add classification codes");
+        await showReadOnlyAlert("add sub category codes");
         return;
       }
       setIsEditing(true);
@@ -450,7 +462,7 @@ const FAClassCodes = forwardRef(({
           <div className="space-y-3">
 
             <FieldRenderer
-              label="Classification Code"
+              label="Sub Category Code"
               required
               value={form.code}
               inputRef={codeInputRef}
@@ -462,7 +474,7 @@ const FAClassCodes = forwardRef(({
             />
 
             <FieldRenderer
-              label="Classification Description"
+              label="Sub Category Description"
               required
               value={form.description}
               maxLength={150}
@@ -506,7 +518,7 @@ const FAClassCodes = forwardRef(({
           columns={tableColumns}
           data={tableData}
           isLoading={isInitialLoading}
-          docType="FA Classification Codes"
+          docType="Sub Category Codes"
           itemsPerPage={50}
           onRowDoubleClick={handleRowDoubleClick}
           onRowClick={(row) => setSelectedRow(row)}

@@ -50,7 +50,7 @@ const FAMast_ReferenceCodeTab = forwardRef(({
 
   const refTabs = useMemo(() => [
     { id: "category",       label: "Category Codes",       icon: faSitemap    },
-    { id: "classification", label: "Classification Codes", icon: faLayerGroup },
+    { id: "classification", label: "Sub Category Codes", icon: faLayerGroup },
     // { id: "subclass",    label: "Sub Class Codes",       icon: faListAlt    },
   ], []);
 

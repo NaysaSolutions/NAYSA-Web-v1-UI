@@ -40,6 +40,24 @@ const getValue = (input) => {
   return input ?? "";
 };
 
+const toBool = (value) => {
+  if (typeof value === "boolean") return value;
+  return ["1", "Y", "YES", "TRUE"].includes(
+    String(value ?? "").trim().toUpperCase()
+  );
+};
+
+const getNonNegativeNumber = (input) => {
+  const value = getValue(input);
+
+  if (value === "" || value === null || value === undefined) return "";
+
+  const numericValue = Number(value);
+  if (Number.isNaN(numericValue)) return "";
+
+  return numericValue < 0 ? 0 : value;
+};
+
 // --- Sidebar tab definitions ---
 const TABS = [
   {
@@ -77,6 +95,14 @@ const MSMast_SetupTab = ({
   const isReadOnly = !isEditing;
   const isNewRecord = form.__isNew;
   const isDisabled = isReadOnly || isLoading;
+  const isUsed = toBool(
+    form.isUsed ??
+    form.inUsed ??
+    form.inUse ??
+    form.used ??
+    form.__isUsed
+  );
+  const lockUsedFields = !isNewRecord && isUsed;
 
   const [isCategOpen, setIsCategOpen] = useState(false);
   const [isClassOpen, setIsClassOpen] = useState(false);
@@ -147,9 +173,9 @@ const MSMast_SetupTab = ({
           <div
             ref={overrideRef}
             className={`w-full ${!canType
-              ? "[&>div]:!bg-[#F1F5F9] [&_input]:!bg-transparent [&_input]:!pointer-events-none [&_input]:!text-slate-600 [&_button]:!text-slate-400 [&_label]:!bg-[#F1F5F9]"
+              ? "[&>div]:!bg-[#F1F5F9] [&_input]:!bg-transparent [&_input]:!pointer-events-none [&_input]:!text-slate-600 [&_label]:!bg-[#F1F5F9]"
               : ""
-            }`}
+              }`}
           >
             <FieldRenderer
               label="Item No"
@@ -160,7 +186,9 @@ const MSMast_SetupTab = ({
               onChange={(v) => onChangeForm({ itemCode: String(getValue(v)).toUpperCase() })}
               onLookup={canType ? undefined : () => !isLoading && setIsItemLookupOpen(true)}
               readOnly={true}
-              disabled={isLoading}
+              disabled={false}
+              lookupDisabled={isLoading}
+              hideClearButton={!isNewRecord}
               maxLength={getLen("item_code", 30)}
             />
           </div>
@@ -185,9 +213,10 @@ const MSMast_SetupTab = ({
                 type="lookup"
                 value={form.uom || ""}
                 onChange={(v) => onChangeForm({ uom: getValue(v) })}
-                onLookup={() => !isDisabled && setUomTarget("uom")}
-                readOnly={isReadOnly}
-                disabled={isDisabled}
+                onLookup={() => !(isDisabled || lockUsedFields) && setUomTarget("uom")}
+                readOnly={isReadOnly || lockUsedFields}
+                disabled={isDisabled || lockUsedFields}
+                hideClearButton={lockUsedFields}
               />
             </div>
             <div className="col-span-2">
@@ -196,9 +225,10 @@ const MSMast_SetupTab = ({
                 type="lookup"
                 value={form.uom2 || ""}
                 onChange={(v) => onChangeForm({ uom2: getValue(v) })}
-                onLookup={() => !isDisabled && setUomTarget("uom2")}
-                readOnly={isReadOnly}
-                disabled={isDisabled}
+                onLookup={() => !(isDisabled || lockUsedFields) && setUomTarget("uom2")}
+                readOnly={isReadOnly || lockUsedFields}
+                disabled={isDisabled || lockUsedFields}
+                hideClearButton={lockUsedFields}
               />
             </div>
             <div className="col-span-1">
@@ -206,9 +236,13 @@ const MSMast_SetupTab = ({
                 label="Qty / UOM2"
                 type="number"
                 value={form.qtyPerUom2 || ""}
-                onChange={(v) => onChangeForm({ qtyPerUom2: getValue(v) })}
-                readOnly={isReadOnly}
-                disabled={isDisabled}
+                onChange={(v) => onChangeForm({ qtyPerUom2: getNonNegativeNumber(v) })}
+                onKeyDown={(e) => {
+                  if (["-", "+"].includes(e.key)) e.preventDefault();
+                }}
+                min={0}
+                readOnly={isReadOnly || lockUsedFields}
+                disabled={isDisabled || lockUsedFields}
               />
             </div>
           </div>
@@ -221,9 +255,10 @@ const MSMast_SetupTab = ({
               type="lookup"
               value={form.categoryCode || ""}
               onChange={(v) => onChangeForm({ categoryCode: getValue(v) })}
-              onLookup={() => !isDisabled && setIsCategOpen(true)}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
+              onLookup={() => !(isDisabled || lockUsedFields) && setIsCategOpen(true)}
+              readOnly={isReadOnly || lockUsedFields}
+              disabled={isDisabled || lockUsedFields}
+              hideClearButton={lockUsedFields}
             />
             <div className="col-span-2">
               <FieldRenderer
@@ -234,6 +269,12 @@ const MSMast_SetupTab = ({
               />
             </div>
           </div>
+
+          {/* {lockUsedFields && (
+            // <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
+            //   UOM, UOM Code 2, Qty / UOM2, and Category are locked because this item is already used.
+            // </div>
+          )} */}
 
           {/* Classification */}
           <div className="grid grid-cols-3 gap-2 mt-1">
@@ -377,9 +418,9 @@ const MSMast_SetupTab = ({
           layout="straight"
           disabled
           data={{
-            registeredBy: form.registeredBy || "",
+            registeredBy: form.registeredByName || form.registeredBy || "",
             registeredDate: form.registeredDate || "",
-            lastUpdatedBy: form.updatedBy || "",
+            lastUpdatedBy: form.updatedByName || form.updatedBy || "",
             lastUpdatedDate: form.updatedDate || "",
           }}
         />
