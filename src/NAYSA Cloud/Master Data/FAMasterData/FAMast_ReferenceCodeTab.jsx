@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faSitemap,
   faLayerGroup,
+  faMapMarkerAlt,
   faChevronLeft,
   faChevronRight,
 } from "@fortawesome/free-solid-svg-icons";
@@ -11,6 +12,7 @@ import {
 // Import dedicated FA reference code components
 import FACategCodes      from "@/NAYSA Cloud/Master Data/FAMasterData/ReferenceCodes/FACategoryCodes";
 import FAClassCodes      from "@/NAYSA Cloud/Master Data/FAMasterData/ReferenceCodes/FAClassificationCodes";
+import FALocationCodes   from "@/NAYSA Cloud/Master Data/FAMasterData/ReferenceCodes/FALocationCodes";
 // import FASubClassCodes from "@/NAYSA Cloud/Master Data/FAMasterData/ReferenceCodes/FASubClassCodes";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -42,6 +44,7 @@ const FAMast_ReferenceCodeTab = forwardRef(({
 }, ref) => {
   const categRef    = useRef(null);
   const classRef    = useRef(null);
+  const locRef      = useRef(null);
   // const subClassRef = useRef(null);
 
   const permissionProps = { isReadOnly, canAdd, canEdit, canSave, canDelete };
@@ -51,6 +54,7 @@ const FAMast_ReferenceCodeTab = forwardRef(({
   const refTabs = useMemo(() => [
     { id: "category",       label: "Category Codes",       icon: faSitemap    },
     { id: "classification", label: "Sub Category Codes", icon: faLayerGroup },
+    { id: "location",       label: "Location Codes",     icon: faMapMarkerAlt },
     // { id: "subclass",    label: "Sub Class Codes",       icon: faListAlt    },
   ], []);
 
@@ -87,16 +91,19 @@ const FAMast_ReferenceCodeTab = forwardRef(({
     add: () => {
       if (activeRefTab === "category")       categRef.current?.add?.();
       if (activeRefTab === "classification") classRef.current?.add?.();
+      if (activeRefTab === "location")       locRef.current?.add?.();
       // if (activeRefTab === "subclass")     subClassRef.current?.add?.();
     },
     save: () => {
       if (activeRefTab === "category")       categRef.current?.save?.();
       if (activeRefTab === "classification") classRef.current?.save?.();
+      if (activeRefTab === "location")       locRef.current?.save?.();
       // if (activeRefTab === "subclass")     subClassRef.current?.save?.();
     },
     reset: () => {
       if (activeRefTab === "category")       categRef.current?.reset?.();
       if (activeRefTab === "classification") classRef.current?.reset?.();
+      if (activeRefTab === "location")       locRef.current?.reset?.();
       // if (activeRefTab === "subclass")     subClassRef.current?.reset?.();
     },
     downloadTemplate: () => categRef.current?.downloadTemplate?.(),
@@ -107,6 +114,7 @@ const FAMast_ReferenceCodeTab = forwardRef(({
     switch (activeRefTab) {
       case "category":       return <FACategCodes ref={categRef} onStateChange={childStateChange} {...permissionProps} />;
       case "classification": return <FAClassCodes ref={classRef} onStateChange={childStateChange} {...permissionProps} />;
+      case "location":       return <FALocationCodes ref={locRef} onStateChange={childStateChange} {...permissionProps} />;
       // case "subclass":    return <FASubClassCodes ref={subClassRef} onStateChange={childStateChange} {...permissionProps} />;
       default: return null;
     }
