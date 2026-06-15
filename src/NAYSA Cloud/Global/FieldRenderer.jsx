@@ -248,6 +248,7 @@ const FieldRenderer = ({
   lookupDisabled = false,
   editableLookup = false,
   allowLookupInput = false,
+  hideClearButton = false,
   options = [],
   readOnly = false,
   placeholder = " ",
@@ -314,7 +315,7 @@ const FieldRenderer = ({
     }
   };
 
-  const canClear = !disabled && !readOnly && !isAudit;
+  const canClear = !disabled && !readOnly && !isAudit && !hideClearButton;
 
   const renderLabel = () => (
     <label htmlFor={inputId} className={labelClass}>
@@ -417,7 +418,7 @@ const FieldRenderer = ({
             onClick={() => !allowLookupInput && !lookupActionDisabled && onLookup?.()}
           />
 
-          {!lookupActionDisabled && editableLookup && getDisplayValue(value, "lookup") && (
+          {!lookupActionDisabled && editableLookup && !hideClearButton && getDisplayValue(value, "lookup") && (
             <div
               style={{
                 position: "absolute",
@@ -487,7 +488,7 @@ const FieldRenderer = ({
             onPaste={onPaste}
             {...props}
           />
-          {/* {renderClearButton(value, type)} */}
+          {renderClearButton(value, type)}
           {renderLabel()}
         </>
       )}

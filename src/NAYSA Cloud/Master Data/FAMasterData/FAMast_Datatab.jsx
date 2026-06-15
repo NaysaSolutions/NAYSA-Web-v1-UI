@@ -30,7 +30,7 @@ const FAMast_DataTab = ({
 
   // ── Column definitions from hs_colconfig / selectedData.js ────────────────
   const fallbackColumns = useMemo(() => [
-    { key: "faCode",            label: "FA Code",           classNames: "text-left",  renderType: "text" },
+    { key: "faCode",            label: "Asset Code",           classNames: "text-left",  renderType: "text" },
     { key: "faName",            label: "Asset Name",        classNames: "text-left",  renderType: "text" },
     { key: "categCode",         label: "Category Code",     classNames: "text-left",  renderType: "text" },
     { key: "categName",         label: "Category Name",     classNames: "text-left",  renderType: "text" },
