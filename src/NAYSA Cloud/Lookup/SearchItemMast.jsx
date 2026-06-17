@@ -44,8 +44,8 @@ const faColumnConfig = [
   { key: "faName",    label: "Asset Name",    width: "300px", hidden: 0, classNames: "text-left"  },
   { key: "categCode", label: "Category Code", width: "140px", hidden: 0, classNames: "text-left"  },
   { key: "categName", label: "Category Name", width: "200px", hidden: 0, classNames: "text-left"  },
-  { key: "classCode", label: "Class Code",    width: "130px", hidden: 0, classNames: "text-left"  },
-  { key: "className", label: "Class Name",    width: "200px", hidden: 0, classNames: "text-left"  },
+  { key: "classCode", label: "Sub Category Code",    width: "130px", hidden: 0, classNames: "text-left"  },
+  { key: "className", label: "Sub Category Name",    width: "200px", hidden: 0, classNames: "text-left"  },
   { key: "flocCode",  label: "Location Code", width: "130px", hidden: 0, classNames: "text-left"  },
   { key: "flocName",  label: "Location Name", width: "200px", hidden: 0, classNames: "text-left"  },
   { key: "serialNo",  label: "Serial No",     width: "150px", hidden: 0, classNames: "text-left"  },
@@ -142,20 +142,26 @@ const ItemMastLookupModal = ({
   const parseApiRows = (result) => {
     if (!result?.success) return [];
 
-    const rawJson = result?.data?.[0]?.result;
-
-    if (typeof rawJson === "string") {
-      try {
-        const parsed = JSON.parse(rawJson);
-        return Array.isArray(parsed) ? parsed : [];
-      } catch (error) {
-        console.error("Failed to parse SQL JSON result:", error);
+    // FA lookup (and similar) returns a flat array directly in result.data
+    if (Array.isArray(result?.data)) {
+      const first = result.data[0];
+      // If the first element has a "result" key, it's the JSON-in-row sproc format
+      if (first && typeof first?.result !== "undefined") {
+        const rawJson = first.result;
+        if (typeof rawJson === "string") {
+          try {
+            const parsed = JSON.parse(rawJson);
+            return Array.isArray(parsed) ? parsed : [];
+          } catch (error) {
+            console.error("Failed to parse SQL JSON result:", error);
+            return [];
+          }
+        }
+        if (Array.isArray(rawJson)) return rawJson;
         return [];
       }
-    }
-
-    if (Array.isArray(rawJson)) {
-      return rawJson;
+      // Plain flat array (e.g. FAMast lookup response)
+      return result.data;
     }
 
     return [];

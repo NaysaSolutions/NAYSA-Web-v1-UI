@@ -2739,7 +2739,7 @@ return (
                 disabled={state.isFetchDisabled || state.isDocNoDisabled || isFormDisabled}
                 readOnly
                 lookupDisabled={isFetchDisabled}
-                onLookup={() => !isFormDisabled && updateState({ branchModalOpen: true })}
+                onLookup={() => !isFormDisabled && uypepdateState({ branchModalOpen: true })}
               />
 
               <FieldRenderer

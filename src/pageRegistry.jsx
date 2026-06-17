@@ -66,6 +66,10 @@ export const pageRegistry = {
   FGST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGST.jsx")),
   RMAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMAJ.jsx")),
 
+
+  // Production
+  StorePortalOrder: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/StorePortal/StorePortalOrder.jsx")),
+
   // Importation
   LC: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Importation/LC.jsx")),
 
