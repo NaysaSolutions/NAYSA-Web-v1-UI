@@ -31,6 +31,7 @@ import {
   useSwalSuccessAlert,
   useSwalErrorAlert,
   useSwalProceedConfirm,
+  useSwalHandleOpenSpecsModal,
   useSwalvalidateRequiredFields as validateRequiredFields,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
@@ -1795,6 +1796,42 @@ const FADS = () => {
             }}
             onKeyDown={(e) => handleReceivableAmountEnter(e, index)}
           />
+        </td>
+      );
+    }
+
+    if (columnKey === "remarks") {
+      return (
+        <td key={columnKey} style={style} className={`global-tran-td-ui relative ${alignClass}`}>
+          <div className="relative flex items-center">
+            <input
+              type="text"
+              className={`w-full global-tran-td-inputclass-ui pr-8 ${alignClass}`}
+              value={getDetailCellDisplayValue(columnKey, row)}
+              readOnly
+              disabled={isFormDisabled}
+            />
+            {!isFormDisabled && (
+              <FontAwesomeIcon
+                icon={faMagnifyingGlass}
+                className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                onClick={() =>
+                  useSwalHandleOpenSpecsModal(
+                    index,
+                    detailRows,
+                    (rowIndex, field, value) =>
+                      setDetailRows((prev) =>
+                        prev.map((item, i) => (i === rowIndex ? { ...item, [field]: value } : item))
+                      ),
+                    row.remarks,
+                    "Disposal Details Remarks",
+                    "remarks",
+                    "Enter disposal detail remarks..."
+                  )
+                }
+              />
+            )}
+          </div>
         </td>
       );
     }

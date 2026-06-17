@@ -82,7 +82,9 @@ export async function useHandlePrint(documentID, docCode, printMode, userCode) {
     }
 
     const payload = { tranId: documentID, formName, docCode, printMode ,userCode};
+        console.log("Received PDF blob:", payload);
     const pdfBlob = await postPdfRequest("/printForm", payload);
+
 
     if (!(pdfBlob instanceof Blob) || pdfBlob.type !== "application/pdf") {
       throw new Error("Expected a PDF file but received something else.");
@@ -521,6 +523,50 @@ export async function useHandleDownloadExcelFAReport(params) {
     return await postRequest("getFAReport", payload);
   } catch (error) {
     console.error("Error downloading Fixed Asset report:", error);
+    return { Data: {} };
+  }
+}
+
+
+export async function useHandleDownloadExcelIMPReport(params) {
+  try {
+    const payload = {
+      PARAMS: JSON.stringify({
+        mode: params.mode,
+        branchcode: params.branchCode,
+        startdate: params.startDate,
+        enddate: params.endDate,
+        payeecode: params.payeeCode || params.vendCode,
+        rcCode: params.rcCode || params.departmentCode,
+      }),
+    };
+
+    return await postRequest("getIMPReport", payload);
+  } catch (error) {
+    console.error("Error downloading Importation report:", error);
+    return { Data: {} };
+  }
+}
+
+
+
+export async function useHandleDownloadExcelSalesReport(params) {
+  try {
+    const payload = {
+      PARAMS: JSON.stringify({
+        mode: params.mode,
+        branchcode: params.branchCode,
+        startdate: params.startDate,
+        enddate: params.endDate,
+        custCode: params.custCode || params.customerCode || params.sCustCode,
+        itemCode: params.itemCode || params.sCode,
+        chainCustomer: params.chainCustomer || params.chainCode,
+      }),
+    };
+
+    return await postRequest("getSalesReport", payload);
+  } catch (error) {
+    console.error("Error downloading Sales report:", error);
     return { Data: {} };
   }
 }

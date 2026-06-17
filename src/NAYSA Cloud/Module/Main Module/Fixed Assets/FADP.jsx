@@ -28,6 +28,7 @@ import {
   useSwalSuccessAlert,
   useSwalErrorAlert,
   useSwalProceedConfirm,
+  useSwalHandleOpenSpecsModal,
   useSwalvalidateRequiredFields as validateRequiredFields,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
@@ -84,6 +85,27 @@ const areDropdownListsEqual = (left = [], right = []) => {
   );
 };
 
+const normalizeFadpDateToMonthEnd = (value = "") => {
+  if (!value) return "";
+
+  const raw = String(value).trim();
+  const datePart = raw.includes("T") ? raw.split("T")[0] : raw;
+
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(datePart)) {
+    const [month, , year] = datePart.split("/").map((part) => part.trim());
+    const lastDay = new Date(Number(year), Number(month), 0).getDate();
+    return `${month}/${String(lastDay).padStart(2, "0")}/${year}`;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+    const [year, month] = datePart.split("-");
+    const lastDay = new Date(Number(year), Number(month), 0).getDate();
+    return `${month}/${String(lastDay).padStart(2, "0")}/${year}`;
+  }
+
+  return raw;
+};
+
 const FADP = () => {
   const {
     companyInfo,
@@ -115,7 +137,7 @@ const FADP = () => {
     branchCode: currentUserRow?.branchCode || "HO",
     branchName: currentUserRow?.branchName || "HO - Head Office",
     fadpNo: "",
-    fadpDate: useGetCurrentDayV2(),
+    fadpDate: normalizeFadpDateToMonthEnd(useGetCurrentDayV2()),
     documentStatus: "",
     status: "OPEN",
     noReprints: "0",
@@ -498,7 +520,7 @@ const FADP = () => {
         fadpNo: data.fadpNo || "",
         branchCode: data.branchCode || "",
         branchName: data.branchName || "",
-        fadpDate: useformatToDatev2(data.fadpDate || ""),
+        fadpDate: normalizeFadpDateToMonthEnd(useformatToDatev2(data.fadpDate || "")),
         depreciationType: fetchedDepreciationType,
         originalDepreciationType: fetchedDepreciationType,
         assetLocationCode: data.assetLocationCode || data.flocCode || "",
@@ -807,7 +829,7 @@ const FADP = () => {
         branchName: currentUserRow?.branchName || "HO - Head Office",
         userCode: currentUserRow?.userCode || "",
         fadpNo: "",
-        fadpDate: useGetCurrentDayV2(),
+        fadpDate: normalizeFadpDateToMonthEnd(useGetCurrentDayV2()),
         documentID: "",
         documentStatus: "",
         status: "OPEN",
@@ -1460,6 +1482,42 @@ const FADP = () => {
       return <td key={columnKey} style={style} className={`global-tran-td-ui ${alignClass}`}>{index + 1}</td>;
     }
 
+    if (columnKey === "remarks") {
+      return (
+        <td key={columnKey} style={style} className={`global-tran-td-ui relative ${alignClass}`}>
+          <div className="relative flex items-center">
+            <input
+              type="text"
+              className={`w-full global-tran-td-inputclass-ui pr-8 ${alignClass}`}
+              value={getDetailCellDisplayValue(columnKey, row)}
+              readOnly
+              disabled={isFormDisabled}
+            />
+            {!isFormDisabled && (
+              <FontAwesomeIcon
+                icon={faMagnifyingGlass}
+                className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                onClick={() =>
+                  useSwalHandleOpenSpecsModal(
+                    index,
+                    detailRows,
+                    (rowIndex, field, value) =>
+                      setDetailRows((prev) =>
+                        prev.map((item, i) => (i === rowIndex ? { ...item, [field]: value } : item))
+                      ),
+                    row.remarks,
+                    "Depreciation Details Remarks",
+                    "remarks",
+                    "Enter depreciation detail remarks..."
+                  )
+                }
+              />
+            )}
+          </div>
+        </td>
+      );
+    }
+
 
     return (
       <td key={columnKey} style={style} className={`global-tran-td-ui ${alignClass}`}>
@@ -1673,7 +1731,9 @@ const FADP = () => {
                         disabled={isFormDisabled}
                         updateState={(updates) => {
                           if (isFormDisabled) return;
-                          updateState({ fadpDate: updates.fadpDate });
+                          updateState({
+                            fadpDate: normalizeFadpDateToMonthEnd(updates.fadpDate),
+                          });
                         }}
                       />
                     </div>

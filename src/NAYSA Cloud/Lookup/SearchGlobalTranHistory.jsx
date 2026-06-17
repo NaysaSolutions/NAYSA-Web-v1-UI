@@ -1217,7 +1217,7 @@ const AllTranHistory = (props) => {
     (row) => {
       const docNo = row?.docNo ?? row?.documentNo ?? row?.DOC_NO ?? "";
       const bcode = row?.branchCode ?? row?.BRANCH_CODE ?? "";
-      if (!docNo || !bcode) return;
+      if (!docNo) return;
 
       if (typeof onRowDoubleClick === "function") {
         onRowDoubleClick({ ...row, docNo, branchCode: bcode });

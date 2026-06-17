@@ -1,3 +1,7 @@
+
+
+
+
 // import { useState, useEffect,useRef,useCallback } from "react";
 // import Swal from 'sweetalert2';
 // import { useNavigate,useLocation  } from "react-router-dom";
@@ -16,7 +20,7 @@
 // import ATCLookupModal from "../../../Lookup/SearchATCRef.jsx";
 // import VATLookupModal from "../../../Lookup/SearchVATRef.jsx";
 // import SLMastLookupModal from "../../../Lookup/SearchSLMast.jsx";
-// import BillTermLookupModal from "../../../Lookup/SearchBillTermRef.jsx";
+// import BankMastLookupModal from "../../../Lookup/SearchBankMast.jsx";
 // import SearchSalesRepRef from "../../../Lookup/SearchSalesRepRef.jsx";
 // import CancelTranModal from "../../../Lookup/SearchCancelRef.jsx";
 // import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
@@ -24,11 +28,10 @@
 // import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 // import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 // import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
-// import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
 // import SearchGlobalItemPickingModal from "../../../Lookup/SearchGlobalItemPickingModal.jsx";
 
 // // Configuration
-// import { apiClient, fetchDataJson, postRequest} from '../../../Configuration/BaseURL.jsx'
+// import { postRequest } from '../../../Configuration/BaseURL.jsx'
 // import { useReset } from "../../../Components/ResetContext";
 // import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 // import {
@@ -40,7 +43,7 @@
 
 // import {
 //   useTopRCRow,
-//   useTopBillTermRow,
+//   useTopAccountRow,
 //   useTopForexRate,
 //   useTopCurrencyRow,
 //   useTopSalesRepRow,
@@ -62,7 +65,7 @@
 //   useformatToDatev2
 // } from '@/NAYSA Cloud/Global/dates';
 // import {
-//   useSelectedHSColConfig as selectedHSColConfig
+//   useSelectedHSColConfig
 // } from '@/NAYSA Cloud/Global/selectedData';
 
 // import DateFormatInput from '@/NAYSA Cloud/Global/DateFormatInput.jsx';
@@ -90,7 +93,7 @@
 
 // // Header
 // import Header from '@/NAYSA Cloud/Components/Header';
-// const SI = () => {
+// const CSI = () => {
 
 //   // View Document Const
 //   const loadedFromUrlRef = useRef(false);
@@ -119,7 +122,7 @@
 //   const [itemPickingRowIndex, setItemPickingRowIndex] = useState(null);
 //   const [itemPickingStockRows, setItemPickingStockRows] = useState([]);
 //   const [itemPickingExistingAllocations, setItemPickingExistingAllocations] = useState([]);
-//   const docType = docTypes.SI;
+//   const docType = docTypes.CSI || "CSI";
 //   const hsDoc = getAllTopHSDocRow(docType) || {};
 //   const pdfLink = docTypePDFGuide[docType];
 //   const videoLink = docTypeVideoGuide[docType];
@@ -155,6 +158,7 @@
 //     isLoading: false,
 //     showSpinner: false,
 //     triggerGLEntries:false,
+//     isGeneratingGL: false,
 //     isDocNoDisabled: false,
 //     isSaveDisabled: false,
 //     isResetDisabled: false,
@@ -167,16 +171,14 @@
 //     // Customer information
 //     billToCustCode: "",
 //     billToCustName: "",
-//     contactPerson: "",
-//     customerPoNo: "",
-//     customerPoDate: null,
+//     custAddr: "",
+//     custTin: "",
 //     salesRepCode: "",
 //     salesRepName: "",
 //     atcCode: "",
 //     atcName: "",
 //     vatCode: "",
 //     vatName: "",
-//     vatCodeFADisposal:"",
 
 //     // Currency information
 //     currCode: companyInfo?.currCode||"",
@@ -186,24 +188,30 @@
 
 //     //Other Header Info
 //     tblFieldArray :[],
-//     siStatus: "O",
-//     siTranType: "",
-//     siTranTypeOptions: [],
-//     siStatusOptions: [],
-//     refSiNo1: "",
-//     refSiNo2: "",
+//     csiStatus: "O",
+//     csiTranType: "",
+//     csiTranTypeOptions: [],
+//     csiStatusOptions: [],
+
+//     paymentType: "",
+//     paymentTypeOptions: [],
+//     bankCode: companyInfo?.depBankcode||"",
+//     bank: "",
+//     acctCode: companyInfo?.depositBankAcctCode || "",
+//     acctName: companyInfo?.depositBankName || "",
+//     currAmount: "0.00",
+//     amount: "0.00",
+//     checkNo: "",
+//     checkDate: "",
+//     clearDate: "",
+//     refCsiNo1: "",
+//     refCsiNo2: "",
 //     remarks: "",
-//     billtermCode: "",
-//     billtermName: "",
-//     dueDate: "",
-//     daysDue: "",
 //     userCode: currentUserRow?.userCode||"",
 
 //     //Detail 1-2
 //     detailRows  :[],
 //     detailRowsGL :[],
-//     openDRSI_Data_Summary: [],
-//     openDRSI_Col_Summary: [],
 
 //     totalDebit:"0.00",
 //     totalCredit:"0.00",
@@ -221,26 +229,73 @@
 //     insertAfterIndex: null,    
 //     showRcModal:false,
 //     showSlModal:false,
-//     showBilltermModal:false,
 //     showSalesRepModal:false,
 //     showItemModal:false,    
 //     showATCModal:false,
 //     showVatModal:false,
+//     showBankMastModal:false,
 
 //     currencyModalOpen:false,
 //     branchModalOpen:false,
 //     custModalOpen:false,
-//     billtermModalOpen:false,
 //     showCancelModal:false,
 //     showAttachModal:false,
 //     showSignatoryModal:false,
 //     showAllTranDocNo:false,
-//     showOpenDRModal:false
 //    });
 
 //   const updateState = (updates) => {
 //       setState(prev => ({ ...prev, ...updates }));
 //     };
+
+//   const [csiHeaderColConfig, setCsiHeaderColConfig] = useState([]);
+
+//   useEffect(() => {
+//     if (!refsLoaded) return;
+
+//     let isMounted = true;
+
+//     const loadCsiHeaderColConfig = async () => {
+//       try {
+//         const configRows = await useSelectedHSColConfig("CSI_Header");
+//         if (isMounted && Array.isArray(configRows)) {
+//           setCsiHeaderColConfig(configRows);
+//         }
+//       } catch (error) {
+//         if (isMounted) {
+//           setCsiHeaderColConfig([]);
+//         }
+//         console.warn("CSI_Header hs_colconfig is not available.", error);
+//       }
+//     };
+
+//     loadCsiHeaderColConfig();
+
+//     return () => {
+//       isMounted = false;
+//     };
+//   }, [refsLoaded]);
+
+//   const getCsiHeaderFieldConfig = useCallback(
+//     (fieldKey) =>
+//       (csiHeaderColConfig || []).find(
+//         (config) => String(config?.key || "").toLowerCase() === String(fieldKey || "").toLowerCase()
+//       ) || {},
+//     [csiHeaderColConfig]
+//   );
+
+//   const getCsiHeaderLabel = useCallback(
+//     (fieldKey, fallbackLabel) => getCsiHeaderFieldConfig(fieldKey)?.label || fallbackLabel,
+//     [getCsiHeaderFieldConfig]
+//   );
+
+//   const isCsiHeaderFieldHidden = useCallback(
+//     (fieldKey) => Number(getCsiHeaderFieldConfig(fieldKey)?.hidden || 0) === 1,
+//     [getCsiHeaderFieldConfig]
+//   );
+
+//   const renderCsiHeaderField = (fieldKey, element) =>
+//     isCsiHeaderFieldHidden(fieldKey) ? null : element;
 
 //   const {
 //   // Document info
@@ -261,6 +316,7 @@
 //   isLoading,
 //   showSpinner,
 //   triggerGLEntries,
+//   isGeneratingGL,
 
 //   // UI states / disable flags
 //   isDocNoDisabled,
@@ -274,8 +330,8 @@
 //   branchName,
 //   billToCustCode,
 //   billToCustName,
-//   customerPoNo,
-//   customerPoDate,
+//   custAddr,
+//   custTin,
 //   salesRepCode,
 //   salesRepName,
 //   atcCode,
@@ -285,26 +341,29 @@
 //   currCode,
 //   currName,
 //   currRate,
-//   siTranType,
-//   siTranTypeOptions = [],
-//   siStatus,
-//   siStatusOptions = [],
-//   refSiNo1,
-//   refSiNo2,
+//   csiTranType,
+//   csiTranTypeOptions = [],
+//   csiStatus,
+//   csiStatusOptions = [],
+//   paymentType,
+//   paymentTypeOptions = [],
+//   bankCode,
+//   bank,
+//   acctCode,
+//   acctName,
+//   currAmount,
+//   amount,
+//   checkNo,
+//   checkDate,
+//   clearDate,
+//   refCsiNo1,
+//   refCsiNo2,
 //   remarks,
-//   contactPerson,
-//   billtermCode,
-//   billtermName,
-//   dueDate,
-//   daysDue,
-//   vatCodeFADisposal,
 
 //   // Transaction details
 //   tblFieldArray,
 //   detailRows,
 //   detailRowsGL,
-//   openDRSI_Data_Summary,
-//   openDRSI_Col_Summary,
 //   totalDebit,
 //   totalCredit,
 //   totalDebitFx1,
@@ -328,14 +387,13 @@
 //   currencyModalOpen,
 //   branchModalOpen,
 //   custModalOpen,
-//   billtermModalOpen,
 //   showCancelModal,
 //   showAttachModal,
 //   showSignatoryModal,
 //   showAllTranDocNo,
-//   showOpenDRModal,
 //   showATCModal,
-//   showVatModal
+//   showVatModal,
+//   showBankMastModal
 
 //   } = state;
 
@@ -362,19 +420,19 @@
 //   const isCancelled = normalizedDisplayStatus === "CANCELLED";
 //   const isFormDisabled = isViewDocumentUrl || ["FINALIZED", "POSTED", "CANCELLED", "CLOSED"].includes(normalizedDisplayStatus);  
 //   const isHeaderSiStatusEditable = !!String(documentID || "").trim() && !isFormDisabled;
-//   const totalSiQuantity = detailRows.reduce((total, row) => total + (parseFormattedNumber(row.siQuantity || 0) || 0),0);
+//   const totalCsiQuantity = detailRows.reduce((total, row) => total + (parseFormattedNumber(row.csiQuantity || 0) || 0),0);
 //   const hasPickedQuantity = (detailRows || []).some(
 //     (row) => (parseFormattedNumber(row.quantityPicked || 0) || 0) > 0
 //   );
 
 //   const filteredHeaderSiStatusOptions =
-//     !isPosted && totalSiQuantity > 0
-//       ? (siStatusOptions || []).filter(
+//     !isPosted && totalCsiQuantity > 0
+//       ? (csiStatusOptions || []).filter(
 //           (option) =>
 //             ["O", "C"].includes(option.DROPDOWN_CODE) ||            
-//             option.DROPDOWN_CODE === siStatus
+//             option.DROPDOWN_CODE === csiStatus
 //         )
-//       : siStatusOptions;
+//       : csiStatusOptions;
 
 //   //Variables
 //   const [totals, setTotals] = useState({
@@ -389,6 +447,7 @@
 
 //   const customParamMap = {
 //     acctCode: glAccountFilter.ActiveAll,
+//     headerAcctCode: glAccountFilter.ActiveAll,
 //   };
 //   const customParam = customParamMap[accountModalSource] || null;
 
@@ -420,44 +479,25 @@
 //   const glCurrDefault = companyInfo?.currCode || "";
 //   const sellingPriceDecimals = Number(companyInfo?.item_decsellprice ?? 2);
 //   const quantityDecimals = Number(companyInfo?.itemDescQtyFG ?? 2);
-
-//   // Company sales settings
-//   const salesDiscountMode = String(companyInfo?.salesDiscountMode || "").toUpperCase();
-//   const salesAllowDuplicateItem = String(
-//     companyInfo?.salesAllowDuplicateItem || ""
-//   ).toUpperCase();
-
-//   // Derived UI flags
-//   const isSellingPriceAndDiscountEditable = salesDiscountMode === "MANUAL";
-//   const SI_ALLOW_DUPLICATE_ITEMS = salesAllowDuplicateItem === "E";
+//   const salesAllowDuplicateItem = String(companyInfo?.salesAllowDuplicateItem || "").toUpperCase();
+//   const isSellingPriceAndDiscountEditable = true;
+//   const CSI_ALLOW_DUPLICATE_ITEMS = salesAllowDuplicateItem === "E";
 
 //   // Discount configuration
-//   const discountLevel = Math.min(
-//     Math.max(Number(companyInfo?.salesDiscLevel ?? 8), 1),
-//     8
-//   );
-//   const showTotalDiscountColumn = discountLevel > 1;
-//   const visibleDiscountRateFields = Array.from(
-//     { length: discountLevel },
-//     (_, index) => `discRate${index + 1}`
-//   );
-//   const visibleDiscountAmountFields = Array.from(
-//     { length: discountLevel },
-//     (_, index) => `discAmount${index + 1}`
-//   );
+//   const discountLevel = 1;
+//   const showTotalDiscountColumn = false;
+//   const visibleDiscountRateFields = ["discRate"];
+//   const visibleDiscountAmountFields = ["discAmount"];
 
 //   const detailColumnDefs = [
-//     { key: "drId", label: "DR ID", width: 120 },
-//     { key: "soId", label: "SO ID", width: 120 },
 //     { key: "groupId", label: "Group ID", width: 120 },
 //     { key: "ln", label: "LN", width: 56 },
-//     { key: "siStat", label: "Picking Status", width: 130 },
-//     { key: "drNo", label: "DR No.", width: 140 },
+//     { key: "csiStat", label: "Picking Status", width: 130 },
 //     { key: "itemCode", label: "Item Code", width: 140 },
 //     { key: "itemName", label: "Item Name", width: 240 },
 //     { key: "itemSpecs", label: "Specification", width: 240 },
 //     { key: "uomCode", label: "UOM", width: 100 },
-//     { key: "siQuantity", label: "SI Quantity", width: 120 },
+//     { key: "csiQuantity", label: "CSI Quantity", width: 120 },
 //     { key: "quantityPicked", label: "Quantity Picked", width: 130 },
 //     { key: "itemAmount", label: "Item Amount", width: 130 },
 //     { key: "unitPrice", label: "Selling Price", width: 130 },
@@ -472,9 +512,6 @@
 //       label: discountLevel === 1 ? "Disc Amount" : `Disc Amount ${index + 1}`,
 //       width: 120,
 //     })),
-//     ...(showTotalDiscountColumn
-//       ? [{ key: "totDiscount", label: "Total Discount", width: 130 }]
-//       : []),
 //     { key: "netAmount", label: "Net Amount", width: 130 },
 //     { key: "vatCode", label: "VAT Code", width: 120 },
 //     { key: "vatRate", label: "VAT Rate", width: 110 },
@@ -498,17 +535,12 @@
 //     renderResizableHeader: renderSiDetailHeader,
 //   } = useResizableTableColumns(detailColumnDefs);
 //   const orderedDetailColumns = getOrderedSoDetailColumns(detailColumnDefs);
-//   const normalizedSiTranType = String(siTranType || "").toUpperCase();
-//   const isDirectSiType = normalizedSiTranType === "SI01";
-//   const isPickingSiType = normalizedSiTranType === "SI02";
-//   const canUsePickingControls =
-//     isPickingSiType && !isViewDocumentUrl && isOpenStatus && !isPosted && !isCancelled;
-//   const isAddItemDisabledBySiType = isDirectSiType;
-//   const isOpenDRDisabledBySiType = isPickingSiType;
-//   const hasSiDetailRows = (detailRows || []).length > 0;
-//   const hasDRLinkedDetailRows = (detailRows || []).some((row) =>
-//     Boolean(String(row?.drNo || "").trim())
-//   );
+//   const normalizedCsiTranType = String(csiTranType || "").toUpperCase();
+//   const isDirectCsiType = true;
+//   const isPickingCsiType = true;
+//   const canUsePickingControls = !isViewDocumentUrl && isOpenStatus && !isPosted && !isCancelled;
+//   const isAddItemDisabledByCsiType = false;
+//   const hasCsiDetailRows = (detailRows || []).length > 0;
 //   const getDetailColumnFallbackWidth = (key) =>
 //     detailColumnDefs.find((column) => column.key === key)?.width || 120;
 //   const getDetailCellStyle = (key, fallbackWidth) => ({
@@ -522,25 +554,16 @@
 //   }, [setSoDetailColumnOrder, discountLevel]);
 
 //   useEffect(() => {
-//     const hiddenColumnKeys = ["drId", "soId", "groupId", "vatRate"];
+//     const hiddenColumnKeys = ["groupId", "vatRate"];
 
-//     if (!isPickingSiType) {
-//       hiddenColumnKeys.push("siStat", "quantityPicked", "itemAmount");
-//     }
-
-//    if (isPickingSiType || normalizedSiTranType === "SI03") {
-//       hiddenColumnKeys.push("drNo");
-//     }
-
-
-//     if (normalizedSiTranType === "SI03") {
-//       hiddenColumnKeys.push("discRate1", "discRate2", "discRate3", "discRate4", "discRate5", "discRate6", "discRate7", "discRate8", "discAmount1", "discAmount2", "discAmount3", "discAmount4", "discAmount5", "discAmount6", "discAmount7", "discAmount8", "totDiscount","freeItem");
+//     if (!isPickingCsiType) {
+//       hiddenColumnKeys.push("csiStat", "quantityPicked", "itemAmount");
 //     }
 
 
 
 //     setSoDetailHiddenColumnKeys(hiddenColumnKeys);
-//   }, [setSoDetailHiddenColumnKeys, isDirectSiType, isPickingSiType,normalizedSiTranType]);
+//   }, [setSoDetailHiddenColumnKeys, isDirectCsiType, isPickingCsiType,normalizedCsiTranType]);
 
 
 //   const sortedDetailRows = getSortedSoDetailRows(
@@ -559,7 +582,7 @@
 //   const glCurrGlobal2 = companyInfo?.glCurrGlobal2 || "";
 //   const glCurrGlobal3 = companyInfo?.glCurrGlobal3 || "";
 
-//   const siGlColumnDefs = [
+//   const csiGlColumnDefs = [
 //     { key: "ln", label: "LN", width: 56 },
 //     { key: "acctCode", label: "Account Code", width: 120 },
 //     { key: "rcCode", label: "RC Code", width: 120 },
@@ -585,36 +608,36 @@
 //     { key: "remarks", label: "Remarks", width: 140 },
 //   ];
 //   const {
-//     getColumnStyle: getSiGlColumnStyle,
-//     getFrozenColumnStyle: getSiGlFrozenStyle,
-//     getOrderedColumns: getOrderedSiGlColumns,
-//     getSortedRows: getSortedSiGlRows,
-//     setColumnOrder: setSiGlColumnOrder,
-//     clearZeroValueOnFocus: clearSiGlZeroOnFocus,
-//     focusNextRowInput: focusNextSiGlRowInput,
-//     renderHeaderContextMenu: renderSiGlHeaderContextMenu,
-//     renderResizableHeader: renderSiGlHeader,
-//   } = useResizableTableColumns(siGlColumnDefs);
-//   const orderedSiGlColumns = getOrderedSiGlColumns(siGlColumnDefs);
-//   const getSiGlFallbackWidth = (key) =>
-//     siGlColumnDefs.find((column) => column.key === key)?.width || 120;
-//   const getSiGlCellStyle = (key, fallbackWidth) => ({
-//     ...getSiGlColumnStyle(key, fallbackWidth),
-//     ...getSiGlFrozenStyle(key, orderedSiGlColumns, fallbackWidth, {
+//     getColumnStyle: getCcsiGlColumnStyle,
+//     getFrozenColumnStyle: getCcsiGlFrozenStyle,
+//     getOrderedColumns: getOrderedCsiGlColumns,
+//     getSortedRows: getSortedCsiGlRows,
+//     setColumnOrder: setCcsiGlColumnOrder,
+//     clearZeroValueOnFocus: clearCsiGlZeroOnFocus,
+//     focusNextRowInput: focusNextCsiGlRowInput,
+//     renderHeaderContextMenu: renderCcsiGlHeaderContextMenu,
+//     renderResizableHeader: renderCcsiGlHeader,
+//   } = useResizableTableColumns(csiGlColumnDefs);
+//   const orderedCcsiGlColumns = getOrderedCsiGlColumns(csiGlColumnDefs);
+//   const getCcsiGlFallbackWidth = (key) =>
+//     csiGlColumnDefs.find((column) => column.key === key)?.width || 120;
+//   const getCcsiGlCellStyle = (key, fallbackWidth) => ({
+//     ...getCcsiGlColumnStyle(key, fallbackWidth),
+//     ...getCcsiGlFrozenStyle(key, orderedCcsiGlColumns, fallbackWidth, {
 //       isHeader: false,
 //     }),
 //   });
 //   useEffect(() => {
-//     setSiGlColumnOrder(siGlColumnDefs.map((column) => column.key));
-//   }, [setSiGlColumnOrder, withCurr2, withCurr3, glCurrDefault, currCode, glCurrGlobal2, glCurrGlobal3]);
-//   const sortedSiGlRows = getSortedSiGlRows(
+//     setCcsiGlColumnOrder(csiGlColumnDefs.map((column) => column.key));
+//   }, [setCcsiGlColumnOrder, withCurr2, withCurr3, glCurrDefault, currCode, glCurrGlobal2, glCurrGlobal3]);
+//   const sortedCcsiGlRows = getSortedCsiGlRows(
 //     detailRowsGL.map((row, originalIndex) => ({ row, originalIndex })),
 //     (entry, sortKey) => {
 //       if (sortKey === "ln") return entry.originalIndex + 1;
 //       return entry.row?.[sortKey] ?? "";
 //     }
 //   );
-//   const siGlEnterNextRowZeroClearFields = [
+//   const csiGlEnterNextRowZeroClearFields = [
 //     "debit",
 //     "credit",
 //     "debitFx1",
@@ -624,49 +647,6 @@
 //   ];
 
 //   const setGLActiveTab = (tab) => updateState({ GLactiveTab: tab });
-//   const calculateDueDate = (startDate, daysDue) => {
-//     if (!startDate || daysDue === "" || daysDue === null || daysDue === undefined || isNaN(daysDue)) return "";
-//     try {
-//       const rawDate = String(startDate).trim();
-//       const isoMatch = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
-//       const usMatch = rawDate.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-//       const date = isoMatch
-//         ? new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]))
-//         : usMatch
-//         ? new Date(Number(usMatch[3]), Number(usMatch[1]) - 1, Number(usMatch[2]))
-//         : new Date(rawDate);
-
-//       if (Number.isNaN(date.getTime())) return "";
-
-//       date.setDate(date.getDate() + parseInt(daysDue, 10));
-//       const month = String(date.getMonth() + 1).padStart(2, "0");
-//       const day = String(date.getDate()).padStart(2, "0");
-//       const year = date.getFullYear();
-//       return `${month}/${day}/${year}`;
-//     } catch (error) {
-//       console.error("Error calculating due date:", error);
-//       return "";
-//     }
-//   };
-
-//   useEffect(() => {
-//     if (!billtermCode) return;
-//     if (daysDue === "" || daysDue === null || daysDue === undefined) return;
-//     const nextDueDate = calculateDueDate(documentDate, daysDue);
-//     updateState({ dueDate: nextDueDate });
-//   }, [documentDate, daysDue, billtermCode]);
-
-
-
-
-
-
-
-
-
-//   // API endpoints
-//   const SI_PRICE_MATRIX_ENDPOINT = "getPriceMatrixItemPrice"; // Assuming SI also uses price matrix
-//   const SI_DUPLICATE_PO_ENDPOINT = "/checkSIDuplicatePO"; // Assuming SI also has duplicate PO check
 
 //   const calculateSalesAmount = (netAmount, vatAmount) =>
 //     (parseFormattedNumber(netAmount || 0) || 0) -
@@ -823,135 +803,6 @@
 //     });
 //   };
 
-
-
-
-//   const formatFetchedHeaderDate = (value) => {
-//     const raw = String(value || "").trim();
-//     if (!raw) return "";
-
-//     if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
-//       const [month, day, year] = raw.split("/").map(Number);
-//       const isValidMonth = month >= 1 && month <= 12;
-//       const isValidDay = day >= 1 && day <= 31;
-//       const isValidYear = year >= 1900 && year <= 2999;
-
-//       if (isValidMonth && isValidDay && isValidYear) {
-//         return raw;
-//       }
-//     }
-
-//     if (/^(19|20)\d{2}-\d{2}-\d{2}(T.*)?$/.test(raw)) {
-//       return useformatToDatev2(raw);
-//     }
-
-//     const digits = raw.replace(/\D/g, "");
-
-//     if (digits.length === 8) {
-//       const first4 = digits.slice(0, 4);
-//       const middle2 = digits.slice(4, 6);
-//       const last2 = digits.slice(6, 8);
-
-//       if (/^(19|20)\d{2}$/.test(first4)) {
-//         return `${middle2}/${last2}/${first4}`;
-//       }
-
-//       const month = digits.slice(0, 2);
-//       const day = digits.slice(2, 4);
-//       const year = digits.slice(4, 8);
-//       return `${month}/${day}/${year}`;
-//     }
-
-//     return "";
-//   };
-
-//   const parseComparableDate = (value) => {
-//     const formattedValue = formatFetchedHeaderDate(value);
-
-//     if (!formattedValue || !/^\d{2}\/\d{2}\/\d{4}$/.test(formattedValue)) {
-//       return null;
-//     }
-
-//     const [month, day, year] = formattedValue.split("/").map(Number);
-//     const parsedDate = new Date(year, month - 1, day);
-
-//     if (
-//       parsedDate.getFullYear() !== year ||
-//       parsedDate.getMonth() !== month - 1 ||
-//       parsedDate.getDate() !== day
-//     ) {
-//       return null;
-//     }
-
-//     return parsedDate;
-//   };
-
-//   const isDateEarlierThanSiDate = (value) => {
-//     const candidateDate = parseComparableDate(value);
-//     const soDate = parseComparableDate(documentDate);
-
-//     if (!candidateDate || !soDate) {
-//       return false;
-//     }
-
-//     return candidateDate < soDate;
-//   };
-
-//   const clearHeaderAndDetailDates = ({ showAlert = false } = {}) => {
-//     const updatedRows = detailRows.map((row) => ({
-//       ...row,
-//       // No delivery date in SI details, assuming SI date is the main date
-//     }));
-
-//     if (showAlert) {
-//       useSwalErrorAlert(
-//         "Invalid Date",
-//         "Date must not be earlier than SI Date."
-//       );
-//     }
-//   };
-
-//   const parseDuplicatePOCheckResult = (response) => {
-//     const rawResult =
-//       response?.data?.data?.[0]?.result ??
-//       response?.data?.[0]?.result ??
-//       response?.data?.result ??
-//       response?.result ??
-//       '{"result":"0"}';
-
-//     try {
-//       const parsed =
-//         typeof rawResult === "string" ? JSON.parse(rawResult) : rawResult;
-//       return String(parsed?.result || "0") === "1";
-//     } catch {
-//       return String(response?.data?.result || response?.result || "0") === "1";
-//     }
-//   };
-
-//   const checkDuplicateSiNo = async (siNoValue) => {
-//     const trimmedSiNo = String(siNoValue || "").trim();
-//     const trimmedCustCode = String(billToCustCode || "").trim();
-
-//     if (!trimmedSiNo || !trimmedCustCode) {
-//       return false;
-//     }
-
-//     const params = {
-//       json_data: {
-//         siNo: trimmedSiNo,
-//         custCode: trimmedCustCode,
-//       },
-//     };
-
-//     try {
-//       const response = await apiClient.get(SI_DUPLICATE_PO_ENDPOINT, { params });
-//       return parseDuplicatePOCheckResult(response);
-//     } catch (error) {
-//       console.error("Error checking duplicate SO customer PO:", error);
-//       return false;
-//     }
-//   };
-
 //   const applyHeaderValueToDetailRows = (detailField, detailValue, headerOverrides = {}) => {
 //     const selectedVatRow =
 //       detailField === "vatCode" ? getAllTopVatRow(detailValue) : null;
@@ -985,7 +836,7 @@
 
 //     const result = await useSwalProceedConfirm(
 //       `Apply ${headerLabel} changes?`,
-//       `SO Detail already has record(s).\nDo you want to apply the updated ${headerLabel} to all SO Detail rows?`,
+//       `CSI Detail already has record(s).\nDo you want to apply the updated ${headerLabel} to all CSI Detail rows?`,
 //       "Yes"
 //     );
 
@@ -1047,32 +898,55 @@
 
 // useEffect(() => {
 //     if (!refsLoaded) return;
-//     const filteredTypes = getAllDropDown("SITRAN_TYPE", docType) || [];
-//     const defaultSiType =
-//       filteredTypes.find((type) => type.DROPDOWN_CODE === "SI01")?.DROPDOWN_CODE ||
+
+//     const filteredTypes = getAllDropDown("CSITRAN_TYPE", docType) || [];
+//     const filteredPaymentTypes = getAllDropDown("PAYMENT_TYPE", docType) || [];
+
+//     const defaultCsiType =
+//       filteredTypes.find((type) => type.DROPDOWN_CODE === "CSI01")?.DROPDOWN_CODE ||
 //       filteredTypes[0]?.DROPDOWN_CODE ||
 //       "";
-//     const mapHeaderSiStatus = (value) => {
+
+//     const defaultPaymentType =
+//       filteredPaymentTypes.find((type) => type.DROPDOWN_CODE === "AR02")?.DROPDOWN_CODE ||
+//       filteredPaymentTypes[0]?.DROPDOWN_CODE ||
+//       "";
+
+//     const mapHeaderCsiStatus = (value) => {
 //       const normalizedValue = String(value || "").toUpperCase();
 //       if (normalizedValue === "OPEN" || normalizedValue === "O") return "O";
 //       if (normalizedValue === "CANCELLED" || normalizedValue === "X") return "X";
 //       if (normalizedValue === "CLOSED" || normalizedValue === "C") return "C";
 //       return "O";
 //     };
+
 //     updateState({
-//       siTranTypeOptions: filteredTypes,
-//       siTranType: defaultSiType,
-//       siStatusOptions: [{ DROPDOWN_CODE: "O", DROPDOWN_NAME: "Open" }, { DROPDOWN_CODE: "X", DROPDOWN_NAME: "Cancelled" }, { DROPDOWN_CODE: "C", DROPDOWN_NAME: "Closed" }],
-//       siStatus: mapHeaderSiStatus(state.siStatus),
+//       csiTranTypeOptions: filteredTypes,
+//       csiTranType: state.csiTranType || defaultCsiType,
+//       paymentTypeOptions: filteredPaymentTypes,
+//       paymentType: state.paymentType || defaultPaymentType,
+//       csiStatusOptions: [
+//         { DROPDOWN_CODE: "O", DROPDOWN_NAME: "Open" },
+//         { DROPDOWN_CODE: "X", DROPDOWN_NAME: "Cancelled" },
+//         { DROPDOWN_CODE: "C", DROPDOWN_NAME: "Closed" },
+//       ],
+//       csiStatus: mapHeaderCsiStatus(state.csiStatus),
 //     });
 // }, [docType, refsLoaded]);
 
 //   const handleReset = () => {
 //       clearSoDetailSorting();
-//       const filteredTypes = getAllDropDown("SITRAN_TYPE", docType) || [];
-//       const defaultSiType =
-//         filteredTypes.find((type) => type.DROPDOWN_CODE === "SI01")?.DROPDOWN_CODE ||
+//       const filteredTypes = getAllDropDown("CSITRAN_TYPE", docType) || [];
+//       const filteredPaymentTypes = getAllDropDown("PAYMENT_TYPE", docType) || [];
+
+//       const defaultCsiType =
+//         filteredTypes.find((type) => type.DROPDOWN_CODE === "CSI01")?.DROPDOWN_CODE ||
 //         filteredTypes[0]?.DROPDOWN_CODE ||
+//         "";
+
+//       const defaultPaymentType =
+//         filteredPaymentTypes.find((type) => type.DROPDOWN_CODE === "AR02")?.DROPDOWN_CODE ||
+//         filteredPaymentTypes[0]?.DROPDOWN_CODE ||
 //         "";
 
 //       updateState({
@@ -1085,35 +959,40 @@
 //       glCurrDefault:companyInfo?.currCode||"",
 //       currName:companyInfo?.currName||"",
 //       currRate:formatNumber(companyInfo?.currRate||1,6),
-//       refSiNo1: "",
-//       refSiNo2: "",
+//       refCsiNo1: "",
+//       refCsiNo2: "",
 //       salesRepCode:"",
 //       salesRepName:"",
 //       remarks:"",
-//       billtermCode:"",
-//       billtermName:"",
-//       dueDate: "",
-//       daysDue: "",
 //       noReprints:"0",
 //       billToCustCode:"",
 //       billToCustName:"",
-//       customerPoNo: "",
-//       customerPoDate: null,
-//       contactPerson: "",
+//       custAddr:"",
+//       custTin:"",
 //       atcCode: "",
 //       atcName: "",
-//       vatCode: "",
+//       vatCode: vatCode || "",
 //       vatName: "",
 //       documentNo: "",
 //       documentID: "",
 //       detailRows: [],
 //       detailRowsGL: [],
-//       openDRSI_Data_Summary: [],
-//       openDRSI_Col_Summary: [],
 //       ...getGLTotalsState([]),
 //       documentStatus:"",      
-//       siTranType: defaultSiType,
-//       siStatus:"O",
+//       csiTranTypeOptions: filteredTypes,
+//       csiTranType: defaultCsiType,
+//       paymentTypeOptions: filteredPaymentTypes,
+//       paymentType: defaultPaymentType,
+//       bankCode: companyInfo?.depBankcode||"",
+//       bank: "",
+//       acctCode: companyInfo?.depositBankAcctCode || "",
+//       acctName: companyInfo?.depositBankName || "",
+//       currAmount: "0.00",
+//       amount: "0.00",
+//       checkNo: "",
+//       checkDate: "",
+//       clearDate: "",
+//       csiStatus:"O",
 
 //       // UI state
 //       activeTab: "basic",
@@ -1125,9 +1004,9 @@
 //       // Modal states
 //       showRcModal: false,
 //       showAccountModal: false,
+//       showBankMastModal: false,
 //       showSlModal: false,
 //       showSalesRepModal: false,
-//       showOpenDRModal: false,
 //     });
 
 //     updateTotalsDisplay(0, 0, 0, 0, 0, 0, 0);
@@ -1138,7 +1017,7 @@
 
 //         try {
 //           const hdtblcol_result = await useFieldLenghtCheck(
-//             "si_hd,si_dt1,'si_dt2"
+//             "csi_hd,csi_dt1,csi_dt2"
 //           );
 
 //           if (hdtblcol_result) {
@@ -1160,9 +1039,9 @@
 //   updateState({ isLoading: true });
   
 //   try {
-//     const data = await useFetchTranData(documentNo, branchCode, docType, "siNo", direction);
+//     const data = await useFetchTranData(documentNo, branchCode, docType, "csiNo", direction);
 
-//     if (!data?.siId) {
+//     if (!data?.csiId) {
 //       Swal.fire({ icon: 'info', title: 'No Records Found', text: 'Transaction does not exist.' });
 //       return resetState();
 //     }
@@ -1170,30 +1049,13 @@
 //     // Format rows
 //     const retrievedDetailRows = distributeVatAcrossDetailRows((data.dt1 || []).map(item => ({
 //       ...item,
-//       siStat: item.pickStat || item.siStat || "F",
-//       siQuantity: formatNumber(item.siQuantity ?? 0,quantityDecimals),
-//       drNo: item.drNo || "",
-//       drId: item.drId || "",
-//       soId: item.soId || "",
+//       csiStat: item.pickStat || item.csiStat || "F",
+//       csiQuantity: formatNumber(item.csiQuantity ?? 0,quantityDecimals),
 //       groupId: item.groupId || "",
 //       unitPrice: formatNumber(item.unitPrice??0,sellingPriceDecimals),
 //       grossAmount: formatNumber(item.grossAmount),
-//       discRate1: formatNumber(item.discRate1 ?? 0),
-//       discRate2: formatNumber(item.discRate2 ?? 0),
-//       discRate3: formatNumber(item.discRate3 ?? 0),
-//       discRate4: formatNumber(item.discRate4 ?? 0),
-//       discRate5: formatNumber(item.discRate5 ?? 0),
-//       discRate6: formatNumber(item.discRate6 ?? 0),
-//       discRate7: formatNumber(item.discRate7 ?? 0),
-//       discRate8: formatNumber(item.discRate8 ?? 0),
-//       discAmount1: formatNumber(item.discAmount1 ?? 0),
-//       discAmount2: formatNumber(item.discAmount2 ?? 0),
-//       discAmount3: formatNumber(item.discAmount3 ?? 0),
-//       discAmount4: formatNumber(item.discAmount4 ?? 0),
-//       discAmount5: formatNumber(item.discAmount5 ?? 0),
-//       discAmount6: formatNumber(item.discAmount6 ?? 0),
-//       discAmount7: formatNumber(item.discAmount7 ?? 0),
-//       discAmount8: formatNumber(item.discAmount8 ?? 0),
+//       discRate: formatNumber(item.discRate ?? 0),
+//       discAmount: formatNumber(item.discAmount ?? 0),
 //       totDiscount: formatNumber(item.totDiscount ?? 0),      
 //       vatAmount: formatNumber(item.vatAmount ?? 0),
 //       vatCode: item.vatCode || data.vatCode || "",
@@ -1203,10 +1065,7 @@
 //       amountDue: formatNumber(item.amountDue ?? 0),
 //       netAmount: formatNumber(item.netAmount ?? 0),
 //       quantityPicked: formatNumber(item.quantityPicked ?? item.qtyPicked ?? 0, quantityDecimals),
-//       itemAmount: item.itemAmount ?? formatNumber( 0),
-//       drQuantity: formatNumber(item.drQuantity ?? 0, quantityDecimals),
-//       linkedSiQuantity: formatNumber(item.siQuantity ?? 0, quantityDecimals), // Renamed to avoid confusion
-//     })), { atcCode: data.atcCode || "" });
+//       itemAmount: item.itemAmount ?? formatNumber( 0),    })), { atcCode: data.atcCode || "" });
 
 //     const formattedGLRows = (data.dt2 || []).map(glRow => ({
 //       ...glRow,
@@ -1220,41 +1079,48 @@
 //     }));
 
 //     updateState({
-//       documentStatus: data.siStatus,
+//       documentStatus: data.csiStatus,
 //       status: data.docStatus,
 //       noReprints:data.noReprints,
-//       documentID: data.siId,
-//       documentNo: data.siNo,
-//       refSiNo1: data.refSiNo1 || "",
-//       refSiNo2: data.refSiNo2 || "",
+//       documentID: data.csiId,
+//       documentNo: data.csiNo,
+//       refCsiNo1: data.refCsiNo1 || "",
+//       refCsiNo2: data.refCsiNo2 || "",
 //       branchCode: data.branchCode,
 //       branchName:data.branchName,
-//       documentDate: useformatToDatev2(data.siDate),
-//       siTranType: data.siTranType,
+//       documentDate: useformatToDatev2(data.csiDate),
+//       csiTranType: data.csiTranType,
 //       billToCustCode: data.custCode,
 //       billToCustName: data.custName,
-//       customerPoNo: data.customerPoNo || "",
-//       customerPoDate: data.customerPoDate ? useformatToDatev2(data.customerPoDate) : null,
+//       custAddr: data.custAddr || "",
+//       custTin: data.custTin || "",
 //       atcCode: data.atcCode || "",
 //       atcName: data.atcName || "",
 //       vatCode: data.vatCode || "",
 //       vatName: data.vatName || "",
-//       billtermCode: data.billtermCode,
-//       billtermName: data.billtermName,
 //       salesRepCode: data.salesRepCode || "",
 //       salesRepName: data.salesRepName || "",
-//       dueDate: data.dueDate ? useformatToDatev2(data.dueDate) : "",
+//       paymentType: data.paymentType || "",
+//       bankCode: data.bankCode || "",
+//       bank: data.bank || "",
+//       acctCode: data.acctCode || "",
+//       acctName: data.acctName || "",
+//       currAmount: formatNumber(data.currAmount ?? data.totalAmountDue ?? 0),
+//       amount: formatNumber(data.amount ?? data.totalAmountDue ?? 0),
+//       checkNo: data.checkNo || "",
+//       checkDate: data.checkDate ? useformatToDatev2(data.checkDate) : "",
+//       clearDate: data.clearDate ? useformatToDatev2(data.clearDate) : "",
 //       currCode: data.currCode,
 //       currName: data.currName,
 //       currRate: formatNumber(data.currRate, 6),
-//       siStatus:
-//         String(data.siStatus || "O").toUpperCase() === "OPEN"
+//       csiStatus:
+//         String(data.csiStatus || "O").toUpperCase() === "OPEN"
 //           ? "O"
-//           : String(data.siStatus || "O").toUpperCase() === "CANCELLED"
+//           : String(data.csiStatus || "O").toUpperCase() === "CANCELLED"
 //           ? "X"
-//           : String(data.siStatus || "O").toUpperCase() === "CLOSED"
+//           : String(data.csiStatus || "O").toUpperCase() === "CLOSED"
 //           ? "C"
-//           : String(data.siStatus || "O"),
+//           : String(data.csiStatus || "O"),
 //       detailRows: retrievedDetailRows,
 //       detailRowsGL: formattedGLRows,
 //       isDocNoDisabled: true,
@@ -1272,7 +1138,7 @@
 //   }
 // };
 
-// const handlesiNoBlur = () => {
+// const handlecsiNoBlur = () => {
 
 //     if (!state.documentID && state.documentNo && state.branchCode) {
 //         fetchTranData(state.documentNo, state.branchCode);
@@ -1302,7 +1168,7 @@
 //    await moveFocusBeforeSave();
 //   }
 
-//   if (documentStatus === "") { // Assuming SI also has an 'O' status for open
+//   if (isOpenStatus) {
 //     updateState({ isLoading: true });
 
 //     try {
@@ -1310,87 +1176,69 @@
 //         branchCode,
 //         documentNo,
 //         documentID,
-//         billtermCode,
 //         billToCustCode,
 //         billToCustName,
-//         refSiNo1,
-//         refSiNo2,
+//         refCsiNo1,
+//         refCsiNo2,
 //         salesRepCode,
 //         salesRepName,
 //         currCode,
 //         currRate,
 //         remarks,
-//         dueDate,
 //         userCode,
-//         contactPerson,
-//         customerPoNo,
-//         customerPoDate,
-//         siTranType,
-//         siStatus,
+//         csiTranType,
+//         csiStatus,
 //         detailRows,
 //         detailRowsGL,
 //       } = state;
 
 //       let finalDetailRowsGL = [...detailRowsGL];
 
-//       const buildSoData = (glRows = finalDetailRowsGL) => ({
+//       const buildCsiData = (glRows = finalDetailRowsGL) => ({
 //         branchCode: branchCode,
-//         siNo: documentNo || "",
-//         siId: documentID || "",
-//         siDate: documentDate,
-//         sitranType: siTranType,
-//         billtermCode: billtermCode,
+//         csiNo: documentNo || "",
+//         csiId: documentID || "",
+//         csiDate: documentDate,
+//         csiTranType: csiTranType,
 //         custCode: billToCustCode,
 //         custName: billToCustName,
-//         attention: contactPerson,
-//         refSiNo1: refSiNo1,
-//         refSiNo2: refSiNo2,
+//         custAddr: custAddr || "",
+//         custTin: custTin || "",
+//         refCsiNo1: refCsiNo1,
+//         refCsiNo2: refCsiNo2,
 //         currCode: currCode || "PHP",
 //         currRate: parseFormattedNumber(currRate),
 //         atcAmount: parseFormattedNumber(totals.totalAtcAmount),
 //         atcCode: atcCode || "",
 //         vatCode: vatCode || "",
-//         dueDate: dueDate || "",
 //         remarks: remarks || "",
 //         userCode: userCode,
-//         customerPoNo: customerPoNo || '',
-//         customerPoDate: customerPoDate || null,
 //         salesRepCode,
 //         salesRepName,
-//         soStatus: siStatus || 'O',
+//         csiStatus: csiStatus || 'O',
+//         paymentType: paymentType || '',
+//         bankCode: bankCode || '',
+//         bank: bank || '',
+//         acctCode: acctCode || '',
+//         currAmount: parseFormattedNumber(totals.totalAmountDue || 0),
+//         amount: parseFormattedNumber(totals.totalAmountDue || 0),
+//         checkNo: checkNo || '',
+//         checkDate: checkDate || null,
+//         clearDate: clearDate || null,
 //         dt1: detailRows.map((row, index) => ({
 //           lnNo: String(index + 1),
-//           pickStat: row.siStat || "F",
-//           siStat: row.siStat || "F",
-//           drNo: row.drNo || "",
-//           drId: row.drId || "",
-//           soId: row.soId || "",
+//           pickStat: row.csiStat || "F",
+//           csiStat: row.csiStat || "F",
 //           groupId: row.groupId || "",
 //           itemCode: row.itemCode || "",
 //           itemName: row.itemName || "",
 //           itemSpecs: row.itemSpecs || "",
 //           uomCode: row.uomCode || "",
-//           pmType: row.pmType || "",
-//           pmId: row.pmId || "",
-//           siQuantity: parseFormattedNumber(row.siQuantity || 0),
+//           csiQuantity: parseFormattedNumber(row.csiQuantity || 0),
 //           unitPrice: parseFormattedNumber(row.unitPrice || 0),
 //           grossAmount: parseFormattedNumber(row.grossAmount || 0),
-//           discRate1: parseFormattedNumber(row.discRate1 || 0),
-//           discRate2: parseFormattedNumber(row.discRate2 || 0),
-//           discRate3: parseFormattedNumber(row.discRate3 || 0),
-//           discRate4: parseFormattedNumber(row.discRate4 || 0),
-//           discRate5: parseFormattedNumber(row.discRate5 || 0),
-//           discRate6: parseFormattedNumber(row.discRate6 || 0),
-//           discRate7: parseFormattedNumber(row.discRate7 || 0),
-//           discRate8: parseFormattedNumber(row.discRate8 || 0),
-//           discAmount1: parseFormattedNumber(row.discAmount1 || 0),
-//           discAmount2: parseFormattedNumber(row.discAmount2 || 0),
-//           discAmount3: parseFormattedNumber(row.discAmount3 || 0),
-//           discAmount4: parseFormattedNumber(row.discAmount4 || 0),
-//           discAmount5: parseFormattedNumber(row.discAmount5 || 0),
-//           discAmount6: parseFormattedNumber(row.discAmount6 || 0),
-//           discAmount7: parseFormattedNumber(row.discAmount7 || 0),
-//           discAmount8: parseFormattedNumber(row.discAmount8 || 0),
+//           discRate: parseFormattedNumber(row.discRate || 0),
+//           discAmount: parseFormattedNumber(row.discAmount || 0),
 //           totDiscount: parseFormattedNumber(row.totDiscount || 0),          
 //           vatCode: row.vatCode || "",
 //           vatRate: parseFormattedNumber(row.vatRate || 0),
@@ -1399,11 +1247,9 @@
 //           atcAmount: parseFormattedNumber(row.atcAmount || 0),
 //           amountDue: parseFormattedNumber(row.amountDue || 0),
 //           netAmount: parseFormattedNumber(row.netAmount || 0),
-//           // No delivery date, customer PO, sales rep in SI details
 //           freeItem: row.freeItem || "",
 //           quantityPicked: parseFormattedNumber(row.quantityPicked || 0),
 //           itemAmount: parseFormattedNumber(row.itemAmount || 0),
-//           drQuantity: parseFormattedNumber(row.drQuantity || 0),
 //         })),
 //         dt2: glRows.map((entry, index) => ({
 //           recNo: String(index + 1),
@@ -1434,7 +1280,7 @@
 //           updateState({ detailRowsGL: [], isGeneratingGL: true });
 //           const newGlEntries = await useGenerateGLEntries(
 //             docType,
-//             buildSoData([])
+//             buildCsiData([])
 //           );
 
 //           updateState({
@@ -1452,7 +1298,7 @@
 //         if (finalDetailRowsGL.length === 0) {
 //           const newGlEntries = await useGenerateGLEntries(
 //             docType,
-//             buildSoData([])
+//             buildCsiData([])
 //           );
 
 //           if (!newGlEntries || newGlEntries.length === 0) {
@@ -1466,15 +1312,15 @@
 
 //         const response = await useTransactionUpsert(
 //           docType,
-//           buildSoData(finalDetailRowsGL),
+//           buildCsiData(finalDetailRowsGL),
 //           updateState,          
-//           "siId",
-//           "siNo"
+//           "csiId",
+//           "csiNo"
 //         );
 
 //         if (response) {
-//           const responseDocNo =  response.data[0].siNo;
-//           const responseDocId =  response.data[0].siId;
+//           const responseDocNo =  response.data[0].csiNo;
+//           const responseDocId =  response.data[0].csiId;
 
 //           await fetchTranData(responseDocNo,branchCode);
 
@@ -1486,8 +1332,8 @@
 //           useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
 //         }
 //         updateState({
-//           documentNo: response?.data?.[0]?.siNo || "",
-//           documentID: response?.data?.[0]?.siId || "",
+//           documentNo: response?.data?.[0]?.csiNo || "",
+//           documentID: response?.data?.[0]?.csiId || "",
 //           isDocNoDisabled: true,
 //           isFetchDisabled: true,
 //         });
@@ -1500,20 +1346,15 @@
 //   }
 // };
 
-//   const createSIDetailRow = (overrides = {}) => ({
+//   const createCSIDetailRow = (overrides = {}) => ({
 //       lnNo: "",
-//       siStat: "F",
-//       drNo: "",
-//       drId: "",
-//       soId: "",
+//       csiStat: "F",
 //       groupId: "",
 //       itemCode: "",
 //       itemName: "",
 //       itemSpecs: "",
 //       uomCode: "",
-//       pmType: "",
-//       pmId: "",
-//       siQuantity: Number(0).toFixed(quantityDecimals),
+//       csiQuantity: Number(0).toFixed(quantityDecimals),
 //       quantityPicked: Number(0).toFixed(quantityDecimals),
 //       itemAmount: "0.00",
 //       unitPrice: Number(0).toFixed(sellingPriceDecimals),
@@ -1524,27 +1365,11 @@
 //       atcAmount: "0.00",
 //       amountDue: "0.00",
 //       grossAmount: "0.00",
-//       discRate1: "0.00",
-//       discRate2: "0.00",
-//       discRate3: "0.00",
-//       discRate4: "0.00",
-//       discRate5: "0.00",
-//       discRate6: "0.00",
-//       discRate7: "0.00",
-//       discRate8: "0.00",
-//       discAmount1: "0.00",
-//       discAmount2: "0.00",
-//       discAmount3: "0.00",
-//       discAmount4: "0.00",
-//       discAmount5: "0.00",
-//       discAmount6: "0.00",
-//       discAmount7: "0.00",
-//       discAmount8: "0.00",
+//       discRate: "0.00",
+//       discAmount: "0.00",
 //       totDiscount: "0.00",      
 //       netAmount: "0.00",      
-//       // No delivery date, customer PO, sales rep in SI details
 //       freeItem: "",
-//       drQuantity: Number(0).toFixed(quantityDecimals),
 //       ...overrides,
 //     });
 
@@ -1554,7 +1379,7 @@
 //     }
 
 //     const updatedRows = [...detailRows];
-//     const normalizedInsertRows = rowsToInsert.map((row) => createSIDetailRow(row));
+//     const normalizedInsertRows = rowsToInsert.map((row) => createCSIDetailRow(row));
 
 //     if (insertIndex !== null && insertIndex >= 0) {
 //       updatedRows.splice(insertIndex + 1, 0, ...normalizedInsertRows);
@@ -1583,284 +1408,7 @@
 //   };
 
 //   const handleInsertBlankRow = (insertIndex = null) => {
-//     insertDetailRows([createSIDetailRow()], insertIndex);
-//   };
-
-//   // const resolveOpenDRGroupId = (item = {}) =>
-//   //   item?.groupId || item?.group_id || "";
-
-//   // const resolveOpenDRDrNo = (item = {}) =>
-//   //   item?.drNo || item?.dr_no || "";
-
-
-
-//   const normalizeOpenDRLookupRow = (item = {}) => ({
-//     ...item,
-//     groupId: item?.groupId || "",
-//     drId: item?.drId || "",
-//     drNo: item?.drNo || "",
-//     soId: item?.soId || "",
-//   });
-
-//   const getUniqueOpenDRRemarks = (records = []) => {
-//     const seen = new Set();
-
-//     return (records || []).reduce((acc, record) => {
-//       const value = String(record?.remarks || "").trim();
-//       if (!value) return acc;
-
-//       const key = value.replace(/\s+/g, " ").toLowerCase();
-//       if (seen.has(key)) return acc;
-
-//       seen.add(key);
-//       acc.push(value);
-//       return acc;
-//     }, []);
-//   };
-
-//   const appendMissingRemarks = (currentRemarks = "", newRemarks = []) => {
-//     const current = String(currentRemarks || "").trim();
-//     const currentKey = current.replace(/\s+/g, " ").toLowerCase();
-//     const missingRemarks = newRemarks.filter((remark) => {
-//       const key = String(remark || "").trim().replace(/\s+/g, " ").toLowerCase();
-//       return key && !currentKey.includes(key);
-//     });
-
-//     if (missingRemarks.length === 0) return currentRemarks || "";
-//     return [current, ...missingRemarks].filter(Boolean).join("\n");
-//   };
-
-//   const buildOpenDRHeaderUpdates = async (selectedRecords = [], selectedSummaryRecords = []) => {
-//     const topRecord = selectedRecords.find(Boolean) || {};
-//     const updates = {};
-
-//     const nextRemarks = appendMissingRemarks(
-//       remarks,
-//       getUniqueOpenDRRemarks(selectedSummaryRecords)
-//     );
-//     if (nextRemarks !== (remarks || "")) {
-//       updates.remarks = nextRemarks;
-//     }
-
-//     const nextSalesRepCode = String(topRecord?.salesrepCode || "").trim();
-//     if (nextSalesRepCode) {
-//       const salesRepRow = await useTopSalesRepRow(nextSalesRepCode);
-//       updates.salesRepCode = nextSalesRepCode;
-//       updates.salesRepName = salesRepRow?.salesRepName || "";
-//     }
-
-//     const nextBilltermCode = String(topRecord?.billtermCode || "").trim();
-//     if (nextBilltermCode) {
-//       const billTermRow = await useTopBillTermRow(nextBilltermCode);
-//       if (billTermRow) {
-//         updates.billtermCode = billTermRow.billtermCode;
-//         updates.billtermName = billTermRow.billtermName;
-//         updates.daysDue = billTermRow.daysDue;
-//         updates.dueDate = calculateDueDate(documentDate, billTermRow.daysDue);
-//       } else {
-//         updates.billtermCode = nextBilltermCode;
-//       }
-//     }
-
-//     const nextCustPoNo = topRecord?.custpoNo || "";
-//     if (nextCustPoNo) {
-//       updates.customerPoNo = nextCustPoNo;
-//     }
-
-//     const nextCustPoDate = topRecord?.custpoDate || "";
-//     if (nextCustPoDate) {
-//       updates.customerPoDate = useformatToDatev2(nextCustPoDate);
-//     }
-
-//     if (siTranType === "SI03") {
-//        const data = await useFetchTranData(topRecord?.drNo, branchCode, "FADS", "fadsNo", "");
-//        updateState({
-//         vatCodeFADisposal: data?.vatCode || "",
-//         billToCustName: data?.custName || "",
-//         customerPoNo: data?.fadsNo ? `FADS-${data.fadsNo}` : "",
-//         customerPoDate: data?.fadsDate ? useformatToDatev2(data.fadsDate) : "",
-//        })
-//     }
-
-
-
-    
-
-//     return updates;
-
-
-//   };
-
-//   const mapOpenDRRecordToDetailRow = (item = {}) => {
-//     const siQuantityValue =item?.siQuantity ?? 0;
-//     const selectedVatCode = item?.vatCode || vatCode || "";
-//     const selectedVatRow = getAllTopVatRow(selectedVatCode);
-
-//     return calculateRowAmountsFromRates(createSIDetailRow({
-//       drNo: item?.drNo || "",
-//       drId: item?.drId || "",
-//       soId: item?.soId || "",
-//       groupId: item?.groupId || "",
-//       itemCode: item?.itemCode || "",
-//       itemName: item?.itemName || "",
-//       itemSpecs: item?.itemSpecs || "",
-//       uomCode: item?.uomCode || "",
-//       pmType: item?.pmType || "",
-//       pmId: item?.pmId || "",
-//       siQuantity: formatNumber(siQuantityValue, quantityDecimals),
-//       quantityPicked: formatNumber(item?.quantityPicked ?? siQuantityValue ?? 0, quantityDecimals),
-//       itemAmount: formatNumber(item?.itemAmount ?? 0),
-//       unitPrice: formatNumber(item?.unitPrice ?? item?.sellPrice ?? item?.sellingPrice ?? 0, sellingPriceDecimals),
-//       vatCode: selectedVatCode,
-//       vatRate: formatNumber(item?.vatRate ?? selectedVatRow?.vatRate ?? 0),
-//       vatAmount: formatNumber(item?.vatAmount ?? 0),
-//       atcAmount: formatNumber(item?.atcAmount ?? 0),
-//       discRate1: formatNumber(item?.discRate1 ?? 0),
-//       discRate2: formatNumber(item?.discRate2 ?? 0),
-//       discRate3: formatNumber(item?.discRate3 ?? 0),
-//       discRate4: formatNumber(item?.discRate4 ?? 0),
-//       discRate5: formatNumber(item?.discRate5 ?? 0),
-//       discRate6: formatNumber(item?.discRate6 ?? 0),
-//       discRate7: formatNumber(item?.discRate7 ?? 0),
-//       discRate8: formatNumber(item?.discRate8 ?? 0),
-//       freeItem: item?.freeItem || "",
-//     }));
-//   };
-
-//   const getOpenDRDuplicateKey = (row = {}) => {
-//     const rowDrId = String(row?.drId || "").trim().toUpperCase();
-//     const rowGroupId = String(row?.groupId || "").trim().toUpperCase();
-//     return rowDrId && rowGroupId ? `${rowDrId}||${rowGroupId}` : "";
-//   };
-
-//   const applySelectedOpenDRSummaryKeys = (rows = [], summaries = []) => {
-//     const normalizedSummaries = (summaries || []).map(normalizeOpenDRLookupRow);
-//     if (!normalizedSummaries.length) return rows;
-
-//     const summaryByGroupId = new Map(
-//       normalizedSummaries
-//         .filter((summary) => summary.groupId)
-//         .map((summary) => [String(summary.groupId), summary])
-//     );
-//     const singleSummary = normalizedSummaries.length === 1 ? normalizedSummaries[0] : null;
-
-//     return (rows || []).map((row) => {
-//       const normalizedRow = normalizeOpenDRLookupRow(row);
-//       const matchedSummary = summaryByGroupId.get(String(normalizedRow.drId || "")) || singleSummary;
-
-//       if (!matchedSummary) return normalizedRow;
-
-//       return {
-//         ...normalizedRow,
-//         drNo: normalizedRow.drNo || matchedSummary.drNo || "",
-//         groupId: normalizedRow.groupId || "",
-//         drId: normalizedRow.drId || matchedSummary.drId || matchedSummary.groupId || "",
-//       };
-//     });
-//   };
-
-//   const getDuplicateOpenDRRows = (incomingRows = []) => {
-//     const seenKeys = new Set(
-//       (detailRowsRef.current || [])
-//         .map(getOpenDRDuplicateKey)
-//         .filter(Boolean)
-//     );
-//     const duplicateRows = [];
-
-//     (incomingRows || []).forEach((row) => {
-//       const key = getOpenDRDuplicateKey(row);
-//       if (!key) return;
-
-//       if (seenKeys.has(key)) {
-//         duplicateRows.push(row);
-//         return;
-//       }
-
-//       seenKeys.add(key);
-//     });
-
-//     return duplicateRows;
-//   };
-
-//   const handleInsertSelectedOpenDR = async (payload) => {
-   
-//     const selectedIds = Array.isArray(payload?.data) ? payload.data : [];
-//     const selectedSummaryRecords = Array.isArray(payload?.records) ? payload.records : [];
-
-//     if (!selectedIds.length) {
-//       updateState({ showOpenDRModal: false });
-//       return;
-//     }
-
-//     const idString = selectedIds.join(",");
-//     const requestPayload = {
-//       json_data: {
-//         selectedId: idString,
-//         selectedIds: idString,
-//       },
-//     };
-
-//     try {
-//       updateState({ isLoading: true, showSpinner: true });
-//       const response = await postRequest("getDRSI_Selected", JSON.stringify(requestPayload));
-
-     
-
-
-//       const rawRows = response?.data?.[0]?.result
-//         ? JSON.parse(response.data[0].result)
-//         : response?.data || response;
-//       const selectedRecords = Array.isArray(rawRows)
-//         ? applySelectedOpenDRSummaryKeys(rawRows, selectedSummaryRecords)
-//         : [];
-
-
-//       if (!selectedRecords.length) {
-//         useSwalErrorAlert("Open DR", "No SI detail rows were returned for the selected Delivery Receipt record(s).");
-//         return;
-//       }
-
-
-//       const duplicateRows = getDuplicateOpenDRRows(selectedRecords);
-//       if (duplicateRows.length > 0) {
-//         const duplicateList = duplicateRows
-//           .map((row) => {
-//             const drNo = row?.drNo || "";
-//             const itemCode = row?.itemCode || "";
-//             return `DR No. ${drNo || "-"} / Item Code ${itemCode || "-"}`;
-//           })
-//           .filter(Boolean);
-//         useSwalErrorAlert(
-//           "Duplicate Open DR Detail",
-//           `Duplicate DR item(s) are not allowed:\n${[...new Set(duplicateList)].join("\n")}`
-//         );
-//         return;
-//       }
-
-
-
-//       const headerUpdates = await buildOpenDRHeaderUpdates(selectedRecords, selectedSummaryRecords);
-
-//       insertDetailRows(selectedRecords.map(mapOpenDRRecordToDetailRow), insertAfterIndex);
-//       setTopTab("details");
-//       updateState({
-//         ...headerUpdates,
-//         showOpenDRModal: false,
-//         openDRSI_Data_Summary: [],
-//         openDRSI_Col_Summary: [],
-//         insertAfterIndex: null,
-//       });
-//     } catch (error) {
-//       console.error("getDRSI_Selected failed:", {
-//         payload: requestPayload,
-//         status: error?.response?.status,
-//         data: error?.response?.data,
-//         error,
-//       });
-//       useSwalErrorAlert("Open DR", getApiErrorMessage(error));
-//     } finally {
-//       updateState({ isLoading: false, showSpinner: false });
-//     }
+//     insertDetailRows([createCSIDetailRow()], insertIndex);
 //   };
 
 //   const normalizeItemModalRecords = (selectedItems) => {
@@ -1876,7 +1424,7 @@
 //   const normalizeItemCode = (itemCode) => String(itemCode || "").trim().toUpperCase();
 
 //   const getFilteredDuplicateFreeItems = (records = [], currentRowIndex = null) => {
-//     if (SI_ALLOW_DUPLICATE_ITEMS) {
+//     if (CSI_ALLOW_DUPLICATE_ITEMS) {
 //       return records;
 //     }
 
@@ -1907,144 +1455,18 @@
 //     if (skippedItemCodes.length > 0) {
 //       useSwalErrorAlert(
 //         "Duplicate Item Not Allowed",
-//         `These item(s) already exist in SI Detail: ${[...new Set(skippedItemCodes)].join(", ")}`
+//         `These item(s) already exist in CSI Detail: ${[...new Set(skippedItemCodes)].join(", ")}`
 //       );
 //     }
 
 //     return filteredRecords;
 //   };
 
-
-
-
-//   const parsePriceMatrixResponse = (response) => {
-//     const directResult =
-//       response?.data?.[0]?.result ??
-//       response?.result ??
-//       response?.data?.result;
-//     if (typeof directResult === "string") {
-//       try {
-//         const parsed = JSON.parse(directResult);
-//         return Array.isArray(parsed) ? parsed : [];
-//       } catch (error) {
-//         console.error("Error parsing SO price matrix result:", error);
-//         return [];
-//       }
-//     }
-
-
-//     const rawData = response?.data ?? [];
-//     if (Array.isArray(rawData)) {
-//       return rawData;
-//     }
-//     if (Array.isArray(response)) {
-//       return response;
-//     }
-//     return [];
-//   };
-
-//   const fetchPriceMatrixRows = async (
-//     selectedRecords = [],
-//     { custCode = billToCustCode || "", docDate = documentDate, headerVatCode = vatCode } = {}
-//   ) => {
-//     if (!Array.isArray(selectedRecords) || selectedRecords.length === 0) {
-//       return [];
-//     }
-
-//     const payload = {
-//       json_data: {
-//         docDate,
-//         custCode,
-//         vatCode: headerVatCode,
-//         items: selectedRecords.map((item, index) => ({
-//           sequence: index + 1,
-//           itemCode: item?.itemCode || "",
-//         })),
-//       },
-//     };
-
-//     try {
-//       updateState({ isLoading: true });
-//       const response = await postRequest(
-//         SI_PRICE_MATRIX_ENDPOINT,
-//         JSON.stringify(payload)
-//       );
-//       return parsePriceMatrixResponse(response);
-//     } catch (error) {
-//       console.error("Error fetching SO price matrix:", error);
-//       return [];
-//     } finally {
-//       updateState({ isLoading: false });
-//     }
-//   };
-
-
-
-
-//   const refreshDetailRowsFromPriceMatrix = async ({ // Assuming SI also uses price matrix
-//     custCode = billToCustCode || "",
-//     rows = detailRows,
-//     docDate = documentDate,
-//     headerVatCode = vatCode,
-//   } = {}) => {
-//     if (!Array.isArray(rows) || rows.length === 0 || !custCode) {
-//       return;
-//     }
-
-//     const selectedRecords = rows.map((row, index) => ({
-//       sequence: index + 1,
-//       itemCode: row?.itemCode || "",
-//     }));
-//     const priceMatrixRows = await fetchPriceMatrixRows(selectedRecords, {
-//       custCode,
-//       docDate,
-//       headerVatCode,
-//     });
-//     const updatedRows = distributeVatAcrossDetailRows(rows.map((row, index) =>
-//       applyPriceMatrixToDetailRow(
-//         row,
-//         getPriceMatrixRowForItem(priceMatrixRows, row, index)
-//       )
-//     ));
-
-//     updateState({ detailRows: updatedRows });
-//     updateTotals(updatedRows);
-//   };
-
-//   const getPriceMatrixRowForItem = (priceMatrixRows = [], item = {}, index = 0) => { // Assuming SI also uses price matrix
-//     const itemCode = normalizeItemCode(item?.itemCode);
-//     const getMatrixItemCode = (priceRow) =>
-//       priceRow?.itemCode ??
-//       "";
-
-//     return (
-//       priceMatrixRows.find(
-//         (priceRow) => normalizeItemCode(getMatrixItemCode(priceRow)) === itemCode
-//       ) ||
-//       priceMatrixRows.find(
-//         (priceRow) => Number(priceRow?.sequence) === index + 1
-//       ) ||
-//       {}
-//     );
-//   };
-
 //   const calculateRowAmountsFromRates = (row) => {
 //     const discountRateFields = visibleDiscountRateFields;
 //     const discountAmountFields = visibleDiscountAmountFields;
-//     const quantity = parseFormattedNumber(row.siQuantity || 0) || 0;
+//     const quantity = parseFormattedNumber(row.csiQuantity || 0) || 0;
 //     let unitPrice = parseFormattedNumber(row.unitPrice || 0) || 0;
-   
-
-//     if (vatCodeFADisposal) {
-//        const vatRow = getAllTopVatRow(vatCodeFADisposal);
-//       const vatRate = parseFormattedNumber(vatRow?.vatRate || 0) || 0;
-      
-
-//       unitPrice = vatRate > 0
-//         ? toFormattedAmountNumber(unitPrice + (unitPrice * (vatRate * 0.01)))
-//         : unitPrice;
-//     }
-
 
 //     const grossAmount = toFormattedAmountNumber(quantity * unitPrice);
 //     let runningBase = grossAmount;
@@ -2077,91 +1499,22 @@
 //     };
 //   };
 
-
-
-//   const applyPriceMatrixToDetailRow = (baseRow, priceRow = {}) => {
-//     if (baseRow.freeItem === "Y") {
-//       return calculateRowAmountsFromRates({
-//         ...baseRow,
-//         unitPrice: formatNumber(0, sellingPriceDecimals),
-//         ...Object.fromEntries(
-//           visibleDiscountRateFields.map((field) => [field, formatNumber(0)])
-//         ),
-//       });
-//     }
-
-//     const hasPriceMatrix = priceRow && Object.keys(priceRow).length > 0;
-
-//     // IMPORTANT:
-//     // Do not return 0 immediately when price matrix has no sellingPrice.
-//     // calculateRowAmountsFromRates() uses row.unitPrice, so fallback must include
-//     // priceRow.unitPrice, baseRow.unitPrice, and baseRow.sellingPrice.
-//     const getPriceValue = () =>
-//       priceRow?.sellingPrice ??
-//       priceRow?.unitPrice ??
-//       baseRow?.unitPrice ??
-//       baseRow?.sellingPrice ??
-//       0;
-
-//     const getPmTypeValue = () => priceRow?.pmType ?? baseRow?.pmType ?? "";
-//     const getPmIdValue = () => priceRow?.pmId ?? baseRow?.pmId ?? "";
-
-//     const getDiscountRateValue = (discountNo) =>
-//       hasPriceMatrix
-//         ? priceRow?.[`discRate${discountNo}`] ?? baseRow?.[`discRate${discountNo}`] ?? 0
-//         : baseRow?.[`discRate${discountNo}`] ?? 0;
-
-//     const selectedVatCode = priceRow?.vatCode || baseRow.vatCode || vatCode || "";
-//     const selectedVatRow = getAllTopVatRow(selectedVatCode);
-
-//     const updatedRow = {
-//       ...baseRow,
-//       pmType: getPmTypeValue(),
-//       pmId: getPmIdValue(),
-//       vatCode: selectedVatCode,
-//       vatRate: formatNumber(selectedVatRow?.vatRate || baseRow?.vatRate || 0),
-//       unitPrice: formatNumber(getPriceValue(), sellingPriceDecimals),
-//     };
-
-//     visibleDiscountRateFields.forEach((field, index) => {
-//       updatedRow[field] = formatNumber(getDiscountRateValue(index + 1));
-//     });
-
-//     return calculateRowAmountsFromRates(updatedRow);
-//   };
-
 //   const mapItemRecordToDetailRow = (item = {}) => {
    
 
-//     return createSIDetailRow({
+//     return createCSIDetailRow({
 //       itemCode: item?.itemCode || "",
 //       itemName: item?.itemName || "",
 //       itemSpecs: item?.itemSpecs || "",
 //       uomCode: item?.uomCode || "",
-//       pmType: item?.pmType || "",
-//       groupId: "",
-//       pmId: item?.pmId || "",    
-//       siQuantity: formatNumber( item?.siQuantity ?? 0, quantityDecimals ),
-//       sellingPrice: formatNumber(item?.sellPrice, sellingPriceDecimals),
+//       groupId: "",    
+//       csiQuantity: formatNumber( item?.csiQuantity ?? 0, quantityDecimals ),
+//       unitPrice: formatNumber(item?.unitPrice ?? item?.sellPrice ?? item?.sellingPrice ?? 0, sellingPriceDecimals),
 //       grossAmount: formatNumber(item?.grossAmount ?? 0),
-//       discRate1: formatNumber(item?.discRate1 ?? 0),
-//       discRate2: formatNumber(item?.discRate2 ?? 0),
-//       discRate3: formatNumber(item?.discRate3 ?? 0),
-//       discRate4: formatNumber(item?.discRate4 ?? 0),
-//       discRate5: formatNumber(item?.discRate5 ?? 0),
-//       discRate6: formatNumber(item?.discRate6 ?? 0),
-//       discRate7: formatNumber(item?.discRate7 ?? 0),
-//       discRate8: formatNumber(item?.discRate8 ?? 0),
-//       discAmount1: formatNumber(item?.discAmount1 ?? 0),
-//       discAmount2: formatNumber(item?.discAmount2 ?? 0),
-//       discAmount3: formatNumber(item?.discAmount3 ?? 0),
-//       discAmount4: formatNumber(item?.discAmount4 ?? 0),
-//       discAmount5: formatNumber(item?.discAmount5 ?? 0),
-//       discAmount6: formatNumber(item?.discAmount6 ?? 0),
-//       discAmount7: formatNumber(item?.discAmount7 ?? 0),
-//       discAmount8: formatNumber(item?.discAmount8 ?? 0),
+//       discRate: formatNumber(item?.discRate ?? 0),
+//       discAmount: formatNumber(item?.discAmount ?? 0),
 //       totDiscount: formatNumber(item?.totDiscount ?? 0),
-//       vatCode: item?.vatCode || "",
+//       vatCode: vatCode || item?.vatCode || "",
 //       vatRate: formatNumber(item?.vatRate ?? 0),
 //       vatAmount: formatNumber(item?.vatAmount ?? 0),
 //       salesAmount: formatSalesAmount(item?.netAmount ?? 0, item?.vatAmount ?? 0),
@@ -2171,21 +1524,16 @@
 //       freeItem: item?.freeItem || "",
 //       quantityPicked: formatNumber(item?.quantityPicked ?? item?.qtyPicked ?? 0, quantityDecimals),
 //       itemAmount: formatNumber(item?.itemAmount ?? 0),
-//       drQuantity: formatNumber(item?.drQuantity ?? 0, quantityDecimals),
 //     });
 //   };
-
 //   const handleInsertSelectedItems = async (selectedRecords = []) => {
 //     if (!Array.isArray(selectedRecords) || selectedRecords.length === 0) {
 //       return;
 //     }
 
-//     const priceMatrixRows = await fetchPriceMatrixRows(selectedRecords); // Assuming SI also uses price matrix
-//     const rowsToInsert = selectedRecords.map((item, index) => {
-//       const baseRow = mapItemRecordToDetailRow(item);
-//       const priceRow = getPriceMatrixRowForItem(priceMatrixRows, item, index);
-//       return applyPriceMatrixToDetailRow(baseRow, priceRow);
-//     });
+//     const rowsToInsert = selectedRecords.map((item) =>
+//       calculateRowAmountsFromRates(mapItemRecordToDetailRow(item))
+//     );
 
 //     insertDetailRows(rowsToInsert, insertAfterIndex);
 //   };
@@ -2195,11 +1543,11 @@
 
 
 
-// const cancelPickingAllocationForDeletedSIRow = async (row) => {
+// const cancelPickingAllocationForDeletedCSIRow = async (row) => {
 //   const pickedQty = parseFormattedNumber(row?.quantityPicked || 0) || 0;
 
 //   // Only SI02 has FG picking allocation.
-//   if (String(siTranType || "").toUpperCase() !== "SI02") {
+//   if (String(csiTranType || "").toUpperCase() !== "CSI02") {
 //     return true;
 //   }
 
@@ -2210,14 +1558,14 @@
 
 //   if (!documentID || !row?.groupId) {
 //     useSwalErrorAlert(
-//       "Delete SI Detail",
-//       "Cannot release picking allocation. SI ID or Group ID is missing."
+//       "Delete CSI Detail",
+//       "Cannot release picking allocation. CSI ID or Group ID is missing."
 //     );
 //     return false;
 //   }
 
 //   const confirm = await useSwalProceedConfirm(
-//     "Delete Picked SI Detail?",
+//     "Delete Picked CSI Detail?",
 //     "This line already has picked quantity. Deleting it will release the FG picking allocation.",
 //     "Yes"
 //   );
@@ -2233,19 +1581,19 @@
 //       mode: "CancelAlloc",
 //       params: JSON.stringify({
 //         json_data: {
-//           docCode: "SI",
+//           docCode: "CSI",
 //           docId: documentID,
 //           groupId: row.groupId,
 //           userCode: userCode || currentUserRow?.userCode || "",
-//           reason: "SI detail line deleted.",
+//           reason: "CSI detail line deleted.",
 //         },
 //       }),
 //     });
 
 //     return true;
 //   } catch (error) {
-//     console.error("Failed to release SI FG picking allocation:", error);
-//     useSwalErrorAlert("Delete SI Detail", getApiErrorMessage(error));
+//     console.error("Failed to release CSI FG picking allocation:", error);
+//     useSwalErrorAlert("Delete CSI Detail", getApiErrorMessage(error));
 //     return false;
 //   } finally {
 //     updateState({ isLoading: false, showSpinner: false });
@@ -2260,7 +1608,7 @@
 //     return;
 //   }
 
-//   const canDelete = await cancelPickingAllocationForDeletedSIRow(rowToDelete);
+//   const canDelete = await cancelPickingAllocationForDeletedCSIRow(rowToDelete);
 
 //   if (!canDelete) {
 //     return;
@@ -2411,7 +1759,7 @@
 
 // const handlePrint = async () => {
 //  if (!detailRows || detailRows.length === 0) {
-//       return; // Assuming SI also requires detail rows to print
+//       return; // Assuming CSI also requires detail rows to print
 //       }
 //   if (documentID) {
 //     updateState({ showSignatoryModal: true });
@@ -2420,13 +1768,8 @@
 
 //   const handleOpenAddItemModal = async (overrides = {}) => {
 //     const lookupCustCode = String(overrides.billToCustCode ?? billToCustCode ?? "").trim();
-//     const lookupBillTermCode = String(overrides.billtermCode ?? billtermCode ?? "").trim();
-//     const lookupSalesRepCode = String(overrides.salesRepCode ?? salesRepCode ?? "").trim();
-
 //     const fieldsToCheck = {
-//       "Header : Bill To Customer Code": lookupCustCode,
-//       "Header : Billing Term": lookupBillTermCode,
-//       "Header : Sales Rep": lookupSalesRepCode,
+//       "Header : Customer Code": lookupCustCode,
 //     };
 
 //     const isValid = await useSwalvalidateRequiredFields(fieldsToCheck, "Add Item");
@@ -2450,7 +1793,7 @@
 //     if (!lookupCustCode) {
 //       const branchIsValid = await useSwalvalidateRequiredFields(
 //         { "Header : Branch": branchCode },
-//         "Add SI Detail"
+//         "Add CSI Detail"
 //       );
 //       if (!branchIsValid) return;
 
@@ -2460,13 +1803,6 @@
 //       });
 //       return;
 //     }
-
-
-//   if (["SI01", "SI03"].includes(String(siTranType || "").toUpperCase())) {
-//     await handleOpenDRLookup();
-//     return;
-//   }
-
 //     await handleOpenAddItemModal();
 //   };
 
@@ -2590,7 +1926,7 @@
 //     }, 0);
 
 //   const buildPickingBasePayload = (row, index) => ({
-//     docCode: "SI",
+//     docCode: "CSI",
 //     docNo: documentNo || "",
 //     docId: documentID || "",
 //     docDate: documentDate || null,
@@ -2598,7 +1934,7 @@
 //     groupId: row?.groupId || "",
 //     lineNo: index + 1,
 //     itemCode: row?.itemCode || "",
-//     requestedQty: parseFormattedNumber(row?.siQuantity || 0) || 0,
+//     requestedQty: parseFormattedNumber(row?.csiQuantity || 0) || 0,
 //     userCode: userCode || currentUserRow?.userCode || "",
 //   });
 
@@ -2633,7 +1969,7 @@
 
 //         allocations.push({
 //           groupId: row.groupId || "",
-//           sourceDocType: "SI",
+//           sourceDocType: "CSI",
 //           sourceLineNo: "",
 //           itemCode: row.itemCode || "",
 //           stockCardRefId: stockRow.stockCardRefId,
@@ -2666,79 +2002,9 @@
 //       }, []);
 //   };
 
-//   const handleOpenDRLookup = async (overrides = {}) => {
-//     const lookupCustCode = String(overrides.billToCustCode ?? billToCustCode ?? "").trim();
-//     const lookupBranchCode = String(overrides.branchCode ?? branchCode ?? "").trim();
-
-//     if (!lookupCustCode) {
-//       const branchIsValid = await useSwalvalidateRequiredFields(
-//         { "Header : Branch": lookupBranchCode },
-//         "Open DR Lookup"
-//       );
-//       if (!branchIsValid) return;
-
-//       updateState({
-//         custModalOpen: true,
-//         modalContext: siTranType === "SI03" ? "openFADS" : "openDR",
-//       });
-//       return;
-//     }
-
-//     const fieldsToCheck = {
-//       "Header : Bill To Customer Code": lookupCustCode,
-//       "Header : Branch": lookupBranchCode,
-//     };
-
-//     const isValid = await useSwalvalidateRequiredFields(fieldsToCheck, "Open DR Lookup");
-//     if (!isValid) return;
-
-//     try {
-//       updateState({ isLoading: true, showSpinner: true });
-
-//       const endpoint = "getDRSI_OpenSummary";
-//       const payload = {
-//           custCode: lookupCustCode,
-//           billToCustCode: lookupCustCode,
-//           branchCode: lookupBranchCode,
-//           siTranType: siTranType || "",
-//         };
-
-//      console.log("GetDRSI_OpenSummary payload:", payload);
-//       const response = await fetchDataJson(endpoint, payload);
-
-//       const drRows = response?.data?.[0]?.result
-//         ? JSON.parse(response.data[0].result).map(normalizeOpenDRLookupRow)
-//         : [];
-
-//       if (!drRows.length) {
-//         useSwalErrorAlert(
-//           "Open DR",
-//           "There are no open Delivery Receipt records for the selected customer/branch."
-//         );
-//         return;
-//       }
-
-//       const summaryColumns = await selectedHSColConfig(endpoint);
-//       updateState({
-//         openDRSI_Data_Summary: drRows,
-//         openDRSI_Col_Summary: summaryColumns,
-//         showOpenDRModal: true,
-//       });
-//     } catch (error) {
-//       console.error("Failed to fetch Open DR:", error);
-//       useSwalErrorAlert("Open DR", getApiErrorMessage(error));
-//       updateState({
-//         openDRSI_Data_Summary: [],
-//         openDRSI_Col_Summary: [],
-//       });
-//     } finally {
-//       updateState({ isLoading: false, showSpinner: false });
-//     }
-//   };
-
 // const handleCancel = async () => {
 //  if (!detailRows || detailRows.length === 0) {
-//       return; // Assuming SI also requires detail rows to cancel
+//       return; // Assuming CSI also requires detail rows to cancel
 //       }
 
 //   if (documentID && (documentStatus === '')) {
@@ -2760,12 +2026,13 @@
 //     const nextDocumentDate = useGetCurrentDayV2();
 //     const copiedDetailRows = detailRows.map((row) => ({
 //       ...row,
-//       siStat: "F",
-//       drQuantity: formatNumber(0, quantityDecimals),
-//       siQuantity: formatNumber(0, quantityDecimals),
+//       csiStat: "F",
+//       allocated: "",
+//       totalAllocated: 0,
+//       quantityPicked: formatNumber(0, quantityDecimals),
+//       itemAmount: formatNumber(0),
 //       groupId: "",
-//       pmId: "",
-//       pmType: "",
+//       pickingAllocations: [],
 //     }));
     
 //     updateState({
@@ -2773,12 +2040,18 @@
 //       documentID: "",
 //       documentStatus: "",
 //       status: "OPEN",
-//       siStatus: "O",
+//       csiStatus: "O",
 //       documentDate: nextDocumentDate,
-//       refSiNo1: "",
-//       refSiNo2: "",
+//       bankCode: "",
+//       bank: "",
+//       checkNo: "",
+//       checkDate: "",
+//       clearDate: "",
+//       refCsiNo1: "",
+//       refCsiNo2: "",
 //       noReprints: "0",
 //       detailRows: copiedDetailRows,
+//       detailRowsGL: [],
 //     });
 //   }
 // };
@@ -2803,7 +2076,7 @@
 
 // useEffect(() => {
 //   const params = new URLSearchParams(location.search);
-//   const docNo = params.get("siNo");
+//   const docNo = params.get("csiNo");
 //   const branchCode = params.get("branchCode");
   
 //   if (!loadedFromUrlRef.current && docNo && branchCode) {
@@ -2813,7 +2086,7 @@
 // }, [location.search, handleHistoryRowPick]);
 
 //   const printData = {
-//     apv_no: documentNo,
+//     csi_no: documentNo,
 //     branch: branchCode,
 //     doc_id: docType,
 //   };
@@ -2876,7 +2149,8 @@
 
 //     try {
 
-//         const address = selectedData?.addr || "";
+//         const address = selectedData?.addr || selectedData?.address || selectedData?.custAddr || "";
+//         const tin = selectedData?.tin || selectedData?.tinNo || selectedData?.custTin || selectedData?.custTinNo || "";
 //         const selectedVatCode = selectedData?.vatCode || "";
 //         const selectedVatRow = getAllTopVatRow(selectedVatCode);
 //         const selectedVatName = selectedVatRow?.vatName || selectedData?.vatName || "";
@@ -2885,10 +2159,9 @@
 //         const selectedAtcName = selectedAtcRow?.atcName || selectedData?.atcName || "";
 //         const custDetails = {            custCode: selectedData?.custCode || '',
 //             custName: selectedData?.custName || '',
+//             custAddr: address,
+//             custTin: tin,
 //             currCode: selectedData?.currCode || '',
-//             attention: selectedData?.attention || '',
-//             billtermCode: selectedData?.billtermCode || '',
-//             billtermName: selectedData?.billtermName || '',
 //             salesRepCode: selectedData?.salesRepCode || '',
 //             salesRepName: selectedData?.salesRepName || '',
 //             vatCode: selectedVatCode,
@@ -2898,14 +2171,12 @@
 
 //         };
 //         const nextBillToCustCode = selectedData?.custCode || "";
-//         const shouldRepriceDetailRows =
-//           detailRows.length > 0 &&
-//           String(nextBillToCustCode).trim() !== "" &&
-//           String(nextBillToCustCode).trim() !== String(billToCustCode || "").trim();
 //         updateState(
 //             {
 //                 billToCustName: selectedData.custName,
 //                 billToCustCode: selectedData.custCode,
+//                 custAddr: address,
+//                 custTin: tin,
 //                 vatCode: selectedVatCode,
 //                 vatName: selectedVatName,
 //                 atcCode: selectedAtcCode,
@@ -2922,9 +2193,8 @@
 //             if (response.success) {
 //                 const customerRow = JSON.parse(response.data[0].result)?.[0] || {};
 //                 custDetails.currCode = customerRow?.currCode || custDetails.currCode;
-//                 custDetails.attention = customerRow?.custContact || custDetails.attention;
-//                 custDetails.billtermCode = customerRow?.billtermCode || custDetails.billtermCode;
-//                 custDetails.billtermName = customerRow?.billtermName || custDetails.billtermName;
+//                 custDetails.custAddr = customerRow?.addr || customerRow?.address || customerRow?.custAddr || custDetails.custAddr;
+//                 custDetails.custTin = customerRow?.tin || customerRow?.tinNo || customerRow?.custTin || custDetails.custTin;
 //                 custDetails.salesRepCode = customerRow?.salesRepCode || custDetails.salesRepCode;
 //                 custDetails.vatCode = customerRow?.vatCode || custDetails.vatCode;
 //                 const customerVatRow = getAllTopVatRow(custDetails.vatCode);
@@ -2950,11 +2220,11 @@
      
 //         await Promise.all([
 //             handleSelectCurrency(custDetails.currCode),
-//             handleSelectBillTerm(custDetails.billtermCode),
 //             updateState({
-//             contactPerson: custDetails.attention,
 //             salesRepCode: custDetails.salesRepCode,
 //             salesRepName: custDetails.salesRepName,
+//             custAddr: custDetails.custAddr || "",
+//             custTin: custDetails.custTin || "",
 //             vatCode: custDetails.vatCode,
 //             vatName: custDetails.vatName,
 //             atcCode: custDetails.atcCode,
@@ -2962,30 +2232,10 @@
 //           })
 //         ]);
 
-//         if (shouldRepriceDetailRows) {
-//             await refreshDetailRowsFromPriceMatrix({
-//               custCode: nextBillToCustCode,
-//               headerVatCode: custDetails.vatCode || vatCode,
-//             });
-//         }
-
-//         if (modalContext === "addDetail" || modalContext === "openDR") {
-//           const nextCustomerCode = custDetails.custCode || selectedData?.custCode || "";
-//           const nextBillTermCode = custDetails.billtermCode || "";
-//           const nextSalesRepCode = custDetails.salesRepCode || "";
-
-//           if (["SI01", "SI03"].includes(String(siTranType || "").toUpperCase()) || modalContext === "openDR") {
-//             await handleOpenDRLookup({
-//               billToCustCode: nextCustomerCode,
-//               branchCode,
-//             });
-//           } else {
-//             await handleOpenAddItemModal({
-//               billToCustCode: nextCustomerCode,
-//               billtermCode: nextBillTermCode,
-//               salesRepCode: nextSalesRepCode,
-//             });
-//           }
+//         if (modalContext === "addDetail") {
+//           await handleOpenAddItemModal({
+//             billToCustCode: custDetails.custCode || selectedData?.custCode || "",
+//           });
 //         }
 
 //     } catch (error) {
@@ -3050,7 +2300,7 @@
 //     );
 //   };
 
-//   const buildSiDataForGl = (rows = detailRows, glRows = [], headerOverrides = {}) => {
+//   const buildCsiDataForGl = (rows = detailRows, glRows = [], headerOverrides = {}) => {
 //     const nextVatCode =
 //       headerOverrides.vatCode !== undefined ? headerOverrides.vatCode : vatCode;
 //     const nextAtcCode =
@@ -3059,62 +2309,49 @@
 
 //     return {
 //       branchCode,
-//       siNo: documentNo || "",
-//       siId: documentID || "",
-//       siDate: documentDate,
-//       sitranType: siTranType,
-//       billtermCode,
+//       csiNo: documentNo || "",
+//       csiId: documentID || "",
+//       csiDate: documentDate,
+//       csiTranType: csiTranType,
 //       custCode: billToCustCode,
 //       custName: billToCustName,
-//       attention: contactPerson,
-//       refSiNo1,
-//       refSiNo2,
+//       custAddr: custAddr || "",
+//       custTin: custTin || "",
+//       refCsiNo1,
+//       refCsiNo2,
 //       currCode: currCode || "PHP",
 //       currRate: parseFormattedNumber(currRate),
 //       atcAmount: totalValues.totalAtcAmt,
 //       atcCode: nextAtcCode || "",
 //       vatCode: nextVatCode || "",
-//       dueDate: dueDate || "",
 //       remarks: remarks || "",
 //       userCode,
-//       customerPoNo: customerPoNo || "",
-//       customerPoDate: customerPoDate || null,
 //       salesRepCode,
 //       salesRepName,
-//       soStatus: siStatus || "O",
+//       csiStatus: csiStatus || "O",
+//       paymentType: paymentType || "",
+//       bankCode: bankCode || "",
+//       bank: bank || "",
+//       acctCode: acctCode || "",
+//       currAmount: parseFormattedNumber(totals.totalAmountDue || 0),
+//       amount: parseFormattedNumber(totals.totalAmountDue || 0),
+//       checkNo: checkNo || "",
+//       checkDate: checkDate || null,
+//       clearDate: clearDate || null,
 //       dt1: rows.map((row, index) => ({
 //         lnNo: String(index + 1),
-//         pickStat: row.siStat || "F",
-//         siStat: row.siStat || "F",
-//         drNo: row.drNo || "",
-//         drId: row.drId || "",
-//         soId: row.soId || "",
+//         pickStat: row.csiStat || "F",
+//         csiStat: row.csiStat || "F",
 //         groupId: row.groupId || "",
 //         itemCode: row.itemCode || "",
 //         itemName: row.itemName || "",
 //         itemSpecs: row.itemSpecs || "",
 //         uomCode: row.uomCode || "",
-//         pmType: row.pmType || "",
-//         pmId: row.pmId || "",
-//         siQuantity: parseFormattedNumber(row.siQuantity || 0),
+//         csiQuantity: parseFormattedNumber(row.csiQuantity || 0),
 //         unitPrice: parseFormattedNumber(row.unitPrice || 0),
 //         grossAmount: parseFormattedNumber(row.grossAmount || 0),
-//         discRate1: parseFormattedNumber(row.discRate1 || 0),
-//         discRate2: parseFormattedNumber(row.discRate2 || 0),
-//         discRate3: parseFormattedNumber(row.discRate3 || 0),
-//         discRate4: parseFormattedNumber(row.discRate4 || 0),
-//         discRate5: parseFormattedNumber(row.discRate5 || 0),
-//         discRate6: parseFormattedNumber(row.discRate6 || 0),
-//         discRate7: parseFormattedNumber(row.discRate7 || 0),
-//         discRate8: parseFormattedNumber(row.discRate8 || 0),
-//         discAmount1: parseFormattedNumber(row.discAmount1 || 0),
-//         discAmount2: parseFormattedNumber(row.discAmount2 || 0),
-//         discAmount3: parseFormattedNumber(row.discAmount3 || 0),
-//         discAmount4: parseFormattedNumber(row.discAmount4 || 0),
-//         discAmount5: parseFormattedNumber(row.discAmount5 || 0),
-//         discAmount6: parseFormattedNumber(row.discAmount6 || 0),
-//         discAmount7: parseFormattedNumber(row.discAmount7 || 0),
-//         discAmount8: parseFormattedNumber(row.discAmount8 || 0),
+//         discRate: parseFormattedNumber(row.discRate || 0),
+//         discAmount: parseFormattedNumber(row.discAmount || 0),
 //         totDiscount: parseFormattedNumber(row.totDiscount || 0),
 //         vatCode: row.vatCode || "",
 //         vatRate: parseFormattedNumber(row.vatRate || 0),
@@ -3126,7 +2363,6 @@
 //         freeItem: row.freeItem || "",
 //         quantityPicked: parseFormattedNumber(row.quantityPicked || 0),
 //         itemAmount: parseFormattedNumber(row.itemAmount || 0),
-//         drQuantity: parseFormattedNumber(row.drQuantity || 0),
 //       })),
 //       dt2: glRows.map((entry, index) => ({
 //         recNo: String(index + 1),
@@ -3163,7 +2399,7 @@
 //       updateState({ detailRowsGL: [], isGeneratingGL: true });
 //       const newGlEntries = await useGenerateGLEntries(
 //         docType,
-//         buildSiDataForGl(rows, [], headerOverrides)
+//         buildCsiDataForGl(rows, [], headerOverrides)
 //       );
 //       updateState({
 //         detailRowsGL: newGlEntries && newGlEntries.length > 0 ? newGlEntries : [],
@@ -3216,6 +2452,7 @@
 
 //     updateState({
 //       detailRows: updatedRows,
+//       detailRowsGL: [],
 //       showATCModal: false,
 //       selectedRowIndex: null,
 //       modalContext: "",
@@ -3246,6 +2483,7 @@
 //     atcCode: nextAtcCode,
 //     atcName: selectedATC.atcName || "",
 //     detailRows: normalizedRows,
+//     detailRowsGL: [],
 //     showATCModal: false,
 //     selectedRowIndex: null,
 //     modalContext: "",
@@ -3334,6 +2572,7 @@
 
 //       updateState({
 //         detailRows: normalizedRows,
+//         detailRowsGL: [],
 //       });
 
 //       updateTotals(normalizedRows);
@@ -3375,6 +2614,7 @@
 //       vatCode: nextVatCode,
 //       vatName: nextVatName,
 //       detailRows: normalizedRows,
+//       detailRowsGL: [],
 //       showVatModal: false,
 //       selectedRowIndex: null,
 //       modalContext: "",
@@ -3404,6 +2644,25 @@
 //     selectedRowIndex: null,
 //     accountModalSource: null,
 //   });
+// };
+
+// const handleCloseBankMastModal = async (selectedBankCode) => {
+//   if (selectedBankCode) {
+//     const accountRow = selectedBankCode?.acctCode
+//       ? await useTopAccountRow(selectedBankCode.acctCode)
+//       : null;
+
+//     updateState({
+//       bankCode: selectedBankCode.bankCode || "",
+//       acctCode: selectedBankCode.acctCode || "",
+//       acctName: accountRow?.acctName || selectedBankCode.acctName || selectedBankCode.bankName || "",
+//       detailRowsGL: [],
+//       showBankMastModal: false,
+//     });
+//     return;
+//   }
+
+//   updateState({ showBankMastModal: false });
 // };
 
 // const handleCloseSlModalGL = (selectedSl) => {
@@ -3471,21 +2730,14 @@
 //   });
 // };
 
-// const handleCloseBillTermModal = async (selectedBillTerm) => {
-//     if (selectedBillTerm) {
-//     handleSelectBillTerm(selectedBillTerm.billtermCode);
-//   };
-//     updateState({ billtermModalOpen: false });
-// }
-
 // const handleOpenItemPickingModal = async (index) => {
 //   const row = detailRowsRef.current?.[index];
-//   const requestedQty = parseFormattedNumber(row?.siQuantity || 0) || 0;
+//   const requestedQty = parseFormattedNumber(row?.csiQuantity || 0) || 0;
 
 //   if (!canUsePickingControls) return;
 
 //   if (!documentID || !documentNo) {
-//     useSwalErrorAlert("Item Picking", "Please save the SI first before opening the picking allocation.");
+//     useSwalErrorAlert("Item Picking", "Please save the CSI first before opening the picking allocation.");
 //     return;
 //   }
 
@@ -3495,12 +2747,12 @@
 //   }
 
 //   if (!row?.groupId) {
-//     useSwalErrorAlert("Item Picking", "Please save and reload the SI first before opening the picking allocation.");
+//     useSwalErrorAlert("Item Picking", "Please save and reload the CSI first before opening the picking allocation.");
 //     return;
 //   }
 
 //   if (requestedQty <= 0) {
-//     useSwalErrorAlert("Item Picking", "SI Quantity must be greater than zero before opening the picking allocation.");
+//     useSwalErrorAlert("Item Picking", "CSI Quantity must be greater than zero before opening the picking allocation.");
 //     return;
 //   }
 
@@ -3577,11 +2829,11 @@
 //         ? 0
 //         : getPickingAllocationAmount(pickedAllocations) || currentRow?.itemAmount || 0
 //     );
-//     const siQuantityValue = parseFormattedNumber(currentRow?.siQuantity || 0) || 0;
+//     const siQuantityValue = parseFormattedNumber(currentRow?.csiQuantity || 0) || 0;
 
 //     updatedRows[itemPickingRowIndex] = {
 //       ...currentRow,
-//       siStat:
+//       csiStat:
 //         totalPicked <= 0
 //           ? "F"
 //           : siQuantityValue > 0 && totalPicked >= siQuantityValue
@@ -3614,15 +2866,15 @@
 //   if (!rows.length || !canUsePickingControls) return;
 
 //   if (!documentID || !documentNo) {
-//     useSwalErrorAlert("Item Picking", "Please save the SI first before using Allocate All or Release All.");
+//     useSwalErrorAlert("Item Picking", "Please save the CSI first before using Allocate All or Release All.");
 //     return;
 //   }
 
 //   const confirm = await useSwalProceedConfirm(
 //     `${actionLabel}?`,
 //     isRelease
-//       ? "This will release all picking allocations for the SI details."
-//       : "This will automatically pick available stock for all eligible SI details.",
+//       ? "This will release all picking allocations for the CSI details."
+//       : "This will automatically pick available stock for all eligible CSI details.",
 //     "Yes"
 //   );
 
@@ -3634,7 +2886,7 @@
 //     const updatedRows = [...rows];
 
 //     for (const [index, row] of rows.entries()) {
-//       const requestedQty = parseFormattedNumber(row?.siQuantity || 0) || 0;
+//       const requestedQty = parseFormattedNumber(row?.csiQuantity || 0) || 0;
 //       if (!row?.itemCode || !row?.groupId || requestedQty <= 0) continue;
 
 //       const basePayload = buildPickingBasePayload(row, index);
@@ -3674,7 +2926,7 @@
 
 //       updatedRows[index] = {
 //         ...updatedRows[index],
-//         siStat:
+//         csiStat:
 //           totalPicked <= 0
 //             ? "F"
 //             : requestedQty > 0 && totalPicked >= requestedQty
@@ -3712,7 +2964,6 @@
 //       });
 //       return;
 //     }
-//     const priceMatrixRows = await fetchPriceMatrixRows([selectedItem]);
 //     const updatedRows = [...detailRows];
 //     const baseRow = {
 //       ...updatedRows[selectedRowIndex],
@@ -3720,12 +2971,11 @@
 //       itemName: selectedItem?.itemName || "",
 //       itemSpecs: selectedItem?.itemSpecs || updatedRows[selectedRowIndex]?.itemSpecs || "",
 //       uomCode: selectedItem?.uomCode || "",
-//       pmType: selectedItem?.pmType || updatedRows[selectedRowIndex]?.pmType || "",
-//       groupId: updatedRows[selectedRowIndex]?.groupId || "",
-//       pmId: selectedItem?.pmId || updatedRows[selectedRowIndex]?.pmId || "",
+//       vatCode: vatCode || selectedItem?.vatCode || "",
+//       vatRate: formatNumber(selectedItem?.vatRate ?? getDetailVatRate(vatCode || selectedItem?.vatCode || "")),
+//       unitPrice: formatNumber(selectedItem?.sellPrice ?? selectedItem?.sellingPrice ?? selectedItem?.unitPrice ?? 0, sellingPriceDecimals),
 //     };
-//     const priceRow = getPriceMatrixRowForItem(priceMatrixRows, selectedItem);
-//     updatedRows[selectedRowIndex] = applyPriceMatrixToDetailRow(baseRow, priceRow);
+//     updatedRows[selectedRowIndex] = calculateRowAmountsFromRates(baseRow);
 //     const normalizedRows = distributeVatAcrossDetailRows(updatedRows);
 //     updateState({ detailRows: normalizedRows });
 //     updateTotals(normalizedRows);
@@ -3746,53 +2996,13 @@
 //   });
 // };
 
-// const handleSelectBillTerm = async (billtermCode) => {
-//     if (billtermCode) {
 
-//      const result = await useTopBillTermRow(billtermCode);
-//       if (result) {
-//       updateState({
-//         billtermCode:result.billtermCode,
-//         billtermName:result.billtermName,
-//         daysDue: result.daysDue,
-//         dueDate: calculateDueDate(documentDate, result.daysDue),
-//         })
-//       }
-//     }
-//   };
-
-// const validateSIQuantity = (index, inputValue) => {
-//   const row = detailRowsRef.current[index];
-//   const drQty = parseFormattedNumber(row?.drQuantity || 0) || 0;
-//   const siQty = parseFormattedNumber(inputValue || 0) || 0;
-//   const rowStatus = String(row?.siStat || "").toUpperCase();
-
-//   if (drQty > 0 && rowStatus === "F" && siQty < drQty) {
-//     const originalValue = row?.siQuantity ?? formatNumber(0, quantityDecimals);
-
-//     useSwalErrorAlert("Invalid Quantity", "SI Quantity must be greater than or equal to DR Quantity.");
-    
-//     const updatedRows = [...detailRowsRef.current];
-//     updatedRows[index] = {
-//       ...updatedRows[index],
-//       siQuantity: originalValue,
-//     };
-
-//     detailRowsRef.current = updatedRows;
-//     updateState({ detailRows: updatedRows });
-//     updateTotals(updatedRows);
-
-//     return false;
-//   }
-
-//   delete originalSOQuantityRef.current[index];
-//   return true;
-// };
+// const validateSIQuantity = () => true;
 
 
 // const recalculateSODetailRow = (row = {}, changedField = "") => {
 //   const discountRateFields = [
-//     "discRate1",
+//     "discRate",
 //     "discRate2",
 //     "discRate3",
 //     "discRate4",
@@ -3802,7 +3012,7 @@
 //     "discRate8",
 //   ];
 //   const discountAmountFields = [
-//     "discAmount1",
+//     "discAmount",
 //     "discAmount2",
 //     "discAmount3",
 //     "discAmount4",
@@ -3812,7 +3022,7 @@
 //     "discAmount8",
 //   ];
 
-//   const quantity = parseFormattedNumber(row.siQuantity || 0) || 0;
+//   const quantity = parseFormattedNumber(row.csiQuantity || 0) || 0;
 //   const unitPrice = parseFormattedNumber(row.unitPrice || 0) || 0;
 //   const grossAmount = toFormattedAmountNumber(quantity * unitPrice);
 
@@ -3877,7 +3087,7 @@
 
 // const handleSODetailRowChange = (index, field, value) => {
 //   const discountRateFields = [
-//     "discRate1",
+//     "discRate",
 //     "discRate2",
 //     "discRate3",
 //     "discRate4",
@@ -3887,7 +3097,7 @@
 //     "discRate8",
 //   ];
 //   const discountAmountFields = [
-//     "discAmount1",
+//     "discAmount",
 //     "discAmount2",
 //     "discAmount3",
 //     "discAmount4",
@@ -3897,7 +3107,7 @@
 //     "discAmount8",
 //   ];
 //   const calculationTriggerFields = [
-//     "siQuantity",
+//     "csiQuantity",
 //     "unitPrice",
 //     ...discountRateFields,
 //     ...discountAmountFields,
@@ -3949,14 +3159,6 @@
 //     [field]: value,
 //   };
 
-//   if (field === "documentDate" && value && isDateEarlierThanSiDate(value)) {
-//     clearHeaderAndDetailDates({ showAlert: true });
-//     return;
-//   }
-//   if (field === "siDate" && value && isDateEarlierThanSiDate(value)) {
-//     clearHeaderAndDetailDates({ showAlert: true });
-//   }
-
 //   if (field === "freeItem") {
 //     updatedRow = buildFreeItemRow(updatedRow, value === "Y");
 //     updatedRows[index] = updatedRow;
@@ -3996,12 +3198,12 @@
 //   updateTotals(normalizedRows);
 // };
 
-// const handleSIDetailRowChange = handleSODetailRowChange;
+// const handleCSIDetailRowChange = handleSODetailRowChange;
 
 // const enterNextRowZeroClearFields = [
-//   "siQuantity",
+//   "csiQuantity",
 //   "unitPrice",
-//   "discRate1",
+//   "discRate",
 //   "discRate2",
 //   "discRate3",
 //   "discRate4",
@@ -4009,7 +3211,7 @@
 //   "discRate6",
 //   "discRate7",
 //   "discRate8",
-//   "discAmount1",
+//   "discAmount",
 //   "discAmount2",
 //   "discAmount3",
 //   "discAmount4",
@@ -4019,13 +3221,11 @@
 //   "discAmount8",
 // ];
 
-// const renderSIDetailCell = (columnKey, row, index) => {
+// const renderCSIDetailCell = (columnKey, row, index) => {
 //   const columnWidth = getDetailColumnFallbackWidth(columnKey);
 //   const style = getDetailCellStyle(columnKey, columnWidth);
-//   const isRowWithDR = Boolean(String(row.drNo || "").trim());
-//   const quantityPickedValue = parseFormattedNumber(row.quantityPicked || 0) || 0;
-//   const canEditPickingStatus = isRowWithDR && quantityPickedValue === 0;
-//   const canSearchItem = !isRowWithDR; // Can't change item if it's from a DR
+//   const canEditPickingStatus = false;
+//   const canSearchItem = true;
   
 //   // Removed salesRepCode from detailModalHandlers
 //   // Added ATC lookup for detail rows if needed, but not explicitly requested for details.
@@ -4038,7 +3238,7 @@
 //       zeroClearFields: enterNextRowZeroClearFields,
 //       parseValue: parseFormattedNumber,
 //       onClearNextValue: (nextIndex, nextField, value) =>
-//         handleSIDetailRowChange(nextIndex, nextField, value),
+//         handleCSIDetailRowChange(nextIndex, nextField, value),
 //     });
 //   };
 
@@ -4087,7 +3287,7 @@
 //       const sanitizedValue = e.target.value.replace(/[^0-9.]/g, "");
 //       const regex = options.regex || /^\d*\.?\d{0,2}$/;
 //       if (regex.test(sanitizedValue) || sanitizedValue === "") {
-//         handleSIDetailRowChange(index, field, sanitizedValue);
+//         handleCSIDetailRowChange(index, field, sanitizedValue);
 //       }
 //     }}
 //       onFocus={(e) => {
@@ -4130,13 +3330,12 @@
 
 //   const detailColumnRenderers = {
 //     ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
-//     siStat: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`siStat-${index}`} className="w-full global-tran-td-inputclass-ui text-left" value={row.siStat || "F"} disabled={isFormDisabled || !canEditPickingStatus} onChange={(e) => handleSIDetailRowChange(index, "siStat", e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled || !canEditPickingStatus) return; e.preventDefault(); focusNextDetailCell("siStat"); }}><option value="F">For Picking</option>{canEditPickingStatus ? <option value="X">Cancelled</option> : <><option value="T">Partially Picked</option><option value="P">Picked</option><option value="X">Cancelled</option></>}</select></td>,
-//     drNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { readOnly: true })}</td>,
+//     csiStat: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`csiStat-${index}`} className="w-full global-tran-td-inputclass-ui text-left" value={row.csiStat || "F"} disabled={isFormDisabled || !canEditPickingStatus} onChange={(e) => handleCSIDetailRowChange(index, "csiStat", e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled || !canEditPickingStatus) return; e.preventDefault(); focusNextDetailCell("csiStat"); }}><option value="F">For Picking</option>{canEditPickingStatus ? <option value="X">Cancelled</option> : <><option value="T">Partially Picked</option><option value="P">Picked</option><option value="X">Cancelled</option></>}</select></td>,
 //     itemCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}><div className="flex items-center gap-1"><input type="text" value={row.itemCode || ""} readOnly className="w-full h-7 text-xs bg-transparent focus:outline-none focus:ring-0" />{canSearchItem && <button type="button" className="text-blue-600 hover:text-blue-800" onClick={() => updateState({ selectedRowIndex: index, selectionContext: "rowItemLookup", insertAfterIndex: null, showItemModal: true })}><FontAwesomeIcon icon={faSearch} /></button>}</div></td>, 
 //     itemName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey)}</td>,
 //     itemSpecs: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey)}</td>,
-//     uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { className: "text-center" })}<input type="hidden" value={row.pmType || ""} readOnly /><input type="hidden" value={row.groupId || ""} readOnly /><input type="hidden" value={row.pmId || ""} readOnly /></td>,
-//     siQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), readOnly: isFormDisabled || isRowWithDR, onBlur: (e) => validateSIQuantity(index, e.target.value), onKeyDown: (e) => validateSIQuantity(index, e.target.value) })}</td>,
+//     uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { className: "text-center" })}<input type="hidden" value={row.groupId || ""} readOnly /></td>,
+//     csiQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), readOnly: isFormDisabled, onBlur: (e) => validateSIQuantity(index, e.target.value), onKeyDown: (e) => validateSIQuantity(index, e.target.value) })}</td>,
 //     quantityPicked: () => (
 //       <td key={columnKey} className="global-tran-td-ui" style={style}>
 //         <div className="flex items-center gap-1">
@@ -4153,7 +3352,7 @@
 //               title="Open Item Picking / Allocation"
 //               aria-label="Open Item Picking / Allocation"
 //               className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-blue-200 bg-blue-50 text-[11px] text-blue-700 transition hover:border-blue-400 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-40"
-//               disabled={!row?.itemCode || (parseFormattedNumber(row?.siQuantity || 0) || 0) <= 0}
+//               disabled={!row?.itemCode || (parseFormattedNumber(row?.csiQuantity || 0) || 0) <= 0}
 //               onClick={() => handleOpenItemPickingModal(index)}
 //             >
 //               <FontAwesomeIcon icon={faClipboardCheck} />
@@ -4172,7 +3371,7 @@
 //         />
 //       </td>
 //     ),
-//     unitPrice: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: sellingPriceDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${sellingPriceDecimals}}$`), blocked: () => !isSellingPriceAndDiscountEditable || normalizedSiTranType === "SI03" || row.freeItem === "Y", readOnly: isFormDisabled || !isSellingPriceAndDiscountEditable || row.freeItem === "Y" })}</td>,
+//     unitPrice: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: sellingPriceDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${sellingPriceDecimals}}$`), blocked: () => row.freeItem === "Y", readOnly: isFormDisabled || row.freeItem === "Y" })}</td>,
 //     grossAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
 //     vatCode: () => (
 //       <td key={columnKey} className="global-tran-td-ui" style={style}>
@@ -4195,21 +3394,19 @@
 //     totDiscount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
 //     netAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
 //     amountDue: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>, // New field
-//     freeItem: () => <td key={columnKey} className="global-tran-td-ui" style={style}><button type="button" className={`w-full h-7 rounded-full border text-[11px] font-semibold transition-colors ${row.freeItem === "Y" ? "border-blue-500 bg-blue-500/15 text-blue-700" : "border-slate-300 bg-white text-slate-600"} ${isFormDisabled || isRowWithDR ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`} disabled={isFormDisabled || isRowWithDR} onClick={() => handleSIDetailRowChange(index, "freeItem", row.freeItem === "Y" ? "" : "Y")}>{row.freeItem === "Y" ? "Yes" : "No"}</button></td>,
-//     drQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), readOnly: true })}</td>, // Read-only as it comes from DR
-//     linkedSiQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), readOnly: true })}</td>, // Read-only as it comes from linked SI
+//     freeItem: () => <td key={columnKey} className="global-tran-td-ui" style={style}><button type="button" className={`w-full h-7 rounded-full border text-[11px] font-semibold transition-colors ${row.freeItem === "Y" ? "border-blue-500 bg-blue-500/15 text-blue-700" : "border-slate-300 bg-white text-slate-600"} ${isFormDisabled ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`} disabled={isFormDisabled} onClick={() => handleCSIDetailRowChange(index, "freeItem", row.freeItem === "Y" ? "" : "Y")}>{row.freeItem === "Y" ? "Yes" : "No"}</button></td>,
 //   };
 
 //   if (visibleDiscountRateFields.includes(columnKey) || visibleDiscountAmountFields.includes(columnKey)) {
-//     detailColumnRenderers[columnKey] = () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { blocked: () => !isSellingPriceAndDiscountEditable || row.freeItem === "Y", readOnly: isFormDisabled || !isSellingPriceAndDiscountEditable || row.freeItem === "Y" })}</td>;
+//     detailColumnRenderers[columnKey] = () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { blocked: () => row.freeItem === "Y", readOnly: isFormDisabled || row.freeItem === "Y" })}</td>;
 //   }
 
 //   return detailColumnRenderers[columnKey]?.() ?? null;
 // };
 
-// const renderSiGlCell = (columnKey, row, index) => {
-//   const columnWidth = getSiGlFallbackWidth(columnKey);
-//   const style = getSiGlCellStyle(columnKey, columnWidth);
+// const renderCcsiGlCell = (columnKey, row, index) => {
+//   const columnWidth = getCcsiGlFallbackWidth(columnKey);
+//   const style = getCcsiGlCellStyle(columnKey, columnWidth);
 //   const glModalHandlers = {
 //     acctCode: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "acctCode" }),
 //     rcCode: () => updateState({ selectedRowIndex: index, showRcModal: true, modalContext: "glRC" }),
@@ -4219,9 +3416,9 @@
 //   };
 
 //   const focusNextGlCell = (field) => {
-//     focusNextSiGlRowInput(index, field, {
+//     focusNextCsiGlRowInput(index, field, {
 //       rows: detailRowsGL,
-//       zeroClearFields: siGlEnterNextRowZeroClearFields,
+//       zeroClearFields: csiGlEnterNextRowZeroClearFields,
 //       parseValue: parseFormattedNumber,
 //       onClearNextValue: (nextIndex, nextField, value) => handleDetailChangeGL(nextIndex, nextField, value),
 //     });
@@ -4277,14 +3474,14 @@
 //         if (e.key !== "Enter") return;
 //         e.preventDefault();
 //         handleBlurGL(index, field, e.target.value, true);
-//         focusNextSiGlRowInput(index, field, {
+//         focusNextCsiGlRowInput(index, field, {
 //           rows: detailRowsGL,
-//           zeroClearFields: siGlEnterNextRowZeroClearFields,
+//           zeroClearFields: csiGlEnterNextRowZeroClearFields,
 //           parseValue: parseFormattedNumber,
 //           onClearNextValue: (nextIndex, nextField, value) => handleDetailChangeGL(nextIndex, nextField, value),
 //         });
 //       }}
-//       onFocus={(e) => clearSiGlZeroOnFocus(e, { isEditable: !isFormDisabled, onClear: (value) => handleDetailChangeGL(index, field, value) })}
+//       onFocus={(e) => clearCsiGlZeroOnFocus(e, { isEditable: !isFormDisabled, onClear: (value) => handleDetailChangeGL(index, field, value) })}
 //       onBlur={(e) => {
 //         if (isFormDisabled) return;
 //         handleBlurGL(index, field, e.target.value);
@@ -4348,7 +3545,7 @@
 //         onHistory={() => setTopTab("history")}
 //         disableRouteNavigation={true}
 
-//         detailsRoute="/page/DR"
+//         detailsRoute="/page/CSI"
 
 //         isSaveDisabled={state.isSaveDisabled || isFormDisabled || ((detailRows?.length || 0) + (detailRowsGL?.length || 0) === 0)}
 //         isResetDisabled={state.isResetDisabled}
@@ -4394,297 +3591,353 @@
 //           {/* Provision for Other Tabs */}
 //         </div>
 
-//         {/* SI Header Form Section - Main Grid Container */}
-//         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 rounded-lg relative" id="so_hd">
+//         {/* CSI Header Form Section - Main Grid Container */}
+//         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 rounded-lg relative" id="csi_hd">
 
 //           <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-//           <div className="global-tran-textbox-group-div-ui">
-//             <FieldRenderer
-//               id="branchName"
-//               label="Branch"
-//               type="lookup"
-//               value={branchName || ""}
-//               disabled={state.isFetchDisabled || state.isDocNoDisabled || isFormDisabled}
-//               onLookup={() => updateState({ branchModalOpen: true })}
-//             />
-
-//             <FieldRenderer
-//               id="siNo"
-//               label="SI No."
-//               type="lookup"
-//               value={state.documentNo || documentNo || ""}
-//               disabled={state.isDocNoDisabled}
-//               onChange={(val) => updateState({ documentNo: val })}
-//               onBlur={handlesiNoBlur}
-//               onLookup={() => updateState({ showAllTranDocNo: true })}
-//               onKeyDown={(e) => {
-//                 if (e.key === "Enter") {
-//                   e.preventDefault();
-//                   handlesoNoBlur();
-//                   document.getElementById("documentDate")?.focus();
-//                 }
-//               }}
-//             />
-
-//             <div className="relative w-full">
-//               <div
-//                 className={`flex items-stretch global-ref-textbox-ui ${
-//                   !isFormDisabled
-//                     ? "global-ref-textbox-enabled"
-//                     : "global-ref-textbox-disabled"
-//                 }`}
-//               >
-//                 <DateFormatInput
-//                   id="documentDate"
-//                   className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
-//                   value={documentDate}
-//                   disabled={isFormDisabled}
-//                   updateState={updateState}
+//             <div className="global-tran-textbox-group-div-ui">
+//               {renderCsiHeaderField("branchName", (
+//                 <FieldRenderer
+//                   id="branchName"
+//                   label={getCsiHeaderLabel("branchName", "Branch")}
+//                   type="lookup"
+//                   value={branchName || ""}
+//                   disabled={state.isFetchDisabled || state.isDocNoDisabled || isFormDisabled}
+//                   onLookup={() => updateState({ branchModalOpen: true })}
 //                 />
-//               </div>
-//               <label
-//                 htmlFor="documentDate"
-//                 className={`global-ref-floating-label ${
-//                   !isFormDisabled
-//                     ? "global-ref-label-enabled"
-//                     : "global-ref-label-disabled"
-//                 }`}
-//               >
-//                 SI Date
-//               </label>
-//             </div>
+//               ))}
 
-//             <FieldRenderer
-//               id="billToCustCode"
-//               label="Bill To Customer Code"
-//               required
-//               type="lookup"
-//               value={billToCustCode || ""}
-//               disabled={isFormDisabled || hasDRLinkedDetailRows}
-//               readOnly
-//               lookupDisabled={isFetchDisabled || hasDRLinkedDetailRows}
-//               onLookup={() => updateState({ custModalOpen: true, modalContext: "OpenDR" })}
-//             />
+//               {renderCsiHeaderField("csiNo", (
+//                 <FieldRenderer
+//                   id="csiNo"
+//                   label={getCsiHeaderLabel("csiNo", "CSI No.")}
+//                   type="lookup"
+//                   value={state.documentNo || documentNo || ""}
+//                   disabled={state.isDocNoDisabled}
+//                   onChange={(val) => updateState({ documentNo: val })}
+//                   onBlur={handlecsiNoBlur}
+//                   onLookup={() => updateState({ showAllTranDocNo: true })}
+//                   onKeyDown={(e) => {
+//                     if (e.key === "Enter") {
+//                       e.preventDefault();
+//                       handlecsiNoBlur();
+//                       document.getElementById("documentDate")?.focus();
+//                     }
+//                   }}
+//                 />
+//               ))}
 
-//             <FieldRenderer
-//               id="billToCustName"
-//               label="Bill To Customer Name"
-//               required
-//               type="text"
-//               value={billToCustName || ""}
-//               disabled
-//               readOnly
-//             />
-//           </div>
+//               {renderCsiHeaderField("documentDate", (
+//                 <div className="relative w-full">
+//                   <div
+//                     className={`flex items-stretch global-ref-textbox-ui ${
+//                       !isFormDisabled
+//                         ? "global-ref-textbox-enabled"
+//                         : "global-ref-textbox-disabled"
+//                     }`}
+//                   >
+//                     <DateFormatInput
+//                       id="documentDate"
+//                       className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
+//                       value={documentDate}
+//                       disabled={isFormDisabled}
+//                       updateState={updateState}
+//                     />
+//                   </div>
+//                   <label
+//                     htmlFor="documentDate"
+//                     className={`global-ref-floating-label ${
+//                       !isFormDisabled
+//                         ? "global-ref-label-enabled"
+//                         : "global-ref-label-disabled"
+//                     }`}
+//                   >
+//                     {getCsiHeaderLabel("documentDate", "CSI Date")}
+//                   </label>
+//                 </div>
+//               ))}
 
-//           <div className="global-tran-textbox-group-div-ui">
-//             <FieldRenderer
-//               id="siTranType"
-//               label="SI Type"
-//               type="select"
-//               value={siTranType || ""}
-//               disabled={isFormDisabled || hasSiDetailRows}
-//               onChange={(val) => updateState({ siTranType: val })}
-//               options={(siTranTypeOptions || []).map((t) => ({
-//                 label: t.DROPDOWN_NAME,
-//                 value: t.DROPDOWN_CODE,
-//               }))}
-//             />
+//               {renderCsiHeaderField("billToCustCode", (
+//                 <FieldRenderer
+//                   id="billToCustCode"
+//                   label={getCsiHeaderLabel("billToCustCode", "Bill To Customer Code")}
+//                   required
+//                   type="lookup"
+//                   value={billToCustCode || ""}
+//                   disabled={isFormDisabled}
+//                   readOnly
+//                   lookupDisabled={isFetchDisabled}
+//                   onLookup={() => updateState({ custModalOpen: true })}
+//                 />
+//               ))}
 
-//             <FieldRenderer
-//               id="atcName"
-//               label="ATC (Goods)"
-//               required
-//               type="lookup"
-//               value={atcName || ""}
-//               disabled={isFormDisabled}
-//               readOnly
-//               lookupDisabled={isFormDisabled}
-//               onLookup={() => updateState({ showATCModal: true })}
-//             />
-
-//             <FieldRenderer
-//               id="vatName"
-//               label="VAT (Goods)"
-//               required
-//               type="lookup"
-//               value={vatName || ""}
-//               disabled={isFormDisabled}
-//               readOnly
-//               lookupDisabled={isFormDisabled}
-//               onLookup={() => updateState({ showVatModal: true, selectedRowIndex: null, modalContext: "headerVAT" })}
-//             />
-
-//             <FieldRenderer
-//               id="billtermName"
-//               label="Billing Term"
-//               required
-//               type="lookup"
-//               value={billtermName || ""}
-//               disabled={isFormDisabled}
-//               readOnly
-//               lookupDisabled={isFormDisabled}
-//               onLookup={() => updateState({ billtermModalOpen: true })}
-//             />
-
-           
-//               <div className="relative w-full">
-//               <div
-//                 className={`flex items-stretch global-ref-textbox-ui ${
-//                   !isFormDisabled
-//                     ? "global-ref-textbox-enabled"
-//                     : "global-ref-textbox-disabled"
-//                 }`}
-//               >
-//                 <DateFormatInput
-//                   id="dueDate"
-//                   className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
-//                   value={dueDate}
+//               {renderCsiHeaderField("billToCustName", (
+//                 <FieldRenderer
+//                   id="billToCustName"
+//                   label={getCsiHeaderLabel("billToCustName", "Bill To Customer Name")}
+//                   required
+//                   type="text"
+//                   value={billToCustName || ""}
 //                   disabled
-//                   updateState={updateState}
+//                   readOnly
 //                 />
-//               </div>
-//               <label htmlFor="dueDate" className="global-ref-floating-label">
-//                 Due Date
-//               </label>
-//             </div>
+//               ))}
 
-
-//           </div>
-
-//           <div className="global-tran-textbox-group-div-ui">
-//             <FieldRenderer
-//               id="salesRepName"
-//               label="Sales Rep"
-//               required
-//               type="lookup"
-//               value={salesRepName || ""}
-//               disabled={isFormDisabled}
-//               readOnly
-//               lookupDisabled={isFormDisabled}
-//               onLookup={() => updateState({ showSalesRepModal: true, modalContext: "headerSalesRep" })}
-//             />
-
-//             <FieldRenderer
-//               id="customerPoNo"
-//               label="Customer PO No."
-//               type="text"
-//               value={customerPoNo || ""}
-//               disabled={isFormDisabled}
-//               onChange={(val) => updateState({ customerPoNo: val })}
-//               maxLength={useGetFieldLength(tblFieldArray, "cust_po_no")}
-//             />
-
-//             <div className="relative w-full">
-//               <div
-//                 className={`flex items-stretch global-ref-textbox-ui ${
-//                   !isFormDisabled
-//                     ? "global-ref-textbox-enabled"
-//                     : "global-ref-textbox-disabled"
-//                 }`}
-//               >
-//                 <DateFormatInput
-//                   id="customerPoDate"
-//                   className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
-//                   value={customerPoDate}
+//               {renderCsiHeaderField("custAddr", (
+//                 <FieldRenderer
+//                   id="custAddr"
+//                   label={getCsiHeaderLabel("custAddr", "Address")}
+//                   type="text"
+//                   value={custAddr || ""}
 //                   disabled={isFormDisabled}
-//                   updateState={updateState}
+//                   onChange={(val) => updateState({ custAddr: val })}
+//                   maxLength={useGetFieldLength(tblFieldArray, "cust_addr")}
 //                 />
+//               ))}
+
+//               {renderCsiHeaderField("custTin", (
+//                 <FieldRenderer
+//                   id="custTin"
+//                   label={getCsiHeaderLabel("custTin", "TIN")}
+//                   type="text"
+//                   value={custTin || ""}
+//                   disabled={isFormDisabled}
+//                   onChange={(val) => updateState({ custTin: val })}
+//                   maxLength={useGetFieldLength(tblFieldArray, "cust_tin")}
+//                 />
+//               ))}
+//             </div>
+
+//             <div className="global-tran-textbox-group-div-ui">
+//               {renderCsiHeaderField("csiTranType", (
+//                 <FieldRenderer
+//                   id="csiTranType"
+//                   label={getCsiHeaderLabel("csiTranType", "CSI Type")}
+//                   type="select"
+//                   value={csiTranType || ""}
+//                   disabled={isFormDisabled || hasCsiDetailRows}
+//                   onChange={(val) => updateState({ csiTranType: val })}
+//                   options={(csiTranTypeOptions || []).map((t) => ({
+//                     label: t.DROPDOWN_NAME,
+//                     value: t.DROPDOWN_CODE,
+//                   }))}
+//                 />
+//               ))}
+
+//               {renderCsiHeaderField("paymentType", (
+//                 <FieldRenderer
+//                   id="paymentType"
+//                   label={getCsiHeaderLabel("paymentType", "Payment Type")}
+//                   required
+//                   type="select"
+//                   value={paymentType || ""}
+//                   disabled={isFormDisabled}
+//                   onChange={(val) => updateState({ paymentType: val })}
+//                   options={(paymentTypeOptions || []).map((t) => ({
+//                     label: t.DROPDOWN_NAME,
+//                     value: t.DROPDOWN_CODE,
+//                   }))}
+//                 />
+//               ))}
+
+//               {renderCsiHeaderField("bankCode", (
+//                 <FieldRenderer
+//                   id="bankCode"
+//                   label={getCsiHeaderLabel("bankCode", "Depository Bank")}
+//                   required
+//                   type="lookup"
+//                   value={acctName || bankCode || ""}
+//                   disabled={isFormDisabled}
+//                   readOnly
+//                   lookupDisabled={isFormDisabled}
+//                   onLookup={() => updateState({ showBankMastModal: true })}
+//                 />
+//               ))}
+
+//               {renderCsiHeaderField("checkNo", (
+//                 <FieldRenderer
+//                   id="checkNo"
+//                   label={getCsiHeaderLabel("checkNo", "Check No.")}
+//                   type="text"
+//                   value={checkNo || ""}
+//                   disabled={isFormDisabled || !(String(paymentType || "").toUpperCase() === "AR01" || String(paymentType || "").toUpperCase() === "AR03")}
+//                   onChange={(val) => updateState({ checkNo: val })}
+//                   maxLength={useGetFieldLength(tblFieldArray, "check_no")}
+//                 />
+//               ))}
+
+//               {renderCsiHeaderField("checkDate", (
+//                 <div className="relative w-full">
+//                   <div className={`flex items-stretch global-ref-textbox-ui ${!isFormDisabled ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"}`}>
+//                     <DateFormatInput
+//                       id="checkDate"
+//                       className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
+//                       value={checkDate}
+//                       disabled={isFormDisabled || !(String(paymentType || "").toUpperCase() === "AR01" || String(paymentType || "").toUpperCase() === "AR03")}
+//                       updateState={updateState}
+//                     />
+//                   </div>
+//                   <label htmlFor="checkDate" className="global-ref-floating-label">
+//                     {getCsiHeaderLabel("checkDate", "Check Date")}
+//                   </label>
+//                 </div>
+//               ))}
+
+//               {renderCsiHeaderField("bank", (
+//                 <FieldRenderer
+//                   id="bank"
+//                   label={getCsiHeaderLabel("bank", String(paymentType || "").toUpperCase() === "AR01" || String(paymentType || "").toUpperCase() === "AR03" ? "Check Bank" : "Bank")}
+//                   type="text"
+//                   value={bank || ""}
+//                   disabled={isFormDisabled}
+//                   onChange={(val) => updateState({ bank: val })}
+//                   maxLength={useGetFieldLength(tblFieldArray, "bank")}
+//                 />
+//               ))}
+//             </div>
+
+//             <div className="global-tran-textbox-group-div-ui">
+//               {renderCsiHeaderField("atcName", (
+//                 <FieldRenderer
+//                   id="atcName"
+//                   label={getCsiHeaderLabel("atcName", "ATC (Goods)")}
+//                   required
+//                   type="lookup"
+//                   value={atcName || ""}
+//                   disabled={isFormDisabled}
+//                   readOnly
+//                   lookupDisabled={isFormDisabled}
+//                   onLookup={() => updateState({ showATCModal: true })}
+//                 />
+//               ))}
+
+//               {renderCsiHeaderField("vatName", (
+//                 <FieldRenderer
+//                   id="vatName"
+//                   label={getCsiHeaderLabel("vatName", "VAT (Goods)")}
+//                   required
+//                   type="lookup"
+//                   value={vatName || ""}
+//                   disabled={isFormDisabled}
+//                   readOnly
+//                   lookupDisabled={isFormDisabled}
+//                   onLookup={() => updateState({ showVatModal: true, selectedRowIndex: null, modalContext: "headerVAT" })}
+//                 />
+//               ))}
+
+//               {renderCsiHeaderField("salesRepName", (
+//                 <FieldRenderer
+//                   id="salesRepName"
+//                   label={getCsiHeaderLabel("salesRepName", "Sales Rep")}
+//                   required
+//                   type="lookup"
+//                   value={salesRepName || ""}
+//                   disabled={isFormDisabled}
+//                   readOnly
+//                   lookupDisabled={isFormDisabled}
+//                   onLookup={() => updateState({ showSalesRepModal: true, modalContext: "headerSalesRep" })}
+//                 />
+//               ))}
+
+//               {renderCsiHeaderField("refCsiNo1", (
+//                 <FieldRenderer
+//                   id="refCsiNo1"
+//                   label={getCsiHeaderLabel("refCsiNo1", "Ref CSI No. 1")}
+//                   type="text"
+//                   value={refCsiNo1 || ""}
+//                   disabled={isFormDisabled}
+//                   onChange={(val) => updateState({ refCsiNo1: val })}
+//                   maxLength={useGetFieldLength(tblFieldArray, "refcsi_no1")}
+//                 />
+//               ))}
+
+//               {renderCsiHeaderField("refCsiNo2", (
+//                 <FieldRenderer
+//                   id="refCsiNo2"
+//                   label={getCsiHeaderLabel("refCsiNo2", "Ref CSI No. 2")}
+//                   type="text"
+//                   value={refCsiNo2 || ""}
+//                   disabled={isFormDisabled}
+//                   onChange={(val) => updateState({ refCsiNo2: val })}
+//                   maxLength={useGetFieldLength(tblFieldArray, "refcsi_no2")}
+//                 />
+//               ))}
+//             </div>
+
+//             {renderCsiHeaderField("remarks", (
+//               <div className="col-span-full">
+//                 <div className="relative p-2">
+//                   <textarea
+//                     id="remarks"
+//                     placeholder=""
+//                     rows={6}
+//                     className="peer global-tran-textbox-remarks-ui pt-2"
+//                     value={remarks}
+//                     onChange={(e) => updateState({ remarks: e.target.value })}
+//                     disabled={isFormDisabled}
+//                     maxLength={useGetFieldLength(tblFieldArray, "remarks")}
+//                   />
+//                   <label
+//                     htmlFor="remarks"
+//                     className="global-tran-floating-label-remarks"
+//                   >
+//                     {getCsiHeaderLabel("remarks", "Remarks")}
+//                   </label>
+//                 </div>
 //               </div>
-//               <label htmlFor="customerPoDate" className="global-ref-floating-label">
-//                 Customer PO Date
-//               </label>
-//             </div>
-
-//             <FieldRenderer
-//               id="refSiNo1"
-//               label="Ref SI No. 1"
-//               type="text"
-//               value={refSiNo1 || ""}
-//               disabled={isFormDisabled}
-//               onChange={(val) => updateState({ refSiNo1: val })}
-//               maxLength={useGetFieldLength(tblFieldArray, "refsi_no1")}
-//             />
-
-//             <FieldRenderer
-//               id="refSiNo2"
-//               label="Ref SI No. 2"
-//               type="text"
-//               value={refSiNo2 || ""}
-//               disabled={isFormDisabled}
-//               onChange={(val) => updateState({ refSiNo2: val })}
-//               maxLength={useGetFieldLength(tblFieldArray, "refsi_no2")}
-//             />
-//           </div>
-
-//           <div className="col-span-full">
-//             <div className="relative p-2">
-//               <textarea
-//                 id="remarks"
-//                 placeholder=""
-//                 rows={6}
-//                 className="peer global-tran-textbox-remarks-ui pt-2"
-//                 value={remarks}
-//                 onChange={(e) => updateState({ remarks: e.target.value })}
-//                 disabled={isFormDisabled}
-//                 maxLength={useGetFieldLength(tblFieldArray, "remarks")}
-//               />
-//               <label
-//                 htmlFor="remarks"
-//                 className="global-tran-floating-label-remarks"
-//               >
-//                 Remarks
-//               </label>
-//             </div>
-//           </div>
+//             ))}
 //           </div>
 
 //           <div className="global-tran-textbox-group-div-ui">
 //             <div className="flex gap-4">
 //               <input type="hidden" id="currCode" value={currCode || ""} readOnly />
 
-//               <div className="flex-grow w-2/3">
-//                 <FieldRenderer
-//                   id="currName"
-//                   label="Currency"
-//                   value={
-//                     currCode
-//                       ? `${currCode}${currName ? ` - ${currName}` : ""}`
-//                       : ""
-//                   }
-//                   disabled
-//                   readOnly
-//                   type="text"
-//                 />
-//               </div>
+//               {renderCsiHeaderField("currName", (
+//                 <div className="flex-grow w-2/3">
+//                   <FieldRenderer
+//                     id="currName"
+//                     label={getCsiHeaderLabel("currName", "Currency")}
+//                     value={
+//                       currCode
+//                         ? `${currCode}${currName ? ` - ${currName}` : ""}`
+//                         : ""
+//                     }
+//                     disabled
+//                     readOnly
+//                     type="text"
+//                   />
+//                 </div>
+//               ))}
 
-//               <div className="flex-grow">
-//                 <FieldRenderer
-//                   id="currRate"
-//                   label="Currency Rate"
-//                   type="amount"
-//                   value={currRate || ""}
-//                   disabled={isFormDisabled || glCurrDefault === currCode}
-//                   onChange={(val) => {
-//                     const sanitizedValue = String(val).replace(/[^0-9.]/g, "");
-//                     if (/^\d*\.?\d{0,6}$/.test(sanitizedValue) || sanitizedValue === "") {
-//                       updateState({ currRate: sanitizedValue });
-//                     }
-//                   }}
-//                   onBlur={handleCurrRateNoBlur}
-//                   onKeyDown={(e) => {
-//                     if (e.key === "Enter") {
-//                       e.preventDefault();
-//                       document.getElementById("refDocNo1")?.focus();
-//                     }
-//                   }}
-//                   onFocus={(e) => {
-//                     if (!isFormDisabled && parseFormattedNumber(e.target.value) === 0) {
-//                       updateState({ currRate: "" });
-//                     }
-//                   }}
-//                 />
-//               </div>
+//               {renderCsiHeaderField("currRate", (
+//                 <div className="flex-grow">
+//                   <FieldRenderer
+//                     id="currRate"
+//                     label={getCsiHeaderLabel("currRate", "Currency Rate")}
+//                     type="amount"
+//                     value={currRate || ""}
+//                     disabled={isFormDisabled || glCurrDefault === currCode}
+//                     onChange={(val) => {
+//                       const sanitizedValue = String(val).replace(/[^0-9.]/g, "");
+//                       if (/^\d*\.?\d{0,6}$/.test(sanitizedValue) || sanitizedValue === "") {
+//                         updateState({ currRate: sanitizedValue });
+//                       }
+//                     }}
+//                     onBlur={handleCurrRateNoBlur}
+//                     onKeyDown={(e) => {
+//                       if (e.key === "Enter") {
+//                         e.preventDefault();
+//                         document.getElementById("refCsiNo1")?.focus();
+//                       }
+//                     }}
+//                     onFocus={(e) => {
+//                       if (!isFormDisabled && parseFormattedNumber(e.target.value) === 0) {
+//                         updateState({ currRate: "" });
+//                       }
+//                     }}
+//                   />
+//                 </div>
+//               ))}
 //             </div>
 
 //             <FieldRenderer
@@ -4748,6 +4001,7 @@
 //               disabled
 //               readOnly
 //             />
+
 //           </div>
 //         </div>
 
@@ -4755,7 +4009,7 @@
 //     </div>
 
 //           {/* APV Detail Section */}
-//           <div id="apv_dtl" className="global-tran-tab-div-ui">
+//           <div id="csi_dtl" className="global-tran-tab-div-ui">
 
 //           {/* Tab Navigation */}
 //           <div className="global-tran-tab-nav-ui">
@@ -4765,7 +4019,7 @@
 //             <button
 //               className="global-tran-tab-padding-ui global-tran-tab-text_active-ui"
 //             > {/* This is correct */}
-//               SI Details
+//               CSI Details
 //             </button>
 //           </div>
 //         </div>
@@ -4800,7 +4054,7 @@
 //             return (
 //               <tr key={originalIndex} className="global-tran-tr-ui">
 //                 {orderedDetailColumns.map((column) =>
-//                   renderSIDetailCell(column.key, row, originalIndex)
+//                   renderCSIDetailCell(column.key, row, originalIndex)
 //                 )}
 
 //                 {!isFormDisabled && (
@@ -4809,22 +4063,20 @@
 //                     style={transactionActionsCellStyle}
 //                   >
 //                     <div className="flex items-center justify-center gap-1">
-//                       {!isDirectSiType && (
-//                         <button
+//                       <button
 //                           type="button"
 //                           className="global-tran-td-button-add-ui"
 //                           onClick={() => handleInsertBlankRow(originalIndex)}
 //                         >
 //                           <FontAwesomeIcon icon={faPlus} />
 //                         </button>
-//                       )}
 
 //                       <button
 //                         type="button"
 //                         className="global-tran-td-button-delete-ui"
 //                         onClick={() => handleDeleteRow(originalIndex)}
 //                         title={
-//                           isPickingSiType && pickedQty > 0
+//                           isPickingCsiType && pickedQty > 0
 //                             ? "Delete row and release picking allocation"
 //                             : "Delete row"
 //                         }
@@ -4852,64 +4104,6 @@
 //     {/* Add Button */}
 //     <div className="global-tran-tab-footer-button-div-ui">
 //       <div ref={addTypeDropdownRef} className="relative inline-block" style={{ visibility: isFormDisabled ? "hidden" : "visible" }}>
-//         {showAddTypeDropdown && (
-//           <div className="absolute bottom-[110%] left-0 mb-3 z-[9999] w-[280px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur-sm dark:border-slate-700 dark:bg-slate-800">
-//             <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-700">
-//               <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
-//                 Add SI Detail
-//               </div>
-//             </div>
-
-//             <div className="p-2">
-//               <button
-//                 type="button"
-//                 className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150 ${isAddItemDisabledBySiType ? "cursor-not-allowed text-slate-400 opacity-50 dark:text-slate-500" : "text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"}`}
-//                 disabled={isAddItemDisabledBySiType}
-//                 onClick={() => {
-//                   if (isAddItemDisabledBySiType) return;
-//                   setShowAddTypeDropdown(false);
-//                   handleOpenAddItemModal();
-//                 }}
-//               >
-//                 <div className="flex items-center gap-3">
-//                   <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
-//                     <FontAwesomeIcon icon={faPlus} />
-//                   </span>
-//                   <div className="flex flex-col items-start">
-//                     <span>Add Item</span>
-//                     <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
-//                       Select item from item master
-//                     </span>
-//                   </div>
-//                 </div>
-//               </button>
-
-//               <button
-//                 type="button"
-//                 className={`mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150 ${isOpenDRDisabledBySiType ? "cursor-not-allowed text-slate-400 opacity-50 dark:text-slate-500" : "text-blue-700 hover:bg-blue-50 hover:text-blue-900 dark:text-blue-300 dark:hover:bg-slate-700"}`}
-//                 disabled={isOpenDRDisabledBySiType}
-//                 onClick={() => {
-//                   if (isOpenDRDisabledBySiType) return;
-//                   setShowAddTypeDropdown(false);
-//                   handleOpenDRLookup();
-//                 }}
-//               >
-//                 <div className="flex items-center gap-3">
-//                   <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-slate-700 dark:text-blue-300">
-//                     <FontAwesomeIcon icon={faClipboardCheck} />
-//                   </span>
-//                   <div className="flex flex-col items-start">
-//                     <span>Open DR</span>
-//                     <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
-//                       Lookup open DR items
-//                     </span>
-//                   </div>
-//                 </div>
-//               </button>
-//             </div>
-//           </div>
-//         )}
-
 //         <button
 //           onClick={handleAddRowClick}
 //           className="global-tran-tab-footer-button-add-ui"
@@ -4985,9 +4179,9 @@
 //           <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
 //             <thead className="global-tran-thead-div-ui">
 //               <tr>
-//                 {orderedSiGlColumns.map((column) =>
-//                   renderSiGlHeader(column.label, column.key, column.width, {
-//                     orderedColumns: orderedSiGlColumns,
+//                 {orderedCcsiGlColumns.map((column) =>
+//                   renderCcsiGlHeader(column.label, column.key, column.width, {
+//                     orderedColumns: orderedCcsiGlColumns,
 //                   })
 //                 )}
 //                 {!isFormDisabled && (
@@ -5001,10 +4195,10 @@
 //               </tr>
 //             </thead>
 //             <tbody className="relative">
-//               {sortedSiGlRows.map(({ row, originalIndex }) => (
+//               {sortedCcsiGlRows.map(({ row, originalIndex }) => (
 //                 <tr key={originalIndex} className="global-tran-tr-ui">
-//                   {orderedSiGlColumns.map((column) =>
-//                     renderSiGlCell(column.key, row, originalIndex)
+//                   {orderedCcsiGlColumns.map((column) =>
+//                     renderCcsiGlCell(column.key, row, originalIndex)
 //                   )}
 
 //                   {!isFormDisabled && (
@@ -5035,7 +4229,7 @@
 //               ))}
 //             </tbody>
 //           </table>
-//           {renderSiGlHeaderContextMenu()}
+//           {renderCcsiGlHeaderContextMenu()}
 //         </div>
 //       </div>
 
@@ -5110,24 +4304,19 @@
 //             />
 //           )}
 
-//     {billtermModalOpen && (
-//       <BillTermLookupModal
-//           isOpen={billtermModalOpen}
-//           onClose={handleCloseBillTermModal}
-//         />
-//     )}
-
 //     {custModalOpen && (
 //       <CustomerMastLookupModal
 //         isOpen={custModalOpen}
 //         onClose={handleCloseCustModal}
-//         customParam={
-//           String(siTranType || "").toUpperCase() === "SI03"
-//             ? "openFADS"
-//             : String(siTranType || "").toUpperCase() === "SI01"
-//               ? "openDR"
-//               : undefined
-//         }
+//         customParam={undefined}
+//       />
+//     )}
+
+
+//     {showBankMastModal && (
+//       <BankMastLookupModal
+//         isOpen={showBankMastModal}
+//         onClose={handleCloseBankMastModal}
 //       />
 //     )}
 
@@ -5151,7 +4340,7 @@
 //       <ItemMastLookupModal
 //         isOpen={showItemModal}
 //         endpoint="getInvLookupFG"
-//         docType="SI"
+//         docType="SO"
 //         onClose={handleCloseItemModal}
 //         onCancel={() =>
 //           updateState({
@@ -5162,24 +4351,6 @@
 //           })
 //         }
 //         enableMultiSelect={selectionContext === "multiAdd"}
-//       />
-//     )}
-
-//     {showOpenDRModal && (
-//       <GlobalLookupModalv1
-//         isOpen={showOpenDRModal}
-//         title="Open Delivery Receipt Summary"
-//         endpoint={openDRSI_Col_Summary}
-//         data={openDRSI_Data_Summary}
-//         btnCaption="Get Selected DR"
-//         onClose={handleInsertSelectedOpenDR}
-//         onCancel={() =>
-//           updateState({
-//             showOpenDRModal: false,
-//             openDRSI_Data_Summary: [],
-//             openDRSI_Col_Summary: [],
-//           })
-//         }
 //       />
 //     )}
 
@@ -5217,16 +4388,16 @@
 //         isOpen={showItemPickingModal}
 //         onClose={handleCloseItemPickingModal}
 //         transaction={{
-//           sourceDocType: "SI",
-//           sourceDocTypeName: "Sales Invoice",
-//           sourceDocNo: documentNo || "New SI",
+//           sourceDocType: "CSI",
+//           sourceDocTypeName: "Cash Cash Sales Invoice",
+//           sourceDocNo: documentNo || "New CSI",
 //           sourceLineNo: `Line ${Number(itemPickingRowIndex ?? 0) + 1}`,
 //           groupId: selectedPickingRow?.groupId || "",
 //           customerCode: billToCustCode || "",
 //           customerName: billToCustName || "",
 //           itemCode: selectedPickingRow?.itemCode || "",
 //           itemName: selectedPickingRow?.itemName || selectedPickingRow?.itemSpecs || "",
-//           requestedQty: parseFormattedNumber(selectedPickingRow?.siQuantity || 0) || 0,
+//           requestedQty: parseFormattedNumber(selectedPickingRow?.csiQuantity || 0) || 0,
 //         }}
 //         stockRows={itemPickingStockRows}
 //         existingAllocations={itemPickingExistingAllocations}
@@ -5266,7 +4437,7 @@
 //     {showAllTranDocNo && (
 //       <AllTranDocNo
 //         isOpen={showAllTranDocNo}
-//         params={{branchCode,branchName,docType,documentTitle,fieldNo : "siNo"}}
+//         params={{branchCode,branchName,docType,documentTitle,fieldNo : "csiNo"}}
 //         onRetrieve={handleTranDocNoRetrieval}
 //         onResponse={{documentNo}}
 //         onSelected={handleTranDocNoSelection}
@@ -5283,9 +4454,9 @@
 //   <AllTranHistory
 //     showHeader={false}
 //     isActive={topTab === "history"}
-//     endpoint="/getSIHistory"
-//     cacheKey={`SI:${state.branchCode || ""}`}
-//     activeTabKey="SI_Summary"
+//     endpoint="/getCSIHistory"
+//     cacheKey={`CSI:${state.branchCode || ""}`}
+//     activeTabKey="CSI_Summary"
 //     branchCode={state.branchCode}
 //     status="All"
 //     onRowDoubleClick={handleHistoryRowPick}
@@ -5297,11 +4468,10 @@
 // );
 // // End of Return
 
+
 // };
 
-// export default SI;
-
-
+// export default CSI;
 
 
 
@@ -5326,7 +4496,7 @@ import ItemMastLookupModal from "../../../Lookup/SearchItemMast.jsx";
 import ATCLookupModal from "../../../Lookup/SearchATCRef.jsx";
 import VATLookupModal from "../../../Lookup/SearchVATRef.jsx";
 import SLMastLookupModal from "../../../Lookup/SearchSLMast.jsx";
-import BillTermLookupModal from "../../../Lookup/SearchBillTermRef.jsx";
+import BankMastLookupModal from "../../../Lookup/SearchBankMast.jsx";
 import SearchSalesRepRef from "../../../Lookup/SearchSalesRepRef.jsx";
 import CancelTranModal from "../../../Lookup/SearchCancelRef.jsx";
 import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
@@ -5334,11 +4504,10 @@ import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
-import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
 import SearchGlobalItemPickingModal from "../../../Lookup/SearchGlobalItemPickingModal.jsx";
 
 // Configuration
-import { apiClient, fetchDataJson, postRequest} from '../../../Configuration/BaseURL.jsx'
+import { postRequest } from '../../../Configuration/BaseURL.jsx'
 import { useReset } from "../../../Components/ResetContext";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import {
@@ -5350,7 +4519,7 @@ import {
 
 import {
   useTopRCRow,
-  useTopBillTermRow,
+  useTopAccountRow,
   useTopForexRate,
   useTopCurrencyRow,
   useTopSalesRepRow,
@@ -5372,7 +4541,7 @@ import {
   useformatToDatev2
 } from '@/NAYSA Cloud/Global/dates';
 import {
-  useSelectedHSColConfig as selectedHSColConfig
+  useSelectedHSColConfig
 } from '@/NAYSA Cloud/Global/selectedData';
 
 import DateFormatInput from '@/NAYSA Cloud/Global/DateFormatInput.jsx';
@@ -5400,7 +4569,7 @@ import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 // Header
 import Header from '@/NAYSA Cloud/Components/Header';
-const SI = () => {
+const CSI = () => {
 
   // View Document Const
   const loadedFromUrlRef = useRef(false);
@@ -5429,7 +4598,7 @@ const SI = () => {
   const [itemPickingRowIndex, setItemPickingRowIndex] = useState(null);
   const [itemPickingStockRows, setItemPickingStockRows] = useState([]);
   const [itemPickingExistingAllocations, setItemPickingExistingAllocations] = useState([]);
-  const docType = docTypes.SI;
+  const docType = docTypes.CSI || "CSI";
   const hsDoc = getAllTopHSDocRow(docType) || {};
   const pdfLink = docTypePDFGuide[docType];
   const videoLink = docTypeVideoGuide[docType];
@@ -5465,6 +4634,7 @@ const SI = () => {
     isLoading: false,
     showSpinner: false,
     triggerGLEntries:false,
+    isGeneratingGL: false,
     isDocNoDisabled: false,
     isSaveDisabled: false,
     isResetDisabled: false,
@@ -5477,16 +4647,14 @@ const SI = () => {
     // Customer information
     billToCustCode: "",
     billToCustName: "",
-    contactPerson: "",
-    customerPoNo: "",
-    customerPoDate: null,
+    custAddr: "",
+    custTin: "",
     salesRepCode: "",
     salesRepName: "",
     atcCode: "",
     atcName: "",
     vatCode: "",
     vatName: "",
-    vatCodeFADisposal:"",
 
     // Currency information
     currCode: companyInfo?.currCode||"",
@@ -5496,24 +4664,30 @@ const SI = () => {
 
     //Other Header Info
     tblFieldArray :[],
-    siStatus: "O",
-    siTranType: "",
-    siTranTypeOptions: [],
-    siStatusOptions: [],
-    refSiNo1: "",
-    refSiNo2: "",
+    csiStatus: "O",
+    csiTranType: "",
+    csiTranTypeOptions: [],
+    csiStatusOptions: [],
+
+    paymentType: "",
+    paymentTypeOptions: [],
+    bankCode: companyInfo?.depBankcode||"",
+    bank: "",
+    acctCode: companyInfo?.depositBankAcctCode || "",
+    acctName: companyInfo?.depositBankName || "",
+    currAmount: "0.00",
+    amount: "0.00",
+    checkNo: "",
+    checkDate: "",
+    clearDate: "",
+    refCsiNo1: "",
+    refCsiNo2: "",
     remarks: "",
-    billtermCode: "",
-    billtermName: "",
-    dueDate: "",
-    daysDue: "",
     userCode: currentUserRow?.userCode||"",
 
     //Detail 1-2
     detailRows  :[],
     detailRowsGL :[],
-    openDRSI_Data_Summary: [],
-    openDRSI_Col_Summary: [],
 
     totalDebit:"0.00",
     totalCredit:"0.00",
@@ -5531,26 +4705,73 @@ const SI = () => {
     insertAfterIndex: null,    
     showRcModal:false,
     showSlModal:false,
-    showBilltermModal:false,
     showSalesRepModal:false,
     showItemModal:false,    
     showATCModal:false,
     showVatModal:false,
+    showBankMastModal:false,
 
     currencyModalOpen:false,
     branchModalOpen:false,
     custModalOpen:false,
-    billtermModalOpen:false,
     showCancelModal:false,
     showAttachModal:false,
     showSignatoryModal:false,
     showAllTranDocNo:false,
-    showOpenDRModal:false
    });
 
   const updateState = (updates) => {
       setState(prev => ({ ...prev, ...updates }));
     };
+
+  const [csiHeaderColConfig, setCsiHeaderColConfig] = useState([]);
+
+  useEffect(() => {
+    if (!refsLoaded) return;
+
+    let isMounted = true;
+
+    const loadCsiHeaderColConfig = async () => {
+      try {
+        const configRows = await useSelectedHSColConfig("CSI_Header");
+        if (isMounted && Array.isArray(configRows)) {
+          setCsiHeaderColConfig(configRows);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setCsiHeaderColConfig([]);
+        }
+        console.warn("CSI_Header hs_colconfig is not available.", error);
+      }
+    };
+
+    loadCsiHeaderColConfig();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [refsLoaded]);
+
+  const getCsiHeaderFieldConfig = useCallback(
+    (fieldKey) =>
+      (csiHeaderColConfig || []).find(
+        (config) => String(config?.key || "").toLowerCase() === String(fieldKey || "").toLowerCase()
+      ) || {},
+    [csiHeaderColConfig]
+  );
+
+  const getCsiHeaderLabel = useCallback(
+    (fieldKey, fallbackLabel) => getCsiHeaderFieldConfig(fieldKey)?.label || fallbackLabel,
+    [getCsiHeaderFieldConfig]
+  );
+
+  const isCsiHeaderFieldHidden = useCallback(
+    (fieldKey) => Number(getCsiHeaderFieldConfig(fieldKey)?.hidden || 0) === 1,
+    [getCsiHeaderFieldConfig]
+  );
+
+  const renderCsiHeaderField = (fieldKey, element) =>
+    isCsiHeaderFieldHidden(fieldKey) ? null : element;
 
   const {
   // Document info
@@ -5571,6 +4792,7 @@ const SI = () => {
   isLoading,
   showSpinner,
   triggerGLEntries,
+  isGeneratingGL,
 
   // UI states / disable flags
   isDocNoDisabled,
@@ -5584,8 +4806,8 @@ const SI = () => {
   branchName,
   billToCustCode,
   billToCustName,
-  customerPoNo,
-  customerPoDate,
+  custAddr,
+  custTin,
   salesRepCode,
   salesRepName,
   atcCode,
@@ -5595,26 +4817,29 @@ const SI = () => {
   currCode,
   currName,
   currRate,
-  siTranType,
-  siTranTypeOptions = [],
-  siStatus,
-  siStatusOptions = [],
-  refSiNo1,
-  refSiNo2,
+  csiTranType,
+  csiTranTypeOptions = [],
+  csiStatus,
+  csiStatusOptions = [],
+  paymentType,
+  paymentTypeOptions = [],
+  bankCode,
+  bank,
+  acctCode,
+  acctName,
+  currAmount,
+  amount,
+  checkNo,
+  checkDate,
+  clearDate,
+  refCsiNo1,
+  refCsiNo2,
   remarks,
-  contactPerson,
-  billtermCode,
-  billtermName,
-  dueDate,
-  daysDue,
-  vatCodeFADisposal,
 
   // Transaction details
   tblFieldArray,
   detailRows,
   detailRowsGL,
-  openDRSI_Data_Summary,
-  openDRSI_Col_Summary,
   totalDebit,
   totalCredit,
   totalDebitFx1,
@@ -5638,14 +4863,13 @@ const SI = () => {
   currencyModalOpen,
   branchModalOpen,
   custModalOpen,
-  billtermModalOpen,
   showCancelModal,
   showAttachModal,
   showSignatoryModal,
   showAllTranDocNo,
-  showOpenDRModal,
   showATCModal,
-  showVatModal
+  showVatModal,
+  showBankMastModal
 
   } = state;
 
@@ -5672,19 +4896,21 @@ const SI = () => {
   const isCancelled = normalizedDisplayStatus === "CANCELLED";
   const isFormDisabled = isViewDocumentUrl || ["FINALIZED", "POSTED", "CANCELLED", "CLOSED"].includes(normalizedDisplayStatus);  
   const isHeaderSiStatusEditable = !!String(documentID || "").trim() && !isFormDisabled;
-  const totalSiQuantity = detailRows.reduce((total, row) => total + (parseFormattedNumber(row.siQuantity || 0) || 0),0);
+  const canViewCostAmount =
+    String(currentUserRow?.viewCostamt || "").toUpperCase() === "Y";
+  const totalCsiQuantity = detailRows.reduce((total, row) => total + (parseFormattedNumber(row.csiQuantity || 0) || 0),0);
   const hasPickedQuantity = (detailRows || []).some(
     (row) => (parseFormattedNumber(row.quantityPicked || 0) || 0) > 0
   );
 
   const filteredHeaderSiStatusOptions =
-    !isPosted && totalSiQuantity > 0
-      ? (siStatusOptions || []).filter(
+    !isPosted && totalCsiQuantity > 0
+      ? (csiStatusOptions || []).filter(
           (option) =>
             ["O", "C"].includes(option.DROPDOWN_CODE) ||            
-            option.DROPDOWN_CODE === siStatus
+            option.DROPDOWN_CODE === csiStatus
         )
-      : siStatusOptions;
+      : csiStatusOptions;
 
   //Variables
   const [totals, setTotals] = useState({
@@ -5699,6 +4925,7 @@ const SI = () => {
 
   const customParamMap = {
     acctCode: glAccountFilter.ActiveAll,
+    headerAcctCode: glAccountFilter.ActiveAll,
   };
   const customParam = customParamMap[accountModalSource] || null;
 
@@ -5730,61 +4957,38 @@ const SI = () => {
   const glCurrDefault = companyInfo?.currCode || "";
   const sellingPriceDecimals = Number(companyInfo?.item_decsellprice ?? 2);
   const quantityDecimals = Number(companyInfo?.itemDescQtyFG ?? 2);
-
-  // Company sales settings
-  const salesDiscountMode = String(companyInfo?.salesDiscountMode || "").toUpperCase();
-  const salesAllowDuplicateItem = String(
-    companyInfo?.salesAllowDuplicateItem || ""
-  ).toUpperCase();
-
-  // Derived UI flags
-  const isSellingPriceAndDiscountEditable = salesDiscountMode === "MANUAL";
-  const SI_ALLOW_DUPLICATE_ITEMS = salesAllowDuplicateItem === "E";
+  const salesAllowDuplicateItem = String(companyInfo?.salesAllowDuplicateItem || "").toUpperCase();
+  const isSellingPriceAndDiscountEditable = true;
+  const CSI_ALLOW_DUPLICATE_ITEMS = salesAllowDuplicateItem === "E";
 
   // Discount configuration
-  const discountLevel = Math.min(
-    Math.max(Number(companyInfo?.salesDiscLevel ?? 8), 1),
-    8
-  );
-  const showTotalDiscountColumn = discountLevel > 1;
-  const visibleDiscountRateFields = Array.from(
-    { length: discountLevel },
-    (_, index) => `discRate${index + 1}`
-  );
-  const visibleDiscountAmountFields = Array.from(
-    { length: discountLevel },
-    (_, index) => `discAmount${index + 1}`
-  );
+  const showTotalDiscountColumn = false;
+  const visibleDiscountRateFields = ["discRate"];
+  const visibleDiscountAmountFields = ["discAmount"];
 
   const detailColumnDefs = [
-    { key: "drId", label: "DR ID", width: 120 },
-    { key: "soId", label: "SO ID", width: 120 },
     { key: "groupId", label: "Group ID", width: 120 },
     { key: "ln", label: "LN", width: 56 },
-    { key: "siStat", label: "Picking Status", width: 130 },
-    { key: "drNo", label: "DR No.", width: 140 },
+    { key: "csiStat", label: "Picking Status", width: 130 },
     { key: "itemCode", label: "Item Code", width: 140 },
     { key: "itemName", label: "Item Name", width: 240 },
     { key: "itemSpecs", label: "Specification", width: 240 },
     { key: "uomCode", label: "UOM", width: 100 },
-    { key: "siQuantity", label: "SI Quantity", width: 120 },
+    { key: "csiQuantity", label: "CSI Quantity", width: 120 },
     { key: "quantityPicked", label: "Quantity Picked", width: 130 },
     { key: "itemAmount", label: "Item Amount", width: 130 },
     { key: "unitPrice", label: "Selling Price", width: 130 },
     { key: "grossAmount", label: "Gross Amount", width: 130 },
-    ...visibleDiscountRateFields.map((field, index) => ({
+    ...visibleDiscountRateFields.map((field) => ({
       key: field,
-      label: discountLevel === 1 ? "Disc Rate" : `Disc Rate ${index + 1}`,
+      label: "Disc Rate",
       width: 110,
     })),
-    ...visibleDiscountAmountFields.map((field, index) => ({
+    ...visibleDiscountAmountFields.map((field) => ({
       key: field,
-      label: discountLevel === 1 ? "Disc Amount" : `Disc Amount ${index + 1}`,
+      label: "Disc Amount",
       width: 120,
     })),
-    ...(showTotalDiscountColumn
-      ? [{ key: "totDiscount", label: "Total Discount", width: 130 }]
-      : []),
     { key: "netAmount", label: "Net Amount", width: 130 },
     { key: "vatCode", label: "VAT Code", width: 120 },
     { key: "vatRate", label: "VAT Rate", width: 110 },
@@ -5808,19 +5012,12 @@ const SI = () => {
     renderResizableHeader: renderSiDetailHeader,
   } = useResizableTableColumns(detailColumnDefs);
   const orderedDetailColumns = getOrderedSoDetailColumns(detailColumnDefs);
-  const normalizedSiTranType = String(siTranType || "").toUpperCase();
-  const isDirectSiType = normalizedSiTranType === "SI01";
-  const isPickingSiType = normalizedSiTranType === "SI02";
-  const canViewCostAmount =
-    String(currentUserRow?.viewCostamt || "").toUpperCase() === "Y";
-  const canUsePickingControls =
-    isPickingSiType && !isViewDocumentUrl && isOpenStatus && !isPosted && !isCancelled;
-  const isAddItemDisabledBySiType = isDirectSiType;
-  const isOpenDRDisabledBySiType = isPickingSiType;
-  const hasSiDetailRows = (detailRows || []).length > 0;
-  const hasDRLinkedDetailRows = (detailRows || []).some((row) =>
-    Boolean(String(row?.drNo || "").trim())
-  );
+  const normalizedCsiTranType = String(csiTranType || "").toUpperCase();
+  const isDirectCsiType = true;
+  const isPickingCsiType = true;
+  const canUsePickingControls = !isViewDocumentUrl && isOpenStatus && !isPosted && !isCancelled;
+  const isAddItemDisabledByCsiType = false;
+  const hasCsiDetailRows = (detailRows || []).length > 0;
   const getDetailColumnFallbackWidth = (key) =>
     detailColumnDefs.find((column) => column.key === key)?.width || 120;
   const getDetailCellStyle = (key, fallbackWidth) => ({
@@ -5831,32 +5028,23 @@ const SI = () => {
   });
   useEffect(() => {
     setSoDetailColumnOrder(detailColumnDefs.map((column) => column.key));
-  }, [setSoDetailColumnOrder, discountLevel]);
+  }, [setSoDetailColumnOrder]);
 
   useEffect(() => {
-    const hiddenColumnKeys = ["drId", "soId", "groupId", "vatRate"];
+    const hiddenColumnKeys = ["groupId", "vatRate"];
 
-    if (!isPickingSiType) {
-      hiddenColumnKeys.push("siStat", "quantityPicked");
+    if (!isPickingCsiType) {
+      hiddenColumnKeys.push("csiStat", "quantityPicked");
     }
 
     if (!(isPosted && canViewCostAmount)) {
       hiddenColumnKeys.push("itemAmount");
     }
 
-   if (isPickingSiType || normalizedSiTranType === "SI03") {
-      hiddenColumnKeys.push("drNo");
-    }
-
-
-    if (normalizedSiTranType === "SI03") {
-      hiddenColumnKeys.push("discRate1", "discRate2", "discRate3", "discRate4", "discRate5", "discRate6", "discRate7", "discRate8", "discAmount1", "discAmount2", "discAmount3", "discAmount4", "discAmount5", "discAmount6", "discAmount7", "discAmount8", "totDiscount","freeItem");
-    }
-
 
 
     setSoDetailHiddenColumnKeys(hiddenColumnKeys);
-  }, [setSoDetailHiddenColumnKeys, isPosted, canViewCostAmount, isDirectSiType, isPickingSiType, normalizedSiTranType]);
+  }, [setSoDetailHiddenColumnKeys, isPosted, canViewCostAmount, isDirectCsiType, isPickingCsiType, normalizedCsiTranType]);
 
 
   const sortedDetailRows = getSortedSoDetailRows(
@@ -5875,7 +5063,7 @@ const SI = () => {
   const glCurrGlobal2 = companyInfo?.glCurrGlobal2 || "";
   const glCurrGlobal3 = companyInfo?.glCurrGlobal3 || "";
 
-  const siGlColumnDefs = [
+  const csiGlColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
     { key: "acctCode", label: "Account Code", width: 120 },
     { key: "rcCode", label: "RC Code", width: 120 },
@@ -5901,36 +5089,36 @@ const SI = () => {
     { key: "remarks", label: "Remarks", width: 140 },
   ];
   const {
-    getColumnStyle: getSiGlColumnStyle,
-    getFrozenColumnStyle: getSiGlFrozenStyle,
-    getOrderedColumns: getOrderedSiGlColumns,
-    getSortedRows: getSortedSiGlRows,
-    setColumnOrder: setSiGlColumnOrder,
-    clearZeroValueOnFocus: clearSiGlZeroOnFocus,
-    focusNextRowInput: focusNextSiGlRowInput,
-    renderHeaderContextMenu: renderSiGlHeaderContextMenu,
-    renderResizableHeader: renderSiGlHeader,
-  } = useResizableTableColumns(siGlColumnDefs);
-  const orderedSiGlColumns = getOrderedSiGlColumns(siGlColumnDefs);
-  const getSiGlFallbackWidth = (key) =>
-    siGlColumnDefs.find((column) => column.key === key)?.width || 120;
-  const getSiGlCellStyle = (key, fallbackWidth) => ({
-    ...getSiGlColumnStyle(key, fallbackWidth),
-    ...getSiGlFrozenStyle(key, orderedSiGlColumns, fallbackWidth, {
+    getColumnStyle: getCcsiGlColumnStyle,
+    getFrozenColumnStyle: getCcsiGlFrozenStyle,
+    getOrderedColumns: getOrderedCsiGlColumns,
+    getSortedRows: getSortedCsiGlRows,
+    setColumnOrder: setCcsiGlColumnOrder,
+    clearZeroValueOnFocus: clearCsiGlZeroOnFocus,
+    focusNextRowInput: focusNextCsiGlRowInput,
+    renderHeaderContextMenu: renderCcsiGlHeaderContextMenu,
+    renderResizableHeader: renderCcsiGlHeader,
+  } = useResizableTableColumns(csiGlColumnDefs);
+  const orderedCcsiGlColumns = getOrderedCsiGlColumns(csiGlColumnDefs);
+  const getCcsiGlFallbackWidth = (key) =>
+    csiGlColumnDefs.find((column) => column.key === key)?.width || 120;
+  const getCcsiGlCellStyle = (key, fallbackWidth) => ({
+    ...getCcsiGlColumnStyle(key, fallbackWidth),
+    ...getCcsiGlFrozenStyle(key, orderedCcsiGlColumns, fallbackWidth, {
       isHeader: false,
     }),
   });
   useEffect(() => {
-    setSiGlColumnOrder(siGlColumnDefs.map((column) => column.key));
-  }, [setSiGlColumnOrder, withCurr2, withCurr3, glCurrDefault, currCode, glCurrGlobal2, glCurrGlobal3]);
-  const sortedSiGlRows = getSortedSiGlRows(
+    setCcsiGlColumnOrder(csiGlColumnDefs.map((column) => column.key));
+  }, [setCcsiGlColumnOrder, withCurr2, withCurr3, glCurrDefault, currCode, glCurrGlobal2, glCurrGlobal3]);
+  const sortedCcsiGlRows = getSortedCsiGlRows(
     detailRowsGL.map((row, originalIndex) => ({ row, originalIndex })),
     (entry, sortKey) => {
       if (sortKey === "ln") return entry.originalIndex + 1;
       return entry.row?.[sortKey] ?? "";
     }
   );
-  const siGlEnterNextRowZeroClearFields = [
+  const csiGlEnterNextRowZeroClearFields = [
     "debit",
     "credit",
     "debitFx1",
@@ -5940,49 +5128,6 @@ const SI = () => {
   ];
 
   const setGLActiveTab = (tab) => updateState({ GLactiveTab: tab });
-  const calculateDueDate = (startDate, daysDue) => {
-    if (!startDate || daysDue === "" || daysDue === null || daysDue === undefined || isNaN(daysDue)) return "";
-    try {
-      const rawDate = String(startDate).trim();
-      const isoMatch = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
-      const usMatch = rawDate.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-      const date = isoMatch
-        ? new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]))
-        : usMatch
-        ? new Date(Number(usMatch[3]), Number(usMatch[1]) - 1, Number(usMatch[2]))
-        : new Date(rawDate);
-
-      if (Number.isNaN(date.getTime())) return "";
-
-      date.setDate(date.getDate() + parseInt(daysDue, 10));
-      const month = String(date.getMonth() + 1).padStart(2, "0");
-      const day = String(date.getDate()).padStart(2, "0");
-      const year = date.getFullYear();
-      return `${month}/${day}/${year}`;
-    } catch (error) {
-      console.error("Error calculating due date:", error);
-      return "";
-    }
-  };
-
-  useEffect(() => {
-    if (!billtermCode) return;
-    if (daysDue === "" || daysDue === null || daysDue === undefined) return;
-    const nextDueDate = calculateDueDate(documentDate, daysDue);
-    updateState({ dueDate: nextDueDate });
-  }, [documentDate, daysDue, billtermCode]);
-
-
-
-
-
-
-
-
-
-  // API endpoints
-  const SI_PRICE_MATRIX_ENDPOINT = "getPriceMatrixItemPrice"; // Assuming SI also uses price matrix
-  const SI_DUPLICATE_PO_ENDPOINT = "/checkSIDuplicatePO"; // Assuming SI also has duplicate PO check
 
   const calculateSalesAmount = (netAmount, vatAmount) =>
     (parseFormattedNumber(netAmount || 0) || 0) -
@@ -6139,135 +5284,6 @@ const SI = () => {
     });
   };
 
-
-
-
-  const formatFetchedHeaderDate = (value) => {
-    const raw = String(value || "").trim();
-    if (!raw) return "";
-
-    if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
-      const [month, day, year] = raw.split("/").map(Number);
-      const isValidMonth = month >= 1 && month <= 12;
-      const isValidDay = day >= 1 && day <= 31;
-      const isValidYear = year >= 1900 && year <= 2999;
-
-      if (isValidMonth && isValidDay && isValidYear) {
-        return raw;
-      }
-    }
-
-    if (/^(19|20)\d{2}-\d{2}-\d{2}(T.*)?$/.test(raw)) {
-      return useformatToDatev2(raw);
-    }
-
-    const digits = raw.replace(/\D/g, "");
-
-    if (digits.length === 8) {
-      const first4 = digits.slice(0, 4);
-      const middle2 = digits.slice(4, 6);
-      const last2 = digits.slice(6, 8);
-
-      if (/^(19|20)\d{2}$/.test(first4)) {
-        return `${middle2}/${last2}/${first4}`;
-      }
-
-      const month = digits.slice(0, 2);
-      const day = digits.slice(2, 4);
-      const year = digits.slice(4, 8);
-      return `${month}/${day}/${year}`;
-    }
-
-    return "";
-  };
-
-  const parseComparableDate = (value) => {
-    const formattedValue = formatFetchedHeaderDate(value);
-
-    if (!formattedValue || !/^\d{2}\/\d{2}\/\d{4}$/.test(formattedValue)) {
-      return null;
-    }
-
-    const [month, day, year] = formattedValue.split("/").map(Number);
-    const parsedDate = new Date(year, month - 1, day);
-
-    if (
-      parsedDate.getFullYear() !== year ||
-      parsedDate.getMonth() !== month - 1 ||
-      parsedDate.getDate() !== day
-    ) {
-      return null;
-    }
-
-    return parsedDate;
-  };
-
-  const isDateEarlierThanSiDate = (value) => {
-    const candidateDate = parseComparableDate(value);
-    const soDate = parseComparableDate(documentDate);
-
-    if (!candidateDate || !soDate) {
-      return false;
-    }
-
-    return candidateDate < soDate;
-  };
-
-  const clearHeaderAndDetailDates = ({ showAlert = false } = {}) => {
-    const updatedRows = detailRows.map((row) => ({
-      ...row,
-      // No delivery date in SI details, assuming SI date is the main date
-    }));
-
-    if (showAlert) {
-      useSwalErrorAlert(
-        "Invalid Date",
-        "Date must not be earlier than SI Date."
-      );
-    }
-  };
-
-  const parseDuplicatePOCheckResult = (response) => {
-    const rawResult =
-      response?.data?.data?.[0]?.result ??
-      response?.data?.[0]?.result ??
-      response?.data?.result ??
-      response?.result ??
-      '{"result":"0"}';
-
-    try {
-      const parsed =
-        typeof rawResult === "string" ? JSON.parse(rawResult) : rawResult;
-      return String(parsed?.result || "0") === "1";
-    } catch {
-      return String(response?.data?.result || response?.result || "0") === "1";
-    }
-  };
-
-  const checkDuplicateSiNo = async (siNoValue) => {
-    const trimmedSiNo = String(siNoValue || "").trim();
-    const trimmedCustCode = String(billToCustCode || "").trim();
-
-    if (!trimmedSiNo || !trimmedCustCode) {
-      return false;
-    }
-
-    const params = {
-      json_data: {
-        siNo: trimmedSiNo,
-        custCode: trimmedCustCode,
-      },
-    };
-
-    try {
-      const response = await apiClient.get(SI_DUPLICATE_PO_ENDPOINT, { params });
-      return parseDuplicatePOCheckResult(response);
-    } catch (error) {
-      console.error("Error checking duplicate SO customer PO:", error);
-      return false;
-    }
-  };
-
   const applyHeaderValueToDetailRows = (detailField, detailValue, headerOverrides = {}) => {
     const selectedVatRow =
       detailField === "vatCode" ? getAllTopVatRow(detailValue) : null;
@@ -6301,7 +5317,7 @@ const SI = () => {
 
     const result = await useSwalProceedConfirm(
       `Apply ${headerLabel} changes?`,
-      `SO Detail already has record(s).\nDo you want to apply the updated ${headerLabel} to all SO Detail rows?`,
+      `CSI Detail already has record(s).\nDo you want to apply the updated ${headerLabel} to all CSI Detail rows?`,
       "Yes"
     );
 
@@ -6363,32 +5379,55 @@ useEffect(() => {
 
 useEffect(() => {
     if (!refsLoaded) return;
-    const filteredTypes = getAllDropDown("SITRAN_TYPE", docType) || [];
-    const defaultSiType =
-      filteredTypes.find((type) => type.DROPDOWN_CODE === "SI01")?.DROPDOWN_CODE ||
+
+    const filteredTypes = getAllDropDown("CSITRAN_TYPE", docType) || [];
+    const filteredPaymentTypes = getAllDropDown("PAYMENT_TYPE", docType) || [];
+
+    const defaultCsiType =
+      filteredTypes.find((type) => type.DROPDOWN_CODE === "CSI01")?.DROPDOWN_CODE ||
       filteredTypes[0]?.DROPDOWN_CODE ||
       "";
-    const mapHeaderSiStatus = (value) => {
+
+    const defaultPaymentType =
+      filteredPaymentTypes.find((type) => type.DROPDOWN_CODE === "AR02")?.DROPDOWN_CODE ||
+      filteredPaymentTypes[0]?.DROPDOWN_CODE ||
+      "";
+
+    const mapHeaderCsiStatus = (value) => {
       const normalizedValue = String(value || "").toUpperCase();
       if (normalizedValue === "OPEN" || normalizedValue === "O") return "O";
       if (normalizedValue === "CANCELLED" || normalizedValue === "X") return "X";
       if (normalizedValue === "CLOSED" || normalizedValue === "C") return "C";
       return "O";
     };
+
     updateState({
-      siTranTypeOptions: filteredTypes,
-      siTranType: defaultSiType,
-      siStatusOptions: [{ DROPDOWN_CODE: "O", DROPDOWN_NAME: "Open" }, { DROPDOWN_CODE: "X", DROPDOWN_NAME: "Cancelled" }, { DROPDOWN_CODE: "C", DROPDOWN_NAME: "Closed" }],
-      siStatus: mapHeaderSiStatus(state.siStatus),
+      csiTranTypeOptions: filteredTypes,
+      csiTranType: state.csiTranType || defaultCsiType,
+      paymentTypeOptions: filteredPaymentTypes,
+      paymentType: state.paymentType || defaultPaymentType,
+      csiStatusOptions: [
+        { DROPDOWN_CODE: "O", DROPDOWN_NAME: "Open" },
+        { DROPDOWN_CODE: "X", DROPDOWN_NAME: "Cancelled" },
+        { DROPDOWN_CODE: "C", DROPDOWN_NAME: "Closed" },
+      ],
+      csiStatus: mapHeaderCsiStatus(state.csiStatus),
     });
 }, [docType, refsLoaded]);
 
   const handleReset = () => {
       clearSoDetailSorting();
-      const filteredTypes = getAllDropDown("SITRAN_TYPE", docType) || [];
-      const defaultSiType =
-        filteredTypes.find((type) => type.DROPDOWN_CODE === "SI01")?.DROPDOWN_CODE ||
+      const filteredTypes = getAllDropDown("CSITRAN_TYPE", docType) || [];
+      const filteredPaymentTypes = getAllDropDown("PAYMENT_TYPE", docType) || [];
+
+      const defaultCsiType =
+        filteredTypes.find((type) => type.DROPDOWN_CODE === "CSI01")?.DROPDOWN_CODE ||
         filteredTypes[0]?.DROPDOWN_CODE ||
+        "";
+
+      const defaultPaymentType =
+        filteredPaymentTypes.find((type) => type.DROPDOWN_CODE === "AR02")?.DROPDOWN_CODE ||
+        filteredPaymentTypes[0]?.DROPDOWN_CODE ||
         "";
 
       updateState({
@@ -6401,35 +5440,40 @@ useEffect(() => {
       glCurrDefault:companyInfo?.currCode||"",
       currName:companyInfo?.currName||"",
       currRate:formatNumber(companyInfo?.currRate||1,6),
-      refSiNo1: "",
-      refSiNo2: "",
+      refCsiNo1: "",
+      refCsiNo2: "",
       salesRepCode:"",
       salesRepName:"",
       remarks:"",
-      billtermCode:"",
-      billtermName:"",
-      dueDate: "",
-      daysDue: "",
       noReprints:"0",
       billToCustCode:"",
       billToCustName:"",
-      customerPoNo: "",
-      customerPoDate: null,
-      contactPerson: "",
+      custAddr:"",
+      custTin:"",
       atcCode: "",
       atcName: "",
-      vatCode: "",
+      vatCode: vatCode || "",
       vatName: "",
       documentNo: "",
       documentID: "",
       detailRows: [],
       detailRowsGL: [],
-      openDRSI_Data_Summary: [],
-      openDRSI_Col_Summary: [],
       ...getGLTotalsState([]),
       documentStatus:"",      
-      siTranType: defaultSiType,
-      siStatus:"O",
+      csiTranTypeOptions: filteredTypes,
+      csiTranType: defaultCsiType,
+      paymentTypeOptions: filteredPaymentTypes,
+      paymentType: defaultPaymentType,
+      bankCode: companyInfo?.depBankcode||"",
+      bank: "",
+      acctCode: companyInfo?.depositBankAcctCode || "",
+      acctName: companyInfo?.depositBankName || "",
+      currAmount: "0.00",
+      amount: "0.00",
+      checkNo: "",
+      checkDate: "",
+      clearDate: "",
+      csiStatus:"O",
 
       // UI state
       activeTab: "basic",
@@ -6441,9 +5485,9 @@ useEffect(() => {
       // Modal states
       showRcModal: false,
       showAccountModal: false,
+      showBankMastModal: false,
       showSlModal: false,
       showSalesRepModal: false,
-      showOpenDRModal: false,
     });
 
     updateTotalsDisplay(0, 0, 0, 0, 0, 0, 0);
@@ -6454,7 +5498,7 @@ useEffect(() => {
 
         try {
           const hdtblcol_result = await useFieldLenghtCheck(
-            "si_hd,si_dt1,'si_dt2"
+            "csi_hd,csi_dt1,csi_dt2"
           );
 
           if (hdtblcol_result) {
@@ -6476,9 +5520,9 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
   updateState({ isLoading: true });
   
   try {
-    const data = await useFetchTranData(documentNo, branchCode, docType, "siNo", direction);
+    const data = await useFetchTranData(documentNo, branchCode, docType, "csiNo", direction);
 
-    if (!data?.siId) {
+    if (!data?.csiId) {
       Swal.fire({ icon: 'info', title: 'No Records Found', text: 'Transaction does not exist.' });
       return resetState();
     }
@@ -6486,30 +5530,13 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
     // Format rows
     const retrievedDetailRows = distributeVatAcrossDetailRows((data.dt1 || []).map(item => ({
       ...item,
-      siStat: item.pickStat || item.siStat || "F",
-      siQuantity: formatNumber(item.siQuantity ?? 0,quantityDecimals),
-      drNo: item.drNo || "",
-      drId: item.drId || "",
-      soId: item.soId || "",
+      csiStat: item.pickStat || item.csiStat || "F",
+      csiQuantity: formatNumber(item.csiQuantity ?? 0,quantityDecimals),
       groupId: item.groupId || "",
       unitPrice: formatNumber(item.unitPrice??0,sellingPriceDecimals),
       grossAmount: formatNumber(item.grossAmount),
-      discRate1: formatNumber(item.discRate1 ?? 0),
-      discRate2: formatNumber(item.discRate2 ?? 0),
-      discRate3: formatNumber(item.discRate3 ?? 0),
-      discRate4: formatNumber(item.discRate4 ?? 0),
-      discRate5: formatNumber(item.discRate5 ?? 0),
-      discRate6: formatNumber(item.discRate6 ?? 0),
-      discRate7: formatNumber(item.discRate7 ?? 0),
-      discRate8: formatNumber(item.discRate8 ?? 0),
-      discAmount1: formatNumber(item.discAmount1 ?? 0),
-      discAmount2: formatNumber(item.discAmount2 ?? 0),
-      discAmount3: formatNumber(item.discAmount3 ?? 0),
-      discAmount4: formatNumber(item.discAmount4 ?? 0),
-      discAmount5: formatNumber(item.discAmount5 ?? 0),
-      discAmount6: formatNumber(item.discAmount6 ?? 0),
-      discAmount7: formatNumber(item.discAmount7 ?? 0),
-      discAmount8: formatNumber(item.discAmount8 ?? 0),
+      discRate: formatNumber(item.discRate ?? 0),
+      discAmount: formatNumber(item.discAmount ?? 0),
       totDiscount: formatNumber(item.totDiscount ?? 0),      
       vatAmount: formatNumber(item.vatAmount ?? 0),
       vatCode: item.vatCode || data.vatCode || "",
@@ -6519,10 +5546,7 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
       amountDue: formatNumber(item.amountDue ?? 0),
       netAmount: formatNumber(item.netAmount ?? 0),
       quantityPicked: formatNumber(item.quantityPicked ?? item.qtyPicked ?? 0, quantityDecimals),
-      itemAmount: item.itemAmount ?? formatNumber( 0),
-      drQuantity: formatNumber(item.drQuantity ?? 0, quantityDecimals),
-      linkedSiQuantity: formatNumber(item.siQuantity ?? 0, quantityDecimals), // Renamed to avoid confusion
-    })), { atcCode: data.atcCode || "" });
+      itemAmount: item.itemAmount ?? formatNumber( 0),    })), { atcCode: data.atcCode || "" });
 
     const formattedGLRows = (data.dt2 || []).map(glRow => ({
       ...glRow,
@@ -6536,41 +5560,48 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
     }));
 
     updateState({
-      documentStatus: data.siStatus,
+      documentStatus: data.csiStatus,
       status: data.docStatus,
       noReprints:data.noReprints,
-      documentID: data.siId,
-      documentNo: data.siNo,
-      refSiNo1: data.refSiNo1 || "",
-      refSiNo2: data.refSiNo2 || "",
+      documentID: data.csiId,
+      documentNo: data.csiNo,
+      refCsiNo1: data.refCsiNo1 || "",
+      refCsiNo2: data.refCsiNo2 || "",
       branchCode: data.branchCode,
       branchName:data.branchName,
-      documentDate: useformatToDatev2(data.siDate),
-      siTranType: data.siTranType,
+      documentDate: useformatToDatev2(data.csiDate),
+      csiTranType: data.csiTranType,
       billToCustCode: data.custCode,
       billToCustName: data.custName,
-      customerPoNo: data.customerPoNo || "",
-      customerPoDate: data.customerPoDate ? useformatToDatev2(data.customerPoDate) : null,
+      custAddr: data.custAddr || "",
+      custTin: data.custTin || "",
       atcCode: data.atcCode || "",
       atcName: data.atcName || "",
       vatCode: data.vatCode || "",
       vatName: data.vatName || "",
-      billtermCode: data.billtermCode,
-      billtermName: data.billtermName,
       salesRepCode: data.salesRepCode || "",
       salesRepName: data.salesRepName || "",
-      dueDate: data.dueDate ? useformatToDatev2(data.dueDate) : "",
+      paymentType: data.paymentType || "",
+      bankCode: data.bankCode || "",
+      bank: data.bank || "",
+      acctCode: data.acctCode || "",
+      acctName: data.acctName || "",
+      currAmount: formatNumber(data.currAmount ?? data.totalAmountDue ?? 0),
+      amount: formatNumber(data.amount ?? data.totalAmountDue ?? 0),
+      checkNo: data.checkNo || "",
+      checkDate: data.checkDate ? useformatToDatev2(data.checkDate) : "",
+      clearDate: data.clearDate ? useformatToDatev2(data.clearDate) : "",
       currCode: data.currCode,
       currName: data.currName,
       currRate: formatNumber(data.currRate, 6),
-      siStatus:
-        String(data.siStatus || "O").toUpperCase() === "OPEN"
+      csiStatus:
+        String(data.csiStatus || "O").toUpperCase() === "OPEN"
           ? "O"
-          : String(data.siStatus || "O").toUpperCase() === "CANCELLED"
+          : String(data.csiStatus || "O").toUpperCase() === "CANCELLED"
           ? "X"
-          : String(data.siStatus || "O").toUpperCase() === "CLOSED"
+          : String(data.csiStatus || "O").toUpperCase() === "CLOSED"
           ? "C"
-          : String(data.siStatus || "O"),
+          : String(data.csiStatus || "O"),
       detailRows: retrievedDetailRows,
       detailRowsGL: formattedGLRows,
       isDocNoDisabled: true,
@@ -6588,7 +5619,7 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
   }
 };
 
-const handlesiNoBlur = () => {
+const handlecsiNoBlur = () => {
 
     if (!state.documentID && state.documentNo && state.branchCode) {
         fetchTranData(state.documentNo, state.branchCode);
@@ -6618,7 +5649,7 @@ const handleActivityOption = async (action) => {
    await moveFocusBeforeSave();
   }
 
-  if (documentStatus === "") { // Assuming SI also has an 'O' status for open
+  if (isOpenStatus) {
     updateState({ isLoading: true });
 
     try {
@@ -6626,87 +5657,69 @@ const handleActivityOption = async (action) => {
         branchCode,
         documentNo,
         documentID,
-        billtermCode,
         billToCustCode,
         billToCustName,
-        refSiNo1,
-        refSiNo2,
+        refCsiNo1,
+        refCsiNo2,
         salesRepCode,
         salesRepName,
         currCode,
         currRate,
         remarks,
-        dueDate,
         userCode,
-        contactPerson,
-        customerPoNo,
-        customerPoDate,
-        siTranType,
-        siStatus,
+        csiTranType,
+        csiStatus,
         detailRows,
         detailRowsGL,
       } = state;
 
       let finalDetailRowsGL = [...detailRowsGL];
 
-      const buildSoData = (glRows = finalDetailRowsGL) => ({
+      const buildCsiData = (glRows = finalDetailRowsGL) => ({
         branchCode: branchCode,
-        siNo: documentNo || "",
-        siId: documentID || "",
-        siDate: documentDate,
-        sitranType: siTranType,
-        billtermCode: billtermCode,
+        csiNo: documentNo || "",
+        csiId: documentID || "",
+        csiDate: documentDate,
+        csiTranType: csiTranType,
         custCode: billToCustCode,
         custName: billToCustName,
-        attention: contactPerson,
-        refSiNo1: refSiNo1,
-        refSiNo2: refSiNo2,
+        custAddr: custAddr || "",
+        custTin: custTin || "",
+        refCsiNo1: refCsiNo1,
+        refCsiNo2: refCsiNo2,
         currCode: currCode || "PHP",
         currRate: parseFormattedNumber(currRate),
         atcAmount: parseFormattedNumber(totals.totalAtcAmount),
         atcCode: atcCode || "",
         vatCode: vatCode || "",
-        dueDate: dueDate || "",
         remarks: remarks || "",
         userCode: userCode,
-        customerPoNo: customerPoNo || '',
-        customerPoDate: customerPoDate || null,
         salesRepCode,
         salesRepName,
-        soStatus: siStatus || 'O',
+        csiStatus: csiStatus || 'O',
+        paymentType: paymentType || '',
+        bankCode: bankCode || '',
+        bank: bank || '',
+        acctCode: acctCode || '',
+        currAmount: parseFormattedNumber(totals.totalAmountDue || 0),
+        amount: parseFormattedNumber(totals.totalAmountDue || 0),
+        checkNo: checkNo || '',
+        checkDate: checkDate || null,
+        clearDate: clearDate || null,
         dt1: detailRows.map((row, index) => ({
           lnNo: String(index + 1),
-          pickStat: row.siStat || "F",
-          siStat: row.siStat || "F",
-          drNo: row.drNo || "",
-          drId: row.drId || "",
-          soId: row.soId || "",
+          pickStat: row.csiStat || "F",
+          csiStat: row.csiStat || "F",
           groupId: row.groupId || "",
           itemCode: row.itemCode || "",
           itemName: row.itemName || "",
           itemSpecs: row.itemSpecs || "",
           uomCode: row.uomCode || "",
-          pmType: row.pmType || "",
-          pmId: row.pmId || "",
-          siQuantity: parseFormattedNumber(row.siQuantity || 0),
+          csiQuantity: parseFormattedNumber(row.csiQuantity || 0),
           unitPrice: parseFormattedNumber(row.unitPrice || 0),
           grossAmount: parseFormattedNumber(row.grossAmount || 0),
-          discRate1: parseFormattedNumber(row.discRate1 || 0),
-          discRate2: parseFormattedNumber(row.discRate2 || 0),
-          discRate3: parseFormattedNumber(row.discRate3 || 0),
-          discRate4: parseFormattedNumber(row.discRate4 || 0),
-          discRate5: parseFormattedNumber(row.discRate5 || 0),
-          discRate6: parseFormattedNumber(row.discRate6 || 0),
-          discRate7: parseFormattedNumber(row.discRate7 || 0),
-          discRate8: parseFormattedNumber(row.discRate8 || 0),
-          discAmount1: parseFormattedNumber(row.discAmount1 || 0),
-          discAmount2: parseFormattedNumber(row.discAmount2 || 0),
-          discAmount3: parseFormattedNumber(row.discAmount3 || 0),
-          discAmount4: parseFormattedNumber(row.discAmount4 || 0),
-          discAmount5: parseFormattedNumber(row.discAmount5 || 0),
-          discAmount6: parseFormattedNumber(row.discAmount6 || 0),
-          discAmount7: parseFormattedNumber(row.discAmount7 || 0),
-          discAmount8: parseFormattedNumber(row.discAmount8 || 0),
+          discRate: parseFormattedNumber(row.discRate || 0),
+          discAmount: parseFormattedNumber(row.discAmount || 0),
           totDiscount: parseFormattedNumber(row.totDiscount || 0),          
           vatCode: row.vatCode || "",
           vatRate: parseFormattedNumber(row.vatRate || 0),
@@ -6715,11 +5728,9 @@ const handleActivityOption = async (action) => {
           atcAmount: parseFormattedNumber(row.atcAmount || 0),
           amountDue: parseFormattedNumber(row.amountDue || 0),
           netAmount: parseFormattedNumber(row.netAmount || 0),
-          // No delivery date, customer PO, sales rep in SI details
           freeItem: row.freeItem || "",
           quantityPicked: parseFormattedNumber(row.quantityPicked || 0),
           itemAmount: parseFormattedNumber(row.itemAmount || 0),
-          drQuantity: parseFormattedNumber(row.drQuantity || 0),
         })),
         dt2: glRows.map((entry, index) => ({
           recNo: String(index + 1),
@@ -6750,7 +5761,7 @@ const handleActivityOption = async (action) => {
           updateState({ detailRowsGL: [], isGeneratingGL: true });
           const newGlEntries = await useGenerateGLEntries(
             docType,
-            buildSoData([])
+            buildCsiData([])
           );
 
           updateState({
@@ -6768,7 +5779,7 @@ const handleActivityOption = async (action) => {
         if (finalDetailRowsGL.length === 0) {
           const newGlEntries = await useGenerateGLEntries(
             docType,
-            buildSoData([])
+            buildCsiData([])
           );
 
           if (!newGlEntries || newGlEntries.length === 0) {
@@ -6782,15 +5793,15 @@ const handleActivityOption = async (action) => {
 
         const response = await useTransactionUpsert(
           docType,
-          buildSoData(finalDetailRowsGL),
+          buildCsiData(finalDetailRowsGL),
           updateState,          
-          "siId",
-          "siNo"
+          "csiId",
+          "csiNo"
         );
 
         if (response) {
-          const responseDocNo =  response.data[0].siNo;
-          const responseDocId =  response.data[0].siId;
+          const responseDocNo =  response.data[0].csiNo;
+          const responseDocId =  response.data[0].csiId;
 
           await fetchTranData(responseDocNo,branchCode);
 
@@ -6802,8 +5813,8 @@ const handleActivityOption = async (action) => {
           useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
         }
         updateState({
-          documentNo: response?.data?.[0]?.siNo || "",
-          documentID: response?.data?.[0]?.siId || "",
+          documentNo: response?.data?.[0]?.csiNo || "",
+          documentID: response?.data?.[0]?.csiId || "",
           isDocNoDisabled: true,
           isFetchDisabled: true,
         });
@@ -6816,20 +5827,15 @@ const handleActivityOption = async (action) => {
   }
 };
 
-  const createSIDetailRow = (overrides = {}) => ({
+  const createCSIDetailRow = (overrides = {}) => ({
       lnNo: "",
-      siStat: "F",
-      drNo: "",
-      drId: "",
-      soId: "",
+      csiStat: "F",
       groupId: "",
       itemCode: "",
       itemName: "",
       itemSpecs: "",
       uomCode: "",
-      pmType: "",
-      pmId: "",
-      siQuantity: Number(0).toFixed(quantityDecimals),
+      csiQuantity: Number(0).toFixed(quantityDecimals),
       quantityPicked: Number(0).toFixed(quantityDecimals),
       itemAmount: "0.00",
       unitPrice: Number(0).toFixed(sellingPriceDecimals),
@@ -6840,29 +5846,19 @@ const handleActivityOption = async (action) => {
       atcAmount: "0.00",
       amountDue: "0.00",
       grossAmount: "0.00",
-      discRate1: "0.00",
-      discRate2: "0.00",
-      discRate3: "0.00",
-      discRate4: "0.00",
-      discRate5: "0.00",
-      discRate6: "0.00",
-      discRate7: "0.00",
-      discRate8: "0.00",
-      discAmount1: "0.00",
-      discAmount2: "0.00",
-      discAmount3: "0.00",
-      discAmount4: "0.00",
-      discAmount5: "0.00",
-      discAmount6: "0.00",
-      discAmount7: "0.00",
-      discAmount8: "0.00",
+      discRate: "0.00",
+      discAmount: "0.00",
       totDiscount: "0.00",      
       netAmount: "0.00",      
-      // No delivery date, customer PO, sales rep in SI details
       freeItem: "",
-      drQuantity: Number(0).toFixed(quantityDecimals),
       ...overrides,
     });
+
+  const normalizeCSIDetailLineNumbers = (rows = []) =>
+    rows.map((row, index) => ({
+      ...row,
+      lnNo: String(index + 1),
+    }));
 
   const insertDetailRows = (rowsToInsert = [], insertIndex = null) => {
     if (!Array.isArray(rowsToInsert) || rowsToInsert.length === 0) {
@@ -6870,7 +5866,7 @@ const handleActivityOption = async (action) => {
     }
 
     const updatedRows = [...detailRows];
-    const normalizedInsertRows = rowsToInsert.map((row) => createSIDetailRow(row));
+    const normalizedInsertRows = rowsToInsert.map((row) => createCSIDetailRow(row));
 
     if (insertIndex !== null && insertIndex >= 0) {
       updatedRows.splice(insertIndex + 1, 0, ...normalizedInsertRows);
@@ -6899,284 +5895,7 @@ const handleActivityOption = async (action) => {
   };
 
   const handleInsertBlankRow = (insertIndex = null) => {
-    insertDetailRows([createSIDetailRow()], insertIndex);
-  };
-
-  // const resolveOpenDRGroupId = (item = {}) =>
-  //   item?.groupId || item?.group_id || "";
-
-  // const resolveOpenDRDrNo = (item = {}) =>
-  //   item?.drNo || item?.dr_no || "";
-
-
-
-  const normalizeOpenDRLookupRow = (item = {}) => ({
-    ...item,
-    groupId: item?.groupId || "",
-    drId: item?.drId || "",
-    drNo: item?.drNo || "",
-    soId: item?.soId || "",
-  });
-
-  const getUniqueOpenDRRemarks = (records = []) => {
-    const seen = new Set();
-
-    return (records || []).reduce((acc, record) => {
-      const value = String(record?.remarks || "").trim();
-      if (!value) return acc;
-
-      const key = value.replace(/\s+/g, " ").toLowerCase();
-      if (seen.has(key)) return acc;
-
-      seen.add(key);
-      acc.push(value);
-      return acc;
-    }, []);
-  };
-
-  const appendMissingRemarks = (currentRemarks = "", newRemarks = []) => {
-    const current = String(currentRemarks || "").trim();
-    const currentKey = current.replace(/\s+/g, " ").toLowerCase();
-    const missingRemarks = newRemarks.filter((remark) => {
-      const key = String(remark || "").trim().replace(/\s+/g, " ").toLowerCase();
-      return key && !currentKey.includes(key);
-    });
-
-    if (missingRemarks.length === 0) return currentRemarks || "";
-    return [current, ...missingRemarks].filter(Boolean).join("\n");
-  };
-
-  const buildOpenDRHeaderUpdates = async (selectedRecords = [], selectedSummaryRecords = []) => {
-    const topRecord = selectedRecords.find(Boolean) || {};
-    const updates = {};
-
-    const nextRemarks = appendMissingRemarks(
-      remarks,
-      getUniqueOpenDRRemarks(selectedSummaryRecords)
-    );
-    if (nextRemarks !== (remarks || "")) {
-      updates.remarks = nextRemarks;
-    }
-
-    const nextSalesRepCode = String(topRecord?.salesrepCode || "").trim();
-    if (nextSalesRepCode) {
-      const salesRepRow = await useTopSalesRepRow(nextSalesRepCode);
-      updates.salesRepCode = nextSalesRepCode;
-      updates.salesRepName = salesRepRow?.salesRepName || "";
-    }
-
-    const nextBilltermCode = String(topRecord?.billtermCode || "").trim();
-    if (nextBilltermCode) {
-      const billTermRow = await useTopBillTermRow(nextBilltermCode);
-      if (billTermRow) {
-        updates.billtermCode = billTermRow.billtermCode;
-        updates.billtermName = billTermRow.billtermName;
-        updates.daysDue = billTermRow.daysDue;
-        updates.dueDate = calculateDueDate(documentDate, billTermRow.daysDue);
-      } else {
-        updates.billtermCode = nextBilltermCode;
-      }
-    }
-
-    const nextCustPoNo = topRecord?.custpoNo || "";
-    if (nextCustPoNo) {
-      updates.customerPoNo = nextCustPoNo;
-    }
-
-    const nextCustPoDate = topRecord?.custpoDate || "";
-    if (nextCustPoDate) {
-      updates.customerPoDate = useformatToDatev2(nextCustPoDate);
-    }
-
-    if (siTranType === "SI03") {
-       const data = await useFetchTranData(topRecord?.drNo, branchCode, "FADS", "fadsNo", "");
-       updateState({
-        vatCodeFADisposal: data?.vatCode || "",
-        billToCustName: data?.custName || "",
-        customerPoNo: data?.fadsNo ? `FADS-${data.fadsNo}` : "",
-        customerPoDate: data?.fadsDate ? useformatToDatev2(data.fadsDate) : "",
-       })
-    }
-
-
-
-    
-
-    return updates;
-
-
-  };
-
-  const mapOpenDRRecordToDetailRow = (item = {}) => {
-    const siQuantityValue =item?.siQuantity ?? 0;
-    const selectedVatCode = item?.vatCode || vatCode || "";
-    const selectedVatRow = getAllTopVatRow(selectedVatCode);
-
-    return calculateRowAmountsFromRates(createSIDetailRow({
-      drNo: item?.drNo || "",
-      drId: item?.drId || "",
-      soId: item?.soId || "",
-      groupId: item?.groupId || "",
-      itemCode: item?.itemCode || "",
-      itemName: item?.itemName || "",
-      itemSpecs: item?.itemSpecs || "",
-      uomCode: item?.uomCode || "",
-      pmType: item?.pmType || "",
-      pmId: item?.pmId || "",
-      siQuantity: formatNumber(siQuantityValue, quantityDecimals),
-      quantityPicked: formatNumber(item?.quantityPicked ?? siQuantityValue ?? 0, quantityDecimals),
-      itemAmount: formatNumber(item?.itemAmount ?? 0),
-      unitPrice: formatNumber(item?.unitPrice ?? item?.sellPrice ?? item?.sellingPrice ?? 0, sellingPriceDecimals),
-      vatCode: selectedVatCode,
-      vatRate: formatNumber(item?.vatRate ?? selectedVatRow?.vatRate ?? 0),
-      vatAmount: formatNumber(item?.vatAmount ?? 0),
-      atcAmount: formatNumber(item?.atcAmount ?? 0),
-      discRate1: formatNumber(item?.discRate1 ?? 0),
-      discRate2: formatNumber(item?.discRate2 ?? 0),
-      discRate3: formatNumber(item?.discRate3 ?? 0),
-      discRate4: formatNumber(item?.discRate4 ?? 0),
-      discRate5: formatNumber(item?.discRate5 ?? 0),
-      discRate6: formatNumber(item?.discRate6 ?? 0),
-      discRate7: formatNumber(item?.discRate7 ?? 0),
-      discRate8: formatNumber(item?.discRate8 ?? 0),
-      freeItem: item?.freeItem || "",
-    }));
-  };
-
-  const getOpenDRDuplicateKey = (row = {}) => {
-    const rowDrId = String(row?.drId || "").trim().toUpperCase();
-    const rowGroupId = String(row?.groupId || "").trim().toUpperCase();
-    return rowDrId && rowGroupId ? `${rowDrId}||${rowGroupId}` : "";
-  };
-
-  const applySelectedOpenDRSummaryKeys = (rows = [], summaries = []) => {
-    const normalizedSummaries = (summaries || []).map(normalizeOpenDRLookupRow);
-    if (!normalizedSummaries.length) return rows;
-
-    const summaryByGroupId = new Map(
-      normalizedSummaries
-        .filter((summary) => summary.groupId)
-        .map((summary) => [String(summary.groupId), summary])
-    );
-    const singleSummary = normalizedSummaries.length === 1 ? normalizedSummaries[0] : null;
-
-    return (rows || []).map((row) => {
-      const normalizedRow = normalizeOpenDRLookupRow(row);
-      const matchedSummary = summaryByGroupId.get(String(normalizedRow.drId || "")) || singleSummary;
-
-      if (!matchedSummary) return normalizedRow;
-
-      return {
-        ...normalizedRow,
-        drNo: normalizedRow.drNo || matchedSummary.drNo || "",
-        groupId: normalizedRow.groupId || "",
-        drId: normalizedRow.drId || matchedSummary.drId || matchedSummary.groupId || "",
-      };
-    });
-  };
-
-  const getDuplicateOpenDRRows = (incomingRows = []) => {
-    const seenKeys = new Set(
-      (detailRowsRef.current || [])
-        .map(getOpenDRDuplicateKey)
-        .filter(Boolean)
-    );
-    const duplicateRows = [];
-
-    (incomingRows || []).forEach((row) => {
-      const key = getOpenDRDuplicateKey(row);
-      if (!key) return;
-
-      if (seenKeys.has(key)) {
-        duplicateRows.push(row);
-        return;
-      }
-
-      seenKeys.add(key);
-    });
-
-    return duplicateRows;
-  };
-
-  const handleInsertSelectedOpenDR = async (payload) => {
-   
-    const selectedIds = Array.isArray(payload?.data) ? payload.data : [];
-    const selectedSummaryRecords = Array.isArray(payload?.records) ? payload.records : [];
-
-    if (!selectedIds.length) {
-      updateState({ showOpenDRModal: false });
-      return;
-    }
-
-    const idString = selectedIds.join(",");
-    const requestPayload = {
-      json_data: {
-        selectedId: idString,
-        selectedIds: idString,
-      },
-    };
-
-    try {
-      updateState({ isLoading: true, showSpinner: true });
-      const response = await postRequest("getDRSI_Selected", JSON.stringify(requestPayload));
-
-     
-
-
-      const rawRows = response?.data?.[0]?.result
-        ? JSON.parse(response.data[0].result)
-        : response?.data || response;
-      const selectedRecords = Array.isArray(rawRows)
-        ? applySelectedOpenDRSummaryKeys(rawRows, selectedSummaryRecords)
-        : [];
-
-
-      if (!selectedRecords.length) {
-        useSwalErrorAlert("Open DR", "No SI detail rows were returned for the selected Delivery Receipt record(s).");
-        return;
-      }
-
-
-      const duplicateRows = getDuplicateOpenDRRows(selectedRecords);
-      if (duplicateRows.length > 0) {
-        const duplicateList = duplicateRows
-          .map((row) => {
-            const drNo = row?.drNo || "";
-            const itemCode = row?.itemCode || "";
-            return `DR No. ${drNo || "-"} / Item Code ${itemCode || "-"}`;
-          })
-          .filter(Boolean);
-        useSwalErrorAlert(
-          "Duplicate Open DR Detail",
-          `Duplicate DR item(s) are not allowed:\n${[...new Set(duplicateList)].join("\n")}`
-        );
-        return;
-      }
-
-
-
-      const headerUpdates = await buildOpenDRHeaderUpdates(selectedRecords, selectedSummaryRecords);
-
-      insertDetailRows(selectedRecords.map(mapOpenDRRecordToDetailRow), insertAfterIndex);
-      setTopTab("details");
-      updateState({
-        ...headerUpdates,
-        showOpenDRModal: false,
-        openDRSI_Data_Summary: [],
-        openDRSI_Col_Summary: [],
-        insertAfterIndex: null,
-      });
-    } catch (error) {
-      console.error("getDRSI_Selected failed:", {
-        payload: requestPayload,
-        status: error?.response?.status,
-        data: error?.response?.data,
-        error,
-      });
-      useSwalErrorAlert("Open DR", getApiErrorMessage(error));
-    } finally {
-      updateState({ isLoading: false, showSpinner: false });
-    }
+    insertDetailRows([createCSIDetailRow()], insertIndex);
   };
 
   const normalizeItemModalRecords = (selectedItems) => {
@@ -7192,7 +5911,7 @@ const handleActivityOption = async (action) => {
   const normalizeItemCode = (itemCode) => String(itemCode || "").trim().toUpperCase();
 
   const getFilteredDuplicateFreeItems = (records = [], currentRowIndex = null) => {
-    if (SI_ALLOW_DUPLICATE_ITEMS) {
+    if (CSI_ALLOW_DUPLICATE_ITEMS) {
       return records;
     }
 
@@ -7223,144 +5942,18 @@ const handleActivityOption = async (action) => {
     if (skippedItemCodes.length > 0) {
       useSwalErrorAlert(
         "Duplicate Item Not Allowed",
-        `These item(s) already exist in SI Detail: ${[...new Set(skippedItemCodes)].join(", ")}`
+        `These item(s) already exist in CSI Detail: ${[...new Set(skippedItemCodes)].join(", ")}`
       );
     }
 
     return filteredRecords;
   };
 
-
-
-
-  const parsePriceMatrixResponse = (response) => {
-    const directResult =
-      response?.data?.[0]?.result ??
-      response?.result ??
-      response?.data?.result;
-    if (typeof directResult === "string") {
-      try {
-        const parsed = JSON.parse(directResult);
-        return Array.isArray(parsed) ? parsed : [];
-      } catch (error) {
-        console.error("Error parsing SO price matrix result:", error);
-        return [];
-      }
-    }
-
-
-    const rawData = response?.data ?? [];
-    if (Array.isArray(rawData)) {
-      return rawData;
-    }
-    if (Array.isArray(response)) {
-      return response;
-    }
-    return [];
-  };
-
-  const fetchPriceMatrixRows = async (
-    selectedRecords = [],
-    { custCode = billToCustCode || "", docDate = documentDate, headerVatCode = vatCode } = {}
-  ) => {
-    if (!Array.isArray(selectedRecords) || selectedRecords.length === 0) {
-      return [];
-    }
-
-    const payload = {
-      json_data: {
-        docDate,
-        custCode,
-        vatCode: headerVatCode,
-        items: selectedRecords.map((item, index) => ({
-          sequence: index + 1,
-          itemCode: item?.itemCode || "",
-        })),
-      },
-    };
-
-    try {
-      updateState({ isLoading: true });
-      const response = await postRequest(
-        SI_PRICE_MATRIX_ENDPOINT,
-        JSON.stringify(payload)
-      );
-      return parsePriceMatrixResponse(response);
-    } catch (error) {
-      console.error("Error fetching SO price matrix:", error);
-      return [];
-    } finally {
-      updateState({ isLoading: false });
-    }
-  };
-
-
-
-
-  const refreshDetailRowsFromPriceMatrix = async ({ // Assuming SI also uses price matrix
-    custCode = billToCustCode || "",
-    rows = detailRows,
-    docDate = documentDate,
-    headerVatCode = vatCode,
-  } = {}) => {
-    if (!Array.isArray(rows) || rows.length === 0 || !custCode) {
-      return;
-    }
-
-    const selectedRecords = rows.map((row, index) => ({
-      sequence: index + 1,
-      itemCode: row?.itemCode || "",
-    }));
-    const priceMatrixRows = await fetchPriceMatrixRows(selectedRecords, {
-      custCode,
-      docDate,
-      headerVatCode,
-    });
-    const updatedRows = distributeVatAcrossDetailRows(rows.map((row, index) =>
-      applyPriceMatrixToDetailRow(
-        row,
-        getPriceMatrixRowForItem(priceMatrixRows, row, index)
-      )
-    ));
-
-    updateState({ detailRows: updatedRows });
-    updateTotals(updatedRows);
-  };
-
-  const getPriceMatrixRowForItem = (priceMatrixRows = [], item = {}, index = 0) => { // Assuming SI also uses price matrix
-    const itemCode = normalizeItemCode(item?.itemCode);
-    const getMatrixItemCode = (priceRow) =>
-      priceRow?.itemCode ??
-      "";
-
-    return (
-      priceMatrixRows.find(
-        (priceRow) => normalizeItemCode(getMatrixItemCode(priceRow)) === itemCode
-      ) ||
-      priceMatrixRows.find(
-        (priceRow) => Number(priceRow?.sequence) === index + 1
-      ) ||
-      {}
-    );
-  };
-
   const calculateRowAmountsFromRates = (row) => {
     const discountRateFields = visibleDiscountRateFields;
     const discountAmountFields = visibleDiscountAmountFields;
-    const quantity = parseFormattedNumber(row.siQuantity || 0) || 0;
+    const quantity = parseFormattedNumber(row.csiQuantity || 0) || 0;
     let unitPrice = parseFormattedNumber(row.unitPrice || 0) || 0;
-   
-
-    if (vatCodeFADisposal) {
-       const vatRow = getAllTopVatRow(vatCodeFADisposal);
-      const vatRate = parseFormattedNumber(vatRow?.vatRate || 0) || 0;
-      
-
-      unitPrice = vatRate > 0
-        ? toFormattedAmountNumber(unitPrice + (unitPrice * (vatRate * 0.01)))
-        : unitPrice;
-    }
-
 
     const grossAmount = toFormattedAmountNumber(quantity * unitPrice);
     let runningBase = grossAmount;
@@ -7393,91 +5986,22 @@ const handleActivityOption = async (action) => {
     };
   };
 
-
-
-  const applyPriceMatrixToDetailRow = (baseRow, priceRow = {}) => {
-    if (baseRow.freeItem === "Y") {
-      return calculateRowAmountsFromRates({
-        ...baseRow,
-        unitPrice: formatNumber(0, sellingPriceDecimals),
-        ...Object.fromEntries(
-          visibleDiscountRateFields.map((field) => [field, formatNumber(0)])
-        ),
-      });
-    }
-
-    const hasPriceMatrix = priceRow && Object.keys(priceRow).length > 0;
-
-    // IMPORTANT:
-    // Do not return 0 immediately when price matrix has no sellingPrice.
-    // calculateRowAmountsFromRates() uses row.unitPrice, so fallback must include
-    // priceRow.unitPrice, baseRow.unitPrice, and baseRow.sellingPrice.
-    const getPriceValue = () =>
-      priceRow?.sellingPrice ??
-      priceRow?.unitPrice ??
-      baseRow?.unitPrice ??
-      baseRow?.sellingPrice ??
-      0;
-
-    const getPmTypeValue = () => priceRow?.pmType ?? baseRow?.pmType ?? "";
-    const getPmIdValue = () => priceRow?.pmId ?? baseRow?.pmId ?? "";
-
-    const getDiscountRateValue = (discountNo) =>
-      hasPriceMatrix
-        ? priceRow?.[`discRate${discountNo}`] ?? baseRow?.[`discRate${discountNo}`] ?? 0
-        : baseRow?.[`discRate${discountNo}`] ?? 0;
-
-    const selectedVatCode = priceRow?.vatCode || baseRow.vatCode || vatCode || "";
-    const selectedVatRow = getAllTopVatRow(selectedVatCode);
-
-    const updatedRow = {
-      ...baseRow,
-      pmType: getPmTypeValue(),
-      pmId: getPmIdValue(),
-      vatCode: selectedVatCode,
-      vatRate: formatNumber(selectedVatRow?.vatRate || baseRow?.vatRate || 0),
-      unitPrice: formatNumber(getPriceValue(), sellingPriceDecimals),
-    };
-
-    visibleDiscountRateFields.forEach((field, index) => {
-      updatedRow[field] = formatNumber(getDiscountRateValue(index + 1));
-    });
-
-    return calculateRowAmountsFromRates(updatedRow);
-  };
-
   const mapItemRecordToDetailRow = (item = {}) => {
    
 
-    return createSIDetailRow({
+    return createCSIDetailRow({
       itemCode: item?.itemCode || "",
       itemName: item?.itemName || "",
       itemSpecs: item?.itemSpecs || "",
       uomCode: item?.uomCode || "",
-      pmType: item?.pmType || "",
-      groupId: "",
-      pmId: item?.pmId || "",    
-      siQuantity: formatNumber( item?.siQuantity ?? 0, quantityDecimals ),
-      sellingPrice: formatNumber(item?.sellPrice, sellingPriceDecimals),
+      groupId: "",    
+      csiQuantity: formatNumber( item?.csiQuantity ?? 0, quantityDecimals ),
+      unitPrice: formatNumber(item?.unitPrice ?? item?.sellPrice ?? item?.sellingPrice ?? 0, sellingPriceDecimals),
       grossAmount: formatNumber(item?.grossAmount ?? 0),
-      discRate1: formatNumber(item?.discRate1 ?? 0),
-      discRate2: formatNumber(item?.discRate2 ?? 0),
-      discRate3: formatNumber(item?.discRate3 ?? 0),
-      discRate4: formatNumber(item?.discRate4 ?? 0),
-      discRate5: formatNumber(item?.discRate5 ?? 0),
-      discRate6: formatNumber(item?.discRate6 ?? 0),
-      discRate7: formatNumber(item?.discRate7 ?? 0),
-      discRate8: formatNumber(item?.discRate8 ?? 0),
-      discAmount1: formatNumber(item?.discAmount1 ?? 0),
-      discAmount2: formatNumber(item?.discAmount2 ?? 0),
-      discAmount3: formatNumber(item?.discAmount3 ?? 0),
-      discAmount4: formatNumber(item?.discAmount4 ?? 0),
-      discAmount5: formatNumber(item?.discAmount5 ?? 0),
-      discAmount6: formatNumber(item?.discAmount6 ?? 0),
-      discAmount7: formatNumber(item?.discAmount7 ?? 0),
-      discAmount8: formatNumber(item?.discAmount8 ?? 0),
+      discRate: formatNumber(item?.discRate ?? 0),
+      discAmount: formatNumber(item?.discAmount ?? 0),
       totDiscount: formatNumber(item?.totDiscount ?? 0),
-      vatCode: item?.vatCode || "",
+      vatCode: vatCode || item?.vatCode || "",
       vatRate: formatNumber(item?.vatRate ?? 0),
       vatAmount: formatNumber(item?.vatAmount ?? 0),
       salesAmount: formatSalesAmount(item?.netAmount ?? 0, item?.vatAmount ?? 0),
@@ -7487,21 +6011,16 @@ const handleActivityOption = async (action) => {
       freeItem: item?.freeItem || "",
       quantityPicked: formatNumber(item?.quantityPicked ?? item?.qtyPicked ?? 0, quantityDecimals),
       itemAmount: formatNumber(item?.itemAmount ?? 0),
-      drQuantity: formatNumber(item?.drQuantity ?? 0, quantityDecimals),
     });
   };
-
   const handleInsertSelectedItems = async (selectedRecords = []) => {
     if (!Array.isArray(selectedRecords) || selectedRecords.length === 0) {
       return;
     }
 
-    const priceMatrixRows = await fetchPriceMatrixRows(selectedRecords); // Assuming SI also uses price matrix
-    const rowsToInsert = selectedRecords.map((item, index) => {
-      const baseRow = mapItemRecordToDetailRow(item);
-      const priceRow = getPriceMatrixRowForItem(priceMatrixRows, item, index);
-      return applyPriceMatrixToDetailRow(baseRow, priceRow);
-    });
+    const rowsToInsert = selectedRecords.map((item) =>
+      calculateRowAmountsFromRates(mapItemRecordToDetailRow(item))
+    );
 
     insertDetailRows(rowsToInsert, insertAfterIndex);
   };
@@ -7511,13 +6030,8 @@ const handleActivityOption = async (action) => {
 
 
 
-const cancelPickingAllocationForDeletedSIRow = async (row) => {
+const cancelPickingAllocationForDeletedCSIRow = async (row) => {
   const pickedQty = parseFormattedNumber(row?.quantityPicked || 0) || 0;
-
-  // Only SI02 has FG picking allocation.
-  if (String(siTranType || "").toUpperCase() !== "SI02") {
-    return true;
-  }
 
   // No picked quantity, no need to call allocation API.
   if (pickedQty <= 0) {
@@ -7526,14 +6040,14 @@ const cancelPickingAllocationForDeletedSIRow = async (row) => {
 
   if (!documentID || !row?.groupId) {
     useSwalErrorAlert(
-      "Delete SI Detail",
-      "Cannot release picking allocation. SI ID or Group ID is missing."
+      "Delete CSI Detail",
+      "Cannot release picking allocation. CSI ID or Group ID is missing."
     );
     return false;
   }
 
   const confirm = await useSwalProceedConfirm(
-    "Delete Picked SI Detail?",
+    "Delete Picked CSI Detail?",
     "This line already has picked quantity. Deleting it will release the FG picking allocation.",
     "Yes"
   );
@@ -7549,19 +6063,19 @@ const cancelPickingAllocationForDeletedSIRow = async (row) => {
       mode: "CancelAlloc",
       params: JSON.stringify({
         json_data: {
-          docCode: "SI",
+          docCode: "CSI",
           docId: documentID,
           groupId: row.groupId,
           userCode: userCode || currentUserRow?.userCode || "",
-          reason: "SI detail line deleted.",
+          reason: "CSI detail line deleted.",
         },
       }),
     });
 
     return true;
   } catch (error) {
-    console.error("Failed to release SI FG picking allocation:", error);
-    useSwalErrorAlert("Delete SI Detail", getApiErrorMessage(error));
+    console.error("Failed to release CSI FG picking allocation:", error);
+    useSwalErrorAlert("Delete CSI Detail", getApiErrorMessage(error));
     return false;
   } finally {
     updateState({ isLoading: false, showSpinner: false });
@@ -7576,18 +6090,24 @@ const handleDeleteRow = async (index) => {
     return;
   }
 
-  const canDelete = await cancelPickingAllocationForDeletedSIRow(rowToDelete);
+  const canDelete = await cancelPickingAllocationForDeletedCSIRow(rowToDelete);
 
   if (!canDelete) {
     return;
   }
 
-  const updatedRows = [...detailRows];
-  updatedRows.splice(index, 1);
+  const updatedRows = normalizeCSIDetailLineNumbers(
+    detailRows.filter((_, rowIndex) => rowIndex !== index)
+  );
+
+  detailRowsRef.current = updatedRows;
 
   updateState({
     detailRows: updatedRows,
     detailRowsGL: [],
+    triggerGLEntries: updatedRows.some(
+      (row) => (parseFormattedNumber(row.quantityPicked || 0) || 0) > 0
+    ),
   });
 
   updateTotals(updatedRows);
@@ -7727,7 +6247,7 @@ const handleBlurGL = async (index, field, value, autoCompute = false) => {
 
 const handlePrint = async () => {
  if (!detailRows || detailRows.length === 0) {
-      return; // Assuming SI also requires detail rows to print
+      return; // Assuming CSI also requires detail rows to print
       }
   if (documentID) {
     updateState({ showSignatoryModal: true });
@@ -7736,13 +6256,8 @@ const handlePrint = async () => {
 
   const handleOpenAddItemModal = async (overrides = {}) => {
     const lookupCustCode = String(overrides.billToCustCode ?? billToCustCode ?? "").trim();
-    const lookupBillTermCode = String(overrides.billtermCode ?? billtermCode ?? "").trim();
-    const lookupSalesRepCode = String(overrides.salesRepCode ?? salesRepCode ?? "").trim();
-
     const fieldsToCheck = {
-      "Header : Bill To Customer Code": lookupCustCode,
-      "Header : Billing Term": lookupBillTermCode,
-      "Header : Sales Rep": lookupSalesRepCode,
+      "Header : Customer Code": lookupCustCode,
     };
 
     const isValid = await useSwalvalidateRequiredFields(fieldsToCheck, "Add Item");
@@ -7766,7 +6281,7 @@ const handlePrint = async () => {
     if (!lookupCustCode) {
       const branchIsValid = await useSwalvalidateRequiredFields(
         { "Header : Branch": branchCode },
-        "Add SI Detail"
+        "Add CSI Detail"
       );
       if (!branchIsValid) return;
 
@@ -7776,13 +6291,6 @@ const handlePrint = async () => {
       });
       return;
     }
-
-
-  if (["SI01", "SI03"].includes(String(siTranType || "").toUpperCase())) {
-    await handleOpenDRLookup();
-    return;
-  }
-
     await handleOpenAddItemModal();
   };
 
@@ -7906,7 +6414,7 @@ const handlePrint = async () => {
     }, 0);
 
   const buildPickingBasePayload = (row, index) => ({
-    docCode: "SI",
+    docCode: "CSI",
     docNo: documentNo || "",
     docId: documentID || "",
     docDate: documentDate || null,
@@ -7914,7 +6422,7 @@ const handlePrint = async () => {
     groupId: row?.groupId || "",
     lineNo: index + 1,
     itemCode: row?.itemCode || "",
-    requestedQty: parseFormattedNumber(row?.siQuantity || 0) || 0,
+    requestedQty: parseFormattedNumber(row?.csiQuantity || 0) || 0,
     userCode: userCode || currentUserRow?.userCode || "",
   });
 
@@ -7949,7 +6457,7 @@ const handlePrint = async () => {
 
         allocations.push({
           groupId: row.groupId || "",
-          sourceDocType: "SI",
+          sourceDocType: "CSI",
           sourceLineNo: "",
           itemCode: row.itemCode || "",
           stockCardRefId: stockRow.stockCardRefId,
@@ -7982,79 +6490,9 @@ const handlePrint = async () => {
       }, []);
   };
 
-  const handleOpenDRLookup = async (overrides = {}) => {
-    const lookupCustCode = String(overrides.billToCustCode ?? billToCustCode ?? "").trim();
-    const lookupBranchCode = String(overrides.branchCode ?? branchCode ?? "").trim();
-
-    if (!lookupCustCode) {
-      const branchIsValid = await useSwalvalidateRequiredFields(
-        { "Header : Branch": lookupBranchCode },
-        "Open DR Lookup"
-      );
-      if (!branchIsValid) return;
-
-      updateState({
-        custModalOpen: true,
-        modalContext: siTranType === "SI03" ? "openFADS" : "openDR",
-      });
-      return;
-    }
-
-    const fieldsToCheck = {
-      "Header : Bill To Customer Code": lookupCustCode,
-      "Header : Branch": lookupBranchCode,
-    };
-
-    const isValid = await useSwalvalidateRequiredFields(fieldsToCheck, "Open DR Lookup");
-    if (!isValid) return;
-
-    try {
-      updateState({ isLoading: true, showSpinner: true });
-
-      const endpoint = "getDRSI_OpenSummary";
-      const payload = {
-          custCode: lookupCustCode,
-          billToCustCode: lookupCustCode,
-          branchCode: lookupBranchCode,
-          siTranType: siTranType || "",
-        };
-
-     console.log("GetDRSI_OpenSummary payload:", payload);
-      const response = await fetchDataJson(endpoint, payload);
-
-      const drRows = response?.data?.[0]?.result
-        ? JSON.parse(response.data[0].result).map(normalizeOpenDRLookupRow)
-        : [];
-
-      if (!drRows.length) {
-        useSwalErrorAlert(
-          "Open DR",
-          "There are no open Delivery Receipt records for the selected customer/branch."
-        );
-        return;
-      }
-
-      const summaryColumns = await selectedHSColConfig(endpoint);
-      updateState({
-        openDRSI_Data_Summary: drRows,
-        openDRSI_Col_Summary: summaryColumns,
-        showOpenDRModal: true,
-      });
-    } catch (error) {
-      console.error("Failed to fetch Open DR:", error);
-      useSwalErrorAlert("Open DR", getApiErrorMessage(error));
-      updateState({
-        openDRSI_Data_Summary: [],
-        openDRSI_Col_Summary: [],
-      });
-    } finally {
-      updateState({ isLoading: false, showSpinner: false });
-    }
-  };
-
 const handleCancel = async () => {
  if (!detailRows || detailRows.length === 0) {
-      return; // Assuming SI also requires detail rows to cancel
+      return; // Assuming CSI also requires detail rows to cancel
       }
 
   if (documentID && (documentStatus === '')) {
@@ -8074,27 +6512,40 @@ const handleCopy = async () => {
   }  
   if (documentID) {
     const nextDocumentDate = useGetCurrentDayV2();
-    const copiedDetailRows = detailRows.map((row) => ({
-      ...row,
-      siStat: "F",
-      drQuantity: formatNumber(0, quantityDecimals),
-      siQuantity: formatNumber(0, quantityDecimals),
-      groupId: "",
-      pmId: "",
-      pmType: "",
-    }));
+    const copiedDetailRows = detailRows.map((row) => {
+      const normalizedRow = calculateRowAmountsFromRates({
+        ...row,
+        csiStat: "F",
+        allocated: "",
+        totalAllocated: 0,
+        quantityPicked: formatNumber(0, quantityDecimals),
+        groupId: "",
+        pickingAllocations: [],
+      });
+
+      return {
+        ...normalizedRow,
+        itemAmount: formatNumber(0),
+      };
+    });
     
     updateState({
       documentNo: "",
       documentID: "",
       documentStatus: "",
       status: "OPEN",
-      siStatus: "O",
+      csiStatus: "O",
       documentDate: nextDocumentDate,
-      refSiNo1: "",
-      refSiNo2: "",
+      bankCode: "",
+      bank: "",
+      checkNo: "",
+      checkDate: "",
+      clearDate: "",
+      refCsiNo1: "",
+      refCsiNo2: "",
       noReprints: "0",
       detailRows: copiedDetailRows,
+      detailRowsGL: [],
     });
   }
 };
@@ -8119,7 +6570,7 @@ const handleHistoryRowPick = useCallback(
 
 useEffect(() => {
   const params = new URLSearchParams(location.search);
-  const docNo = params.get("siNo");
+  const docNo = params.get("csiNo");
   const branchCode = params.get("branchCode");
   
   if (!loadedFromUrlRef.current && docNo && branchCode) {
@@ -8129,7 +6580,7 @@ useEffect(() => {
 }, [location.search, handleHistoryRowPick]);
 
   const printData = {
-    apv_no: documentNo,
+    csi_no: documentNo,
     branch: branchCode,
     doc_id: docType,
   };
@@ -8192,7 +6643,8 @@ const handleSaveAndPrint = async (documentID) => {
 
     try {
 
-        const address = selectedData?.addr || "";
+        const address = selectedData?.addr || selectedData?.address || selectedData?.custAddr || "";
+        const tin = selectedData?.tin || selectedData?.tinNo || selectedData?.custTin || selectedData?.custTinNo || "";
         const selectedVatCode = selectedData?.vatCode || "";
         const selectedVatRow = getAllTopVatRow(selectedVatCode);
         const selectedVatName = selectedVatRow?.vatName || selectedData?.vatName || "";
@@ -8201,10 +6653,9 @@ const handleSaveAndPrint = async (documentID) => {
         const selectedAtcName = selectedAtcRow?.atcName || selectedData?.atcName || "";
         const custDetails = {            custCode: selectedData?.custCode || '',
             custName: selectedData?.custName || '',
+            custAddr: address,
+            custTin: tin,
             currCode: selectedData?.currCode || '',
-            attention: selectedData?.attention || '',
-            billtermCode: selectedData?.billtermCode || '',
-            billtermName: selectedData?.billtermName || '',
             salesRepCode: selectedData?.salesRepCode || '',
             salesRepName: selectedData?.salesRepName || '',
             vatCode: selectedVatCode,
@@ -8214,14 +6665,12 @@ const handleSaveAndPrint = async (documentID) => {
 
         };
         const nextBillToCustCode = selectedData?.custCode || "";
-        const shouldRepriceDetailRows =
-          detailRows.length > 0 &&
-          String(nextBillToCustCode).trim() !== "" &&
-          String(nextBillToCustCode).trim() !== String(billToCustCode || "").trim();
         updateState(
             {
                 billToCustName: selectedData.custName,
                 billToCustCode: selectedData.custCode,
+                custAddr: address,
+                custTin: tin,
                 vatCode: selectedVatCode,
                 vatName: selectedVatName,
                 atcCode: selectedAtcCode,
@@ -8238,9 +6687,8 @@ const handleSaveAndPrint = async (documentID) => {
             if (response.success) {
                 const customerRow = JSON.parse(response.data[0].result)?.[0] || {};
                 custDetails.currCode = customerRow?.currCode || custDetails.currCode;
-                custDetails.attention = customerRow?.custContact || custDetails.attention;
-                custDetails.billtermCode = customerRow?.billtermCode || custDetails.billtermCode;
-                custDetails.billtermName = customerRow?.billtermName || custDetails.billtermName;
+                custDetails.custAddr = customerRow?.addr || customerRow?.address || customerRow?.custAddr || custDetails.custAddr;
+                custDetails.custTin = customerRow?.tin || customerRow?.tinNo || customerRow?.custTin || custDetails.custTin;
                 custDetails.salesRepCode = customerRow?.salesRepCode || custDetails.salesRepCode;
                 custDetails.vatCode = customerRow?.vatCode || custDetails.vatCode;
                 const customerVatRow = getAllTopVatRow(custDetails.vatCode);
@@ -8266,11 +6714,11 @@ const handleSaveAndPrint = async (documentID) => {
      
         await Promise.all([
             handleSelectCurrency(custDetails.currCode),
-            handleSelectBillTerm(custDetails.billtermCode),
             updateState({
-            contactPerson: custDetails.attention,
             salesRepCode: custDetails.salesRepCode,
             salesRepName: custDetails.salesRepName,
+            custAddr: custDetails.custAddr || "",
+            custTin: custDetails.custTin || "",
             vatCode: custDetails.vatCode,
             vatName: custDetails.vatName,
             atcCode: custDetails.atcCode,
@@ -8278,30 +6726,10 @@ const handleSaveAndPrint = async (documentID) => {
           })
         ]);
 
-        if (shouldRepriceDetailRows) {
-            await refreshDetailRowsFromPriceMatrix({
-              custCode: nextBillToCustCode,
-              headerVatCode: custDetails.vatCode || vatCode,
-            });
-        }
-
-        if (modalContext === "addDetail" || modalContext === "openDR") {
-          const nextCustomerCode = custDetails.custCode || selectedData?.custCode || "";
-          const nextBillTermCode = custDetails.billtermCode || "";
-          const nextSalesRepCode = custDetails.salesRepCode || "";
-
-          if (["SI01", "SI03"].includes(String(siTranType || "").toUpperCase()) || modalContext === "openDR") {
-            await handleOpenDRLookup({
-              billToCustCode: nextCustomerCode,
-              branchCode,
-            });
-          } else {
-            await handleOpenAddItemModal({
-              billToCustCode: nextCustomerCode,
-              billtermCode: nextBillTermCode,
-              salesRepCode: nextSalesRepCode,
-            });
-          }
+        if (modalContext === "addDetail") {
+          await handleOpenAddItemModal({
+            billToCustCode: custDetails.custCode || selectedData?.custCode || "",
+          });
         }
 
     } catch (error) {
@@ -8366,7 +6794,7 @@ const handleSaveAndPrint = async (documentID) => {
     );
   };
 
-  const buildSiDataForGl = (rows = detailRows, glRows = [], headerOverrides = {}) => {
+  const buildCsiDataForGl = (rows = detailRows, glRows = [], headerOverrides = {}) => {
     const nextVatCode =
       headerOverrides.vatCode !== undefined ? headerOverrides.vatCode : vatCode;
     const nextAtcCode =
@@ -8375,62 +6803,49 @@ const handleSaveAndPrint = async (documentID) => {
 
     return {
       branchCode,
-      siNo: documentNo || "",
-      siId: documentID || "",
-      siDate: documentDate,
-      sitranType: siTranType,
-      billtermCode,
+      csiNo: documentNo || "",
+      csiId: documentID || "",
+      csiDate: documentDate,
+      csiTranType: csiTranType,
       custCode: billToCustCode,
       custName: billToCustName,
-      attention: contactPerson,
-      refSiNo1,
-      refSiNo2,
+      custAddr: custAddr || "",
+      custTin: custTin || "",
+      refCsiNo1,
+      refCsiNo2,
       currCode: currCode || "PHP",
       currRate: parseFormattedNumber(currRate),
       atcAmount: totalValues.totalAtcAmt,
       atcCode: nextAtcCode || "",
       vatCode: nextVatCode || "",
-      dueDate: dueDate || "",
       remarks: remarks || "",
       userCode,
-      customerPoNo: customerPoNo || "",
-      customerPoDate: customerPoDate || null,
       salesRepCode,
       salesRepName,
-      soStatus: siStatus || "O",
+      csiStatus: csiStatus || "O",
+      paymentType: paymentType || "",
+      bankCode: bankCode || "",
+      bank: bank || "",
+      acctCode: acctCode || "",
+      currAmount: parseFormattedNumber(totals.totalAmountDue || 0),
+      amount: parseFormattedNumber(totals.totalAmountDue || 0),
+      checkNo: checkNo || "",
+      checkDate: checkDate || null,
+      clearDate: clearDate || null,
       dt1: rows.map((row, index) => ({
         lnNo: String(index + 1),
-        pickStat: row.siStat || "F",
-        siStat: row.siStat || "F",
-        drNo: row.drNo || "",
-        drId: row.drId || "",
-        soId: row.soId || "",
+        pickStat: row.csiStat || "F",
+        csiStat: row.csiStat || "F",
         groupId: row.groupId || "",
         itemCode: row.itemCode || "",
         itemName: row.itemName || "",
         itemSpecs: row.itemSpecs || "",
         uomCode: row.uomCode || "",
-        pmType: row.pmType || "",
-        pmId: row.pmId || "",
-        siQuantity: parseFormattedNumber(row.siQuantity || 0),
+        csiQuantity: parseFormattedNumber(row.csiQuantity || 0),
         unitPrice: parseFormattedNumber(row.unitPrice || 0),
         grossAmount: parseFormattedNumber(row.grossAmount || 0),
-        discRate1: parseFormattedNumber(row.discRate1 || 0),
-        discRate2: parseFormattedNumber(row.discRate2 || 0),
-        discRate3: parseFormattedNumber(row.discRate3 || 0),
-        discRate4: parseFormattedNumber(row.discRate4 || 0),
-        discRate5: parseFormattedNumber(row.discRate5 || 0),
-        discRate6: parseFormattedNumber(row.discRate6 || 0),
-        discRate7: parseFormattedNumber(row.discRate7 || 0),
-        discRate8: parseFormattedNumber(row.discRate8 || 0),
-        discAmount1: parseFormattedNumber(row.discAmount1 || 0),
-        discAmount2: parseFormattedNumber(row.discAmount2 || 0),
-        discAmount3: parseFormattedNumber(row.discAmount3 || 0),
-        discAmount4: parseFormattedNumber(row.discAmount4 || 0),
-        discAmount5: parseFormattedNumber(row.discAmount5 || 0),
-        discAmount6: parseFormattedNumber(row.discAmount6 || 0),
-        discAmount7: parseFormattedNumber(row.discAmount7 || 0),
-        discAmount8: parseFormattedNumber(row.discAmount8 || 0),
+        discRate: parseFormattedNumber(row.discRate || 0),
+        discAmount: parseFormattedNumber(row.discAmount || 0),
         totDiscount: parseFormattedNumber(row.totDiscount || 0),
         vatCode: row.vatCode || "",
         vatRate: parseFormattedNumber(row.vatRate || 0),
@@ -8442,7 +6857,6 @@ const handleSaveAndPrint = async (documentID) => {
         freeItem: row.freeItem || "",
         quantityPicked: parseFormattedNumber(row.quantityPicked || 0),
         itemAmount: parseFormattedNumber(row.itemAmount || 0),
-        drQuantity: parseFormattedNumber(row.drQuantity || 0),
       })),
       dt2: glRows.map((entry, index) => ({
         recNo: String(index + 1),
@@ -8479,7 +6893,7 @@ const handleSaveAndPrint = async (documentID) => {
       updateState({ detailRowsGL: [], isGeneratingGL: true });
       const newGlEntries = await useGenerateGLEntries(
         docType,
-        buildSiDataForGl(rows, [], headerOverrides)
+        buildCsiDataForGl(rows, [], headerOverrides)
       );
       updateState({
         detailRowsGL: newGlEntries && newGlEntries.length > 0 ? newGlEntries : [],
@@ -8532,6 +6946,7 @@ const handleCloseATCModal = async (selectedATC) => {
 
     updateState({
       detailRows: updatedRows,
+      detailRowsGL: [],
       showATCModal: false,
       selectedRowIndex: null,
       modalContext: "",
@@ -8562,6 +6977,7 @@ const handleCloseATCModal = async (selectedATC) => {
     atcCode: nextAtcCode,
     atcName: selectedATC.atcName || "",
     detailRows: normalizedRows,
+    detailRowsGL: [],
     showATCModal: false,
     selectedRowIndex: null,
     modalContext: "",
@@ -8647,16 +7063,14 @@ const handleCloseVatModal = async (selectedVat) => {
         vatCode: nextVatCode,
         atcCode,
       });
+      detailRowsRef.current = normalizedRows;
 
       updateState({
         detailRows: normalizedRows,
+        detailRowsGL: [],
       });
 
       updateTotals(normalizedRows);
-      await regenerateGlEntriesForRows(normalizedRows, {
-        vatCode: nextVatCode,
-        atcCode,
-      });
       return;
     }
 
@@ -8686,21 +7100,19 @@ const handleCloseVatModal = async (selectedVat) => {
       vatCode: nextVatCode,
       atcCode,
     });
+    detailRowsRef.current = normalizedRows;
 
     updateState({
       vatCode: nextVatCode,
       vatName: nextVatName,
       detailRows: normalizedRows,
+      detailRowsGL: [],
       showVatModal: false,
       selectedRowIndex: null,
       modalContext: "",
     });
 
     updateTotals(normalizedRows);
-    await regenerateGlEntriesForRows(normalizedRows, {
-      vatCode: nextVatCode,
-      atcCode,
-    });
   } catch (error) {
     console.error("Error applying selected VAT:", error);
     useSwalErrorAlert(
@@ -8720,6 +7132,25 @@ const handleCloseAccountModal = (selectedAccount) => {
     selectedRowIndex: null,
     accountModalSource: null,
   });
+};
+
+const handleCloseBankMastModal = async (selectedBankCode) => {
+  if (selectedBankCode) {
+    const accountRow = selectedBankCode?.acctCode
+      ? await useTopAccountRow(selectedBankCode.acctCode)
+      : null;
+
+    updateState({
+      bankCode: selectedBankCode.bankCode || "",
+      acctCode: selectedBankCode.acctCode || "",
+      acctName: accountRow?.acctName || selectedBankCode.acctName || selectedBankCode.bankName || "",
+      detailRowsGL: [],
+      showBankMastModal: false,
+    });
+    return;
+  }
+
+  updateState({ showBankMastModal: false });
 };
 
 const handleCloseSlModalGL = (selectedSl) => {
@@ -8787,21 +7218,14 @@ const handleCloseSalesRepModal = (selectedSalesRep) => {
   });
 };
 
-const handleCloseBillTermModal = async (selectedBillTerm) => {
-    if (selectedBillTerm) {
-    handleSelectBillTerm(selectedBillTerm.billtermCode);
-  };
-    updateState({ billtermModalOpen: false });
-}
-
 const handleOpenItemPickingModal = async (index) => {
   const row = detailRowsRef.current?.[index];
-  const requestedQty = parseFormattedNumber(row?.siQuantity || 0) || 0;
+  const requestedQty = parseFormattedNumber(row?.csiQuantity || 0) || 0;
 
   if (!canUsePickingControls) return;
 
   if (!documentID || !documentNo) {
-    useSwalErrorAlert("Item Picking", "Please save the SI first before opening the picking allocation.");
+    useSwalErrorAlert("Item Picking", "Please save the CSI first before opening the picking allocation.");
     return;
   }
 
@@ -8811,12 +7235,12 @@ const handleOpenItemPickingModal = async (index) => {
   }
 
   if (!row?.groupId) {
-    useSwalErrorAlert("Item Picking", "Please save and reload the SI first before opening the picking allocation.");
+    useSwalErrorAlert("Item Picking", "Please save and reload the CSI first before opening the picking allocation.");
     return;
   }
 
   if (requestedQty <= 0) {
-    useSwalErrorAlert("Item Picking", "SI Quantity must be greater than zero before opening the picking allocation.");
+    useSwalErrorAlert("Item Picking", "CSI Quantity must be greater than zero before opening the picking allocation.");
     return;
   }
 
@@ -8893,11 +7317,11 @@ const handleConfirmItemPicking = async (payload) => {
         ? 0
         : getPickingAllocationAmount(pickedAllocations) || currentRow?.itemAmount || 0
     );
-    const siQuantityValue = parseFormattedNumber(currentRow?.siQuantity || 0) || 0;
+    const siQuantityValue = parseFormattedNumber(currentRow?.csiQuantity || 0) || 0;
 
     updatedRows[itemPickingRowIndex] = {
       ...currentRow,
-      siStat:
+      csiStat:
         totalPicked <= 0
           ? "F"
           : siQuantityValue > 0 && totalPicked >= siQuantityValue
@@ -8930,15 +7354,15 @@ const handleBulkPickingAllocation = async (mode) => {
   if (!rows.length || !canUsePickingControls) return;
 
   if (!documentID || !documentNo) {
-    useSwalErrorAlert("Item Picking", "Please save the SI first before using Allocate All or Release All.");
+    useSwalErrorAlert("Item Picking", "Please save the CSI first before using Allocate All or Release All.");
     return;
   }
 
   const confirm = await useSwalProceedConfirm(
     `${actionLabel}?`,
     isRelease
-      ? "This will release all picking allocations for the SI details."
-      : "This will automatically pick available stock for all eligible SI details.",
+      ? "This will release all picking allocations for the CSI details."
+      : "This will automatically pick available stock for all eligible CSI details.",
     "Yes"
   );
 
@@ -8952,7 +7376,7 @@ const handleBulkPickingAllocation = async (mode) => {
       .map((row, index) => ({
         row,
         index,
-        requestedQty: parseFormattedNumber(row?.siQuantity || 0) || 0,
+        requestedQty: parseFormattedNumber(row?.csiQuantity || 0) || 0,
       }))
       .filter(({ row, requestedQty }) =>
         String(row?.itemCode || "").trim() &&
@@ -8964,8 +7388,8 @@ const handleBulkPickingAllocation = async (mode) => {
       useSwalErrorAlert(
         "Item Picking",
         isRelease
-          ? "There are no valid SI detail rows to release."
-          : "There are no valid SI detail rows to allocate."
+          ? "There are no valid CSI detail rows to release."
+          : "There are no valid CSI detail rows to allocate."
       );
       return;
     }
@@ -8975,10 +7399,10 @@ const handleBulkPickingAllocation = async (mode) => {
         mode: "BulkCancelAlloc",
         params: JSON.stringify({
           json_data: {
-            docCode: "SI",
+            docCode: "CSI",
             docId: documentID,
             userCode: userCode || currentUserRow?.userCode || "",
-            reason: "SI bulk release allocation.",
+            reason: "CSI bulk release allocation.",
             dt1: bulkRows.map(({ row, index }) => ({
               groupId: row.groupId || "",
               lineNo: index + 1,
@@ -8991,7 +7415,7 @@ const handleBulkPickingAllocation = async (mode) => {
       bulkRows.forEach(({ index }) => {
         updatedRows[index] = {
           ...updatedRows[index],
-          siStat: "F",
+          csiStat: "F",
           quantityPicked: formatNumber(0, quantityDecimals),
           itemAmount: formatNumber(0),
           pickingAllocations: [],
@@ -9002,7 +7426,7 @@ const handleBulkPickingAllocation = async (mode) => {
         mode: "BulkAutoAlloc",
         params: JSON.stringify({
           json_data: {
-            docCode: "SI",
+            docCode: "CSI",
             docNo: documentNo || "",
             docId: documentID || "",
             docDate: documentDate || null,
@@ -9032,7 +7456,7 @@ const handleBulkPickingAllocation = async (mode) => {
 
         updatedRows[index] = {
           ...updatedRows[index],
-          siStat:
+          csiStat:
             detailResult?.pickStat ||
             (totalPicked <= 0
               ? "F"
@@ -9072,7 +7496,6 @@ const handleCloseItemModal = async (selectedItems) => {
       });
       return;
     }
-    const priceMatrixRows = await fetchPriceMatrixRows([selectedItem]);
     const updatedRows = [...detailRows];
     const baseRow = {
       ...updatedRows[selectedRowIndex],
@@ -9080,12 +7503,11 @@ const handleCloseItemModal = async (selectedItems) => {
       itemName: selectedItem?.itemName || "",
       itemSpecs: selectedItem?.itemSpecs || updatedRows[selectedRowIndex]?.itemSpecs || "",
       uomCode: selectedItem?.uomCode || "",
-      pmType: selectedItem?.pmType || updatedRows[selectedRowIndex]?.pmType || "",
-      groupId: updatedRows[selectedRowIndex]?.groupId || "",
-      pmId: selectedItem?.pmId || updatedRows[selectedRowIndex]?.pmId || "",
+      vatCode: vatCode || selectedItem?.vatCode || "",
+      vatRate: formatNumber(selectedItem?.vatRate ?? getDetailVatRate(vatCode || selectedItem?.vatCode || "")),
+      unitPrice: formatNumber(selectedItem?.sellPrice ?? selectedItem?.sellingPrice ?? selectedItem?.unitPrice ?? 0, sellingPriceDecimals),
     };
-    const priceRow = getPriceMatrixRowForItem(priceMatrixRows, selectedItem);
-    updatedRows[selectedRowIndex] = applyPriceMatrixToDetailRow(baseRow, priceRow);
+    updatedRows[selectedRowIndex] = calculateRowAmountsFromRates(baseRow);
     const normalizedRows = distributeVatAcrossDetailRows(updatedRows);
     updateState({ detailRows: normalizedRows });
     updateTotals(normalizedRows);
@@ -9106,161 +7528,86 @@ const handleCloseItemModal = async (selectedItems) => {
   });
 };
 
-const handleSelectBillTerm = async (billtermCode) => {
-    if (billtermCode) {
 
-     const result = await useTopBillTermRow(billtermCode);
-      if (result) {
-      updateState({
-        billtermCode:result.billtermCode,
-        billtermName:result.billtermName,
-        daysDue: result.daysDue,
-        dueDate: calculateDueDate(documentDate, result.daysDue),
-        })
-      }
-    }
+const validateSIQuantity = () => true;
+
+const CSI_MAX_DISC_RATE = 99.99;
+
+const validateCSIDetailDiscounts = (row = {}, changedField = "", { showAlert = true } = {}) => {
+  const validatedRow = {
+    ...row,
+  };
+  const grossAmount = toFormattedAmountNumber(
+    (parseFormattedNumber(validatedRow.csiQuantity || 0) || 0) *
+    (parseFormattedNumber(validatedRow.unitPrice || 0) || 0)
+  );
+  const showDiscountAlert = (message) => {
+    if (!showAlert) return;
+    useSwalErrorAlert("CSI Discount Validation", message);
   };
 
-const validateSIQuantity = (index, inputValue) => {
-  const row = detailRowsRef.current[index];
-  const drQty = parseFormattedNumber(row?.drQuantity || 0) || 0;
-  const siQty = parseFormattedNumber(inputValue || 0) || 0;
-  const rowStatus = String(row?.siStat || "").toUpperCase();
-
-  if (drQty > 0 && rowStatus === "F" && siQty < drQty) {
-    const originalValue = row?.siQuantity ?? formatNumber(0, quantityDecimals);
-
-    useSwalErrorAlert("Invalid Quantity", "SI Quantity must be greater than or equal to DR Quantity.");
-    
-    const updatedRows = [...detailRowsRef.current];
-    updatedRows[index] = {
-      ...updatedRows[index],
-      siQuantity: originalValue,
-    };
-
-    detailRowsRef.current = updatedRows;
-    updateState({ detailRows: updatedRows });
-    updateTotals(updatedRows);
-
-    return false;
+  const discRate = parseFormattedNumber(validatedRow.discRate || 0) || 0;
+  if (Math.abs(discRate) > CSI_MAX_DISC_RATE) {
+    validatedRow.discRate = formatNumber(0);
+    showDiscountAlert("Disc Rate must be from -99.99 to 99.99 only. Value reverted to zero.");
   }
 
-  delete originalSOQuantityRef.current[index];
-  return true;
+  const discAmount = parseFormattedNumber(validatedRow.discAmount || 0) || 0;
+  if (discAmount < 0 || discAmount > grossAmount) {
+    validatedRow.discAmount = formatNumber(0);
+    if (discAmount < 0) {
+      showDiscountAlert("Disc Amount cannot be negative. Value reverted to zero.");
+    } else if (changedField === "discAmount") {
+      showDiscountAlert("Disc Amount cannot exceed Gross Amount. Value reverted to zero.");
+    }
+  }
+
+  return validatedRow;
 };
 
 
 const recalculateSODetailRow = (row = {}, changedField = "") => {
-  const discountRateFields = [
-    "discRate1",
-    "discRate2",
-    "discRate3",
-    "discRate4",
-    "discRate5",
-    "discRate6",
-    "discRate7",
-    "discRate8",
-  ];
-  const discountAmountFields = [
-    "discAmount1",
-    "discAmount2",
-    "discAmount3",
-    "discAmount4",
-    "discAmount5",
-    "discAmount6",
-    "discAmount7",
-    "discAmount8",
-  ];
-
-  const quantity = parseFormattedNumber(row.siQuantity || 0) || 0;
-  const unitPrice = parseFormattedNumber(row.unitPrice || 0) || 0;
+  const validatedRow = validateCSIDetailDiscounts(row, changedField);
+  const quantity = parseFormattedNumber(validatedRow.csiQuantity || 0) || 0;
+  const unitPrice = parseFormattedNumber(validatedRow.unitPrice || 0) || 0;
   const grossAmount = toFormattedAmountNumber(quantity * unitPrice);
-
-  let runningBase = grossAmount;
-  let totalDiscount = 0;
-  const updatedDiscountAmounts = {};
-  const updatedDiscountRates = {};
-
-  if (discountAmountFields.includes(changedField)) {
-    discountAmountFields.forEach((amountField, index) => {
-      const discountNo = index + 1;
-      const rateField = `discRate${discountNo}`;
-      const discountAmount = toFormattedAmountNumber(
-        parseFormattedNumber(row[amountField] || 0)
-      );
-      const discountRate =
-        runningBase !== 0
-          ? toFormattedAmountNumber((discountAmount / runningBase) * 100)
-          : 0;
-
-      updatedDiscountAmounts[amountField] =
-        amountField === changedField ? row[amountField] : formatNumber(discountAmount);
-      updatedDiscountRates[rateField] = formatNumber(discountRate);
-
-      totalDiscount += discountAmount;
-      runningBase = toFormattedAmountNumber(runningBase - discountAmount);
-    });
-  } else {
-    discountRateFields.forEach((rateField, index) => {
-      const discountNo = index + 1;
-      const amountField = `discAmount${discountNo}`;
-      const rateValue = parseFormattedNumber(row[rateField] || 0) || 0;
-      const discountAmount = toFormattedAmountNumber(runningBase * (rateValue * 0.01));
-
-      updatedDiscountRates[rateField] =
-        rateField === changedField ? row[rateField] : formatNumber(rateValue);
-      updatedDiscountAmounts[amountField] = formatNumber(discountAmount);
-
-      totalDiscount += discountAmount;
-      runningBase = toFormattedAmountNumber(runningBase - discountAmount);
-    });
-  }
-
+  const discRate = parseFormattedNumber(validatedRow.discRate || 0) || 0;
+  const discAmountFromRate = toFormattedAmountNumber(grossAmount * (discRate * 0.01));
+  const discAmount =
+    changedField === "discAmount"
+      ? toFormattedAmountNumber(parseFormattedNumber(validatedRow.discAmount || 0))
+      : discAmountFromRate;
+  const totalDiscount = discAmount;
   const netAmount = toFormattedAmountNumber(grossAmount - totalDiscount);
-  const vatAmount = parseFormattedNumber(row.vatAmount || 0) || 0;
+  const nextDiscRate =
+    changedField === "discAmount" && grossAmount !== 0
+      ? toFormattedAmountNumber((discAmount / grossAmount) * 100)
+      : discRate;
+
+  const vatAmount = parseFormattedNumber(validatedRow.vatAmount || 0) || 0;
 
   
   return {
-    ...row,
+    ...validatedRow,
     grossAmount: formatNumber(grossAmount),
     vatAmount: formatNumber(vatAmount),
     salesAmount: formatNumber(netAmount - vatAmount),
     // ATC is header-level only, not per detail row.
     atcAmount: formatNumber(0),
     amountDue: formatNumber(0),
-    ...updatedDiscountRates,
-    ...updatedDiscountAmounts,
+    discRate: formatNumber(nextDiscRate),
+    discAmount: formatNumber(discAmount),
     totDiscount: formatNumber(totalDiscount),
     netAmount: formatNumber(netAmount),
   };
 };
 
 const handleSODetailRowChange = (index, field, value) => {
-  const discountRateFields = [
-    "discRate1",
-    "discRate2",
-    "discRate3",
-    "discRate4",
-    "discRate5",
-    "discRate6",
-    "discRate7",
-    "discRate8",
-  ];
-  const discountAmountFields = [
-    "discAmount1",
-    "discAmount2",
-    "discAmount3",
-    "discAmount4",
-    "discAmount5",
-    "discAmount6",
-    "discAmount7",
-    "discAmount8",
-  ];
   const calculationTriggerFields = [
-    "siQuantity",
+    "csiQuantity",
     "unitPrice",
-    ...discountRateFields,
-    ...discountAmountFields,
+    "discRate",
+    "discAmount",
   ];
 
   const zeroValueByField = (targetField) => {
@@ -9292,11 +7639,11 @@ const handleSODetailRowChange = (index, field, value) => {
       netAmount: formatNumber(0),
     };
 
-    discountRateFields.forEach((discountField) => {
+    visibleDiscountRateFields.forEach((discountField) => {
       zeroedRow[discountField] = formatNumber(0);
     });
 
-    discountAmountFields.forEach((discountField) => {
+    visibleDiscountAmountFields.forEach((discountField) => {
       zeroedRow[discountField] = formatNumber(0);
     });
 
@@ -9309,18 +7656,11 @@ const handleSODetailRowChange = (index, field, value) => {
     [field]: value,
   };
 
-  if (field === "documentDate" && value && isDateEarlierThanSiDate(value)) {
-    clearHeaderAndDetailDates({ showAlert: true });
-    return;
-  }
-  if (field === "siDate" && value && isDateEarlierThanSiDate(value)) {
-    clearHeaderAndDetailDates({ showAlert: true });
-  }
-
   if (field === "freeItem") {
     updatedRow = buildFreeItemRow(updatedRow, value === "Y");
     updatedRows[index] = updatedRow;
     const normalizedRows = distributeVatAcrossDetailRows(updatedRows);
+    detailRowsRef.current = normalizedRows;
     updateState({ detailRows: normalizedRows });
     updateTotals(normalizedRows);
     return;
@@ -9328,7 +7668,7 @@ const handleSODetailRowChange = (index, field, value) => {
 
   if (
     updatedRows[index]?.freeItem === "Y" &&
-    ["unitPrice", ...discountRateFields, ...discountAmountFields].includes(field)
+    ["unitPrice", ...visibleDiscountRateFields, ...visibleDiscountAmountFields].includes(field)
   ) {
     updatedRow = {
       ...updatedRows[index],
@@ -9336,6 +7676,7 @@ const handleSODetailRowChange = (index, field, value) => {
     };
     updatedRows[index] = buildFreeItemRow(updatedRow, true);
     const normalizedRows = distributeVatAcrossDetailRows(updatedRows);
+    detailRowsRef.current = normalizedRows;
     updateState({ detailRows: normalizedRows });
     updateTotals(normalizedRows);
     return;
@@ -9351,41 +7692,28 @@ const handleSODetailRowChange = (index, field, value) => {
     ? distributeVatAcrossDetailRows(updatedRows)
     : updatedRows;
 
-
-  updateState({ detailRows: normalizedRows });
+  detailRowsRef.current = normalizedRows;
+  updateState({
+    detailRows: normalizedRows,
+    ...(calculationTriggerFields.includes(field) ? { detailRowsGL: [] } : {}),
+  });
   updateTotals(normalizedRows);
 };
 
-const handleSIDetailRowChange = handleSODetailRowChange;
+const handleCSIDetailRowChange = handleSODetailRowChange;
 
 const enterNextRowZeroClearFields = [
-  "siQuantity",
+  "csiQuantity",
   "unitPrice",
-  "discRate1",
-  "discRate2",
-  "discRate3",
-  "discRate4",
-  "discRate5",
-  "discRate6",
-  "discRate7",
-  "discRate8",
-  "discAmount1",
-  "discAmount2",
-  "discAmount3",
-  "discAmount4",
-  "discAmount5",
-  "discAmount6",
-  "discAmount7",
-  "discAmount8",
+  "discRate",
+  "discAmount",
 ];
 
-const renderSIDetailCell = (columnKey, row, index) => {
+const renderCSIDetailCell = (columnKey, row, index) => {
   const columnWidth = getDetailColumnFallbackWidth(columnKey);
   const style = getDetailCellStyle(columnKey, columnWidth);
-  const isRowWithDR = Boolean(String(row.drNo || "").trim());
-  const quantityPickedValue = parseFormattedNumber(row.quantityPicked || 0) || 0;
-  const canEditPickingStatus = isRowWithDR && quantityPickedValue === 0;
-  const canSearchItem = !isRowWithDR; // Can't change item if it's from a DR
+  const canEditPickingStatus = false;
+  const canSearchItem = true;
   
   // Removed salesRepCode from detailModalHandlers
   // Added ATC lookup for detail rows if needed, but not explicitly requested for details.
@@ -9398,7 +7726,7 @@ const renderSIDetailCell = (columnKey, row, index) => {
       zeroClearFields: enterNextRowZeroClearFields,
       parseValue: parseFormattedNumber,
       onClearNextValue: (nextIndex, nextField, value) =>
-        handleSIDetailRowChange(nextIndex, nextField, value),
+        handleCSIDetailRowChange(nextIndex, nextField, value),
     });
   };
 
@@ -9444,10 +7772,26 @@ const renderSIDetailCell = (columnKey, row, index) => {
     readOnly={options.readOnly ?? isFormDisabled}
     onChange={(e) => {
       if (options.readOnly || options.blocked?.()) return;
-      const sanitizedValue = e.target.value.replace(/[^0-9.]/g, "");
-      const regex = options.regex || /^\d*\.?\d{0,2}$/;
+      let sanitizedValue = e.target.value.replace(
+        options.allowNegative ? /[^0-9.-]/g : /[^0-9.]/g,
+        ""
+      );
+      if (options.allowNegative) {
+        sanitizedValue = sanitizedValue.replace(/(?!^)-/g, "");
+      }
+      const regex = options.regex || (options.allowNegative ? /^-?\d*\.?\d{0,2}$/ : /^\d*\.?\d{0,2}$/);
       if (regex.test(sanitizedValue) || sanitizedValue === "") {
-        handleSIDetailRowChange(index, field, sanitizedValue);
+        if (options.deferRecalculate) {
+          const updatedRows = [...(detailRowsRef.current || detailRows || [])];
+          updatedRows[index] = {
+            ...updatedRows[index],
+            [field]: sanitizedValue,
+          };
+          detailRowsRef.current = updatedRows;
+          updateState({ detailRows: updatedRows });
+          return;
+        }
+        handleCSIDetailRowChange(index, field, sanitizedValue);
       }
     }}
       onFocus={(e) => {
@@ -9490,13 +7834,12 @@ const renderSIDetailCell = (columnKey, row, index) => {
 
   const detailColumnRenderers = {
     ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
-    siStat: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`siStat-${index}`} className="w-full global-tran-td-inputclass-ui text-left" value={row.siStat || "F"} disabled={isFormDisabled || !canEditPickingStatus} onChange={(e) => handleSIDetailRowChange(index, "siStat", e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled || !canEditPickingStatus) return; e.preventDefault(); focusNextDetailCell("siStat"); }}><option value="F">For Picking</option>{canEditPickingStatus ? <option value="X">Cancelled</option> : <><option value="T">Partially Picked</option><option value="P">Picked</option><option value="X">Cancelled</option></>}</select></td>,
-    drNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { readOnly: true })}</td>,
+    csiStat: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`csiStat-${index}`} className="w-full global-tran-td-inputclass-ui text-left" value={row.csiStat || "F"} disabled={isFormDisabled || !canEditPickingStatus} onChange={(e) => handleCSIDetailRowChange(index, "csiStat", e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled || !canEditPickingStatus) return; e.preventDefault(); focusNextDetailCell("csiStat"); }}><option value="F">For Picking</option>{canEditPickingStatus ? <option value="X">Cancelled</option> : <><option value="T">Partially Picked</option><option value="P">Picked</option><option value="X">Cancelled</option></>}</select></td>,
     itemCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}><div className="flex items-center gap-1"><input type="text" value={row.itemCode || ""} readOnly className="w-full h-7 text-xs bg-transparent focus:outline-none focus:ring-0" />{canSearchItem && <button type="button" className="text-blue-600 hover:text-blue-800" onClick={() => updateState({ selectedRowIndex: index, selectionContext: "rowItemLookup", insertAfterIndex: null, showItemModal: true })}><FontAwesomeIcon icon={faSearch} /></button>}</div></td>, 
     itemName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey)}</td>,
     itemSpecs: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey)}</td>,
-    uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { className: "text-center" })}<input type="hidden" value={row.pmType || ""} readOnly /><input type="hidden" value={row.groupId || ""} readOnly /><input type="hidden" value={row.pmId || ""} readOnly /></td>,
-    siQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), readOnly: isFormDisabled || isRowWithDR, onBlur: (e) => validateSIQuantity(index, e.target.value), onKeyDown: (e) => validateSIQuantity(index, e.target.value) })}</td>,
+    uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { className: "text-center" })}<input type="hidden" value={row.groupId || ""} readOnly /></td>,
+    csiQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), readOnly: isFormDisabled, onBlur: (e) => validateSIQuantity(index, e.target.value), onKeyDown: (e) => validateSIQuantity(index, e.target.value) })}</td>,
     quantityPicked: () => (
       <td key={columnKey} className="global-tran-td-ui" style={style}>
         <div className="flex items-center gap-1">
@@ -9513,7 +7856,7 @@ const renderSIDetailCell = (columnKey, row, index) => {
               title="Open Item Picking / Allocation"
               aria-label="Open Item Picking / Allocation"
               className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-blue-200 bg-blue-50 text-[11px] text-blue-700 transition hover:border-blue-400 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-40"
-              disabled={!row?.itemCode || (parseFormattedNumber(row?.siQuantity || 0) || 0) <= 0}
+              disabled={!row?.itemCode || (parseFormattedNumber(row?.csiQuantity || 0) || 0) <= 0}
               onClick={() => handleOpenItemPickingModal(index)}
             >
               <FontAwesomeIcon icon={faClipboardCheck} />
@@ -9532,7 +7875,7 @@ const renderSIDetailCell = (columnKey, row, index) => {
         />
       </td>
     ),
-    unitPrice: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: sellingPriceDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${sellingPriceDecimals}}$`), blocked: () => !isSellingPriceAndDiscountEditable || normalizedSiTranType === "SI03" || row.freeItem === "Y", readOnly: isFormDisabled || !isSellingPriceAndDiscountEditable || row.freeItem === "Y" })}</td>,
+    unitPrice: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: sellingPriceDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${sellingPriceDecimals}}$`), blocked: () => row.freeItem === "Y", readOnly: isFormDisabled || row.freeItem === "Y" })}</td>,
     grossAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
     vatCode: () => (
       <td key={columnKey} className="global-tran-td-ui" style={style}>
@@ -9555,21 +7898,42 @@ const renderSIDetailCell = (columnKey, row, index) => {
     totDiscount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
     netAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
     amountDue: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>, // New field
-    freeItem: () => <td key={columnKey} className="global-tran-td-ui" style={style}><button type="button" className={`w-full h-7 rounded-full border text-[11px] font-semibold transition-colors ${row.freeItem === "Y" ? "border-blue-500 bg-blue-500/15 text-blue-700" : "border-slate-300 bg-white text-slate-600"} ${isFormDisabled || isRowWithDR ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`} disabled={isFormDisabled || isRowWithDR} onClick={() => handleSIDetailRowChange(index, "freeItem", row.freeItem === "Y" ? "" : "Y")}>{row.freeItem === "Y" ? "Yes" : "No"}</button></td>,
-    drQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), readOnly: true })}</td>, // Read-only as it comes from DR
-    linkedSiQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), readOnly: true })}</td>, // Read-only as it comes from linked SI
+    freeItem: () => <td key={columnKey} className="global-tran-td-ui" style={style}><button type="button" className={`w-full h-7 rounded-full border text-[11px] font-semibold transition-colors ${row.freeItem === "Y" ? "border-blue-500 bg-blue-500/15 text-blue-700" : "border-slate-300 bg-white text-slate-600"} ${isFormDisabled ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`} disabled={isFormDisabled} onClick={() => handleCSIDetailRowChange(index, "freeItem", row.freeItem === "Y" ? "" : "Y")}>{row.freeItem === "Y" ? "Yes" : "No"}</button></td>,
   };
 
-  if (visibleDiscountRateFields.includes(columnKey) || visibleDiscountAmountFields.includes(columnKey)) {
-    detailColumnRenderers[columnKey] = () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { blocked: () => !isSellingPriceAndDiscountEditable || row.freeItem === "Y", readOnly: isFormDisabled || !isSellingPriceAndDiscountEditable || row.freeItem === "Y" })}</td>;
+  if (visibleDiscountRateFields.includes(columnKey)) {
+    detailColumnRenderers[columnKey] = () => (
+      <td key={columnKey} className="global-tran-td-ui" style={style}>
+        {numericInput(columnKey, {
+          blocked: () => row.freeItem === "Y",
+          readOnly: isFormDisabled || row.freeItem === "Y",
+          deferRecalculate: true,
+          allowNegative: true,
+          regex: /^-?\d*\.?\d{0,2}$/,
+        })}
+      </td>
+    );
+  }
+
+  if (visibleDiscountAmountFields.includes(columnKey)) {
+    detailColumnRenderers[columnKey] = () => (
+      <td key={columnKey} className="global-tran-td-ui" style={style}>
+        {numericInput(columnKey, {
+          blocked: () => row.freeItem === "Y",
+          readOnly: isFormDisabled || row.freeItem === "Y",
+          deferRecalculate: true,
+          regex: /^\d*\.?\d{0,2}$/,
+        })}
+      </td>
+    );
   }
 
   return detailColumnRenderers[columnKey]?.() ?? null;
 };
 
-const renderSiGlCell = (columnKey, row, index) => {
-  const columnWidth = getSiGlFallbackWidth(columnKey);
-  const style = getSiGlCellStyle(columnKey, columnWidth);
+const renderCcsiGlCell = (columnKey, row, index) => {
+  const columnWidth = getCcsiGlFallbackWidth(columnKey);
+  const style = getCcsiGlCellStyle(columnKey, columnWidth);
   const glModalHandlers = {
     acctCode: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "acctCode" }),
     rcCode: () => updateState({ selectedRowIndex: index, showRcModal: true, modalContext: "glRC" }),
@@ -9579,9 +7943,9 @@ const renderSiGlCell = (columnKey, row, index) => {
   };
 
   const focusNextGlCell = (field) => {
-    focusNextSiGlRowInput(index, field, {
+    focusNextCsiGlRowInput(index, field, {
       rows: detailRowsGL,
-      zeroClearFields: siGlEnterNextRowZeroClearFields,
+      zeroClearFields: csiGlEnterNextRowZeroClearFields,
       parseValue: parseFormattedNumber,
       onClearNextValue: (nextIndex, nextField, value) => handleDetailChangeGL(nextIndex, nextField, value),
     });
@@ -9637,14 +8001,14 @@ const renderSiGlCell = (columnKey, row, index) => {
         if (e.key !== "Enter") return;
         e.preventDefault();
         handleBlurGL(index, field, e.target.value, true);
-        focusNextSiGlRowInput(index, field, {
+        focusNextCsiGlRowInput(index, field, {
           rows: detailRowsGL,
-          zeroClearFields: siGlEnterNextRowZeroClearFields,
+          zeroClearFields: csiGlEnterNextRowZeroClearFields,
           parseValue: parseFormattedNumber,
           onClearNextValue: (nextIndex, nextField, value) => handleDetailChangeGL(nextIndex, nextField, value),
         });
       }}
-      onFocus={(e) => clearSiGlZeroOnFocus(e, { isEditable: !isFormDisabled, onClear: (value) => handleDetailChangeGL(index, field, value) })}
+      onFocus={(e) => clearCsiGlZeroOnFocus(e, { isEditable: !isFormDisabled, onClear: (value) => handleDetailChangeGL(index, field, value) })}
       onBlur={(e) => {
         if (isFormDisabled) return;
         handleBlurGL(index, field, e.target.value);
@@ -9708,7 +8072,7 @@ return (
         onHistory={() => setTopTab("history")}
         disableRouteNavigation={true}
 
-        detailsRoute="/page/DR"
+        detailsRoute="/page/CSI"
 
         isSaveDisabled={state.isSaveDisabled || isFormDisabled || ((detailRows?.length || 0) + (detailRowsGL?.length || 0) === 0)}
         isResetDisabled={state.isResetDisabled}
@@ -9754,297 +8118,353 @@ return (
           {/* Provision for Other Tabs */}
         </div>
 
-        {/* SI Header Form Section - Main Grid Container */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 rounded-lg relative" id="so_hd">
+        {/* CSI Header Form Section - Main Grid Container */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 rounded-lg relative" id="csi_hd">
 
           <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="global-tran-textbox-group-div-ui">
-            <FieldRenderer
-              id="branchName"
-              label="Branch"
-              type="lookup"
-              value={branchName || ""}
-              disabled={state.isFetchDisabled || state.isDocNoDisabled || isFormDisabled}
-              onLookup={() => updateState({ branchModalOpen: true })}
-            />
-
-            <FieldRenderer
-              id="siNo"
-              label="SI No."
-              type="lookup"
-              value={state.documentNo || documentNo || ""}
-              disabled={state.isDocNoDisabled}
-              onChange={(val) => updateState({ documentNo: val })}
-              onBlur={handlesiNoBlur}
-              onLookup={() => updateState({ showAllTranDocNo: true })}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handlesoNoBlur();
-                  document.getElementById("documentDate")?.focus();
-                }
-              }}
-            />
-
-            <div className="relative w-full">
-              <div
-                className={`flex items-stretch global-ref-textbox-ui ${
-                  !isFormDisabled
-                    ? "global-ref-textbox-enabled"
-                    : "global-ref-textbox-disabled"
-                }`}
-              >
-                <DateFormatInput
-                  id="documentDate"
-                  className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
-                  value={documentDate}
-                  disabled={isFormDisabled}
-                  updateState={updateState}
+            <div className="global-tran-textbox-group-div-ui">
+              {renderCsiHeaderField("branchName", (
+                <FieldRenderer
+                  id="branchName"
+                  label={getCsiHeaderLabel("branchName", "Branch")}
+                  type="lookup"
+                  value={branchName || ""}
+                  disabled={state.isFetchDisabled || state.isDocNoDisabled || isFormDisabled}
+                  onLookup={() => updateState({ branchModalOpen: true })}
                 />
-              </div>
-              <label
-                htmlFor="documentDate"
-                className={`global-ref-floating-label ${
-                  !isFormDisabled
-                    ? "global-ref-label-enabled"
-                    : "global-ref-label-disabled"
-                }`}
-              >
-                SI Date
-              </label>
-            </div>
+              ))}
 
-            <FieldRenderer
-              id="billToCustCode"
-              label="Bill To Customer Code"
-              required
-              type="lookup"
-              value={billToCustCode || ""}
-              disabled={isFormDisabled || hasDRLinkedDetailRows}
-              readOnly
-              lookupDisabled={isFetchDisabled || hasDRLinkedDetailRows}
-              onLookup={() => updateState({ custModalOpen: true, modalContext: "OpenDR" })}
-            />
+              {renderCsiHeaderField("csiNo", (
+                <FieldRenderer
+                  id="csiNo"
+                  label={getCsiHeaderLabel("csiNo", "CSI No.")}
+                  type="lookup"
+                  value={state.documentNo || documentNo || ""}
+                  disabled={state.isDocNoDisabled}
+                  onChange={(val) => updateState({ documentNo: val })}
+                  onBlur={handlecsiNoBlur}
+                  onLookup={() => updateState({ showAllTranDocNo: true })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handlecsiNoBlur();
+                      document.getElementById("documentDate")?.focus();
+                    }
+                  }}
+                />
+              ))}
 
-            <FieldRenderer
-              id="billToCustName"
-              label="Bill To Customer Name"
-              required
-              type="text"
-              value={billToCustName || ""}
-              disabled
-              readOnly
-            />
-          </div>
+              {renderCsiHeaderField("documentDate", (
+                <div className="relative w-full">
+                  <div
+                    className={`flex items-stretch global-ref-textbox-ui ${
+                      !isFormDisabled
+                        ? "global-ref-textbox-enabled"
+                        : "global-ref-textbox-disabled"
+                    }`}
+                  >
+                    <DateFormatInput
+                      id="documentDate"
+                      className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
+                      value={documentDate}
+                      disabled={isFormDisabled}
+                      updateState={updateState}
+                    />
+                  </div>
+                  <label
+                    htmlFor="documentDate"
+                    className={`global-ref-floating-label ${
+                      !isFormDisabled
+                        ? "global-ref-label-enabled"
+                        : "global-ref-label-disabled"
+                    }`}
+                  >
+                    {getCsiHeaderLabel("documentDate", "CSI Date")}
+                  </label>
+                </div>
+              ))}
 
-          <div className="global-tran-textbox-group-div-ui">
-            <FieldRenderer
-              id="siTranType"
-              label="SI Type"
-              type="select"
-              value={siTranType || ""}
-              disabled={isFormDisabled || hasSiDetailRows}
-              onChange={(val) => updateState({ siTranType: val })}
-              options={(siTranTypeOptions || []).map((t) => ({
-                label: t.DROPDOWN_NAME,
-                value: t.DROPDOWN_CODE,
-              }))}
-            />
+              {renderCsiHeaderField("billToCustCode", (
+                <FieldRenderer
+                  id="billToCustCode"
+                  label={getCsiHeaderLabel("billToCustCode", "Bill To Customer Code")}
+                  required
+                  type="lookup"
+                  value={billToCustCode || ""}
+                  disabled={isFormDisabled}
+                  readOnly
+                  lookupDisabled={isFetchDisabled}
+                  onLookup={() => updateState({ custModalOpen: true })}
+                />
+              ))}
 
-            <FieldRenderer
-              id="atcName"
-              label="ATC (Goods)"
-              required
-              type="lookup"
-              value={atcName || ""}
-              disabled={isFormDisabled}
-              readOnly
-              lookupDisabled={isFormDisabled}
-              onLookup={() => updateState({ showATCModal: true })}
-            />
-
-            <FieldRenderer
-              id="vatName"
-              label="VAT (Goods)"
-              required
-              type="lookup"
-              value={vatName || ""}
-              disabled={isFormDisabled}
-              readOnly
-              lookupDisabled={isFormDisabled}
-              onLookup={() => updateState({ showVatModal: true, selectedRowIndex: null, modalContext: "headerVAT" })}
-            />
-
-            <FieldRenderer
-              id="billtermName"
-              label="Billing Term"
-              required
-              type="lookup"
-              value={billtermName || ""}
-              disabled={isFormDisabled}
-              readOnly
-              lookupDisabled={isFormDisabled}
-              onLookup={() => updateState({ billtermModalOpen: true })}
-            />
-
-           
-              <div className="relative w-full">
-              <div
-                className={`flex items-stretch global-ref-textbox-ui ${
-                  !isFormDisabled
-                    ? "global-ref-textbox-enabled"
-                    : "global-ref-textbox-disabled"
-                }`}
-              >
-                <DateFormatInput
-                  id="dueDate"
-                  className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
-                  value={dueDate}
+              {renderCsiHeaderField("billToCustName", (
+                <FieldRenderer
+                  id="billToCustName"
+                  label={getCsiHeaderLabel("billToCustName", "Bill To Customer Name")}
+                  required
+                  type="text"
+                  value={billToCustName || ""}
                   disabled
-                  updateState={updateState}
+                  readOnly
                 />
-              </div>
-              <label htmlFor="dueDate" className="global-ref-floating-label">
-                Due Date
-              </label>
-            </div>
+              ))}
 
-
-          </div>
-
-          <div className="global-tran-textbox-group-div-ui">
-            <FieldRenderer
-              id="salesRepName"
-              label="Sales Rep"
-              required
-              type="lookup"
-              value={salesRepName || ""}
-              disabled={isFormDisabled}
-              readOnly
-              lookupDisabled={isFormDisabled}
-              onLookup={() => updateState({ showSalesRepModal: true, modalContext: "headerSalesRep" })}
-            />
-
-            <FieldRenderer
-              id="customerPoNo"
-              label="Customer PO No."
-              type="text"
-              value={customerPoNo || ""}
-              disabled={isFormDisabled}
-              onChange={(val) => updateState({ customerPoNo: val })}
-              maxLength={useGetFieldLength(tblFieldArray, "cust_po_no")}
-            />
-
-            <div className="relative w-full">
-              <div
-                className={`flex items-stretch global-ref-textbox-ui ${
-                  !isFormDisabled
-                    ? "global-ref-textbox-enabled"
-                    : "global-ref-textbox-disabled"
-                }`}
-              >
-                <DateFormatInput
-                  id="customerPoDate"
-                  className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
-                  value={customerPoDate}
+              {renderCsiHeaderField("custAddr", (
+                <FieldRenderer
+                  id="custAddr"
+                  label={getCsiHeaderLabel("custAddr", "Address")}
+                  type="text"
+                  value={custAddr || ""}
                   disabled={isFormDisabled}
-                  updateState={updateState}
+                  onChange={(val) => updateState({ custAddr: val })}
+                  maxLength={useGetFieldLength(tblFieldArray, "cust_addr")}
                 />
+              ))}
+
+              {renderCsiHeaderField("custTin", (
+                <FieldRenderer
+                  id="custTin"
+                  label={getCsiHeaderLabel("custTin", "TIN")}
+                  type="text"
+                  value={custTin || ""}
+                  disabled={isFormDisabled}
+                  onChange={(val) => updateState({ custTin: val })}
+                  maxLength={useGetFieldLength(tblFieldArray, "cust_tin")}
+                />
+              ))}
+            </div>
+
+            <div className="global-tran-textbox-group-div-ui">
+              {renderCsiHeaderField("csiTranType", (
+                <FieldRenderer
+                  id="csiTranType"
+                  label={getCsiHeaderLabel("csiTranType", "CSI Type")}
+                  type="select"
+                  value={csiTranType || ""}
+                  disabled={isFormDisabled || hasCsiDetailRows}
+                  onChange={(val) => updateState({ csiTranType: val })}
+                  options={(csiTranTypeOptions || []).map((t) => ({
+                    label: t.DROPDOWN_NAME,
+                    value: t.DROPDOWN_CODE,
+                  }))}
+                />
+              ))}
+
+              {renderCsiHeaderField("paymentType", (
+                <FieldRenderer
+                  id="paymentType"
+                  label={getCsiHeaderLabel("paymentType", "Payment Type")}
+                  required
+                  type="select"
+                  value={paymentType || ""}
+                  disabled={isFormDisabled}
+                  onChange={(val) => updateState({ paymentType: val })}
+                  options={(paymentTypeOptions || []).map((t) => ({
+                    label: t.DROPDOWN_NAME,
+                    value: t.DROPDOWN_CODE,
+                  }))}
+                />
+              ))}
+
+              {renderCsiHeaderField("bankCode", (
+                <FieldRenderer
+                  id="bankCode"
+                  label={getCsiHeaderLabel("bankCode", "Depository Bank")}
+                  required
+                  type="lookup"
+                  value={acctName || bankCode || ""}
+                  disabled={isFormDisabled}
+                  readOnly
+                  lookupDisabled={isFormDisabled}
+                  onLookup={() => updateState({ showBankMastModal: true })}
+                />
+              ))}
+
+              {renderCsiHeaderField("checkNo", (
+                <FieldRenderer
+                  id="checkNo"
+                  label={getCsiHeaderLabel("checkNo", "Check No.")}
+                  type="text"
+                  value={checkNo || ""}
+                  disabled={isFormDisabled || !(String(paymentType || "").toUpperCase() === "AR01" || String(paymentType || "").toUpperCase() === "AR03")}
+                  onChange={(val) => updateState({ checkNo: val })}
+                  maxLength={useGetFieldLength(tblFieldArray, "check_no")}
+                />
+              ))}
+
+              {renderCsiHeaderField("checkDate", (
+                <div className="relative w-full">
+                  <div className={`flex items-stretch global-ref-textbox-ui ${!isFormDisabled ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"}`}>
+                    <DateFormatInput
+                      id="checkDate"
+                      className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
+                      value={checkDate}
+                      disabled={isFormDisabled || !(String(paymentType || "").toUpperCase() === "AR01" || String(paymentType || "").toUpperCase() === "AR03")}
+                      updateState={updateState}
+                    />
+                  </div>
+                  <label htmlFor="checkDate" className="global-ref-floating-label">
+                    {getCsiHeaderLabel("checkDate", "Check Date")}
+                  </label>
+                </div>
+              ))}
+
+              {renderCsiHeaderField("bank", (
+                <FieldRenderer
+                  id="bank"
+                  label={getCsiHeaderLabel("bank", String(paymentType || "").toUpperCase() === "AR01" || String(paymentType || "").toUpperCase() === "AR03" ? "Check Bank" : "Bank")}
+                  type="text"
+                  value={bank || ""}
+                  disabled={isFormDisabled}
+                  onChange={(val) => updateState({ bank: val })}
+                  maxLength={useGetFieldLength(tblFieldArray, "bank")}
+                />
+              ))}
+            </div>
+
+            <div className="global-tran-textbox-group-div-ui">
+              {renderCsiHeaderField("atcName", (
+                <FieldRenderer
+                  id="atcName"
+                  label={getCsiHeaderLabel("atcName", "ATC (Goods)")}
+                  required
+                  type="lookup"
+                  value={atcName || ""}
+                  disabled={isFormDisabled}
+                  readOnly
+                  lookupDisabled={isFormDisabled}
+                  onLookup={() => updateState({ showATCModal: true })}
+                />
+              ))}
+
+              {renderCsiHeaderField("vatName", (
+                <FieldRenderer
+                  id="vatName"
+                  label={getCsiHeaderLabel("vatName", "VAT (Goods)")}
+                  required
+                  type="lookup"
+                  value={vatName || ""}
+                  disabled={isFormDisabled}
+                  readOnly
+                  lookupDisabled={isFormDisabled}
+                  onLookup={() => updateState({ showVatModal: true, selectedRowIndex: null, modalContext: "headerVAT" })}
+                />
+              ))}
+
+              {renderCsiHeaderField("salesRepName", (
+                <FieldRenderer
+                  id="salesRepName"
+                  label={getCsiHeaderLabel("salesRepName", "Sales Rep")}
+                  required
+                  type="lookup"
+                  value={salesRepName || ""}
+                  disabled={isFormDisabled}
+                  readOnly
+                  lookupDisabled={isFormDisabled}
+                  onLookup={() => updateState({ showSalesRepModal: true, modalContext: "headerSalesRep" })}
+                />
+              ))}
+
+              {renderCsiHeaderField("refCsiNo1", (
+                <FieldRenderer
+                  id="refCsiNo1"
+                  label={getCsiHeaderLabel("refCsiNo1", "Ref CSI No. 1")}
+                  type="text"
+                  value={refCsiNo1 || ""}
+                  disabled={isFormDisabled}
+                  onChange={(val) => updateState({ refCsiNo1: val })}
+                  maxLength={useGetFieldLength(tblFieldArray, "refcsi_no1")}
+                />
+              ))}
+
+              {renderCsiHeaderField("refCsiNo2", (
+                <FieldRenderer
+                  id="refCsiNo2"
+                  label={getCsiHeaderLabel("refCsiNo2", "Ref CSI No. 2")}
+                  type="text"
+                  value={refCsiNo2 || ""}
+                  disabled={isFormDisabled}
+                  onChange={(val) => updateState({ refCsiNo2: val })}
+                  maxLength={useGetFieldLength(tblFieldArray, "refcsi_no2")}
+                />
+              ))}
+            </div>
+
+            {renderCsiHeaderField("remarks", (
+              <div className="col-span-full">
+                <div className="relative p-2">
+                  <textarea
+                    id="remarks"
+                    placeholder=""
+                    rows={6}
+                    className="peer global-tran-textbox-remarks-ui pt-2"
+                    value={remarks}
+                    onChange={(e) => updateState({ remarks: e.target.value })}
+                    disabled={isFormDisabled}
+                    maxLength={useGetFieldLength(tblFieldArray, "remarks")}
+                  />
+                  <label
+                    htmlFor="remarks"
+                    className="global-tran-floating-label-remarks"
+                  >
+                    {getCsiHeaderLabel("remarks", "Remarks")}
+                  </label>
+                </div>
               </div>
-              <label htmlFor="customerPoDate" className="global-ref-floating-label">
-                Customer PO Date
-              </label>
-            </div>
-
-            <FieldRenderer
-              id="refSiNo1"
-              label="Ref SI No. 1"
-              type="text"
-              value={refSiNo1 || ""}
-              disabled={isFormDisabled}
-              onChange={(val) => updateState({ refSiNo1: val })}
-              maxLength={useGetFieldLength(tblFieldArray, "refsi_no1")}
-            />
-
-            <FieldRenderer
-              id="refSiNo2"
-              label="Ref SI No. 2"
-              type="text"
-              value={refSiNo2 || ""}
-              disabled={isFormDisabled}
-              onChange={(val) => updateState({ refSiNo2: val })}
-              maxLength={useGetFieldLength(tblFieldArray, "refsi_no2")}
-            />
-          </div>
-
-          <div className="col-span-full">
-            <div className="relative p-2">
-              <textarea
-                id="remarks"
-                placeholder=""
-                rows={6}
-                className="peer global-tran-textbox-remarks-ui pt-2"
-                value={remarks}
-                onChange={(e) => updateState({ remarks: e.target.value })}
-                disabled={isFormDisabled}
-                maxLength={useGetFieldLength(tblFieldArray, "remarks")}
-              />
-              <label
-                htmlFor="remarks"
-                className="global-tran-floating-label-remarks"
-              >
-                Remarks
-              </label>
-            </div>
-          </div>
+            ))}
           </div>
 
           <div className="global-tran-textbox-group-div-ui">
             <div className="flex gap-4">
               <input type="hidden" id="currCode" value={currCode || ""} readOnly />
 
-              <div className="flex-grow w-2/3">
-                <FieldRenderer
-                  id="currName"
-                  label="Currency"
-                  value={
-                    currCode
-                      ? `${currCode}${currName ? ` - ${currName}` : ""}`
-                      : ""
-                  }
-                  disabled
-                  readOnly
-                  type="text"
-                />
-              </div>
+              {renderCsiHeaderField("currName", (
+                <div className="flex-grow w-2/3">
+                  <FieldRenderer
+                    id="currName"
+                    label={getCsiHeaderLabel("currName", "Currency")}
+                    value={
+                      currCode
+                        ? `${currCode}${currName ? ` - ${currName}` : ""}`
+                        : ""
+                    }
+                    disabled
+                    readOnly
+                    type="text"
+                  />
+                </div>
+              ))}
 
-              <div className="flex-grow">
-                <FieldRenderer
-                  id="currRate"
-                  label="Currency Rate"
-                  type="amount"
-                  value={currRate || ""}
-                  disabled={isFormDisabled || glCurrDefault === currCode}
-                  onChange={(val) => {
-                    const sanitizedValue = String(val).replace(/[^0-9.]/g, "");
-                    if (/^\d*\.?\d{0,6}$/.test(sanitizedValue) || sanitizedValue === "") {
-                      updateState({ currRate: sanitizedValue });
-                    }
-                  }}
-                  onBlur={handleCurrRateNoBlur}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      document.getElementById("refDocNo1")?.focus();
-                    }
-                  }}
-                  onFocus={(e) => {
-                    if (!isFormDisabled && parseFormattedNumber(e.target.value) === 0) {
-                      updateState({ currRate: "" });
-                    }
-                  }}
-                />
-              </div>
+              {renderCsiHeaderField("currRate", (
+                <div className="flex-grow">
+                  <FieldRenderer
+                    id="currRate"
+                    label={getCsiHeaderLabel("currRate", "Currency Rate")}
+                    type="amount"
+                    value={currRate || ""}
+                    disabled={isFormDisabled || glCurrDefault === currCode}
+                    onChange={(val) => {
+                      const sanitizedValue = String(val).replace(/[^0-9.]/g, "");
+                      if (/^\d*\.?\d{0,6}$/.test(sanitizedValue) || sanitizedValue === "") {
+                        updateState({ currRate: sanitizedValue });
+                      }
+                    }}
+                    onBlur={handleCurrRateNoBlur}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        document.getElementById("refCsiNo1")?.focus();
+                      }
+                    }}
+                    onFocus={(e) => {
+                      if (!isFormDisabled && parseFormattedNumber(e.target.value) === 0) {
+                        updateState({ currRate: "" });
+                      }
+                    }}
+                  />
+                </div>
+              ))}
             </div>
 
             <FieldRenderer
@@ -10108,6 +8528,7 @@ return (
               disabled
               readOnly
             />
+
           </div>
         </div>
 
@@ -10115,7 +8536,7 @@ return (
     </div>
 
           {/* APV Detail Section */}
-          <div id="apv_dtl" className="global-tran-tab-div-ui">
+          <div id="csi_dtl" className="global-tran-tab-div-ui">
 
           {/* Tab Navigation */}
           <div className="global-tran-tab-nav-ui">
@@ -10125,7 +8546,7 @@ return (
             <button
               className="global-tran-tab-padding-ui global-tran-tab-text_active-ui"
             > {/* This is correct */}
-              SI Details
+              CSI Details
             </button>
           </div>
         </div>
@@ -10160,7 +8581,7 @@ return (
             return (
               <tr key={originalIndex} className="global-tran-tr-ui">
                 {orderedDetailColumns.map((column) =>
-                  renderSIDetailCell(column.key, row, originalIndex)
+                  renderCSIDetailCell(column.key, row, originalIndex)
                 )}
 
                 {!isFormDisabled && (
@@ -10169,22 +8590,20 @@ return (
                     style={transactionActionsCellStyle}
                   >
                     <div className="flex items-center justify-center gap-1">
-                      {!isDirectSiType && (
-                        <button
+                      <button
                           type="button"
                           className="global-tran-td-button-add-ui"
                           onClick={() => handleInsertBlankRow(originalIndex)}
                         >
                           <FontAwesomeIcon icon={faPlus} />
                         </button>
-                      )}
 
                       <button
                         type="button"
                         className="global-tran-td-button-delete-ui"
                         onClick={() => handleDeleteRow(originalIndex)}
                         title={
-                          isPickingSiType && pickedQty > 0
+                          isPickingCsiType && pickedQty > 0
                             ? "Delete row and release picking allocation"
                             : "Delete row"
                         }
@@ -10212,64 +8631,6 @@ return (
     {/* Add Button */}
     <div className="global-tran-tab-footer-button-div-ui">
       <div ref={addTypeDropdownRef} className="relative inline-block" style={{ visibility: isFormDisabled ? "hidden" : "visible" }}>
-        {showAddTypeDropdown && (
-          <div className="absolute bottom-[110%] left-0 mb-3 z-[9999] w-[280px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur-sm dark:border-slate-700 dark:bg-slate-800">
-            <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-700">
-              <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
-                Add SI Detail
-              </div>
-            </div>
-
-            <div className="p-2">
-              <button
-                type="button"
-                className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150 ${isAddItemDisabledBySiType ? "cursor-not-allowed text-slate-400 opacity-50 dark:text-slate-500" : "text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"}`}
-                disabled={isAddItemDisabledBySiType}
-                onClick={() => {
-                  if (isAddItemDisabledBySiType) return;
-                  setShowAddTypeDropdown(false);
-                  handleOpenAddItemModal();
-                }}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
-                    <FontAwesomeIcon icon={faPlus} />
-                  </span>
-                  <div className="flex flex-col items-start">
-                    <span>Add Item</span>
-                    <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
-                      Select item from item master
-                    </span>
-                  </div>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                className={`mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150 ${isOpenDRDisabledBySiType ? "cursor-not-allowed text-slate-400 opacity-50 dark:text-slate-500" : "text-blue-700 hover:bg-blue-50 hover:text-blue-900 dark:text-blue-300 dark:hover:bg-slate-700"}`}
-                disabled={isOpenDRDisabledBySiType}
-                onClick={() => {
-                  if (isOpenDRDisabledBySiType) return;
-                  setShowAddTypeDropdown(false);
-                  handleOpenDRLookup();
-                }}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-slate-700 dark:text-blue-300">
-                    <FontAwesomeIcon icon={faClipboardCheck} />
-                  </span>
-                  <div className="flex flex-col items-start">
-                    <span>Open DR</span>
-                    <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
-                      Lookup open DR items
-                    </span>
-                  </div>
-                </div>
-              </button>
-            </div>
-          </div>
-        )}
-
         <button
           onClick={handleAddRowClick}
           className="global-tran-tab-footer-button-add-ui"
@@ -10345,9 +8706,9 @@ return (
           <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
             <thead className="global-tran-thead-div-ui">
               <tr>
-                {orderedSiGlColumns.map((column) =>
-                  renderSiGlHeader(column.label, column.key, column.width, {
-                    orderedColumns: orderedSiGlColumns,
+                {orderedCcsiGlColumns.map((column) =>
+                  renderCcsiGlHeader(column.label, column.key, column.width, {
+                    orderedColumns: orderedCcsiGlColumns,
                   })
                 )}
                 {!isFormDisabled && (
@@ -10361,10 +8722,10 @@ return (
               </tr>
             </thead>
             <tbody className="relative">
-              {sortedSiGlRows.map(({ row, originalIndex }) => (
+              {sortedCcsiGlRows.map(({ row, originalIndex }) => (
                 <tr key={originalIndex} className="global-tran-tr-ui">
-                  {orderedSiGlColumns.map((column) =>
-                    renderSiGlCell(column.key, row, originalIndex)
+                  {orderedCcsiGlColumns.map((column) =>
+                    renderCcsiGlCell(column.key, row, originalIndex)
                   )}
 
                   {!isFormDisabled && (
@@ -10395,7 +8756,7 @@ return (
               ))}
             </tbody>
           </table>
-          {renderSiGlHeaderContextMenu()}
+          {renderCcsiGlHeaderContextMenu()}
         </div>
       </div>
 
@@ -10470,24 +8831,19 @@ return (
             />
           )}
 
-    {billtermModalOpen && (
-      <BillTermLookupModal
-          isOpen={billtermModalOpen}
-          onClose={handleCloseBillTermModal}
-        />
-    )}
-
     {custModalOpen && (
       <CustomerMastLookupModal
         isOpen={custModalOpen}
         onClose={handleCloseCustModal}
-        customParam={
-          String(siTranType || "").toUpperCase() === "SI03"
-            ? "openFADS"
-            : String(siTranType || "").toUpperCase() === "SI01"
-              ? "openDR"
-              : undefined
-        }
+        customParam={undefined}
+      />
+    )}
+
+
+    {showBankMastModal && (
+      <BankMastLookupModal
+        isOpen={showBankMastModal}
+        onClose={handleCloseBankMastModal}
       />
     )}
 
@@ -10511,7 +8867,7 @@ return (
       <ItemMastLookupModal
         isOpen={showItemModal}
         endpoint="getInvLookupFG"
-        docType="SI"
+        docType="SO"
         onClose={handleCloseItemModal}
         onCancel={() =>
           updateState({
@@ -10522,24 +8878,6 @@ return (
           })
         }
         enableMultiSelect={selectionContext === "multiAdd"}
-      />
-    )}
-
-    {showOpenDRModal && (
-      <GlobalLookupModalv1
-        isOpen={showOpenDRModal}
-        title="Open Delivery Receipt Summary"
-        endpoint={openDRSI_Col_Summary}
-        data={openDRSI_Data_Summary}
-        btnCaption="Get Selected DR"
-        onClose={handleInsertSelectedOpenDR}
-        onCancel={() =>
-          updateState({
-            showOpenDRModal: false,
-            openDRSI_Data_Summary: [],
-            openDRSI_Col_Summary: [],
-          })
-        }
       />
     )}
 
@@ -10577,16 +8915,16 @@ return (
         isOpen={showItemPickingModal}
         onClose={handleCloseItemPickingModal}
         transaction={{
-          sourceDocType: "SI",
-          sourceDocTypeName: "Sales Invoice",
-          sourceDocNo: documentNo || "New SI",
+          sourceDocType: "CSI",
+          sourceDocTypeName: "Cash Cash Sales Invoice",
+          sourceDocNo: documentNo || "New CSI",
           sourceLineNo: `Line ${Number(itemPickingRowIndex ?? 0) + 1}`,
           groupId: selectedPickingRow?.groupId || "",
           customerCode: billToCustCode || "",
           customerName: billToCustName || "",
           itemCode: selectedPickingRow?.itemCode || "",
           itemName: selectedPickingRow?.itemName || selectedPickingRow?.itemSpecs || "",
-          requestedQty: parseFormattedNumber(selectedPickingRow?.siQuantity || 0) || 0,
+          requestedQty: parseFormattedNumber(selectedPickingRow?.csiQuantity || 0) || 0,
         }}
         stockRows={itemPickingStockRows}
         existingAllocations={itemPickingExistingAllocations}
@@ -10626,7 +8964,7 @@ return (
     {showAllTranDocNo && (
       <AllTranDocNo
         isOpen={showAllTranDocNo}
-        params={{branchCode,branchName,docType,documentTitle,fieldNo : "siNo"}}
+        params={{branchCode,branchName,docType,documentTitle,fieldNo : "csiNo"}}
         onRetrieve={handleTranDocNoRetrieval}
         onResponse={{documentNo}}
         onSelected={handleTranDocNoSelection}
@@ -10643,9 +8981,9 @@ return (
   <AllTranHistory
     showHeader={false}
     isActive={topTab === "history"}
-    endpoint="/getSIHistory"
-    cacheKey={`SI:${state.branchCode || ""}`}
-    activeTabKey="SI_Summary"
+    endpoint="/getCSIHistory"
+    cacheKey={`CSI:${state.branchCode || ""}`}
+    activeTabKey="CSI_Summary"
     branchCode={state.branchCode}
     status="All"
     onRowDoubleClick={handleHistoryRowPick}
@@ -10657,9 +8995,13 @@ return (
 );
 // End of Return
 
+
 };
 
-export default SI;
+export default CSI;
+
+
+
 
 
 

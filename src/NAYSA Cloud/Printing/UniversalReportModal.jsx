@@ -36,6 +36,8 @@ import {
   useHandlePrintRMINVReport,
   useHandleDownloadExcelRMINVReport,
   useHandleDownloadExcelFAReport,
+  useHandleDownloadExcelIMPReport,
+  useHandleDownloadExcelSalesReport,
 } from "@/NAYSA Cloud/Global/report";
 import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
 import { exportGenericHistoryExcel } from "@/NAYSA Cloud/Global/report";
@@ -86,6 +88,8 @@ const MODULE_DEFS = {
   MS:  { label: "Item",     lookup: MSLookupModal,           print: useHandlePrintMSINVReport,  excel: useHandleDownloadExcelMSINVReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasInventory: true, hasSingleMain: true },
   RM:  { label: "Item",     lookup: RMLookupModal,           print: useHandlePrintRMINVReport,  excel: useHandleDownloadExcelRMINVReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasInventory: true, hasSingleMain: true },
   FA:  { label: "Asset",    lookup: null,                    print: useHandlePrintGLReport,     excel: useHandleDownloadExcelFAReport,    hasExtra: false, hasCutoff: false, hasReportType: false, hasFA: true, hasSingleMain: true, hasSingleRc: true, rcLabel: "Department/RC" },
+  IMP: { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,     excel: useHandleDownloadExcelIMPReport,   hasExtra: false, hasCutoff: false, hasReportType: false, hasSingleMain: true, hasSingleRc: true, rcLabel: "Department/RC" },
+  OE: { label: "Customer", lookup: CustomerMastLookupModal, print: useHandlePrintARReport, excel: useHandleDownloadExcelSalesReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasSales: true },
 };
 
 // ─── SYSTEM COLOR THEME (blue) ────────────────────────────────────────────────
@@ -242,6 +246,9 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
     reportQuery: "",
     branchModal: false,
     mainLookup: false,
+    salesCustomerModal: false,
+    salesChainModal: false,
+    salesItemModal: false,
     slModal: false,
     rcModal: false,
     warehouseModal: false,
@@ -271,6 +278,9 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
     sSlCode: "", sSlName: "", eSlCode: "", eSlName: "",
     sRcCode: "", sRcName: "", eRcCode: "", eRcName: "",
     rcCode: "", rcName: "",
+    custCode: "", custName: "",
+    chainCustomer: "", chainCustomerName: "",
+    itemCode: "", itemName: "",
     whCode: "", whName: "", locCode: "", locName: "",
     categCode: "", categName: "", classCode: "", className: "",
     faCode: "", faName: "",
@@ -297,6 +307,7 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
     enabled: isOpen,
   });
 
+
   useEffect(() => {
     if (data?.list?.length > 0 && ui.selected.id === 0) {
       updateUi({ selected: { id: data.list[0].reportId, name: data.list[0].reportName } });
@@ -312,11 +323,13 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
         branchCode: filters.branchCode,
         startDate: filters.startDate,
         endDate: filters.endDate,
+        custCode: config.hasSales ? filters.custCode : (filters.custCode || filters.customerCode || filters.sCustCode),
+        chainCustomer: config.hasSales ? filters.chainCustomer : (filters.chainCustomer || filters.chainCode),
         sPayeeCode: filters.sCode, ePayeeCode: config.hasSingleMain ? filters.sCode : filters.eCode,
         sCustCode:  filters.sCode, eCustCode:  config.hasSingleMain ? filters.sCode : filters.eCode,
         sAccCode:   filters.sCode, eAccCode:   config.hasSingleMain ? filters.sCode : filters.eCode,
         payeeCode: filters.sCode, vendCode: filters.sCode, departmentCode: filters.rcCode,
-        itemCode: filters.sCode, whCode: filters.whCode, wwhCode: filters.whCode, locCode: filters.locCode,
+        itemCode: config.hasSales ? filters.itemCode : filters.sCode, whCode: filters.whCode, wwhCode: filters.whCode, locCode: filters.locCode,
         categCode: filters.categCode, classCode: filters.classCode, faCode: filters.faCode,
         sSLCode: filters.sSlCode, eSLCode: filters.eSlCode,
         sRcCode: config.hasSingleRc ? filters.rcCode : filters.sRcCode,
@@ -392,7 +405,8 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
     sCode: "", sName: "", eCode: "", eName: "",
     sSlCode: "", sSlName: "", eSlCode: "", eSlName: "",
     sRcCode: "", sRcName: "", eRcCode: "", eRcName: "",
-    rcCode: "", rcName: "", whCode: "", whName: "", locCode: "", locName: "",
+    rcCode: "", rcName: "", custCode: "", custName: "", chainCustomer: "", chainCustomerName: "", itemCode: "", itemName: "",
+    whCode: "", whName: "", locCode: "", locName: "",
     categCode: "", categName: "", classCode: "", className: "", faCode: "", faName: "",
     sCutOff: "", sCutOffName: "", eCutOff: "", eCutOffName: "", reportType: "TEXT",
   });
@@ -682,8 +696,27 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
                         />
                       )}
 
+                      {/* Sales */}
+                      {config.hasSales && (<>
+                        <LookupField label="Customer"
+                          value={filters.custName || filters.custCode}
+                          placeholder="Select Customer..."
+                          onOpen={() => updateUi({ salesCustomerModal: true })}
+                          ring={ring} btnClass={btnCls} />
+                        <LookupField label="Chain Customer"
+                          value={filters.chainCustomerName || filters.chainCustomer}
+                          placeholder="Select Chain Customer..."
+                          onOpen={() => updateUi({ salesChainModal: true })}
+                          ring={ring} btnClass={btnCls} />
+                        <LookupField label="Item"
+                          value={filters.itemName || filters.itemCode}
+                          placeholder="Select Item..."
+                          onOpen={() => updateUi({ salesItemModal: true })}
+                          ring={ring} btnClass={btnCls} />
+                      </>)}
+
                       {/* Main lookup: single or range */}
-                      {!config.hasCutoff && !config.hasInventory && !config.hasFA && (
+                      {!config.hasCutoff && !config.hasInventory && !config.hasFA && !config.hasSales && (
                         config.hasSingleMain ? (
                           <LookupField label={config.label}
                             value={filters.sName} placeholder={`Select ${config.label}…`}
@@ -731,7 +764,7 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
                       </>)}
 
                       {/* Inventory fields */}
-                      {config.hasInventory && (<>
+                      {config.hasInventory && !config.hasSales && (<>
                         <LookupField label="Item Code" value={filters.sName || filters.sCode}
                           placeholder="Select Item…"
                           onOpen={() => updateUi({ lookupMode: "S", mainLookup: true })}
@@ -827,6 +860,47 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
           if (p?.branchCode) updateFilters({ branchCode: p.branchCode, branchName: p.branchName });
           updateUi({ branchModal: false });
         }} />
+      )}
+
+      {ui.salesCustomerModal && (
+        <CustomerMastLookupModal
+          isOpen={ui.salesCustomerModal}
+          customParam="ActiveAll"
+          onClose={p => {
+            if (p) updateFilters({ custCode: p.custCode || "", custName: p.custName || "" });
+            updateUi({ salesCustomerModal: false });
+          }}
+        />
+      )}
+
+      {ui.salesChainModal && (
+        <CustomerMastLookupModal
+          isOpen={ui.salesChainModal}
+          customParam="ActiveChain"
+          onClose={p => {
+            if (p) updateFilters({ chainCustomer: p.custCode || "", chainCustomerName: p.custName || "" });
+            updateUi({ salesChainModal: false });
+          }}
+        />
+      )}
+
+      {ui.salesItemModal && (
+        <ItemMastLookupModal
+          isOpen={ui.salesItemModal}
+          endpoint="getInvLookupFG"
+          docType="SO"
+          customParam="ActiveAll"
+          onClose={p => {
+            const row = Array.isArray(p?.records) ? p.records[0] : p?.records || p;
+            if (row) {
+              updateFilters({
+                itemCode: row.itemCode || row.itemNo || row.code || "",
+                itemName: row.itemName || row.description || row.name || "",
+              });
+            }
+            updateUi({ salesItemModal: false });
+          }}
+        />
       )}
 
       {!config.hasCutoff && ui.mainLookup && MainLookupModal && (

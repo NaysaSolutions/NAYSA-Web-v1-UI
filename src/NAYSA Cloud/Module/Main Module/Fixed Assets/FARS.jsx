@@ -29,6 +29,7 @@ import {
   useSwalshowSaveSuccessDialog,
   useSwalErrorAlert,
   useSwalProceedConfirm,
+  useSwalHandleOpenSpecsModal,
   useSwalvalidateRequiredFields as validateRequiredFields,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
@@ -71,6 +72,8 @@ const sourceColumns = [
   { key: "rcName", label: "Department Name", width: 220 },
   { key: "empNo", label: "Employee", width: 140 },
   { key: "empName", label: "Employee Name", width: 220 },
+  { key: "eul", label: "EUL (Months)", width: 120, align: "text-right" },
+  { key: "rul", label: "RUL (Months)", width: 120, align: "text-right" },
   { key: "acqCost", label: "Acq. Cost", width: 120, align: "text-right" },
   { key: "deprMonth", label: "Depr. Month", width: 120, align: "text-right" },
   { key: "accumDepr", label: "Accum. Depr", width: 120, align: "text-right" },
@@ -94,6 +97,8 @@ const resultColumns = [
   { key: "rcName", label: "Department Name", width: 220 },
   { key: "empNo", label: "Employee", width: 140 },
   { key: "empName", label: "Employee Name", width: 220 },
+  { key: "eul", label: "EUL (Months)", width: 120, align: "text-right" },
+  { key: "rul", label: "RUL (Months)", width: 120, align: "text-right" },
   { key: "acqCost", label: "Acq. Cost", width: 120, align: "text-right" },
   { key: "deprMonth", label: "Depr. Month", width: 120, align: "text-right" },
   { key: "accumDepr", label: "Accum. Depr", width: 120, align: "text-right" },
@@ -144,6 +149,16 @@ const extractLookupRows = (response) => {
   return parseLookupRows(resultValue);
 };
 
+const parseWholeMonths = (value) => {
+  const parsed = parseFormattedNumber(value || 0);
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : 0;
+};
+
+const isPositiveWholeMonth = (value) => {
+  const rawValue = String(value ?? "").replace(/,/g, "").trim();
+  return /^[1-9]\d*$/.test(rawValue);
+};
+
 const formatAssetRow = (item = {}) => ({
   ...item,
   faCode: item.faCode || item.assetNo || item.FA_CODE || "",
@@ -164,6 +179,8 @@ const formatAssetRow = (item = {}) => ({
   empName: item.empName || item.empFullName || item.employeeName || "",
   acqCost: formatNumber(item.acqCost || 0),
   deprMonth: formatNumber(item.deprMonth || 0),
+  eul: String(parseWholeMonths(item.eul ?? item.EUL ?? item.eulMonths ?? item.eulMonth ?? 0)),
+  rul: String(parseWholeMonths(item.rul ?? item.RUL ?? item.rulMonths ?? item.rulMonth ?? 0)),
   accumDepr: formatNumber(item.accumDepr || 0),
   salvageValue: formatNumber(item.salvageValue || 0),
   netbookValue: formatNumber(item.netbookValue || item.netBookValue || item.nbValue || 0),
@@ -186,6 +203,8 @@ const buildResultRowFromSource = (source = {}) => ({
   empName: source.empName || "",
   acqCost: source.acqCost || "0.00",
   deprMonth: source.deprMonth || "0.00",
+  eul: source.eul || "0",
+  rul: source.rul || "0",
   accumDepr: source.accumDepr || "0.00",
   salvageValue: source.salvageValue || "0.00",
   netbookValue: source.netbookValue || source.nbValue || "0.00",
@@ -209,6 +228,12 @@ const buildReclassResultRowFromSource = (source = {}) => ({
   categName: "",
   classCode: "",
   className: "",
+});
+
+const buildCapitalizationAdjustmentResultRowFromSource = (source = {}) => ({
+  ...buildResultRowFromSource(source),
+  faCode: source.faCode || "",
+  tagNo: source.tagNo || "",
 });
 
 const mirrorReclassResultRows = (sourceRows = [], currentRows = []) => {
@@ -241,7 +266,39 @@ const mirrorReclassResultRows = (sourceRows = [], currentRows = []) => {
   });
 };
 
+const mirrorCapitalizationAdjustmentResultRows = (sourceRows = [], currentRows = []) => {
+  const currentByAssetCode = new Map(
+    currentRows
+      .filter((row) => String(row.faCode || "").trim())
+      .map((row) => [String(row.faCode || "").trim().toUpperCase(), row])
+  );
+
+  return sourceRows.map((source, index) => {
+    const sourceAssetCode = String(source.faCode || "").trim().toUpperCase();
+    const current = currentByAssetCode.get(sourceAssetCode) || currentRows[index] || {};
+
+    return {
+      ...buildCapitalizationAdjustmentResultRowFromSource(source),
+      ...current,
+      faCode: source.faCode || "",
+      tagNo: source.tagNo || "",
+      assetDescription: source.assetDescription || source.faName || current.assetDescription || "",
+      categCode: source.categCode || current.categCode || "",
+      categName: source.categName || current.categName || "",
+      classCode: source.classCode || current.classCode || "",
+      className: source.className || current.className || "",
+      flocCode: source.flocCode || current.flocCode || "",
+      flocName: source.flocName || current.flocName || "",
+      rcCode: source.rcCode || current.rcCode || "",
+      rcName: source.rcName || current.rcName || "",
+      empNo: source.empNo || current.empNo || "",
+      empName: source.empName || current.empName || "",
+    };
+  });
+};
+
 const amountKeys = ["acqCost", "deprMonth", "accumDepr", "salvageValue", "netbookValue"];
+const capitalizationAdjustmentColumnKeys = new Set(["eul", "rul"]);
 const amountTotalLabels = {
   acqCost: "Total Acq. Cost",
   deprMonth: "Total Depr. Month",
@@ -261,6 +318,69 @@ const sumAssetAmounts = (rows = []) =>
     totals[key] = rows.reduce((sum, row) => sum + (parseFormattedNumber(row[key]) || 0), 0);
     return totals;
   }, {});
+
+const computeCapitalizationAdjustmentAmounts = (row = {}, updates = {}) => {
+  const nextRow = { ...row, ...updates };
+  const acqCost = Math.max(0, parseFormattedNumber(nextRow.acqCost || 0) || 0);
+  const accumDepr = Math.max(0, parseFormattedNumber(nextRow.accumDepr || 0) || 0);
+  const salvageValue = Math.max(0, parseFormattedNumber(nextRow.salvageValue || 0) || 0);
+  const rul = parseWholeMonths(nextRow.rul);
+  const netbookValue = acqCost - accumDepr;
+  const depreciableValue = netbookValue - salvageValue;
+
+  return {
+    netbookValue: formatNumber(netbookValue),
+    nbValue: formatNumber(netbookValue),
+    deprMonth: formatNumber(rul > 0 ? depreciableValue / rul : 0),
+  };
+};
+
+const computeComponentizationDeprMonth = (row = {}, updates = {}) => {
+  const nextRow = { ...row, ...updates };
+  const netbookValue = Math.max(0, parseFormattedNumber(nextRow.netbookValue || nextRow.nbValue || 0) || 0);
+  const salvageValue = Math.max(0, parseFormattedNumber(nextRow.salvageValue || 0) || 0);
+  const rul = parseWholeMonths(nextRow.rul);
+  const depreciableValue = netbookValue - salvageValue;
+
+  return {
+    deprMonth: formatNumber(rul > 0 ? depreciableValue / rul : 0),
+  };
+};
+
+const computeValueCorrectionAmounts = (row = {}, updates = {}) => {
+  const nextRow = { ...row, ...updates };
+  const acqCost = Math.max(0, parseFormattedNumber(nextRow.acqCost || 0) || 0);
+  const accumDepr = Math.max(0, parseFormattedNumber(nextRow.accumDepr || 0) || 0);
+  const salvageValue = Math.max(0, parseFormattedNumber(nextRow.salvageValue || 0) || 0);
+  const rul = parseWholeMonths(nextRow.rul);
+  const netbookValue = acqCost - accumDepr;
+  const depreciableValue = netbookValue - salvageValue;
+
+  const updatesToApply = {
+    netbookValue: formatNumber(netbookValue),
+    nbValue: formatNumber(netbookValue),
+  };
+
+  if (rul > 0) {
+    updatesToApply.deprMonth = formatNumber(depreciableValue / rul);
+  }
+
+  return updatesToApply;
+};
+
+const computeValueCorrectionRul = (row = {}, updates = {}) => {
+  const nextRow = { ...row, ...updates };
+  const netbookValue = Math.max(0, parseFormattedNumber(nextRow.netbookValue || nextRow.nbValue || 0) || 0);
+  const salvageValue = Math.max(0, parseFormattedNumber(nextRow.salvageValue || 0) || 0);
+  const deprMonth = Math.max(0, parseFormattedNumber(nextRow.deprMonth || 0) || 0);
+  const depreciableValue = netbookValue - salvageValue;
+
+  return {
+    rul: String(deprMonth > 0 && depreciableValue > 0
+      ? Math.max(1, Math.floor(depreciableValue / deprMonth))
+      : parseWholeMonths(nextRow.rul)),
+  };
+};
 
 const splitAllocatedAmountKeys = ["deprMonth", "accumDepr", "salvageValue", "netbookValue"];
 
@@ -414,12 +534,18 @@ const FARS = () => {
   const isSplitType = restructuringTypeCode === "FARS02";
   const isMergeType = restructuringTypeCode === "FARS01";
   const isReclassType = restructuringTypeCode === "FARS03";
-  const resultAllowsMultiple = isSplitType || isReclassType;
+  const isCapitalizationAdjustmentType = restructuringTypeCode === "FARS04";
+  const isComponentizationType = restructuringTypeCode === "FARS05";
+  const isValueCorrectionType = restructuringTypeCode === "FARS06";
+  const isSplitLikeType = isSplitType || isComponentizationType;
+  const isOriginalNewValueType = isCapitalizationAdjustmentType || isValueCorrectionType;
+  const isMirroredResultType = isReclassType || isOriginalNewValueType;
+  const resultAllowsMultiple = isSplitLikeType || isReclassType;
   const showGeneralLedgerSection = !isMergeType && !isSplitType;
   const hasSourceAssets = (sourceRows?.length || 0) > 0;
   const hasAssetDetails = (sourceRows?.length || 0) > 0 || (resultRows?.length || 0) > 0;
-  const canAddResultRow = hasSourceAssets && !isReclassType && (isSplitType || (resultRows?.length || 0) === 0);
-  const hideAssetDeleteActions = sourceRows.length === 3 && resultRows.length === 3;
+  const canAddResultRow = hasSourceAssets && !isMirroredResultType && (isSplitLikeType || (resultRows?.length || 0) === 0);
+  const hideAssetDeleteActions = !isOriginalNewValueType && sourceRows.length === 3 && resultRows.length === 3;
 
   const updateState = useCallback((updates) => {
     setState((prev) => {
@@ -441,12 +567,38 @@ const FARS = () => {
   }, [state.currCode, state.glCurrDefault, state.glCurrMode, updateState]);
 
   const visibleSourceColumns = useMemo(
-    () => sourceColumns.filter((column) => withCostAmount || !amountKeys.includes(column.key)),
-    [withCostAmount]
+    () => sourceColumns
+      .filter((column) => !capitalizationAdjustmentColumnKeys.has(column.key))
+      .filter((column) => withCostAmount || !amountKeys.includes(column.key))
+      .map((column) => {
+        if (!isOriginalNewValueType) return column;
+        if (column.key === "acqCost") return { ...column, label: "Original Acq Cost" };
+        if (column.key === "deprMonth") return { ...column, label: "Original Depr. Month" };
+        if (column.key === "accumDepr") return { ...column, label: "Original Accum. Depr" };
+        if (column.key === "salvageValue") return { ...column, label: "Original Salvage Value" };
+        if (column.key === "netbookValue") return { ...column, label: "Original Net Book Value" };
+        return column;
+      }),
+    [isOriginalNewValueType, withCostAmount]
   );
   const visibleResultColumns = useMemo(
-    () => resultColumns.filter((column) => withCostAmount || !amountKeys.includes(column.key)),
-    [withCostAmount]
+    () => resultColumns
+      .filter((column) =>
+        isOriginalNewValueType ||
+        (isComponentizationType && column.key === "rul") ||
+        !capitalizationAdjustmentColumnKeys.has(column.key)
+      )
+      .filter((column) => withCostAmount || (!amountKeys.includes(column.key) && !capitalizationAdjustmentColumnKeys.has(column.key)))
+      .map((column) => {
+        if (!isOriginalNewValueType) return column;
+        if (column.key === "acqCost") return { ...column, label: "New Acq Cost" };
+        if (column.key === "deprMonth") return { ...column, label: "New Depr. Month" };
+        if (column.key === "accumDepr") return { ...column, label: "New Accum. Depr" };
+        if (column.key === "salvageValue") return { ...column, label: "New Salvage Value" };
+        if (column.key === "netbookValue") return { ...column, label: "New Net Book Value" };
+        return column;
+      }),
+    [isComponentizationType, isOriginalNewValueType, withCostAmount]
   );
 
   const glColumns = useMemo(() => [
@@ -610,6 +762,14 @@ const FARS = () => {
   }, [isReclassType, sourceRows]);
 
   useEffect(() => {
+    if (!isOriginalNewValueType || sourceRows.length === 0) return;
+
+    setResultRows((prev) => {
+      return mirrorCapitalizationAdjustmentResultRows(sourceRows, prev);
+    });
+  }, [isOriginalNewValueType, sourceRows]);
+
+  useEffect(() => {
     if (showGeneralLedgerSection || glRows.length === 0) return;
     setGlRows([]);
   }, [showGeneralLedgerSection, glRows.length]);
@@ -617,17 +777,27 @@ const FARS = () => {
   useEffect(() => {
     if (!refsLoaded) return;
     const filteredTypes = getAllDropDown?.("FARSTRAN_TYPE", docType) || [];
+    const fallbackTypes = [
+      { DROPDOWN_CODE: "FARS05", DROPDOWN_NAME: "Componentization" },
+      { DROPDOWN_CODE: "FARS06", DROPDOWN_NAME: "Value Correction" },
+    ];
+    const farsTypes = fallbackTypes.reduce((types, fallbackType) => {
+      const hasType = types.some((type) =>
+        String(type?.DROPDOWN_CODE || "").toUpperCase() === fallbackType.DROPDOWN_CODE
+      );
+      return hasType ? types : [...types, fallbackType];
+    }, filteredTypes);
     updateState((prev) => {
-      const nextType = prev.restructuringType || filteredTypes[0]?.DROPDOWN_CODE || "";
+      const nextType = prev.restructuringType || farsTypes[0]?.DROPDOWN_CODE || "";
       if (
         prev.restructuringType === nextType &&
-        areDropdownListsEqual(prev.restructuringTypeList || [], filteredTypes)
+        areDropdownListsEqual(prev.restructuringTypeList || [], farsTypes)
       ) {
         return null;
       }
 
       return {
-        restructuringTypeList: filteredTypes,
+        restructuringTypeList: farsTypes,
         restructuringType: nextType,
       };
     });
@@ -778,6 +948,8 @@ const FARS = () => {
       acqDate: row.acqDate || "",
       acqCost: parseFormattedNumber(row.acqCost || 0),
       deprMonth: parseFormattedNumber(row.deprMonth || 0),
+      eul: parseWholeMonths(row.eul),
+      rul: parseWholeMonths(row.rul),
       accumDepr: parseFormattedNumber(row.accumDepr || 0),
       salvageValue: parseFormattedNumber(row.salvageValue || 0),
       netbookValue: parseFormattedNumber(row.netbookValue || row.nbValue || 0),
@@ -831,6 +1003,8 @@ const FARS = () => {
       acqDate: row.acqDate || "",
       acqCost: parseFormattedNumber(row.acqCost || 0),
       deprMonth: parseFormattedNumber(row.deprMonth || 0),
+      eul: parseWholeMonths(row.eul),
+      rul: parseWholeMonths(row.rul),
       accumDepr: parseFormattedNumber(row.accumDepr || 0),
       salvageValue: parseFormattedNumber(row.salvageValue || 0),
       netbookValue: parseFormattedNumber(row.netbookValue || row.nbValue || 0),
@@ -857,6 +1031,17 @@ const FARS = () => {
 
     if (isReclassType && sourceRows.length !== resultRows.length) {
       useSwalErrorAlert("Save FARS", "Reclass Result Assets must match the number of Source Assets.");
+      return false;
+    }
+
+    if (isComponentizationType && sourceRows.length !== 1) {
+      useSwalErrorAlert("Save FARS", "Componentization allows only one Source Asset.");
+      return false;
+    }
+
+    if (isOriginalNewValueType && sourceRows.length !== resultRows.length) {
+      const valueTypeName = isValueCorrectionType ? "Value Correction" : "Capitalization Adjustment";
+      useSwalErrorAlert("Save FARS", `${valueTypeName} Result Assets must match the number of Source Assets.`);
       return false;
     }
 
@@ -905,7 +1090,93 @@ const FARS = () => {
       return false;
     }
 
-    if (resultAcqCost - sourceAcqCost > 0.01) {
+    if (isCapitalizationAdjustmentType) {
+      const mismatchedAssetIndex = resultRows.findIndex((row, index) => {
+        const source = sourceRows[index] || {};
+        const sourceFaCode = String(source.faCode || "").trim().toUpperCase();
+        const resultFaCode = String(row.faCode || "").trim().toUpperCase();
+        const sourceTagNo = String(source.tagNo || "").trim().toUpperCase();
+        const resultTagNo = String(row.tagNo || "").trim().toUpperCase();
+        return sourceFaCode !== resultFaCode || sourceTagNo !== resultTagNo;
+      });
+      if (mismatchedAssetIndex >= 0) {
+        useSwalErrorAlert("Save FARS", `Result Asset No. and Property Tag must match Source Asset on line ${mismatchedAssetIndex + 1}.`);
+        return false;
+      }
+
+      const invalidRulIndex = resultRows.findIndex((row) => !isPositiveWholeMonth(row.rul));
+      if (invalidRulIndex >= 0) {
+        useSwalErrorAlert("Save FARS", `RUL (Months) must be a whole number greater than zero on line ${invalidRulIndex + 1}.`);
+        return false;
+      }
+
+      const invalidDeprMonthIndex = resultRows.findIndex((row) => {
+        const deprMonth = Math.max(0, parseFormattedNumber(row.deprMonth || 0) || 0);
+        const acqCost = Math.max(0, parseFormattedNumber(row.acqCost || 0) || 0);
+        const netbookValue = Math.max(0, parseFormattedNumber(row.netbookValue || row.nbValue || 0) || 0);
+        return deprMonth > Math.min(acqCost, netbookValue);
+      });
+      if (invalidDeprMonthIndex >= 0) {
+        useSwalErrorAlert("Save FARS", `New Depr. Month must not exceed New Acq Cost or New Net Book Value on line ${invalidDeprMonthIndex + 1}.`);
+        return false;
+      }
+    }
+
+    if (isValueCorrectionType) {
+      const mismatchedAssetIndex = resultRows.findIndex((row, index) => {
+        const source = sourceRows[index] || {};
+        const sourceFaCode = String(source.faCode || "").trim().toUpperCase();
+        const resultFaCode = String(row.faCode || "").trim().toUpperCase();
+        const sourceTagNo = String(source.tagNo || "").trim().toUpperCase();
+        const resultTagNo = String(row.tagNo || "").trim().toUpperCase();
+        return sourceFaCode !== resultFaCode || sourceTagNo !== resultTagNo;
+      });
+      if (mismatchedAssetIndex >= 0) {
+        useSwalErrorAlert("Save FARS", `Result Asset No. and Property Tag must match Source Asset on line ${mismatchedAssetIndex + 1}.`);
+        return false;
+      }
+
+      const invalidRulIndex = resultRows.findIndex((row) => !isPositiveWholeMonth(row.rul));
+      if (invalidRulIndex >= 0) {
+        useSwalErrorAlert("Save FARS", `RUL (Months) must be a whole number greater than zero on line ${invalidRulIndex + 1}.`);
+        return false;
+      }
+
+      const invalidAccumDeprIndex = resultRows.findIndex((row) => {
+        const accumDepr = Math.max(0, parseFormattedNumber(row.accumDepr || 0) || 0);
+        const netbookValue = Math.max(0, parseFormattedNumber(row.netbookValue || row.nbValue || 0) || 0);
+        return accumDepr > netbookValue;
+      });
+      if (invalidAccumDeprIndex >= 0) {
+        useSwalErrorAlert("Save FARS", `New Accum. Depr must not exceed New Net Book Value on line ${invalidAccumDeprIndex + 1}.`);
+        return false;
+      }
+
+      const invalidSalvageIndex = resultRows.findIndex((row) => {
+        const salvageValue = Math.max(0, parseFormattedNumber(row.salvageValue || 0) || 0);
+        const netbookValue = Math.max(0, parseFormattedNumber(row.netbookValue || row.nbValue || 0) || 0);
+        return salvageValue > netbookValue;
+      });
+      if (invalidSalvageIndex >= 0) {
+        useSwalErrorAlert("Save FARS", `New Salvage Value must not exceed New Net Book Value on line ${invalidSalvageIndex + 1}.`);
+        return false;
+      }
+    }
+
+    if (isComponentizationType) {
+      const invalidRulIndex = resultRows.findIndex((row) => !isPositiveWholeMonth(row.rul));
+      if (invalidRulIndex >= 0) {
+        useSwalErrorAlert("Save FARS", `RUL (Months) must be a whole number greater than zero on line ${invalidRulIndex + 1}.`);
+        return false;
+      }
+
+      if (Math.abs(resultAcqCost - sourceAcqCost) > 0.01) {
+        useSwalErrorAlert("Save FARS", "Total Result Asset Acq. Cost must be equal to total Source Asset Acq. Cost.");
+        return false;
+      }
+    }
+
+    if (!isOriginalNewValueType && !isComponentizationType && resultAcqCost - sourceAcqCost > 0.01) {
       useSwalErrorAlert("Save FARS", "Total Result Asset Acq. Cost must not exceed total Source Asset Acq. Cost.");
       return false;
     }
@@ -1139,7 +1410,7 @@ const FARS = () => {
     if (!nextType) return;
     updateState({ restructuringType: nextType });
     clearGeneratedGLEntries();
-    if (nextType !== "FARS02") {
+    if (!["FARS02", "FARS05"].includes(nextType)) {
       setResultRows((prev) => prev.slice(0, 1));
       setSelectedResultIndex(0);
     }
@@ -1210,16 +1481,16 @@ const FARS = () => {
     const rawSelectedAssets = Array.isArray(selectedItems.records)
       ? selectedItems.records
       : [selectedItems.records];
-    const selectedAssets = isSplitType ? rawSelectedAssets.slice(0, 1) : rawSelectedAssets;
+    const selectedAssets = isSplitLikeType ? rawSelectedAssets.slice(0, 1) : rawSelectedAssets;
 
     const selectedRows = selectedAssets.map(formatAssetRow);
 
-    if (!isSplitType && hasDuplicateAssetCode([...sourceRows, ...selectedRows])) {
+    if (!isSplitLikeType && hasDuplicateAssetCode([...sourceRows, ...selectedRows])) {
       useSwalErrorAlert("Duplicate Asset", "Duplicate asset code is not allowed in Source Assets.");
       return;
     }
 
-    if (isSplitType) {
+    if (isSplitLikeType) {
       setSourceRows(selectedRows);
       setResultRows((prev) => {
         const source = selectedRows[0] || {};
@@ -1228,10 +1499,10 @@ const FARS = () => {
         const nextRows = baseRows.map((row) => ({
           ...row,
           assetDescription: row.assetDescription || source.assetDescription || source.faName || "",
-          categCode: source.categCode || row.categCode || "",
-          categName: source.categName || row.categName || "",
-          classCode: source.classCode || row.classCode || "",
-          className: source.className || row.className || "",
+          categCode: isComponentizationType ? row.categCode || source.categCode || "" : source.categCode || row.categCode || "",
+          categName: isComponentizationType ? row.categName || source.categName || "" : source.categName || row.categName || "",
+          classCode: isComponentizationType ? row.classCode || source.classCode || "" : source.classCode || row.classCode || "",
+          className: isComponentizationType ? row.className || source.className || "" : source.className || row.className || "",
           flocCode: source.flocCode || row.flocCode || "",
           flocName: source.flocName || row.flocName || "",
           rcCode: source.rcCode || row.rcCode || "",
@@ -1240,7 +1511,13 @@ const FARS = () => {
           empName: source.empName || row.empName || "",
         }));
 
-        return applySplitAllocatedAmounts(nextRows, selectedRows);
+        const allocatedRows = applySplitAllocatedAmounts(nextRows, selectedRows);
+        if (!isComponentizationType) return allocatedRows;
+
+        return allocatedRows.map((row) => ({
+          ...row,
+          ...computeComponentizationDeprMonth(row),
+        }));
       });
     } else {
       const buildNextSourceRows = (rows = []) => {
@@ -1261,10 +1538,12 @@ const FARS = () => {
 
       if (isReclassType) {
         setResultRows((prev) => mirrorReclassResultRows(nextSourceRows, prev));
+      } else if (isOriginalNewValueType) {
+        setResultRows((prev) => mirrorCapitalizationAdjustmentResultRows(nextSourceRows, prev));
       }
     }
 
-    if (!isSplitType && !isReclassType) {
+    if (!isSplitLikeType && !isMirroredResultType) {
       setResultRows((prev) => {
         if (prev.length > 0) return prev;
         return [
@@ -1275,7 +1554,7 @@ const FARS = () => {
 
     clearGeneratedGLEntries();
     setSelectedRowIndex(
-      isSplitType
+      isSplitLikeType
         ? 0
         : state.faLookupInsertIndex !== null && state.faLookupInsertIndex >= 0
         ? state.faLookupInsertIndex + 1
@@ -1294,6 +1573,10 @@ const FARS = () => {
     setSourceRows(nextSourceRows);
     if (isReclassType) {
       setResultRows((prev) => mirrorReclassResultRows(nextSourceRows, prev));
+    } else if (isOriginalNewValueType) {
+      setResultRows((prev) => mirrorCapitalizationAdjustmentResultRows(nextSourceRows, prev));
+    } else if (isComponentizationType) {
+      setResultRows([]);
     }
     clearGeneratedGLEntries();
     setSelectedRowIndex((prev) => Math.max(0, Math.min(prev, sourceRows.length - 2)));
@@ -1301,8 +1584,8 @@ const FARS = () => {
 
   const handleAddResultRow = (index = null) => {
     if (isFormDisabled) return;
-    if (isReclassType) {
-      useSwalErrorAlert("Result Assets", "Reclass Result Assets are copied from Source Assets.");
+    if (isMirroredResultType) {
+      useSwalErrorAlert("Result Assets", "Result Assets are copied from Source Assets.");
       return;
     }
     if ((sourceRows?.length || 0) === 0) {
@@ -1316,7 +1599,7 @@ const FARS = () => {
     }
 
     const source = sourceRows[0] || {};
-    const newRow = isSplitType
+    const newRow = isSplitLikeType
       ? buildSplitResultRowFromSource(source)
       : buildResultRowFromSource(source);
 
@@ -1332,8 +1615,31 @@ const FARS = () => {
 
   const handleDeleteResultRow = (index) => {
     if (isFormDisabled) return;
+
+    if (isOriginalNewValueType) {
+      const resultRow = resultRows[index] || {};
+      const resultAssetCode = String(resultRow.faCode || "").trim().toUpperCase();
+      const matchedSourceIndex = resultAssetCode
+        ? sourceRows.findIndex((row) => String(row.faCode || "").trim().toUpperCase() === resultAssetCode)
+        : -1;
+      const sourceIndexToDelete = matchedSourceIndex >= 0 ? matchedSourceIndex : index;
+      const nextSourceRows = sourceRows.filter((_, rowIndex) => rowIndex !== sourceIndexToDelete);
+
+      setSourceRows(nextSourceRows);
+      setResultRows((prev) =>
+        mirrorCapitalizationAdjustmentResultRows(
+          nextSourceRows,
+          prev.filter((_, rowIndex) => rowIndex !== index)
+        )
+      );
+      clearGeneratedGLEntries();
+      setSelectedRowIndex((prev) => Math.max(0, Math.min(prev, nextSourceRows.length - 1)));
+      setSelectedResultIndex((prev) => Math.max(0, Math.min(prev, nextSourceRows.length - 1)));
+      return;
+    }
+
     if (isReclassType) {
-      useSwalErrorAlert("Result Assets", "Remove the Source Asset to remove the copied Reclass Result Asset.");
+      useSwalErrorAlert("Result Assets", "Remove the Source Asset to remove the copied Result Asset.");
       return;
     }
     setResultRows((prev) => prev.filter((_, rowIndex) => rowIndex !== index));
@@ -1416,13 +1722,164 @@ const FARS = () => {
     const amount = Math.max(0, parseFormattedNumber(value || 0) || 0);
     const updates = { acqCost: formatNumber(amount) };
 
-    if (isSplitType) {
+    if (isSplitLikeType) {
       Object.assign(updates, getSplitAllocatedAmounts(sumAssetAmounts(sourceRows), amount));
+      if (isComponentizationType) {
+        Object.assign(updates, computeComponentizationDeprMonth(resultRows[index] || {}, updates));
+      }
+    }
+
+    if (isCapitalizationAdjustmentType) {
+      Object.assign(updates, computeCapitalizationAdjustmentAmounts(resultRows[index] || {}, updates));
+    }
+
+    if (isValueCorrectionType) {
+      Object.assign(updates, computeValueCorrectionAmounts(resultRows[index] || {}, updates));
     }
 
     updateResultRow(index, updates);
 
     if (moveNext) moveToNextResultCell(index, "acqCost");
+  };
+
+  const commitCapitalizationAdjustmentMonth = (index, columnKey, value, { moveNext = false } = {}) => {
+    const months = parseWholeMonths(value);
+    if (columnKey === "rul" && months <= 0) {
+      useSwalErrorAlert("Result Assets", "RUL (Months) must be greater than zero.");
+      updateResultRow(index, { rul: "1", ...computeCapitalizationAdjustmentAmounts(resultRows[index] || {}, { rul: "1" }) });
+      return;
+    }
+
+    const updates = { [columnKey]: String(months) };
+    if (columnKey === "rul") {
+      Object.assign(updates, computeCapitalizationAdjustmentAmounts(resultRows[index] || {}, updates));
+    }
+    updateResultRow(index, updates);
+    if (moveNext) moveToNextResultCell(index, columnKey);
+  };
+
+  const commitComponentizationRul = (index, value, { moveNext = false } = {}) => {
+    const months = parseWholeMonths(value);
+    if (months <= 0) {
+      useSwalErrorAlert("Result Assets", "RUL (Months) must be greater than zero.");
+      updateResultRow(index, {
+        rul: "1",
+        ...computeComponentizationDeprMonth(resultRows[index] || {}, { rul: "1" }),
+      });
+      return;
+    }
+
+    const updates = {
+      rul: String(months),
+      ...computeComponentizationDeprMonth(resultRows[index] || {}, { rul: String(months) }),
+    };
+    updateResultRow(index, updates);
+    if (moveNext) moveToNextResultCell(index, "rul");
+  };
+
+  const commitCapitalizationAdjustmentAmount = (index, columnKey, value, { moveNext = false } = {}) => {
+    const amount = Math.max(0, parseFormattedNumber(value || 0) || 0);
+    const updates = {
+      [columnKey]: formatNumber(amount),
+      ...computeCapitalizationAdjustmentAmounts(resultRows[index] || {}, { [columnKey]: formatNumber(amount) }),
+    };
+
+    updateResultRow(index, updates);
+    if (moveNext) moveToNextResultCell(index, columnKey);
+  };
+
+  const commitValueCorrectionAmount = (index, columnKey, value, { moveNext = false } = {}) => {
+    const row = resultRows[index] || {};
+    const source = getSourceRowForResultRow(row) || sourceRows[index] || {};
+    const amount = Math.max(0, parseFormattedNumber(value || 0) || 0);
+    const updates = { [columnKey]: formatNumber(amount) };
+
+    if (columnKey === "accumDepr") {
+      const netbookValue = Math.max(0, parseFormattedNumber(row.netbookValue || row.nbValue || 0) || 0);
+      if (amount > netbookValue) {
+        useSwalErrorAlert("Result Assets", "New Accum. Depr must not exceed New Net Book Value.");
+        const originalAccumDepr = formatNumber(source.accumDepr || 0);
+        Object.assign(updates, {
+          accumDepr: originalAccumDepr,
+          ...computeValueCorrectionAmounts(row, { accumDepr: originalAccumDepr }),
+        });
+        updateResultRow(index, updates);
+        if (moveNext) moveToNextResultCell(index, columnKey);
+        return;
+      }
+    }
+
+    if (["acqCost", "accumDepr"].includes(columnKey)) {
+      Object.assign(updates, computeValueCorrectionAmounts(row, updates));
+    }
+
+    if (columnKey === "salvageValue") {
+      const netbookValue = Math.max(0, parseFormattedNumber(row.netbookValue || row.nbValue || 0) || 0);
+      if (amount > netbookValue) {
+        useSwalErrorAlert("Result Assets", "New Salvage Value must not exceed New Net Book Value.");
+        const originalSalvageValue = formatNumber(source.salvageValue || 0);
+        updates.salvageValue = originalSalvageValue;
+        Object.assign(updates, computeValueCorrectionAmounts(row, { salvageValue: originalSalvageValue }));
+      } else {
+        Object.assign(updates, computeValueCorrectionAmounts(row, updates));
+      }
+    }
+
+    if (columnKey === "deprMonth") {
+      Object.assign(updates, computeValueCorrectionRul(row, updates));
+    }
+
+    updateResultRow(index, updates);
+    if (moveNext) moveToNextResultCell(index, columnKey);
+  };
+
+  const commitValueCorrectionRul = (index, value, { moveNext = false } = {}) => {
+    const months = parseWholeMonths(value);
+    if (months <= 0) {
+      useSwalErrorAlert("Result Assets", "RUL (Months) must be greater than zero.");
+      const originalRul = String(parseWholeMonths(getSourceRowForResultRow(resultRows[index] || {}).rul || resultRows[index]?.rul || 1) || 1);
+      updateResultRow(index, {
+        rul: originalRul,
+        ...computeValueCorrectionAmounts(resultRows[index] || {}, { rul: originalRul }),
+      });
+      return;
+    }
+
+    const updates = {
+      rul: String(months),
+      ...computeValueCorrectionAmounts(resultRows[index] || {}, { rul: String(months) }),
+    };
+    updateResultRow(index, updates);
+    if (moveNext) moveToNextResultCell(index, "rul");
+  };
+
+  const getCapitalizationAdjustmentMaxDeprMonth = (row = {}) => {
+    const acqCost = Math.max(0, parseFormattedNumber(row.acqCost || 0) || 0);
+    const netbookValue = Math.max(0, parseFormattedNumber(row.netbookValue || row.nbValue || 0) || 0);
+    return Math.min(acqCost, netbookValue);
+  };
+
+  const commitCapitalizationAdjustmentDeprMonth = (index, value, { moveNext = false } = {}) => {
+    const row = resultRows[index] || {};
+    const amount = Math.max(0, parseFormattedNumber(value || 0) || 0);
+    const maxDeprMonth = getCapitalizationAdjustmentMaxDeprMonth(row);
+    const nextAmount = Math.min(amount, maxDeprMonth);
+    const netbookValue = parseFormattedNumber(row.netbookValue || row.nbValue || 0) || 0;
+    const salvageValue = parseFormattedNumber(row.salvageValue || 0) || 0;
+    const depreciableValue = netbookValue - salvageValue;
+    const nextRul = nextAmount > 0 && depreciableValue > 0
+      ? Math.max(1, Math.floor(depreciableValue / nextAmount))
+      : parseWholeMonths(row.rul);
+
+    if (amount > maxDeprMonth) {
+      useSwalErrorAlert("Result Assets", "New Depr. Month must not exceed New Acq Cost or New Net Book Value.");
+    }
+
+    updateResultRow(index, {
+      deprMonth: formatNumber(nextAmount),
+      rul: String(nextRul),
+    });
+    if (moveNext) moveToNextResultCell(index, "deprMonth");
   };
 
   const handleAddRowGL = (index = null) => {
@@ -1830,7 +2287,7 @@ const FARS = () => {
       ...getSourceFrozenStyle(columnKey, orderedSourceColumns, columnMeta.width || 120, { isHeader: false }),
     };
     const alignClass = columnMeta.align || "text-left";
-    const amountFields = ["acqCost", "deprMonth", "accumDepr", "salvageValue", "netbookValue"];
+    const amountFields = ["acqCost", "deprMonth", "eul", "rul", "accumDepr", "salvageValue", "netbookValue"];
 
     if (columnKey === "ln") {
       return <td key={columnKey} style={style} className={`global-tran-td-ui ${alignClass}`}>{index + 1}</td>;
@@ -1847,6 +2304,43 @@ const FARS = () => {
             disabled
             readOnly
           />
+        </td>
+      );
+    }
+
+    if (columnKey === "remarks") {
+      return (
+        <td key={columnKey} style={style} className={`global-tran-td-ui relative ${alignClass}`}>
+          <div className="relative flex items-center">
+            <input
+              type="text"
+              id={`source-${columnKey}-${index}`}
+              className={`w-full global-tran-td-inputclass-ui pr-8 ${alignClass}`}
+              value={row[columnKey] || ""}
+              disabled={isFormDisabled}
+              readOnly
+            />
+            {!isFormDisabled && (
+              <FontAwesomeIcon
+                icon={faMagnifyingGlass}
+                className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                onClick={() =>
+                  useSwalHandleOpenSpecsModal(
+                    index,
+                    sourceRows,
+                    (rowIndex, field, value) =>
+                      setSourceRows((prev) =>
+                        prev.map((item, i) => (i === rowIndex ? { ...item, [field]: value } : item))
+                      ),
+                    row.remarks,
+                    "Source Assets Remarks",
+                    "remarks",
+                    "Enter source asset remarks..."
+                  )
+                }
+              />
+            )}
+          </div>
         </td>
       );
     }
@@ -1871,23 +2365,43 @@ const FARS = () => {
       ...getResultFrozenStyle(columnKey, orderedResultColumns, columnMeta.width || 120, { isHeader: false }),
     };
     const alignClass = columnMeta.align || "text-left";
-    const amountFields = ["acqCost", "deprMonth", "accumDepr", "salvageValue", "netbookValue"];
+    const amountFields = ["acqCost", "deprMonth", "eul", "rul", "accumDepr", "salvageValue", "netbookValue"];
 
     if (columnKey === "ln") {
       return <td key={columnKey} style={style} className={`global-tran-td-ui ${alignClass}`}>{index + 1}</td>;
     }
 
     if (columnKey === "assetDescription") {
+      const isEditable = (isSplitType || isMergeType) && !isFormDisabled;
       return (
-        <td key={columnKey} className="global-tran-td-ui" style={style}>
-          <input
-            type="text"
-            id={`result-assetDescription-${index}`}
-            className={`w-full global-tran-td-inputclass-ui ${alignClass}`}
-            value={row.assetDescription || ""}
-            readOnly
-            disabled
-          />
+        <td key={columnKey} style={style} className="global-tran-td-ui relative">
+          <div className="relative flex items-center">
+            <input
+              type="text"
+              id={`result-assetDescription-${index}`}
+              className={`w-full global-tran-td-inputclass-ui pr-8 ${alignClass}`}
+              value={row.assetDescription || ""}
+              disabled={!isEditable}
+              readOnly
+            />
+            {isEditable && (
+              <FontAwesomeIcon
+                icon={faMagnifyingGlass}
+                className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                onClick={() =>
+                  useSwalHandleOpenSpecsModal(
+                    index,
+                    resultRows,
+                    (rowIndex, field, value) => updateResultRow(rowIndex, { [field]: value }),
+                    row.assetDescription,
+                    "Asset Description",
+                    "assetDescription",
+                    "Enter asset description..."
+                  )
+                }
+              />
+            )}
+          </div>
         </td>
       );
     }
@@ -1899,6 +2413,8 @@ const FARS = () => {
 
     if (lookupConfig) {
       const isMergeCategoryOrClass = isMergeType && ["categName", "className"].includes(columnKey);
+      const isOriginalNewValueCategoryClass = isOriginalNewValueType && ["categName", "className"].includes(columnKey);
+      const isLookupDisabled = isFormDisabled || isSplitType || isMergeCategoryOrClass || isOriginalNewValueCategoryClass;
       return (
         <td key={columnKey} className="global-tran-td-ui" style={style}>
           <div className="relative w-full">
@@ -1908,9 +2424,9 @@ const FARS = () => {
               className={`w-full pr-6 global-tran-td-inputclass-ui cursor-pointer ${alignClass}`}
               value={row[lookupConfig.valueKey] || ""}
               readOnly
-              disabled={isFormDisabled || isMergeCategoryOrClass}
+              disabled={isLookupDisabled}
             />
-            {!isFormDisabled && !isMergeCategoryOrClass && (
+            {!isLookupDisabled && (
               <FontAwesomeIcon
                 icon={faMagnifyingGlass}
                 className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
@@ -1925,14 +2441,20 @@ const FARS = () => {
     const readOnlyGenerated = columnKey === "faCode" || columnKey === "tagNo";
     const readOnlyMergeCategoryClass = isMergeType && ["categCode", "categName", "classCode", "className"].includes(columnKey);
     const readOnlyReclassCategoryClassCodes = isReclassType && ["categCode", "classCode"].includes(columnKey);
+    const readOnlyOriginalNewValueCategoryClass = isOriginalNewValueType && ["categCode", "classCode"].includes(columnKey);
     const readOnlyAssignmentFields = ["flocCode", "flocName", "rcCode", "rcName", "empNo", "empName"].includes(columnKey);
-    const isReadOnly = isFormDisabled || readOnlyGenerated || readOnlyMergeCategoryClass || readOnlyReclassCategoryClassCodes || readOnlyAssignmentFields;
+    const isReadOnly = isFormDisabled || readOnlyGenerated || readOnlyMergeCategoryClass || readOnlyReclassCategoryClassCodes || readOnlyOriginalNewValueCategoryClass || readOnlyAssignmentFields;
 
     if (amountFields.includes(columnKey)) {
       const isAmountReadOnly =
         isFormDisabled ||
         isMergeType ||
-        (isSplitType && columnKey !== "acqCost");
+        (isSplitLikeType && columnKey !== "acqCost" && !(isComponentizationType && columnKey === "rul")) ||
+        (isCapitalizationAdjustmentType && ["eul", "netbookValue"].includes(columnKey)) ||
+        (isValueCorrectionType && ["eul", "netbookValue"].includes(columnKey));
+      const isWholeMonthField =
+        (isCapitalizationAdjustmentType && ["eul", "rul"].includes(columnKey)) ||
+        ((isComponentizationType || isValueCorrectionType) && columnKey === "rul");
 
       return (
         <td key={columnKey} style={style} className="global-tran-td-ui text-right">
@@ -1945,11 +2467,46 @@ const FARS = () => {
             disabled={isAmountReadOnly}
             onChange={(event) => {
               if (isAmountReadOnly) return;
+              if (isWholeMonthField) {
+                const nextValue = event.target.value;
+                if (/^\d*$/.test(nextValue)) {
+                  const updates = { [columnKey]: nextValue };
+                  if (isComponentizationType && columnKey === "rul" && parseWholeMonths(nextValue) > 0) {
+                    Object.assign(updates, computeComponentizationDeprMonth(resultRows[index] || {}, updates));
+                  }
+                  if (isValueCorrectionType && columnKey === "rul" && parseWholeMonths(nextValue) > 0) {
+                    Object.assign(updates, computeValueCorrectionAmounts(resultRows[index] || {}, updates));
+                  }
+                  updateResultRow(index, updates);
+                }
+                return;
+              }
               const sanitizedValue = event.target.value.replace(/[^0-9.]/g, "");
               if (/^\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") {
                 const updates = { [columnKey]: sanitizedValue };
-                if (isSplitType && columnKey === "acqCost") {
+                if (isSplitLikeType && columnKey === "acqCost") {
                   Object.assign(updates, getSplitAllocatedAmounts(sumAssetAmounts(sourceRows), sanitizedValue));
+                  if (isComponentizationType) {
+                    Object.assign(updates, computeComponentizationDeprMonth(resultRows[index] || {}, updates));
+                  }
+                }
+                if (isCapitalizationAdjustmentType && ["acqCost", "accumDepr", "salvageValue"].includes(columnKey)) {
+                  Object.assign(updates, computeCapitalizationAdjustmentAmounts(resultRows[index] || {}, updates));
+                }
+                if (isValueCorrectionType && ["acqCost", "accumDepr"].includes(columnKey)) {
+                  Object.assign(updates, computeValueCorrectionAmounts(resultRows[index] || {}, updates));
+                }
+                if (isValueCorrectionType && columnKey === "salvageValue") {
+                  const netbookValue = Math.max(0, parseFormattedNumber(resultRows[index]?.netbookValue || resultRows[index]?.nbValue || 0) || 0);
+                  if ((parseFormattedNumber(sanitizedValue || 0) || 0) > netbookValue) return;
+                  Object.assign(updates, computeValueCorrectionAmounts(resultRows[index] || {}, updates));
+                }
+                if (isValueCorrectionType && columnKey === "deprMonth") {
+                  Object.assign(updates, computeValueCorrectionRul(resultRows[index] || {}, updates));
+                }
+                if (isCapitalizationAdjustmentType && columnKey === "deprMonth") {
+                  const maxDeprMonth = getCapitalizationAdjustmentMaxDeprMonth(resultRows[index] || {});
+                  if ((parseFormattedNumber(sanitizedValue || 0) || 0) > maxDeprMonth) return;
                 }
                 updateResultRow(index, updates);
               }
@@ -1957,14 +2514,51 @@ const FARS = () => {
             onFocus={(event) => {
               if (!isAmountReadOnly && parseFormattedNumber(event.target.value || 0) === 0) {
                 const updates = { [columnKey]: "" };
-                if (isSplitType && columnKey === "acqCost") {
+                if (isSplitLikeType && columnKey === "acqCost") {
                   Object.assign(updates, getSplitAllocatedAmounts(sumAssetAmounts(sourceRows), 0));
+                  if (isComponentizationType) {
+                    Object.assign(updates, computeComponentizationDeprMonth(resultRows[index] || {}, updates));
+                  }
+                }
+                if ((isCapitalizationAdjustmentType || isComponentizationType || isValueCorrectionType) && columnKey === "rul") {
+                  updateResultRow(index, { rul: "" });
+                  return;
+                }
+                if (isCapitalizationAdjustmentType && ["acqCost", "accumDepr", "salvageValue"].includes(columnKey)) {
+                  Object.assign(updates, computeCapitalizationAdjustmentAmounts(resultRows[index] || {}, updates));
+                }
+                if (isValueCorrectionType && ["acqCost", "accumDepr"].includes(columnKey)) {
+                  Object.assign(updates, computeValueCorrectionAmounts(resultRows[index] || {}, updates));
                 }
                 updateResultRow(index, updates);
               }
             }}
             onBlur={(event) => {
               if (isAmountReadOnly) return;
+              if (isCapitalizationAdjustmentType && columnKey === "rul") {
+                commitCapitalizationAdjustmentMonth(index, columnKey, event.target.value, { moveNext: true });
+                return;
+              }
+              if (isComponentizationType && columnKey === "rul") {
+                commitComponentizationRul(index, event.target.value, { moveNext: true });
+                return;
+              }
+              if (isValueCorrectionType && columnKey === "rul") {
+                commitValueCorrectionRul(index, event.target.value, { moveNext: true });
+                return;
+              }
+              if (isCapitalizationAdjustmentType && ["accumDepr", "salvageValue"].includes(columnKey)) {
+                commitCapitalizationAdjustmentAmount(index, columnKey, event.target.value, { moveNext: true });
+                return;
+              }
+              if (isValueCorrectionType && ["accumDepr", "salvageValue", "deprMonth"].includes(columnKey)) {
+                commitValueCorrectionAmount(index, columnKey, event.target.value, { moveNext: true });
+                return;
+              }
+              if (isCapitalizationAdjustmentType && columnKey === "deprMonth") {
+                commitCapitalizationAdjustmentDeprMonth(index, event.target.value, { moveNext: true });
+                return;
+              }
               if (columnKey === "acqCost") {
                 commitResultAcqCost(index, event.target.value, { moveNext: true });
                 return;
@@ -1972,11 +2566,75 @@ const FARS = () => {
               updateResultRow(index, { [columnKey]: formatNumber(event.target.value || 0) });
             }}
             onKeyDown={(event) => {
-              if (event.key !== "Enter" || isAmountReadOnly || columnKey !== "acqCost") return;
+              if (event.key !== "Enter" || isAmountReadOnly) return;
+              if (!["acqCost", "rul", "deprMonth", "accumDepr", "salvageValue"].includes(columnKey)) return;
               event.preventDefault();
+              if (isCapitalizationAdjustmentType && columnKey === "rul") {
+                commitCapitalizationAdjustmentMonth(index, columnKey, event.currentTarget.value, { moveNext: true });
+                return;
+              }
+              if (isComponentizationType && columnKey === "rul") {
+                commitComponentizationRul(index, event.currentTarget.value, { moveNext: true });
+                return;
+              }
+              if (isValueCorrectionType && columnKey === "rul") {
+                commitValueCorrectionRul(index, event.currentTarget.value, { moveNext: true });
+                return;
+              }
+              if (isCapitalizationAdjustmentType && ["accumDepr", "salvageValue"].includes(columnKey)) {
+                commitCapitalizationAdjustmentAmount(index, columnKey, event.currentTarget.value, { moveNext: true });
+                return;
+              }
+              if (isValueCorrectionType && ["accumDepr", "salvageValue", "deprMonth"].includes(columnKey)) {
+                commitValueCorrectionAmount(index, columnKey, event.currentTarget.value, { moveNext: true });
+                return;
+              }
+              if (isCapitalizationAdjustmentType && columnKey === "deprMonth") {
+                commitCapitalizationAdjustmentDeprMonth(index, event.currentTarget.value, { moveNext: true });
+                return;
+              }
               commitResultAcqCost(index, event.currentTarget.value, { moveNext: true });
             }}
           />
+        </td>
+      );
+    }
+
+    if (columnKey === "remarks") {
+      return (
+        <td key={columnKey} style={style} className={`global-tran-td-ui relative ${alignClass}`}>
+          <div className="relative flex items-center">
+            <input
+              type="text"
+              id={`result-${columnKey}-${index}`}
+              className={`w-full global-tran-td-inputclass-ui pr-8 ${alignClass}`}
+              value={row[columnKey] || ""}
+              disabled={isReadOnly}
+              readOnly
+            />
+            {!isReadOnly && (
+              <FontAwesomeIcon
+                icon={faMagnifyingGlass}
+                className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                onClick={() =>
+                  useSwalHandleOpenSpecsModal(
+                    index,
+                    resultRows,
+                    (rowIndex, field, value) =>
+                      setResultRows((prev) =>
+                        prev.map((item, i) => (i === rowIndex ? { ...item, [field]: value } : item))
+                      ),
+                    row.remarks,
+                    detailTab === "source" ? "Source Assets Remarks" : "Result Assets Remarks",
+                    "remarks",
+                    detailTab === "source"
+                      ? "Enter source asset remarks..."
+                      : "Enter result asset remarks..."
+                  )
+                }
+              />
+            )}
+          </div>
         </td>
       );
     }
@@ -2624,7 +3282,7 @@ const FARS = () => {
           idKey="groupId"
           onClose={handleCloseFAMastLookup}
           onCancel={() => updateState({ showFAMastLookup: false, faLookupInsertIndex: null })}
-          singleSelect={isSplitType}
+          singleSelect={isSplitLikeType}
         />
       )}
 

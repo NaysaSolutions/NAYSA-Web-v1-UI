@@ -29,6 +29,7 @@ import {
   useSwalSuccessAlert,
   useSwalErrorAlert,
   useSwalProceedConfirm,
+  useSwalHandleOpenSpecsModal,
   useSwalvalidateRequiredFields as validateRequiredFields,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
@@ -1670,6 +1671,42 @@ const FATR = () => {
                 className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
                 onClick={() => openDetailLookup(index, columnKey)}
                 title="Search"
+              />
+            )}
+          </div>
+        </td>
+      );
+    }
+
+    if (columnKey === "remarks") {
+      return (
+        <td key={columnKey} style={style} className={`global-tran-td-ui relative ${alignClass}`}>
+          <div className="relative flex items-center">
+            <input
+              type="text"
+              className={`w-full global-tran-td-inputclass-ui pr-8 ${alignClass}`}
+              value={getDetailCellDisplayValue(columnKey, row)}
+              readOnly
+              disabled={isFormDisabled}
+            />
+            {!isFormDisabled && (
+              <FontAwesomeIcon
+                icon={faMagnifyingGlass}
+                className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                onClick={() =>
+                  useSwalHandleOpenSpecsModal(
+                    index,
+                    detailRows,
+                    (rowIndex, field, value) =>
+                      setDetailRows((prev) =>
+                        prev.map((item, i) => (i === rowIndex ? { ...item, [field]: value } : item))
+                      ),
+                    row.remarks,
+                    "Transfer Details Remarks",
+                    "remarks",
+                    "Enter transfer detail remarks..."
+                  )
+                }
               />
             )}
           </div>

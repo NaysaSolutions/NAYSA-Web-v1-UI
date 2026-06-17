@@ -705,6 +705,10 @@ const AppContent = () => {
     [location.pathname, navigate]
   );
 
+  const handleSidebarNavigate = useCallback(() => {
+    setIsSidebarVisible(false);
+  }, []);
+
   if (isElectronScannerRoute) {
     return <ElectronScannerPage />;
   }
@@ -744,7 +748,7 @@ const AppContent = () => {
         <div className="fixed inset-0 z-50 flex">
           <Sidebar
             menuItems={menuItems}
-            onNavigate={() => setIsSidebarVisible(false)}
+            onNavigate={handleSidebarNavigate}
             onOpenModal={handleOpenModalFromMenu}
           />
           <div
@@ -766,9 +770,18 @@ const AppContent = () => {
             className="h-full overflow-y-auto"
           >
             <Routes location={location}>
-              <Route path="/" element={<Dashboard1 user={user} />} />
-              <Route path="/change-password" element={<ChangePassword />} />
-              <Route path="/approve-user" element={<ApproveUser />} />
+              <Route
+                path="/"
+                element={<Dashboard1 user={user} />}
+              />
+              <Route
+                path="/change-password"
+                element={<ChangePassword />}
+              />
+              <Route
+                path="/approve-user"
+                element={<ApproveUser />}
+              />
               <Route
                 path="/security-settings/biometric"
                 element={<BiometricSettingsPage />}
