@@ -208,6 +208,9 @@ export default function AuthProvider({ children }) {
     try {
       localStorage.removeItem(USER_CACHE_KEY);
       localStorage.removeItem(AUTH_REFS_CACHE_KEY);
+      localStorage.removeItem("naysa_sidebar_pinned");
+      localStorage.removeItem("naysa_sidebar_open_keys");
+      localStorage.removeItem("naysa_sidebar_scroll_top");
       sessionStorage.removeItem("menuItems");
       sessionStorage.removeItem("routeRows");
     } catch {}

@@ -412,7 +412,7 @@ const isDateBeforeDate = (value, baseValue) => {
     { key: "serviceCode", label: "Job Code", width: 120 },
     { key: "serviceName", label: "Scope of Work", width: 300 },
     { key: "itemCode", label: "Item Code", width: 120 },
-    { key: "itemName", label: "Item Description", width: 300 },
+    { key: "itemName", label: "Item Name", width: 300 },
     { key: "itemSpecs", label: "Specification", width: 300 },
     { key: "uomCode", label: "UOM", width: 80 },
     { key: "qtyOnHand", label: "Qty on Hand", width: 130 },

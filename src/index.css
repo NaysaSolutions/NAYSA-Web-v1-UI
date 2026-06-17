@@ -515,27 +515,25 @@ body {
 }
 
 .global-ref-floating-label {
-  @apply absolute start-1 top-2 z-10 origin-[0] -translate-y-5 scale-75 transform 
-                    bg-gray-100 px-2 text-xs text-gray-400 transition-all 
+  @apply absolute start-2 -top-2 z-10 origin-[0] scale-75 transform 
+                    bg-white px-1 text-xs text-gray-400 transition-all 
                     peer-placeholder-shown:top-1/2 
                     peer-placeholder-shown:-translate-y-1/2 
                     peer-placeholder-shown:scale-100 
-                    peer-focus:top-2
-                    peer-focus:-translate-y-5
+                    peer-focus:-top-2
                     peer-focus:scale-75 
                     peer-focus:text-blue-600
-                    /* @apply absolute -top-2 left-2 bg-white dark:bg-gray-900 px-1 text-sm font-normal opacity-90 */
                     dark:bg-gray-600 dark:text-white dark:peer-focus:text-white;
 }
 
 .global-ref-label-enabled {
-  @apply bg-white text-gray-600 rounded-xl text-xs sm:text-sm
+  @apply bg-white text-gray-600 text-xs sm:text-sm
           dark:bg-gray-600 dark:text-white dark:peer-focus:text-white;
 }
 
 .global-ref-label-disabled {
-  @apply bg-gray-50 text-gray-600 rounded-lg text-xs sm:text-sm
-          dark:bg-gray-500 dark:text-white dark:peer-focus:text-white;
+  @apply bg-white text-gray-600 text-xs sm:text-sm
+          dark:bg-gray-600 dark:text-white dark:peer-focus:text-white;
 }
 
 .global-ref-textbox-enabled {

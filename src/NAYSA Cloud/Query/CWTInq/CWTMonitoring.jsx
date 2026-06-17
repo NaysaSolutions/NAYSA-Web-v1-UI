@@ -40,6 +40,7 @@ import SearchGlobalReportTable from "@/NAYSA Cloud/Lookup/SearchGlobalReportTabl
 import CustomerMastLookupModal from "@/NAYSA Cloud/Lookup/SearchCustMast";
 import BranchLookupModal from "@/NAYSA Cloud/Lookup/SearchBranchRef";
 import GlobalGLPostingModalv1 from "@/NAYSA Cloud/Lookup/SearchGlobalGLPostingv1.jsx";
+import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import Swal from "sweetalert2";
 import {
   useGetCurrentDay,
@@ -853,8 +854,9 @@ const doGenerateCWTReversal = useCallback(
         },
       };
 
+      console.log("updateARCWLCL payload:", JSON.stringify(payload, null, 2));
+
       const { data: res } = await apiClient.post("updateARCWLCL", payload);
-      console.log(res);
 
       if (res?.status !== "success") {
         await Swal.fire(
@@ -1034,87 +1036,44 @@ const doGenerateCWTReversal = useCallback(
                 Customer Details
               </h3>
 
-              {/* Branch */}
-              <div className="global-tran-textbox-group-div-ui">
-                <div className="relative">
-                  <input
-                    type="text"
-                    id="branchName"
-                    placeholder=" "
-                    value={branchName}
-                    readOnly
-                    className="peer global-tran-textbox-ui cursor-pointer"
-                  />
-                  <label
-                    htmlFor="branchName"
-                    className="global-tran-floating-label"
-                  >
-                    Branch
-                  </label>
-                  <button
-                    type="button"
-                    className="global-tran-textbox-button-search-padding-ui global-tran-textbox-button-search-enabled-ui global-tran-textbox-button-search-ui"
-                    onClick={() => updateState({ showBranchModal: true })}
-                    disabled={isLoading}
-                    aria-label="Find Branch"
-                    title="Find Branch"
-                  >
-                    <FontAwesomeIcon icon={faMagnifyingGlass} />
-                  </button>
-                </div>
-              </div>
+              <div className="space-y-3">
+                <FieldRenderer
+                  type="lookup"
+                  id="branchName"
+                  name="branchName"
+                  label="Branch"
+                  value={branchName}
+                  readOnly
+                  disabled={isLoading}
+                  onLookup={() => updateState({ showBranchModal: true })}
+                />
 
-              {/* Customer Code */}
-              <div className="global-tran-textbox-group-div-ui">
-                <div className="relative">
-                  <input
-                    type="text"
-                    id="custCode"
-                    placeholder=" "
-                    value={custCode}
-                    onChange={(e) =>
-                      updateState({ custCode: e.target.value })
-                    }
-                    className="peer global-tran-textbox-ui"
-                    disabled={isLoading}
-                  />
-                  <label
-                    htmlFor="custCode"
-                    className="global-tran-floating-label"
-                  >
-                    Customer Code
-                  </label>
-                  <button
-                    type="button"
-                    className="global-tran-textbox-button-search-padding-ui global-tran-textbox-button-search-enabled-ui global-tran-textbox-button-search-ui"
-                    onClick={() => updateState({ showCustomerModal: true })}
-                    disabled={isLoading}
-                    aria-label="Find Customer"
-                    title="Find Customer"
-                  >
-                    <FontAwesomeIcon icon={faMagnifyingGlass} />
-                  </button>
-                </div>
-              </div>
+                <FieldRenderer
+                  type="lookup"
+                  id="custCode"
+                  name="custCode"
+                  label="Customer Code"
+                  value={custCode}
+                  disabled={isLoading}
+                  allowLookupInput
+                  onChange={(value) =>
+                    updateState({
+                      custCode: value,
+                      custName: "",
+                    })
+                  }
+                  onLookup={() => updateState({ showCustomerModal: true })}
+                />
 
-              {/* Customer Name */}
-              <div className="global-tran-textbox-group-div-ui">
-                <div className="relative">
-                  <input
-                    type="text"
-                    id="custName"
-                    placeholder=" "
-                    value={custName}
-                    readOnly
-                    className="peer global-tran-textbox-ui"
-                  />
-                  <label
-                    htmlFor="custName"
-                    className="global-tran-floating-label"
-                  >
-                    Customer Name
-                  </label>
-                </div>
+                <FieldRenderer
+                  type="text"
+                  id="custName"
+                  name="custName"
+                  label="Customer Name"
+                  value={custName}
+                  readOnly
+                  disabled
+                />
               </div>
             </section>
 
@@ -1128,82 +1087,41 @@ const doGenerateCWTReversal = useCallback(
                 Date Range
               </h3>
 
-              {/* Starting Date */}
-              <div className="global-tran-textbox-group-div-ui">
-                <div className="relative">
-                  <input
-                    type="date"
-                    id="startDate"
-                    placeholder=" "
-                    value={startDate}
-                    onChange={(e) =>
-                      updateState({ startDate: e.target.value })
-                    }
-                    className="peer global-tran-textbox-ui"
-                    disabled={isLoading}
-                  />
-                  <label
-                    htmlFor="startDate"
-                    className="global-tran-floating-label"
-                  >
-                    Starting Date
-                  </label>
-                </div>
-              </div>
+              <div className="space-y-3">
+                <FieldRenderer
+                  type="date"
+                  id="startDate"
+                  name="startDate"
+                  label="Starting Date"
+                  value={startDate}
+                  onChange={(value) => updateState({ startDate: value })}
+                  disabled={isLoading}
+                />
 
-              {/* Ending Date */}
-              <div className="global-tran-textbox-group-div-ui">
-                <div className="relative">
-                  <input
-                    type="date"
-                    id="endDate"
-                    placeholder=" "
-                    value={endDate}
-                    onChange={(e) =>
-                      updateState({ endDate: e.target.value })
-                    }
-                    className="peer global-tran-textbox-ui"
-                    disabled={isLoading}
-                  />
-                  <label
-                    htmlFor="endDate"
-                    className="global-tran-floating-label"
-                  >
-                    Ending Date
-                  </label>
-                </div>
-              </div>
+                <FieldRenderer
+                  type="date"
+                  id="endDate"
+                  name="endDate"
+                  label="Ending Date"
+                  value={endDate}
+                  onChange={(value) => updateState({ endDate: value })}
+                  disabled={isLoading}
+                />
 
-              {/* Check Status */}
-              <div className="global-tran-textbox-group-div-ui">
-                <div className="relative">
-                  <select
-                    id="status"
-                    value={status}
-                    onChange={(e) =>
-                      updateState({ status: e.target.value })
-                    }
-                    className="peer global-tran-textbox-ui pr-8"
-                    disabled={isLoading}
-                  >
-                    <option value=""></option>
-                    <option value="R">R - Received</option>
-                    <option value="O">O - Open</option>
-                    <option value="H">H - Hold</option>
-                  </select>
-                  <label
-                    htmlFor="status"
-                    className="global-tran-floating-label"
-                  >
-                    Check Status
-                  </label>
-                  <span className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400">
-                    <FontAwesomeIcon
-                      icon={faChevronDown}
-                      className="text-xs"
-                    />
-                  </span>
-                </div>
+                <FieldRenderer
+                  type="select"
+                  id="status"
+                  name="status"
+                  label="Check Status"
+                  value={status}
+                  onChange={(value) => updateState({ status: value })}
+                  disabled={isLoading}
+                  options={[
+                    { value: "R", label: "R - Received" },
+                    { value: "O", label: "O - Open" },
+                    { value: "H", label: "H - Hold" },
+                  ]}
+                />
               </div>
             </section>
 
@@ -1218,90 +1136,45 @@ const doGenerateCWTReversal = useCallback(
               </h3>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {/* JV No. */}
-                <div className="global-tran-textbox-group-div-ui">
-                  <div className="relative">
-                    <input
-                      type="text"
-                      id="jvNo"
-                      placeholder=" "
-                      value={jvNo}
-                      onChange={(e) => updateState({ jvNo: e.target.value })}
-                      className="peer global-tran-textbox-ui"
-                      disabled={isLoading}
-                    />
-                    <label htmlFor="jvNo" className="global-tran-floating-label">
-                      JV No.
-                    </label>
-                  </div>
-                </div>
+                <FieldRenderer
+                  type="text"
+                  id="jvNo"
+                  name="jvNo"
+                  label="JV No."
+                  value={jvNo}
+                  onChange={(value) => updateState({ jvNo: value })}
+                  disabled={isLoading}
+                />
 
-                {/* JV Date */}
-                <div className="global-tran-textbox-group-div-ui">
-                  <div className="relative">
-                    <input
-                      type="date"
-                      id="jvDate"
-                      placeholder=" "
-                      value={jvDate}
-                      onChange={(e) => updateState({ jvDate: e.target.value })}
-                      className="peer global-tran-textbox-ui"
-                      disabled={isLoading}
-                    />
-                    <label
-                      htmlFor="jvDate"
-                      className="global-tran-floating-label"
-                    >
-                      JV Date
-                    </label>
-                  </div>
-                </div>
+                <FieldRenderer
+                  type="date"
+                  id="jvDate"
+                  name="jvDate"
+                  label="JV Date"
+                  value={jvDate}
+                  onChange={(value) => updateState({ jvDate: value })}
+                  disabled={isLoading}
+                />
 
-                {/* Received from Date */}
-                <div className="global-tran-textbox-group-div-ui">
-                  <div className="relative">
-                    <input
-                      type="date"
-                      id="recvFromDate"
-                      placeholder=" "
-                      value={recvFromDate}
-                      onChange={(e) =>
-                        updateState({ recvFromDate: e.target.value })
-                      }
-                      className="peer global-tran-textbox-ui"
-                      disabled={isLoading}
-                    />
-                    <label
-                      htmlFor="recvFromDate"
-                      className="global-tran-floating-label"
-                    >
-                      Received from Date
-                    </label>
-                  </div>
-                </div>
+                <FieldRenderer
+                  type="date"
+                  id="recvFromDate"
+                  name="recvFromDate"
+                  label="Received from Date"
+                  value={recvFromDate}
+                  onChange={(value) => updateState({ recvFromDate: value })}
+                  disabled={isLoading}
+                />
 
-                {/* Received to Date */}
-                <div className="global-tran-textbox-group-div-ui">
-                  <div className="relative">
-                    <input
-                      type="date"
-                      id="recvToDate"
-                      placeholder=" "
-                      value={recvToDate}
-                      onChange={(e) =>
-                        updateState({ recvToDate: e.target.value })
-                      }
-                      className="peer global-tran-textbox-ui"
-                      disabled={isLoading}
-                    />
-                    <label
-                      htmlFor="recvToDate"
-                      className="global-tran-floating-label"
-                    >
-                      Received to Date
-                    </label>
-                  </div>
-                </div>
+                <FieldRenderer
+                  type="date"
+                  id="recvToDate"
+                  name="recvToDate"
+                  label="Received to Date"
+                  value={recvToDate}
+                  onChange={(value) => updateState({ recvToDate: value })}
+                  disabled={isLoading}
+                />
               </div>
             </section>
           </div>

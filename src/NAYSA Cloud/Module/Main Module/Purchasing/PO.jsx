@@ -460,7 +460,7 @@ const PO = () => {
     { key: "prNo", label: "PR No.", width: 120 },
     { key: "invType", label: "Type", width: 80 },
     { key: "itemCode", label: "Item Code", width: 130 },
-    { key: "itemName", label: "Item Description", width: 300 },
+    { key: "itemName", label: "Item Name", width: 300 },
     { key: "itemSpecs", label: "Specification", width: 300 },
     { key: "uomCode", label: "UOM", width: 90 },
     { key: "poQty", label: "PO Quantity", width: 130 },
@@ -2862,6 +2862,7 @@ const handleActivityOption = async (action) => {
   const handleSelectCurrency = async (code) => {
     if (code) {
       const result = await useTopCurrencyRow(code);
+     
       if (result) {
         const rate =
           code === glCurrDefault

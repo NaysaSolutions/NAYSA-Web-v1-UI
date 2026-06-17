@@ -260,7 +260,7 @@ export const useUpdateRowEditEntries = async (row, field, value,currCode,currRat
 // global update of GL Entries per record
 export const useFetchTranData = async (documentNo,branchCode,docType,fieldName,direction='') => {
 
-
+  
   const response = await fetchData(`get${docType}?${fieldName}=${documentNo}&branchCode=${branchCode}&direction=${direction}`);
   if (!response?.success || !response.data?.length) {
     return null; // no record

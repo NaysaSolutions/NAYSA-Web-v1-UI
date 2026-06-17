@@ -1000,6 +1000,13 @@ const SearchGlobalReportTable = forwardRef(
     }));
 
     const hasRows = filteredData.length > 0;
+    const isRedRow = (row) => {
+      const status = String(row?.status || "").toUpperCase();
+      const moveDirection = String(row?.moveDirection || "").toUpperCase();
+
+      return status === "FAILED" || moveDirection === "OUT";
+    };
+
 
     return (
       <div
@@ -2003,15 +2010,12 @@ const SearchGlobalReportTable = forwardRef(
                             key={col.key}
                             style={getCellWidthStyle(col)}
                             className={`px-1.5 py-1 text-[11px] leading-tight whitespace-nowrap ${
-                              String(row?.status || "").toUpperCase() === "FAILED"
-                                ? "text-red-600"
-                                : "text-gray-700"
-                            } ${
-                              col.renderType === "number" ||
-                              col.renderType === "currency"
-                                ? "text-right tabular-nums"
-                                : "text-left"
-                            }`}
+                                isRedRow(row) ? "text-red-600" : "text-gray-700"
+                              } ${
+                                col.renderType === "number" || col.renderType === "currency"
+                                  ? "text-right tabular-nums"
+                                  : "text-left"
+                              }`}
                           >
                             <div className="truncate overflow-hidden whitespace-nowrap max-w-full">
                               {formatValue(row[col.key], col)}

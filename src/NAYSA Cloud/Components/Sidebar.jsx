@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { NavLink } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchData } from "@/NAYSA Cloud/Configuration/BaseURL";
@@ -15,12 +15,40 @@ import {
   FiShield,
   FiSun,
   FiMoon,
+  FiMapPin,
+  FiMaximize2,
+  FiMinimize2,
   FiBox,
   FiShoppingCart,
   FiSearch,
   FiCheckCircle,
   FiLayers,
 } from "react-icons/fi";
+
+export const SIDEBAR_PINNED_KEY = "naysa_sidebar_pinned";
+export const SIDEBAR_OPEN_KEYS = "naysa_sidebar_open_keys";
+export const SIDEBAR_SCROLL_TOP = "naysa_sidebar_scroll_top";
+
+const THEME_STORAGE_KEY = "theme";
+const THEME_CHANGE_EVENT = "naysa-theme-change";
+
+const getStoredTheme = () =>
+  localStorage.getItem(THEME_STORAGE_KEY) === "dark" ? "dark" : "light";
+
+const applyTheme = (theme) => {
+  const isDark = theme === "dark";
+  document.documentElement.classList.toggle("dark", isDark);
+  localStorage.setItem(THEME_STORAGE_KEY, theme);
+  return isDark;
+};
+
+const broadcastThemeChange = (theme) => {
+  window.dispatchEvent(
+    new CustomEvent(THEME_CHANGE_EVENT, {
+      detail: { theme },
+    })
+  );
+};
 
 const iconMap = {
   Dashboard: FiHome,
@@ -69,14 +97,38 @@ const getLevelClasses = (level) => {
   return "pl-16";
 };
 
+const readStoredOpenKeys = () => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SIDEBAR_OPEN_KEYS) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const collectMenuKeys = (items = [], parentKey = "") =>
+  items.flatMap((item, index) => {
+    const key = parentKey
+      ? `${parentKey}/${index}-${item?.name || "item"}`
+      : `${index}-${item?.name || "item"}`;
+
+    if (!Array.isArray(item?.subMenu) || item.subMenu.length === 0) {
+      return [];
+    }
+
+    return [key, ...collectMenuKeys(item.subMenu, key)];
+  });
+
 const MenuItem = ({
   item,
+  itemKey,
   level = 0,
   searchTerm,
+  openMenuKeys,
+  onToggleMenu,
   onNavigate,
   onOpenModal,
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
 
   const hasSubMenu = Array.isArray(item?.subMenu) && item.subMenu.length > 0;
@@ -84,23 +136,23 @@ const MenuItem = ({
 
   const itemName = item?.name || "";
   const isSpecialBlue = /(post|finalize|approval)/i.test(itemName);
+  const lcSearchTerm = (searchTerm || "").toLowerCase();
+  const searchForcesOpen = Boolean(
+    lcSearchTerm && hasSubMenu && anyDescendantMatches(item, lcSearchTerm)
+  );
+  const isOpen = hasSubMenu && (openMenuKeys.includes(itemKey) || searchForcesOpen);
 
   useEffect(() => {
-    const lc = (searchTerm || "").toLowerCase();
-
-    if (!lc) {
+    if (!lcSearchTerm) {
       setIsVisible(true);
-      setIsOpen(false);
       return;
     }
 
-    const matches = itemName.toLowerCase().includes(lc);
-    const descendant = hasSubMenu && anyDescendantMatches(item, lc);
+    const matches = itemName.toLowerCase().includes(lcSearchTerm);
+    const descendant = hasSubMenu && anyDescendantMatches(item, lcSearchTerm);
 
     setIsVisible(matches || descendant);
-
-    if (descendant) setIsOpen(true);
-  }, [searchTerm, itemName, item, hasSubMenu]);
+  }, [lcSearchTerm, itemName, item, hasSubMenu]);
 
   if (!isVisible) return null;
 
@@ -176,7 +228,7 @@ const MenuItem = ({
         <button
           type="button"
           className={`${rowBase} w-full cursor-pointer`}
-          onClick={() => setIsOpen((prev) => !prev)}
+          onClick={() => onToggleMenu(itemKey)}
         >
           <span
             className={`absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r-full bg-blue-500 transition-all duration-300 ${
@@ -216,8 +268,11 @@ const MenuItem = ({
                 >
                   <MenuItem
                     item={sub}
+                    itemKey={`${itemKey}/${i}-${sub?.name || "item"}`}
                     level={level + 1}
                     searchTerm={searchTerm}
+                    openMenuKeys={openMenuKeys}
+                    onToggleMenu={onToggleMenu}
                     onNavigate={onNavigate}
                     onOpenModal={onOpenModal}
                   />
@@ -255,7 +310,9 @@ const MenuItem = ({
         state={{ permissionType: item?.permissionType }}
         onClick={() => {
           onNavigate?.();
-          if (item?.onOpenModal) onOpenModal?.(item);
+          if (item?.onOpenModal) {
+            onOpenModal?.(item);
+          }
         }}
         className={({ isActive }) =>
           `${rowBase} ${isActive ? activeBg : ""} ${
@@ -283,7 +340,12 @@ const MenuItem = ({
 
 const Sidebar = ({ menuItems = null, onNavigate, onOpenModal }) => {
   const [searchTerm, setSearchTerm] = useState("");
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => getStoredTheme() === "dark");
+  const [isPinned, setIsPinned] = useState(
+    () => localStorage.getItem(SIDEBAR_PINNED_KEY) === "Y"
+  );
+  const [openMenuKeys, setOpenMenuKeys] = useState(() => readStoredOpenKeys());
+  const menuScrollRef = useRef(null);
   const { user } = useAuth();
 
   const { data, isLoading, error } = useQuery({
@@ -294,12 +356,63 @@ const Sidebar = ({ menuItems = null, onNavigate, onOpenModal }) => {
   });
 
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", isDarkMode);
-    return () => document.documentElement.classList.remove("dark");
-  }, [isDarkMode]);
+    setIsDarkMode(applyTheme(getStoredTheme()));
+
+    const handleThemeChange = (event) => {
+      if (event.type === "storage" && event.key !== THEME_STORAGE_KEY) return;
+
+      const nextTheme =
+        event.type === "storage"
+          ? event.newValue
+          : event.detail?.theme;
+
+      if (nextTheme === "dark" || nextTheme === "light") {
+        setIsDarkMode(applyTheme(nextTheme));
+      }
+    };
+
+    window.addEventListener(THEME_CHANGE_EVENT, handleThemeChange);
+    window.addEventListener("storage", handleThemeChange);
+
+    return () => {
+      window.removeEventListener(THEME_CHANGE_EVENT, handleThemeChange);
+      window.removeEventListener("storage", handleThemeChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(SIDEBAR_PINNED_KEY, isPinned ? "Y" : "N");
+
+    if (!isPinned) {
+      localStorage.removeItem(SIDEBAR_OPEN_KEYS);
+      localStorage.removeItem(SIDEBAR_SCROLL_TOP);
+    }
+  }, [isPinned]);
+
+  useEffect(() => {
+    if (isPinned) {
+      localStorage.setItem(SIDEBAR_OPEN_KEYS, JSON.stringify(openMenuKeys));
+    }
+  }, [isPinned, openMenuKeys]);
 
   const items =
     menuItems && menuItems.length > 0 ? menuItems : data?.menuItems ?? [];
+  const allMenuKeys = useMemo(() => collectMenuKeys(items), [items]);
+  const isAllExpanded =
+    allMenuKeys.length > 0 && allMenuKeys.every((key) => openMenuKeys.includes(key));
+
+  useEffect(() => {
+    if (!isPinned) return;
+
+    const savedTop = Number(localStorage.getItem(SIDEBAR_SCROLL_TOP) || 0);
+    const id = requestAnimationFrame(() => {
+      if (menuScrollRef.current) {
+        menuScrollRef.current.scrollTop = Number.isFinite(savedTop) ? savedTop : 0;
+      }
+    });
+
+    return () => cancelAnimationFrame(id);
+  }, [isPinned, items.length]);
 
   const filteredCount = useMemo(() => {
     if (!searchTerm) return items.length;
@@ -307,6 +420,45 @@ const Sidebar = ({ menuItems = null, onNavigate, onOpenModal }) => {
       anyDescendantMatches(item, searchTerm.toLowerCase())
     ).length;
   }, [items, searchTerm]);
+
+  const handleTogglePinned = () => {
+    setIsPinned((prev) => {
+      const next = !prev;
+
+      if (next) {
+        localStorage.setItem(SIDEBAR_OPEN_KEYS, JSON.stringify(openMenuKeys));
+        localStorage.setItem(
+          SIDEBAR_SCROLL_TOP,
+          String(menuScrollRef.current?.scrollTop || 0)
+        );
+      } else {
+        localStorage.removeItem(SIDEBAR_OPEN_KEYS);
+        localStorage.removeItem(SIDEBAR_SCROLL_TOP);
+      }
+
+      return next;
+    });
+  };
+
+  const handleToggleMenu = (key) => {
+    setOpenMenuKeys((prev) =>
+      prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]
+    );
+  };
+
+  const handleToggleExpandAll = () => {
+    setOpenMenuKeys(isAllExpanded ? [] : allMenuKeys);
+  };
+
+  const handleNavigate = () => {
+    onNavigate?.();
+  };
+
+  const handleMenuScroll = (event) => {
+    if (isPinned) {
+      localStorage.setItem(SIDEBAR_SCROLL_TOP, String(event.currentTarget.scrollTop));
+    }
+  };
 
   return (
     <div className="sidebar flex flex-col h-screen w-100 bg-white dark:bg-gray-900 shadow-2xl border-r border-slate-200 dark:border-slate-800">
@@ -332,13 +484,48 @@ const Sidebar = ({ menuItems = null, onNavigate, onOpenModal }) => {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setIsDarkMode(!isDarkMode)}
-            className="w-10 h-10 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all duration-300 hover:scale-105 active:scale-95"
-          >
-            {isDarkMode ? <FiSun /> : <FiMoon />}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleTogglePinned}
+              title={isPinned ? "Unpin sidebar menu" : "Pin sidebar menu"}
+              aria-pressed={isPinned}
+              className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95 ${
+                isPinned
+                  ? "border-blue-200 bg-blue-100 text-blue-700 dark:border-blue-800 dark:bg-blue-900/40 dark:text-blue-300"
+                  : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              }`}
+            >
+              <FiMapPin className={isPinned ? "rotate-45" : ""} />
+            </button>
+
+            <button
+              type="button"
+              onClick={handleToggleExpandAll}
+              title={isAllExpanded ? "Collapse all menus" : "Expand all menus"}
+              aria-pressed={isAllExpanded}
+              disabled={allMenuKeys.length === 0}
+              className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 ${
+                isAllExpanded
+                  ? "border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+                  : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              }`}
+            >
+              {isAllExpanded ? <FiMinimize2 /> : <FiMaximize2 />}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const nextTheme = isDarkMode ? "light" : "dark";
+                setIsDarkMode(applyTheme(nextTheme));
+                broadcastThemeChange(nextTheme);
+              }}
+              className="w-10 h-10 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all duration-300 hover:scale-105 active:scale-95"
+            >
+              {isDarkMode ? <FiSun /> : <FiMoon />}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -360,7 +547,11 @@ const Sidebar = ({ menuItems = null, onNavigate, onOpenModal }) => {
         </div> */}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-2 py-2 custom-scrollbar">
+      <div
+        ref={menuScrollRef}
+        className="flex-1 overflow-y-auto px-2 py-2 custom-scrollbar"
+        onScroll={handleMenuScroll}
+      >
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400 animate-in fade-in duration-300">
             <div className="w-10 h-10 rounded-full border-4 border-slate-200 dark:border-slate-700 border-t-blue-600 animate-spin mb-3" />
@@ -380,8 +571,11 @@ const Sidebar = ({ menuItems = null, onNavigate, onOpenModal }) => {
               <MenuItem
                 key={idx}
                 item={item}
+                itemKey={`${idx}-${item?.name || "item"}`}
                 searchTerm={searchTerm}
-                onNavigate={onNavigate}
+                openMenuKeys={openMenuKeys}
+                onToggleMenu={handleToggleMenu}
+                onNavigate={handleNavigate}
                 onOpenModal={onOpenModal}
               />
             ))}

@@ -18,6 +18,8 @@ import {
   faTableList,
   faSearch,
   faIdCard,
+  faTag,
+  faCamera,
   faPesoSign,
   faRecycle,
   faScaleBalanced,
@@ -41,6 +43,7 @@ import SearchCutOffRef from "@/NAYSA Cloud/Lookup/SearchCutOffRef.jsx";
 import SearchGlobalReportTable from "@/NAYSA Cloud/Lookup/SearchGlobalReportTable.jsx";
 import SearchFAFind from "@/NAYSA Cloud/Lookup/SearchFAFind.jsx";
 import GlobalLookupModalv1 from "@/NAYSA Cloud/Lookup/SearchGlobalLookupv1.jsx";
+import BarcodeQrReaderModal from "@/NAYSA Cloud/Lookup/SearchGlobalQRBarCodeReader.jsx";
 
 const DASHBOARD_AMOUNT_FIELDS = [
   { key: "acqCost", label: "Acq. Cost", icon: faPesoSign, tone: "blue" },
@@ -183,25 +186,25 @@ const FAAssetInquiry = () => {
       label: "Asset Query",
       icon: faSearch,
       endpoint: "getFAAssetQuery",
-      filters: ["Branch", "Location", "Department", "Category", "Sub Category", "Asset Code", "FA Status"]
+      filters: ["Branch", "Location", "Department", "Category", "Sub Category", "Asset Code", "Property Tag No.", "FA Status"]
     },
     assetHistory: {
       label: "Asset History",
       icon: faHistory,
       endpoint: "getFAAssetHistory",
-      filters: ["Branch", "Location", "Department", "Category", "Sub Category", "Asset Code", "Start Cut Off", "End Cut Off", "FA Status"]
+      filters: ["Branch", "Location", "Department", "Category", "Sub Category", "Asset Code", "Property Tag No.", "Start Cut Off", "End Cut Off", "FA Status"]
     },
     deprHistory: {
       label: "Depreciation History",
       icon: faCalculator,
       endpoint: "getFADeprHistory",
-      filters: ["Branch", "Location", "Department", "Category", "Sub Category", "Asset Code", "Start Cut Off", "End Cut Off", "FA Status"]
+      filters: ["Branch", "Location", "Department", "Category", "Sub Category", "Asset Code", "Property Tag No.", "Start Cut Off", "End Cut Off", "FA Status"]
     },
     lapsingSchedule: {
       label: "Lapsing Schedule",
       icon: faTableList,
       endpoint: "getFALapsingSchedule",
-      filters: ["Branch", "Location", "Department", "Category", "Sub Category", "Start Cut Off", "End Cut Off", "FA Status"]
+      filters: ["Branch", "Location", "Department", "Category", "Sub Category", "Property Tag No.", "Start Cut Off", "End Cut Off", "FA Status"]
     },
   }), []);
 
@@ -214,6 +217,7 @@ const FAAssetInquiry = () => {
     categCode: "", categName: "", // Category
     classCode: "", className: "", // Sub Category / FA Class
     faCode: "", faName: "",
+    tagNo: "",
     cutoffStartCode: companyInfo?.cutoffCode || "",
     cutoffStartName: companyInfo?.cutoffName || "",
     cutoffEndCode: companyInfo?.cutoffCode || "",
@@ -256,6 +260,7 @@ const FAAssetInquiry = () => {
       );
     }
     if (activeFilters.faCode) contextParts.push(`Asset: ${activeFilters.faCode}`);
+    if (activeFilters.tagNo) contextParts.push(`Tag No.: ${activeFilters.tagNo}`);
     if (activeFilters.flocCode) contextParts.push(`Location: ${activeFilters.flocCode}`);
     if (activeFilters.rcCode) contextParts.push(`Department: ${activeFilters.rcCode}`);
     if (activeFilters.categCode) contextParts.push(`Category: ${activeFilters.categCode}`);
@@ -352,7 +357,8 @@ const FAAssetInquiry = () => {
     if (filters.includes("Department")) data.rcCode = f.rcCode;
     if (filters.includes("Category")) data.categCode = f.categCode;
     if (filters.includes("Sub Category") || filters.includes("FA Class")) data.classCode = f.classCode;
-    if (filters.includes("Asset Code")) data.faCode = f.faCode;
+    if (filters.includes("Asset Code") || filters.includes("Property Tag No.")) data.faCode = f.faCode;
+    if (filters.includes("Property Tag No.")) data.tagNo = f.tagNo || "";
     if (filters.includes("Start Cut Off")) data.startingCutoff = f.cutoffStartCode;
     if (filters.includes("End Cut Off")) data.endingCutoff = f.cutoffEndCode;
     if (filters.includes("FA Status")) data.faStatus = f.faStatus || "";
@@ -722,9 +728,10 @@ const FAAssetInquiry = () => {
           tabConfig={activeTabConfig}
           filters={activeFilters}
           onClose={() => setShowFilterModal(false)}
-          onApply={() => {
+          onApply={(patch = {}) => {
+            const nextFilters = { ...activeFilters, ...patch };
             setShowFilterModal(false);
-            runTabQuery(activeTab, activeFilters);
+            runTabQuery(activeTab, nextFilters);
           }}
           updateLookupState={updateFilters}
           isLoading={isLoading}
@@ -798,6 +805,7 @@ const AssetQueryReportTable = ({ view, onView }) => (
     columns={view.cols}
     data={view.rows}
     itemsPerPage={50}
+    docType="Asset Query"
     rightActionLabel="View"
     onRowAction={onView}
   />
@@ -809,6 +817,7 @@ const AssetHistoryReportTable = ({ view }) => (
     columns={view.cols}
     data={view.rows}
     itemsPerPage={50}
+    docType="Asset History"
     rightActionLabel="View"
     onRowAction={openPathUrlDocument}
   />
@@ -820,6 +829,7 @@ const DeprHistoryReportTable = ({ view }) => (
     columns={view.cols}
     data={view.rows}
     itemsPerPage={50}
+    docType="Depreciation History"
   />
 );
 
@@ -829,6 +839,7 @@ const LapsingScheduleReportTable = ({ view }) => (
     columns={view.cols}
     data={view.rows}
     itemsPerPage={50}
+    docType="Lapsing Schedule"
   />
 );
 
@@ -973,6 +984,30 @@ const FilterModal = ({
         </div>
 
         <div className="space-y-2.5 overflow-y-auto p-2.5 sm:space-y-3 sm:p-4">
+          {tabConfig.filters.includes("Property Tag No.") && (
+            <ModalSection title="Property Tag Search">
+              <div className="mx-auto w-full max-w-md">
+                <TagNoSuggestFilter
+                  value={filters.tagNo}
+                  branchCode={filters.branchCode}
+                  disabled={isLoading}
+                  onChange={(value) => updateLookupState({ tagNo: value })}
+                  onSelect={(row) => {
+                    const patch = {
+                      tagNo: "",
+                      faCode: row?.faCode || row?.assetNo || row?.FA_CODE || filters.faCode || "",
+                      faName: row?.faName || row?.assetDescription || row?.FA_NAME || filters.faName || "",
+                    };
+
+                    updateLookupState(patch);
+                    onApply(patch);
+                  }}
+                  onClear={() => updateLookupState({ tagNo: "" })}
+                />
+              </div>
+            </ModalSection>
+          )}
+
           {hasAssetIdentifiers && (
             <ModalSection title="Asset Identifiers">
               {tabConfig.filters.includes("Branch") && (
@@ -1149,6 +1184,331 @@ const ModalSection = ({ title, children }) => (
     <div className="grid grid-cols-1 gap-2">{children}</div>
   </div>
 );
+
+const TagNoSuggestFilter = ({
+  value,
+  branchCode,
+  disabled,
+  onChange,
+  onSelect,
+  onClear,
+}) => {
+  const [suggestions, setSuggestions] = useState([]);
+  const [isSuggestLoading, setIsSuggestLoading] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+  const [showQrReader, setShowQrReader] = useState(false);
+  const suggestionRowsCacheRef = useRef({});
+
+  const normalizeTagSuggestRow = (row = {}) => ({
+    ...row,
+    faCode: row?.faCode || row?.assetNo || row?.FA_CODE || "",
+    tagNo: row?.tagNo || row?.assetTag || row?.TAG_NO || "",
+    faName: row?.faName || row?.assetDescription || row?.FA_NAME || "",
+  });
+
+  const findExactTagMatch = (rows = [], tagNo = "") => {
+    const lowerTagNo = String(tagNo || "").trim().toLowerCase();
+
+    return rows.find((row) =>
+      [row?.tagNo, row?.assetTag, row?.TAG_NO].some(
+        (item) => String(item || "").trim().toLowerCase() === lowerTagNo
+      )
+    );
+  };
+
+  useEffect(() => {
+    const cleanSearchText = String(value || "").trim();
+
+    if (disabled || cleanSearchText.length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      setSelectedSuggestionIndex(-1);
+      setIsSuggestLoading(false);
+      return undefined;
+    }
+
+    let isMounted = true;
+    const timer = setTimeout(async () => {
+      const lowerSearchText = cleanSearchText.toLowerCase();
+      const cacheKey = `${branchCode || ""}|${lowerSearchText}`;
+
+      setIsSuggestLoading(true);
+
+      try {
+        let rawLookupRows = suggestionRowsCacheRef.current?.[cacheKey];
+
+        if (!Array.isArray(rawLookupRows)) {
+          const response = await postRequest("lookupFAMast", {
+            PARAMS: JSON.stringify({
+              json_data: {
+                branchCode: branchCode || "",
+                filter: "AutoSuggest",
+                search: cleanSearchText,
+                searchText: cleanSearchText,
+                searchMode: "start",
+                faCode: "",
+                tagNo: "",
+              },
+            }),
+          });
+
+          rawLookupRows = extractLookupRows(response);
+          suggestionRowsCacheRef.current = {
+            ...(suggestionRowsCacheRef.current || {}),
+            [cacheKey]: rawLookupRows,
+          };
+        }
+
+        if (!isMounted) return;
+
+        const filteredRows = rawLookupRows
+          .filter((row) =>
+            [row?.tagNo, row?.assetTag, row?.TAG_NO].some((item) =>
+              String(item || "").toLowerCase().includes(lowerSearchText)
+            )
+          )
+          .slice(0, 10)
+          .map(normalizeTagSuggestRow);
+
+        setSuggestions(filteredRows);
+        setShowSuggestions(filteredRows.length > 0);
+        setSelectedSuggestionIndex(filteredRows.length > 0 ? 0 : -1);
+      } catch (error) {
+        console.error("Property Tag No. suggestions error:", error);
+        if (isMounted) {
+          setSuggestions([]);
+          setShowSuggestions(false);
+          setSelectedSuggestionIndex(-1);
+        }
+      } finally {
+        if (isMounted) setIsSuggestLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [branchCode, disabled, value]);
+
+  const handleSelect = (row) => {
+    setSuggestions([]);
+    setShowSuggestions(false);
+    setSelectedSuggestionIndex(-1);
+    setIsSuggestLoading(false);
+    onSelect?.(row);
+  };
+
+  const validateAndSelectTagNo = async () => {
+    const cleanTagNo = String(value || "").trim();
+    if (!cleanTagNo || disabled || isSuggestLoading) return;
+
+    setShowSuggestions(false);
+    setSelectedSuggestionIndex(-1);
+
+    const matchedSuggestion = findExactTagMatch(suggestions, cleanTagNo);
+    if (matchedSuggestion) {
+      handleSelect(normalizeTagSuggestRow(matchedSuggestion));
+      return;
+    }
+
+    const cacheRows = Object.values(suggestionRowsCacheRef.current || {}).flat();
+    const matchedCachedRow = findExactTagMatch(cacheRows, cleanTagNo);
+
+    if (matchedCachedRow) {
+      handleSelect(normalizeTagSuggestRow(matchedCachedRow));
+      return;
+    }
+
+    setIsSuggestLoading(true);
+
+    try {
+      const lowerTagNo = cleanTagNo.toLowerCase();
+      const response = await postRequest("lookupFAMast", {
+        PARAMS: JSON.stringify({
+          json_data: {
+            branchCode: branchCode || "",
+            filter: "AutoSuggest",
+            search: cleanTagNo,
+            searchText: cleanTagNo,
+            searchMode: "start",
+            faCode: "",
+            tagNo: "",
+          },
+        }),
+      });
+
+      const matchedRow = findExactTagMatch(extractLookupRows(response), lowerTagNo);
+
+      if (!matchedRow) {
+        setSuggestions([]);
+        setShowSuggestions(false);
+        setSelectedSuggestionIndex(-1);
+        useSwalErrorAlert("Property Tag No.", "Property Tag No. is not valid.");
+        return;
+      }
+
+      handleSelect(normalizeTagSuggestRow(matchedRow));
+    } catch (error) {
+      console.error("Property Tag No. validation error:", error);
+      useSwalErrorAlert("Property Tag No.", "Unable to validate Property Tag No.");
+    } finally {
+      setIsSuggestLoading(false);
+    }
+  };
+
+  const handleQrScan = (scanValue) => {
+    const cleanScanValue = String(scanValue || "").trim();
+    if (!cleanScanValue) return;
+
+    onChange?.(cleanScanValue);
+    setSuggestions([]);
+    setShowSuggestions(false);
+    setSelectedSuggestionIndex(-1);
+    setIsSuggestLoading(false);
+    setShowQrReader(false);
+  };
+
+  const hasSelectableSuggestions = showSuggestions && !isSuggestLoading && suggestions.length > 0;
+
+  return (
+    <div className="relative">
+     
+      <div className="flex h-10 items-center rounded-md border border-slate-300 bg-white shadow-sm transition focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100">
+        <FontAwesomeIcon icon={faTag} className="ml-3 shrink-0 text-[13px] text-slate-400" />
+        <input
+          id="asset_query_tag_no"
+          type="text"
+          value={value || ""}
+          disabled={disabled}
+          autoComplete="off"
+          placeholder="Type Property Tag No."
+          className="h-full min-w-0 flex-1 border-0 bg-transparent px-2 text-xs font-semibold text-slate-800 outline-none placeholder:font-medium placeholder:text-slate-400 disabled:text-slate-500"
+          onChange={(e) => onChange?.(e.target.value)}
+          onBlur={() => window.setTimeout(() => setShowSuggestions(false), 120)}
+          onFocus={() => {
+            if (suggestions.length > 0) setShowSuggestions(true);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown" && hasSelectableSuggestions) {
+              e.preventDefault();
+              setSelectedSuggestionIndex((index) =>
+                index < 0 ? 0 : (index + 1) % suggestions.length
+              );
+              return;
+            }
+
+            if (e.key === "ArrowUp" && hasSelectableSuggestions) {
+              e.preventDefault();
+              setSelectedSuggestionIndex((index) =>
+                index <= 0 ? suggestions.length - 1 : index - 1
+              );
+              return;
+            }
+
+            if (e.key === "Enter") {
+              e.preventDefault();
+              validateAndSelectTagNo();
+              return;
+            }
+
+            if (e.key === "Escape") {
+              e.preventDefault();
+              setShowSuggestions(false);
+            }
+          }}
+        />
+
+        {String(value || "").trim() && (
+          <button
+            type="button"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-50 hover:text-red-600 disabled:opacity-50"
+            onClick={() => {
+              onClear?.();
+              setSuggestions([]);
+              setShowSuggestions(false);
+              setSelectedSuggestionIndex(-1);
+            }}
+            disabled={disabled}
+            title="Clear Property Tag No."
+          >
+            <FontAwesomeIcon icon={faTimes} className="text-[13px]" />
+          </button>
+        )}
+
+        <button
+          type="button"
+          className="mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-blue-600 transition hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50"
+          onClick={() => setShowQrReader(true)}
+          disabled={disabled}
+          title="Scan Property Tag"
+        >
+          <FontAwesomeIcon icon={faCamera} className="text-[13px]" />
+        </button>
+      </div>
+
+      {(showSuggestions || isSuggestLoading) && (
+        <div className="absolute left-0 right-0 top-full z-[70] mt-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
+          {isSuggestLoading ? (
+            <div className="flex items-center gap-2 px-3 py-3 text-xs font-medium text-slate-500">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-r-transparent border-t-transparent" />
+              Loading suggestions...
+            </div>
+          ) : suggestions.length === 0 ? (
+            <div className="px-3 py-3 text-xs text-slate-500">No suggestions found.</div>
+          ) : (
+            <div className="max-h-[220px] overflow-y-auto py-1">
+              {suggestions.map((row, index) => (
+                <button
+                  type="button"
+                  key={`${row.tagNo}-${row.faCode}-${index}`}
+                  className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition ${
+                    selectedSuggestionIndex === index
+                      ? "bg-blue-50 ring-1 ring-inset ring-blue-100"
+                      : "hover:bg-blue-50"
+                  }`}
+                  onMouseEnter={() => setSelectedSuggestionIndex(index)}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleSelect(row);
+                  }}
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-xs font-bold text-slate-800">
+                      {row.tagNo || row.faCode}
+                    </div>
+                    <div className="mt-0.5 truncate text-[11px] text-slate-500">
+                      Asset Code: {row.faCode || "-"}
+                    </div>
+                    {row.faName && (
+                      <div className="mt-0.5 truncate text-[11px] text-slate-500">
+                        {row.faName}
+                      </div>
+                    )}
+                  </div>
+                  <div className="shrink-0 rounded-full bg-blue-50 px-2 py-1 text-[10px] font-bold uppercase text-blue-700">
+                    Tag No.
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {showQrReader && (
+        <BarcodeQrReaderModal
+          isOpen={showQrReader}
+          title="Scan Property Tag QR Code"
+          scanOnce={true}
+          onScan={handleQrScan}
+          onClose={() => setShowQrReader(false)}
+        />
+      )}
+    </div>
+  );
+};
 
 const DualFilterInput = ({
   labelCode,

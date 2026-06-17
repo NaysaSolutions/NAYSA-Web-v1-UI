@@ -38,6 +38,9 @@ import {
   useformatToDatev2,
   useFormatToDate
 } from '@/NAYSA Cloud/Global/dates';
+import {
+  useSelectedHSColConfig
+} from '@/NAYSA Cloud/Global/selectedData.js';
 
 import {
   docTypeNames,
@@ -49,11 +52,9 @@ import {
 import {
   useTopPayeeRow,
   useTopVatRow,
-  useTopBillCodeRow,
 } from "@/NAYSA Cloud/Global/top1RefTable";
 
 import {
-  useTransactionUpsert,
   useFetchTranData,
   useHandleCancel,
   useHandlePost,
@@ -72,6 +73,7 @@ import {
   useSwalErrorAlert,
   useSwalvalidateRequiredFields,
   useSwalProceedConfirm,
+  useSwalHandleOpenSpecsModal,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
@@ -157,7 +159,7 @@ const LC = () => {
     brokerName: "",
     forwarderCode: "",
     forwarderName: "",
-    shipmentMode: "",
+    shipmentMode: "Sea",
     importationDate: useGetCurrentDayV2(),
     countryOrigin: "",
     refLcNo1: "",
@@ -185,10 +187,13 @@ const LC = () => {
     payeeLookupContext: "payee",
     payeeModalOpen: false,
     vatLookupModalOpen: false,
+    showOpenRRModal: false,
     showAllTranDocNo: false,
     showRRRefModal: false,
     globalLookupRow: [],
     globalLookupHeader: [],
+    openRR_Data_Summary: [],
+    openRR_Col_Summary: [],
 
     // Detail lines
     detailRows: [],
@@ -280,12 +285,15 @@ const LC = () => {
     showSignatoryModal,
     showPostModal,
     vatLookupModalOpen,
+    showOpenRRModal,
     showApprovalStatusModal,
     detailRowsApp,
 
     // RC Lookup
     rcLookupModalOpen,
     rcLookupContext,
+    openRR_Data_Summary,
+    openRR_Col_Summary,
 
   } = state;
 
@@ -307,7 +315,7 @@ const LC = () => {
     { key: "invType", label: "Type", width: 80 },
     { key: "rrNo", label: "RR No.", width: 120 },
     { key: "itemCode", label: "Item Code", width: 130 },
-    { key: "itemName", label: "Item Description", width: 300 },
+    { key: "itemName", label: "Item Name", width: 300 },
     { key: "uomCode", label: "UOM", width: 90 },
     { key: "quantity", label: "Quantity", width: 120 },
     { key: "unitCost", label: "Unit Cost", width: 130 },
@@ -320,7 +328,6 @@ const LC = () => {
     { key: "rcCode", label: "RC Code", width: 120 },
     { key: "rrLineNo", label: "RR LN", width: 90 },
     { key: "acctCode", label: "Account Code", width: 140 },
-    { key: "refNo", label: "Adj. No.", width: 120 },
   ];
 
   const openRRLookupColumns = [
@@ -420,6 +427,8 @@ const LC = () => {
       netAmt: formatNumber(netAmt || 0, DEC_AMT),
     };
   }, [shipmentCostRows]);
+
+  const appliedShipmentItemAllocationSignatureRef = useRef("");
 
   const pdfLink = docTypePDFGuide[docType];
   const videoLink = docTypeVideoGuide[docType];
@@ -525,9 +534,99 @@ const LC = () => {
     });
   };
 
+  const getShipmentItemAllocationSignature = (rows = []) =>
+    [
+      allocationType || "Amount",
+      shipmentCostTotals.netAmt || "0.00",
+      (rows || [])
+        .map((row, index) =>
+          [
+            index,
+            row?.groupId || "",
+            row?.rrId || "",
+            row?.itemCode || "",
+            parseFormattedNumber(row?.quantity || 0),
+            parseFormattedNumber(row?.itemCost || 0),
+          ].join(":")
+        )
+        .join("|"),
+    ].join("::");
+
+  const recalculateShipmentItemAllocations = (sourceRows = []) => {
+    const rows = Array.isArray(sourceRows) ? sourceRows : [];
+
+    if (!rows.length) {
+      return rows;
+    }
+
+    const totalShippingCost = parseFormattedNumber(shipmentCostTotals.netAmt || 0);
+    const allocationMode = String(allocationType || "Amount").trim();
+    const baseTotal =
+      allocationMode === "Quantity"
+        ? rows.reduce((sum, row) => sum + parseFormattedNumber(row.quantity || 0), 0)
+        : rows.reduce((sum, row) => sum + parseFormattedNumber(row.itemCost || 0), 0);
+
+    if (baseTotal <= 0 || totalShippingCost <= 0) {
+      return rows.map((row) =>
+        recalcShipmentItemRow({
+          ...row,
+          allocRate: formatNumber(0, 5),
+          shippingCost: formatNumber(0, DEC_AMT),
+        })
+      );
+    }
+
+    const allocRate = totalShippingCost / baseTotal;
+    let allocatedShipping = 0;
+
+    return rows.map((row, index) => {
+      const itemAmount =
+        allocationMode === "Quantity"
+          ? parseFormattedNumber(row.quantity || 0)
+          : parseFormattedNumber(row.itemCost || 0);
+      let shippingCostValue = index === rows.length - 1
+        ? totalShippingCost - allocatedShipping
+        : Math.round((itemAmount * allocRate) * 100) / 100;
+
+      if (index !== rows.length - 1) {
+        allocatedShipping += shippingCostValue;
+      }
+
+      return recalcShipmentItemRow({
+        ...row,
+        allocRate: formatNumber(allocRate, 5),
+        shippingCost: formatNumber(shippingCostValue, DEC_AMT),
+      });
+    });
+  };
+
+  const syncShipmentItemAllocations = (sourceRows = detailRows || []) => {
+    const allocationSignature = getShipmentItemAllocationSignature(sourceRows);
+    if (appliedShipmentItemAllocationSignatureRef.current === allocationSignature) {
+      return sourceRows;
+    }
+
+    const updatedRows = recalculateShipmentItemAllocations(sourceRows);
+    const updatedSignature = getShipmentItemAllocationSignature(updatedRows);
+
+    if (updatedSignature === appliedShipmentItemAllocationSignatureRef.current) {
+      return sourceRows;
+    }
+
+    appliedShipmentItemAllocationSignatureRef.current = updatedSignature;
+    detailRowsRef.current = updatedRows;
+    updateState({ detailRows: updatedRows });
+    updateTotalsDisplay(updatedRows);
+    return updatedRows;
+  };
+
   useEffect(() => {
     detailRowsRef.current = detailRows || [];
   }, [detailRows]);
+
+  useEffect(() => {
+    syncShipmentItemAllocations(detailRows || []);
+  }, [shipmentCostTotals.netAmt, allocationType]);
 
   useEffect(() => {
     if (resetFlag) {
@@ -569,7 +668,7 @@ const LC = () => {
       brokerName: "",
       forwarderCode: "",
       forwarderName: "",
-      shipmentMode: "",
+      shipmentMode: "Sea",
       importationDate: today,
       countryOrigin: "",
       refLcNo1: "",
@@ -603,15 +702,19 @@ const LC = () => {
       rcLookupContext: "",
       payeeModalOpen: false,
       vatLookupModalOpen: false,
+      showOpenRRModal: false,
       showApprovalStatusModal: false,
       showAllTranDocNo: false,
       showRRRefModal: false,
       globalLookupRow: [],
       globalLookupHeader: [],
+      openRR_Data_Summary: [],
+      openRR_Col_Summary: [],
       selectedRowIndex: null,
     });
     setShipmentCostRows([]);
     setShipmentCostLookup({ type: "", rowIndex: null });
+    appliedShipmentItemAllocationSignatureRef.current = "";
 
     updateTotalsDisplay([]);
   };
@@ -648,6 +751,7 @@ const LC = () => {
       });
       updateTotalsDisplay([]);
       setShipmentCostRows([]);
+      appliedShipmentItemAllocationSignatureRef.current = "";
     };
 
     updateState({ isLoading: true });
@@ -705,7 +809,6 @@ const LC = () => {
           rcName: item.rcName || "",
           rrLineNo: item.rrLineNo || "",
           acctCode: item.acctCode || "",
-          refNo: item.refNo || "",
         })
       );
 
@@ -732,6 +835,7 @@ const LC = () => {
       );
       updateTotalsDisplay(detailRowsFromFetch);
       setShipmentCostRows(shipmentCostRowsFromFetch);
+      appliedShipmentItemAllocationSignatureRef.current = "";
 
       updateState({
         documentStatus: getStatusCode(data.status),
@@ -848,176 +952,164 @@ const LC = () => {
     return extractOpenRRRows(resultValue);
   };
 
-  const normalizeOpenRRRow = (row, index) => {
-    const type = getLookupValue(row, "type", "Type", "TYPE", "invType", "INV_TYPE");
-    const rrNo = getLookupValue(row, "rrNo", "rr_no", "RR_NO", "msrrNo", "MSRR_NO", "joNo", "jo_no", "JO_NO", "docNo", "DOC_NO", "tranNo", "TRAN_NO");
-    const rrId = getLookupValue(row, "rrId", "rr_id", "RR_ID", "rrHdId", "RR_HD_ID", "msrrId", "MSRR_ID", "joId", "jo_id", "JO_ID");
-    const poNo = getLookupValue(row, "poNo", "po_no", "PO_NO", "joNo", "jo_no", "JO_NO");
+  const buildShipmentItemRowFromRR = (item = {}, summary = {}) => {
+    const quantityValue = parseFormattedNumber(item.quantity || 0);
+    const unitCostValue = parseFormattedNumber(item.unitCost || 0);
+    const amountValue = quantityValue * unitCostValue;
 
-    return {
-      ...row,
-      groupId: getLookupValue(row, "groupId", "GROUP_ID", "id", "ID") || [rrId, rrNo, poNo, index + 1].filter(Boolean).join("-") || String(index + 1),
-      type,
-      branchCode: getLookupValue(row, "branchCode", "BranchCode", "BRANCH_CODE", "bc", "BC"),
-      rrNo,
-      rrDate: getLookupValue(row, "rrDate", "rr_date", "RR_DATE", "joDate", "jo_date", "JO_DATE"),
-      rrId,
-      poNo,
-      vendCode: getLookupValue(row, "vendCode", "vend_code", "VEND_CODE"),
-      vendName: getLookupValue(row, "vendName", "vend_name", "VEND_NAME"),
-      siNo: getLookupValue(row, "siNo", "si_no", "SI_NO", "drNo", "DR_NO"),
-      siDate: getLookupValue(row, "siDate", "si_date", "SI_DATE", "rrDate", "RR_DATE", "joDate", "JO_DATE"),
-      siAmount: getLookupValue(row, "siAmount", "si_amount", "SI_AMOUNT", "amount", "AMOUNT", "rrAmount", "RR_AMOUNT", "joAmount", "JO_AMOUNT"),
-      drAcct: getLookupValue(row, "drAcct", "dr_acct", "DR_ACCT", "debitAcct", "DEBIT_ACCT"),
-      rcCode: getLookupValue(row, "rcCode", "rc_code", "RC_CODE"),
-      rcName: getLookupValue(row, "rcName", "rc_name", "RC_NAME"),
-      vatCode: getLookupValue(row, "vatCode", "vat_code", "VAT_CODE"),
-      vatDesc: getLookupValue(row, "vatDesc", "vat_desc", "VAT_DESC", "vatName", "VAT_NAME"),
-      vatAmount: getLookupValue(row, "vatAmount", "vat_amount", "VAT_AMOUNT"),
-      itemCode: getLookupValue(row, "itemCode", "item_code", "ITEM_CODE"),
-      itemName: getLookupValue(row, "itemName", "item_name", "ITEM_NAME"),
-      uomCode: getLookupValue(row, "uomCode", "uom_code", "UOM_CODE"),
-      quantity: getLookupValue(row, "quantity", "qty", "QTY", "rrQty", "RR_QTY"),
-      unitCost: getLookupValue(row, "unitCost", "unit_cost", "UNIT_COST", "cost", "COST"),
-      rrLineNo: getLookupValue(row, "rrLineNo", "rr_line_no", "RR_LINE_NO", "lnNo", "LN_NO"),
-    };
+    return recalcShipmentItemRow({
+      lN: "",
+      invType: item.invType || "",
+      groupId: item.groupId || summary.groupId || "",
+      rrId: item.rrId || "",
+      rrNo: item.rrNo || "",
+      rrDate: item.rrDate || "",
+      vendCode: summary.vendCode || "",
+      vendname: summary.vendname || "",
+      rrRefNo: summary.rrRefNo || "",
+      poNo: item.poNo || "",
+      remarks: summary.remarks || "",
+      itemCode: item.itemCode || "",
+      itemName: item.itemName || "",
+      uomCode: item.uomCode || "",
+      quantity: formatNumber(quantityValue || 0, decQty),
+      unitCost: formatNumber(unitCostValue || 0, decUPrice),
+      itemCost: formatNumber(amountValue || 0, DEC_AMT),
+      allocRate: formatNumber(0, 5),
+      shippingCost: formatNumber(0, 6),
+      landedCost: formatNumber(amountValue || 0, DEC_AMT),
+      unitShipCost: formatNumber(0, 6),
+      unitLandedCost: formatNumber(0, 6),
+      rcCode: item.rcCode || "",
+      rrLineNo: item.rrLineNo || "",
+      acctCode: item.acctCode || "",
+    });
   };
 
-  const handleOpenReferenceRR = async () => {
+  const handleOpenRRLookup = async () => {
     if (isFormDisabled) return;
 
     const lookupVendCode = String(vendCode || "").trim();
     const lookupBranchCode = String(branchCode || "").trim();
 
-    if (!lookupVendCode) {
-      updateState({ payeeLookupContext: "payee", payeeModalOpen: true });
-      return;
-    }
+    const isValid = await useSwalvalidateRequiredFields(
+      {
+        "Header : Branch Code": lookupBranchCode,
+        "Header : Payee Code": lookupVendCode,
+      },
+      "Open RR Lookup"
+    );
 
-    updateState({ isLoading: true, showSpinner: true });
+    if (!isValid) return;
 
     try {
-      const lookupPayload = {
+      updateState({ isLoading: true, showSpinner: true });
+
+      const response = await fetchDataJson("getRRLC_OpenSummary", {
         branchCode: lookupBranchCode,
         vendCode: lookupVendCode,
-      };
+      });
 
-      const requestAttempts = [
-        async () => {
-          const rrResponse = await fetchDataJson("getAPVRR_OpenSummary", lookupPayload);
-          const joResponse = await fetchDataJson("getAPVJO_OpenSummary", lookupPayload);
-          return [...extractOpenRRResponseRows(rrResponse), ...extractOpenRRResponseRows(joResponse)];
-        },
-        async () => {
-          const rrResponse = await fetchData("getAPVRR_OpenSummary", {
-            PARAMS: JSON.stringify({ json_data: lookupPayload }),
-          });
-          const joResponse = await fetchData("getAPVJO_OpenSummary", {
-            PARAMS: JSON.stringify({ json_data: lookupPayload }),
-          });
-          return [...extractOpenRRResponseRows(rrResponse), ...extractOpenRRResponseRows(joResponse)];
-        },
-        async () => {
-          const rrResponse = await fetchData("getAPVRR_OpenSummary", {
-            PARAMS: JSON.stringify(lookupPayload),
-          });
-          const joResponse = await fetchData("getAPVJO_OpenSummary", {
-            PARAMS: JSON.stringify(lookupPayload),
-          });
-          return [...extractOpenRRResponseRows(rrResponse), ...extractOpenRRResponseRows(joResponse)];
-        },
-      ];
+      const rrRows = response?.data?.[0]?.result
+        ? JSON.parse(response.data[0].result)
+        : [];
 
-      let rawRows = [];
-      for (const requestOpenReference of requestAttempts) {
-        try {
-          rawRows = await requestOpenReference();
-          if (rawRows.length > 0) break;
-        } catch (requestError) {
-          console.warn("Open RR/JO lookup attempt failed:", requestError);
-        }
-      }
-
-      const normalizedRows = rawRows.map((row, index) => normalizeOpenRRRow(row, index));
-
-      if (normalizedRows.length === 0) {
-        useSwalErrorAlert("Open Reference", "No open RR/JO found for this payee.");
+      if (!rrRows.length) {
+        useSwalErrorAlert(
+          "Open RR",
+          "There are no open RR records for the selected payee and branch."
+        );
         return;
       }
 
+      const summaryColumns = await useSelectedHSColConfig("getRRLC_OpenSummary", currentUserRow?.userCode || "");
+
       updateState({
-        globalLookupRow: normalizedRows,
-        globalLookupHeader: openRRLookupColumns,
-        showRRRefModal: true,
+        openRR_Data_Summary: rrRows,
+        openRR_Col_Summary: summaryColumns || [],
+        showOpenRRModal: true,
       });
     } catch (error) {
-      console.error("Failed to fetch Open RR/JO:", error);
-      useSwalErrorAlert("Open Reference", "Unable to load open RR/JO references.");
+      console.error("Failed to fetch Open RR:", error);
+      useSwalErrorAlert("Open RR", error?.message || "Unable to load open RR records.");
+      updateState({
+        openRR_Data_Summary: [],
+        openRR_Col_Summary: [],
+      });
     } finally {
       updateState({ isLoading: false, showSpinner: false });
     }
   };
 
-  const handleCloseRRRefModal = async (selectedItems) => {
-    if (!selectedItems || !selectedItems.records) {
-      updateState({ showRRRefModal: false });
+  const handleInsertSelectedOpenRR = async (payload) => {
+    const selectedIds = Array.isArray(payload?.data) ? payload.data : [];
+    const selectedSummaryRecords = Array.isArray(payload?.records) ? payload.records : [];
+
+    if (!selectedIds.length) {
+      updateState({
+        showOpenRRModal: false,
+        openRR_Data_Summary: [],
+        openRR_Col_Summary: [],
+      });
       return;
     }
 
-    const itemsArray = Array.isArray(selectedItems.records)
-      ? selectedItems.records
-      : [selectedItems.records];
+    const idString = selectedIds.join(",");
+    const requestPayload = {
+      json_data: {
+        tranIds: idString,
+        selectedIds: idString,
+      },
+    };
 
-    const mappedRows = itemsArray.map((item) => {
-      const amount = parseFormattedNumber(item.siAmount || item.amount || 0);
-      const quantity = parseFormattedNumber(item.quantity || 0) || (amount ? 1 : 0);
-      const unitCost = parseFormattedNumber(item.unitCost || 0) || (quantity ? amount / quantity : 0);
+    try {
+      updateState({ isLoading: true, showSpinner: true });
 
-      return recalcShipmentItemRow({
-        lN: "",
-        invType: item.type || item.invType || "",
-        groupId: item.groupId || "",
-        rrId: item.rrId || item.joId || "",
-        rrNo: item.rrNo || item.joNo || "",
-        itemCode: item.itemCode || "",
-        itemName: item.itemName || "",
-        uomCode: item.uomCode || "",
-        quantity: formatNumber(quantity, decQty),
-        unitCost: formatNumber(unitCost, decUPrice),
-        itemCost: formatNumber(amount, DEC_AMT),
-        allocRate: formatNumber(0, 5),
-        shippingCost: formatNumber(0, 6),
-        landedCost: formatNumber(amount, DEC_AMT),
-        unitShipCost: formatNumber(0, 6),
-        unitLandedCost: formatNumber(0, 6),
-        itemSpecs: "",
-        vatCode: item.vatCode || "",
-        vatName: item.vatDesc || item.vatName || "",
-        rcCode: item.rcCode || "",
-        rcName: item.rcName || "",
-        rrLineNo: item.rrLineNo || "",
-        acctCode: item.drAcct || item.acctCode || "",
-        refNo: item.poNo || "",
+
+      const response = await postRequest("getRRLC_Selected", JSON.stringify(requestPayload));
+      const rawRows = response?.data?.[0]?.result
+        ? JSON.parse(response.data[0].result)
+        : response?.data || response;
+      const selectedRecords = Array.isArray(rawRows) ? rawRows : [];
+
+      if (!selectedRecords.length) {
+        useSwalErrorAlert("Open RR", "No RR detail rows were returned for the selected record(s).");
+        return;
+      }
+
+      const summaryByGroupId = new Map(
+        selectedSummaryRecords
+          .filter((summary) => String(summary?.groupId || "").trim())
+          .map((summary) => [String(summary.groupId), summary])
+      );
+
+      const mappedRows = selectedRecords.map((item) => {
+        const summary = summaryByGroupId.get(String(item.groupId || "")) || selectedSummaryRecords[0] || {};
+        return buildShipmentItemRowFromRR(item, summary);
       });
-    });
 
-    const updatedRows = [...(detailRowsRef.current || detailRows || []), ...mappedRows];
-    detailRowsRef.current = updatedRows;
-    updateState({
-      detailRows: updatedRows,
-      showRRRefModal: false,
-    });
-    updateTotalsDisplay(updatedRows);
+      const updatedRows = [...(detailRowsRef.current || detailRows || []), ...mappedRows];
+      detailRowsRef.current = updatedRows;
+      appliedShipmentItemAllocationSignatureRef.current = "";
+      updateState({
+        detailRows: updatedRows,
+        showOpenRRModal: false,
+        openRR_Data_Summary: [],
+        openRR_Col_Summary: [],
+      });
+      updateTotalsDisplay(updatedRows);
+      syncShipmentItemAllocations(updatedRows);
+    } catch (error) {
+      console.error("getRRLC_Selected failed:", error);
+      useSwalErrorAlert("Open RR", error?.message || "Unable to insert the selected RR rows.");
+    } finally {
+      updateState({ isLoading: false, showSpinner: false });
+    }
   };
 
-  const handleOpenVATLookup = (rowIndex) => {
-    if (isFormDisabled) return;
+ 
 
-    updateState({
-      vatLookupModalOpen: true,
-      selectedRowIndex: rowIndex,
-    });
-  };
+
 
   const handleCloseVATLookup = async (selectedVAT) => {
     if (!selectedVAT) {
@@ -1121,11 +1213,35 @@ const LC = () => {
     }
   };
 
-  const handleDeleteRow = (index) => {
-    const updatedRows = [...detailRows];
-    updatedRows.splice(index, 1);
+  const handleDeleteRow = async (index) => {
+    const currentRows = detailRowsRef.current || detailRows || [];
+    const targetRow = currentRows[index] || {};
+    const targetRrId = String(targetRow.rrId || "").trim();
+
+    const message = targetRrId
+      ? `This will delete the entire selected RR (${String(targetRow.rrNo||"").trim()}).\nAll item rows under this RR will be removed.`
+      : "This will delete the selected item row.";
+
+    const confirm = await useSwalProceedConfirm(
+      "Delete Shipment Item?",
+      message,
+      "Yes",
+      "No"
+    );
+
+    if (!confirm?.isConfirmed) {
+      return;
+    }
+
+    const updatedRows = targetRrId
+      ? currentRows.filter((row) => String(row?.rrId || "").trim() !== targetRrId)
+      : currentRows.filter((_, rowIndex) => rowIndex !== index);
+
+    detailRowsRef.current = updatedRows;
+    appliedShipmentItemAllocationSignatureRef.current = "";
     updateState({ detailRows: updatedRows });
     updateTotalsDisplay(updatedRows);
+    syncShipmentItemAllocations(updatedRows);
   };
 
   const recalcShipmentCostRow = (row = {}) => {
@@ -1229,6 +1345,41 @@ const LC = () => {
     });
   };
 
+  const applyShipmentCostPatchToAllRows = (patch) => {
+    setShipmentCostRows((prevRows) =>
+      (prevRows || []).map((row) => ({
+        ...row,
+        ...patch,
+      }))
+    );
+  };
+
+  const confirmApplyShipmentCostChangesToAllRows = async ({
+    headerLabel,
+    patch,
+  }) => {
+    if ((shipmentCostRows?.length || 0) === 0) {
+      return false;
+    }
+
+    const result = await useSwalProceedConfirm(
+      `Apply ${headerLabel} changes?`,
+      `Shipment Cost Details already has record(s).\nDo you want to apply the updated ${headerLabel} to all records?`,
+      "Yes"
+    );
+
+    if (result?.isConfirmed) {
+      applyShipmentCostPatchToAllRows(patch);
+      return true;
+    }
+
+    return false;
+  };
+
+  const handleShipmentCostRemarksChange = (index, _field, value) => {
+    handleShipmentCostChange(index, "remarks", value, false);
+  };
+
   const focusShipmentCostInput = (rowIndex, field) => {
     setTimeout(() => {
       const nextEl = document.getElementById(`shipmentCost-${field}-${rowIndex}`);
@@ -1257,35 +1408,21 @@ const LC = () => {
     moveToNextShipmentCostRow(index, field);
   };
 
-  const buildShipmentCostRowFromRef = async (selectedRef = {}) => {
-    const selectedCode =
+  const buildShipmentCostRowFromRef = (selectedRef = {}) => ({
+    ...createBlankShipmentCostRow(),
+    billCode:
       selectedRef.billCode ||
       selectedRef.code ||
       selectedRef.lcCode ||
-      "";
-
-    let billCodeRow = null;
-    if (selectedCode) {
-      try {
-        billCodeRow = await useTopBillCodeRow(selectedCode);
-      } catch (error) {
-        console.error("Error fetching shipment cost reference:", error);
-      }
-    }
-
-    return {
-      ...createBlankShipmentCostRow(),
-      billCode: billCodeRow?.billCode || selectedCode,
-      billDesc:
-        billCodeRow?.billName ||
-        billCodeRow?.description ||
-        selectedRef.billName ||
-        selectedRef.description ||
-        selectedRef.name ||
-        "",
-      acctCode: billCodeRow?.acctCode || selectedRef.acctCode || "",
-    };
-  };
+      "",
+    billDesc:
+      selectedRef.billDesc ||
+      selectedRef.billName ||
+      selectedRef.description ||
+      selectedRef.name ||
+      "",
+    acctCode: selectedRef.acctCode || "",
+  });
 
   const handleCloseShipmentCostRefLookup = async (selectedRef) => {
     if (!selectedRef) {
@@ -1295,7 +1432,7 @@ const LC = () => {
 
     if (Array.isArray(selectedRef)) {
       if (selectedRef.length > 0) {
-        const rowsToAdd = await Promise.all(selectedRef.map((row) => buildShipmentCostRowFromRef(row)));
+        const rowsToAdd = selectedRef.map((row) => buildShipmentCostRowFromRef(row));
         setShipmentCostRows((prevRows) => [...(prevRows || []), ...rowsToAdd]);
       }
       setShipmentCostLookup({ type: "", rowIndex: null });
@@ -1307,21 +1444,35 @@ const LC = () => {
       return;
     }
 
-    const nextRow = await buildShipmentCostRowFromRef(selectedRef);
+    const nextRow = buildShipmentCostRowFromRef(selectedRef);
     updateShipmentCostRow(shipmentCostLookup.rowIndex, nextRow);
     setShipmentCostLookup({ type: "", rowIndex: null });
   };
 
-  const handleCloseShipmentCostAccountLookup = (selectedAccount) => {
+  const handleCloseShipmentCostAccountLookup = async (selectedAccount) => {
     if (!selectedAccount || shipmentCostLookup.rowIndex == null) {
       setShipmentCostLookup({ type: "", rowIndex: null });
       return;
     }
 
-    updateShipmentCostRow(shipmentCostLookup.rowIndex, {
+    const nextAccountPatch = {
       acctCode: selectedAccount.acctCode || "",
       acctName: selectedAccount.acctName || "",
-    });
+    };
+
+    updateShipmentCostRow(shipmentCostLookup.rowIndex, nextAccountPatch);
+
+    if (shipmentCostLookup.rowIndex === 0 && (shipmentCostRows?.length || 0) > 1) {
+      const applied = await confirmApplyShipmentCostChangesToAllRows({
+        headerLabel: "Account Code",
+        patch: nextAccountPatch,
+      });
+      if (!applied) {
+        setShipmentCostLookup({ type: "", rowIndex: null });
+        return;
+      }
+    }
+
     setShipmentCostLookup({ type: "", rowIndex: null });
   };
 
@@ -1348,7 +1499,7 @@ const LC = () => {
     const row = { ...(updatedRows[index] || {}) };
     const editableFields = ["quantity", "unitCost"];
 
-    const nonNumericFields = ["invType", "rrNo", "itemCode", "itemName", "uomCode", "itemSpecs", "rcCode", "rcName", "rrLineNo", "acctCode", "refNo"];
+    const nonNumericFields = ["invType", "rrNo", "itemCode", "itemName", "uomCode", "itemSpecs", "rcCode", "rcName", "rrLineNo", "acctCode"];
 
     if (nonNumericFields.includes(field)) {
       row[field] = value;
@@ -1375,8 +1526,10 @@ const LC = () => {
     }
     updatedRows[index] = recalculatedRow;
     detailRowsRef.current = updatedRows;
+    appliedShipmentItemAllocationSignatureRef.current = "";
     updateState({ detailRows: updatedRows });
     updateTotalsDisplay(updatedRows);
+    syncShipmentItemAllocations(updatedRows);
   };
 
 
@@ -1473,6 +1626,7 @@ const handleActivityOption = async (action) => {
         invType: row.invType || "",
         lnNo: index + 1,
         rrNo: row.rrNo || "",
+        rrId: row.rrId || "",
         itemCode: row.itemCode || "",
         itemName: row.itemName || "",
         uomCode: row.uomCode || "",
@@ -1491,7 +1645,6 @@ const handleActivityOption = async (action) => {
         itemSpecs: row.itemSpecs || "",
         rrLineNo: row.rrLineNo || "",
         acctCode: row.acctCode || "",
-        refNo: row.refNo || "",
       })),
       dt2: shipmentCostRowsForSave.map((row, index) => ({
         documentID: documentID || "",
@@ -1509,30 +1662,41 @@ const handleActivityOption = async (action) => {
         siDate: row.siDate || null,
         remarks: row.remarks || "",
         acctCode: row.acctCode || "",
-        acctName: row.acctName || "",
         rcCode: row.rcCode || "",
-        rcName: row.rcName || "",
       })),
     };
 
 
-    const response = await useTransactionUpsert(docType, lcData, updateState, "documentID", "documentNo");
+    const response = await postRequest(
+      `upsert${docType}`,
+      JSON.stringify({ json_data: lcData })
+    );
 
+    const responseData = response?.data?.[0] || {};
+    const returnedErrorMsg = String(responseData.errorMsg || responseData.message || "").trim();
+    const returnedErrorCount = Number(responseData.errorCount ?? 0);
 
-    if (response) {
-      const responseDocNo = response.data[0]?.documentNo || response.data[0]?.docNo;
-      const responseDocId = response.data[0]?.documentID || response.data[0]?.docId;
+    if (returnedErrorMsg || returnedErrorCount > 0) {
+      useSwalErrorAlert("Validation Failed", returnedErrorMsg || "Unable to save transaction.");
+      return;
+    }
 
+    if (!responseData.documentNo && !responseData.docNo && !responseData.documentID && !responseData.docId) {
+      useSwalErrorAlert("Save Error", "Unexpected save response.");
+      return;
+    }
+
+    const responseDocNo = responseData.documentNo || responseData.docNo || documentNo;
+    const responseDocId = responseData.documentID || responseData.docId || documentID;
+
+    if (responseDocNo || responseDocId) {
       await fetchTranData(responseDocNo, branchCode);
       const isZero = Number(noReprints) === 0;
       const onSaveAndPrint = isZero
         ? () => updateState({ showSignatoryModal: true })
         : () => handleSaveAndPrint(responseDocId);
 
-      useSwalshowSaveSuccessDialog(
-        handleReset,
-        onSaveAndPrint
-      );
+      useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
     }
 
     updateState({
@@ -1540,7 +1704,13 @@ const handleActivityOption = async (action) => {
       isFetchDisabled: true,
     });
   } catch (error) {
-    console.error("Error during transaction upsert:", error);
+    const errorMessage =
+      error?.response?.data?.[0]?.errorMsg ||
+      error?.response?.data?.message ||
+      error?.response?.data?.error ||
+      error?.message ||
+      "Unable to save transaction.";
+    useSwalErrorAlert("Save Error", errorMessage);
   } finally {
     updateState({ isLoading: false });
   }
@@ -1584,6 +1754,7 @@ const handleActivityOption = async (action) => {
     }));
 
     detailRowsRef.current = copiedDetailRows;
+    appliedShipmentItemAllocationSignatureRef.current = "";
 
     updateState({
       documentNo: "",
@@ -1601,6 +1772,7 @@ const handleActivityOption = async (action) => {
     });
 
     updateTotalsDisplay(copiedDetailRows);
+    syncShipmentItemAllocations(copiedDetailRows);
   }
 };
 
@@ -1701,7 +1873,7 @@ const handleActivityOption = async (action) => {
     updateState({ branchModalOpen: false });
   };
 
-  const handleCloseRCModal = (selectedRC) => {
+  const handleCloseRCModal = async (selectedRC) => {
     if (!selectedRC) {
       updateState({
         rcLookupModalOpen: false,
@@ -1714,10 +1886,28 @@ const handleActivityOption = async (action) => {
     const { rcCode: selectedCode, rcName: selectedName } = selectedRC;
 
     if (rcLookupContext === "shipmentCost" && shipmentCostLookup.rowIndex != null) {
-      updateShipmentCostRow(shipmentCostLookup.rowIndex, {
+      const nextRcPatch = {
         rcCode: selectedCode,
         rcName: selectedName,
-      });
+      };
+
+      updateShipmentCostRow(shipmentCostLookup.rowIndex, nextRcPatch);
+
+      if (shipmentCostLookup.rowIndex === 0 && (shipmentCostRows?.length || 0) > 1) {
+        const applied = await confirmApplyShipmentCostChangesToAllRows({
+          headerLabel: "RC Code",
+          patch: nextRcPatch,
+        });
+        if (!applied) {
+          setShipmentCostLookup({ type: "", rowIndex: null });
+          updateState({
+            rcLookupModalOpen: false,
+            rcLookupContext: "",
+          });
+          return;
+        }
+      }
+
       setShipmentCostLookup({ type: "", rowIndex: null });
       updateState({
         rcLookupModalOpen: false,
@@ -1776,6 +1966,25 @@ const handleActivityOption = async (action) => {
 
       const nextVendCode = payeeRow?.vendCode || selectedVendCode;
       const nextVendName = selectedData?.vendName || payeeRow?.vendName || "";
+      const currentVendCode = String(vendCode || "").trim();
+      const currentBrokerCode = String(brokerCode || "").trim();
+      const currentForwarderCode = String(forwarderCode || "").trim();
+
+      const isDuplicateSelection =
+        (payeeLookupContext === "payee" &&
+          (nextVendCode === currentBrokerCode || nextVendCode === currentForwarderCode)) ||
+        (payeeLookupContext === "broker" &&
+          (nextVendCode === currentVendCode || nextVendCode === currentForwarderCode)) ||
+        (payeeLookupContext === "forwarder" &&
+          (nextVendCode === currentVendCode || nextVendCode === currentBrokerCode));
+
+      if (isDuplicateSelection) {
+        useSwalErrorAlert(
+          "Invalid Payee",
+          "Payee Code, Broker, and Forwarder must all be different."
+        );
+        return;
+      }
 
       if (payeeLookupContext === "shipmentCost" && shipmentCostLookup.rowIndex != null) {
         const nextVatCode = payeeRow?.vatCode || selectedData?.vatCode || "";
@@ -2000,11 +2209,8 @@ const handleActivityOption = async (action) => {
       invType: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`invType-${index}`} className="w-full global-tran-td-inputclass-ui" value={row.invType || ""} onChange={(e) => handleShipmentItemChange(index, "invType", e.target.value)} disabled={rowLocked || !!row.itemCode} onKeyDown={(e) => handleGridKeyDown(e, "invType", { disabled: rowLocked || !!row.itemCode })}><option value="">Select</option><option value="MS">MS</option><option value="RM">RM</option><option value="FG">FG</option></select></td>,
       itemCode: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`itemCode-${index}`} className="w-full global-tran-td-inputclass-ui" value={row.itemCode || ""} readOnly disabled={rowLocked} /></div></td>,
       itemName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("itemName", { readOnly: true })}</td>,
-      itemSpecs: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`itemSpecs-${index}`} className="w-full global-tran-td-inputclass-ui" value={row.itemSpecs || ""} readOnly={rowLocked} disabled={isFormDisabled} onChange={(e) => handleShipmentItemChange(index, "itemSpecs", e.target.value)} onKeyDown={(e) => handleGridKeyDown(e, "itemSpecs", { readOnly: rowLocked })} /></div></td>,
       uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("uomCode", { readOnly: true })}</td>,
-      vatCode: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`vatCode-${index}`} className="w-full global-tran-td-inputclass-ui pr-6" value={row.vatCode || ""} readOnly disabled={rowLocked} />{!rowLocked && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 cursor-pointer hover:text-blue-900" onClick={() => handleOpenVATLookup(index)} />}</div></td>,
       rcCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("rcCode", { readOnly: true })}</td>,
-      rcName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("rcName", { readOnly: true })}</td>,
 
       rrNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("rrNo", { readOnly: true })}</td>,
       quantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("quantity", { readOnly: rowLocked })}</td>,
@@ -2071,6 +2277,39 @@ const handleActivityOption = async (action) => {
     if (columnKey === "vatCode") return lookupInput("vatCode", "vat");
     if (columnKey === "acctCode") return lookupInput("acctCode", "acct");
     if (columnKey === "rcCode") return lookupInput("rcCode", "rc");
+    if (columnKey === "remarks") {
+      return (
+        <td key={columnKey} className="global-tran-td-ui relative" style={style}>
+          <div className="relative flex items-center">
+            <input
+              type="text"
+              id={`shipmentCost-${columnKey}-${index}`}
+              className="w-full global-tran-td-inputclass-ui pr-8"
+              value={row.remarks || ""}
+              readOnly
+              disabled={isFormDisabled}
+            />
+            {!isFormDisabled && (
+              <FontAwesomeIcon
+                icon={faSearch}
+                className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                onClick={() =>
+                  useSwalHandleOpenSpecsModal(
+                    index,
+                    shipmentCostRows,
+                    handleShipmentCostRemarksChange,
+                    row.remarks,
+                    "Remarks",
+                    "remarks",
+                    `Enter remarks for ${row.billCode || "this shipment cost"}...`
+                  )
+                }
+              />
+            )}
+          </div>
+        </td>
+      );
+    }
 
     if (columnKey === "siDate") {
       return (
@@ -2148,7 +2387,7 @@ const handleActivityOption = async (action) => {
           showActions={topTab === "details"}
           showNotify={(hsDoc?.docApp === "Y" || maxApprovalLevel > 0) && approvalStatus !== "Approved Transaction"}
           showBIRForm={false}
-          showCopyForm={true}
+          showCopyForm={false}
           isViewDocument={isViewDocument}
           onDetails={() => setTopTab("details")}
           disableRouteNavigation={true}
@@ -2270,7 +2509,7 @@ const handleActivityOption = async (action) => {
                       updateState={updateState}
                     />
                   </div>
-                  <label htmlFor="docDate" className="global-ref-floating-label">
+                  <label htmlFor="docDate" className="global-ref-floating-label global-ref-label-enabled">
                     LC Date
                   </label>
                 </div>
@@ -2394,7 +2633,7 @@ const handleActivityOption = async (action) => {
                       updateState={(next) => updateState({ importationDate: next.importationDate ?? next.value ?? next })}
                     />
                   </div>
-                  <label htmlFor="importationDate" className="global-ref-floating-label">
+                  <label htmlFor="importationDate" className="global-ref-floating-label global-ref-label-enabled">
                     Importation Date
                   </label>
                 </div>
@@ -2427,7 +2666,7 @@ const handleActivityOption = async (action) => {
                       updateState={(next) => updateState({ releaseDate: next.releaseDate ?? next.value ?? next })}
                     />
                   </div>
-                  <label htmlFor="releaseDate" className="global-ref-floating-label">
+                  <label htmlFor="releaseDate" className="global-ref-floating-label global-ref-label-enabled">
                     Release Date
                   </label>
                 </div>
@@ -2545,14 +2784,14 @@ const handleActivityOption = async (action) => {
 
               <div className="global-tran-tab-footer-main-div-ui">
                 <div className="global-tran-tab-footer-button-div-ui">
-                  <button
-                    type="button"
-                    onClick={handleOpenReferenceRR}
-                    disabled={isFormDisabled}
-                    className={`global-tran-tab-footer-button-add-ui ${isFormDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
-                    style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
-                  >
-                    <FontAwesomeIcon icon={faPlus} className="mr-2" />
+              <button
+                type="button"
+                onClick={handleOpenRRLookup}
+                disabled={isFormDisabled}
+                className={`global-tran-tab-footer-button-add-ui ${isFormDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
+              >
+                <FontAwesomeIcon icon={faPlus} className="mr-2" />
                     Add
                   </button>
                 </div>
@@ -2657,11 +2896,13 @@ const handleActivityOption = async (action) => {
       <div className={topTab === "history" ? "" : "hidden"}>
         <AllTranHistory
           showHeader={false}
-          endpoint={`/get${docType}History`}
-          cacheKey={`${docType}:${state.branchCode || ""}:${state.documentNo || ""}`}
+          isActive={topTab === "history"}
+          endpoint="/getLCHistory"
+          cacheKey={`LC:${state.branchCode || ""}:${state.fromDate || ""}:${state.toDate || ""}`}
+          activeTabKey="LC_Summary"
           branchCode={state.branchCode}
-          startDate={null}
-          endDate={null}
+          startDate={state.fromDate}
+          endDate={state.toDate}
           status="All"
           onRowDoubleClick={handleHistoryRowPick}
           historyExportName={`${documentTitle} History`}
@@ -2688,6 +2929,25 @@ const handleActivityOption = async (action) => {
         <PayeeMastLookupModal
           isOpen={payeeModalOpen}
           onClose={handleClosePayeeModal}
+          customParam={payeeLookupContext === "payee" ? "OpenIMP" : "ActiveAll"}
+        />
+      )}
+
+      {showOpenRRModal && (
+        <GlobalLookupModalv1
+          isOpen={showOpenRRModal}
+          title="Open RR Summary"
+          endpoint={openRR_Col_Summary}
+          data={openRR_Data_Summary}
+          btnCaption="Get Selected RR"
+          onClose={handleInsertSelectedOpenRR}
+          onCancel={() =>
+            updateState({
+              showOpenRRModal: false,
+              openRR_Data_Summary: [],
+              openRR_Col_Summary: [],
+            })
+          }
         />
       )}
 
@@ -2733,7 +2993,7 @@ const handleActivityOption = async (action) => {
       {state.showRRRefModal && (
         <GlobalLookupModalv1
           isOpen={state.showRRRefModal}
-          title="Open RR / JO References"
+          title="Open RR References"
           data={state.globalLookupRow}
           endpoint={openRRLookupColumns}
           btnCaption="Get Selected RR"

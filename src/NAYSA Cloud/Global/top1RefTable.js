@@ -518,7 +518,6 @@ export const useTopForexRate = async (currencyCode, documentDate) => {
         currCode: currencyCode,
       },
     };
-
     const forexResponse = await postRequest(
       "getDForexByDate",
       JSON.stringify(forexPayload)

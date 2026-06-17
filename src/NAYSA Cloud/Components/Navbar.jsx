@@ -37,6 +37,26 @@ import apiClient, { ensureCsrf } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { Link, useNavigate } from "react-router-dom";
 
 const DEFAULT_AVATAR = "/3135715.png";
+const THEME_STORAGE_KEY = "theme";
+const THEME_CHANGE_EVENT = "naysa-theme-change";
+
+const getStoredTheme = () =>
+  localStorage.getItem(THEME_STORAGE_KEY) === "dark" ? "dark" : "light";
+
+const applyTheme = (theme) => {
+  const isDark = theme === "dark";
+  document.documentElement.classList.toggle("dark", isDark);
+  localStorage.setItem(THEME_STORAGE_KEY, theme);
+  return isDark;
+};
+
+const broadcastThemeChange = (theme) => {
+  window.dispatchEvent(
+    new CustomEvent(THEME_CHANGE_EVENT, {
+      detail: { theme },
+    })
+  );
+};
 
 const Navbar = ({
   onMenuClick,
@@ -110,16 +130,28 @@ const Navbar = ({
   }, [refreshProfileImage]);
 
   useEffect(() => {
-    const cachedTheme = localStorage.getItem("theme");
+    setIsDark(applyTheme(getStoredTheme()));
 
-    if (cachedTheme === "dark") {
-      document.documentElement.classList.add("dark");
-      setIsDark(true);
-    } else {
-      document.documentElement.classList.remove("dark");
-      setIsDark(false);
-      if (!cachedTheme) localStorage.setItem("theme", "light");
-    }
+    const handleThemeChange = (event) => {
+      if (event.type === "storage" && event.key !== THEME_STORAGE_KEY) return;
+
+      const nextTheme =
+        event.type === "storage"
+          ? event.newValue
+          : event.detail?.theme;
+
+      if (nextTheme === "dark" || nextTheme === "light") {
+        setIsDark(applyTheme(nextTheme));
+      }
+    };
+
+    window.addEventListener(THEME_CHANGE_EVENT, handleThemeChange);
+    window.addEventListener("storage", handleThemeChange);
+
+    return () => {
+      window.removeEventListener(THEME_CHANGE_EVENT, handleThemeChange);
+      window.removeEventListener("storage", handleThemeChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -152,16 +184,9 @@ const Navbar = ({
   }, []);
 
   const toggleDarkMode = () => {
-    const newMode = !isDark;
-    setIsDark(newMode);
-
-    if (newMode) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
+    const nextTheme = isDark ? "light" : "dark";
+    setIsDark(applyTheme(nextTheme));
+    broadcastThemeChange(nextTheme);
   };
 
   const updateDropdownPosition = useCallback(() => {
