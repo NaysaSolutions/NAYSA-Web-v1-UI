@@ -89,9 +89,9 @@ const RegistrationInfo = ({ data = {}, layout = "stacked", showHeader = true }) 
   );
 
   return (
-    <div className={`bg-white p-3 rounded-lg border shadow-sm ${layout === 'minimize' ? 'max-w-2xl' : ''}`}>
+    <div className={`bg-white dark:bg-slate-800 p-3 rounded-lg border dark:border-slate-700 shadow-sm ${layout === 'minimize' ? 'max-w-2xl' : ''}`}>
       {showHeader && (
-        <h3 className="text-[9px] sm:text-[12px] font-bold text-slate-500 tracking-widest border-b pb-2 mb-3 uppercase">
+        <h3 className="text-[9px] sm:text-[12px] font-bold text-slate-500 dark:text-slate-400 tracking-widest border-b dark:border-slate-700 pb-2 mb-3 uppercase">
           Registration Information
         </h3>
       )}

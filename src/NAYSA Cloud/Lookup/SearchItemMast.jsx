@@ -435,16 +435,16 @@ const ItemMastLookupModal = ({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 animate-fade-in font-sans">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-[90rem] max-h-[85vh] flex flex-col relative overflow-hidden border border-slate-200">
-        <div className="flex items-center justify-between px-4 py-3 bg-slate-100 border-b">
-          <h2 className="text-[16px] font-bold text-[#1e40af]">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-[90rem] max-h-[85vh] flex flex-col relative overflow-hidden border border-slate-200 dark:border-slate-700">
+        <div className="flex items-center justify-between px-4 py-3 bg-slate-100 dark:bg-slate-700 border-b dark:border-slate-600">
+          <h2 className="text-[16px] font-bold text-[#1e40af] dark:text-blue-300">
             {itemSelectTitle}
           </h2>
 
           <div className="flex items-center gap-4">
             <button
               onClick={() => refetch()}
-              className="text-slate-400 hover:text-blue-600 transition-colors"
+              className="text-slate-400 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-300 transition-colors"
               type="button"
               disabled={!hasSubmittedSearch}
             >
@@ -453,7 +453,7 @@ const ItemMastLookupModal = ({
 
             <button
               onClick={() => onClose?.(null)}
-              className="text-slate-400 hover:text-red-600 transition-colors"
+              className="text-slate-400 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
               type="button"
             >
               <FontAwesomeIcon icon={faTimes} size="lg" />
@@ -463,18 +463,18 @@ const ItemMastLookupModal = ({
 
         <form
           onSubmit={handleManualSearch}
-          className="px-4 py-3 bg-slate-50 border-b flex items-center gap-6 flex-wrap"
+          className="px-4 py-3 bg-slate-50 dark:bg-slate-700/60 border-b dark:border-slate-600 flex items-center gap-6 flex-wrap"
         >
           <div className="flex items-center gap-2 w-full max-w-xl">
             <div className="relative flex-grow">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 dark:text-slate-500">
                 <FontAwesomeIcon icon={faSearch} size="sm" />
               </span>
 
               <input
                 type="text"
                 placeholder={String(docType || "").toUpperCase() === "FA" ? "Search by FA code or asset name..." : "Search by item code or item name..."}
-                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white transition-all"
+                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white dark:bg-slate-700 dark:text-slate-100 dark:placeholder:text-slate-400 transition-all"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -494,7 +494,7 @@ const ItemMastLookupModal = ({
           </div>
 
           <div className="flex items-center gap-5">
-            <label className="flex items-center gap-2 cursor-pointer text-[10px] font-bold text-slate-600 tracking-tight">
+            <label className="flex items-center gap-2 cursor-pointer text-[10px] font-bold text-slate-600 dark:text-slate-300 tracking-tight">
               <input
                 type="radio"
                 value="start"
@@ -520,7 +520,7 @@ const ItemMastLookupModal = ({
               <button
                 type="button"
                 onClick={resetFilters}
-                className="ml-2 text-[10px] font-bold text-blue-600 hover:underline"
+                className="ml-2 text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline"
               >
                 <FontAwesomeIcon icon={faEraser} className="mr-1" />
                 CLEAR ALL
@@ -529,30 +529,30 @@ const ItemMastLookupModal = ({
           </div>
         </form>
 
-        <div className="flex-grow overflow-auto custom-scrollbar bg-white">
+        <div className="flex-grow overflow-auto custom-scrollbar bg-white dark:bg-slate-800">
           {isLoading || isFetching ? (
-            <div className="flex flex-col items-center justify-center h-64 text-slate-400">
+            <div className="flex flex-col items-center justify-center h-64 text-slate-400 dark:text-slate-500">
               <FontAwesomeIcon icon={faSpinner} spin size="2x" className="mb-4 text-blue-500" />
               <p className="text-sm font-medium">Fetching from server...</p>
             </div>
           ) : (
             <table className="min-w-full border-separate border-spacing-0">
-              <thead className="sticky top-0 z-10 bg-slate-100 shadow-sm">
+              <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-700 shadow-sm">
                 <tr>
                   {enableMultiSelect && (
                     <th
                       style={{ width: "110px" }}
-                      className="px-4 py-3 text-left border-b border-slate-200"
+                      className="px-4 py-3 text-left border-b border-slate-200 dark:border-slate-600"
                     >
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="text-[12px] font-bold text-slate-600  tracking-tighter">
+                        <span className="text-[12px] font-bold text-slate-600 dark:text-slate-200 tracking-tighter">
                           Select
                         </span>
                         <FontAwesomeIcon icon={faSort} className="text-[10px] opacity-0" />
                       </div>
 
                       <div className="flex h-[34px] items-center">
-                        <label className="flex items-center gap-2 text-[11px] font-semibold text-slate-600 cursor-pointer select-none">
+                        <label className="flex items-center gap-2 text-[11px] font-semibold text-slate-600 dark:text-slate-300 cursor-pointer select-none">
                           <input
                             type="checkbox"
                             checked={allVisibleSelected}
@@ -588,7 +588,7 @@ const ItemMastLookupModal = ({
                         }
                         className="flex items-center gap-2 cursor-pointer mb-2 group"
                       >
-                        <span className="text-[12px] font-bold text-slate-600  tracking-tighter">
+                        <span className="text-[12px] font-bold text-slate-600 dark:text-slate-200 tracking-tighter">
                           {col.label}
                         </span>
                         <FontAwesomeIcon
@@ -600,7 +600,7 @@ const ItemMastLookupModal = ({
                       </div>
 
                       <div className="relative">
-                        <span className="absolute inset-y-0 left-2.5 flex items-center text-slate-300">
+                        <span className="absolute inset-y-0 left-2.5 flex items-center text-slate-300 dark:text-slate-500">
                           <FontAwesomeIcon icon={faSearch} className="text-[10px]" />
                         </span>
                         <input
@@ -613,7 +613,7 @@ const ItemMastLookupModal = ({
                             }))
                           }
                           placeholder="Filter..."
-                          className="w-full pl-7 pr-2 py-1.5 text-[11px] font-normal border border-slate-200 rounded-md bg-white focus:border-blue-400 outline-none"
+                          className="w-full pl-7 pr-2 py-1.5 text-[11px] font-normal border border-slate-200 dark:border-slate-600 rounded-md bg-white dark:bg-slate-600 dark:text-slate-100 dark:placeholder:text-slate-400 focus:border-blue-400 outline-none"
                         />
                       </div>
                     </th>
@@ -621,7 +621,7 @@ const ItemMastLookupModal = ({
                 </tr>
               </thead>
 
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                 {visibleRows.length > 0 ? (
                   visibleRows.map((item, idx) => {
                     const rowKey = getRowUniqueKey(item);
@@ -634,15 +634,15 @@ const ItemMastLookupModal = ({
                         className={`transition-colors group ${
                           enableMultiSelect
                             ? isChecked
-                              ? "bg-blue-50 hover:bg-blue-100"
-                              : "hover:bg-slate-50"
-                            : "hover:bg-blue-50 cursor-pointer"
+                              ? "bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50"
+                              : "hover:bg-slate-50 dark:hover:bg-slate-700"
+                            : "hover:bg-blue-50 dark:hover:bg-slate-700 cursor-pointer"
                         }`}
                       >
                         {enableMultiSelect && (
                           <td
                             style={{ width: "110px" }}
-                            className="px-4 py-3 text-[12px] text-slate-700 font-medium align-middle"
+                            className="px-4 py-3 text-[12px] text-slate-700 dark:text-slate-200 font-medium align-middle"
                           >
                             <div
                               className="flex items-center"
@@ -661,7 +661,7 @@ const ItemMastLookupModal = ({
                         {visibleColumns.map((col) => (
                           <td
                             key={col.key}
-                            className={`px-4 py-3 text-[12px] text-slate-700 font-medium ${col.classNames || ""}`}
+                            className={`px-4 py-3 text-[12px] text-slate-700 dark:text-slate-200 font-medium ${col.classNames || ""}`}
                           >
                             {col.key === "itemCode" ? (
                               <span className="font-bold">
@@ -679,7 +679,7 @@ const ItemMastLookupModal = ({
                   <tr>
                     <td
                       colSpan={visibleColumns.length + (enableMultiSelect ? 1 : 0)}
-                      className="px-4 py-20 text-center text-slate-400 italic"
+                      className="px-4 py-20 text-center text-slate-400 dark:text-slate-500 italic"
                     >
                       No records found.
                     </td>
@@ -690,9 +690,9 @@ const ItemMastLookupModal = ({
           )}
         </div>
 
-        <div className="px-4 py-3 border-t bg-slate-50 flex items-center justify-between gap-3 flex-wrap">
+        <div className="px-4 py-3 border-t dark:border-slate-700 bg-slate-50 dark:bg-slate-700/60 flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-4">
-            <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">
               Total Records: {visibleRows.length}
             </span>
 
