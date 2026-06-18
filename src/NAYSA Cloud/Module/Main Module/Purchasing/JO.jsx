@@ -882,7 +882,7 @@ const handleAddRow = async (index) => {
 
 
 const handleAddRowClick = async () => {
-  const fields = { "Header : Department": rcName, "Header : Payee": payeeCode };
+  const fields = { "Header : Payee": payeeCode };
   if (! await useSwalvalidateRequiredFields(fields, "Add Item") || isFormDisabled) return;
 
   try {
@@ -1386,7 +1386,10 @@ const handleCloseRCModal = (selectedRC) => {
       ...selectedRC,
       rcLookupModalOpen: false
     });
+    return;
   }
+
+  updateState({ rcLookupModalOpen: false });
 };
 
 
@@ -2169,6 +2172,7 @@ const renderJoDetailColumn = (columnKey, row, index) => {
          <JobCodeLookupModal
            isOpen={showJobCodesModal}
            onClose={handleCloseJobCodesLookup}
+           activeOnly={true}
            />
         )}
             

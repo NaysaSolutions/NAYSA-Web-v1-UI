@@ -3566,7 +3566,11 @@ const handleActivityOption = async (action) => {
                   id="payTerm"
                   label="Payterm *"
                   type="lookup"
-                  value={paytermName || paytermCode || ""}
+                  value={
+                    paytermCode
+                      ? `${paytermCode}${paytermName ? ` - ${paytermName}` : ""}`
+                      : ""
+                  }
                   readOnly
                   disabled={isFormDisabled}
                   lookupDisabled={isFormDisabled}
