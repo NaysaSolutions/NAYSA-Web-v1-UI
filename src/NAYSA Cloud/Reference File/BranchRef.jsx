@@ -1,5 +1,11 @@
 // src/NAYSA Cloud/Reference File/BranchRef.jsx
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
@@ -24,7 +30,6 @@ import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
 import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
-
 import {
   reftables,
   reftablesPDFGuide,
@@ -40,9 +45,31 @@ import {
   useSwalValidationAlert,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
-import { useFieldLenghtCheck, useGetFieldLength,} from '@/NAYSA Cloud/Global/procedure';
+import {
+  useFieldLenghtCheck,
+  useGetFieldLength,
+} from "@/NAYSA Cloud/Global/procedure";
 
 const DOC_TYPE = "Branch";
+
+const BRANCH_TYPE_OPTIONS = [
+  { value: "Main", label: "Main" },
+  { value: "Branch", label: "Branch" },
+  { value: "Company Store", label: "Company Store" },
+  { value: "Franchisee", label: "Franchisee" },
+];
+
+const normalizeBranchType = (value) => {
+  const v = String(value || "").trim().toUpperCase();
+
+  if (v === "MAIN") return "Main";
+  if (v === "COMPANY STORE" || v === "COMPANYSTORE" || v === "COMPANY") {
+    return "Company Store";
+  }
+  if (v === "FRANCHISEE" || v === "FRANCHISE") return "Franchisee";
+
+  return "Branch";
+};
 
 const INITIAL_FORM = {
   branchCode: "",
@@ -53,12 +80,17 @@ const INITIAL_FORM = {
   branchTin: "",
   telNo: "",
   zipCode: "",
-  main: "Branch",   // Main = Main, Branch = Branch
+  main: "Branch", // Main / Branch / Company Store / Franchisee
   active: "Y", // Y/N
-  tblFieldArray :[],
+  tblFieldArray: [],
 };
 
-const INITIAL_REG = { registeredBy: "", registeredDate: "", lastUpdatedBy: "", lastUpdatedDate: "" };
+const INITIAL_REG = {
+  registeredBy: "",
+  registeredDate: "",
+  lastUpdatedBy: "",
+  lastUpdatedDate: "",
+};
 
 const BranchRef = () => {
   const queryClient = useQueryClient();
@@ -75,7 +107,7 @@ const BranchRef = () => {
   const [selectedBranchCode, setSelectedBranchCode] = useState(null);
 
   const [isOpenGuide, setOpenGuide] = useState(false);
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [tblFieldArray, setTblFieldArray] = useState([]);
 
@@ -90,8 +122,7 @@ const BranchRef = () => {
       .join(", ");
   }, []);
 
-  const getBranchTypeLabel = (mainYN) =>
-    String(mainYN || "").toUpperCase() === "MAIN" ? "Main" : "Branch";
+  const getBranchTypeLabel = (branchType) => normalizeBranchType(branchType);
 
   const getActiveLabel = (activeYN) =>
     String(activeYN || "").toUpperCase() === "Y" ? "Yes" : "No";
@@ -106,60 +137,70 @@ const BranchRef = () => {
     },
   });
 
-// --- MUTATION: UPSERT ---
-const { mutate: saveBranch, isLoading: isSaving } = useMutation({
-  mutationFn: async (payload) => await apiClient.post("/upsertBranch", payload),
+  // --- MUTATION: UPSERT ---
+  const { mutate: saveBranch, isLoading: isSaving } = useMutation({
+    mutationFn: async (payload) =>
+      await apiClient.post("/upsertBranch", payload),
 
-  onSuccess: (response) => {
-    // 1) SPROC row style (errorcount/errormsg)
-    const sqlRow = response?.data?.data?.[0];
-    if (sqlRow?.errorcount > 0) {
-      useSwalErrorAlert("Error", sqlRow?.errormsg || "Failed to save Branch.");
-      resetForm(); // ✅ reset on failure
-      return;
-    }
+    onSuccess: (response) => {
+      // 1) SPROC row style (errorcount/errormsg)
+      const sqlRow = response?.data?.data?.[0];
+      if (sqlRow?.errorcount > 0) {
+        useSwalErrorAlert(
+          "Error",
+          sqlRow?.errormsg || "Failed to save Branch.",
+        );
+        resetForm(); // ✅ reset on failure
+        return;
+      }
 
-    // 2) API status style
-    const status = response?.data?.status ?? response?.data?.data?.status;
-    const success = response?.data?.success || status === "success" || !status;
+      // 2) API status style
+      const status = response?.data?.status ?? response?.data?.data?.status;
+      const success =
+        response?.data?.success || status === "success" || !status;
 
-    if (!success) {
-      useSwalErrorAlert(
-        "Error",
-        response?.data?.message ||
-          response?.data?.data?.message ||
-          "Failed to save Branch."
+      if (!success) {
+        useSwalErrorAlert(
+          "Error",
+          response?.data?.message ||
+            response?.data?.data?.message ||
+            "Failed to save Branch.",
+        );
+        resetForm(); // ✅ reset on failure
+        return;
+      }
+
+      // ✅ success path
+      queryClient.invalidateQueries({ queryKey: ["branchList"] });
+      useSwalSuccessAlert("Success!", "Branch saved successfully!");
+      resetForm();
+    },
+
+    onError: (error) => {
+      useSwalErrorAlertAPI(
+        "System Error",
+        error?.response?.status
+          ? `HTTP ${error.response.status}`
+          : error?.message || String(error),
       );
-      resetForm(); // ✅ reset on failure
-      return;
-    }
-
-    // ✅ success path
-    queryClient.invalidateQueries({ queryKey: ["branchList"] });
-    useSwalSuccessAlert("Success!", "Branch saved successfully!");
-    resetForm();
-  },
-
-  onError: (error) => {
-    useSwalErrorAlertAPI(
-      "System Error",
-      error?.response?.status ? `HTTP ${error.response.status}` : error?.message || String(error)
-    );
-    resetForm(); // ✅ reset on request error too
-  },
-});
-
+      resetForm(); // ✅ reset on request error too
+    },
+  });
 
   // --- MUTATION: DELETE ---
   const { mutate: deleteBranch, isLoading: isDeleting } = useMutation({
-  mutationFn: async (payload) => await apiClient.post("/deleteBranch", payload),
-  onSuccess: (response) => {
-    queryClient.invalidateQueries(["branchList"]);
-    useSwalDeleteRecord("Deleted!", "The branch has been removed from the system.");
-    resetForm();
-  },
-  onError: (error) => useSwalErrorAlertAPI("Delete Error", error)
-});
+    mutationFn: async (payload) =>
+      await apiClient.post("/deleteBranch", payload),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries(["branchList"]);
+      useSwalDeleteRecord(
+        "Deleted!",
+        "The branch has been removed from the system.",
+      );
+      resetForm();
+    },
+    onError: (error) => useSwalErrorAlertAPI("Delete Error", error),
+  });
 
   // --- ACTIONS ---
   const resetForm = () => {
@@ -188,7 +229,7 @@ const { mutate: saveBranch, isLoading: isSaving } = useMutation({
       branchTin: row.branchTin ?? "",
       telNo: row.telNo ?? "",
       zipCode: row.zipCode ?? "",
-      main: String(row.main ?? "Branch").toUpperCase() === "MAIN" ? "Main" : "Branch",
+      main: normalizeBranchType(row.main),
       active: String(row.active ?? "Y").toUpperCase() === "Y" ? "Y" : "N",
     });
 
@@ -196,7 +237,7 @@ const { mutate: saveBranch, isLoading: isSaving } = useMutation({
       registeredBy: row.registeredBy,
       registeredDate: row.registeredDate,
       lastUpdatedBy: row.lastUpdatedBy,
-      lastUpdatedDate: row.lastUpdatedDate
+      lastUpdatedDate: row.lastUpdatedDate,
     });
 
     console.log("Edit Row:", row);
@@ -205,15 +246,14 @@ const { mutate: saveBranch, isLoading: isSaving } = useMutation({
 
   // --- ACTIONS ---
   const handleSave = () => {
-  
     const payload = {
       json_data: JSON.stringify({
         json_data: {
           ...formData,
           action: selectedBranchCode ? "EDIT" : "ADD",
           userCode: user?.USER_CODE || "ADMIN",
-        }
-      })
+        },
+      }),
     };
     saveBranch(payload);
   };
@@ -223,33 +263,32 @@ const { mutate: saveBranch, isLoading: isSaving } = useMutation({
       setIsLoading(true); // Ensure you have a general loading state or use the mutation's state
       const payload = {
         json_data: {
-          branchCode: row.branchCode 
-        }
+          branchCode: row.branchCode,
+        },
       };
-  
+
       // 1. Check if used in other tables via SPROC
-      const response = await apiClient.post("/checkInUsedBranch", payload);    
+      const response = await apiClient.post("/checkInUsedBranch", payload);
       const sqlRow = response?.data?.data?.[0];
-      const rawJsonString = sqlRow?.result || Object.values(sqlRow || {})[0];  
+      const rawJsonString = sqlRow?.result || Object.values(sqlRow || {})[0];
       const parsedData = JSON.parse(rawJsonString || '{"result":"0"}');
-  
 
       if (parsedData.result === "1") {
         setIsLoading(false);
         return useSwalErrorAlertAPI(
-          `Cannot Delete Branch Code: ${row.branchCode}`, 
-          `Code was already used.`
+          `Cannot Delete Branch Code: ${row.branchCode}`,
+          `Code was already used.`,
         );
       }
-  
+
       // 2. Confirmations
       const confirm = await useSwalDeleteConfirm(
-        "Confirm Delete", 
-        `Are you sure you want to delete Code: ${row.branchCode}?`
+        "Confirm Delete",
+        `Are you sure you want to delete Code: ${row.branchCode}?`,
       );
-  
+
       if (confirm.isConfirmed) {
-        deleteBranch(payload); 
+        deleteBranch(payload);
       }
     } catch (error) {
       useSwalErrorAlertAPI("System Error", error);
@@ -257,35 +296,32 @@ const { mutate: saveBranch, isLoading: isSaving } = useMutation({
       setIsLoading(false);
     }
   };
-  
 
   // --- DUPLICATE CHECK (Add mode only) ---
-const handleCheckDuplicate = async (code) => {
-  
-  if (isEditing && selectedBranchCode) return; 
-  if (!code) return;
+  const handleCheckDuplicate = async (code) => {
+    if (isEditing && selectedBranchCode) return;
+    if (!code) return;
 
-  try {
-    const payload = { json_data: { branchCode: code } };
-    const response = await apiClient.post("/checkDuplicateBranch", payload);
-    
-    const sqlRow = response?.data?.data?.[0];
-    const rawJsonString = sqlRow?.result || Object.values(sqlRow || {})[0];
-    const parsedData = JSON.parse(rawJsonString || '{"result":"0"}');
+    try {
+      const payload = { json_data: { branchCode: code } };
+      const response = await apiClient.post("/checkDuplicateBranch", payload);
 
-    if (parsedData.result === "1") {
-      setIsLoading(false);
-      resetForm();
-      return useSwalErrorAlertAPI(
-        `Duplicate Branch Code: ${code}`, 
-        `Code was already used.`
-      );
+      const sqlRow = response?.data?.data?.[0];
+      const rawJsonString = sqlRow?.result || Object.values(sqlRow || {})[0];
+      const parsedData = JSON.parse(rawJsonString || '{"result":"0"}');
+
+      if (parsedData.result === "1") {
+        setIsLoading(false);
+        resetForm();
+        return useSwalErrorAlertAPI(
+          `Duplicate Branch Code: ${code}`,
+          `Code was already used.`,
+        );
+      }
+    } catch (error) {
+      console.error("Duplicate Check Error:", error);
     }
-
-  } catch (error) {
-    console.error("Duplicate Check Error:", error);
-  }
-};
+  };
 
   // Ctrl+S save + click outside dropdown
   useEffect(() => {
@@ -296,7 +332,8 @@ const handleCheckDuplicate = async (code) => {
       }
     };
     const handleClick = (e) => {
-      if (guideRef.current && !guideRef.current.contains(e.target)) setOpenGuide(false);
+      if (guideRef.current && !guideRef.current.contains(e.target))
+        setOpenGuide(false);
     };
     window.addEventListener("keydown", handleKey);
     document.addEventListener("mousedown", handleClick);
@@ -306,11 +343,10 @@ const handleCheckDuplicate = async (code) => {
     };
   }, [isEditing, formData, branches]);
 
-
   // --- TABLE COLUMNS (SearchGlobalReferenceTable style) ---
   const columns = useMemo(
     () => [
-{
+      {
         key: "__actions",
         label: "Actions",
         width: 100,
@@ -338,24 +374,56 @@ const handleCheckDuplicate = async (code) => {
         ),
       },
 
-      { key: "branchCode", label: "Branch Code", sortable: true , width: 120, minWidth: 120, requiredVisible: true },
-      { key: "branchName", label: "Branch Name", sortable: true , width: 280, minWidth: 280, requiredVisible: true },
+      {
+        key: "branchCode",
+        label: "Branch Code",
+        sortable: true,
+        width: 120,
+        minWidth: 120,
+        requiredVisible: true,
+      },
+      {
+        key: "branchName",
+        label: "Branch Name",
+        sortable: true,
+        width: 280,
+        minWidth: 280,
+        requiredVisible: true,
+      },
       {
         key: "address",
         label: "Address",
         sortable: true,
-        width: 350 ,
+        width: 350,
         minWidth: 100,
         render: (row) => getAddress(row),
       },
-      { key: "zipCode", label: "Zip Code", sortable: true, width: 100, minWidth: 100 },
-      { key: "branchTin", label: "TIN", sortable: true, width: 150, minWidth: 100 },
-      { key: "telNo", label: "Contact No.", sortable: true, width: 150, minWidth: 100 },
+      {
+        key: "zipCode",
+        label: "Zip Code",
+        sortable: true,
+        width: 100,
+        minWidth: 100,
+      },
+      {
+        key: "branchTin",
+        label: "TIN",
+        sortable: true,
+        width: 150,
+        minWidth: 100,
+      },
+      {
+        key: "telNo",
+        label: "Contact No.",
+        sortable: true,
+        width: 150,
+        minWidth: 100,
+      },
       {
         key: "main",
         label: "Branch Type",
         sortable: true,
-        width: 100 ,
+        width: 100,
         minWidth: 100,
         render: (row) => getBranchTypeLabel(row.main),
       },
@@ -363,29 +431,29 @@ const handleCheckDuplicate = async (code) => {
         key: "active",
         label: "Active",
         sortable: true,
-        width: 100 ,
+        width: 100,
         minWidth: 100,
         render: (row) => getActiveLabel(row.active),
       },
-      
     ],
-    [getAddress, branches, selectedBranchCode, handleDelete]
+    [getAddress, branches, selectedBranchCode, handleDelete],
   );
 
+  // load max length metadata once
+  useEffect(() => {
+    let mounted = true;
 
-    // load max length metadata once
-    useEffect(() => {
-      let mounted = true;
+    (async () => {
+      const res = await useFieldLenghtCheck("BRANCH_REF");
+      if (mounted) setTblFieldArray(res || []);
+    })();
 
-      (async () => {
-        const res = await useFieldLenghtCheck("BRANCH_REF");
-        if (mounted) setTblFieldArray(res || []);
-      })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
-      return () => { mounted = false; };
-    }, []);
-
-    const getMax = (col) => useGetFieldLength(tblFieldArray, col);
+  const getMax = (col) => useGetFieldLength(tblFieldArray, col);
 
   return (
     <div className="global-ref-main-div-ui">
@@ -394,7 +462,6 @@ const handleCheckDuplicate = async (code) => {
       {/* HEADER (same UI pattern as COAMast, no Tabs) */}
       <div className="global-ref-header-ui mb-2">
         <div className="w-full flex flex-col gap-1 md:grid md:grid-cols-3 md:items-center md:gap-0">
-
           {/* Left: Title */}
           <div className="w-full md:w-auto flex md:justify-start">
             <h1 className="global-ref-headertext-ui w-full md:w-auto truncate text-center md:text-left">
@@ -408,7 +475,6 @@ const handleCheckDuplicate = async (code) => {
           {/* Right: Buttons + Info */}
           <div className="w-full md:w-auto flex md:justify-end">
             <div className="w-full md:w-auto flex items-center justify-center md:justify-end gap-2 flex-wrap">
-
               <div className="flex flex-wrap justify-center md:justify-end gap-2">
                 <ButtonBar
                   buttons={[
@@ -422,19 +488,24 @@ const handleCheckDuplicate = async (code) => {
                     },
                     {
                       key: "save",
-                      label: <span className="hidden sm:inline ml-1">Save</span>,
+                      label: (
+                        <span className="hidden sm:inline ml-1">Save</span>
+                      ),
                       icon: faSave,
                       onClick: handleSave,
                       disabled: !isEditing || isSaving,
                       className: `flex items-center justify-center h-7 w-8 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md transition-all
-                        ${!isEditing || isSaving
-                          ? "bg-blue-500 opacity-50 cursor-not-allowed text-white"
-                          : "bg-blue-600 text-white hover:bg-blue-700"
+                        ${
+                          !isEditing || isSaving
+                            ? "bg-blue-500 opacity-50 cursor-not-allowed text-white"
+                            : "bg-blue-600 text-white hover:bg-blue-700"
                         }`,
                     },
                     {
                       key: "reset",
-                      label: <span className="hidden sm:inline ml-1">Reset</span>,
+                      label: (
+                        <span className="hidden sm:inline ml-1">Reset</span>
+                      ),
                       icon: faUndo,
                       onClick: resetForm,
                       className:
@@ -450,9 +521,17 @@ const handleCheckDuplicate = async (code) => {
                   onClick={() => setOpenGuide((v) => !v)}
                   className="bg-blue-600 text-white h-7 w-8 sm:w-auto sm:h-8 sm:px-4 rounded-md flex items-center justify-center gap-1 hover:bg-blue-700 transition-all"
                 >
-                  <FontAwesomeIcon icon={faInfoCircle} className="text-[12px]" />
-                  <span className="hidden sm:inline ml-1 text-[11px] font-medium">Info</span>
-                  <FontAwesomeIcon icon={faChevronDown} className="hidden sm:inline text-[10px] opacity-80" />
+                  <FontAwesomeIcon
+                    icon={faInfoCircle}
+                    className="text-[12px]"
+                  />
+                  <span className="hidden sm:inline ml-1 text-[11px] font-medium">
+                    Info
+                  </span>
+                  <FontAwesomeIcon
+                    icon={faChevronDown}
+                    className="hidden sm:inline text-[10px] opacity-80"
+                  />
                 </button>
 
                 {isOpenGuide && (
@@ -465,7 +544,11 @@ const handleCheckDuplicate = async (code) => {
                       disabled={!pdfLink}
                       className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 dark:hover:bg-blue-900 border-b border-gray-100 dark:border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <FontAwesomeIcon icon={faFilePdf} className="mr-2 text-red-500" /> PDF Guide
+                      <FontAwesomeIcon
+                        icon={faFilePdf}
+                        className="mr-2 text-red-500"
+                      />{" "}
+                      PDF Guide
                     </button>
 
                     <button
@@ -476,21 +559,22 @@ const handleCheckDuplicate = async (code) => {
                       disabled={!videoLink}
                       className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 dark:hover:bg-blue-900 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <FontAwesomeIcon icon={faVideo} className="mr-2 text-blue-500" /> Video Guide
+                      <FontAwesomeIcon
+                        icon={faVideo}
+                        className="mr-2 text-blue-500"
+                      />{" "}
+                      Video Guide
                     </button>
                   </div>
                 )}
               </div>
-
             </div>
           </div>
-
         </div>
       </div>
 
-        {/* MAIN CONTENT */}
-        <div className="mt-24 sm:mt-24 flex flex-col lg:flex-row lg:items-stretch gap-2">
-        
+      {/* MAIN CONTENT */}
+      <div className="mt-24 sm:mt-24 flex flex-col lg:flex-row lg:items-stretch gap-2">
         {/* LEFT: Form */}
         <div className="flex-1 bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
           {/* Column 1 */}
@@ -501,7 +585,9 @@ const handleCheckDuplicate = async (code) => {
               type="text"
               value={formData.branchCode}
               disabled={!isEditing || (isEditing && !!selectedBranchCode)}
-              onChange={(v) => updateForm({ branchCode: (v || "").toUpperCase() })}
+              onChange={(v) =>
+                updateForm({ branchCode: (v || "").toUpperCase() })
+              }
               onBlur={(e) => handleCheckDuplicate(e.target.value)}
               maxLength={getMax("BRANCH_CODE")}
             />
@@ -578,13 +664,10 @@ const handleCheckDuplicate = async (code) => {
             <FieldRenderer
               label="Branch Type"
               type="select"
-              value={formData.main === "Main" ? "Main" : "Branch"}
+              value={normalizeBranchType(formData.main)}
               disabled={!isEditing}
-              options={[
-                { value: "Main", label: "Main" },
-                { value: "Branch", label: "Branch" },
-              ]}
-              onChange={(v) => updateForm({ main: v === "Main" ? "Main" : "Branch" })}
+              options={BRANCH_TYPE_OPTIONS}
+              onChange={(v) => updateForm({ main: normalizeBranchType(v) })}
             />
 
             <FieldRenderer
@@ -605,7 +688,6 @@ const handleCheckDuplicate = async (code) => {
         <div className="w-full lg:w-[320px]">
           <RegistrationInfo layout="stacked" data={registrationInfo} />
         </div>
-
       </div>
 
       {/* TABLE */}

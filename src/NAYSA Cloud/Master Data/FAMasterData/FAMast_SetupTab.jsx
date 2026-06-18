@@ -1,5 +1,9 @@
 // src/NAYSA Cloud/Master Data/FAMasterData/FAMast_SetupTab.jsx
 import React, { useEffect, useRef, useState } from "react";
+import Barcode from "react-barcode";
+import QRCode from "react-qr-code";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faEye, faTag } from "@fortawesome/free-solid-svg-icons";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer";
 import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
 import { useFieldLenghtCheck, useGetFieldLength } from "@/NAYSA Cloud/Global/procedure";
@@ -13,13 +17,15 @@ import SearchRCMast from "@/NAYSA Cloud/Lookup/SearchRCMast.jsx";
 // import SearchEmployee from "@/NAYSA Cloud/Lookup/SearchEmployee.jsx";
 import SearchCurrMast from "@/NAYSA Cloud/Lookup/SearchCurrRef.jsx";
 import ItemMastLookupModal from "@/NAYSA Cloud/Lookup/SearchItemMast.jsx";
+import SearchPPETag from "@/NAYSA Cloud/Lookup/SearchPPETag.jsx";
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Shared UI primitives
 // ─────────────────────────────────────────────────────────────────────────────
-const SectionHeader = ({ title }) => (
-  <div className="mb-3">
-    <div className="text-[9px] sm:text-[12px] font-bold text-slate-500 tracking-widest border-b pb-2">
+const SectionHeader = ({ title, icon }) => (
+  <div className="mb-3 mt-1">
+    <div className="flex items-center gap-2 text-[9px] sm:text-[11px] font-bold text-blue-600/80 tracking-widest border-b border-blue-100 pb-2">
+      {icon && <span className="opacity-70">{icon}</span>}
       {title}
     </div>
   </div>
@@ -39,6 +45,70 @@ const Card = ({ children, className = "" }) => (
   </div>
 );
 
+const AssetTagPreviewCard = ({ tagInfo, onOpenPreview }) => {
+  const tagNo = tagInfo?.serialRow?.assetTag || "System-Generated";
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2 text-xs font-bold text-blue-700">
+          <FontAwesomeIcon icon={faTag} />
+          <span className="truncate">Property Tag Preview</span>
+        </div>
+
+        <button
+          type="button"
+          className="inline-flex min-w-[84px] items-center justify-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-blue-700 disabled:opacity-50"
+          onClick={onOpenPreview}
+        >
+          <FontAwesomeIcon icon={faEye} />
+          Preview
+        </button>
+      </div>
+
+      <div className="mx-auto w-full max-w-[320px] rounded-md border-2 border-slate-900 bg-white p-2 text-slate-900">
+        <div className="grid grid-cols-[minmax(0,1fr)_74px] gap-2">
+          <div className="min-w-0">
+            <div className="text-lg font-black leading-none text-blue-700">NAYSA</div>
+            <div className="text-[9px] font-black uppercase text-slate-600">Property Tag</div>
+            <div className="mt-1 truncate text-[10px] font-extrabold" title={tagInfo.companyInfo.companyName}>
+              {tagInfo.companyInfo.companyName}
+            </div>
+            <div className="truncate text-[9px] font-semibold text-slate-500" title={tagInfo.documentInfo.branchName}>
+              {tagInfo.documentInfo.branchName}
+            </div>
+            <div className="mt-2 max-h-[30px] min-h-[28px] overflow-hidden text-[11px] font-extrabold leading-tight" title={tagInfo.detailRow.assetDescription}>
+              {tagInfo.detailRow.assetDescription}
+            </div>
+          </div>
+
+          <div className="flex flex-col items-center justify-start gap-1">
+            <div className="border border-slate-900 bg-white p-1">
+              <QRCode value={tagNo} size={56} bgColor="#ffffff" fgColor="#111827" level="M" />
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-2 flex justify-center overflow-hidden bg-white [&_svg]:mx-auto">
+          <Barcode
+            value={tagNo}
+            format="CODE128"
+            height={24}
+            width={1.1}
+            margin={0}
+            displayValue={false}
+            background="#ffffff"
+            lineColor="#111827"
+          />
+        </div>
+        <div className="mt-1 truncate text-center text-[11px] font-black" title={tagNo}>
+          {tagNo}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  Helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,6 +119,9 @@ const getValue = (input) => {
   }
   return input ?? "";
 };
+
+const firstValue = (...values) =>
+  values.find((value) => value !== undefined && value !== null && String(value).trim() !== "") || "";
 
 const fallbackFaStatusOptions = [
   { value: "A", label: "Active" },
@@ -148,23 +221,24 @@ const FAMast_SetupTab = ({
   onLookupSelect,
   onBlurFaCode,
 }) => {
-  const isReadOnly  = !isEditing;
+  const isReadOnly = !isEditing;
   const isNewRecord = form.__isNew;
-  const isDisabled  = isReadOnly || isLoading;
+  const isDisabled = isReadOnly || isLoading;
 
-  const [isCategOpen,      setIsCategOpen]      = useState(false);
-  const [isClassOpen,      setIsClassOpen]      = useState(false);
-  const [isFlocOpen,       setIsFlocOpen]       = useState(false);
-  const [isBranchOpen,     setIsBranchOpen]     = useState(false);
-  const [isVendOpen,       setIsVendOpen]       = useState(false);
-  const [isRcOpen,         setIsRcOpen]         = useState(false);
-  const [isEmpOpen,        setIsEmpOpen]        = useState(false);
-  const [isCurrOpen,       setIsCurrOpen]       = useState(false);
+  const [isCategOpen, setIsCategOpen] = useState(false);
+  const [isClassOpen, setIsClassOpen] = useState(false);
+  const [isFlocOpen, setIsFlocOpen] = useState(false);
+  const [isBranchOpen, setIsBranchOpen] = useState(false);
+  const [isVendOpen, setIsVendOpen] = useState(false);
+  const [isRcOpen, setIsRcOpen] = useState(false);
+  const [isEmpOpen, setIsEmpOpen] = useState(false);
+  const [isCurrOpen, setIsCurrOpen] = useState(false);
   const [isItemLookupOpen, setIsItemLookupOpen] = useState(false);
-  const [activeTab,        setActiveTab]        = useState("acquisition");
+  const [activeTab, setActiveTab] = useState("acquisition");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [tblFieldArray,    setTblFieldArray]    = useState([]);
+  const [tblFieldArray, setTblFieldArray] = useState([]);
   const [faStatusOptions, setFaStatusOptions] = useState(fallbackFaStatusOptions);
+  const [showPpeTagPreview, setShowPpeTagPreview] = useState(false);
 
   useEffect(() => {
     const run = async () => {
@@ -204,7 +278,7 @@ const FAMast_SetupTab = ({
 
   // ── FA Code: typed when new, lookup when existing ────────────────────────
   // canType: only allow manual entry when generationMode is NOT "Auto" AND it's a new record
-  const canType    = isNewRecord && generationMode !== "Auto";
+  const canType = isNewRecord && generationMode !== "Auto";
   const overrideRef = useRef(null);
 
   useEffect(() => {
@@ -231,7 +305,7 @@ const FAMast_SetupTab = ({
         input.removeAttribute("maxlength");
         input.onclick = null;
         input.oninput = null;
-        input.onblur  = null;
+        input.onblur = null;
       }
     };
     attach();
@@ -239,282 +313,176 @@ const FAMast_SetupTab = ({
     return () => clearTimeout(t);
   }, [canType, isNewRecord, onChangeForm, onBlurFaCode, tblFieldArray]);
 
+  const propertyTagInfo = {
+    companyInfo: {
+      compName: "NAYSA Financials",
+      companyName: "NAYSA Financials",
+      branchName: firstValue(form.branchName, form.branchCode, "-"),
+    },
+    documentInfo: {
+      documentDate: firstValue(form.acqDate, form.registeredDate, "-"),
+      branchCode: firstValue(form.branchCode, ""),
+      branchName: firstValue(form.branchName, form.branchCode, "-"),
+    },
+    detailRow: {
+      assetDescription: firstValue(form.faName, form.faSpecs, form.faCode, "-"),
+      categName: firstValue(form.categName, form.categCode, "-"),
+      className: firstValue(form.className, form.classCode, "-"),
+      location: firstValue(form.flocName, form.flocCode, "-"),
+      brandModel: firstValue(form.modelNo, "-"),
+      acqCost: form.acqCost || 0,
+    },
+    serialRow: {
+      assetTag: firstValue(form.tagNo, form.barCode, form.faCode, "System-Generated"),
+      tagNo: firstValue(form.tagNo, form.barCode, form.faCode, "System-Generated"),
+      serialNo: firstValue(form.serialNo, "-"),
+      faName: firstValue(form.faName, form.faSpecs, form.faCode, "-"),
+      categName: firstValue(form.categName, form.categCode, "-"),
+      className: firstValue(form.className, form.classCode, "-"),
+      location: firstValue(form.flocName, form.flocCode, "-"),
+      assignedTo: firstValue(form.empName, form.empNo, "-"),
+      empName: firstValue(form.empName, form.empNo, "-"),
+      rcCode: firstValue(form.rcName, form.rcCode, "-"),
+      branchName: firstValue(form.branchName, form.branchCode, "-"),
+      acqDate: firstValue(form.acqDate, form.registeredDate, "-"),
+      brandModel: firstValue(form.modelNo, "-"),
+      acqCost: form.acqCost || 0,
+    },
+  };
+
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <>
       <div className="flex flex-col gap-6 rounded-lg relative">
 
         {/* ══════════════════════════════════════════════════════════════════
-            TOP CARD: Basic Information
+            TOP CARD: 3 columns — Basic Info | Tag Info | Tag Preview
         ══════════════════════════════════════════════════════════════════ */}
         <Card className="border border-blue-500/30 p-6 rounded-lg">
-          <SectionHeader title="BASIC INFORMATION" />
 
-          {/* FA Code — system-generated when Auto mode, lookup trigger when existing */}
-          <div
-            ref={overrideRef}
-            className={`w-full ${!canType
-              ? "[&>div]:!bg-[#F1F5F9] [&_input]:!bg-transparent [&_input]:!pointer-events-none [&_input]:!text-slate-600 [&_button]:!text-slate-400 [&_label]:!bg-[#F1F5F9]"
-              : ""
-            }`}
-          >
-            <FieldRenderer
-              label="Asset Code"
-              required
-              editableLookup
-              type="lookup"
-              value={form.faCode || ""}
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+
+            {/* ══ COL 1: Basic Information ══ */}
+            <div className="min-w-0 space-y-2">
+              <div className="text-[9px] sm:text-[12px] font-bold text-slate-500 tracking-widest border-b pb-2">
+                BASIC INFORMATION
+              </div>
+
+              {/* FA Code */}
+              <div ref={overrideRef} className={`w-full ${!canType ? "[&>div]:!bg-[#F1F5F9] [&_input]:!bg-transparent [&_input]:!pointer-events-none [&_input]:!text-slate-600 [&_button]:!text-slate-400 [&_label]:!bg-[#F1F5F9]" : ""}`}>
+                <FieldRenderer label="Asset Code" required editableLookup type="lookup" value={form.faCode || ""}
+                  onChange={(v) => onChangeForm({ faCode: String(getValue(v)).toUpperCase() })}
+                  onLookup={canType ? undefined : (isNewRecord ? undefined : () => !isLoading && setIsItemLookupOpen(true))}
+                  readOnly={true} disabled={isLoading} hideClearButton={!isNewRecord} maxLength={getLen("fa_code", 30)} />
+              </div>
+
+              <FieldRenderer label="Asset Name" required type="text" value={form.faName || ""}
+                onChange={(v) => onChangeForm({ faName: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} maxLength={getLen("fa_name", 200)} />
+
+              <div className="grid grid-cols-[190px_1fr] gap-2">
+                <FieldRenderer label="Category" required type="lookup" value={form.categCode || ""}
+                  onChange={(v) => onChangeForm({ categCode: getValue(v), categName: "" })}
+                  onLookup={() => !isDisabled && setIsCategOpen(true)} readOnly={isReadOnly} disabled={isDisabled} />
+                <FieldRenderer type="text" value={form.categName || ""} readOnly disabled />
+              </div>
+
+              <div className="grid grid-cols-[190px_1fr] gap-2">
+                <FieldRenderer label="Sub Category" type="lookup" value={form.classCode || ""}
+                  onChange={(v) => onChangeForm({ classCode: getValue(v), className: "" })}
+                  onLookup={() => !isDisabled && setIsClassOpen(true)} readOnly={isReadOnly} disabled={isDisabled} />
+                <FieldRenderer type="text" value={form.className || ""} readOnly disabled />
+              </div>
+
+              <div className="grid grid-cols-[190px_1fr] gap-2">
+                <FieldRenderer label="Assigned RC" type="lookup" value={form.rcCode || ""}
+                  onChange={(v) => onChangeForm({ rcCode: getValue(v), rcName: "" })}
+                  onLookup={() => !isDisabled && setIsRcOpen(true)} readOnly={isReadOnly} disabled={isDisabled} />
+                <FieldRenderer type="text" value={form.rcName || ""} readOnly disabled />
+              </div>
+
+              <div className="grid grid-cols-[190px_1fr] gap-2">
+                <FieldRenderer label="Employee No" type="lookup" value={form.empNo || ""}
+                  onChange={(v) => onChangeForm({ empNo: getValue(v), empName: "" })}
+                  onLookup={() => !isDisabled && setIsEmpOpen(true)} readOnly={isReadOnly} disabled={isDisabled} />
+                <FieldRenderer type="text" value={form.empName || ""} readOnly disabled />
+              </div>
+
+              <div className="grid grid-cols-[190px_1fr] gap-2">
+                <FieldRenderer label="Payee Code" type="lookup" value={form.vendCode || ""}
+                  onChange={(v) => onChangeForm({ vendCode: getValue(v), vendName: "" })}
+                  onLookup={() => !isDisabled && setIsVendOpen(true)} readOnly={isReadOnly} disabled={isDisabled} />
+                <FieldRenderer type="text" value={form.vendName || ""} readOnly disabled />
+              </div>
+
+              <FieldRenderer label="Specification" type="text" value={form.faSpecs || ""}
+                onChange={(v) => onChangeForm({ faSpecs: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} maxLength={getLen("fa_specs", 500)} />
+
+              <div className="grid grid-cols-2 gap-2">
+                <FieldRenderer label="Ref No 1" type="text" value={form.refNo1 || ""}
+                  onChange={(v) => onChangeForm({ refNo1: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} maxLength={getLen("ref_no1", 50)} />
+                <FieldRenderer label="Ref No 2" type="text" value={form.refNo2 || ""}
+                  onChange={(v) => onChangeForm({ refNo2: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} maxLength={getLen("ref_no2", 50)} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <FieldRenderer label="Asset Status" type="select" options={faStatusOptions} value={form.faStatus || "A"}
+                  onChange={(v) => onChangeForm({ faStatus: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} />
+                <FieldRenderer label="Tran Mode" type="select"
+                  options={[{ value: "S", label: "Single" }, { value: "G", label: "Group" }]}
+                  value={form.tranMode || "S"} onChange={(v) => onChangeForm({ tranMode: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} />
+              </div>
+            </div>
+
+            {/* ══ COL 2: Property Tag Information ══ */}
+            <div className="min-w-0 space-y-2">
+              <div className="text-[9px] sm:text-[12px] font-bold text-slate-500 tracking-widest border-b pb-2">
+                
+                PROPERTY TAG INFORMATION
+              </div>
+
+              <FieldRenderer label="Property Tag" type="text" value={form.tagNo || ""}
+                onChange={(v) => onChangeForm({ tagNo: getValue(v) })} readOnly={isReadOnly || isNewRecord} disabled={isDisabled || isNewRecord} maxLength={getLen("tag_no", 100)} />
+              <FieldRenderer label="Old Property Tag" type="text" value={form.oldCode || ""}
+                onChange={(v) => onChangeForm({ oldCode: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} maxLength={getLen("old_code", 100)} />
+              <FieldRenderer label="Bar Code" type="text" value={form.barCode || ""}
+                onChange={(v) => onChangeForm({ barCode: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} maxLength={getLen("bar_code", 100)} />
               
-              onChange={(v) => onChangeForm({ faCode: String(getValue(v)).toUpperCase() })}
-              onLookup={canType ? undefined : (isNewRecord ? undefined : () => !isLoading && setIsItemLookupOpen(true))}
-              readOnly={true}
-              disabled={isLoading}
-              maxLength={getLen("fa_code", 30)}
-            />
-          </div>
+              <FieldRenderer label="Serial No" type="text" value={form.serialNo || ""}
+                onChange={(v) => onChangeForm({ serialNo: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} maxLength={getLen("serial_no", 100)} />
 
-          {/* Asset Name */}
-          <FieldRenderer
-            label="Asset Name"
-            required
-            type="text"
-            value={form.faName || ""}
-            onChange={(v) => onChangeForm({ faName: getValue(v) })}
-            readOnly={isReadOnly}
-            disabled={isDisabled}
-            maxLength={getLen("fa_name", 200)}
-          />
+              <FieldRenderer label="Model No" type="text" value={form.modelNo || ""}
+                onChange={(v) => onChangeForm({ modelNo: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} maxLength={getLen("model_no", 100)} />
 
-          {/* Category */}
-          <div className="grid grid-cols-3 gap-2 mt-1">
-            <FieldRenderer
-              label="Category"
-              required
-              type="lookup"
-              value={form.categCode || ""}
-              onChange={(v) => onChangeForm({ categCode: getValue(v), categName: "" })}
-              onLookup={() => !isDisabled && setIsCategOpen(true)}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-            />
-            <div className="col-span-2">
-              <FieldRenderer type="text" value={form.categName || ""} readOnly disabled />
+              <FieldRenderer label="RR No" type="text" value={form.rrNo || ""}
+                onChange={(v) => onChangeForm({ rrNo: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} maxLength={getLen("rr_no", 50)} />
+
+              <div className="pt-2 border-t border-blue-100 space-y-2">
+                <div className="grid grid-cols-[190px_1fr] gap-2">
+                  <FieldRenderer label="Branch" type="lookup" value={form.branchCode || ""}
+                    onChange={(v) => onChangeForm({ branchCode: getValue(v), branchName: "" })}
+                    onLookup={() => !isDisabled && setIsBranchOpen(true)} readOnly={isReadOnly} disabled={isDisabled} />
+                  <FieldRenderer type="text" value={form.branchName || ""} readOnly disabled />
+                </div>
+                <div className="grid grid-cols-[190px_1fr] gap-2">
+                  <FieldRenderer label="Location" type="lookup" value={form.flocCode || ""}
+                    onChange={(v) => onChangeForm({ flocCode: getValue(v), flocName: "" })}
+                    onLookup={() => !isDisabled && setIsFlocOpen(true)} readOnly={isReadOnly} disabled={isDisabled} />
+                  <FieldRenderer type="text" value={form.flocName || ""} readOnly disabled />
+                </div>
+                <div className="grid grid-cols-[190px_1fr] gap-2">
+                  <FieldRenderer label="Department" type="text" value={form.rcCode || ""} readOnly disabled />
+                  <FieldRenderer type="text" value={form.rcName || ""} readOnly disabled />
+                </div>
+                <FieldRenderer label="Acquired On" type="text" value={form.acqDate || ""} readOnly disabled />
+              </div>
             </div>
-          </div>
 
-          {/* Classification */}
-          <div className="grid grid-cols-3 gap-2 mt-1">
-            <FieldRenderer
-              label="Classification"
-              type="lookup"
-              value={form.classCode || ""}
-              onChange={(v) => onChangeForm({ classCode: getValue(v), className: "" })}
-              onLookup={() => !isDisabled && setIsClassOpen(true)}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
+            {/* ══ COL 3: Property Tag Preview ══ */}
+            <AssetTagPreviewCard
+              tagInfo={propertyTagInfo}
+              onOpenPreview={() => setShowPpeTagPreview(true)}
             />
-            <div className="col-span-2">
-              <FieldRenderer type="text" value={form.className || ""} readOnly disabled />
-            </div>
-          </div>
 
-          {/* Location */}
-          <div className="grid grid-cols-3 gap-2 mt-1">
-            <FieldRenderer
-              label="Location"
-              type="lookup"
-              value={form.flocCode || ""}
-              onChange={(v) => onChangeForm({ flocCode: getValue(v), flocName: "" })}
-              onLookup={() => !isDisabled && setIsFlocOpen(true)}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-            />
-            <div className="col-span-2">
-              <FieldRenderer type="text" value={form.flocName || ""} readOnly disabled />
-            </div>
-          </div>
-
-          {/* Branch */}
-          <div className="grid grid-cols-3 gap-2 mt-1">
-            <FieldRenderer
-              label="Branch"
-              required
-              type="lookup"
-              value={form.branchCode || ""}
-              onChange={(v) => onChangeForm({ branchCode: getValue(v), branchName: "" })}
-              onLookup={() => !isDisabled && setIsBranchOpen(true)}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-            />
-            <div className="col-span-2">
-              <FieldRenderer type="text" value={form.branchName || ""} readOnly disabled />
-            </div>
-          </div>
-
-          {/* Identifiers row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-1">
-            <FieldRenderer
-              label="Serial No"
-              type="text"
-              value={form.serialNo || ""}
-              onChange={(v) => onChangeForm({ serialNo: getValue(v) })}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-              maxLength={getLen("serial_no", 100)}
-            />
-            <FieldRenderer
-              label="Model No"
-              type="text"
-              value={form.modelNo || ""}
-              onChange={(v) => onChangeForm({ modelNo: getValue(v) })}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-              maxLength={getLen("model_no", 100)}
-            />
-            <FieldRenderer
-              label="Bar Code"
-              type="text"
-              value={form.barCode || ""}
-              onChange={(v) => onChangeForm({ barCode: getValue(v) })}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-              maxLength={getLen("bar_code", 100)}
-            />
-            <FieldRenderer
-              label="Property Tag"
-              required
-              type="text"
-              value={form.tagNo || ""}
-              
-              onChange={(v) => onChangeForm({ tagNo: getValue(v) })}
-              readOnly={isReadOnly || isNewRecord}
-              disabled={isDisabled || isNewRecord}
-              maxLength={getLen("tag_no", 100)}
-            />
-            <FieldRenderer
-              label="Old Property Tag"
-              type="text"
-              value={form.oldCode || ""}
-              onChange={(v) => onChangeForm({ oldCode: getValue(v) })}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-              maxLength={getLen("old_code", 100)}
-            />
-            <FieldRenderer
-              label="RR No"
-              type="text"
-              value={form.rrNo || ""}
-              onChange={(v) => onChangeForm({ rrNo: getValue(v) })}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-              maxLength={getLen("rr_no", 50)}
-            />
-          </div>
-
-          {/* Responsibility Center */}
-          <div className="grid grid-cols-3 gap-2 mt-1">
-            <FieldRenderer
-              label="Assigned RC"
-              type="lookup"
-              value={form.rcCode || ""}
-              onChange={(v) => onChangeForm({ rcCode: getValue(v), rcName: "" })}
-              onLookup={() => !isDisabled && setIsRcOpen(true)}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-            />
-            <div className="col-span-2">
-              <FieldRenderer type="text" value={form.rcName || ""} readOnly disabled />
-            </div>
-          </div>
-
-          {/* Employee */}
-          <div className="grid grid-cols-3 gap-2 mt-1">
-            <FieldRenderer
-              label="Employee No"
-              type="lookup"
-              value={form.empNo || ""}
-              onChange={(v) => onChangeForm({ empNo: getValue(v), empName: "" })}
-              onLookup={() => !isDisabled && setIsEmpOpen(true)}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-            />
-            <div className="col-span-2">
-              <FieldRenderer type="text" value={form.empName || ""} readOnly disabled />
-            </div>
-          </div>
-
-          {/* Vendor */}
-          <div className="grid grid-cols-3 gap-2 mt-1">
-            <FieldRenderer
-              label="Vendor Code"
-              type="lookup"
-              value={form.vendCode || ""}
-              onChange={(v) => onChangeForm({ vendCode: getValue(v), vendName: "" })}
-              onLookup={() => !isDisabled && setIsVendOpen(true)}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-            />
-            <div className="col-span-2">
-              <FieldRenderer type="text" value={form.vendName || ""} readOnly disabled />
-            </div>
-          </div>
-
-          {/* FA Specs */}
-          <FieldRenderer
-            label="FA Specs"
-            type="text"
-            value={form.faSpecs || ""}
-            onChange={(v) => onChangeForm({ faSpecs: getValue(v) })}
-            readOnly={isReadOnly}
-            disabled={isDisabled}
-            maxLength={getLen("fa_specs", 500)}
-          />
-
-          {/* Ref No 1 & 2 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-1">
-            <FieldRenderer
-              label="Ref No 1"
-              type="text"
-              value={form.refNo1 || ""}
-              onChange={(v) => onChangeForm({ refNo1: getValue(v) })}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-              maxLength={getLen("ref_no1", 50)}
-            />
-            <FieldRenderer
-              label="Ref No 2"
-              type="text"
-              value={form.refNo2 || ""}
-              onChange={(v) => onChangeForm({ refNo2: getValue(v) })}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-              maxLength={getLen("ref_no2", 50)}
-            />
-          </div>
-
-          {/* FA Status */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-1">
-            <FieldRenderer
-              label="Asset Status"
-              type="select"
-              options={faStatusOptions}
-              value={form.faStatus || "A"}
-              onChange={(v) => onChangeForm({ faStatus: getValue(v) })}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-            />
-            <FieldRenderer
-              label="Tran Mode"
-              type="select"
-              options={[
-                { value: "S", label: "Single"   },
-                { value: "G", label: "Group"    },
-              ]}
-              value={form.tranMode || "S"}
-              onChange={(v) => onChangeForm({ tranMode: getValue(v) })}
-              readOnly={isReadOnly}
-              disabled={isDisabled}
-            />
           </div>
         </Card>
 
@@ -571,7 +539,7 @@ const FAMast_SetupTab = ({
             </div>
 
             {/* ── Content Area ── */}
-            <div className="flex-1 p-5 md:p-6 space-y-4 min-w-0">
+            <div className="flex-1 p-5 md:p-6 space-y-5 min-w-0">
 
               {/* ══ Acquisition ══ */}
               {activeTab === "acquisition" && (
@@ -589,36 +557,32 @@ const FAMast_SetupTab = ({
                       disabled={isDisabled}
                     />
 
-                    {/* Currency */}
-                    <div className="flex gap-2">
-                      <div className="flex-1">
-                        <FieldRenderer
-                          label="Currency"
-                          type="lookup"
-                          value={form.currCode || "PHP"}
-                          onChange={(v) => onChangeForm({ currCode: getValue(v) })}
-                          onLookup={() => !isDisabled && setIsCurrOpen(true)}
-                          readOnly={isReadOnly}
-                          disabled={isDisabled}
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <FieldRenderer
-                          label="Rate"
-                          type="number"
-                          value={form.currRate || "1.000000"}
-                          onChange={(v) => onChangeForm({ currRate: getValue(v) })}
-                          readOnly={isReadOnly}
-                          disabled={isDisabled}
-                        />
-                      </div>
+                    {/* Currency + Rate */}
+                    <div className="grid grid-cols-[1fr_120px] gap-2">
+                      <FieldRenderer
+                        label="Currency"
+                        type="lookup"
+                        value={form.currCode || "PHP"}
+                        onChange={(v) => onChangeForm({ currCode: getValue(v) })}
+                        onLookup={() => !isDisabled && setIsCurrOpen(true)}
+                        readOnly={isReadOnly}
+                        disabled={isDisabled}
+                      />
+                      <FieldRenderer
+                        label="Rate"
+                        type="number"
+                        value={form.currRate || "1.000000"}
+                        onChange={(v) => onChangeForm({ currRate: getValue(v) })}
+                        readOnly={isReadOnly}
+                        disabled={isDisabled}
+                      />
                     </div>
 
                     {/* EUL / RUL */}
                     <FieldRenderer
                       label="Est. Useful Life (yrs)"
                       type="number"
-                      value={form.eul || ""}
+                      value={form.eul ?? ""}
                       onChange={(v) => onChangeForm({ eul: getValue(v) })}
                       readOnly={isReadOnly}
                       disabled={isDisabled}
@@ -626,7 +590,7 @@ const FAMast_SetupTab = ({
                     <FieldRenderer
                       label="Remaining Useful Life (yrs)"
                       type="number"
-                      value={form.rul || ""}
+                      value={form.rul ?? ""}
                       onChange={(v) => onChangeForm({ rul: getValue(v) })}
                       readOnly={isReadOnly}
                       disabled={isDisabled}
@@ -636,7 +600,7 @@ const FAMast_SetupTab = ({
                     <FieldRenderer
                       label="Acquisition Cost"
                       type="number"
-                      value={form.acqCost || ""}
+                      value={form.acqCost ?? ""}
                       onChange={(v) => onChangeForm({ acqCost: getValue(v) })}
                       readOnly={isReadOnly}
                       disabled={isDisabled}
@@ -644,7 +608,7 @@ const FAMast_SetupTab = ({
                     <FieldRenderer
                       label="Acquisition Cost (FX1)"
                       type="number"
-                      value={form.acqCostFx1 || ""}
+                      value={form.acqCostFx1 ?? ""}
                       onChange={(v) => onChangeForm({ acqCostFx1: getValue(v) })}
                       readOnly={isReadOnly}
                       disabled={isDisabled}
@@ -652,7 +616,7 @@ const FAMast_SetupTab = ({
                     <FieldRenderer
                       label="Acquisition Cost (FX2)"
                       type="number"
-                      value={form.acqCostFx2 || ""}
+                      value={form.acqCostFx2 ?? ""}
                       onChange={(v) => onChangeForm({ acqCostFx2: getValue(v) })}
                       readOnly={isReadOnly}
                       disabled={isDisabled}
@@ -662,7 +626,7 @@ const FAMast_SetupTab = ({
                     <FieldRenderer
                       label="Salvage Value"
                       type="number"
-                      value={form.salvageValue || ""}
+                      value={form.salvageValue ?? ""}
                       onChange={(v) => onChangeForm({ salvageValue: getValue(v) })}
                       readOnly={isReadOnly}
                       disabled={isDisabled}
@@ -705,23 +669,23 @@ const FAMast_SetupTab = ({
                 <>
                   <SectionHeader title="ACCUMULATED DEPRECIATION" />
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <FieldRenderer label="Accum Depr"      type="number" value={form.accumDepr    || ""} readOnly disabled />
-                    <FieldRenderer label="Accum Depr (FX1)"type="number" value={form.accumDeprFx1 || ""} readOnly disabled />
-                    <FieldRenderer label="Accum Depr (FX2)"type="number" value={form.accumDeprFx2 || ""} readOnly disabled />
+                    <FieldRenderer label="Accum Depr" type="number" value={form.accumDepr ?? ""} readOnly disabled />
+                    <FieldRenderer label="Accum Depr (FX1)" type="number" value={form.accumDeprFx1 ?? ""} readOnly disabled />
+                    <FieldRenderer label="Accum Depr (FX2)" type="number" value={form.accumDeprFx2 ?? ""} readOnly disabled />
                   </div>
 
                   <SectionHeader title="MONTHLY DEPRECIATION" />
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <FieldRenderer label="Depr / Month"       type="number" value={form.deprMonth    || ""} readOnly disabled />
-                    <FieldRenderer label="Depr / Month (FX1)" type="number" value={form.deprMonthFx1 || ""} readOnly disabled />
-                    <FieldRenderer label="Depr / Month (FX2)" type="number" value={form.deprMonthFx2 || ""} readOnly disabled />
+                    <FieldRenderer label="Depr / Month" type="number" value={form.deprMonth ?? ""} readOnly disabled />
+                    <FieldRenderer label="Depr / Month (FX1)" type="number" value={form.deprMonthFx1 ?? ""} readOnly disabled />
+                    <FieldRenderer label="Depr / Month (FX2)" type="number" value={form.deprMonthFx2 ?? ""} readOnly disabled />
                   </div>
 
                   <SectionHeader title="NET BOOK VALUE" />
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <FieldRenderer label="Net Book Value"       type="number" value={form.nbValue    || ""} readOnly disabled />
-                    <FieldRenderer label="Net Book Value (FX1)" type="number" value={form.nbValueFx1 || ""} readOnly disabled />
-                    <FieldRenderer label="Net Book Value (FX2)" type="number" value={form.nbValueFx2 || ""} readOnly disabled />
+                    <FieldRenderer label="Net Book Value" type="number" value={form.nbValue ?? ""} readOnly disabled />
+                    <FieldRenderer label="Net Book Value (FX1)" type="number" value={form.nbValueFx1 ?? ""} readOnly disabled />
+                    <FieldRenderer label="Net Book Value (FX2)" type="number" value={form.nbValueFx2 ?? ""} readOnly disabled />
                   </div>
                 </>
               )}
@@ -750,7 +714,7 @@ const FAMast_SetupTab = ({
                     <FieldRenderer
                       label="Warranty Months"
                       type="number"
-                      value={form.warrantyMonths || ""}
+                      value={form.warrantyMonths ?? ""}
                       onChange={(v) => onChangeForm({ warrantyMonths: getValue(v) })}
                       readOnly={isReadOnly}
                       disabled={isDisabled}
@@ -774,10 +738,10 @@ const FAMast_SetupTab = ({
                   <SectionHeader title="LOCK INFORMATION" />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <FieldRenderer label="Locked Tran Code" type="text" value={form.lockedTranCode || ""} readOnly disabled />
-                    <FieldRenderer label="Locked Tran No"   type="text" value={form.lockedTranNo   || ""} readOnly disabled />
+                    <FieldRenderer label="Locked Tran No" type="text" value={form.lockedTranNo || ""} readOnly disabled />
                     <FieldRenderer label="Locked Tran Date" type="text" value={form.lockedTranDate || ""} readOnly disabled />
-                    <FieldRenderer label="Locked By"        type="text" value={form.lockedBy       || ""} readOnly disabled />
-                    <FieldRenderer label="Locked Date"      type="text" value={form.lockedDate     || ""} readOnly disabled />
+                    <FieldRenderer label="Locked By" type="text" value={form.lockedBy || ""} readOnly disabled />
+                    <FieldRenderer label="Locked Date" type="text" value={form.lockedDate || ""} readOnly disabled />
                   </div>
                 </>
               )}
@@ -791,9 +755,9 @@ const FAMast_SetupTab = ({
           layout="straight"
           disabled
           data={{
-            registeredBy:    form.registeredBy    || "",
-            registeredDate:  form.registeredDate  || "",
-            lastUpdatedBy:   form.lastUpdatedBy   || "",
+            registeredBy: form.registeredBy || "",
+            registeredDate: form.registeredDate || "",
+            lastUpdatedBy: form.lastUpdatedBy || "",
             lastUpdatedDate: form.lastUpdatedDate || "",
           }}
         />
@@ -864,6 +828,7 @@ const FAMast_SetupTab = ({
         isOpen={isItemLookupOpen}
         endpoint="/lookupFAMast"
         docType="FA"
+        method="post"
         enableMultiSelect={false}
         onClose={(payload) => {
           setIsItemLookupOpen(false);
@@ -871,6 +836,19 @@ const FAMast_SetupTab = ({
           if (selected) onLookupSelect(selected.faCode);
         }}
       />
+
+      {showPpeTagPreview && (
+        <SearchPPETag
+          isOpen={showPpeTagPreview}
+          viewMode
+          companyInfo={propertyTagInfo.companyInfo}
+          documentInfo={propertyTagInfo.documentInfo}
+          detailRow={propertyTagInfo.detailRow}
+          serialRow={propertyTagInfo.serialRow}
+          onClose={() => setShowPpeTagPreview(false)}
+        />
+      )}
+
     </>
   );
 };

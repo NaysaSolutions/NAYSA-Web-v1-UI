@@ -223,6 +223,20 @@ const GlobalLookupModalv1 = ({
     }
   };
 
+  const handleEditableCellChange = (row, key, value) => {
+    setRecords((prev) =>
+      prev.map((record) =>
+        record.groupId === row.groupId ? { ...record, [key]: value } : record
+      )
+    );
+
+    setSelected((prev) =>
+      prev.map((record) =>
+        record.groupId === row.groupId ? { ...record, [key]: value } : record
+      )
+    );
+  };
+
   const handleFilterChange = (e, key) => {
     setFilters((prev) => ({ ...prev, [key]: e.target.value }));
     setCurrentPage(1);
@@ -1589,7 +1603,30 @@ const handleExportExcelClick = async () => {
                                       style={{ width: w, minWidth: 70, maxWidth: 900 }}
                                       title={String(cellValue ?? "")}
                                     >
-                                      {cellValue}
+                                      {column.editable ? (
+                                        <input
+                                          type={column.inputType || "text"}
+                                          value={row[column.key] ?? ""}
+                                          onChange={(e) => {
+                                            const rawValue = e.target.value;
+                                            const nextValue =
+                                              column.renderType === "number"
+                                                ? rawValue.replace(/[^0-9.-]/g, "")
+                                                : rawValue;
+
+                                            handleEditableCellChange(
+                                              row,
+                                              column.key,
+                                              nextValue
+                                            );
+                                          }}
+                                          onClick={(e) => e.stopPropagation()}
+                                          onDoubleClick={(e) => e.stopPropagation()}
+                                          className="h-7 w-full rounded border border-blue-200 bg-white px-2 text-right text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300"
+                                        />
+                                      ) : (
+                                        cellValue
+                                      )}
                                     </td>
                                   );
                                 })}

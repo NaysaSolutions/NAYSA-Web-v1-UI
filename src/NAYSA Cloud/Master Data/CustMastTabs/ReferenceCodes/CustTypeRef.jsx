@@ -417,7 +417,7 @@ const CustTypeRef = forwardRef(({ onStateChange }, ref) => {
         <RegistrationInfo data={form} layout="stacked" />
       </Card>
 
-      <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-100">
+      
         <SearchGlobalReferenceTable
           columns={tableColumns}
           data={tableData}
@@ -430,7 +430,7 @@ const CustTypeRef = forwardRef(({ onStateChange }, ref) => {
           tableSize={tableSize}
           autoFillGrid={true}
         />
-      </div>
+     
     </div>
   );
 });

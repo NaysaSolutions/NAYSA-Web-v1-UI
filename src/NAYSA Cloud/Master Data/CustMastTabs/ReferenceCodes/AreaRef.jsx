@@ -432,7 +432,7 @@ const handleEdit = useCallback(async (row) => {
         <RegistrationInfo data={form} layout="stacked" />
       </Card>
 
-      <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-100">
+     
         <SearchGlobalReferenceTable
           columns={tableColumns}
           data={tableData}
@@ -445,7 +445,7 @@ const handleEdit = useCallback(async (row) => {
           tableSize={tableSize}
           autoFillGrid={true}
         />
-      </div>
+      
     </div>
   );
 });

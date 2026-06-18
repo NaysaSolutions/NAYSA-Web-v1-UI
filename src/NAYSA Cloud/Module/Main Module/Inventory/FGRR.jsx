@@ -144,6 +144,7 @@ const [isViewDocument, setIsViewDocument] = useState(false);
   // E = show/enable General Ledger / Entries / DT2.
   // D = hide/disable General Ledger / Entries / DT2.
   const isGeneralLedgerEnabled = fgInvGLMode === "E";
+  const shouldAutoGenerateGLOnSave = true;
 
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
 
@@ -199,7 +200,51 @@ const [isViewDocument, setIsViewDocument] = useState(false);
     { key: "delDate", label: "Del Date", renderType: "date", width: 120 },
   ];
 
-  const [state, setState] = useState({
+  const withEditableCurrencyRateColumn = (columns = []) => {
+    const normalizeColumnText = (value) =>
+      String(value || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
+
+    const isCurrencyRateColumn = (column) => {
+      const key = normalizeColumnText(column?.key || column?.field || "");
+      const label = normalizeColumnText(
+        column?.label || column?.header || column?.caption || "",
+      );
+
+      return [key, label].some((value) =>
+        ["currrate", "currencyrate", "forexrate", "fxrate"].includes(value),
+      );
+    };
+
+    if (columns.some(isCurrencyRateColumn)) {
+      return columns.map((column) =>
+        isCurrencyRateColumn(column)
+          ? {
+              ...column,
+              renderType: column.renderType || "number",
+              roundingOff: column.roundingOff ?? 6,
+              width: column.width || 140,
+              editable: true,
+            }
+          : column,
+      );
+    }
+
+    return [
+      ...columns,
+      {
+        key: "CurrRate",
+        label: "Currency Rate",
+        renderType: "number",
+        roundingOff: 6,
+        width: 140,
+        editable: true,
+      },
+    ];
+  };
+
+ const [state, setState] = useState({
     // HS Option / Currency
     glCurrMode: "M",
     glCurrDefault: "PHP",
@@ -475,7 +520,8 @@ groupId,
   const [lotEntryRows, setLotEntryRows] = useState([]);
 
   const [totals, setTotals] = useState({
-    rrQty: "",
+rrQty: "",
+    amount: "",
   });
 
   // PR.jsx
@@ -514,6 +560,7 @@ groupId,
       { key: "itemName", label: "Item Description", width: 300 },
       { key: "itemSpecs", label: "Specification", width: 300 },
       { key: "uomCode", label: "UOM", width: 80 },
+      { key: "poBalance", label: "PO Balance", width: 130 },
       { key: "rrQty", label: "RR Quantity", width: 130 },
       { key: "freeQty", label: "Free Quantity", width: 130 },
       { key: "unitCost", label: "Unit Cost", width: 120 },
@@ -579,10 +626,10 @@ groupId,
       { key: "sltypeCode", label: "SL Type", width: 120 },
       { key: "slCode", label: "SL Code", width: 120 },
       { key: "particular", label: "Particulars", width: 320 },
-      { key: "vatCode", label: "VAT Code", width: 120 },
-      { key: "vatName", label: "VAT Name", width: 220 },
-      { key: "atcCode", label: "ATC Code", width: 120 },
-      { key: "atcName", label: "ATC Name", width: 220 },
+      // { key: "vatCode", label: "VAT Code", width: 120 },
+      // { key: "vatName", label: "VAT Name", width: 220 },
+      // { key: "atcCode", label: "ATC Code", width: 120 },
+      // { key: "atcName", label: "ATC Name", width: 220 },
       { key: "debit", label: `Debit (${glCurrDefault})`, width: 140 },
       { key: "credit", label: `Credit (${glCurrDefault})`, width: 140 },
       ...(withCurr2
@@ -683,7 +730,16 @@ groupId,
       0,
     );
 
-    setTotals({ rrQty: formatNumber(totalRRQty, 6) });
+setTotals({
+      rrQty: formatNumber(totalRRQty, 6),
+      amount: formatNumber(
+        rows.reduce(
+          (sum, r) => sum + (parseFormattedNumber(r?.netAmount ?? r?.net_amount) || 0),
+          0
+        ),
+        2
+      ),
+    });
   };
 
   // ==========================
@@ -778,6 +834,14 @@ groupId,
     return [];
   };
 
+  const getCurrencyCode = (row = {}) =>
+    getPOField(row, "CurrCode", "CURR_CODE", "currCode", "curr_code", "currency", "Currency");
+
+  const getCurrencyName = (row = {}) =>
+    getPOField(row, "CurrName", "CURR_NAME", "currName", "curr_name", "currencyName", "CurrencyName");
+
+  const normalizeCurrencyCode = (code) => String(code || "").trim().toUpperCase();
+
   const formatOpenPODate = (value) => {
     if (!value) return "";
 
@@ -812,8 +876,28 @@ groupId,
       "ID",
       "id",
     );
-    const poId = getPOField(row, "PoId", "PO_ID", "poId", "po_id");
-    const poNo = getPOField(row, "PoNo", "PO_NO", "poNo", "po_no");
+ const poId = getPOField(row, "PoId", "PO_ID", "poId", "po_id");
+ const poNo = getPOField(row, "PoNo", "PO_NO", "poNo", "po_no");
+    const currCode = getPOField(row, "CurrCode", "CURR_CODE", "currCode", "curr_code");
+    const currRate = getPOField(
+      row,
+      "CurrRate",
+      "CURR_RATE",
+      "CurrencyRate",
+      "CURRENCY_RATE",
+      "ForexRate",
+      "FOREX_RATE",
+      "FxRate",
+      "FX_RATE",
+      "currRate",
+      "curr_rate",
+      "currencyRate",
+      "currency_rate",
+      "forexRate",
+      "forex_rate",
+      "fxRate",
+      "fx_rate",
+    );
     const formattedPoDate = formatOpenPODate(
       getPOField(row, "PoDate", "PO_DATE", "poDate", "po_date"),
     );
@@ -837,8 +921,16 @@ groupId,
         "BCode",
         "BCODE",
       ),
-      PoId: poId,
-      PoNo: poNo,
+ PoId: poId,
+ PoNo: poNo,
+      CurrCode: currCode,
+      CURR_CODE: currCode,
+      currCode,
+      curr_code: currCode,
+      CurrRate: currRate,
+      CURR_RATE: currRate,
+      currRate,
+      curr_rate: currRate,
       PoDate: formattedPoDate,
       PO_DATE: formattedPoDate,
       poDate: formattedPoDate,
@@ -1075,7 +1167,26 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     );
     const vatCode = getPOField(row, "VatCode", "VAT_CODE", "vatCode", "vat_code");
     const currCode = getPOField(row, "CurrCode", "CURR_CODE", "currCode", "curr_code");
-    const rcCode = getPOField(
+    const currRate = getPOField(
+      row,
+      "CurrRate",
+      "CURR_RATE",
+      "CurrencyRate",
+      "CURRENCY_RATE",
+      "ForexRate",
+      "FOREX_RATE",
+      "FxRate",
+      "FX_RATE",
+      "currRate",
+      "curr_rate",
+      "currencyRate",
+      "currency_rate",
+      "forexRate",
+      "forex_rate",
+      "fxRate",
+      "fx_rate",
+    );
+ const rcCode = getPOField(
       row,
       "RcCode",
       "RC_CODE",
@@ -1301,7 +1412,15 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       CurrCode: currCode,
       currCode,
       curr_code: currCode,
-      ITEM_AMOUNT: getPOField(row, "ITEM_AMOUNT", "itemAmount", "item_amount"),
+      CurrRate: currRate,
+      CURR_RATE: currRate,
+      CurrencyRate: currRate,
+      CURRENCY_RATE: currRate,
+      currRate,
+      curr_rate: currRate,
+      currencyRate: currRate,
+      currency_rate: currRate,
+ ITEM_AMOUNT: getPOField(row, "ITEM_AMOUNT", "itemAmount", "item_amount"),
       DISC_RATE: getPOField(row, "DISC_RATE", "discRate", "disc_rate"),
       VEND_CODE: getPOField(
         row,
@@ -1376,7 +1495,11 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       department: row.rcCode,
       currcode: row.currCode,
       currency: row.currCode,
-      itemspecs: row.itemSpecs,
+      currrate: row.currRate,
+      currencyrate: row.currRate,
+      forexrate: row.currRate,
+      fxrate: row.currRate,
+ itemspecs: row.itemSpecs,
       specs: row.itemSpecs,
     };
 
@@ -1516,8 +1639,8 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
             : openPOColSummary,
         openPORRColDetail:
           Array.isArray(colConfigDetail) && colConfigDetail.length > 0
-            ? colConfigDetail
-            : openPOColDetail,
+ ? withEditableCurrencyRateColumn(colConfigDetail)
+ : withEditableCurrencyRateColumn(openPOColDetail),
         poLookupModalOpen: true,
         isLoading: false,
       });
@@ -1628,6 +1751,19 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     );
 
     const vatRateMap = Object.fromEntries(vatRatePairs);
+    const selectedCurrRate =
+      getPOField(details?.[0], "CurrRate", "CURR_RATE", "currRate", "curr_rate") ||
+      getPOField(summary, "CurrRate", "CURR_RATE", "currRate", "curr_rate") ||
+      state.currRate ||
+      1;
+    const selectedCurrCode = normalizeCurrencyCode(
+      getCurrencyCode(details?.[0]) || getCurrencyCode(summary) || currCode || "PHP",
+    );
+    const selectedCurrRow = await useTopCurrencyRow(selectedCurrCode);
+    const selectedCurrName =
+      normalizeCurrencyCode(getCurrencyCode(selectedCurrRow) || selectedCurrCode) === selectedCurrCode
+        ? getCurrencyName(selectedCurrRow) || selectedCurrCode
+        : selectedCurrCode;
 
     const newMappedRows = details.map((d, idx) => {
       const poQty = parseFormattedNumber(d.poQuantity || 0);
@@ -1690,7 +1826,13 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
         poBalance: formatNumber(qtyBalance, 6),
         freeQty: formatNumber(0, 6),
 
-        currCode: d.currCode || summary.currCode || "PHP",
+        currCode: normalizeCurrencyCode(getCurrencyCode(d) || selectedCurrCode || "PHP"),
+        currRate: formatNumber(
+          getPOField(d, "CurrRate", "CURR_RATE", "currRate", "curr_rate") ||
+            selectedCurrRate ||
+            1,
+          6,
+        ),
         unitCost: formatNumber(unitCost, 6),
 
         amount: formatNumber(d.itemAmount || gross, 2),
@@ -1717,6 +1859,13 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
         locName: "",
       };
     });
+    const recalculatedMappedRows = newMappedRows.map((row) =>
+      recalcFGRRRowWithCurrencyRate({
+        ...row,
+        currCode: selectedCurrCode,
+        currRate: selectedCurrRate,
+      }),
+    );
 
     updateState({
       poNo: selectedPoNos.join(", ") || summary.poNo || "",
@@ -1724,15 +1873,16 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
       rcCode: summary.rcCode || rcCode,
       vendCode: getPOField(summary, "VendCode", "VEND_CODE", "vendCode", "vend_code"),
       vendName: getPOField(summary, "VendName", "VEND_NAME", "vendName", "vend_name"),
-      currCode: summary.currCode || currCode || "PHP",
-      currRate: formatNumber(summary.currRate || 1, 6),
+      currCode: selectedCurrCode,
+      currName: selectedCurrName,
+      currRate: formatNumber(selectedCurrRate || 1, 6),
       WHCode: poWhCode || WHCode || "",
       WHcode: poWhCode || WHcode || "",
       WHName: poWhName || WHName || "",
-      detailRows: newMappedRows,
+      detailRows: recalculatedMappedRows,
     });
 
-    updateTotalsDisplay(newMappedRows);
+    updateTotalsDisplay(recalculatedMappedRows);
   } catch (error) {
     console.error("PO Lookup Error:", error);
   } finally {
@@ -1868,7 +2018,7 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
     row.vatRate = formatNumber(rate, 2);
 
     // 4. Recompute transaction metrics with active rate variables loaded
-    row = recalcFGRRRow(row);
+    row = recalcFGRRRowWithCurrencyRate(row);
 
     // 5. Update state instances safely
     updatedRows[rowIndex] = row;
@@ -1903,6 +2053,8 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
         const defaultCurr =
           hs.glCurrDefault ?? hs.GLCURR_DEFAULT ?? state.currCode ?? "PHP";
 
+        const transactionCurr = normalizeCurrencyCode(state.currCode || defaultCurr || "PHP");
+
         const loadedFGInvGLMode = resolveGLMode(
           hs.fginvGLMode,
           hs.fgInvGLMode,
@@ -1927,16 +2079,19 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
           glCurrGlobal3: hs.glCurrGlobal3 ?? hs.GLCURR_GLOBAL3 ?? "",
 
           // set default currency for transaction
-          currCode: defaultCurr,
+          currCode: transactionCurr,
         });
 
         // -------------------------------------------------------
         // 3) TOP CURRENCY ROW (currency name, default rate)
         // -------------------------------------------------------
-        const currRow = await useTopCurrencyRow(defaultCurr);
+        const currRow = await useTopCurrencyRow(transactionCurr);
         if (currRow) {
           updateState({
-            currName: currRow.currName ?? currRow.CURR_NAME ?? state.currName,
+            currName:
+              normalizeCurrencyCode(getCurrencyCode(currRow) || transactionCurr) === transactionCurr
+                ? getCurrencyName(currRow) || transactionCurr
+                : transactionCurr,
             // If you always treat base currency as 1, keep this:
             currRate: formatNumber(1, 6),
             // If you prefer currency table rate, use this instead:
@@ -1945,7 +2100,7 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
         } else {
           // fallback safe defaults
           updateState({
-            currName: state.currName || defaultCurr,
+            currName: state.currName || transactionCurr,
             currRate: formatNumber(1, 6),
           });
         }
@@ -2040,6 +2195,9 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
       const parsed = data;
       const parsedDocumentNo = parsed.rrNo || "";
       const parsedDocumentId = parsed.rrId || parsed.rrHdId;
+      const isCancelledTran = ["X", "CANCELLED", "CANCELED"].includes(
+        String(parsed.rrStatus || parsed.status || "").trim().toUpperCase(),
+      );
 
       const parsedWHCode = parsed.WHCode || parsed.whCode || parsed.warehouseCode || "";
       const parsedWHName = parsed.WHName || parsed.whName || parsed.warehouseName || "";
@@ -2430,12 +2588,12 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
         vatName: g.vatName || "",
         atcCode: g.atcCode || "",
         atcName: g.atcName || "",
-        debit: formatNumber(g.debit || 0),
-        credit: formatNumber(g.credit || 0),
-        debitFx1: formatNumber(g.debitFx1 || 0),
-        creditFx1: formatNumber(g.creditFx1 || 0),
-        debitFx2: formatNumber(g.debitFx2 || 0),
-        creditFx2: formatNumber(g.creditFx2 || 0),
+        debit: formatNumber(isCancelledTran ? 0 : g.debit || 0),
+        credit: formatNumber(isCancelledTran ? 0 : g.credit || 0),
+        debitFx1: formatNumber(isCancelledTran ? 0 : g.debitFx1 || 0),
+        creditFx1: formatNumber(isCancelledTran ? 0 : g.creditFx1 || 0),
+        debitFx2: formatNumber(isCancelledTran ? 0 : g.debitFx2 || 0),
+        creditFx2: formatNumber(isCancelledTran ? 0 : g.creditFx2 || 0),
         slRefNo: g.slRefNo || "",
         slRefDate: normalizeGLDate(g.slRefDate || ""),
         remarks: g.remarks || "",
@@ -2593,7 +2751,7 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
           ? selectedVatLookupRate
           : selectedVatFetchedRate;
 
-      return recalcFGRRRow(getHeaderWarehouseLocationFields({
+      return recalcFGRRRowWithCurrencyRate(getHeaderWarehouseLocationFields({
         ...baseRow,
         invType: "FG",
         unitCost: formatNumber(parseFormattedNumber(selectedUnitCost), decUcost),
@@ -2690,7 +2848,31 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
     });
   };
 
-  const handlePrTranTypeChange = (e) => {
+  const handleCurrRateRecalcBlur = (e) => {
+    const numericRate = parseFormattedNumber(e.target.value || 0);
+    const nextRate = Number.isNaN(numericRate)
+      ? "0.000000"
+      : formatNumber(numericRate, 6);
+    const nextRows = (detailRows || []).map((row) =>
+      recalcFGRRRowWithCurrencyRate({
+        ...row,
+        currCode: row.currCode || currCode || state.currCode || "PHP",
+        currRate: nextRate,
+      }),
+    );
+
+    updateState({
+      currRate: nextRate,
+      detailRows: nextRows,
+      withCurr2:
+        (glCurrMode === "M" && glCurrDefault !== currCode) ||
+        glCurrMode === "D",
+      withCurr3: glCurrMode === "T",
+    });
+    updateTotalsDisplay(nextRows);
+  };
+
+  const handlePrTranTypeChange = (e) => {
     updateState({ selectedPoTranType: e.target.value });
   };
 
@@ -3140,7 +3322,7 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
       rrQty: formatNumber(lot.quantity, decQty),
     }));
 
-    updatedRows[lotPickingRowIndex] = recalcFGRRRow(
+    updatedRows[lotPickingRowIndex] = recalcFGRRRowWithCurrencyRate(
       {
         ...currentRow,
         rrQty: formatNumber(totalLotQty, decQty),
@@ -3170,7 +3352,7 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
   };
 
   const recalcFGRRRow = (row) => {
-    const rrQty = parseFormattedNumber(row.rrQty || 0);
+return recalcFGRRRowWithCurrencyRate(row);
     const freeQty = parseFormattedNumber(row.freeQty || 0);
     const unitCost = parseFormattedNumber(row.unitCost || 0);
     const vatRate = parseFormattedNumber(row.vatRate || 0);
@@ -3195,7 +3377,33 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
     };
   };
 
-  const handleDetailChange = async (index, field, value, extraData = {}) => {
+  const recalcFGRRRowWithCurrencyRate = (row) => {
+    const rrQty = parseFormattedNumber(row.rrQty || 0);
+    const freeQty = parseFormattedNumber(row.freeQty || 0);
+    const unitCost = parseFormattedNumber(row.unitCost || 0);
+    const vatRate = parseFormattedNumber(row.vatRate || 0);
+    const rowCurrCode = normalizeCurrencyCode(row.currCode || currCode || state.currCode || "PHP");
+    const rowCurrRate = parseFormattedNumber(row.currRate ?? currRate ?? state.currRate ?? 1) || 1;
+    const chargeableQty = Math.max(rrQty - freeQty, 0);
+    const gross = chargeableQty * unitCost;
+    const vatAmt = vatRate ? gross - gross / (1 + vatRate / 100) : 0;
+    const netAmtFx = gross - vatAmt;
+    const netAmt = rowCurrCode !== "PHP" ? netAmtFx * rowCurrRate : netAmtFx;
+
+    return {
+      ...row,
+      currCode: rowCurrCode,
+      currRate: formatNumber(rowCurrRate, 6),
+      grossAmount: formatNumber(gross, 2),
+      itemAmount: formatNumber(gross, 2),
+      vatAmount: formatNumber(vatAmt, 2),
+      fxAmount: formatNumber(netAmtFx, 2),
+      netAmount: formatNumber(netAmt, 2),
+      amount: formatNumber(gross, 2),
+    };
+  };
+
+  const handleDetailChange = async (index, field, value, extraData = {}) => {
     const rows = Array.isArray(detailRows) ? detailRows : [];
     const updatedRows = [...rows];
 
@@ -3321,6 +3529,7 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
     }
 
     updatedRows[index] = row;
+    if (field === "rrQty" && !validateRRQtyWithinPOBalance(updatedRows)) return;
     updateState({ detailRows: updatedRows });
 
     // ✅ replicate only for header-like fields (codes)
@@ -3340,7 +3549,7 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
     updateTotalsDisplay(updatedRows);
   };
 
-  const totalDebitGL = (state.detailRowsGL || []).reduce(
+  const totalDebitGL = (state.detailRowsGL || []).reduce(
     (sum, r) => sum + parseFormattedNumber(r?.debit || 0),
     0,
   );
@@ -3350,11 +3559,62 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
     0,
   );
 
-  const handleDocNoBlur = () => {
+  const handleDocNoBlur = () => {
     if (!state.documentID && state.documentNo && state.branchCode) {
       fetchTranData(state.documentNo, state.branchCode);
     }
   };
+
+  const validateRRQtyWithinPOBalance = (rowsToValidate = state.detailRows) => {
+    const errors = [];
+
+    (rowsToValidate || []).forEach((row, index) => {
+      const rrQtyValue = parseFormattedNumber(
+        row?.rrQty || row?.rrQuantity || row?.quantity || 0,
+      );
+      const balanceCandidates = [
+        row?.poBalance,
+        row?.qtyBalance,
+        row?.QtyBalance,
+        row?.BalanceQty,
+        row?.balanceQty,
+        row?.QTY_BALANCE,
+      ];
+      const poQtyCandidates = [
+        row?.poQty,
+        row?.poQuantity,
+        row?.PoQuantity,
+        row?.QtyOrdered,
+        row?.PO_QUANTITY,
+      ];
+      const hasBalance = balanceCandidates.some(
+        (value) => value !== undefined && value !== null && String(value).trim() !== "",
+      );
+      const allowedQty = hasBalance
+        ? parseFormattedNumber(balanceCandidates.find(
+            (value) => value !== undefined && value !== null && String(value).trim() !== "",
+          ) || 0)
+        : parseFormattedNumber(poQtyCandidates.find(
+            (value) => value !== undefined && value !== null && String(value).trim() !== "",
+          ) || 0);
+
+      if (allowedQty >= 0 && rrQtyValue > allowedQty + 0.000001) {
+        errors.push(
+          `Line ${index + 1}${row?.itemCode ? ` (${row.itemCode})` : ""}: RR Quantity ${formatNumber(rrQtyValue, decQty)} exceeds PO Balance ${formatNumber(allowedQty, decQty)}.`,
+        );
+      }
+    });
+
+    if (errors.length === 0) return true;
+
+    Swal.fire({
+      icon: "warning",
+      title: "RR Quantity exceeds PO Quantity",
+      html: errors.slice(0, 10).join("<br/>"),
+    });
+
+    return false;
+  };
   // ==========================
   // SAVE / UPSERT (FGRR + DT1 + DT2)
   // ==========================
@@ -3362,13 +3622,15 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
     // If already posted/cancelled/finalized, do not allow save / generate
     if (documentStatus !== "") return;
 
+    if (action === "Upsert" && !validateRRQtyWithinPOBalance()) return;
+
     updateState({ isLoading: true });
 
     try {
       const isNew = !state.documentID;
 
       // Optional front-end guard: prevent save when GL is unbalanced
-    if (isGeneralLedgerEnabled && action === "Upsert") {
+    if (false && isGeneralLedgerEnabled && action === "Upsert") {
         const totalDebit = (state.detailRowsGL || []).reduce(
           (sum, r) => sum + parseFormattedNumber(r?.debit || 0),
           0,
@@ -3482,7 +3744,7 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
           vatCode: r.vatCode || "",
           vatAmount: parseFormattedNumber(r.vatAmount || 0),
           currCode: r.currCode || state.currCode || "PHP",
-          currRate: Number(state.currRate || 1),
+          currRate: Number(r.currRate || state.currRate || 1),
           fxAmount: parseFormattedNumber(r.fxAmount || r.itemAmount || r.grossAmount || 0),
           netAmount: parseFormattedNumber(r.netAmount || 0),
 
@@ -3576,6 +3838,32 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
         });
       });
 
+      let glRowsForSave = Array.isArray(state.detailRowsGL)
+        ? [...state.detailRowsGL]
+        : [];
+
+      const mapGLRowsForSave = (rows = []) =>
+        (rows || []).map((r, i) => ({
+          recNo: String(i + 1),
+          acctCode: r.acctCode || "",
+          rcCode: r.rcCode || "",
+          sltypeCode: r.sltypeCode || "",
+          slCode: r.slCode || "",
+          particular: r.particular || "",
+          vatCode: r.vatCode || "",
+          atcCode: r.atcCode || "",
+          debit: parseFormattedNumber(r.debit || 0),
+          credit: parseFormattedNumber(r.credit || 0),
+          debitFx1: parseFormattedNumber(r.debitFx1 || 0),
+          creditFx1: parseFormattedNumber(r.creditFx1 || 0),
+          debitFx2: parseFormattedNumber(r.debitFx2 || 0),
+          creditFx2: parseFormattedNumber(r.creditFx2 || 0),
+          slRefNo: r.slRefNo || "",
+          slRefDate: r.slRefDate || null,
+          remarks: r.remarks || "",
+          dt1Lineno: r.dt1Lineno || "",
+        }));
+
 // Build payload (match your sproc params)
       const glData = {
         branchCode: state.branchCode,
@@ -3620,7 +3908,7 @@ rrHdId: documentID || "",
         dt3: dt3Payload,
 
         // DT2 (GL)
-        dt2: isGeneralLedgerEnabled ? (state.detailRowsGL || []).map((r, i) => ({
+        dt2: shouldAutoGenerateGLOnSave ? (glRowsForSave || []).map((r, i) => ({
           recNo: String(i + 1),
           acctCode: r.acctCode || "",
           rcCode: r.rcCode || "",
@@ -3645,12 +3933,72 @@ rrHdId: documentID || "",
       // ================
       // GENERATE GL
       // ================
-    if (action === "GenerateGL") {
+      const getNetAmountGLData = () => ({
+        ...glData,
+        dt1: (dt1Payload || []).map((row) => {
+          const netAmount = parseFormattedNumber(row.netAmount || row.net_amount || 0);
+
+          return {
+            ...row,
+            amount: netAmount,
+            itemAmount: netAmount,
+            grossAmount: netAmount,
+            fxAmount: netAmount,
+            netAmount,
+            net_amount: netAmount,
+          };
+        }),
+        dt2: [],
+      });
+
+if (action === "GenerateGL") {
       if (!isGeneralLedgerEnabled) return;
-        const newGlEntries = await useGenerateGLEntries(docType, glData);
+const newGlEntries = await useGenerateGLEntries(docType, getNetAmountGLData());
         if (newGlEntries) updateState({ detailRowsGL: newGlEntries });
         return;
-      }
+      }   
+
+      if (action === "Upsert" && shouldAutoGenerateGLOnSave) {
+        glRowsForSave = [];
+        glData.dt2 = [];
+
+        const generatedGlEntries = await useGenerateGLEntries(docType, getNetAmountGLData());
+
+        if (Array.isArray(generatedGlEntries) && generatedGlEntries.length > 0) {
+          glRowsForSave = generatedGlEntries;
+          glData.dt2 = mapGLRowsForSave(glRowsForSave);
+          updateState({ detailRowsGL: generatedGlEntries });
+        }
+
+        if (!Array.isArray(glRowsForSave) || glRowsForSave.length === 0) {
+          Swal.fire({
+            icon: "warning",
+            title: "General Ledger",
+            text: "No GL entries were generated. Please check the FG Category account setup.",
+          });
+          return;
+        }
+
+        const totalDebit = glRowsForSave.reduce(
+          (sum, r) => sum + parseFormattedNumber(r?.debit || 0),
+          0
+        );
+        const totalCredit = glRowsForSave.reduce(
+          (sum, r) => sum + parseFormattedNumber(r?.credit || 0),
+          0
+        );
+
+        if (Number((totalDebit - totalCredit).toFixed(2)) !== 0) {
+          Swal.fire({
+            icon: "warning",
+            title: "Unbalanced Debit/Credit",
+            html: `Debit: <b>${formatNumber(totalDebit)}</b><br/>Credit: <b>${formatNumber(
+              totalCredit
+            )}</b><br/><br/>Please balance GL before saving.`,
+          });
+          return;
+        }
+      }
 
       console.log("FGRR upsert response:", docType, glData, updateState);
       // ================
@@ -4049,7 +4397,7 @@ const handleClosePayeeLookup = async (row) => {
         ? formatNumber(parseFormattedNumber(nextVatRate), 2)
         : "";
     const updatedDetails = (detailRows || []).map((item) =>
-      recalcFGRRRow({
+      recalcFGRRRowWithCurrencyRate({
         ...item,
         vatCode: nextVatCode,
         vatName: nextVatName,
@@ -4250,16 +4598,29 @@ const handleClosePayeeLookup = async (row) => {
 
   const handleSelectCurrency = async (code) => {
     if (code) {
-      const result = await useTopCurrencyRow(code);
+      const selectedCode = normalizeCurrencyCode(code);
+      const result = await useTopCurrencyRow(selectedCode);
       if (result) {
         const rate =
-          code === glCurrDefault
+          selectedCode === normalizeCurrencyCode(glCurrDefault)
             ? defaultCurrRate
-            : await useTopForexRate(code, header.rr_date);
+            : await useTopForexRate(selectedCode, header.rr_date);
+        const nextRate = formatNumber(parseFormattedNumber(rate), 6);
+        const nextRows = (detailRows || []).map((row) =>
+          recalcFGRRRowWithCurrencyRate({
+            ...row,
+            currCode: selectedCode,
+            currRate: nextRate,
+          }),
+        );
 
         updateState({
-          currCode: result.currCode,
-          currName: result.currName,
+          currCode: selectedCode,
+          currName:
+            normalizeCurrencyCode(getCurrencyCode(result) || selectedCode) === selectedCode
+              ? getCurrencyName(result) || selectedCode
+              : selectedCode,
+          detailRows: nextRows,
           currRate: formatNumber(parseFormattedNumber(rate), 6),
         });
       }
@@ -4517,6 +4878,14 @@ const handleClosePayeeLookup = async (row) => {
       uomCode: () => (
         <td key={columnKey} className="global-tran-td-ui" style={style}>
           {textInput("uomCode", { readOnly: true, className: "text-center" })}
+        </td>
+      ),
+      poBalance: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {readOnlyNumberInput(
+            "poBalance",
+            formatNumber(parseFormattedNumber(row.poBalance ?? row.qtyBalance ?? 0), decQty),
+          )}
         </td>
       ),
       rrQty: () => (
@@ -5135,8 +5504,61 @@ const handleClosePayeeLookup = async (row) => {
 
               {/* Column 3: Currency */}
               <div className="global-tran-textbox-group-div-ui">
-                {/* NEW FLEX CONTAINER FOR CURRENCY AND CURRENCY RATE */}
-                
+                <div className="flex gap-4">
+                  <input type="hidden" id="currCode" value={currCode || ""} readOnly />
+
+                  <div className="flex-grow w-2/3">
+                    <FieldRenderer
+                      id="currName"
+                      label="Currency"
+                      type="text"
+                      value={
+                        currCode
+                          ? `${currCode}${currName ? ` - ${currName}` : ""}`
+                          : ""
+                      }
+                      disabled
+                      readOnly
+                    />
+                  </div>
+
+                  <div className="flex-grow">
+                    <FieldRenderer
+                      id="currRate"
+                      label="Currency Rate"
+                      type="amount"
+                      value={currRate || ""}
+                      disabled={isFormDisabled || glCurrDefault === currCode}
+                      onChange={(val) => {
+                        const sanitizedValue = String(val).replace(/[^0-9.]/g, "");
+                        if (/^\d*\.?\d{0,6}$/.test(sanitizedValue) || sanitizedValue === "") {
+                          const nextRows = (detailRows || []).map((row) =>
+                            recalcFGRRRowWithCurrencyRate({
+                              ...row,
+                              currCode: row.currCode || currCode || state.currCode || "PHP",
+                              currRate: sanitizedValue || 0,
+                            }),
+                          );
+                          updateState({ currRate: sanitizedValue, detailRows: nextRows });
+                          updateTotalsDisplay(nextRows);
+                        }
+                      }}
+                      onBlur={handleCurrRateRecalcBlur}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          document.getElementById("WHcode")?.focus();
+                        }
+                      }}
+                      onFocus={(e) => {
+                        if (!isFormDisabled && parseFormattedNumber(e.target.value) === 0) {
+                          updateState({ currRate: "" });
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+
 
                 {/* WareHouse  */}
 
@@ -5958,6 +6380,20 @@ const handleClosePayeeLookup = async (row) => {
             </div>
 
             <div className="global-tran-tab-footer-total-main-div-ui">
+  <div className="global-tran-tab-footer-total-div-ui">
+                <label
+                  htmlFor="TotalNetAmount"
+                  className="global-tran-tab-footer-total-label-ui"
+                >
+                  Total Net Amount:
+                </label>
+                <label
+                  htmlFor="TotalNetAmount"
+                  className="global-tran-tab-footer-total-value-ui"
+                >
+                  {totals.amount}
+                </label>
+              </div>
               <div className="global-tran-tab-footer-total-div-ui">
                 <label
                   htmlFor="TotalQty"
@@ -5972,6 +6408,7 @@ const handleClosePayeeLookup = async (row) => {
                   {totals.rrQty}
                 </label>
               </div>
+              
           </div>
           </div>
         </div>
@@ -6015,14 +6452,6 @@ const handleClosePayeeLookup = async (row) => {
                           orderedColumns: orderedFGRRGlColumns,
                         }),
                       )}
-                      {!isFormDisabled && (
-                        <th
-                          className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900"
-                          style={transactionActionsHeaderStyle}
-                        >
-                          Actions
-                        </th>
-                      )}
                     </tr>
                   </thead>
 
@@ -6034,29 +6463,6 @@ const handleClosePayeeLookup = async (row) => {
                       >
                         {orderedFGRRGlColumns.map((column) =>
                           renderFGRRGlCell(column.key, row, originalIndex),
-                        )}
-                        {!isFormDisabled && (
-                          <td
-                            className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black"
-                            style={transactionActionsCellStyle}
-                          >
-                            <div className="flex items-center justify-center gap-1">
-                              <button
-                                type="button"
-                                className="global-tran-td-button-add-ui"
-                                onClick={() => handleAddGLRow(originalIndex)}
-                              >
-                                <FontAwesomeIcon icon={faPlus} />
-                              </button>
-                              <button
-                                type="button"
-                                className="global-tran-td-button-delete-ui"
-                                onClick={() => handleDeleteGLRow(originalIndex)}
-                              >
-                                <FontAwesomeIcon icon={faTrashAlt} />
-                              </button>
-                            </div>
-                          </td>
                         )}
                       </tr>
                     ))}
@@ -6505,8 +6911,8 @@ const handleClosePayeeLookup = async (row) => {
     }
     detailColumns={
       openPORRColDetail.length > 0
-        ? openPORRColDetail
-        : openPOColDetail
+        ? withEditableCurrencyRateColumn(openPORRColDetail)
+        : withEditableCurrencyRateColumn(openPOColDetail)
     }
     summaryData={openPODataSummary}
     tabTitles={["Open PO Summary", "Open PO Detail"]}
@@ -6537,8 +6943,22 @@ const handleClosePayeeLookup = async (row) => {
         ? extractLookupRows(response.data[0].result)
         : extractLookupRows(response?.data || response);
 
+      const currencyRateByPoNo = Object.fromEntries(
+        selectedSummaries
+          .map((row) => [
+            getPOField(row, "PoNo", "PO_NO", "poNo", "po_no"),
+            getPOField(row, "CurrRate", "CURR_RATE", "currRate", "curr_rate"),
+          ])
+          .filter(([poNo]) => poNo),
+      );
+
       const normalizedRows = rows.map((row, index) => {
         const normalized = normalizeOpenPODetailRow(row, index);
+        const poCurrencyRate =
+          normalized.currRate ||
+          normalized.CurrRate ||
+          currencyRateByPoNo[normalized.poNo || normalized.PoNo] ||
+          1;
         const uniqueGroupId = [
           normalized.poNo || normalized.PoNo || idString,
           normalized.lnNo || normalized.Ln || index + 1,
@@ -6548,8 +6968,16 @@ const handleClosePayeeLookup = async (row) => {
 
         return {
           ...fillConfiguredOpenPODetailKeys(
-            normalized,
-            openPORRColDetail.length > 0 ? openPORRColDetail : openPOColDetail,
+            {
+              ...normalized,
+              CurrRate: poCurrencyRate,
+              CURR_RATE: poCurrencyRate,
+              currRate: poCurrencyRate,
+              curr_rate: poCurrencyRate,
+            },
+            withEditableCurrencyRateColumn(
+              openPORRColDetail.length > 0 ? openPORRColDetail : openPOColDetail,
+            ),
           ),
           groupId: uniqueGroupId,
           lookupGroupId: uniqueGroupId,

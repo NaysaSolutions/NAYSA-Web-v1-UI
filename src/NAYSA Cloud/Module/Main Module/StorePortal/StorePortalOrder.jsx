@@ -81,8 +81,51 @@ const getRowValue = (row, keys, fallback = "") => {
 const getCurrentUserCode = (currentUserRow, user) =>
   getRowValue(
     currentUserRow,
-    ["userCode", "USER_CODE", "user_code", "UserCode", "USERID", "userId"],
-    getRowValue(user, ["USER_CODE", "userCode", "user_code"], ""),
+    [
+      "userCode",
+      "USER_CODE",
+      "user_code",
+      "UserCode",
+      "USERCODE",
+      "usercode",
+      "USERID",
+      "userid",
+      "userId",
+      "UserID",
+      "USER_ID",
+      "user_id",
+      "LOGIN_ID",
+      "loginId",
+      "ACTCODE",
+      "actCode",
+      "USERNAME",
+      "username",
+    ],
+    getRowValue(
+      user,
+      [
+        "USER_CODE",
+        "userCode",
+        "user_code",
+        "UserCode",
+        "USERCODE",
+        "usercode",
+        "USERID",
+        "userid",
+        "userId",
+        "UserID",
+        "USER_ID",
+        "user_id",
+        "LOGIN_ID",
+        "loginId",
+        "ACTCODE",
+        "actCode",
+        "USERNAME",
+        "username",
+        "name",
+      ],
+      "",
+    ),
   );
 
 const getCurrentUserName = (currentUserRow, user) =>
@@ -112,8 +155,6 @@ const getCurrentUserBranchName = (currentUserRow) =>
     "BRANCH_DESC",
   ]);
 
-const getCurrentUserStoreType = (currentUserRow) =>
-  getRowValue(currentUserRow, ["storeType", "STORE_TYPE", "store_type", "StoreType"]);
 
 const unwrapDataArray = (response) => {
   const raw =
@@ -171,11 +212,43 @@ const toBoolean = (value) =>
   value === 1 ||
   ["1", "true", "y", "yes"].includes(String(value ?? "").trim().toLowerCase());
 
+const getApiErrorMessage = (error, fallback = "Unable to complete request.") => {
+  const data = error?.response?.data;
+
+  if (typeof data?.message === "string" && data.message.trim()) {
+    return data.message;
+  }
+
+  const errors = data?.errors;
+
+  if (errors?.errorMessage) {
+    return String(errors.errorMessage);
+  }
+
+  if (typeof errors === "string" && errors.trim()) {
+    return errors;
+  }
+
+  if (Array.isArray(errors)) {
+    const first = errors.flat().find(Boolean);
+    if (first) return String(first);
+  }
+
+  if (errors && typeof errors === "object") {
+    const first = Object.values(errors).flat().find(Boolean);
+    if (first) return String(first);
+  }
+
+  return error?.message || fallback;
+};
+
 const normalizeItemRow = (row = {}) => ({
   ...row,
   itemCode: getRowValue(row, ["itemCode", "ITEM_CODE", "item_code", "ItemCode", "ITEM_NO", "itemNo"]),
   itemName: getRowValue(row, ["itemName", "ITEM_NAME", "item_name", "ItemName", "ITEM_DESC", "itemDesc"]),
   uomCode: getRowValue(row, ["uomCode", "UOM_CODE", "uom_code", "UomCode", "UOM", "uom"]),
+  storeItemTag: getRowValue(row, ["storeItemTag", "STORE_ITEM_TAG", "store_item_tag", "itemAvailability"], ""),
+  storeType: getRowValue(row, ["storeType", "STORE_TYPE", "store_type", "branchStoreType"], ""),
 });
 
 const normalizeForecastRow = (row = {}) => ({
@@ -208,7 +281,34 @@ const normalizeConfirmationRow = (row = {}, fallbackDate = "") => {
   };
 };
 
-const getStoreTypeRequests = (value) => [value];
+const normalizeHistoryRow = (row = {}) => ({
+  ...normalizeForecastRow(row),
+  weeklyForecastNo: getRowValue(row, ["weeklyForecastNo", "WEEKLY_FORECAST_NO", "ORDER_NO", "orderNo"], ""),
+  originalWeeklyQty: toNumber(
+    row.originalWeeklyQty ??
+      row.ORIGINAL_WEEKLY_QTY ??
+      row.original_weekly_qty ??
+      row.forecastQty ??
+      row.FORECAST_QTY ??
+      row.orderQty,
+  ),
+  confirmedOrderQty: toNumber(
+    row.confirmedOrderQty ??
+      row.CONFIRMED_ORDER_QTY ??
+      row.confirmed_order_qty ??
+      row.confirmedQty ??
+      row.CONFIRMED_QTY,
+  ),
+  balanceQty: toNumber(row.balanceQty ?? row.BALANCE_QTY ?? row.balance_qty),
+  displayQty: toNumber(row.displayQty ?? row.DISPLAY_QTY ?? row.display_qty ?? row.orderQty),
+  status: getRowValue(row, ["status", "STATUS"], toBoolean(row.confirmed) ? "Confirmed" : "Forecast"),
+});
+
+const normalizeStoreContextRow = (row = {}) => ({
+  storeCode: getRowValue(row, ["storeCode", "STORE_CODE", "branchCode", "BRANCH_CODE"], ""),
+  storeType: getRowValue(row, ["storeType", "STORE_TYPE", "branchStoreType", "BRANCH_STORE_TYPE"], ""),
+});
+
 
 const mergeUniqueItems = (rows = []) => {
   const itemMap = new Map();
@@ -241,8 +341,8 @@ const buildOrderMatrix = (loadedItems, savedForecastRows, forecastDates) => {
     if (!row.itemCode || !row.deliveryDate || !matrix[row.itemCode]) return;
     if (!forecastDates.includes(row.deliveryDate)) return;
 
-    // Always display the saved weekly qty, even when confirmed.
-    // Example: Weekly Forecast 500 -> Daily Order Confirmed 300 -> Weekly cell shows 300 and is locked.
+    // Always display the saved Order Forecast qty, even when confirmed.
+    // Example: Order Forecast 500 -> Daily Order Confirmed 300 -> Order Forecast cell shows 300 and is locked.
     matrix[row.itemCode][row.deliveryDate] = toNumber(row.orderQty);
   });
 
@@ -399,7 +499,22 @@ const focusNextQuantityInput = (event) => {
   }
 };
 
+const formatQuantityWithSeparator = (value) => {
+  if (value === null || value === undefined || value === "") return "";
+
+  const stringValue = String(value).replace(/,/g, "");
+  if (!/^\d*(\.\d*)?$/.test(stringValue)) return stringValue;
+
+  const [wholePart = "", decimalPart] = stringValue.split(".");
+  const normalizedWhole = wholePart.replace(/^0+(?=\d)/, "") || "0";
+  const formattedWhole = normalizedWhole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
+  return decimalPart !== undefined ? `${formattedWhole}.${decimalPart}` : formattedWhole;
+};
+
 const QuantityInput = ({ value, onChange, tone = "blue", navGroup, navRow, navCol, disabled = false, max }) => {
+  const displayValue = formatQuantityWithSeparator(value ?? 0);
+
   const valueClass =
     Number(value || 0) > 0
       ? tone === "green"
@@ -431,7 +546,7 @@ const QuantityInput = ({ value, onChange, tone = "blue", navGroup, navRow, navCo
       data-qty-group={navGroup}
       data-qty-row={navRow}
       data-qty-col={navCol}
-      value={value ?? 0}
+      value={displayValue}
       disabled={disabled}
       onChange={handleChange}
       onKeyDown={focusNextQuantityInput}
@@ -474,7 +589,8 @@ export default function StorePortalOrder() {
   const branchName = useMemo(() => getCurrentUserBranchName(currentUserRow), [currentUserRow]);
   const storeCode = branchCode;
 
-  const [storeType, setStoreType] = useState("Company");
+  const [storeType, setStoreType] = useState("");
+  const [forecastView, setForecastView] = useState("entry");
   const [startDate, setStartDate] = useState(defaultForecastStartDate);
   const [endDate, setEndDate] = useState(defaultForecastEndDate);
 
@@ -491,11 +607,14 @@ export default function StorePortalOrder() {
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [confirmSubmitting, setConfirmSubmitting] = useState(false);
 
+  const [historyRows, setHistoryRows] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
   const [toast, setToast] = useState(null);
 
   const dates = useMemo(() => getDateRange(startDate, endDate), [startDate, endDate]);
   const hasTaggedBranch = Boolean(storeCode);
-  const isBusy = refsLoading || forecastLoading || forecastSubmitting || confirmLoading || confirmSubmitting;
+  const isBusy = refsLoading || forecastLoading || forecastSubmitting || confirmLoading || confirmSubmitting || historyLoading;
   const userDisplay = userName && userName !== userCode ? `${userCode} - ${userName}` : userCode;
   const branchDisplay = branchName ? `${branchCode} - ${branchName}` : branchCode;
 
@@ -504,10 +623,34 @@ export default function StorePortalOrder() {
     window.setTimeout(() => setToast(null), 3500);
   }, []);
 
+
+  const loadStoreContext = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!hasTaggedBranch) {
+        setStoreType("");
+        return;
+      }
+
+      try {
+        const res = await fetchData("store-portal/store-context", {
+          userCode,
+          storeCode,
+        });
+
+        const contextRow = unwrapDataArray(res).map(normalizeStoreContextRow)[0];
+        setStoreType(contextRow?.storeType || "");
+      } catch (error) {
+        console.error("Failed to load branch store type:", error);
+        setStoreType("");
+        if (!silent) showToast("Unable to load branch store type setup.", "error");
+      }
+    },
+    [hasTaggedBranch, showToast, storeCode, userCode],
+  );
+
   useEffect(() => {
-    const rowStoreType = getCurrentUserStoreType(currentUserRow);
-    if (rowStoreType) setStoreType(rowStoreType);
-  }, [currentUserRow]);
+    loadStoreContext({ silent: true });
+  }, [loadStoreContext]);
 
   const loadItems = useCallback(
     async ({ silent = false } = {}) => {
@@ -529,40 +672,32 @@ export default function StorePortalOrder() {
         return;
       }
 
+
       setForecastLoading(true);
       try {
-        const storeTypeRequests = getStoreTypeRequests(storeType);
-        const itemResponses = await Promise.all(
-          storeTypeRequests.map((type) =>
-            fetchData("store-portal/items", {
-              storeCode,
-              storeType: type,
-            }),
-          ),
-        );
+        const itemResponse = await fetchData("store-portal/items", {
+          userCode,
+          storeCode,
+        });
 
-        const loadedItems = mergeUniqueItems(itemResponses.flatMap((response) => unwrapDataArray(response)));
+        const loadedItems = mergeUniqueItems(unwrapDataArray(itemResponse));
+        const itemStoreType = loadedItems.find((item) => item.storeType)?.storeType;
+        if (itemStoreType) setStoreType(itemStoreType);
+
         let savedForecastRows = [];
 
         try {
-          const forecastResponses = await Promise.allSettled(
-            storeTypeRequests.map((type) =>
-              fetchData("store-portal/weekly-forecast", {
-                storeCode,
-                storeType: type,
-                startDate,
-                endDate,
-                orderType: "WeeklyForecast",
-              }),
-            ),
-          );
+          const forecastResponse = await fetchData("store-portal/weekly-forecast", {
+            userCode,
+            storeCode,
+            startDate,
+            endDate,
+            orderType: "WeeklyForecast",
+          });
 
-          savedForecastRows = forecastResponses
-            .filter((response) => response.status === "fulfilled")
-            .flatMap((response) => unwrapDataArray(response.value))
-            .map(normalizeForecastRow);
+          savedForecastRows = unwrapDataArray(forecastResponse).map(normalizeForecastRow);
         } catch (forecastError) {
-          console.warn("Items loaded, but existing weekly forecast quantities were not retrieved:", forecastError);
+          console.warn("Items loaded, but existing Order Forecast quantities were not retrieved:", forecastError);
         }
 
         const nextOrderMatrix = buildOrderMatrix(loadedItems, savedForecastRows, dates);
@@ -576,7 +711,7 @@ export default function StorePortalOrder() {
         if (!silent) {
           showToast(
             savedForecastRows.length > 0
-              ? "Items loaded with existing weekly forecast quantities."
+              ? "Items loaded with existing Order Forecast quantities."
               : "Items loaded successfully.",
           );
         }
@@ -591,17 +726,71 @@ export default function StorePortalOrder() {
         setForecastLoading(false);
       }
     },
-    [dates, endDate, hasTaggedBranch, showToast, startDate, storeCode, storeType],
+    [dates, endDate, hasTaggedBranch, showToast, startDate, storeCode, userCode],
+  );
+
+  const loadHistory = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!hasTaggedBranch) {
+        setHistoryRows([]);
+        if (!silent) showToast("No branch is tagged to the logged-in user account.", "error");
+        return;
+      }
+
+      if (!startDate || !endDate || new Date(`${startDate}T00:00:00`) > new Date(`${endDate}T00:00:00`)) {
+        setHistoryRows([]);
+        if (!silent) showToast("Please select a valid history date range.", "error");
+        return;
+      }
+
+      setHistoryLoading(true);
+      try {
+        const historyResponse = await fetchData("store-portal/weekly-forecast-history", {
+          userCode,
+          storeCode,
+          startDate,
+          endDate,
+        });
+
+        const rows = unwrapDataArray(historyResponse)
+          .map(normalizeHistoryRow)
+          .filter(
+            (row) =>
+              row.itemCode &&
+              (toNumber(row.originalWeeklyQty) > 0 || toNumber(row.confirmedOrderQty) > 0 || toBoolean(row.confirmed)),
+          );
+
+        setHistoryRows(rows);
+        if (!silent) {
+          showToast(rows.length > 0 ? "Order Forecast history loaded successfully." : "No Order Forecast history found.");
+        }
+      } catch (error) {
+        console.error("Failed to load Order Forecast history:", error);
+        setHistoryRows([]);
+        if (!silent) showToast("Unable to load Order Forecast history.", "error");
+      } finally {
+        setHistoryLoading(false);
+      }
+    },
+    [endDate, hasTaggedBranch, showToast, startDate, storeCode, userCode],
   );
 
   useEffect(() => {
-    loadItems({ silent: true });
-  }, [loadItems]);
+    if (forecastView === "entry") {
+      loadItems({ silent: true });
+    }
+  }, [forecastView, loadItems]);
+
+  useEffect(() => {
+    if (forecastView === "history") {
+      loadHistory({ silent: true });
+    }
+  }, [forecastView, loadHistory]);
 
   useEffect(() => {
     setConfirmationRows([]);
     setLoadedConfirmationRows([]);
-  }, [storeCode, storeType, deliveryDate]);
+  }, [storeCode, deliveryDate]);
 
   const isForecastCellConfirmed = useCallback(
     (itemCode, date) => Boolean(confirmedMatrix[itemCode]?.[date]),
@@ -610,7 +799,7 @@ export default function StorePortalOrder() {
 
   const resetWeeklyForecast = () => {
     setOrderMatrix(cloneMatrix(loadedOrderMatrix));
-    showToast("Weekly forecast reset to the last loaded values.");
+    showToast("Order Forecast reset to the last loaded values.");
   };
 
   const handleQtyChange = (itemCode, date, value) => {
@@ -632,28 +821,44 @@ export default function StorePortalOrder() {
       return;
     }
 
+    if (!startDate || !endDate || dates.length === 0) {
+      showToast("Please select a valid forecast date range.", "error");
+      return;
+    }
+
     if (items.length === 0) {
       showToast("Load items before submitting the forecast.", "error");
       return;
     }
 
+    const safeUserCode = userCode || userName || "SYSTEM";
     const details = [];
+
     items.forEach((item) => {
+      if (!item.itemCode) return;
+
       dates.forEach((date) => {
+        const rawQty = orderMatrix[item.itemCode]?.[date];
+        const orderQty = toNumber(rawQty);
+
         details.push({
           itemCode: item.itemCode,
-          itemName: item.itemName,
-          uomCode: item.uomCode,
+          itemName: item.itemName || "",
+          uomCode: item.uomCode || "",
           deliveryDate: date,
-          orderQty: Number(orderMatrix[item.itemCode]?.[date] || 0),
+          orderQty,
         });
       });
     });
 
+    if (details.length === 0) {
+      showToast("No valid forecast details to submit.", "error");
+      return;
+    }
+
     const payload = {
-      userCode,
+      userCode: safeUserCode,
       storeCode,
-      storeType,
       startDate,
       endDate,
       orderType: "WeeklyForecast",
@@ -663,11 +868,11 @@ export default function StorePortalOrder() {
     setForecastSubmitting(true);
     try {
       const res = await postRequest("store-portal/weekly-forecast", payload);
-      showToast(res?.message || "Weekly forecast submitted successfully.");
+      showToast(res?.message || "Order Forecast submitted successfully.");
       await loadItems({ silent: true });
     } catch (error) {
-      console.error("Failed to submit weekly forecast:", error);
-      showToast("Unable to submit weekly forecast.", "error");
+      console.error("Failed to submit Order Forecast:", error?.response?.data || error);
+      showToast(getApiErrorMessage(error, "Unable to submit Order Forecast."), "error");
     } finally {
       setForecastSubmitting(false);
     }
@@ -683,13 +888,18 @@ export default function StorePortalOrder() {
     try {
       const res = await fetchData("store-portal/confirmation", {
         storeCode,
-        storeType,
         deliveryDate,
       });
 
       const rows = unwrapDataArray(res)
         .map((row) => normalizeConfirmationRow(row, deliveryDate))
-        .filter((row) => row.itemCode && toNumber(row.orderQty) > 0);
+        // Keep confirmed rows even if the weekly qty returned as 0.
+        // The saved/confirmed qty must still be retrievable for old forecast dates.
+        .filter(
+          (row) =>
+            row.itemCode &&
+            (toNumber(row.orderQty) > 0 || toNumber(row.forecastQty) > 0 || toBoolean(row.confirmed)),
+        );
 
       setConfirmationRows(rows);
       setLoadedConfirmationRows(rows.map((row) => ({ ...row })));
@@ -713,11 +923,9 @@ export default function StorePortalOrder() {
       prev.map((row, i) => {
         if (i !== index || toBoolean(row.confirmed)) return row;
 
-        const maxQty = toNumber(row.forecastQty ?? row.orderQty);
-        const enteredQty = toNumber(value);
-        const nextQty = maxQty > 0 && enteredQty > maxQty ? maxQty : value;
-
-        return { ...row, orderQty: nextQty };
+        // Confirm Qty may still be greater than the requested / Order Forecast
+        // quantity, but it must be locked once the row is already confirmed.
+        return { ...row, orderQty: value };
       }),
     );
   };
@@ -750,20 +958,11 @@ export default function StorePortalOrder() {
       return;
     }
 
-    const today = formatDate(new Date());
-    const hasPastDeliveryDate = details.some((row) => normalizeDate(row.deliveryDate) < today);
-
-    if (hasPastDeliveryDate) {
-      showToast("Confirmation is only allowed for today or a future delivery date.", "error");
-      return;
-    }
-
     const payloadDeliveryDate = details[0]?.deliveryDate || deliveryDate;
 
     const payload = {
       userCode,
       storeCode,
-      storeType,
       deliveryDate: payloadDeliveryDate,
       orderType: "ConfirmedOrder",
       details,
@@ -777,7 +976,7 @@ export default function StorePortalOrder() {
       await loadConfirmation();
     } catch (error) {
       console.error("Failed to confirm store portal order:", error);
-      showToast("Unable to confirm order.", "error");
+      showToast(getApiErrorMessage(error, "Unable to confirm order."), "error");
     } finally {
       setConfirmSubmitting(false);
     }
@@ -807,9 +1006,24 @@ export default function StorePortalOrder() {
     [dates, orderMatrix],
   );
 
+  const totalConfirmationOrderQty = useMemo(
+    () => confirmationRows.reduce((sum, row) => sum + Number(row.forecastQty || 0), 0),
+    [confirmationRows],
+  );
+
   const totalConfirmedQty = useMemo(
     () => confirmationRows.reduce((sum, row) => sum + Number(row.orderQty || 0), 0),
     [confirmationRows],
+  );
+
+  const totalHistoryOriginalQty = useMemo(
+    () => historyRows.reduce((sum, row) => sum + Number(row.originalWeeklyQty || 0), 0),
+    [historyRows],
+  );
+
+  const totalHistoryConfirmedQty = useMemo(
+    () => historyRows.reduce((sum, row) => sum + Number(row.confirmedOrderQty || 0), 0),
+    [historyRows],
   );
 
   return (
@@ -817,7 +1031,7 @@ export default function StorePortalOrder() {
       {isBusy && <LoadingSpinner />}
       <Toast toast={toast} />
 
-      <div className="fixed left-2 right-2 top-[54px] z-[120] flex max-w-[calc(100vw-1rem)] flex-col gap-2 rounded-lg bg-gradient-to-r from-blue-200 to-blue-100 p-2 text-blue-900 shadow-xl dark:bg-blue-900 dark:text-white sm:left-4 sm:right-4 sm:top-[62px] sm:max-w-none sm:flex-row sm:items-center sm:justify-between md:left-6 md:right-6">
+      <div className="fixed left-2 right-2 top-[54px] z-[20] flex max-w-[calc(100vw-1rem)] flex-col gap-2 rounded-lg bg-gradient-to-r from-blue-200 to-blue-100 p-2 text-blue-900 shadow-xl dark:bg-blue-900 dark:text-white sm:left-4 sm:right-4 sm:top-[62px] sm:max-w-none sm:flex-row sm:items-center sm:justify-between md:left-6 md:right-6">
         <div className="min-w-0 text-center sm:text-left">
           <h1 className="break-words px-1 text-base font-semibold leading-tight sm:px-3 sm:text-xl lg:text-2xl">
             Store Portal Ordering
@@ -855,11 +1069,7 @@ export default function StorePortalOrder() {
           <FloatingField id="userAccount" label="User Account" value={userDisplay || "Loading user..."} readOnly />
           <FloatingField id="branchTagged" label="Tagged Branch" value={branchDisplay || "No branch tagged"} readOnly />
           <FloatingField id="storeCode" label="Store Code" value={storeCode || ""} readOnly />
-          <FloatingField id="storeType" label="Store Type" type="select" value={storeType} onChange={setStoreType}>
-            <option value="Company">Company Store</option>
-            <option value="Franchisee">Franchisee</option>
-            <option value="Both">Both</option>
-          </FloatingField>
+          <FloatingField id="storeType" label="Store Type" value={storeType || "Auto from Branch_ref"} readOnly />
         </div>
 
         {!hasTaggedBranch && (
@@ -872,33 +1082,55 @@ export default function StorePortalOrder() {
       <div className="global-tran-tab-div-ui !p-3 sm:!p-4 lg:!p-6">
         <div className="global-tran-tab-nav-ui !items-stretch !gap-3 sm:!items-center">
           <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-            <button className="global-tran-tab-padding-ui global-tran-tab-text_active-ui">
-              Weekly Forecast
+            <button
+              type="button"
+              onClick={() => setForecastView("entry")}
+              className={`global-tran-tab-padding-ui ${forecastView === "entry" ? "global-tran-tab-text_active-ui" : "rounded-lg bg-slate-100 text-slate-600 dark:bg-gray-800 dark:text-slate-300"}`}
+            >
+              Order Forecast
             </button>
-            {items.length > 0 && <StatusPill>{items.length} items</StatusPill>}
+            <button
+              type="button"
+              onClick={() => setForecastView("history")}
+              className={`global-tran-tab-padding-ui ${forecastView === "history" ? "global-tran-tab-text_active-ui" : "rounded-lg bg-slate-100 text-slate-600 dark:bg-gray-800 dark:text-slate-300"}`}
+            >
+              History
+            </button>
+            {forecastView === "entry" && items.length > 0 && <StatusPill>{items.length} items</StatusPill>}
+            {forecastView === "history" && historyRows.length > 0 && <StatusPill>{historyRows.length} history lines</StatusPill>}
           </div>
 
           <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:items-center">
-            <StatusPill variant="warning" className="min-h-[34px]">
-              <Clock3 className="mr-1 h-3 w-3 shrink-0" />
-              <span className="sm:hidden">Cutoff 1:00 PM</span>
-              <span className="hidden sm:inline">Order confirmation cutoff 1:00 PM</span>
-            </StatusPill>
-            <ActionButton icon={RefreshCw} onClick={() => loadItems()} disabled={forecastLoading || !hasTaggedBranch}>
-              {forecastLoading ? "Loading..." : "Load Items"}
-            </ActionButton>
-            <ActionButton icon={RotateCcw} onClick={resetWeeklyForecast} disabled={forecastLoading || items.length === 0}>
-              Reset
-            </ActionButton>
+            {forecastView === "entry" ? (
+              <>
+                <StatusPill variant="warning" className="min-h-[34px]">
+                  <Clock3 className="mr-1 h-3 w-3 shrink-0" />
+                  <span className="sm:hidden">Cutoff 1:00 PM</span>
+                  <span className="hidden sm:inline">All order confirmations must be completed on or before 1:00 PM.</span>
+                </StatusPill>
+                <ActionButton icon={RefreshCw} onClick={() => loadItems()} disabled={forecastLoading || !hasTaggedBranch}>
+                  {forecastLoading ? "Loading..." : "Load Items"}
+                </ActionButton>
+                <ActionButton icon={RotateCcw} onClick={resetWeeklyForecast} disabled={forecastLoading || items.length === 0}>
+                  Reset
+                </ActionButton>
+              </>
+            ) : (
+              <ActionButton icon={RefreshCw} onClick={() => loadHistory()} disabled={historyLoading || !hasTaggedBranch}>
+                {historyLoading ? "Loading..." : "Load History"}
+              </ActionButton>
+            )}
           </div>
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-3">
           <FloatingField id="forecastStartDate" label="Start Date" type="date" value={startDate} onChange={setStartDate} />
           <FloatingField id="forecastEndDate" label="End Date" type="date" value={endDate} onChange={setEndDate} />
-          <FloatingField id="forecastDayCount" label="Forecast Days" value={dates.length ? String(dates.length) : "0"} readOnly />
+          <FloatingField id="forecastDayCount" label={forecastView === "history" ? "History Days" : "Forecast Days"} value={dates.length ? String(dates.length) : "0"} readOnly />
         </div>
 
+        {forecastView === "entry" ? (
+          <>
         <div className="mt-3 space-y-3 md:hidden">
           {items.map((item, index) => (
             <div
@@ -975,34 +1207,34 @@ export default function StorePortalOrder() {
         </div>
 
         <div className="global-tran-table-main-div-ui mt-3 hidden max-w-full overflow-x-auto sm:mt-4 md:block">
-          <div className="global-tran-table-main-sub-div-ui !max-h-[56vh] sm:!max-h-[360px]">
-            <table className="min-w-full border-separate border-spacing-0 [&_td]:border-b [&_td]:border-r [&_td]:border-slate-200 [&_th]:border-b [&_th]:border-slate-200 [&_tr>td:first-child]:border-l">
-              <thead className="global-tran-thead-div-ui">
+          <div className="global-tran-table-main-sub-div-ui relative isolate !max-h-[56vh] sm:!max-h-[360px]">
+            <table className="w-max min-w-full table-fixed border-separate border-spacing-0 [&_td]:border-b [&_td]:border-r [&_td]:border-slate-200 [&_th]:border-b [&_th]:border-r [&_th]:border-slate-200 [&_tr>td:first-child]:border-l">
+              <thead className="global-tran-thead-div-ui sticky top-0 z-[220]">
                 <tr>
-                  <th className="global-tran-th-ui sticky top-0 z-[100] min-w-[78px] bg-blue-100 text-left dark:bg-blue-900 md:left-0 md:min-w-[90px]">Code</th>
-                  <th className="global-tran-th-ui sticky top-0 z-[100] min-w-[150px] bg-blue-100 text-left dark:bg-blue-900 md:left-[90px] md:min-w-[150px]">Item Name</th>
-                  <th className="global-tran-th-ui sticky top-0 z-[100] min-w-[50px] bg-blue-100 text-center dark:bg-blue-900 md:left-[240px] md:min-w-[70px] md:shadow-[2px_0_0_0_rgba(226,232,240,1)]">UOM</th>
+                  <th className="global-tran-th-ui sticky left-0 top-0 z-[240] w-[96px] min-w-[96px] max-w-[96px] bg-blue-100 text-left dark:bg-blue-900">Code</th>
+                  <th className="global-tran-th-ui sticky left-[96px] top-0 z-[240] w-[240px] min-w-[240px] max-w-[240px] bg-blue-100 text-left dark:bg-blue-900">Item Name</th>
+                  <th className="global-tran-th-ui sticky left-[336px] top-0 z-[240] w-[72px] min-w-[72px] max-w-[72px] bg-blue-100 text-center shadow-[2px_0_0_0_rgba(226,232,240,1)] dark:bg-blue-900">UOM</th>
                   {dates.map((date) => (
-                    <th key={date} className="global-tran-th-ui sticky top-0 z-[95] min-w-[96px] bg-blue-100 dark:bg-blue-900 md:min-w-[80px]">
+                    <th key={date} className="global-tran-th-ui sticky top-0 z-[210] w-[96px] min-w-[96px] max-w-[96px] bg-blue-100 dark:bg-blue-900">
                       <div className="text-[10px] font-bold text-slate-500 dark:text-slate-300">{dayLabel(date)}</div>
                       <div>{shortDate(date)}</div>
                     </th>
                   ))}
-                  <th className="global-tran-th-ui sticky top-0 z-[95] min-w-[90px] bg-blue-100 text-right dark:bg-blue-900">Total</th>
+                  <th className="global-tran-th-ui sticky top-0 z-[210] w-[100px] min-w-[100px] max-w-[100px] bg-blue-100 text-right dark:bg-blue-900">Total</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((item, index) => (
                   <tr key={item.itemCode || index} className="global-tran-tr-ui">
-                    <td className="global-tran-td-ui z-10 min-w-[78px] bg-white font-mono font-semibold dark:bg-black md:sticky md:left-0 md:min-w-[90px]">{item.itemCode}</td>
-                    <td className="global-tran-td-ui z-10 min-w-[150px] bg-white font-medium dark:bg-black md:sticky md:left-[90px] md:min-w-[150px]">
+                    <td className="global-tran-td-ui sticky left-0 z-[40] w-[96px] min-w-[96px] max-w-[96px] overflow-hidden text-ellipsis whitespace-nowrap bg-white font-mono font-semibold dark:bg-black">{item.itemCode}</td>
+                    <td className="global-tran-td-ui sticky left-[96px] z-[40] w-[240px] min-w-[240px] max-w-[240px] bg-white font-medium dark:bg-black">
                       <span className="block truncate">{item.itemName}</span>
                     </td>
-                    <td className="global-tran-td-ui z-10 min-w-[50px] bg-white text-center dark:bg-black md:sticky md:left-[240px] md:min-w-[70px] md:shadow-[2px_0_0_0_rgba(226,232,240,1)]">
+                    <td className="global-tran-td-ui sticky left-[336px] z-[40] w-[72px] min-w-[72px] max-w-[72px] bg-white text-center shadow-[2px_0_0_0_rgba(226,232,240,1)] dark:bg-black">
                       <span className="block w-full text-center text-xs font-medium text-slate-700 dark:text-slate-200">{item.uomCode || "-"}</span>
                     </td>
                     {dates.map((date, dateIndex) => (
-                      <td key={`${item.itemCode}-${date}`} className="global-tran-td-ui text-center">
+                      <td key={`${item.itemCode}-${date}`} className="global-tran-td-ui w-[96px] min-w-[96px] max-w-[96px] text-center">
                         <QuantityInput
                           value={orderMatrix[item.itemCode]?.[date] ?? 0}
                           onChange={(value) => handleQtyChange(item.itemCode, date, value)}
@@ -1013,7 +1245,7 @@ export default function StorePortalOrder() {
                         />
                       </td>
                     ))}
-                    <td className="global-tran-td-ui bg-slate-50 text-right text-xs font-bold text-slate-800 dark:bg-gray-900 dark:text-white">
+                    <td className="global-tran-td-ui w-[100px] min-w-[100px] max-w-[100px] bg-slate-50 text-right text-xs font-bold text-slate-800 dark:bg-gray-900 dark:text-white">
                       {getItemForecastTotal(item.itemCode).toLocaleString()}
                     </td>
                   </tr>
@@ -1021,15 +1253,15 @@ export default function StorePortalOrder() {
 
                 {items.length > 0 && (
                   <tr className="bg-blue-50/80 font-bold dark:bg-blue-900/30">
-                    <td className="global-tran-td-ui z-10 bg-blue-50 text-left text-xs font-bold text-slate-800 dark:bg-blue-900 dark:text-white md:sticky md:left-0" colSpan={3}>
+                    <td className="global-tran-td-ui sticky left-0 z-[40] w-[408px] min-w-[408px] max-w-[408px] bg-blue-50 text-left text-xs font-bold text-slate-800 dark:bg-blue-900 dark:text-white" colSpan={3}>
                       Total Per Day
                     </td>
                     {dates.map((date) => (
-                      <td key={`total-${date}`} className="global-tran-td-ui text-right text-xs font-bold text-slate-800 dark:text-white">
+                      <td key={`total-${date}`} className="global-tran-td-ui w-[96px] min-w-[96px] max-w-[96px] text-right text-xs font-bold text-slate-800 dark:text-white">
                         {(totalForecastPerDay[date] || 0).toLocaleString()}
                       </td>
                     ))}
-                    <td className="global-tran-td-ui bg-blue-100 text-right text-xs font-bold text-slate-900 dark:bg-blue-900 dark:text-white">
+                    <td className="global-tran-td-ui w-[100px] min-w-[100px] max-w-[100px] bg-blue-100 text-right text-xs font-bold text-slate-900 dark:bg-blue-900 dark:text-white">
                       {totalForecastQty.toLocaleString()}
                     </td>
                   </tr>
@@ -1058,7 +1290,7 @@ export default function StorePortalOrder() {
               disabled={!hasTaggedBranch || items.length === 0 || forecastSubmitting}
               variant="success"
             >
-              {forecastSubmitting ? "Submitting..." : "Submit Weekly Forecast"}
+              {forecastSubmitting ? "Submitting..." : "Submit Order Forecast"}
             </ActionButton>
           </div>
 
@@ -1069,6 +1301,139 @@ export default function StorePortalOrder() {
             </div>
           </div>
         </div>
+
+          </>
+        ) : (
+          <>
+            <div className="mt-3 space-y-3 md:hidden">
+              {historyRows.map((row, index) => (
+                <div
+                  key={`${row.itemCode || "item"}-${row.deliveryDate || index}-history-card`}
+                  className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-gray-800"
+                >
+                  <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-blue-50 px-3 py-2 dark:border-slate-700 dark:bg-blue-900/30">
+                    <div className="min-w-0">
+                      <div className="font-mono text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                        {row.itemCode}
+                      </div>
+                      <div className="truncate text-sm font-semibold text-slate-900 dark:text-white">
+                        {row.itemName}
+                      </div>
+                    </div>
+                    <span className="shrink-0 rounded-md bg-white px-2 py-1 text-[10px] font-bold text-slate-700 shadow-sm dark:bg-gray-900 dark:text-slate-200">
+                      {row.uomCode || "-"}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 px-3 py-3 text-xs">
+                    <div>
+                      <div className="font-bold uppercase text-slate-500 dark:text-slate-300">Delivery Date</div>
+                      <div className="font-semibold text-slate-900 dark:text-white">{row.deliveryDate}</div>
+                    </div>
+                    <div>
+                      <div className="font-bold uppercase text-slate-500 dark:text-slate-300">Status</div>
+                      <div className="font-semibold text-slate-900 dark:text-white">{row.status}</div>
+                    </div>
+                    <div>
+                      <div className="font-bold uppercase text-slate-500 dark:text-slate-300">Original Qty</div>
+                      <div className="font-semibold text-slate-900 dark:text-white">{toNumber(row.originalWeeklyQty).toLocaleString()}</div>
+                    </div>
+                    <div>
+                      <div className="font-bold uppercase text-slate-500 dark:text-slate-300">Confirmed Order</div>
+                      <div className="font-semibold text-green-700 dark:text-green-200">{toNumber(row.confirmedOrderQty).toLocaleString()}</div>
+                    </div>
+                    <div>
+                      <div className="font-bold uppercase text-slate-500 dark:text-slate-300">Variance</div>
+                      <div className="font-semibold text-slate-900 dark:text-white">{toNumber(row.balanceQty).toLocaleString()}</div>
+                    </div>
+                    <div>
+                      <div className="font-bold uppercase text-slate-500 dark:text-slate-300">Variance</div>
+                      <div className="font-semibold text-slate-900 dark:text-white">{toNumber(row.varianceQty).toLocaleString()}</div>
+                    </div>
+                    <div>
+                      <div className="font-bold uppercase text-slate-500 dark:text-slate-300">Confirmed By</div>
+                      <div className="font-semibold text-slate-900 dark:text-white">{row.confirmedBy || "-"}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {historyRows.length === 0 && (
+                <div className="rounded-lg border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500 shadow-sm dark:border-slate-700 dark:bg-gray-800 dark:text-slate-300">
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <PackageOpen className="h-8 w-8 text-slate-400" />
+                    <span>{hasTaggedBranch ? "No Order Forecast history loaded." : "Assign a branch to this user before ordering."}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="global-tran-table-main-div-ui mt-3 hidden max-w-full overflow-x-auto sm:mt-4 md:block">
+              <div className="global-tran-table-main-sub-div-ui relative isolate !max-h-[56vh] sm:!max-h-[360px]">
+                <table className="w-max min-w-full table-fixed border-separate border-spacing-0 [&_td]:border-b [&_td]:border-r [&_td]:border-slate-200 [&_th]:border-b [&_th]:border-r [&_th]:border-slate-200 [&_tr>td:first-child]:border-l">
+                  <thead className="global-tran-thead-div-ui sticky top-0 z-[220]">
+                    <tr>
+                      <th className="global-tran-th-ui sticky left-0 top-0 z-[240] w-[96px] min-w-[96px] max-w-[96px] bg-blue-100 text-left dark:bg-blue-900">Code</th>
+                      <th className="global-tran-th-ui sticky left-[96px] top-0 z-[240] w-[240px] min-w-[240px] max-w-[240px] bg-blue-100 text-left dark:bg-blue-900">Item Name</th>
+                      <th className="global-tran-th-ui sticky left-[336px] top-0 z-[240] w-[72px] min-w-[72px] max-w-[72px] bg-blue-100 text-center shadow-[2px_0_0_0_rgba(226,232,240,1)] dark:bg-blue-900">UOM</th>
+                      <th className="global-tran-th-ui sticky top-0 z-[210] w-[120px] min-w-[120px] max-w-[120px] bg-blue-100 text-left dark:bg-blue-900">Delivery Date</th>
+                      <th className="global-tran-th-ui sticky top-0 z-[210] w-[130px] min-w-[130px] max-w-[130px] bg-blue-100 text-right dark:bg-blue-900">Original Qty</th>
+                      <th className="global-tran-th-ui sticky top-0 z-[210] w-[140px] min-w-[140px] max-w-[140px] bg-blue-100 text-right dark:bg-blue-900">Confirmed Order</th>
+                      <th className="global-tran-th-ui sticky top-0 z-[210] w-[110px] min-w-[110px] max-w-[110px] bg-blue-100 text-right dark:bg-blue-900">Variance</th>
+                      <th className="global-tran-th-ui sticky top-0 z-[210] w-[120px] min-w-[120px] max-w-[120px] bg-blue-100 text-left dark:bg-blue-900">Status</th>
+                      <th className="global-tran-th-ui sticky top-0 z-[210] w-[130px] min-w-[130px] max-w-[130px] bg-blue-100 text-left dark:bg-blue-900">Confirmed By</th>
+                      <th className="global-tran-th-ui sticky top-0 z-[210] w-[130px] min-w-[130px] max-w-[130px] bg-blue-100 text-left dark:bg-blue-900">Confirmed Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyRows.map((row, index) => (
+                      <tr key={`${row.itemCode || "item"}-${row.deliveryDate || index}-history`} className="global-tran-tr-ui">
+                        <td className="global-tran-td-ui sticky left-0 z-[40] w-[96px] min-w-[96px] max-w-[96px] overflow-hidden text-ellipsis whitespace-nowrap bg-white font-mono font-semibold dark:bg-black">{row.itemCode}</td>
+                        <td className="global-tran-td-ui sticky left-[96px] z-[40] w-[240px] min-w-[240px] max-w-[240px] bg-white font-medium dark:bg-black">
+                          <span className="block truncate">{row.itemName}</span>
+                        </td>
+                        <td className="global-tran-td-ui sticky left-[336px] z-[40] w-[72px] min-w-[72px] max-w-[72px] bg-white text-center shadow-[2px_0_0_0_rgba(226,232,240,1)] dark:bg-black">{row.uomCode || "-"}</td>
+                        <td className="global-tran-td-ui w-[120px] min-w-[120px] max-w-[120px] text-left">{row.deliveryDate}</td>
+                        <td className="global-tran-td-ui w-[130px] min-w-[130px] max-w-[130px] text-right font-semibold">{toNumber(row.originalWeeklyQty).toLocaleString()}</td>
+                        <td className="global-tran-td-ui w-[140px] min-w-[140px] max-w-[140px] text-right font-semibold text-green-700 dark:text-green-200">{toNumber(row.confirmedOrderQty).toLocaleString()}</td>
+                        <td className="global-tran-td-ui w-[110px] min-w-[110px] max-w-[110px] text-right font-semibold">{toNumber(row.balanceQty).toLocaleString()}</td>
+                        <td className="global-tran-td-ui w-[120px] min-w-[120px] max-w-[120px] text-left">{row.status}</td>
+                        <td className="global-tran-td-ui w-[130px] min-w-[130px] max-w-[130px] text-left">{row.confirmedBy || "-"}</td>
+                        <td className="global-tran-td-ui w-[130px] min-w-[130px] max-w-[130px] text-left">{row.confirmedDate || "-"}</td>
+                      </tr>
+                    ))}
+
+                    {historyRows.length === 0 && (
+                      <tr>
+                        <td colSpan={10} className="global-tran-td-ui py-10 text-center text-sm text-slate-500">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <PackageOpen className="h-8 w-8 text-slate-400" />
+                            <span>{hasTaggedBranch ? "No Order Forecast history loaded." : "Assign a branch to this user before ordering."}</span>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="global-tran-tab-footer-main-div-ui !mt-4 !justify-end !gap-3">
+              <div className="global-tran-tab-footer-total-main-div-ui w-full rounded-lg bg-blue-50/60 px-3 py-2 sm:ml-auto sm:w-auto dark:bg-gray-900/40">
+                <div className="global-tran-tab-footer-total-div-ui">
+                  <label className="global-tran-tab-footer-total-label-ui">Total Original Qty:</label>
+                  <label className="global-tran-tab-footer-total-value-ui">{totalHistoryOriginalQty.toLocaleString()}</label>
+                </div>
+              </div>
+              <div className="global-tran-tab-footer-total-main-div-ui w-full rounded-lg bg-green-50/60 px-3 py-2 sm:w-auto dark:bg-gray-900/40">
+                <div className="global-tran-tab-footer-total-div-ui">
+                  <label className="global-tran-tab-footer-total-label-ui">Total Confirmed Order:</label>
+                  <label className="global-tran-tab-footer-total-value-ui">{totalHistoryConfirmedQty.toLocaleString()}</label>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="global-tran-tab-div-ui !p-3 sm:!p-4 lg:!p-6">
@@ -1125,6 +1490,20 @@ export default function StorePortalOrder() {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <div className="text-[11px] font-bold uppercase text-slate-500 dark:text-slate-300">
+                        Order Qty
+                      </div>
+                      <div className="text-[10px] font-semibold uppercase text-slate-400 dark:text-slate-500">
+                        Order Forecast
+                      </div>
+                    </div>
+                    <div className="w-28 shrink-0 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-right text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-gray-900 dark:text-slate-200">
+                      {toNumber(row.forecastQty).toLocaleString()}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] font-bold uppercase text-slate-500 dark:text-slate-300">
                         Confirm Qty
                       </div>
                       {isConfirmed && (
@@ -1138,7 +1517,6 @@ export default function StorePortalOrder() {
                         value={row.orderQty ?? 0}
                         onChange={(value) => handleConfirmQtyChange(index, value)}
                         tone="green"
-                        max={row.forecastQty ?? row.orderQty}
                         navGroup="confirmation-mobile"
                         navRow={index}
                         navCol={0}
@@ -1150,7 +1528,7 @@ export default function StorePortalOrder() {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <div className="text-[11px] font-bold uppercase text-slate-500 dark:text-slate-300">
-                        Delivery Date
+                        Confirmation Date
                       </div>
                       <div className="text-sm font-semibold text-slate-900 dark:text-white">
                         {shortDate(row.deliveryDate || deliveryDate)}
@@ -1180,40 +1558,43 @@ export default function StorePortalOrder() {
         </div>
 
         <div className="global-tran-table-main-div-ui mt-3 hidden max-w-full overflow-x-auto sm:mt-4 md:block">
-          <div className="global-tran-table-main-sub-div-ui !max-h-[56vh] sm:!max-h-[360px]">
-            <table className="min-w-full border-separate border-spacing-0 [&_td]:border-b [&_td]:border-r [&_td]:border-slate-200 [&_th]:border-b [&_th]:border-slate-200 [&_tr>td:first-child]:border-l">
-              <thead className="global-tran-thead-div-ui">
+          <div className="global-tran-table-main-sub-div-ui relative isolate !max-h-[56vh] sm:!max-h-[360px]">
+            <table className="w-max min-w-full table-fixed border-separate border-spacing-0 [&_td]:border-b [&_td]:border-r [&_td]:border-slate-200 [&_th]:border-b [&_th]:border-r [&_th]:border-slate-200 [&_tr>td:first-child]:border-l">
+              <thead className="global-tran-thead-div-ui sticky top-0 z-[220]">
                 <tr>
-                  <th className="global-tran-th-ui sticky top-0 z-[100] min-w-[78px] bg-blue-100 text-left dark:bg-blue-900 md:left-0 md:min-w-[90px]">Code</th>
-                  <th className="global-tran-th-ui sticky top-0 z-[100] min-w-[150px] bg-blue-100 text-left dark:bg-blue-900 md:left-[90px] md:min-w-[180px]">Item Name</th>
-                  <th className="global-tran-th-ui sticky top-0 z-[100] min-w-[58px] bg-blue-100 text-center dark:bg-blue-900 md:left-[270px] md:min-w-[74px] md:shadow-[2px_0_0_0_rgba(226,232,240,1)]">UOM</th>
-                  <th className="global-tran-th-ui sticky top-0 z-[95] min-w-[110px] bg-blue-100 text-right dark:bg-blue-900 md:min-w-[120px]">Confirm Qty</th>
-                  <th className="global-tran-th-ui sticky top-0 z-[95] min-w-[138px] bg-blue-100 text-left dark:bg-blue-900 md:min-w-[150px]">Delivery Date</th>
+                  <th className="global-tran-th-ui sticky left-0 top-0 z-[240] w-[96px] min-w-[96px] max-w-[96px] bg-blue-100 text-left dark:bg-blue-900">Code</th>
+                  <th className="global-tran-th-ui sticky left-[96px] top-0 z-[240] w-[240px] min-w-[240px] max-w-[240px] bg-blue-100 text-left dark:bg-blue-900">Item Name</th>
+                  <th className="global-tran-th-ui sticky left-[336px] top-0 z-[240] w-[72px] min-w-[72px] max-w-[72px] bg-blue-100 text-center shadow-[2px_0_0_0_rgba(226,232,240,1)] dark:bg-blue-900">UOM</th>
+                  <th className="global-tran-th-ui sticky top-0 z-[210] w-[120px] min-w-[120px] max-w-[120px] bg-blue-100 text-right dark:bg-blue-900">Order Qty</th>
+                  <th className="global-tran-th-ui sticky top-0 z-[210] w-[120px] min-w-[120px] max-w-[120px] bg-blue-100 text-right dark:bg-blue-900">Confirm Qty</th>
+                  <th className="global-tran-th-ui sticky top-0 z-[210] w-[150px] min-w-[150px] max-w-[150px] bg-blue-100 text-left dark:bg-blue-900">Confirmation Date</th>
                 </tr>
               </thead>
               <tbody>
                 {confirmationRows.map((row, index) => (
                   <tr key={`${row.itemCode || "item"}-${index}`} className="global-tran-tr-ui">
-                    <td className="global-tran-td-ui z-10 min-w-[78px] bg-white font-mono font-semibold dark:bg-black md:sticky md:left-0 md:min-w-[90px]">{row.itemCode}</td>
-                    <td className="global-tran-td-ui z-10 min-w-[150px] bg-white font-medium dark:bg-black md:sticky md:left-[90px] md:min-w-[180px]">
+                    <td className="global-tran-td-ui sticky left-0 z-[40] w-[96px] min-w-[96px] max-w-[96px] overflow-hidden text-ellipsis whitespace-nowrap bg-white font-mono font-semibold dark:bg-black">{row.itemCode}</td>
+                    <td className="global-tran-td-ui sticky left-[96px] z-[40] w-[240px] min-w-[240px] max-w-[240px] bg-white font-medium dark:bg-black">
                       <span className="block truncate">{row.itemName}</span>
                     </td>
-                    <td className="global-tran-td-ui z-10 min-w-[58px] bg-white text-center dark:bg-black md:sticky md:left-[270px] md:min-w-[70px] md:shadow-[2px_0_0_0_rgba(226,232,240,1)]">
+                    <td className="global-tran-td-ui sticky left-[336px] z-[40] w-[72px] min-w-[72px] max-w-[72px] bg-white text-center shadow-[2px_0_0_0_rgba(226,232,240,1)] dark:bg-black">
                       <span className="block w-full text-center text-xs font-medium text-slate-700 dark:text-slate-200">{row.uomCode || "-"}</span>
                     </td>
-                    <td className="global-tran-td-ui text-right">
+                    <td className="global-tran-td-ui w-[120px] min-w-[120px] max-w-[120px] bg-slate-50 text-right text-xs font-semibold text-slate-700 dark:bg-gray-900 dark:text-slate-200">
+                      {toNumber(row.forecastQty).toLocaleString()}
+                    </td>
+                    <td className="global-tran-td-ui w-[120px] min-w-[120px] max-w-[120px] text-right">
                       <QuantityInput
                         value={row.orderQty ?? 0}
                         onChange={(value) => handleConfirmQtyChange(index, value)}
                         tone="green"
-                        max={row.forecastQty ?? row.orderQty}
                         navGroup="confirmation"
                         navRow={index}
                         navCol={0}
                         disabled={toBoolean(row.confirmed)}
                       />
                     </td>
-                    <td className="global-tran-td-ui text-left">
+                    <td className="global-tran-td-ui w-[150px] min-w-[150px] max-w-[150px] text-left">
                       <DateInput
                         value={row.deliveryDate || deliveryDate}
                         onChange={(value) => handleConfirmDateChange(index, value)}
@@ -1225,7 +1606,7 @@ export default function StorePortalOrder() {
 
                 {confirmationRows.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="global-tran-td-ui py-10 text-center text-sm text-slate-500">
+                    <td colSpan={6} className="global-tran-td-ui py-10 text-center text-sm text-slate-500">
                       <div className="flex flex-col items-center justify-center gap-2">
                         <PackageOpen className="h-8 w-8 text-slate-400" />
                         <span>{hasTaggedBranch ? "No forecast rows loaded for confirmation." : "Assign a branch to this user before ordering."}</span>
@@ -1255,10 +1636,19 @@ export default function StorePortalOrder() {
             </ActionButton>
           </div>
 
-          <div className="global-tran-tab-footer-total-main-div-ui w-full rounded-lg bg-blue-50/60 px-3 py-2 sm:w-auto dark:bg-gray-900/40">
-            <div className="global-tran-tab-footer-total-div-ui">
-              <label className="global-tran-tab-footer-total-label-ui">Total Confirmed Qty:</label>
-              <label className="global-tran-tab-footer-total-value-ui">{totalConfirmedQty.toLocaleString()}</label>
+          <div className="ml-auto flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
+            <div className="global-tran-tab-footer-total-main-div-ui w-full rounded-lg bg-blue-50/60 px-3 py-2 sm:w-auto dark:bg-gray-900/40">
+              <div className="global-tran-tab-footer-total-div-ui">
+                <label className="global-tran-tab-footer-total-label-ui">Total Order Qty:</label>
+                <label className="global-tran-tab-footer-total-value-ui">{totalConfirmationOrderQty.toLocaleString()}</label>
+              </div>
+            </div>
+
+            <div className="global-tran-tab-footer-total-main-div-ui w-full rounded-lg bg-green-50/60 px-3 py-2 sm:w-auto dark:bg-gray-900/40">
+              <div className="global-tran-tab-footer-total-div-ui">
+                <label className="global-tran-tab-footer-total-label-ui">Total Confirmed Qty:</label>
+                <label className="global-tran-tab-footer-total-value-ui">{totalConfirmedQty.toLocaleString()}</label>
+              </div>
             </div>
           </div>
         </div>

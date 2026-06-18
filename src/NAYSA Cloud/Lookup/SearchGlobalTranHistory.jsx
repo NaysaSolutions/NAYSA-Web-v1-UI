@@ -1744,12 +1744,12 @@ const handleExportConfirm = async (enteredFileName) => {
       return (
         <div
           key={row.__idx ?? idx}
-          className="rounded-lg border bg-white shadow-sm px-3 py-2 cursor-pointer active:scale-[0.99] transition"
+          className="rounded-lg border dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm px-3 py-2 cursor-pointer active:scale-[0.99] transition"
           onClick={() => handleRowDoubleClick(row)}
         >
           <div className="flex items-start justify-between gap-2 mb-1">
             <div className="min-w-0 flex-1">
-              <div className="text-[10px] font-semibold text-gray-500 leading-tight">
+              <div className="text-[10px] font-semibold text-gray-500 dark:text-slate-400 leading-tight">
                 {headerLabel}
               </div>
               <div className={`text-[12px] font-bold leading-tight truncate ${rowClass || "text-slate-800"}`}>
@@ -1781,7 +1781,7 @@ const handleExportConfirm = async (enteredFileName) => {
                   key={col.key}
                   className="grid grid-cols-[110px_1fr] gap-x-2 py-[2px] text-[11px] leading-tight"
                 >
-                  <div className="font-semibold text-gray-500">
+                  <div className="font-semibold text-gray-500 dark:text-slate-400">
                     {(col.label || col.key)}
                   </div>
                   <div
@@ -1810,19 +1810,19 @@ const handleExportConfirm = async (enteredFileName) => {
         <button
           key={`group-${uniqueId}-${idx}`}
           type="button"
-          className="w-full rounded-lg border bg-gray-50 px-3 py-2 text-left"
+          className="w-full rounded-lg border dark:border-slate-700 bg-gray-50 dark:bg-slate-700/60 px-3 py-2 text-left"
           onClick={() => toggleGroup(row)}
         >
           <div className="flex items-center gap-2" style={{ paddingLeft: row.level * 14 }}>
             <FontAwesomeIcon
               icon={isExpanded ? faChevronDown : faChevronRight}
-              className="text-[11px] text-gray-500"
+              className="text-[11px] text-gray-500 dark:text-slate-400"
             />
-            <span className="text-[11px] font-semibold text-gray-600">
+            <span className="text-[11px] font-semibold text-gray-600 dark:text-slate-300">
               {(baseColumns.find((c) => c.key === row.key)?.label || row.key)}:
             </span>
-            <span className="text-[11px] font-bold text-blue-900">{row.value}</span>
-            <span className="ml-auto rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+            <span className="text-[11px] font-bold text-blue-900 dark:text-blue-300">{row.value}</span>
+            <span className="ml-auto rounded-full bg-blue-100 dark:bg-blue-900/40 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:text-blue-300">
               {row.count}
             </span>
           </div>
@@ -1839,9 +1839,9 @@ const handleExportConfirm = async (enteredFileName) => {
       return (
         <div
           key={`subtotal-${idx}`}
-          className="rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2"
+          className="rounded-lg border border-yellow-200 dark:border-yellow-800/50 bg-yellow-50 dark:bg-yellow-900/20 px-3 py-2"
         >
-          <div className="text-[11px] font-bold text-yellow-800 leading-tight mb-1">
+          <div className="text-[11px] font-bold text-yellow-800 dark:text-yellow-300 leading-tight mb-1">
             Sub Total for {(row.groupLabel)}: {row.groupValue}
           </div>
 
@@ -1856,7 +1856,7 @@ const handleExportConfirm = async (enteredFileName) => {
                   key={col.key}
                   className="grid grid-cols-[110px_1fr] gap-x-2 py-[2px] text-[11px] leading-tight"
                 >
-                  <div className="font-semibold text-yellow-700">
+                  <div className="font-semibold text-yellow-700 dark:text-yellow-400">
                     {(col.label || col.key)}
                   </div>
                   <div className={alignRight ? "text-right tabular-nums" : "text-left"}>
@@ -1878,8 +1878,8 @@ const handleExportConfirm = async (enteredFileName) => {
     if (!totalCols.length) return null;
 
     return (
-      <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
-        <div className="text-[11px] font-bold text-blue-900 leading-tight mb-1">
+      <div className="rounded-lg border border-blue-200 dark:border-blue-800/50 bg-blue-50 dark:bg-blue-900/20 px-3 py-2">
+        <div className="text-[11px] font-bold text-blue-900 dark:text-blue-300 leading-tight mb-1">
           {groupBy.length > 0 ? "Grand Total" : "Total"}
         </div>
 
@@ -1894,7 +1894,7 @@ const handleExportConfirm = async (enteredFileName) => {
                 key={col.key}
                 className="grid grid-cols-[110px_1fr] gap-x-2 py-[2px] text-[11px] leading-tight"
               >
-                <div className="font-semibold text-blue-700">
+                <div className="font-semibold text-blue-700 dark:text-blue-400">
                   {(col.label || col.key)}
                 </div>
                 <div className={alignRight ? "text-right tabular-nums" : "text-left"}>
@@ -1922,7 +1922,7 @@ const handleExportConfirm = async (enteredFileName) => {
         </>
       )}
 
-      <div className="fixed top-[55px] left-0 w-full z-30 bg-white shadow-md dark:bg-gray-800">
+      <div className="fixed top-[55px] left-0 w-full z-30 bg-white dark:bg-slate-800 shadow-md">
         {showHeader && (
           <div className="flex flex-col md:flex-row items-center justify-between px-4 py-2 gap-2 border-b border-gray-200 dark:border-gray-700">
             <div className="flex flex-wrap justify-center md:justify-start gap-1 lg:gap-2 w-full md:w-auto">
@@ -1972,12 +1972,12 @@ const handleExportConfirm = async (enteredFileName) => {
   <div className="p-3 mt-4">
     <div className="flex items-end gap-1.5 mt-4 overflow-x-auto">
       <div className="min-w-0 flex-1">
-        <label className="block text-[10px] font-semibold text-gray-600 mb-1">
+        <label className="block text-[10px] font-semibold text-gray-600 dark:text-slate-300 mb-1">
           Date Range
         </label>
-        <div className="flex items-center border border-gray-300 rounded-md px-1.5 py-1 bg-white h-[36px]">
+        <div className="flex items-center border border-gray-300 dark:border-slate-600 rounded-md px-1.5 py-1 bg-white dark:bg-slate-700 h-[36px]">
           <select
-            className="w-[92px] min-w-[92px] border-none focus:ring-0 text-[10px] bg-transparent pr-1"
+            className="w-[92px] min-w-[92px] border-none focus:ring-0 text-[10px] bg-transparent dark:text-slate-100 pr-1"
             value={dateRangeType}
             onChange={(e) => setDateRangeType(e.target.value)}
           >
@@ -1987,15 +1987,15 @@ const handleExportConfirm = async (enteredFileName) => {
             <option>Custom Range</option>
           </select>
 
-          <div className="flex items-center border-l border-gray-300 pl-1.5 min-w-0 flex-1">
-            <FontAwesomeIcon icon={faCalendarAlt} className="text-gray-400 mr-1.5 text-[10px]" />
+          <div className="flex items-center border-l border-gray-300 dark:border-slate-600 pl-1.5 min-w-0 flex-1">
+            <FontAwesomeIcon icon={faCalendarAlt} className="text-gray-400 dark:text-slate-500 mr-1.5 text-[10px]" />
             <input
               type="text"
               value={formatDateRange(dates[0], dates[1])}
               onClick={() => {
                 if (dateRangeType === "Custom Range") setModalIsOpen(true);
               }}
-              className="w-full min-w-0 border-none focus:ring-0 text-[10px] bg-transparent text-gray-700 whitespace-nowrap"
+              className="w-full min-w-0 border-none focus:ring-0 text-[10px] bg-transparent text-gray-700 dark:text-slate-200 whitespace-nowrap"
               placeholder="Select"
               readOnly
               title={formatDateRange(dates[0], dates[1])}
@@ -2008,10 +2008,10 @@ const handleExportConfirm = async (enteredFileName) => {
         <label className="block text-[10px] font-semibold text-gray-600 mb-1">
           Status
         </label>
-        <div className="flex items-center border border-gray-300 rounded-md px-1.5 py-1 bg-white h-[36px]">
-          <FontAwesomeIcon icon={faFilter} className="text-gray-400 mr-1.5 text-[10px]" />
+        <div className="flex items-center border border-gray-300 dark:border-slate-600 rounded-md px-1.5 py-1 bg-white dark:bg-slate-700 h-[36px]">
+          <FontAwesomeIcon icon={faFilter} className="text-gray-400 dark:text-slate-500 mr-1.5 text-[10px]" />
           <select
-            className="w-full min-w-0 border-none focus:ring-0 text-[10px] bg-transparent"
+            className="w-full min-w-0 border-none focus:ring-0 text-[10px] bg-transparent dark:text-slate-100"
             value={status}
             onChange={(e) => setStatus(e.target.value)}
           >
@@ -2051,9 +2051,9 @@ const handleExportConfirm = async (enteredFileName) => {
           <div className="flex flex-col md:flex-row flex-wrap items-end gap-2 overflow-x-auto p-4 mt-10">
             <div className="flex-shrink-0 sm:min-w-[200px]">
               {/* <label className="block text-sm font-semibold text-gray-600 mb-1">Date Range:</label> */}
-              <div className="flex items-center border border-gray-300 rounded-md px-2 py-1 bg-white">
+              <div className="flex items-center border border-gray-300 dark:border-slate-600 rounded-md px-2 py-1 bg-white dark:bg-slate-700">
                 <select
-                  className="border-none focus:ring-0 text-sm bg-transparent pr-2"
+                  className="border-none focus:ring-0 text-sm bg-transparent dark:text-slate-100 pr-2"
                   value={dateRangeType}
                   onChange={(e) => setDateRangeType(e.target.value)}
                 >
@@ -2063,15 +2063,15 @@ const handleExportConfirm = async (enteredFileName) => {
                   <option>Custom Range</option>
                 </select>
 
-                <div className="flex items-center border-l border-gray-300 pl-2 min-w-[200px]">
-                  <FontAwesomeIcon icon={faCalendarAlt} className="text-gray-400 mr-2 flex-shrink-0" />
+                <div className="flex items-center border-l border-gray-300 dark:border-slate-600 pl-2 min-w-[200px]">
+                  <FontAwesomeIcon icon={faCalendarAlt} className="text-gray-400 dark:text-slate-500 mr-2 flex-shrink-0" />
                   <input
                     type="text"
                     value={formatDateRange(dates[0], dates[1])}
                     onClick={() => {
                       if (dateRangeType === "Custom Range") setModalIsOpen(true);
                     }}
-                    className="w-full min-w-0 h-[25px] border-none focus:ring-0 text-sm bg-transparent text-gray-700 tabular-nums whitespace-nowrap pr-2"
+                    className="w-full min-w-0 h-[25px] border-none focus:ring-0 text-sm bg-transparent text-gray-700 dark:text-slate-200 tabular-nums whitespace-nowrap pr-2"
                     placeholder="Select date range"
                     readOnly
                     title={formatDateRange(dates[0], dates[1])}
@@ -2082,10 +2082,10 @@ const handleExportConfirm = async (enteredFileName) => {
 
             <div className="flex-shrink-0 min-w-[200px]">
               {/* <label className="block text-sm font-semibold text-gray-600 mb-1">Status:</label> */}
-              <div className="flex items-center border border-gray-300 rounded-md px-2 py-1 bg-white">
-                <FontAwesomeIcon icon={faFilter} className="text-gray-400 mr-2" />
+              <div className="flex items-center border border-gray-300 dark:border-slate-600 rounded-md px-2 py-1 bg-white dark:bg-slate-700">
+                <FontAwesomeIcon icon={faFilter} className="text-gray-400 dark:text-slate-500 mr-2" />
                 <select
-                  className="w-full h-[25px] border-none focus:ring-0 text-sm"
+                  className="w-full h-[25px] border-none focus:ring-0 text-sm dark:bg-slate-700 dark:text-slate-100"
                   value={status}
                   onChange={(e) => setStatus(e.target.value)}
                 >
@@ -2145,8 +2145,8 @@ const handleExportConfirm = async (enteredFileName) => {
             aria-label={tabLabel}
             className={`py-1.5 ${isMobile ? "px-1.5 min-w-[60px]" : "px-10"} text-sm text-center border rounded-t-lg transition-all duration-200 ${
               isTabActive
-                ? "bg-blue-100 text-blue-700 font-semibold shadow-lg shadow-blue-300 relative before:absolute before:inset-x-0 before:bottom-0 before:h-[3px] before:bg-blue-700 before:rounded-t-md"
-                : "bg-white shadow-lg shadow-blue-50 text-gray-600 font-semibold hover:text-blue-700 hover:bg-blue-50"
+                ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-semibold shadow-lg shadow-blue-300 dark:shadow-none relative before:absolute before:inset-x-0 before:bottom-0 before:h-[3px] before:bg-blue-700 dark:before:bg-blue-400 before:rounded-t-md"
+                : "bg-white dark:bg-slate-700 shadow-lg shadow-blue-50 dark:shadow-none text-gray-600 dark:text-slate-300 font-semibold hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-slate-600"
             }`}
             onClick={() => {
               setActiveTab(tabKey);
@@ -2176,22 +2176,22 @@ const handleExportConfirm = async (enteredFileName) => {
         </div>
       </div>
 
-        <div className="bg-white shadow-md rounded-md overflow-visible px-2 pt-2 pb-0 mt-0 mb-4 mx-4">
+        <div className="bg-white dark:bg-slate-800 shadow-md rounded-md overflow-visible px-2 pt-2 pb-0 mt-0 mb-4 mx-4">
           {activeTab && visibleCols.length > 0  && (
-            <div className="p-1 bg-white rounded-md flex flex-col md:flex-row md:items-center md:justify-between gap-2 shrink-0 mb-0"
+            <div className="p-1 bg-white dark:bg-slate-800 rounded-md flex flex-col md:flex-row md:items-center md:justify-between gap-2 shrink-0 mb-0"
                  onDragOver={e => e.preventDefault()}
                  onDrop={e => handleColDrop(e, null, true)}>
               
               <div className="flex-1 flex flex-wrap gap-2 items-center min-w-0">
                 {groupBy.length === 0 && !isMobile && (
-                  <div className="text-gray-400 italic border border-dashed border-gray-300 rounded text-[10px] sm:text-xs px-8 py-2">
+                  <div className="text-gray-400 dark:text-slate-500 italic border border-dashed border-gray-300 dark:border-slate-600 rounded text-[10px] sm:text-xs px-8 py-2">
                     <FontAwesomeIcon icon={faLayerGroup} className="mr-1" /> Drag column here to Group
                   </div>
                 )}
                 {groupBy.map(gKey => (
-                  <div key={gKey} className="flex items-center bg-blue-100 text-blue-800 rounded border border-blue-200 text-xs px-2 py-1">
+                  <div key={gKey} className="flex items-center bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 rounded border border-blue-200 dark:border-blue-700 text-xs px-2 py-1">
                     {baseColumns.find(c => c.key === gKey)?.label}
-                    <button type="button" onClick={() => handleRemoveGroupedColumn(gKey)} className="ml-2 text-blue-600 hover:text-red-600">
+                    <button type="button" onClick={() => handleRemoveGroupedColumn(gKey)} className="ml-2 text-blue-600 dark:text-blue-400 hover:text-red-500">
                       <FontAwesomeIcon icon={faTimes} />
                     </button>
                   </div>
@@ -2203,7 +2203,7 @@ const handleExportConfirm = async (enteredFileName) => {
                   <div className="flex items-center gap-2 shrink-0">
                     <label className="inline-flex items-center cursor-pointer select-none h-8">
                       <input type="checkbox" checked={allExpanded} onChange={() => toggleAllGroups(!allExpanded)} className="sr-only" />
-                      <div className={`relative rounded-full transition-colors duration-200 ${allExpanded ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-600"} w-24 h-8`}>
+                      <div className={`relative rounded-full transition-colors duration-200 ${allExpanded ? "bg-blue-600 text-white" : "bg-gray-300 dark:bg-slate-600 text-gray-600 dark:text-slate-300"} w-24 h-8`}>
                         <span className={`absolute rounded-full bg-white shadow-md transition-all duration-200 ${allExpanded ? "left-[66px]" : "left-[2px]"} top-[2px] w-7 h-7`} />
                         <span className={`absolute inset-0 flex items-center font-medium pointer-events-none text-[11px] ${allExpanded ? "justify-start pl-4" : "justify-end pr-4"}`}>{allExpanded ? "Collapse" : "Expand"}</span>
                       </div>
@@ -2216,15 +2216,15 @@ const handleExportConfirm = async (enteredFileName) => {
 
                 <div className="flex items-center gap-2 min-w-0 flex-1 md:flex-none">
                   <input type="text" value={globalSearch} onChange={e => setGlobalSearch(e.target.value)}
-                         placeholder="Quick Search..." className="w-full min-w-[120px] rounded-md border border-gray-300 focus:ring-1 focus:ring-blue-300 outline-none h-8 md:w-48 px-3 text-xs" />
+                         placeholder="Quick Search..." className="w-full min-w-[120px] rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:ring-1 focus:ring-blue-300 dark:focus:ring-blue-500 outline-none h-8 md:w-48 px-3 text-xs" />
                 </div>
 
                 {isMobile && (
-                  <div className="inline-flex overflow-hidden rounded-md border border-gray-300 bg-white shadow-sm shrink-0">
+                  <div className="inline-flex overflow-hidden rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm shrink-0">
                     <button
                       type="button"
                       onClick={() => setUseCardView(false)}
-                      className={`h-8 w-8 ${!useCardView ? "bg-blue-600 text-white" : "bg-white text-gray-600"}`}
+                      className={`h-8 w-8 ${!useCardView ? "bg-blue-600 text-white" : "bg-white dark:bg-slate-700 text-gray-600 dark:text-slate-300"}`}
                       title="Table View"
                     >
                       <FontAwesomeIcon icon={faTable} />
@@ -2232,7 +2232,7 @@ const handleExportConfirm = async (enteredFileName) => {
                     <button
                       type="button"
                       onClick={() => setUseCardView(true)}
-                      className={`h-8 w-8 ${useCardView ? "bg-blue-600 text-white" : "bg-white text-gray-600"}`}
+                      className={`h-8 w-8 ${useCardView ? "bg-blue-600 text-white" : "bg-white dark:bg-slate-700 text-gray-600 dark:text-slate-300"}`}
                       title="Card View"
                     >
                       <FontAwesomeIcon icon={faThLarge} />
@@ -2243,7 +2243,7 @@ const handleExportConfirm = async (enteredFileName) => {
                 {!isMobile && (
                   <label className="inline-flex items-center cursor-pointer select-none shrink-0 h-8">
                       <input type="checkbox" checked={autoFillGridState} onChange={() => setAutoFillGridState(!autoFillGridState)} className="sr-only" />
-                      <div className={`relative rounded-full transition-colors duration-200 ${autoFillGridState ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-700"} w-20 h-8`}>
+                      <div className={`relative rounded-full transition-colors duration-200 ${autoFillGridState ? "bg-blue-600 text-white" : "bg-gray-300 dark:bg-slate-600 text-gray-700 dark:text-slate-300"} w-20 h-8`}>
                           <span className={`absolute top-[2px] rounded-full bg-white shadow-md transition-all duration-200 ${autoFillGridState ? "left-[50px]" : "left-[2px]"} w-7 h-7`} />
                           <span className={`absolute inset-0 flex items-center text-[11px] font-medium pointer-events-none transition-all duration-200 ${autoFillGridState ? "justify-start pl-2 text-white" : "justify-end pr-2"}`}>Auto Fit</span>
                       </div>
@@ -2256,14 +2256,14 @@ const handleExportConfirm = async (enteredFileName) => {
                     <FontAwesomeIcon icon={faFileExport} className="mr-1" /> Export
                   </button>
                  {showExportMenu && (
-                    <div className="absolute right-0 mt-1 min-w-[120px] rounded-lg shadow-lg bg-white ring-1 ring-black/10 z-[60] overflow-hidden py-1">
+                    <div className="absolute right-0 mt-1 min-w-[120px] rounded-lg shadow-lg bg-white dark:bg-slate-800 ring-1 ring-black/10 dark:ring-slate-700 z-[60] overflow-hidden py-1">
                       <button
                         type="button"
                         onClick={() => {
                           setShowExportMenu(false);
                           openExportModal("excel");
                         }}
-                        className="flex items-center w-full px-4 py-2 text-xs hover:bg-blue-50 transition-colors"
+                        className="flex items-center w-full px-4 py-2 text-xs text-gray-700 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors"
                       >
                         <FontAwesomeIcon icon={faFileExcel} className="mr-2 text-green-600" />
                         Excel
@@ -2316,20 +2316,20 @@ const handleExportConfirm = async (enteredFileName) => {
                     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/45 px-3 py-3">
                       <div
                         data-sgrt-cols
-                        className="flex max-h-[60vh] w-full max-w-[480px] flex-col overflow-hidden rounded-md bg-white shadow-2xl ring-1 ring-black/10"
+                        className="flex max-h-[60vh] w-full max-w-[480px] flex-col overflow-hidden rounded-md bg-white dark:bg-slate-800 shadow-2xl ring-1 ring-black/10 dark:ring-slate-700"
                       >
-                        <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-3 py-2">
+                        <div className="flex items-start justify-between gap-3 border-b border-gray-200 dark:border-slate-700 px-3 py-2">
                           <div className="min-w-0">
-                            <h2 className="text-sm font-bold text-slate-900">
+                            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
                               Manage Columns - {activeTabLabel}
                             </h2>
-                            <p className="mt-0.5 text-[11px] text-slate-500">
+                            <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
                               Choose the columns to display in the table.
                             </p>
                           </div>
                           <button
                             type="button"
-                            className="h-6 w-6 shrink-0 text-slate-500 hover:text-red-600"
+                            className="h-6 w-6 shrink-0 text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400"
                             onClick={handleCloseColumnChooser}
                             title="Close"
                           >
@@ -2337,7 +2337,7 @@ const handleExportConfirm = async (enteredFileName) => {
                           </button>
                         </div>
 
-                        <div className="border-b border-gray-200 px-3 py-2">
+                        <div className="border-b border-gray-200 dark:border-slate-700 px-3 py-2">
                           <div className="flex flex-col gap-2">
                             <div className="relative min-w-0 flex-1">
                               <FontAwesomeIcon
@@ -2349,11 +2349,11 @@ const handleExportConfirm = async (enteredFileName) => {
                                 value={columnChooserSearch}
                                 onChange={(e) => setColumnChooserSearch(e.target.value)}
                                 placeholder="Search columns..."
-                                className="h-7 w-full rounded-md border border-gray-300 pl-9 pr-2 text-[11px] outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                className="h-7 w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 pl-9 pr-2 text-[11px] outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                               />
                             </div>
                             <div className="flex items-center gap-2 overflow-x-auto">
-                              <label className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-1 text-[11px] text-slate-800 cursor-pointer select-none">
+                              <label className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-1 text-[11px] text-slate-800 dark:text-slate-200 cursor-pointer select-none">
                                 <input
                                   type="checkbox"
                                   className="h-3 w-3 accent-blue-600"
@@ -2362,7 +2362,7 @@ const handleExportConfirm = async (enteredFileName) => {
                                 />
                                 {allChecked ? `UnSelect All (${chooserColumns.length})` : `Select All (${chooserColumns.length})`}
                               </label>
-                              <div className="h-5 shrink-0 border-l border-gray-300" />
+                              <div className="h-5 shrink-0 border-l border-gray-300 dark:border-slate-600" />
                               {/* <button
                                 type="button"
                                 className="h-7 shrink-0 px-1.5 text-[11px] font-medium text-blue-600 hover:text-blue-700"
@@ -2372,7 +2372,7 @@ const handleExportConfirm = async (enteredFileName) => {
                               </button> */}
                               <button
                                 type="button"
-                                className="h-7 shrink-0 rounded-md border border-gray-300 px-2 text-[11px] font-medium text-slate-600 hover:bg-gray-50"
+                                className="h-7 shrink-0 rounded-md border border-gray-300 dark:border-slate-600 px-2 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
                                 onClick={() => {
                                   setColumnChooserDraftHidden([]);
                                   setColumnChooserSearch("");
@@ -2389,7 +2389,7 @@ const handleExportConfirm = async (enteredFileName) => {
                             {filteredChooserColumns.map((col) => (
                               <label
                                 key={col.key}
-                                className="flex h-7 items-center gap-1.5 rounded border border-gray-200 bg-white px-2 text-[11px] text-slate-800 shadow-sm cursor-pointer select-none hover:bg-blue-50"
+                                className="flex h-7 items-center gap-1.5 rounded border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 text-[11px] text-slate-800 dark:text-slate-200 shadow-sm cursor-pointer select-none hover:bg-blue-50 dark:hover:bg-slate-600"
                               >
                                 <input
                                   type="checkbox"
@@ -2398,20 +2398,20 @@ const handleExportConfirm = async (enteredFileName) => {
                                   onChange={(e) => handleToggleColumnVisibility(col.key, e.target.checked)}
                                 />
                                 <span className="min-w-0 flex-1 truncate">{col.label}</span>
-                                <FontAwesomeIcon icon={faGripVertical} className="text-[11px] text-slate-300" />
+                                <FontAwesomeIcon icon={faGripVertical} className="text-[11px] text-slate-300 dark:text-slate-500" />
                               </label>
                             ))}
                           </div>
                         </div>
 
-                        <div className="flex flex-col gap-2 border-t border-gray-200 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="text-[11px] text-slate-500">
+                        <div className="flex flex-col gap-2 border-t border-gray-200 dark:border-slate-700 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
                             Showing {filteredChooserColumns.length === 0 ? 0 : 1}-{filteredChooserColumns.length} of {chooserColumns.length} columns
                           </div>
                           <div className="flex justify-end gap-2">
                             <button
                               type="button"
-                              className="h-7 min-w-[72px] rounded-md border border-gray-300 px-3 text-[11px] font-medium text-slate-600 hover:bg-gray-50"
+                              className="h-7 min-w-[72px] rounded-md border border-gray-300 dark:border-slate-600 px-3 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
                               onClick={handleCloseColumnChooser}
                             >
                               Cancel
@@ -2435,12 +2435,12 @@ const handleExportConfirm = async (enteredFileName) => {
 
           <div
             ref={tableScrollRef}
-            className={`overflow-auto bg-white rounded-md max-h-[60vh] relative custom-scrollbar ${autoFillGridState ? "overflow-x-hidden" : ""}`}
+            className={`overflow-auto bg-white dark:bg-slate-700 rounded-md max-h-[60vh] relative custom-scrollbar ${autoFillGridState ? "overflow-x-hidden" : ""}`}
           >
             {loading ? (
-              <div className="text-center py-6 text-gray-500">Loading data and configurations...</div>
+              <div className="text-center py-6 text-gray-500 dark:text-slate-400">Loading data and configurations...</div>
             ) : !activeTab || visibleCols.length === 0 ? (
-              <div className="text-center py-10 text-gray-500">
+              <div className="text-center py-10 text-gray-500 dark:text-slate-400">
                 Select a date range and click ‘Filter’ to load history.
               </div>
             ) : isMobile && useCardView ? (
@@ -2462,7 +2462,7 @@ const handleExportConfirm = async (enteredFileName) => {
                     {filteredData.length > 0 && renderMobileGrandTotalCard()}
                   </>
                 ) : (
-                  <div className="rounded-md border py-4 text-center text-gray-500">
+                  <div className="rounded-md border dark:border-slate-700 py-4 text-center text-gray-500 dark:text-slate-400">
                     No records found matching the filter criteria.
                   </div>
                 )}
@@ -2470,7 +2470,7 @@ const handleExportConfirm = async (enteredFileName) => {
             ) : (
               <>
                 {isMobile && visibleCols.length > MOBILE_MAX_COLUMNS && (
-                  <div className="mb-2 text-[11px] text-gray-500">
+                  <div className="mb-2 text-[11px] text-gray-500 dark:text-slate-400">
                     Showing first {MOBILE_MAX_COLUMNS} columns on mobile table view.
                   </div>
                 )}
@@ -2480,9 +2480,9 @@ const handleExportConfirm = async (enteredFileName) => {
                     className={`global-tran-table-div-ui w-full text-center ${autoFillGridState ? "table-fixed" : "min-w-[1200px] table-auto"}`}
                   >
                   <thead className="text-[11px] font-bold sticky top-0 z-30">
-                    <tr className="bg-blue-100 text-blue-900">
+                    <tr className="bg-blue-100 dark:bg-slate-700 text-blue-900 dark:text-slate-100">
                       <th
-                        className="sticky left-0 top-0 z-50 px-2 bg-blue-100 text-blue-900 w-[64px]"
+                        className="sticky left-0 top-0 z-50 px-2 bg-blue-100 dark:bg-slate-700 text-blue-900 dark:text-slate-100 w-[64px]"
                         style={{ minWidth: ACTION_COL_WIDTH, maxWidth: ACTION_COL_WIDTH }}
                       >
                         View
@@ -2513,7 +2513,7 @@ const handleExportConfirm = async (enteredFileName) => {
                             onClick={() => col.sortable !== false && handleSort(col.key)}
                             className={`px-2 py-2 select-none relative ${
                               col.sortable !== false ? "cursor-pointer" : ""
-                            } ${autoFillGridState ? "whitespace-normal break-words" : "whitespace-nowrap"} ${meta.sticky ? "sticky z-50 bg-blue-100" : ""} ${numberAlignClass(col)}`}
+                            } ${autoFillGridState ? "whitespace-normal break-words" : "whitespace-nowrap"} ${meta.sticky ? "sticky z-50 bg-blue-100 dark:bg-slate-700" : ""} ${numberAlignClass(col)}`}
                             style={style}
                           >
                             <div className={`flex items-center justify-between gap-2 ${autoFillGridState ? "min-w-0" : ""}`}>
@@ -2537,8 +2537,8 @@ const handleExportConfirm = async (enteredFileName) => {
                       })}
                     </tr>
 
-                    <tr className="bg-gray-100 sticky top-[25px] z-20">
-                      <td className="sticky left-0 z-40 px-2 py-1 border-r border-b border-gray-200 bg-gray-100" />
+                    <tr className="bg-gray-100 dark:bg-slate-700/80 sticky top-[25px] z-20">
+                      <td className="sticky left-0 z-40 px-2 py-1 border-r border-b border-gray-200 dark:border-slate-600 bg-gray-100 dark:bg-slate-700/80" />
                       {renderVisibleCols.map((col, i) => {
                         const meta = stickyPlan[i];
                         const style = meta.sticky
@@ -2555,8 +2555,8 @@ const handleExportConfirm = async (enteredFileName) => {
                         return (
                           <td
                             key={col.key}
-                            className={`px-1 py-1 border-r border-b border-gray-200 whitespace-nowrap ${
-                              meta.sticky ? "sticky z-30 bg-gray-100" : ""
+                            className={`px-1 py-1 border-r border-b border-gray-200 dark:border-slate-600 whitespace-nowrap ${
+                              meta.sticky ? "sticky z-30 bg-gray-100 dark:bg-slate-700/80" : ""
                             }`}
                             style={style}
                           >
@@ -2565,7 +2565,7 @@ const handleExportConfirm = async (enteredFileName) => {
                               value={searchFields[col.key] || ""}
                               onChange={(e) => handleSearchChange(e, col.key)}
                               placeholder="Filter..."
-                              className="w-full px-1.5 py-0.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-300 text-[10px]"
+                              className="w-full px-1.5 py-0.5 border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-800 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-300 dark:focus:ring-blue-500 text-[10px]"
                             />
                           </td>
                         );
@@ -2573,7 +2573,7 @@ const handleExportConfirm = async (enteredFileName) => {
                     </tr>
                   </thead>
 
-                  <tbody className="bg-white text-[11px]">
+                  <tbody className="bg-white dark:bg-slate-700 text-[11px] dark:text-slate-100">
                     {displayRows.length > 0 ? (
                       <>
                         {displayRows.map((row, idx) => {
@@ -2583,23 +2583,23 @@ const handleExportConfirm = async (enteredFileName) => {
                             return (
                               <tr
                                 key={`g-${uniqueId}`}
-                                className="bg-gray-100 hover:bg-gray-200 cursor-pointer border-b"
+                                className="bg-gray-100 dark:bg-slate-700/60 hover:bg-gray-200 dark:hover:bg-slate-600/60 cursor-pointer border-b dark:border-slate-600"
                                 onClick={() => toggleGroup(row)}
                               >
                                 <td
                                   colSpan={renderVisibleCols.length + 1}
-                                  className="px-2 py-1 font-bold text-blue-800 whitespace-nowrap text-left"
+                                  className="px-2 py-1 font-bold text-blue-800 dark:text-blue-300 whitespace-nowrap text-left"
                                 >
                                   <div className="flex items-center" style={{ paddingLeft: row.level * 20 }}>
                                     <FontAwesomeIcon
                                       icon={isExpanded ? faChevronDown : faChevronRight}
-                                      className="mr-2 text-gray-500"
+                                      className="mr-2 text-gray-500 dark:text-slate-400"
                                     />
-                                    <span className="text-gray-600 font-normal">
+                                    <span className="text-gray-600 dark:text-slate-400 font-normal">
                                       {baseColumns.find((c) => c.key === row.key)?.label}:
                                     </span>
                                     <span className="ml-1">{row.value}</span>
-                                    <span className="ml-2 bg-blue-200 text-blue-800 text-[10px] px-2 rounded-full font-normal">
+                                    <span className="ml-2 bg-blue-200 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 text-[10px] px-2 rounded-full font-normal">
                                       {row.count}
                                     </span>
                                   </div>
@@ -2612,9 +2612,9 @@ const handleExportConfirm = async (enteredFileName) => {
                             return (
                               <tr
                                 key={`sub-${row.groupValue}-${idx}`}
-                                className="bg-blue-50 font-bold border-b text-[10px]"
+                                className="bg-blue-50 dark:bg-blue-900/20 font-bold border-b dark:border-slate-600 text-[10px]"
                               >
-                                <td className="sticky left-0 bg-blue-50 border-r z-10" />
+                                <td className="sticky left-0 bg-blue-50 dark:bg-blue-900/20 border-r dark:border-slate-600 z-10" />
                                 {renderVisibleCols.map((col, i) => {
                                   const meta = stickyPlan[i];
                                   const val = row.aggregates[col.key];
@@ -2633,7 +2633,7 @@ const handleExportConfirm = async (enteredFileName) => {
                                     <td
                                       key={col.key}
                                       className={`px-2 py-1 whitespace-nowrap ${numberAlignClass(col)} ${
-                                        meta.sticky ? "sticky z-10 bg-blue-50" : ""
+                                        meta.sticky ? "sticky z-10 bg-blue-50 dark:bg-blue-900/20" : ""
                                       }`}
                                       style={style}
                                     >
@@ -2642,7 +2642,7 @@ const handleExportConfirm = async (enteredFileName) => {
                                           className="float-left text-left font-bold"
                                           style={{ paddingLeft: row.level * 20 }}
                                         >
-                                          <span className="text-gray-500 uppercase">Subtotal: {row.groupValue}</span>
+                                          <span className="text-gray-500 dark:text-slate-400 uppercase">Subtotal: {row.groupValue}</span>
                                         </div>
                                       )}
                                       {val !== undefined ? formatCellValue(val, col) : ""}
@@ -2657,12 +2657,12 @@ const handleExportConfirm = async (enteredFileName) => {
                           return (
                             <tr
                               key={idx}
-                              className={`hover:bg-blue-50 transition-colors cursor-pointer border-b group ${rowClass} ${
-                                idx % 2 === 0 ? "bg-white" : "bg-gray-50"
+                              className={`hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors cursor-pointer border-b dark:border-slate-600 group ${rowClass} ${
+                                idx % 2 === 0 ? "bg-white dark:bg-slate-700 dark:text-slate-100" : "bg-gray-50 dark:bg-slate-600/60 dark:text-slate-100"
                               }`}
                               onDoubleClick={() => handleRowDoubleClick(row)}
                             >
-                              <td className="sticky left-0 z-10 px-2 py-0 border-r border-gray-200 bg-white group-hover:bg-blue-50 text-center w-[64px] min-w-[64px]">
+                              <td className="sticky left-0 z-10 px-2 py-0 border-r border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-700 group-hover:bg-blue-50 dark:group-hover:bg-slate-600 text-center w-[64px] min-w-[64px]">
                                 <div className="flex items-center justify-center h-6">
                                   <button
                                     onClick={(e) => {
@@ -2722,7 +2722,7 @@ const handleExportConfirm = async (enteredFileName) => {
                       </>
                     ) : (
                       <tr>
-                        <td colSpan={renderVisibleCols.length + 1} className="text-center text-gray-500 py-4 border">
+                        <td colSpan={renderVisibleCols.length + 1} className="text-center text-gray-500 dark:text-slate-400 py-4 border dark:border-slate-700">
                           No records found matching the filter criteria.
                         </td>
                       </tr>
@@ -2730,9 +2730,9 @@ const handleExportConfirm = async (enteredFileName) => {
                   </tbody>
 
                   {filteredData.length > 0 && hasGrandTotalColumns && (
-                    <tfoot className="sticky bottom-0 z-30 shadow-[0_-4px_6px_rgba(0,0,0,0.05)] bg-blue-100 font-bold border-t border-blue-400">
+                    <tfoot className="sticky bottom-0 z-30 shadow-[0_-4px_6px_rgba(0,0,0,0.05)] bg-blue-100 dark:bg-slate-700 font-bold border-t border-blue-400 dark:border-slate-600">
                       <tr>
-                        <td className="sticky left-0 bg-blue-100 border-r border-gray-300 z-40" />
+                        <td className="sticky left-0 bg-blue-100 dark:bg-slate-700 border-r border-gray-300 dark:border-slate-600 z-40" />
                         {renderVisibleCols.map((col, i) => {
                           const meta = stickyPlan[i];
                           const val = grandTotals[col.key];
@@ -2751,12 +2751,12 @@ const handleExportConfirm = async (enteredFileName) => {
                             <td
                               key={col.key}
                               className={`px-2 py-1.5 text-[11px] ${numberAlignClass(col)} ${
-                                meta.sticky ? "sticky z-30 bg-blue-100" : ""
+                                meta.sticky ? "sticky z-30 bg-blue-100 dark:bg-slate-700" : ""
                               }`}
                               style={style}
                             >
                               {i === 0 && (
-                                <span className="text-gray-800 uppercase tracking-wide whitespace-nowrap">
+                                <span className="text-gray-800 dark:text-slate-200 uppercase tracking-wide whitespace-nowrap">
                                   {groupBy.length > 0 ? "Grand Total" : "Grand Total"}
                                 </span>
                               )}
@@ -2873,7 +2873,7 @@ const handleExportConfirm = async (enteredFileName) => {
         isOpen={modalIsOpen}
         onRequestClose={() => setModalIsOpen(false)}
         closeTimeoutMS={150}
-        className="w-[min(100vw,500px)] sm:w-[min(100vw,500px)] h-[90vh] sm:h-auto sm:max-h-[80vh] mx-auto sm:mt-4 rounded-none sm:rounded-2xl shadow-2xl bg-white overflow-hidden outline-none"
+        className="w-[min(100vw,500px)] sm:w-[min(100vw,500px)] h-[90vh] sm:h-auto sm:max-h-[80vh] mx-auto sm:mt-4 rounded-none sm:rounded-2xl shadow-2xl bg-white dark:bg-slate-800 overflow-hidden outline-none"
         overlayClassName="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50"
       >
         <div className="relative bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-3">
@@ -2975,17 +2975,17 @@ const handleExportConfirm = async (enteredFileName) => {
               </button>
             </div>
 
-            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-600">
-              <div className="font-semibold text-slate-700 mb-1">Selected Range</div>
+            <div className="mt-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/60 p-2.5 text-xs text-slate-600 dark:text-slate-300">
+              <div className="font-semibold text-slate-700 dark:text-slate-200 mb-1">Selected Range</div>
               {dates?.[0] && dates?.[1] ? (
                 <div>
                   {format(dates[0], "MMM dd, yyyy")} — {format(dates[1], "MMM dd, yyyy")}
                 </div>
               ) : (
-                <div className="italic text-slate-400">No range selected</div>
+                <div className="italic text-slate-400 dark:text-slate-500">No range selected</div>
               )}
               {granularity !== "day" && (
-                <div className="mt-1 text-[11px] text-slate-500">
+                <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
                   Mode: <span className="uppercase">{granularity}</span> (one tap selects entire{" "}
                   {granularity})
                 </div>
@@ -2993,17 +2993,17 @@ const handleExportConfirm = async (enteredFileName) => {
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200 p-2 sm:p-2">
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-2 sm:p-2">
             <div className="flex items-center gap-1 mb-2">
-              <span className="text-xs text-slate-500 mr-1">Select by:</span>
-              <div className="inline-flex rounded-lg border border-slate-300 overflow-hidden">
+              <span className="text-xs text-slate-500 dark:text-slate-400 mr-1">Select by:</span>
+              <div className="inline-flex rounded-lg border border-slate-300 dark:border-slate-600 overflow-hidden">
                 {["day", "month", "year"].map((g) => (
                   <button
                     key={g}
                     type="button"
                     onClick={() => setGranularity(g)}
                     className={`px-3 py-1.5 text-xs capitalize ${
-                      granularity === g ? "bg-blue-600 text-white" : "bg-white text-slate-700 hover:bg-slate-50"
+                      granularity === g ? "bg-blue-600 text-white" : "bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-600"
                     }`}
                   >
                     {g}
@@ -3062,7 +3062,7 @@ const handleExportConfirm = async (enteredFileName) => {
                         <button
                           onClick={decreaseMonth}
                           disabled={prevMonthButtonDisabled}
-                          className="px-2 py-1 rounded-md hover:bg-slate-100 disabled:opacity-40"
+                          className="px-2 py-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-600 dark:text-slate-200 disabled:opacity-40"
                           title="Previous month"
                           type="button"
                         >
@@ -3081,7 +3081,7 @@ const handleExportConfirm = async (enteredFileName) => {
 
                       <div className="flex items-center gap-2">
                         <select
-                          className="text-sm border border-slate-300 rounded-md px-2 py-1 bg-white"
+                          className="text-sm border border-slate-300 dark:border-slate-600 rounded-md px-2 py-1 bg-white dark:bg-slate-700 dark:text-slate-100"
                           value={date.getMonth()}
                           onChange={(e) => changeMonth(Number(e.target.value))}
                         >
@@ -3118,14 +3118,14 @@ const handleExportConfirm = async (enteredFileName) => {
           `}</style>
         </div>
 
-        <div className="sticky bottom-0 flex items-center justify-between gap-2 px-4 sm:px-5 py-3 bg-white/95 border-t border-slate-200">
-          <div className="text-[11px] text-slate-500">
-            Tip: Press <kbd className="px-1 py-0.5 bg-slate-100 rounded">Enter</kbd> to apply.
+        <div className="sticky bottom-0 flex items-center justify-between gap-2 px-4 sm:px-5 py-3 bg-white/95 dark:bg-slate-800/95 border-t border-slate-200 dark:border-slate-700">
+          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+            Tip: Press <kbd className="px-1 py-0.5 bg-slate-100 dark:bg-slate-700 dark:text-slate-300 rounded">Enter</kbd> to apply.
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => setModalIsOpen(false)}
-              className="px-4 py-2 rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50 text-sm"
+              className="px-4 py-2 rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 text-sm"
             >
               Cancel
             </button>

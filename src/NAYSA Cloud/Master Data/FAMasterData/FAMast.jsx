@@ -1,6 +1,6 @@
 // src/NAYSA Cloud/Master Data/FAMasterData/FAMast.jsx
 
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -14,6 +14,9 @@ import {
     faTrash,
     faTable,
     faChartLine,
+    faMagnifyingGlass,
+    faFilter,
+    faTimes,
 } from "@fortawesome/free-solid-svg-icons";
 
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
@@ -33,6 +36,14 @@ import {
 
 import { usePagePermission } from "@/NAYSA Cloud/Global/usePagePermission.js";
 import PermissionBadge from "@/NAYSA Cloud/Global/PermissionBadge.jsx";
+
+import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
+import SearchBranchRef from "@/NAYSA Cloud/Lookup/SearchBranchRef.jsx";
+import SearchRCMast from "@/NAYSA Cloud/Lookup/SearchRCMast.jsx";
+import SearchFACateg from "@/NAYSA Cloud/Lookup/SearchFACateg.jsx";
+import SearchFAClass from "@/NAYSA Cloud/Lookup/SearchFAClass.jsx";
+import SearchFALoc from "@/NAYSA Cloud/Lookup/SearchFALoc.jsx";
+import SearchFAAsset from "@/NAYSA Cloud/Lookup/SearchFAAsset.jsx";
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Empty form — mirrors fa_mast columns exactly (camelCase aliases from sproc)
@@ -131,6 +142,175 @@ const emptyForm = {
     __isNew: false,
 };
 
+const FA_STATUS_OPTIONS = [
+    { value: "All",  label: "All Assets" },
+    { value: "A", label: "Active" },
+    { value: "M", label: "Merged" },
+    { value: "S", label: "Split" },
+    { value: "D", label: "Disposed" },
+    { value: "H", label: "Hold" },
+];
+
+const normalizeText = (value) =>
+    value === null || value === undefined ? "" : String(value).trim();
+
+const normalizeUpper = (value) => normalizeText(value).toUpperCase();
+
+const pickFirst = (row = {}, keys = []) => {
+    for (const key of keys) {
+        const value = row?.[key];
+        if (value !== null && value !== undefined && String(value).trim() !== "") return value;
+    }
+    return "";
+};
+
+const compactParams = (params = {}) =>
+    Object.entries(params).reduce((acc, [key, value]) => {
+        const text = normalizeText(value);
+        if (text !== "") acc[key] = text;
+        return acc;
+    }, {});
+
+const buildEmptyMasterFilters = (currentUserRow = {}) => ({
+    branchCode: normalizeText(currentUserRow?.branchCode || currentUserRow?.BRANCH_CODE),
+    branchName: normalizeText(currentUserRow?.branchName || currentUserRow?.BRANCH_NAME),
+    flocCode: "",
+    flocName: "",
+    rcCode: "",
+    rcName: "",
+    categCode: "",
+    categName: "",
+    classCode: "",
+    className: "",
+    faCode: "",
+    faName: "",
+    faStatus: "",
+    showLookupModal: false,
+    lookupType: "",
+    modalType: "",
+});
+
+const buildMasterFilterParams = (filters = {}) =>
+    compactParams({
+        search: filters.faCode,
+        searchMode: "part",
+        branchCode: filters.branchCode,
+        flocCode: filters.flocCode,
+        rcCode: filters.rcCode,
+        categCode: filters.categCode,
+        classCode: filters.classCode,
+        faCode: filters.faCode,
+        faStatus: filters.faStatus,
+    });
+
+const rowMatchesCodeNameFilter = (row, filters, codeFilterKey, nameFilterKey, codeKeys, nameKeys) => {
+    const codeFilter = normalizeUpper(filters?.[codeFilterKey]);
+    const nameFilter = normalizeUpper(filters?.[nameFilterKey]);
+
+    if (!codeFilter && !nameFilter) return true;
+
+    const rowCode = normalizeUpper(pickFirst(row, codeKeys));
+    const rowName = normalizeUpper(pickFirst(row, nameKeys));
+
+    if (codeFilter && rowCode) return rowCode === codeFilter;
+    if (nameFilter && rowName) return rowName.includes(nameFilter);
+
+    return false;
+};
+
+const rowMatchesStatusFilter = (row, filters) => {
+    const statusFilter = normalizeUpper(filters?.faStatus);
+    if (!statusFilter || statusFilter === "ALL") return true;
+
+    const rowStatus = normalizeUpper(
+        pickFirst(row, [
+            "faStatus", "FA_STATUS", "fa_status",
+            "status",   "STATUS",
+            "assetStatus", "ASSET_STATUS", "asset_status",
+        ])
+    );
+
+    // FIX: if the sproc doesn't return a status column at all, don't silently
+    // drop the row — pass it through so the user can still see the data.
+    if (!rowStatus) return true;
+    return rowStatus === statusFilter || rowStatus.startsWith(statusFilter);
+};
+
+const filterRowsByMasterFilters = (rows = [], filters = {}) => {
+    const list = Array.isArray(rows) ? rows : [];
+
+    return list.filter((row) =>
+        rowMatchesCodeNameFilter(
+            row,
+            filters,
+            "branchCode",
+            "branchName",
+            ["branchCode", "BRANCH_CODE", "branch_code"],
+            ["branchName", "BRANCH_NAME", "branch_name"]
+        ) &&
+        rowMatchesCodeNameFilter(
+            row,
+            filters,
+            "flocCode",
+            "flocName",
+            ["flocCode", "FLOC_CODE", "floc_code", "locCode", "LOC_CODE", "loc_code", "locationCode", "LOCATION_CODE"],
+            ["flocName", "FLOC_NAME", "floc_name", "locName",  "LOC_NAME",  "loc_name",  "location",     "LOCATION",     "locationName", "LOCATION_NAME"]
+        ) &&
+        rowMatchesCodeNameFilter(
+            row,
+            filters,
+            "rcCode",
+            "rcName",
+            ["rcCode", "RC_CODE", "rc_code", "deptCode", "DEPT_CODE", "departmentCode"],
+            ["rcName", "RC_NAME", "rc_name", "deptName", "DEPT_NAME", "departmentName"]
+        ) &&
+        rowMatchesCodeNameFilter(
+            row,
+            filters,
+            "categCode",
+            "categName",
+            ["categCode", "CATEG_CODE", "categ_code", "categoryCode"],
+            ["categName", "CATEG_NAME", "categ_name", "categoryName", "category"]
+        ) &&
+        rowMatchesCodeNameFilter(
+            row,
+            filters,
+            "classCode",
+            "className",
+            ["classCode", "CLASS_CODE", "class_code", "subCategoryCode"],
+            ["className", "CLASS_NAME", "class_name", "subCategoryName", "assetSubCategory"]
+        ) &&
+        rowMatchesCodeNameFilter(
+            row,
+            filters,
+            "faCode",
+            "faName",
+            ["faCode", "FA_CODE", "fa_code"],
+            ["faName", "FA_NAME", "fa_name", "description", "assetDescription"]
+        ) &&
+        rowMatchesStatusFilter(row, filters)
+    );
+};
+
+const buildMasterFilterContext = (filters = {}) => {
+    const parts = [];
+
+    if (filters.branchCode || filters.branchName) {
+        parts.push(`Branch: ${filters.branchCode || "All"}${filters.branchName ? ` - ${filters.branchName}` : ""}`);
+    }
+    if (filters.faCode) parts.push(`Asset: ${filters.faCode}${filters.faName ? ` - ${filters.faName}` : ""}`);
+    if (filters.flocCode || filters.flocName) parts.push(`Location: ${filters.flocCode || filters.flocName}`);
+    if (filters.rcCode || filters.rcName) parts.push(`Department: ${filters.rcCode || filters.rcName}`);
+    if (filters.categCode || filters.categName) parts.push(`Category: ${filters.categCode || filters.categName}`);
+    if (filters.classCode || filters.className) parts.push(`Sub Category: ${filters.classCode || filters.className}`);
+    if (filters.faStatus) {
+        const label = FA_STATUS_OPTIONS.find((option) => option.value === filters.faStatus)?.label || filters.faStatus;
+        parts.push(`FA Status: ${label}`);
+    }
+
+    return parts.length ? parts.join(" | ") : "No filters applied";
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  Component
 // ─────────────────────────────────────────────────────────────────────────────
@@ -140,7 +320,7 @@ const FAMast = () => {
     const [isLoading, setIsLoading]   = useState(false);
     const generationMode              = "Auto";     // fa_code + tag_no are system-generated on save
 
-    const { user } = useAuth();
+    const { user, currentUserRow } = useAuth();
     const userCode = user?.USER_CODE || user?.userCode || user?.code || "";
 
     const [form, setForm]                         = useState({ ...emptyForm });
@@ -152,6 +332,18 @@ const FAMast = () => {
     const [financialAllRows, setFinancialAllRows] = useState([]);
     const [financialRows, setFinancialRows]       = useState([]);
 
+    // ── master tab filter state ───────────────────────────────────────────────
+    const defaultMasterFilters = useMemo(
+        () => buildEmptyMasterFilters(currentUserRow),
+        [currentUserRow]
+    );
+    const [showMasterFilterModal, setShowMasterFilterModal] = useState(false);
+    const [masterFiltersByTab, setMasterFiltersByTab] = useState(() => ({
+        assetMaster: buildEmptyMasterFilters(),
+        financialInfo: buildEmptyMasterFilters(),
+    }));
+    const activeMasterFilters = masterFiltersByTab[activeMasterDataTab] || defaultMasterFilters;
+
     // Reference Tab
     const refTabRef               = useRef(null);
     const [refState, setRefState] = useState({ isEditing: false, canSave: false, activeRefTab: "category" });
@@ -161,26 +353,101 @@ const FAMast = () => {
         usePagePermission("FAMast");
 
     // ── init ─────────────────────────────────────────────────────────────────
-    useEffect(() => {
-        loadMasterList();
-    }, []);
+    // Records are NOT auto-loaded. The user must click Filter (SearchFAAsset)
+    // and apply before any data appears in the DataTab or FinancialInfoTab.
 
     useEffect(() => {
-        if (activeTab === "master" && activeMasterDataTab === "financialInfo" && financialAllRows.length === 0) {
-            loadFinancialInfoList();
-        }
-    }, [activeTab, activeMasterDataTab]);
+        if (!defaultMasterFilters.branchCode && !defaultMasterFilters.branchName) return;
+
+        setMasterFiltersByTab((prev) => {
+            const next = { ...prev };
+            ["assetMaster", "financialInfo"].forEach((tabKey) => {
+                const existing = next[tabKey] || {};
+                next[tabKey] = {
+                    ...defaultMasterFilters,
+                    ...existing,
+                    branchCode: existing.branchCode || defaultMasterFilters.branchCode,
+                    branchName: existing.branchName || defaultMasterFilters.branchName,
+                };
+            });
+            return next;
+        });
+    }, [defaultMasterFilters.branchCode, defaultMasterFilters.branchName]);
+
+    // No auto-load on tab switch — user must apply a filter via SearchFAAsset first.
 
     // ── helpers ──────────────────────────────────────────────────────────────
     const updateForm = (patch) => setForm((prev) => ({ ...prev, ...patch }));
 
-    const parseSprocJsonResult = (rows) => {
-        if (!rows) return [];
-        const r = rows?.[0]?.result;
-        if (typeof r === "string") {
-            try { return JSON.parse(r); } catch { return []; }
+    const updateMasterFilters = useCallback((patch, tabKey = activeMasterDataTab) => {
+        setMasterFiltersByTab((prev) => ({
+            ...prev,
+            [tabKey]: {
+                ...(prev[tabKey] || defaultMasterFilters),
+                ...patch,
+            },
+        }));
+    }, [activeMasterDataTab, defaultMasterFilters]);
+
+    const parseSprocJsonResult = (payload) => {
+        const parseJson = (value) => {
+            if (typeof value !== "string") return value;
+            const text = value.trim();
+            if (!text) return [];
+
+            try {
+                return JSON.parse(text);
+            } catch {
+                return [];
+            }
+        };
+
+        const getWrapperValue = (row = {}) => {
+            const wrapperKeys = [
+                "result", "Result", "RESULT",
+                "jsonResult", "JSON_RESULT", "json_result",
+                "data", "Data", "DATA",
+            ];
+
+            for (const key of wrapperKeys) {
+                if (row?.[key] !== undefined && row?.[key] !== null) return row[key];
+            }
+            return undefined;
+        };
+
+        let value = parseJson(payload);
+        if (!value) return [];
+
+        // SQL Server FOR JSON commonly comes back as:
+        // [{ result: "[{...}]" }] or [{ RESULT: "[{...}]" }]
+        if (Array.isArray(value)) {
+            if (value.length === 1 && value[0] && typeof value[0] === "object" && !Array.isArray(value[0])) {
+                const wrapperValue = getWrapperValue(value[0]);
+                if (wrapperValue !== undefined) {
+                    const parsedWrapper = parseJson(wrapperValue);
+                    return Array.isArray(parsedWrapper)
+                        ? parsedWrapper
+                        : parsedWrapper && typeof parsedWrapper === "object"
+                            ? [parsedWrapper]
+                            : [];
+                }
+            }
+            return value;
         }
-        if (Array.isArray(rows) && rows.length && typeof rows[0] === "object") return rows;
+
+        if (value && typeof value === "object") {
+            const wrapperValue = getWrapperValue(value);
+            if (wrapperValue !== undefined && wrapperValue !== value) {
+                const parsedWrapper = parseJson(wrapperValue);
+                return Array.isArray(parsedWrapper)
+                    ? parsedWrapper
+                    : parsedWrapper && typeof parsedWrapper === "object"
+                        ? [parsedWrapper]
+                        : [];
+            }
+            return [value];
+        }
+
         return [];
     };
 
@@ -188,16 +455,13 @@ const FAMast = () => {
     const loadMasterList = async (filters = {}) => {
         setIsLoading(true);
         try {
-            const { search, searchMode } = filters || {};
+            const filterParams = buildMasterFilterParams(filters);
             const res  = await apiClient.get("/faMast", {
-                params: {
-                    search: search || undefined,
-                    searchMode: searchMode || undefined,
-                },
+                params: filterParams,
             });
-            const list = parseSprocJsonResult(res?.data?.data);
+            const list = parseSprocJsonResult(res?.data?.data ?? res?.data);
             setMasterAllRows(list);
-            setMasterRows(list);
+            setMasterRows(filterRowsByMasterFilters(list, filters));
         } catch {
             setMasterAllRows([]);
             setMasterRows([]);
@@ -210,37 +474,74 @@ const FAMast = () => {
     const loadFinancialInfoList = async (filters = {}) => {
         setIsLoading(true);
         try {
-            const { search, searchMode } = filters || {};
+            // GET /faMastFinancialInfo — controller reads individual query params
+            // and builds the json_data body before calling the sproc.
+            // Use the same /faMast route that works (already has X-Company-DB via apiClient).
+            // Pass mode=FinancialInfo so the controller calls the FinancialInfo sproc mode.
+            const res = await apiClient.get("/faMast", {
+                params: {
+                    mode:       "FinancialInfo",
+                    branchCode: filters.branchCode || undefined,
+                    flocCode:   filters.flocCode   || undefined,
+                    rcCode:     filters.rcCode     || undefined,
+                    categCode:  filters.categCode  || undefined,
+                    classCode:  filters.classCode  || undefined,
+                    faCode:     filters.faCode     || undefined,
+                    faStatus:   filters.faStatus   || undefined,
+                    search:     filters.faName     || undefined,
+                    searchMode: filters.faName ? "part" : undefined,
+                },
+            });
 
-            // Preferred route: create this route/controller endpoint for @mode = 'FinancialInfo'.
-            // Fallback keeps the UI usable if your controller accepts mode in /faMast.
-            let res;
-            try {
-                res = await apiClient.get("/faMastFinancialInfo", {
-                    params: {
-                        search: search || undefined,
-                        searchMode: searchMode || undefined,
-                    },
-                });
-            } catch (firstError) {
-                res = await apiClient.get("/faMast", {
-                    params: {
-                        mode: "FinancialInfo",
-                        search: search || undefined,
-                        searchMode: searchMode || undefined,
-                    },
-                });
-            }
-
-            const list = parseSprocJsonResult(res?.data?.data);
+            const list = parseSprocJsonResult(res?.data?.data ?? res?.data);
             setFinancialAllRows(list);
-            setFinancialRows(list);
+            setFinancialRows(filterRowsByMasterFilters(list, filters));
         } catch (e) {
             console.error("Failed to load Fixed Asset Financial Information", e);
             setFinancialAllRows([]);
             setFinancialRows([]);
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    // ── master tab header actions ─────────────────────────────────────────────
+    const runActiveMasterFilter = async (filters = activeMasterFilters) => {
+        if (activeMasterDataTab === "assetMaster") {
+            await loadMasterList(filters);
+        } else if (activeMasterDataTab === "financialInfo") {
+            await loadFinancialInfoList(filters);
+        }
+    };
+
+    const handleMasterFilter = () => {
+        setShowMasterFilterModal(true);
+    };
+
+    const handleApplyMasterFilter = async () => {
+        // FIX: Read the latest filters directly from state instead of the
+        // activeMasterFilters memo, which can be stale when the modal's
+        // updateFilters calls haven't caused a re-render yet.
+        const latestFilters =
+            masterFiltersByTab[activeMasterDataTab] || defaultMasterFilters;
+        setShowMasterFilterModal(false);
+        await runActiveMasterFilter(latestFilters);
+    };
+
+    const handleMasterReset = () => {
+        const resetFilters = { ...defaultMasterFilters, showLookupModal: false, lookupType: "", modalType: "" };
+        setMasterFiltersByTab((prev) => ({
+            ...prev,
+            [activeMasterDataTab]: resetFilters,
+        }));
+
+        // Clear rows — user must click Filter again to load records.
+        if (activeMasterDataTab === "assetMaster") {
+            setMasterAllRows([]);
+            setMasterRows([]);
+        } else if (activeMasterDataTab === "financialInfo") {
+            setFinancialAllRows([]);
+            setFinancialRows([]);
         }
     };
 
@@ -252,7 +553,7 @@ const FAMast = () => {
         setIsLoading(true);
         try {
             const res    = await apiClient.post("/getFAMast", { FA_CODE: code });
-            const parsed = parseSprocJsonResult(res?.data?.data);
+            const parsed = parseSprocJsonResult(res?.data?.data ?? res?.data);
             const row    = Array.isArray(parsed) ? parsed?.[0] : null;
 
             if (!row) {
@@ -523,6 +824,11 @@ const FAMast = () => {
         { id: "financialInfo", label: "Fixed Asset Financial Information",  icon: faChartLine },
     ];
 
+    const masterFilterContext = useMemo(
+        () => buildMasterFilterContext(activeMasterFilters),
+        [activeMasterFilters]
+    );
+
     // ── header buttons ────────────────────────────────────────────────────────
     const headerButtons = useMemo(() => {
         const baseBtn = "flex items-center justify-center h-8 w-8 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md transition-all shadow-sm text-white";
@@ -574,6 +880,27 @@ const FAMast = () => {
             ];
         }
 
+        if (activeTab === "master") {
+            return [
+                {
+                    key: "filter",
+                    label: <span className="hidden sm:inline ml-1">Filter</span>,
+                    icon: faMagnifyingGlass,
+                    onClick: handleMasterFilter,
+                    disabled: isLoading,
+                    className: `${baseBtn} bg-blue-600 hover:bg-blue-700`,
+                },
+                {
+                    key: "reset",
+                    label: <span className="hidden sm:inline ml-1">Reset</span>,
+                    icon: faUndo,
+                    onClick: handleMasterReset,
+                    disabled: isLoading,
+                    className: `${baseBtn} bg-blue-600 hover:bg-blue-700`,
+                },
+            ];
+        }
+
         if (activeTab === "ref") {
             return [
                 {
@@ -615,7 +942,7 @@ const FAMast = () => {
         }
 
         return [];
-    }, [activeTab, isLoading, isEditing, form, refState, isReadOnly, canAdd, canEdit, canSave, canDelete]);
+    }, [activeTab, activeMasterDataTab, isLoading, isEditing, form, refState, activeMasterFilters, isReadOnly, canAdd, canEdit, canSave, canDelete, handleMasterFilter, handleMasterReset]);
 
     // ── render ────────────────────────────────────────────────────────────────
     return (
@@ -696,12 +1023,15 @@ const FAMast = () => {
                             ))}
                         </div>
 
+                        <div className="flex items-center gap-2 rounded-md border border-blue-100 bg-blue-50/70 px-3 py-2 text-[11px] font-medium text-slate-600 sm:text-xs">
+                            <FontAwesomeIcon icon={faFilter} className="text-blue-600" />
+                            <span className="truncate">{masterFilterContext}</span>
+                        </div>
+
                         {activeMasterDataTab === "assetMaster" && (
                             <FAMast_DataTab
                                 rows={masterRows}
                                 isLoading={isLoading}
-                                onFilter={loadMasterList}
-                                onReset={loadMasterList}
                                 userCode={userCode}
                                 onRowDoubleClick={async (row) => {
                                     await fetchItemByCode(row.faCode, canEdit);
@@ -713,8 +1043,7 @@ const FAMast = () => {
                         {activeMasterDataTab === "financialInfo" && (
                             <FAMast_FinancialInfoTab
                                 data={financialRows}
-                                loading={isLoading}
-                                onRefresh={loadFinancialInfoList}
+                                isLoading={isLoading}
                                 onRowDoubleClick={async (row) => {
                                     const code = String(row?.faCode || "").trim();
                                     if (!code) return;
@@ -749,8 +1078,361 @@ const FAMast = () => {
                 )}
 
             </div>
+
+            {showMasterFilterModal && (
+                <FAMastFilterModal
+                    tabLabel={masterDataTabs.find((tab) => tab.id === activeMasterDataTab)?.label || "Fixed Asset Master Data"}
+                    filters={activeMasterFilters}
+                    onClose={() => setShowMasterFilterModal(false)}
+                    onApply={handleApplyMasterFilter}
+                    updateFilters={updateMasterFilters}
+                    isLoading={isLoading}
+                />
+            )}
+
+            <FAMastLookupManager
+                filters={activeMasterFilters}
+                updateFilters={updateMasterFilters}
+            />
         </div>
     );
+};
+
+const FAMastFilterModal = ({
+    tabLabel,
+    filters,
+    onClose,
+    onApply,
+    updateFilters,
+    isLoading,
+}) => {
+    const clearCategoryAndClass = () =>
+        updateFilters({
+            categCode: "",
+            categName: "",
+            classCode: "",
+            className: "",
+        });
+
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 backdrop-blur-[1px] sm:p-3"
+            onClick={onClose}
+        >
+            <div
+                className="flex max-h-[84vh] w-full max-w-[95vw] flex-col overflow-hidden rounded-lg bg-white shadow-2xl sm:max-h-[88vh] sm:max-w-4xl sm:rounded-xl"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="flex items-center justify-between border-b bg-gradient-to-r from-blue-50 to-white px-3 py-2.5 sm:px-4 sm:py-3">
+                    <h3 className="flex items-center gap-2 truncate text-sm font-semibold text-gray-800 sm:text-base">
+                        <FontAwesomeIcon icon={faFilter} className="text-[13px] text-blue-600 sm:text-sm" />
+                        <span>Filters - {tabLabel}</span>
+                    </h3>
+
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="p-1 text-gray-500 transition hover:text-gray-800"
+                        disabled={isLoading}
+                    >
+                        <FontAwesomeIcon icon={faTimes} className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    </button>
+                </div>
+
+                <div className="space-y-2.5 overflow-y-auto p-2.5 sm:space-y-3 sm:p-4">
+                    <FAMastFilterSection title="Asset Identifiers">
+                        <FAMastDualFilterInput
+                            labelCode="Branch Code"
+                            labelName="Branch Name"
+                            codeValue={filters.branchCode}
+                            nameValue={filters.branchName}
+                            modalType="branch"
+                            updateFilters={updateFilters}
+                            disabled={isLoading}
+                            onClear={() => updateFilters({ branchCode: "", branchName: "", flocCode: "", flocName: "" })}
+                        />
+
+                        <FAMastDualFilterInput
+                            labelCode="Category Code"
+                            labelName="FA Category"
+                            codeValue={filters.categCode}
+                            nameValue={filters.categName}
+                            modalType="category"
+                            updateFilters={updateFilters}
+                            disabled={isLoading}
+                            onClear={clearCategoryAndClass}
+                        />
+
+                        <FAMastDualFilterInput
+                            labelCode="Class Code"
+                            labelName="Sub Category"
+                            codeValue={filters.classCode}
+                            nameValue={filters.className}
+                            modalType="class"
+                            updateFilters={updateFilters}
+                            disabled={isLoading}
+                            onClear={() => updateFilters({ classCode: "", className: "" })}
+                        />
+
+                        <FAMastDualFilterInput
+                            labelCode="Asset Code"
+                            labelName="Asset Name"
+                            codeValue={filters.faCode}
+                            nameValue={filters.faName}
+                            modalType="asset"
+                            updateFilters={updateFilters}
+                            disabled={isLoading}
+                            onClear={() => updateFilters({ faCode: "", faName: "" })}
+                        />
+                    </FAMastFilterSection>
+
+                    <FAMastFilterSection title="Assignments">
+                        <FAMastDualFilterInput
+                            labelCode="Location Code"
+                            labelName="Location Name"
+                            codeValue={filters.flocCode}
+                            nameValue={filters.flocName}
+                            modalType="location"
+                            updateFilters={updateFilters}
+                            disabled={isLoading}
+                            onClear={() => updateFilters({ flocCode: "", flocName: "" })}
+                        />
+
+                        <FAMastDualFilterInput
+                            labelCode="Department Code"
+                            labelName="Department Name"
+                            codeValue={filters.rcCode}
+                            nameValue={filters.rcName}
+                            modalType="dept"
+                            updateFilters={updateFilters}
+                            disabled={isLoading}
+                            onClear={() => updateFilters({ rcCode: "", rcName: "" })}
+                        />
+                    </FAMastFilterSection>
+
+                    <FAMastFilterSection title="FA Status">
+                        <FieldRenderer
+                            id="faStatus"
+                            label="FA Status"
+                            type="select"
+                            value={filters.faStatus || ""}
+                            disabled={isLoading}
+                            onChange={(value) => updateFilters({ faStatus: value })}
+                            options={FA_STATUS_OPTIONS}
+                        />
+                    </FAMastFilterSection>
+                </div>
+
+                <div className="border-t bg-gray-50 px-3 py-2.5 sm:px-4">
+                    <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border bg-white px-3 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-100 sm:min-w-[110px] sm:w-auto"
+                            disabled={isLoading}
+                        >
+                            <FontAwesomeIcon icon={faTimes} className="h-3.5 w-3.5" />
+                            Close
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={onApply}
+                            className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-blue-700 disabled:opacity-60 sm:min-w-[110px] sm:w-auto"
+                            disabled={isLoading}
+                        >
+                            <FontAwesomeIcon icon={faMagnifyingGlass} className="h-3.5 w-3.5" />
+                            Apply
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const FAMastFilterSection = ({ title, children }) => (
+    <div className="rounded-lg border bg-slate-50/60 p-3 shadow-sm">
+        <p className="mb-2 text-sm font-semibold text-gray-700">{title}</p>
+        <div className="grid grid-cols-1 gap-2">{children}</div>
+    </div>
+);
+
+const FAMastDualFilterInput = ({
+    labelCode,
+    labelName,
+    codeValue,
+    nameValue,
+    modalType,
+    updateFilters,
+    disabled,
+    onClear,
+    allowClear = true,
+}) => {
+    const codeId = `${modalType}_code`;
+    const nameId = `${modalType}_name`;
+
+    const openLookup = () => {
+        if (disabled) return;
+        updateFilters({
+            showLookupModal: true,
+            lookupType: codeId,
+            modalType,
+        });
+    };
+
+    return (
+        <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-12">
+            <div className="md:col-span-4">
+                <FieldRenderer
+                    id={codeId}
+                    label={labelCode}
+                    type="lookup"
+                    value={codeValue || ""}
+                    disabled={disabled}
+                    readOnly
+                    editableLookup={allowClear}
+                    onLookup={openLookup}
+                    onClear={allowClear ? onClear : undefined}
+                    labelClassName="text-[10px] sm:text-xs"
+                />
+            </div>
+
+            <div className="md:col-span-8">
+                <FieldRenderer
+                    id={nameId}
+                    label={labelName}
+                    type="text"
+                    value={nameValue || ""}
+                    disabled
+                    readOnly
+                    labelClassName="text-[10px] sm:text-xs"
+                />
+            </div>
+        </div>
+    );
+};
+
+const FAMastLookupManager = ({ filters, updateFilters }) => {
+    const { showLookupModal, modalType } = filters || {};
+
+    if (!showLookupModal) return null;
+
+    const close = () => {
+        updateFilters({ showLookupModal: false, lookupType: "", modalType: "" });
+    };
+
+    switch (modalType) {
+        case "branch":
+            return (
+                <SearchBranchRef
+                    isOpen={showLookupModal}
+                    onClose={(row) => {
+                        if (row) {
+                            updateFilters({
+                                branchCode: row.branchCode || row.BRANCH_CODE || "",
+                                branchName: row.branchName || row.BRANCH_NAME || "",
+                                flocCode: "",
+                                flocName: "",
+                            });
+                        }
+                        close();
+                    }}
+                />
+            );
+
+        case "category":
+            return (
+                <SearchFACateg
+                    isOpen={showLookupModal}
+                    onClose={(row) => {
+                        if (row) {
+                            updateFilters({
+                                categCode: row.code || row.categCode || row.categoryCode || row.CATEG_CODE || "",
+                                categName: row.description || row.categName || row.categoryName || row.CATEG_NAME || "",
+                                classCode: "",
+                                className: "",
+                            });
+                        }
+                        close();
+                    }}
+                />
+            );
+
+        case "class":
+            return (
+                <SearchFAClass
+                    isOpen={showLookupModal}
+                    categCode={filters.categCode}
+                    onClose={(row) => {
+                        if (row) {
+                            updateFilters({
+                                classCode: row.code || row.classCode || row.CLASS_CODE || "",
+                                className: row.description || row.className || row.assetSubCategory || row.CLASS_NAME || "",
+                                categCode: row.categCode || row.categ_code || row.categoryCode || filters.categCode || "",
+                            });
+                        }
+                        close();
+                    }}
+                />
+            );
+
+        case "asset":
+            return (
+                <SearchFAAsset
+                    isOpen={showLookupModal}
+                    title="Fixed Asset Master"
+                    branchCode={filters.branchCode}
+                    activeOnly={false}
+                    onClose={(row) => {
+                        if (row) {
+                            updateFilters({
+                                faCode: row.faCode || row.FA_CODE || "",
+                                faName: row.faName || row.FA_NAME || row.assetDescription || "",
+                            });
+                        }
+                        close();
+                    }}
+                />
+            );
+
+        case "location":
+            return (
+                <SearchFALoc
+                    isOpen={showLookupModal}
+                    branchCode={filters.branchCode}
+                    onClose={(row) => {
+                        if (row) {
+                            updateFilters({
+                                flocCode: row.code || row.flocCode || row.floc_code || row.FLOC_CODE || "",
+                                flocName: row.description || row.flocName || row.floc_name || row.FLOC_NAME || "",
+                            });
+                        }
+                        close();
+                    }}
+                />
+            );
+
+        case "dept":
+            return (
+                <SearchRCMast
+                    isOpen={showLookupModal}
+                    onClose={(row) => {
+                        if (row) {
+                            updateFilters({
+                                rcCode: row.rcCode || row.RC_CODE || "",
+                                rcName: row.rcName || row.RC_NAME || "",
+                            });
+                        }
+                        close();
+                    }}
+                />
+            );
+
+        default:
+            close();
+            return null;
+    }
 };
 
 export default FAMast;
