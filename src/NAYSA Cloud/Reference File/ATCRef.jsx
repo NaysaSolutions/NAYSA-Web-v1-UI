@@ -958,6 +958,10 @@ const ATCRef = () => {
       {isEwtAcctModalOpen && (
         <SearchCOAMast
           isOpen={isEwtAcctModalOpen}
+          source="ewtAcct"
+          customParam="EWT"
+          classCode="EWT"
+          title="Select EWT Account"
           onClose={(value) => {
             if (value) {
               setField("ewtAcct", value?.acctCode || "");
@@ -971,6 +975,10 @@ const ATCRef = () => {
       {isCwtAcctModalOpen && (
         <SearchCOAMast
           isOpen={isCwtAcctModalOpen}
+          source="cwtAcct"
+          customParam="CWT"
+          classCode="CWT"
+          title="Select CWT Account"
           onClose={(value) => {
             if (value) {
               setField("cwtAcct", value?.acctCode || "");
@@ -984,6 +992,10 @@ const ATCRef = () => {
       {isClAcctModalOpen && (
         <SearchCOAMast
           isOpen={isClAcctModalOpen}
+          source="clAcct"
+          customParam="CWTCL"
+          classCode="CWTCL"
+          title="Select CWT Clearing Account"
           onClose={(value) => {
             if (value) {
               setField("clAcct", value?.acctCode || "");

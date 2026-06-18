@@ -757,14 +757,14 @@ const handleCodeChange = (v) => {
                     }}
                     className="!h-8 !text-[12px] border-blue-600 focus:ring-blue-500 rounded-md pr-6 font-bold"
                   />
-                  {selectedYear && (
+                  {/* {selectedYear && (
                     <button
                       onClick={() => setSelectedYear("")}
                       className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 text-[10px]"
                     >
                       ✕
                     </button>
-                  )}
+                  )} */}
                 </div>
               </div>
             </h2>
