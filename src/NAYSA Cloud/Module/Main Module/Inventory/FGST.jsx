@@ -1629,10 +1629,6 @@ const FGST = () => {
     { key: "sltypeCode", label: "SL Type Code", width: 120 },
     { key: "slCode", label: "SL Code", width: 120 },
     { key: "particular", label: "Particulars", width: 320 },
-    { key: "vatCode", label: "VAT Code", width: 120 },
-    { key: "vatName", label: "VAT Name", width: 220 },
-    { key: "atcCode", label: "ATC Code", width: 120 },
-    { key: "atcName", label: "ATC Name", width: 220 },
     { key: "debit", label: `Debit (${glCurrDefault})`, width: 140 },
     { key: "credit", label: `Credit (${glCurrDefault})`, width: 140 },
     ...(withCurr2 ? [
@@ -3565,9 +3561,6 @@ const FGST = () => {
                         })}
                       </Fragment>
                     ))}
-                    {!isFormDisabled && (
-                      <th key="gl-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
-                    )}
                   </tr>
                 </thead>
                 <tbody className="relative">
@@ -3699,93 +3692,6 @@ const FGST = () => {
                               "particular",
                               e.target.value,
                             )
-                          }
-                        />
-                      </td>
-
-                      <td className="global-tran-td-ui">
-                        <div className="relative w-fit">
-                          <input
-                            type="text"
-                            className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
-                            value={row.vatCode || ""}
-                            onChange={(e) =>
-                              handleDetailChangeGL(
-                                index,
-                                "vatCode",
-                                e.target.value,
-                              )
-                            }
-                            readOnly
-                          />
-
-                          {!isFormDisabled &&
-                            row.vatCode &&
-                            row.vatCode.length > 0 && (
-                              <FontAwesomeIcon
-                                icon={faMagnifyingGlass}
-                                className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                                onClick={() => {
-                                  updateState({
-                                    selectedRowIndex: index,
-                                    showVatModal: true,
-                                  });
-                                }}
-                              />
-                            )}
-                        </div>
-                      </td>
-
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[200px] global-tran-td-inputclass-ui"
-                          value={row.vatName || ""}
-                          readOnly
-                        />
-                      </td>
-
-                      <td className="global-tran-td-ui">
-                        <div className="relative w-fit">
-                          <input
-                            type="text"
-                            className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
-                            value={row.atcCode || ""}
-                            onChange={(e) =>
-                              handleDetailChangeGL(
-                                index,
-                                "atcCode",
-                                e.target.value,
-                              )
-                            }
-                            readOnly
-                          />
-
-                          {!isFormDisabled &&
-                            (row.atcCode !== "" || row.atcCode) && (
-                              <FontAwesomeIcon
-                                icon={faMagnifyingGlass}
-                                className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                                onClick={() => {
-                                  if (row.atcCode !== "" || row.atcCode) {
-                                    updateState({
-                                      selectedRowIndex: index,
-                                      showAtcModal: true,
-                                    });
-                                  }
-                                }}
-                              />
-                            )}
-                        </div>
-                      </td>
-
-                      <td className="global-tran-td-ui">
-                        <input
-                          type="text"
-                          className="w-[200px] global-tran-td-inputclass-ui"
-                          value={row.atcName || ""}
-                          onChange={(e) =>
-                            handleDetailChange(index, "atcName", e.target.value)
                           }
                         />
                       </td>
@@ -4155,18 +4061,6 @@ const FGST = () => {
                         />
                       </td>
 
-                      {!isFormDisabled && (
-                        <td className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black" style={transactionActionsCellStyle}>
-                          <div className="flex items-center justify-center gap-1">
-                            <button type="button" className="global-tran-td-button-add-ui" onClick={() => handleAddRowGL(index)}>
-                              <FontAwesomeIcon icon={faPlus} />
-                            </button>
-                            <button type="button" className="global-tran-td-button-delete-ui" onClick={() => handleDeleteRowGL(index)}>
-                              <FontAwesomeIcon icon={faTrashAlt} />
-                            </button>
-                          </div>
-                        </td>
-                      )}
                     </tr>
                   ))}
                 </tbody>

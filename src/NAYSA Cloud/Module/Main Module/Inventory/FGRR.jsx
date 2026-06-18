@@ -2195,6 +2195,9 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
       const parsed = data;
       const parsedDocumentNo = parsed.rrNo || "";
       const parsedDocumentId = parsed.rrId || parsed.rrHdId;
+      const isCancelledTran = ["X", "CANCELLED", "CANCELED"].includes(
+        String(parsed.rrStatus || parsed.status || "").trim().toUpperCase(),
+      );
 
       const parsedWHCode = parsed.WHCode || parsed.whCode || parsed.warehouseCode || "";
       const parsedWHName = parsed.WHName || parsed.whName || parsed.warehouseName || "";
@@ -2585,12 +2588,12 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
         vatName: g.vatName || "",
         atcCode: g.atcCode || "",
         atcName: g.atcName || "",
-        debit: formatNumber(g.debit || 0),
-        credit: formatNumber(g.credit || 0),
-        debitFx1: formatNumber(g.debitFx1 || 0),
-        creditFx1: formatNumber(g.creditFx1 || 0),
-        debitFx2: formatNumber(g.debitFx2 || 0),
-        creditFx2: formatNumber(g.creditFx2 || 0),
+        debit: formatNumber(isCancelledTran ? 0 : g.debit || 0),
+        credit: formatNumber(isCancelledTran ? 0 : g.credit || 0),
+        debitFx1: formatNumber(isCancelledTran ? 0 : g.debitFx1 || 0),
+        creditFx1: formatNumber(isCancelledTran ? 0 : g.creditFx1 || 0),
+        debitFx2: formatNumber(isCancelledTran ? 0 : g.debitFx2 || 0),
+        creditFx2: formatNumber(isCancelledTran ? 0 : g.creditFx2 || 0),
         slRefNo: g.slRefNo || "",
         slRefDate: normalizeGLDate(g.slRefDate || ""),
         remarks: g.remarks || "",
@@ -6377,6 +6380,20 @@ const handleClosePayeeLookup = async (row) => {
             </div>
 
             <div className="global-tran-tab-footer-total-main-div-ui">
+  <div className="global-tran-tab-footer-total-div-ui">
+                <label
+                  htmlFor="TotalNetAmount"
+                  className="global-tran-tab-footer-total-label-ui"
+                >
+                  Total Net Amount:
+                </label>
+                <label
+                  htmlFor="TotalNetAmount"
+                  className="global-tran-tab-footer-total-value-ui"
+                >
+                  {totals.amount}
+                </label>
+              </div>
               <div className="global-tran-tab-footer-total-div-ui">
                 <label
                   htmlFor="TotalQty"
@@ -6391,20 +6408,7 @@ const handleClosePayeeLookup = async (row) => {
                   {totals.rrQty}
                 </label>
               </div>
-              <div className="global-tran-tab-footer-total-div-ui">
-                <label
-                  htmlFor="TotalAmount"
-                  className="global-tran-tab-footer-total-label-ui"
-                >
-                  Total Amount:
-                </label>
-                <label
-                  htmlFor="TotalAmount"
-                  className="global-tran-tab-footer-total-value-ui"
-                >
-                  {totals.amount}
-                </label>
-              </div>
+              
           </div>
           </div>
         </div>

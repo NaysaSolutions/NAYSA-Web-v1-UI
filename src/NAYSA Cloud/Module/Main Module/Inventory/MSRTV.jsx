@@ -1205,10 +1205,6 @@ const handleColumnLabel = (columnName) =>{
     { key: "sltypeCode", label: "SL Type", width: 120 },
     { key: "slCode", label: "SL Code", width: 120 },
     { key: "particular", label: "Particulars", width: 320 },
-    { key: "vatCode", label: "VAT Code", width: 120 },
-    { key: "vatName", label: "VAT Name", width: 220 },
-    { key: "atcCode", label: "ATC Code", width: 120 },
-    { key: "atcName", label: "ATC Name", width: 220 },
     { key: "debit", label: `Debit (${glCurrDefault})`, width: 140 },
     { key: "credit", label: `Credit (${glCurrDefault})`, width: 140 },
     ...(withCurr2 ? [
@@ -2721,9 +2717,6 @@ return (
                       })}
                     </Fragment>
                   ))}
-                  {!isFormDisabled && (
-                    <th key="gl-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
-                  )}
                 </tr>
                 {renderMsrtvGlHeaderContextMenu()}
               </thead>
@@ -2731,18 +2724,6 @@ return (
                 {sortedMsrtvGlRows.map(({ row, originalIndex }) => (
                   <tr key={`${row.acctCode || "gl"}-${originalIndex}`} className="global-tran-tr-ui">
                     {orderedMsrtvGlColumns.map((column) => renderMsrtvGlColumn(column.key, row, originalIndex))}
-                    {!isFormDisabled && (
-                      <td className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black" style={transactionActionsCellStyle}>
-                        <div className="flex items-center justify-center gap-1">
-                          <button type="button" className="global-tran-td-button-add-ui" onClick={() => handleAddRowGL(originalIndex)}>
-                            <FontAwesomeIcon icon={faPlus} />
-                          </button>
-                          <button type="button" className="global-tran-td-button-delete-ui" onClick={() => handleDeleteRowGL(originalIndex)}>
-                            <FontAwesomeIcon icon={faTrashAlt} />
-                          </button>
-                        </div>
-                      </td>
-                    )}
                   </tr>
                 ))}
               </tbody>

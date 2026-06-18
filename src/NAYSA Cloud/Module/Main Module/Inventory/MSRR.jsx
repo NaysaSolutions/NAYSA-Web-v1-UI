@@ -5885,6 +5885,21 @@ const handleClosePayeeLookup = async (row) => {
             </div>
 
             <div className="global-tran-tab-footer-total-main-div-ui">
+<div className="global-tran-tab-footer-total-div-ui">
+                <label
+                  htmlFor="TotalNetAmount"
+                  className="global-tran-tab-footer-total-label-ui"
+                >
+                  Total Net Amount:
+                </label>
+                <label
+                  htmlFor="TotalNetAmount"
+                  className="global-tran-tab-footer-total-value-ui"
+                >
+                  {totals.amount}
+                </label>
+              </div>
+  
               <div className="global-tran-tab-footer-total-div-ui">
                 <label
                   htmlFor="TotalQty"
@@ -5898,6 +5913,8 @@ const handleClosePayeeLookup = async (row) => {
                 >
                   {totals.rrQty}
                 </label>
+
+
               </div>
             </div>
           </div>
