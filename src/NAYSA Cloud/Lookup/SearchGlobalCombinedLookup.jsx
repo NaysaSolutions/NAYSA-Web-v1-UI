@@ -195,9 +195,10 @@ const GlobalCombinedLookup = ({
 
           // 1. Map IDs back to full Detail objects
           // Note: Replace 'prId' or 'PRNo' with the actual primary key field name of your detail rows
-          const selectedDetailRows = detailData.filter((row) =>
-            selectedIds.includes(row.groupId) 
-          );
+          const selectedDetailRows =
+            Array.isArray(finalPayload.records) && finalPayload.records.length > 0
+              ? finalPayload.records
+              : detailData.filter((row) => selectedIds.includes(row.groupId));
 
           // 2. Map loaded Summary IDs back to full Summary objects
           // Using the state 'selectedSummaryIds' we captured during handleSummaryAction

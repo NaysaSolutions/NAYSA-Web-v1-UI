@@ -1428,10 +1428,13 @@ useEffect(() => {
 
 
   const printData = {
-    apv_no: documentNo,
-    branch: branchCode,
-    doc_id: docType
-  };
+  svi_no: documentNo,
+  svi_id: documentID,
+  branch: branchCode,
+  doc_id: docType,
+  doc_type: docType,
+  user_code: userCode,
+};
 
 
 
@@ -1892,18 +1895,30 @@ const handleCloseCancel = async (confirmation) => {
 
 
 
-const handleCloseSignatory = async (mode) => {
-  
-    updateState({ 
-        showSpinner: true,
-        showSignatoryModal: false,
-        noReprints: mode === "Final" ? 1 : 0, });
-    await useHandlePrint(documentID, docType, mode,userCode);
+const handleCloseSignatory = async (mode = "Inline") => {
+  const printMode =
+    typeof mode === "string"
+      ? mode
+      : mode?.mode || mode?.printMode || "Inline";
 
-    updateState({
-      showSpinner: false 
-    });
+  updateState({
+    showSpinner: true,
+    showSignatoryModal: false,
+    noReprints: printMode === "Final" ? 1 : 0,
+  });
 
+  try {
+    await useHandlePrint(
+      documentID,
+      docType,
+      printMode,
+      userCode || currentUserRow?.userCode || ""
+    );
+  } catch (error) {
+    console.error("SVI print error:", error?.response?.data || error);
+  } finally {
+    updateState({ showSpinner: false });
+  }
 };
 
 
@@ -1912,11 +1927,20 @@ const handleCloseSignatory = async (mode) => {
 
 
 const handleSaveAndPrint = async (documentID) => {
+  updateState({ showSpinner: true });
 
-    updateState({ showSpinner: true });
-    await useHandlePrint(documentID, docType);
-
-    updateState({showSpinner: false});
+  try {
+    await useHandlePrint(
+      documentID,
+      docType,
+      "Inline",
+      userCode || currentUserRow?.userCode || ""
+    );
+  } catch (error) {
+    console.error("SVI print error:", error?.response?.data || error);
+  } finally {
+    updateState({ showSpinner: false });
+  }
 };
 
 

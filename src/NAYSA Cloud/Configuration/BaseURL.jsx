@@ -537,11 +537,43 @@ export const postRequest = async (endpoint, body = {}, config = {}) => {
 };
 
 export const postPdfRequest = async (endpoint, body = {}) => {
-  const { data } = await apiClient.post(endpoint, body, {
-    headers: { Accept: "application/pdf" },
-    responseType: "blob",
-  });
-  return data; // Blob
+  try {
+    const { data } = await apiClient.post(endpoint, body, {
+      headers: {
+        Accept: "application/pdf",
+      },
+      responseType: "blob",
+    });
+
+    return data;
+  } catch (error) {
+    let backendError = error?.response?.data;
+
+    if (backendError instanceof Blob) {
+      const text = await backendError.text();
+
+      try {
+        backendError = JSON.parse(text);
+      } catch {
+        backendError = {
+          message: text,
+        };
+      }
+
+      if (error.response) {
+        error.response.data = backendError;
+      }
+    }
+
+    console.error("PDF REQUEST FAILED:", {
+      endpoint,
+      body,
+      status: error?.response?.status,
+      backendError,
+    });
+
+    throw error;
+  }
 };
 
 

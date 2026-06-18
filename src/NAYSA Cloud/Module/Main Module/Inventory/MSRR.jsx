@@ -146,7 +146,7 @@ const isViewDocumentUrl = isViewDocument;
   // E = show/enable General Ledger / Entries / DT2.
   // D = hide/disable General Ledger / Entries / DT2.
   const isGeneralLedgerEnabled = msInvGLMode === "E";
-  const shouldAutoGenerateGLOnSave = isGeneralLedgerEnabled;
+  const shouldAutoGenerateGLOnSave = true;
 
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
 
@@ -478,7 +478,8 @@ groupId,
   const [lotEntryRows, setLotEntryRows] = useState([]);
 
   const [totals, setTotals] = useState({
-    rrQty: "",
+rrQty: "",
+    amount: "",
   });
 
   // PR.jsx
@@ -518,6 +519,7 @@ groupId,
     { key: "itemName", label: "Item Description", width: 300 },
     { key: "itemSpecs", label: "Specification", width: 300 },
     { key: "uomCode", label: "UOM", width: 80 },
+    { key: "poBalance", label: "PO Balance", width: 130 },
     { key: "rrQty", label: "RR Quantity", width: 130 },
     { key: "freeQty", label: "Free Quantity", width: 130 },
     { key: "unitCost", label: "Unit Cost", width: 120 },
@@ -581,10 +583,10 @@ groupId,
       { key: "sltypeCode", label: "SL Type", width: 120 },
       { key: "slCode", label: "SL Code", width: 120 },
       { key: "particular", label: "Particulars", width: 320 },
-      { key: "vatCode", label: "VAT Code", width: 120 },
-      { key: "vatName", label: "VAT Name", width: 220 },
-      { key: "atcCode", label: "ATC Code", width: 120 },
-      { key: "atcName", label: "ATC Name", width: 220 },
+      // { key: "vatCode", label: "VAT Code", width: 120 },
+      // { key: "vatName", label: "VAT Name", width: 220 },
+      // { key: "atcCode", label: "ATC Code", width: 120 },
+      // { key: "atcName", label: "ATC Name", width: 220 },
       { key: "debit", label: `Debit (${glCurrDefault})`, width: 140 },
       { key: "credit", label: `Credit (${glCurrDefault})`, width: 140 },
       ...(withCurr2
@@ -695,7 +697,16 @@ groupId,
       0,
     );
 
-    setTotals({ rrQty: formatNumber(totalRRQty, 6) });
+setTotals({
+      rrQty: formatNumber(totalRRQty, 6),
+      amount: formatNumber(
+        rows.reduce(
+          (sum, r) => sum + (parseFormattedNumber(r?.netAmount ?? r?.net_amount) || 0),
+          0
+        ),
+        2
+      ),
+    });
   };
 
   // ==========================
@@ -1809,7 +1820,7 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
 updateState(nextState);
 updateTotalsDisplay(newMappedRows);
 
-if (isGeneralLedgerEnabled) {
+if (shouldAutoGenerateGLOnSave) {
   const dt1PayloadForGL = newMappedRows.map((r, index) => ({
     lnNo: String(index + 1),
     poId: r.poId || r.po_id || r.PO_ID || "",
@@ -1829,13 +1840,16 @@ if (isGeneralLedgerEnabled) {
     freeQuantity: parseFormattedNumber(r.freeQty || r.freeQuantity || 0),
     unitCost: parseFormattedNumber(r.unitCost || 0),
     unitCostFx: parseFormattedNumber(r.unitCostFx || r.unitCost || 0),
-    itemAmount: parseFormattedNumber(r.itemAmount || r.grossAmount || 0),
+    amount: parseFormattedNumber(r.netAmount || r.net_amount || 0),
+    itemAmount: parseFormattedNumber(r.netAmount || r.net_amount || 0),
+    grossAmount: parseFormattedNumber(r.netAmount || r.net_amount || 0),
     vatCode: r.vatCode || "",
     vatAmount: parseFormattedNumber(r.vatAmount || 0),
     currCode: r.currCode || nextState.currCode || "PHP",
     currRate: parseFormattedNumber(nextState.currRate || 1),
-    fxAmount: parseFormattedNumber(r.fxAmount || r.itemAmount || r.grossAmount || 0),
-    netAmount: parseFormattedNumber(r.netAmount || 0),
+    fxAmount: parseFormattedNumber(r.netAmount || r.net_amount || 0),
+    netAmount: parseFormattedNumber(r.netAmount || r.net_amount || 0),
+    net_amount: parseFormattedNumber(r.net_amount || r.netAmount || 0),
     whouseCode: r.whouseCode || r.whCode || nextState.WHCode || nextState.WHcode || "",
     locCode: r.locCode || r.LocCode || nextState.LocCode || "",
     rcCode: r.rcCode || nextState.rcCode || "",
@@ -3551,6 +3565,7 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
     }
 
     updatedRows[index] = row;
+    if (field === "rrQty" && !validateRRQtyWithinPOBalance(updatedRows)) return;
     updateState({ detailRows: updatedRows });
 
     // ✅ replicate only for header-like fields (codes)
@@ -3580,11 +3595,62 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
     0,
   );
 
-  const handleDocNoBlur = () => {
+  const handleDocNoBlur = () => {
     if (!state.documentID && state.documentNo && state.branchCode) {
       fetchTranData(state.documentNo, state.branchCode);
     }
   };
+
+  const validateRRQtyWithinPOBalance = (rowsToValidate = state.detailRows) => {
+    const errors = [];
+
+    (rowsToValidate || []).forEach((row, index) => {
+      const rrQtyValue = parseFormattedNumber(
+        row?.rrQty || row?.rrQuantity || row?.quantity || 0,
+      );
+      const balanceCandidates = [
+        row?.poBalance,
+        row?.qtyBalance,
+        row?.QtyBalance,
+        row?.BalanceQty,
+        row?.balanceQty,
+        row?.QTY_BALANCE,
+      ];
+      const poQtyCandidates = [
+        row?.poQty,
+        row?.poQuantity,
+        row?.PoQuantity,
+        row?.QtyOrdered,
+        row?.PO_QUANTITY,
+      ];
+      const hasBalance = balanceCandidates.some(
+        (value) => value !== undefined && value !== null && String(value).trim() !== "",
+      );
+      const allowedQty = hasBalance
+        ? parseFormattedNumber(balanceCandidates.find(
+            (value) => value !== undefined && value !== null && String(value).trim() !== "",
+          ) || 0)
+        : parseFormattedNumber(poQtyCandidates.find(
+            (value) => value !== undefined && value !== null && String(value).trim() !== "",
+          ) || 0);
+
+      if (allowedQty >= 0 && rrQtyValue > allowedQty + 0.000001) {
+        errors.push(
+          `Line ${index + 1}${row?.itemCode ? ` (${row.itemCode})` : ""}: RR Quantity ${formatNumber(rrQtyValue, decQty)} exceeds PO Balance ${formatNumber(allowedQty, decQty)}.`,
+        );
+      }
+    });
+
+    if (errors.length === 0) return true;
+
+    Swal.fire({
+      icon: "warning",
+      title: "RR Quantity exceeds PO Quantity",
+      html: errors.slice(0, 10).join("<br/>"),
+    });
+
+    return false;
+  };
   // ==========================
   // SAVE / UPSERT (MSRR + DT1 + DT2)
   // ==========================
@@ -3594,6 +3660,8 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
 
   // ✅ VALIDATE FIRST BEFORE LOADING
   if (action === "Upsert") {
+    if (!validateRRQtyWithinPOBalance()) return;
+
     const headerWhCode = state.WHCode || state.WHcode || "";
     const headerLocCode = state.LocCode || "";
     const referenceNo =
@@ -3934,18 +4002,36 @@ rrHdId: documentID || "",
       // ================
       // GENERATE GL
       // ================
-    if (action === "GenerateGL") {
+      const getNetAmountGLData = () => ({
+        ...glData,
+        dt1: (dt1Payload || []).map((row) => {
+          const netAmount = parseFormattedNumber(row.netAmount || row.net_amount || 0);
+
+          return {
+            ...row,
+            amount: netAmount,
+            itemAmount: netAmount,
+            grossAmount: netAmount,
+            fxAmount: netAmount,
+            netAmount,
+            net_amount: netAmount,
+          };
+        }),
+        dt2: [],
+      });
+
+if (action === "GenerateGL") {
       if (!isGeneralLedgerEnabled) return;
-        const newGlEntries = await useGenerateGLEntries(docType, glData);
+const newGlEntries = await useGenerateGLEntries(docType, getNetAmountGLData());
         if (newGlEntries) updateState({ detailRowsGL: newGlEntries });
         return;
       }
 
       if (action === "Upsert" && shouldAutoGenerateGLOnSave) {
-        const generatedGlEntries = await useGenerateGLEntries(docType, {
-          ...glData,
-          dt2: [],
-        });
+        glRowsForSave = [];
+        glData.dt2 = [];
+
+        const generatedGlEntries = await useGenerateGLEntries(docType, getNetAmountGLData());
 
         if (Array.isArray(generatedGlEntries) && generatedGlEntries.length > 0) {
           glRowsForSave = generatedGlEntries;
@@ -4802,6 +4888,14 @@ const handleClosePayeeLookup = async (row) => {
       uomCode: () => (
         <td key={columnKey} className="global-tran-td-ui" style={style}>
           {textInput("uomCode", { readOnly: true, className: "text-center" })}
+        </td>
+      ),
+      poBalance: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {readOnlyNumberInput(
+            "poBalance",
+            formatNumber(parseFormattedNumber(row.poBalance ?? row.qtyBalance ?? 0), decQty),
+          )}
         </td>
       ),
       rrQty: () => (
@@ -5848,14 +5942,14 @@ const handleClosePayeeLookup = async (row) => {
                           orderedColumns: orderedMSRRGlColumns,
                         }),
                       )}
-                      {!isFormDisabled && (
+                      {/* {!isFormDisabled && (
                         <th
                           className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900"
                           style={transactionActionsHeaderStyle}
                         >
                           Actions
                         </th>
-                      )}
+                      )} */}
                     </tr>
                   </thead>
 
@@ -5868,7 +5962,7 @@ const handleClosePayeeLookup = async (row) => {
                         {orderedMSRRGlColumns.map((column) =>
                           renderMSRRGlCell(column.key, row, originalIndex),
                         )}
-                        {!isFormDisabled && (
+                        {/* {!isFormDisabled && (
                           <td
                             className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black"
                             style={transactionActionsCellStyle}
@@ -5890,7 +5984,7 @@ const handleClosePayeeLookup = async (row) => {
                               </button>
                             </div>
                           </td>
-                        )}
+                        )} */}
                       </tr>
                     ))}
                   </tbody>
