@@ -27,7 +27,6 @@ import SearchBudItemRef from "../../../Lookup/SearchBudItemRef.jsx";
 import Header from "@/NAYSA Cloud/Components/Header";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import DateFormatInput from "@/NAYSA Cloud/Global/DateFormatInput.jsx";
-import { fetchDataJson, postRequest } from "../../../Configuration/BaseURL.jsx";
 import { useReset } from "../../../Components/ResetContext";
 import {
   useGetCurrentDayV2,
@@ -45,6 +44,8 @@ import {
   useHandlePost,
   useFieldLenghtCheck,
   useGetFieldLength,
+  useFetchTranData,
+  useTransactionUpsert,
 } from "@/NAYSA Cloud/Global/procedure";
 
 import { useHandlePrint } from "@/NAYSA Cloud/Global/report";
@@ -70,12 +71,11 @@ import {
 
 const DEC_AMT = 2;
 
-const sanitizeNumeric = (value) => {
+const sanitizePositiveNumeric = (value) => {
   const raw = String(value ?? "");
-  const cleaned = raw.replace(/[^0-9.-]/g, "");
+  const cleaned = raw.replace(/[^0-9.]/g, "");
   const parts = cleaned.split(".");
-  const normalized = parts.length <= 1 ? cleaned : `${parts.shift()}.${parts.join("")}`;
-  return normalized.replace(/(?!^)-/g, "");
+  return parts.length <= 1 ? cleaned : `${parts.shift()}.${parts.join("")}`;
 };
 
 const getFullStatus = (status) => {
@@ -125,6 +125,17 @@ const toDateValue = (value) => {
 };
 
 
+const deriveCutoffCode = (dateValue = "") => {
+  const normalizedDate = toDateValue(dateValue);
+  if (!normalizedDate) return "";
+
+  const match = normalizedDate.match(/^(\d{4})-(\d{2})-/);
+  if (!match) return "";
+
+  return `${match[1]}${match[2]}`;
+};
+
+
 const BUDAU = () => {
   const loadedFromUrlRef = useRef(false);
   const detailRowsRef = useRef([]);
@@ -162,7 +173,7 @@ const BUDAU = () => {
     branchCode: currentUserRow?.branchCode || "",
     branchName: currentUserRow?.branchName || "",
     budauDate: useGetCurrentDayV2(),
-    cutoffCode: "",
+    cutoffCode: deriveCutoffCode(useGetCurrentDayV2()),
     refNo: "",
     totalBudgetBalance: "0.00",
     totalAdjustmentAmount: "0.00",
@@ -247,6 +258,13 @@ const BUDAU = () => {
   const statusColor = statusMap[displayStatus] || "";
   const isDocumentLocked = isViewDocument || isLockedStatus(displayStatus);
   const isFormDisabled = isDocumentLocked;
+
+  useEffect(() => {
+    const nextCutoffCode = deriveCutoffCode(budauDate);
+    if (nextCutoffCode !== cutoffCode) {
+      updateState({ cutoffCode: nextCutoffCode });
+    }
+  }, [budauDate, cutoffCode]);
 
   const getMax = (col) => useGetFieldLength(tblFieldArray, col) || 100;
 
@@ -336,44 +354,50 @@ const BUDAU = () => {
     });
 
   const mapFetchedRow = (item = {}) => ({
-    rcCode: item.rcCode || item.rc_code || "",
-    rcName: item.rcName || item.rc_name || "",
-    acctCode: item.acctCode || item.acct_code || "",
-    acctName: item.acctName || item.acct_name || "",
-    budgetCode: item.budgetCode || item.budget_code || "",
-    budgetName: item.budgetName || item.budget_name || "",
-    budgetBalance: formatNumber(item.budgetBalance ?? item.budget_balance ?? 0, decAmt),
-    adjustmentAmount: formatNumber(item.adjustmentAmount ?? item.adjustment_amount ?? 0, decAmt),
-    newBudgetBalance: formatNumber(item.newBudgetBalance ?? item.new_budget_balance ?? 0, decAmt),
+    rcCode: item.rcCode || "",
+    rcName: item.rcName || "",
+    acctCode: item.acctCode || "",
+    acctName: item.acctName || "",
+    budgetCode: item.budgetCode || "",
+    budgetName: item.budgetName || "",
+    budgetBalance: formatNumber(item.budgetBalance ?? 0, decAmt),
+    adjustmentAmount: formatNumber(item.adjustmentAmount ?? 0, decAmt),
+    newBudgetBalance: formatNumber(item.newBudgetBalance ?? 0, decAmt),
     remarks: item.remarks || "",
   });
 
   const buildPayload = (rowsForSave = []) => {
-    const totalBalance = rowsForSave.reduce((sum, row) => sum + (parseFormattedNumber(row.budgetBalance || 0) || 0), 0);
-    const totalAdjustment = rowsForSave.reduce((sum, row) => sum + (parseFormattedNumber(row.adjustmentAmount || 0) || 0), 0);
-    const totalNewBalance = rowsForSave.reduce((sum, row) => sum + (parseFormattedNumber(row.newBudgetBalance || 0) || 0), 0);
+    const totalBudgetBalance = rowsForSave.reduce(
+      (sum, row) => sum + (parseFormattedNumber(row.budgetBalance || 0) || 0),
+      0
+    );
+
+    const totalAdjustmentAmount = rowsForSave.reduce(
+      (sum, row) => sum + (parseFormattedNumber(row.adjustmentAmount || 0) || 0),
+      0
+    );
+
+    const totalNewBudgetBalance = rowsForSave.reduce(
+      (sum, row) => sum + (parseFormattedNumber(row.newBudgetBalance || 0) || 0),
+      0
+    );
 
     return {
       branchCode: branchCode || "",
-      branchName: branchName || "",
-      documentNo: documentNo || "",
-      documentID: documentID || "",
       budauNo: documentNo || "",
+      budauId: documentID || "",
       budauDate: budauDate || useGetCurrentDayV2(),
       cutoffCode: cutoffCode || "",
       refNo: refNo || "",
-      totalBudgetBalance: totalBalance,
-      totalAdjustmentAmount: totalAdjustment,
-      totalNewBudgetBalance: totalNewBalance,
+      totalBudgetBalance,
+      totalAdjustmentAmount,
+      totalNewBudgetBalance,
       remarks: remarks || "",
       status: documentStatus || status || "",
       userCode: currentUserRow?.userCode || "",
 
       dt1: rowsForSave.map((row, index) => ({
-        documentID: documentID || "",
-        budauNo: documentNo || "",
         lnNo: index + 1,
-        lineNo: index + 1,
         branchCode: branchCode || "",
         cutoffCode: cutoffCode || "",
         rcCode: row.rcCode || "",
@@ -398,13 +422,24 @@ const BUDAU = () => {
     recalcTotals(normalizedRows);
   };
 
-  const updateDetailRow = (rowIndex, updater) => {
+  const setDetailRowsWithoutNormalize = (rows = []) => {
+    detailRowsRef.current = rows;
+    updateState({ detailRows: rows });
+    recalcTotals(rows);
+  };
+
+  const updateDetailRow = (rowIndex, updater, normalize = true) => {
     const nextRows = [...(detailRowsRef.current || detailRows || [])];
     const currentRow = { ...(nextRows[rowIndex] || {}) };
     nextRows[rowIndex] =
       typeof updater === "function" ? updater(currentRow) : { ...currentRow, ...updater };
 
-    setDetailRows(nextRows);
+    if (normalize) {
+      setDetailRows(nextRows);
+      return;
+    }
+
+    setDetailRowsWithoutNormalize(nextRows);
   };
 
   const handleInsertBlankRow = (index = null) => {
@@ -446,15 +481,32 @@ const BUDAU = () => {
       }
 
       if (["budgetBalance", "adjustmentAmount", "newBudgetBalance"].includes(field)) {
-        const nextValue = commit
-          ? formatNumber(parseFormattedNumber(value || 0) || 0, decAmt)
-          : sanitizeNumeric(value);
+        if (commit) {
+          const nextValue = Math.max(parseFormattedNumber(value || 0) || 0, 0);
+          return recalcRow({ ...row, [field]: nextValue });
+        }
+
+        const nextValue = sanitizePositiveNumeric(value);
+        if (field === "adjustmentAmount") {
+          return {
+            ...row,
+            adjustmentAmount: nextValue,
+            newBudgetBalance:
+              nextValue === ""
+                ? row.newBudgetBalance
+                : formatNumber(
+                    (parseFormattedNumber(row.budgetBalance || 0) || 0) +
+                      (parseFormattedNumber(nextValue || 0) || 0),
+                    decAmt
+                  ),
+          };
+        }
 
         return { ...row, [field]: nextValue };
       }
 
       return { ...row, [field]: value };
-    });
+    }, commit);
   };
 
   const openHeaderLookup = (type) => {
@@ -678,8 +730,8 @@ const BUDAU = () => {
         readOnly={isFormDisabled || options.readOnly}
         disabled={false}
         onChange={(e) => {
-          const nextValue = sanitizeNumeric(e.target.value);
-          if (/^-?\d*\.?\d*$/.test(nextValue) || nextValue === "") {
+          const nextValue = sanitizePositiveNumeric(e.target.value);
+          if (/^\d*\.?\d*$/.test(nextValue) || nextValue === "") {
             handleDetailRowChange(index, field, nextValue, false);
           }
         }}
@@ -799,11 +851,6 @@ const BUDAU = () => {
       );
 
       if (!isValid) return false;
-
-      if ((parseFormattedNumber(row.adjustmentAmount || 0) || 0) <= 0) {
-        useSwalErrorAlert("Validation Error", `Line ${lineNo}: Adjustment Amount must be greater than zero.`);
-        return false;
-      }
     }
 
 
@@ -831,80 +878,47 @@ const BUDAU = () => {
       return;
     }
 
-
     const detailValid = await validateRows(rowsForSave);
     if (!detailValid) return;
 
-    updateState({ isLoading: true, showSpinner: true });
+    if (documentStatus === "") {
+      updateState({ isLoading: true, showSpinner: true });
 
-    try {
-      const payloadData = buildPayload(rowsForSave);
+      try {
+        const budauData = buildPayload(rowsForSave);
 
-      const response = await postRequest(
-        `upsert${docType}`,
-        JSON.stringify({ json_data: payloadData })
-      );
+        const response = await useTransactionUpsert(
+          docType,
+          budauData,
+          updateState,
+          "budauId",
+          "budauNo"
+        );
 
-      const responseData = response?.data?.[0] || response?.data?.data?.[0] || response?.data || {};
-      const returnedErrorMsg = String(
-        responseData.errorMsg ||
-          responseData.errormsg ||
-          responseData.message ||
-          ""
-      ).trim();
-      const returnedErrorCount = Number(responseData.errorCount ?? responseData.errorcount ?? 0);
+        if (response) {
+          const responseDocNo = response.data[0].budauNo;
+          const responseDocId = response.data[0].budauId;
 
-      if (returnedErrorMsg || returnedErrorCount > 0) {
-        useSwalErrorAlert("Validation Failed", returnedErrorMsg || "Unable to save transaction.");
-        return;
+          await fetchTranData(responseDocNo, branchCode);
+
+          const isZero = Number(noReprints) === 0;
+          const onSaveAndPrint = isZero
+            ? () => updateState({ showSignatoryModal: true })
+            : () => handleSaveAndPrint(responseDocId);
+
+          useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
+        }
+
+        updateState({ isDocNoDisabled: true, isFetchDisabled: true });
+      } catch (error) {
+        console.error("Error during transaction upsert:", error);
+      } finally {
+        updateState({ isLoading: false, showSpinner: false });
       }
-
-      const responseDocNo =
-        responseData.documentNo ||
-        responseData.docNo ||
-        responseData.budauNo ||
-        documentNo;
-
-      const responseDocId =
-        responseData.documentID ||
-        responseData.docId ||
-        responseData.budauId ||
-        documentID;
-
-      if (!responseDocNo && !responseDocId) {
-        useSwalErrorAlert("Save Error", "Unexpected save response.");
-        return;
-      }
-
-      if (responseDocNo || responseDocId) {
-        await fetchTranData(responseDocNo, state.branchCode, responseDocId);
-        const isZero = Number(noReprints) === 0;
-        const onSaveAndPrint = isZero
-          ? () => updateState({ showSignatoryModal: true })
-          : () => handleSaveAndPrint(responseDocId);
-
-        useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
-      }
-
-      updateState({
-        isDocNoDisabled: true,
-        isFetchDisabled: true,
-      });
-    } catch (error) {
-      const errorMessage =
-        error?.response?.data?.[0]?.errorMsg ||
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        error?.message ||
-        "Unable to save transaction.";
-
-      useSwalErrorAlert("Save Error", errorMessage);
-    } finally {
-      updateState({ isLoading: false, showSpinner: false });
     }
   };
 
-  const fetchTranData = async (docNoParam = "", branchCodeParam = "", key = "") => {
+  const fetchTranData = async (documentNo, branchCode, direction = "") => {
     const resetFetchState = () => {
       updateState({
         documentNo: "",
@@ -919,33 +933,15 @@ const BUDAU = () => {
     updateState({ isLoading: true, showSpinner: true });
 
     try {
-      let formattedDocNo = String(docNoParam || "").trim();
-
-      if (formattedDocNo && /^\d+$/.test(formattedDocNo)) {
-        formattedDocNo = formattedDocNo.padStart(Number(state.documentDocLen || 8), "0");
-      }
-
-      const response = await fetchDataJson("getBUDAU", {
-        documentNo: formattedDocNo,
-        docNo: formattedDocNo,
-        branchCode: branchCodeParam || state.branchCode || "",
-        documentID: key || "",
-        docId: key || "",
+      const data = await useFetchTranData(
+        documentNo,
+        branchCode,
         docType,
-      });
+        "budauNo",
+        direction
+      );
 
-      const data =
-        response?.data?.[0]?.result
-          ? JSON.parse(response.data[0].result)
-          : response?.data?.result
-            ? JSON.parse(response.data.result)
-            : response?.data?.[0] || response?.data || response || {};
-
-      const header = Array.isArray(data) ? data[0] || {} : data;
-      const fetchedDocumentID = header?.documentID || header?.docId || header?.budauId || "";
-      const fetchedDocumentNo = header?.documentNo || header?.docNo || header?.budauNo || "";
-
-      if (!fetchedDocumentID && !fetchedDocumentNo) {
+      if (!data?.budauId && !data?.budauNo) {
         Swal.fire({
           icon: "info",
           title: "No Records Found",
@@ -955,44 +951,35 @@ const BUDAU = () => {
         return;
       }
 
-      const rawDetails =
-        header?.dt1 ||
-        header?.details ||
-        header?.detailRows ||
-        data?.dt1 ||
-        [];
-
-      const detailRowsFromFetch = (Array.isArray(rawDetails) ? rawDetails : []).map((item) =>
+      const detailRowsFromFetch = (data.dt1 || []).map((item) =>
         recalcRow(mapFetchedRow(item))
       );
 
       setDetailRows(detailRowsFromFetch);
 
+      const documentStatus = getStatusCode(data.status || data.budauStatus);
+
       updateState({
-        documentStatus: getStatusCode(header.status || header.budauStatus || header.budau_status),
-        status: getStatusCode(header.status || header.budauStatus || header.budau_status),
-        originalDocStatus: getStatusCode(header.status || header.budauStatus || header.budau_status),
-        appLevel: header.appLevel || 0,
+        documentStatus,
+        status: documentStatus,
+        originalDocStatus: documentStatus,
+        appLevel: data.appLevel || 0,
 
-        documentID: fetchedDocumentID,
-        documentNo: fetchedDocumentNo,
+        documentID: data.budauId || "",
+        documentNo: data.budauNo || "",
 
-        branchCode: header.branchCode || header.branch_code || "",
-        branchName: header.branchName || header.branch_name || "",
-        budauDate: useformatToDatev2(header.budauDate || header.budau_date) || toDateValue(header.budauDate || header.budau_date),
-        cutoffCode: header.cutoffCode || header.cutoff_code || "",
-        refNo: header.refNo || header.ref_no || "",
-        totalBudgetBalance: formatNumber(header.totalBudgetBalance ?? header.total_budget_balance ?? 0, decAmt),
-        totalAdjustmentAmount: formatNumber(header.totalAdjustmentAmount ?? header.total_adjustment_amount ?? 0, decAmt),
-        totalNewBudgetBalance: formatNumber(header.totalNewBudgetBalance ?? header.total_new_budget_balance ?? 0, decAmt),
+        branchCode: data.branchCode || "",
+        branchName: data.branchName || "",
+        budauDate: useformatToDatev2(data.budauDate || data.docDate) || toDateValue(data.budauDate || data.docDate),
+        cutoffCode: data.cutoffCode || "",
+        refNo: data.refNo || "",
+        totalBudgetBalance: formatNumber(data.totalBudgetBalance ?? 0, decAmt),
+        totalAdjustmentAmount: formatNumber(data.totalAdjustmentAmount ?? 0, decAmt),
+        totalNewBudgetBalance: formatNumber(data.totalNewBudgetBalance ?? 0, decAmt),
 
-        remarks: header.remarks || "",
-        noReprints: header.noReprints ?? "0",
-        detailRowsApp: Array.isArray(header.dtApp)
-          ? header.dtApp
-          : header.dtApp
-            ? [header.dtApp]
-            : [],
+        remarks: data.remarks || "",
+        noReprints: data.noReprints ?? "0",
+        detailRowsApp: Array.isArray(data.dtApp) ? data.dtApp : data.dtApp ? [data.dtApp] : [],
 
         isDocNoDisabled: true,
         isFetchDisabled: true,
@@ -1035,7 +1022,7 @@ const BUDAU = () => {
       branchCode: defaultBranchCode,
       branchName: defaultBranchName,
       budauDate: today,
-      cutoffCode: "",
+      cutoffCode: deriveCutoffCode(today),
       refNo: "",
       totalBudgetBalance: "0.00",
       totalAdjustmentAmount: "0.00",
@@ -1113,6 +1100,7 @@ const BUDAU = () => {
       status: "",
       originalDocStatus: "",
       budauDate: useGetCurrentDayV2(),
+      cutoffCode: deriveCutoffCode(useGetCurrentDayV2()),
       noReprints: "0",
       appLevel: 0,
       detailRows: copiedRows,
@@ -1398,11 +1386,12 @@ const BUDAU = () => {
           </div>
 
           <div
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols- gap-4 rounded-lg relative"
+            className="grid grid-cols-1 gap-4 rounded-lg relative px-2"
             id="budau_hd"
           >
-            <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="global-tran-textbox-group-div-ui">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-4 rounded-lg relative items-start">
+              {/* Row 1: Branch | Reference No. | Blank */}
+              <div className="w-full">
                 <FieldRenderer
                   id="branchName"
                   label="Branch"
@@ -1417,7 +1406,24 @@ const BUDAU = () => {
                     openHeaderLookup("headerBranch")
                   }
                 />
+              </div>
 
+              <div className="w-full">
+                <FieldRenderer
+                  id="refNo"
+                  label="Reference No."
+                  type="text"
+                  value={refNo || ""}
+                  disabled={isFormDisabled}
+                  maxLength={getMax("REF_NO")}
+                  onChange={(val) => updateState({ refNo: val })}
+                />
+              </div>
+
+              <div className="hidden xl:block" />
+
+              {/* Row 2: Doc No | Tran Type | Blank */}
+              <div className="w-full">
                 <FieldRenderer
                   id="docNo"
                   label="BUDAU No."
@@ -1439,45 +1445,9 @@ const BUDAU = () => {
                     }}
                   }
                 />
-
-                <div className="relative w-full">
-                  <div className={`flex items-stretch global-ref-textbox-ui ${!isFormDisabled ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"}`}>
-                    <DateFormatInput
-                      id="budauDate"
-                      className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
-                      value={budauDate || ""}
-                      disabled={isFormDisabled}
-                      updateState={(next) => updateState({ budauDate: next.budauDate ?? next.value ?? next })}
-                    />
-                  </div>
-                  <label htmlFor="budauDate" className="global-ref-floating-label global-ref-label-enabled">
-                    BUDAU Date
-                  </label>
-                </div>
               </div>
 
-              <div className="global-tran-textbox-group-div-ui">
-                <FieldRenderer
-                  id="cutoffCode"
-                  label="Cutoff"
-                  required
-                  type="text"
-                  value={cutoffCode || ""}
-                  disabled={isFormDisabled}
-                  maxLength={6}
-                  onChange={(val) => updateState({ cutoffCode: String(val || "").replace(/[^0-9]/g, "").slice(0, 6) })}
-                />
-
-                <FieldRenderer
-                  id="refNo"
-                  label="Reference No."
-                  type="text"
-                  value={refNo || ""}
-                  disabled={isFormDisabled}
-                  maxLength={getMax("REF_NO")}
-                  onChange={(val) => updateState({ refNo: val })}
-                />
-
+              <div className="w-full">
                 <FieldRenderer
                   id="tranType"
                   label="Tran Type"
@@ -1489,8 +1459,30 @@ const BUDAU = () => {
                 />
               </div>
 
-              <div className="col-span-full">
-                <div className="relative p-2">
+              <div className="hidden xl:block" />
+
+              {/* Row 3: Doc Date | Blank | Blank */}
+              <div className="relative w-full">
+                <input type="hidden" id="cutoffCode" value={cutoffCode || ""} readOnly />
+                <div className={`flex items-stretch global-ref-textbox-ui ${!isFormDisabled ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"}`}>
+                  <DateFormatInput
+                    id="budauDate"
+                    className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
+                    value={budauDate || ""}
+                    disabled={isFormDisabled}
+                    updateState={(next) => updateState({ budauDate: next.budauDate ?? next.value ?? next })}
+                  />
+                </div>
+                <label htmlFor="budauDate" className="global-ref-floating-label global-ref-label-enabled">
+                  BUDAU Date
+                </label>
+              </div>
+
+              <div className="hidden md:block" />
+              <div className="hidden xl:block" />
+
+              <div className="md:col-span-2 xl:col-span-3 w-full">
+                <div className="relative">
                   <textarea
                     id="remarks"
                     placeholder=""
@@ -1658,6 +1650,7 @@ const BUDAU = () => {
           title="Search Budget Codes"
           activeOnly={true}
           groupOnly={false}
+          customParam="NonGroup"
           onClose={handleCloseBudgetItemLookup}
         />
       )}

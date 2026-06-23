@@ -549,6 +549,17 @@ const openPOAPVLookupColumns = [
 ];
 
 
+
+const resolveGlobalLookupColumns = async (endpointKey) => {
+  const result = await selectedHSColConfig(endpointKey);
+  const rawResult = result?.data?.[0]?.result ?? result?.[0]?.result ?? result?.result ?? result;
+
+  return typeof rawResult === "string"
+    ? JSON.parse(rawResult || "[]")
+    : rawResult;
+};
+
+
 const handleOpenReferencePOAdvance = async (overrides = {}) => {
   setShowInvoiceAddDropdown(false);
 
@@ -613,6 +624,84 @@ const handleOpenReferencePOAdvance = async (overrides = {}) => {
         error?.response?.data?.error ||
         error?.message ||
         "Error in fetching PO advances reference."
+    );
+  } finally {
+    updateState({ isLoading: false, showSpinner: false });
+  }
+};
+
+
+const handleOpenReferenceLCImportation = async (overrides = {}) => {
+  setShowInvoiceAddDropdown(false);
+
+  const lookupVendCode = String(overrides.vendCode ?? vendCode ?? "").trim();
+  const lookupBranchCode = String(overrides.branchCode ?? branchCode ?? "").trim();
+  const lcSummaryEndpoint = "getAPVLC_OpenSummary";
+
+  try {
+    updateState({ isLoading: true, showSpinner: true });
+
+    const lookupPayload = {
+      branchCode: lookupBranchCode,
+      ...(lookupVendCode ? { vendCode: lookupVendCode } : {}),
+    };
+
+    const requestAttempts = [
+      async () => fetchDataJson(lcSummaryEndpoint, lookupPayload),
+      async () => fetchData(lcSummaryEndpoint, {
+        PARAMS: JSON.stringify({ json_data: lookupPayload }),
+      }),
+      async () => postRequest(
+        lcSummaryEndpoint,
+        JSON.stringify({ json_data: lookupPayload }),
+      ),
+    ];
+
+    let rawRows = [];
+    let lastError = null;
+
+    for (const requestOpenLCReference of requestAttempts) {
+      try {
+        const response = await requestOpenLCReference();
+        rawRows = extractOpenRRResponseRows(response);
+        if (rawRows.length > 0) break;
+      } catch (requestError) {
+        lastError = requestError;
+        console.warn("Open LC Importation lookup attempt failed:", requestError);
+      }
+    }
+
+    if (lastError && rawRows.length === 0) {
+      throw lastError;
+    }
+
+    if (rawRows.length === 0) {
+      useSwalErrorAlert(
+        "LC Importation Reference",
+        "No open LC Importation reference found."
+      );
+      return;
+    }
+
+    const lcSummaryColumns = await resolveGlobalLookupColumns(lcSummaryEndpoint);
+
+    updateState({
+      globalLookupRow: rawRows,
+      globalLookupHeader: lcSummaryColumns,
+      globalLookupConfigEndpoint: lcSummaryEndpoint,
+      globalLookupTitle: "Open LC Importation References",
+      globalLookupBtnCaption: "Get Selected LC",
+      showRRRefModal: true,
+      modalContext: "openLCImportation",
+    });
+  } catch (error) {
+    console.error("Failed to fetch LC Importation reference:", error);
+    useSwalErrorAlert(
+      "LC Importation Reference",
+      error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        "Error in fetching LC Importation reference."
     );
   } finally {
     updateState({ isLoading: false, showSpinner: false });
@@ -1944,11 +2033,24 @@ const extractOpenRRResponseRows = (response) => {
 
   const handleInvoiceAddClick = () => {
     if (isFormDisabled) return;
+
+    if (String(selectedApType || "").toUpperCase() === "APV07") {
+      setShowInvoiceAddDropdown(false);
+      handleOpenReferenceLCImportation();
+      return;
+    }
+
     setShowInvoiceAddDropdown((prev) => !prev);
   };
 
   const handleAddInvoiceRow = async () => {
     setShowInvoiceAddDropdown(false);
+
+    if (String(selectedApType || "").toUpperCase() === "APV07") {
+      await handleOpenReferenceLCImportation();
+      return;
+    }
+
     await handleAddRow();
   };
 
@@ -2062,6 +2164,7 @@ const handleCloseRRRefModal = async (selectedItems) => {
   }
 
   const isPOAdvanceFlow = modalContext === "openPOAdvance";
+  const isLCImportationFlow = modalContext === "openLCImportation";
 
   const itemsArray = Array.isArray(selectedItems.records)
     ? selectedItems.records
@@ -2070,6 +2173,132 @@ const handleCloseRRRefModal = async (selectedItems) => {
   updateState({ isLoading: true, showSpinner: true });
 
   try {
+    if (isLCImportationFlow) {
+      const selectedLC = itemsArray[0] || {};
+      const selectedIds = itemsArray
+        .map((row) => row.groupId || row.lcId || "")
+        .filter(Boolean)
+        .join(",");
+
+      const detailPayload = {
+        json_data: {
+          selectedIds,
+          lcId: itemsArray.length === 1 ? selectedLC.lcId || "" : "",
+          branchCode: selectedLC.branchCode || branchCode || "",
+        },
+      };
+
+      const detailResponse = await postRequest(
+        "getAPVLC_OpenDetail",
+        JSON.stringify(detailPayload),
+      );
+
+      const lcDetailRows = extractOpenRRResponseRows(detailResponse);
+
+      if (lcDetailRows.length === 0) {
+        useSwalErrorAlert(
+          "LC Importation Reference",
+          "No invoice details found for the selected LC reference."
+        );
+        return;
+      }
+
+      const firstDetail = lcDetailRows[0] || {};
+
+      // APV07 LC selection should not overwrite the APV header payee.
+      // Keep the current header payee/account/currency and use LC broker/forwarder only as row reference info.
+      const foundVendCode = vendName?.vendCode || vendCode || "";
+      const foundVendName = vendName?.vendName || "";
+      const foundAcctCode = apAccountCode || "";
+      const foundAcctName = apAccountName || "";
+      const foundCurrCode = vendName?.currCode || currencyCode || "";
+      const foundCurrName = vendName?.currName || currencyName || "";
+      const foundVatCode = vendName?.vatCode || "";
+      const foundAtcCode = vendName?.atcCode || "";
+      const lcBrokerCode = firstDetail.vendCode || selectedLC.vendCode || "";
+      const lcBrokerName = firstDetail.vendName || selectedLC.vendName || "";
+      const lcForwarderCode = firstDetail.forwarderCode || selectedLC.forwarderCode || "";
+      const lcForwarderName = firstDetail.forwarderName || selectedLC.forwarderName || "";
+      const masterAtcRow = foundAtcCode ? await useTopATCRow(foundAtcCode) : null;
+      const defaultAdvancesAcctCode = await getDefaultAdvancesAcctCode();
+
+      const mappedRows = await Promise.all(
+        lcDetailRows.map(async (item) => {
+          const amount = parseFormattedNumber(item.siAmount || item.amount || item.billAmt || 0);
+          const vatAmount = parseFormattedNumber(item.vatAmount || item.vatAmt || 0);
+          const netAmount = parseFormattedNumber(item.netAmount || item.netAmt || 0);
+          const rawSiDate = item.siDate || item.lcDate || "";
+          const formattedSiDate = rawSiDate
+            ? useformatToDatev2(rawSiDate) || normalizeSlrefDate(rawSiDate) || useGetCurrentDayV2()
+            : useGetCurrentDayV2();
+          const calculatedAtcAmount = foundAtcCode
+            ? await useTopATCAmount(foundAtcCode, netAmount)
+            : 0;
+
+          return {
+            lnNo: "",
+            invType: item.invType || "LC",
+            rrNo: "",
+            poNo: item.poNo || item.lcNo || "",
+            siNo: item.siNo || "",
+            siDate: formattedSiDate,
+            amount: formatNumber(amount),
+            siAmount: formatNumber(amount),
+            debitAcct: item.debitAcct || item.drAcct || "",
+            rcCode: item.rcCode || "",
+            rcName: item.rcName || "",
+            sltypeCode: "SU",
+            slCode:  item.vendCode,
+            slName:  item.vendCode,
+            brokerCode: item.vendCode || lcBrokerCode,
+            brokerName: item.vendName || lcBrokerName,
+            forwarderCode: item.forwarderCode || lcForwarderCode,
+            forwarderName: item.forwarderName || lcForwarderName,
+            vatCode: item.vatCode || foundVatCode,
+            vatName: item.vatName || "",
+            vatAmount: formatNumber(vatAmount),
+            atcCode: foundAtcCode,
+            atcName: masterAtcRow?.atcName || "",
+            atcAmount: formatNumber(calculatedAtcAmount),
+            advpoNo: "",
+            advpoAmount: "0.00",
+            advpoVatAmount: "0.00",
+            advpoAtcAmount: "0.00",
+            advAcct: item.advAcct || item.adv_acct || item.ADV_ACCT || defaultAdvancesAcctCode,
+            paytermCode: "",
+            dueDate: useGetCurrentDayV2(),
+            remarks: item.remarks || "",
+            REC_RC: item.rcCode ? "Y" : "N",
+            REC_SL: "Y",
+            lcId: item.lcId || selectedLC.lcId || "",
+            lcNo: item.lcNo || selectedLC.lcNo || "",
+          };
+        }),
+      );
+
+      const updatedRows = [...detailRows, ...mappedRows];
+
+      updateState({
+        // Preserve APV header values after selecting LC reference.
+        vendCode,
+        vendName,
+        apAccountCode,
+        apAccountName,
+        currencyCode,
+        currencyName,
+        currencyRate,
+        detailRows: updatedRows,
+        showRRRefModal: false,
+        triggerGLEntries: true,
+        modalContext: "",
+        globalLookupTitle: "",
+        globalLookupBtnCaption: "",
+        globalLookupConfigEndpoint: "",
+      });
+      updateTotals(updatedRows);
+      return;
+    }
+
     const defaultAdvancesAcctCode = await getDefaultAdvancesAcctCode();
 
     const mappedRows = await Promise.all(
@@ -3551,6 +3780,15 @@ const handleAtcNameDoubleClick = (index) => {
         visibility.tin = false;
         break;
 
+      case "APV07": // importation
+        visibility.sltypeCode = false;
+        visibility.slName = false;
+        visibility.address = false;
+        visibility.tin = false;
+        visibility.rrNo = false;
+        visibility.poNo = true;
+        break;
+
       case "APV02": // non purchases
         visibility.invType = false;
         visibility.rrNo = false;
@@ -3632,9 +3870,11 @@ const handleAtcNameDoubleClick = (index) => {
     String(selectedApType || "").toUpperCase().includes("ADV") ||
     String(selectedApTypeName || "").toUpperCase().includes("ADVANCE");
 
-  const showAppliedAdvancesColumns = selectedApType === "APV01";
+  const isImportationAPType = selectedApType === "APV07";
 
-  const showAdvancesAccountColumn = selectedApType === "APV01" || isAdvancesAPType;
+  const showAppliedAdvancesColumns = selectedApType === "APV01" || isImportationAPType;
+
+  const showAdvancesAccountColumn = selectedApType === "APV01" || isAdvancesAPType || isImportationAPType;
   const showDrAccountColumn = !isAdvancesAPType;
   const hasSelectedReference = detailRows.some((row) =>
     String(
@@ -3653,17 +3893,27 @@ const handleAtcNameDoubleClick = (index) => {
         row.rrId ||
         row.rr_id ||
         row.RR_ID ||
+        row.lcId ||
+        row.lc_id ||
+        row.LC_ID ||
+        row.lcNo ||
+        row.lc_no ||
+        row.LC_NO ||
         "",
     ).trim(),
   );
 
-  const openReferenceLabel = isAdvancesAPType
-    ? "Open Reference PO/JO"
-    : "Open Reference RR/JO";
+  const openReferenceLabel = isImportationAPType
+    ? "Open Reference LC"
+    : isAdvancesAPType
+      ? "Open Reference PO/JO"
+      : "Open Reference RR/JO";
 
-  const openReferenceDescription = isAdvancesAPType
-    ? "Pull PO/JO advances"
-    : "Pull RR/JO details";
+  const openReferenceDescription = isImportationAPType
+    ? "Pull LC Importation details"
+    : isAdvancesAPType
+      ? "Pull PO/JO advances"
+      : "Pull RR/JO details";
 
   // Render the component
   return (
@@ -3991,11 +4241,13 @@ const handleAtcNameDoubleClick = (index) => {
                         {fieldVisibility.invType && (
                           <th className="global-tran-th-ui">Type</th>
                         )}
-                        {fieldVisibility.rrNo && (
+                        {fieldVisibility.rrNo && !isImportationAPType && (
                           <th className="global-tran-th-ui">RR No.</th>
                         )}
                         {fieldVisibility.poNo && (
-                          <th className="global-tran-th-ui">PO/JO No.</th>
+                          <th className="global-tran-th-ui">
+                            {isImportationAPType ? "LC No" : "PO/JO No."}
+                          </th>
                         )}
                         <th className="global-tran-th-ui">Invoice No.</th>
                         <th className="global-tran-th-ui">Invoice Date</th>
@@ -4062,13 +4314,14 @@ const handleAtcNameDoubleClick = (index) => {
                                 disabled={isFormDisabled}
                               >
                                 <option value=""></option>
+                                {isImportationAPType && <option value="LC">LC</option>}
                                 <option value="FG">FG</option>
                                 <option value="MS">MS</option>
                                 <option value="RM">RM</option>
                               </select>
                             </td>
                           )}
-                          {fieldVisibility.rrNo && (
+                          {fieldVisibility.rrNo && !isImportationAPType && (
                             <td className="global-tran-td-ui">
                               <input
                                 type="text"
@@ -4641,7 +4894,13 @@ const handleAtcNameDoubleClick = (index) => {
                                 <button
                                   type="button"
                                   className="global-tran-td-button-add-ui"
-                                  onClick={() => handleAddRow(index)}
+                                  onClick={() => {
+                                    if (isImportationAPType) {
+                                      handleOpenReferenceLCImportation();
+                                      return;
+                                    }
+                                    handleAddRow(index);
+                                  }}
                                 >
                                   <FontAwesomeIcon icon={faPlus} />
                                 </button>
@@ -4668,7 +4927,7 @@ const handleAtcNameDoubleClick = (index) => {
                 {/* Add Button */}
                 <div className="global-tran-tab-footer-button-div-ui">
                   <div className="relative inline-block">
-                    {showInvoiceAddDropdown && (
+                    {showInvoiceAddDropdown && !isImportationAPType && (
                       <div className="absolute bottom-[110%] left-0 mb-2 z-[9999] w-[220px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.16)] backdrop-blur-sm dark:border-slate-700 dark:bg-slate-800">
                         <div className="border-b border-slate-100 px-3 py-2 dark:border-slate-700">
                           <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-400 dark:text-slate-500">
@@ -4702,7 +4961,9 @@ const handleAtcNameDoubleClick = (index) => {
                             className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium text-blue-700 transition-all duration-150 hover:bg-blue-50 hover:text-blue-900 dark:text-blue-300 dark:hover:bg-slate-700"
                             onClick={() => {
   setShowInvoiceAddDropdown(false);
-  if (isAdvancesAPType) {
+  if (isImportationAPType) {
+    handleOpenReferenceLCImportation();
+  } else if (isAdvancesAPType) {
     handleOpenReferencePOAdvance();
   } else {
     handleOpenReferenceRR();
@@ -5513,7 +5774,13 @@ const handleAtcNameDoubleClick = (index) => {
                             <button
                               type="button"
                               className="global-tran-td-button-add-ui"
-                              onClick={() => handleAddRow(index)}
+                              onClick={() => {
+                                if (isImportationAPType) {
+                                  handleOpenReferenceLCImportation();
+                                } else {
+                                  handleAddRow(index);
+                                }
+                              }}
                             >
                               <FontAwesomeIcon icon={faPlus} />
                             </button>
@@ -5642,17 +5909,21 @@ const handleAtcNameDoubleClick = (index) => {
     isOpen={state.showRRRefModal}
     title={
       state.globalLookupTitle ||
-      (modalContext === "openPOAdvance"
-        ? "Open PO / JO References"
-        : "Open RR / JO References")
+      (modalContext === "openLCImportation"
+        ? "Open LC Importation References"
+        : modalContext === "openPOAdvance"
+          ? "Open PO / JO References"
+          : "Open RR / JO References")
     }
     data={state.globalLookupRow}
-    endpoint={state.globalLookupHeader || openRRLookupColumns}
+    endpoint={Array.isArray(state.globalLookupHeader) ? state.globalLookupHeader : openRRLookupColumns}
     btnCaption={
       state.globalLookupBtnCaption ||
-      (modalContext === "openPOAdvance"
-        ? "Get Selected PO/JO"
-        : "Get Selected RR/JO")
+      (modalContext === "openLCImportation"
+        ? "Get Selected LC"
+        : modalContext === "openPOAdvance"
+          ? "Get Selected PO/JO"
+          : "Get Selected RR/JO")
     }
     idKey="groupId"
     onClose={handleCloseRRRefModal}
@@ -5662,6 +5933,7 @@ const handleAtcNameDoubleClick = (index) => {
         modalContext: "",
         globalLookupTitle: "",
         globalLookupBtnCaption: "",
+        globalLookupConfigEndpoint: "",
       })
     }
     singleSelect={false}

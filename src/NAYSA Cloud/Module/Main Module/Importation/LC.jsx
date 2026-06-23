@@ -136,6 +136,7 @@ const LC = () => {
     documentSeries: hsDoc?.docSeries || "Auto",
     documentDocLen: hsDoc?.docLength || 8,
     documentID: null,
+    apvId:"",
     documentNo: "",
     documentStatus: "",
     status: "O",
@@ -224,6 +225,7 @@ const LC = () => {
     documentID,
     documentStatus,
     documentNo,
+    apvId,
     status,
     appLevel,
     originalDocStatus,
@@ -456,7 +458,8 @@ const LC = () => {
     return map[raw] || raw;
   };
 
-  const displayStatus = getFullStatus(status);
+  const isApvLocked = String(apvId || "").trim() !== "";
+  const displayStatus = isApvLocked ? "Locked Transaction" : getFullStatus(status);
 
   const statusMap = {
     FINALIZED: "global-tran-stat-text-finalized-ui",
@@ -464,10 +467,10 @@ const LC = () => {
     CLOSED: "global-tran-stat-text-finalized-ui",
   };
 
-  const statusColor = statusMap[displayStatus] || "";
+  const statusColor = isApvLocked ? "global-tran-stat-text-finalized-ui" : statusMap[displayStatus] || "";
   const maxApprovalLevel = Number(currentUserRow?.lcMaxAppLevel || currentUserRow?.maxAppLevel || 0);
   const currentApprovalLevel = Number(appLevel ?? 0);
-  const approvalStatusHiddenStatuses = ["CANCELLED", "POSTED", "FINALIZED"];
+  const approvalStatusHiddenStatuses = ["CANCELLED", "POSTED", "FINALIZED", "LOCKED TRANSACTION"];
   const showApprovalStatus =
     !!documentID &&
     maxApprovalLevel > 0 &&
@@ -482,9 +485,10 @@ const LC = () => {
     currentApprovalLevel === -1
       ? "text-rose-500 dark:text-rose-400 animate-pulse"
       : statusColor;
-  const isDocumentLocked = isViewDocumentUrl || ["FINALIZED", "CANCELLED", "CLOSED"].includes(
-    displayStatus
-  );
+  const isDocumentLocked =
+    isViewDocumentUrl ||
+    isApvLocked ||
+    ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
   const isApprovalLocked =
     currentApprovalLevel > 0 &&
     currentApprovalLevel <= maxApprovalLevel;
@@ -663,6 +667,7 @@ const LC = () => {
       rcCode: "",
       rcName: "",
       vendCode: "",
+      apvId:"",
       vendNameHeader: "",
       brokerCode: "",
       brokerName: "",
@@ -848,7 +853,7 @@ const LC = () => {
         documentNo: fetchedDocumentNo,
         branchCode: data.branchCode || branchCode,
         branchName: data.branchName || branchName,
-
+        apvId: data.apvId || "",
         importationDate: useformatToDatev2(data.importationDate) || data.importationDate || "",
         brokerCode: data.brokerCode || "",
         brokerName: data.brokerName || "",
@@ -1214,6 +1219,8 @@ const LC = () => {
   };
 
   const handleDeleteRow = async (index) => {
+    if (isFormDisabled) return;
+
     const currentRows = detailRowsRef.current || detailRows || [];
     const targetRow = currentRows[index] || {};
     const targetRrId = String(targetRow.rrId || "").trim();
@@ -1294,6 +1301,8 @@ const LC = () => {
   };
 
   const handleShipmentCostChange = (index, field, value, commit = false) => {
+    if (isFormDisabled) return;
+
     setShipmentCostRows((prevRows) => {
       const nextRows = [...(prevRows || [])];
       const row = { ...(nextRows[index] || {}) };
@@ -1495,6 +1504,8 @@ const LC = () => {
 
 
   const handleShipmentItemChange = (index, field, value, commit = false) => {
+    if (isFormDisabled) return;
+
     const updatedRows = [...(detailRowsRef.current || detailRows || [])];
     const row = { ...(updatedRows[index] || {}) };
     const editableFields = ["quantity", "unitCost"];
@@ -1538,6 +1549,10 @@ const LC = () => {
   
 
 const handleActivityOption = async (action) => {
+  if (isFormDisabled) {
+    return;
+  }
+
   if (originalDocStatus !== "O" || detailRows.length === 0) {
     return;
   }
@@ -2397,7 +2412,7 @@ const handleActivityOption = async (action) => {
           isAttachDisabled={!documentID}
           isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
           isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
-          isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED" || displayStatus === "CLOSED"}
+          isCancelDisabled={!documentID || isApvLocked || displayStatus === "CANCELLED" || displayStatus === "FINALIZED" || displayStatus === "CLOSED"}
           isNotifyDisabled={!documentID || displayStatus === "CANCELLED" || approvalStatus === "Approved Transaction"}
         />
       </div>
