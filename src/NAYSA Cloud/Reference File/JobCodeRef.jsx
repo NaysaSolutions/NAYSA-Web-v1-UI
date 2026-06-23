@@ -5,6 +5,7 @@ import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 
 // Import Lookup Modals
 import SearchCOAMast from "@/NAYSA Cloud/Lookup/SearchCOAMast";
+import SearchUOM from "@/NAYSA Cloud/Lookup/SearchUOM.jsx";
 
 // Icons & Globals
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -42,7 +43,7 @@ const JobCodeRef = () => {
   const [registrationInfo, setRegistrationInfo] = useState(INITIAL_REG);
   const [isEditing, setIsEditing] = useState(false);
   const [selectedJobCode, setSelectedJobCode] = useState(null);
-  const [modals, setModals] = useState({ coaMast: false, guide: false });
+  const [modals, setModals] = useState({ coaMast: false, uomMast: false, guide: false });
   const [isOpenGuide, setOpenGuide] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [tblFieldArray, setTblFieldArray] = useState([]);
@@ -265,6 +266,14 @@ const JobCodeRef = () => {
         isOpen={modals.coaMast} 
         onClose={(v) => { toggleModal("coaMast", false); if(v) updateForm({ acctCode: v.acctCode, acctName: v.acctName }); }} 
       />
+
+      <SearchUOM
+        isOpen={modals.uomMast}
+        onClose={(v) => {
+          toggleModal("uomMast", false);
+          if (v) updateForm({ uomCode: v.uomCode || "" });
+        }}
+      />
       
       <div className="global-ref-header-ui">
         <div className="w-full flex flex-col md:grid md:grid-cols-2 items-center">
@@ -357,7 +366,14 @@ const JobCodeRef = () => {
           </div>
           <div className="space-y-6">
             <div className="grid grid-cols-2 gap-3">
-              <FieldRenderer label="UOM" value={formData.uomCode} disabled={!isEditing} onChange={(v) => updateForm({ uomCode: v })} maxLength={getMax("uom_code")} />
+              <FieldRenderer
+                label="UOM"
+                type="lookup"
+                value={formData.uomCode}
+                disabled={!isEditing}
+                onLookup={() => toggleModal("uomMast", true)}
+                readOnly
+              />
               <FieldRenderer label="Active" type="select" value={formData.active} disabled={!isEditing} options={[{ value: "Y", label: "Yes" }, { value: "N", label: "No" }]} onChange={(v) => updateForm({ active: v })} />
             </div>
             <FieldRenderer

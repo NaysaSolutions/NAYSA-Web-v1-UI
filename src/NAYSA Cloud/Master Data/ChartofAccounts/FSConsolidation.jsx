@@ -703,7 +703,7 @@ const FSConsolidation = forwardRef(function FSConsolidation(
               value={row.fsType ?? ""}
               onChange={(e) => updateRow(rowKey, "fsType", e.target.value)}
             >
-              <option value=""></option>
+              {/* <option value=""></option> */}
               <option value="BS">Balance Sheet</option>
               <option value="IS">Income Statement</option>
             </select>

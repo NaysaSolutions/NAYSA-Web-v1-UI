@@ -548,7 +548,7 @@ useEffect(() => {
       if ((sourceRows?.length || 0) > 0) {
         const result = await useSwalProceedConfirm(
           "Apply Date Needed changes?",
-          "PR Detail already has record(s).\nDo you want to apply the updated Date Needed to all PR Detail rows?",
+          "This will copy the header Delivery Date to all item details. Do you want to continue?",
           "Yes"
         );
 
@@ -1492,8 +1492,39 @@ if (field === 'prStatus') {
         documentStatus,
       } = state;
 
+      let rowsForSave = detailRows || [];
+      const headerStatusForSave = documentStatus || "O";
 
-      const normalizedDetailRows = (detailRows || []).map((row) => ({
+      if (["X", "C"].includes(headerStatusForSave)) {
+        const isCancel = headerStatusForSave === "X";
+        const actionWord = isCancel ? "CANCEL" : "CLOSE";
+
+        const result = await useSwalProceedConfirm(
+          `Confirm Full Document ${isCancel ? "Cancellation" : "Closing"}?`,
+          `Are you sure you want to ${actionWord} this entire PR? This action is permanent and will affect all open line items.`,
+          "Yes"
+        );
+
+        if (!result?.isConfirmed) {
+          updateState({ documentStatus: "O" });
+          return;
+        }
+
+        if (isCancel) {
+          updateState({ showCancelModal: true, documentStatus: "O" });
+          return;
+        }
+
+        rowsForSave = rowsForSave.map((row) =>
+          row.prStatus === "O" || !row.prStatus
+            ? { ...row, prStatus: "C" }
+            : row
+        );
+        updateState({ detailRows: rowsForSave });
+      }
+
+
+      const normalizedDetailRows = rowsForSave.map((row) => ({
         ...row,
         prStatus: row.prStatus || "O",
       }));
@@ -1522,7 +1553,7 @@ if (field === 'prStatus') {
         prStatus: finalHeaderPrStatus,
         userCode: userCode,
         // ⬇️ THIS PART guarantees ALL CURRENT detailRows (including newly added) are sent
-        dt1: detailRows.map((row, index) => ({
+        dt1: rowsForSave.map((row, index) => ({
           prId: documentID || "",
           groupId: row.groupId || "",       
           invType: row.invType || "",
@@ -1613,38 +1644,7 @@ if (field === 'prStatus') {
   };
 
 const handleHeaderStatusChange = (value) => {
-  if (value === "X" || value === "C") {
-    const isCancel = value === "X";
-    const actionWord = isCancel ? "CANCEL" : "CLOSE";
-
-    useSwalProceedConfirm(
-      `Confirm Full Document ${isCancel ? "Cancellation" : "Closing"}?`,
-      `Are you sure you want to ${actionWord} this entire PR? This action is permanent and will affect all open line items.`
-    ).then((result) => {
-      if (result.isConfirmed) {
-        if (isCancel) {
-          handleCancel(); 
-        } else {
-          const updatedRows = detailRows.map(row => {
-            if (row.prStatus === "O" || !row.prStatus) {
-              return { ...row, prStatus: "C" };
-            }
-            return row;
-          });
-
-          updateState({ 
-            documentStatus: "C", 
-            detailRows: updatedRows,
-            isFormDisabled:true,
-          });
-        }
-      } else {
-        updateState({ documentStatus: "O" });
-      }
-    });
-  } else {
-    updateState({ documentStatus: value });
-  }
+  updateState({ documentStatus: value });
 };
 
 
@@ -2360,12 +2360,12 @@ const renderPrDetailColumn = (columnKey, row, index) => {
                   label="PR Status"
                   type="select"
                   value={documentStatus || "O"}
-                  disabled={isDocumentLocked || !documentID?.length || documentStatus !== "O"}
+                  disabled={isDocumentLocked || !documentID?.length || originalDocStatus !== "O"}
                   onChange={(val) => handleHeaderStatusChange(val)}
                   options={[
                     { label: "Open", value: "O" },
                     { label: "Closed", value: "C" },
-                    ...( !hasExistingPO && documentStatus !== "C"
+                    ...( !hasExistingPO && originalDocStatus !== "C"
                       ? [{ label: "Cancelled", value: "X" }]
                       : []),
                   ]}

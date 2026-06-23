@@ -27,6 +27,7 @@ const COAMastLookupModal = ({
   onClose, 
   source, 
   customParam,
+  classCode,
   title = "Select Chart of Accounts",
   withPagination = false 
 }) => {
@@ -41,6 +42,20 @@ const COAMastLookupModal = ({
   const [sortConfig, setSortConfig] = useState({ key: "", direction: "asc" });
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = withPagination ? 100 : 999999;
+
+  const resolvedClassCode = useMemo(() => {
+    const rawValue = String(
+      classCode ||
+        (customParam === "apv_hd" ? "APGL" : customParam) ||
+        source ||
+        ""
+    )
+      .trim()
+      .toUpperCase();
+
+    if (["APGL", "ADGL"].includes(rawValue)) return rawValue;
+    return "";
+  }, [classCode, customParam, source]);
 
   const hasActiveFilters = Object.values(filters).some((val) => val !== "");
 
@@ -65,18 +80,43 @@ const COAMastLookupModal = ({
     isFetching,
     refetch,
   } = useQuery({
-    queryKey: ["lookupCOA", customParam],
+    queryKey: ["lookupCOA", customParam, source, resolvedClassCode],
     queryFn: async () => {
-      let paramToSend = customParam === "apv_hd" ? "APGL" : customParam;
+      const paramToSend = customParam === "apv_hd" ? "APGL" : customParam;
+      const lookupFilter = resolvedClassCode || paramToSend || "";
+
       const { data: result } = await apiClient.post("/lookupCOA", {
         PARAMS: JSON.stringify({
-          search: paramToSend || "",
+          // Keep both names because some controllers/SPs read `search`, others read `filter`.
+          search: lookupFilter,
+          filter: lookupFilter,
+          classCode: resolvedClassCode || "",
+          class_code: resolvedClassCode || "",
           page: 1,
           pageSize: 5000,
         }),
       });
+
       const rawData = result?.data?.[0]?.result || "[]";
-      return Array.isArray(rawData) ? rawData : JSON.parse(rawData);
+      const parsedRows = Array.isArray(rawData) ? rawData : JSON.parse(rawData);
+
+      if (!resolvedClassCode) return parsedRows;
+
+      // Strict frontend guard. The backend must return classCode/class_code.
+      // This prevents the Advances Account lookup from showing non-ADGL accounts.
+      return parsedRows.filter((row) => {
+        const rowClassCode = String(
+          row.classCode ||
+            row.class_code ||
+            row.CLASS_CODE ||
+            row.classcode ||
+            ""
+        )
+          .trim()
+          .toUpperCase();
+
+        return rowClassCode === resolvedClassCode;
+      });
     },
     enabled: isOpen,
     staleTime: 1000 * 60 * 5,

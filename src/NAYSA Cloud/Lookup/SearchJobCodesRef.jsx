@@ -1,24 +1,50 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faTimes, faSpinner } from "@fortawesome/free-solid-svg-icons";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 
-const JobCodeLookupModal = ({ isOpen, onClose, customParam }) => {
+const JobCodeLookupModal = ({ isOpen, onClose, customParam, activeOnly = true }) => {
   const [rows, setRows] = useState([]);
-  const [filtered, setFiltered] = useState([]);
-  // Added uomCode to the filter state
   const [filters, setFilters] = useState({ jobCode: "", jobName: "", uomCode: "" });
   const [loading, setLoading] = useState(false);
 
-  // Updated pickers to include UOM
-  const pickCode = (r) => r?.jobCode ??  "";
-  const pickName = (r) => r?.jobName ??  "";
-  const pickUom = (r) => r?.uomCode ?? "";
+  const pickCode = (r) => r?.jobCode ?? r?.JobCode ?? r?.JOB_CODE ?? "";
+  const pickName = (r) => r?.jobName ?? r?.JobName ?? r?.JOB_NAME ?? "";
+  const pickUom = (r) => r?.uomCode ?? r?.UomCode ?? r?.UOM_CODE ?? "";
+
+  const normalizeActive = (value) =>
+    String(value ?? "Y").trim().toUpperCase();
+
+  const isActiveJobCode = (r) => {
+    const activeValue = normalizeActive(
+      r?.active ?? r?.Active ?? r?.ACTIVE ?? r?.status ?? r?.Status ?? r?.STATUS
+    );
+
+    return !["N", "NO", "FALSE", "0"].includes(activeValue);
+  };
+
+  const parseLookupResult = (result) => {
+    const raw =
+      result?.data?.[0]?.result ??
+      result?.data?.result ??
+      result?.result ??
+      result;
+
+    if (Array.isArray(raw)) return raw;
+    if (!raw) return [];
+
+    try {
+      const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      console.error("Invalid Job Code lookup JSON:", error, raw);
+      return [];
+    }
+  };
 
   useEffect(() => {
     if (!isOpen) {
       setRows([]);
-      setFiltered([]);
       setFilters({ jobCode: "", jobName: "", uomCode: "" });
       return;
     }
@@ -33,24 +59,21 @@ const JobCodeLookupModal = ({ isOpen, onClose, customParam }) => {
             PARAMS: JSON.stringify({
               search: "",
               page: 1,
-              pageSize: 50,
+              pageSize: 200,
+              activeOnly,
+              customParam: customParam || "",
             }),
           },
         });
 
-        const data =
-          Array.isArray(result?.data) && result.data[0]?.result
-            ? JSON.parse(result.data[0].result)
-            : [];
+        if (!alive) return;
 
-        if (!alive) return;
-        setRows(data);
-        setFiltered(data);
+        const data = parseLookupResult(result);
+        const lookupRows = activeOnly ? data.filter(isActiveJobCode) : data;
+        setRows(lookupRows);
       } catch (err) {
-        console.error("Failed to fetch JobCode:", err);
-        if (!alive) return;
-        setRows([]);
-        setFiltered([]);
+        console.error("Failed to fetch Job Codes:", err);
+        if (alive) setRows([]);
       } finally {
         if (alive) setLoading(false);
       }
@@ -59,26 +82,24 @@ const JobCodeLookupModal = ({ isOpen, onClose, customParam }) => {
     return () => {
       alive = false;
     };
-  }, [isOpen, customParam]);
+  }, [isOpen, customParam, activeOnly]);
 
-  useEffect(() => {
-    const codeFilter = (filters.jobCode || "").toLowerCase();
-    const nameFilter = (filters.jobName || "").toLowerCase();
-    const uomFilter = (filters.uomCode || "").toLowerCase();
+  const filtered = useMemo(() => {
+    const codeFilter = filters.jobCode.toLowerCase();
+    const nameFilter = filters.jobName.toLowerCase();
+    const uomFilter = filters.uomCode.toLowerCase();
 
-    setFiltered(
-      rows.filter((r) => {
-        const code = String(pickCode(r) || "").toLowerCase();
-        const name = String(pickName(r) || "").toLowerCase();
-        const uom = String(pickUom(r) || "").toLowerCase();
-        
-        return (
-          code.includes(codeFilter) && 
-          name.includes(nameFilter) && 
-          uom.includes(uomFilter)
-        );
-      })
-    );
+    return rows.filter((r) => {
+      const code = String(pickCode(r)).toLowerCase();
+      const name = String(pickName(r)).toLowerCase();
+      const uom = String(pickUom(r)).toLowerCase();
+
+      return (
+        code.includes(codeFilter) &&
+        name.includes(nameFilter) &&
+        uom.includes(uomFilter)
+      );
+    });
   }, [filters, rows]);
 
   const handleApply = (row) => onClose(row);
@@ -157,6 +178,7 @@ const JobCodeLookupModal = ({ isOpen, onClose, customParam }) => {
                       <td className="px-4 py-1">{pickUom(r)}</td>
                       <td className="px-4 py-1">
                         <button
+                          type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleApply(r);
