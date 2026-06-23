@@ -9,7 +9,7 @@ import {
 import { useHandlePostTran } from "@/NAYSA Cloud/Global/procedure";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
-const PostBUDBB = ({ isOpen, onClose, userCode }) => {
+const PostBUDRA = ({ isOpen, onClose, userCode }) => {
   const [data, setData] = useState([]);
   const [colConfigData, setcolConfigData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -24,13 +24,14 @@ const PostBUDBB = ({ isOpen, onClose, userCode }) => {
       if (!isOpen) return;
 
       setLoading(true);
+      setModalReady(false);
       alertFired.current = false;
 
       try {
-        const endpoint = "postingBUDBB";
+        const endpoint = "postingBUDRA";
         const response = await fetchDataJson(endpoint);
 
-        const budbbData = response?.data?.[0]?.result
+        const budraData = response?.data?.[0]?.result
           ? JSON.parse(response.data[0].result)
           : Array.isArray(response?.data)
             ? response.data
@@ -38,23 +39,26 @@ const PostBUDBB = ({ isOpen, onClose, userCode }) => {
               ? JSON.parse(response.data.result)
               : [];
 
-        if (budbbData.length === 0 && !alertFired.current) {
+        if (budraData.length === 0 && !alertFired.current) {
           useSwalInfoAlert("No Records Found", "There are no records to display.");
           alertFired.current = true;
           onClose?.();
+          return;
         }
 
         const colConfig = await useSelectedHSColConfig(endpoint);
 
         if (isMounted) {
-          setData(budbbData);
-          setcolConfigData(colConfig);
+          setData(budraData);
+          setcolConfigData(colConfig || []);
           setModalReady(true);
         }
       } catch (error) {
-        console.error("Error fetching BUDBB posting data:", error);
+        console.error("Error fetching BUDRA posting data:", error);
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
@@ -70,17 +74,16 @@ const PostBUDBB = ({ isOpen, onClose, userCode }) => {
     await useHandlePostTran(
       selectedData,
       userPw,
-      "BUDBB",
+      "BUDRA",
       userCode,
       setLoading,
       onClose
     );
   };
 
- 
-
-  const handleViewDocument = (row) => {
-    const { docNo } = row.docNo;
+  const handleViewDocument = (row = {}) => {
+    const docNo = row.docNo || row.documentNo || row.budraNo || "";
+    const branchCode = row.branchCode || "";
 
     if (!docNo) {
       useSwalValidationAlert({
@@ -91,11 +94,12 @@ const PostBUDBB = ({ isOpen, onClose, userCode }) => {
       return;
     }
 
-    const BUDBB_VIEW_URL = "/page/BUDBB";
+    const BUDRA_VIEW_URL = "/page/BUDRA";
 
     const url =
-      `${window.location.origin}${BUDBB_VIEW_URL}` +
+      `${window.location.origin}${BUDRA_VIEW_URL}` +
       `?docNo=${encodeURIComponent(docNo)}` +
+      (branchCode ? `&branchCode=${encodeURIComponent(branchCode)}` : "") +
       `&viewDocument=true`;
 
     window.open(url, "_blank", "noopener,noreferrer");
@@ -107,7 +111,7 @@ const PostBUDBB = ({ isOpen, onClose, userCode }) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Finalize Budget Beginning"
+          title="Finalize Budget Realignment"
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}
@@ -122,4 +126,4 @@ const PostBUDBB = ({ isOpen, onClose, userCode }) => {
   );
 };
 
-export default PostBUDBB;
+export default PostBUDRA;
