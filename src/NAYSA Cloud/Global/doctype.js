@@ -41,6 +41,7 @@ export const docTypes = {
   RMRTV:"RMRTV",
   RMAJ:"RMAJ",
   RMST:"RMST",
+  WO:"WO",
 
 };
 
@@ -93,6 +94,11 @@ export const docTypeNames = {
     FARC: "Fixed Asset Reclassification Transaction",
     FASP: "Fixed Asset Split Transaction",
     FATR: "Fixed Asset Transfer Location Transaction",
+
+    WO: "Work Order Transaction",
+    PR: "Purchase Request Transaction",
+    JO: "Job Order Transaction",
+
   };
 
 
@@ -130,6 +136,9 @@ export const docTypeNames = {
     FASP: "",
     FATR: "",
 
+    
+    WO: "",
+
   };
 
   export const docTypePDFGuide = {
@@ -163,6 +172,9 @@ export const docTypeNames = {
     FARC: "",
     FASP: "",
     FATR: "",
+    
+    WO: "",
+    
   };
 
 
