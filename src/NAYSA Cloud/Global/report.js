@@ -649,6 +649,32 @@ export async function useHandleDownloadExcelSalesReport(params) {
 
 
 
+export async function useHandleDownloadExcelBUDReport(params) {
+  try {
+    const payload = {
+      PARAMS: JSON.stringify({
+        mode: params.mode,
+        branchcode: params.branchCode,
+        startdate: params.startDate,
+        enddate: params.endDate,
+        budgetYear: params.budgetYear,
+        cutoffCode: params.cutoffCode,
+        budgetCode: params.budgetCode,
+        acctCode: params.acctCode || params.accountCode,
+        rcCode: params.rcCode || params.departmentCode,
+        groupBy: params.groupBy || "ACCOUNT_RC",
+        monthlyView: params.monthlyView || "BUDGET",
+      }),
+    };
+
+    return await postRequest("getBudgetReport", payload);
+  } catch (error) {
+    console.error("Error downloading Budget report:", error);
+    return { Data: {} };
+  }
+}
+
+
 
 
 export async function useHandleDownloadExcelBIRReport(params) {
