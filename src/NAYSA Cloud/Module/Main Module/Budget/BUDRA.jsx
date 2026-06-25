@@ -2039,7 +2039,7 @@ const BUDRA = () => {
         <COAMastLookupModal
           isOpen={acctLookupModalOpen}
           title="Select Account Code"
-          customParam="ActiveAll"
+          customParam="REQ_BUDGET"
           onClose={handleCloseAccountLookup}
         />
       )}

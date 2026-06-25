@@ -2256,7 +2256,7 @@ const handleTranDocNoRetrieval = async (data) => {
         <COAMastLookupModal
           isOpen={acctLookupModalOpen}
           title="Select Account Code"
-          customParam="ActiveAll"
+          customParam="REQ_BUDGET"
           onClose={handleCloseAccountLookup}
         />
       )}
