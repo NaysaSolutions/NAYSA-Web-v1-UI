@@ -99,6 +99,82 @@ export async function useHandlePrint(documentID, docCode, printMode, userCode) {
 }
 
 
+// export async function useHandlePrint(documentID, docCode, printMode, userCode) {
+//   let printWindow = null;
+
+//   try {
+//     printWindow = window.open("", "_blank");
+
+//     if (!printWindow) {
+//       throw new Error("Popup blocked — please allow popups for this site.");
+//     }
+
+//     injectLoadingSpinner(printWindow);
+
+//     const responseDocControl = await useTopDocControlRow(docCode);
+//     const formName = responseDocControl?.formName;
+
+//     if (!formName) {
+//       throw new Error("Report Name not defined");
+//     }
+
+//     const payload = {
+//       tranId: documentID,
+//       formName,
+//       docCode,
+//       printMode,
+//       userCode,
+
+//       // Optional but recommended if your Laravel/API accepts it.
+//       // If reportCode is blank, Laravel can still resolve from formName.
+//       reportCode: responseDocControl?.reportCode || "",
+//     };
+
+//     console.log("Opening DXR viewer:", payload);
+
+//     const res = await postRequest("open-dxr-viewer", payload);
+
+//     const viewerUrl =
+//       res?.data?.viewerUrl ||
+//       res?.Data?.viewerUrl ||
+//       res?.viewerUrl ||
+//       res?.data?.data?.viewerUrl;
+
+//     if (!viewerUrl) {
+//       console.error("Invalid open-dxr-viewer response:", res);
+//       throw new Error("DevExpress viewer URL was not returned.");
+//     }
+
+//     printWindow.location.href = viewerUrl;
+//   } catch (error) {
+//     console.error("Error opening DevExpress report viewer:", error);
+
+//     if (printWindow && !printWindow.closed) {
+//       printWindow.document.open();
+//       printWindow.document.write(`
+//         <html>
+//           <head>
+//             <title>Report Error</title>
+//             <style>
+//               body {
+//                 font-family: Segoe UI, Tahoma, sans-serif;
+//                 padding: 30px;
+//                 color: #991b1b;
+//               }
+//             </style>
+//           </head>
+//           <body>
+//             <h3>Unable to open report viewer</h3>
+//             <p>${error?.message || "Unknown error"}</p>
+//           </body>
+//         </html>
+//       `);
+//       printWindow.document.close();
+//     }
+//   }
+// }
+
+
 
 
 
@@ -571,6 +647,32 @@ export async function useHandleDownloadExcelSalesReport(params) {
   }
 }
 
+
+
+export async function useHandleDownloadExcelBUDReport(params) {
+  try {
+    const payload = {
+      PARAMS: JSON.stringify({
+        mode: params.mode,
+        branchcode: params.branchCode,
+        startdate: params.startDate,
+        enddate: params.endDate,
+        budgetYear: params.budgetYear,
+        cutoffCode: params.cutoffCode,
+        budgetCode: params.budgetCode,
+        acctCode: params.acctCode || params.accountCode,
+        rcCode: params.rcCode || params.departmentCode,
+        groupBy: params.groupBy || "ACCOUNT_RC",
+        monthlyView: params.monthlyView || "BUDGET",
+      }),
+    };
+
+    return await postRequest("getBudgetReport", payload);
+  } catch (error) {
+    console.error("Error downloading Budget report:", error);
+    return { Data: {} };
+  }
+}
 
 
 

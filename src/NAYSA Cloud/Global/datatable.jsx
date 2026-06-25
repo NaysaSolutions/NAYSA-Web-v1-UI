@@ -3106,6 +3106,7 @@ export const transactionActionsHeaderStyle = {
   borderLeft: "1px solid rgba(148, 163, 184, 0.45)",
   boxShadow: "-8px 0 14px -12px rgba(15, 23, 42, 0.35)",
   backgroundImage: "none",
+  backgroundColor: "var(--erp-surface-2)",
 };
 
 export const transactionActionsCellStyle = {
@@ -3117,6 +3118,8 @@ export const transactionActionsCellStyle = {
   borderLeft: "1px solid rgba(148, 163, 184, 0.35)",
   boxShadow: "-8px 0 14px -12px rgba(15, 23, 42, 0.28)",
   backgroundImage: "none",
+  backgroundColor: "var(--erp-surface)",
+  color: "var(--erp-text-muted)",
 };
 
 // ==============================

@@ -140,6 +140,18 @@ const getTransferColumnKeys = (transferType = "") => {
   ];
 };
 
+const requiresGLEntries = (transferType = "", rows = []) => {
+  const type = String(transferType || "").trim().toUpperCase();
+
+  if (type === "FATR01") {
+    return rows.some(
+      (row) => String(row.fromFlocCode || "").trim().toUpperCase() === "LOC_INT"
+    );
+  }
+
+  return true;
+};
+
 const FATR = () => {
   const {
     companyInfo,
@@ -642,8 +654,9 @@ const FATR = () => {
           userCode,
         } = state;
 
-        let finalDetailRowsGL = [...glRows];
         const finalDetailRows = applyIntransitLocationToRows(detailRows, transferType);
+        const isGlRequired = requiresGLEntries(transferType, finalDetailRows);
+        let finalDetailRowsGL = isGlRequired ? [...glRows] : [];
 
         const buildGlData = (glRows) => ({
           branchCode: branchCode,
@@ -737,6 +750,15 @@ const FATR = () => {
         });
 
         if (action === "GenerateGL") {
+          if (!isGlRequired) {
+            setGlRows([]);
+            useSwalErrorAlert(
+              "General Ledger",
+              "General Ledger entries are not required for normal Location-to-Location transfer."
+            );
+            return;
+          }
+
           try {
             setGlRows([]);
             updateState({ isGeneratingGL: true });
@@ -760,7 +782,10 @@ const FATR = () => {
           const isValid = await validateTransferRows();
           if (!isValid) return;
 
-          if (finalDetailRowsGL.length === 0) {
+          if (!isGlRequired) {
+            finalDetailRowsGL = [];
+            setGlRows([]);
+          } else if (finalDetailRowsGL.length === 0) {
             const newGlEntries = await useGenerateGLEntries(
               docType,
               buildGlData([])

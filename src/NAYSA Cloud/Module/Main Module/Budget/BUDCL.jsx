@@ -27,7 +27,7 @@ import SearchBudItemRef from "../../../Lookup/SearchBudItemRef.jsx";
 import Header from "@/NAYSA Cloud/Components/Header";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import DateFormatInput from "@/NAYSA Cloud/Global/DateFormatInput.jsx";
-import { fetchDataJson, postRequest } from "../../../Configuration/BaseURL.jsx";
+import { postRequest } from "../../../Configuration/BaseURL.jsx";
 import { useReset } from "../../../Components/ResetContext";
 import {
   useGetCurrentDayV2,
@@ -45,6 +45,8 @@ import {
   useHandlePost,
   useFieldLenghtCheck,
   useGetFieldLength,
+  useFetchTranData,
+  useTransactionUpsert,
 } from "@/NAYSA Cloud/Global/procedure";
 
 import { useHandlePrint } from "@/NAYSA Cloud/Global/report";
@@ -82,26 +84,34 @@ const getFullStatus = (status) => {
   const raw = String(status ?? "").trim().toUpperCase();
 
   const map = {
-    "": "OPEN",
+    "": "PENDING",
+    P: "PENDING",
+    PENDING: "PENDING",
     O: "OPEN",
+    OPEN: "OPEN",
     C: "CLOSED",
+    CLOSED: "CLOSED",
     X: "CANCELLED",
-    F: "FINALIZED",
-    P: "POSTED",
+    CANCELLED: "CANCELLED",
+    POSTED: "OPEN",
+    FINALIZED: "OPEN",
   };
 
-  return map[raw] || raw || "OPEN";
+  return map[raw] || raw || "PENDING";
 };
 
 const getStatusCode = (status) => {
   const raw = String(status ?? "").trim().toUpperCase();
 
   const map = {
-    OPEN: "",
+    "": "P",
+    P: "P",
+    PENDING: "P",
+    OPEN: "O",
     CLOSED: "C",
     CANCELLED: "X",
-    FINALIZED: "F",
-    POSTED: "P",
+    FINALIZED: "O",
+    POSTED: "O",
   };
 
   return map[raw] ?? raw;
@@ -110,18 +120,64 @@ const getStatusCode = (status) => {
 const getCurrentYear = () => String(new Date().getFullYear());
 
 const isLockedStatus = (status) =>
-  ["FINALIZED", "CANCELLED", "CLOSED", "POSTED"].includes(getFullStatus(status));
+  ["OPEN", "CLOSED", "CANCELLED"].includes(getFullStatus(status));
 
 const toDateValue = (value) => {
   const raw = String(value || "").trim();
   if (!raw) return "";
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) return raw;
-  const yyyy = parsed.getFullYear();
-  const mm = String(parsed.getMonth() + 1).padStart(2, "0");
-  const dd = String(parsed.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) return raw;
+
+  const normalized = raw.includes("T") ? raw.split("T")[0] : raw;
+  let parsed = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (parsed) {
+    const [, year, month, day] = parsed;
+    return `${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}/${year}`;
+  }
+
+  parsed = normalized.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (parsed) {
+    const [, month, day, year] = parsed;
+    return `${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}/${year}`;
+  }
+
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  const month = String(local.getMonth() + 1).padStart(2, "0");
+  const day = String(local.getDate()).padStart(2, "0");
+  const year = local.getFullYear();
+  return `${month}/${day}/${year}`;
+};
+
+const parseDateValue = (value) => {
+  const normalized = toDateValue(value);
+  if (!normalized) return null;
+
+  const [month, day, year] = normalized.split("/").map(Number);
+  const parsed = new Date(year, month - 1, day);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const addDaysToDateValue = (value, days = 1) => {
+  const parsed = parseDateValue(value);
+  if (!parsed) return "";
+
+  const nextDate = new Date(parsed);
+  nextDate.setDate(nextDate.getDate() + days);
+
+  const mm = String(nextDate.getMonth() + 1).padStart(2, "0");
+  const dd = String(nextDate.getDate()).padStart(2, "0");
+  const yyyy = nextDate.getFullYear();
+  return `${mm}/${dd}/${yyyy}`;
+};
+
+const isBeforeDateValue = (left, right) => {
+  const leftDate = parseDateValue(left);
+  const rightDate = parseDateValue(right);
+
+  if (!leftDate || !rightDate) return false;
+  return leftDate.getTime() < rightDate.getTime();
 };
 
 
@@ -166,7 +222,7 @@ const BUDCL = () => {
     budgetName: "",
     refDocNo: "",
     refDocDate: "",
-    expiryDate: useGetCurrentDayV2(),
+    expiryDate: addDaysToDateValue(useGetCurrentDayV2(), 1),
     processBy: "",
     processDate: "",
     processTime: "",
@@ -248,6 +304,7 @@ const BUDCL = () => {
   const displayStatus = getFullStatus(status || documentStatus);
 
   const statusMap = {
+    OPEN: "global-tran-stat-text-finalized-ui",
     FINALIZED: "global-tran-stat-text-finalized-ui",
     POSTED: "global-tran-stat-text-finalized-ui",
     CANCELLED: "global-tran-stat-text-closed-ui",
@@ -262,7 +319,6 @@ const BUDCL = () => {
 
   const detailColumnDefs = [
     { key: "ln", label: "LN", width: 56, type: "ln" },
-    { key: "cutoffCode", label: "Cutoff", width: 100 },
     { key: "rcCode", label: "RC Code", width: 120, type: "lookup", lookupType: "rc" },
     { key: "rcName", label: "RC Name", width: 220, readOnly: true },
     { key: "acctCode", label: "Account Code", width: 140, type: "lookup", lookupType: "acct" },
@@ -329,7 +385,6 @@ const BUDCL = () => {
 
   const createBlankRow = () =>
     recalcRow({
-      cutoffCode: "",
       rcCode: "",
       rcName: "",
       acctCode: "",
@@ -341,7 +396,6 @@ const BUDCL = () => {
     });
 
   const mapFetchedRow = (item = {}) => ({
-    cutoffCode: item.cutoffCode || item.cutoff_code || "",
     rcCode: item.rcCode || item.rc_code || "",
     rcName: item.rcName || item.rc_name || "",
     acctCode: item.acctCode || item.acct_code || "",
@@ -383,7 +437,6 @@ const BUDCL = () => {
         lnNo: index + 1,
         lineNo: index + 1,
         branchCode: branchCode || "",
-        cutoffCode: row.cutoffCode || "",
         rcCode: row.rcCode || "",
         rcName: row.rcName || "",
         acctCode: row.acctCode || "",
@@ -404,17 +457,179 @@ const BUDCL = () => {
     recalcTotals(normalizedRows);
   };
 
-  const updateDetailRow = (rowIndex, updater) => {
+  const setDetailRowsWithoutNormalize = (rows = []) => {
+    detailRowsRef.current = rows;
+    updateState({ detailRows: rows });
+    recalcTotals(rows);
+  };
+
+  const updateDetailRow = (rowIndex, updater, normalize = true) => {
     const nextRows = [...(detailRowsRef.current || detailRows || [])];
     const currentRow = { ...(nextRows[rowIndex] || {}) };
     nextRows[rowIndex] =
       typeof updater === "function" ? updater(currentRow) : { ...currentRow, ...updater };
 
-    setDetailRows(nextRows);
+    if (normalize) {
+      setDetailRows(nextRows);
+      return;
+    }
+
+    setDetailRowsWithoutNormalize(nextRows);
+  };
+
+  const getBudgetBalanceRow = async (row = {}) => {
+    const selectedBranchCode = branchCode || currentUserRow?.branchCode || "";
+    const selectedBudgetCode = budgetCode || "";
+    const selectedRcCode = row.rcCode || "";
+    const selectedAcctCode = row.acctCode || "";
+
+    if (!selectedBudgetCode || !selectedRcCode || !selectedAcctCode) {
+      return null;
+    }
+
+    const payload = {
+      branchCode: selectedBranchCode,
+      rcCode: selectedRcCode,
+      acctCode: selectedAcctCode,
+      budgetCode: selectedBudgetCode,
+      docDate: budclDate || useGetCurrentDayV2(),
+      docCode: docType,
+      docId: documentID || "",
+      positiveOnly: "N",
+    };
+
+    const response = await postRequest("getBUDCLBudgetBalance", {
+      json_data: payload,
+    });
+
+    const rawResult =
+      response?.data?.data?.[0]?.result ??
+      response?.data?.[0]?.result ??
+      response?.data?.result ??
+      response?.data?.data ??
+      response?.data ??
+      [];
+
+    const parsedResult =
+      typeof rawResult === "string"
+        ? JSON.parse(rawResult || "[]")
+        : rawResult;
+
+    const balanceRow = Array.isArray(parsedResult)
+      ? parsedResult[0] || null
+      : parsedResult;
+
+    return balanceRow || null;
+  };
+
+  const applyBudgetBalanceToRow = async (rowIndex, overrides = {}) => {
+    if (isFormDisabled) return;
+
+    const baseRows = detailRowsRef.current || detailRows || [];
+    const currentRow = {
+      ...(baseRows[rowIndex] || {}),
+      ...overrides,
+    };
+
+    const selectedBudgetCode = budgetCode || "";
+    const selectedRcCode = currentRow.rcCode || "";
+    const selectedAcctCode = currentRow.acctCode || "";
+
+    if (!selectedBudgetCode || !selectedRcCode || !selectedAcctCode) {
+      updateDetailRow(rowIndex, currentRow);
+      return;
+    }
+
+    updateState({ isLoading: true, showSpinner: true });
+
+    try {
+      const balanceRow = await getBudgetBalanceRow(currentRow);
+
+      if (!balanceRow) {
+        updateDetailRow(rowIndex, {
+          ...currentRow,
+          beginningAmount: formatNumber(0, decAmt),
+          clearanceAmount: formatNumber(0, decAmt),
+          endingAmount: formatNumber(0, decAmt),
+        });
+
+        useSwalInfoAlert(
+          "No Budget Balance",
+          "No available budget balance found for the selected Budget Code, RC, and Account."
+        );
+        return;
+      }
+
+      const errorMessage = String(
+        balanceRow.errorMsg ||
+          balanceRow.restrictionMessage ||
+          balanceRow.message ||
+          ""
+      ).trim();
+
+      const errorCount = Number(balanceRow.errorCount || 0);
+      const isRestricted = String(balanceRow.isRestricted || "").toUpperCase() === "Y";
+
+      if (errorCount > 0 || isRestricted) {
+        updateDetailRow(rowIndex, {
+          ...currentRow,
+          rcName: currentRow.rcName || balanceRow.rcName || "",
+          acctName: currentRow.acctName || balanceRow.acctName || "",
+          beginningAmount: formatNumber(0, decAmt),
+          clearanceAmount: formatNumber(0, decAmt),
+          endingAmount: formatNumber(0, decAmt),
+        });
+
+        useSwalErrorAlert(
+          "Budget Balance Restricted",
+          errorMessage || "Selected Budget Code, RC, and Account has an open transaction that may affect the YTD balance."
+        );
+        return;
+      }
+
+      const beginningAmount =
+        parseFormattedNumber(
+          balanceRow.beginningAmount ??
+            balanceRow.temporaryOpenBalance ??
+            balanceRow.budgetBalance ??
+            balanceRow.availableBudgetAmount ??
+            0
+        ) || 0;
+
+      updateDetailRow(rowIndex, {
+        ...currentRow,
+        rcName: currentRow.rcName || balanceRow.rcName || "",
+        acctName: currentRow.acctName || balanceRow.acctName || "",
+        beginningAmount: formatNumber(beginningAmount, decAmt),
+        clearanceAmount: formatNumber(0, decAmt),
+        endingAmount: formatNumber(beginningAmount, decAmt),
+      });
+    } catch (error) {
+      console.error("Error fetching BUDCL budget balance:", error);
+      useSwalErrorAlert(
+        "Budget Balance Error",
+        error?.response?.data?.message ||
+          error?.response?.data?.details ||
+          error?.message ||
+          "Unable to fetch budget balance."
+      );
+    } finally {
+      updateState({ isLoading: false, showSpinner: false });
+    }
   };
 
   const handleInsertBlankRow = (index = null) => {
     if (isFormDisabled) return;
+
+    const requiredValid = useSwalvalidateRequiredFields(
+      {
+        "Budget Code": budgetCode,
+        "Expiry Date": expiryDate,
+      },
+      "Budget Clearance"
+    );
+
+    if (!requiredValid) return;
 
     const currentRows = [...(detailRowsRef.current || detailRows || [])];
     const insertIndex = Number.isInteger(index) ? index + 1 : currentRows.length;
@@ -444,14 +659,43 @@ const BUDCL = () => {
 
   const handleDetailRowChange = (index, field, value, commit = false) => {
     updateDetailRow(index, (row) => {
-      if (field === "cutoffCode") {
-        return {
-          ...row,
-          cutoffCode: String(value || "").replace(/[^0-9]/g, "").slice(0, 6),
-        };
-      }
-
       if (["beginningAmount", "clearanceAmount", "endingAmount"].includes(field)) {
+        if (field === "clearanceAmount") {
+          const rawValue = String(value ?? "");
+          const sanitizedValue = sanitizeNumeric(rawValue).replace(/-/g, "");
+          const beginningAmount = parseFormattedNumber(row.beginningAmount || 0) || 0;
+          const parsedValue = parseFormattedNumber(sanitizedValue || 0) || 0;
+
+          if (!commit) {
+            return {
+              ...row,
+              clearanceAmount: sanitizedValue,
+              endingAmount:
+                sanitizedValue === "" || parsedValue <= 0
+                  ? formatNumber(beginningAmount, decAmt)
+                  : formatNumber(beginningAmount - parsedValue, decAmt),
+            };
+          }
+
+          if (parsedValue <= 0) {
+            return {
+              ...row,
+              clearanceAmount: "",
+              endingAmount: formatNumber(beginningAmount, decAmt),
+            };
+          }
+
+          if (parsedValue > beginningAmount) {
+            useSwalErrorAlert(
+              "Validation Error",
+              "Clearance Amount cannot exceed Beginning Amount."
+            );
+            return recalcRow({ ...row, [field]: beginningAmount });
+          }
+
+          return recalcRow({ ...row, [field]: parsedValue });
+        }
+
         const nextValue = commit
           ? formatNumber(parseFormattedNumber(value || 0) || 0, decAmt)
           : sanitizeNumeric(value);
@@ -460,7 +704,7 @@ const BUDCL = () => {
       }
 
       return { ...row, [field]: value };
-    });
+    }, field === "clearanceAmount" ? commit : true);
   };
 
   const openHeaderLookup = (type) => {
@@ -521,9 +765,12 @@ const BUDCL = () => {
     });
   };
 
-  const handleCloseRCModal = (selectedRC) => {
-    if (selectedRC && lookupContext === "rc" && selectedRowIndex != null) {
-      updateDetailRow(selectedRowIndex, {
+  const handleCloseRCModal = async (selectedRC) => {
+    const rowIndex = selectedRowIndex;
+    const shouldApplyBalance = selectedRC && lookupContext === "rc" && rowIndex != null;
+
+    if (shouldApplyBalance) {
+      await applyBudgetBalanceToRow(rowIndex, {
         rcCode: selectedRC.rcCode || selectedRC.code || "",
         rcName: selectedRC.rcName || selectedRC.description || "",
       });
@@ -536,9 +783,12 @@ const BUDCL = () => {
     });
   };
 
-  const handleCloseAccountLookup = (selectedAccount) => {
-    if (selectedAccount && lookupContext === "acct" && selectedRowIndex != null) {
-      updateDetailRow(selectedRowIndex, {
+  const handleCloseAccountLookup = async (selectedAccount) => {
+    const rowIndex = selectedRowIndex;
+    const shouldApplyBalance = selectedAccount && lookupContext === "acct" && rowIndex != null;
+
+    if (shouldApplyBalance) {
+      await applyBudgetBalanceToRow(rowIndex, {
         acctCode: selectedAccount.acctCode || selectedAccount.code || "",
         acctName: selectedAccount.acctName || selectedAccount.description || "",
       });
@@ -554,10 +804,24 @@ const BUDCL = () => {
   const handleCloseBudgetItemLookup = (selectedBudget) => {
     if (selectedBudget) {
       if (lookupContext === "headerBudgetItem") {
+        const clearedRows = (detailRowsRef.current || detailRows || []).map((row) =>
+          recalcRow({
+            ...row,
+            beginningAmount: "0.00",
+            clearanceAmount: "0.00",
+            endingAmount: "0.00",
+          })
+        );
+
+        detailRowsRef.current = clearedRows;
+
         updateState({
           budgetCode: selectedBudget.code || "",
           budgetName: selectedBudget.description || "",
+          detailRows: clearedRows,
         });
+
+        recalcTotals(clearedRows);
       }
 
       if (lookupContext === "budgetItem" && selectedRowIndex != null) {
@@ -797,7 +1061,6 @@ const BUDCL = () => {
 
       const isValid = await useSwalvalidateRequiredFields(
         {
-          [`Line ${lineNo}: Cutoff`]: row.cutoffCode,
           [`Line ${lineNo}: RC Code`]: row.rcCode,
           [`Line ${lineNo}: Account Code`]: row.acctCode,
         },
@@ -805,11 +1068,6 @@ const BUDCL = () => {
       );
 
       if (!isValid) return false;
-
-      if (!/^\d{6}$/.test(String(row.cutoffCode || ""))) {
-        useSwalErrorAlert("Validation Error", `Line ${lineNo}: Cutoff must be in YYYYMM format.`);
-        return false;
-      }
 
       const beginning = parseFormattedNumber(row.beginningAmount || 0) || 0;
       const clearance = parseFormattedNumber(row.clearanceAmount || 0) || 0;
@@ -845,53 +1103,28 @@ const BUDCL = () => {
 
     if (!headerValid) return;
 
-
     const detailValid = await validateRows(rowsForSave);
     if (!detailValid) return;
 
     updateState({ isLoading: true, showSpinner: true });
 
     try {
-      const payloadData = buildPayload(rowsForSave);
+      const budclData = buildPayload(rowsForSave);
 
-      const response = await postRequest(
-        `upsert${docType}`,
-        JSON.stringify({ json_data: payloadData })
+      const response = await useTransactionUpsert(
+        docType,
+        budclData,
+        updateState,
+        "budclId",
+        "budclNo"
       );
 
-      const responseData = response?.data?.[0] || response?.data?.data?.[0] || response?.data || {};
-      const returnedErrorMsg = String(
-        responseData.errorMsg ||
-          responseData.errormsg ||
-          responseData.message ||
-          ""
-      ).trim();
-      const returnedErrorCount = Number(responseData.errorCount ?? responseData.errorcount ?? 0);
+      if (response) {
+        const responseDocNo = response?.data?.[0]?.budclNo || documentNo;
+        const responseDocId = response?.data?.[0]?.budclId || documentID;
 
-      if (returnedErrorMsg || returnedErrorCount > 0) {
-        useSwalErrorAlert("Validation Failed", returnedErrorMsg || "Unable to save transaction.");
-        return;
-      }
+        await fetchTranData(responseDocNo, branchCode);
 
-      const responseDocNo =
-        responseData.documentNo ||
-        responseData.docNo ||
-        responseData.budclNo ||
-        documentNo;
-
-      const responseDocId =
-        responseData.documentID ||
-        responseData.docId ||
-        responseData.budclId ||
-        documentID;
-
-      if (!responseDocNo && !responseDocId) {
-        useSwalErrorAlert("Save Error", "Unexpected save response.");
-        return;
-      }
-
-      if (responseDocNo || responseDocId) {
-        await fetchTranData(responseDocNo, state.branchCode, responseDocId);
         const isZero = Number(noReprints) === 0;
         const onSaveAndPrint = isZero
           ? () => updateState({ showSignatoryModal: true })
@@ -900,29 +1133,22 @@ const BUDCL = () => {
         useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
       }
 
-      updateState({
-        isDocNoDisabled: true,
-        isFetchDisabled: true,
-      });
+      updateState({ isDocNoDisabled: true, isFetchDisabled: true });
     } catch (error) {
-      const errorMessage =
-        error?.response?.data?.[0]?.errorMsg ||
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        error?.message ||
-        "Unable to save transaction.";
-
-      useSwalErrorAlert("Save Error", errorMessage);
+      console.error("Error during transaction upsert:", error);
     } finally {
       updateState({ isLoading: false, showSpinner: false });
     }
   };
 
-  const fetchTranData = async (docNoParam = "", branchCodeParam = "", key = "") => {
+  const fetchTranData = async (documentNo, branchCode, direction = "") => {
     const resetFetchState = () => {
       updateState({
         documentNo: "",
         documentID: "",
+        documentStatus: "P",
+        status: "P",
+        originalDocStatus: "P",
         isDocNoDisabled: false,
         isFetchDisabled: false,
       });
@@ -933,33 +1159,15 @@ const BUDCL = () => {
     updateState({ isLoading: true, showSpinner: true });
 
     try {
-      let formattedDocNo = String(docNoParam || "").trim();
-
-      if (formattedDocNo && /^\d+$/.test(formattedDocNo)) {
-        formattedDocNo = formattedDocNo.padStart(Number(state.documentDocLen || 8), "0");
-      }
-
-      const response = await fetchDataJson("getBUDCL", {
-        documentNo: formattedDocNo,
-        docNo: formattedDocNo,
-        branchCode: branchCodeParam || state.branchCode || "",
-        documentID: key || "",
-        docId: key || "",
+      const data = await useFetchTranData(
+        documentNo,
+        branchCode,
         docType,
-      });
+        "budclNo",
+        direction
+      );
 
-      const data =
-        response?.data?.[0]?.result
-          ? JSON.parse(response.data[0].result)
-          : response?.data?.result
-            ? JSON.parse(response.data.result)
-            : response?.data?.[0] || response?.data || response || {};
-
-      const header = Array.isArray(data) ? data[0] || {} : data;
-      const fetchedDocumentID = header?.documentID || header?.docId || header?.budclId || "";
-      const fetchedDocumentNo = header?.documentNo || header?.docNo || header?.budclNo || "";
-
-      if (!fetchedDocumentID && !fetchedDocumentNo) {
+      if (!data?.budclId && !data?.budclNo) {
         Swal.fire({
           icon: "info",
           title: "No Records Found",
@@ -969,49 +1177,51 @@ const BUDCL = () => {
         return;
       }
 
-      const rawDetails =
-        header?.dt1 ||
-        header?.details ||
-        header?.detailRows ||
-        data?.dt1 ||
-        [];
-
-      const detailRowsFromFetch = (Array.isArray(rawDetails) ? rawDetails : []).map((item) =>
+      const detailRowsFromFetch = (data.dt1 || []).map((item) =>
         recalcRow(mapFetchedRow(item))
       );
 
       setDetailRows(detailRowsFromFetch);
 
+      const documentStatus = getStatusCode(data.status || data.budclStatus);
+      const fetchedBudclDate =
+        useformatToDatev2(data.budclDate || data.docDate) ||
+        toDateValue(data.budclDate || data.docDate) ||
+        useGetCurrentDayV2();
+
+      const fetchedExpiryDate =
+        useformatToDatev2(data.expiryDate) ||
+        toDateValue(data.expiryDate) ||
+        addDaysToDateValue(fetchedBudclDate, 1);
+
       updateState({
-        documentStatus: getStatusCode(header.status || header.budclStatus || header.budcl_status),
-        status: getStatusCode(header.status || header.budclStatus || header.budcl_status),
-        originalDocStatus: getStatusCode(header.status || header.budclStatus || header.budcl_status),
-        appLevel: header.appLevel || 0,
+        documentStatus,
+        status: documentStatus,
+        originalDocStatus: documentStatus,
+        appLevel: data.appLevel || 0,
 
-        documentID: fetchedDocumentID,
-        documentNo: fetchedDocumentNo,
+        documentID: data.budclId || "",
+        documentNo: data.budclNo || "",
 
-        branchCode: header.branchCode || header.branch_code || "",
-        branchName: header.branchName || header.branch_name || "",
-        budclDate: useformatToDatev2(header.budclDate || header.budcl_date) || toDateValue(header.budclDate || header.budcl_date),
-        budgetCode: header.budgetCode || header.budget_code || "",
-        budgetName: header.budgetName || header.budget_name || "",
-        refDocNo: header.refDocNo || header.ref_doc_no || "",
-        refDocDate: useformatToDatev2(header.refDocDate || header.ref_doc_date) || toDateValue(header.refDocDate || header.ref_doc_date),
-        expiryDate: useformatToDatev2(header.expiryDate || header.expiry_date) || toDateValue(header.expiryDate || header.expiry_date),
-        processBy: header.processBy || header.process_by || "",
-        processDate: useformatToDatev2(header.processDate || header.process_date) || toDateValue(header.processDate || header.process_date),
-        processTime: header.processTime || header.process_time || "",
-        ytdBudgetAmount: formatNumber(header.ytdBudgetAmount ?? header.ytd_budget_amount ?? 0, decAmt),
-        totalClearanceAmount: formatNumber(header.totalClearanceAmount ?? header.total_clearance_amount ?? 0, decAmt),
+        branchCode: data.branchCode || "",
+        branchName: data.branchName || "",
+        budclDate: fetchedBudclDate,
+        budgetCode: data.budgetCode || "",
+        budgetName: data.budgetName || "",
+        refDocNo: data.refDocNo || "",
+        refDocDate: useformatToDatev2(data.refDocDate) || toDateValue(data.refDocDate),
+        expiryDate: isBeforeDateValue(fetchedExpiryDate, fetchedBudclDate)
+          ? addDaysToDateValue(fetchedBudclDate, 1)
+          : fetchedExpiryDate,
+        processBy: data.processBy || "",
+        processDate: useformatToDatev2(data.processDate) || toDateValue(data.processDate),
+        processTime: data.processTime || "",
+        ytdBudgetAmount: formatNumber(data.ytdBudgetAmount ?? 0, decAmt),
+        totalClearanceAmount: formatNumber(data.totalClearanceAmount ?? 0, decAmt),
 
-        remarks: header.remarks || "",
-        noReprints: header.noReprints ?? "0",
-        detailRowsApp: Array.isArray(header.dtApp)
-          ? header.dtApp
-          : header.dtApp
-            ? [header.dtApp]
-            : [],
+        remarks: data.remarks || "",
+        noReprints: data.noReprints ?? "0",
+        detailRowsApp: Array.isArray(data.dtApp) ? data.dtApp : data.dtApp ? [data.dtApp] : [],
 
         isDocNoDisabled: true,
         isFetchDisabled: true,
@@ -1039,9 +1249,9 @@ const BUDCL = () => {
     updateState({
       documentID: "",
       documentNo: "",
-      documentStatus: "",
-      status: "",
-      originalDocStatus: "",
+      documentStatus: "P",
+      status: "P",
+      originalDocStatus: "P",
       appLevel: 0,
       activeTab: "basic",
       isLoading: false,
@@ -1058,7 +1268,7 @@ const BUDCL = () => {
       budgetName: "",
       refDocNo: "",
       refDocDate: "",
-      expiryDate: today,
+      expiryDate: addDaysToDateValue(today, 1),
       processBy: "",
       processDate: "",
       processTime: "",
@@ -1109,13 +1319,13 @@ const BUDCL = () => {
   };
 
   const handleCancel = async () => {
-    if (documentID && !["X", "F", "C", "P"].includes(String(documentStatus || "").toUpperCase())) {
+    if (documentID && getStatusCode(documentStatus || status) === "P") {
       updateState({ showCancelModal: true });
     }
   };
 
   const handlePost = async () => {
-    if (documentID && !["X", "F", "C", "P"].includes(String(documentStatus || "").toUpperCase())) {
+    if (documentID && getStatusCode(documentStatus || status) === "P") {
       updateState({ showPostModal: true });
     }
   };
@@ -1133,10 +1343,11 @@ const BUDCL = () => {
     updateState({
       documentNo: "",
       documentID: "",
-      documentStatus: "",
-      status: "",
-      originalDocStatus: "",
+      documentStatus: "P",
+      status: "P",
+      originalDocStatus: "P",
       budclDate: useGetCurrentDayV2(),
+      expiryDate: addDaysToDateValue(useGetCurrentDayV2(), 1),
       noReprints: "0",
       appLevel: 0,
       detailRows: copiedRows,
@@ -1188,11 +1399,11 @@ const BUDCL = () => {
         );
 
         if (result && result.success) {
-          useSwalSuccessAlert("Success", "Finalize Completed");
+          useSwalSuccessAlert("Success", "Posting Completed");
           await fetchTranData(documentNo, state.branchCode);
         }
       } catch (error) {
-        useSwalErrorAlert("Finalize Error", error?.message || "Unable to finalize transaction.");
+        useSwalErrorAlert("Posting Error", error?.message || "Unable to post transaction.");
       } finally {
         updateState({ showSpinner: false });
       }
@@ -1384,7 +1595,7 @@ const BUDCL = () => {
           isAttachDisabled={!documentID}
           isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
           isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
-          isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED" || displayStatus === "CLOSED"}
+          isCancelDisabled={!documentID || displayStatus !== "PENDING"}
           isNotifyDisabled
         />
       </div>
@@ -1398,7 +1609,7 @@ const BUDCL = () => {
           <div className={`global-tran-headerstat-div-ui ${isViewDocument ? "max-md:!mt-0" : ""}`}>
             <div>
               <p className="global-tran-headerstat-text-ui">
-                Transaction Status
+                Clearance Status
               </p>
               <h1 className={`global-tran-stat-text-ui ${statusColor}`}>
                 {displayStatus}
@@ -1471,7 +1682,15 @@ const BUDCL = () => {
                       className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
                       value={budclDate || ""}
                       disabled={isFormDisabled}
-                      updateState={(next) => updateState({ budclDate: next.budclDate ?? next.value ?? next })}
+                      updateState={(next) => {
+                        const nextBudclDate = toDateValue(next.budclDate ?? next.value ?? next);
+                        if (!nextBudclDate) return;
+
+                        updateState({
+                          budclDate: nextBudclDate,
+                          expiryDate: addDaysToDateValue(nextBudclDate, 1),
+                        });
+                      }}
                     />
                   </div>
                   <label htmlFor="budclDate" className="global-ref-floating-label global-ref-label-enabled">
@@ -1547,13 +1766,38 @@ const BUDCL = () => {
                       className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
                       value={expiryDate || ""}
                       disabled={isFormDisabled}
-                      updateState={(next) => updateState({ expiryDate: next.expiryDate ?? next.value ?? next })}
+                      updateState={(next) => {
+                        const nextExpiryDate = toDateValue(next.expiryDate ?? next.value ?? next);
+                        if (!nextExpiryDate) return;
+
+                        if (isBeforeDateValue(nextExpiryDate, budclDate)) {
+                          updateState({ expiryDate: addDaysToDateValue(budclDate, 1) });
+                          return;
+                        }
+
+                        updateState({ expiryDate: nextExpiryDate });
+                      }}
                     />
                   </div>
                   <label htmlFor="expiryDate" className="global-ref-floating-label global-ref-label-enabled">
                     Expiry Date
                   </label>
                 </div>
+
+                <FieldRenderer
+                  id="clearanceStatus"
+                  label="Clearance Status"
+                  type="select"
+                  value={status || documentStatus || "P"}
+                  disabled
+                  readOnly
+                  options={[
+                    { value: "P", label: "Pending" },
+                    { value: "O", label: "Open" },
+                    { value: "C", label: "Closed" },
+                    { value: "X", label: "Cancelled" },
+                  ]}
+                />
               </div>
 
               <div className="col-span-full">
@@ -1712,7 +1956,7 @@ const BUDCL = () => {
         <COAMastLookupModal
           isOpen={acctLookupModalOpen}
           title="Select Account Code"
-          customParam="ActiveAll"
+          customParam="REQ_BUDGET"
           onClose={handleCloseAccountLookup}
         />
       )}

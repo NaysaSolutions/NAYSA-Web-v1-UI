@@ -70,7 +70,8 @@ export const pageRegistry = {
 
 
 
-  // Production
+  // Production 
+  WO: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Production/WO.jsx")),
   StorePortalOrder: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/StorePortal/StorePortalOrder.jsx")),
 
   // Importation
@@ -105,6 +106,8 @@ export const pageRegistry = {
   ProdBOM: lazyPage(() => import("./NAYSA Cloud/Master Data/BillofMaterial/Reference File/ProdBOM.jsx")),
   // Global & Queries
   AllTranHistory: lazyPage(() => import("./NAYSA Cloud/Lookup/SearchGlobalTranHistory.jsx")),
+  BudgetInquiry: lazyPage(() => import("./NAYSA Cloud/Query/BUDInq/BUDInq.jsx")),
+  BUDInq: lazyPage(() => import("./NAYSA Cloud/Query/BUDInq/BUDInq.jsx")),
   ARINQ: lazyPage(() => import("./NAYSA Cloud/Query/ARInq/ARINQ.jsx")),
   APINQ: lazyPage(() => import("./NAYSA Cloud/Query/APInq/APINQ.jsx")),
   EWTINQ: lazyPage(() => import("./NAYSA Cloud/Query/EWTInq/EWTINQ.jsx")),
@@ -142,6 +145,7 @@ export const pageRegistry = {
   BillCodeRef: lazyPage(() => import("./NAYSA Cloud/Reference File/BillCodeRef.jsx")),
   LCRef: lazyPage(() => import("./NAYSA Cloud/Reference File/LCRef.jsx")),
   BudItemRef: lazyPage(() => import("./NAYSA Cloud/Reference File/BudItemRef.jsx")),
+  BudgetAccountRef: lazyPage(() => import("./NAYSA Cloud/Reference File/BudgetAccountRef.jsx")),
   WarehouseLocation: lazyPage(() => import("./NAYSA Cloud/Master Data/Inventory/WareMast.jsx")),
   UOM: lazyPage(() => import("./NAYSA Cloud/Master Data/Inventory/UOM.jsx")),
   QualityStat: lazyPage(() => import("./NAYSA Cloud/Master Data/Inventory/QualityStat.jsx")),
@@ -181,6 +185,10 @@ export const pageRegistry = {
   PostSI: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/PostSI.jsx")),
   PostCSI: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/PostCSI.jsx")),
   PostLC: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Importation/PostLC.jsx")),
+  PostBUDBB: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Budget/PostBUDBB.jsx")),
+  PostBUDAU: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Budget/PostBUDAU.jsx")),
+  PostBUDRA: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Budget/PostBUDRA.jsx")),
+  PostBUDCL: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Budget/PostBUDCL.jsx")),
   PostRMRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostRMRR.jsx")),
   PostRMIS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostRMIS.jsx")),
   MonthendGLProcessingModal: lazyPage(() => import("./NAYSA Cloud/Processing/MonthendProcessing.jsx")),
@@ -214,4 +222,5 @@ export const pageRegistry = {
   FAReportModal: reportModal("FA"),
   IMPReportModal: reportModal("IMP"),
   SalesReportModal: reportModal("OE"),
+  BUDReportModal: reportModal("BUD"),
 };

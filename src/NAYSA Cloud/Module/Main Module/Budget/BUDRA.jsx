@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Swal from "sweetalert2";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
@@ -22,6 +22,7 @@ import RCLookupModal from "../../../Lookup/SearchRCMast.jsx";
 import COAMastLookupModal from "../../../Lookup/SearchCOAMast.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import SearchBudItemRef from "../../../Lookup/SearchBudItemRef.jsx";
+import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
 
 // Global UI / Config
 import Header from "@/NAYSA Cloud/Components/Header";
@@ -29,6 +30,7 @@ import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import DateFormatInput from "@/NAYSA Cloud/Global/DateFormatInput.jsx";
 import { fetchDataJson, postRequest } from "../../../Configuration/BaseURL.jsx";
 import { useReset } from "../../../Components/ResetContext";
+import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
 import {
   useGetCurrentDayV2,
   useformatToDatev2,
@@ -45,6 +47,8 @@ import {
   useHandlePost,
   useFieldLenghtCheck,
   useGetFieldLength,
+  useFetchTranData,
+  useTransactionUpsert,
 } from "@/NAYSA Cloud/Global/procedure";
 
 import { useHandlePrint } from "@/NAYSA Cloud/Global/report";
@@ -124,10 +128,56 @@ const toDateValue = (value) => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
+const deriveCutoffCode = (dateValue = "") => {
+  const normalizedDate = toDateValue(dateValue);
+  if (!normalizedDate) return "";
+
+  const match = normalizedDate.match(/^(\d{4})-(\d{2})-/);
+  if (!match) return "";
+
+  return `${match[1]}${match[2]}`;
+};
+
+const parseLookupRows = (value) => {
+  if (!value) return [];
+
+  if (typeof value === "string") {
+    try {
+      return parseLookupRows(JSON.parse(value));
+    } catch {
+      return [];
+    }
+  }
+
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.data)) return value.data;
+  if (Array.isArray(value?.rows)) return value.rows;
+  if (Array.isArray(value?.dt1)) return value.dt1;
+  if (value?.result) return parseLookupRows(value.result);
+  if (typeof value === "object" && Object.keys(value).length > 0) return [value];
+
+  return [];
+};
+
+const extractLookupRows = (response) => {
+  const resultValue =
+    response?.data?.[0]?.result ??
+    response?.data?.[0]?.RESULT ??
+    response?.data?.result ??
+    response?.data?.RESULT ??
+    response?.result ??
+    response?.RESULT ??
+    response?.data ??
+    response;
+
+  return parseLookupRows(resultValue);
+};
+
 
 const BUDRA = () => {
   const loadedFromUrlRef = useRef(false);
   const detailRowsRef = useRef([]);
+  const addDropdownRef = useRef(null);
   const location = useLocation();
 
   const { companyInfo, currentUserRow, getAllTopHSDocRow } = useAuth();
@@ -162,7 +212,7 @@ const BUDRA = () => {
     branchCode: currentUserRow?.branchCode || "",
     branchName: currentUserRow?.branchName || "",
     budraDate: useGetCurrentDayV2(),
-    cutoffCode: "",
+    cutoffCode: deriveCutoffCode(useGetCurrentDayV2()),
     refNo: "",
     totalFromAmount: "0.00",
     totalToAmount: "0.00",
@@ -183,6 +233,11 @@ const BUDRA = () => {
     rcLookupModalOpen: false,
     acctLookupModalOpen: false,
     budgetItemLookupModalOpen: false,
+    showAddDropdown: false,
+    showOpenBudgetBalanceModal: false,
+    openBudgetBalanceRows: [],
+    openBudgetBalanceColumns: [],
+    addRowInsertIndex: null,
     showCancelModal: false,
     showAttachModal: false,
     showSignatoryModal: false,
@@ -226,6 +281,11 @@ const BUDRA = () => {
     rcLookupModalOpen,
     acctLookupModalOpen,
     budgetItemLookupModalOpen,
+    showAddDropdown,
+    showOpenBudgetBalanceModal,
+    openBudgetBalanceRows,
+    openBudgetBalanceColumns,
+    addRowInsertIndex,
     showCancelModal,
     showAttachModal,
     showSignatoryModal,
@@ -248,23 +308,38 @@ const BUDRA = () => {
   const isDocumentLocked = isViewDocument || isLockedStatus(displayStatus);
   const isFormDisabled = isDocumentLocked;
 
-  const getMax = (col) => useGetFieldLength(tblFieldArray, col) || 100;
+  useEffect(() => {
+    const nextCutoffCode = deriveCutoffCode(budraDate);
+    if (nextCutoffCode !== cutoffCode) {
+      updateState({ cutoffCode: nextCutoffCode });
+    }
+  }, [budraDate, cutoffCode]);
 
-  const detailColumnDefs = [
-    { key: "ln", label: "LN", width: 56, type: "ln" },
-    { key: "element", label: "Element", width: 110, type: "select", options: [{ value: "FROM", label: "FROM" }, { value: "TO", label: "TO" }] },
-    { key: "branchRef", label: "Budget Branch", width: 130, type: "lookup", lookupType: "branchRef" },
-    { key: "rcCode", label: "RC Code", width: 120, type: "lookup", lookupType: "rc" },
-    { key: "rcName", label: "RC Name", width: 220, readOnly: true },
-    { key: "acctCode", label: "Account Code", width: 140, type: "lookup", lookupType: "acct" },
-    { key: "acctName", label: "Account Name", width: 260, readOnly: true },
-    { key: "budgetCode", label: "Budget Code", width: 140, type: "lookup", lookupType: "budgetItem" },
-    { key: "budgetName", label: "Budget Name", width: 260, readOnly: true },
-    { key: "budgetBalance", label: "Budget Balance", width: 150, type: "amount" },
-    { key: "adjustmentAmount", label: "Adjustment Amount", width: 170, type: "amount" },
-    { key: "newBudgetBalance", label: "New Budget Balance", width: 170, type: "amount", readOnly: true },
-    { key: "remarks", label: "Remarks", width: 240, type: "remarks" },
-  ];
+  const getMax = (col) => useGetFieldLength(tblFieldArray, col) || 100;
+  const getElementValue = (value = "") =>
+    String(value || "").trim().toUpperCase() === "TO" ? "TO" : "FROM";
+  const isSourceRow = (row = {}) => getElementValue(row.element) === "FROM";
+  const isBudgetLockedElement = (row = {}) =>
+    (parseFormattedNumber(row.budgetBalance || 0) || 0) > 0;
+
+  const detailColumnDefs = useMemo(
+    () => [
+      { key: "ln", label: "LN", width: 56, type: "ln" },
+      { key: "element", label: "Element", width: 110, type: "select", options: [{ value: "FROM", label: "Source" }, { value: "TO", label: "Destination" }] },
+      { key: "branchRef", label: "Budget Branch", width: 130, type: "lookup", lookupType: "branchRef" },
+      { key: "rcCode", label: "RC Code", width: 120, type: "lookup", lookupType: "rc" },
+      { key: "rcName", label: "RC Name", width: 220, readOnly: true },
+      { key: "acctCode", label: "Account Code", width: 140, type: "lookup", lookupType: "acct" },
+      { key: "acctName", label: "Account Name", width: 260, readOnly: true },
+      { key: "budgetCode", label: "Budget Code", width: 140, type: "lookup", lookupType: "budgetItem" },
+      { key: "budgetName", label: "Budget Name", width: 260, readOnly: true },
+      { key: "budgetBalance", label: "Budget Balance", width: 150, type: "amount" },
+      { key: "adjustmentAmount", label: "Adjustment Amount", width: 170, type: "amount" },
+      { key: "newBudgetBalance", label: "New Budget Balance", width: 170, type: "amount", readOnly: true },
+      { key: "remarks", label: "Remarks", width: 240, type: "remarks" },
+    ],
+    []
+  );
 
   const {
     getColumnStyle,
@@ -292,14 +367,29 @@ const BUDRA = () => {
     (entry, sortKey) => (sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? "")
   );
 
+  useEffect(() => {
+    if (!showAddDropdown) return;
+
+    const handleClickOutside = (event) => {
+      if (addDropdownRef.current?.contains(event.target)) return;
+      updateState({ showAddDropdown: false });
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showAddDropdown]);
+
+  useEffect(() => {
+    if (isFormDisabled && showAddDropdown) {
+      updateState({ showAddDropdown: false });
+    }
+  }, [isFormDisabled, showAddDropdown]);
+
   const recalcRow = (row = {}) => {
-    const element = String(row.element || "FROM").toUpperCase() === "TO" ? "TO" : "FROM";
+    const element = getElementValue(row.element);
     const budgetBalance = parseFormattedNumber(row.budgetBalance || 0) || 0;
     const adjustmentAmount = parseFormattedNumber(row.adjustmentAmount || 0) || 0;
-    const newBudgetBalance =
-      element === "FROM"
-        ? budgetBalance - adjustmentAmount
-        : budgetBalance + adjustmentAmount;
+    const newBudgetBalance = budgetBalance + adjustmentAmount;
 
     return {
       ...row,
@@ -311,28 +401,33 @@ const BUDRA = () => {
   };
 
   const recalcTotals = (rows = []) => {
-    let fromAmount = 0;
-    let toAmount = 0;
+    let sourceAmount = 0;
+    let destinationAmount = 0;
+    let totalAdjustment = 0;
 
     (rows || []).forEach((row) => {
       const amount = parseFormattedNumber(row.adjustmentAmount || 0) || 0;
-      if (String(row.element || "").toUpperCase() === "TO") {
-        toAmount += amount;
+      if (amount < 0) {
+        sourceAmount += Math.abs(amount);
+      } else if (amount > 0) {
+        destinationAmount += amount;
       } else {
-        fromAmount += amount;
+        if (isSourceRow(row)) sourceAmount += 0;
+        else destinationAmount += 0;
       }
+      totalAdjustment += amount;
     });
 
     updateState({
-      totalFromAmount: formatNumber(fromAmount, decAmt),
-      totalToAmount: formatNumber(toAmount, decAmt),
-      totalNetAmount: formatNumber(toAmount - fromAmount, decAmt),
+      totalFromAmount: formatNumber(sourceAmount, decAmt),
+      totalToAmount: formatNumber(destinationAmount, decAmt),
+      totalNetAmount: formatNumber(totalAdjustment, decAmt),
     });
   };
 
   const createBlankRow = () =>
     recalcRow({
-      element: "FROM",
+      element: "TO",
       branchRef: branchCode || "",
       branchRefName: branchName || "",
       rcCode: "",
@@ -364,17 +459,19 @@ const BUDRA = () => {
   });
 
   const buildPayload = (rowsForSave = []) => {
-    const totalFrom = rowsForSave.reduce((sum, row) => {
-      return String(row.element || "").toUpperCase() === "FROM"
-        ? sum + (parseFormattedNumber(row.adjustmentAmount || 0) || 0)
-        : sum;
+    const totalSource = rowsForSave.reduce((sum, row) => {
+      const amount = parseFormattedNumber(row.adjustmentAmount || 0) || 0;
+      return amount < 0 ? sum + Math.abs(amount) : sum;
     }, 0);
 
-    const totalTo = rowsForSave.reduce((sum, row) => {
-      return String(row.element || "").toUpperCase() === "TO"
-        ? sum + (parseFormattedNumber(row.adjustmentAmount || 0) || 0)
-        : sum;
+    const totalDestination = rowsForSave.reduce((sum, row) => {
+      const amount = parseFormattedNumber(row.adjustmentAmount || 0) || 0;
+      return amount > 0 ? sum + amount : sum;
     }, 0);
+    const totalAdjustment = rowsForSave.reduce(
+      (sum, row) => sum + (parseFormattedNumber(row.adjustmentAmount || 0) || 0),
+      0
+    );
 
     return {
       branchCode: branchCode || "",
@@ -385,9 +482,9 @@ const BUDRA = () => {
       budraDate: budraDate || useGetCurrentDayV2(),
       cutoffCode: cutoffCode || "",
       refNo: refNo || "",
-      totalFromAmount: totalFrom,
-      totalToAmount: totalTo,
-      totalNetAmount: totalTo - totalFrom,
+      totalFromAmount: totalSource,
+      totalToAmount: totalDestination,
+      totalNetAmount: totalAdjustment,
       remarks: remarks || "",
       status: documentStatus || status || "",
       userCode: currentUserRow?.userCode || "",
@@ -423,13 +520,24 @@ const BUDRA = () => {
     recalcTotals(normalizedRows);
   };
 
-  const updateDetailRow = (rowIndex, updater) => {
+  const setDetailRowsWithoutNormalize = (rows = []) => {
+    detailRowsRef.current = rows;
+    updateState({ detailRows: rows });
+    recalcTotals(rows);
+  };
+
+  const updateDetailRow = (rowIndex, updater, normalize = true) => {
     const nextRows = [...(detailRowsRef.current || detailRows || [])];
     const currentRow = { ...(nextRows[rowIndex] || {}) };
     nextRows[rowIndex] =
       typeof updater === "function" ? updater(currentRow) : { ...currentRow, ...updater };
 
-    setDetailRows(nextRows);
+    if (normalize) {
+      setDetailRows(nextRows);
+      return;
+    }
+
+    setDetailRowsWithoutNormalize(nextRows);
   };
 
   const handleInsertBlankRow = (index = null) => {
@@ -440,6 +548,122 @@ const BUDRA = () => {
 
     currentRows.splice(insertIndex, 0, createBlankRow());
     setDetailRows(currentRows);
+  };
+
+  const mapOpenBudgetBalanceRow = (item = {}) =>
+    recalcRow({
+      element: item.element || "FROM",
+      branchRef:
+        item.branchRef ||
+        item.branch_ref ||
+        item.branchCode ||
+        item.branch_code ||
+        branchCode ||
+        "",
+      branchRefName:
+        item.branchRefName ||
+        item.branch_ref_name ||
+        item.branchName ||
+        item.branch_name ||
+        branchName ||
+        "",
+      rcCode: item.rcCode || item.rc_code || "",
+      rcName: item.rcName || item.rc_name || "",
+      acctCode: item.acctCode || item.acct_code || "",
+      acctName: item.acctName || item.acct_name || "",
+      budgetCode: item.budgetCode || item.budget_code || "",
+      budgetName: item.budgetName || item.budget_name || "",
+      budgetBalance: formatNumber(item.budgetBalance ?? item.budget_balance ?? 0, decAmt),
+      adjustmentAmount: formatNumber(item.adjustmentAmount ?? item.adjustment_amount ?? 0, decAmt),
+      newBudgetBalance: formatNumber(item.newBudgetBalance ?? item.new_budget_balance ?? item.budgetBalance ?? item.budget_balance ?? 0, decAmt),
+      remarks: item.remarks || "",
+    });
+
+  const handleOpenBudgetBalanceLookup = async (index = null) => {
+    if (isFormDisabled) return;
+
+    const isValid = await useSwalvalidateRequiredFields(
+      {
+        "Branch Code": branchCode,
+        Cutoff: cutoffCode,
+      },
+      "Open Budget Balance"
+    );
+
+    if (!isValid) return;
+
+    if (!/^\d{6}$/.test(String(cutoffCode || ""))) {
+      useSwalErrorAlert("Open Budget Balance", "Cutoff must be in YYYYMM format.");
+      return;
+    }
+
+    try {
+      updateState({ isLoading: true, showSpinner: true });
+
+      const response = await postRequest("lookupBUDOpenBalanceYTD", {
+          json_data: {
+            docDate: budraDate || "",
+            cutoffCode: cutoffCode || "",
+            branchCode: branchCode || "",
+            rcCode: "",
+            acctCode: "",
+            budgetCode: "",
+            positiveOnly: "Y",
+          },
+        });
+
+      const lookupRows = extractLookupRows(response).map((row, rowIndex) => ({
+        ...row,
+        groupId:
+          row?.groupId ||
+          [
+            row?.branchRef || row?.branchCode  || branchCode || "",
+            row?.rcCode ||  "",
+            row?.acctCode || "",
+            row?.budgetCode || "",
+            rowIndex + 1,
+          ].join("|") ||
+          String(rowIndex + 1),
+      }));
+
+      if (!lookupRows.length) {
+        useSwalErrorAlert("Open Budget Balance", "No open budget balance records were found.");
+        return;
+      }
+
+      const colConfig = await useSelectedHSColConfig(
+        "lookupBUDOpenBalanceYTD",
+        currentUserRow?.userCode || ""
+      );
+
+      updateState({
+        showOpenBudgetBalanceModal: true,
+        openBudgetBalanceRows: lookupRows,
+        openBudgetBalanceColumns: Array.isArray(colConfig) ? colConfig : [],
+        addRowInsertIndex: index,
+      });
+    } catch (error) {
+      console.error("Failed to load open budget balance lookup:", error);
+      useSwalErrorAlert(
+        "Open Budget Balance",
+        error?.message || "Unable to load open budget balance records."
+      );
+      updateState({
+        openBudgetBalanceRows: [],
+        openBudgetBalanceColumns: [],
+        addRowInsertIndex: null,
+      });
+    } finally {
+      updateState({ isLoading: false, showSpinner: false });
+    }
+  };
+
+  const handleAddOption = async (index = null) => {
+    if (isFormDisabled) return;
+    updateState({
+      showAddDropdown: !showAddDropdown,
+      addRowInsertIndex: index,
+    });
   };
 
   const handleDeleteRow = async (index) => {
@@ -470,7 +694,12 @@ const BUDRA = () => {
         };
       }
 
-      if (["budgetBalance", "adjustmentAmount", "newBudgetBalance"].includes(field)) {
+      if (field === "element") {
+        const nextElement = getElementValue(value);
+        return recalcRow({ ...row, element: nextElement });
+      }
+
+      if (["budgetBalance", "newBudgetBalance"].includes(field)) {
         const nextValue = commit
           ? formatNumber(parseFormattedNumber(value || 0) || 0, decAmt)
           : sanitizeNumeric(value);
@@ -478,8 +707,45 @@ const BUDRA = () => {
         return { ...row, [field]: nextValue };
       }
 
+      if (field === "adjustmentAmount") {
+        const nextRawValue = commit
+          ? parseFormattedNumber(value || 0) || 0
+          : sanitizeNumeric(value);
+
+        if (!commit) {
+          return {
+            ...row,
+            adjustmentAmount: nextRawValue,
+            newBudgetBalance: nextRawValue === ""
+              ? row.newBudgetBalance
+              : formatNumber((parseFormattedNumber(row.budgetBalance || 0) || 0) + (parseFormattedNumber(nextRawValue || 0) || 0), decAmt),
+          };
+        }
+
+        const budgetBalance = parseFormattedNumber(row.budgetBalance || 0) || 0;
+        const isSource = isSourceRow(row);
+        let finalAmount = Number(nextRawValue) || 0;
+
+        if (isSource && finalAmount > 0) {
+          useSwalErrorAlert("Adjustment Amount", "Positive adjustment amount is not allowed for Source rows.");
+          finalAmount = 0;
+        }
+
+        if (finalAmount < 0 && budgetBalance <= 0) {
+          useSwalErrorAlert("Adjustment Amount", "Negative adjustment amount is not allowed when Budget Balance is zero.");
+          finalAmount = 0;
+        }
+
+        if (finalAmount < 0 && Math.abs(finalAmount) > budgetBalance) {
+          useSwalErrorAlert("Adjustment Amount", "Negative adjustment amount cannot exceed Budget Balance.");
+          finalAmount = budgetBalance > 0 ? -budgetBalance : 0;
+        }
+
+        return recalcRow({ ...row, adjustmentAmount: finalAmount });
+      }
+
       return { ...row, [field]: value };
-    });
+    }, commit);
   };
 
   const openHeaderLookup = (type) => {
@@ -594,6 +860,40 @@ const BUDRA = () => {
     });
   };
 
+  const handleCloseOpenBudgetBalanceLookup = (selectedItems) => {
+    const selectedRecords = Array.isArray(selectedItems?.records)
+      ? selectedItems.records
+      : selectedItems?.records
+        ? [selectedItems.records]
+        : [];
+
+    if (!selectedRecords.length) {
+      updateState({
+        showOpenBudgetBalanceModal: false,
+        openBudgetBalanceRows: [],
+        openBudgetBalanceColumns: [],
+        addRowInsertIndex: null,
+      });
+      return;
+    }
+
+    const mappedRows = selectedRecords.map((record) => mapOpenBudgetBalanceRow(record));
+    const currentRows = [...(detailRowsRef.current || detailRows || [])];
+    const insertIndex = Number.isInteger(addRowInsertIndex)
+      ? addRowInsertIndex + 1
+      : currentRows.length;
+
+    currentRows.splice(insertIndex, 0, ...mappedRows);
+    setDetailRows(currentRows);
+
+    updateState({
+      showOpenBudgetBalanceModal: false,
+      openBudgetBalanceRows: [],
+      openBudgetBalanceColumns: [],
+      addRowInsertIndex: null,
+    });
+  };
+
   const handleRemarksCell = (index, _field, value) => {
     handleDetailRowChange(index, "remarks", value);
   };
@@ -611,6 +911,7 @@ const BUDRA = () => {
     const columnKey = column.key;
     const columnWidth = getDetailFallbackWidth(columnKey);
     const style = getDetailCellStyle(columnKey, columnWidth);
+    const elementLabel = isSourceRow(row) ? "Source" : "Destination";
 
     const focusNextDetailCell = (field) => {
       focusNextRowInput(index, field, {
@@ -681,9 +982,9 @@ const BUDRA = () => {
             className="w-full global-tran-td-inputclass-ui pr-6"
             value={row[field] || ""}
             readOnly
-            disabled={isFormDisabled}
+            disabled={isFormDisabled || isSourceRow(row)}
           />
-          {!isFormDisabled && (
+          {!isFormDisabled && !isSourceRow(row) && (
             <FontAwesomeIcon
               icon={faMagnifyingGlass}
               className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
@@ -745,20 +1046,13 @@ const BUDRA = () => {
     if (column.type === "select") {
       return (
         <td key={columnKey} className="global-tran-td-ui" style={style}>
-          <select
+          <input
             id={`${column.key}-${index}`}
             className="w-full global-tran-td-inputclass-ui"
-            value={row[column.key] || ""}
+            value={elementLabel}
+            readOnly
             disabled={isFormDisabled}
-            onChange={(e) => handleDetailRowChange(index, column.key, e.target.value, true)}
-            onKeyDown={(e) => handleGridKeyDown(e, column.key)}
-          >
-            {(column.options || []).map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          />
         </td>
       );
     }
@@ -810,13 +1104,12 @@ const BUDRA = () => {
       return false;
     }
 
-    let fromAmount = 0;
-    let toAmount = 0;
+    let totalAdjustment = 0;
 
     for (let index = 0; index < rows.length; index += 1) {
       const row = rows[index] || {};
       const lineNo = index + 1;
-      const element = String(row.element || "").toUpperCase();
+      const element = getElementValue(row.element);
 
       const isValid = await useSwalvalidateRequiredFields(
         {
@@ -835,237 +1128,213 @@ const BUDRA = () => {
       const balance = parseFormattedNumber(row.budgetBalance || 0) || 0;
 
       if (!["FROM", "TO"].includes(element)) {
-        useSwalErrorAlert("Validation Error", `Line ${lineNo}: Element must be FROM or TO.`);
+        useSwalErrorAlert("Validation Error", `Line ${lineNo}: Element must be Source or Destination.`);
         return false;
       }
 
-      if (adjustment <= 0) {
-        useSwalErrorAlert("Validation Error", `Line ${lineNo}: Adjustment Amount must be greater than zero.`);
+      if (adjustment === 0) {
+        useSwalErrorAlert("Validation Error", `Line ${lineNo}: Adjustment Amount must not be zero.`);
         return false;
       }
 
-      if (element === "FROM" && adjustment > balance) {
-        useSwalErrorAlert("Validation Error", `Line ${lineNo}: FROM Adjustment Amount cannot exceed Budget Balance.`);
+      if (element === "FROM" && adjustment >= 0) {
+        useSwalErrorAlert("Validation Error", `Line ${lineNo}: Source Adjustment Amount must be negative.`);
         return false;
       }
 
-      if (element === "FROM") fromAmount += adjustment;
-      if (element === "TO") toAmount += adjustment;
+      if (element === "TO" && adjustment <= 0) {
+        useSwalErrorAlert("Validation Error", `Line ${lineNo}: Destination Adjustment Amount must be positive.`);
+        return false;
+      }
+
+      if (adjustment < 0 && balance <= 0) {
+        useSwalErrorAlert("Validation Error", `Line ${lineNo}: Negative Adjustment Amount is not allowed when Budget Balance is zero.`);
+        return false;
+      }
+
+      if (adjustment < 0 && Math.abs(adjustment) > balance) {
+        useSwalErrorAlert("Validation Error", `Line ${lineNo}: Negative Adjustment Amount cannot exceed Budget Balance.`);
+        return false;
+      }
+
+      totalAdjustment += adjustment;
     }
 
-    if (fromAmount <= 0 || toAmount <= 0) {
-      useSwalErrorAlert("Validation Error", "Budget Realignment requires at least one FROM row and one TO row.");
+    if (Math.abs(totalAdjustment) > 0.009) {
+      useSwalErrorAlert("Validation Error", "Adjustment Total Amount must be equal to 0.00.");
       return false;
     }
-
-    if (Math.abs(fromAmount - toAmount) > 0.009) {
-      useSwalErrorAlert("Validation Error", "Total FROM Amount must be equal to Total TO Amount.");
-      return false;
-    }
-
-
     return true;
   };
 
-  const handleActivityOption = async () => {
+
+
+
+
+  const handleActivityOption = async (action) => {
     if (isFormDisabled) return;
 
     const rowsForSave = (detailRowsRef.current || detailRows || []).map((row) => recalcRow(row));
-
-    const headerValid = await useSwalvalidateRequiredFields(
-      {
-        "Branch Code": branchCode,
-        "Budget Realignment Date": budraDate,
-        "Cutoff": cutoffCode,
-      },
-      "Budget Realignment"
-    );
-
-    if (!headerValid) return;
-
-    if (!/^\d{6}$/.test(String(cutoffCode || ""))) {
-      useSwalErrorAlert("Validation Error", "Cutoff must be in YYYYMM format.");
-      return;
-    }
-
-
     const detailValid = await validateRows(rowsForSave);
     if (!detailValid) return;
 
-    updateState({ isLoading: true, showSpinner: true });
+    if (documentStatus === "") {
+      updateState({ isLoading: true, showSpinner: true });
 
-    try {
-      const payloadData = buildPayload(rowsForSave);
+      try {     
+        const totalFromAmount = rowsForSave.reduce((sum, row) => {
+        const amount = parseFormattedNumber(row.adjustmentAmount || 0) || 0;
+        return String(row.element || "").toUpperCase() === "FROM" ? sum + amount : sum;
+      }, 0);
 
-      const response = await postRequest(
-        `upsert${docType}`,
-        JSON.stringify({ json_data: payloadData })
-      );
+      const totalToAmount = rowsForSave.reduce((sum, row) => {
+        const amount = parseFormattedNumber(row.adjustmentAmount || 0) || 0;
+        return String(row.element || "").toUpperCase() === "TO" ? sum + amount : sum;
+      }, 0);
 
-      const responseData = response?.data?.[0] || response?.data?.data?.[0] || response?.data || {};
-      const returnedErrorMsg = String(
-        responseData.errorMsg ||
-          responseData.errormsg ||
-          responseData.message ||
-          ""
-      ).trim();
-      const returnedErrorCount = Number(responseData.errorCount ?? responseData.errorcount ?? 0);
+    const budraData = {
+      branchCode: branchCode || "",
+      budraNo: documentNo || "",
+      budraId: documentID || "",
+      budraDate: budraDate || useGetCurrentDayV2(),
+      cutoffCode: cutoffCode || "",
+      refNo: refNo || "",
+      totalFromAmount,
+      totalToAmount,
+      totalNetAmount: totalToAmount - totalFromAmount,
+      remarks: remarks || "",
+      status: documentStatus || status || "",
+      userCode: currentUserRow?.userCode || "",
 
-      if (returnedErrorMsg || returnedErrorCount > 0) {
-        useSwalErrorAlert("Validation Failed", returnedErrorMsg || "Unable to save transaction.");
-        return;
-      }
-
-      const responseDocNo =
-        responseData.documentNo ||
-        responseData.docNo ||
-        responseData.budraNo ||
-        documentNo;
-
-      const responseDocId =
-        responseData.documentID ||
-        responseData.docId ||
-        responseData.budraId ||
-        documentID;
-
-      if (!responseDocNo && !responseDocId) {
-        useSwalErrorAlert("Save Error", "Unexpected save response.");
-        return;
-      }
-
-      if (responseDocNo || responseDocId) {
-        await fetchTranData(responseDocNo, state.branchCode, responseDocId);
-        const isZero = Number(noReprints) === 0;
-        const onSaveAndPrint = isZero
-          ? () => updateState({ showSignatoryModal: true })
-          : () => handleSaveAndPrint(responseDocId);
-
-        useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
-      }
-
-      updateState({
-        isDocNoDisabled: true,
-        isFetchDisabled: true,
-      });
-    } catch (error) {
-      const errorMessage =
-        error?.response?.data?.[0]?.errorMsg ||
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        error?.message ||
-        "Unable to save transaction.";
-
-      useSwalErrorAlert("Save Error", errorMessage);
-    } finally {
-      updateState({ isLoading: false, showSpinner: false });
-    }
-  };
-
-  const fetchTranData = async (docNoParam = "", branchCodeParam = "", key = "") => {
-    const resetFetchState = () => {
-      updateState({
-        documentNo: "",
-        documentID: "",
-        isDocNoDisabled: false,
-        isFetchDisabled: false,
-      });
-
-      setDetailRows([]);
+      dt1: rowsForSave.map((row, index) => ({
+        lnNo: index + 1,
+        lineNo: index + 1,
+        branchCode: branchCode || "",
+        element: row.element || "",
+        cutoffCode: cutoffCode || "",
+        branchRef: row.branchRef || "",
+        rcCode: row.rcCode || "",
+        rcName: row.rcName || "",
+        acctCode: row.acctCode || "",
+        acctName: row.acctName || "",
+        budgetCode: row.budgetCode || "",
+        budgetName: row.budgetName || "",
+        budgetBalance: parseFormattedNumber(row.budgetBalance || 0) || 0,
+        adjustmentAmount: parseFormattedNumber(row.adjustmentAmount || 0) || 0,
+        newBudgetBalance: parseFormattedNumber(row.newBudgetBalance || 0) || 0,
+        remarks: row.remarks || "",
+      })),
     };
 
-    updateState({ isLoading: true, showSpinner: true });
 
-    try {
-      let formattedDocNo = String(docNoParam || "").trim();
 
-      if (formattedDocNo && /^\d+$/.test(formattedDocNo)) {
-        formattedDocNo = formattedDocNo.padStart(Number(state.documentDocLen || 8), "0");
+    const response = await useTransactionUpsert(docType,budraData,updateState,"budraId","budraNo");
+
+      if (response) {
+          const responseDocNo =  response.data[0].budraNo;
+          const responseDocId =  response.data[0].budraId;
+          await fetchTranData(responseDocNo,branchCode);
+
+        const isZero = Number(noReprints) === 0;
+                        const onSaveAndPrint =
+                          isZero
+                            ? () => updateState({ showSignatoryModal: true })                  
+                            : () => handleSaveAndPrint(responseDocId); 
+                        useSwalshowSaveSuccessDialog(
+                          handleReset,          
+                          onSaveAndPrint       
+                        );
       }
-
-      const response = await fetchDataJson("getBUDRA", {
-        documentNo: formattedDocNo,
-        docNo: formattedDocNo,
-        branchCode: branchCodeParam || state.branchCode || "",
-        documentID: key || "",
-        docId: key || "",
-        docType,
-      });
-
-      const data =
-        response?.data?.[0]?.result
-          ? JSON.parse(response.data[0].result)
-          : response?.data?.result
-            ? JSON.parse(response.data.result)
-            : response?.data?.[0] || response?.data || response || {};
-
-      const header = Array.isArray(data) ? data[0] || {} : data;
-      const fetchedDocumentID = header?.documentID || header?.docId || header?.budraId || "";
-      const fetchedDocumentNo = header?.documentNo || header?.docNo || header?.budraNo || "";
-
-      if (!fetchedDocumentID && !fetchedDocumentNo) {
-        Swal.fire({
-          icon: "info",
-          title: "No Records Found",
-          text: "Transaction does not exist.",
-        });
-        resetFetchState();
-        return;
+      updateState({ isDocNoDisabled: true, isFetchDisabled: true });  
+      } catch (error) {
+        console.error(`Error during ${action}:`, error);
+      } finally {
+        updateState({ isLoading: false, showSpinner: false });
       }
-
-      const rawDetails =
-        header?.dt1 ||
-        header?.details ||
-        header?.detailRows ||
-        data?.dt1 ||
-        [];
-
-      const detailRowsFromFetch = (Array.isArray(rawDetails) ? rawDetails : []).map((item) =>
-        recalcRow(mapFetchedRow(item))
-      );
-
-      setDetailRows(detailRowsFromFetch);
-
-      updateState({
-        documentStatus: getStatusCode(header.status || header.budraStatus || header.budra_status),
-        status: getStatusCode(header.status || header.budraStatus || header.budra_status),
-        originalDocStatus: getStatusCode(header.status || header.budraStatus || header.budra_status),
-        appLevel: header.appLevel || 0,
-
-        documentID: fetchedDocumentID,
-        documentNo: fetchedDocumentNo,
-
-        branchCode: header.branchCode || header.branch_code || "",
-        branchName: header.branchName || header.branch_name || "",
-        budraDate: useformatToDatev2(header.budraDate || header.budra_date) || toDateValue(header.budraDate || header.budra_date),
-        cutoffCode: header.cutoffCode || header.cutoff_code || "",
-        refNo: header.refNo || header.ref_no || "",
-        totalFromAmount: formatNumber(header.totalFromAmount ?? header.total_from_amount ?? 0, decAmt),
-        totalToAmount: formatNumber(header.totalToAmount ?? header.total_to_amount ?? 0, decAmt),
-        totalNetAmount: formatNumber(header.totalNetAmount ?? header.total_net_amount ?? 0, decAmt),
-
-        remarks: header.remarks || "",
-        noReprints: header.noReprints ?? "0",
-        detailRowsApp: Array.isArray(header.dtApp)
-          ? header.dtApp
-          : header.dtApp
-            ? [header.dtApp]
-            : [],
-
-        isDocNoDisabled: true,
-        isFetchDisabled: true,
-      });
-    } catch (error) {
-      console.error("Error fetching Budget Realignment:", error);
-      Swal.fire({
-        icon: "error",
-        title: "Fetch Error",
-        text: error?.message || "Unable to fetch Budget Realignment.",
-      });
-      resetFetchState();
-    } finally {
-      updateState({ isLoading: false, showSpinner: false });
     }
   };
+
+
+
+
+
+
+  const fetchTranData = async (documentNo, branchCode,direction='') => {
+  const resetFetchState = () => {
+    updateState({
+      documentNo: "",
+      documentID: "",
+      isDocNoDisabled: false,
+      isFetchDisabled: false,
+    });
+    setDetailRows([]);
+  };
+
+  updateState({ isLoading: true, showSpinner: true });
+
+  try {
+   
+     const data = await useFetchTranData(documentNo, branchCode,docType,"budraNo",direction);
+    if (!data?.budraId && !data?.budraNo) {
+      Swal.fire({
+        icon: "info",
+        title: "No Records Found",
+        text: "Transaction does not exist.",
+      });
+      resetFetchState();
+      return;
+    }
+
+    const detailRowsFromFetch = (data.dt1 || []).map((item) =>
+      recalcRow(mapFetchedRow(item))
+    );
+
+    setDetailRows(detailRowsFromFetch);
+    const documentStatus = getStatusCode(data.status || data.budraStatus);
+
+    updateState({
+      documentStatus,
+      status: documentStatus,
+      originalDocStatus: documentStatus,
+      appLevel: data.appLevel || 0,
+
+      documentID: data.budraId || "",
+      documentNo: data.budraNo || "",
+
+      branchCode: data.branchCode || "",
+      branchName: data.branchName || "",
+      budraDate: useformatToDatev2(data.budraDate || data.docDate) || toDateValue(data.budraDate || data.docDate),
+      cutoffCode: data.cutoffCode || "",
+      refNo: data.refNo || "",
+      totalFromAmount: formatNumber(data.totalFromAmount ?? 0, decAmt),
+      totalToAmount: formatNumber(data.totalToAmount ?? 0, decAmt),
+      totalNetAmount: formatNumber(data.totalNetAmount ?? 0, decAmt),
+
+      remarks: data.remarks || "",
+      noReprints: data.noReprints ?? "0",
+      detailRowsApp: Array.isArray(data.dtApp) ? data.dtApp : data.dtApp ? [data.dtApp] : [],
+
+      isDocNoDisabled: true,
+      isFetchDisabled: true,
+    });
+  } catch (error) {
+    console.error("Error fetching Budget Realignment:", error);
+    Swal.fire({
+      icon: "error",
+      title: "Fetch Error",
+      text: error?.message || "Unable to fetch Budget Realignment.",
+    });
+    resetFetchState();
+  } finally {
+    updateState({ isLoading: false, showSpinner: false });
+  }
+};
+  
+
+
+ 
+
+
 
   const handleReset = () => {
     clearAllSorting();
@@ -1092,7 +1361,7 @@ const BUDRA = () => {
       branchCode: defaultBranchCode,
       branchName: defaultBranchName,
       budraDate: today,
-      cutoffCode: "",
+      cutoffCode: deriveCutoffCode(today),
       refNo: "",
       totalFromAmount: "0.00",
       totalToAmount: "0.00",
@@ -1111,6 +1380,11 @@ const BUDRA = () => {
       rcLookupModalOpen: false,
       acctLookupModalOpen: false,
       budgetItemLookupModalOpen: false,
+      showAddDropdown: false,
+      showOpenBudgetBalanceModal: false,
+      openBudgetBalanceRows: [],
+      openBudgetBalanceColumns: [],
+      addRowInsertIndex: null,
       showCancelModal: false,
       showAttachModal: false,
       showSignatoryModal: false,
@@ -1170,6 +1444,7 @@ const BUDRA = () => {
       status: "",
       originalDocStatus: "",
       budraDate: useGetCurrentDayV2(),
+      cutoffCode: deriveCutoffCode(useGetCurrentDayV2()),
       noReprints: "0",
       appLevel: 0,
       detailRows: copiedRows,
@@ -1455,11 +1730,12 @@ const BUDRA = () => {
           </div>
 
           <div
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols- gap-4 rounded-lg relative"
+            className="grid grid-cols-1 gap-4 rounded-lg relative px-2"
             id="budra_hd"
           >
-            <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="global-tran-textbox-group-div-ui">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-4 rounded-lg relative items-start">
+              {/* Row 1: Branch | Reference No. | Blank */}
+              <div className="w-full">
                 <FieldRenderer
                   id="branchName"
                   label="Branch"
@@ -1474,7 +1750,24 @@ const BUDRA = () => {
                     openHeaderLookup("headerBranch")
                   }
                 />
+              </div>
 
+              <div className="w-full">
+                <FieldRenderer
+                  id="refNo"
+                  label="Reference No."
+                  type="text"
+                  value={refNo || ""}
+                  disabled={isFormDisabled}
+                  maxLength={getMax("REF_NO")}
+                  onChange={(val) => updateState({ refNo: val })}
+                />
+              </div>
+
+              <div className="hidden xl:block" />
+
+              {/* Row 2: Doc No | Tran Type | Blank */}
+              <div className="w-full">
                 <FieldRenderer
                   id="docNo"
                   label="BUDRA No."
@@ -1496,45 +1789,9 @@ const BUDRA = () => {
                     }}
                   }
                 />
-
-                <div className="relative w-full">
-                  <div className={`flex items-stretch global-ref-textbox-ui ${!isFormDisabled ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"}`}>
-                    <DateFormatInput
-                      id="budraDate"
-                      className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
-                      value={budraDate || ""}
-                      disabled={isFormDisabled}
-                      updateState={(next) => updateState({ budraDate: next.budraDate ?? next.value ?? next })}
-                    />
-                  </div>
-                  <label htmlFor="budraDate" className="global-ref-floating-label global-ref-label-enabled">
-                    BUDRA Date
-                  </label>
-                </div>
               </div>
 
-              <div className="global-tran-textbox-group-div-ui">
-                <FieldRenderer
-                  id="cutoffCode"
-                  label="Cutoff"
-                  required
-                  type="text"
-                  value={cutoffCode || ""}
-                  disabled={isFormDisabled}
-                  maxLength={6}
-                  onChange={(val) => updateState({ cutoffCode: String(val || "").replace(/[^0-9]/g, "").slice(0, 6) })}
-                />
-
-                <FieldRenderer
-                  id="refNo"
-                  label="Reference No."
-                  type="text"
-                  value={refNo || ""}
-                  disabled={isFormDisabled}
-                  maxLength={getMax("REF_NO")}
-                  onChange={(val) => updateState({ refNo: val })}
-                />
-
+              <div className="w-full">
                 <FieldRenderer
                   id="tranType"
                   label="Tran Type"
@@ -1546,8 +1803,30 @@ const BUDRA = () => {
                 />
               </div>
 
-              <div className="col-span-full">
-                <div className="relative p-2">
+              <div className="hidden xl:block" />
+
+              {/* Row 3: Doc Date | Blank | Blank */}
+              <div className="relative w-full">
+                <input type="hidden" id="cutoffCode" value={cutoffCode || ""} readOnly />
+                <div className={`flex items-stretch global-ref-textbox-ui ${!isFormDisabled ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"}`}>
+                  <DateFormatInput
+                    id="budraDate"
+                    className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
+                    value={budraDate || ""}
+                    disabled={isFormDisabled}
+                    updateState={(next) => updateState({ budraDate: next.budraDate ?? next.value ?? next })}
+                  />
+                </div>
+                <label htmlFor="budraDate" className="global-ref-floating-label global-ref-label-enabled">
+                  BUDRA Date
+                </label>
+              </div>
+
+              <div className="hidden md:block" />
+              <div className="hidden xl:block" />
+
+              <div className="md:col-span-2 xl:col-span-3 w-full">
+                <div className="relative">
                   <textarea
                     id="remarks"
                     placeholder=""
@@ -1614,13 +1893,13 @@ const BUDRA = () => {
                           style={transactionActionsCellStyle}
                         >
                           <div className="flex items-center justify-center gap-1">
-                            <button
-                              type="button"
-                              className="global-tran-td-button-add-ui"
-                              onClick={() => handleInsertBlankRow(originalIndex)}
-                            >
-                              <FontAwesomeIcon icon={faPlus} />
-                            </button>
+                              <button
+                                type="button"
+                                className="global-tran-td-button-add-ui"
+                                onClick={() => handleInsertBlankRow(originalIndex)}
+                              >
+                                <FontAwesomeIcon icon={faPlus} />
+                              </button>
 
                             <button
                               type="button"
@@ -1642,25 +1921,81 @@ const BUDRA = () => {
           </div>
 
           <div className="global-tran-tab-footer-main-div-ui">
-            <div className="global-tran-tab-footer-button-div-ui">
-              <button
-                type="button"
-                onClick={() => handleInsertBlankRow()}
-                disabled={isFormDisabled}
-                className={`global-tran-tab-footer-button-add-ui ${isFormDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
-                style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
-              >
-                <FontAwesomeIcon icon={faPlus} className="mr-2" />
-                Add
-              </button>
+          <div className="global-tran-tab-footer-button-div-ui">
+              {!isFormDisabled && (
+                <div ref={addDropdownRef} className="relative inline-block">
+                  {showAddDropdown && (
+                    <div className="absolute bottom-[110%] left-0 mb-3 z-[9999] w-[300px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur-sm dark:border-slate-700 dark:bg-slate-800">
+                      <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-700">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+                          Add Budget Detail
+                        </div>
+                      </div>
+
+                      <div className="p-2">
+                        <button
+                          type="button"
+                          className="flex w-full items-center justify-start gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
+                          onClick={() => {
+                            const insertIndex = addRowInsertIndex;
+                            updateState({ showAddDropdown: false, addRowInsertIndex: null });
+                            handleInsertBlankRow(insertIndex);
+                          }}
+                        >
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                            <FontAwesomeIcon icon={faPlus} />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate leading-5">Add Row</div>
+                            <div className="truncate text-[11px] font-normal text-slate-400 dark:text-slate-500">
+                              Insert a blank line
+                            </div>
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="mt-1 flex w-full items-center justify-start gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-blue-700 transition-all duration-150 hover:bg-blue-50 hover:text-blue-900 dark:text-blue-300 dark:hover:bg-slate-700"
+                          onClick={async () => {
+                            const insertIndex = addRowInsertIndex;
+                            updateState({ showAddDropdown: false });
+                            await handleOpenBudgetBalanceLookup(insertIndex);
+                          }}
+                        >
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-slate-700 dark:text-blue-300">
+                            <FontAwesomeIcon icon={faMagnifyingGlass} />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate leading-5 whitespace-nowrap">Open Budget Balance</div>
+                            <div className="truncate text-[11px] font-normal text-slate-400 dark:text-slate-500">
+                              Select existing open balances
+                            </div>
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => handleAddOption()}
+                    disabled={isFormDisabled}
+                    className={`global-tran-tab-footer-button-add-ui ${isFormDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                    style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
+                  >
+                    <FontAwesomeIcon icon={faPlus} className="mr-2" />
+                    Add
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="global-tran-tab-footer-total-main-div-ui grid gap-1 grid-cols-[auto_auto]">
-              <div className="global-tran-tab-footer-total-label-ui">Total FROM Amount:</div>
+              <div className="global-tran-tab-footer-total-label-ui">Total Source Amount:</div>
               <div className="global-tran-tab-footer-total-value-ui">{totalFromAmount}</div>
-              <div className="global-tran-tab-footer-total-label-ui">Total TO Amount:</div>
+              <div className="global-tran-tab-footer-total-label-ui">Total Destination Amount:</div>
               <div className="global-tran-tab-footer-total-value-ui">{totalToAmount}</div>
-              <div className="global-tran-tab-footer-total-label-ui">Total Net Amount:</div>
+              <div className="global-tran-tab-footer-total-label-ui">Total Adjustment Amount:</div>
               <div className="global-tran-tab-footer-total-value-ui">{totalNetAmount}</div>
               <div className="global-tran-tab-footer-total-label-ui">Total Rows:</div>
               <div className="global-tran-tab-footer-total-value-ui">{detailRows.length}</div>
@@ -1704,7 +2039,7 @@ const BUDRA = () => {
         <COAMastLookupModal
           isOpen={acctLookupModalOpen}
           title="Select Account Code"
-          customParam="ActiveAll"
+          customParam="REQ_BUDGET"
           onClose={handleCloseAccountLookup}
         />
       )}
@@ -1715,7 +2050,29 @@ const BUDRA = () => {
           title="Search Budget Codes"
           activeOnly={true}
           groupOnly={false}
+          customParam="NonGroup"
           onClose={handleCloseBudgetItemLookup}
+        />
+      )}
+
+      {showOpenBudgetBalanceModal && (
+        <GlobalLookupModalv1
+          isOpen={showOpenBudgetBalanceModal}
+          title="Open Budget Balance"
+          data={openBudgetBalanceRows}
+          endpoint={openBudgetBalanceColumns}
+          btnCaption="Get Selected Budget"
+          idKey="groupId"
+          onClose={handleCloseOpenBudgetBalanceLookup}
+          onCancel={() =>
+            updateState({
+              showOpenBudgetBalanceModal: false,
+              openBudgetBalanceRows: [],
+              openBudgetBalanceColumns: [],
+              addRowInsertIndex: null,
+            })
+          }
+          singleSelect={false}
         />
       )}
 
