@@ -104,15 +104,19 @@ export const useTransactionUpsert = async (docCode, glData, updateState, idKey, 
         console.log(JSON.stringify(payload))
         const response = await postRequest("upsert" + docCode, JSON.stringify(payload));
 
-        if (response?.status === 'success' && response.data && response.data.length > 0) {
-            const resultData = response.data[0];
+        const legacySuccess = response?.status === 'success' && Array.isArray(response.data) && response.data.length > 0;
+        const normalizedSuccess = response?.success === true;
+
+        if (legacySuccess || normalizedSuccess) {
+            const resultData = legacySuccess ? response.data[0] : response;
             const returnedErrorCount = resultData['errorCount'];
-            const returnedErrorMsg = resultData['errorMsg'];
+            const returnedErrorMsg = resultData['errorMsg'] || resultData['message'];
 
             if (returnedErrorMsg && returnedErrorCount > 0) {
                 if (returnedErrorMsg.includes("Unbalanced")) {
-                    const tDebit = glData.dt2.reduce((sum, row) => sum + (parseFloat(row.debit) || 0), 0);
-                    const tCredit = glData.dt2.reduce((sum, row) => sum + (parseFloat(row.credit) || 0), 0);
+                    const glRows = Array.isArray(glData.dt2) ? glData.dt2 : [];
+                    const tDebit = glRows.reduce((sum, row) => sum + (parseFloat(row.debit) || 0), 0);
+                    const tCredit = glRows.reduce((sum, row) => sum + (parseFloat(row.credit) || 0), 0);
 
                     useSwalErrorAlert(
                         "Unbalanced Debit/Credit",
@@ -132,8 +136,14 @@ export const useTransactionUpsert = async (docCode, glData, updateState, idKey, 
                     isFetchDisabled: true
                 });
             }
-            return response;
+            return legacySuccess
+                ? response
+                : { ...response, status: 'success', data: [resultData] };
         } 
+
+        if (response?.success === false || response?.status === 'error') {
+            useSwalErrorAlert("Validation Failed", response?.message || "Unable to save transaction.");
+        }
         return null;
     } catch (error) {
         useSwalErrorAlert("Connection Error", error.message);

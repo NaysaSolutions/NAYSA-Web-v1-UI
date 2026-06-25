@@ -138,9 +138,17 @@ const formatCellValue = (value, config) => {
         C: { text: "CLOSED", color: "text-blue-800" },
         F: { text: "FINALIZED", color: "text-blue-800" },
         X: { text: "CANCELLED", color: "text-red-600" },
+        AC: { text: "ACCOUNTING CLOSED", color: "text-blue-800" },
+        R: { text: "RELEASED", color: "text-blue-800" },
         "": { text: "OPEN", color: "text-black" },
       };
-      const sty = map[value] || map[""];
+      if (config?.isWoTab) {
+        map.AC = { text: "ACCOUNTING CLOSED", color: "text-blue-800" };
+        map.R = { text: "RELEASED", color: "text-blue-800" };
+      }
+      const normalizedValue = String(value ?? "").toUpperCase();
+      const sty = map[normalizedValue];
+      if (!sty) return String(value);
       return <span className={sty.color + " font-semibold"}>{sty.text}</span>;
     }
 
@@ -179,6 +187,8 @@ const AllTranHistory = (props) => {
     cacheKey: cacheKeyProp,
     historyExportName: historyExportNameProp,
     isActive = true,
+    quantityDecimals,
+    amountDecimals,
   } = props || {};
 
   const didInitRef = useRef(false);
@@ -215,15 +225,19 @@ const AllTranHistory = (props) => {
     { value: "C", label: "CLOSED" },
     { value: "", label: "OPEN" },
     { value: "X", label: "CANCELLED" },
+    { value: "AC", label: "ACCOUNTING CLOSED" },
+    { value: "R", label: "RELEASED" },
   ];
 
-  const restrictedTabs = ["JO_", "PO_", "PR_","SO_"];
+  const restrictedTabs = ["JO_", "PO_", "PR_","SO_","WO_"];
   const isRestricted = restrictedTabs.some((prefix) => activeTab?.includes(prefix));
+  const isWoTab = activeTab?.includes("WO_");
 
   const statusOptions =
     Array.isArray(statusOptionsProp) && statusOptionsProp.length
       ? statusOptionsProp
       : fallbackStatusOptions.filter((opt) => {
+          if (["AC", "R"].includes(opt.value) && !isWoTab) return false;
           if (isRestricted) return opt.value !== "F";
           return opt.value !== "C";
         });
@@ -248,21 +262,40 @@ const AllTranHistory = (props) => {
           config = response.data;
         }
 
-        config = (config || []).map((c) => ({
-          key: c.key,
-          label:
+        config = (config || []).map((c) => {
+          const label =
             c.label ||
             String(c.key || "")
               .replace(/_/g, " ")
-              .replace(/\b\w/g, (ch) => ch.toUpperCase()),
-          classNames: c.classNames || "text-left",
-          renderType: c.renderType || "text",
-          renderFormat: c.renderFormat || "",
-          roundingOff: typeof c.roundingOff === "number" ? c.roundingOff : undefined,
-          sortable: c.sortable !== false,
-          hidden: !!c.hidden,
-          width: c.width,
-        }));
+              .replace(/\b\w/g, (ch) => ch.toUpperCase());
+          const numericName = `${c.key || ""} ${label}`.toLowerCase();
+          const isQuantity = /qty|quantity/.test(numericName);
+          const isAmount = /amt|amount|cost/.test(numericName);
+          const forcedDecimals =
+            isQuantity && typeof quantityDecimals === "number"
+              ? quantityDecimals
+              : isAmount && typeof amountDecimals === "number"
+                ? amountDecimals
+                : undefined;
+
+          return {
+            key: c.key,
+            label,
+            classNames: c.classNames || "text-left",
+            renderType: forcedDecimals !== undefined ? "number" : c.renderType || "text",
+            renderFormat: c.renderFormat || "",
+            isWoTab: String(groupId || "").includes("WO_"),
+            roundingOff:
+              forcedDecimals !== undefined
+                ? forcedDecimals
+                : typeof c.roundingOff === "number"
+                  ? c.roundingOff
+                  : undefined,
+            sortable: c.sortable !== false,
+            hidden: !!c.hidden,
+            width: c.width,
+          };
+        });
 
         return config;
       } catch (err) {
@@ -270,7 +303,7 @@ const AllTranHistory = (props) => {
         return [];
       }
     },
-    [currentUserRow?.userCode]
+    [amountDecimals, currentUserRow?.userCode, quantityDecimals]
   );
 
   const initialDates = useCallback(() => {
@@ -542,14 +575,25 @@ const AllTranHistory = (props) => {
         dataResponse.data[0] &&
         dataResponse.data[0].result
           ? dataResponse.data[0].result
-          : "{}";
+          : null;
 
       let parsed;
-      try {
-        parsed = JSON.parse(raw);
-      } catch (e) {
-        console.error("Failed to parse history result", e, raw);
-        return { rootDataMap: {}, newTabConfigs: {}, rootKeys: [] };
+      if (raw !== null) {
+        try {
+          parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+        } catch (e) {
+          console.error("Failed to parse history result", e, raw);
+          return { rootDataMap: {}, newTabConfigs: {}, rootKeys: [] };
+        }
+      } else if (dataResponse?.raw) {
+        parsed = dataResponse.raw;
+      } else if (dataResponse?.summary || dataResponse?.detail) {
+        parsed = {
+          WO_Summary: dataResponse.summary || [],
+          WO_Detail: dataResponse.detail || [],
+        };
+      } else {
+        parsed = {};
       }
 
       let rootDataMap = {};
