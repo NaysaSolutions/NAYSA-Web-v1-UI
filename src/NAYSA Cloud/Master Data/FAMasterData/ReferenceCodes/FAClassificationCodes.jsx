@@ -27,6 +27,7 @@ import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
 import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import SearchFACateg from "@/NAYSA Cloud/Lookup/SearchFACateg.jsx";
+// import SearchFAProfile from "@/NAYSA Cloud/Lookup/SearchFAProfile.jsx";
 
 /* ================= HELPERS ================= */
 
@@ -65,6 +66,10 @@ const DEFAULT_FORM = {
   description:     "",
   categCode:       "",
   categName:       "",
+  eul:             "",
+  profileCode:     "",
+  profileName:     "",
+  salvagePercent:  "",
   registeredBy:    "",
   registeredDate:  "",
   lastUpdatedBy:   "",
@@ -96,6 +101,7 @@ const FAClassCodes = forwardRef(({
   const [isDupCode, setIsDupCode]     = useState(false);
   const [search, setSearch]           = useState("");
   const [isCategOpen, setIsCategOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
@@ -166,10 +172,13 @@ const FAClassCodes = forwardRef(({
       return apiClient.post("/upsertFAClass", {
         json_data: JSON.stringify({
           json_data: {
-            code:        payload.code,
-            description: payload.description,
-            categCode:   payload.categCode,
-            userCode:    payload.userCode,
+            code:           payload.code,
+            description:    payload.description,
+            categCode:      payload.categCode,
+            eul:            payload.eul,
+            profileCode:    payload.profileCode,
+            salvagePercent: payload.salvagePercent,
+            userCode:       payload.userCode,
           },
         }),
       });
@@ -211,9 +220,12 @@ const FAClassCodes = forwardRef(({
 
     const payload = {
       ...form,
-      code:        String(form.code        || "").trim(),
-      description: String(form.description || "").trim(),
-      categCode:   String(form.categCode   || "").trim(),
+      code:           String(form.code        || "").trim(),
+      description:    String(form.description || "").trim(),
+      categCode:      String(form.categCode   || "").trim(),
+      eul:            form.eul === "" || form.eul === null ? 0 : Number(form.eul),
+      profileCode:    String(form.profileCode || "").trim(),
+      salvagePercent: form.salvagePercent === "" || form.salvagePercent === null ? 0 : Number(form.salvagePercent),
       userCode,
     };
 
@@ -297,6 +309,10 @@ const FAClassCodes = forwardRef(({
       description:     row.description || row.classDesc   || row.className || "",
       categCode:       row.categCode   || row.categ_code  || "",
       categName:       row.categName   || row.categ_name  || "",
+      eul:             row.eul ?? "",
+      profileCode:     row.profileCode || row.profile_code || "",
+      profileName:     row.profileName || row.profile_name || "",
+      salvagePercent:  row.salvagePercent ?? row.salvage_percent ?? "",
       registeredBy:    row.registeredBy    || "",
       registeredDate:  row.registeredDate  || "",
       lastUpdatedBy:   row.lastUpdatedBy   || "",
@@ -381,10 +397,14 @@ const FAClassCodes = forwardRef(({
         </div>
       ),
     },
-    { key: "code",        label: "Sub Category Code",               sortable: true, width: 150 },
-    { key: "description", label: "Sub Category Description / Name", sortable: true, width: 280 },
-    { key: "categCode",   label: "Category Code",                     sortable: true, width: 120 },
-    { key: "categName",   label: "Category Name",                     sortable: true, width: 200 },
+    { key: "code",            label: "Sub Category Code",               sortable: true, width: 150 },
+    { key: "description",     label: "Sub Category Description / Name", sortable: true, width: 240 },
+    { key: "categCode",       label: "Category Code",                   sortable: true, width: 120 },
+    { key: "categName",       label: "Category Description",            sortable: true, width: 180 },
+    // { key: "profileCode",     label: "Profile Code",                    sortable: true, width: 120 },
+    // { key: "profileName",     label: "Profile Name",                    sortable: true, width: 180 },
+    { key: "eul",             label: "EUL",                             sortable: true, width: 80 },
+    { key: "salvagePercent",  label: "Salvage Value",                   sortable: true, width: 120 },
   ], [handleEdit, handleDelete, isReadOnly, canEdit, canDelete]);
 
   /* ================= TABLE DATA ================= */
@@ -394,10 +414,14 @@ const FAClassCodes = forwardRef(({
 
     const mapped = list.map((row, index) => ({
       ...row,
-      code:        row.code        || row.classCode  || "",
-      description: row.description || row.classDesc  || row.className || "",
-      categCode:   row.categCode   || row.categ_code || "",
-      categName:   row.categName   || row.categ_name || "",
+      code:           row.code           || row.classCode    || "",
+      description:    row.description    || row.classDesc    || row.className || "",
+      categCode:      row.categCode      || row.categ_code   || "",
+      categName:      row.categName      || row.categ_name   || "",
+      profileCode:    row.profileCode    || row.profile_code || "",
+      profileName:    row.profileName    || row.profile_name || "",
+      eul:            row.eul ?? "",
+      salvagePercent: row.salvagePercent ?? row.salvage_percent ?? "",
       __idx: index,
     }));
 
@@ -405,10 +429,14 @@ const FAClassCodes = forwardRef(({
       const s = String(search || "").trim().toLowerCase();
       if (!s) return true;
       return (
-        String(row.code        || "").toLowerCase().includes(s) ||
-        String(row.description || "").toLowerCase().includes(s) ||
-        String(row.categCode   || "").toLowerCase().includes(s) ||
-        String(row.categName   || "").toLowerCase().includes(s)
+        String(row.code           || "").toLowerCase().includes(s) ||
+        String(row.description    || "").toLowerCase().includes(s) ||
+        String(row.categCode      || "").toLowerCase().includes(s) ||
+        String(row.categName      || "").toLowerCase().includes(s) ||
+        String(row.profileCode    || "").toLowerCase().includes(s) ||
+        String(row.profileName    || "").toLowerCase().includes(s) ||
+        String(row.eul             ?? "").toLowerCase().includes(s) ||
+        String(row.salvagePercent  ?? "").toLowerCase().includes(s)
       );
     });
   }, [classifications, search]);
@@ -461,48 +489,120 @@ const FAClassCodes = forwardRef(({
           <SectionHeader title="BASIC INFORMATION" />
           <div className="space-y-3">
 
-            <FieldRenderer
-              label="Sub Category Code"
-              required
-              value={form.code}
-              inputRef={codeInputRef}
-              maxLength={20}
-              onChange={(v) => setField("code", v ?? "")}
-              onBlur={handleCodeValidate}
-              onKeyDown={handleCodeValidate}
-              disabled={isReadOnly || !isEditing || form.__existing}
-            />
+            <div className="grid grid-cols-2 gap-3">
+              <FieldRenderer
+                label="Sub Category Code"
+                required
+                value={form.code}
+                inputRef={codeInputRef}
+                maxLength={20}
+                onChange={(v) => setField("code", v ?? "")}
+                onBlur={handleCodeValidate}
+                onKeyDown={handleCodeValidate}
+                disabled={isReadOnly || !isEditing || form.__existing}
+              />
 
-            <FieldRenderer
-              label="Sub Category Description"
-              required
-              value={form.description}
-              maxLength={150}
-              onChange={(v) => setField("description", v ?? "")}
-              disabled={isReadOnly || !isEditing}
-            />
+              <FieldRenderer
+                label="Sub Category Description"
+                required
+                value={form.description}
+                maxLength={150}
+                onChange={(v) => setField("description", v ?? "")}
+                disabled={isReadOnly || !isEditing}
+              />
+            </div>
 
-            <FieldRenderer
-              label="Category Code"
-              type="lookup"
-              value={form.categCode || ""}
-              onLookup={() => {
-                if (isReadOnly || !isEditing) return;
-                setIsCategOpen(true);
-              }}
-              onChange={(v) => {
-                setField("categCode", String(v ?? "").toUpperCase());
-                setField("categName", "");
-              }}
-              disabled={isReadOnly || !isEditing}
-            />
+            <div className="grid grid-cols-2 gap-3">
+              <FieldRenderer
+                label="Category Code"
+                type="lookup"
+                value={form.categCode || ""}
+                onLookup={() => {
+                  if (isReadOnly || !isEditing) return;
+                  setIsCategOpen(true);
+                }}
+                onChange={(v) => {
+                  setField("categCode", String(v ?? "").toUpperCase());
+                  setField("categName", "");
+                }}
+                disabled={isReadOnly || !isEditing}
+              />
 
-            <FieldRenderer
-              label="Category Description"
-              value={form.categName}
-              readOnly
-              disabled
-            />
+              <FieldRenderer
+                label="Category Description"
+                value={form.categName}
+                readOnly
+                disabled
+              />
+            </div>
+
+            {/* <div className="grid grid-cols-2 gap-3">
+              <FieldRenderer
+                label="Profile Code"
+                type="lookup"
+                required={Number(form.eul) > 0}
+                value={form.profileCode || ""}
+                onLookup={() => {
+                  if (isReadOnly || !isEditing) return;
+                  if (!(Number(form.eul) > 0)) return;
+                  setIsProfileOpen(true);
+                }}
+                onChange={(v) => {
+                  setField("profileCode", String(v ?? "").toUpperCase());
+                  setField("profileName", "");
+                }}
+                disabled={isReadOnly || !isEditing || !(Number(form.eul) > 0)}
+              />
+
+              <FieldRenderer
+                label="Profile Name"
+                value={form.profileName}
+                readOnly
+                disabled
+              />
+            </div> */}
+
+            <div className="grid grid-cols-2 gap-3">
+              <FieldRenderer
+                label="EUL"
+                type="number"
+                value={form.eul}
+                min={0}
+                onKeyDown={(e) => {
+                  if (e.key === "-" || e.key === "e" || e.key === "E") {
+                    e.preventDefault();
+                  }
+                }}
+                onChange={(v) => {
+                  const n = v === "" || v === null ? "" : Math.max(0, Math.trunc(Number(v)));
+                  setField("eul", Number.isNaN(n) ? "" : n);
+                  if (Number(n) === 0) {
+                    setField("profileCode", "");
+                    setField("profileName", "");
+                  }
+                }}
+                disabled={isReadOnly || !isEditing}
+              />
+
+              <FieldRenderer
+                label="Salvage Value"
+                type="number"
+                value={form.salvagePercent}
+                min={0}
+                max={100}
+                onKeyDown={(e) => {
+                  if (e.key === "-" || e.key === "e" || e.key === "E") {
+                    e.preventDefault();
+                  }
+                }}
+                onChange={(v) => {
+                  if (v === "" || v === null) { setField("salvagePercent", ""); return; }
+                  const n = Math.min(100, Math.max(0, Number(v)));
+                  setField("salvagePercent", Number.isNaN(n) ? "" : n);
+                }}
+                disabled={isReadOnly || !isEditing}
+              />
+            </div>
 
           </div>
         </Card>
@@ -538,6 +638,18 @@ const FAClassCodes = forwardRef(({
           }
         }}
       />
+
+      {/* ── FA Depreciation Profile Lookup Modal ──
+      <SearchFAProfile
+        isOpen={isProfileOpen}
+        onClose={(selected) => {
+          setIsProfileOpen(false);
+          if (selected) {
+            setField("profileCode", selected.code || selected.profileCode || "");
+            setField("profileName", selected.description || selected.profileName || "");
+          }
+        }}
+      /> */}
 
     </div>
   );
