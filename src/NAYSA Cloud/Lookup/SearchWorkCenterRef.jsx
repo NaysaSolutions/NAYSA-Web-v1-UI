@@ -85,7 +85,7 @@ const SearchWorkCenterRef = ({
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4 animate-fade-in backdrop-blur-[1px]">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col relative overflow-hidden transform animate-scale-in border border-slate-200">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[80vh] flex flex-col relative overflow-hidden transform animate-scale-in border border-slate-200">
         
         {/* Header Section */}
         <div className="flex items-center justify-between p-2 bg-slate-100 dark:bg-gray-900 border-b border-slate-200 dark:border-gray-700">
@@ -129,6 +129,7 @@ const SearchWorkCenterRef = ({
             <table className="min-w-full">
               <thead className="sticky top-0 z-10 bg-slate-200 dark:bg-gray-700">
                 <tr>
+                  {/* Existing WC Code Header */}
                   <th className="px-4 py-2 text-left">
                     <label className="block text-[13px] font-bold text-slate-600 dark:text-gray-300 propercase mb-1">
                       Work Center Code
@@ -141,6 +142,7 @@ const SearchWorkCenterRef = ({
                       className="w-full px-2 py-1 text-xs border rounded bg-white dark:bg-gray-800 outline-none focus:ring-2 focus:ring-blue-500/20"
                     />
                   </th>
+                  {/* Existing WC Name Header */}
                   <th className="px-4 py-2 text-left">
                     <label className="block text-[13px] font-bold text-slate-600 dark:text-gray-300 propercase mb-1">
                       Work Center Name
@@ -153,10 +155,31 @@ const SearchWorkCenterRef = ({
                       className="w-full px-2 py-1 text-xs border rounded bg-white dark:bg-gray-800 outline-none focus:ring-2 focus:ring-blue-500/20"
                     />
                   </th>
+                  {/* NEW: Est Runtime Header */}
+                  <th className="px-4 py-2 text-right">
+                    <label className="block text-[13px] font-bold text-slate-600 dark:text-gray-300 propercase mb-1">
+                      Est. Runtime
+                    </label>
+                    <div className="h-[26px]"></div> {/* Spacer to align with inputs */}
+                  </th>
+                  {/* NEW: Std Labor Header */}
+                  <th className="px-4 py-2 text-right">
+                    <label className="block text-[13px] font-bold text-slate-600 dark:text-gray-300 propercase mb-1">
+                      Std. Labor
+                    </label>
+                    <div className="h-[26px]"></div>
+                  </th>
+                  {/* NEW: Std Overhead Header */}
+                  <th className="px-4 py-2 text-right">
+                    <label className="block text-[13px] font-bold text-slate-600 dark:text-gray-300 propercase mb-1">
+                      Std. Overhead
+                    </label>
+                    <div className="h-[26px]"></div>
+                  </th>
                 </tr>
               </thead>
 
-              <tbody className="bg-white dark:bg-gray-800">
+             <tbody className="bg-white dark:bg-gray-800">
                 {paginatedData.length > 0 ? (
                   paginatedData.map((item, index) => (
                     <tr
@@ -170,11 +193,24 @@ const SearchWorkCenterRef = ({
                       <td className="px-4 py-2 text-xs text-slate-600 dark:text-gray-300 whitespace-nowrap">
                         {item.wcName}
                       </td>
+                      {/* NEW: Est Runtime Cell */}
+                      <td className="px-4 py-2 text-xs text-slate-600 dark:text-gray-300 text-right whitespace-nowrap">
+                        {Number(item.estRuntime || 0).toFixed(2)}
+                      </td>
+                      {/* NEW: Std Labor Cell */}
+                      <td className="px-4 py-2 text-xs text-slate-600 dark:text-gray-300 text-right whitespace-nowrap">
+                        {Number(item.stdLabor || 0).toFixed(2)}
+                      </td>
+                      {/* NEW: Std Overhead Cell */}
+                      <td className="px-4 py-2 text-xs text-slate-600 dark:text-gray-300 text-right whitespace-nowrap">
+                        {Number(item.stdOverhead || 0).toFixed(2)}
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="2" className="px-4 py-16 text-center text-slate-400 italic text-sm">
+                    {/* Updated colSpan from 2 to 5 */}
+                    <td colSpan="5" className="px-4 py-16 text-center text-slate-400 italic text-sm">
                       No matching records found.
                     </td>
                   </tr>
