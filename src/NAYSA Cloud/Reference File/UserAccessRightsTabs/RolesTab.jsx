@@ -1,5 +1,6 @@
 import React, {
   useState,
+  useEffect,
   forwardRef,
   useImperativeHandle,
   useMemo,
@@ -22,6 +23,48 @@ import {
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
 import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable.jsx";
+
+const getUserType = (row = {}) =>
+  String(
+    row.userType ??
+      row.USER_TYPE ??
+      row.user_type ??
+      row.userTypeCode ??
+      row.USER_TYPE_CODE ??
+      row.user_type_code ??
+      row.type ??
+      row.TYPE ??
+      ""
+  )
+    .trim()
+    .toUpperCase();
+
+const isRegularUser = (row = {}) => {
+  const userType = getUserType(row);
+
+  if (!userType) return false;
+
+  const blockedTypes = new Set([
+    "ADMIN",
+    "ADMINISTRATOR",
+    "SUPER ADMIN",
+    "SUPERADMIN",
+    "SUPER USER",
+    "SUPERUSER",
+    "SYSTEM",
+  ]);
+
+  if (blockedTypes.has(userType)) return false;
+
+  return (
+    userType === "REGULAR" ||
+    userType === "REGULAR USER" ||
+    userType === "REG" ||
+    userType === "R" ||
+    userType === "USER" ||
+    userType.includes("REGULAR")
+  );
+};
 
 const RolesTab = forwardRef(
   (
@@ -53,26 +96,36 @@ const RolesTab = forwardRef(
       return new Set();
     }, [appliedUserRoles]);
 
-    const selectedUserDetails = useMemo(() => {
-      return (Array.isArray(users) ? users : []).filter((u) =>
-        selectedUsers.includes(u.userCode)
+    const regularUsers = useMemo(() => {
+      return (Array.isArray(users) ? users : []).filter(isRegularUser);
+    }, [users]);
+
+    useEffect(() => {
+      setSelectedUsers((prev) =>
+        prev.filter((code) =>
+          regularUsers.some((u) => String(u.userCode || "") === String(code || ""))
+        )
       );
-    }, [users, selectedUsers]);
+    }, [regularUsers]);
+
+    const selectedUserDetails = useMemo(() => {
+      return regularUsers.filter((u) => selectedUsers.includes(u.userCode));
+    }, [regularUsers, selectedUsers]);
 
     const roleTableData = useMemo(() => {
       return activeRoles; // Changed from roles
     }, [activeRoles]);
 
     const userTableData = useMemo(() => {
-      return Array.isArray(users) ? users : [];
-    }, [users]);
+      return regularUsers;
+    }, [regularUsers]);
 
     const allUserCodes = useMemo(
       () =>
-        (Array.isArray(users) ? users : [])
+        regularUsers
           .map((u) => u.userCode)
           .filter(Boolean),
-      [users]
+      [regularUsers]
     );
 
     const allRoleCodes = useMemo(
@@ -285,7 +338,7 @@ const RolesTab = forwardRef(
       getExportData: () => {
         const rows = [];
 
-        (Array.isArray(users) ? users : []).forEach((u) => {
+        regularUsers.forEach((u) => {
           activeRoles.forEach((r) => { // Changed from roles
             if (appliedRolesSet.has(`${u.userCode}-${r.roleCode}`)) {
               rows.push({

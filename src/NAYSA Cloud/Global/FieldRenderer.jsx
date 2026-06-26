@@ -27,6 +27,8 @@ const FieldRenderer = ({
   editableLookup = false,
   allowLookupInput = false,
   hideClearButton = false,
+  isRetrieved = false,
+  retrieved = false,
   options = [],
   readOnly = false,
   placeholder = " ",
@@ -39,7 +41,7 @@ const FieldRenderer = ({
 }) => {
   const isAudit = variant === "audit";
   const isEnabled = !disabled || isAudit;
-  const lookupActionDisabled = disabled || lookupDisabled || isAudit;
+  const lookupActionDisabled = disabled || readOnly || lookupDisabled || isAudit;
 
   const labelText = typeof label === "string" ? label : "";
   const idSource = id || name || labelText;
@@ -154,7 +156,9 @@ const FieldRenderer = ({
     }
   };
 
-  const canClear = !disabled && !readOnly && !isAudit && !hideClearButton;
+  const isRetrievedMode = Boolean(isRetrieved || retrieved);
+  const shouldHideClearButton = hideClearButton || type === "date" || isRetrievedMode;
+  const canClear = !disabled && !readOnly && !isAudit && !shouldHideClearButton;
 
   const renderLabel = () => (
     <label htmlFor={inputId} className={labelClass}>
@@ -261,7 +265,7 @@ const FieldRenderer = ({
 
           {!lookupActionDisabled &&
             editableLookup &&
-            !hideClearButton &&
+            !shouldHideClearButton &&
             getDisplayValue(value, "lookup") &&
             clearBtn(
               (e) => {
