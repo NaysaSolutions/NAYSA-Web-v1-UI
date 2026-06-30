@@ -50,9 +50,9 @@ const SearchWorkCenterRef = ({
   } = useQuery({
     queryKey: ["lookupWorkCenter", customParam],
     queryFn: async () => {
-      // Calls the backend route mapping to your WorkOrderRef sproc
+      // Pass "Active" if customParam is empty so the stored procedure filters at the DB level
       const { data: result } = await apiClient.get("/lookupWorkCenter", {
-        params: { PARAMS: customParam || "" },
+        params: { PARAMS: customParam || "Active" },
       });
       const rawData = result?.data?.[0]?.result || "[]";
       return Array.isArray(rawData) ? rawData : JSON.parse(rawData);
@@ -66,10 +66,18 @@ const SearchWorkCenterRef = ({
   const filteredData = useMemo(() => {
     if (!workCenters.length) return [];
     return workCenters.filter((item) => {
-      return (
-        (item.wcCode || "").toLowerCase().includes(debouncedFilters.wcCode.toLowerCase()) &&
-        (item.wcName || "").toLowerCase().includes(debouncedFilters.wcName.toLowerCase())
-      );
+      // Frontend fail-safe: explicitly filter out records where active is 'N'
+      const isActive = !item.active || item.active.toUpperCase() === "Y";
+      
+      const matchCode = (item.wcCode || "")
+        .toLowerCase()
+        .includes(debouncedFilters.wcCode.toLowerCase());
+        
+      const matchName = (item.wcName || "")
+        .toLowerCase()
+        .includes(debouncedFilters.wcName.toLowerCase());
+
+      return isActive && matchCode && matchName;
     });
   }, [workCenters, debouncedFilters]);
 
@@ -86,7 +94,6 @@ const SearchWorkCenterRef = ({
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4 animate-fade-in backdrop-blur-[1px]">
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[80vh] flex flex-col relative overflow-hidden transform animate-scale-in border border-slate-200">
-        
         {/* Header Section */}
         <div className="flex items-center justify-between p-2 bg-slate-100 dark:bg-gray-900 border-b border-slate-200 dark:border-gray-700">
           <div className="flex items-center gap-3">
@@ -122,7 +129,12 @@ const SearchWorkCenterRef = ({
         <div className="flex-grow overflow-auto custom-scrollbar bg-white dark:bg-gray-800">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center h-64 text-slate-400">
-              <FontAwesomeIcon icon={faSpinner} spin size="2x" className="mb-4 text-blue-500" />
+              <FontAwesomeIcon
+                icon={faSpinner}
+                spin
+                size="2x"
+                className="mb-4 text-blue-500"
+              />
               <p className="text-sm font-medium">Fetching Reference Data...</p>
             </div>
           ) : (
@@ -137,7 +149,9 @@ const SearchWorkCenterRef = ({
                     <input
                       type="text"
                       value={filters.wcCode}
-                      onChange={(e) => setFilters(p => ({ ...p, wcCode: e.target.value }))}
+                      onChange={(e) =>
+                        setFilters((p) => ({ ...p, wcCode: e.target.value }))
+                      }
                       placeholder="Filter..."
                       className="w-full px-2 py-1 text-xs border rounded bg-white dark:bg-gray-800 outline-none focus:ring-2 focus:ring-blue-500/20"
                     />
@@ -150,7 +164,9 @@ const SearchWorkCenterRef = ({
                     <input
                       type="text"
                       value={filters.wcName}
-                      onChange={(e) => setFilters(p => ({ ...p, wcName: e.target.value }))}
+                      onChange={(e) =>
+                        setFilters((p) => ({ ...p, wcName: e.target.value }))
+                      }
                       placeholder="Filter..."
                       className="w-full px-2 py-1 text-xs border rounded bg-white dark:bg-gray-800 outline-none focus:ring-2 focus:ring-blue-500/20"
                     />
@@ -158,28 +174,30 @@ const SearchWorkCenterRef = ({
                   {/* NEW: Est Runtime Header */}
                   <th className="px-4 py-2 text-right">
                     <label className="block text-[13px] font-bold text-slate-600 dark:text-gray-300 propercase mb-1">
-                      Est. Runtime
+                      Estimated Runtime{" "}
+                      <span className="normal-case">(Mins)</span>
                     </label>
-                    <div className="h-[26px]"></div> {/* Spacer to align with inputs */}
+                    <div className="h-[26px]"></div>{" "}
+                    {/* Spacer to align with inputs */}
                   </th>
                   {/* NEW: Std Labor Header */}
                   <th className="px-4 py-2 text-right">
                     <label className="block text-[13px] font-bold text-slate-600 dark:text-gray-300 propercase mb-1">
-                      Std. Labor
+                      Standard Direct Labor Cost
                     </label>
                     <div className="h-[26px]"></div>
                   </th>
                   {/* NEW: Std Overhead Header */}
                   <th className="px-4 py-2 text-right">
                     <label className="block text-[13px] font-bold text-slate-600 dark:text-gray-300 propercase mb-1">
-                      Std. Overhead
+                      Standard Factory Overhead Cost
                     </label>
                     <div className="h-[26px]"></div>
                   </th>
                 </tr>
               </thead>
 
-             <tbody className="bg-white dark:bg-gray-800">
+              <tbody className="bg-white dark:bg-gray-800">
                 {paginatedData.length > 0 ? (
                   paginatedData.map((item, index) => (
                     <tr
@@ -210,7 +228,10 @@ const SearchWorkCenterRef = ({
                 ) : (
                   <tr>
                     {/* Updated colSpan from 2 to 5 */}
-                    <td colSpan="5" className="px-4 py-16 text-center text-slate-400 italic text-sm">
+                    <td
+                      colSpan="5"
+                      className="px-4 py-16 text-center text-slate-400 italic text-sm"
+                    >
                       No matching records found.
                     </td>
                   </tr>
@@ -233,11 +254,11 @@ const SearchWorkCenterRef = ({
                 Auto-syncing...
               </span>
             )}
-            
+
             {withPagination && totalPages > 1 && (
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                  onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
                   disabled={currentPage === 1}
                   className="p-1 text-slate-400 disabled:opacity-30 hover:text-blue-600"
                 >
@@ -247,7 +268,9 @@ const SearchWorkCenterRef = ({
                   {currentPage} / {totalPages}
                 </span>
                 <button
-                  onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+                  onClick={() =>
+                    setCurrentPage((p) => Math.min(p + 1, totalPages))
+                  }
                   disabled={currentPage === totalPages}
                   className="p-1 text-slate-400 disabled:opacity-30 hover:text-blue-600"
                 >
@@ -260,12 +283,38 @@ const SearchWorkCenterRef = ({
       </div>
 
       <style jsx="true">{`
-        .animate-fade-in { animation: fadeIn 0.1s ease-out forwards; }
-        .animate-scale-in { animation: scaleIn 0.15s cubic-bezier(0.16, 1, 0.3, 1); }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes scaleIn { from { transform: scale(0.98); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-        .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .animate-fade-in {
+          animation: fadeIn 0.1s ease-out forwards;
+        }
+        .animate-scale-in {
+          animation: scaleIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+        @keyframes scaleIn {
+          from {
+            transform: scale(0.98);
+            opacity: 0;
+          }
+          to {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 5px;
+          height: 5px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #e2e8f0;
+          border-radius: 10px;
+        }
       `}</style>
     </div>
   );
