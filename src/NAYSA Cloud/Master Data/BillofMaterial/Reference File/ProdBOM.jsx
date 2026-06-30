@@ -236,7 +236,11 @@ const normalizeReportTableColumns = (columns = []) =>
     label: col.label || col.header || col.name || col.key || "",
     renderType:
       col.renderType ||
-      (col.type === "amount" ? "number" : col.type === "date" ? "date" : col.type),
+      (col.type === "amount"
+        ? "number"
+        : col.type === "date"
+          ? "date"
+          : col.type),
     roundingOff:
       col.roundingOff ??
       (typeof col.decimals === "number" ? col.decimals : undefined),
@@ -245,22 +249,23 @@ const normalizeReportTableColumns = (columns = []) =>
 /* ─────────────────────────────────────────────────────────────
    LEFT PANEL / HISTORY (BOM RECORD UI ENHANCED)
 ───────────────────────────────────────────────────────────────*/
-const BOMListPanel = ({
-  rows,
-  onSelect,
-  onRefresh,
-  isLoading,
-}) => {
+const BOMListPanel = ({ rows, onSelect, onRefresh, isLoading }) => {
   // Drill-down State
   const [expandedCodes, setExpandedCodes] = useState([]);
   const [detailCache, setDetailCache] = useState({});
   const [loadingDetailCode, setLoadingDetailCode] = useState("");
-  
+
   // Filter State
   const [statusFilter, setStatusFilter] = useState("ALL");
 
   const getBOMDescription = (row = {}) =>
-    row.bomDescription || row.bomDesc || row.bom_description || row.itemDescription || row.itemName || row.itemDesc || "";
+    row.bomDescription ||
+    row.bomDesc ||
+    row.bom_description ||
+    row.itemDescription ||
+    row.itemName ||
+    row.itemDesc ||
+    "";
 
   const getBOMQty = (row = {}) =>
     row.quantity ?? row.qty ?? row.bomQty ?? row.batchQty ?? "0.000000";
@@ -276,27 +281,34 @@ const BOMListPanel = ({
   };
 
   const tableRows = useMemo(() => {
-    const processedRows = (Array.isArray(rows) ? rows : []).map((row, index) => {
-      const bomCode = row.bomCode || row.BOM_CODE || row.bom_code || "";
-      const activeValue = row.active ?? row.ACTIVE ?? row.status ?? row.STATUS ?? "Y";
-      const inactive = isInactiveStatus(activeValue) || String(activeValue || "").trim().toUpperCase() === "INACTIVE";
-      const bomQty = toNumber(getBOMQty(row));
+    const processedRows = (Array.isArray(rows) ? rows : []).map(
+      (row, index) => {
+        const bomCode = row.bomCode || row.BOM_CODE || row.bom_code || "";
+        const activeValue =
+          row.active ?? row.ACTIVE ?? row.status ?? row.STATUS ?? "Y";
+        const inactive =
+          isInactiveStatus(activeValue) ||
+          String(activeValue || "")
+            .trim()
+            .toUpperCase() === "INACTIVE";
+        const bomQty = toNumber(getBOMQty(row));
 
-      return {
-        ...row,
-        key: bomCode || `bom-record-${index}`,
-        bomCode,
-        bomDate: row.bomDate || row.BOM_DATE || row.bom_date || "",
-        invType: row.invType || row.inv_type || row.INV_TYPE || "",
-        itemCode: row.itemCode || row.item_code || row.ITEM_CODE || "",
-        bomDescriptionDisplay: getBOMDescription(row),
-        bomQty,
-        bomQtyDisplay: fmt6(bomQty),
-        bomUomDisplay: getBOMUOM(row),
-        workCenterDisplay: getWorkCenterDisplay(row),
-        statusDisplay: inactive ? "INACTIVE" : "ACTIVE",
-      };
-    });
+        return {
+          ...row,
+          key: bomCode || `bom-record-${index}`,
+          bomCode,
+          bomDate: row.bomDate || row.BOM_DATE || row.bom_date || "",
+          invType: row.invType || row.inv_type || row.INV_TYPE || "",
+          itemCode: row.itemCode || row.item_code || row.ITEM_CODE || "",
+          bomDescriptionDisplay: getBOMDescription(row),
+          bomQty,
+          bomQtyDisplay: fmt6(bomQty),
+          bomUomDisplay: getBOMUOM(row),
+          workCenterDisplay: getWorkCenterDisplay(row),
+          statusDisplay: inactive ? "INACTIVE" : "ACTIVE",
+        };
+      },
+    );
 
     // Apply the Active/Inactive Filter
     if (statusFilter === "ALL") return processedRows;
@@ -309,7 +321,8 @@ const BOMListPanel = ({
       lineNo: d.lineNo || d.LINE_NO || idx + 1,
       invType: d.invType || d.inv_type || d.INV_TYPE || "",
       itemCode: d.itemCode || d.item_code || d.ITEM_CODE || "",
-      itemDescription: d.itemDescription || d.itemDesc || d.itemName || d.ITEM_NAME || "",
+      itemDescription:
+        d.itemDescription || d.itemDesc || d.itemName || d.ITEM_NAME || "",
       uom: d.uom || d.uomCode || d.UOM_CODE || "",
       qtyNeeded: fmt6(d.qtyNeeded ?? d.qty_needed ?? d.QTY_NEEDED ?? 0),
       scrapRate: fmt6(d.scrapRate ?? d.scrap_rate ?? d.SCRAP_RATE ?? 0),
@@ -346,7 +359,36 @@ const BOMListPanel = ({
     }
   };
 
-  const handleCollapseAll = () => setExpandedCodes([]);
+  const handleToggleExpandAll = () => {
+    if (expandedCodes.length > 0) {
+      // If any rows are expanded, collapse them all
+      setExpandedCodes([]);
+    } else {
+      // If nothing is expanded, show all
+      const allCodes = tableRows.map((row) => row.bomCode);
+      setExpandedCodes(allCodes);
+
+      // Fetch component data in the background for any rows that aren't cached yet
+      allCodes.forEach(async (code) => {
+        if (!detailCache[code]) {
+          try {
+            const res = await apiClient.post("/getProdBOM", { BOM_CODE: code });
+            const parsed = parseSprocJsonResult(res?.data?.data);
+            const record = Array.isArray(parsed) ? parsed?.[0] : null;
+            const components = Array.isArray(record?.dt1) ? record.dt1 : [];
+
+            setDetailCache((prev) => ({
+              ...prev,
+              [code]: normalizeComponentRows(components),
+            }));
+          } catch {
+            setDetailCache((prev) => ({ ...prev, [code]: [] }));
+          }
+        }
+      });
+    }
+  };
+
 
   // Inject custom render for the Action column to include the Chevron
   const bomRecordColumns = useMemo(
@@ -397,14 +439,58 @@ const BOMListPanel = ({
             );
           },
         },
-        { key: "bomDate", header: "BOM Effectivity Date", width: 150, minWidth: 140, type: "date" },
-        { key: "bomCode", header: "BOM Code", width: 140, minWidth: 120, cellClassName: "font-mono text-xs" },
+        {
+          key: "bomDate",
+          header: "BOM Effectivity Date",
+          width: 150,
+          minWidth: 140,
+          type: "date",
+        },
+        {
+          key: "bomCode",
+          header: "BOM Code",
+          width: 140,
+          minWidth: 120,
+          cellClassName: "font-mono text-xs",
+        },
         { key: "invType", header: "Inv Type", width: 100, minWidth: 90 },
-        { key: "itemCode", header: "Item Code", width: 140, minWidth: 120, cellClassName: "font-mono text-xs" },
-        { key: "bomDescriptionDisplay", header: "Item Name", width: 280, minWidth: 180, maxWidth: 420 },
-        { key: "workCenterDisplay", header: "Work Center", width: 200, minWidth: 160, maxWidth: 340 },
-        { key: "bomQty", header: "Batch Qty", width: 130, minWidth: 120, cellClassName: "text-right font-semibold", type: "amount", decimals: 6 },
-        { key: "bomUomDisplay", header: "UOM", width: 90, minWidth: 80, cellClassName: "text-center" },
+        {
+          key: "itemCode",
+          header: "Item Code",
+          width: 140,
+          minWidth: 120,
+          cellClassName: "font-mono text-xs",
+        },
+        {
+          key: "bomDescriptionDisplay",
+          header: "Item Name",
+          width: 280,
+          minWidth: 180,
+          maxWidth: 420,
+        },
+        {
+          key: "workCenterDisplay",
+          header: "Work Center",
+          width: 200,
+          minWidth: 160,
+          maxWidth: 340,
+        },
+        {
+          key: "bomQty",
+          header: "Batch Qty",
+          width: 130,
+          minWidth: 120,
+          cellClassName: "text-right font-semibold",
+          type: "amount",
+          decimals: 6,
+        },
+        {
+          key: "bomUomDisplay",
+          header: "UOM",
+          width: 90,
+          minWidth: 80,
+          cellClassName: "text-center",
+        },
         { key: "statusDisplay", header: "Status", width: 110, minWidth: 100 },
       ]),
     [expandedCodes, onSelect],
@@ -425,41 +511,84 @@ const BOMListPanel = ({
               Components for {row.bomCode}
             </span>
             <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-              {isDetailLoading ? "Fetching data..." : `${components.length} items`}
+              {isDetailLoading
+                ? "Fetching data..."
+                : `${components.length} items`}
             </span>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-[800px] w-full text-[10px] text-left">
               <thead className="bg-slate-100 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 uppercase font-bold">
                 <tr>
-                  <th className="w-12 px-3 py-1.5 text-center border-l border-slate-200 dark:border-slate-700">LN</th>
-                  <th className="w-20 px-3 py-1.5 text-center border-l border-slate-200 dark:border-slate-700">Type</th>
-                  <th className="w-32 px-3 py-1.5 border-l border-slate-200 dark:border-slate-700">Item Code</th>
-                  <th className="px-3 py-1.5 border-l border-slate-200 dark:border-slate-700">Component Description</th>
-                  <th className="w-20 px-3 py-1.5 text-center border-l border-slate-200 dark:border-slate-700">UOM</th>
-                  <th className="w-28 px-3 py-1.5 text-right border-l border-slate-200 dark:border-slate-700">Qty Needed</th>
-                  <th className="w-24 px-3 py-1.5 text-right border-l border-slate-200 dark:border-slate-700">Scrap Rate</th>
+                  <th className="w-12 px-3 py-1.5 text-center border-l border-slate-200 dark:border-slate-700">
+                    LN
+                  </th>
+                  <th className="w-20 px-3 py-1.5 text-center border-l border-slate-200 dark:border-slate-700">
+                    Type
+                  </th>
+                  <th className="w-32 px-3 py-1.5 border-l border-slate-200 dark:border-slate-700">
+                    Item Code
+                  </th>
+                  <th className="px-3 py-1.5 border-l border-slate-200 dark:border-slate-700">
+                    Component Description
+                  </th>
+                  <th className="w-20 px-3 py-1.5 text-center border-l border-slate-200 dark:border-slate-700">
+                    UOM
+                  </th>
+                  <th className="w-28 px-3 py-1.5 text-right border-l border-slate-200 dark:border-slate-700">
+                    Qty Needed
+                  </th>
+                  <th className="w-24 px-3 py-1.5 text-right border-l border-slate-200 dark:border-slate-700">
+                    Scrap Rate (%)
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                 {isDetailLoading ? (
                   <tr>
-                    <td colSpan={7} className="px-3 py-6 text-center text-slate-400 dark:text-slate-500">Loading structure...</td>
+                    <td
+                      colSpan={7}
+                      className="px-3 py-6 text-center text-slate-400 dark:text-slate-500"
+                    >
+                      Loading structure...
+                    </td>
                   </tr>
                 ) : components.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-3 py-6 text-center text-slate-400 dark:text-slate-500">No components defined.</td>
+                    <td
+                      colSpan={7}
+                      className="px-3 py-6 text-center text-slate-400 dark:text-slate-500"
+                    >
+                      No components defined.
+                    </td>
                   </tr>
                 ) : (
                   components.map((component, index) => (
-                    <tr key={`${row.bomCode}-comp-${index}`} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                      <td className="px-3 py-1.5 text-center font-medium text-slate-500 dark:text-slate-400">{index + 1}</td>
-                      <td className="px-3 py-1.5 text-center border-l border-slate-100 dark:border-slate-700/50 font-bold dark:text-slate-300">{component.invType || "-"}</td>
-                      <td className="px-3 py-1.5 border-l border-slate-100 dark:border-slate-700/50 font-bold text-slate-700 dark:text-slate-300">{component.itemCode || "-"}</td>
-                      <td className="px-3 py-1.5 border-l border-slate-100 dark:border-slate-700/50 text-slate-700 dark:text-slate-400">{component.itemDescription || "-"}</td>
-                      <td className="px-3 py-1.5 text-center border-l border-slate-100 dark:border-slate-700/50 text-slate-600 dark:text-slate-400">{component.uom || "-"}</td>
-                      <td className="px-3 py-1.5 text-right border-l border-slate-100 dark:border-slate-700/50 font-mono text-blue-700 dark:text-blue-400 font-semibold">{component.qtyNeeded}</td>
-                      <td className="px-3 py-1.5 text-right border-l border-slate-100 dark:border-slate-700/50 font-mono text-slate-500 dark:text-slate-400">{component.scrapRate}%</td>
+                    <tr
+                      key={`${row.bomCode}-comp-${index}`}
+                      className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors"
+                    >
+                      <td className="px-3 py-1.5 text-center font-medium text-slate-500 dark:text-slate-400">
+                        {index + 1}
+                      </td>
+                      <td className="px-3 py-1.5 text-center border-l border-slate-100 dark:border-slate-700/50 font-bold dark:text-slate-300">
+                        {component.invType || "-"}
+                      </td>
+                      <td className="px-3 py-1.5 border-l border-slate-100 dark:border-slate-700/50 font-bold text-slate-700 dark:text-slate-300">
+                        {component.itemCode || "-"}
+                      </td>
+                      <td className="px-3 py-1.5 border-l border-slate-100 dark:border-slate-700/50 text-slate-700 dark:text-slate-400">
+                        {component.itemDescription || "-"}
+                      </td>
+                      <td className="px-3 py-1.5 text-center border-l border-slate-100 dark:border-slate-700/50 text-slate-600 dark:text-slate-400">
+                        {component.uom || "-"}
+                      </td>
+                      <td className="px-3 py-1.5 text-right border-l border-slate-100 dark:border-slate-700/50 font-mono text-blue-700 dark:text-blue-400 font-semibold">
+                        {component.qtyNeeded}
+                      </td>
+                      <td className="px-3 py-1.5 text-right border-l border-slate-100 dark:border-slate-700/50 font-mono text-slate-500 dark:text-slate-400">
+                        {component.scrapRate}%
+                      </td>
                     </tr>
                   ))
                 )}
@@ -478,7 +607,9 @@ const BOMListPanel = ({
         <div className="flex items-center gap-3">
           {/* Status Filter */}
           <div className="flex items-center gap-2">
-            <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Status Filter:</label>
+            <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+              Status Filter:
+            </label>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
@@ -493,16 +624,23 @@ const BOMListPanel = ({
           {/* Collapse All Button */}
           <button
             type="button"
-            onClick={handleCollapseAll}
-            disabled={expandedCodes.length === 0}
+            onClick={handleToggleExpandAll}
+            disabled={tableRows.length === 0}
             className={`flex items-center gap-1.5 h-7 px-3 text-[11px] font-bold rounded shadow-sm transition-all ${
-              expandedCodes.length > 0
-                ? "bg-blue-600 text-white hover:bg-blue-700"
-                : "bg-slate-200 text-slate-400 dark:bg-slate-800 dark:text-slate-500 cursor-not-allowed"
+              tableRows.length > 0
+                ? expandedCodes.length > 0
+                  ? "bg-blue-600 text-white hover:bg-blue-700" // Active state (Collapse All)
+                  : "bg-white text-blue-600 border border-blue-600 hover:bg-blue-50 dark:bg-slate-800 dark:border-blue-500 dark:text-blue-400" // Inactive state (Show All)
+                : "bg-slate-200 text-slate-400 dark:bg-slate-800 dark:text-slate-500 cursor-not-allowed" // Disabled state
             }`}
           >
-            <FontAwesomeIcon icon={faChevronDown} className="-rotate-180" />
-            Collapse All {expandedCodes.length > 0 && `(${expandedCodes.length})`}
+            <FontAwesomeIcon 
+              icon={faChevronDown} 
+              className={`transition-transform duration-200 ${expandedCodes.length > 0 ? "-rotate-180" : "rotate-0"}`} 
+            />
+            {expandedCodes.length > 0 
+              ? `Collapse All (${expandedCodes.length})` 
+              : "Show All"}
           </button>
         </div>
       </div>
@@ -519,7 +657,6 @@ const BOMListPanel = ({
         onRowAction={onSelect}
         onRowDoubleClick={onSelect}
         onMobileRowOpen={onSelect}
-        
         // Drill-down hooks
         renderDetailPanel={renderDetailPanel}
         expandedRowKeys={expandedCodes}
@@ -586,11 +723,11 @@ const ProdBOM = () => {
   const hasRecord = String(form?.bomCode || "").trim() && !form.__isNew;
 
   // New Lock Check Variables
-  const isLockedBOM = hasRecord && String(form.originalActive || "Y").toUpperCase() === "N";
+  const isLockedBOM =
+    hasRecord && String(form.originalActive || "Y").toUpperCase() === "N";
   const canEditForm = isFullAccess && !isLockedBOM;
 
-  const isPageBusy =
-    isLoading || isMasterLoading || isRecordLoading;
+  const isPageBusy = isLoading || isMasterLoading || isRecordLoading;
 
   // Click outside guide listener
   useEffect(() => {
@@ -672,7 +809,8 @@ const ProdBOM = () => {
 
   const getCheckResult = (res) => {
     const row = res?.data?.data?.[0] || res?.data?.[0] || {};
-    const value = row.result ?? row.RESULT ?? row.isUsed ?? row.isused ?? row.exists;
+    const value =
+      row.result ?? row.RESULT ?? row.isUsed ?? row.isused ?? row.exists;
     return String(value ?? "0").trim() === "1" || value === true;
   };
 
@@ -801,16 +939,14 @@ const ProdBOM = () => {
       return;
     }
     setTopTab("details");
-    const copiedLines = lines.map(
-      (row, idx) => ({
-        ...emptyLine(idx + 1),
-        ...row,
-        lineNo: idx + 1,
-        qtyNeeded: fmt6(row.qtyNeeded),
-        scrapRate: fmt6(row.scrapRate),
-        scrapQty: fmt6(row.scrapQty),
-      }),
-    );
+    const copiedLines = lines.map((row, idx) => ({
+      ...emptyLine(idx + 1),
+      ...row,
+      lineNo: idx + 1,
+      qtyNeeded: fmt6(row.qtyNeeded),
+      scrapRate: fmt6(row.scrapRate),
+      scrapQty: fmt6(row.scrapQty),
+    }));
     setSelectedCode("");
     setIsCurrentBOMUsed(false);
     setForm({
@@ -869,7 +1005,10 @@ const ProdBOM = () => {
       cleanBomCode.toUpperCase() !== originalBomCode.toUpperCase();
 
     try {
-      if (!isNewRecord && (isCurrentBOMUsed || (await checkInUsedBOM(originalBomCode)))) {
+      if (
+        !isNewRecord &&
+        (isCurrentBOMUsed || (await checkInUsedBOM(originalBomCode)))
+      ) {
         await useSwalErrorAlert(
           "Record In Use",
           "Cannot save changes. This BOM Code is already used in Work Order.",
@@ -877,7 +1016,10 @@ const ProdBOM = () => {
         return;
       }
 
-      if ((isNewRecord || isCodeChanged) && (await checkDuplicateBOM(cleanBomCode))) {
+      if (
+        (isNewRecord || isCodeChanged) &&
+        (await checkDuplicateBOM(cleanBomCode))
+      ) {
         await useSwalErrorAlert(
           "Duplicate BOM Code",
           "BOM Code already exists. Please use another BOM Code.",
@@ -1096,7 +1238,7 @@ const ProdBOM = () => {
       invType: getItemLookupConfig(invType).invType,
     });
   };
-  
+
   const handleComponentAddClick = () => {
     if (!canEditForm || isPageBusy) return;
     setShowTypeDropdown((prev) => !prev);
@@ -1111,7 +1253,10 @@ const ProdBOM = () => {
     if (!selectedItems.length) return;
 
     const existingRows = lines.filter(
-      (row) => String(row.invType || row.itemCode || row.itemDescription || "").trim() !== "",
+      (row) =>
+        String(
+          row.invType || row.itemCode || row.itemDescription || "",
+        ).trim() !== "",
     );
 
     const rowsToAdd = selectedItems.map((item, idx) => ({
@@ -1177,12 +1322,14 @@ const ProdBOM = () => {
   );
 
   const bomDetailColumns = useMemo(() => {
-
-const numberInput = (row, field) => {
+    const numberInput = (row, field) => {
       // Map the camelCase field name to your DB column name
-      const dbColName = field === "qtyNeeded" ? "QTY_NEEDED" : 
-                        field === "scrapRate" ? "SCRAP_RATE" : 
-                        "SCRAP_QTY";
+      const dbColName =
+        field === "qtyNeeded"
+          ? "QTY_NEEDED"
+          : field === "scrapRate"
+            ? "SCRAP_RATE"
+            : "SCRAP_QTY";
 
       return (
         <input
@@ -1192,7 +1339,7 @@ const numberInput = (row, field) => {
           value={row[field] || ""}
           disabled={!canEditForm}
           // Added a fallback of 18 in case the DB dictionary fails to load the length
-          maxLength={getMax(dbColName, "BOM_DT1") || 18} 
+          maxLength={getMax(dbColName, "BOM_DT1") || 18}
           onFocus={(e) => {
             // Added "scrapQty" to this array so the 0.000000 clears when you click on it!
             if (!["qtyNeeded", "scrapRate", "scrapQty"].includes(field)) return;
@@ -1211,23 +1358,25 @@ const numberInput = (row, field) => {
           onBlur={() => {
             const num = toNumber(row[field]);
             // If it was forced to strictly "0", keep it "0", otherwise format to 6 decimals
-            const finalValue = (num === 0 && String(row[field]) === "0") ? "0" : fmt6(num);
+            const finalValue =
+              num === 0 && String(row[field]) === "0" ? "0" : fmt6(num);
             updateLine(row.originalIndex, field, finalValue);
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
               const num = toNumber(row[field]);
-              const finalValue = (num === 0 && String(row[field]) === "0") ? "0" : fmt6(num);
+              const finalValue =
+                num === 0 && String(row[field]) === "0" ? "0" : fmt6(num);
               updateLine(row.originalIndex, field, finalValue);
-              
+
               const nextRowIndex = row.originalIndex + 1;
               const nextElementId = `bom-input-${field}-${nextRowIndex}`;
               const nextElement = document.getElementById(nextElementId);
-              
+
               if (nextElement) {
                 nextElement.focus();
-                nextElement.select(); 
+                nextElement.select();
               }
             }
           }}
@@ -1385,7 +1534,7 @@ const numberInput = (row, field) => {
       },
       {
         key: "scrapRate",
-        label: "Scrap Rate",
+        label: "Scrap Rate (%)",
         width: 112,
         minWidth: 104,
         maxWidth: 122,
@@ -1470,7 +1619,7 @@ const numberInput = (row, field) => {
         className:
           "flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all",
       },
-{
+      {
         key: "save",
         label: <span className="sm:inline ml-1">Save</span>,
         icon: faSaveIcon,
@@ -1532,7 +1681,7 @@ const numberInput = (row, field) => {
             <div className="w-full md:w-auto">
               <div className="flex flex-nowrap overflow-x-auto no-scrollbar border-b border-blue-300 dark:border-gray-700">
                 {[
-                  { id: "details", label: "BOM Setup" }, 
+                  { id: "details", label: "BOM Setup" },
                   { id: "history", label: "BOM Record" },
                   { id: "summary", label: "BOM Summary & Print" },
                 ].map((tab) => (
@@ -1542,11 +1691,11 @@ const numberInput = (row, field) => {
                       setTopTab(tab.id);
                       if (tab.id === "details") handleReset();
                     }}
-                  className={`shrink-0 whitespace-nowrap px-3 py-1 sm:py-2 sm:px-4 text-[10px] sm:text-[13px] font-bold transition-all border-b-2 rounded-md ${
-  topTab === tab.id
-    ? "border-blue-700 text-blue-700 bg-blue-50/50 dark:border-blue-500 dark:text-blue-400 dark:bg-blue-900/30"
-    : "border-transparent text-gray-500 hover:text-blue-500 dark:text-slate-400 dark:hover:text-blue-400"
-}`}
+                    className={`shrink-0 whitespace-nowrap px-3 py-1 sm:py-2 sm:px-4 text-[10px] sm:text-[13px] font-bold transition-all border-b-2 rounded-md ${
+                      topTab === tab.id
+                        ? "border-blue-700 text-blue-700 bg-blue-50/50 dark:border-blue-500 dark:text-blue-400 dark:bg-blue-900/30"
+                        : "border-transparent text-gray-500 hover:text-blue-500 dark:text-slate-400 dark:hover:text-blue-400"
+                    }`}
                   >
                     {tab.label}
                   </button>
@@ -1635,7 +1784,7 @@ const numberInput = (row, field) => {
             {/* BOM Header Form Section - Main Grid Container */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 rounded-lg relative">
               <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-3 items-start">
-               {/* Row 1 */}
+                {/* Row 1 */}
                 <div className="relative w-full">
                   <div
                     className={`flex items-stretch global-ref-textbox-ui ${canEditForm ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"}`}
@@ -1649,7 +1798,10 @@ const numberInput = (row, field) => {
                       disabled={!canEditForm || isCheckingBOMCode}
                       maxLength={getMax("BOM_CODE")}
                       onChange={(e) =>
-                        handleFieldChange("bomCode", e.target.value.toUpperCase())
+                        handleFieldChange(
+                          "bomCode",
+                          e.target.value.toUpperCase(),
+                        )
                       }
                       onBlur={handleBOMCodeBlur}
                       onKeyDown={(e) => {
@@ -1734,7 +1886,9 @@ const numberInput = (row, field) => {
                   value={form.quantity}
                   disabled={!canEditForm}
                   onFocus={(e) =>
-                    clearZeroValueOnFocus(e, (value) => updateForm({ quantity: value }))
+                    clearZeroValueOnFocus(e, (value) =>
+                      updateForm({ quantity: value }),
+                    )
                   }
                   onChange={(val) => {
                     let sanitized = String(val).replace(/[^0-9.]/g, "");
@@ -1797,7 +1951,7 @@ const numberInput = (row, field) => {
                 />
 
                 {/* Remarks Section */}
-              <div className="col-span-full">
+                <div className="col-span-full">
                   <div className="relative">
                     <textarea
                       id="remarks"
@@ -1806,7 +1960,9 @@ const numberInput = (row, field) => {
                       className="peer global-tran-textbox-remarks-ui pt-6 pb-2 px-3"
                       value={form.remarks}
                       disabled={!canEditForm}
-                      onChange={(e) => handleFieldChange("remarks", e.target.value)}
+                      onChange={(e) =>
+                        handleFieldChange("remarks", e.target.value)
+                      }
                       maxLength={getMax("REMARKS")}
                     />
                     <label
@@ -1846,7 +2002,7 @@ const numberInput = (row, field) => {
               </div>
             </div>
 
-           <div className="global-tran-table-main-div-ui relative overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
+            <div className="global-tran-table-main-div-ui relative overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
               <SearchGlobalReferenceTable
                 key={`bom-component-details-${canEditForm ? "edit" : "view"}`}
                 docType="BOM Component Details"
@@ -1855,7 +2011,7 @@ const numberInput = (row, field) => {
                 itemsPerPage={200}
                 showFilters
                 tableSize="Half"
-                autoFit ={true}
+                autoFit={true}
               />
             </div>
 
@@ -1937,7 +2093,7 @@ const numberInput = (row, field) => {
                     </div>
                   )}
 
-<button
+                  <button
                     type="button"
                     onClick={handleComponentAddClick}
                     disabled={!canEditForm || isPageBusy}
@@ -1954,7 +2110,7 @@ const numberInput = (row, field) => {
         </div>
 
         {/* History Tab */}
-  <div className={topTab === "history" ? "" : "hidden"}>
+        <div className={topTab === "history" ? "" : "hidden"}>
           <BOMListPanel
             rows={masterList}
             onSelect={handleSelectBOM}
@@ -1963,14 +2119,14 @@ const numberInput = (row, field) => {
           />
         </div>
 
-
         {/* --- START OF NEW BOM SUMMARY & PRINT TAB --- */}
         <div className={topTab === "summary" ? "" : "hidden"}>
-          
           {/* Top Control Bar for Summary Tab */}
           <div className="m-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
             <div className="flex items-center gap-2 w-full sm:w-auto">
-              <span className="text-sm font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">Find BOM:</span>
+              <span className="text-sm font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                Find BOM:
+              </span>
               <div className="relative flex-grow sm:w-64">
                 <input
                   id="summarySearchInput"
@@ -1978,25 +2134,29 @@ const numberInput = (row, field) => {
                   placeholder="Enter BOM Code..."
                   className="w-full rounded-md border border-slate-300 pl-3 pr-8 py-1.5 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-white uppercase transition-colors"
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && e.target.value.trim()) {
+                    if (e.key === "Enter" && e.target.value.trim()) {
                       fetchBOMByCode(e.target.value.trim().toUpperCase());
                     }
                   }}
                 />
-                <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs" />
+                <FontAwesomeIcon
+                  icon={faMagnifyingGlass}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"
+                />
               </div>
               <button
                 type="button"
                 disabled={isRecordLoading}
                 onClick={() => {
-                  const inputVal = document.getElementById("summarySearchInput")?.value;
+                  const inputVal =
+                    document.getElementById("summarySearchInput")?.value;
                   if (inputVal?.trim()) {
                     fetchBOMByCode(inputVal.trim().toUpperCase());
                   }
                 }}
                 className={`px-4 py-1.5 rounded-md text-sm font-bold shadow-sm transition-colors whitespace-nowrap ${
-                  isRecordLoading 
-                    ? "bg-slate-400 text-white cursor-not-allowed" 
+                  isRecordLoading
+                    ? "bg-slate-400 text-white cursor-not-allowed"
                     : "bg-blue-600 hover:bg-blue-700 text-white"
                 }`}
               >
@@ -2009,9 +2169,15 @@ const numberInput = (row, field) => {
               <button
                 type="button"
                 onClick={() => {
-                  const printContent = document.getElementById("printable-bom-summary");
-                  const printWindow = window.open("", "_blank", "width=900,height=800");
-                  
+                  const printContent = document.getElementById(
+                    "printable-bom-summary",
+                  );
+                  const printWindow = window.open(
+                    "",
+                    "_blank",
+                    "width=900,height=800",
+                  );
+
                   printWindow.document.write(`
                     <!DOCTYPE html>
                     <html>
@@ -2055,8 +2221,13 @@ const numberInput = (row, field) => {
           {/* Empty State */}
           {!form.bomCode ? (
             <div className="flex flex-col items-center justify-center p-12 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 m-4">
-              <FontAwesomeIcon icon={faInfoCircle} className="text-4xl mb-4 text-slate-300 dark:text-slate-600" />
-              <p className="text-slate-500 dark:text-slate-400 text-center">Please search for a BOM Code above to view its summary.</p>
+              <FontAwesomeIcon
+                icon={faInfoCircle}
+                className="text-4xl mb-4 text-slate-300 dark:text-slate-600"
+              />
+              <p className="text-slate-500 dark:text-slate-400 text-center">
+                Please search for a BOM Code above to view its summary.
+              </p>
             </div>
           ) : (
             <div className="m-4">
@@ -2064,52 +2235,138 @@ const numberInput = (row, field) => {
               <div className="bg-white dark:bg-slate-800 p-8 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
                 <div id="printable-bom-summary">
                   <div className="header-title">Bill of Materials</div>
-                  <div className="header-subtitle">BOM Code: <strong>{form.bomCode}</strong></div>
-                  
+                  <div className="header-subtitle">
+                    BOM Code: <strong>{form.bomCode}</strong>
+                  </div>
+
                   <div className="info-grid flex flex-col md:flex-row justify-between mb-8 gap-6 text-sm text-slate-700 dark:text-slate-300">
                     <div className="info-col w-full md:w-1/2">
-                      <div className="info-row flex mb-2"><span className="info-label font-bold w-36">Item Code:</span> {form.itemCode || '-'}</div>
-                      <div className="info-row flex mb-2"><span className="info-label font-bold w-36">Description:</span> {form.itemDescription || '-'}</div>
-                      <div className="info-row flex mb-2"><span className="info-label font-bold w-36">Inventory Type:</span> {form.invType || '-'}</div>
-                      <div className="info-row flex mb-2"><span className="info-label font-bold w-36">Status:</span> {form.active === 'Y' ? 'Active' : 'Inactive'}</div>
+                      <div className="info-row flex mb-2">
+                        <span className="info-label font-bold w-36">
+                          Item Code:
+                        </span>{" "}
+                        {form.itemCode || "-"}
+                      </div>
+                      <div className="info-row flex mb-2">
+                        <span className="info-label font-bold w-36">
+                          Description:
+                        </span>{" "}
+                        {form.itemDescription || "-"}
+                      </div>
+                      <div className="info-row flex mb-2">
+                        <span className="info-label font-bold w-36">
+                          Inventory Type:
+                        </span>{" "}
+                        {form.invType || "-"}
+                      </div>
+                      <div className="info-row flex mb-2">
+                        <span className="info-label font-bold w-36">
+                          Status:
+                        </span>{" "}
+                        {form.active === "Y" ? "Active" : "Inactive"}
+                      </div>
                     </div>
                     <div className="info-col w-full md:w-1/2">
-                      <div className="info-row flex mb-2"><span className="info-label font-bold w-36">Effectivity Date:</span> {form.bomDate}</div>
-                      <div className="info-row flex mb-2"><span className="info-label font-bold w-36">Batch Qty:</span> <span className="font-mono text-blue-600 dark:text-blue-400 font-semibold">{form.quantity} {form.uom}</span></div>
-                      <div className="info-row flex mb-2"><span className="info-label font-bold w-36">Work Center:</span> {form.workCenter} {form.workCenterName ? `- ${form.workCenterName}` : ''}</div>
-                      <div className="info-row flex mb-2"><span className="info-label font-bold w-36">Remarks:</span> {form.remarks || '-'}</div>
+                      <div className="info-row flex mb-2">
+                        <span className="info-label font-bold w-36">
+                          Effectivity Date:
+                        </span>{" "}
+                        {form.bomDate}
+                      </div>
+                      <div className="info-row flex mb-2">
+                        <span className="info-label font-bold w-36">
+                          Batch Qty:
+                        </span>{" "}
+                        <span className="font-mono text-blue-600 dark:text-blue-400 font-semibold">
+                          {form.quantity} {form.uom}
+                        </span>
+                      </div>
+                      <div className="info-row flex mb-2">
+                        <span className="info-label font-bold w-36">
+                          Work Center:
+                        </span>{" "}
+                        {form.workCenter}{" "}
+                        {form.workCenterName ? `- ${form.workCenterName}` : ""}
+                      </div>
+                      <div className="info-row flex mb-2">
+                        <span className="info-label font-bold w-36">
+                          Remarks:
+                        </span>{" "}
+                        {form.remarks || "-"}
+                      </div>
                     </div>
                   </div>
 
-                  <div className="section-title text-lg font-bold mb-4 text-slate-800 dark:text-slate-200 uppercase tracking-wide border-b border-slate-300 dark:border-slate-600 pb-2">Components</div>
-                  
+                  <div className="section-title text-lg font-bold mb-4 text-slate-800 dark:text-slate-200 uppercase tracking-wide border-b border-slate-300 dark:border-slate-600 pb-2">
+                    Components
+                  </div>
+
                   <table className="w-full text-left text-sm border-collapse mb-4 text-slate-700 dark:text-slate-300">
                     <thead className="bg-slate-100 dark:bg-slate-700/50">
                       <tr>
-                        <th className="border border-slate-200 dark:border-slate-600 p-2 text-center w-12">LN</th>
-                        <th className="border border-slate-200 dark:border-slate-600 p-2 w-20 text-center">Type</th>
-                        <th className="border border-slate-200 dark:border-slate-600 p-2 w-32">Item Code</th>
-                        <th className="border border-slate-200 dark:border-slate-600 p-2">Component Description</th>
-                        <th className="border border-slate-200 dark:border-slate-600 p-2 text-center w-20">UOM</th>
-                        <th className="border border-slate-200 dark:border-slate-600 p-2 text-right w-28">Qty Needed</th>
-                        <th className="border border-slate-200 dark:border-slate-600 p-2 text-right w-24">Scrap Rate</th>
+                        <th className="border border-slate-200 dark:border-slate-600 p-2 text-center w-12">
+                          LN
+                        </th>
+                        <th className="border border-slate-200 dark:border-slate-600 p-2 w-20 text-center">
+                          Type
+                        </th>
+                        <th className="border border-slate-200 dark:border-slate-600 p-2 w-32">
+                          Item Code
+                        </th>
+                        <th className="border border-slate-200 dark:border-slate-600 p-2">
+                          Component Description
+                        </th>
+                        <th className="border border-slate-200 dark:border-slate-600 p-2 text-center w-20">
+                          UOM
+                        </th>
+                        <th className="border border-slate-200 dark:border-slate-600 p-2 text-right w-28">
+                          Qty Needed
+                        </th>
+                        <th className="border border-slate-200 dark:border-slate-600 p-2 text-right w-24">
+                          Scrap Rate
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {lines.filter(l => String(l.itemCode).trim() !== "").map((line, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                          <td className="border border-slate-200 dark:border-slate-600 p-2 text-center">{idx + 1}</td>
-                          <td className="border border-slate-200 dark:border-slate-600 p-2 text-center font-bold">{line.invType}</td>
-                          <td className="border border-slate-200 dark:border-slate-600 p-2 font-mono">{line.itemCode}</td>
-                          <td className="border border-slate-200 dark:border-slate-600 p-2">{line.itemDescription}</td>
-                          <td className="border border-slate-200 dark:border-slate-600 p-2 text-center">{line.uom}</td>
-                          <td className="border border-slate-200 dark:border-slate-600 p-2 text-right font-mono text-blue-700 dark:text-blue-400 font-semibold">{line.qtyNeeded}</td>
-                          <td className="border border-slate-200 dark:border-slate-600 p-2 text-right font-mono text-slate-500">{line.scrapRate}%</td>
-                        </tr>
-                      ))}
-                      {lines.filter(l => String(l.itemCode).trim() !== "").length === 0 && (
+                      {lines
+                        .filter((l) => String(l.itemCode).trim() !== "")
+                        .map((line, idx) => (
+                          <tr
+                            key={idx}
+                            className="hover:bg-slate-50 dark:hover:bg-slate-700/30"
+                          >
+                            <td className="border border-slate-200 dark:border-slate-600 p-2 text-center">
+                              {idx + 1}
+                            </td>
+                            <td className="border border-slate-200 dark:border-slate-600 p-2 text-center font-bold">
+                              {line.invType}
+                            </td>
+                            <td className="border border-slate-200 dark:border-slate-600 p-2 font-mono">
+                              {line.itemCode}
+                            </td>
+                            <td className="border border-slate-200 dark:border-slate-600 p-2">
+                              {line.itemDescription}
+                            </td>
+                            <td className="border border-slate-200 dark:border-slate-600 p-2 text-center">
+                              {line.uom}
+                            </td>
+                            <td className="border border-slate-200 dark:border-slate-600 p-2 text-right font-mono text-blue-700 dark:text-blue-400 font-semibold">
+                              {line.qtyNeeded}
+                            </td>
+                            <td className="border border-slate-200 dark:border-slate-600 p-2 text-right font-mono text-slate-500">
+                              {line.scrapRate}%
+                            </td>
+                          </tr>
+                        ))}
+                      {lines.filter((l) => String(l.itemCode).trim() !== "")
+                        .length === 0 && (
                         <tr>
-                          <td colSpan="7" className="border border-slate-200 dark:border-slate-600 p-6 text-center text-slate-400">No components have been added yet.</td>
+                          <td
+                            colSpan="7"
+                            className="border border-slate-200 dark:border-slate-600 p-6 text-center text-slate-400"
+                          >
+                            No components have been added yet.
+                          </td>
                         </tr>
                       )}
                     </tbody>

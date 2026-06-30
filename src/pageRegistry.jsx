@@ -105,6 +105,9 @@ export const pageRegistry = {
   RMMast: lazyPage(() => import("./NAYSA Cloud/Master Data/RMMasterData/RMMast.jsx")),
   FAMast: lazyPage(() => import("./NAYSA Cloud/Master Data/FAMasterData/FAMast.jsx")),
   ProdBOM: lazyPage(() => import("./NAYSA Cloud/Master Data/BillofMaterial/Reference File/ProdBOM.jsx")),
+  ProdWorkCenter: lazyPage(() => import("./NAYSA Cloud/Master Data/BillofMaterial/Reference File/ProdWorkCenter.jsx")),
+  ProdParameters: lazyPage(() => import("./NAYSA Cloud/Master Data/BillofMaterial/Reference File/ProdParameters.jsx")),
+  ProdParameter: lazyPage(() => import("./NAYSA Cloud/Master Data/BillofMaterial/Reference File/ProdParameters.jsx")),
   // Global & Queries
   AllTranHistory: lazyPage(() => import("./NAYSA Cloud/Lookup/SearchGlobalTranHistory.jsx")),
   BudgetInquiry: lazyPage(() => import("./NAYSA Cloud/Query/BUDInq/BUDInq.jsx")),
