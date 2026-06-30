@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 
@@ -25,7 +25,6 @@ import COAMastLookupModal from "../../../Lookup/SearchCOAMast.jsx";
 import SLMastLookupModal from "../../../Lookup/SearchSLMast.jsx";
 import VATLookupModal from "../../../Lookup/SearchVATRef.jsx";
 import ATCLookupModal from "../../../Lookup/SearchATCRef.jsx";
-import PayeeMastLookupModal from "../../../Lookup/SearchVendMast";
 import CancelTranModal from "../../../Lookup/SearchCancelRef.jsx";
 import PostTranModal from "../../../Lookup/SearchPostRef.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
@@ -33,7 +32,7 @@ import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import WOLookupModal from "../../../Lookup/SearchWO.jsx";
 import SearchStockCard from "@/NAYSA Cloud/Lookup/SearchStockCard.jsx";
 
-import { fetchDataJson } from "../../../Configuration/BaseURL.jsx";
+import { fetchDataJson, postRequest } from "../../../Configuration/BaseURL.jsx";
 import { useSelectedHSColConfig as getSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
 import {
     docTypeNames,
@@ -42,7 +41,6 @@ import {
     docTypeVideoGuide,
 } from "@/NAYSA Cloud/Global/doctype";
 import {
-    useTransactionUpsert,
     useFetchTranData,
     useHandleCancel,
     useHandlePostTran,
@@ -53,8 +51,10 @@ import {
     formatNumber,
     parseFormattedNumber,
     useSwalshowSaveSuccessDialog,
+    useSwalErrorAlert,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
+import { useResizableTableColumns } from "@/NAYSA Cloud/Global/datatable.jsx";
 
 const today = () => new Date().toISOString().split("T")[0];
 
@@ -94,6 +94,104 @@ const amountValue = (value, decimal = 2) =>
     formatNumber(parseFormattedNumber(value || 0), decimal);
 
 const amountRaw = (value) => parseFormattedNumber(value || 0) || 0;
+
+const tryParseJson = (value) => {
+    if (typeof value !== "string") return value;
+
+    const trimmed = value.trim();
+    if (!trimmed) return value;
+
+    if (
+        (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+        (trimmed.startsWith("[") && trimmed.endsWith("]"))
+    ) {
+        try {
+            return JSON.parse(trimmed);
+        } catch {
+            return value;
+        }
+    }
+
+    return value;
+};
+
+const flattenSprocResult = (value, output = []) => {
+    const parsed = tryParseJson(value);
+
+    if (Array.isArray(parsed)) {
+        parsed.forEach((item) => flattenSprocResult(item, output));
+        return output;
+    }
+
+    if (parsed && typeof parsed === "object") {
+        output.push(parsed);
+
+        [
+            "data",
+            "result",
+            "RESULT",
+            "JsonResult",
+            "rows",
+            "recordset",
+            "recordsets",
+        ].forEach((key) => {
+            if (parsed[key] !== undefined && parsed[key] !== parsed) {
+                flattenSprocResult(parsed[key], output);
+            }
+        });
+    }
+
+    return output;
+};
+
+const normalizeSprocValidationText = (message = "") => {
+    const normalized = String(message || "")
+        .replace(/\r\n/g, "\n")
+        .replace(/\r/g, "\n")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => {
+            if (line.toLowerCase().includes("the following fields are required")) {
+                return "The following fields are required :";
+            }
+
+            return line.replace(/^[-\s]+/, "- ");
+        })
+        .join("\n");
+
+    return normalized || "Please complete required fields.";
+};
+
+const getSprocValidationMessage = (value) => {
+    const rows = flattenSprocResult(value);
+
+    const errorRow = rows.find((row) => {
+        const errorCount = Number(getValue(row, "errorCount", "ERROR_COUNT", "error_count") || 0);
+        const errorMsg = getValue(row, "errorMsg", "ERROR_MSG", "error_message", "message", "MESSAGE");
+
+        return errorCount > 0 || Boolean(errorMsg);
+    });
+
+    return errorRow
+        ? normalizeSprocValidationText(
+            getValue(errorRow, "errorMsg", "ERROR_MSG", "error_message", "message", "MESSAGE")
+        )
+        : "";
+};
+
+const getSavedTranRow = (value) => {
+    const rows = flattenSprocResult(value);
+
+    return rows.find((row) =>
+        Boolean(getValue(row, "fgprNo", "FGPR_NO", "docNo", "documentNo", "tranNo")) &&
+        Boolean(getValue(row, "fgprHdId", "fgprId", "FGPR_ID", "docId", "documentID"))
+    ) || null;
+};
+
+const showSprocValidationToast = (message) => {
+    useSwalErrorAlert("Validation Failed", normalizeSprocValidationText(message));
+};
 
 const detailConfigKeyMap = {
     line_no: "lineNo",
@@ -160,6 +258,42 @@ const summaryConfigKeyMap = {
     remarks: "remarks",
 };
 
+const fallbackDetailColumns = [
+    { key: "lineNo", label: "LN", classNames: "text-left", renderType: "text", width: 80 },
+    { key: "itemCode", label: "Item No", classNames: "text-left", renderType: "text", width: 130 },
+    { key: "itemName", label: "Item Description", classNames: "text-left", renderType: "text", width: 220 },
+    { key: "uomCode", label: "UOM", classNames: "text-left", renderType: "text", width: 90 },
+    { key: "quantity", label: "WOR Quantity", classNames: "text-right", renderType: "number", renderFormat: "2", width: 130 },
+    { key: "unitCost", label: "Unit Cost", classNames: "text-right", renderType: "number", renderFormat: "6", width: 130 },
+    { key: "itemAmount", label: "Amount", classNames: "text-right", renderType: "number", renderFormat: "6", width: 130 },
+    { key: "lotNo", label: "Lot No", classNames: "text-left", renderType: "text", width: 130 },
+    { key: "bbDate", label: "BB Date", classNames: "text-left", renderType: "date", renderFormat: "MM/DD/YYYY", width: 130 },
+    { key: "qstatCode", label: "QC Status", classNames: "text-left", renderType: "text", width: 120 },
+    { key: "rcCode", label: "RC Code", classNames: "text-left", renderType: "text", width: 120 },
+    { key: "slCode", label: "SL Code", classNames: "text-left", renderType: "text", width: 120 },
+    { key: "totMatlCost", label: "Direct Materials Cost", classNames: "text-right", renderType: "number", renderFormat: "6", width: 170 },
+    { key: "stdLabor", label: "STD DLCost", classNames: "text-right", renderType: "number", renderFormat: "6", width: 130 },
+    { key: "stdOverhead", label: "STD FOHCost", classNames: "text-right", renderType: "number", renderFormat: "6", width: 130 },
+    { key: "whouseCode", label: "Warehouse", classNames: "text-left", renderType: "text", width: 130 },
+    { key: "locCode", label: "Location", classNames: "text-left", renderType: "text", width: 130 },
+];
+
+const fallbackSummaryColumns = [
+    { key: "lineNo", label: "LN", classNames: "text-left", renderType: "text", width: 80 },
+    { key: "acctCode", label: "Acct Code", classNames: "text-left", renderType: "text", width: 130 },
+    { key: "rcCode", label: "RC Code", classNames: "text-left", renderType: "text", width: 120 },
+    { key: "slCode", label: "SL Code", classNames: "text-left", renderType: "text", width: 120 },
+    { key: "particular", label: "Particular", classNames: "text-left", renderType: "text", width: 220 },
+    { key: "vatCode", label: "VAT Code", classNames: "text-left", renderType: "text", width: 120 },
+    { key: "vatDesc", label: "VAT Description", classNames: "text-left", renderType: "text", width: 180 },
+    { key: "atcCode", label: "EWT Code", classNames: "text-left", renderType: "text", width: 120 },
+    { key: "atcDesc", label: "EWT Description", classNames: "text-left", renderType: "text", width: 180 },
+    { key: "debit", label: "Debit", classNames: "text-right", renderType: "number", renderFormat: "2", width: 130 },
+    { key: "credit", label: "Credit", classNames: "text-right", renderType: "number", renderFormat: "2", width: 130 },
+    { key: "slRefNo", label: "S/L Reference No.", classNames: "text-left", renderType: "text", width: 150 },
+    { key: "remarks", label: "Remarks", classNames: "text-left", renderType: "text", width: 180 },
+];
+
 const normalizeConfigColumns = (configRows, keyMap) => {
     if (!Array.isArray(configRows) || configRows.length === 0) return [];
 
@@ -185,6 +319,7 @@ const FGPR = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const loadedFromUrlRef = useRef(false);
+    const saveInProgressRef = useRef(false);
     const { resetFlag } = useReset();
     const { user, companyInfo } = useAuth();
 
@@ -215,6 +350,7 @@ const FGPR = () => {
             cutoffCode: "",
             refNo: "",
             woNo: "",
+            isOpenReferenceWO: false,
             particular: "",
             remarks: "",
             noReprints: "0",
@@ -227,8 +363,6 @@ const FGPR = () => {
             WHName: "",
             LocCode: "",
             LocName: "",
-            vendCode: "",
-            vendName: "",
             userCode: user?.USER_CODE || user?.userCode || "NSI",
 
             detailRows: [],
@@ -252,7 +386,6 @@ const FGPR = () => {
             showSLLookup: false,
             showVATLookup: false,
             showEWTLookup: false,
-            payeeLookupOpen: false,
             showCancelModal: false,
             showPostModal: false,
             showWOLookup: false,
@@ -299,6 +432,8 @@ const FGPR = () => {
     const isFormDisabled =
         state.isViewDocument || ["FINALIZED", "CANCELLED", "CLOSED", "POSTED"].includes(displayStatus);
 
+    const hasItemDetails = Array.isArray(state.detailRows) && state.detailRows.length > 0;
+
     const totals = useMemo(() => {
         const detailRows = state.detailRows || [];
         const summaryRows = state.detailRowsGL || [];
@@ -322,6 +457,55 @@ const FGPR = () => {
             ),
         };
     }, [state.detailRows, state.detailRowsGL]);
+
+    const detailTableColumns = useMemo(() => state.detailColumns || [], [state.detailColumns]);
+    const summaryTableColumns = useMemo(() => state.summaryColumns || [], [state.summaryColumns]);
+
+    const {
+        getColumnStyle: getDetailColumnStyle,
+        getFrozenColumnStyle: getDetailFrozenStyle,
+        getOrderedColumns: getOrderedDetailColumns,
+        getSortedRows: getSortedDetailRows,
+        renderHeaderContextMenu: renderDetailHeaderContextMenu,
+        renderResizableHeader: renderDetailHeader,
+    } = useResizableTableColumns(detailTableColumns);
+
+    const orderedDetailColumns = getOrderedDetailColumns(detailTableColumns);
+
+    const getDetailCellStyle = (key, fallbackWidth) => ({
+        ...getDetailColumnStyle(key, fallbackWidth),
+        ...getDetailFrozenStyle(key, orderedDetailColumns, fallbackWidth, {
+            isHeader: false,
+        }),
+    });
+
+    const sortedDetailRows = getSortedDetailRows(
+        (state.detailRows || []).map((row, originalIndex) => ({ row, originalIndex })),
+        (entry, sortKey) => entry.row?.[sortKey] ?? "",
+    );
+
+    const {
+        getColumnStyle: getSummaryColumnStyle,
+        getFrozenColumnStyle: getSummaryFrozenStyle,
+        getOrderedColumns: getOrderedSummaryColumns,
+        getSortedRows: getSortedSummaryRows,
+        renderHeaderContextMenu: renderSummaryHeaderContextMenu,
+        renderResizableHeader: renderSummaryHeader,
+    } = useResizableTableColumns(summaryTableColumns);
+
+    const orderedSummaryColumns = getOrderedSummaryColumns(summaryTableColumns);
+
+    const getSummaryCellStyle = (key, fallbackWidth) => ({
+        ...getSummaryColumnStyle(key, fallbackWidth),
+        ...getSummaryFrozenStyle(key, orderedSummaryColumns, fallbackWidth, {
+            isHeader: false,
+        }),
+    });
+
+    const sortedSummaryRows = getSortedSummaryRows(
+        (state.detailRowsGL || []).map((row, originalIndex) => ({ row, originalIndex })),
+        (entry, sortKey) => entry.row?.[sortKey] ?? "",
+    );
 
     useEffect(() => {
         detailRowsRef.current = state.detailRows || [];
@@ -388,14 +572,13 @@ const FGPR = () => {
                 })
                 : [];
 
-            // Transaction Details > General Ledger columns.
-            // FGPR_Summary is for History/Header only.
             const summaryColumnOrder = [
-                'lineNo', 'acctCode', 'rcCode', 'slCode', 'particular',
-                'vatCode', 'vatDesc', 'atcCode', 'atcDesc',
-                'debit', 'credit', 'slRefNo', 'slRefDate', 'remarks',
+                "lineNo", "acctCode", "rcCode", "slCode", "particular",
+                "vatCode", "vatDesc", "atcCode", "atcDesc",
+                "debit", "credit", "slRefNo", "slRefDate", "remarks",
             ];
 
+            const normalizedDetailColumns = normalizeConfigColumns(transactionDetailConfig, detailConfigKeyMap);
             const rawSummaryColumns = normalizeConfigColumns(generalLedgerConfig, summaryConfigKeyMap);
             const sortedSummaryColumns = [...rawSummaryColumns].sort((a, b) => {
                 const ai = summaryColumnOrder.indexOf(a.key);
@@ -404,8 +587,17 @@ const FGPR = () => {
             });
 
             updateState({
-                detailColumns: normalizeConfigColumns(transactionDetailConfig, detailConfigKeyMap),
-                summaryColumns: sortedSummaryColumns,
+                detailColumns: normalizedDetailColumns.length ? normalizedDetailColumns : fallbackDetailColumns,
+                summaryColumns: sortedSummaryColumns.length ? sortedSummaryColumns : fallbackSummaryColumns,
+            });
+        } catch (error) {
+            console.error("FGPR column config error:", error);
+
+            // Prevent page from being stuck on LoadingSpinner when HS_COLCONFIG fails
+            // or when a config endpoint has no rows yet.
+            updateState({
+                detailColumns: fallbackDetailColumns,
+                summaryColumns: fallbackSummaryColumns,
             });
         } finally {
             updateState({ isLoading: false });
@@ -567,8 +759,6 @@ const FGPR = () => {
         LocCode: state.LocCode || "",
         particular: state.particular || "",
         remarks: state.remarks || "",
-        vendCode: state.vendCode || "",
-        vendName: state.vendName || "",
         userCode: state.userCode || user?.USER_CODE || "",
         currCode: state.currCode || "PHP",
         currRate: amountRaw(state.currRate || 1) || 1,
@@ -639,6 +829,7 @@ const FGPR = () => {
                 cutoffCode: getValue(parsed, "cutoffCode", "cutoff_code", "CUTOFF_CODE"),
                 refNo: getValue(parsed, "refNo", "ref_no", "REF_NO"),
                 woNo: getValue(parsed, "woNo", "wo_no", "WO_NO"),
+                isOpenReferenceWO: Boolean(getValue(parsed, "woNo", "wo_no", "WO_NO")),
                 branchCode: getValue(parsed, "branchCode", "branch_code", "BRANCH_CODE") || branchCode,
                 branchName: getValue(parsed, "branchName", "branch_name", "BRANCH_NAME") || state.branchName,
                 WHCode: getValue(parsed, "whouseCode", "whouse_code", "WHOUSE_CODE", "whCode", "WH_CODE"),
@@ -647,8 +838,6 @@ const FGPR = () => {
                 LocName: getValue(parsed, "locName", "loc_name", "LOC_NAME", "LocName"),
                 particular: getValue(parsed, "particular", "PARTICULAR"),
                 remarks: getValue(parsed, "remarks", "REMARKS"),
-                vendCode: getValue(parsed, "vendCode", "vend_code", "VEND_CODE"),
-                vendName: getValue(parsed, "vendName", "vend_name", "VEND_NAME"),
                 currCode: getValue(parsed, "currCode", "curr_code", "CURR_CODE") || "PHP",
                 currRate: getValue(parsed, "currRate", "curr_rate", "CURR_RATE") || 1,
                 noReprints: getValue(parsed, "noReprints", "no_reprints", "NO_REPRINTS") || "0",
@@ -667,63 +856,64 @@ const FGPR = () => {
 
     const handleActivityOption = async (action) => {
         if (isFormDisabled && action !== "GenerateGL") return;
-        if (action === "Upsert" && !validateBeforeSave()) return;
+        if (saveInProgressRef.current) return;
 
+        saveInProgressRef.current = true;
         updateState({ isLoading: true });
 
         try {
             if (action === "GenerateGL") {
                 const entries = await useGenerateGLEntries(endpointDocType, buildPayload([]));
+                const generateError = getSprocValidationMessage(entries);
+
+                if (generateError) {
+                    showSprocValidationToast(generateError);
+                    return;
+                }
+
                 if (Array.isArray(entries)) {
                     updateState({ detailRowsGL: entries.map(normalizeSummaryRow) });
                 }
+
                 return;
             }
 
-            let glRowsForSave = state.detailRowsGL || [];
-
-            if (!Array.isArray(glRowsForSave) || glRowsForSave.length === 0) {
-                const generated = await useGenerateGLEntries(endpointDocType, buildPayload([]));
-                if (Array.isArray(generated) && generated.length > 0) {
-                    glRowsForSave = generated.map(normalizeSummaryRow);
-                    updateState({ detailRowsGL: glRowsForSave });
-                }
-            }
-
+            /*
+             * Save should NOT auto-generate GL.
+             * The Upsert sproc is the source of validation truth.
+             */
+            const glRowsForSave = Array.isArray(state.detailRowsGL) ? state.detailRowsGL : [];
             const payload = buildPayload(glRowsForSave);
-            const result = await useTransactionUpsert(
-                endpointDocType,
-                payload,
-                updateState,
-                "fgprHdId",
-                "fgprNo",
+
+            /*
+             * Use the FGPR controller directly so the sproc result is preserved:
+             * response.data[0].errorMsg / response.data[0].errorCount
+             */
+            const result = await postRequest(
+                "upsertFGPR",
+                JSON.stringify({ json_data: payload }),
             );
 
-            const row = Array.isArray(result)
-                ? result[0]
-                : Array.isArray(result?.data)
-                    ? result.data[0]
-                    : result?.data || result;
+            const upsertError = getSprocValidationMessage(result);
 
-            if (row?.errorCount && Number(row.errorCount) > 0) {
-                Swal.fire({
-                    icon: "warning",
-                    title: "Validation",
-                    html: String(row.errorMsg || "Please complete required fields.").replace(/\r?\n/g, "<br/>")
-                });
+            if (upsertError) {
+                showSprocValidationToast(upsertError);
                 return;
             }
 
+            const savedRow = getSavedTranRow(result);
+
             const savedNo = getValue(
-                row,
+                savedRow,
                 "fgprNo",
                 "FGPR_NO",
                 "docNo",
                 "documentNo",
                 "tranNo",
             ) || state.documentNo;
+
             const savedId = getValue(
-                row,
+                savedRow,
                 "fgprHdId",
                 "fgprId",
                 "FGPR_ID",
@@ -747,8 +937,20 @@ const FGPR = () => {
             );
         } catch (error) {
             console.error("FGPR save error:", error);
-            Swal.fire({ icon: "error", title: "Error", text: error?.message || "Something went wrong during save." });
+
+            const sprocMessage =
+                error?.response?.data?.errorMsg ||
+                error?.response?.data?.message ||
+                error?.response?.data?.details ||
+                error?.response?.data?.error ||
+                error?.data?.errorMsg ||
+                error?.errorMsg ||
+                error?.message ||
+                "Something went wrong during save.";
+
+            showSprocValidationToast(sprocMessage);
         } finally {
+            saveInProgressRef.current = false;
             updateState({ isLoading: false });
         }
     };
@@ -835,7 +1037,7 @@ const FGPR = () => {
     };
 
     const addDetailRow = (index = null) => {
-        if (isFormDisabled) return;
+        if (isFormDisabled || state.isOpenReferenceWO) return;
         const next = normalizeDetailRow(
             {
                 whouseCode: state.WHCode,
@@ -855,12 +1057,12 @@ const FGPR = () => {
     };
 
     const handleAddRowClick = () => {
-        if (isFormDisabled) return;
+        if (isFormDisabled || state.isOpenReferenceWO) return;
         setShowTypeDropdown((prev) => !prev);
     };
 
     const handleOpenFGLookup = () => {
-        if (isFormDisabled) return;
+        if (isFormDisabled || state.isOpenReferenceWO) return;
         setShowTypeDropdown(false);
         updateState({
             itemLookupOpen: true,
@@ -870,7 +1072,7 @@ const FGPR = () => {
     };
 
     const handleOpenWOReferenceLookup = () => {
-        if (isFormDisabled) return;
+        if (isFormDisabled || hasItemDetails) return;
 
         if (!state.branchCode) {
             Swal.fire({
@@ -909,6 +1111,8 @@ const FGPR = () => {
     };
 
     const updateDetailRow = (index, field, value, extra = {}) => {
+        if (["itemAmount", "amount"].includes(field)) return;
+
         const rows = [...state.detailRows];
         const row = { ...rows[index], [field]: value, ...extra };
 
@@ -919,9 +1123,6 @@ const FGPR = () => {
             row.totMatlCost = row.totMatlCost || row.itemAmount;
         }
 
-        if (field === "itemAmount") {
-            row.amount = value;
-        }
 
         rows[index] = row;
         updateState({ detailRows: rows });
@@ -1131,16 +1332,6 @@ const FGPR = () => {
         updateState({ showEWTLookup: false, glRowIndex: null });
     };
 
-    const handleClosePayeeLookup = (row) => {
-        if (row) {
-            updateState({
-                vendCode: getValue(row, "vendCode", "vend_code", "VEND_CODE"),
-                vendName: getValue(row, "vendName", "vend_name", "VEND_NAME"),
-            });
-        }
-        updateState({ payeeLookupOpen: false });
-    };
-
     const openAllTranDocNoLookup = useCallback((event) => {
         if (event) {
             event.preventDefault();
@@ -1185,18 +1376,37 @@ const FGPR = () => {
         }
     };
 
-    const handleHistoryRowPick = useCallback((row) => {
-        const docNo = row?.docNo || row?.fgprNo || row?.FGPR_NO;
-        const branchCode = row?.branchCode || row?.BRANCH_CODE || state.branchCode;
+    const handleHistoryRowPick = useCallback(async (row = {}) => {
+        const docNo = getValue(
+            row,
+            "docNo",
+            "fgprNo",
+            "fgpr_no",
+            "FGPR_NO",
+            "documentNo",
+            "DOCUMENT_NO",
+        );
+        const branchCode =
+            getValue(row, "branchCode", "branch_code", "BRANCH_CODE") ||
+            state.branchCode;
+
         if (!docNo || !branchCode) return;
-        fetchTranData(docNo, branchCode);
-        updateState({ topTab: "details" });
+
+        await fetchTranData(docNo, branchCode);
+        updateState({
+            topTab: "details",
+            activeTab: "basic",
+        });
     }, [state.branchCode]);
 
     useEffect(() => {
         const params = new URLSearchParams(location.search);
-        const docNo = params.get("fgprNo") || params.get("fgrpNo") || params.get("docNo");
-        const brCode = params.get("branchCode");
+        const docNo =
+            params.get("fgprNo") ||
+            params.get("fgpr_no") ||
+            params.get("fgrpNo") ||
+            params.get("docNo");
+        const brCode = params.get("branchCode") || params.get("branch_code");
 
         if (!loadedFromUrlRef.current && docNo && brCode) {
             loadedFromUrlRef.current = true;
@@ -1261,11 +1471,9 @@ const FGPR = () => {
 
         updateState({
             woNo,
-            refNo: woNo || state.refNo,
+            isOpenReferenceWO: true,
             particular: getValue(header, "remarks", "particular", "PARTICULAR") || state.particular,
             remarks: getValue(header, "remarks", "particular", "PARTICULAR") || state.remarks,
-            vendCode: getValue(header, "vendCode", "VEND_CODE") || state.vendCode,
-            vendName: getValue(header, "vendName", "VEND_NAME") || state.vendName,
             detailRows: normalizedRows.map((row, index) => ({ ...row, lineNo: String(index + 1) })),
             showWOLookup: false,
         });
@@ -1350,6 +1558,102 @@ const FGPR = () => {
         await loadWOReference(row);
     };
 
+    const handleTableInputEnterNavigation = (event, tableName, columnKey) => {
+        if (event.key !== "Enter") return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const currentInput = event.currentTarget;
+        const tableSelector = `[data-fgpr-table="${tableName}"]`;
+        const inputs = Array.from(
+            document.querySelectorAll(
+                `${tableSelector}:not([disabled]):not([readonly])`
+            )
+        ).filter((input) => {
+            const style = window.getComputedStyle(input);
+            return style.display !== "none" && style.visibility !== "hidden";
+        });
+
+        if (!inputs.length) return;
+
+        const currentIndex = inputs.indexOf(currentInput);
+        const sameColumnInputs = inputs.filter(
+            (input) => input.dataset.fgprCol === columnKey
+        );
+        const currentColumnIndex = sameColumnInputs.indexOf(currentInput);
+
+        let nextInput = null;
+
+        if (event.shiftKey) {
+            nextInput = currentColumnIndex > 0
+                ? sameColumnInputs[currentColumnIndex - 1]
+                : inputs[currentIndex - 1];
+        } else {
+            nextInput =
+                currentColumnIndex >= 0 && currentColumnIndex < sameColumnInputs.length - 1
+                    ? sameColumnInputs[currentColumnIndex + 1]
+                    : inputs[currentIndex + 1];
+        }
+
+        if (!nextInput) return;
+
+        setTimeout(() => {
+            nextInput.focus();
+            if (typeof nextInput.select === "function") {
+                nextInput.select();
+            }
+        }, 0);
+    };
+
+    const attachTableNavigation = (node, tableName, rowIndex, columnKey) => {
+        if (!React.isValidElement(node)) return node;
+
+        const nodeType = typeof node.type === "string" ? node.type.toLowerCase() : "";
+        const existingOnKeyDown = node.props?.onKeyDown;
+        const existingOnBlur = node.props?.onBlur;
+        const children = node.props?.children;
+
+        const navigatedChildren = children
+            ? React.Children.map(children, (child) =>
+                attachTableNavigation(child, tableName, rowIndex, columnKey)
+            )
+            : children;
+
+        const extraProps = {};
+
+        if (["input", "textarea", "select"].includes(nodeType)) {
+            extraProps["data-fgpr-table"] = tableName;
+            extraProps["data-fgpr-row"] = rowIndex;
+            extraProps["data-fgpr-col"] = columnKey;
+            extraProps.onKeyDown = (event) => {
+                existingOnKeyDown?.(event);
+                if (event.defaultPrevented) return;
+
+                if (event.key === "Enter") {
+                    /*
+                     * Format the current numeric field before moving to the next row.
+                     * Without this, the value stays as typed (example: 10) until the user
+                     * clicks the field again or clicks outside the table.
+                     */
+                    existingOnBlur?.({
+                        ...event,
+                        target: event.currentTarget,
+                        currentTarget: event.currentTarget,
+                    });
+                }
+
+                handleTableInputEnterNavigation(event, tableName, columnKey);
+            };
+        }
+
+        if (navigatedChildren !== children) {
+            extraProps.children = navigatedChildren;
+        }
+
+        return React.cloneElement(node, extraProps);
+    };
+
     const textInput = (value, onChange, options = {}) => (
         <input
             type="text"
@@ -1369,12 +1673,28 @@ const FGPR = () => {
             readOnly={isFormDisabled}
             disabled={isFormDisabled}
             onFocus={(e) => {
-                const raw = amountRaw(e.target.value);
-                e.target.value = raw === 0 ? "" : String(raw);
+                const raw = amountRaw(value);
+                if (raw === 0) {
+                    onChange("");
+                    return;
+                }
+
+                setTimeout(() => {
+                    e.currentTarget.select();
+                }, 0);
             }}
             onChange={(e) => onChange(e.target.value.replace(/[^0-9.-]/g, ""))}
             onBlur={(e) => onChange(amountValue(e.target.value, decimal))}
         />
+    );
+
+    const readOnlyNumberInput = (value, decimal = 2) => (
+        <span
+            className="block w-full px-2 py-1 text-right text-slate-900 dark:text-slate-100"
+            title="Amount is system-computed from Quantity x Unit Cost"
+        >
+            {amountValue(value || 0, decimal)}
+        </span>
     );
 
     const lookupCell = (value, onLookup, onChange = null) => (
@@ -1401,7 +1721,7 @@ const FGPR = () => {
         const key = column.key;
         const width = column.width || 120;
         const tdClass = `global-tran-td-ui ${column.classNames || ""}`;
-        const style = { minWidth: width, width };
+        const style = getDetailCellStyle(key, width);
 
         const openDetailLookup = (source, modalKey) => {
             updateState({
@@ -1419,8 +1739,9 @@ const FGPR = () => {
             uomCode: () => textInput(row.uomCode, (v) => updateDetailRow(index, "uomCode", v)),
             quantity: () => numberInput(row.quantity, (v) => updateDetailRow(index, "quantity", v), 2),
             unitCost: () => numberInput(row.unitCost, (v) => updateDetailRow(index, "unitCost", v), 6),
-            itemAmount: () => numberInput(row.itemAmount ?? row.amount, (v) => updateDetailRow(index, "itemAmount", v), 6),
-            amount: () => numberInput(row.itemAmount ?? row.amount, (v) => updateDetailRow(index, "itemAmount", v), 6),
+            itemAmount: () => readOnlyNumberInput(row.itemAmount ?? row.amount, 6),
+            amount: () => readOnlyNumberInput(row.itemAmount ?? row.amount, 6),
+            totalAmount: () => readOnlyNumberInput(row.itemAmount ?? row.amount ?? row.totalAmount, 6),
             categCode: () => textInput(row.categCode, (v) => updateDetailRow(index, "categCode", v), { readOnly: true }),
             lotNo: () => textInput(row.lotNo, (v) => updateDetailRow(index, "lotNo", v)),
             bbDate: () => (
@@ -1458,9 +1779,12 @@ const FGPR = () => {
                 }),
         };
 
+        const cellContent =
+            renderers[key]?.() || textInput(row[key], (v) => updateDetailRow(index, key, v));
+
         return (
             <td key={`${key}-${index}`} className={tdClass} style={style}>
-                {renderers[key]?.() || textInput(row[key], (v) => updateDetailRow(index, key, v))}
+                {attachTableNavigation(cellContent, "fgpr-detail", index, key)}
             </td>
         );
     };
@@ -1469,7 +1793,7 @@ const FGPR = () => {
         const key = column.key;
         const width = column.width || 120;
         const tdClass = `global-tran-td-ui ${column.classNames || ""}`;
-        const style = { minWidth: width, width };
+        const style = getSummaryCellStyle(key, width);
 
         const renderers = {
             lineNo: () => <span>{index + 1}</span>,
@@ -1501,9 +1825,12 @@ const FGPR = () => {
             remarks: () => textInput(row.remarks, (v) => updateSummaryRow(index, "remarks", v)),
         };
 
+        const cellContent =
+            renderers[key]?.() || textInput(row[key], (v) => updateSummaryRow(index, key, v));
+
         return (
             <td key={`${key}-${index}`} className={tdClass} style={style}>
-                {renderers[key]?.() || textInput(row[key], (v) => updateSummaryRow(index, key, v))}
+                {attachTableNavigation(cellContent, "fgpr-summary", index, key)}
             </td>
         );
     };
@@ -1515,7 +1842,7 @@ const FGPR = () => {
         fgpr_no: state.documentNo,
     };
 
-    if (state.isLoading || (state.detailColumns.length === 0 && state.summaryColumns.length === 0)) {
+    if (state.isLoading) {
         return <LoadingSpinner />;
     }
 
@@ -1568,8 +1895,8 @@ const FGPR = () => {
                         <button
                             type="button"
                             className={`global-tran-tab-padding-ui ${state.activeTab === "basic"
-                                    ? "global-tran-tab-text_active-ui"
-                                    : "global-tran-tab-text_inactive-ui"
+                                ? "global-tran-tab-text_active-ui"
+                                : "global-tran-tab-text_inactive-ui"
                                 }`}
                             onClick={() => updateState({ activeTab: "basic" })}
                         >
@@ -1635,49 +1962,12 @@ const FGPR = () => {
 
                                 <div className="global-tran-textbox-group-div-ui">
                                     <FieldRenderer
-                                        id="vendCode"
-                                        label="Payee Code"
-                                        type="lookup"
-                                        value={state.vendCode || ""}
-                                        readOnly
-                                        disabled={isFormDisabled}
-                                        onLookup={() => updateState({ payeeLookupOpen: true })}
-                                    />
-                                    <FieldRenderer
-                                        id="vendName"
-                                        label="Payee Name"
-                                        type="text"
-                                        value={state.vendName || ""}
-                                        onChange={(val) => updateState({ vendName: val })}
-                                        disabled={isFormDisabled}
-                                    />
-
-                                    <FieldRenderer
-                                        id="refNo"
-                                        label="Reference No."
-                                        type="text"
-                                        value={state.refNo || ""}
-                                        onChange={(val) => updateState({ refNo: val })}
-                                        disabled={isFormDisabled}
-                                    />
-                                    
-                                </div>
-
-                                <div className="global-tran-textbox-group-div-ui">
-                                    <FieldRenderer
                                         id="woNo"
                                         label="WO No."
-                                        type="lookup"
+                                        type="text"
                                         value={state.woNo || ""}
-                                        onChange={(val) => updateState({ woNo: val })}
-                                        onLookup={loadWOReference}
-                                        onKeyDown={(e) => {
-                                            if (e.key === "Enter") {
-                                                e.preventDefault();
-                                                loadWOReference();
-                                            }
-                                        }}
-                                        disabled={isFormDisabled}
+                                        readOnly
+                                        disabled
                                     />
                                     <FieldRenderer
                                         id="WHCode"
@@ -1685,6 +1975,7 @@ const FGPR = () => {
                                         type="lookup"
                                         value={state.WHCode || ""}
                                         readOnly
+                                        required
                                         disabled={isFormDisabled}
                                         onLookup={() => updateState({ warehouseLookupOpen: true })}
                                     />
@@ -1695,6 +1986,7 @@ const FGPR = () => {
                                         type="lookup"
                                         value={state.LocCode || ""}
                                         readOnly
+                                        required
                                         disabled={isFormDisabled}
                                         onLookup={() => {
                                             if (!state.WHCode) {
@@ -1708,8 +2000,17 @@ const FGPR = () => {
                                             updateState({ locationLookupOpen: true, selectedWH: state.WHCode });
                                         }}
                                     />
+                                </div>
 
-
+                                <div className="global-tran-textbox-group-div-ui">
+                                    <FieldRenderer
+                                        id="refNo"
+                                        label="Reference No."
+                                        type="text"
+                                        value={state.refNo || ""}
+                                        onChange={(val) => updateState({ refNo: val })}
+                                        disabled={isFormDisabled}
+                                    />
                                 </div>
 
                                 <div className="col-span-full">
@@ -1743,43 +2044,39 @@ const FGPR = () => {
 
                                 <div className="global-tran-table-main-div-ui">
                                     <div className="global-tran-table-main-sub-div-ui">
-                                        <table className="global-tran-table-ui">
+                                        <table className="min-w-full border-separate border-spacing-0 [&_td]:border-b [&_td]:border-r [&_td]:border-slate-200 [&_tr>td:first-child]:border-l [&_th]:border-b [&_th]:border-slate-200">
                                             <thead className="global-tran-thead-div-ui">
                                                 <tr>
-                                                    {state.detailColumns.map((column) => (
-                                                        <th
-                                                            key={column.key}
-                                                            className={`global-tran-th-ui ${column.classNames || ""}`}
-                                                            style={{ minWidth: column.width || 120, width: column.width || 120 }}
-                                                        >
-                                                            {column.label}
-                                                        </th>
-                                                    ))}
+                                                    {orderedDetailColumns.map((column) =>
+                                                        renderDetailHeader(column.label, column.key, column.width, {
+                                                            orderedColumns: orderedDetailColumns,
+                                                        })
+                                                    )}
                                                     {!isFormDisabled && (
                                                         <th className="global-tran-th-ui" style={{ minWidth: 90 }}>Actions</th>
                                                     )}
                                                 </tr>
                                             </thead>
-                                            <tbody>
+                                            <tbody className="relative">
                                                 {state.detailRows.length === 0 ? (
                                                     <tr>
                                                         <td
                                                             className="global-tran-td-ui text-center text-gray-500"
-                                                            colSpan={state.detailColumns.length + 1}
+                                                            colSpan={orderedDetailColumns.length + 1}
                                                         >
                                                             No item details yet.
                                                         </td>
                                                     </tr>
                                                 ) : (
-                                                    state.detailRows.map((row, index) => (
-                                                        <tr key={row.id || index} className="global-tran-tr-ui">
-                                                            {state.detailColumns.map((column) => renderDetailCell(column, row, index))}
+                                                    sortedDetailRows.map(({ row, originalIndex }) => (
+                                                        <tr key={row.id || originalIndex} className="global-tran-tr-ui">
+                                                            {orderedDetailColumns.map((column) => renderDetailCell(column, row, originalIndex))}
                                                             {!isFormDisabled && (
                                                                 <td className="global-tran-td-ui text-center" style={{ minWidth: 90 }}>
                                                                     <button
                                                                         type="button"
                                                                         className="global-tran-td-button-delete-ui"
-                                                                        onClick={() => deleteDetailRow(index)}
+                                                                        onClick={() => deleteDetailRow(originalIndex)}
                                                                         disabled={isFormDisabled}
                                                                     >
                                                                         <FontAwesomeIcon icon={faMinus} />
@@ -1791,13 +2088,14 @@ const FGPR = () => {
                                                 )}
                                             </tbody>
                                         </table>
+                                        {renderDetailHeaderContextMenu()}
                                     </div>
                                 </div>
 
                                 <div className="global-tran-tab-footer-main-div-ui">
                                     <div className="global-tran-tab-footer-button-div-ui">
                                         <div className="relative inline-block">
-                                            {showTypeDropdown && (
+                                            {showTypeDropdown && !state.isOpenReferenceWO && (
                                                 <div className="absolute bottom-[110%] left-0 z-[9999] mb-2 w-[220px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.16)] dark:border-slate-700 dark:bg-slate-800">
                                                     <div className="border-b border-slate-100 px-3 py-2 dark:border-slate-700">
                                                         <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-400 dark:text-slate-500">
@@ -1827,28 +2125,32 @@ const FGPR = () => {
                                                             </span>
                                                         </button>
 
-                                                        <div className="my-1.5 border-t border-slate-100 dark:border-slate-700" />
+                                                        {!hasItemDetails && (
+                                                            <>
+                                                                <div className="my-1.5 border-t border-slate-100 dark:border-slate-700" />
 
-                                                        <button
-                                                            type="button"
-                                                            className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium text-blue-700 transition-all duration-150 hover:bg-blue-50 hover:text-blue-900 dark:text-blue-300 dark:hover:bg-slate-700"
-                                                            onClick={handleOpenWOReferenceLookup}
-                                                        >
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-slate-700 dark:text-blue-300">
-                                                                    <FontAwesomeIcon icon={faMagnifyingGlass} />
-                                                                </span>
-                                                                <div className="flex flex-col items-start">
-                                                                    <span>Open Reference WO</span>
-                                                                    <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500">
-                                                                        Pull items from WO
+                                                                <button
+                                                                    type="button"
+                                                                    className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium text-blue-700 transition-all duration-150 hover:bg-blue-50 hover:text-blue-900 dark:text-blue-300 dark:hover:bg-slate-700"
+                                                                    onClick={handleOpenWOReferenceLookup}
+                                                                >
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-slate-700 dark:text-blue-300">
+                                                                            <FontAwesomeIcon icon={faMagnifyingGlass} />
+                                                                        </span>
+                                                                        <div className="flex flex-col items-start">
+                                                                            <span>Open Reference WO</span>
+                                                                            <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500">
+                                                                                Pull items from WO
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600 dark:bg-slate-700 dark:text-blue-300">
+                                                                        WO
                                                                     </span>
-                                                                </div>
-                                                            </div>
-                                                            <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600 dark:bg-slate-700 dark:text-blue-300">
-                                                                WO
-                                                            </span>
-                                                        </button>
+                                                                </button>
+                                                            </>
+                                                        )}
                                                     </div>
                                                 </div>
                                             )}
@@ -1857,8 +2159,8 @@ const FGPR = () => {
                                                 type="button"
                                                 onClick={handleAddRowClick}
                                                 className="global-tran-tab-footer-button-add-ui"
-                                                disabled={isFormDisabled}
-                                                style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
+                                                disabled={isFormDisabled || state.isOpenReferenceWO}
+                                                style={{ visibility: (isFormDisabled || state.isOpenReferenceWO) ? "hidden" : "visible" }}
                                             >
                                                 <FontAwesomeIcon icon={faPlus} className="mr-2" />
                                                 Add
@@ -1901,43 +2203,39 @@ const FGPR = () => {
 
                                 <div className="global-tran-table-main-div-ui">
                                     <div className="global-tran-table-main-sub-div-ui">
-                                        <table className="global-tran-table-ui">
+                                        <table className="min-w-full border-separate border-spacing-0 [&_td]:border-b [&_td]:border-r [&_td]:border-slate-200 [&_tr>td:first-child]:border-l [&_th]:border-b [&_th]:border-slate-200">
                                             <thead className="global-tran-thead-div-ui">
                                                 <tr>
-                                                    {state.summaryColumns.map((column) => (
-                                                        <th
-                                                            key={column.key}
-                                                            className={`global-tran-th-ui ${column.classNames || ""}`}
-                                                            style={{ minWidth: column.width || 120, width: column.width || 120 }}
-                                                        >
-                                                            {column.label}
-                                                        </th>
-                                                    ))}
+                                                    {orderedSummaryColumns.map((column) =>
+                                                        renderSummaryHeader(column.label, column.key, column.width, {
+                                                            orderedColumns: orderedSummaryColumns,
+                                                        })
+                                                    )}
                                                     {!isFormDisabled && (
                                                         <th className="global-tran-th-ui" style={{ minWidth: 90 }}>Actions</th>
                                                     )}
                                                 </tr>
                                             </thead>
-                                            <tbody>
+                                            <tbody className="relative">
                                                 {state.detailRowsGL.length === 0 ? (
                                                     <tr>
                                                         <td
                                                             className="global-tran-td-ui text-center text-gray-500"
-                                                            colSpan={state.summaryColumns.length + 1}
+                                                            colSpan={orderedSummaryColumns.length + 1}
                                                         >
                                                             No general ledger entries yet.
                                                         </td>
                                                     </tr>
                                                 ) : (
-                                                    state.detailRowsGL.map((row, index) => (
-                                                        <tr key={row.id || index} className="global-tran-tr-ui">
-                                                            {state.summaryColumns.map((column) => renderSummaryCell(column, row, index))}
+                                                    sortedSummaryRows.map(({ row, originalIndex }) => (
+                                                        <tr key={row.id || originalIndex} className="global-tran-tr-ui">
+                                                            {orderedSummaryColumns.map((column) => renderSummaryCell(column, row, originalIndex))}
                                                             {!isFormDisabled && (
                                                                 <td className="global-tran-td-ui text-center" style={{ minWidth: 90 }}>
                                                                     <button
                                                                         type="button"
                                                                         className="global-tran-td-button-delete-ui"
-                                                                        onClick={() => deleteSummaryRow(index)}
+                                                                        onClick={() => deleteSummaryRow(originalIndex)}
                                                                         disabled={isFormDisabled}
                                                                     >
                                                                         <FontAwesomeIcon icon={faMinus} />
@@ -1949,6 +2247,7 @@ const FGPR = () => {
                                                 )}
                                             </tbody>
                                         </table>
+                                        {renderSummaryHeaderContextMenu()}
                                     </div>
                                 </div>
 
@@ -1987,6 +2286,7 @@ const FGPR = () => {
             <div className={state.topTab === "history" ? "" : "hidden"}>
                 <AllTranHistory
                     showHeader={false}
+                    isActive={state.topTab === "history"}
                     endpoint="/getFGPRHistory"
                     cacheKey={`FGPR:${state.branchCode || ""}:${state.documentNo || ""}`}
                     activeTabKey="FGPR_Summary"
@@ -2094,17 +2394,6 @@ const FGPR = () => {
                 onClose={handleCloseEWTLookup}
                 onSelect={handleCloseEWTLookup}
             />
-
-            {state.payeeLookupOpen && (
-                <PayeeMastLookupModal
-                    isOpen={state.payeeLookupOpen}
-                    onClose={handleClosePayeeLookup}
-                    onSelect={handleClosePayeeLookup}
-                />
-            )}
-
-
-
             {state.showCancelModal && (
                 <CancelTranModal
                     isOpen={state.showCancelModal}

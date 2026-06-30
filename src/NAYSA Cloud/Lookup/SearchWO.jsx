@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Swal from "sweetalert2";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faMagnifyingGlass, faClipboardCheck } from "@fortawesome/free-solid-svg-icons";
 
 import { fetchDataJson } from "../Configuration/BaseURL.jsx";
+import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 const getValue = (row, ...keys) => {
     if (!row || typeof row !== "object") return "";
@@ -51,6 +54,7 @@ const toRows = (response) => {
 const SearchWO = ({
     isOpen,
     onClose,
+    onCancel,
     onSelect,
     branchCode = "",
     whouseCode = "",
@@ -103,65 +107,91 @@ const SearchWO = ({
         onSelect?.(row);
     };
 
+    const handleClose = (event) => {
+        event?.stopPropagation();
+        (onCancel || onClose)?.();
+    };
+
     return (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 px-4">
-            <div className="w-full max-w-6xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-                <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-                    <div>
-                        <h2 className="text-lg font-semibold text-slate-800">Search Work Order</h2>
-                        <p className="text-xs text-slate-500">
-                            Closed Work Orders only. Filter: WO_STATUS = C and Remaining Qty &gt; 0.
-                        </p>
+        <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 px-3 sm:px-4"
+            onMouseDown={(event) => {
+                if (event.target === event.currentTarget) handleClose(event);
+            }}
+        >
+            <div className="flex max-h-[88vh] w-full max-w-[86rem] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
+                {/* Header — mirrors GlobalCombinedLookup's TabHeader pattern */}
+                <div className="flex w-full flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3 sm:px-5">
+                    <div className="flex min-w-0 flex-col pl-1 sm:pl-2">
+                        <div className="global-lookup-headertext-ui leading-tight">Search Work Order</div>
+                        <div className="mt-0.5 text-[10px] font-medium text-slate-400">
+                            Closed Work Orders only · WO_STATUS = C and Remaining Qty &gt; 0
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <span className="flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-semibold text-slate-500 shadow-sm">
+                            <FontAwesomeIcon icon={faClipboardCheck} className="text-[10px] text-blue-600" />
+                            {filteredRows.length} record{filteredRows.length === 1 ? "" : "s"}
+                        </span>
+                        <button
+                            type="button"
+                            onClick={handleClose}
+                            className="flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-[11px] font-semibold text-slate-500 shadow-sm hover:bg-slate-50"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+
+                {/* Search bar */}
+                <div className="flex flex-col gap-2.5 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:px-5">
+                    <div className="relative flex-1">
+                        <FontAwesomeIcon
+                            icon={faMagnifyingGlass}
+                            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400"
+                        />
+                        <input
+                            type="text"
+                            className="h-9 w-full rounded-md border border-slate-200 bg-white pl-8 pr-3 text-[12px] text-slate-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-100"
+                            placeholder="Search WO No., Item Code, or Item Name"
+                            value={filter}
+                            onChange={(event) => setFilter(event.target.value)}
+                            onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    loadRows(filter);
+                                }
+                            }}
+                            autoFocus
+                        />
                     </div>
 
                     <button
                         type="button"
-                        className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
-                        onClick={onClose}
-                    >
-                        Close
-                    </button>
-                </div>
-
-                <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 md:flex-row md:items-center">
-                    <input
-                        type="text"
-                        className="h-10 flex-1 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-blue-500"
-                        placeholder="Search WO No., Item Code, or Item Name"
-                        value={filter}
-                        onChange={(event) => setFilter(event.target.value)}
-                        onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                                event.preventDefault();
-                                loadRows(filter);
-                            }
-                        }}
-                        autoFocus
-                    />
-
-                    <button
-                        type="button"
-                        className="h-10 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="flex h-9 items-center justify-center gap-2 rounded-md bg-blue-600 px-4 text-[11px] font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                         onClick={() => loadRows(filter)}
                         disabled={loading}
                     >
+                        <FontAwesomeIcon icon={faMagnifyingGlass} className="text-[10px]" />
                         {loading ? "Loading..." : "Search"}
                     </button>
                 </div>
 
-                <div className="max-h-[60vh] overflow-auto">
-                    <table className="w-full min-w-[980px] border-collapse text-sm">
-                        <thead className="sticky top-0 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                {/* Table */}
+                <div className="relative flex-1 overflow-auto">
+                    <table className="w-full min-w-[980px] border-collapse text-[12px]">
+                        <thead className="sticky top-0 z-10 bg-slate-50 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
                             <tr>
-                                <th className="border-b px-4 py-3">WO No.</th>
-                                <th className="border-b px-4 py-3">WO Date</th>
-                                <th className="border-b px-4 py-3">Item Code</th>
-                                <th className="border-b px-4 py-3">Item Name</th>
-                                <th className="border-b px-4 py-3 text-right">WO Qty</th>
-                                <th className="border-b px-4 py-3 text-right">WOR Qty</th>
-                                <th className="border-b px-4 py-3 text-right">Remaining</th>
-                                <th className="border-b px-4 py-3 text-right">Unit Cost</th>
-                                <th className="border-b px-4 py-3">Status</th>
+                                <th className="border-b border-slate-200 px-4 py-2.5">WO No.</th>
+                                <th className="border-b border-slate-200 px-4 py-2.5">WO Date</th>
+                                <th className="border-b border-slate-200 px-4 py-2.5">Item Code</th>
+                                <th className="border-b border-slate-200 px-4 py-2.5">Item Name</th>
+                                <th className="border-b border-slate-200 px-4 py-2.5 text-right">WO Qty</th>
+                                <th className="border-b border-slate-200 px-4 py-2.5 text-right">WOR Qty</th>
+                                <th className="border-b border-slate-200 px-4 py-2.5 text-right">Remaining</th>
+                                <th className="border-b border-slate-200 px-4 py-2.5 text-right">Unit Cost</th>
+                                <th className="border-b border-slate-200 px-4 py-2.5">Status</th>
                             </tr>
                         </thead>
 
@@ -180,20 +210,22 @@ const SearchWO = ({
                                 return (
                                     <tr
                                         key={`${woNo}-${index}`}
-                                        className="cursor-pointer border-b hover:bg-blue-50"
+                                        className="cursor-pointer border-b border-slate-100 hover:bg-blue-50/60"
                                         onClick={() => handleSelect(row)}
                                         onDoubleClick={() => handleSelect(row)}
                                     >
-                                        <td className="px-4 py-3 font-medium text-blue-700">{woNo}</td>
-                                        <td className="px-4 py-3">{woDate}</td>
-                                        <td className="px-4 py-3">{itemCode}</td>
-                                        <td className="px-4 py-3">{itemName}</td>
-                                        <td className="px-4 py-3 text-right">{woQty.toLocaleString()}</td>
-                                        <td className="px-4 py-3 text-right">{worQty.toLocaleString()}</td>
-                                        <td className="px-4 py-3 text-right font-semibold">{remainingQty.toLocaleString()}</td>
-                                        <td className="px-4 py-3 text-right">{unitCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</td>
-                                        <td className="px-4 py-3">
-                                            <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">
+                                        <td className="px-4 py-2.5 font-semibold text-blue-700">{woNo}</td>
+                                        <td className="px-4 py-2.5 text-slate-600">{woDate}</td>
+                                        <td className="px-4 py-2.5 text-slate-600">{itemCode}</td>
+                                        <td className="px-4 py-2.5 text-slate-600">{itemName}</td>
+                                        <td className="px-4 py-2.5 text-right text-slate-600">{woQty.toLocaleString()}</td>
+                                        <td className="px-4 py-2.5 text-right text-slate-600">{worQty.toLocaleString()}</td>
+                                        <td className="px-4 py-2.5 text-right font-semibold text-slate-700">{remainingQty.toLocaleString()}</td>
+                                        <td className="px-4 py-2.5 text-right text-slate-600">
+                                            {unitCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+                                        </td>
+                                        <td className="px-4 py-2.5">
+                                            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-100">
                                                 {status || "C"}
                                             </span>
                                         </td>
@@ -203,24 +235,23 @@ const SearchWO = ({
 
                             {!loading && filteredRows.length === 0 && (
                                 <tr>
-                                    <td colSpan={9} className="px-4 py-10 text-center text-slate-500">
+                                    <td colSpan={9} className="px-4 py-10 text-center text-[12px] text-slate-400">
                                         No closed Work Order available for FGPR.
-                                    </td>
-                                </tr>
-                            )}
-
-                            {loading && (
-                                <tr>
-                                    <td colSpan={9} className="px-4 py-10 text-center text-slate-500">
-                                        Loading closed Work Orders...
                                     </td>
                                 </tr>
                             )}
                         </tbody>
                     </table>
+
+                    {loading && (
+                        <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/60">
+                            <LoadingSpinner />
+                        </div>
+                    )}
                 </div>
 
-                <div className="border-t border-slate-100 px-5 py-3 text-xs text-slate-500">
+                {/* Footer */}
+                <div className="border-t border-slate-100 px-4 py-2.5 text-[10px] font-medium text-slate-400 sm:px-5">
                     Tip: click a row to load the Work Order into FGPR.
                 </div>
             </div>

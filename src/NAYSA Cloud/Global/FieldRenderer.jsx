@@ -41,7 +41,10 @@ const FieldRenderer = ({
 }) => {
   const isAudit = variant === "audit";
   const isEnabled = !disabled || isAudit;
-  const lookupActionDisabled = disabled || readOnly || lookupDisabled || isAudit;
+  // For lookup fields, readOnly should only prevent manual typing.
+  // It should NOT disable the search icon/click action.
+  // To disable lookup action, pass disabled={true} or lookupDisabled={true}.
+  const lookupActionDisabled = disabled || lookupDisabled || isAudit;
 
   const labelText = typeof label === "string" ? label : "";
   const idSource = id || name || labelText;
