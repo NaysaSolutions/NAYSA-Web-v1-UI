@@ -43,7 +43,9 @@ export const docTypes = {
   RMAJ:"RMAJ",
   RMST:"RMST",
   WO:"WO",
-
+  MSRFP:"MSRFP",
+  RMRFP:"RMRFP",
+  FGRFP:"FGRFP"
 };
 
 
@@ -85,6 +87,10 @@ export const docTypeNames = {
     FGST: "FG Stock Transfer Transaction",
     RMST: "RM Stock Transfer Transaction",
     RMRTV: "RM Inventory Return to Vendor Transaction",
+    MSRFP: "MS Return from Production Transaction",
+    RMRFP: "RM Return from Production Transaction",
+    FGRFP: "FG Return from Production Transaction",
+
 
     // Fixed Assets Module
     FARR: "Fixed Assets Receiving Transaction",

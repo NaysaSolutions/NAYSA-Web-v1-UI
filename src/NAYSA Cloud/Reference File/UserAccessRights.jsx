@@ -43,6 +43,48 @@ import RolesTab from "./UserAccessRightsTabs/RolesTab";
 import RoleAccessTab from "./UserAccessRightsTabs/RoleAccessTab";
 import UserRoleTab from "./UserAccessRightsTabs/UserRoleTab";
 
+const getUserType = (row = {}) =>
+  String(
+    row.userType ??
+      row.USER_TYPE ??
+      row.user_type ??
+      row.userTypeCode ??
+      row.USER_TYPE_CODE ??
+      row.user_type_code ??
+      row.type ??
+      row.TYPE ??
+      ""
+  )
+    .trim()
+    .toUpperCase();
+
+const isRegularUser = (row = {}) => {
+  const userType = getUserType(row);
+
+  if (!userType) return false;
+
+  const blockedTypes = new Set([
+    "ADMIN",
+    "ADMINISTRATOR",
+    "SUPER ADMIN",
+    "SUPERADMIN",
+    "SUPER USER",
+    "SUPERUSER",
+    "SYSTEM",
+  ]);
+
+  if (blockedTypes.has(userType)) return false;
+
+  return (
+    userType === "REGULAR" ||
+    userType === "REGULAR USER" ||
+    userType === "REG" ||
+    userType === "R" ||
+    userType === "USER" ||
+    userType.includes("REGULAR")
+  );
+};
+
 const UserAccessRights = () => {
   const docType = "UserAccRight";
   const { user, companyInfo } = useAuth();
@@ -141,7 +183,9 @@ const UserAccessRights = () => {
 
           if (Array.isArray(resultData)) {
             userData = resultData.filter(
-              (u) => u.userCode || u.userName || u.userType
+              (u) =>
+                (u.userCode || u.USER_CODE || u.userName || u.USER_NAME) &&
+                isRegularUser(u)
             );
           }
         } catch (parseError) {
@@ -153,8 +197,8 @@ const UserAccessRights = () => {
 
       if (userData.length === 0) {
         await useSwalInfoAlert(
-          "No Users",
-          "No active users found in the system."
+          "No Regular Users",
+          "No active regular users found in the system."
         );
       }
 

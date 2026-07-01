@@ -809,6 +809,68 @@ export async function useHandlePrintBUDReport(params) {
 
 
 
+export async function useHandlePrintPRDReport(params) {
+  try {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      throw new Error("Popup blocked - please allow popups for this site.");
+    }
+
+    injectLoadingSpinner(printWindow);
+
+    const responseDocRpt = await useTopHSRptRow(params.reportId);
+    const formName = responseDocRpt?.reportName;
+    if (!formName) {
+      throw new Error("Report Name not defined");
+    }
+
+    const payload = {
+      branchCode: params.branchCode,
+      startDate: params.startDate,
+      endDate: params.endDate,
+      invType: params.invType,
+      itemCode: params.itemCode,
+      woNo: params.woNo,
+      reportName: formName,
+      sprocMode: "",
+      sprocName: "",
+      export: "",
+    };
+
+    const pdfBlob = await postPdfRequest("/printPRDReport", payload);
+
+    if (!(pdfBlob instanceof Blob) || pdfBlob.type !== "application/pdf") {
+      throw new Error("Expected a PDF file but received something else.");
+    }
+
+    const fileURL = URL.createObjectURL(pdfBlob);
+    printWindow.location.href = fileURL;
+  } catch (error) {
+    console.error("Error printing PRD report:", error);
+  }
+}
+
+export async function useHandleDownloadExcelPRDReport(params) {
+  try {
+    const payload = {
+      PARAMS: JSON.stringify({
+        mode: params.mode,
+        branchcode: params.branchCode,
+        startdate: params.startDate,
+        enddate: params.endDate,
+        invtype: params.invType,
+        itemcode: params.itemCode,
+        wono: params.woNo,
+      }),
+    };
+
+    return await postRequest("getPRDReport", payload);
+  } catch (error) {
+    console.error("Error downloading Production report:", error);
+    return { Data: {} };
+  }
+}
+
 
 export async function useHandleDownloadExcelBIRReport(params) {
   const { branchCode, sCutOff, eCutOff, userName, mode } = params;

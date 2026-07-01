@@ -27,6 +27,8 @@ const FieldRenderer = ({
   editableLookup = false,
   allowLookupInput = false,
   hideClearButton = false,
+  isRetrieved = false,
+  retrieved = false,
   options = [],
   readOnly = false,
   placeholder = " ",
@@ -35,10 +37,14 @@ const FieldRenderer = ({
   maxLength,
   onPaste,
   labelClassName = "",
+  nativeSelect = false,
   ...props
 }) => {
   const isAudit = variant === "audit";
   const isEnabled = !disabled || isAudit;
+  // For lookup fields, readOnly should only prevent manual typing.
+  // It should NOT disable the search icon/click action.
+  // To disable lookup action, pass disabled={true} or lookupDisabled={true}.
   const lookupActionDisabled = disabled || lookupDisabled || isAudit;
 
   const labelText = typeof label === "string" ? label : "";
@@ -154,7 +160,9 @@ const FieldRenderer = ({
     }
   };
 
-  const canClear = !disabled && !readOnly && !isAudit && !hideClearButton;
+  const isRetrievedMode = Boolean(isRetrieved || retrieved);
+  const shouldHideClearButton = hideClearButton || type === "date" || isRetrievedMode;
+  const canClear = !disabled && !readOnly && !isAudit && !shouldHideClearButton;
 
   const renderLabel = () => (
     <label htmlFor={inputId} className={labelClass}>
@@ -261,7 +269,7 @@ const FieldRenderer = ({
 
           {!lookupActionDisabled &&
             editableLookup &&
-            !hideClearButton &&
+            !shouldHideClearButton &&
             getDisplayValue(value, "lookup") &&
             clearBtn(
               (e) => {

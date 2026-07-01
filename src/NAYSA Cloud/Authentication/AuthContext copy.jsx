@@ -648,7 +648,7 @@ export default function AuthProvider({ children }) {
         </div>
       </div>
 
-      <div style="border-radius:12px;background:#fff7ed;border:1px solid #9a3412;padding:9px;font-size:11px;line-height:1.35;color:#9a3412;">
+      <div style="border-radius:12px;background:#fff7ed;border:1px solid #fed7aa;padding:9px;font-size:11px;line-height:1.35;color:#9a3412;">
         Approve only if this login was requested by you.
       </div>
     </div>
@@ -660,7 +660,7 @@ export default function AuthProvider({ children }) {
   showCancelButton: true,
   showConfirmButton: true,
   confirmButtonText: "Approve",
-  cancelButtonText: "Cancel",
+  cancelButtonText: "Block",
   reverseButtons: true,
   allowOutsideClick: false,
   allowEscapeKey: false,

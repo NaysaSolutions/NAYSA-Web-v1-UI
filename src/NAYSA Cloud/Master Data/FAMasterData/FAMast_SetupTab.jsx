@@ -444,8 +444,8 @@ const FAMast_SetupTab = ({
                 onChange={(v) => onChangeForm({ tagNo: getValue(v) })} readOnly={isReadOnly || isNewRecord} disabled={isDisabled || isNewRecord} maxLength={getLen("tag_no", 100)} />
               <FieldRenderer label="Old Property Tag" type="text" value={form.oldCode || ""}
                 onChange={(v) => onChangeForm({ oldCode: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} maxLength={getLen("old_code", 100)} />
-              <FieldRenderer label="Bar Code" type="text" value={form.barCode || ""}
-                onChange={(v) => onChangeForm({ barCode: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} maxLength={getLen("bar_code", 100)} />
+              {/* <FieldRenderer label="Bar Code" type="text" value={form.barCode || ""}
+                onChange={(v) => onChangeForm({ barCode: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} maxLength={getLen("bar_code", 100)} /> */}
               
               <FieldRenderer label="Serial No" type="text" value={form.serialNo || ""}
                 onChange={(v) => onChangeForm({ serialNo: getValue(v) })} readOnly={isReadOnly} disabled={isDisabled} maxLength={getLen("serial_no", 100)} />
@@ -653,13 +653,13 @@ const FAMast_SetupTab = ({
                       disabled={isDisabled}
                       maxLength={getLen("gcutoff_code", 6)}
                     />
-                    <FieldRenderer
+                    {/* <FieldRenderer
                       label="D-Cutoff Code"
                       type="text"
                       value={form.dcutoffCode || ""}
                       readOnly
                       disabled
-                    />
+                    /> */}
                   </div>
                 </>
               )}
