@@ -37,6 +37,7 @@ const FieldRenderer = ({
   maxLength,
   onPaste,
   labelClassName = "",
+  nativeSelect = false,
   ...props
 }) => {
   const isAudit = variant === "audit";
