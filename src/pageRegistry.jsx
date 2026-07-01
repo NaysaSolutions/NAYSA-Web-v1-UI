@@ -228,4 +228,5 @@ export const pageRegistry = {
   IMPReportModal: reportModal("IMP"),
   SalesReportModal: reportModal("OE"),
   BUDReportModal: reportModal("BUD"),
+  PRDReportModal: reportModal("PRD"),
 };

@@ -1104,6 +1104,12 @@ const RMLookupModal = (props) => (
   />
 );
 
+const PRD_ITEM_LOOKUP = {
+  FG: FGLookupModal,
+  MS: MSLookupModal,
+  RM: RMLookupModal,
+};
+
 const MODULE_DEFS = {
   AP:  { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelPURReport,    hasExtra: false, hasCutoff: false, hasReportType: false },
   VI:  { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelAPReport,    hasExtra: false, hasCutoff: false, hasReportType: false },
@@ -1120,6 +1126,7 @@ const MODULE_DEFS = {
   FA:  { label: "Asset",    lookup: null,                    print: useHandlePrintGLReport,     excel: useHandleDownloadExcelFAReport,    hasExtra: false, hasCutoff: false, hasReportType: false, hasFA: true, hasSingleMain: true, hasSingleRc: true, rcLabel: "Department/RC" },
   IMP: { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,     excel: useHandleDownloadExcelIMPReport,   hasExtra: false, hasCutoff: false, hasReportType: false, hasSingleMain: true, hasSingleRc: true, rcLabel: "Department/RC" },
   BUD: { label: "Budget",   lookup: null,                    print: useHandlePrintGLReport,    excel: useHandleDownloadExcelBUDReport,   hasExtra: false, hasCutoff: false, hasReportType: false, hasBudget: true, hasSingleRc: true, rcLabel: "Department/RC" },
+  PRD: { label: "Item",     lookup: null,                    print: useHandlePrintGLReport,    excel: useHandleDownloadExcelGLReport,    hasExtra: false, hasCutoff: false, hasReportType: false, hasProduction: true },
   OE: { label: "Customer", lookup: CustomerMastLookupModal, print: useHandlePrintARReport, excel: useHandleDownloadExcelSalesReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasSales: true },
 };
 
@@ -1317,6 +1324,8 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
     whCode: "", whName: "", locCode: "", locName: "",
     categCode: "", categName: "", classCode: "", className: "",
     faCode: "", faName: "",
+    invType: "FG",
+    woNo: "",
     userName: currentUserRow.userName,
     sCutOff: companyInfo.cutoffCode, sCutOffName: companyInfo.cutoffName,
     eCutOff: companyInfo.cutoffCode, eCutOffName: companyInfo.cutoffName,
@@ -1372,6 +1381,7 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
         sAccCode:   filters.sCode, eAccCode:   config.hasSingleMain ? filters.sCode : filters.eCode,
         payeeCode: filters.sCode, vendCode: filters.sCode, departmentCode: filters.rcCode,
         itemCode: config.hasSales ? filters.itemCode : filters.sCode, whCode: filters.whCode, wwhCode: filters.whCode, locCode: filters.locCode,
+        invType: filters.invType, woNo: filters.woNo,
         categCode: filters.categCode, classCode: filters.classCode, faCode: filters.faCode,
         sSLCode: filters.sSlCode, eSLCode: filters.eSlCode,
         sRcCode: config.hasSingleRc ? filters.rcCode : filters.sRcCode,
@@ -1448,6 +1458,8 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
   if (!isOpen) return null;
 
   const MainLookupModal = config.lookup;
+  const PRDItemLookupModal = PRD_ITEM_LOOKUP[filters.invType] || FGLookupModal;
+  const ActiveMainLookupModal = config.hasProduction ? PRDItemLookupModal : MainLookupModal;
   const selectedReport  = data?.list?.find(x => x.reportId === ui.selected.id);
   const isExport        = selectedReport?.export === "Y";
 
@@ -1458,6 +1470,7 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
     rcCode: "", rcName: "", custCode: "", custName: "", chainCustomer: "", chainCustomerName: "", itemCode: "", itemName: "",
     whCode: "", whName: "", locCode: "", locName: "",
     categCode: "", categName: "", classCode: "", className: "", faCode: "", faName: "",
+    invType: "FG", woNo: "",
     sCutOff: "", sCutOffName: "", eCutOff: "", eCutOffName: "", reportType: "TEXT",
     budgetYear: String(new Date(today).getFullYear()), cutoffCode: "", cutoffName: "",
     budgetCode: "", budgetName: "", acctCode: "", acctName: "", groupBy: "ACCOUNT_RC", monthlyView: "BUDGET",
@@ -1828,8 +1841,40 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
                           ring={ring} btnClass={btnCls} />
                       </>)}
 
+                      {/* Production fields */}
+                      {config.hasProduction && (<>
+                        <label className="text-[10px] font-semibold tracking-widest text-gray-400 uppercase self-center">
+                          Inventory Type
+                        </label>
+                        <select
+                          value={filters.invType}
+                          onChange={e => updateFilters({ invType: e.target.value, sCode: "", sName: "", eCode: "", eName: "" })}
+                          className={`w-full border border-gray-200 rounded-xl px-3 py-2.5 text-xs bg-gray-50 outline-none transition focus:ring-2 focus:border-transparent ${ring}`}
+                        >
+                          <option value="FG">FG</option>
+                          <option value="RM">RM</option>
+                          <option value="MS">MS</option>
+                        </select>
+
+                        <LookupField label="Item Code" value={filters.sName || filters.sCode}
+                          placeholder="Select Item..."
+                          onOpen={() => updateUi({ lookupMode: "S", mainLookup: true })}
+                          ring={ring} btnClass={btnCls} />
+
+                        <label className="text-[10px] font-semibold tracking-widest text-gray-400 uppercase self-center">
+                          WO No
+                        </label>
+                        <input
+                          type="text"
+                          value={filters.woNo}
+                          onChange={e => updateFilters({ woNo: e.target.value })}
+                          className={`w-full border border-gray-200 rounded-xl px-3 py-2.5 text-xs bg-gray-50 outline-none transition focus:ring-2 focus:border-transparent ${ring}`}
+                          placeholder="Enter WO No..."
+                        />
+                      </>)}
+
                       {/* Main lookup: single or range */}
-                      {!config.hasCutoff && !config.hasInventory && !config.hasFA && !config.hasSales && !config.hasBudget && (
+                      {!config.hasCutoff && !config.hasInventory && !config.hasFA && !config.hasSales && !config.hasBudget && !config.hasProduction && (
                         config.hasSingleMain ? (
                           <LookupField label={config.label}
                             value={filters.sName} placeholder={`Select ${config.label}…`}
@@ -2016,11 +2061,12 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
         />
       )}
 
-      {!config.hasCutoff && ui.mainLookup && MainLookupModal && (
-        <MainLookupModal isOpen onClose={p => {
-          if (p) {
-            const code = p.payeeCode || p.vendCode || p.custCode || p.acctCode || p.itemCode || "";
-            const name = p.payeeName || p.vendName || p.custName || p.acctName || p.itemName || "";
+      {!config.hasCutoff && ui.mainLookup && ActiveMainLookupModal && (
+        <ActiveMainLookupModal isOpen onClose={p => {
+          const row = Array.isArray(p?.records) ? p.records[0] : p?.records || p;
+          if (row) {
+            const code = row.payeeCode || row.vendCode || row.custCode || row.acctCode || row.itemCode || row.itemNo || row.code || "";
+            const name = row.payeeName || row.vendName || row.custName || row.acctName || row.itemName || row.description || row.name || "";
             if (ui.lookupMode === "S") updateFilters({ sCode: code, sName: name, eCode: code, eName: name });
             else updateFilters({ eCode: code, eName: name });
           }
