@@ -69,6 +69,10 @@ export const pageRegistry = {
   RMIS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMIS.jsx")),
   FGPR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGPR.jsx")),
   RMPR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMPR.jsx")),
+  FGRFP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGRFP.jsx")),
+  RMRFP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMRFP.jsx")),
+  MSRFP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSRFP.jsx")),
+
 
 
 
@@ -198,6 +202,9 @@ export const pageRegistry = {
   PostBUDCL: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Budget/PostBUDCL.jsx")),
   PostRMRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostRMRR.jsx")),
   PostRMIS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostRMIS.jsx")),
+  PostFGRFP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGRFP.jsx")),
+  PostRMRFP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostRMRFP.jsx")),
+  PostMSRFP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSRFP.jsx")),
   MonthendGLProcessingModal: lazyPage(() => import("./NAYSA Cloud/Processing/MonthendProcessing.jsx")),
   YearendGLProcessingModal: lazyPage(() => import("./NAYSA Cloud/Processing/YearendProcessing.jsx")),
   BankReconProcessing: lazyPage(() => import("./NAYSA Cloud/Processing/BankReconProcessing.jsx")),
