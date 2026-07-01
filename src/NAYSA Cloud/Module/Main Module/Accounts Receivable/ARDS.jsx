@@ -1022,90 +1022,93 @@ const ARDS = () => {
         </div>
 
         <div className="global-tran-tab-div-ui">
-          <div className="global-tran-tab-header-div-ui">
-            <button className="global-tran-tab-text_active-ui">Receipt Details</button>
+          <div className="global-tran-tab-nav-ui">
+            <div className="flex flex-row sm:flex-row">
+              <span className="global-tran-tab-padding-ui global-tran-tab-text_active-ui">
+                Receipt Details
+              </span>
+            </div>
           </div>
-        </div>
 
-        <div className="global-tran-table-main-div-ui">
-          <div className="global-tran-table-main-sub-div-ui">
-            <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
-              <thead className="global-tran-thead-div-ui">
-                <tr>
-                  {orderedArdsDetailColumns.map((column) =>
-                    renderArdsDetailHeader(column.label, column.key, column.width, {
-                      orderedColumns: orderedArdsDetailColumns,
-                    })
-                  )}
-                  {!isFormDisabled && (
-                    <th className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>
-                      Actions
-                    </th>
-                  )}
-                </tr>
-              </thead>
-              <tbody className="relative">
-                {sortedArdsDetailRows.map(({ row, originalIndex }) => (
-                  <tr key={originalIndex} className="global-tran-tr-ui">
-                    {orderedArdsDetailColumns.map((column) => renderArdsDetailCell(column.key, row, originalIndex))}
+          <div className="global-tran-table-main-div-ui">
+            <div className="global-tran-table-main-sub-div-ui">
+              <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
+                <thead className="global-tran-thead-div-ui">
+                  <tr>
+                    {orderedArdsDetailColumns.map((column) =>
+                      renderArdsDetailHeader(column.label, column.key, column.width, {
+                        orderedColumns: orderedArdsDetailColumns,
+                      })
+                    )}
                     {!isFormDisabled && (
-                      <td className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black" style={transactionActionsCellStyle}>
-                        <div className="flex items-center justify-center gap-1">
-                          <button type="button" className="global-tran-td-button-delete-ui" onClick={() => handleDeleteRow(originalIndex)}>
-                            <FontAwesomeIcon icon={faTrashAlt} />
-                          </button>
-                        </div>
-                      </td>
+                      <th className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>
+                        Actions
+                      </th>
                     )}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            {renderArdsDetailHeaderContextMenu()}
+                </thead>
+                <tbody className="relative">
+                  {sortedArdsDetailRows.map(({ row, originalIndex }) => (
+                    <tr key={originalIndex} className="global-tran-tr-ui">
+                      {orderedArdsDetailColumns.map((column) => renderArdsDetailCell(column.key, row, originalIndex))}
+                      {!isFormDisabled && (
+                        <td className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black" style={transactionActionsCellStyle}>
+                          <div className="flex items-center justify-center gap-1">
+                            <button type="button" className="global-tran-td-button-delete-ui" onClick={() => handleDeleteRow(originalIndex)}>
+                              <FontAwesomeIcon icon={faTrashAlt} />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {renderArdsDetailHeaderContextMenu()}
+            </div>
+          </div>
+
+          <div className="global-tran-tab-footer-main-div-ui">
+            <div className="global-tran-tab-footer-button-div-ui">
+              <button
+                onClick={handleAddRow}
+                className="global-tran-tab-footer-button-add-ui"
+                style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
+              >
+                <FontAwesomeIcon icon={faPlus} className="mr-2" />Add
+              </button>
+            </div>
+
+            <div className="global-tran-tab-footer-total-main-div-ui">
+              <div className="global-tran-tab-footer-total-div-ui">
+                <label htmlFor="TotalAmount" className="global-tran-tab-footer-total-label-ui">
+                  Total Amount:
+                </label>
+                <label htmlFor="TotalAmount" className="global-tran-tab-footer-total-value-ui">
+                  {totals.totalAmount}
+                </label>
+              </div>
+
+              <div className="global-tran-tab-footer-total-div-ui">
+                <label htmlFor="TotalApplied" className="global-tran-tab-footer-total-label-ui">
+                  Total Applied:
+                </label>
+                <label htmlFor="TotalApplied" className="global-tran-tab-footer-total-value-ui">
+                  {totals.totalApplied}
+                </label>
+              </div>
+
+              <div className="global-tran-tab-footer-total-div-ui">
+                <label htmlFor="TotalBalance" className="global-tran-tab-footer-total-label-ui">
+                  Total Balance:
+                </label>
+                <label htmlFor="TotalBalance" className="global-tran-tab-footer-total-value-ui">
+                  {totals.totalBalance}
+                </label>
+              </div>
+            </div>
           </div>
         </div>
-
-        <div className="global-tran-tab-footer-main-div-ui">
-          <div className="global-tran-tab-footer-button-div-ui">
-            <button
-              onClick={handleAddRow}
-              className="global-tran-tab-footer-button-add-ui"
-              style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
-            >
-              <FontAwesomeIcon icon={faPlus} className="mr-2" />Add
-            </button>
-          </div>
-
-          <div className="global-tran-tab-footer-total-main-div-ui">
-            <div className="global-tran-tab-footer-total-div-ui">
-              <label htmlFor="TotalAmount" className="global-tran-tab-footer-total-label-ui">
-                Total Amount:
-              </label>
-              <label htmlFor="TotalAmount" className="global-tran-tab-footer-total-value-ui">
-                {totals.totalAmount}
-              </label>
-            </div>
-
-            <div className="global-tran-tab-footer-total-div-ui">
-              <label htmlFor="TotalApplied" className="global-tran-tab-footer-total-label-ui">
-                Total Applied:
-              </label>
-              <label htmlFor="TotalApplied" className="global-tran-tab-footer-total-value-ui">
-                {totals.totalApplied}
-              </label>
-            </div>
-
-            <div className="global-tran-tab-footer-total-div-ui">
-              <label htmlFor="TotalBalance" className="global-tran-tab-footer-total-label-ui">
-                Total Balance:
-              </label>
-              <label htmlFor="TotalBalance" className="global-tran-tab-footer-total-value-ui">
-                {totals.totalBalance}
-              </label>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {branchModalOpen && <BranchLookupModal isOpen={branchModalOpen} onClose={handleCloseBranchModal} />}
 
@@ -1162,10 +1165,10 @@ const ARDS = () => {
 
       {showSpinner && <LoadingSpinner />}
 
-     <div className={topTab === "history" ? "" : "hidden"}>
-       <AllTranHistory
-         showHeader={false}
-         isActive={topTab === "history"}
+      <div className={topTab === "history" ? "" : "hidden"}>
+        <AllTranHistory
+          showHeader={false}
+          isActive={topTab === "history"}
          endpoint="/getARDSHistory"
          cacheKey={`ARDS:${state.branchCode || ""}:${state.fromDate || ""}:${state.toDate || ""}`}
          activeTabKey="ARDS_Summary"
@@ -1174,11 +1177,12 @@ const ARDS = () => {
          endDate={state.toDate}
          status="All"
          onRowDoubleClick={handleHistoryRowPick}
-         historyExportName={`${documentTitle} History`}
-       />
+          historyExportName={`${documentTitle} History`}
+        />
+      </div>
+      </div>
      </div>
-    </div>
-  );
+   );
 };
 
 export default ARDS;

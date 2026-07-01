@@ -25,6 +25,7 @@ export const pageRegistry = {
   CR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Receivable/CR.jsx")),
   AR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Receivable/AR.jsx")),
   ARDS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Receivable/ARDS.jsx")),
+  PRC: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Receivable/PRC.jsx")),
 
   // Accounts Payable
   APV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Payable/APV.jsx")),
@@ -63,6 +64,7 @@ export const pageRegistry = {
   RMRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMRTV.jsx")),
   FGRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGRR.jsx")),
   RMRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMRR.jsx")),
+  FGSR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGSR.jsx")),
   FGST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGST.jsx")),
   RMAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMAJ.jsx")),
   FGIS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGIS.jsx")),
@@ -169,6 +171,7 @@ export const pageRegistry = {
   PostRMST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostRMST.jsx")),
   PostFGRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGRTV.jsx")),
   PostFGST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGST.jsx")),
+  PostFGSR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGSR.jsx")),
   PostMSIS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSIS.jsx")),
   PostRMRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostRMRTV.jsx")),
   PostFGRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGRR.jsx")),

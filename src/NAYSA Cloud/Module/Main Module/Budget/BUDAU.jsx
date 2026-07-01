@@ -245,7 +245,7 @@ const BUDAU = () => {
 
   const pdfLink = docTypePDFGuide?.[docType];
   const videoLink = docTypeVideoGuide?.[docType];
-  const documentTitle = "Budget Augmentation";
+  const documentTitle = `${hsDoc?.docName || "Budget Augmentation"} Transaction`;
   const displayStatus = getFullStatus(status || documentStatus);
 
   const statusMap = {

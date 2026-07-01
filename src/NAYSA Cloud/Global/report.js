@@ -318,8 +318,7 @@ export async function useHandlePrintAPReport(params) {
               sprocMode:"",
               sprocName : "",
               export :"" };
-
-        console.log(JSON.stringify(payload))
+  
 
     const pdfBlob = await postPdfRequest("/printAPReport", payload);
 
@@ -604,6 +603,52 @@ export async function useHandleDownloadExcelFAReport(params) {
 }
 
 
+export async function useHandlePrintFAReport(params) {
+  try {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      throw new Error("Popup blocked â€” please allow popups for this site.");
+    }
+
+    injectLoadingSpinner(printWindow);
+
+    const responseDocRpt = await useTopHSRptRow(params.reportId);
+    const formName = responseDocRpt?.reportName;
+    if (!formName) {
+      throw new Error("Report Name not defined");
+    }
+
+    const payload = {
+      branchCode: params.branchCode,
+      startDate: params.startDate,
+      endDate: params.endDate,
+      categCode: params.categCode,
+      classCode: params.classCode,
+      rcCode: params.rcCode,
+      locCode: params.locCode,
+      faCode: params.faCode,
+      reportName: formName,
+      sprocMode: "",
+      sprocName: "",
+      export: "",
+    };
+
+    const pdfBlob = await postPdfRequest("/printFAReport", payload);
+
+    if (!(pdfBlob instanceof Blob) || pdfBlob.type !== "application/pdf") {
+      throw new Error("Expected a PDF file but received something else.");
+    }
+
+    const fileURL = URL.createObjectURL(pdfBlob);
+    printWindow.location.href = fileURL;
+  } catch (error) {
+    console.error("Error printing fixed asset report:", error);
+  }
+}
+
+
+
+
 export async function useHandleDownloadExcelIMPReport(params) {
   try {
     const payload = {
@@ -648,6 +693,48 @@ export async function useHandleDownloadExcelSalesReport(params) {
 }
 
 
+export async function useHandlePrintSalesReport(params) {
+  try {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      throw new Error("Popup blocked â€” please allow popups for this site.");
+    }
+
+    injectLoadingSpinner(printWindow);
+
+    const responseDocRpt = await useTopHSRptRow(params.reportId);
+    const formName = responseDocRpt?.reportName;
+    if (!formName) {
+      throw new Error("Report Name not defined");
+    }
+
+    const payload = {
+      branchCode: params.branchCode,
+      startDate: params.startDate,
+      endDate: params.endDate,
+      custCode: params.custCode || params.customerCode || params.sCustCode,
+      itemCode: params.itemCode || params.sCode,
+      chainCustomer: params.chainCustomer || params.chainCode,
+      reportName: formName,
+      sprocMode: "",
+      sprocName: "",
+      export: "",
+    };
+
+    const pdfBlob = await postPdfRequest("/printSalesReport", payload);
+
+    if (!(pdfBlob instanceof Blob) || pdfBlob.type !== "application/pdf") {
+      throw new Error("Expected a PDF file but received something else.");
+    }
+
+    const fileURL = URL.createObjectURL(pdfBlob);
+    printWindow.location.href = fileURL;
+  } catch (error) {
+    console.error("Error printing Sales report:", error);
+  }
+}
+
+
 
 export async function useHandleDownloadExcelBUDReport(params) {
   try {
@@ -671,6 +758,52 @@ export async function useHandleDownloadExcelBUDReport(params) {
   } catch (error) {
     console.error("Error downloading Budget report:", error);
     return { Data: {} };
+  }
+}
+
+
+export async function useHandlePrintBUDReport(params) {
+  try {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      throw new Error("Popup blocked â€” please allow popups for this site.");
+    }
+
+    injectLoadingSpinner(printWindow);
+
+    const responseDocRpt = await useTopHSRptRow(params.reportId);
+    const formName = responseDocRpt?.reportName;
+    if (!formName) {
+      throw new Error("Report Name not defined");
+    }
+
+    const payload = {
+      branchCode: params.branchCode,
+      startDate: params.startDate,
+      endDate: params.endDate,
+      budgetYear: params.budgetYear,
+      cutoffCode: params.cutoffCode,
+      budgetCode: params.budgetCode,
+      acctCode: params.acctCode || params.accountCode,
+      rcCode: params.rcCode || params.departmentCode,
+      groupBy: params.groupBy || "ACCOUNT_RC",
+      monthlyView: params.monthlyView || "BUDGET",
+      reportName: formName,
+      sprocMode: "",
+      sprocName: "",
+      export: "",
+    };
+
+    const pdfBlob = await postPdfRequest("/printBudgetReport", payload);
+
+    if (!(pdfBlob instanceof Blob) || pdfBlob.type !== "application/pdf") {
+      throw new Error("Expected a PDF file but received something else.");
+    }
+
+    const fileURL = URL.createObjectURL(pdfBlob);
+    printWindow.location.href = fileURL;
+  } catch (error) {
+    console.error("Error printing Budget report:", error);
   }
 }
 

@@ -23,6 +23,7 @@ export const docTypes = {
   MSST:"MSST",
   MSRTV:"MSRTV",
   FGRTV:"FGRTV",
+  FGSR:"FGSR",
   FARR:"FARR",
   FARS:"FARS",
   FAAD:"FAAD",
@@ -79,6 +80,7 @@ export const docTypeNames = {
     RMAJ: "RM Inventory Adjustment Transaction",
     MSRTV: "MS Inventory Return to Vendor Transaction",
     FGRTV: "FG Inventory Return to Vendor Transaction",
+    FGSR: "FG Sales Return Transaction",
     FGIS: "FG Issue Slip Transaction",
     FGST: "FG Stock Transfer Transaction",
     RMST: "RM Stock Transfer Transaction",
@@ -135,6 +137,7 @@ export const docTypeNames = {
     FARC: "",
     FASP: "",
     FATR: "",
+    FGSR: "",
 
     
     WO: "",
@@ -172,6 +175,7 @@ export const docTypeNames = {
     FARC: "",
     FASP: "",
     FATR: "",
+    FGSR: "",
     
     WO: "",
     
