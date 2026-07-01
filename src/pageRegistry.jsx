@@ -68,6 +68,7 @@ export const pageRegistry = {
   FGIS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGIS.jsx")),
   RMIS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMIS.jsx")),
   FGPR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGPR.jsx")),
+  RMPR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMPR.jsx")),
 
 
 
@@ -178,6 +179,7 @@ export const pageRegistry = {
   PostRMRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostRMRTV.jsx")),
   PostFGRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGRR.jsx")),
   PostFGPR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGPR.jsx")),
+  PostRMPR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostRMPR.jsx")),
   PostMSAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSAJ.jsx")),
   PostFGAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGAJ.jsx")),
   PostRMAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostRMAJ.jsx")),
