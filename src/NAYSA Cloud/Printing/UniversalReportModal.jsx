@@ -1050,23 +1050,25 @@ import { fetchData, postRequest } from "@/NAYSA Cloud/Configuration/BaseURL";
 import { useTopUserRow, useTopHSRptRow } from "@/NAYSA Cloud/Global/top1RefTable";
 import {
   useHandlePrintAPReport,
+  useHandlePrintARReport,
+  useHandlePrintGLReport,
+  useHandlePrintFGINVReport,
+  useHandlePrintMSINVReport,
+  useHandlePrintRMINVReport,
+  useHandlePrintPRDReport,
   useHandleDownloadExcelAPReport,
   useHandleDownloadExcelPURReport,
-  useHandlePrintARReport,
   useHandleDownloadExcelARReport,
-  useHandlePrintGLReport,
   useHandleDownloadExcelGLReport,
   useHandleDownloadExcelBIRReport,
-  useHandlePrintFGINVReport,
   useHandleDownloadExcelFGINVReport,
-  useHandlePrintMSINVReport,
   useHandleDownloadExcelMSINVReport,
-  useHandlePrintRMINVReport,
   useHandleDownloadExcelRMINVReport,
   useHandleDownloadExcelFAReport,
   useHandleDownloadExcelIMPReport,
   useHandleDownloadExcelBUDReport,
   useHandleDownloadExcelSalesReport,
+  useHandleDownloadExcelPRDReport,
 } from "@/NAYSA Cloud/Global/report";
 import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
 import { exportGenericHistoryExcel } from "@/NAYSA Cloud/Global/report";
@@ -1126,7 +1128,7 @@ const MODULE_DEFS = {
   FA:  { label: "Asset",    lookup: null,                    print: useHandlePrintGLReport,     excel: useHandleDownloadExcelFAReport,    hasExtra: false, hasCutoff: false, hasReportType: false, hasFA: true, hasSingleMain: true, hasSingleRc: true, rcLabel: "Department/RC" },
   IMP: { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,     excel: useHandleDownloadExcelIMPReport,   hasExtra: false, hasCutoff: false, hasReportType: false, hasSingleMain: true, hasSingleRc: true, rcLabel: "Department/RC" },
   BUD: { label: "Budget",   lookup: null,                    print: useHandlePrintGLReport,    excel: useHandleDownloadExcelBUDReport,   hasExtra: false, hasCutoff: false, hasReportType: false, hasBudget: true, hasSingleRc: true, rcLabel: "Department/RC" },
-  PRD: { label: "Item",     lookup: null,                    print: useHandlePrintGLReport,    excel: useHandleDownloadExcelGLReport,    hasExtra: false, hasCutoff: false, hasReportType: false, hasProduction: true },
+  PRD: { label: "Item",     lookup: null,                    print: useHandlePrintPRDReport,    excel: useHandleDownloadExcelPRDReport,    hasExtra: false, hasCutoff: false, hasReportType: false, hasProduction: true },
   OE: { label: "Customer", lookup: CustomerMastLookupModal, print: useHandlePrintARReport, excel: useHandleDownloadExcelSalesReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasSales: true },
 };
 
