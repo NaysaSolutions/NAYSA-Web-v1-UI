@@ -858,10 +858,10 @@ Swal.fire({
         ⏳
       </div>
       <div style="font-size:15px;font-weight:800;color:#0f172a;line-height:1.2;">
-        Account Already Logged In
+        Waiting for Approval
       </div>
       <div style="font-size:12px;color:#64748b;line-height:1.45;margin-top:8px;">
-        Your account is currently active in another session. Please approve the login request from that session to continue.
+        A confirmation request was sent to the active session.
       </div>
     </div>
   `,
