@@ -1021,6 +1021,10 @@ const FGPR = () => {
             detailColumns: prev.detailColumns || [],
             summaryColumns: prev.summaryColumns || [],
             topTab: prev.topTab === "history" ? "history" : "details",
+
+            // Keep Stock Card mounted when transaction retrieval/reset reloads the page data.
+            // This prevents the Stock Card inquiry from losing its already-loaded results.
+            showStockCard: prev.showStockCard,
         }));
     };
 
@@ -1842,12 +1846,11 @@ const FGPR = () => {
         fgpr_no: state.documentNo,
     };
 
-    if (state.isLoading) {
-        return <LoadingSpinner />;
-    }
-
     return (
         <div className="global-tran-main-div-ui">
+            {/* Do not return only <LoadingSpinner /> here.
+                Returning early unmounts the Stock Card modal and reloads its query data.
+                Keep the page mounted and show the spinner as an overlay instead. */}
             {state.showSpinner && <LoadingSpinner />}
 
             <div className="global-tran-headerToolbar-ui">

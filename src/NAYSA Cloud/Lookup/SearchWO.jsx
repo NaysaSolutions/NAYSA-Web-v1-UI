@@ -51,6 +51,20 @@ const toRows = (response) => {
     return [];
 };
 
+/**
+ * Reusable Work Order lookup.
+ *
+ * Default behavior is still FGPR:
+ *   <SearchWO ... />
+ *
+ * For RMPR:
+ *   <SearchWO
+ *      ...
+ *      endpoint="getRMPRWO"
+ *      docType="RMPR"
+ *      moduleLabel="RMPR"
+ *   />
+ */
 const SearchWO = ({
     isOpen,
     onClose,
@@ -59,10 +73,21 @@ const SearchWO = ({
     branchCode = "",
     whouseCode = "",
     locCode = "",
+
+    // Reusable settings
+    endpoint = "getFGPRWO",
+    docType = "FGPR",
+    moduleLabel = "",
+    title = "Search Work Order",
+    subtitle = "Closed Work Orders only · WO_STATUS = C and Remaining Qty > 0",
+    noRecordMessage = "",
+    tipMessage = "",
 }) => {
     const [filter, setFilter] = useState("");
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(false);
+
+    const label = moduleLabel || docType || "transaction";
 
     const loadRows = async (searchText = filter) => {
         if (!isOpen) return;
@@ -70,11 +95,12 @@ const SearchWO = ({
         setLoading(true);
 
         try {
-            const response = await fetchDataJson("getFGPRWO", {
+            const response = await fetchDataJson(endpoint, {
                 branchCode,
                 filter: searchText,
                 whouseCode,
                 locCode,
+                docType,
             });
 
             setRows(toRows(response));
@@ -83,7 +109,7 @@ const SearchWO = ({
             Swal.fire({
                 icon: "error",
                 title: "WO Lookup Failed",
-                text: error?.message || "Unable to load closed Work Orders.",
+                text: error?.message || `Unable to load closed Work Orders for ${label}.`,
             });
         } finally {
             setLoading(false);
@@ -96,7 +122,7 @@ const SearchWO = ({
             loadRows("");
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isOpen, branchCode, whouseCode, locCode]);
+    }, [isOpen, branchCode, whouseCode, locCode, endpoint, docType]);
 
     const filteredRows = useMemo(() => rows, [rows]);
 
@@ -123,9 +149,9 @@ const SearchWO = ({
                 {/* Header — mirrors GlobalCombinedLookup's TabHeader pattern */}
                 <div className="flex w-full flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3 sm:px-5">
                     <div className="flex min-w-0 flex-col pl-1 sm:pl-2">
-                        <div className="global-lookup-headertext-ui leading-tight">Search Work Order</div>
+                        <div className="global-lookup-headertext-ui leading-tight">{title}</div>
                         <div className="mt-0.5 text-[10px] font-medium text-slate-400">
-                            Closed Work Orders only · WO_STATUS = C and Remaining Qty &gt; 0
+                            {subtitle}
                         </div>
                     </div>
 
@@ -236,7 +262,7 @@ const SearchWO = ({
                             {!loading && filteredRows.length === 0 && (
                                 <tr>
                                     <td colSpan={9} className="px-4 py-10 text-center text-[12px] text-slate-400">
-                                        No closed Work Order available for FGPR.
+                                        {noRecordMessage || `No closed Work Order available for ${label}.`}
                                     </td>
                                 </tr>
                             )}
@@ -252,7 +278,7 @@ const SearchWO = ({
 
                 {/* Footer */}
                 <div className="border-t border-slate-100 px-4 py-2.5 text-[10px] font-medium text-slate-400 sm:px-5">
-                    Tip: click a row to load the Work Order into FGPR.
+                    {tipMessage || `Tip: click a row to load the Work Order into ${label}.`}
                 </div>
             </div>
         </div>
