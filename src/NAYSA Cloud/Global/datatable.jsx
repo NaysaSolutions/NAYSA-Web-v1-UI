@@ -3102,11 +3102,11 @@ export const transactionActionsHeaderStyle = {
   minWidth: "110px",
   maxWidth: "110px",
   zIndex: 25,
-  backgroundClip: "padding-box",
+  backgroundClip: "border-box",
   borderLeft: "1px solid rgba(148, 163, 184, 0.45)",
   boxShadow: "-8px 0 14px -12px rgba(15, 23, 42, 0.35)",
   backgroundImage: "none",
-  backgroundColor: "var(--erp-surface-2)",
+  backgroundColor: "var(--erp-surface-2, #dbeafe)",
 };
 
 export const transactionActionsCellStyle = {
@@ -3114,12 +3114,12 @@ export const transactionActionsCellStyle = {
   minWidth: "110px",
   maxWidth: "110px",
   zIndex: 5,
-  backgroundClip: "padding-box",
+  backgroundClip: "border-box",
   borderLeft: "1px solid rgba(148, 163, 184, 0.35)",
   boxShadow: "-8px 0 14px -12px rgba(15, 23, 42, 0.28)",
   backgroundImage: "none",
-  backgroundColor: "var(--erp-surface)",
-  color: "var(--erp-text-muted)",
+  backgroundColor: "var(--erp-surface, #ffffff)",
+  color: "var(--erp-text-muted, #475569)",
 };
 
 // ==============================
@@ -3151,6 +3151,7 @@ export const useResizableTableColumns = (columns = []) => {
     x: 0,
     y: 0,
   });
+  const [bypassColumnWidths, setBypassColumnWidths] = useState(false);
   const [autoResizeRows, setAutoResizeRows] = useState(false);
   const [showColumnVisibilityModal, setShowColumnVisibilityModal] = useState(false);
   const [showExportFileNameModal, setShowExportFileNameModal] = useState(false);
@@ -3274,7 +3275,7 @@ export const useResizableTableColumns = (columns = []) => {
   }, [handleResizeMove]);
 
   const startResize = useCallback(
-    (e, key, minWidth = 60) => {
+    (e, key, minWidth = 0) => {
       e.preventDefault();
       e.stopPropagation();
 
@@ -3283,7 +3284,7 @@ export const useResizableTableColumns = (columns = []) => {
         key,
         minWidth,
         startX: e.clientX,
-        startWidth: th?.offsetWidth || columnWidths[key] || minWidth,
+        startWidth: th?.offsetWidth ?? columnWidths[key] ?? minWidth,
       };
 
       document.addEventListener("mousemove", handleResizeMove);
@@ -3547,21 +3548,31 @@ export const useResizableTableColumns = (columns = []) => {
 
   // Column layout, visibility, sorting, filtering, and grouping actions.
   const getColumnWidth = useCallback(
-    (key, fallbackWidth) => columnWidths[key] || fallbackWidth,
+    (key, fallbackWidth) => columnWidths[key] ?? fallbackWidth,
     [columnWidths]
   );
 
   const getColumnStyle = useCallback(
     (key, fallbackWidth) => {
-      const width = getColumnWidth(key, fallbackWidth);
+      const resizedWidth = columnWidths[key];
+
+      if (bypassColumnWidths && resizedWidth == null) {
+        return {};
+      }
+
+      const width = resizedWidth ?? getColumnWidth(key, fallbackWidth);
 
       return {
         width: `${width}px`,
         minWidth: `${width}px`,
         maxWidth: `${width}px`,
+        overflow: "hidden",
+        textOverflow: "clip",
+        whiteSpace: "nowrap",
+        ...(width <= 8 ? { paddingLeft: "0px", paddingRight: "0px" } : {}),
       };
     },
-    [getColumnWidth]
+    [bypassColumnWidths, columnWidths, getColumnWidth]
   );
 
   const reorderColumns = useCallback((fromKey, toKey) => {
@@ -4166,7 +4177,7 @@ export const useResizableTableColumns = (columns = []) => {
 
   const getFrozenColumnStyle = useCallback(
     (key, orderedColumns = columns, fallbackWidth = 120, options = {}) => {
-      if (!frozenColumnKeys.includes(key)) {
+      if (bypassColumnWidths || !frozenColumnKeys.includes(key)) {
         return {};
       }
 
@@ -4197,7 +4208,7 @@ export const useResizableTableColumns = (columns = []) => {
           : "none",
       };
     },
-    [columns, frozenColumnKeys, getColumnWidth]
+    [bypassColumnWidths, columns, frozenColumnKeys, getColumnWidth]
   );
 
   // Column drag/drop supports both reordering and grouping.
@@ -5108,7 +5119,7 @@ export const useResizableTableColumns = (columns = []) => {
       <th
         key={key}
         draggable
-        className={`global-tran-th-ui relative select-none ${options.extraClassName || ""}`.trim()}
+        className={`global-tran-th-ui relative select-none overflow-hidden whitespace-nowrap align-top ${options.extraClassName || ""}`.trim()}
         style={{
           ...getColumnStyle(key, fallbackWidth),
           ...getFrozenColumnStyle(key, options.orderedColumns || columns, fallbackWidth, {
@@ -5122,8 +5133,10 @@ export const useResizableTableColumns = (columns = []) => {
         onContextMenu={(e) => handleHeaderContextMenu(e, key)}
         onClick={() => toggleSort(key)}
       >
-        <div className="flex items-center justify-center gap-1 pr-2">
-          <span>{label}</span>
+        <div className="flex min-w-0 items-center justify-center gap-1 overflow-hidden pr-2">
+          <span className="min-w-0 max-w-full overflow-hidden whitespace-nowrap text-ellipsis leading-tight">
+            {label}
+          </span>
           {filteringColumnKeys.includes(key) && !isActionColumn(key) && (
             <Filter className="h-3 w-3 shrink-0 text-blue-600" aria-hidden="true" />
           )}
@@ -5167,12 +5180,13 @@ export const useResizableTableColumns = (columns = []) => {
         <button
           type="button"
           aria-label={`Resize ${label} column`}
-          className="absolute top-0 right-0 h-full w-2 cursor-col-resize select-none touch-none bg-transparent hover:bg-blue-300/40"
-          onMouseDown={(e) => startResize(e, key, fallbackWidth)}
+          className="absolute top-0 right-0 z-10 h-full w-2 cursor-col-resize select-none touch-none bg-transparent hover:bg-blue-300/40"
+          onMouseDown={(e) => startResize(e, key, 0)}
         />
       </th>
     ),
     [
+      bypassColumnWidths,
       columnFilters,
       columns,
       filteringColumnKeys,
@@ -5351,6 +5365,24 @@ export const useResizableTableColumns = (columns = []) => {
             >
               <Eye className={getMenuIconClassName(true)} aria-hidden="true" />
               <span>Manage columns</span>
+            </button>
+            <button
+              type="button"
+              className={getMenuItemClassName(true)}
+              onClick={() => {
+                setBypassColumnWidths((prev) => {
+                  if (prev) {
+                    setColumnWidths({});
+                  }
+                  return !prev;
+                });
+                setHeaderContextMenu({ visible: false, x: 0, y: 0, key: null });
+              }}
+            >
+              <Columns3 className={getMenuIconClassName(true)} aria-hidden="true" />
+              <span>
+                {bypassColumnWidths ? "Use assigned column widths" : "Bypass column widths"}
+              </span>
             </button>
           </div>
         </div>
@@ -5804,6 +5836,7 @@ export const useResizableTableColumns = (columns = []) => {
   }, [
     bodyContextMenu,
     autoResizeRows,
+    bypassColumnWidths,
     copyFeedback,
     clearSort,
     deleteGroupColumn,
@@ -5836,6 +5869,7 @@ export const useResizableTableColumns = (columns = []) => {
     startCalculatorDrag,
     startCalculatorResize,
     startContextMenuDrag,
+    setBypassColumnWidths,
     toggleColumnFiltering,
     toggleFreezeColumn,
     toggleColumnVisibility,
@@ -5844,6 +5878,7 @@ export const useResizableTableColumns = (columns = []) => {
 
   return {
     autoResizeRows,
+    bypassColumnWidths,
     columnWidths,
     columnOrder,
     frozenColumnKeys,
@@ -5854,6 +5889,7 @@ export const useResizableTableColumns = (columns = []) => {
     columnFilters,
     sortConfigs,
     setColumnWidths,
+    setBypassColumnWidths,
     setColumnOrder,
     setFrozenColumnKeys,
     setHiddenColumnKeys,

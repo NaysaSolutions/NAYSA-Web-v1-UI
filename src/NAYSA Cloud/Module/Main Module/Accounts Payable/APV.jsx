@@ -91,6 +91,11 @@ import {
 } from "@/NAYSA Cloud/Global/dates";
 
 import DateFormatInput from "@/NAYSA Cloud/Global/DateFormatInput.jsx";
+import {
+  transactionActionsCellStyle,
+  transactionActionsHeaderStyle,
+  useResizableTableColumns,
+} from "@/NAYSA Cloud/Global/datatable.jsx";
 
 import {
   useSelectedHSColConfig as selectedHSColConfig
@@ -3876,6 +3881,94 @@ const handleAtcNameDoubleClick = (index) => {
 
   const showAdvancesAccountColumn = selectedApType === "APV01" || isAdvancesAPType || isImportationAPType;
   const showDrAccountColumn = !isAdvancesAPType;
+  const apvDetailColumnDefs = [
+    { key: "ln", label: "LN", width: 56 },
+    ...(fieldVisibility.invType ? [{ key: "invType", label: "Type", width: 70 }] : []),
+    ...(fieldVisibility.rrNo && !isImportationAPType
+      ? [{ key: "rrNo", label: "RR No.", width: 120 }]
+      : []),
+    ...(fieldVisibility.poNo
+      ? [{ key: "poNo", label: isImportationAPType ? "LC No" : "PO/JO No.", width: 120 }]
+      : []),
+    { key: "siNo", label: "Invoice No.", width: 120 },
+    { key: "siDate", label: "Invoice Date", width: 130 },
+    {
+      key: "amount",
+      label: isAdvancesAPType ? "Advances Amount" : "Original Amount",
+      width: 140,
+    },
+    { key: "currCode", label: "Currency", width: 90 },
+    { key: "siAmount", label: "Invoice Amount", width: 130 },
+    ...(showDrAccountColumn ? [{ key: "debitAcct", label: "DR Account", width: 120 }] : []),
+    { key: "rcCode", label: "RC Code", width: 120 },
+    { key: "rcName", label: "RC Name", width: 260 },
+    ...(fieldVisibility.sltypeCode
+      ? [{ key: "sltypeCode", label: "SL Type Code", width: 120 }]
+      : []),
+    { key: "slCode", label: "SL Code", width: 120 },
+    { key: "vatCode", label: "VAT Code", width: 120 },
+    { key: "vatName", label: "VAT Name", width: 260 },
+    { key: "vatAmount", label: "VAT Amount", width: 130 },
+    { key: "atcCode", label: "ATC", width: 120 },
+    { key: "atcName", label: "ATC Name", width: 260 },
+    { key: "atcAmount", label: "ATC Amount", width: 130 },
+    { key: "paytermCode", label: "Payment Terms", width: 130 },
+    { key: "dueDate", label: "Due Date", width: 130 },
+    ...(showAppliedAdvancesColumns
+      ? [
+          { key: "advpoNo", label: "Applied Advances PO", width: 150 },
+          { key: "advpoAmount", label: "Applied Advances Amt", width: 150 },
+          { key: "advpoVatAmount", label: "Applied Advances VAT", width: 150 },
+        ]
+      : []),
+    ...(showAdvancesAccountColumn
+      ? [{ key: "advAcct", label: "Advances Account", width: 150 }]
+      : []),
+  ];
+  const {
+    getColumnStyle: getApvDetailColumnStyle,
+    renderHeaderContextMenu: renderApvDetailHeaderContextMenu,
+    renderResizableHeader: renderApvDetailHeader,
+  } = useResizableTableColumns(apvDetailColumnDefs);
+  const getApvDetailCellStyle = (key, fallbackWidth) =>
+    getApvDetailColumnStyle(key, fallbackWidth);
+
+  const apvGlColumnDefs = [
+    { key: "ln", label: "LN", width: 56 },
+    { key: "acctCode", label: "Account Code", width: 120 },
+    { key: "rcCode", label: "RC Code", width: 120 },
+    { key: "sltypeCode", label: "SL Type Code", width: 120 },
+    { key: "slCode", label: "SL Code", width: 120 },
+    { key: "particular", label: "Particulars", width: 260 },
+    { key: "vatCode", label: "VAT Code", width: 120 },
+    { key: "vatName", label: "VAT Name", width: 220 },
+    { key: "atcCode", label: "ATC", width: 120 },
+    { key: "atcName", label: "ATC Name", width: 220 },
+    { key: "debit", label: `Debit (${glCurrDefault})`, width: 140 },
+    { key: "credit", label: `Credit (${glCurrDefault})`, width: 140 },
+    ...(withCurr2
+      ? [
+          { key: "debitFx1", label: `Debit (${withCurr3 ? glCurrGlobal2 : currencyCode})`, width: 140 },
+          { key: "creditFx1", label: `Credit (${withCurr3 ? glCurrGlobal2 : currencyCode})`, width: 140 },
+        ]
+      : []),
+    ...(withCurr3
+      ? [
+          { key: "debitFx2", label: `Debit (${glCurrGlobal3})`, width: 140 },
+          { key: "creditFx2", label: `Credit (${glCurrGlobal3})`, width: 140 },
+        ]
+      : []),
+    { key: "slRefNo", label: "SL Ref. No.", width: 120 },
+    { key: "slrefDate", label: "SL Ref. Date", width: 130 },
+    { key: "remarks", label: "Remarks", width: 240 },
+  ];
+  const {
+    getColumnStyle: getApvGlColumnStyle,
+    renderHeaderContextMenu: renderApvGlHeaderContextMenu,
+    renderResizableHeader: renderApvGlHeader,
+  } = useResizableTableColumns(apvGlColumnDefs);
+  const getApvGlCellStyle = (key, fallbackWidth) =>
+    getApvGlColumnStyle(key, fallbackWidth);
   const hasSelectedReference = detailRows.some((row) =>
     String(
       row.advpoNo ||
@@ -4234,59 +4327,26 @@ const handleAtcNameDoubleClick = (index) => {
               {/* Invoice Details Button */}
               <div className="global-tran-table-main-div-ui">
                 <div className="global-tran-table-main-sub-div-ui">
-                  <table className="min-w-full border-collapse">
+                  <table className="min-w-full table-fixed border-collapse [&_input]:w-full [&_select]:w-full">
+                    <colgroup>
+                      {apvDetailColumnDefs.map((column) => (
+                        <col
+                          key={column.key}
+                          style={getApvDetailCellStyle(column.key, column.width)}
+                        />
+                      ))}
+                      {!isFormDisabled && <col style={transactionActionsCellStyle} />}
+                    </colgroup>
                     <thead className="global-tran-thead-div-ui">
                       <tr>
-                        <th className="global-tran-th-ui">LN</th>
-                        {fieldVisibility.invType && (
-                          <th className="global-tran-th-ui">Type</th>
-                        )}
-                        {fieldVisibility.rrNo && !isImportationAPType && (
-                          <th className="global-tran-th-ui">RR No.</th>
-                        )}
-                        {fieldVisibility.poNo && (
-                          <th className="global-tran-th-ui">
-                            {isImportationAPType ? "LC No" : "PO/JO No."}
-                          </th>
-                        )}
-                        <th className="global-tran-th-ui">Invoice No.</th>
-                        <th className="global-tran-th-ui">Invoice Date</th>
-                        <th className="global-tran-th-ui">
-                          {isAdvancesAPType ? "Advances Amount" : "Original Amount"}
-                        </th>
-                        <th className="global-tran-th-ui">Currency</th>
-                        <th className="global-tran-th-ui">Invoice Amount</th>
-                        {showDrAccountColumn && (
-                          <th className="global-tran-th-ui">DR Account</th>
-                        )}
-                        <th className="global-tran-th-ui">RC Code</th>
-                        <th className="global-tran-th-ui">RC Name</th>
-                        {fieldVisibility.sltypeCode && (
-                          <th className="global-tran-th-ui" id="sltypeCode">
-                            SL Type Code
-                          </th>
-                        )}
-                        <th className="global-tran-th-ui">SL Code</th>
-                        <th className="global-tran-th-ui">VAT Code</th>
-                        <th className="global-tran-th-ui">VAT Name</th>
-                        <th className="global-tran-th-ui">VAT Amount</th>
-                        <th className="global-tran-th-ui">ATC</th>
-                        <th className="global-tran-th-ui">ATC Name</th>
-                        <th className="global-tran-th-ui">ATC Amount</th>
-                        <th className="global-tran-th-ui">Payment Terms</th>
-                        <th className="global-tran-th-ui">Due Date</th>
-                        {showAppliedAdvancesColumns && (
-                          <>
-                            <th className="global-tran-th-ui">Applied Advances PO</th>
-                            <th className="global-tran-th-ui">Applied Advances Amt</th>
-                            <th className="global-tran-th-ui">Applied Advances VAT</th>
-                          </>
-                        )}
-                        {showAdvancesAccountColumn && (
-                          <th className="global-tran-th-ui">Advances Account</th>
+                        {apvDetailColumnDefs.map((column) =>
+                          renderApvDetailHeader(column.label, column.key, column.width)
                         )}
                         {!isFormDisabled && (
-                          <th className="global-tran-th-ui sticky right-0 bg-blue-300 dark:bg-blue-900 z-30">
+                          <th
+                            className="global-tran-th-ui sticky right-0 bg-blue-300 dark:bg-blue-900 z-30"
+                            style={transactionActionsHeaderStyle}
+                          >
                             Actions
                           </th>
                         )}
@@ -4889,7 +4949,10 @@ const handleAtcNameDoubleClick = (index) => {
                           )}
 
                           {!isFormDisabled && (
-                            <td className="global-tran-td-ui text-center sticky right-0">
+                            <td
+                              className="global-tran-td-ui text-center sticky right-0"
+                              style={transactionActionsCellStyle}
+                            >
                               <div className="flex items-center justify-center gap-1">
                                 <button
                                   type="button"
@@ -4919,6 +4982,7 @@ const handleAtcNameDoubleClick = (index) => {
                       ))}
                     </tbody>
                   </table>
+                  {renderApvDetailHeaderContextMenu()}
                 </div>
               </div>
 
@@ -5094,54 +5158,27 @@ const handleAtcNameDoubleClick = (index) => {
           {/* GL Details Table */}
           <div className="global-tran-table-main-div-ui">
             <div className="global-tran-table-main-sub-div-ui">
-              <table className="min-w-full border-collapse">
+              <table className="min-w-full table-fixed border-collapse [&_input]:w-full [&_select]:w-full">
+                <colgroup>
+                  {apvGlColumnDefs.map((column) => (
+                    <col
+                      key={column.key}
+                      style={getApvGlCellStyle(column.key, column.width)}
+                    />
+                  ))}
+                  {!isFormDisabled && <col style={transactionActionsCellStyle} />}
+                </colgroup>
                 <thead className="global-tran-thead-div-ui">
                   <tr>
-                    <th className="global-tran-th-ui">LN</th>
-                    <th className="global-tran-th-ui">Account Code</th>
-                    <th className="global-tran-th-ui">RC Code</th>
-                    <th className="global-tran-th-ui">SL Type Code</th>
-                    <th className="global-tran-th-ui">SL Code</th>
-                    <th className="global-tran-th-ui">Particulars</th>
-                    <th className="global-tran-th-ui">VAT Code</th>
-                    <th className="global-tran-th-ui">VAT Name</th>
-                    <th className="global-tran-th-ui">ATC</th>
-                    <th className="global-tran-th-ui ">ATC Name</th>
-
-                    <th className="global-tran-th-ui">
-                      Debit ({glCurrDefault})
-                    </th>
-                    <th className="global-tran-th-ui">
-                      Credit ({glCurrDefault})
-                    </th>
-
-                    <th
-                      className={`global-tran-th-ui ${withCurr2 ? "" : "hidden"}`}
-                    >
-                      Debit ({withCurr3 ? glCurrGlobal2 : currencyCode})
-                    </th>
-                    <th
-                      className={`global-tran-th-ui ${withCurr2 ? "" : "hidden"}`}
-                    >
-                      Credit ({withCurr3 ? glCurrGlobal2 : currencyCode})
-                    </th>
-                    <th
-                      className={`global-tran-th-ui ${withCurr3 ? "" : "hidden"}`}
-                    >
-                      Debit ({glCurrGlobal3})
-                    </th>
-                    <th
-                      className={`global-tran-th-ui ${withCurr3 ? "" : "hidden"}`}
-                    >
-                      Credit ({glCurrGlobal3})
-                    </th>
-
-                    <th className="global-tran-th-ui">SL Ref. No.</th>
-                    <th className="global-tran-th-ui">SL Ref. Date</th>
-                    <th className="global-tran-th-ui">Remarks</th>
+                    {apvGlColumnDefs.map((column) =>
+                      renderApvGlHeader(column.label, column.key, column.width)
+                    )}
 
                     {!isFormDisabled && (
-                      <th className="global-tran-th-ui sticky right-0 bg-blue-300 dark:bg-blue-900 z-30">
+                      <th
+                        className="global-tran-th-ui sticky right-0 bg-blue-300 dark:bg-blue-900 z-30"
+                        style={transactionActionsHeaderStyle}
+                      >
                         Actions
                       </th>
                     )}
@@ -5769,7 +5806,10 @@ const handleAtcNameDoubleClick = (index) => {
                       </td>
 
                       {!isFormDisabled && (
-                        <td className="global-tran-td-ui text-center sticky right-0">
+                        <td
+                          className="global-tran-td-ui text-center sticky right-0"
+                          style={transactionActionsCellStyle}
+                        >
                           <div className="flex items-center justify-center gap-1">
                             <button
                               type="button"
@@ -5799,6 +5839,7 @@ const handleAtcNameDoubleClick = (index) => {
                   ))}
                 </tbody>
               </table>
+              {renderApvGlHeaderContextMenu()}
             </div>
           </div>
 
