@@ -25,6 +25,7 @@ export const pageRegistry = {
   CR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Receivable/CR.jsx")),
   AR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Receivable/AR.jsx")),
   ARDS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Receivable/ARDS.jsx")),
+  PRC: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Receivable/PRC.jsx")),
 
   // Accounts Payable
   APV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Payable/APV.jsx")),
@@ -63,11 +64,17 @@ export const pageRegistry = {
   RMRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMRTV.jsx")),
   FGRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGRR.jsx")),
   RMRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMRR.jsx")),
+  FGSR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGSR.jsx")),
   FGST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGST.jsx")),
   RMAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMAJ.jsx")),
   FGIS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGIS.jsx")),
   RMIS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMIS.jsx")),
   FGPR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGPR.jsx")),
+  RMPR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMPR.jsx")),
+  FGRFP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGRFP.jsx")),
+  RMRFP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMRFP.jsx")),
+  MSRFP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSRFP.jsx")),
+
 
 
 
@@ -175,10 +182,12 @@ export const pageRegistry = {
   PostRMST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostRMST.jsx")),
   PostFGRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGRTV.jsx")),
   PostFGST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGST.jsx")),
+  PostFGSR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGSR.jsx")),
   PostMSIS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSIS.jsx")),
   PostRMRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostRMRTV.jsx")),
   PostFGRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGRR.jsx")),
   PostFGPR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGPR.jsx")),
+  PostRMPR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostRMPR.jsx")),
   PostMSAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSAJ.jsx")),
   PostFGAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGAJ.jsx")),
   PostRMAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostRMAJ.jsx")),
@@ -197,6 +206,9 @@ export const pageRegistry = {
   PostBUDCL: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Budget/PostBUDCL.jsx")),
   PostRMRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostRMRR.jsx")),
   PostRMIS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostRMIS.jsx")),
+  PostFGRFP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGRFP.jsx")),
+  PostRMRFP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostRMRFP.jsx")),
+  PostMSRFP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSRFP.jsx")),
   MonthendGLProcessingModal: lazyPage(() => import("./NAYSA Cloud/Processing/MonthendProcessing.jsx")),
   YearendGLProcessingModal: lazyPage(() => import("./NAYSA Cloud/Processing/YearendProcessing.jsx")),
   BankReconProcessing: lazyPage(() => import("./NAYSA Cloud/Processing/BankReconProcessing.jsx")),
@@ -229,4 +241,5 @@ export const pageRegistry = {
   IMPReportModal: reportModal("IMP"),
   SalesReportModal: reportModal("OE"),
   BUDReportModal: reportModal("BUD"),
+  PRDReportModal: reportModal("PRD"),
 };

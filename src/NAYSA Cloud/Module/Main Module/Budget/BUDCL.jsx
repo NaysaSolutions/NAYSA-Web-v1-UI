@@ -300,7 +300,7 @@ const BUDCL = () => {
 
   const pdfLink = docTypePDFGuide?.[docType];
   const videoLink = docTypeVideoGuide?.[docType];
-  const documentTitle = "Budget Clearance";
+  const documentTitle = `${hsDoc?.docName || "Budget Clearance"} Transaction`;
   const displayStatus = getFullStatus(status || documentStatus);
 
   const statusMap = {
@@ -1633,10 +1633,11 @@ const BUDCL = () => {
           </div>
 
           <div
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols- gap-4 rounded-lg relative"
+            className="grid grid-cols-1 gap-4 rounded-lg relative"
             id="budcl_hd"
           >
-            <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start">
+              {/* Column 1 */}
               <div className="global-tran-textbox-group-div-ui">
                 <FieldRenderer
                   id="branchName"
@@ -1699,6 +1700,7 @@ const BUDCL = () => {
                 </div>
               </div>
 
+              {/* Column 2 */}
               <div className="global-tran-textbox-group-div-ui">
                 <FieldRenderer
                   id="budgetCode"
@@ -1731,7 +1733,10 @@ const BUDCL = () => {
                   disabled
                   readOnly
                 />
+              </div>
 
+              {/* Column 3 */}
+              <div className="global-tran-textbox-group-div-ui">
                 <FieldRenderer
                   id="refDocNo"
                   label="Reference Document No."
@@ -1741,9 +1746,7 @@ const BUDCL = () => {
                   maxLength={getMax("REF_DOC_NO")}
                   onChange={(val) => updateState({ refDocNo: val })}
                 />
-              </div>
 
-              <div className="global-tran-textbox-group-div-ui">
                 <div className="relative w-full">
                   <div className={`flex items-stretch global-ref-textbox-ui ${!isFormDisabled ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"}`}>
                     <DateFormatInput
@@ -1783,7 +1786,10 @@ const BUDCL = () => {
                     Expiry Date
                   </label>
                 </div>
+              </div>
 
+              {/* Column 4 */}
+              <div className="global-tran-textbox-group-div-ui">
                 <FieldRenderer
                   id="clearanceStatus"
                   label="Clearance Status"

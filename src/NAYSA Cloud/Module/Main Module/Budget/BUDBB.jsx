@@ -165,6 +165,8 @@ const BUDBB = () => {
     status: "",
     originalDocStatus: "",
     appLevel: 0,
+    branchCode:"",
+    branchName:"",
 
     // UI state
     activeTab: "basic",
@@ -217,6 +219,8 @@ const BUDBB = () => {
     documentID,
     documentStatus,
     documentNo,
+    branchCode,
+    branchName,
     status,
     activeTab,
     isLoading,
@@ -1413,10 +1417,11 @@ The file was not imported. An Excel error log has been downloaded.`
       const data = await useFetchTranData(
         formattedDocNo,
         "",
-        docType,
-        "bbNo",
+        "BUDBB",
+        "documentNo",
         direction
       );
+
 
       if (!data?.bbId) {
         Swal.fire({
@@ -1684,7 +1689,7 @@ const handleHistoryRowPick = useCallback(
     const docNo = row?.docNo;
     if (!docNo) return;
 
-
+  
     await fetchTranData(docNo, ""); 
     setTopTab("details");
     cleanUrl(); // 
@@ -1730,30 +1735,52 @@ const handleHistoryRowPick = useCallback(
 
 
   
+// const handleTranDocNoRetrieval = async (data) => {
+
+
+//   await fetchTranData(data.docNo, "", data.key);
+//   updateState({ showAllTranDocNo: data.modalClose });
+// };
+
+
+
+
+//   const handleTranDocNoSelection = async (data = {}) => {
+//     const selectedDocNo = data.docNo || data.documentNo || "";
+
+//     handleReset();
+
+//     updateState({
+//       showAllTranDocNo: false,
+//       documentNo: selectedDocNo,
+//     });
+
+
+
+//     if (selectedDocNo) {
+//       await fetchTranData(selectedDocNo,"");
+//     }
+//   };
+
+
+
+
 const handleTranDocNoRetrieval = async (data) => {
 
+    console.log(data)
+    await fetchTranData(data.docNo, branchCode, data.key);
+    updateState({showAllTranDocNo: data.modalClose});
+};
 
-  await fetchTranData(data.docNo, "", data.key);
-  updateState({ showAllTranDocNo: data.modalClose });
+
+const handleTranDocNoSelection = async (data) => {
+    
+    handleReset();
+    updateState({showAllTranDocNo: false, documentNo:data.docNo });
 };
 
 
 
-
-  const handleTranDocNoSelection = async (data = {}) => {
-    const selectedDocNo = data.docNo || data.documentNo || "";
-
-    handleReset();
-
-    updateState({
-      showAllTranDocNo: false,
-      documentNo: selectedDocNo,
-    });
-
-    if (selectedDocNo) {
-      await fetchTranData(selectedDocNo);
-    }
-  };
 
   const handleDocNoBlur = () => {
     if (!state.documentID && state.documentNo) {
@@ -2303,7 +2330,7 @@ const handleTranDocNoRetrieval = async (data) => {
       {showAllTranDocNo && (
         <AllTranDocNo
           isOpen={showAllTranDocNo}
-          params={{ docType, documentTitle, fieldNo: "documentNo" }}
+          params={{branchCode,branchName,docType,documentTitle,fieldNo : "documentNo"}}
           onRetrieve={handleTranDocNoRetrieval}
           onResponse={{ documentNo }}
           onSelected={handleTranDocNoSelection}

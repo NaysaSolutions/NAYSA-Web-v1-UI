@@ -249,8 +249,8 @@ const getSavedTranRow = (value) => {
     const rows = flattenSprocResult(value);
 
     return rows.find((row) =>
-        Boolean(getValue(row, "fgprNo", "FGPR_NO", "docNo", "documentNo", "tranNo")) &&
-        Boolean(getValue(row, "fgprHdId", "fgprId", "FGPR_ID", "docId", "documentID"))
+        Boolean(getValue(row, "rmprNo", "RMPR_NO", "docNo", "documentNo", "tranNo")) &&
+        Boolean(getValue(row, "rmprHdId", "rmprId", "RMPR_ID", "docId", "documentID"))
     ) || null;
 };
 
@@ -328,7 +328,7 @@ const fallbackDetailColumns = [
     { key: "itemCode", label: "Item No", classNames: "text-left", renderType: "text", width: 130 },
     { key: "itemName", label: "Item Description", classNames: "text-left", renderType: "text", width: 220 },
     { key: "uomCode", label: "UOM", classNames: "text-left", renderType: "text", width: 90 },
-    { key: "quantity", label: "WOR Quantity", classNames: "text-right", renderType: "number", renderFormat: "2", width: 130 },
+    { key: "quantity", label: "Quantity", classNames: "text-right", renderType: "number", renderFormat: "2", width: 130 },
     { key: "unitCost", label: "Unit Cost", classNames: "text-right", renderType: "number", renderFormat: "6", width: 130 },
     { key: "itemAmount", label: "Amount", classNames: "text-right", renderType: "number", renderFormat: "6", width: 130 },
     { key: "lotNo", label: "Lot No", classNames: "text-left", renderType: "text", width: 130 },
@@ -380,7 +380,7 @@ const normalizeConfigColumns = (configRows, keyMap) => {
         .filter((column) => Boolean(column.key));
 };
 
-const FGPR = () => {
+const RMPR = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const loadedFromUrlRef = useRef(false);
@@ -388,10 +388,10 @@ const FGPR = () => {
     const { resetFlag } = useReset();
     const { user, companyInfo } = useAuth();
 
-    const endpointDocType = docTypes?.FGPR || "FGPR";
-    const docType = docTypes?.FGPR || "FGPR";
+    const endpointDocType = docTypes?.RMPR || "RMPR";
+    const docType = docTypes?.RMPR || "RMPR";
     const reportDocType = docType;
-    const documentTitle = docTypeNames?.[docType] || "FG Production Receipt";
+    const documentTitle = docTypeNames?.[docType] || "RM Production Receipt";
     const pdfLink = docTypePDFGuide?.[docType];
     const videoLink = docTypeVideoGuide?.[docType];
 
@@ -411,7 +411,7 @@ const FGPR = () => {
             documentNo: "",
             documentStatus: "",
             status: "OPEN",
-            fgprDate: today(),
+            rmprDate: today(),
             cutoffCode: "",
             refNo: "",
             woNo: "",
@@ -609,23 +609,23 @@ const FGPR = () => {
 
         try {
             const [detailConfig, generalLedgerConfig] = await Promise.all([
-                getSelectedHSColConfig("FGPR_Item_Detail", userCode, ""),
-                getSelectedHSColConfig("FGPR_General_Ledger", userCode, ""),
+                getSelectedHSColConfig("RMPR_Item_Detail", userCode, ""),
+                getSelectedHSColConfig("RMPR_General_Ledger", userCode, ""),
             ]);
 
-            // FGPR_Item_Detail is shared with Transaction History.
+            // RMPR_Item_Detail is shared with Transaction History.
             // Hide history-only columns from Transaction Details > Item Details
             // without creating another HS_COLCONFIG endpoint.
             const transactionDetailHiddenKeys = new Set([
-                "fgpr_id",
+                "rmpr_id",
                 "branch_code",
-                "fgpr_no",
-                "fgpr_date",
+                "rmpr_no",
+                "rmpr_date",
                 "wo_no",
-                "fgprId",
+                "rmprId",
                 "branchCode",
-                "fgprNo",
-                "fgprDate",
+                "rmprNo",
+                "rmprDate",
                 "woNo",
             ]);
 
@@ -656,7 +656,7 @@ const FGPR = () => {
                 summaryColumns: sortedSummaryColumns.length ? sortedSummaryColumns : fallbackSummaryColumns,
             });
         } catch (error) {
-            console.error("FGPR column config error:", error);
+            console.error("RMPR column config error:", error);
 
             // Prevent page from being stuck on LoadingSpinner when HS_COLCONFIG fails
             // or when a config endpoint has no rows yet.
@@ -809,12 +809,12 @@ const FGPR = () => {
 
     const buildPayload = (summaryOverride = null) => ({
         branchCode: state.branchCode,
-        fgprNo: state.documentNo || "",
-        fgprId: state.documentID || "",
-        fgprHdId: state.documentID || "",
+        rmprNo: state.documentNo || "",
+        rmprId: state.documentID || "",
+        rmprHdId: state.documentID || "",
         docNo: state.documentNo || "",
         docId: state.documentID || "",
-        fgprDate: state.fgprDate || today(),
+        rmprDate: state.rmprDate || today(),
         cutoffCode: state.cutoffCode || "",
         refNo: state.refNo || "",
         woNo: state.woNo || "",
@@ -837,8 +837,8 @@ const FGPR = () => {
             Swal.fire({ icon: "warning", title: "Required", text: "Please select Branch." });
             return false;
         }
-        if (!state.fgprDate) {
-            Swal.fire({ icon: "warning", title: "Required", text: "Please select FGPR Date." });
+        if (!state.rmprDate) {
+            Swal.fire({ icon: "warning", title: "Required", text: "Please select RMPR Date." });
             return false;
         }
         if (!state.WHCode) {
@@ -861,7 +861,7 @@ const FGPR = () => {
             Swal.fire({
                 icon: "warning",
                 title: "Invalid Detail",
-                text: `Line ${invalidRowIndex + 1}: Item No. and WOR Quantity are required.`,
+                text: `Line ${invalidRowIndex + 1}: Item No. and Quantity are required.`,
             });
             return false;
         }
@@ -874,10 +874,10 @@ const FGPR = () => {
         updateState({ isLoading: true });
 
         try {
-            const data = await useFetchTranData(docNo, branchCode, endpointDocType, "fgprNo", direction);
+            const data = await useFetchTranData(docNo, branchCode, endpointDocType, "rmprNo", direction);
             const parsed = Array.isArray(data) ? data[0] : data;
 
-            if (!parsed || (!parsed.fgprNo && !parsed.docNo && !parsed.FGPR_NO && !parsed.documentNo)) {
+            if (!parsed || (!parsed.rmprNo && !parsed.docNo && !parsed.RMPR_NO && !parsed.documentNo)) {
                 Swal.fire({ icon: "info", title: "No Records Found", text: "Transaction does not exist." });
                 return;
             }
@@ -886,11 +886,11 @@ const FGPR = () => {
             const dt2 = getValue(parsed, "dt2", "dtlb", "summary", "gl") || [];
 
             updateState({
-                documentID: getValue(parsed, "fgprHdId", "fgprId", "FGPR_ID", "documentID", "docId"),
-                documentNo: getValue(parsed, "fgprNo", "FGPR_NO", "docNo", "documentNo"),
-                documentStatus: getValue(parsed, "fgprStatus", "fgpr_status", "FGPR_STATUS", "stat", "status", "STAT"),
-                status: getValue(parsed, "fgprStatus", "fgpr_status", "FGPR_STATUS", "stat", "status", "STAT") || "OPEN",
-                fgprDate: toDateInput(getValue(parsed, "fgprDate", "fgpr_date", "FGPR_DATE")) || today(),
+                documentID: getValue(parsed, "rmprHdId", "rmprId", "RMPR_ID", "documentID", "docId"),
+                documentNo: getValue(parsed, "rmprNo", "RMPR_NO", "docNo", "documentNo"),
+                documentStatus: getValue(parsed, "rmprStatus", "rmpr_status", "RMPR_STATUS", "stat", "status", "STAT"),
+                status: getValue(parsed, "rmprStatus", "rmpr_status", "RMPR_STATUS", "stat", "status", "STAT") || "OPEN",
+                rmprDate: toDateInput(getValue(parsed, "rmprDate", "rmpr_date", "RMPR_DATE")) || today(),
                 cutoffCode: getValue(parsed, "cutoffCode", "cutoff_code", "CUTOFF_CODE"),
                 refNo: getValue(parsed, "refNo", "ref_no", "REF_NO"),
                 woNo: getValue(parsed, "woNo", "wo_no", "WO_NO"),
@@ -912,8 +912,8 @@ const FGPR = () => {
                 isFetchDisabled: true,
             });
         } catch (error) {
-            console.error("FGPR fetch error:", error);
-            Swal.fire({ icon: "error", title: "Fetch Failed", text: error?.message || "Unable to load FGPR." });
+            console.error("RMPR fetch error:", error);
+            Swal.fire({ icon: "error", title: "Fetch Failed", text: error?.message || "Unable to load RMPR." });
         } finally {
             updateState({ isLoading: false });
         }
@@ -951,11 +951,11 @@ const FGPR = () => {
             const payload = buildPayload(glRowsForSave);
 
             /*
-             * Use the FGPR controller directly so the sproc result is preserved:
+             * Use the RMPR controller directly so the sproc result is preserved:
              * response.data[0].errorMsg / response.data[0].errorCount
              */
             const result = await postRequest(
-                "upsertFGPR",
+                "upsertRMPR",
                 JSON.stringify({ json_data: payload }),
             );
 
@@ -970,8 +970,8 @@ const FGPR = () => {
 
             const savedNo = getValue(
                 savedRow,
-                "fgprNo",
-                "FGPR_NO",
+                "rmprNo",
+                "RMPR_NO",
                 "docNo",
                 "documentNo",
                 "tranNo",
@@ -979,9 +979,9 @@ const FGPR = () => {
 
             const savedId = getValue(
                 savedRow,
-                "fgprHdId",
-                "fgprId",
-                "FGPR_ID",
+                "rmprHdId",
+                "rmprId",
+                "RMPR_ID",
                 "docId",
                 "documentID",
             ) || state.documentID;
@@ -1001,7 +1001,7 @@ const FGPR = () => {
                 () => handleSaveAndPrint(savedId),
             );
         } catch (error) {
-            console.error("FGPR save error:", error);
+            console.error("RMPR save error:", error);
 
             const sprocMessage =
                 error?.response?.data?.errorMsg ||
@@ -1130,7 +1130,7 @@ const FGPR = () => {
         setShowTypeDropdown((prev) => !prev);
     };
 
-    const handleOpenFGLookup = () => {
+    const handleOpenRMLookup = () => {
         if (isFormDisabled || state.isOpenReferenceWO) return;
         setShowTypeDropdown(false);
         updateState({
@@ -1310,7 +1310,7 @@ const FGPR = () => {
                 {
                     ...item,
                     itemCode: getValue(item, "itemCode", "ITEM_CODE", "itemNo", "ITEM_NO"),
-                    itemName: getValue(item, "itemName", "ITEM_NAME", "itemDesc", "ITEM_DESC", "fgName", "FG_NAME", "fgDesc", "FG_DESC"),
+                    itemName: getValue(item, "itemName", "ITEM_NAME", "itemDesc", "ITEM_DESC", "rmName", "RM_NAME", "rmDesc", "RM_DESC"),
                     categCode: getValue(item, "categCode", "CATEG_CODE"),
                     uomCode: getValue(item, "uomCode", "UOM_CODE", "uom", "UOM"),
                     acctCode: getValue(item, "acctCode", "ACCT_CODE", "invacctCode", "INVACCT_CODE"),
@@ -1430,7 +1430,7 @@ const FGPR = () => {
     };
 
     const handleTranDocNoSelection = async (data) => {
-        const docNo = getValue(data, "docNo", "fgprNo", "fgpr_no", "FGPR_NO", "documentNo");
+        const docNo = getValue(data, "docNo", "rmprNo", "rmpr_no", "RMPR_NO", "documentNo");
         const branchCode = getValue(data, "branchCode", "branch_code", "BRANCH_CODE") || state.branchCode;
 
         handleReset();
@@ -1449,9 +1449,9 @@ const FGPR = () => {
         const docNo = getValue(
             row,
             "docNo",
-            "fgprNo",
-            "fgpr_no",
-            "FGPR_NO",
+            "rmprNo",
+            "rmpr_no",
+            "RMPR_NO",
             "documentNo",
             "DOCUMENT_NO",
         );
@@ -1501,9 +1501,8 @@ const FGPR = () => {
     useEffect(() => {
         const params = new URLSearchParams(location.search);
         const docNo =
-            params.get("fgprNo") ||
-            params.get("fgpr_no") ||
-            params.get("fgrpNo") ||
+            params.get("rmprNo") ||
+            params.get("rmpr_no") ||
             params.get("docNo");
         const brCode = params.get("branchCode") || params.get("branch_code");
 
@@ -1551,7 +1550,7 @@ const FGPR = () => {
             Swal.fire({
                 icon: "warning",
                 title: "Invalid WO Status",
-                text: "Only closed Work Orders with status C are allowed for FGPR.",
+                text: "Only closed Work Orders with status C are allowed for RMPR.",
             });
             return;
         }
@@ -1601,7 +1600,7 @@ const FGPR = () => {
         updateState({ isLoading: true });
 
         try {
-            const response = await fetchDataJson("getFGPRWO", {
+            const response = await fetchDataJson("getRMPRWO", {
                 branchCode: selectedBranchCode,
                 woNo: woNoToLoad,
                 whouseCode: state.WHCode,
@@ -1615,7 +1614,7 @@ const FGPR = () => {
                 Swal.fire({
                     icon: "info",
                     title: "No Records",
-                    text: "Work Order was not found, has no remaining quantity, or is not yet closed. Only WO_STATUS = C can be loaded for FGPR.",
+                    text: "Work Order was not found, has no remaining quantity, or is not yet closed. Only WO_STATUS = C can be loaded for RMPR.",
                 });
                 return;
             }
@@ -1634,7 +1633,7 @@ const FGPR = () => {
                 details,
             );
         } catch (error) {
-            console.error("FGPR WO load error:", error);
+            console.error("RMPR WO load error:", error);
             Swal.fire({ icon: "error", title: "WO Load Failed", text: error?.message || "Unable to load Work Order." });
         } finally {
             updateState({ isLoading: false });
@@ -1664,7 +1663,7 @@ const FGPR = () => {
         event.stopPropagation();
 
         const currentInput = event.currentTarget;
-        const tableSelector = `[data-fgpr-table="${tableName}"]`;
+        const tableSelector = `[data-rmpr-table="${tableName}"]`;
         const inputs = Array.from(
             document.querySelectorAll(
                 `${tableSelector}:not([disabled]):not([readonly])`
@@ -1678,7 +1677,7 @@ const FGPR = () => {
 
         const currentIndex = inputs.indexOf(currentInput);
         const sameColumnInputs = inputs.filter(
-            (input) => input.dataset.fgprCol === columnKey
+            (input) => input.dataset.rmprCol === columnKey
         );
         const currentColumnIndex = sameColumnInputs.indexOf(currentInput);
 
@@ -1722,9 +1721,9 @@ const FGPR = () => {
         const extraProps = {};
 
         if (["input", "textarea", "select"].includes(nodeType)) {
-            extraProps["data-fgpr-table"] = tableName;
-            extraProps["data-fgpr-row"] = rowIndex;
-            extraProps["data-fgpr-col"] = columnKey;
+            extraProps["data-rmpr-table"] = tableName;
+            extraProps["data-rmpr-row"] = rowIndex;
+            extraProps["data-rmpr-col"] = columnKey;
             extraProps.onKeyDown = (event) => {
                 existingOnKeyDown?.(event);
                 if (event.defaultPrevented) return;
@@ -1883,7 +1882,7 @@ const FGPR = () => {
 
         return (
             <td key={`${key}-${index}`} className={tdClass} style={style}>
-                {attachTableNavigation(cellContent, "fgpr-detail", index, key)}
+                {attachTableNavigation(cellContent, "rmpr-detail", index, key)}
             </td>
         );
     };
@@ -1929,7 +1928,7 @@ const FGPR = () => {
 
         return (
             <td key={`${key}-${index}`} className={tdClass} style={style}>
-                {attachTableNavigation(cellContent, "fgpr-summary", index, key)}
+                {attachTableNavigation(cellContent, "rmpr-summary", index, key)}
             </td>
         );
     };
@@ -1938,7 +1937,7 @@ const FGPR = () => {
         doc_id: reportDocType,
         branch: state.branchCode,
         pr_no: state.documentNo,
-        fgpr_no: state.documentNo,
+        rmpr_no: state.documentNo,
     };
 
     return (
@@ -1967,7 +1966,7 @@ const FGPR = () => {
                     onDetails={() => updateState({ topTab: "details" })}
                     onHistory={() => updateState({ topTab: "history" })}
                     disableRouteNavigation
-                    detailsRoute="/page/FGPR"
+                    detailsRoute="/page/RMPR"
                     isSaveDisabled={state.isSaveDisabled || isFormDisabled}
                     isResetDisabled={state.isResetDisabled}
                     isViewDocument={state.isViewDocument}
@@ -2005,10 +2004,10 @@ const FGPR = () => {
                             type="button"
                             onClick={() => updateState({ showStockCard: true })}
                             className="mr-2 inline-flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100 hover:border-blue-300 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950/70"
-                            title="View FG Stock Card"
+                            title="View RM Stock Card"
                         >
                             <FontAwesomeIcon icon={faBoxesStacked} />
-                            FG Stock Card
+                            RM Stock Card
                         </button>
                     </div>
 
@@ -2027,8 +2026,8 @@ const FGPR = () => {
                                         onLookup={() => updateState({ branchModalOpen: true })}
                                     />
                                     <FieldRenderer
-                                        id="fgprNo"
-                                        label="FGPR No."
+                                        id="rmprNo"
+                                        label="RMPR No."
                                         type="lookup"
                                         value={state.documentNo || ""}
                                         readOnly={state.isDocNoDisabled}
@@ -2049,11 +2048,11 @@ const FGPR = () => {
                                         }}
                                     />
                                     <FieldRenderer
-                                        id="fgprDate"
-                                        label="FGPR Date"
+                                        id="rmprDate"
+                                        label="RMPR Date"
                                         type="date"
-                                        value={state.fgprDate}
-                                        onChange={(val) => updateState({ fgprDate: val })}
+                                        value={state.rmprDate}
+                                        onChange={(val) => updateState({ rmprDate: val })}
                                         disabled={isFormDisabled}
                                     />
                                 </div>
@@ -2205,21 +2204,21 @@ const FGPR = () => {
                                                         <button
                                                             type="button"
                                                             className="mt-1 flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
-                                                            onClick={handleOpenFGLookup}
+                                                            onClick={handleOpenRMLookup}
                                                         >
                                                             <div className="flex items-center gap-2">
                                                                 <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
                                                                     <FontAwesomeIcon icon={faBoxesStacked} />
                                                                 </span>
                                                                 <div className="flex flex-col items-start">
-                                                                    <span>Finished Goods</span>
+                                                                    <span>Raw Materials</span>
                                                                     <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500">
-                                                                        Add FG item
+                                                                        Add RM item
                                                                     </span>
                                                                 </div>
                                                             </div>
                                                             <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
-                                                                FG
+                                                                RM
                                                             </span>
                                                         </button>
 
@@ -2385,9 +2384,9 @@ const FGPR = () => {
                 <AllTranHistory
                     showHeader={false}
                     isActive={state.topTab === "history"}
-                    endpoint="/getFGPRHistory"
-                    cacheKey={`FGPR:${state.branchCode || ""}:${state.documentNo || ""}`}
-                    activeTabKey="FGPR_Summary"
+                    endpoint="/getRMPRHistory"
+                    cacheKey={`RMPR:${state.branchCode || ""}:${state.documentNo || ""}`}
+                    activeTabKey="RMPR_Summary"
                     branchCode={state.branchCode}
                     startDate={null}
                     endDate={null}
@@ -2418,6 +2417,9 @@ const FGPR = () => {
                     branchCode={state.branchCode}
                     whouseCode={state.WHCode}
                     locCode={state.LocCode}
+                    endpoint="getRMPRWO"
+                    docType="RMPR"
+                    moduleLabel="RMPR"
                     onClose={() => updateState({ showWOLookup: false })}
                     onSelect={handleCloseWOLookup}
                 />
@@ -2447,13 +2449,13 @@ const FGPR = () => {
             {state.itemLookupOpen && (
                 <ItemMastLookupModal
                     isOpen={state.itemLookupOpen}
-                    endpoint="getInvLookupFG"
+                    endpoint="getInvLookupRM"
                     onClose={handleCloseItemLookup}
                     onGetSelectedItems={handleCloseItemLookup}
                     onCancel={() => updateState({ itemLookupOpen: false, selectedRowIndex: null })}
                     enableMultiSelect
                     customParam="ActiveAll"
-                    docType="PRFG"
+                    docType="PRRM"
                 />
             )}
 
@@ -2518,7 +2520,7 @@ const FGPR = () => {
             {state.showStockCard && (
                 <SearchStockCard
                     isOpen={state.showStockCard}
-                    module="FG"
+                    module="RM"
                     onClose={() => updateState({ showStockCard: false })}
                 />
             )}
@@ -2531,7 +2533,7 @@ const FGPR = () => {
                         branchName: state.branchName,
                         docType,
                         documentTitle,
-                        fieldNo: "fgprNo",
+                        fieldNo: "rmprNo",
                     }}
                     onRetrieve={handleTranDocNoRetrieval}
                     onResponse={{ documentNo: state.documentNo }}
@@ -2543,4 +2545,4 @@ const FGPR = () => {
     );
 };
 
-export default FGPR;
+export default RMPR;

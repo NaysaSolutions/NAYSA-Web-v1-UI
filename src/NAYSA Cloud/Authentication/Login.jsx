@@ -1373,6 +1373,46 @@ const inputCls =
   "transition-colors focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20 " +
   "disabled:opacity-50 disabled:cursor-not-allowed";
 
+const Toast = Swal.mixin({
+  toast: true,
+  position: "top-end",
+  showConfirmButton: false,
+  timer: 2500,
+  timerProgressBar: true,
+  width: "22rem",
+  customClass: {
+    popup: "rounded-xl shadow-lg text-sm",
+    title: "text-sm font-semibold",
+  },
+});
+
+const showToast = (icon, title, text = "") => {
+  Toast.fire({ icon, title, text });
+};
+
+const waitForLoginApproval = async (
+  requestId,
+  maxWaitMs = 60000,
+  shouldCancel = () => false
+) => {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < maxWaitMs) {
+    if (shouldCancel()) return "cancelled";
+
+    const { data } = await apiClient.get(`/login/request-status/${requestId}`);
+
+    if (shouldCancel()) return "cancelled";
+    if (data?.status === "approved") return "approved";
+    if (data?.status === "denied") return "denied";
+    if (data?.status === "expired") return "expired";
+
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+
+  return shouldCancel() ? "cancelled" : "expired";
+};
+
 /* ════════════════════════════════════════════════════════════════════
    Login
    ════════════════════════════════════════════════════════════════════ */
@@ -1445,20 +1485,26 @@ export default function Login({ onSwitchToRegister }) {
     if (!form.USER_CODE.trim() || !form.PASSWORD) return;
 
     if (!companyCode) {
-      useSwalWarningAlert("Select Company", "Please choose a company before logging in.");
+      showToast("warning", "Select Company", "Please choose a company before logging in.");
       return;
     }
 
     setIsLoading(true);
 
     try {
+<<<<<<< HEAD
       setTenant(companyCode); 
       
       const { data } = await apiClient.post("/login", {
+=======
+      await login({
+        companyCode,
+>>>>>>> 44b5327e3b903f6be4ec22f691571cec8184c7e7
         USER_CODE: form.USER_CODE.trim(),
         PASSWORD: form.PASSWORD,
       });
 
+<<<<<<< HEAD
       if (data?.status !== "success") {
         throw new Error(data?.message || "Login failed.");
       }
@@ -1473,6 +1519,9 @@ export default function Login({ onSwitchToRegister }) {
       setUser(normalized);
 
       useSwalSuccessAlert("Welcome back!", `You have successfully signed in as ${normalized.USER_NAME}.`);
+=======
+      showToast("success", "Welcome back!", "You have successfully signed in.");
+>>>>>>> 44b5327e3b903f6be4ec22f691571cec8184c7e7
       navigate("/", { replace: true });
 
     } catch (err) {
@@ -1480,22 +1529,119 @@ export default function Login({ onSwitchToRegister }) {
       const code   = err?.response?.data?.code;
       const msg    = err?.response?.data?.message || err?.message || "Please try again.";
 
+      const isApprovalRequired =
+        status === 409 &&
+        (code === "LOGIN_APPROVAL_REQUIRED" || code === "ACTIVE_SESSION");
+
+      if (isApprovalRequired) {
+        const requestId = err?.response?.data?.requestId;
+
+        if (!requestId) {
+          showToast(
+            "error",
+            "Login blocked",
+            "Active session detected but no approval request was created."
+          );
+          return;
+        }
+
+        let approvalCancelled = false;
+
+Swal.fire({
+  title: "",
+  html: `
+    <div style="text-align:center;">
+      <div style="height:36px;width:36px;margin:0 auto 10px;border-radius:999px;background:linear-gradient(135deg,#dbeafe,#bfdbfe);display:flex;align-items:center;justify-content:center;color:#1d4ed8;font-size:17px;font-weight:800;">
+        ⏳
+      </div>
+      <div style="font-size:15px;font-weight:800;color:#0f172a;line-height:1.2;">
+        Account Already Logged In
+      </div>
+      <div style="font-size:12px;color:#64748b;line-height:1.45;margin-top:8px;">
+        Your account is currently active in another session. Please approve the login request from that session to continue.
+      </div>
+    </div>
+  `,
+  width: "min(320px, calc(100vw - 28px))",
+  padding: "0.9rem",
+  background: "#ffffff",
+  backdrop: "rgba(15, 23, 42, 0.30)",
+  allowOutsideClick: false,
+  allowEscapeKey: false,
+  heightAuto: false,
+  showCancelButton: true,
+  showConfirmButton: false,
+  cancelButtonText: "Cancel",
+  buttonsStyling: false,
+  customClass: {
+    popup: "rounded-2xl shadow-2xl border border-slate-200",
+    htmlContainer: "m-0",
+    actions: "mt-3 w-full",
+    cancelButton:
+      "w-full rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200",
+  },
+}).then((res) => {
+  if (res.dismiss) approvalCancelled = true;
+});
+
+const approvalStatus = await waitForLoginApproval(
+  requestId,
+  60000,
+  () => approvalCancelled
+);
+
+Swal.close();
+        
+
+        if (approvalStatus === "approved") {
+          try {
+            await login({
+              companyCode,
+              USER_CODE: form.USER_CODE.trim(),
+              PASSWORD: form.PASSWORD,
+              approvalRequestId: requestId,
+            });
+
+            showToast("success", "Welcome back!", "You have successfully signed in.");
+            navigate("/", { replace: true });
+          } catch (approvedLoginErr) {
+            showToast(
+              "error",
+              "Login failed",
+              approvedLoginErr?.response?.data?.message ||
+                approvedLoginErr?.message ||
+                "Please try again."
+            );
+          }
+
+          return;
+        }
+
+        if (approvalStatus === "denied") {
+          showToast("error", "Login denied", "The active session denied your login request.");
+          return;
+        }
+
+        if (approvalStatus === "cancelled") {
+          showToast("info", "Login cancelled", "You cancelled the approval request.");
+          return;
+        }
+
+        showToast("warning", "Approval expired", "No response was received from the active session.");
+        return;
+      }
+
       if (status === 403 && code === "PENDING") {
-        useSwalErrorAlert(
-          "Awaiting Administrator Approval",
-          "Your account is pending activation.\nPlease wait for the administrator to approve your account and send a temporary password."
-        );
+        showToast("info", "Awaiting Administrator Approval", "Your account is pending activation.");
         return;
       }
 
       if (status === 403 && code === "INACTIVE") {
-        useSwalErrorAlert(
-          "Account Inactive",
-          msg || "Your account has been deactivated. Please contact the administrator."
-        );
+        showToast("error", "Account Inactive", msg || "Your account has been deactivated.");
         return;
       }
 
+<<<<<<< HEAD
       if (status === 403 && code === "PASSWORD_EXPIRED") {
     useSwalErrorAlert(
         "Password Expired",
@@ -1512,10 +1658,27 @@ export default function Login({ onSwitchToRegister }) {
           "Login Limit Reached",
           msg || "Maximum concurrent users reached. Please try again later."
         );
+=======
+      if (status === 403 && code === "LOCKED") {
+        showToast("error", "Account Locked", msg || "Your account has been locked.");
         return;
       }
 
-      useSwalErrorAlert("Login failed", msg);
+      if (status === 403 && code === "PASSWORD_EXPIRED") {
+        showToast("warning", "Password Expired", msg || "Your password has expired.");
+        navigate(
+          `/change-password?user=${encodeURIComponent(form.USER_CODE.trim())}&mode=expired&company=${encodeURIComponent(companyCode)}`
+        );
+        return;
+      }
+
+      if (status === 429 && code === "SEAT_LIMIT") {
+        showToast("warning", "Login Limit Reached", msg || "Maximum concurrent users reached.");
+>>>>>>> 44b5327e3b903f6be4ec22f691571cec8184c7e7
+        return;
+      }
+
+      showToast("error", "Login failed", msg);
     } finally {
       setIsLoading(false);
     }
@@ -1525,15 +1688,12 @@ export default function Login({ onSwitchToRegister }) {
   const handleBiometricLogin = async () => {
     try {
       if (!companyCode) {
-        useSwalWarningAlert("Select Company", "Please choose a company before logging in.");
+        showToast("warning", "Select Company", "Please choose a company before logging in.");
         return;
       }
 
       if (!window.PublicKeyCredential || typeof navigator.credentials?.get !== "function") {
-        useSwalErrorAlert(
-          "Biometric Login Not Supported",
-          "This browser or device does not support biometric login."
-        );
+        showToast("error", "Biometric Login Not Supported", "This browser or device does not support biometric login.");
         return;
       }
 
@@ -1555,17 +1715,17 @@ export default function Login({ onSwitchToRegister }) {
         payload: { credential: serializeLoginCredential(credential) },
       });
 
-      useSwalSuccessAlert("Welcome back!", "Biometric authentication successful.");
+      showToast("success", "Welcome back!", "Biometric authentication successful.");
       navigate("/", { replace: true });
     } catch (err) {
       const msg = err?.response?.data?.message || err?.message || "Unable to login using biometrics.";
 
       if (err?.name === "NotAllowedError") {
-        useSwalErrorAlert("Biometric Login Cancelled", "Authentication was cancelled or timed out.");
+        showToast("info", "Biometric Login Cancelled", "Authentication was cancelled or timed out.");
         return;
       }
 
-      useSwalErrorAlert("Biometric Login Failed", msg);
+      showToast("error", "Biometric Login Failed", msg);
     } finally {
       setBioAuthInProgress(false);
       setIsBioLoading(false);

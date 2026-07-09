@@ -37,6 +37,7 @@ const FieldRenderer = ({
   maxLength,
   onPaste,
   labelClassName = "",
+  nativeSelect = false,
   ...props
 }) => {
   const isAudit = variant === "audit";
@@ -48,6 +49,10 @@ const FieldRenderer = ({
 
   const labelText = typeof label === "string" ? label : "";
   const idSource = id || name || labelText;
+  const normalizedFieldKey = String(idSource || "")
+    .replace(/[^a-z0-9]/gi, "")
+    .toLowerCase();
+  const isCurrRateField = normalizedFieldKey === "currrate";
 
   const inputId = idSource
     ? String(idSource).toLowerCase().replace(/[^a-z0-9]+/gi, "_")
@@ -160,7 +165,8 @@ const FieldRenderer = ({
   };
 
   const isRetrievedMode = Boolean(isRetrieved || retrieved);
-  const shouldHideClearButton = hideClearButton || type === "date" || isRetrievedMode;
+  const shouldHideClearButton =
+    hideClearButton || type === "date" || isRetrievedMode || isCurrRateField;
   const canClear = !disabled && !readOnly && !isAudit && !shouldHideClearButton;
 
   const renderLabel = () => (

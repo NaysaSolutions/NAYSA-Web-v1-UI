@@ -31,27 +31,35 @@ import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferen
 import SearchGlobalReportTable from "@/NAYSA Cloud/Lookup/SearchGlobalReportTable";
 
 // ─── Module endpoint registry ───────────────────────────────────────────────
-// Only FG is wired today. Add RM / MS prefixes here when those endpoints exist
-// — no other part of this file needs to change.
+// Same React file, but it calls your existing module-specific Laravel routes.
 const MODULE_CONFIG = {
   FG: {
+    invType: "FG",
     label: "FG Stock Card",
     icon: Boxes,
     itemLookupEndpoint: "getInvLookupFG",
+    itemLookupDocType: "PRFG",
     base: "/fg/inventory/stock-card",
+    inventorySetupKeys: ["fginvCosting", "fgInvCosting", "FGINV_COSTING", "fginventorySetup"],
   },
-  // RM: {
-  //   label: "RM Stock Card",
-  //   icon: Layers,
-  //   itemLookupEndpoint: "getInvLookupRM",
-  //   base: "/rm/inventory/stock-card",
-  // },
-  // MS: {
-  //   label: "MS Stock Card",
-  //   icon: ClipboardList,
-  //   itemLookupEndpoint: "getInvLookupMS",
-  //   base: "/ms/inventory/stock-card",
-  // },
+  RM: {
+    invType: "RM",
+    label: "RM Stock Card",
+    icon: Layers,
+    itemLookupEndpoint: "getInvLookupRM",
+    itemLookupDocType: "PRRM",
+    base: "/rm/inventory/stock-card",
+    inventorySetupKeys: ["rminvCosting", "rmInvCosting", "RMINV_COSTING", "rminventorySetup"],
+  },
+  MS: {
+    invType: "MS",
+    label: "MS Stock Card",
+    icon: ClipboardList,
+    itemLookupEndpoint: "getInvLookupMS",
+    itemLookupDocType: "PRMS",
+    base: "/ms/inventory/stock-card",
+    inventorySetupKeys: ["msinvCosting", "msInvCosting", "MSINV_COSTING", "msinventorySetup"],
+  },
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -65,6 +73,19 @@ const formatLookupValue = (code, name) => {
   if (!name) return code || "";
   if (!code) return name;
   return `${code} - ${name}`;
+};
+
+const getFirstDefined = (source, keys = [], fallback = "") => {
+  for (const key of keys) {
+    const value = source?.[key];
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return fallback;
+};
+
+const normalizeModuleKey = (moduleKey = "FG") => {
+  const normalized = String(moduleKey || "FG").trim().toUpperCase();
+  return MODULE_CONFIG[normalized] ? normalized : "FG";
 };
 
 const parseDateValue = (value) => {
@@ -297,7 +318,8 @@ function CalendarField({ id, label, value, updateState, disabled = false }) {
 
 // ─── Main inquiry body (filters + tabs + tables) ───────────────────────────
 function StockCardInquiryBody({ moduleKey }) {
-  const config = MODULE_CONFIG[moduleKey] || MODULE_CONFIG.FG;
+  const activeModuleKey = normalizeModuleKey(moduleKey);
+  const config = MODULE_CONFIG[activeModuleKey] || MODULE_CONFIG.FG;
   const { companyInfo, currentUserRow, user } = useAuth();
 
   const defaultBranchCode = currentUserRow?.branchCode || user?.branchCode || "";
@@ -306,7 +328,9 @@ function StockCardInquiryBody({ moduleKey }) {
   const defaultCutoffName = companyInfo?.cutoffName || "";
   const defaultReferenceDate = useGetCurrentDayV2();
   const defaultReportType = companyInfo?.stockStatusReportType || companyInfo?.reportType || "Daily";
-  const defaultInventorySetup = companyInfo?.fginvCosting || "";
+  const defaultInventorySetup = String(
+    getFirstDefined(companyInfo, config.inventorySetupKeys, companyInfo?.inventorySetup || companyInfo?.costingMethod || "FIFO")
+  ).toUpperCase();
 
   const defaultBalanceFilters = useMemo(
     () => ({
@@ -370,6 +394,21 @@ function StockCardInquiryBody({ moduleKey }) {
   const [shouldLoadStockStatus, setShouldLoadStockStatus] = useState(0);
   const [lookupState, setLookupState] = useState({ type: "", scope: "", cutoffTarget: "" });
 
+  useEffect(() => {
+    setInventorySetup(defaultInventorySetup || "FIFO");
+    setActiveMainTab((defaultInventorySetup || "FIFO") === "WAC" ? "location" : "fifo");
+    setBalanceFilters(defaultBalanceFilters);
+    setStockCardFilters(defaultStockCardFilters);
+    setStockStatusFilters(defaultStockStatusFilters);
+    setSelectedBalanceItem(null);
+    setShouldLoadBalance(0);
+    setShouldLoadStockCard(0);
+    setShouldLoadStockStatus(0);
+    setLookupState({ type: "", scope: "", cutoffTarget: "" });
+    // Reset only when switching module, not when minimizing/restoring the modal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeModuleKey]);
+
   const openLookup = (type, scope, cutoffTarget = "") => setLookupState({ type, scope, cutoffTarget });
   const closeLookup = () => setLookupState({ type: "", scope: "", cutoffTarget: "" });
 
@@ -396,12 +435,16 @@ function StockCardInquiryBody({ moduleKey }) {
 
   // ── Endpoints (module-aware via MODULE_CONFIG.base) ─────────────────────
   const setupQuery = useQuery({
-    queryKey: [moduleKey, "stock-card-setup"],
+    queryKey: [activeModuleKey, "stock-card-setup"],
     queryFn: async () => {
       const response = await apiClient.get(`${config.base}/setup`);
       return response?.data?.data || { inventorySetup: defaultInventorySetup };
     },
     staleTime: Infinity,
+    gcTime: Infinity,
+    cacheTime: Infinity,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   useEffect(() => {
@@ -446,30 +489,45 @@ function StockCardInquiryBody({ moduleKey }) {
   );
 
   const balanceQuery = useQuery({
-    queryKey: [moduleKey, inventorySetup, shouldLoadBalance, balanceFilters],
+    queryKey: [activeModuleKey, inventorySetup, shouldLoadBalance, balanceFilters],
     enabled: shouldLoadBalance > 0,
     queryFn: async () => {
       const response = await apiClient.get(balanceEndpoint, { params: balanceRequestParams });
       return normalizeBalanceResponse(response?.data?.data);
     },
+    staleTime: Infinity,
+    gcTime: Infinity,
+    cacheTime: Infinity,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   const stockCardQuery = useQuery({
-    queryKey: [moduleKey, "stock-card-movement", shouldLoadStockCard, stockCardFilters],
+    queryKey: [activeModuleKey, "stock-card-movement", shouldLoadStockCard, stockCardFilters],
     enabled: shouldLoadStockCard > 0,
     queryFn: async () => {
       const response = await apiClient.get(`${config.base}/stock-card`, { params: stockCardRequestParams });
       return response?.data?.data || { rows: [], totals: {} };
     },
+    staleTime: Infinity,
+    gcTime: Infinity,
+    cacheTime: Infinity,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   const stockStatusQuery = useQuery({
-    queryKey: [moduleKey, "stock-status", shouldLoadStockStatus],
+    queryKey: [activeModuleKey, "stock-status", shouldLoadStockStatus, stockStatusFilters],
     enabled: shouldLoadStockStatus > 0,
     queryFn: async () => {
       const response = await apiClient.get(`${config.base}/stock-status`, { params: stockStatusRequestParams });
       return response?.data?.data || { summary: [], perItem: [], perLot: [] };
     },
+    staleTime: Infinity,
+    gcTime: Infinity,
+    cacheTime: Infinity,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   const balanceSummaryRows = safeArray(balanceQuery.data?.summary);
@@ -848,7 +906,16 @@ function StockCardInquiryBody({ moduleKey }) {
       </div>
 
       {lookupState.type === "branch" && <BranchLookupModal isOpen onClose={handleBranchLookupClose} title="Search Branch" withPagination />}
-      {lookupState.type === "item" && <ItemMastLookupModal isOpen endpoint={config.itemLookupEndpoint} onClose={handleItemLookupClose} onCancel={closeLookup} enableMultiSelect={false} docType="PRFG" />}
+      {lookupState.type === "item" && (
+        <ItemMastLookupModal
+          isOpen
+          endpoint={config.itemLookupEndpoint}
+          onClose={handleItemLookupClose}
+          onCancel={closeLookup}
+          enableMultiSelect={false}
+          docType={config.itemLookupDocType}
+        />
+      )}
       {lookupState.type === "warehouse" && <WarehouseLookupModal isOpen onClose={handleWarehouseLookupClose} filter={warehouseLookupFilter} />}
       {lookupState.type === "location" && (
         <LocationLookupModal isOpen onClose={handleLocationLookupClose} filter={locationLookupWarehouse ? `ByWH${locationLookupWarehouse}` : "ActiveAll"} whCode={locationLookupWarehouse} />
@@ -858,13 +925,14 @@ function StockCardInquiryBody({ moduleKey }) {
   );
 }
 
-// ─── Modal shell (minimizable, plain inline — no portal) ───────────────────
+// ─── Modal shell (minimizable, keeps loaded queries mounted) ───────────────
 const SearchStockCard = ({ isOpen, module = "FG", onClose }) => {
+  const activeModule = normalizeModuleKey(module);
   const [isMinimized, setIsMinimized] = useState(false);
 
   useEffect(() => {
     if (isOpen) setIsMinimized(false);
-  }, [isOpen]);
+  }, [isOpen, activeModule]);
 
   useEffect(() => {
     if (!isOpen || isMinimized) return undefined;
@@ -877,77 +945,78 @@ const SearchStockCard = ({ isOpen, module = "FG", onClose }) => {
 
   if (!isOpen) return null;
 
-  const config = MODULE_CONFIG[module] || MODULE_CONFIG.FG;
+  const config = MODULE_CONFIG[activeModule] || MODULE_CONFIG.FG;
   const Icon = config.icon;
 
-  if (isMinimized) {
-    return (
-      <div className="fixed bottom-4 right-4 z-50">
-        <button
-          type="button"
-          onClick={() => setIsMinimized(false)}
-          className="flex items-center gap-2.5 rounded-full border border-slate-200 bg-white px-4 py-2.5 shadow-lg hover:border-blue-300 hover:shadow-xl"
-          title={`Restore ${config.label}`}
-        >
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white">
-            <Icon size={13} />
-          </span>
-          <span className="text-xs font-semibold text-slate-700">{config.label}</span>
-          <span className="flex h-5 w-5 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-blue-600">
-            <Maximize2 size={11} />
-          </span>
-          <span
-            role="button"
-            tabIndex={0}
-            aria-label="Close"
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsMinimized(false);
-              onClose?.();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
+  return (
+    <>
+      {isMinimized && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <button
+            type="button"
+            onClick={() => setIsMinimized(false)}
+            className="flex items-center gap-2.5 rounded-full border border-slate-200 bg-white px-4 py-2.5 shadow-lg hover:border-blue-300 hover:shadow-xl"
+            title={`Restore ${config.label}`}
+          >
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white">
+              <Icon size={13} />
+            </span>
+            <span className="text-xs font-semibold text-slate-700">{config.label}</span>
+            <span className="flex h-5 w-5 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-blue-600">
+              <Maximize2 size={11} />
+            </span>
+            <span
+              role="button"
+              tabIndex={0}
+              aria-label="Close"
+              onClick={(e) => {
                 e.stopPropagation();
                 setIsMinimized(false);
                 onClose?.();
-              }
-            }}
-            className="flex h-5 w-5 items-center justify-center rounded-full text-slate-400 hover:bg-rose-50 hover:text-rose-500"
-          >
-            <X size={12} />
-          </span>
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-0 sm:p-6"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose?.();
-      }}
-    >
-      <div className="flex h-full max-h-full w-full max-w-[1400px] flex-col overflow-hidden rounded-none border-0 border-slate-200 bg-white shadow-2xl sm:max-h-[92vh] sm:rounded-lg sm:border">
-        <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 sm:gap-3 sm:px-4 sm:py-2.5">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white">
-            <Icon size={14} />
-          </span>
-          <h2 className="flex-1 truncate text-xs font-bold text-slate-700 sm:text-sm">{config.label} Inquiry</h2>
-
-          <button type="button" onClick={() => setIsMinimized(true)} title="Minimize" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-slate-200 hover:text-slate-700">
-            <Minus size={15} />
-          </button>
-          <button type="button" onClick={() => onClose?.()} title="Close" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-rose-100 hover:text-rose-600">
-            <X size={15} />
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.stopPropagation();
+                  setIsMinimized(false);
+                  onClose?.();
+                }
+              }}
+              className="flex h-5 w-5 items-center justify-center rounded-full text-slate-400 hover:bg-rose-50 hover:text-rose-500"
+            >
+              <X size={12} />
+            </span>
           </button>
         </div>
+      )}
 
-        <div className="flex-1 overflow-auto bg-slate-50 px-2 py-2 sm:px-3">
-          <StockCardInquiryBody moduleKey={module} />
+      <div
+        className={`${isMinimized ? "pointer-events-none invisible opacity-0" : "visible opacity-100"} fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-0 transition-opacity sm:p-6`}
+        aria-hidden={isMinimized}
+        onMouseDown={(e) => {
+          if (!isMinimized && e.target === e.currentTarget) onClose?.();
+        }}
+      >
+        <div className="flex h-full max-h-full w-full max-w-[1400px] flex-col overflow-hidden rounded-none border-0 border-slate-200 bg-white shadow-2xl sm:max-h-[92vh] sm:rounded-lg sm:border">
+          <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 sm:gap-3 sm:px-4 sm:py-2.5">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white">
+              <Icon size={14} />
+            </span>
+            <h2 className="flex-1 truncate text-xs font-bold text-slate-700 sm:text-sm">{config.label} Inquiry</h2>
+
+            <button type="button" onClick={() => setIsMinimized(true)} title="Minimize" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-slate-200 hover:text-slate-700">
+              <Minus size={15} />
+            </button>
+            <button type="button" onClick={() => onClose?.()} title="Close" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-rose-100 hover:text-rose-600">
+              <X size={15} />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-auto bg-slate-50 px-2 py-2 sm:px-3">
+            <StockCardInquiryBody moduleKey={activeModule} />
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 

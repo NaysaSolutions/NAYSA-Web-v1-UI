@@ -272,6 +272,8 @@ export const useFetchTranData = async (documentNo,branchCode,docType,fieldName,d
 
   
   const response = await fetchData(`get${docType}?${fieldName}=${documentNo}&branchCode=${branchCode}&direction=${direction}`);
+  
+  
   if (!response?.success || !response.data?.length) {
     return null; // no record
   }

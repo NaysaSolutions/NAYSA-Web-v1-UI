@@ -3557,8 +3557,7 @@ const handleActivityOption = async (action) => {
                   required
                   type="text"
                   value={vendNameHeader || ""}
-                  disabled={isFormDisabled}
-                  onChange={(val) => updateState({ vendNameHeader: val })}
+                  disabled
                 />
 
                 {/* Payterm */}

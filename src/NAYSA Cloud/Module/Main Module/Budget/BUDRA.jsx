@@ -294,7 +294,7 @@ const BUDRA = () => {
 
   const pdfLink = docTypePDFGuide?.[docType];
   const videoLink = docTypeVideoGuide?.[docType];
-  const documentTitle = "Budget Realignment";
+  const documentTitle = `${hsDoc?.docName || "Budget Realignment"} Transaction`;
   const displayStatus = getFullStatus(status || documentStatus);
 
   const statusMap = {
