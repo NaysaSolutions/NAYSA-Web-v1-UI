@@ -74,6 +74,7 @@ export const pageRegistry = {
   // Production 
   WO: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Production/WO.jsx")),
   StorePortalOrder: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/StorePortal/StorePortalOrder.jsx")),
+  Commissary: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/StorePortal/Commissary.jsx")),
 
   // Importation
   LC: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Importation/LC.jsx")),
