@@ -79,6 +79,71 @@ const getValue = (row, ...keys) => {
     return "";
 };
 
+
+const DOCUMENT_STATUS_LABELS = {
+    F: "FINALIZED",
+    X: "CANCELLED",
+    Y: "CANCELLED",
+    C: "CLOSED",
+    P: "POSTED",
+    O: "OPEN",
+    R: "RELEASED",
+    "": "OPEN",
+};
+
+const formatDocumentStatusLabel = (value) => {
+    const text = String(value ?? "").trim();
+    if (!text) return "OPEN";
+
+    const upper = text.toUpperCase();
+    return DOCUMENT_STATUS_LABELS[upper] || upper;
+};
+
+const applyHistoryStatusLabels = (root = document) => {
+    if (typeof document === "undefined") return;
+
+    const tables = Array.from(root.querySelectorAll("table"));
+
+    tables.forEach((table) => {
+        const headerRows = Array.from(table.querySelectorAll("thead tr"));
+        const headerRow = headerRows.find((row) =>
+            Array.from(row.children).some((cell) =>
+                ["STATUS", "DOC STATUS", "DOCUMENT STATUS"].includes(
+                    (cell.textContent || "").trim().toUpperCase()
+                )
+            )
+        );
+
+        if (!headerRow) return;
+
+        const statusIndex = Array.from(headerRow.children).findIndex((cell) =>
+            ["STATUS", "DOC STATUS", "DOCUMENT STATUS"].includes(
+                (cell.textContent || "").trim().toUpperCase()
+            )
+        );
+
+        if (statusIndex < 0) return;
+
+        const bodyRows = Array.from(table.querySelectorAll("tbody tr"));
+
+        bodyRows.forEach((row) => {
+            const cells = Array.from(row.children);
+            const statusCell = cells[statusIndex];
+
+            if (!statusCell || statusCell.querySelector("input, select, textarea")) return;
+
+            const currentText = (statusCell.textContent || "").trim();
+            const nextText = formatDocumentStatusLabel(currentText);
+
+            if (nextText && nextText !== currentText) {
+                statusCell.textContent = nextText;
+                statusCell.title = nextText;
+            }
+        });
+    });
+};
+
+
 const toDateInput = (value) => {
     if (!value) return "";
     const text = String(value);
@@ -1021,6 +1086,10 @@ const FGPR = () => {
             detailColumns: prev.detailColumns || [],
             summaryColumns: prev.summaryColumns || [],
             topTab: prev.topTab === "history" ? "history" : "details",
+
+            // Keep Stock Card mounted when transaction retrieval/reset reloads the page data.
+            // This prevents the Stock Card inquiry from losing its already-loaded results.
+            showStockCard: prev.showStockCard,
         }));
     };
 
@@ -1398,6 +1467,36 @@ const FGPR = () => {
             activeTab: "basic",
         });
     }, [state.branchCode]);
+
+
+    useEffect(() => {
+        if (state.topTab !== "history") return;
+
+        let timer = null;
+
+        const run = () => {
+            clearTimeout(timer);
+            timer = setTimeout(() => applyHistoryStatusLabels(), 50);
+        };
+
+        run();
+
+        const observer = new MutationObserver(run);
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            characterData: true,
+        });
+
+        const interval = setInterval(run, 700);
+
+        return () => {
+            clearTimeout(timer);
+            clearInterval(interval);
+            observer.disconnect();
+        };
+    }, [state.topTab]);
+
 
     useEffect(() => {
         const params = new URLSearchParams(location.search);
@@ -1842,12 +1941,11 @@ const FGPR = () => {
         fgpr_no: state.documentNo,
     };
 
-    if (state.isLoading) {
-        return <LoadingSpinner />;
-    }
-
     return (
         <div className="global-tran-main-div-ui">
+            {/* Do not return only <LoadingSpinner /> here.
+                Returning early unmounts the Stock Card modal and reloads its query data.
+                Keep the page mounted and show the spinner as an overlay instead. */}
             {state.showSpinner && <LoadingSpinner />}
 
             <div className="global-tran-headerToolbar-ui">
@@ -2294,6 +2392,13 @@ const FGPR = () => {
                     startDate={null}
                     endDate={null}
                     status="All"
+                    statusFormatter={formatDocumentStatusLabel}
+                    columnFormatters={{
+                        status: formatDocumentStatusLabel,
+                        doc_stat: formatDocumentStatusLabel,
+                        docStatus: formatDocumentStatusLabel,
+                        stat: formatDocumentStatusLabel,
+                    }}
                     onRowDoubleClick={handleHistoryRowPick}
                     historyExportName={`${documentTitle} History`}
                 />
