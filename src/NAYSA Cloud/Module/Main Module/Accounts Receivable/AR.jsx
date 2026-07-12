@@ -21,6 +21,7 @@ import CancelTranModal from "../../../Lookup/SearchCancelRef.jsx";
 import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
 import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
+import GlobalCombinedLookup from "../../../Lookup/SearchGlobalCombinedLookup.jsx";
 import PostCR from "../../../Module/Main Module/Accounts Receivable/PostCR.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
@@ -108,6 +109,10 @@ const AR = () => {
   const loadedFromUrlRef = useRef(false);
   const detailRowsRef = useRef([]);
   const detailRowsGLRef = useRef([]);
+  const pendingAddAfterCustomerRef = useRef(false);
+  const selectedHSColConfig = useSelectedHSColConfig;
+  const swalValidateRequiredFields = useSwalvalidateRequiredFields;
+  const swalErrorAlert = useSwalErrorAlert;
   const navigate = useNavigate();
   const location = useLocation();
   const { companyInfo, currentUserRow,getAllDropDown,refsLoaded ,getAllTopATCRow, getAllTopVatRow,getAllTopVatAmount,getAllTopATCAmount,getAllTopHSDocRow } = useAuth();
@@ -218,6 +223,9 @@ const AR = () => {
     detailRowsGL :[],
     globalLookupRow:[],
     globalLookupHeader:[],
+    openPRCAR_Data_Summary: [],
+    openPRCAR_Col_Summary: [],
+    openPRCAR_Col_Detail: [],
 
 
     totalDebit:"0.00",
@@ -239,6 +247,7 @@ const AR = () => {
     showAtcModal:false,
     showSlModal:false,
     showARBalanceModal:false,
+    showOpenPRCModal:false,
     showPostingModal:false,
 
     currencyModalOpen:false,
@@ -335,6 +344,9 @@ const AR = () => {
   detailRowsGL,
   globalLookupRow,
   globalLookupHeader,
+  openPRCAR_Data_Summary,
+  openPRCAR_Col_Summary,
+  openPRCAR_Col_Detail,
   totalDebit,
   totalCredit,
   totalDebitFx1,
@@ -365,6 +377,7 @@ const AR = () => {
   showAttachModal,
   showSignatoryModal,
   showARBalanceModal,
+  showOpenPRCModal,
   showPostingModal,
   showAllTranDocNo,
   custModalParams,
@@ -726,6 +739,9 @@ useEffect(() => {
       documentID: "",
       detailRows: [],
       detailRowsGL:[],
+      openPRCAR_Data_Summary: [],
+      openPRCAR_Col_Summary: [],
+      openPRCAR_Col_Detail: [],
       totalDebit:"0.00",
       totalCredit:"0.00",
       totalDebitFx1:"0.00",
@@ -874,6 +890,7 @@ const fetchTranData = async (documentNo, branchCode,direction="") => {
       currName: data.currName,
       currRate: formatNumber(data.currRate, 6),
       remarks: data.remarks,
+      prcNo: data.prcNo,
       detailRows: retrievedDetailRows,
       detailRowsGL: formattedGLRows,
       isDocNoDisabled: true,
@@ -988,6 +1005,7 @@ const handleActivityOption = async (action) => {
       depBankCode: depBankCode || "",
       depAcctName: depAcctName || "",
       depAcctNo: depAcctNo || "",
+      prcNo: prcNo || "",
       bank: bank || "",
       checkNo: checkNo || "",
       checkDate: checkDate || null,
@@ -1129,26 +1147,20 @@ const handleActivityOption = async (action) => {
 };
 
 
-const handleAddRow = async () => {
-
-
- const fieldsToCheck = {
-          "Header : Customer or Chain": custCode || chainCode,
-        };
-        const isValid = useSwalvalidateRequiredFields(fieldsToCheck, "Add Invoice");
-        if (!isValid) return;
-
-
-
-
+const performAddRow = async ({
+  nextCustCode = custCode,
+  nextCustName = custName,
+  nextChainCode = chainCode,
+  nextCurrCode = currCode,
+  nextCurrRate = currRate,
+} = {}) => {
     if(selectedARType ==="AR11" ) {
-      await handleOpenARBalance();
+      await handleOpenARBalance({ custCode: nextCustCode, chainCode: nextChainCode, branchCode });
       return;
     }
 
-
   try {
-    const items = await handleFetchDetail(custCode);
+    const items = await handleFetchDetail(nextCustCode);
     const itemList = Array.isArray(items) ? items : [items];
     const newRows = await Promise.all(itemList.map(async (item) => {
 
@@ -1162,11 +1174,11 @@ const handleAddRow = async () => {
         unappliedAmount: "0.00",
         balance: "0.00",
         arAcct: "",
-        currCode: currCode,
-        currRate: formatNumber(currRate,6) ,
+        currCode: nextCurrCode,
+        currRate: formatNumber(nextCurrRate,6) ,
         checkAmount: "0.00",
-        custCode: custCode,
-        custName: custName,
+        custCode: nextCustCode,
+        custName: nextCustName,
         refBranchcode: branchCode,
         refDocCode:  "AR",
         groupId: "",
@@ -1191,6 +1203,23 @@ const handleAddRow = async () => {
     console.error("Error adding new row:", error);
     alert("Failed to add new row. Please select a Payee first.");
   }
+};
+
+
+const handleAddRow = async () => {
+  const hasCustomerOrChain = Boolean(String(custCode || "").trim() || String(chainCode || "").trim());
+
+  if (!hasCustomerOrChain) {
+    pendingAddAfterCustomerRef.current = true;
+    updateState({
+      custModalOpen: true,
+      custModalParams: selectedARType === "AR11" ? "OpenAR" : "ActiveAll",
+      custModalSource: "customer",
+    });
+    return;
+  }
+
+  await performAddRow();
 };
 
 
@@ -1395,11 +1424,13 @@ useEffect(() => {
 
   const handleCloseCustModal = async (selectedData) => {
     if (!selectedData) {
+        pendingAddAfterCustomerRef.current = false;
         updateState({ custModalOpen: false, custModalSource: null });
         return;
     }
 
     if (custModalSource === "chain") {
+        pendingAddAfterCustomerRef.current = false;
         updateState({
             custModalOpen: false,
             custModalSource: null,
@@ -1411,6 +1442,8 @@ useEffect(() => {
         return;
     }
 
+    const shouldContinueAdd = pendingAddAfterCustomerRef.current && custModalSource === "customer";
+    pendingAddAfterCustomerRef.current = false;
     updateState({ custModalOpen: false, custModalSource: null });
     updateState({ isLoading: true });
 
@@ -1445,6 +1478,7 @@ useEffect(() => {
 
           // Replace Customer Info in Invoice Details on Change of Customer
         const responseCurrRate = await handleSelectCurrency(custDetails.currCode)
+        const nextCurrRate = responseCurrRate || currRate;
         if (responseCurrRate) {
           if (detailRows && selectedARType !== "AR11" ) {
           const updatedRows = detailRows.map((row) => ({
@@ -1457,6 +1491,16 @@ useEffect(() => {
 
           updateState({ detailRows: updatedRows , detailRowsGL: [] });
         }
+        }
+
+        if (shouldContinueAdd) {
+          await performAddRow({
+            nextCustCode: custDetails.custCode,
+            nextCustName: custDetails.custName,
+            nextChainCode: "",
+            nextCurrCode: custDetails.currCode || currCode,
+            nextCurrRate,
+          });
         }
 
     } catch (error) {
@@ -1940,15 +1984,215 @@ const handleCloseBankMast = async (selectedBankCode) => {
 };
 
 
+const normalizeLookupDate = (value) => {
+  if (!value) return "";
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  const text = String(value).trim();
+  if (!text) return "";
+
+  const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+
+  const slashDateMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slashDateMatch) {
+    const month = slashDateMatch[1].padStart(2, "0");
+    const day = slashDateMatch[2].padStart(2, "0");
+    return `${slashDateMatch[3]}-${month}-${day}`;
+  }
+
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) return text;
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const isAfterLookupDate = (left, right) => {
+  const leftDate = normalizeLookupDate(left);
+  const rightDate = normalizeLookupDate(right);
+  return !!leftDate && !!rightDate && leftDate > rightDate;
+};
+
+const getApiErrorMessage = (error) =>
+  error?.response?.data?.message ||
+  error?.response?.data?.error ||
+  error?.message ||
+  "Unexpected error.";
+
+const hasSameInvoiceWithDifferentChecks = (rows = []) => {
+  const checksByInvoice = new Map();
+
+  rows.forEach((row) => {
+    const siNo = String(row?.siNo || "").trim();
+    if (!siNo) return;
+
+    const checkSignature = [
+      row?.bank || "",
+      row?.checkNo || "",
+      normalizeLookupDate(row?.checkDate),
+      row?.checkAmount || "",
+    ].join("|");
+
+    if (!checksByInvoice.has(siNo)) {
+      checksByInvoice.set(siNo, new Set());
+    }
+
+    checksByInvoice.get(siNo).add(checkSignature);
+  });
+
+  return [...checksByInvoice.values()].some((checks) => checks.size > 1);
+};
+
+const handleOpenPRCLookup = async () => {
+  const fieldsToCheck = {
+    "Header : Branch": branchCode,
+    "Header : AR Date": documentDate,
+  };
+
+  const isValid = await swalValidateRequiredFields(fieldsToCheck, "Open Provisional Receipt Lookup");
+  if (!isValid) return;
+
+  try {
+    updateState({ isLoading: true, showSpinner: true });
+
+    const endpoint = "getPRCCR_OpenSummary";
+    const response = await fetchDataJson(endpoint, {
+      branchCode,
+      prcNo: "",
+      custCode,
+      chainCode,
+    });
+
+    const prcRows = response?.data?.[0]?.result
+      ? JSON.parse(response.data[0].result)
+      : [];
+
+    if (prcRows.length === 0) {
+      swalErrorAlert(
+        "Open Provisional Receipt",
+        "There are no open Provisional Receipt records for the selected branch/customer."
+      );
+      return;
+    }
+
+    const summaryColumns = await selectedHSColConfig(endpoint);
+    const detailColumns = await selectedHSColConfig("getPRCCR_OpenDetail");
+
+    updateState({
+      openPRCAR_Data_Summary: prcRows,
+      openPRCAR_Col_Summary: summaryColumns,
+      openPRCAR_Col_Detail: detailColumns,
+      showOpenPRCModal: true,
+    });
+  } catch (error) {
+    console.error("Failed to fetch Open Provisional Receipt:", error);
+    swalErrorAlert("Open Provisional Receipt", getApiErrorMessage(error));
+    updateState({
+      openPRCAR_Data_Summary: [],
+      openPRCAR_Col_Summary: [],
+      openPRCAR_Col_Detail: [],
+    });
+  } finally {
+    updateState({ isLoading: false, showSpinner: false });
+  }
+};
+
+const handleClosePRCLookup = async (payload) => {
+  const selectedDetails = Array.isArray(payload?.details) ? payload.details : [];
+  const selectedSummaries = Array.isArray(payload?.summary) ? payload.summary : [];
+
+  if (selectedDetails.length === 0) {
+    swalErrorAlert("Open Provisional Receipt", "Please select at least one invoice detail.");
+    return;
+  }
+
+  const postDatedRows = selectedDetails.filter((row) =>
+    isAfterLookupDate(row?.checkDate, documentDate)
+  );
+
+  if (postDatedRows.length > 0) {
+    const firstPostDated = postDatedRows[0];
+    swalErrorAlert(
+      "Open Provisional Receipt",
+      `Cannot select post-dated checks. Check Date ${normalizeLookupDate(firstPostDated.checkDate)} is later than AR Date ${normalizeLookupDate(documentDate)}.`
+    );
+    return;
+  }
+
+  const firstSummary = selectedSummaries[0] || {};
+  const prcNumbers = [
+    ...new Set(selectedSummaries.map((row) => row?.prcNo).filter(Boolean)),
+  ].join(",");
+
+  const newRows = selectedDetails.map((entry, idx) => ({
+    lnNo: detailRows.length + idx + 1,
+    w2307: "",
+    siNo: entry.siNo || "",
+    siDate: normalizeLookupDate(entry.siDate),
+    siAmount: formatNumber(entry.siAmount || 0, 2),
+    appliedAmount: formatNumber(entry.appliedAmount || 0, 2),
+    unappliedAmount: formatNumber(entry.unappliedAmount || 0, 2),
+    balance: formatNumber(entry.balance || 0, 2),
+    arAcct: entry.arAcct || "",
+    currCode: entry.currCode || firstSummary.currCode || currCode,
+    currRate: formatNumber(entry.currRate || firstSummary.currRate || currRate || 1, 6),
+    bank: entry.bank || "",
+    checkNo: entry.checkNo || "",
+    checkDate: normalizeLookupDate(entry.checkDate),
+    checkAmount: formatNumber(entry.checkAmount || entry.appliedAmount || 0, 2),
+    custCode: entry.custCode || firstSummary.custCode || custCode,
+    custName: entry.custName || firstSummary.custName || custName,
+    refBranchcode: entry.refBranchCode || entry.refBranchcode || firstSummary.branchCode || branchCode,
+    refDocCode: entry.refDocCode || "PRC",
+    groupId: entry.groupId || "",
+  }));
+
+  const updatedRows = [...detailRows, ...newRows];
+  const shouldUseMultipleChecks = hasSameInvoiceWithDifferentChecks(selectedDetails);
+  updateState({
+    prcNo: prcNumbers || firstSummary.prcNo || "",
+    selectedCheckType: shouldUseMultipleChecks ? "AR22" : selectedCheckType,
+    chainCode: firstSummary.chainCode || chainCode,
+    chainName: firstSummary.chainName || chainName,
+    custCode: firstSummary.custCode || custCode,
+    custName: firstSummary.custName || custName,
+    depBankCode: firstSummary.depBankCode || depBankCode,
+    depAcctName: firstSummary.depAcctName || depAcctName,
+    depAcctNo: firstSummary.depAcctNo || depAcctNo,
+    currCode: firstSummary.currCode || currCode,
+    currName: firstSummary.currName || currName,
+    currRate: formatNumber(firstSummary.currRate || currRate || 1, 6),
+    detailRows: updatedRows,
+    detailRowsGL: [],
+    showOpenPRCModal: false,
+    openPRCAR_Data_Summary: [],
+    openPRCAR_Col_Summary: [],
+    openPRCAR_Col_Detail: [],
+  });
+  updateTotals(updatedRows);
+};
 
 
-const handleOpenARBalance = async () => {
+
+
+const handleOpenARBalance = async (overrides = {}) => {
   try {
     updateState({ isLoading: true });
 
 
     const endpoint ="getOpenARBalance"
-    const response = await fetchDataJson(endpoint, { custCode, branchCode });
+    const lookupCustCode = overrides.custCode ?? custCode;
+    const lookupBranchCode = overrides.branchCode ?? branchCode;
+    const response = await fetchDataJson(endpoint, { custCode: lookupCustCode, branchCode: lookupBranchCode });
     const custData = response?.data?.[0]?.result ? JSON.parse(response.data[0].result) : [];
 
     const colConfig = await useSelectedHSColConfig(endpoint);
@@ -2555,8 +2799,8 @@ const renderArGlCell = (columnKey, row, index) => {
                       label="Bank Account No."
                       type="text"
                       value={depAcctNo || ""}
-                      disabled={isFormDisabled}
-                      onChange={(val) => updateState({ depAcctNo: val })}
+                      disabled
+                      readOnly
                     />
 
                     <FieldRenderer
@@ -2661,6 +2905,7 @@ const renderArGlCell = (columnKey, row, index) => {
                     disabled={state.isFetchDisabled || state.isDocNoDisabled || isFormDisabled}
                     readOnly
                     lookupDisabled={isFetchDisabled}
+                    onLookup={handleOpenPRCLookup}
                   />
 
                   <FieldRenderer
@@ -3143,6 +3388,50 @@ const renderArGlCell = (columnKey, row, index) => {
         endpoint={globalLookupHeader}
         onClose={handleCloseARBalance}
         onCancel={() => updateState({ showARBalanceModal: false })}
+      />
+    )}
+
+
+    {showOpenPRCModal && (
+      <GlobalCombinedLookup
+        isOpen={showOpenPRCModal}
+        title="Open Provisional Receipt"
+        summarySelectionMode="multiple"
+        detailSelectionMode="multiple"
+        summaryColumns={openPRCAR_Col_Summary}
+        detailColumns={openPRCAR_Col_Detail}
+        summaryData={openPRCAR_Data_Summary}
+        tabTitles={["Open PRC Summary", "Open PRC Detail"]}
+        fetchDetailApi={async (selectedIds) => {
+          const idString = Array.isArray(selectedIds)
+            ? selectedIds.join(",")
+            : selectedIds;
+
+          const payload = {
+            json_data: JSON.stringify({
+              json_data: {
+                selectedId: idString,
+                selectedIds: idString,
+              },
+            }),
+          };
+
+          const response = await postRequest("getPRCCR_OpenDetail", payload);
+          const rawData = response?.data?.[0]?.result
+            ? JSON.parse(response.data[0].result)
+            : response?.data || response;
+
+          return { data: Array.isArray(rawData) ? rawData : [] };
+        }}
+        onClose={handleClosePRCLookup}
+        onCancel={() =>
+          updateState({
+            showOpenPRCModal: false,
+            openPRCAR_Data_Summary: [],
+            openPRCAR_Col_Summary: [],
+            openPRCAR_Col_Detail: [],
+          })
+        }
       />
     )}
 
