@@ -916,7 +916,15 @@ function StockCardInquiryBody({ moduleKey }) {
           docType={config.itemLookupDocType}
         />
       )}
-      {lookupState.type === "warehouse" && <WarehouseLookupModal isOpen onClose={handleWarehouseLookupClose} filter={warehouseLookupFilter} />}
+      {lookupState.type === "warehouse" && (
+        <WarehouseLookupModal
+          isOpen
+          onClose={handleWarehouseLookupClose}
+          filter={warehouseLookupFilter}
+          branchCode={activeLookupFilters?.branchCode || ""}
+          invType={activeModule}
+        />
+      )}
       {lookupState.type === "location" && (
         <LocationLookupModal isOpen onClose={handleLocationLookupClose} filter={locationLookupWarehouse ? `ByWH${locationLookupWarehouse}` : "ActiveAll"} whCode={locationLookupWarehouse} />
       )}

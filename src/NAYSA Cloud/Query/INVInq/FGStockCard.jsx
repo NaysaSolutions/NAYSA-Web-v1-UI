@@ -1630,6 +1630,8 @@ function FGStockCardQuery() {
           isOpen
           onClose={handleWarehouseLookupClose}
           filter={warehouseLookupFilter}
+          branchCode={activeLookupFilters?.branchCode || ""}
+        invType="FG"
         />
       )}
 

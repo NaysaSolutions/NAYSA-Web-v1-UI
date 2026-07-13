@@ -6157,8 +6157,10 @@ const handleClosePayeeLookup = async (row) => {
       {state.warehouseLookupOpen && (
         <WarehouseLookupModal
           isOpen={state.warehouseLookupOpen}
-          onClose={handleCloseWarehouseLookup}
-          filter="ActiveAll"
+          onClose={handleCloseWarehouseLookup}
+          filter="ActiveAll"
+          branchCode={state.branchCode || ""}
+          invType="RM"
         />
       )}
 

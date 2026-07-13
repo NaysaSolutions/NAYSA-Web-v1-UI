@@ -1638,6 +1638,8 @@ function RMStockCardQuery() {
           isOpen
           onClose={handleWarehouseLookupClose}
           filter={warehouseLookupFilter}
+          branchCode={activeLookupFilters?.branchCode || ""}
+        invType="RM"
         />
       )}
 
