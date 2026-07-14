@@ -4167,6 +4167,7 @@ const handleActivityOption = async (action) => {
           isOpen={state.warehouseLookupOpen}
           onClose={handleCloseWarehouseLookup}
           filter="ActiveAll"
+          branchCode={branchCode || ""}
         />
       )}
 

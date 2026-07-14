@@ -2953,7 +2953,9 @@ return (
               isOpen={warehouseLookupOpen}
               onClose={handleCloseWarehouseLookup}
               filter="ActiveAll"
+              branchCode={branchCode || ""}
               source={accountModalSource}
+            invType="FG"
             />
           )}  
    

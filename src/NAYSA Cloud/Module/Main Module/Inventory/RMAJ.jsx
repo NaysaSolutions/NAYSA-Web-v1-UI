@@ -3277,7 +3277,9 @@ return (
               isOpen={warehouseLookupOpen}
               onClose={handleCloseWarehouseLookup}
               filter={"ByBC" + branchCode}
+              branchCode={branchCode || ""}
               source={accountModalSource}
+            invType="RM"
             />
           )}  
    

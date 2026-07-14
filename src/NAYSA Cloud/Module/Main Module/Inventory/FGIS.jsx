@@ -3169,6 +3169,8 @@ useEffect(() => {
           isOpen={state.warehouseLookupOpen}
           onClose={handleCloseWarehouseLookup}
           filter="ActiveAll"
+          branchCode={branchCode || ""}
+        invType="FG"
         />
       )}
 

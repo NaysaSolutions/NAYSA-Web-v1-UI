@@ -4434,6 +4434,7 @@ const invAccountCode = firstValue(
                 ? detailRows[selectedRowIndex]?.itemCode
                 : null
             }
+          invType="MS"
           />
         )}
 
@@ -4444,6 +4445,7 @@ const invAccountCode = firstValue(
             filter={getFromWarehouseLookupProps().filter}
             source={accountModalSource}
             branchCode={getFromWarehouseLookupProps().branchCode}
+          invType="MS"
           />
         )}
 
@@ -4454,6 +4456,7 @@ const invAccountCode = firstValue(
             filter={getToWarehouseLookupProps().filter}
             source={accountModalSource}
             branchCode={getToWarehouseLookupProps().branchCode}
+          invType="MS"
           />
         )}
 
