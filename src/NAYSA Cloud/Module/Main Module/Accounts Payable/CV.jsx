@@ -93,6 +93,8 @@ import {
 import { 
   formatNumber,
   parseFormattedNumber,
+  useSwalErrorAlert,
+  useSwalInfoAlert,
   useSwalshowSaveSuccessDialog,
 } from '@/NAYSA Cloud/Global/behavior.jsx';
 
@@ -165,7 +167,7 @@ const CV = () => {
     documentDate:useGetCurrentDayV2(),   
     documentNo: "",
     documentStatus:"",
-    status: "OPEN",
+    status: "Open",
     noReprints:"0",
 
 
@@ -383,6 +385,14 @@ const CV = () => {
 
 } = state;
 
+const selectedPayTypeOption = cvPayTypeDd.find(
+  (opt) => opt.DROPDOWN_CODE === selectedPayType
+);
+const selectedPayTypeCode = String(selectedPayTypeOption?.DROPDOWN_CODE || selectedPayType || "").toUpperCase();
+const selectedPayTypeName = String(selectedPayTypeOption?.DROPDOWN_NAME || "").toUpperCase();
+const isCheckPayment = selectedPayTypeCode.includes("CV01") || selectedPayTypeName.includes("CHECK");
+const isCashPayment = selectedPayTypeCode.includes("CV02") || selectedPayTypeName.includes("CASH");
+
 
 
 
@@ -390,16 +400,16 @@ const CV = () => {
 
 
   //Status Global Setup
-  const displayStatus = status || 'OPEN';
+  const displayStatus = status || 'Open';
   const statusMap = {
-    FINALIZED: "global-tran-stat-text-finalized-ui",
-    CANCELLED: "global-tran-stat-text-closed-ui",
-    CLOSED: "global-tran-stat-text-closed-ui",
+    Finalized: "global-tran-stat-text-finalized-ui",
+    Cancelled: "global-tran-stat-text-closed-ui",
+    Closed: "global-tran-stat-text-closed-ui",
   };
   const statusColor = statusMap[displayStatus] || "";
   const isFormDisabled =
   isViewDocumentUrl ||
-  ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+  ["Finalized", "Cancelled", "Closed"].includes(displayStatus);
 
   const FIELD_CONFIG = {
     apType: { requireWithAPV: "Y", hideOnCvTypes: ["APV02"] },
@@ -420,6 +430,7 @@ const CV = () => {
     rcCode: { requireWithAPV: "ANY", hideOnCvTypes: [] },
     rcName: { requireWithAPV: "ANY", hideOnCvTypes: [] },
     slCode: { requireWithAPV: "ANY", hideOnCvTypes: [] },
+    slName: { requireWithAPV: "ANY", hideOnCvTypes: [] },
     vatCode: { requireWithAPV: "N", hideOnCvTypes: ["APV02"] },
     vatName: { requireWithAPV: "N", hideOnCvTypes: ["APV02"] },
     vatAmount: { requireWithAPV: "N", hideOnCvTypes: ["APV02"] },
@@ -451,8 +462,8 @@ const CV = () => {
     { key: "currCode", label: "Currency", width: 110 },
     { key: "currRate", label: "Currency Rate", width: 130 },
     { key: "siAmount", label: "Invoice Amount", width: 140 },
-    { key: "appliedAmount", label: "Applied", width: 130 },
-    { key: "unappliedAmount", label: "Unapplied", width: 130 },
+    { key: "appliedAmount", label: "Applied Amount", width: 130 },
+    { key: "unappliedAmount", label: "Unapplied Amount", width: 130 },
     { key: "balance", label: "Balance", width: 130 },
     { key: "debitAcct", label: "DR Account", width: 120 },
     { key: "apAcct", label: "AP Account", width: 120 },
@@ -460,6 +471,7 @@ const CV = () => {
     { key: "rcCode", label: "RC Code", width: 120 },
     { key: "rcName", label: "RC Name", width: 220 },
     { key: "slCode", label: "SL Code", width: 120 },
+    { key: "slName", label: "SL Name", width: 220 },
     { key: "vatCode", label: "VAT Code", width: 120 },
     { key: "vatName", label: "VAT Name", width: 220 },
     { key: "vatAmount", label: "VAT Amount", width: 130 },
@@ -928,6 +940,7 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       vatAmount: formatNumber(item.vatAmount),
       atcAmount: formatNumber(item.atcAmount),
       amountDue: formatNumber(item.amountDue),
+      slName: item.slName || item.vendName || data.vendName || "",
 
       
     }));
@@ -1022,12 +1035,23 @@ const handleCvNoBlur = () => {
 
 const handleWithAPVChange = (e) => {
   const selectedWithAPV = e.target.value; 
-  updateState({ selectedWithAPV: selectedWithAPV }); 
+  updateState({
+    selectedWithAPV: selectedWithAPV,
+    ...(selectedWithAPV === "Y" ? { selectedCvType: "APV01" } : {}),
+  }); 
 };
 
 const handlePayTypeChange = (e) => {
   const selectedPayType = e.target.value; 
-  updateState({ selectedPayType: selectedPayType }); 
+  const payTypeOption = cvPayTypeDd.find((opt) => opt.DROPDOWN_CODE === selectedPayType);
+  const payTypeCode = String(payTypeOption?.DROPDOWN_CODE || selectedPayType || "").toUpperCase();
+  const payTypeName = String(payTypeOption?.DROPDOWN_NAME || "").toUpperCase();
+  const cashPayment = payTypeCode.includes("CV02") || payTypeName.includes("CASH");
+
+  updateState({
+    selectedPayType: selectedPayType,
+    ...(cashPayment ? { checkNo: "", checkDate: "" } : {}),
+  }); 
 };
 
 const handleCvTypeChange = (e) => {
@@ -1092,17 +1116,10 @@ const handleCurrRateNoBlur = (e) => {
 
 
     if (action === "Upsert") {
-      const payTypeObj = cvPayTypeDd.find(opt => opt.DROPDOWN_CODE === selectedPayType);
-      const isCheckPayment = payTypeObj && payTypeObj.DROPDOWN_CODE.toUpperCase().includes("CV01");
-
       if (isCheckPayment && (!checkNo || checkNo.trim() === "")) {
         updateState({ isLoading: false });
-        Swal.fire({
-          icon: 'warning',
-          title: 'Validation Error',
-          text: 'Check No. is required when the Payment Type is Check.',
-        });
-        return; // Stop the save process
+        useSwalErrorAlert("Validation Error", "Check No. is required when the Payment Type is Check.");
+        return;
       }
     }
 
@@ -1153,6 +1170,7 @@ const handleCurrRateNoBlur = (e) => {
         rcCode: row.rcCode,
         rcName: row.rcName,
         slCode: row.slCode,
+        slName: row.slName || vendName,
         vatCode: row.vatCode,
         vatName: row.vatName,
         vatAmount: parseFormattedNumber(row.vatAmount || 0),
@@ -1290,7 +1308,10 @@ const handleCurrRateNoBlur = (e) => {
         discAcct: "",
         rcCode: "",
         rcName: "",
-        slCode: vendCode
+        slCode: vendCode,
+        slName: vendName,
+        vendCode: vendCode,
+        vendName: vendName,
         
       };
     }));
@@ -1325,7 +1346,7 @@ const handleCurrRateNoBlur = (e) => {
     }, 100);
   } catch (error) {
     console.error("Error adding new row:", error);
-    alert("Failed to add new row. Please select a Payee first.");
+    useSwalErrorAlert("Validation Error", "Failed to add new row. Please select a Payee first.");
   }
 };
 
@@ -1480,7 +1501,7 @@ const handleCopy = async () => {
     updateState({ documentNo:"",
                   documentID:"",
                   documentStatus:"",
-                  status:"OPEN",
+                  status:"Open",
                   documentDate:useGetCurrentDayV2(), 
                   noReprints:"0",
 
@@ -1554,7 +1575,14 @@ const handleCopy = async () => {
 
         updateState({
             vendName: selectedData.vendName,
-            vendCode: selectedData.vendCode
+            vendCode: selectedData.vendCode,
+            detailRows: detailRows.map((row) => ({
+              ...row,
+              slCode: !row.slCode || row.slCode === vendCode ? selectedData.vendCode : row.slCode,
+              slName: selectedData.vendName,
+              vendCode: selectedData.vendCode,
+              vendName: selectedData.vendName,
+            })),
         });
         
         if (!selectedData.currCode) {
@@ -1578,6 +1606,35 @@ const handleCopy = async () => {
     } finally {
         updateState({ isLoading: false });
     }
+};
+
+
+const recomputeCvDetailRowAmounts = async (row, changedField = "") => {
+  const invoiceAmount = parseFormattedNumber(row.siAmount || 0) || 0;
+  const appliedAmount = parseFormattedNumber(row.appliedAmount || 0) || 0;
+  const unappliedAmount = parseFormattedNumber(row.unappliedAmount || 0) || 0;
+  const invoiceBalance = +(invoiceAmount - unappliedAmount).toFixed(2);
+  const appliedBalance = +(appliedAmount - unappliedAmount).toFixed(2);
+
+  let vatAmount = parseFormattedNumber(row.vatAmount || 0) || 0;
+
+  if (changedField === "vatCode" || changedField === "vatName" || changedField === "vatClear") {
+    vatAmount = row.vatCode ? await useTopVatAmount(row.vatCode, invoiceBalance) : 0;
+  }
+
+  const netOfVat = +(invoiceBalance - vatAmount).toFixed(2);
+  const atcAmount = row.atcCode ? await useTopATCAmount(row.atcCode, netOfVat) : 0;
+  const amountDue = selectedWithAPV === "Y"
+    ? appliedBalance
+    : +(invoiceBalance - atcAmount).toFixed(2);
+
+  row.vatAmount = formatNumber(vatAmount);
+  row.atcAmount = formatNumber(atcAmount);
+  row.amountDue = formatNumber(amountDue);
+  row.balance = formatNumber(appliedBalance);
+  row.balanceAmount = formatNumber(invoiceBalance);
+
+  return row;
 };
 
 
@@ -1667,6 +1724,7 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
 
     if (field === 'slCode' ){
           row.slCode = value.slCode   
+          row.slName = value.slName || value.sl_name || vendName
           
     };
 
@@ -1702,16 +1760,16 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
     row.atcAmount = formatNumber(newATCAmount);
     row.appliedAmount = formatNumber(applied);
     row.unappliedAmount = formatNumber(unapplied);
-    row.balance = +(applied - unapplied).toFixed(2);
+    row.balance = formatNumber(applied - unapplied);
     row.origAmount = formatNumber(parseFormattedNumber(row.origAmount));
     row.currRate = formatNumber(parseFormattedNumber(row.currRate),6);
 
     
   if (selectedWithAPV === "Y") {
-      row.amountDue = +(applied - unapplied).toFixed(2);
+      row.amountDue = formatNumber(applied - unapplied);
   };
   if (selectedWithAPV === "N") {
-      row.amountDue = +(newInvoiceAmount - newATCAmount).toFixed(2);
+      row.amountDue = formatNumber(newInvoiceAmount - newATCAmount);
   } 
 
   }
@@ -1727,10 +1785,10 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
     row.balanceAmount = newBalance.toFixed(2);
 
   if (selectedWithAPV === "Y") {
-      row.amountDue = +(applied - unapplied).toFixed(2);
+      row.amountDue = formatNumber(applied - unapplied);
   };
   if (selectedWithAPV === "N") {
-      row.amountDue = +(newBalance - newATCAmount).toFixed(2);
+      row.amountDue = formatNumber(newBalance - newATCAmount);
   } 
 
     await recalcRow(newAppliedAmount, newUnapplied);
@@ -1738,31 +1796,15 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
 
   // Handling VAT and ATC code updates
   if (field === 'vatCode' || field === 'atcCode') {
-    async function updateVatAndAtc() {
-      const newInvoiceBal = +(parseFormattedNumber(row.siAmount) - parseFormattedNumber(row.unappliedAmount)).toFixed(2);
-      let newVatAmount = parseFormattedNumber(row.vatAmount) || 0;
+    await recomputeCvDetailRowAmounts(row, field);
+  }
 
-      if (field === 'vatCode') {
-        newVatAmount = row.vatCode ? await useTopVatAmount(row.vatCode, newInvoiceBal) : 0;
-        row.vatAmount = newVatAmount.toFixed(2);
-      }
-
-      const newNetOfVat = +(newInvoiceBal - newVatAmount).toFixed(2);
-      const newATCAmount = row.atcCode ? await useTopATCAmount(row.atcCode, newNetOfVat) : 0;
-
-      row.atcAmount = newATCAmount.toFixed(2);
-
-      if (selectedWithAPV === "Y") {
-          row.amountDue = +(newInvoiceBal).toFixed(2)
-      }
-
-      if (selectedWithAPV === "N") {
-          row.amountDue = +(newInvoiceBal - newATCAmount).toFixed(2);
-      } 
-
-    }
-
-    await updateVatAndAtc();
+  if (field === 'atcAmount') {
+    const invoiceBal = +(parseFormattedNumber(row.siAmount || 0) - parseFormattedNumber(row.unappliedAmount || 0)).toFixed(2);
+    const appliedBalance = +(parseFormattedNumber(row.appliedAmount || 0) - parseFormattedNumber(row.unappliedAmount || 0)).toFixed(2);
+    const newATCAmount = parseFormattedNumber(row.atcAmount || 0) || 0;
+    row.atcAmount = formatNumber(newATCAmount);
+    row.amountDue = formatNumber(selectedWithAPV === "Y" ? appliedBalance : invoiceBal - newATCAmount);
   }
 }
 
@@ -1962,7 +2004,7 @@ const handleTranDocNoSelection = async (data) => {
 
 
 const handleCloseCancel = async (confirmation) => {
-    if(confirmation && documentStatus !== "OPEN" && documentID !== null ) {
+    if(confirmation && documentStatus !== "Open" && documentID !== null ) {
 
       const result = await useHandleCancel(docType,documentID,userCode,confirmation.password,confirmation.reason,updateState);
       if (result.success) 
@@ -1982,7 +2024,7 @@ const handleCloseCancel = async (confirmation) => {
 };
 
 const handleClosePost = async (confirmation) => {
-    if(documentStatus !== "OPEN" && documentID !== null ) {
+    if(documentStatus !== "Open" && documentID !== null ) {
 
       const result = await useHandlePost(docType,documentID,userCode,updateState);
       if (result.success) 
@@ -2091,12 +2133,45 @@ const handleOpenAPBalance = async () => {
 
 const handleCloseAPBalance = async (payload) => {
     if (payload && payload !== null) {
+      const selectedRecords = Array.isArray(payload.records) ? payload.records : [];
+      const selectedPayeeCodes = [
+        ...new Set(
+          selectedRecords
+            .map((entry) => String(entry.vendCode || entry.vend_code || "").trim())
+            .filter(Boolean)
+        ),
+      ];
+
+      if (selectedPayeeCodes.length > 1) {
+        useSwalErrorAlert("Validation Error", "Open AP Balance should not allow selection of multiple APV references with different Payee.");
+        return;
+      }
       
        updateState({ isLoading: true });
 
       const result = await useSelectedOpenAPBalance(payload);
       if (result) {   
-      const newRows = result.map((entry, idx) => ({    
+      const resultRows = Array.isArray(result) ? result : [];
+      const resultPayeeCodes = [
+        ...new Set(
+          resultRows
+            .map((entry) => String(entry.vendCode || entry.vend_code || "").trim())
+            .filter(Boolean)
+        ),
+      ];
+
+      if (resultPayeeCodes.length > 1) {
+        updateState({ isLoading: false });
+        useSwalErrorAlert("Validation Error", "Open AP Balance should not allow selection of multiple APV references with different Payee.");
+        return;
+      }
+
+      const selectedPayee = resultRows.find((entry) => entry.vendCode || entry.vendName) || selectedRecords[0] || {};
+      const selectedCurrCode = selectedPayee.currCode || currCode;
+      const selectedCurrName = selectedPayee.currName || currName;
+      const selectedCurrRate = selectedPayee.currRate || currRate;
+
+      const newRows = resultRows.map((entry, idx) => ({    
         lnNo: idx + 1,
         apvNo: entry.apvNo,
         apvDate: entry.apvDate,
@@ -2121,13 +2196,14 @@ const handleCloseAPBalance = async (payload) => {
         rcCode: entry.rcCode,
         rcName: entry.rcName,
         slCode: entry.slCode,
+        slName: entry.slName || entry.vendName || selectedPayee.vendName || vendName,
         debitAcct: entry.drAccount,
         apAcct: entry.apAccount,
         vatAcct: entry.vatAccount,
-        currCode: entry.currCode,
-        currRate: formatNumber(entry.currRate,6) ,
-        vendCode: entry.vendCode,
-        vendName: entry.vendName,
+        currCode: entry.currCode || selectedCurrCode,
+        currRate: formatNumber(entry.currRate || selectedCurrRate,6) ,
+        vendCode: entry.vendCode || selectedPayee.vendCode || vendCode,
+        vendName: entry.vendName || selectedPayee.vendName || vendName,
         refBranchcode: branchCode,
         refDocCode: entry.refDocCode,
         groupId: entry.groupId,
@@ -2136,7 +2212,14 @@ const handleCloseAPBalance = async (payload) => {
 
       
       const updatedRows = [...detailRows, ...newRows];
-      updateState({ detailRows: updatedRows});
+      updateState({
+        vendCode: selectedPayee.vendCode || vendCode,
+        vendName: selectedPayee.vendName || vendName,
+        currCode: selectedCurrCode,
+        currName: selectedCurrName,
+        currRate: formatNumber(selectedCurrRate, 6),
+        detailRows: updatedRows
+      });
       updateTotals(updatedRows);
     }  
   }
@@ -2262,8 +2345,12 @@ const handleCheckNoChange = async (e) => {
     const newCheckNo = e.target.value;
     const docId = documentID; // Use a correctly scoped variable
 
+    if (isCashPayment) return;
+
     // Immediately update state to reflect user input
     updateState({ checkNo: newCheckNo });
+
+    if (!String(newCheckNo || "").trim()) return;
 
     // Wait a brief moment to avoid API calls on every keystroke
     await new Promise(resolve => setTimeout(resolve, 300));
@@ -2272,12 +2359,7 @@ const handleCheckNoChange = async (e) => {
         const isDuplicate = await checkDuplicateCheckNo(newCheckNo, docId);
 
         if (isDuplicate) {
-            Swal.fire({
-                icon: 'error',
-                text: 'Duplicate Check Number is not allowed!',
-                confirmButtonColor: '#3085d6',
-                confirmButtonText: 'OK'
-            });
+            useSwalErrorAlert("Validation Error", "Duplicate Check Number is not allowed!");
             // Clear the input only if it's a duplicate
             updateState({ checkNo: "" });
             return;
@@ -2285,66 +2367,48 @@ const handleCheckNoChange = async (e) => {
 
     } catch (error) {
         console.error('Error in handleCheckNoChange:', error);
-        Swal.fire({
-            icon: 'error',
-            title: 'Error',
-            text: 'An error occurred while checking the duplicate check number. Please try again later.',
-            confirmButtonColor: '#3085d6',
-            confirmButtonText: 'OK'
-        });
+        useSwalErrorAlert("Error", "An error occurred while checking the duplicate check number. Please try again later.");
     }
 };
 
+const checkDuplicateCheckNo = async (checkNo, docId = null) => {
+    const selectedBankCode = String(bankCode ?? "").trim();
+    const normalizedCheckNo = String(checkNo ?? "").trim();
 
-const checkDuplicateCheckNo = async (checkNo, docId) => {
-    const selectedBankCode = bankCode; 
-    
+    if (!selectedBankCode || !normalizedCheckNo) {
+        return false;
+    }
+
     try {
-        const params = {
+        const response = await fetchData("/validateDuplicateCheck", {
             json_data: {
                 bankCode: selectedBankCode,
-                checkNo: checkNo,
-                docId: docId || null 
-            }
-        };
-
-        const response = await fetchData('/validateDuplicateCheck', params);
-
-        // 1. Check if the API call was successful and has data
-        if (response.success && response.data && response.data.length > 0) {
-            
-            // 2. Check for '1' (string) or 1 (number)
-            const isDuplicate = response.data[0].result == 1; 
-
-            if (isDuplicate) {
-                // 3. Trigger the alert if a duplicate is found
-                Swal.fire({
-                    icon: 'warning', // Use warning for duplicates
-                    title: 'Duplicate Check Number',
-                    text: `Check No. ${checkNo} has already been used.`,
-                    confirmButtonColor: '#3085d6',
-                    confirmButtonText: 'OK'
-                });
-                return true; // Yes, it is a duplicate
-            }
-        }
-        
-        return false; // No duplicate found
-        
-    } catch (error) {
-        console.error('Error fetching data from API:', error);
-        Swal.fire({
-            icon: 'error',
-            title: 'API Error',
-            text: 'Could not validate the Check Number. Please try again.',
-            confirmButtonColor: '#d33',
-            confirmButtonText: 'OK'
+                checkNo: normalizedCheckNo,
+                docId: docId || null,
+            },
         });
-        return true; // Block submission on error to be safe
+
+        if (!response?.success) {
+            throw new Error(
+                response?.message || "The duplicate check validation failed."
+            );
+        }
+
+        return Number(response?.data?.[0]?.result ?? 0) === 1;
+    } catch (error) {
+        console.error("Error validating Check Number:", error);
+
+        useSwalErrorAlert(
+            "Validation Error",
+            "Could not validate the Check Number. Please try again."
+        );
+
+        // Block saving when duplicate validation cannot be completed.
+        return true;
     }
 };
 
-const handleVatNameDoubleClick = (index) => {
+const handleVatNameDoubleClick = async (index) => {
   if (isFormDisabled) return;
 
   const updatedRows = [...detailRows];
@@ -2355,11 +2419,13 @@ const handleVatNameDoubleClick = (index) => {
     vatAmount: "0.00",
   };
 
+  await recomputeCvDetailRowAmounts(updatedRows[index], "vatClear");
+
   updateState({ detailRows: updatedRows });
   updateTotals(updatedRows);
 };
 
-const handleAtcNameDoubleClick = (index) => {
+const handleAtcNameDoubleClick = async (index) => {
   if (isFormDisabled) return;
 
   const updatedRows = [...detailRows];
@@ -2369,6 +2435,8 @@ const handleAtcNameDoubleClick = (index) => {
     atcName: "",
     atcAmount: "0.00",
   };
+
+  await recomputeCvDetailRowAmounts(updatedRows[index], "atcCode");
 
   updateState({ detailRows: updatedRows });
   updateTotals(updatedRows);
@@ -2443,7 +2511,7 @@ const renderCvDetailCell = (columnKey, row, index) => {
           if (field === "appliedAmount") {
             const invoiceAmt = parseFormattedNumber(row.siAmount) || 0;
             if (num > invoiceAmt) {
-              Swal.fire({ icon: "info", text: "Applied amount exceeded invoice amount." });
+              useSwalInfoAlert("Validation", "Applied amount exceeds invoice balance.");
               await handleDetailChange(index, field, invoiceAmt, true);
             } else {
               await handleDetailChange(index, field, num, true);
@@ -2506,11 +2574,12 @@ const renderCvDetailCell = (columnKey, row, index) => {
     vatCode: () => lookupInput("vatCode"),
     atcCode: () => lookupInput("atcCode"),
     rcName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("rcName", { readOnly: true })}</td>,
+    slName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("slName", { readOnly: true })}</td>,
     vatName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("vatName", { readOnly: true, onDoubleClick: () => handleVatNameDoubleClick(index) })}</td>,
     vatAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("vatAmount", { readOnly: true })}</td>,
     atcName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("atcName", { readOnly: true, onDoubleClick: () => handleAtcNameDoubleClick(index) })}</td>,
     atcAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("atcAmount", { disabled: isFormDisabled })}</td>,
-    amountDue: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("amountDue", { disabled: isFormDisabled })}</td>,
+    amountDue: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("amountDue", { readOnly: true })}</td>,
   };
   return renderers[columnKey]?.() ?? null;
 };
@@ -2604,9 +2673,9 @@ const renderCvGlCell = (columnKey, row, index) => {
               isSaveDisabled={state.isSaveDisabled || isFormDisabled || detailRowsGL.length === 0}
               isResetDisabled={state.isResetDisabled}
               isAttachDisabled={!documentID}
-              isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
-              isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
-              isCancelDisabled={!documentID ||displayStatus === "CANCELLED" ||displayStatus === "FINALIZED"}
+              isPrintDisabled={!documentID || displayStatus === "Cancelled"}
+              isCopyDisabled={!documentID || displayStatus === "Cancelled"}
+              isCancelDisabled={!documentID ||displayStatus === "Cancelled" ||displayStatus === "Finalized"}
         />
       </div>
 
@@ -2789,7 +2858,7 @@ const renderCvGlCell = (columnKey, row, index) => {
                       label="Check No."
                       type="text"
                       value={checkNo || ""}
-                      disabled={isFormDisabled}
+                      disabled={isFormDisabled || isCashPayment}
                       onChange={(val) => handleCheckNoChange({ target: { value: val } })}
                       maxLength={useGetFieldLength(tblFieldArray, "check_no")}
                     />
@@ -2800,7 +2869,7 @@ const renderCvGlCell = (columnKey, row, index) => {
                 <div className="relative flex-grow w-2/4">
                   <div
                     className={`flex items-stretch global-ref-textbox-ui ${
-                      !isFormDisabled
+                      !isFormDisabled && !isCashPayment
                         ? "global-ref-textbox-enabled"
                         : "global-ref-textbox-disabled"
                     }`}
@@ -2810,13 +2879,13 @@ const renderCvGlCell = (columnKey, row, index) => {
                       className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
                       value={checkDate}
                       updateState={updateState}
-                      disabled={isFormDisabled}
+                      disabled={isFormDisabled || isCashPayment}
                     />
                   </div>
                   <label
                     htmlFor="checkDate"
                     className={`global-ref-floating-label ${
-                      !isFormDisabled
+                      !isFormDisabled && !isCashPayment
                         ? "global-ref-label-enabled"
                         : "global-ref-label-disabled"
                     }`}
@@ -2834,7 +2903,7 @@ const renderCvGlCell = (columnKey, row, index) => {
                   label="CV Type"
                   type="select"
                   value={selectedCvType}
-                  disabled={isFormDisabled}
+                  disabled={isFormDisabled || selectedWithAPV === "Y"}
                   onChange={(val) => handleCvTypeChange({ target: { value: val } })}
                   options={cvTranTypeDd.map((type) => ({
                     label: type.DROPDOWN_NAME,
@@ -3539,10 +3608,10 @@ const renderCvGlCell = (columnKey, row, index) => {
         endDate={state.toDate}
         status={(() => {
             const s = (state.status || "").toUpperCase();
-            if (s === "FINALIZED") return "F";
-            if (s === "CANCELLED") return "X";
-            if (s === "CLOSED")    return "C";
-            if (s === "OPEN")      return "";
+            if (s === "Finalized") return "F";
+            if (s === "Cancelled") return "X";
+            if (s === "Closed")    return "C";
+            if (s === "Open")      return "";
             return "All";
           })()}
           onRowDoubleClick={handleHistoryRowPick}
