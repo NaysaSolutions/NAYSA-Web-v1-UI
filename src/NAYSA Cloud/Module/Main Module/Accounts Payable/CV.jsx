@@ -2344,6 +2344,36 @@ const checkDuplicateCheckNo = async (checkNo, docId) => {
     }
 };
 
+const handleVatNameDoubleClick = (index) => {
+  if (isFormDisabled) return;
+
+  const updatedRows = [...detailRows];
+  updatedRows[index] = {
+    ...updatedRows[index],
+    vatCode: "",
+    vatName: "",
+    vatAmount: "0.00",
+  };
+
+  updateState({ detailRows: updatedRows });
+  updateTotals(updatedRows);
+};
+
+const handleAtcNameDoubleClick = (index) => {
+  if (isFormDisabled) return;
+
+  const updatedRows = [...detailRows];
+  updatedRows[index] = {
+    ...updatedRows[index],
+    atcCode: "",
+    atcName: "",
+    atcAmount: "0.00",
+  };
+
+  updateState({ detailRows: updatedRows });
+  updateTotals(updatedRows);
+};
+
 const renderCvDetailCell = (columnKey, row, index) => {
   const columnWidth = getCvDetailFallbackWidth(columnKey);
   const style = getCvDetailCellStyle(columnKey, columnWidth);
@@ -2374,6 +2404,7 @@ const renderCvDetailCell = (columnKey, row, index) => {
       maxLength={options.maxLength}
       readOnly={options.readOnly}
       disabled={options.disabled}
+      onDoubleClick={options.onDoubleClick}
       onChange={(e) => handleDetailChange(index, field, e.target.value, false)}
       onKeyDown={(e) => {
         if (e.key !== "Enter" || options.readOnly || options.disabled) return;
@@ -2475,9 +2506,9 @@ const renderCvDetailCell = (columnKey, row, index) => {
     vatCode: () => lookupInput("vatCode"),
     atcCode: () => lookupInput("atcCode"),
     rcName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("rcName", { readOnly: true })}</td>,
-    vatName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("vatName", { readOnly: true })}</td>,
+    vatName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("vatName", { readOnly: true, onDoubleClick: () => handleVatNameDoubleClick(index) })}</td>,
     vatAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("vatAmount", { readOnly: true })}</td>,
-    atcName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("atcName", { readOnly: true })}</td>,
+    atcName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("atcName", { readOnly: true, onDoubleClick: () => handleAtcNameDoubleClick(index) })}</td>,
     atcAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("atcAmount", { disabled: isFormDisabled })}</td>,
     amountDue: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("amountDue", { disabled: isFormDisabled })}</td>,
   };
@@ -3372,7 +3403,7 @@ const renderCvGlCell = (columnKey, row, index) => {
   <VATLookupModal  
     isOpen={showVatModal}
     onClose={handleCloseVatModal}
-    customParam="Input"
+    customParam="InputAll"
   />
 )}
 
