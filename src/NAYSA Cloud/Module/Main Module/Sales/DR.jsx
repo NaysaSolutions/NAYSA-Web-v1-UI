@@ -7135,6 +7135,8 @@ return (
         isOpen={showWhseModal}
         onClose={handleCloseWarehouseLookup}
         filter={"ByBC" + branchCode}
+        branchCode={branchCode || ""}
+      invType="FG"
       />
     )}
 

@@ -1638,6 +1638,8 @@ function MSStockCardQuery() {
           isOpen
           onClose={handleWarehouseLookupClose}
           filter={warehouseLookupFilter}
+          branchCode={activeLookupFilters?.branchCode || ""}
+        invType="MS"
         />
       )}
 

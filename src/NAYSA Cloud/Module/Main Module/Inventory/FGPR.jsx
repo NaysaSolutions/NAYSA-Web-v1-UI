@@ -2429,6 +2429,8 @@ const FGPR = () => {
                     onClose={handleCloseWarehouseLookup}
                     onSelect={handleCloseWarehouseLookup}
                     filter="ActiveAll"
+                    branchCode={state.branchCode || ""}
+                invType="FG"
                 />
             )}
 

@@ -2152,7 +2152,7 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
         <WarehouseLookupModal isOpen onClose={p => {
           if (p) updateFilters({ whCode: p.whCode||"", whName: p.whName||"", locCode: "", locName: "" });
           updateUi({ warehouseModal: false });
-        }} />
+        }} branchCode={filters.branchCode || ""} />
       )}
 
       {config.hasInventory && ui.locationModal && (

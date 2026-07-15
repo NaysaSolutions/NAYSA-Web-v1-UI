@@ -578,7 +578,12 @@ const handlePreview = async () => {
           <FGLookupModal isOpen={itemModalOpen} onClose={handleCloseItemModal} />
         )}
         {warehouseModalOpen && (
-          <WarehouseLookupModal isOpen={warehouseModalOpen} onClose={handleCloseWarehouseModal} />
+          <WarehouseLookupModal
+            isOpen={warehouseModalOpen}
+            onClose={handleCloseWarehouseModal}
+            branchCode={filters.branchCode || ""}
+          invType="FG"
+          />
         )}
         {locationModalOpen && (
           <LocationLookupModal isOpen={locationModalOpen} onClose={handleCloseLocationModal} whCode={filters.whCode} />

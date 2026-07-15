@@ -2225,6 +2225,42 @@ const handleInvoiceNoCommit = (index, value) => {
   updateTotals(updatedRows);
 };
 
+const handleVatNameDoubleClick = (index) => {
+  if (isFormDisabled) return;
+
+  const updatedRows = [...(detailRowsRef.current || [])];
+  updatedRows[index] = {
+    ...updatedRows[index],
+    vatCode: "",
+    vatName: "",
+    vatAmount: "0.00",
+  };
+
+  updateState({
+    detailRows: updatedRows,
+    detailRowsGL: [],
+  });
+  updateTotals(updatedRows);
+};
+
+const handleAtcNameDoubleClick = (index) => {
+  if (isFormDisabled) return;
+
+  const updatedRows = [...(detailRowsRef.current || [])];
+  updatedRows[index] = {
+    ...updatedRows[index],
+    atcCode: "",
+    atcName: "",
+    atcAmount: "0.00",
+  };
+
+  updateState({
+    detailRows: updatedRows,
+    detailRowsGL: [],
+  });
+  updateTotals(updatedRows);
+};
+
 // Detail table cell renderers.
 // Keep each key aligned with pcvDetailColumnDefs.
 const renderPcvDetailCell = (columnKey, row, index) => {
@@ -2348,7 +2384,7 @@ const renderPcvDetailCell = (columnKey, row, index) => {
         </div>
       </td>
     ),
-    vatName: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full global-tran-td-inputclass-ui" value={row.vatName || ""} readOnly onDoubleClick={!isFormDisabled ? () => handleDetailChange(index, "vatName", 0, true) : undefined} /></td>,
+    vatName: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full global-tran-td-inputclass-ui" value={row.vatName || ""} readOnly onDoubleClick={!isFormDisabled ? () => handleVatNameDoubleClick(index) : undefined} /></td>,
     vatAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0" value={formatNumber(parseFormattedNumber(row.vatAmount)) || ""} readOnly /></td>,
     atcCode: () => (
       <td key={columnKey} className="global-tran-td-ui relative" style={style}>
@@ -2358,7 +2394,7 @@ const renderPcvDetailCell = (columnKey, row, index) => {
         </div>
       </td>
     ),
-    atcName: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full global-tran-td-inputclass-ui" value={row.atcName || ""} readOnly onDoubleClick={!isFormDisabled ? () => handleDetailChange(index, "atcName", 0, true) : undefined} /></td>,
+    atcName: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full global-tran-td-inputclass-ui" value={row.atcName || ""} readOnly onDoubleClick={!isFormDisabled ? () => handleAtcNameDoubleClick(index) : undefined} /></td>,
     atcAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0" value={formatNumber(parseFormattedNumber(row.atcAmount)) || ""} onChange={(e) => handleDetailChange(index, "atcAmount", e.target.value)} /></td>,
     netAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0" value={formatNumber(parseFormattedNumber(row.netAmount)) || ""} readOnly /></td>,
     address1: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("address1", { className: "text-left", maxLength: pcvFieldLengths.address1 })}</td>,

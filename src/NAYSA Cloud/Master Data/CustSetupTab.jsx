@@ -1110,6 +1110,7 @@ const CustSetupTab = forwardRef(
         <WarehouseLookupModal
           isOpen={isWarehouseLookupOpen}
           filter="ActiveAll"
+          branchCode={form?.branchCode || ""}
           onClose={(selected) => {
             setIsWarehouseLookupOpen(false);
             if (!selected) return;

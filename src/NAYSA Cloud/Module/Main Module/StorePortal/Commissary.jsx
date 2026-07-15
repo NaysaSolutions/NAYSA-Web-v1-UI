@@ -3,8 +3,10 @@ import {
   Search,
   ListTree,
   PackageOpen,
+  Boxes,
   LayoutList,
   ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { fetchData } from "../../../Configuration/BaseURL.jsx";
 
@@ -69,7 +71,7 @@ const tabs = [
     label: "Forecast Summary",
     viewType: "forecast",
     icon: LayoutList,
-    endpoint: "/commissary/forecast-summary",
+    endpoint: "commissary/forecast-summary",
     detailed: false,
     emptyText: "No forecast quantity available for this date range.",
   },
@@ -78,25 +80,35 @@ const tabs = [
     label: "Forecast Detailed",
     viewType: "forecast",
     icon: ListTree,
-    endpoint: "/commissary/forecast-detailed",
+    endpoint: "commissary/forecast-detailed",
     detailed: true,
     emptyText: "No forecast detail available for this date range.",
   },
   {
+    key: "forecastMaterialNeededSummary",
+    label: "Material Needed Detailed",
+    viewType: "forecast",
+    icon: Boxes,
+    endpoint: "commissary/forecast-material-needed-summary",
+    materialSummary: true,
+    emptyText: "No material summary available for this forecast date range.",
+  },
+  {
     key: "forecastMaterialNeeded",
-    label: "Material Needed",
+    label: "Material Needed Summary",
     viewType: "forecast",
     icon: PackageOpen,
-    endpoint: "/commissary/forecast-material-needed",
+    endpoint: "commissary/forecast-material-needed",
     detailed: false,
-    emptyText: "No material requirement available for this forecast date range.",
+    emptyText:
+      "No material requirement available for this forecast date range.",
   },
   {
     key: "confirmedSummary",
     label: "Confirmed Summary",
     viewType: "confirmed",
     icon: LayoutList,
-    endpoint: "/commissary/confirmed-summary",
+    endpoint: "commissary/confirmed-summary",
     detailed: false,
     emptyText: "No confirmed quantity available for this date range.",
   },
@@ -105,18 +117,28 @@ const tabs = [
     label: "Confirmed Detailed",
     viewType: "confirmed",
     icon: ListTree,
-    endpoint: "/commissary/confirmed-detailed",
+    endpoint: "commissary/confirmed-detailed",
     detailed: true,
     emptyText: "No confirmed detail available for this date range.",
+  },
+  {
+    key: "confirmedMaterialNeededSummary",
+    label: "Material Needed Detailed",
+    viewType: "confirmed",
+    icon: Boxes,
+    endpoint: "commissary/confirmed-material-needed-summary",
+    materialSummary: true,
+    emptyText: "No material summary available for this confirmed date range.",
   },
   {
     key: "confirmedMaterialNeeded",
     label: "Material Needed",
     viewType: "confirmed",
     icon: PackageOpen,
-    endpoint: "/commissary/confirmed-material-needed",
+    endpoint: "commissary/confirmed-material-needed",
     detailed: false,
-    emptyText: "No material requirement available for this confirmed date range.",
+    emptyText:
+      "No material requirement available for this confirmed date range.",
   },
 ];
 
@@ -199,9 +221,13 @@ const pivotRows = (rows = [], isDetailed = false) => {
     const itemCode = item.itemCode || "";
     const storeCode = item.storeCode || "";
     const deliveryDate = item.deliveryDate;
-    const qty = Number(item.qty || item.totalQty || item.storeQty || 0);
+    const qty = Number(item.qty ?? item.totalQty ?? item.storeQty ?? 0);
 
-    if (!itemCode || !deliveryDate) return;
+    // Commissary must display only current positive quantities returned
+    // by the Store Portal for the selected date range.
+    if (!itemCode || !deliveryDate || !Number.isFinite(qty) || qty <= 0) {
+      return;
+    }
 
     const key = isDetailed ? `${storeCode}|${itemCode}` : itemCode;
 
@@ -226,6 +252,207 @@ const pivotRows = (rows = [], isDetailed = false) => {
   return Array.from(map.values());
 };
 
+const buildMaterialSummaryRows = (rows = []) => {
+  const materials = new Map();
+
+  rows.forEach((item) => {
+    const itemCode = String(item.itemCode || "").trim();
+    const deliveryDate = item.deliveryDate;
+    const qty = Number(item.qty ?? item.totalQty ?? item.storeQty ?? 0);
+
+    if (!itemCode || !deliveryDate || !Number.isFinite(qty) || qty <= 0) return;
+
+    if (!materials.has(itemCode)) {
+      materials.set(itemCode, {
+        itemCode,
+        itemDesc: item.itemDesc || item.itemName || "",
+        categCode: item.categCode || item.categoryCode || "",
+        uomCode: item.uomCode || "",
+        dates: {},
+        total: 0,
+        produceItems: new Map(),
+      });
+    }
+
+    const material = materials.get(itemCode);
+    material.dates[deliveryDate] =
+      (Number(material.dates[deliveryDate]) || 0) + qty;
+    material.total += qty;
+
+    const produceItemCode = String(
+      item.produceItemCode || item.finishedItemCode || "Unspecified",
+    ).trim();
+
+    if (!material.produceItems.has(produceItemCode)) {
+      material.produceItems.set(produceItemCode, {
+        itemCode: produceItemCode,
+        itemDesc:
+          item.produceItemDesc ||
+          item.produceItemName ||
+          item.finishedItemName ||
+          "Unspecified finished item",
+        uomCode: item.produceUomCode || item.finishedUomCode || "",
+        dates: {},
+        total: 0,
+        branches: new Map(),
+      });
+    }
+
+    const produceItem = material.produceItems.get(produceItemCode);
+    produceItem.dates[deliveryDate] =
+      (Number(produceItem.dates[deliveryDate]) || 0) + qty;
+    produceItem.total += qty;
+
+    const branchCode = String(item.storeCode || item.branchCode || "").trim();
+    const branchName = String(
+      item.storeName || item.branchName || branchCode || "Unspecified Branch",
+    ).trim();
+    const branchKey = branchCode || branchName;
+
+    if (!produceItem.branches.has(branchKey)) {
+      produceItem.branches.set(branchKey, {
+        branchCode,
+        branchName,
+        dates: {},
+        total: 0,
+      });
+    }
+
+    const branch = produceItem.branches.get(branchKey);
+    branch.dates[deliveryDate] =
+      (Number(branch.dates[deliveryDate]) || 0) + qty;
+    branch.total += qty;
+  });
+
+  return Array.from(materials.values()).map((material) => ({
+    ...material,
+    produceItems: Array.from(material.produceItems.values()).map(
+      (produceItem) => ({
+        ...produceItem,
+        branches: Array.from(produceItem.branches.values()).sort((a, b) =>
+          String(a.branchName || a.branchCode).localeCompare(
+            String(b.branchName || b.branchCode),
+          ),
+        ),
+      }),
+    ),
+  }));
+};
+
+const QuantityCells = ({ dates, row, className = "" }) => (
+  <>
+    {dates.map((date) => (
+      <td
+        key={date}
+        className={`global-tran-td-ui w-[96px] min-w-[96px] max-w-[96px] text-right font-medium ${className}`}
+      >
+        {row.dates?.[date] ? row.dates[date].toLocaleString() : "-"}
+      </td>
+    ))}
+    <td
+      className={`global-tran-td-ui w-[100px] min-w-[100px] max-w-[100px] text-right text-xs font-bold ${className}`}
+    >
+      {(Number(row.total) || 0).toLocaleString()}
+    </td>
+  </>
+);
+
+const MaterialSummaryRows = ({
+  materials,
+  dates,
+  expandedMaterials,
+  onToggleMaterial,
+}) => (
+  <>
+    {materials.map((material) => {
+      const isExpanded = expandedMaterials.includes(material.itemCode);
+
+      return (
+        <React.Fragment key={`material-${material.itemCode}`}>
+          <tr className="bg-white hover:bg-slate-50 dark:bg-black dark:hover:bg-gray-900/50">
+            <td className="global-tran-td-ui w-[180px] min-w-[180px] text-left font-semibold text-slate-600 dark:text-slate-300">
+              All Branches
+            </td>
+            <td className="global-tran-td-ui w-[120px] min-w-[120px] text-left font-mono text-sm">
+              <button
+                type="button"
+                onClick={() => onToggleMaterial(material.itemCode)}
+                className="flex w-full items-center gap-1 font-semibold text-blue-700 hover:text-blue-900 dark:text-blue-300"
+                aria-expanded={isExpanded}
+              >
+                {isExpanded ? (
+                  <ChevronDown className="h-4 w-4 shrink-0" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 shrink-0" />
+                )}
+                {material.itemCode}
+              </button>
+            </td>
+            <td className="global-tran-td-ui w-[260px] min-w-[260px] text-left font-semibold">
+              {material.itemDesc}
+            </td>
+            <td className="global-tran-td-ui w-[90px] min-w-[90px] text-left font-semibold text-slate-600 dark:text-slate-300">
+              {material.uomCode || "-"}
+            </td>
+            <QuantityCells
+              dates={dates}
+              row={material}
+              className="bg-slate-50 text-blue-700 dark:bg-gray-900 dark:text-blue-300"
+            />
+          </tr>
+
+          {isExpanded &&
+            material.produceItems.map((produceItem) => (
+              <React.Fragment
+                key={`produce-${material.itemCode}-${produceItem.itemCode}`}
+              >
+                <tr className="bg-emerald-50/70 dark:bg-emerald-950/20">
+                  <td className="global-tran-td-ui w-[180px] min-w-[180px] text-left text-xs font-bold uppercase text-emerald-700 dark:text-emerald-300">
+                    
+                  </td>
+                  <td className="global-tran-td-ui w-[120px] min-w-[120px] pl-7 text-left font-mono text-sm font-semibold text-emerald-800 dark:text-emerald-200">
+                    {produceItem.itemCode}
+                  </td>
+                  <td className="global-tran-td-ui w-[260px] min-w-[260px] text-left font-medium">
+                    {produceItem.itemDesc}
+                  </td>
+                  <td className="global-tran-td-ui w-[90px] min-w-[90px] text-left font-semibold text-slate-600 dark:text-slate-300">
+                    {produceItem.uomCode || "-"}
+                  </td>
+                  <QuantityCells dates={dates} row={produceItem} />
+                </tr>
+
+                {produceItem.branches.map((branch) => (
+                  <tr
+                    key={`branch-${material.itemCode}-${produceItem.itemCode}-${branch.branchCode || branch.branchName}`}
+                    className="bg-slate-50/80 hover:bg-slate-100 dark:bg-gray-950 dark:hover:bg-gray-900"
+                  >
+                    <td className="global-tran-td-ui w-[180px] min-w-[180px] pl-7 text-left font-semibold text-slate-700 dark:text-slate-200">
+                      {branch.branchCode &&
+                      branch.branchName !== branch.branchCode
+                        ? `${branch.branchCode} - ${branch.branchName}`
+                        : branch.branchName || branch.branchCode}
+                    </td>
+                    <td className="global-tran-td-ui w-[120px] min-w-[120px] text-left text-xs font-semibold text-slate-500">
+                      Required
+                    </td>
+                    <td className="global-tran-td-ui w-[260px] min-w-[260px] text-left text-xs text-slate-500">
+                      Material needed 
+                    </td>
+                    <td className="global-tran-td-ui w-[90px] min-w-[90px] text-left font-semibold text-slate-600 dark:text-slate-300">
+                      {material.uomCode || "-"}
+                    </td>
+                    <QuantityCells dates={dates} row={branch} />
+                  </tr>
+                ))}
+              </React.Fragment>
+            ))}
+        </React.Fragment>
+      );
+    })}
+  </>
+);
+
 /* ─── main component ──────────────────────────────────────────────────────── */
 export default function CommissaryForecast() {
   const [startDate, setStartDate] = useState(formatDate(new Date()));
@@ -235,13 +462,16 @@ export default function CommissaryForecast() {
   const [activeTab, setActiveTab] = useState("forecastSummary");
   const [storeFilter, setStoreFilter] = useState("All");
   const [collapsedCategoriesByTab, setCollapsedCategoriesByTab] = useState({});
+  const [expandedMaterialsByTab, setExpandedMaterialsByTab] = useState({});
 
   const [tabData, setTabData] = useState({
     forecastSummary: [],
     forecastDetailed: [],
+    forecastMaterialNeededSummary: [],
     forecastMaterialNeeded: [],
     confirmedSummary: [],
     confirmedDetailed: [],
+    confirmedMaterialNeededSummary: [],
     confirmedMaterialNeeded: [],
   });
   const [isLoading, setIsLoading] = useState(false);
@@ -254,7 +484,10 @@ export default function CommissaryForecast() {
   );
 
   const activeTabConfig = useMemo(
-    () => visibleTabs.find((tab) => tab.key === activeTab) || visibleTabs[0] || tabs[0],
+    () =>
+      visibleTabs.find((tab) => tab.key === activeTab) ||
+      visibleTabs[0] ||
+      tabs[0],
     [activeTab, visibleTabs],
   );
 
@@ -265,7 +498,7 @@ export default function CommissaryForecast() {
 
   const loadCategories = async () => {
     try {
-      const response = await fetchData("/commissary/categories");
+      const response = await fetchData("commissary/categories");
       setCategories(unwrapData(response));
     } catch (error) {
       console.error("Failed to load commissary categories", error);
@@ -282,28 +515,38 @@ export default function CommissaryForecast() {
         setTabData({
           forecastSummary: [],
           forecastDetailed: [],
+          forecastMaterialNeededSummary: [],
           forecastMaterialNeeded: [],
           confirmedSummary: [],
           confirmedDetailed: [],
+          confirmedMaterialNeededSummary: [],
           confirmedMaterialNeeded: [],
         });
         setErrorMessage("Start Date and End Date are required.");
         return;
       }
 
-      const query = new URLSearchParams({
+      const queryParams = {
         startDate,
         endDate,
-        category: category ?? "All",
-      }).toString();
+        category: category || "All",
+      };
 
       const responses = await Promise.all(
-        tabs.map((tab) => fetchData(`${tab.endpoint}?${query}`)),
+        tabs.map((tab) =>
+          fetchData(tab.endpoint, {
+            ...queryParams,
+            ...(tab.detailed ? { storeCode: "All" } : {}),
+          }),
+        ),
       );
 
       const nextData = {};
       tabs.forEach((tab, index) => {
-        nextData[tab.key] = pivotRows(unwrapData(responses[index]), tab.detailed);
+        const responseRows = unwrapData(responses[index]);
+        nextData[tab.key] = tab.materialSummary
+          ? buildMaterialSummaryRows(responseRows)
+          : pivotRows(responseRows, tab.detailed);
       });
 
       setTabData(nextData);
@@ -312,13 +555,21 @@ export default function CommissaryForecast() {
       setTabData({
         forecastSummary: [],
         forecastDetailed: [],
+        forecastMaterialNeededSummary: [],
         forecastMaterialNeeded: [],
         confirmedSummary: [],
         confirmedDetailed: [],
+        confirmedMaterialNeededSummary: [],
         confirmedMaterialNeeded: [],
       });
+      const responseData = error?.response?.data;
+      const firstValidationError = responseData?.errors
+        ? Object.values(responseData.errors).flat().find(Boolean)
+        : "";
+
       setErrorMessage(
-        error?.response?.data?.message ||
+        firstValidationError ||
+          responseData?.message ||
           error?.message ||
           "Failed to load commissary data.",
       );
@@ -337,14 +588,18 @@ export default function CommissaryForecast() {
     const currentTab = tabs.find((tab) => tab.key === activeTab);
     if (currentTab?.viewType === viewType) return;
 
-    setActiveTab(viewType === "forecast" ? "forecastSummary" : "confirmedSummary");
+    setActiveTab(
+      viewType === "forecast" ? "forecastSummary" : "confirmedSummary",
+    );
     setStoreFilter("All");
   }, [activeTab, viewType]);
 
   const storeOptions = useMemo(() => {
     const map = new Map();
     const sourceRows =
-      viewType === "forecast" ? tabData.forecastDetailed : tabData.confirmedDetailed;
+      viewType === "forecast"
+        ? tabData.forecastDetailed
+        : tabData.confirmedDetailed;
 
     sourceRows.forEach((row) => {
       const storeKey = getStoreKey(row);
@@ -368,11 +623,17 @@ export default function CommissaryForecast() {
   const activeRawData = tabData[activeTab] || [];
 
   const currentData = useMemo(() => {
-    if (!activeTabConfig.detailed || storeFilter === "All") return activeRawData;
+    if (
+      !activeTabConfig.detailed ||
+      activeTabConfig.materialSummary ||
+      storeFilter === "All"
+    )
+      return activeRawData;
     return activeRawData.filter((row) => getStoreKey(row) === storeFilter);
   }, [activeRawData, activeTabConfig.detailed, storeFilter]);
 
   const activeCollapsedCategories = collapsedCategoriesByTab[activeTab] || [];
+  const activeExpandedMaterials = expandedMaterialsByTab[activeTab] || [];
   const activeCollapsedCategorySet = useMemo(
     () => new Set(activeCollapsedCategories),
     [activeCollapsedCategories],
@@ -416,11 +677,25 @@ export default function CommissaryForecast() {
   const getCategoryTotal = (rows = []) =>
     rows.reduce((sum, row) => sum + (Number(row.total) || 0), 0);
 
+  const toggleMaterialExpansion = (itemCode) => {
+    setExpandedMaterialsByTab((prev) => {
+      const current = prev[activeTab] || [];
+      return {
+        ...prev,
+        [activeTab]: current.includes(itemCode)
+          ? current.filter((value) => value !== itemCode)
+          : [...current, itemCode],
+      };
+    });
+  };
+
   const setCollapsedForActiveTab = (updater) => {
     setCollapsedCategoriesByTab((prev) => ({
       ...prev,
       [activeTab]:
-        typeof updater === "function" ? updater(prev[activeTab] || []) : updater,
+        typeof updater === "function"
+          ? updater(prev[activeTab] || [])
+          : updater,
     }));
   };
 
@@ -481,7 +756,9 @@ export default function CommissaryForecast() {
     if (storeFilter === "All") return;
 
     const sourceRows =
-      viewType === "forecast" ? tabData.forecastDetailed : tabData.confirmedDetailed;
+      viewType === "forecast"
+        ? tabData.forecastDetailed
+        : tabData.confirmedDetailed;
     const selectedStoreStillExists = sourceRows.some(
       (row) => getStoreKey(row) === storeFilter,
     );
@@ -489,9 +766,16 @@ export default function CommissaryForecast() {
     if (!selectedStoreStillExists) {
       setStoreFilter("All");
     }
-  }, [tabData.forecastDetailed, tabData.confirmedDetailed, storeFilter, viewType]);
+  }, [
+    tabData.forecastDetailed,
+    tabData.confirmedDetailed,
+    storeFilter,
+    viewType,
+  ]);
 
-  const colSpan = dates.length + (activeTabConfig.detailed ? 4 : 3);
+  const showsBranchColumn =
+    activeTabConfig.detailed || activeTabConfig.materialSummary;
+  const colSpan = dates.length + (showsBranchColumn ? 5 : 4);
 
   return (
     <div className="global-tran-main-div-ui !mt-0 min-w-0 overflow-x-hidden px-2 pb-20 pt-[136px] sm:pt-[112px] md:pt-[116px] lg:pt-[120px]">
@@ -641,9 +925,9 @@ export default function CommissaryForecast() {
             <table className="w-max min-w-full table-fixed border-separate border-spacing-0 [&_td]:border-b [&_td]:border-r [&_td]:border-slate-200 [&_th]:border-b [&_th]:border-r [&_th]:border-slate-200 [&_tr>td:first-child]:border-l">
               <thead className="global-tran-thead-div-ui sticky top-0 z-[220]">
                 <tr>
-                  {activeTabConfig.detailed && (
+                  {showsBranchColumn && (
                     <th className="global-tran-th-ui sticky top-0 z-[210] w-[180px] min-w-[180px] bg-blue-100 text-left dark:bg-blue-900">
-                      Store
+                      {activeTabConfig.materialSummary ? "Branch" : "Store"}
                     </th>
                   )}
                   <th className="global-tran-th-ui sticky top-0 z-[210] w-[120px] min-w-[120px] bg-blue-100 text-left dark:bg-blue-900">
@@ -651,6 +935,9 @@ export default function CommissaryForecast() {
                   </th>
                   <th className="global-tran-th-ui sticky top-0 z-[210] w-[260px] min-w-[260px] bg-blue-100 text-left dark:bg-blue-900">
                     Description
+                  </th>
+                  <th className="global-tran-th-ui sticky top-0 z-[210] w-[90px] min-w-[90px] bg-blue-100 text-left dark:bg-blue-900">
+                    UOM
                   </th>
 
                   {dates.map((date) => (
@@ -700,9 +987,14 @@ export default function CommissaryForecast() {
                     const categoryTotal = getCategoryTotal(group.rows);
 
                     return (
-                      <React.Fragment key={`${activeTab}-${group.categoryName}`}>
+                      <React.Fragment
+                        key={`${activeTab}-${group.categoryName}`}
+                      >
                         <tr className="bg-blue-50 dark:bg-blue-950/40">
-                          <td colSpan={colSpan} className="global-tran-td-ui !p-0">
+                          <td
+                            colSpan={colSpan}
+                            className="global-tran-td-ui !p-0"
+                          >
                             <button
                               type="button"
                               onClick={() =>
@@ -730,7 +1022,15 @@ export default function CommissaryForecast() {
                           </td>
                         </tr>
 
-                        {!isCollapsed &&
+                        {!isCollapsed && activeTabConfig.materialSummary ? (
+                          <MaterialSummaryRows
+                            materials={group.rows}
+                            dates={dates}
+                            expandedMaterials={activeExpandedMaterials}
+                            onToggleMaterial={toggleMaterialExpansion}
+                          />
+                        ) : (
+                          !isCollapsed &&
                           group.rows.map((row, idx) => (
                             <tr
                               key={`${group.categoryName}-${row.storeCode || "all"}-${row.itemCode}-${idx}`}
@@ -749,6 +1049,9 @@ export default function CommissaryForecast() {
                                   {row.itemDesc}
                                 </span>
                               </td>
+                              <td className="global-tran-td-ui w-[90px] min-w-[90px] text-left font-semibold text-slate-600 dark:text-slate-300">
+                                {row.uomCode || "-"}
+                              </td>
 
                               {dates.map((date) => (
                                 <td
@@ -765,7 +1068,8 @@ export default function CommissaryForecast() {
                                 {row.total.toLocaleString()}
                               </td>
                             </tr>
-                          ))}
+                          ))
+                        )}
                       </React.Fragment>
                     );
                   })
