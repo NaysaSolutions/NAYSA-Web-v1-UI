@@ -2258,9 +2258,20 @@ const handleExportConfirm = async (enteredFileName) => {
                   </div>
                 )}
 
-                <div className="flex items-center gap-2 min-w-0 flex-1 md:flex-none">
+                <div className="relative flex items-center gap-2 min-w-0 flex-1 md:flex-none">
                   <input type="text" value={globalSearch} onChange={e => setGlobalSearch(e.target.value)}
-                         placeholder="Quick Search..." className="w-full min-w-[120px] rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:ring-1 focus:ring-blue-300 dark:focus:ring-blue-500 outline-none h-8 md:w-48 px-3 text-xs" />
+                         placeholder="Quick Search..." className="w-full min-w-[120px] rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:ring-1 focus:ring-blue-300 dark:focus:ring-blue-500 outline-none h-8 md:w-48 pl-3 pr-8 text-xs" />
+                  {globalSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setGlobalSearch("")}
+                      className="absolute right-2 text-gray-400 hover:text-gray-600 dark:text-slate-400 dark:hover:text-slate-200"
+                      aria-label="Clear quick search"
+                      title="Clear quick search"
+                    >
+                      <FontAwesomeIcon icon={faTimes} />
+                    </button>
+                  )}
                 </div>
 
                 {isMobile && (

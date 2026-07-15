@@ -2384,7 +2384,9 @@ export const exportGenericQueryExcel = async (
             };
           }
 
-          subtotalRow.getCell(1).value = "Subtotal:";
+
+          subtotalRow.getCell(1).value =
+          `SUBTOTAL: ${String(node.value ?? "").trim() || "(Blank)"}`;
           subtotalRow.getCell(1).font = {
             name: "Calibri",
             size: 10,

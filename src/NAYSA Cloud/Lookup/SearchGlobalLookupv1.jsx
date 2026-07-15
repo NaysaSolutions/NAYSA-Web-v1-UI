@@ -27,13 +27,14 @@ import {
   faFileImage,
   faColumns,
   faSearch,
+  faGripVertical,
 } from "@fortawesome/free-solid-svg-icons";
 import { formatNumber,useSwalErrorAlert } from "../Global/behavior.jsx";
 import { exportGenericQueryExcel } from "@/NAYSA Cloud/Global/report";
-import Swal from "sweetalert2";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
+import ExportFileNameModal from "@/NAYSA Cloud/Lookup/SearchExport.jsx";
 
 
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
@@ -53,6 +54,7 @@ const GlobalLookupModalv1 = ({
   singleSelect = false,
   modalMaxWidthClass = "max-w-8xl",
   overlayZIndexClass = "z-50",
+  exportFileName = "Lookup",
 }) => {
   const [records, setRecords] = useState([]);
   const [filtered, setFiltered] = useState([]);
@@ -78,9 +80,18 @@ const GlobalLookupModalv1 = ({
   // Column chooser (NEW)
   const [userHiddenCols, setUserHiddenCols] = useState([]);
   const [showColumnChooser, setShowColumnChooser] = useState(false);
+  const [columnChooserSearch, setColumnChooserSearch] = useState("");
+  const [columnChooserDraftHidden, setColumnChooserDraftHidden] = useState([]);
 
   // Export menu (NEW)
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exportModal, setExportModal] = useState({
+    isOpen: false,
+    title: "Export File",
+    confirmText: "Export",
+    defaultFileName: "",
+    type: null,
+  });
   const exportContainerRef = useRef(null); // hidden full-table container for PDF/Image
 
   // Resizing
@@ -880,32 +891,39 @@ const baseVisibleCols = useMemo(() => {
     return `${yyyy}${mm}${dd}_${hh}${mi}${ss}`;
   };
 
-  
+  const sanitizeFileName = (name) =>
+    String(name ?? "")
+      .trim()
+      .replace(/[\\/:*?"<>|]/g, "")
+      .replace(/\s+/g, " ")
+      .substring(0, 120);
 
-  const askFileName = async (label, defaultPrefix = "Lookup") => {
-    const defaultFileName = `${defaultPrefix} ${getDateTimeStamp()}`;
-    const { value: fileName } = await Swal.fire({
-      title: "Enter File Name",
-      input: "text",
-      inputLabel: label,
-      inputValue: defaultFileName,
-      width: "400px",
-      showCancelButton: true,
-      confirmButtonText: "Export",
-      inputValidator: (value) => {
-        if (!value || value.trim() === "") return "File name cannot be empty!";
-      },
+  const openExportModal = (type) => {
+    const titleMap = { excel: "Export Excel", csv: "Export CSV", pdf: "Export PDF", image: "Export Image" };
+    setExportModal({
+      isOpen: true,
+      title: titleMap[type] || "Export File",
+      confirmText: "Export",
+      defaultFileName: `${exportFileName} ${getDateTimeStamp()}`,
+      type,
     });
-    return fileName || null;
   };
 
+  const closeExportModal = () => setExportModal({
+    isOpen: false,
+    title: "Export File",
+    confirmText: "Export",
+    defaultFileName: "",
+    type: null,
+  });
 
 
-  const handleExportCsvClick = async () => {
+
+  const handleExportCsvClick = async (customFileName) => {
     if (!hasDataFiltered) return;
 
     try {
-      const fileName = await askFileName("Export CSV File Name:", title || "Lookup");
+      const fileName = sanitizeFileName(customFileName);
       if (!fileName) return;
 
       const rowsToExport = filtered;
@@ -950,11 +968,11 @@ const baseVisibleCols = useMemo(() => {
     }
   };
 
-  const handleExportPdfClick = async () => {
+  const handleExportPdfClick = async (customFileName) => {
     if (!hasDataFiltered || !exportContainerRef.current) return;
 
     try {
-      const fileName = await askFileName("Export PDF File Name:", title || "Lookup");
+      const fileName = sanitizeFileName(customFileName);
       if (!fileName) return;
 
       const canvas = await html2canvas(exportContainerRef.current, {
@@ -982,11 +1000,11 @@ const baseVisibleCols = useMemo(() => {
     }
   };
 
-  const handleExportImageClick = async () => {
+  const handleExportImageClick = async (customFileName) => {
     if (!hasDataFiltered || !exportContainerRef.current) return;
 
     try {
-      const fileName = await askFileName("Export Image File Name:", title || "Lookup");
+      const fileName = sanitizeFileName(customFileName);
       if (!fileName) return;
 
       const canvas = await html2canvas(exportContainerRef.current, {
@@ -1010,29 +1028,11 @@ const baseVisibleCols = useMemo(() => {
   // Excel export placeholder:
   // Your lookup currently doesn't have exportGenericQueryExcel wired.
   // If you already have it in your project, just import and implement similar to SearchGlobalReportTable.
-const handleExportExcelClick = async () => {
+const handleExportExcelClick = async (customFileName) => {
   if (!hasDataFiltered) return;
 
   try {
-    // Default file name: Title + timestamp
-    const now = new Date();
-    const datePart = now.toISOString().slice(0, 10).replace(/-/g, "");
-    const timePart = now.toTimeString().slice(0, 8).replace(/:/g, "");
-    const defaultFileName = `${String(title || "Lookup").trim() || "Lookup"} ${datePart}_${timePart}`;
-
-    const { value: fileName } = await Swal.fire({
-      title: "Enter File Name",
-      input: "text",
-      inputLabel: "Export File Name:",
-      inputValue: defaultFileName,
-      width: "400px",
-      showCancelButton: true,
-      confirmButtonText: "Export",
-      inputValidator: (value) => {
-        if (!value || value.trim() === "") return "File name cannot be empty!";
-      },
-    });
-
+    const fileName = sanitizeFileName(customFileName);
     if (!fileName) return;
 
     // ✅ Always export actual rows/structure (NOT boolean)
@@ -1069,22 +1069,55 @@ const handleExportExcelClick = async () => {
   }
 };
 
+  const handleExportConfirm = async (enteredFileName) => {
+    try {
+      const fileName = sanitizeFileName(enteredFileName);
+      if (!fileName) return;
+      if (exportModal.type === "excel") await handleExportExcelClick(fileName);
+      else if (exportModal.type === "csv") await handleExportCsvClick(fileName);
+      else if (exportModal.type === "pdf") await handleExportPdfClick(fileName);
+      else if (exportModal.type === "image") await handleExportImageClick(fileName);
+    } finally {
+      closeExportModal();
+    }
+  };
+
   
 
   // Column chooser helpers
   const allChooserKeys = baseVisibleCols.map((c) => c.key);
-  const visibleChooserCount = allChooserKeys.filter(
-    (key) => !userHiddenCols.includes(key)
-  ).length;
-  const allChecked = visibleChooserCount === allChooserKeys.length;
+  const allChecked = allChooserKeys.every((key) => !columnChooserDraftHidden.includes(key));
+  const filteredChooserColumns = baseVisibleCols.filter((col) =>
+    String(col.label || col.key || "").toLowerCase().includes(columnChooserSearch.trim().toLowerCase())
+  );
 
-  const toggleSelectAllColumns = () => {
-    if (allChecked) {
-      useSwalErrorAlert("Minimum columns required", "Please retain at least 2 columns.")
-      return;
-    }
+  const handleToggleColumnChooser = () => {
+    setColumnChooserSearch("");
+    setColumnChooserDraftHidden(userHiddenCols);
+    setShowColumnChooser(true);
+  };
 
-    setUserHiddenCols([]);
+  const handleCloseColumnChooser = () => {
+    setShowColumnChooser(false);
+    setColumnChooserSearch("");
+    setColumnChooserDraftHidden([]);
+  };
+
+  const handleToggleColumnVisibility = (key, checked) => {
+    setColumnChooserDraftHidden((prev) => {
+      if (checked) return prev.filter((item) => item !== key);
+      const visibleCount = allChooserKeys.filter((item) => !prev.includes(item)).length;
+      if (visibleCount <= MIN_VISIBLE_COLUMNS) {
+        useSwalErrorAlert("Minimum columns required", "Please retain at least 2 columns.");
+        return prev;
+      }
+      return [...prev, key];
+    });
+  };
+
+  const handleToggleAllColumns = (checked) => {
+    if (checked) setColumnChooserDraftHidden([]);
+    else setColumnChooserDraftHidden(allChooserKeys.slice(MIN_VISIBLE_COLUMNS));
   };
 
   // =========================
@@ -1246,68 +1279,62 @@ const handleExportExcelClick = async () => {
                     </div>
 
                     {/* Export dropdown */}
-                    <div className="relative">
+                    <div className="relative shrink-0">
                       <button
                         type="button"
                         onClick={() => hasDataFiltered && setShowExportMenu((prev) => !prev)}
                         disabled={!hasDataFiltered}
-                        className="h-8 text-xs bg-white border px-2 rounded hover:bg-gray-100 disabled:opacity-50"
+                        className="text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 transition flex items-center justify-center h-8 px-3 whitespace-nowrap"
                         title="Export options"
                       >
-                        <FontAwesomeIcon icon={faFileExport} className="text-blue-600 mr-1" />
+                        <FontAwesomeIcon icon={faFileExport} className="mr-1" />
                         Export
                       </button>
 
                       {showExportMenu && (
-                        <div
-                          className="absolute right-0 mt-1 bg-white border rounded shadow-lg p-2 z-50 min-w-[180px]"
-                          onMouseLeave={() => setShowExportMenu(false)}
-                        >
-                          <div className="text-[11px] font-semibold mb-1 border-b pb-1">
-                            Export Options
-                          </div>
+                        <div className="absolute right-0 mt-1 min-w-[120px] rounded-lg shadow-lg bg-white dark:bg-slate-800 ring-1 ring-black/10 dark:ring-slate-700 z-[60] overflow-hidden py-1">
                           <button
                             type="button"
-                            onClick={async () => {
+                            onClick={() => {
                               setShowExportMenu(false);
-                              await handleExportExcelClick();
+                              openExportModal("excel");
                             }}
-                            className="w-full text-left text-[11px] px-2 py-1 rounded hover:bg-gray-100 flex items-center gap-2"
+                            className="flex items-center w-full px-4 py-2 text-xs text-gray-700 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors"
                           >
-                            <FontAwesomeIcon icon={faFileExcel} className="text-green-600" />
+                            <FontAwesomeIcon icon={faFileExcel} className="mr-2 text-green-600" />
                             Excel
                           </button>
                           <button
                             type="button"
-                            onClick={async () => {
+                            onClick={() => {
                               setShowExportMenu(false);
-                              await handleExportCsvClick();
+                              openExportModal("csv");
                             }}
-                            className="w-full text-left text-[11px] px-2 py-1 rounded hover:bg-gray-100 flex items-center gap-2"
+                            className="flex items-center w-full px-4 py-2 text-xs text-gray-700 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors"
                           >
-                            <FontAwesomeIcon icon={faFileCsv} className="text-emerald-600" />
+                            <FontAwesomeIcon icon={faFileCsv} className="mr-2 text-emerald-600" />
                             CSV
                           </button>
                           <button
                             type="button"
-                            onClick={async () => {
+                            onClick={() => {
                               setShowExportMenu(false);
-                              await handleExportPdfClick();
+                              openExportModal("pdf");
                             }}
-                            className="w-full text-left text-[11px] px-2 py-1 rounded hover:bg-gray-100 flex items-center gap-2"
+                            className="flex items-center w-full px-4 py-2 text-xs text-gray-700 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors"
                           >
-                            <FontAwesomeIcon icon={faFilePdf} className="text-red-600" />
+                            <FontAwesomeIcon icon={faFilePdf} className="mr-2 text-red-600" />
                             PDF
                           </button>
                           <button
                             type="button"
-                            onClick={async () => {
+                            onClick={() => {
                               setShowExportMenu(false);
-                              await handleExportImageClick();
+                              openExportModal("image");
                             }}
-                            className="w-full text-left text-[11px] px-2 py-1 rounded hover:bg-gray-100 flex items-center gap-2"
+                            className="flex items-center w-full px-4 py-2 text-xs text-gray-700 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors"
                           >
-                            <FontAwesomeIcon icon={faFileImage} className="text-blue-600" />
+                            <FontAwesomeIcon icon={faFileImage} className="mr-2 text-blue-600" />
                             Image
                           </button>
                         </div>
@@ -1315,69 +1342,61 @@ const handleExportExcelClick = async () => {
                     </div>
 
                     {/* Column chooser */}
-                    <div className="relative">
+                    <div className="relative shrink-0">
                       <button
                         type="button"
-                        onClick={() => setShowColumnChooser((prev) => !prev)}
-                        className="h-8 text-xs bg-white border px-2 rounded hover:bg-gray-100"
+                        onClick={handleToggleColumnChooser}
+                        className="text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition flex items-center justify-center h-8 px-3 whitespace-nowrap"
                         title="Show/Hide columns"
                       >
-                        <FontAwesomeIcon icon={faColumns} className="text-green-600" /> Columns
+                        <FontAwesomeIcon icon={faColumns} className="mr-1" /> Columns
                       </button>
 
                       {showColumnChooser && (
-                        <div
-                          className="absolute right-0 mt-1 bg-white border rounded shadow-lg p-2 max-h-64 overflow-auto z-50 min-w-[220px]"
-                          onMouseLeave={() => setShowColumnChooser(false)}
-                        >
-                          <div className="flex items-center justify-between text-[11px] font-semibold mb-1 border-b pb-1">
-                            <span>Show / Hide Columns</span>
-                            <label className="flex items-center gap-1 text-[11px]">
-                              <input
-                                type="checkbox"
-                                className="h-3 w-3"
-                                checked={allChecked}
-                                onChange={toggleSelectAllColumns}
-                              />
-                              <span>Select All</span>
-                            </label>
+                        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/45 px-3 py-3">
+                          <div className="flex max-h-[60vh] w-full max-w-[480px] flex-col overflow-hidden rounded-md bg-white dark:bg-slate-800 shadow-2xl ring-1 ring-black/10 dark:ring-slate-700">
+                            <div className="flex items-start justify-between gap-3 border-b border-gray-200 dark:border-slate-700 px-3 py-2">
+                              <div>
+                                <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Manage Columns - {exportFileName}</h2>
+                                <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">Choose the columns to display in the table.</p>
+                              </div>
+                              <button type="button" className="h-6 w-6 shrink-0 text-slate-500 hover:text-red-600" onClick={handleCloseColumnChooser} title="Close">
+                                <FontAwesomeIcon icon={faTimes} className="text-sm" />
+                              </button>
+                            </div>
+                            <div className="border-b border-gray-200 dark:border-slate-700 px-3 py-2 space-y-2">
+                              <div className="relative">
+                                <FontAwesomeIcon icon={faSearch} className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400" />
+                                <input type="text" value={columnChooserSearch} onChange={(e) => setColumnChooserSearch(e.target.value)} placeholder="Search columns..." className="h-7 w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 pl-9 pr-2 text-[11px] outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <label className="inline-flex h-7 items-center gap-1.5 text-[11px] cursor-pointer">
+                                  <input type="checkbox" className="h-3 w-3 accent-blue-600" checked={allChecked} onChange={(e) => handleToggleAllColumns(e.target.checked)} />
+                                  {allChecked ? `UnSelect All (${allChooserKeys.length})` : `Select All (${allChooserKeys.length})`}
+                                </label>
+                                <div className="h-5 border-l border-gray-300 dark:border-slate-600" />
+                                <button type="button" className="h-7 rounded-md border border-gray-300 dark:border-slate-600 px-2 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700" onClick={() => { setColumnChooserDraftHidden([]); setColumnChooserSearch(""); }}>Restore Default</button>
+                              </div>
+                            </div>
+                            <div className="min-h-0 flex-1 overflow-auto px-3 py-2 custom-scrollbar">
+                              <div className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
+                                {filteredChooserColumns.map((col) => (
+                                  <label key={col.key} className="flex h-7 items-center gap-1.5 rounded border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 text-[11px] text-slate-800 dark:text-slate-200 shadow-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600">
+                                    <input type="checkbox" className="h-3 w-3 shrink-0 accent-blue-600" checked={!columnChooserDraftHidden.includes(col.key)} onChange={(e) => handleToggleColumnVisibility(col.key, e.target.checked)} />
+                                    <span className="min-w-0 flex-1 truncate">{col.label}</span>
+                                    <FontAwesomeIcon icon={faGripVertical} className="text-[11px] text-slate-300 dark:text-slate-500" />
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between gap-2 border-t border-gray-200 dark:border-slate-700 px-3 py-2">
+                              <div className="text-[11px] text-slate-500 dark:text-slate-400">Showing {filteredChooserColumns.length === 0 ? 0 : 1}-{filteredChooserColumns.length} of {allChooserKeys.length} columns</div>
+                              <div className="flex gap-2">
+                                <button type="button" className="h-7 min-w-[72px] rounded-md border border-gray-300 dark:border-slate-600 px-3 text-[11px] font-medium text-slate-600 dark:text-slate-300" onClick={handleCloseColumnChooser}>Cancel</button>
+                                <button type="button" className="h-7 min-w-[72px] rounded-md bg-blue-600 px-3 text-[11px] font-medium text-white hover:bg-blue-700" onClick={() => { setUserHiddenCols(columnChooserDraftHidden); handleCloseColumnChooser(); }}>Apply</button>
+                              </div>
+                            </div>
                           </div>
-
-                          {baseVisibleCols.map((col) => (
-                            <label
-                              key={col.key}
-                              className="flex items-center text-[11px] gap-2 mb-1"
-                            >
-                              <input
-                                type="checkbox"
-                                className="h-3 w-3"
-                                checked={!userHiddenCols.includes(col.key)}
-                                onChange={(e) => {
-                                  const checked = e.target.checked;
-
-                                  setUserHiddenCols((prev) => {
-                                    const currentlyVisible = allChooserKeys.filter(
-                                      (key) => !prev.includes(key)
-                                    ).length;
-
-                                    // show column
-                                    if (checked) {
-                                      return prev.filter((k) => k !== col.key);
-                                    }
-
-                                    // hide column - but retain at least 2
-                                    if (currentlyVisible <= MIN_VISIBLE_COLUMNS) {
-                                      useSwalErrorAlert("Minimum columns required", "Please retain at least 2 columns.")
-                                      return prev;
-                                    }
-
-                                    return [...prev, col.key];
-                                  });
-                                }}
-                              />
-                              <span className="truncate">{col.label}</span>
-                            </label>
-                          ))}
                         </div>
                       )}
                     </div>
@@ -1796,6 +1815,14 @@ const handleExportExcelClick = async () => {
             Tip: Double-click a column header to Group By it.
           </span>
         </div>
+        <ExportFileNameModal
+          isOpen={exportModal.isOpen}
+          title={exportModal.title}
+          defaultFileName={exportModal.defaultFileName}
+          confirmText={exportModal.confirmText}
+          onClose={closeExportModal}
+          onConfirm={handleExportConfirm}
+        />
       </div>
     </div>
   );
