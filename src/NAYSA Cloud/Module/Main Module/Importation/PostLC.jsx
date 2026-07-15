@@ -101,7 +101,7 @@ const PostLC = ({ isOpen, onClose, userCode }) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post Landed Cost"
+          title="Finalize Landed Cost"
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}

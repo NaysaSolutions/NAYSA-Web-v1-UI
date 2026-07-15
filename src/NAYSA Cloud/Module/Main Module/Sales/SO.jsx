@@ -1776,6 +1776,25 @@ const handleCancel = async () => {
   }
 };
 
+const handleHeaderSoStatusChange = async (value) => {
+  if (value === "X") {
+    await handleCancel();
+    return;
+  }
+
+  if (String(soStatus || "").toUpperCase() === "O" && value === "C") {
+    const result = await useSwalProceedConfirm(
+      "Confirm Close SO",
+      "Do you want to change SO Status from Open to Closed?",
+      "Yes"
+    );
+
+    if (!result?.isConfirmed) return;
+  }
+
+  updateState({ soStatus: value });
+};
+
 
 
 
@@ -1800,7 +1819,7 @@ const handleCopy = async () => {
     const copiedDetailRows = detailRows.map((row) => ({
       ...row,
       soStat: "O",
-      delDate: nextDeliveryDate || "",
+      delDate: "",
       customerPoNo: "",
       drQuantity: formatNumber(0, quantityDecimals),
       siQuantity: formatNumber(0, quantityDecimals),
@@ -2660,12 +2679,12 @@ const renderSODetailCell = (columnKey, row, index, soStatusOptions) => {
 );
 
   // Read-only amount display used by calculated amount columns.
-  const readonlyAmountInput = (field) => (
+  const readonlyAmountInput = (field, alwaysReadOnly = false) => (
     <input
       type="text"
       className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
       value={row[field] || ""}
-      readOnly={isFormDisabled}
+      readOnly={alwaysReadOnly || isFormDisabled}
       onChange={(e) => handleSODetailRowChange(index, field, e.target.value)}
     />
   );
@@ -2679,15 +2698,15 @@ const renderSODetailCell = (columnKey, row, index, soStatusOptions) => {
     uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { className: "text-center" })}<input type="hidden" value={row.pmType || ""} readOnly /><input type="hidden" value={row.groupId || ""} readOnly /><input type="hidden" value={row.pmId || ""} readOnly /></td>,
     soQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), onFocus: () => { originalSOQuantityRef.current[index] = row.soQuantity; }, onBlur: (e) => validateSOQuantity(index, e.target.value), onKeyDown: (e) => validateSOQuantity(index, e.target.value) })}</td>,
     sellingPrice: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: sellingPriceDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${sellingPriceDecimals}}$`), blocked: () => !isSellPriceOpenEditable || row.freeItem === "Y", readOnly: isFormDisabled || !isDiscountEditable || row.freeItem === "Y" })}</td>,
-    grossAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
+    grossAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey, true)}</td>,
     totDiscount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
-    netAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
+    netAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey, true)}</td>,
     delDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><DateFormatInput id={`delDate-${index}`} name="delDate" value={row.delDate || ""} disabled={isFormDisabled || isRowWithDR} updateState={(updates) => handleSODetailRowChange(index, "delDate", updates.delDate || "")} className="w-full h-7 text-xs bg-transparent focus:outline-none focus:ring-0" /></td>, 
     customerPoNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { readOnly: isFormDisabled || isRowWithDR })}</td>,
     salesRepCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}><div className="flex items-center gap-1"><input type="text" value={row.salesRepCode || ""} readOnly className="w-full h-7 text-xs bg-transparent focus:outline-none focus:ring-0" />{canEditDetailAfterDR && <button type="button" className="text-blue-600 hover:text-blue-800" onClick={() => updateState({ showSalesRepModal: true, selectedRowIndex: index, modalContext: "detailSalesRep" })}><FontAwesomeIcon icon={faSearch} /></button>}</div></td>,
     freeItem: () => <td key={columnKey} className="global-tran-td-ui" style={style}><button type="button" className={`w-full h-7 rounded-full border text-[11px] font-semibold transition-colors ${row.freeItem === "Y" ? "border-blue-500 bg-blue-500/15 text-blue-700" : "border-slate-300 bg-white text-slate-600"} ${isFormDisabled || isRowWithDR ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`} disabled={isFormDisabled || isRowWithDR} onClick={() => handleSODetailRowChange(index, "freeItem", row.freeItem === "Y" ? "" : "Y")}>{row.freeItem === "Y" ? "Yes" : "No"}</button></td>,
-    drQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`) })}</td>,
-    siQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`) })}</td>,
+    drQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), readOnly: true })}</td>,
+    siQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), readOnly: true })}</td>,
   };
 
   if (visibleDiscountRateFields.includes(columnKey) || visibleDiscountAmountFields.includes(columnKey)) {
@@ -2799,6 +2818,12 @@ return (
               onBlur={handlesoNoBlur}
               onLookup={() => updateState({ showAllTranDocNo: true })}
               onKeyDown={(e) => {
+                if (e.key === "F1") {
+                  e.preventDefault();
+                  updateState({ showAllTranDocNo: true });
+                  return;
+                }
+
                 if (e.key === "Enter") {
                   e.preventDefault();
                   handlesoNoBlur();
@@ -3137,7 +3162,7 @@ return (
               type="select"
               value={soStatus || ""}
               disabled={!isHeaderSoStatusEditable}
-              onChange={(val) => updateState({ soStatus: val })}
+              onChange={handleHeaderSoStatusChange}
               options={filteredHeaderSoStatusOptions.map((t) => ({
                 label: t.DROPDOWN_NAME,
                 value: t.DROPDOWN_CODE,

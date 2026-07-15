@@ -122,7 +122,7 @@ const PostFARS = ({ isOpen, onClose, userCode = "" }) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post Asset Restructuring"
+          title="Finalize Asset Restructuring"
           btnCaption="Okay"
           onClose={onClose}
           onPost={handlePost}

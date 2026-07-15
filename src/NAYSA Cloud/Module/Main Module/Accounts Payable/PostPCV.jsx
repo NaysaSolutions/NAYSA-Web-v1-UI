@@ -106,7 +106,7 @@ return (
   data={data} 
       colConfigData={colConfigData} 
       userPassword ={userPassword}
-      title="Post Petty Cash Voucher" 
+        title="Finalize Petty Cash Voucher"
       btnCaption="Ok"
       onClose={onClose}
       onPost={handlePost} 

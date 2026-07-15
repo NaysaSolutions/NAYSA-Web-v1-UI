@@ -117,7 +117,7 @@ const PostAPV = ({ isOpen, onClose, userCode }) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post Accounts Payable Voucher"
+          title="Finalize Accounts Payable Voucher"
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}

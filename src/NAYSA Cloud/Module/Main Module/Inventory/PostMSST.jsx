@@ -108,7 +108,7 @@ return (
       <GlobalGLPostingModalv1
       data={data}
       colConfigData={colConfigData}
-      title="Post MS Stock Transfer"
+        title="Finalize MS Stock Transfer"
       userPassword={userPassword}
       btnCaption="Okay"
       onClose={onClose}

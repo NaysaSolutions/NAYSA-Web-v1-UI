@@ -112,7 +112,7 @@ return (
       <GlobalGLPostingModalv1
         data={data}
         colConfigData={colConfigData}
-        title="Post Check Voucher"
+        title="Finalize Check Voucher"
         userPassword={userPassword}
         btnCaption="Okay"
         onClose={onClose}

@@ -168,7 +168,7 @@ const PostFATR = ({ isOpen, onClose, userCode }) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post Fixed Asset Receiving"
+          title="Finalize Fixed Asset Receiving"
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}

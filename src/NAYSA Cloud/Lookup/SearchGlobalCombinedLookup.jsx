@@ -171,6 +171,7 @@ const GlobalCombinedLookup = ({
           onClose={handleSummaryAction}
           onCancel={onCancel}
           modalMaxWidthClass="max-w-[86rem]"
+          exportFileName={tabTitles[0]}
         />
       </div>
 
@@ -213,6 +214,7 @@ const GlobalCombinedLookup = ({
         }}
           onCancel={onCancel}
           modalMaxWidthClass="max-w-[86rem]"
+          exportFileName={tabTitles[1]}
         />
       </div>
 

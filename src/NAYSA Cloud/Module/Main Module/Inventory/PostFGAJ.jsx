@@ -167,7 +167,7 @@ const PostFGAJ = ({ isOpen, onClose, userCode }) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post FG Inventory Adjustment"
+          title="Finalize FG Inventory Adjustment"
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}

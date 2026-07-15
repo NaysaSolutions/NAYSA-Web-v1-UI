@@ -235,7 +235,7 @@ const PostRMRR = ({ isOpen, onClose, userCode }) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post RM Receiving Report"
+          title="Finalize RM Receiving Report"
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}

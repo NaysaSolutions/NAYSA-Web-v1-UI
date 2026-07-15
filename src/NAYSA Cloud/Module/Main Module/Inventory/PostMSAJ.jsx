@@ -106,7 +106,7 @@ return (
       <GlobalGLPostingModalv1
       data={data}
       colConfigData={colConfigData}
-      title="Post MS Inventory Adjustment"
+      title="Finalize MS Inventory Adjustment"
       userPassword={userPassword}
       btnCaption="Okay"
       onClose={onClose}

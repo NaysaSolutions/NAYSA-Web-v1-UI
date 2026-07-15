@@ -109,7 +109,7 @@ return (
       <GlobalGLPostingModalv1
        data={data}
       colConfigData={colConfigData}
-      title="Post Service Invoice"
+      title="Finalize Service Invoice"
       userPassword={userPassword}
       btnCaption="Okay"
       onClose={onClose}

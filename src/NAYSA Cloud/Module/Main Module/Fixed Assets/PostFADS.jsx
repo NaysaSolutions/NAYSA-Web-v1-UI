@@ -122,7 +122,7 @@ const PostFADS = ({ isOpen, onClose, userCode = "" }) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post FA Disposal"
+          title="Finalize FA Disposal"
           btnCaption="Okay"
           onClose={onClose}
           onPost={handlePost}

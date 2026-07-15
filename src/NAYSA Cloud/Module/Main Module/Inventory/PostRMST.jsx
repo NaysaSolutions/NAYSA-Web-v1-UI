@@ -120,7 +120,7 @@ return (
       <GlobalGLPostingModalv1
       data={data}
       colConfigData={colConfigData}
-      title="Post RM Stock Transfer"
+          title="Finalize RM Stock Transfer"
       userPassword={userPassword}
       btnCaption="Okay"
       onClose={onClose}

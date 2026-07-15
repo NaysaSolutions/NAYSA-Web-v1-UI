@@ -102,7 +102,7 @@ return (
       <GlobalGLPostingModalv1
       data={data} 
       colConfigData={colConfigData} 
-      title="Post AR Credit Memo" 
+        title="Finalize AR Credit Memo"
       userPassword ={userPassword}
       btnCaption="Ok"
       onClose={onClose}

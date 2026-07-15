@@ -554,7 +554,7 @@ console.log('✅ MSIS Posting Payload Expected:', {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post MS Issuance Slip"
+          title="Finalize MS Issuance Slip"
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}

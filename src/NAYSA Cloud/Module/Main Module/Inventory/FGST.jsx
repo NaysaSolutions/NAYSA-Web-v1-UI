@@ -295,7 +295,7 @@ const PostFGST = ({ isOpen, onClose, userCode, docType = "FGST", documentTitle =
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title={`Post ${documentTitle}`}
+        title={`Finalize ${documentTitle}`}
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}

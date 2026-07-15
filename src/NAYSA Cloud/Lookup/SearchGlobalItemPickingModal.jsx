@@ -214,7 +214,6 @@ export default function SearchGlobalItemPickingModal({
   const [transactionColumnOrder, setTransactionColumnOrder] = useState(baseTransactionColumns.map((column) => column.key));
   const [allocationColumnWidths, setAllocationColumnWidths] = useState({});
   const [transactionColumnWidths, setTransactionColumnWidths] = useState({});
-  const [draggedRowId, setDraggedRowId] = useState(null);
   const [pickQtyDrafts, setPickQtyDrafts] = useState({});
   const [hideFullyAllocatedRows, setHideFullyAllocatedRows] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -662,36 +661,6 @@ export default function SearchGlobalItemPickingModal({
       priorityNo: index + 1,
     }));
 
-  const handleDragStart = (rowId) => {
-    setDraggedRowId(rowId);
-  };
-
-  const handleDragOver = (event) => {
-    event.preventDefault();
-  };
-
-  const handleDrop = (targetRowId) => {
-    if (!draggedRowId || draggedRowId === targetRowId) {
-      setDraggedRowId(null);
-      return;
-    }
-
-    setRows((prevRows) => {
-      const nextRows = [...prevRows];
-      const fromIndex = nextRows.findIndex((row) => row.id === draggedRowId);
-      const toIndex = nextRows.findIndex((row) => row.id === targetRowId);
-
-      if (fromIndex < 0 || toIndex < 0) return prevRows;
-
-      const [movedRow] = nextRows.splice(fromIndex, 1);
-      nextRows.splice(toIndex, 0, movedRow);
-
-      return refreshPriorityNumbers(nextRows);
-    });
-
-    setDraggedRowId(null);
-  };
-
   const handleMoveRow = (rowId, direction) => {
     setRows((prevRows) => {
       const nextRows = [...prevRows];
@@ -716,17 +685,28 @@ export default function SearchGlobalItemPickingModal({
 
     if (!regex.test(cleanValue) && cleanValue !== "") return;
 
-    setPickQtyDrafts((prev) => ({ ...prev, [rowId]: cleanValue }));
+    const currentRow = rows.find((row) => row.id === rowId);
+    const otherPickedQty = rows.reduce(
+      (sum, row) => row.id === rowId ? sum : sum + parseNumber(row.pickQty),
+      0
+    );
+    const requestedQty = parseNumber(resolvedTransaction.requestedQty);
+    const maxRequestedQtyForRow = Math.max(requestedQty - otherPickedQty, 0);
+    const maxPickQty = currentRow
+      ? Math.min(getMaxPickQtyForRow(currentRow), maxRequestedQtyForRow)
+      : maxRequestedQtyForRow;
+    const nextPickQty = cleanValue === "" ? 0 : Math.min(parseNumber(cleanValue), maxPickQty);
+    const nextDraftValue = cleanValue === "" ? "" : String(nextPickQty);
+
+    setPickQtyDrafts((prev) => ({ ...prev, [rowId]: nextDraftValue }));
 
     setRows((prevRows) =>
       prevRows.map((row) => {
         if (row.id !== rowId) return row;
-        const nextPickQty = parseNumber(cleanValue);
-        const maxQty = getMaxPickQtyForRow(row);
 
         return {
           ...row,
-          pickQty: Math.min(nextPickQty, maxQty),
+          pickQty: nextPickQty,
         };
       })
     );
@@ -901,10 +881,10 @@ export default function SearchGlobalItemPickingModal({
   };
 
   const handleConfirm = () => {
-    if (!isBalanced) {
+    if (totals.pickedForThisLine > parseNumber(resolvedTransaction.requestedQty)) {
       swalErrorAlert(
         "Invalid Pick Quantity",
-        "Picked quantity does not match the available quantity for this line."
+        "Picked quantity cannot be more than requested quantity."
       );
       return;
     }
@@ -1405,13 +1385,9 @@ export default function SearchGlobalItemPickingModal({
                     return (
                       <tr
                         key={row.id}
-                        draggable={allowManualAllocation}
-                        onDragStart={() => handleDragStart(row.id)}
-                        onDragOver={handleDragOver}
-                        onDrop={() => handleDrop(row.id)}
                         className={`border-b border-slate-200 ${
                           rowAllocated ? "bg-blue-50 text-blue-800" : "bg-white"
-                        } ${draggedRowId === row.id ? "opacity-60" : ""}`}
+                        }`}
                       >
                         {orderedAllocationColumns.map((column) => renderAllocationCell(row, column))}
                       </tr>

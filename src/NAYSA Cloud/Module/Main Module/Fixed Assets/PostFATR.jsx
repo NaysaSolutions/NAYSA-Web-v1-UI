@@ -122,7 +122,7 @@ const PostFATR = ({ isOpen, onClose, userCode = "" }) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post FA Transfer Location"
+          title="Finalize FA Transfer Location"
           btnCaption="Okay"
           onClose={onClose}
           onPost={handlePost}
