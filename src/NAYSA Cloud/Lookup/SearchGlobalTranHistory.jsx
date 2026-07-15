@@ -853,11 +853,6 @@ const AllTranHistory = (props) => {
     [orderedCols, groupBy]
   );
 
-  const protectedColumnKeys = useMemo(
-    () => chooserColumns.slice(0, 2).map((col) => col.key),
-    [chooserColumns]
-  );
-
   const draftVisibleChooserColumnCount = useMemo(
     () => chooserColumns.filter((col) => !columnChooserDraftHidden.includes(col.key)).length,
     [chooserColumns, columnChooserDraftHidden]
@@ -870,17 +865,6 @@ const AllTranHistory = (props) => {
       String(col.label || col.key || "").toLowerCase().includes(q)
     );
   }, [chooserColumns, columnChooserSearch]);
-
-  useEffect(() => {
-    if (!activeTab || protectedColumnKeys.length === 0) return;
-
-    setUserHiddenColsByTab((prev) => {
-      const current = prev[activeTab] || [];
-      const nextHidden = current.filter((key) => !protectedColumnKeys.includes(key));
-      if (nextHidden.length === current.length) return prev;
-      return { ...prev, [activeTab]: nextHidden };
-    });
-  }, [activeTab, protectedColumnKeys]);
 
   const primaryCardCol = useMemo(() => {
     if (!visibleCols.length) return null;
@@ -1741,10 +1725,7 @@ const handleExportConfirm = async (enteredFileName) => {
       return;
     }
 
-    const protectedKeys = new Set(protectedColumnKeys);
-    const nextHidden = chooserColumns
-      .filter((col) => !protectedKeys.has(col.key))
-      .map((col) => col.key);
+    const nextHidden = chooserColumns.slice(2).map((col) => col.key);
 
     setColumnChooserDraftHidden(nextHidden);
   };
@@ -1752,7 +1733,7 @@ const handleExportConfirm = async (enteredFileName) => {
   const handleToggleColumnVisibility = (colKey, checked) => {
     if (!activeTab) return;
 
-    if (!checked && (protectedColumnKeys.includes(colKey) || draftVisibleChooserColumnCount <= 2)) {
+    if (!checked && draftVisibleChooserColumnCount <= 2) {
       useSwalErrorAlert("Minimum columns required", "Please retain at least 2 columns.");
       return;
     }

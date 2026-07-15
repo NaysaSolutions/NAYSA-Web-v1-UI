@@ -124,7 +124,7 @@ const PostFGRTV = ({ isOpen, onClose, userCode }) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post FG Return to Vendor"
+          title="Finalize FG Return to Vendor"
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}

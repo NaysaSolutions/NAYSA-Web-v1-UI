@@ -3173,6 +3173,7 @@ export const useResizableTableColumns = (columns = []) => {
   });
   const calculatorModalRef = useRef(calculatorModal);
   const resizingRef = useRef(null);
+  const resizeEndedAtRef = useRef(0);
   const draggedColumnKeyRef = useRef(null);
   const headerContextTableRef = useRef(null);
   const bodyContextTableRef = useRef(null);
@@ -3258,6 +3259,9 @@ export const useResizableTableColumns = (columns = []) => {
 
     const { startX, startWidth, key, minWidth } = resizingRef.current;
     const delta = e.clientX - startX;
+    if (Math.abs(delta) > 2) {
+      resizingRef.current.didResize = true;
+    }
     const nextWidth = Math.max(minWidth, startWidth + delta);
 
     setColumnWidths((prev) => ({
@@ -3269,6 +3273,11 @@ export const useResizableTableColumns = (columns = []) => {
   const handleResizeEnd = useCallback(() => {
     if (!resizingRef.current) return;
 
+    if (resizingRef.current.didResize) {
+      resizeEndedAtRef.current = Date.now();
+    }
+    document.body.style.cursor = resizingRef.current.previousBodyCursor;
+    document.body.style.userSelect = resizingRef.current.previousBodyUserSelect;
     resizingRef.current = null;
     document.removeEventListener("mousemove", handleResizeMove);
     document.removeEventListener("mouseup", handleResizeEnd);
@@ -3285,7 +3294,12 @@ export const useResizableTableColumns = (columns = []) => {
         minWidth,
         startX: e.clientX,
         startWidth: th?.offsetWidth ?? columnWidths[key] ?? minWidth,
+        didResize: false,
+        previousBodyCursor: document.body.style.cursor,
+        previousBodyUserSelect: document.body.style.userSelect,
       };
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
 
       document.addEventListener("mousemove", handleResizeMove);
       document.addEventListener("mouseup", handleResizeEnd);
@@ -3295,6 +3309,11 @@ export const useResizableTableColumns = (columns = []) => {
 
   useEffect(() => {
     return () => {
+      if (resizingRef.current) {
+        document.body.style.cursor = resizingRef.current.previousBodyCursor;
+        document.body.style.userSelect = resizingRef.current.previousBodyUserSelect;
+        resizingRef.current = null;
+      }
       document.removeEventListener("mousemove", handleResizeMove);
       document.removeEventListener("mouseup", handleResizeEnd);
     };
@@ -5131,7 +5150,10 @@ export const useResizableTableColumns = (columns = []) => {
         onDrop={(e) => handleColumnDrop(e, key)}
         onDragEnd={handleColumnDragEnd}
         onContextMenu={(e) => handleHeaderContextMenu(e, key)}
-        onClick={() => toggleSort(key)}
+        onClick={() => {
+          if (Date.now() - resizeEndedAtRef.current < 250) return;
+          toggleSort(key);
+        }}
       >
         <div className="flex min-w-0 items-center justify-center gap-1 overflow-hidden pr-2">
           <span className="min-w-0 max-w-full overflow-hidden whitespace-nowrap text-ellipsis leading-tight">
@@ -5182,6 +5204,7 @@ export const useResizableTableColumns = (columns = []) => {
           aria-label={`Resize ${label} column`}
           className="absolute top-0 right-0 z-10 h-full w-2 cursor-col-resize select-none touch-none bg-transparent hover:bg-blue-300/40"
           onMouseDown={(e) => startResize(e, key, 0)}
+          onClick={(e) => e.stopPropagation()}
         />
       </th>
     ),

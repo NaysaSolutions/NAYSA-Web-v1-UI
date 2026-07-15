@@ -104,7 +104,7 @@ return (
       <GlobalGLPostingModalv1
       data={data} 
       colConfigData={colConfigData} 
-      title="Post Statement of Accounts" 
+      title="Finalize Statement of Accounts" 
       userPassword ={userPassword}
       btnCaption="Ok"
       onClose={onClose}

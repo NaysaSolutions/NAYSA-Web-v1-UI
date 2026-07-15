@@ -116,13 +116,7 @@ const AR = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { companyInfo, currentUserRow,getAllDropDown,refsLoaded ,getAllTopATCRow, getAllTopVatRow,getAllTopVatAmount,getAllTopATCAmount,getAllTopHSDocRow } = useAuth();
-  const [isViewDocument, setIsViewDocument] = useState(false);
-  useEffect(() => {
-    const p = new URLSearchParams(location.search);
-    if (p.get("viewDocument") === "true") {
-      setIsViewDocument(true);
-    }
-    }, []);
+  const isViewDocument = new URLSearchParams(location.search).get("viewDocument") === "true";
   const isViewDocumentUrl = isViewDocument;
 
 
@@ -392,13 +386,14 @@ const AR = () => {
 
   //Status Global Setup
   const displayStatus = status || 'OPEN';
+  const normalizedDisplayStatus = String(displayStatus).trim().toUpperCase();
   const statusMap = {
     FINALIZED: "global-tran-stat-text-finalized-ui",
     CANCELLED: "global-tran-stat-text-closed-ui",
     CLOSED: "global-tran-stat-text-closed-ui",
   };
-  const statusColor = statusMap[displayStatus] || "";
-  const isFormDisabled = isViewDocumentUrl || ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+  const statusColor = statusMap[normalizedDisplayStatus] || "";
+  const isFormDisabled = isViewDocumentUrl || ["FINALIZED", "CANCELLED", "CLOSED"].includes(normalizedDisplayStatus);
   const arFieldLengths = {
     siNo: useGetFieldLength(tblFieldArray, "si_no"),
     slRefNo: useGetFieldLength(tblFieldArray, "slref_no"),
@@ -2390,7 +2385,7 @@ const renderArDetailCell = (columnKey, row, index) => {
       className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
       value={options.displayValue ?? row[field] ?? ""}
       disabled={options.disabled ?? isFormDisabled}
-      readOnly={options.readOnly}
+      readOnly={isFormDisabled || options.readOnly}
       onChange={(e) => {
         const raw = e.target.value;
         const allowNegative = options.allowNegative ?? false;
@@ -2486,7 +2481,7 @@ const renderArGlCell = (columnKey, row, index) => {
       id={`${field}-${index}`}
       className={`w-full pr-6 global-tran-td-inputclass-ui cursor-pointer ${options.className || ""}`.trim()}
       value={row[field] || ""}
-      readOnly={options.readOnly}
+      readOnly={isFormDisabled || options.readOnly}
       onChange={(e) => handleDetailChangeGL(index, field, e.target.value)}
       onKeyDown={(e) => {
         if (e.key !== "Enter" || isFormDisabled) return;
@@ -2504,7 +2499,7 @@ const renderArGlCell = (columnKey, row, index) => {
       value={row[field] || ""}
       readOnly={isFormDisabled}
       onChange={(e) => { const sanitizedValue = e.target.value.replace(/[^0-9.]/g, ""); if (/^\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") handleDetailChangeGL(index, field, sanitizedValue); }}
-      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleBlurGL(index, field, e.target.value, true); focusNextArGlRowInput(index, field, { rows: detailRowsGL, zeroClearFields: arGlEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChangeGL(nextIndex, nextField, value) }); } }}
+      onKeyDown={(e) => { if (e.key === "Enter" && !isFormDisabled) { e.preventDefault(); handleBlurGL(index, field, e.target.value, true); focusNextArGlRowInput(index, field, { rows: detailRowsGL, zeroClearFields: arGlEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChangeGL(nextIndex, nextField, value) }); } }}
       onFocus={(e) => clearArGlZeroOnFocus(e, { isEditable: !isFormDisabled, onClear: (value) => handleDetailChangeGL(index, field, value) })}
       onBlur={(e) => { if (isFormDisabled) return; handleBlurGL(index, field, e.target.value); }}
     />

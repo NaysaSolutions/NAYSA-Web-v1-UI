@@ -141,7 +141,7 @@ const PostRMPR = ({ isOpen, onClose, userCode }) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post RM Production Receipt"
+          title="Finalize RM Production Receipt"
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}

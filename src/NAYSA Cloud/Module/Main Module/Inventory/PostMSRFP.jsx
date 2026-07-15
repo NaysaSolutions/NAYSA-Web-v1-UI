@@ -141,7 +141,7 @@ const PostMSRFP = ({ isOpen, onClose, userCode }) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post MS Return from Production"
+          title="Finalize MS Return from Production"
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}
