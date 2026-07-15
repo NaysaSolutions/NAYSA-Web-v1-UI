@@ -1541,6 +1541,16 @@ export default function PRInq() {
                             <div className="mt-0.5 text-[11px] text-slate-400">
                               {row.prDate}
                             </div>
+                            <div className="mt-1.5 flex items-center gap-1.5">
+                              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-600">
+                                {(row.requestor || "U")
+                                  .slice(0, 1)
+                                  .toUpperCase()}
+                              </div>
+                              <span className="text-[11px] text-slate-500">
+                                {row.requestor || "—"}
+                              </span>
+                            </div>
                           </td>
                           <td className="px-5 py-4">
                             <div className="text-[13px] font-medium text-slate-800">

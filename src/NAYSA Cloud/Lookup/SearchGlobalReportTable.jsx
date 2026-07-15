@@ -113,8 +113,8 @@ const SearchGlobalReportTable = forwardRef(
     const [currentPage, setCurrentPage] = useState(
       () => Number(initialState?.currentPage) || 1,
     );
-    const [rowsPerPage, setRowsPerPage] = useState(
-      () => Number(initialState?.itemsPerPage ?? itemsPerPage ?? 1000),
+    const [rowsPerPage, setRowsPerPage] = useState(() =>
+      Number(initialState?.itemsPerPage ?? itemsPerPage ?? 1000),
     );
     const [autoFillGridState, setAutoFillGridState] = useState(
       autoFit || autoFillGrid,
@@ -134,7 +134,9 @@ const SearchGlobalReportTable = forwardRef(
     );
     const [showColumnChooser, setShowColumnChooser] = useState(false);
     const [columnChooserSearch, setColumnChooserSearch] = useState("");
-    const [columnChooserDraftHidden, setColumnChooserDraftHidden] = useState([]);
+    const [columnChooserDraftHidden, setColumnChooserDraftHidden] = useState(
+      [],
+    );
     const [showExportMenu, setShowExportMenu] = useState(false);
 
     const [exportModal, setExportModal] = useState({
@@ -174,7 +176,8 @@ const SearchGlobalReportTable = forwardRef(
     useEffect(() => {
       const onDown = (e) => {
         if (!e.target.closest?.("[data-sgrt-export]")) setShowExportMenu(false);
-        if (!e.target.closest?.("[data-sgrt-cols]")) setShowColumnChooser(false);
+        if (!e.target.closest?.("[data-sgrt-cols]"))
+          setShowColumnChooser(false);
       };
 
       document.addEventListener("mousedown", onDown);
@@ -208,7 +211,7 @@ const SearchGlobalReportTable = forwardRef(
 
     const hasActiveFilters = useMemo(
       () => Object.values(filters).some((v) => String(v || "").trim() !== ""),
-      [filters]
+      [filters],
     );
 
     const parseNumber = (v) => {
@@ -278,7 +281,8 @@ const SearchGlobalReportTable = forwardRef(
     useEffect(() => {
       setGroupBy((prev) => {
         const next = prev.filter(
-          (key, index, arr) => baseColumnKeys.has(key) && arr.indexOf(key) === index,
+          (key, index, arr) =>
+            baseColumnKeys.has(key) && arr.indexOf(key) === index,
         );
         return next.length === prev.length ? prev : next;
       });
@@ -303,15 +307,22 @@ const SearchGlobalReportTable = forwardRef(
     );
 
     const draftVisibleChooserColumnCount = useMemo(
-      () => chooserColumns.filter((col) => !columnChooserDraftHidden.includes(col.key)).length,
+      () =>
+        chooserColumns.filter(
+          (col) => !columnChooserDraftHidden.includes(col.key),
+        ).length,
       [chooserColumns, columnChooserDraftHidden],
     );
 
     const filteredChooserColumns = useMemo(() => {
-      const q = String(columnChooserSearch || "").trim().toLowerCase();
+      const q = String(columnChooserSearch || "")
+        .trim()
+        .toLowerCase();
       if (!q) return chooserColumns;
       return chooserColumns.filter((col) =>
-        String(col.label || col.key || "").toLowerCase().includes(q),
+        String(col.label || col.key || "")
+          .toLowerCase()
+          .includes(q),
       );
     }, [chooserColumns, columnChooserSearch]);
 
@@ -352,7 +363,9 @@ const SearchGlobalReportTable = forwardRef(
         );
       }
 
-      const q = String(globalSearch || "").trim().toLowerCase();
+      const q = String(globalSearch || "")
+        .trim()
+        .toLowerCase();
 
       if (q) {
         const keys = visibleCols.map((c) => c.key);
@@ -399,9 +412,7 @@ const SearchGlobalReportTable = forwardRef(
 
         if (
           (col.renderType === "number" || col.renderType === "currency") &&
-          !totalExemptions.some(
-            (ex) => label.includes(ex) || key.includes(ex),
-          )
+          !totalExemptions.some((ex) => label.includes(ex) || key.includes(ex))
         ) {
           sums[col.key] = rows.reduce(
             (acc, r) => acc + (parseNumber(r?.[col.key]) || 0),
@@ -508,7 +519,9 @@ const SearchGlobalReportTable = forwardRef(
 
     const displayRows = useMemo(() => {
       if (!pagination) {
-        return groupBy.length ? processRenderList(groupedStructure) : filteredData;
+        return groupBy.length
+          ? processRenderList(groupedStructure)
+          : filteredData;
       }
 
       const start = (safePage - 1) * rowsPerPage;
@@ -556,7 +569,8 @@ const SearchGlobalReportTable = forwardRef(
     const allExpanded =
       groupBy.length > 0 &&
       (autoExpandGroups ||
-        (allGroupKeys.length > 0 && allGroupKeys.every((k) => expandedGroups[k])));
+        (allGroupKeys.length > 0 &&
+          allGroupKeys.every((k) => expandedGroups[k])));
     const groupingRenderKey = `${groupBy.join("|") || "ungrouped"}:${autoExpandGroups ? "expanded" : "manual"}`;
 
     const getColumnMinWidth = (col) =>
@@ -590,7 +604,10 @@ const SearchGlobalReportTable = forwardRef(
       if (autoFillGridState) {
         return Math.min(
           maxWidth,
-          Math.max(measuredWidth, Math.max(getAutoFitWidth(), AUTO_FIT_MIN_WIDTH)),
+          Math.max(
+            measuredWidth,
+            Math.max(getAutoFitWidth(), AUTO_FIT_MIN_WIDTH),
+          ),
         );
       }
 
@@ -643,7 +660,8 @@ const SearchGlobalReportTable = forwardRef(
       if (typeof document === "undefined") return 0;
 
       const canvas =
-        getTextWidth.canvas || (getTextWidth.canvas = document.createElement("canvas"));
+        getTextWidth.canvas ||
+        (getTextWidth.canvas = document.createElement("canvas"));
       const context = canvas.getContext("2d");
       if (!context) return 0;
 
@@ -684,9 +702,12 @@ const SearchGlobalReportTable = forwardRef(
 
         const cellPaddingAllowance = 28;
         const sortIconAllowance = 18;
-        const widthFromHeader = headerWidth + cellPaddingAllowance + sortIconAllowance;
+        const widthFromHeader =
+          headerWidth + cellPaddingAllowance + sortIconAllowance;
         const widthFromContent = contentWidth + cellPaddingAllowance;
-        const computed = Math.ceil(Math.max(widthFromHeader, widthFromContent, minWidth));
+        const computed = Math.ceil(
+          Math.max(widthFromHeader, widthFromContent, minWidth),
+        );
 
         measuredWidths[col.key] = Math.min(maxWidth, computed);
       });
@@ -752,7 +773,10 @@ const SearchGlobalReportTable = forwardRef(
       const onMove = (me) =>
         setColWidths((prev) => ({
           ...prev,
-          [key]: Math.min(maxWidth, Math.max(minWidth, startWidth + (me.clientX - startX))),
+          [key]: Math.min(
+            maxWidth,
+            Math.max(minWidth, startWidth + (me.clientX - startX)),
+          ),
         }));
 
       const onUp = () => {
@@ -783,7 +807,9 @@ const SearchGlobalReportTable = forwardRef(
       return `${yyyy}${mm}${dd}_${hh}${mi}${ss}`;
     };
 
-    const defaultFileName = sanitizeFileName(`${docType} ${getDateTimeStamp()}`);
+    const defaultFileName = sanitizeFileName(
+      `${docType} ${getDateTimeStamp()}`,
+    );
 
     const openExportModal = (type) => {
       const titleMap = {
@@ -868,7 +894,9 @@ const SearchGlobalReportTable = forwardRef(
     const exportPdfWithFileName = async (safeFileName) => {
       if (!exportContainerRef.current) return;
 
-      const canvas = await html2canvas(exportContainerRef.current, { scale: 2 });
+      const canvas = await html2canvas(exportContainerRef.current, {
+        scale: 2,
+      });
       const pdf = new jsPDF("l", "mm", "a4");
 
       pdf.addImage(
@@ -950,7 +978,11 @@ const SearchGlobalReportTable = forwardRef(
     };
 
     const toggleColumnVisibility = (colKey, checked) => {
-      if (!checked && (protectedColumnKeys.includes(colKey) || draftVisibleChooserColumnCount <= 2)) {
+      if (
+        !checked &&
+        (protectedColumnKeys.includes(colKey) ||
+          draftVisibleChooserColumnCount <= 2)
+      ) {
         useSwalErrorAlert(
           "Minimum columns required",
           "Please retain at least 2 columns.",
@@ -1007,7 +1039,6 @@ const SearchGlobalReportTable = forwardRef(
       return status === "FAILED" || moveDirection === "OUT";
     };
 
-
     return (
       <div
         className={[
@@ -1024,9 +1055,12 @@ const SearchGlobalReportTable = forwardRef(
             setAutoFillGridState(false);
             setGroupBy((p) => {
               const current = p.filter(
-                (key, index, arr) => baseColumnKeys.has(key) && arr.indexOf(key) === index,
+                (key, index, arr) =>
+                  baseColumnKeys.has(key) && arr.indexOf(key) === index,
               );
-              return current.includes(draggedCol) ? current : [...current, draggedCol];
+              return current.includes(draggedCol)
+                ? current
+                : [...current, draggedCol];
             });
             if (!autoExpandGroups) setExpandedGroups({});
             setDraggedCol(null);
@@ -1092,7 +1126,9 @@ const SearchGlobalReportTable = forwardRef(
                       setAutoExpandGroups(expand);
                       setExpandedGroups(
                         expand
-                          ? Object.fromEntries(allGroupKeys.map((k) => [k, true]))
+                          ? Object.fromEntries(
+                              allGroupKeys.map((k) => [k, true]),
+                            )
                           : {},
                       );
                     }}
@@ -1154,50 +1190,68 @@ const SearchGlobalReportTable = forwardRef(
                     : "flex items-center gap-2 w-full md:w-auto"
                 }
               >
-                <input
-                  type="text"
-                  value={globalSearch}
-                  onChange={(e) => {
-                    setGlobalSearch(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  placeholder="Quick Search..."
-                  className={`rounded-md border border-gray-300 focus:ring-1 focus:ring-blue-300 outline-none ${
-                    isMobileView
-                      ? "w-full h-9 px-3 text-xs"
-                      : tableSize === "Half"
-                        ? "h-7 md:w-24 px-2 text-[11px]"
-                        : "h-8 md:w-48 px-3 text-xs"
-                  }`}
-                />
+                <div className={isMobileView ? "relative w-full" : "relative"}>
+                  <input
+                    type="text"
+                    value={globalSearch}
+                    onChange={(e) => {
+                      setGlobalSearch(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    placeholder="Quick Search..."
+                    className={`rounded-md border border-gray-300 focus:ring-1 focus:ring-blue-300 outline-none ${
+                      isMobileView
+                        ? "w-full h-9 pl-3 pr-9 text-xs"
+                        : tableSize === "Half"
+                          ? "h-7 w-full md:w-24 pl-2 pr-7 text-[11px]"
+                          : "h-8 w-full md:w-48 pl-3 pr-8 text-xs"
+                    }`}
+                  />
+
+                  {globalSearch && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGlobalSearch("");
+                        setCurrentPage(1);
+                      }}
+                      className="absolute right-2 top-1/2 z-10 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-gray-400 hover:bg-gray-200 hover:text-red-600"
+                      title="Clear Quick Search"
+                      aria-label="Clear Quick Search"
+                    >
+                      <FontAwesomeIcon icon={faTimes} className="text-[10px]" />
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
-              {hasActiveFilters && (
-                <button
-                  type="button"
-                  className={`rounded-md bg-red-100 text-red-700 hover:bg-red-200 shrink-0 font-medium flex items-center ${
-                    tableSize === "Half"
-                      ? "h-7 px-2 text-[10px]"
-                      : "h-8 px-3 text-xs"
-                  }`}
-                  onClick={() => {
-                    setFilters({});
-                    setCurrentPage(1);
-                  }}
-                  title="Clear column filters"
-                >
-                  <FontAwesomeIcon icon={faTimes} className="mr-1" />
-                  Clear Filters
-                </button>
-              )}
+            {hasActiveFilters && (
+              <button
+                type="button"
+                className={`rounded-md bg-red-100 text-red-700 hover:bg-red-200 shrink-0 font-medium flex items-center ${
+                  tableSize === "Half"
+                    ? "h-7 px-2 text-[10px]"
+                    : "h-8 px-3 text-xs"
+                }`}
+                onClick={() => {
+                  setFilters({});
+                  setCurrentPage(1);
+                }}
+                title="Clear column filters"
+              >
+                <FontAwesomeIcon icon={faTimes} className="mr-1" />
+                Clear Filters
+              </button>
+            )}
 
             {isMobileView ? (
               <div className="w-full grid grid-cols-3 gap-2">
                 <div className="relative" data-sgrt-export>
                   <button
                     onClick={() =>
-                      filteredData.length > 0 && setShowExportMenu(!showExportMenu)
+                      filteredData.length > 0 &&
+                      setShowExportMenu(!showExportMenu)
                     }
                     disabled={filteredData.length === 0}
                     className="w-full h-9 px-2 text-[11px] font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 transition flex items-center justify-center"
@@ -1353,7 +1407,8 @@ const SearchGlobalReportTable = forwardRef(
                 <div className="relative" data-sgrt-export>
                   <button
                     onClick={() =>
-                      filteredData.length > 0 && setShowExportMenu(!showExportMenu)
+                      filteredData.length > 0 &&
+                      setShowExportMenu(!showExportMenu)
                     }
                     disabled={filteredData.length === 0}
                     className={`text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 transition flex items-center justify-center ${
@@ -1516,7 +1571,9 @@ const SearchGlobalReportTable = forwardRef(
                           toggleColumnVisibility(col.key, e.target.checked)
                         }
                       />
-                      <span className="min-w-0 flex-1 truncate">{col.label}</span>
+                      <span className="min-w-0 flex-1 truncate">
+                        {col.label}
+                      </span>
                       <FontAwesomeIcon
                         icon={faGripVertical}
                         className="text-[11px] text-slate-300"
@@ -1529,7 +1586,8 @@ const SearchGlobalReportTable = forwardRef(
               <div className="flex flex-col gap-2 border-t border-gray-200 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-[11px] text-slate-500">
                   Showing {filteredChooserColumns.length === 0 ? 0 : 1}-
-                  {filteredChooserColumns.length} of {chooserColumns.length} columns
+                  {filteredChooserColumns.length} of {chooserColumns.length}{" "}
+                  columns
                 </div>
                 <div className="flex justify-end gap-2">
                   <button
@@ -1576,11 +1634,15 @@ const SearchGlobalReportTable = forwardRef(
                     >
                       <div className="flex items-center text-xs font-bold text-blue-900">
                         <FontAwesomeIcon
-                          icon={autoExpandGroups || expandedGroups[uid] ? faChevronDown : faChevronRight}
+                          icon={
+                            autoExpandGroups || expandedGroups[uid]
+                              ? faChevronDown
+                              : faChevronRight
+                          }
                           className="mr-2"
                         />
-                        {columns.find((c) => c.key === row.key)?.label}: {row.value} (
-                        {row.count})
+                        {columns.find((c) => c.key === row.key)?.label}:{" "}
+                        {row.value} ({row.count})
                       </div>
                     </div>
                   );
@@ -1633,7 +1695,9 @@ const SearchGlobalReportTable = forwardRef(
                             }}
                             className="text-[10px] font-semibold text-blue-600 hover:text-blue-700"
                           >
-                            {isExpanded ? "See Less" : `See More (${extraCols.length})`}
+                            {isExpanded
+                              ? "See Less"
+                              : `See More (${extraCols.length})`}
                           </button>
                         </div>
                       )}
@@ -1657,7 +1721,10 @@ const SearchGlobalReportTable = forwardRef(
                       <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-100">
                         {visibleCols[0] && (
                           <span className="text-[11px] font-bold text-blue-900 pr-2 break-words">
-                            {formatValue(row[visibleCols[0].key], visibleCols[0])}
+                            {formatValue(
+                              row[visibleCols[0].key],
+                              visibleCols[0],
+                            )}
                           </span>
                         )}
 
@@ -1731,7 +1798,9 @@ const SearchGlobalReportTable = forwardRef(
                           }}
                           className="text-[10px] font-semibold text-blue-600 hover:text-blue-700"
                         >
-                          {isExpanded ? "See Less" : `See More (${extraCols.length})`}
+                          {isExpanded
+                            ? "See Less"
+                            : `See More (${extraCols.length})`}
                         </button>
                       </div>
                     )}
@@ -1753,7 +1822,9 @@ const SearchGlobalReportTable = forwardRef(
               <table
                 key={groupingRenderKey}
                 className={`global-tran-table-div-ui border-collapse ${
-                  autoFillGridState ? "w-full table-fixed" : "min-w-max table-auto"
+                  autoFillGridState
+                    ? "w-full table-fixed"
+                    : "min-w-max table-auto"
                 }`}
                 style={
                   autoFillGridState
@@ -1892,7 +1963,9 @@ const SearchGlobalReportTable = forwardRef(
                           }}
                         >
                           <td
-                            colSpan={visibleCols.length + (hasActionCol ? 1 : 0)}
+                            colSpan={
+                              visibleCols.length + (hasActionCol ? 1 : 0)
+                            }
                             className="px-2 py-1 text-[11px] font-bold text-blue-800"
                           >
                             <div
@@ -1900,7 +1973,11 @@ const SearchGlobalReportTable = forwardRef(
                               style={{ paddingLeft: row.level * 20 }}
                             >
                               <FontAwesomeIcon
-                                icon={autoExpandGroups || expandedGroups[uid] ? faChevronDown : faChevronRight}
+                                icon={
+                                  autoExpandGroups || expandedGroups[uid]
+                                    ? faChevronDown
+                                    : faChevronRight
+                                }
                                 className="mr-2 text-gray-500"
                               />
                               <span className="text-gray-600 font-normal">
@@ -1983,7 +2060,10 @@ const SearchGlobalReportTable = forwardRef(
                                 className="px-2 py-0 bg-blue-500 text-white rounded hover:bg-blue-600 transition leading-none"
                                 title="View"
                               >
-                                <FontAwesomeIcon icon={faEye} className="w-2.5 h-3.5" />
+                                <FontAwesomeIcon
+                                  icon={faEye}
+                                  className="w-2.5 h-3.5"
+                                />
                               </button>
 
                               {onRowActionsClick && (
@@ -2010,12 +2090,13 @@ const SearchGlobalReportTable = forwardRef(
                             key={col.key}
                             style={getCellWidthStyle(col)}
                             className={`px-1.5 py-1 text-[11px] leading-tight whitespace-nowrap ${
-                                isRedRow(row) ? "text-red-600" : "text-gray-700"
-                              } ${
-                                col.renderType === "number" || col.renderType === "currency"
-                                  ? "text-right tabular-nums"
-                                  : "text-left"
-                              }`}
+                              isRedRow(row) ? "text-red-600" : "text-gray-700"
+                            } ${
+                              col.renderType === "number" ||
+                              col.renderType === "currency"
+                                ? "text-right tabular-nums"
+                                : "text-left"
+                            }`}
                           >
                             <div className="truncate overflow-hidden whitespace-nowrap max-w-full">
                               {formatValue(row[col.key], col)}
