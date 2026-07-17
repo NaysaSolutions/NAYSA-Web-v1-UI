@@ -1215,7 +1215,7 @@ const doGenerateCWTReversal = useCallback(
         <GlobalGLPostingModalv1
           data={rows} // 👈 Passes the filtered data from the 'Load' step
           colConfigData={cols} // Passes the column configuration
-          title="Generate CWT Reversal Posting"
+        title="Finalize CWT Reversal"
           btnCaption="Generate & Post Reversal"
           userPassword={userPassword}
           onClose={() => updateState({ showReversalModal: false })}        

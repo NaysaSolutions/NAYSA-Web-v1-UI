@@ -1223,7 +1223,7 @@ export default function CheckRL() {
         <GlobalGLPostingModalv1
           data={rows}
           colConfigData={cols}
-          title="Generate CWT Reversal Posting"
+        title="Finalize CWT Reversal"
           btnCaption="Generate & Post Reversal"
           userPassword={userPassword}
           onClose={() => updateState({ showReversalModal: false })}

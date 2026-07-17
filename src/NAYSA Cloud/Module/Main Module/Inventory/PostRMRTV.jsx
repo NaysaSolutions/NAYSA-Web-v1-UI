@@ -124,7 +124,7 @@ const PostRMRTV = ({ isOpen, onClose, userCode }) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post RM Return to Vendor"
+          title="Finalize RM Return to Vendor"
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}

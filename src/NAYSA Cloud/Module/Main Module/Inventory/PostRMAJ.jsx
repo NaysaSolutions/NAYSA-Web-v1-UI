@@ -125,7 +125,7 @@ const PostRMAJ = ({ isOpen, onClose, userCode }) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post RM Inventory Adjustment"
+          title="Finalize RM Inventory Adjustment"
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}

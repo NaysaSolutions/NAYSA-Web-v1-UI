@@ -105,7 +105,7 @@ return (
       <GlobalGLPostingModalv1
       data={data}
       colConfigData={colConfigData}
-      title="Post FG Sales Return"
+      title="Finalize FG Sales Return"
       userPassword={userPassword}
       btnCaption="Okay"
       onClose={onClose}

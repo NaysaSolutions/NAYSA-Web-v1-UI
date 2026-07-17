@@ -534,7 +534,7 @@ const normalizeColumnConfig = (columns) =>
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post FG Issuance Slip"
+          title="Finalize FG Issuance Slip"
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}

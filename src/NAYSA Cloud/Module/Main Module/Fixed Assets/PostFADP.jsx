@@ -122,7 +122,7 @@ const PostFADP = ({ isOpen, onClose, userCode = "" }) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post FA Depreciation"
+          title="Finalize FA Depreciation"
           btnCaption="Okay"
           onClose={onClose}
           onPost={handlePost}

@@ -46,6 +46,7 @@ import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 
+
 // Configuration
 import {
   postRequest,
@@ -112,7 +113,8 @@ const MSRR = () => {
 
   const { resetFlag } = useReset();
   const { user, companyInfo } = useAuth();
-const [isViewDocument, setIsViewDocument] = useState(false);
+  // const { companyInfo, currentUserRow, getAllDropDown, refsLoaded, getAllTopHSDocRow } = useAuth();
+  const [isViewDocument, setIsViewDocument] = useState(false);
   const [msInvGLModeSetting, setMsInvGLModeSetting] = useState("");
 
   useEffect(() => {
@@ -239,8 +241,8 @@ const isViewDocumentUrl = isViewDocument;
       rr_date: new Date().toISOString().split("T")[0], // PR Date
     },
 
-    branchCode: "HO",
-    branchName: "Head Office",
+    branchCode: user?.branchCode||"",
+    branchName: user?.branchName||"",
 
     // Responsibility Center / Requesting Dept
     // Responsibility Center / Requesting Dept
@@ -6308,8 +6310,10 @@ const handleClosePayeeLookup = async (row) => {
       {state.warehouseLookupOpen && (
         <WarehouseLookupModal
           isOpen={state.warehouseLookupOpen}
-          onClose={handleCloseWarehouseLookup}
-          filter="ActiveAll"
+          onClose={handleCloseWarehouseLookup}
+          filter="ActiveAll"
+          branchCode={state.branchCode || ""}
+          invType="MS"
         />
       )}
 

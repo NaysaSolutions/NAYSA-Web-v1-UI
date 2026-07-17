@@ -9778,6 +9778,12 @@ return (
               onBlur={handlesiNoBlur}
               onLookup={() => updateState({ showAllTranDocNo: true })}
               onKeyDown={(e) => {
+                if (e.key === "F1") {
+                  e.preventDefault();
+                  updateState({ showAllTranDocNo: true });
+                  return;
+                }
+
                 if (e.key === "Enter") {
                   e.preventDefault();
                   handlesoNoBlur();

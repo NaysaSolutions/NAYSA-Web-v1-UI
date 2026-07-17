@@ -8,7 +8,13 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 
-const WarehouseLookupModal = ({ isOpen, onClose, filter = "ActiveAll" }) => {
+const WarehouseLookupModal = ({
+  isOpen,
+  onClose,
+  filter = "ActiveAll",
+  branchCode = "",
+  invType = "",
+}) => {
   const [warehouse, setWarehouse] = useState([]);
   const [filtered, setFiltered] = useState([]);
   const [filters, setFilters] = useState({ whCode: "", whName: "" });
@@ -29,7 +35,7 @@ const WarehouseLookupModal = ({ isOpen, onClose, filter = "ActiveAll" }) => {
       setLoading(true);
       try {
         const { data: result } = await apiClient.get("warehouse/lookupWarehouse", {
-          params: { filter },
+          params: { filter, branchCode, invType },
         });
 
         const rows =
@@ -53,7 +59,7 @@ const WarehouseLookupModal = ({ isOpen, onClose, filter = "ActiveAll" }) => {
     return () => {
       alive = false;
     };
-  }, [isOpen, filter]);
+  }, [isOpen, filter, branchCode, invType]);
 
   useEffect(() => {
     const newFiltered = warehouse.filter((item) => {

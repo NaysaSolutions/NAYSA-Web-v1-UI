@@ -3309,6 +3309,8 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
           isOpen={state.warehouseLookupOpen}
           onClose={handleCloseWarehouseLookup}
           filter="ActiveAll"
+          branchCode={branchCode || ""}
+        invType="MS"
         />
       )}
 

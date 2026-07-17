@@ -106,7 +106,7 @@ return (
       <GlobalGLPostingModalv1
       data={data}
       colConfigData={colConfigData}
-      title="Post MS Return to Vendor"
+      title="Finalize MS Return to Vendor"
       userPassword={userPassword}
       btnCaption="Okay"
       onClose={onClose}

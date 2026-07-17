@@ -101,7 +101,7 @@ const PostSI = ({ isOpen, onClose, userCode }) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post Sales Invoice"
+          title="Finalize Sales Invoice"
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}

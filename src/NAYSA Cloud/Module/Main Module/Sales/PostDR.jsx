@@ -163,7 +163,7 @@ const PostDR = ({ isOpen, onClose, userCode }) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post Delivery Receipt"
+          title="Finalize Delivery Receipt"
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}

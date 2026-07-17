@@ -100,7 +100,7 @@ const PostFGST = ({ isOpen, onClose, userCode }) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post FG Stock Transfer"
+      title="Finalize FG Stock Transfer"
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}

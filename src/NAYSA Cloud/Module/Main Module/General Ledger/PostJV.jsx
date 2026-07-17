@@ -100,7 +100,7 @@ const PostJV = ({ isOpen, onClose, userCode, branchCode }) => {
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Post Journal Voucher"
+          title="Finalize Journal Voucher"
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}

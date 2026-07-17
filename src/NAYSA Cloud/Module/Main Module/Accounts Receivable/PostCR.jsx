@@ -107,7 +107,7 @@ return (
       <GlobalGLPostingModalv1
       data={data} 
       colConfigData={colConfigData} 
-      title="Post Collection Receipt" 
+      title="Finalize Collection Receipt" 
       userPassword ={userPassword}
       btnCaption="Ok"
       onClose={onClose}

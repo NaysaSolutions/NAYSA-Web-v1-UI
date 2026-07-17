@@ -73,7 +73,7 @@ const CutoffLookupModal = ({
       const { data: result } = await apiClient.get("/lookupCutOff", {
         params: {
             // CutoffController expects a string directly which is formatted in the sproc
-            PARAMS: customParam || "All",
+            PARAMS: customParam || "Open",
         },
       });
 

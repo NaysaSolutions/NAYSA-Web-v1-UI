@@ -64,6 +64,7 @@ const GlobalGLPostingModalv1 = ({
   const [mobileViewMode, setMobileViewMode] = useState("card");
   const [isMinimized, setIsMinimized] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
+  const hasPasswordValue = String(userPassword ?? "").length > 0;
 
   const firstFocusableRef = useRef(null);
   const STICKY_COUNT = 3;
@@ -116,6 +117,22 @@ useEffect(() => {
   useEffect(() => {
     if (isMobile) { setShowFilters(false); setFilters({}); }
   }, [isMobile]);
+
+  useEffect(() => {
+    if (hasPasswordValue) {
+      setShowFilters(false);
+      setFilters({});
+    } else if (!isMobile) {
+      setShowFilters(true);
+    }
+  }, [hasPasswordValue, isMobile]);
+
+  useEffect(() => {
+    if (selected.length === 0) {
+      setUserPassword("");
+      setShowPassword(false);
+    }
+  }, [selected.length]);
 
   useEffect(() => {
     setSelected([]);
@@ -187,7 +204,10 @@ useEffect(() => {
     setFiltered(current);
   }, [records, debouncedFilters, sortConfig, columnConfig, debouncedGlobal, visibleCols]);
 
-  const displayData = useMemo(() => filtered, [filtered]);
+  const displayData = useMemo(
+    () => (hasPasswordValue ? selected : filtered),
+    [filtered, hasPasswordValue, selected],
+  );
   const totalItems = filtered.length;
   const startItem = totalItems > 0 ? 1 : 0;
   const endItem = totalItems;
@@ -243,7 +263,10 @@ useEffect(() => {
 
   const toggleSelect = (row) => {
     const id = getRowId(row);
-    setSelected((prev) => prev.some((s) => getRowId(s) === id) ? prev.filter((s) => getRowId(s) !== id) : [...prev, row]);
+    const isSelected = selectedIds.has(id);
+    setSelected((prev) => isSelected
+      ? prev.filter((s) => getRowId(s) !== id)
+      : [...prev, row]);
   };
 
   const toggleSelectAll = () => {
@@ -385,7 +408,7 @@ useEffect(() => {
             </div>
             {!isMobile && (
               <>
-                <button onClick={() => setShowFilters((s) => !s)} className="text-xs px-3 py-2 rounded-md border hover:bg-gray-50">{showFilters ? "Hide filters" : "Show filters"}</button>
+                {!hasPasswordValue && <button onClick={() => setShowFilters((s) => !s)} className="text-xs px-3 py-2 rounded-md border hover:bg-gray-50">{showFilters ? "Hide filters" : "Show filters"}</button>}
                 <button onClick={clearAllFilters} disabled={activeFilterChips.length === 0} className="text-xs px-3 py-2 rounded-md border hover:bg-gray-50 disabled:opacity-40 inline-flex items-center gap-2"><FontAwesomeIcon icon={faFilterCircleXmark} /> Clear filters</button>
               </>
             )}
@@ -435,7 +458,7 @@ useEffect(() => {
                       );
                     })}
                   </tr>
-                  {!isMobile && showFilters && (
+                  {!isMobile && showFilters && !hasPasswordValue && (
                     <tr className="bg-slate-200 text-[10px]">
                       <td className="sticky left-0 bg-slate-200 z-[70] border-b border-r"></td>
                       <td className="sticky bg-slate-200 z-[70] border-b" style={{ left: stickyLefts[1], width: SELECT_COL_W, minWidth: SELECT_COL_W, maxWidth: SELECT_COL_W }}></td>
@@ -491,9 +514,25 @@ useEffect(() => {
               <div className="flex items-center gap-2">
                 <span className="font-medium">Password</span>
                 <div className="relative min-w-[200px]">
-                  <input type="text" name="username" autoComplete="username" className="hidden" tabIndex={-1} aria-hidden="true" />
-                  <input  ref={firstFocusableRef} type={showPassword ? "text" : "password"} value={userPassword} onChange={(e) => setUserPassword(e.target.value)}  onPaste={(e) => e.preventDefault()} onCopy={(e) => e.preventDefault()} onCut={(e) => e.preventDefault()} onContextMenu={(e) => e.preventDefault()} autoComplete="new-password" spellCheck={false} className="border rounded px-2 py-1.5 text-xs w-full pr-8" />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-1.5 text-gray-400"><FontAwesomeIcon icon={showPassword ? faEyeSlash : faEye} /></button>
+                  <input
+                    ref={firstFocusableRef}
+                    type={showPassword ? "text" : "password"}
+                    name="gl_posting_authorization"
+                    value={userPassword}
+                    onChange={(e) => setUserPassword(e.target.value)}
+                    onPaste={(e) => e.preventDefault()}
+                    onCopy={(e) => e.preventDefault()}
+                    onCut={(e) => e.preventDefault()}
+                    onContextMenu={(e) => e.preventDefault()}
+                    autoComplete="off"
+                    data-form-type="other"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    disabled={selected.length === 0}
+                    spellCheck={false}
+                    className="border rounded px-2 py-1.5 text-xs w-full pr-8 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                  <button type="button" disabled={selected.length === 0} onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-1.5 text-gray-400 disabled:cursor-not-allowed"><FontAwesomeIcon icon={showPassword ? faEyeSlash : faEye} /></button>
                 </div>
                 <button disabled={selected.length === 0} onClick={handleGetSelected} className="px-4 py-1.5 bg-blue-600 text-white rounded-md disabled:opacity-50 hover:bg-blue-700 transition">{btnCaption} {selected.length ? `(${selected.length})` : ""}</button>
                 <button onClick={handleClose} className="px-4 py-1.5 bg-gray-100 text-gray-800 border rounded-md hover:bg-gray-200">Cancel</button>

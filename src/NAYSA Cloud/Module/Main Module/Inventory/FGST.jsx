@@ -295,7 +295,7 @@ const PostFGST = ({ isOpen, onClose, userCode, docType = "FGST", documentTitle =
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title={`Post ${documentTitle}`}
+        title={`Finalize ${documentTitle}`}
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}
@@ -4261,6 +4261,7 @@ const FGST = () => {
                 ? detailRows[selectedRowIndex]?.itemCode
                 : null
             }
+          invType="FG"
           />
         )}
 
@@ -4271,6 +4272,7 @@ const FGST = () => {
             filter={getFromWarehouseLookupProps().filter}
             source={accountModalSource}
             branchCode={getFromWarehouseLookupProps().branchCode}
+          invType="FG"
           />
         )}
 
@@ -4281,6 +4283,7 @@ const FGST = () => {
             filter={getToWarehouseLookupProps().filter}
             source={accountModalSource}
             branchCode={getToWarehouseLookupProps().branchCode}
+          invType="FG"
           />
         )}
 

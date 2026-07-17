@@ -3948,6 +3948,18 @@ const DR = () => {
     detailRowsGLRef.current = detailRowsGL || [];
   }, [detailRows, detailRowsGL]);
 
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "F1") {
+        e.preventDefault();
+        updateState({ showAllTranDocNo: true });
+      }
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   //Status Global Setup
   const displayStatus = status || 'OPEN';
   const statusMap = {
@@ -3966,6 +3978,11 @@ const DR = () => {
   const isHeaderDrStatusEditable = !!String(documentID || "").trim() && !isFormDisabled;
   const canUsePickingControls = !isViewDocumentUrl && !isPosted && !isCancelled;
   const filteredHeaderDrStatusOptions = drStatusOptions || [];
+  const selectedDrTranTypeOption = (drTranTypeOptions || []).find(
+    (option) => option.DROPDOWN_CODE === (drTranType || "DR01")
+  );
+  const selectedDrTranTypeText = `${drTranType || "DR01"} ${selectedDrTranTypeOption?.DROPDOWN_NAME || ""}`.toUpperCase();
+  const isRegularDrType = (drTranType || "DR01") === "DR01" || selectedDrTranTypeText.includes("REGULAR");
   const getOptionalFieldLength = (fieldName) =>
     useGetFieldLength(tblFieldArray, fieldName) || undefined;
   const canChangeCustomer =
@@ -5365,6 +5382,13 @@ const handleConfirmItemPicking = async (payload) => {
 
     const basePayload = buildPickingBasePayload(currentRow, itemPickingRowIndex);
     const pickedAllocations = Array.isArray(payload?.allocations) ? payload.allocations : [];
+    const requestedQty = parseFormattedNumber(currentRow?.drQuantity || 0) || 0;
+    const payloadTotalPicked = parseFormattedNumber(payload?.totalPicked || 0) || 0;
+
+    if (payloadTotalPicked > requestedQty) {
+      useSwalErrorAlert("Item Picking", "Picked quantity cannot be more than requested quantity.");
+      return;
+    }
 
     const response = await postRequest("getFGUpdateStockAllocation", {
       mode: "SaveAlloc",
@@ -5380,6 +5404,11 @@ const handleConfirmItemPicking = async (payload) => {
     const totalPicked = getPickingResultNumber(result,currentRow,itemPickingRowIndex, ["totalAllocated"],payload?.totalPicked ?? 0);
     const itemAmount = getPickingResultNumber( result,currentRow,itemPickingRowIndex, ["itemAmount"],totalPicked <= 0 ? 0 : getPickingAllocationAmount(pickedAllocations) || currentRow?.itemAmount || 0);
     const drQuantityValue = parseFormattedNumber(currentRow?.drQuantity || 0) || 0;
+
+    if (totalPicked > drQuantityValue) {
+      useSwalErrorAlert("Item Picking", "Picked quantity cannot be more than requested quantity.");
+      return;
+    }
 
     updatedRows[itemPickingRowIndex] = {
       ...currentRow,
@@ -5627,6 +5656,25 @@ const handleCancel = async () => {
   }
 };
 
+const handleHeaderDrStatusChange = async (value) => {
+  if (value === "X") {
+    await handleCancel();
+    return;
+  }
+
+  if (String(drStatus || "").toUpperCase() === "O" && value === "C") {
+    const result = await useSwalProceedConfirm(
+      "Confirm Close DR",
+      "Do you want to change DR Status from Open to Closed?",
+      "Yes"
+    );
+
+    if (!result?.isConfirmed) return;
+  }
+
+  updateState({ drStatus: value });
+};
+
 
 
 
@@ -5666,6 +5714,7 @@ const handleCopy = async () => {
       documentStatus: "O",
       originalDocStatus: "O",
       status: "OPEN",
+      drStatus: "O",
       documentDate: nextDocumentDate, 
       noReprints: "0",
       detailRows: copiedDetailRows,
@@ -6024,6 +6073,16 @@ const handleSODetailRowChange = (index, field, value) => {
     }
   }
 
+  if (field === "drQuantity" && isRegularDrType) {
+    const drQty = parseFormattedNumber(value || 0) || 0;
+    const soBalance = parseFormattedNumber(detailRowsRef.current?.[index]?.soBalance || 0) || 0;
+
+    if (drQty > soBalance) {
+      useSwalErrorAlert("Invalid DR Quantity", "DR Quantity cannot be more than SO Balance.");
+      return;
+    }
+  }
+
   const zeroValueByField = (targetField) => {
     if (targetField === "soQuantity" || targetField === "drQuantity") {
       return formatNumber(0, quantityDecimals);
@@ -6246,7 +6305,7 @@ const renderDRDetailCell = (columnKey, row, index) => {
     itemSpecs: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey)}</td>, 
     uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { className: "text-center" })}<input type="hidden" value={row.pmType || ""} readOnly /><input type="hidden" value={row.groupId || ""} readOnly /><input type="hidden" value={row.pmId || ""} readOnly /></td>, 
     soBalance: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), readOnly: true })}</td>,
-    deliveryDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><DateFormatInput key={`deliveryDate-${index}-${row.deliveryDate || "empty"}`} id={`deliveryDate-${index}`} name="deliveryDate" value={row.deliveryDate || ""} disabled={isFormDisabled || isRowFromSO} updateState={(updates) => handleSODetailRowChange(index, "deliveryDate", updates.deliveryDate || "")} className="w-full h-7 text-xs bg-transparent focus:outline-none focus:ring-0" /></td>,
+    deliveryDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><DateFormatInput key={`deliveryDate-${index}-${row.deliveryDate || "empty"}`} id={`deliveryDate-${index}`} name="deliveryDate" value={row.deliveryDate || ""} disabled={isFormDisabled} updateState={(updates) => handleSODetailRowChange(index, "deliveryDate", updates.deliveryDate || "")} className="w-full h-7 text-xs bg-transparent focus:outline-none focus:ring-0" /></td>,
     freeItem: () => <td key={columnKey} className="global-tran-td-ui" style={style}><button type="button" className={`w-full h-7 rounded-full border text-[11px] font-semibold transition-colors ${row.freeItem === "Y" ? "border-blue-500 bg-blue-500/15 text-blue-700" : "border-slate-300 bg-white text-slate-600"} ${isFormDisabled || isRowFromSO ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`} disabled={isFormDisabled || isRowFromSO} onClick={() => handleSODetailRowChange(index, "freeItem", row.freeItem === "Y" ? "" : "Y")}>{row.freeItem === "Y" ? "Yes" : "No"}</button></td>, 
     drQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`) })}</td>, 
     quantityPicked: () => (
@@ -6490,6 +6549,12 @@ return (
               onBlur={handlesoNoBlur}
               onLookup={() => updateState({ showAllTranDocNo: true })} // Changed soNo to drNo
               onKeyDown={(e) => { 
+                if (e.key === "F1") {
+                  e.preventDefault();
+                  updateState({ showAllTranDocNo: true });
+                  return;
+                }
+
                 if (e.key === "Enter") {
                   e.preventDefault();
                   handlesoNoBlur();
@@ -6673,7 +6738,7 @@ return (
               type="select"
               value={drStatus || ""}
               disabled={!isHeaderDrStatusEditable}
-              onChange={(val) => updateState({ drStatus: val })}
+              onChange={handleHeaderDrStatusChange}
               options={filteredHeaderDrStatusOptions.map((t) => ({
                 label: t.DROPDOWN_NAME,
                 value: t.DROPDOWN_CODE,
@@ -7070,6 +7135,8 @@ return (
         isOpen={showWhseModal}
         onClose={handleCloseWarehouseLookup}
         filter={"ByBC" + branchCode}
+        branchCode={branchCode || ""}
+      invType="FG"
       />
     )}
 
