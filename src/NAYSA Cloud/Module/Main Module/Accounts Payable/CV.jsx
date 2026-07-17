@@ -2258,18 +2258,21 @@ const handleCloseBankModal = async (selectedBank) => {
 }
 
   
-const handleCheckNoChange = async (e) => {
+const handleCheckNoChange = (e) => {
     const newCheckNo = e.target.value;
-    const docId = documentID; // Use a correctly scoped variable
 
-    // Immediately update state to reflect user input
+    updateState({ checkNo: newCheckNo });
+};
+
+const handleCheckNoBlur = async (e) => {
+    const newCheckNo = String(e.target.value || "").trim();
+
     updateState({ checkNo: newCheckNo });
 
-    // Wait a brief moment to avoid API calls on every keystroke
-    await new Promise(resolve => setTimeout(resolve, 300));
+    if (!newCheckNo) return;
 
     try {
-        const isDuplicate = await checkDuplicateCheckNo(newCheckNo, docId);
+        const isDuplicate = await checkDuplicateCheckNo(newCheckNo);
 
         if (isDuplicate) {
             Swal.fire({
@@ -2284,7 +2287,7 @@ const handleCheckNoChange = async (e) => {
         }
 
     } catch (error) {
-        console.error('Error in handleCheckNoChange:', error);
+        console.error('Error in handleCheckNoBlur:', error);
         Swal.fire({
             icon: 'error',
             title: 'Error',
@@ -2296,40 +2299,114 @@ const handleCheckNoChange = async (e) => {
 };
 
 
-const checkDuplicateCheckNo = async (checkNo, docId) => {
-    const selectedBankCode = bankCode; 
+const checkDuplicateCheckNo = async (checkNo) => {
+    const selectedBankCode = bankCode;
+    const normalizedCheckNo = String(checkNo || "").trim();
+
+    if (!normalizedCheckNo || !selectedBankCode) return false;
     
     try {
+        const jsonData = {
+            bankCode: selectedBankCode,
+            branchCode: branchCode || "",
+            checkNo: normalizedCheckNo,
+            cvId: documentID || null,
+            docId: documentID || null,
+            documentID: documentID || null,
+            cvNo: documentNo || "",
+            documentNo: documentNo || "",
+        };
+
         const params = {
-            json_data: {
-                bankCode: selectedBankCode,
-                checkNo: checkNo,
-                docId: docId || null 
-            }
+            ...jsonData,
+            PARAMS: JSON.stringify({ json_data: jsonData }),
         };
 
         const response = await fetchData('/validateDuplicateCheck', params);
 
-        // 1. Check if the API call was successful and has data
         if (response.success && response.data && response.data.length > 0) {
-            
-            // 2. Check for '1' (string) or 1 (number)
-            const isDuplicate = response.data[0].result == 1; 
+            const resultRow = response.data[0] || {};
+            const result = resultRow?.result;
+            let parsedResult = result;
 
-            if (isDuplicate) {
-                // 3. Trigger the alert if a duplicate is found
-                Swal.fire({
-                    icon: 'warning', // Use warning for duplicates
-                    title: 'Duplicate Check Number',
-                    text: `Check No. ${checkNo} has already been used.`,
-                    confirmButtonColor: '#3085d6',
-                    confirmButtonText: 'OK'
-                });
-                return true; // Yes, it is a duplicate
+            if (typeof result === "string") {
+                const trimmed = result.trim();
+                if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+                    try {
+                        parsedResult = JSON.parse(trimmed);
+                    } catch {
+                        parsedResult = trimmed;
+                    }
+                }
             }
+
+            if (Array.isArray(parsedResult)) parsedResult = parsedResult[0];
+
+            if (parsedResult && typeof parsedResult === "object") {
+                parsedResult = { ...resultRow, ...parsedResult };
+            }
+
+            const resultCvId =
+                parsedResult && typeof parsedResult === "object"
+                    ? parsedResult.cvId ??
+                      parsedResult.cv_id ??
+                      parsedResult.docId ??
+                      parsedResult.doc_id ??
+                      parsedResult.documentID ??
+                      parsedResult.documentId
+                    : null;
+
+            const resultCvNo =
+                parsedResult && typeof parsedResult === "object"
+                    ? parsedResult.cvNo ??
+                      parsedResult.cv_no ??
+                      parsedResult.documentNo ??
+                      parsedResult.document_no
+                    : "";
+
+            const resultCheckNo =
+                parsedResult && typeof parsedResult === "object"
+                    ? parsedResult.checkNo ??
+                      parsedResult.check_no ??
+                      parsedResult.chkNo ??
+                      parsedResult.chk_no
+                    : "";
+
+            if (
+                (documentID && String(resultCvId || "") === String(documentID)) ||
+                (documentNo && String(resultCvNo || "").trim() === String(documentNo).trim())
+            ) {
+                return false;
+            }
+
+            const hasConflictingRecord =
+                Boolean(resultCvId) ||
+                Boolean(String(resultCvNo || "").trim()) ||
+                Boolean(String(resultCheckNo || "").trim());
+
+            if (!hasConflictingRecord) {
+                return false;
+            }
+
+            const duplicateValue =
+                typeof parsedResult === "object" && parsedResult !== null
+                    ? parsedResult.isDuplicate ??
+                      parsedResult.duplicate ??
+                      parsedResult.result ??
+                      parsedResult.exists ??
+                      parsedResult.count
+                    : parsedResult;
+
+            return (
+                duplicateValue === true ||
+                duplicateValue === 1 ||
+                duplicateValue === "1" ||
+                String(duplicateValue || "").toUpperCase() === "Y" ||
+                String(duplicateValue || "").toUpperCase() === "TRUE"
+            );
         }
         
-        return false; // No duplicate found
+        return false;
         
     } catch (error) {
         console.error('Error fetching data from API:', error);
@@ -2340,7 +2417,7 @@ const checkDuplicateCheckNo = async (checkNo, docId) => {
             confirmButtonColor: '#d33',
             confirmButtonText: 'OK'
         });
-        return true; // Block submission on error to be safe
+        return true;
     }
 };
 
@@ -2760,6 +2837,7 @@ const renderCvGlCell = (columnKey, row, index) => {
                       value={checkNo || ""}
                       disabled={isFormDisabled}
                       onChange={(val) => handleCheckNoChange({ target: { value: val } })}
+                      onBlur={handleCheckNoBlur}
                       maxLength={useGetFieldLength(tblFieldArray, "check_no")}
                     />
                 </div>

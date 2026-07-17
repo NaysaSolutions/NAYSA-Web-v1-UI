@@ -631,6 +631,12 @@ useEffect(() => {
 
     const acctCode = selectedAccount?.acctCode ?? "";
     const acctName = selectedAccount?.acctName ?? "";
+    const acctSlReq = pickFirstValue(
+      selectedAccount?.slReq,
+      selectedAccount?.REQ_SL,
+      selectedAccount?.reqSL,
+      selectedAccount?.req_sl,
+    );
 
     if (accountModalSource === "drAcct") {
       console.log("✅ DR ACCT SELECTED:", { acctCode, acctName });
@@ -640,6 +646,10 @@ useEffect(() => {
 
       row.drAcctCode = acctCode;
       row.drAcctName = acctName;
+      row.drAcctSlReq = acctSlReq;
+      if (accountRequiresSL(row) && !row.slCode) {
+        row.slCode = getDefaultSLCode();
+      }
 
       rows[selectedRowIndex] = row;
 
@@ -648,11 +658,12 @@ useEffect(() => {
         selectedRowIndex,
         "drAcctCode",
         acctCode,
-        { drAcctName: acctName },
+        { drAcctName: acctName, drAcctSlReq: acctSlReq },
       );
+      const finalRows = applyDefaultSLCodeToSLRequiredRows(updatedRows);
 
       updateState({
-        detailRows: updatedRows,
+        detailRows: finalRows,
         detailRowsGL: [],
         showAccountModal: false,
         selectedRowIndex: null,
@@ -1043,6 +1054,37 @@ useEffect(() => {
     return "";
   };
 
+  const isYesFlag = (value) =>
+    ["Y", "YES", "TRUE", "1"].includes(String(value ?? "").trim().toUpperCase());
+
+  const accountRequiresSL = (account = {}) =>
+    isYesFlag(
+      pickFirstValue(
+        account.drAcctSlReq,
+        account.slReq,
+        account.REQ_SL,
+        account.reqSL,
+        account.req_sl,
+        account.slRequired,
+        account.SL_REQUIRED,
+        account.reqSl,
+      ),
+    );
+
+  const getDefaultSLCode = (sourceState = state) =>
+    pickFirstValue(
+      sourceState.vendCode,
+      sourceState.vendCOde,
+      sourceState.empCode,
+      sourceState.custCode,
+    );
+
+  const applyDefaultSLCodeToSLRequiredRows = (rows, defaultSLCode = getDefaultSLCode()) =>
+    (Array.isArray(rows) ? rows : []).map((row) => {
+      if (!defaultSLCode || row?.slCode || !accountRequiresSL(row)) return row;
+      return { ...row, slCode: defaultSLCode };
+    });
+
   const parseLookupResultRows = (response) => {
     const rawResult = response?.data?.[0]?.result;
 
@@ -1112,6 +1154,15 @@ useEffect(() => {
       item?.acct_name,
       item?.ACCT_NAME,
     ),
+    slReq: pickFirstValue(
+      item?.drAcctSlReq,
+      item?.slReq,
+      item?.REQ_SL,
+      item?.reqSL,
+      item?.req_sl,
+      item?.SL_REQUIRED,
+      item?.slRequired,
+    ),
   });
 
   const fetchDefaultDrAccountByCategory = async (categCode) => {
@@ -1179,6 +1230,8 @@ useEffect(() => {
         const rawQtyHand = parseFormattedNumber(item?.qtyHand ?? item?.qtyOnHand ?? 0) || 0;
         const rawUnitCost = parseFormattedNumber(item?.unitCost ?? 0) || 0;
         const defaultDrAccount = await resolveDefaultDrAccount(item);
+        const defaultSLCode = getDefaultSLCode();
+        const defaultDrAccountRequiresSL = accountRequiresSL(defaultDrAccount);
 
         return {
           itemCode: item?.itemCode ?? "",
@@ -1205,8 +1258,9 @@ useEffect(() => {
           // Defaulted from ms_categ.expacct_code, but still editable through the DR Acct lookup cell.
           drAcctCode: defaultDrAccount.code || "",
           drAcctName: defaultDrAccount.name || "",
+          drAcctSlReq: defaultDrAccount.slReq || "",
           rcCode: state.rcCode || "",
-          slCode: "",
+          slCode: defaultDrAccountRequiresSL ? defaultSLCode : "",
           mrsNo: "",
           mrsQty: formatNumber(0, 6),
           remarks: "",
@@ -1473,6 +1527,17 @@ useEffect(() => {
 
   const handleAddRowGL = (index = null) => {
     if (isFormDisabled) return;
+    if ((detailRows || []).length === 0) {
+      Swal.fire({
+        icon: "warning",
+        title: "General Ledger",
+        text: "Please add item details before adding General Ledger entries.",
+        timer: 2500,
+        showConfirmButton: false,
+      });
+      return;
+    }
+
     const updatedRows = [...(detailRowsGL || [])];
     if (index !== null && index !== undefined) {
       updatedRows.splice(index + 1, 0, createEmptyGlRow());
@@ -1704,6 +1769,7 @@ row.itemAmount = computedAmount;
         attention,
         vendCode,
         vendName,
+        custCode,
 
         remarks,
         noReprints,
@@ -1774,7 +1840,11 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
             rcCode: row.rcCode || rcCode || "",
             slTypeCode: row.slTypeCode || row.sltypeCode || "",
             sltypeCode: row.sltypeCode || row.slTypeCode || "",
-            slCode: row.slCode || vendCode || "",
+            slCode:
+              row.slCode ||
+              (accountRequiresSL(row)
+                ? getDefaultSLCode({ ...state, vendCode, custCode })
+                : ""),
 
             uniqueKey: row.uniqueKey || "",
             operation: row.operation || "S",
@@ -2078,6 +2148,22 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
         rcLookupModalOpen: false,
         rcLookupContext: "",
       });
+    } else if (rcLookupContext === "payeeCode") {
+      const nextState = {
+        ...state,
+        vendCode: selectedCode,
+        vendCOde: selectedCode,
+        vendName: selectedName,
+      };
+      updateState({
+        vendCode: selectedCode,
+        vendCOde: selectedCode,
+        vendName: selectedName,
+        detailRows: applyDefaultSLCodeToSLRequiredRows(state.detailRows, getDefaultSLCode(nextState)),
+        detailRowsGL: [],
+        rcLookupModalOpen: false,
+        rcLookupContext: "",
+      });
     } else {
       updateState({
         rcLookupModalOpen: false,
@@ -2088,14 +2174,24 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
 
   const handleCloseRcModalGL = (selectedRC) => {
     if (selectedRC && selectedRowIndex !== null) {
-      handleDetailChangeGL(selectedRowIndex, "rcCode", selectedRC);
+      if (accountModalSource === "detailRcCode") {
+        const selectedCode = selectedRC.rcCode || selectedRC.rc_code || "";
+        handleDetailChange(selectedRowIndex, "rcCode", selectedCode);
+      } else {
+        handleDetailChangeGL(selectedRowIndex, "rcCode", selectedRC);
+      }
     }
     updateState({ showRcModal: false, selectedRowIndex: null, accountModalSource: null });
   };
 
   const handleCloseSlModalGL = (selectedSL) => {
     if (selectedSL && selectedRowIndex !== null) {
-      handleDetailChangeGL(selectedRowIndex, "slCode", selectedSL);
+      if (accountModalSource === "detailSlCode") {
+        const selectedCode = selectedSL.slCode || selectedSL.sl_code || "";
+        handleDetailChange(selectedRowIndex, "slCode", selectedCode);
+      } else {
+        handleDetailChangeGL(selectedRowIndex, "slCode", selectedSL);
+      }
     }
     updateState({ showSlModal: false, selectedRowIndex: null, accountModalSource: null });
   };
@@ -2107,9 +2203,16 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
 
   const handleCloseCustModal = (selectedCustomer) => {
     if (selectedCustomer) {
-      updateState({
+      const nextState = {
+        ...state,
         custCode: selectedCustomer.custCode || selectedCustomer.customerCode || "",
         custName: selectedCustomer.custName || selectedCustomer.customerName || "",
+      };
+      updateState({
+        custCode: nextState.custCode,
+        custName: nextState.custName,
+        detailRows: applyDefaultSLCodeToSLRequiredRows(state.detailRows, getDefaultSLCode(nextState)),
+        detailRowsGL: [],
       });
     }
     updateState({ custModalOpen: false });
@@ -2458,8 +2561,8 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
       whouseCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("whouseCode", { readOnly: true, value: row.whouseName ?? row.whName ?? row.whouseCode ?? row.WHname ?? row.WHcode ?? "" })}</td>,
       locCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("locCode", { readOnly: true, value: row.locName ?? row.locCode ?? "" })}</td>,
       drAcctCode: () => lookupCell("drAcctCode", row.drAcctCode || "", () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "drAcct" })),
-      rcCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("rcCode", { readOnly: rowLocked, value: row.rcCode || rcCode || "" })}</td>,
-      slCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("slCode", { readOnly: rowLocked })}</td>,
+      rcCode: () => lookupCell("rcCode", row.rcCode || rcCode || "", () => updateState({ selectedRowIndex: index, showRcModal: true, accountModalSource: "detailRcCode" })),
+      slCode: () => lookupCell("slCode", row.slCode || "", () => updateState({ selectedRowIndex: index, showSlModal: true, accountModalSource: "detailSlCode" })),
       qtyOnHand: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("qtyOnHand", { readOnly: true, value: row.qtyOnHand || "0.000000" })}</td>,
       mrsNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("mrsNo", { readOnly: rowLocked })}</td>,
       mrsQty: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("mrsQty", { value: row.mrsQty || "0.000000" })}</td>,
@@ -2820,8 +2923,8 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
                   label="Employee Name"
                   type="text"
                   value={vendName || ""}
-                  disabled={isFormDisabled}
-                  onChange={(val) => updateState({ vendName: val })}
+                  disabled
+                  readOnly
                 />
 
                 <FieldRenderer
@@ -2840,8 +2943,8 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
                   label="Customer Name"
                   type="text"
                   value={state.custName || ""}
-                  disabled={isFormDisabled}
-                  onChange={(val) => updateState({ custName: val })}
+                  disabled
+                  readOnly
                 />
               </div>
 
@@ -3025,6 +3128,7 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
                             <button
                               type="button"
                               className="global-tran-td-button-add-ui"
+                              disabled={(detailRows || []).length === 0}
                               onClick={() => handleAddRowGL(originalIndex)}
                             >
                               <FontAwesomeIcon icon={faPlus} />
@@ -3051,7 +3155,10 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
             <div className="global-tran-tab-footer-button-div-ui">
               <button
                 onClick={() => handleAddRowGL()}
-                className="global-tran-tab-footer-button-add-ui"
+                disabled={(detailRows || []).length === 0}
+                className={`global-tran-tab-footer-button-add-ui ${
+                  (detailRows || []).length === 0 ? "opacity-50 cursor-not-allowed" : ""
+                }`}
                 style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
               >
                 <FontAwesomeIcon icon={faPlus} className="mr-2" />

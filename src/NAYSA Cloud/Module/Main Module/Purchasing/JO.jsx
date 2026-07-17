@@ -117,6 +117,11 @@ const toDateInputValue = (value) => {
   return "";
 };
 
+const firstTextValue = (...values) => {
+  const value = values.find((item) => item !== undefined && item !== null);
+  return value === undefined ? "" : String(value);
+};
+
 const JO = () => {
    const loadedFromUrlRef = useRef(false);
    const detailRowsRef = useRef([]);
@@ -752,6 +757,8 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
     // Format rows
     const retrievedDetailRows = (data.dt1 || []).map(item => ({
       ...item,
+      scopeOfWork: firstTextValue(item.scopeOfWork, item.scope_of_work, item.serviceName, item.jobName),
+      specification: firstTextValue(item.specification, item.Specification, item.SPECIFICATION, item.itemSpecs, item.item_specs, item.specs),
       quantity: formatNumber(item.quantity,2),
       unitPrice: formatNumber(item.unitPrice,decUPrice),
       grossAmt: formatNumber(item.grossAmt,2),
@@ -1524,8 +1531,8 @@ const handleClosePRLookup = async (selection) => {
       
       return {
         jobCode: d.jobCode || d.JobCode || "",
-        scopeOfWork: d.scopeOfWork  || "",
-        specification: d.specification|| "",
+        scopeOfWork: firstTextValue(d.scopeOfWork, d.scope_of_work, d.serviceName, d.jobName),
+        specification: firstTextValue(d.specification, d.Specification, d.SPECIFICATION, d.itemSpecs, d.item_specs, d.specs),
         quantity: formatNumber(qty, 2),
         unitPrice: formatNumber(0, decUPrice),
         uomCode: d.uomCode  || "",
@@ -1692,31 +1699,20 @@ const renderJoDetailColumn = (columnKey, row, index) => {
 
     return (
       <td key={columnKey} className="global-tran-td-ui relative align-top" style={style}>
-        <div className={`flex ${autoResizeJoDetailRows ? "items-start" : "items-center"}`}>
-          {autoResizeJoDetailRows ? (
-            <textarea
-              id={`${field}-${index}`}
-              className="w-full min-h-[28px] resize-none bg-transparent py-1 pr-8 text-xs leading-4 whitespace-pre-wrap break-words focus:outline-none focus:ring-0"
-              value={value}
-              rows={lineCount}
-              readOnly={isFormDisabled}
-              onChange={(e) => handleDetailChange(index, field, e.target.value, false)}
-            />
-          ) : (
-            <input
-              type="text"
-              id={`${field}-${index}`}
-              className="w-full global-tran-td-inputclass-ui pr-8"
-              value={value}
-              readOnly={isFormDisabled}
-              onChange={(e) => handleDetailChange(index, field, e.target.value, false)}
-              onKeyDown={(e) => {
-                if (e.key !== "Enter" || isFormDisabled) return;
-                e.preventDefault();
-                focusNextDetailCell(field);
-              }}
-            />
-          )}
+        <div className="flex items-start">
+          <textarea
+            id={`${field}-${index}`}
+            className="w-full min-h-[28px] resize-none bg-transparent py-1 pr-8 text-xs leading-4 whitespace-pre-wrap break-words focus:outline-none focus:ring-0"
+            value={value}
+            rows={lineCount}
+            readOnly={isFormDisabled}
+            onChange={(e) => handleDetailChange(index, field, e.target.value, false)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter" || e.shiftKey || isFormDisabled) return;
+              e.preventDefault();
+              focusNextDetailCell(field);
+            }}
+          />
           {!isFormDisabled && (
             <FontAwesomeIcon
               icon={faSearch}

@@ -213,6 +213,7 @@ const isViewDocumentUrl = isViewDocument;
     glCurrGlobal3: "",
     drNo: "",
     siNo: "",
+    siDate: "",
 
     // Document information
     documentName: "",
@@ -360,6 +361,7 @@ const isViewDocumentUrl = isViewDocument;
     status,
     drNo,
     siNo,
+    siDate,
 
     activeTab,
     isLoading,
@@ -510,20 +512,62 @@ rrQty: "",
   isViewDocumentUrl ||
   ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
 
+  const companyDefaultCurrCode = String(
+    companyInfo?.currCode ||
+      companyInfo?.currencyCode ||
+      companyInfo?.CURR_CODE ||
+      glCurrDefault ||
+      "PHP",
+  ).trim();
+  const headerCurrCode = String(currCode || companyDefaultCurrCode || "PHP").trim();
+  const isForeignHeaderCurrency =
+    Boolean(headerCurrCode && companyDefaultCurrCode) &&
+    headerCurrCode.toUpperCase() !== companyDefaultCurrCode.toUpperCase();
+  const hasPONoValue = (row = {}) =>
+    [row?.poNo, row?.PONo, row?.PoNo, row?.PO_NO, row?.po_no].some(
+      (value) => value !== undefined && value !== null && String(value).trim() !== "",
+    );
+  const isDirectReceiving =
+    Array.isArray(detailRows) &&
+    detailRows.length > 0 &&
+    detailRows.every((row) => !hasPONoValue(row));
+
   const msrrDetailColumnDefs = useMemo(
   () => [
     { key: "ln", label: "LN", width: 56 },
     // { key: "rrStatus", label: "RR Status", width: 100 },
     { key: "poNo", label: "PO No.", width: 140 },
     { key: "itemCode", label: "Item Code", width: 120 },
-    { key: "itemName", label: "Item Description", width: 300 },
+    { key: "itemName", label: "Item Name", width: 300 },
     { key: "itemSpecs", label: "Specification", width: 300 },
     { key: "uomCode", label: "UOM", width: 80 },
     { key: "poBalance", label: "PO Balance", width: 130 },
     { key: "rrQty", label: "RR Quantity", width: 130 },
     { key: "freeQty", label: "Free Quantity", width: 130 },
-    { key: "unitCost", label: "Unit Cost", width: 120 },
-    { key: "grossAmount", label: "Amount", width: 140 },
+    {
+      key: "unitCost",
+      label: `Unit Price (${headerCurrCode || "PHP"})`,
+      width: 140,
+    },
+    ...(isForeignHeaderCurrency
+      ? [
+          {
+            key: "unitCostPhp",
+            label: `Unit Price (${companyDefaultCurrCode || "PHP"})`,
+            width: 140,
+          },
+        ]
+      : []),
+    { key: "grossAmount", label: `Amount (${headerCurrCode || "PHP"})`, width: 140 },
+    ...(isForeignHeaderCurrency
+      ? [
+          {
+            key: "grossAmountPhp",
+            label: `Amount (${companyDefaultCurrCode || "PHP"})`,
+            width: 140,
+          },
+        ]
+      : []),
     { key: "vatCode", label: "VAT", width: 110 },
     { key: "vatRate", label: "VAT Rate", width: 120 },
     { key: "vatAmount", label: "VAT Amount", width: 120 },
@@ -534,7 +578,7 @@ rrQty: "",
     { key: "whouseCode", label: "Warehouse", width: 120 },
     { key: "LocCode", label: "Location", width: 120 },
   ],
-  []
+  [companyDefaultCurrCode, headerCurrCode, isForeignHeaderCurrency]
 );
 
   const {
@@ -549,8 +593,19 @@ rrQty: "",
   } = useResizableTableColumns(msrrDetailColumnDefs);
 
   const visibleMSRRDetailColumns = useMemo(
-  () => getOrderedMSRRDetailColumns(msrrDetailColumnDefs),
-  [getOrderedMSRRDetailColumns, msrrDetailColumnDefs]
+  () => {
+    const columns = getOrderedMSRRDetailColumns(msrrDetailColumnDefs);
+    if (!isDirectReceiving) return columns;
+
+    const hiddenDirectReceivingColumns = new Set([
+      "poNo",
+      "poBalance",
+      "prBalance",
+      "freeQty",
+    ]);
+    return columns.filter((column) => !hiddenDirectReceivingColumns.has(column.key));
+  },
+  [getOrderedMSRRDetailColumns, isDirectReceiving, msrrDetailColumnDefs]
 );
 
   const getMSRRDetailFallbackWidth = (key) =>
@@ -1821,6 +1876,8 @@ updateState(nextState);
 updateTotalsDisplay(newMappedRows);
 
 if (shouldAutoGenerateGLOnSave) {
+  const nextStateIsDirectReceiving =
+    newMappedRows.length > 0 && newMappedRows.every((row) => !hasPONoValue(row));
   const dt1PayloadForGL = newMappedRows.map((r, index) => ({
     lnNo: String(index + 1),
     poId: r.poId || r.po_id || r.PO_ID || "",
@@ -1833,7 +1890,7 @@ if (shouldAutoGenerateGLOnSave) {
     uomCode: r.uomCode || "",
     quantity: parseFormattedNumber(r.rrQty || r.quantity || 0),
     rrQuantity: parseFormattedNumber(r.rrQty || r.quantity || 0),
-    poNo: r.poNo || nextState.poNo || "",
+    poNo: nextStateIsDirectReceiving ? "" : r.poNo || nextState.poNo || "",
     poLineno: r.poLineno || r.poLineNo || r.lnNo || r.Ln || r.lineNo || "",
     poQty: parseFormattedNumber(r.poQty || r.poQuantity || r.PO_QUANTITY || 0),
     poBalance: parseFormattedNumber(r.poBalance || r.qtyBalance || 0),
@@ -1863,12 +1920,12 @@ if (shouldAutoGenerateGLOnSave) {
     rrId: documentID || "",
     rrHdId: documentID || "",
     rrDate: header?.rr_date || state.RRDate || new Date().toISOString().split("T")[0],
-    poNo: nextState.poNo || "",
+    poNo: nextStateIsDirectReceiving ? "" : nextState.poNo || "",
     vendCode: nextState.vendCode || "",
     vendName: nextState.vendName || "",
     drNo: state.drNo || state.drno || "",
     siNo: state.siNo || "",
-    siDate: null,
+    siDate: state.siDate || null,
     currCode: nextState.currCode || "PHP",
     currRate: parseFormattedNumber(nextState.currRate || 1),
     whouseCode: nextState.WHCode || nextState.WHcode || "",
@@ -1932,7 +1989,7 @@ if (shouldAutoGenerateGLOnSave) {
 
       drNo: "",
       siNo: "",
-      siDate: null, // ✅ CLEAR SI DATE
+      siDate: "", // CLEAR SI DATE
 
       rcCode: "",
       rcName: "",
@@ -2388,7 +2445,7 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
           groupId: rowGroupId,
           rrStatus: r.rrStatus || r.poStatus || "",
           poStatus: r.poStatus || r.rrStatus || "",
-          poNo: r.poNo || parsed.poNo || "",
+          poNo: r.poNo || r.PoNo || r.PO_NO || r.po_no || "",
           itemCode: r.itemCode || r.itemNo || "",
           itemName: r.itemName || r.itemDesc || "",
           itemSpecs: r.itemSpecs || r.itemSpec || "",
@@ -2455,12 +2512,21 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
         dt1Lineno: g.dt1Lineno || "",
       }));
 
+      const fetchedIsDirectReceiving =
+        mappedDT1.length > 0 &&
+        mappedDT1.every((row) => !hasPONoValue(row));
+      const normalizedMappedDT1 = fetchedIsDirectReceiving
+        ? mappedDT1.map((row) =>
+            recalcMSRRRow({ ...row, freeQty: formatNumber(0, decQty) }),
+          )
+        : mappedDT1;
+
       updateState({
-        detailRows: mappedDT1,
+        detailRows: normalizedMappedDT1,
         detailRowsGL: mappedDT2,
         dt3,
       });
-      updateTotalsDisplay(mappedDT1);
+      updateTotalsDisplay(normalizedMappedDT1);
     } catch (e) {
       console.error("fetchTranData error:", e);
       Swal.fire({ icon: 'error', title: 'Fetch Error', text: e.message });
@@ -2819,16 +2885,21 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
   // HEADER EVENTS
   // ==========================
 
-  const handleCurrRateNoBlur = (e) => {
-    const num = formatNumber(e.target.value, 6);
-    updateState({
-      currRate: isNaN(num) ? "0.000000" : num,
-      withCurr2:
-        (glCurrMode === "M" && glCurrDefault !== currCode) ||
-        glCurrMode === "D",
-      withCurr3: glCurrMode === "T",
-    });
-  };
+  const handleCurrRateNoBlur = (e) => {
+    const num = formatNumber(e.target.value, 6);
+    const nextCurrRate = isNaN(num) ? "0.000000" : num;
+    const updatedRows = recalcMSRRRowsForCurrencyRate(nextCurrRate);
+
+    updateState({
+      currRate: nextCurrRate,
+      detailRows: updatedRows,
+      withCurr2:
+        (glCurrMode === "M" && glCurrDefault !== currCode) ||
+        glCurrMode === "D",
+      withCurr3: glCurrMode === "T",
+    });
+    updateTotalsDisplay(updatedRows);
+  };
 
   const handlePrTranTypeChange = (e) => {
     updateState({ selectedPoTranType: e.target.value });
@@ -3394,31 +3465,40 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
     handleCloseLotPickingModal();
   };
 
-  const recalcMSRRRow = (row) => {
-    const rrQty = parseFormattedNumber(row.rrQty || 0);
-    const freeQty = parseFormattedNumber(row.freeQty || 0);
-    const unitCost = parseFormattedNumber(row.unitCost || 0);
-    const vatRate = parseFormattedNumber(row.vatRate || 0);
+  const recalcMSRRRow = (row, rateOverride = currRate) => {
+    const rrQty = parseFormattedNumber(row.rrQty || 0);
+    const freeQty = isDirectReceiving ? 0 : parseFormattedNumber(row.freeQty || 0);
+    const unitCost = parseFormattedNumber(row.unitCost || 0);
+    const vatRate = parseFormattedNumber(row.vatRate || 0);
+    const effectiveCurrRate = parseFormattedNumber(rateOverride || 1) || 0;
 
-    // ✅ ONLY chargeable quantity
-    const chargeableQty = Math.max(rrQty - freeQty, 0);
+    const chargeableQty = Math.max(rrQty - freeQty, 0);
+    const gross = chargeableQty * unitCost;
+    const vatAmt = vatRate ? gross - gross / (1 + vatRate / 100) : 0;
+    const netAmt = gross - vatAmt;
+    const unitCostPhp = unitCost * effectiveCurrRate;
+    const grossPhp = gross * effectiveCurrRate;
+    const vatAmtPhp = vatAmt * effectiveCurrRate;
+    const netAmtPhp = netAmt * effectiveCurrRate;
 
-    const gross = chargeableQty * unitCost;
-
-    // VAT-inclusive example (adjust if exclusive in your setup)
-    const vatAmt = vatRate ? gross - gross / (1 + vatRate / 100) : 0;
-
-    const netAmt = gross - vatAmt;
-
-    return {
-      ...row,
-      grossAmount: formatNumber(gross, 2),
+    return {
+      ...row,
+      grossAmount: formatNumber(gross, 2),
       itemAmount: formatNumber(gross, 2),
-      vatAmount: formatNumber(vatAmt, 2),
-      netAmount: formatNumber(netAmt, 2),
-      amount: formatNumber(gross, 2), // your Amount column
-    };
-  };
+      vatAmount: formatNumber(vatAmt, 2),
+      netAmount: formatNumber(netAmt, 2),
+      amount: formatNumber(gross, 2),
+      unitCostPhp: formatNumber(unitCostPhp, decUcost),
+      grossAmountPhp: formatNumber(grossPhp, 2),
+      itemAmountPhp: formatNumber(grossPhp, 2),
+      vatAmountPhp: formatNumber(vatAmtPhp, 2),
+      netAmountPhp: formatNumber(netAmtPhp, 2),
+      amountPhp: formatNumber(grossPhp, 2),
+    };
+  };
+
+  const recalcMSRRRowsForCurrencyRate = (rateValue, rows = detailRows) =>
+    (Array.isArray(rows) ? rows : []).map((row) => recalcMSRRRow(row, rateValue));
 
   const sanitizeMSRRNumeric = (value) => {
     const raw = String(value ?? "");
@@ -3602,9 +3682,27 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
   };
 
   const validateRRQtyWithinPOBalance = (rowsToValidate = state.detailRows) => {
+    if (isDirectReceiving) return true;
+
     const errors = [];
 
     (rowsToValidate || []).forEach((row, index) => {
+      const poReferenceCandidates = [
+        row?.poNo,
+        row?.PONo,
+        row?.PO_NO,
+        row?.poId,
+        row?.po_id,
+        row?.PO_ID,
+        row?.poLineno,
+        row?.poLineNo,
+        row?.po_line_no,
+        row?.PO_LINE_NO,
+      ];
+      const hasPOReference = poReferenceCandidates.some(
+        (value) => value !== undefined && value !== null && String(value).trim() !== "",
+      );
+
       const rrQtyValue = parseFormattedNumber(
         row?.rrQty || row?.rrQuantity || row?.quantity || 0,
       );
@@ -3633,6 +3731,12 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
         : parseFormattedNumber(poQtyCandidates.find(
             (value) => value !== undefined && value !== null && String(value).trim() !== "",
           ) || 0);
+      const hasHeaderPOReferenceWithLimit =
+        Boolean(state.poNo) && (hasBalance || poQtyCandidates.some(
+          (value) => parseFormattedNumber(value || 0) > 0,
+        ));
+
+      if (!hasPOReference && !hasHeaderPOReferenceWithLimit) return;
 
       if (allowedQty >= 0 && rrQtyValue > allowedQty + 0.000001) {
         errors.push(
@@ -3813,6 +3917,7 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
         const sourceLots = getRowLotEntriesForSave(r);
         const firstLot = sourceLots[0] || {};
         const stableLotGroupId = getStableLotGroupId(r, index);
+        const rowPoNo = r.poNo || r.PoNo || r.PO_NO || r.po_no || "";
 
         return {
           lnNo: String(index + 1),
@@ -3826,20 +3931,28 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
           uomCode: r.uomCode || "",
           quantity: parseFormattedNumber(r.rrQty || r.quantity || 0),
           rrQuantity: parseFormattedNumber(r.rrQty || r.quantity || 0),
-          poNo: r.poNo || state.poNo || "",
+          poNo: isDirectReceiving ? "" : rowPoNo || state.poNo || "",
           poLineno: r.poLineno || r.poLineNo || r.lnNo || r.Ln || r.lineNo || "",
           poQty: parseFormattedNumber(r.poQty || r.poQuantity || r.PO_QUANTITY || 0),
           poBalance: parseFormattedNumber(r.poBalance || r.qtyBalance || 0),
-          freeQuantity: parseFormattedNumber(r.freeQty || r.freeQuantity || 0),
+          freeQuantity: isDirectReceiving
+            ? 0
+            : parseFormattedNumber(r.freeQty || r.freeQuantity || 0),
           unitCost: parseFormattedNumber(r.unitCost || 0),
           unitCostFx: parseFormattedNumber(r.unitCostFx || r.unitCost || 0),
+          unitCostPhp: parseFormattedNumber(r.unitCostPhp || 0),
           itemAmount: parseFormattedNumber(r.itemAmount || r.grossAmount || 0),
+          itemAmountPhp: parseFormattedNumber(r.itemAmountPhp || r.grossAmountPhp || 0),
           vatCode: r.vatCode || "",
           vatAmount: parseFormattedNumber(r.vatAmount || 0),
+          vatAmountPhp: parseFormattedNumber(r.vatAmountPhp || 0),
           currCode: r.currCode || state.currCode || "PHP",
           currRate: Number(state.currRate || 1),
           fxAmount: parseFormattedNumber(r.fxAmount || r.itemAmount || r.grossAmount || 0),
           netAmount: parseFormattedNumber(r.netAmount || 0),
+          grossAmountPhp: parseFormattedNumber(r.grossAmountPhp || r.amountPhp || 0),
+          pesoAmount: parseFormattedNumber(r.grossAmountPhp || r.amountPhp || 0),
+          netAmountPhp: parseFormattedNumber(r.netAmountPhp || 0),
           whouseCode: r.whouseCode || r.whCode || state.WHCode || state.WHcode || "",
           locCode: r.locCode || r.LocCode || state.LocCode || "",
           lotNo: firstLot.lotNo || r.lotNo || "",
@@ -3953,13 +4066,13 @@ rrHdId: documentID || "",
           state.RRDate ||
           new Date().toISOString().split("T")[0],
 
-        poNo: state.poNo || "",
+        poNo: isDirectReceiving ? "" : state.poNo || "",
         vendCode: state.vendCode || "",
         vendName: state.vendName || "",
 
         drNo: state.drNo || state.drNo || "",
         siNo: state.siNo || "",
-        siDate: null,
+        siDate: state.siDate || null,
 
         refRrNo1:
         state.refRrNo1 ||
@@ -4913,6 +5026,20 @@ const handleClosePayeeLookup = async (row) => {
           {msrrNumericInput(row, index, "unitCost")}
         </td>
       ),
+      unitCostPhp: () => {
+        const convertedUnitCost =
+          parseFormattedNumber(row.unitCost || row.unit_price || row.unit_cost || 0) *
+          parseFormattedNumber(currRate || 1);
+
+        return (
+          <td key={columnKey} className="global-tran-td-ui" style={style}>
+            {readOnlyNumberInput(
+              "unitCostPhp",
+              convertedUnitCost ? formatNumber(convertedUnitCost, decUcost) : "",
+            )}
+          </td>
+        );
+      },
       grossAmount: () => (
         <td key={columnKey} className="global-tran-td-ui" style={style}>
           {readOnlyNumberInput(
@@ -4921,6 +5048,23 @@ const handleClosePayeeLookup = async (row) => {
           )}
         </td>
       ),
+      grossAmountPhp: () => {
+        const convertedAmount =
+          row.grossAmountPhp ??
+          row.amountPhp ??
+          row.itemAmountPhp ??
+          parseFormattedNumber(row.grossAmount ?? row.amount ?? row.itemAmount ?? 0) *
+            parseFormattedNumber(currRate || 1);
+
+        return (
+          <td key={columnKey} className="global-tran-td-ui" style={style}>
+            {readOnlyNumberInput(
+              "grossAmountPhp",
+              formatNumber(parseFormattedNumber(convertedAmount)) || "",
+            )}
+          </td>
+        );
+      },
       vatCode: () => (
         <td key={columnKey} className="global-tran-td-ui relative" style={style}>
           <div className="flex items-center">
@@ -5509,9 +5653,8 @@ const handleClosePayeeLookup = async (row) => {
                   required
                   type="text"
                   value={vendName || ""}
-                  onChange={(val) => updateState({ vendName: val })}
-                  disabled={isFormDisabled}
-                  onClick={() => updateState({ payeeLookupOpen: true })}
+                  disabled
+                  readOnly
                 />
 
                 {/* PR Tran Type */}
@@ -5528,13 +5671,8 @@ const handleClosePayeeLookup = async (row) => {
                     id="SIdate"
                     label="SI Date"
                     type="date"
-                    value={header.rr_date}
-                    onChange={(val) =>
-                      setHeader((prev) => ({
-                        ...prev,
-                        rr_date: val,
-                      }))
-                    }
+                    value={siDate || ""}
+                    onChange={(val) => updateState({ siDate: val })}
                     disabled={isFormDisabled}
                   />
 
@@ -5574,6 +5712,58 @@ const handleClosePayeeLookup = async (row) => {
                
 
                 {/* WareHouse  */}
+
+                <div className="flex gap-4">
+                  <input type="hidden" id="currCode" value={currCode || ""} readOnly />
+
+                  <div className="flex-grow w-2/3">
+                    <FieldRenderer
+                      id="currName"
+                      label="Currency"
+                      type="text"
+                      value={
+                        currCode
+                          ? `${currCode}${currName ? ` - ${currName}` : ""}`
+                          : ""
+                      }
+                      disabled
+                      readOnly
+                    />
+                  </div>
+
+                  <div className="flex-grow">
+                    <FieldRenderer
+                      id="currRate"
+                      label="Currency Rate"
+                      type="amount"
+                      value={currRate || ""}
+                      disabled={isFormDisabled || !isForeignHeaderCurrency}
+                      onChange={(val) => {
+                        const sanitizedValue = String(val).replace(/[^0-9.]/g, "");
+                        if (/^\d*\.?\d{0,6}$/.test(sanitizedValue) || sanitizedValue === "") {
+                          const updatedRows = recalcMSRRRowsForCurrencyRate(sanitizedValue || 0);
+                          updateState({
+                            currRate: sanitizedValue,
+                            detailRows: updatedRows,
+                          });
+                          updateTotalsDisplay(updatedRows);
+                        }
+                      }}
+                      onBlur={handleCurrRateNoBlur}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          document.getElementById("WHcode")?.focus();
+                        }
+                      }}
+                      onFocus={(e) => {
+                        if (!isFormDisabled && parseFormattedNumber(e.target.value) === 0) {
+                          updateState({ currRate: "" });
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
 
                 <FieldRenderer
                   id="WHcode"

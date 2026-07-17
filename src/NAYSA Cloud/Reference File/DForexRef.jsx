@@ -261,7 +261,7 @@ const DForexRef = ({ onSelect }) => {
   const queryClient = useQueryClient();
 
   const docType = "DForexRef";
-  const documentTitle = reftables?.[docType] || "Daily Forex Reference";
+  const documentTitle = reftables?.[docType] || "Daily Forex";
   const guideRef = useRef(null);
   const pdfLink = reftablesPDFGuide?.[docType];
   const videoLink = reftablesVideoGuide?.[docType];
