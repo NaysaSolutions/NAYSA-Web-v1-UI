@@ -6,9 +6,11 @@ import React, {
   useCallback,
 } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Save, Undo2, Edit, Trash2, Info } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
+  faPlus,
+  faSave,
+  faUndo,
   faEdit,
   faTrashAlt,
   faInfoCircle,
@@ -32,6 +34,7 @@ import {
   reftablesVideoGuide,
 } from "@/NAYSA Cloud/Global/reftable";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
+import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
 import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
 import SearchGlobalReferenceTable from "../Lookup/SearchGlobalReferenceTable.jsx";
 import SearchCOAMast from "../Lookup/SearchCOAMast.jsx";
@@ -694,44 +697,51 @@ const ATCRef = () => {
       <div className="global-ref-header-ui">
         <h1 className="global-ref-headertext-ui">{documentTitle}</h1>
 
-        <div className="flex gap-2 text-xs">
-          <button
-            type="button"
-            onClick={startNew}
-            disabled={isEditing}
-            className="bg-blue-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
-          >
-            <Plus size={16} />
-            <span className="hidden sm:inline">Add</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!isEditing || saveMutation.isPending}
-            className="bg-blue-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
-          >
-            <Save size={16} />
-            <span className="hidden sm:inline">Save</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleReset}
-            className="bg-blue-600 text-white px-3 py-2 rounded-lg flex items-center gap-2"
-          >
-            <Undo2 size={16} />
-            <span className="hidden sm:inline">Reset</span>
-          </button>
+        <div className="flex items-center justify-center md:justify-end gap-2 flex-wrap">
+          <div className="flex flex-wrap justify-center md:justify-end gap-2">
+            <ButtonBar
+              buttons={[
+                {
+                  key: "add",
+                  label: <span className="sm:inline ml-1">Add</span>,
+                  icon: faPlus,
+                  onClick: startNew,
+                  className:
+                    "flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all",
+                },
+                {
+                  key: "save",
+                  label: <span className="sm:inline ml-1">Save</span>,
+                  icon: faSave,
+                  onClick: handleSave,
+                  disabled: !isEditing || saveMutation.isPending,
+                  className: `flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md transition-all
+                    ${
+                      !isEditing || saveMutation.isPending
+                        ? "bg-blue-500 opacity-50 cursor-not-allowed text-white"
+                        : "bg-blue-600 text-white hover:bg-blue-700"
+                    }`,
+                },
+                {
+                  key: "reset",
+                  label: <span className="sm:inline ml-1">Reset</span>,
+                  icon: faUndo,
+                  onClick: handleReset,
+                  className:
+                    "flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all",
+                },
+              ]}
+            />
+          </div>
 
           {/* Info Dropdown */}
           <div ref={guideRef} className="relative">
             <button
               onClick={() => setOpenGuide((v) => !v)}
-              className="bg-blue-600 text-white h-full sm:h-8 sm:px-4 rounded-md flex items-center justify-center gap-1 hover:bg-blue-700 transition-all px-3"
+              className="bg-blue-600 text-white h-7 w-16 sm:w-auto sm:h-8 sm:px-4 rounded-md flex items-center justify-center gap-1 hover:bg-blue-700 transition-all"
             >
               <FontAwesomeIcon icon={faInfoCircle} className="text-[12px]" />
-              <span className="hidden sm:inline ml-1 text-[11px] font-medium">
+              <span className="sm:inline ml-1 text-[11px] font-medium">
                 Info
               </span>
               <FontAwesomeIcon
