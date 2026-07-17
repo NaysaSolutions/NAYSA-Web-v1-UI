@@ -28,7 +28,7 @@ import {
   useSwalErrorAlert,
   useSwalSuccessAlert,
   useSwalErrorAlertAPI,
-} from "@/NAYSA Cloud/Global/behavior";
+} from "@/NAYSA Cloud/Global/behavior.jsx";
 
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 

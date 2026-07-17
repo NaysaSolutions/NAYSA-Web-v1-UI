@@ -480,14 +480,14 @@ const APV = () => {
   const displayStatus =
     documentStatus && documentStatus !== "" ? documentStatus : status || "OPEN";
   const statusMap = {
-    FINALIZED: "global-tran-stat-text-finalized-ui",
-    CANCELLED: "global-tran-stat-text-closed-ui",
-    CLOSED: "global-tran-stat-text-closed-ui",
+    Finalized: "global-tran-stat-text-finalized-ui",
+    Cancelled: "global-tran-stat-text-closed-ui",
+    Closed: "global-tran-stat-text-closed-ui",
   };
   const statusColor = statusMap[displayStatus] || "";
   const isFormDisabled =
     isViewDocumentUrl ||
-    ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+    ["Finalized", "Cancelled", "Closed"].includes(displayStatus);
 
   // Field visibility based on AP type
   useEffect(() => {
@@ -1432,22 +1432,22 @@ const extractOpenRRResponseRows = (response) => {
         }
       }
 
-      const resolvedStatus =
-        data.docStatus ||
-        (data.apvCancelled === "Y"
-          ? "CANCELLED"
-          : data.apvStatus === "F"
-            ? "FINALIZED"
-            : data.apvStatus === "C"
-              ? "CLOSED"
-              : "OPEN");
+      // const resolvedStatus =
+      //   data.docStatus ||
+      //   (data.apvCancelled === "Y"
+      //     ? "CANCELLED"
+      //     : data.apvStatus === "F"
+      //       ? "FINALIZED"
+      //       : data.apvStatus === "C"
+      //         ? "CLOSED"
+      //         : "OPEN");
 
       // Align with CV:
       // documentStatus keeps the raw DB status for validations/posting/cancel.
       // status keeps the display status from dbo.fnGetDocumentStatus.
       const stateUpdates = {
         documentStatus: data.apvStatus || "",
-        status: resolvedStatus,
+        status: data.docStatus,
         documentID: data.apvId,
         documentNo: data.apvNo,
         branchCode: data.branchCode,
@@ -6060,7 +6060,7 @@ const handleAtcNameDoubleClick = (index) => {
 
         {/* VAT Code Modal */}
         {showVatModal && (
-          <VATLookupModal isOpen={showVatModal} onClose={handleCloseVatModal} />
+          <VATLookupModal isOpen={showVatModal} customParam="InputAll" onClose={handleCloseVatModal} />
         )}
 
         {/* ATC Code Modal */}
@@ -6165,10 +6165,10 @@ const handleAtcNameDoubleClick = (index) => {
           endDate={state.toDate}
           status={(() => {
             const s = (state.status || "").toUpperCase();
-            if (s === "FINALIZED") return "F";
-            if (s === "CANCELLED") return "X";
-            if (s === "CLOSED") return "C";
-            if (s === "OPEN") return "";
+            if (s === "Finalized") return "F";
+            if (s === "Cancelled") return "X";
+            if (s === "Closed")    return "C";
+            if (s === "Open")      return "";
             return "All";
           })()}
           onRowDoubleClick={handleHistoryRowPick}
