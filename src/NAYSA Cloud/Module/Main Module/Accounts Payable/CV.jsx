@@ -2341,8 +2341,9 @@ const handleCloseBankModal = async (selectedBank) => {
 }
 
   
-const handleCheckNoChange = (e) => {
+const handleCheckNoChange = async (e) => {
     const newCheckNo = e.target.value;
+    const docId = documentID; // Use a correctly scoped variable
 
     if (isCashPayment) return;
 
@@ -2355,7 +2356,7 @@ const handleCheckNoChange = (e) => {
     await new Promise(resolve => setTimeout(resolve, 300));
 
     try {
-        const isDuplicate = await checkDuplicateCheckNo(newCheckNo);
+        const isDuplicate = await checkDuplicateCheckNo(newCheckNo, docId);
 
         if (isDuplicate) {
             useSwalErrorAlert("Validation Error", "Duplicate Check Number is not allowed!");
@@ -2859,7 +2860,6 @@ const renderCvGlCell = (columnKey, row, index) => {
                       value={checkNo || ""}
                       disabled={isFormDisabled || isCashPayment}
                       onChange={(val) => handleCheckNoChange({ target: { value: val } })}
-                      onBlur={handleCheckNoBlur}
                       maxLength={useGetFieldLength(tblFieldArray, "check_no")}
                     />
                 </div>
