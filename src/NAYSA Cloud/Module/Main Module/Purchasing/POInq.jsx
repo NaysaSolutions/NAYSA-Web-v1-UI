@@ -107,17 +107,34 @@ const formatAmount = (value) => {
   }).format(num);
 };
 
-const extractResultArray = (response) => {
-  const raw = response?.data?.data?.[0]?.result;
-  if (!raw) return [];
+const parseJsonValue = (value) => {
+  if (typeof value !== "string") return value;
 
   try {
-    const parsed = JSON.parse(raw);
-    return safeArray(parsed?.[0]?.dt1);
-  } catch (error) {
-    console.error("Failed to parse PO inquiry result:", error);
-    return [];
+    return JSON.parse(value);
+  } catch {
+    return null;
   }
+};
+
+const extractResultArray = (response) => {
+  const candidates = [
+    response?.data?.data,
+    response?.data,
+    response,
+  ];
+
+  for (const candidate of candidates) {
+    const payload = parseJsonValue(candidate);
+    const firstRow = Array.isArray(payload) ? payload[0] : payload;
+    const resultPayload = parseJsonValue(firstRow?.result);
+    const container = resultPayload || firstRow;
+
+    if (Array.isArray(container?.dt1)) return container.dt1;
+    if (Array.isArray(container?.[0]?.dt1)) return container[0].dt1;
+  }
+
+  return [];
 };
 
 const getFlowState = (row) => {
@@ -748,7 +765,11 @@ function DrilldownModal({
                                   type="button"
                                   title="View Document"
                                   onClick={() =>
-                                    onViewDocument?.(row, stageKey)
+                                    onViewDocument?.(
+                                      row,
+                                      stageKey,
+                                      String(value || ""),
+                                    )
                                   }
                                   className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-blue-500 hover:bg-blue-50 hover:text-blue-600"
                                 >
@@ -832,14 +853,14 @@ export default function POInq() {
 
   const navigate = useNavigate();
 
-  const handleViewPODocument = (row) => {
-    const poNo = row?.prNo || row?.poNo || "";
+  const handleViewPODocument = (row, selectedPoNo = "") => {
+    const poNo = selectedPoNo || row?.poNo || row?.prNo || "";
     const branchCode = row?.branch || row?.branchCode || "";
 
     if (!poNo || !branchCode) return;
 
     navigate(
-      `/page/PO?msajNo=${encodeURIComponent(poNo)}&branchCode=${encodeURIComponent(branchCode)}`,
+      `/page/PO?poNo=${encodeURIComponent(poNo)}&branchCode=${encodeURIComponent(branchCode)}&viewOnly=Y`,
     );
   };
 
@@ -864,6 +885,8 @@ export default function POInq() {
           branchCode: selectedBranch === "All" ? "" : selectedBranch,
           itemCode: selectedItem.code,
           poStatus: "",
+          startingDate: fromDate,
+          endingDate: toDate,
           startingCutoff: fromDate ? fromDate.slice(0, 7).replace("-", "") : "",
           endingCutoff: toDate ? toDate.slice(0, 7).replace("-", "") : "",
           rcCode: selectedDepartment.code,
@@ -872,18 +895,15 @@ export default function POInq() {
         },
       });
 
-      const raw = response?.data?.[0]?.result;
-      let parsedRows = [];
-
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw);
-          parsedRows = Array.isArray(parsed?.[0]?.dt1) ? parsed[0].dt1 : [];
-        } catch (parseError) {
-          console.error("Failed to parse result JSON:", parseError);
-        }
+      if (response?.success === false || response?.data?.success === false) {
+        throw new Error(
+          response?.message ||
+            response?.data?.message ||
+            "Unable to retrieve PO Inquiry records.",
+        );
       }
 
+      const parsedRows = extractResultArray(response);
       const aggregated = aggregatePOInqRows(parsedRows);
       setData(aggregated);
 
@@ -1831,9 +1851,9 @@ export default function POInq() {
           stageList={stageList}
           onClose={() => setDrilldown(null)}
           onStage={(key) => setDrilldown({ row: drilldown.row, stageKey: key })}
-          onViewDocument={(row, stageKey) => {
+          onViewDocument={(row, stageKey, selectedPoNo) => {
             if (stageKey !== "po") return;
-            handleViewPODocument(row);
+            handleViewPODocument(row, selectedPoNo);
           }}
         />
       )}
