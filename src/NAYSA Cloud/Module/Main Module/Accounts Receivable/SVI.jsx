@@ -393,16 +393,18 @@ const SVI = () => {
 
   //Status Global Setup
   const displayStatus = status || 'OPEN';
+  const normalizedStatus = String(displayStatus).trim().toUpperCase();
   const statusMap = {
+    POSTED: "global-tran-stat-text-finalized-ui",
     FINALIZED: "global-tran-stat-text-finalized-ui",
     CANCELLED: "global-tran-stat-text-closed-ui",
     CLOSED: "global-tran-stat-text-closed-ui",
   };
-  const statusColor = statusMap[displayStatus] || "";
+  const statusColor = statusMap[normalizedStatus] || "";
   const isFormDisabled =
   isReadOnly ||
   isViewDocumentUrl ||
-  ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+  ["POSTED", "FINALIZED", "CANCELLED", "CLOSED"].includes(normalizedStatus);
 
   const sviDetailColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
