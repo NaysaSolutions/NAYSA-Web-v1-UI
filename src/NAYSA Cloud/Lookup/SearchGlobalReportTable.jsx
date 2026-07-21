@@ -1052,7 +1052,6 @@ const SearchGlobalReportTable = forwardRef(
           onDrop={(e) => {
             e.preventDefault();
             if (!draggedCol) return;
-            setAutoFillGridState(false);
             setGroupBy((p) => {
               const current = p.filter(
                 (key, index, arr) =>
@@ -1851,9 +1850,8 @@ const SearchGlobalReportTable = forwardRef(
                       <th
                         key={col.key}
                         style={getCellWidthStyle(col)}
-                        draggable={!autoFillGridState}
+                        draggable
                         onDragStart={(e) => {
-                          if (autoFillGridState) return;
                           setDraggedCol(col.key);
                           e.dataTransfer.setData("text/plain", col.key);
                           e.dataTransfer.effectAllowed = "move";

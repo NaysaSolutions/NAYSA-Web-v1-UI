@@ -128,7 +128,10 @@ async function waitForLoginApproval(
     if (shouldCancel()) return "cancelled";
 
     try {
-      const { data } = await apiClient.get(`/login/request-status/${requestId}`);
+      const { data } = await apiClient.get(
+        `/login/request-status/${requestId}`,
+        { withCredentials: true }
+      );
 
       if (shouldCancel()) return "cancelled";
 
@@ -274,24 +277,30 @@ export default function Login({ onSwitchToRegister }) {
   }
 
   async function showApprovalWaitingPopup(requestId) {
-    let approvalCancelled = false;
+    let stopPolling = false;
 
-    Swal.fire({
+    const popupPromise = Swal.fire({
       title: "",
       html: `
         <div style="text-align:center;">
-          <div style="height:36px;width:36px;margin:0 auto 10px;border-radius:999px;background:linear-gradient(135deg,#dbeafe,#bfdbfe);display:flex;align-items:center;justify-content:center;color:#1d4ed8;font-size:17px;font-weight:800;">
+          <div style="height:38px;width:38px;margin:0 auto 10px;border-radius:999px;background:linear-gradient(135deg,#dbeafe,#bfdbfe);display:flex;align-items:center;justify-content:center;color:#1d4ed8;font-size:18px;font-weight:800;">
             ⏳
           </div>
+
           <div style="font-size:15px;font-weight:800;color:#0f172a;line-height:1.2;">
             Account Already Logged In
           </div>
+
           <div style="font-size:12px;color:#64748b;line-height:1.45;margin-top:8px;">
-            Your account is currently active in another session. Please approve the login request from that session to continue.
+            Your account is active in another session. You may wait for approval from that device or terminate the previous session and sign in here.
+          </div>
+
+          <div style="margin-top:12px;border:1px solid #fecaca;border-radius:10px;background:#fef2f2;padding:9px;color:#991b1b;font-size:11px;line-height:1.4;text-align:left;">
+            <strong>Terminate Session</strong> will immediately invalidate the previous browser or device.
           </div>
         </div>
       `,
-      width: "min(320px, calc(100vw - 28px))",
+      width: "min(350px, calc(100vw - 28px))",
       padding: "0.9rem",
       background: "#ffffff",
       backdrop: "rgba(15, 23, 42, 0.30)",
@@ -299,29 +308,38 @@ export default function Login({ onSwitchToRegister }) {
       allowEscapeKey: false,
       heightAuto: false,
       showCancelButton: true,
-      showConfirmButton: false,
+      showConfirmButton: true,
+      confirmButtonText: "Terminate Session",
       cancelButtonText: "Cancel",
+      reverseButtons: true,
       buttonsStyling: false,
       customClass: {
         popup: "rounded-2xl shadow-2xl border border-slate-200",
         htmlContainer: "m-0",
-        actions: "mt-3 w-full",
+        actions: "mt-3 grid w-full grid-cols-2 gap-2",
+        confirmButton:
+          "w-full rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-red-700",
         cancelButton:
           "w-full rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200",
       },
     }).then((result) => {
-      if (result.dismiss) approvalCancelled = true;
+      if (result.isConfirmed) return "terminate";
+      stopPolling = true;
+      return "cancelled";
     });
 
-    const status = await waitForLoginApproval(
+    const approvalPromise = waitForLoginApproval(
       requestId,
       65000,
-      () => approvalCancelled
+      () => stopPolling
     );
 
+    const result = await Promise.race([popupPromise, approvalPromise]);
+
+    stopPolling = true;
     Swal.close();
 
-    return status;
+    return result;
   }
 
   async function continueAfterApproval(requestId) {
@@ -388,6 +406,36 @@ export default function Login({ onSwitchToRegister }) {
         }
 
         const approvalStatus = await showApprovalWaitingPopup(requestId);
+
+        if (approvalStatus === "terminate") {
+          try {
+            await login({
+              companyCode,
+              USER_CODE: form.USER_CODE.trim(),
+              PASSWORD: form.PASSWORD,
+              forceLogin: true,
+              approvalRequestId: requestId,
+            });
+
+            showToast(
+              "success",
+              "Previous session terminated",
+              "You are now signed in on this device."
+            );
+
+            navigate("/", { replace: true });
+          } catch (terminateError) {
+            showToast(
+              "error",
+              "Unable to terminate session",
+              terminateError?.response?.data?.message ||
+                terminateError?.message ||
+                "Please try again."
+            );
+          }
+
+          return;
+        }
 
         if (approvalStatus === "approved") {
           try {

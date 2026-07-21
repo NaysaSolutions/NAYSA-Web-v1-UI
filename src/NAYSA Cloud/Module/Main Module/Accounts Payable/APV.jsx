@@ -181,6 +181,9 @@ const getAssignedUserBranch = (userRow) => {
   };
 };
 
+const isNonPurchasesApType = (value) =>
+  ["APV02", "APV002"].includes(String(value || "").trim().toUpperCase());
+
 const APV = () => {
   // View Document Const
   const loadedFromUrlRef = useRef(false);
@@ -477,19 +480,18 @@ const APV = () => {
   const displayStatus =
     documentStatus && documentStatus !== "" ? documentStatus : status || "OPEN";
   const statusMap = {
-    OPEN: "global-tran-stat-text-open-ui",
-    FINALIZED: "global-tran-stat-text-finalized-ui",
-    CANCELLED: "global-tran-stat-text-closed-ui",
-    CLOSED: "global-tran-stat-text-finalized-ui",
+    Finalized: "global-tran-stat-text-finalized-ui",
+    Cancelled: "global-tran-stat-text-closed-ui",
+    Closed: "global-tran-stat-text-closed-ui",
   };
-  const statusColor = statusMap[String(displayStatus).trim().toUpperCase()] || "";
+  const statusColor = statusMap[displayStatus] || "";
   const isFormDisabled =
     isViewDocumentUrl ||
-    ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+    ["Finalized", "Cancelled", "Closed"].includes(displayStatus);
 
   // Field visibility based on AP type
   useEffect(() => {
-    const shouldHideInvoiceDetails = selectedApType === "APV02";
+    const shouldHideInvoiceDetails = isNonPurchasesApType(selectedApType);
     updateState({
       fieldVisibility: {
         ...fieldVisibility,
@@ -1017,15 +1019,83 @@ const extractOpenRRResponseRows = (response) => {
   };
 
   const calculateDueDate = (startDate, daysDue) => {
-    if (!startDate || isNaN(daysDue)) return "";
+    const parsedDaysDue = Number.parseInt(daysDue, 10);
+    if (!startDate || Number.isNaN(parsedDaysDue)) return "";
+
     try {
-      const date = new Date(startDate);
-      date.setDate(date.getDate() + parseInt(daysDue));
-      return date.toISOString().split("T")[0];
+      const rawDate = String(startDate).trim();
+      let year;
+      let month;
+      let day;
+
+      if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(rawDate)) {
+        [year, month, day] = rawDate.split("-").map(Number);
+      } else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(rawDate)) {
+        const parts = rawDate.split("/").map(Number);
+        [month, day, year] = parts;
+      } else {
+        const fallbackDate = new Date(rawDate);
+        if (Number.isNaN(fallbackDate.getTime())) return "";
+        year = fallbackDate.getFullYear();
+        month = fallbackDate.getMonth() + 1;
+        day = fallbackDate.getDate();
+      }
+
+      const date = new Date(year, month - 1, day);
+      date.setDate(date.getDate() + parsedDaysDue);
+
+      const yyyy = date.getFullYear();
+      const mm = String(date.getMonth() + 1).padStart(2, "0");
+      const dd = String(date.getDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
     } catch (error) {
       console.error("Error calculating due date:", error);
       return "";
     }
+  };
+
+  const getPaytermDaysDue = (paytermData) =>
+    paytermData?.daysDue ??
+    paytermData?.days_due ??
+    paytermData?.DAYS_DUE ??
+    paytermData?.dueDays ??
+    paytermData?.due_days ??
+    "";
+
+  const getPaytermCode = (paytermData) =>
+    paytermData?.paytermCode ??
+    paytermData?.payterm_code ??
+    paytermData?.PAYTERM_CODE ??
+    "";
+
+  const getPaytermName = (paytermData) =>
+    paytermData?.paytermName ??
+    paytermData?.payterm_name ??
+    paytermData?.PAYTERM_NAME ??
+    "";
+
+  const recalculateDueDatesByApvDate = async (apvDate) => {
+    const updatedRows = await Promise.all(
+      detailRows.map(async (row) => {
+        if (!row.paytermCode) return row;
+
+        const paytermData = await useTopPayTermRow(row.paytermCode);
+        const daysDue = getPaytermDaysDue(paytermData);
+
+        return {
+          ...row,
+          dueDate: calculateDueDate(apvDate, daysDue),
+        };
+      }),
+    );
+
+    updateState({
+      header: {
+        ...header,
+        apv_date: apvDate,
+      },
+      detailRows: updatedRows,
+    });
   };
 
   // API call functions
@@ -1362,22 +1432,22 @@ const extractOpenRRResponseRows = (response) => {
         }
       }
 
-      const resolvedStatus =
-        data.docStatus ||
-        (data.apvCancelled === "Y"
-          ? "CANCELLED"
-          : data.apvStatus === "F"
-            ? "FINALIZED"
-            : data.apvStatus === "C"
-              ? "CLOSED"
-              : "OPEN");
+      // const resolvedStatus =
+      //   data.docStatus ||
+      //   (data.apvCancelled === "Y"
+      //     ? "CANCELLED"
+      //     : data.apvStatus === "F"
+      //       ? "FINALIZED"
+      //       : data.apvStatus === "C"
+      //         ? "CLOSED"
+      //         : "OPEN");
 
       // Align with CV:
       // documentStatus keeps the raw DB status for validations/posting/cancel.
       // status keeps the display status from dbo.fnGetDocumentStatus.
       const stateUpdates = {
         documentStatus: data.apvStatus || "",
-        status: resolvedStatus,
+        status: data.docStatus,
         documentID: data.apvId,
         documentNo: data.apvNo,
         branchCode: data.branchCode,
@@ -1784,7 +1854,7 @@ const extractOpenRRResponseRows = (response) => {
       if (action === "GenerateGL") {
         let finalGlEntries = [];
 
-        if (selectedApType === "APV02") {
+        if (isNonPurchasesApType(selectedApType)) {
           // --- NON-PURCHASES GENERATION ---
           
           // 1. Blank Row for Expense side
@@ -1807,6 +1877,8 @@ const extractOpenRRResponseRows = (response) => {
 
           // 2. Pre-filled AP Account Row (Matching your Invoice Details logic)
           const vName = vendName?.vendName || "";
+          const selectedApAccountDisplay =
+            apAccountName || apAccountCode || "Accounts Payable";
           
           // standardizing requirement check for AP Account
           // AP accounts usually require SL (Vendor)
@@ -1818,7 +1890,7 @@ const extractOpenRRResponseRows = (response) => {
             // If vendor is missing in header, show "REQ SL" immediately
             slCode: vendCode || "REQ SL", 
             slName: vName,
-            particular: `Accounts Payable${vName ? ' / ' + vName : ''}`,
+            particular: `${selectedApAccountDisplay}${vName ? ' / ' + vName : ''}`,
             debit: "0.00",
             credit: "0.00",
             slRefNo: "",
@@ -3031,8 +3103,15 @@ const calculatedAtcAmount = aCode
 
       if (field === "paytermCode") {
         const paytermData = await useTopPayTermRow(value);
-        if (paytermData && paytermData.daysDue && header.apv_date) {
-          row.dueDate = calculateDueDate(header.apv_date, paytermData.daysDue);
+        const daysDue = getPaytermDaysDue(paytermData);
+
+        if (paytermData) {
+          row.paytermCode = getPaytermCode(paytermData) || value;
+          row.paytermName = getPaytermName(paytermData);
+        }
+
+        if (paytermData && daysDue !== "" && header.apv_date) {
+          row.dueDate = calculateDueDate(header.apv_date, daysDue);
         } else {
           row.dueDate = "";
         }
@@ -3544,7 +3623,7 @@ const calculatedAtcAmount = aCode
 
   const handleClosePaytermModal = async (selectedPayterm) => {
     if (selectedPayterm && selectedRowIndex !== null) {
-      handleSelectPayTerm(selectedPayterm.paytermCode);
+      await handleSelectPayTerm(getPaytermCode(selectedPayterm));
     }
     updateState({ showPaytermModal: false });
   };
@@ -3553,13 +3632,14 @@ const calculatedAtcAmount = aCode
     if (paytermCode) {
       const result = await useTopPayTermRow(paytermCode);
       if (result) {
+        const daysDue = getPaytermDaysDue(result);
         const updatedRows = [...detailRows];
         if (selectedRowIndex !== null) {
           updatedRows[selectedRowIndex] = {
             ...updatedRows[selectedRowIndex],
-            paytermCode: result.paytermCode,
-            paytermName: result.paytermName,
-            dueDate: calculateDueDate(header.apv_date, result.daysDue),
+            paytermCode: getPaytermCode(result) || paytermCode,
+            paytermName: getPaytermName(result),
+            dueDate: calculateDueDate(header.apv_date, daysDue),
           };
           updateState({ detailRows: updatedRows });
         }
@@ -3796,6 +3876,7 @@ const handleAtcNameDoubleClick = (index) => {
         break;
 
       case "APV02": // non purchases
+      case "APV002":
         visibility.invType = false;
         visibility.rrNo = false;
         visibility.poNo = false;
@@ -4065,7 +4146,7 @@ const handleAtcNameDoubleClick = (index) => {
               <p className="global-tran-headerstat-text-ui">
                 Transaction Status
               </p>
-              <h1 className={`global-tran-stat-text-ui uppercase ${statusColor}`}>
+              <h1 className={`global-tran-stat-text-ui ${statusColor}`}>
                 {displayStatus}
               </h1>
             </div>
@@ -4135,12 +4216,7 @@ const handleAtcNameDoubleClick = (index) => {
                     disabled={isFormDisabled}
                     updateState={(updates) => {
                       if (updates.apv_date !== undefined) {
-                        updateState({
-                          header: {
-                            ...header,
-                            apv_date: updates.apv_date,
-                          },
-                        });
+                        recalculateDueDatesByApvDate(updates.apv_date);
                       }
                     }}
                   />
@@ -5984,7 +6060,7 @@ const handleAtcNameDoubleClick = (index) => {
 
         {/* VAT Code Modal */}
         {showVatModal && (
-          <VATLookupModal isOpen={showVatModal} onClose={handleCloseVatModal} />
+          <VATLookupModal isOpen={showVatModal} customParam="InputAll" onClose={handleCloseVatModal} />
         )}
 
         {/* ATC Code Modal */}
@@ -6089,10 +6165,10 @@ const handleAtcNameDoubleClick = (index) => {
           endDate={state.toDate}
           status={(() => {
             const s = (state.status || "").toUpperCase();
-            if (s === "FINALIZED") return "F";
-            if (s === "CANCELLED") return "X";
-            if (s === "CLOSED") return "C";
-            if (s === "OPEN") return "";
+            if (s === "Finalized") return "F";
+            if (s === "Cancelled") return "X";
+            if (s === "Closed")    return "C";
+            if (s === "Open")      return "";
             return "All";
           })()}
           onRowDoubleClick={handleHistoryRowPick}

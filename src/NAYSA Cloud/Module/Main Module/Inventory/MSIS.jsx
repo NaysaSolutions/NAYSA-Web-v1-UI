@@ -69,6 +69,9 @@ import { useHandlePrint } from "@/NAYSA Cloud/Global/report";
 import {
   formatNumber,
   parseFormattedNumber,
+  useSwalErrorAlert,
+  useSwalInfoAlert,
+  useSwalSuccessAlert,
   useSwalshowSaveSuccessDialog,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
@@ -86,9 +89,10 @@ import {
 
 const MSIS = () => {
   const loadedFromUrlRef = useRef(false);
+  const detailRowsRef = useRef([]);
   const detailRowsGLRef = useRef([]);
   const categoryAccountCacheRef = useRef({});
-  const { user } = useAuth();
+  const { user, currentUserRow } = useAuth();
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -140,8 +144,8 @@ useEffect(() => {
       rr_date: new Date().toISOString().split("T")[0], // PR Date
     },
 
-    branchCode: "HO",
-    branchName: "Head Office",
+    branchCode: currentUserRow?.branchCode||"",
+    branchName: currentUserRow?.branchName||"",
 
     // Responsibility Center / Requesting Dept
     // Responsibility Center / Requesting Dept
@@ -346,6 +350,7 @@ useEffect(() => {
 
   const [totals, setTotals] = useState({
     totalQtyNeeded: "",
+    totalAmount: "",
   });
 
   // MSIS.jsx
@@ -370,9 +375,15 @@ useEffect(() => {
   const isOpenDocumentStatus = (value) =>
     ["", "O", "OPEN"].includes(String(value ?? "").trim().toUpperCase());
 
-  const updateTotalsDisplay = (qtyNeeded) => {
+  const updateTotalsDisplay = (qtyNeeded, rows = []) => {
+    const totalAmount = (Array.isArray(rows) ? rows : []).reduce(
+      (acc, r) => acc + (parseFormattedNumber(r.amount ?? r.itemAmount ?? 0) || 0),
+      0,
+    );
+
     setTotals({
       totalQtyNeeded: formatNumber(qtyNeeded, 6),
+      totalAmount: formatNumber(totalAmount, 2),
     });
   };
 
@@ -414,6 +425,10 @@ useEffect(() => {
   useEffect(() => {
     updateState({ isDocNoDisabled: !!state.documentID });
   }, [state.documentID]);
+
+  useEffect(() => {
+    detailRowsRef.current = detailRows || [];
+  }, [detailRows]);
 
   useEffect(() => {
     detailRowsGLRef.current = detailRowsGL || [];
@@ -469,8 +484,9 @@ useEffect(() => {
 
     updateState({
       header: { rr_date: today },
-      branchCode: "HO",
-      branchName: "Head Office",
+      branchCode: currentUserRow?.branchCode||"",
+      branchName: currentUserRow?.branchName||"",
+      userCode:currentUserRow?.userCode||"",
       cutoffCode: "",
       rcCode: "",
       rcName: "",
@@ -523,7 +539,7 @@ useEffect(() => {
       drAcctName: "",
     });
 
-    updateTotalsDisplay(0);
+    updateTotalsDisplay(0, []);
   };
 
   const handleCloseWarehouseLookup = (row) => {
@@ -632,6 +648,12 @@ useEffect(() => {
 
     const acctCode = selectedAccount?.acctCode ?? "";
     const acctName = selectedAccount?.acctName ?? "";
+    const acctSlReq = pickFirstValue(
+      selectedAccount?.slReq,
+      selectedAccount?.REQ_SL,
+      selectedAccount?.reqSL,
+      selectedAccount?.req_sl,
+    );
 
     if (accountModalSource === "drAcct") {
       console.log("✅ DR ACCT SELECTED:", { acctCode, acctName });
@@ -641,6 +663,10 @@ useEffect(() => {
 
       row.drAcctCode = acctCode;
       row.drAcctName = acctName;
+      row.drAcctSlReq = acctSlReq;
+      if (accountRequiresSL(row) && !row.slCode) {
+        row.slCode = getDefaultSLCode();
+      }
 
       rows[selectedRowIndex] = row;
 
@@ -649,11 +675,12 @@ useEffect(() => {
         selectedRowIndex,
         "drAcctCode",
         acctCode,
-        { drAcctName: acctName },
+        { drAcctName: acctName, drAcctSlReq: acctSlReq },
       );
+      const finalRows = applyDefaultSLCodeToSLRequiredRows(updatedRows);
 
       updateState({
-        detailRows: updatedRows,
+        detailRows: finalRows,
         detailRowsGL: [],
         showAccountModal: false,
         selectedRowIndex: null,
@@ -848,7 +875,7 @@ useEffect(() => {
         detailRows: [],
         detailRowsGL: [],
       });
-      updateTotalsDisplay(0);
+      updateTotalsDisplay(0, []);
     };
 
     updateState({ isLoading: true });
@@ -862,11 +889,7 @@ useEffect(() => {
       console.log("✅ MSIS Retrieved DT2:", parseRetrievedArray(data.dt2));
 
       if (!data?.msisId && !data?.msisNo) {
-        Swal.fire({
-          icon: "info",
-          title: "No Records Found",
-          text: "Transaction does not exist.",
-        });
+        useSwalInfoAlert("No Records Found", "Transaction does not exist.");
         return resetState();
       }
 
@@ -947,7 +970,7 @@ useEffect(() => {
         (acc, r) => acc + (parseFormattedNumber(r.quantity ?? 0) || 0),
         0,
       );
-      updateTotalsDisplay(totalQty);
+      updateTotalsDisplay(totalQty, retrievedDetailRows);
 
       const retrievedRcCode = getFirstValue(
         data.rcCode,
@@ -1024,11 +1047,10 @@ useEffect(() => {
       });
     } catch (error) {
       console.error("Error fetching MSIS transaction data:", error);
-      Swal.fire({
-        icon: "error",
-        title: "Fetch Error",
-        text: error?.response?.data?.message || error?.message || "Unable to fetch transaction.",
-      });
+      useSwalErrorAlert(
+        "Fetch Error",
+        error?.response?.data?.message || error?.message || "Unable to fetch transaction.",
+      );
       resetState();
     } finally {
       updateState({ isLoading: false });
@@ -1043,6 +1065,37 @@ useEffect(() => {
     }
     return "";
   };
+
+  const isYesFlag = (value) =>
+    ["Y", "YES", "TRUE", "1"].includes(String(value ?? "").trim().toUpperCase());
+
+  const accountRequiresSL = (account = {}) =>
+    isYesFlag(
+      pickFirstValue(
+        account.drAcctSlReq,
+        account.slReq,
+        account.REQ_SL,
+        account.reqSL,
+        account.req_sl,
+        account.slRequired,
+        account.SL_REQUIRED,
+        account.reqSl,
+      ),
+    );
+
+  const getDefaultSLCode = (sourceState = state) =>
+    pickFirstValue(
+      sourceState.vendCode,
+      sourceState.vendCOde,
+      sourceState.empCode,
+      sourceState.custCode,
+    );
+
+  const applyDefaultSLCodeToSLRequiredRows = (rows, defaultSLCode = getDefaultSLCode()) =>
+    (Array.isArray(rows) ? rows : []).map((row) => {
+      if (!defaultSLCode || row?.slCode || !accountRequiresSL(row)) return row;
+      return { ...row, slCode: defaultSLCode };
+    });
 
   const parseLookupResultRows = (response) => {
     const rawResult = response?.data?.[0]?.result;
@@ -1113,6 +1166,15 @@ useEffect(() => {
       item?.acct_name,
       item?.ACCT_NAME,
     ),
+    slReq: pickFirstValue(
+      item?.drAcctSlReq,
+      item?.slReq,
+      item?.REQ_SL,
+      item?.reqSL,
+      item?.req_sl,
+      item?.SL_REQUIRED,
+      item?.slRequired,
+    ),
   });
 
   const fetchDefaultDrAccountByCategory = async (categCode) => {
@@ -1165,13 +1227,7 @@ useEffect(() => {
     );
 
     if (itemsArray.length === 0) {
-      Swal.fire({
-        icon: "info",
-        title: "No Stock Selected",
-        text: "Only items with Quantity on Hand can be selected.",
-        timer: 2500,
-        showConfirmButton: false,
-      });
+      useSwalInfoAlert("No Stock Selected", "Only items with Quantity on Hand can be selected.");
       return;
     }
 
@@ -1180,6 +1236,8 @@ useEffect(() => {
         const rawQtyHand = parseFormattedNumber(item?.qtyHand ?? item?.qtyOnHand ?? 0) || 0;
         const rawUnitCost = parseFormattedNumber(item?.unitCost ?? 0) || 0;
         const defaultDrAccount = await resolveDefaultDrAccount(item);
+        const defaultSLCode = getDefaultSLCode();
+        const defaultDrAccountRequiresSL = accountRequiresSL(defaultDrAccount);
 
         return {
           itemCode: item?.itemCode ?? "",
@@ -1206,8 +1264,9 @@ useEffect(() => {
           // Defaulted from ms_categ.expacct_code, but still editable through the DR Acct lookup cell.
           drAcctCode: defaultDrAccount.code || "",
           drAcctName: defaultDrAccount.name || "",
+          drAcctSlReq: defaultDrAccount.slReq || "",
           rcCode: state.rcCode || "",
-          slCode: "",
+          slCode: defaultDrAccountRequiresSL ? defaultSLCode : "",
           mrsNo: "",
           mrsQty: formatNumber(0, 6),
           remarks: "",
@@ -1221,7 +1280,7 @@ useEffect(() => {
         (acc, r) => acc + (parseFormattedNumber(r.quantity ?? r.qtyNeeded ?? 0) || 0),
         0
       );
-      updateTotalsDisplay(totalQty);
+      updateTotalsDisplay(totalQty, updated);
       return { ...prev, detailRows: updated };
     });
   };
@@ -1308,13 +1367,10 @@ useEffect(() => {
   const handleAddRowClick = () => {
     // Block if RC or Requesting Dept is blank
     if (!rcCode || !reqRcCode) {
-      Swal.fire({
-        icon: "warning",
-        title: "Required Header Fields",
-        text: "Please select both Responsibility Center and Requesting Dept before adding PR lines.",
-        timer: 2500,
-        showConfirmButton: false,
-      });
+      useSwalInfoAlert(
+        "Required Header Fields",
+        "Please select both Responsibility Center and Requesting Dept before adding PR lines.",
+      );
       return;
     }
 
@@ -1359,7 +1415,7 @@ useEffect(() => {
       (acc, r) => acc + (parseFormattedNumber(r.quantity ?? r.qtyNeeded ?? 0) || 0),
       0,
     );
-    updateTotalsDisplay(totalQty);
+    updateTotalsDisplay(totalQty, updatedRows);
 
     setShowTypeDropdown(false);
   };
@@ -1368,13 +1424,7 @@ useEffect(() => {
     if (isFormDisabled) return;
 
     if (!state.WHcode) {
-      Swal.fire({
-        icon: "warning",
-        title: "Required Header Field",
-        text: "Please select Warehouse before adding items.",
-        timer: 2500,
-        showConfirmButton: false,
-      });
+      useSwalInfoAlert("Required Header Field", "Please select Warehouse before adding items.");
       return;
     }
 
@@ -1398,13 +1448,10 @@ useEffect(() => {
       );
 
       if (balanceRows.length === 0) {
-        Swal.fire({
-          icon: "info",
-          title: "MS Location Balance",
-          text: "No items with Quantity on Hand were found for the selected warehouse/location.",
-          timer: 3000,
-          showConfirmButton: false,
-        });
+        useSwalInfoAlert(
+          "MS Location Balance",
+          "No items with Quantity on Hand were found for the selected warehouse/location.",
+        );
         updateState({
           globalLookupRow: [],
           globalLookupHeader: [],
@@ -1422,11 +1469,10 @@ useEffect(() => {
       });
     } catch (error) {
       console.error("MSIS item lookup error:", error);
-      Swal.fire({
-        icon: "error",
-        title: "MS Location Balance",
-        text: error?.response?.data?.message || error?.message || "No records found.",
-      });
+      useSwalErrorAlert(
+        "MS Location Balance",
+        error?.response?.data?.message || error?.message || "No records found.",
+      );
       updateState({
         globalLookupRow: [],
         globalLookupHeader: [],
@@ -1448,7 +1494,7 @@ useEffect(() => {
       (acc, r) => acc + (parseFormattedNumber(r.quantity ?? r.qtyNeeded ?? 0) || 0),
       0,
     );
-    updateTotalsDisplay(totalQty);
+    updateTotalsDisplay(totalQty, updatedRows);
   };
 
   const createEmptyGlRow = () => ({
@@ -1474,6 +1520,14 @@ useEffect(() => {
 
   const handleAddRowGL = (index = null) => {
     if (isFormDisabled) return;
+    if ((detailRows || []).length === 0) {
+      useSwalInfoAlert(
+        "General Ledger",
+        "Please add item details before adding General Ledger entries.",
+      );
+      return;
+    }
+
     const updatedRows = [...(detailRowsGL || [])];
     if (index !== null && index !== undefined) {
       updatedRows.splice(index + 1, 0, createEmptyGlRow());
@@ -1566,7 +1620,7 @@ useEffect(() => {
   };
 
   const handleDetailChange = async (index, field, value, commit = false) => {
-    const updatedRows = [...detailRows];
+    const updatedRows = [...(detailRowsRef.current || detailRows || [])];
     const row = { ...updatedRows[index] };
 
     // sanitize numeric
@@ -1618,13 +1672,14 @@ row.itemAmount = computedAmount;
       ? await replicateFirstRowValueToBlankRows(updatedRows, index, field, row[field])
       : updatedRows;
 
+    detailRowsRef.current = finalRows;
     updateState({ detailRows: finalRows, detailRowsGL: [] });
 
     const totalQty = finalRows.reduce(
       (acc, r) => acc + (parseFormattedNumber(r.quantity ?? r.qtyNeeded ?? 0) || 0),
       0,
     );
-    updateTotalsDisplay(totalQty);
+    updateTotalsDisplay(totalQty, finalRows);
   };
 
   // ==========================
@@ -1705,6 +1760,7 @@ row.itemAmount = computedAmount;
         attention,
         vendCode,
         vendName,
+        custCode,
 
         remarks,
         noReprints,
@@ -1775,7 +1831,11 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
             rcCode: row.rcCode || rcCode || "",
             slTypeCode: row.slTypeCode || row.sltypeCode || "",
             sltypeCode: row.sltypeCode || row.slTypeCode || "",
-            slCode: row.slCode || vendCode || "",
+            slCode:
+              row.slCode ||
+              (accountRequiresSL(row)
+                ? getDefaultSLCode({ ...state, vendCode, custCode })
+                : ""),
 
             uniqueKey: row.uniqueKey || "",
             operation: row.operation || "S",
@@ -1983,11 +2043,7 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
     );
 
     if (result?.success) {
-      Swal.fire({
-        icon: "success",
-        title: "Success",
-        text: "Cancelled successfully.",
-      });
+      useSwalSuccessAlert("Success", "Cancelled successfully.");
 
       await fetchTranData(documentNo, branchCode);
     }
@@ -2005,11 +2061,7 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
         updateState,
       );
       if (result.success) {
-        Swal.fire({
-          icon: "success",
-          title: "Success",
-          text: result.message,
-        });
+        useSwalSuccessAlert("Success", result.message);
       }
       await fetchTranData(documentNo, branchCode);
     }
@@ -2079,6 +2131,22 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
         rcLookupModalOpen: false,
         rcLookupContext: "",
       });
+    } else if (rcLookupContext === "payeeCode") {
+      const nextState = {
+        ...state,
+        vendCode: selectedCode,
+        vendCOde: selectedCode,
+        vendName: selectedName,
+      };
+      updateState({
+        vendCode: selectedCode,
+        vendCOde: selectedCode,
+        vendName: selectedName,
+        detailRows: applyDefaultSLCodeToSLRequiredRows(state.detailRows, getDefaultSLCode(nextState)),
+        detailRowsGL: [],
+        rcLookupModalOpen: false,
+        rcLookupContext: "",
+      });
     } else {
       updateState({
         rcLookupModalOpen: false,
@@ -2089,14 +2157,24 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
 
   const handleCloseRcModalGL = (selectedRC) => {
     if (selectedRC && selectedRowIndex !== null) {
-      handleDetailChangeGL(selectedRowIndex, "rcCode", selectedRC);
+      if (accountModalSource === "detailRcCode") {
+        const selectedCode = selectedRC.rcCode || selectedRC.rc_code || "";
+        handleDetailChange(selectedRowIndex, "rcCode", selectedCode);
+      } else {
+        handleDetailChangeGL(selectedRowIndex, "rcCode", selectedRC);
+      }
     }
     updateState({ showRcModal: false, selectedRowIndex: null, accountModalSource: null });
   };
 
   const handleCloseSlModalGL = (selectedSL) => {
     if (selectedSL && selectedRowIndex !== null) {
-      handleDetailChangeGL(selectedRowIndex, "slCode", selectedSL);
+      if (accountModalSource === "detailSlCode") {
+        const selectedCode = selectedSL.slCode || selectedSL.sl_code || "";
+        handleDetailChange(selectedRowIndex, "slCode", selectedCode);
+      } else {
+        handleDetailChangeGL(selectedRowIndex, "slCode", selectedSL);
+      }
     }
     updateState({ showSlModal: false, selectedRowIndex: null, accountModalSource: null });
   };
@@ -2108,9 +2186,16 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
 
   const handleCloseCustModal = (selectedCustomer) => {
     if (selectedCustomer) {
-      updateState({
+      const nextState = {
+        ...state,
         custCode: selectedCustomer.custCode || selectedCustomer.customerCode || "",
         custName: selectedCustomer.custName || selectedCustomer.customerName || "",
+      };
+      updateState({
+        custCode: nextState.custCode,
+        custName: nextState.custName,
+        detailRows: applyDefaultSLCodeToSLRequiredRows(state.detailRows, getDefaultSLCode(nextState)),
+        detailRowsGL: [],
       });
     }
     updateState({ custModalOpen: false });
@@ -2188,6 +2273,8 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
     getFrozenColumnStyle: getMSISDetailFrozenStyle,
     getOrderedColumns: getOrderedMSISDetailColumns,
     getSortedRows: getSortedMSISDetailRows,
+    clearZeroValueOnFocus: clearMSISDetailZeroOnFocus,
+    focusNextRowInput: focusNextMSISDetailRowInput,
     renderHeaderContextMenu: renderMSISDetailHeaderContextMenu,
     renderResizableHeader: renderMSISDetailHeader,
   } = useResizableTableColumns(msisDetailColumnDefs);
@@ -2324,7 +2411,7 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
       (acc, r) => acc + (parseFormattedNumber(r.quantity ?? r.qtyNeeded ?? 0) || 0),
       0
     );
-    updateTotalsDisplay(totalQty);
+    updateTotalsDisplay(totalQty, updatedRows);
   };
 
   const renderMSISDetailCell = (columnKey, row, index) => {
@@ -2341,12 +2428,16 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
     };
 
     const focusNextDetailCell = (field) => {
-      const maxRowIndex = Math.max((detailRows || []).length - 1, 0);
-      const nextRowIndex = Math.min(maxRowIndex, index + 1);
-      focusDetailCell(field, nextRowIndex);
+      focusNextMSISDetailRowInput(index, field, {
+        rows: detailRowsRef.current || detailRows || [],
+        zeroClearFields: msisEnterNextRowZeroClearFields,
+        parseValue: parseFormattedNumber,
+        onClearNextValue: (nextIndex, nextField, val) =>
+          handleDetailChange(nextIndex, nextField, val, false),
+      });
     };
 
-    const handleGridKeyDown = (e, field, options = {}) => {
+    const handleGridKeyDown = async (e, field, options = {}) => {
       if (options.readOnly || options.disabled || rowLocked) return;
 
       if (e.key === "Enter") {
@@ -2357,9 +2448,9 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
             getMSISDetailNumericDecimals(field),
           );
           e.target.value = formattedValue;
-          handleDetailChange(index, field, formattedValue, true);
+          await handleDetailChange(index, field, formattedValue, true);
         }
-        focusNextDetailCell(field);
+        setTimeout(() => focusNextDetailCell(field), 0);
         return;
       }
 
@@ -2409,9 +2500,10 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
         }}
         onFocus={(e) => {
           if ((options.readOnly ?? rowLocked) || (options.disabled ?? false)) return;
-          if (msisEnterNextRowZeroClearFields.includes(field) && parseFormattedNumber(e.target.value || 0) === 0) {
-            handleDetailChange(index, field, "");
-          }
+          clearMSISDetailZeroOnFocus(e, {
+            isEditable: true,
+            onClear: (val) => handleDetailChange(index, field, val, false),
+          });
         }}
         onBlur={(e) => {
           if ((options.readOnly ?? rowLocked) || (options.disabled ?? false)) return;
@@ -2459,8 +2551,8 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
       whouseCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("whouseCode", { readOnly: true, value: row.whouseName ?? row.whName ?? row.whouseCode ?? row.WHname ?? row.WHcode ?? "" })}</td>,
       locCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("locCode", { readOnly: true, value: row.locName ?? row.locCode ?? "" })}</td>,
       drAcctCode: () => lookupCell("drAcctCode", row.drAcctCode || "", () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "drAcct" })),
-      rcCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("rcCode", { readOnly: rowLocked, value: row.rcCode || rcCode || "" })}</td>,
-      slCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("slCode", { readOnly: rowLocked })}</td>,
+      rcCode: () => lookupCell("rcCode", row.rcCode || rcCode || "", () => updateState({ selectedRowIndex: index, showRcModal: true, accountModalSource: "detailRcCode" })),
+      slCode: () => lookupCell("slCode", row.slCode || "", () => updateState({ selectedRowIndex: index, showSlModal: true, accountModalSource: "detailSlCode" })),
       qtyOnHand: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("qtyOnHand", { readOnly: true, value: row.qtyOnHand || "0.000000" })}</td>,
       mrsNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("mrsNo", { readOnly: rowLocked })}</td>,
       mrsQty: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("mrsQty", { value: row.mrsQty || "0.000000" })}</td>,
@@ -2821,8 +2913,8 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
                   label="Employee Name"
                   type="text"
                   value={vendName || ""}
-                  disabled={isFormDisabled}
-                  onChange={(val) => updateState({ vendName: val })}
+                  disabled
+                  readOnly
                 />
 
                 <FieldRenderer
@@ -2841,8 +2933,8 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
                   label="Customer Name"
                   type="text"
                   value={state.custName || ""}
-                  disabled={isFormDisabled}
-                  onChange={(val) => updateState({ custName: val })}
+                  disabled
+                  readOnly
                 />
               </div>
 
@@ -2964,6 +3056,14 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
                   {totals.totalQtyNeeded}
                 </label>
               </div>
+              <div className="global-tran-tab-footer-total-div-ui">
+                <label htmlFor="TotalAmount" className="global-tran-tab-footer-total-label-ui">
+                  Total Amount:
+                </label>
+                <label htmlFor="TotalAmount" className="global-tran-tab-footer-total-value-ui">
+                  {totals.totalAmount}
+                </label>
+              </div>
             </div>
           </div>
         </div>
@@ -3026,6 +3126,7 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
                             <button
                               type="button"
                               className="global-tran-td-button-add-ui"
+                              disabled={(detailRows || []).length === 0}
                               onClick={() => handleAddRowGL(originalIndex)}
                             >
                               <FontAwesomeIcon icon={faPlus} />
@@ -3052,7 +3153,10 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
             <div className="global-tran-tab-footer-button-div-ui">
               <button
                 onClick={() => handleAddRowGL()}
-                className="global-tran-tab-footer-button-add-ui"
+                disabled={(detailRows || []).length === 0}
+                className={`global-tran-tab-footer-button-add-ui ${
+                  (detailRows || []).length === 0 ? "opacity-50 cursor-not-allowed" : ""
+                }`}
                 style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
               >
                 <FontAwesomeIcon icon={faPlus} className="mr-2" />
@@ -3087,20 +3191,14 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
       <div className={topTab === "history" ? "" : "hidden"}>
         <AllTranHistory
           showHeader={false}
+          isActive={topTab === "history"}
           endpoint="/getMSISHistory"
           cacheKey={`MSIS:${state.branchCode || ""}:${state.documentNo || ""}`}
           activeTabKey="MSIS_Summary"
           branchCode={state.branchCode}
           startDate={null}
           endDate={null}
-          status={(() => {
-            const s = (state.status || "").toUpperCase();
-            if (s === "FINALIZED") return "F";
-            if (s === "CANCELLED") return "X";
-            if (s === "CLOSED") return "C";
-            if (s === "OPEN") return "";
-            return "All";
-          })()}
+          status="All"
           onRowDoubleClick={handleHistoryRowPick}
           historyExportName={`${documentTitle} History`}
         />
@@ -3119,6 +3217,7 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
           isOpen={rcLookupModalOpen}
           onClose={handleCloseRCModal}
           customParam="ActiveDept"
+          fixedRcType={rcLookupContext === "reqDept" ? "Department" : ""}
         />
       )}
 

@@ -952,7 +952,9 @@ const handleCloseItemLookup = async (selectedItems) => {
     if (isDuplicate) {
       useSwalProceedConfirm(
         "Duplicate Item Detected",
-        "This item is already in the list. Do you want to select it anyway?"
+        "This item is already in the list. Do you want to select it anyway?",
+        "Yes, Cancel",
+        "Cancel"
       ).then(async (result) => {
         if (result.isConfirmed) {
           await applySingleItem();
@@ -1005,7 +1007,9 @@ const handleCloseItemLookup = async (selectedItems) => {
   if (duplicateItems.length > 0) {
     useSwalProceedConfirm(
       "Duplicate Items Detected",
-      "Some items are already in the list. Do you want to add them anyway?"
+      "Some items are already in the list. Do you want to add them anyway?",
+      "Yes, Cancel",
+      "Cancel"
     ).then(async (result) => {
       if (result.isConfirmed) {
         await processAddition(itemsArray);
@@ -1401,7 +1405,11 @@ if (field === 'prStatus') {
     
    useSwalProceedConfirm(
       `Confirm Line ${isCancel ? "Cancellation" : "Closing"}?`, 
-      `Are you sure you want to ${actionText} this specific item? This action is permanent for this line and cannot be undone.`
+      isCancel
+        ? "Are you sure you want to cancel this item? Once cancelled, it cannot be edited. You need to add the item again if needed."
+        : `Are you sure you want to ${actionText} this specific item? This action is permanent for this line and cannot be undone.`,
+      isCancel ? "Yes, Cancel" : undefined,
+      "Cancel"
     ).then((result) => {
       if (result.isConfirmed) {
         if (isCancel) {
@@ -1956,6 +1964,7 @@ const renderPrDetailColumn = (columnKey, row, index) => {
     const value = row[field] || "";
     const lineCount = Math.max(1, String(value).split(/\r\n|\r|\n/).length);
     const canOpenModal = !isFormDisabled && row.prStatus === "O";
+    const preserveEncodedText = field === "itemSpecs";
 
     return (
       <td key={columnKey} className="global-tran-td-ui relative align-top" style={style}>
@@ -1963,9 +1972,12 @@ const renderPrDetailColumn = (columnKey, row, index) => {
           {autoResizePrDetailRows ? (
             <textarea
               id={`${field}-${index}`}
-              className="w-full min-h-[28px] resize-none bg-transparent py-1 pr-8 text-xs leading-4 whitespace-pre-wrap break-words focus:outline-none focus:ring-0"
+              className={`w-full min-h-[28px] resize-none bg-transparent py-1 pr-8 text-xs leading-4 focus:outline-none focus:ring-0 ${
+                preserveEncodedText ? "whitespace-pre overflow-x-auto" : "whitespace-pre-wrap break-words"
+              }`}
               value={value}
               rows={lineCount}
+              wrap={preserveEncodedText ? "off" : "soft"}
               readOnly={rowLocked}
               onChange={(e) => handleDetailChange(index, field, e.target.value, false)}
             />

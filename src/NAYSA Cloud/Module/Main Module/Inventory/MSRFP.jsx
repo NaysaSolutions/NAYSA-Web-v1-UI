@@ -110,7 +110,7 @@ const MSRFP = () => {
   const location = useLocation();
 
   const { resetFlag } = useReset();
-  const { user, companyInfo } = useAuth();
+  const { user, companyInfo, currentUserRow } = useAuth();
 const [isViewDocument, setIsViewDocument] = useState(false);
   const [msInvGLModeSetting, setMsInvGLModeSetting] = useState("");
 
@@ -237,8 +237,8 @@ const isViewDocumentUrl = isViewDocument;
       rr_date: new Date().toISOString().split("T")[0], // PR Date
     },
 
-    branchCode: "HO",
-    branchName: "Head Office",
+    branchCode: currentUserRow?.branchCode||"",
+    branchName: currentUserRow?.branchName||"",
 
     // Responsibility Center / Requesting Dept
     // Responsibility Center / Requesting Dept
@@ -1927,8 +1927,10 @@ if (shouldAutoGenerateGLOnSave) {
       // ======================
       header: { rr_date: today },
 
-      branchCode: "HO",
-      branchName: "Head Office",
+      branchCode: currentUserRow?.branchCode||"",
+      branchName: currentUserRow?.branchName||"",
+      userCode:currentUserRow?.userCode||"",
+
       cutoffCode: "",
       poNo: "",
 

@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { X } from "lucide-react";
 import {
   faSave,
   faUndo,
@@ -27,7 +28,7 @@ import {
   useSwalErrorAlert,
   useSwalSuccessAlert,
   useSwalErrorAlertAPI,
-} from "@/NAYSA Cloud/Global/behavior";
+} from "@/NAYSA Cloud/Global/behavior.jsx";
 
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
@@ -287,6 +288,21 @@ const GLFSMatching = forwardRef(function GLFSMatching(
     updateRow(getRowKey(selectedRowData), field, value);
   };
 
+  const clearFsConsoFields = (rowKey) => {
+    setRows((prev) =>
+      prev.map((row) =>
+        getRowKey(row) === rowKey
+          ? {
+              ...row,
+              fsConsoCode: "",
+              fsConsoName: "",
+              __isDirty: true,
+            }
+          : row
+      )
+    );
+  };
+
   const columns = useMemo(
     () => [
       // {
@@ -339,8 +355,26 @@ const GLFSMatching = forwardRef(function GLFSMatching(
 
           return (
             <div className="flex items-center gap-1 min-w-[160px]">
-              <div className="flex-1 rounded-md border border-gray-300 px-2 py-1 text-[11px] bg-gray-50 text-left">
+              <div
+                className={`relative flex-1 rounded-md border border-gray-300 px-2 py-1 text-[11px] bg-gray-50 text-left ${
+                  row.fsConsoCode ? "pr-8" : ""
+                }`}
+              >
                 {row.fsConsoCode || "NO MATCHED FS CONSO"}
+                {row.fsConsoCode && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      clearFsConsoFields(rowKey);
+                    }}
+                    title="Clear"
+                    aria-label="Clear FS Conso Code"
+                    className="absolute right-1 top-1/2 flex h-[18px] w-6 -translate-y-1/2 items-center justify-center rounded-md border-none bg-transparent text-slate-400 transition-colors hover:bg-slate-200/70 hover:text-slate-600 dark:text-slate-300 dark:hover:bg-slate-600/70 dark:hover:text-white"
+                  >
+                    <X style={{ width: "11px", height: "11px", strokeWidth: 2.5 }} />
+                  </button>
+                )}
               </div>
               <button
                 type="button"

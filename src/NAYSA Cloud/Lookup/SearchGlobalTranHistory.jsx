@@ -166,6 +166,30 @@ const parseNumber = (v) => {
 const isNumericColumn = (col) =>
   col?.renderType === "number" || col?.renderType === "currency";
 
+const statusFieldCandidates = [
+  "C",
+  "doc_stat",
+  "docStatus",
+  "status",
+  "stat",
+  "docStat",
+  "msisStatus",
+  "msis_status",
+];
+
+const getRowStatusValue = (row) =>
+  statusFieldCandidates
+    .map((field) => (row?.[field] !== undefined ? String(row[field]) : undefined))
+    .find((value) => value !== undefined) ?? "";
+
+const normalizeHistoryStatusRows = (rows) =>
+  (Array.isArray(rows) ? rows : []).map((row) => {
+    if (!row || typeof row !== "object" || Array.isArray(row)) return row;
+    const rowStatus = getRowStatusValue(row);
+    if (!rowStatus || row.docStatus !== undefined) return row;
+    return { ...row, docStatus: rowStatus };
+  });
+
 
 /* ============================== Component =============================== */
 const AllTranHistory = (props) => {
@@ -609,7 +633,13 @@ const AllTranHistory = (props) => {
       Object.keys(rootDataMap).forEach((k) => {
         const v = rootDataMap[k];
         if (v && typeof v === "object" && !Array.isArray(v) && Array.isArray(v.rows)) {
-          rootDataMap[k] = v.rows;
+          rootDataMap[k] = normalizeHistoryStatusRows(v.rows);
+        }
+      });
+
+      Object.keys(rootDataMap).forEach((k) => {
+        if (Array.isArray(rootDataMap[k])) {
+          rootDataMap[k] = normalizeHistoryStatusRows(rootDataMap[k]);
         }
       });
 
@@ -923,12 +953,8 @@ const AllTranHistory = (props) => {
 
   const statusFiltered = (() => {
     if (status === "All") return base;
-    const statusFieldCandidates = ["C", "doc_stat", "docStatus", "status", "stat"];
     return base.filter((row) => {
-      const rowStatus =
-        statusFieldCandidates
-          .map((f) => (row[f] !== undefined ? String(row[f]) : undefined))
-          .find((v) => v !== undefined) ?? "";
+      const rowStatus = getRowStatusValue(row);
       return rowStatus === status;
     });
   })();
@@ -1230,11 +1256,7 @@ const AllTranHistory = (props) => {
   };
 
   const getRowClassByStatus = (row) => {
-    const statusFieldCandidates = ["C", "doc_stat", "docStatus", "status", "stat","docStat"];
-    const rowStatus =
-      statusFieldCandidates
-        .map((f) => (row[f] !== undefined ? String(row[f]) : undefined))
-        .find((v) => v !== undefined) ?? "";
+    const rowStatus = getRowStatusValue(row);
 
     if (rowStatus === "X" ) return "text-red-600";
     if (rowStatus === "F" || rowStatus === "C") return "text-blue-700";

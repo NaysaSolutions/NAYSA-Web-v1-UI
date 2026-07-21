@@ -685,7 +685,7 @@ const BranchRef = () => {
         </div>
 
         {/* RIGHT: Registration Info */}
-        <div className="w-full lg:w-[320px]">
+        <div className="w-full lg:w-[320px] [&>div]:h-full">
           <RegistrationInfo layout="stacked" data={registrationInfo} />
         </div>
       </div>

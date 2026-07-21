@@ -46,6 +46,7 @@ import {
 import {
   useSwalSuccessAlert,
   useSwalErrorAlert,
+  useSwalValidationAlert,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
@@ -110,6 +111,132 @@ function normalizeStatusCode(value) {
   if (s === "ALL") return "ALL";
 
   return "";
+}
+
+function getExplicitPostedCvStatus(row) {
+  const statusValues = [
+    row?.cvDocStatus,
+    row?.cv_doc_status,
+    row?.cvStatus,
+    row?.cv_status,
+    row?.documentStatus,
+    row?.document_status,
+    row?.tranStatus,
+    row?.tran_status,
+    row?.postingStatus,
+    row?.posting_status,
+  ];
+
+  if (
+    statusValues.some((value) =>
+      ["FINALIZED", "POSTED"].includes(
+        (value || "").toString().trim().toUpperCase()
+      )
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    statusValues.some((value) =>
+      ["OPEN", "CANCELLED", "CLOSED", "UNPOSTED"].includes(
+        (value || "").toString().trim().toUpperCase()
+      )
+    )
+  ) {
+    return false;
+  }
+
+  const postedFlags = [
+    row?.isPosted,
+    row?.is_posted,
+    row?.posted,
+    row?.isFinalized,
+    row?.is_finalized,
+    row?.finalized,
+  ];
+
+  if (postedFlags.some((value) => {
+    const normalized = (value ?? "").toString().trim().toUpperCase();
+    return normalized === "1" || normalized === "Y" || normalized === "TRUE";
+  })) {
+    return true;
+  }
+
+  if (postedFlags.some((value) => {
+    const normalized = (value ?? "").toString().trim().toUpperCase();
+    return normalized === "0" || normalized === "N" || normalized === "FALSE";
+  })) {
+    return false;
+  }
+
+  return null;
+}
+
+function getRowBranchCode(row, fallbackBranchCode = "") {
+  return (
+    row?.branchCode ||
+    row?.branch_code ||
+    row?.branchcode ||
+    row?.BranchCode ||
+    fallbackBranchCode ||
+    ""
+  );
+}
+
+function getCvNoFromPathUrl(pathUrl) {
+  const raw = String(pathUrl || "").trim();
+  if (!raw) return "";
+
+  try {
+    const url = new URL(raw, "http://naysa.local");
+    return url.searchParams.get("cvNo") || url.searchParams.get("docNo") || "";
+  } catch {
+    return "";
+  }
+}
+
+function getRowCvNo(row) {
+  return (
+    row?.cvNo ||
+    row?.cv_no ||
+    row?.CVNo ||
+    row?.docNo ||
+    row?.doc_no ||
+    row?.documentNo ||
+    row?.document_no ||
+    getCvNoFromPathUrl(row?.pathUrl) ||
+    ""
+  );
+}
+
+async function isPostedCvTransaction(row, fallbackBranchCode = "") {
+  const explicitStatus = getExplicitPostedCvStatus(row);
+  if (explicitStatus !== null) return explicitStatus;
+
+  const cvNo = getRowCvNo(row);
+  const rowBranchCode = getRowBranchCode(row, fallbackBranchCode);
+  if (!cvNo || !rowBranchCode) return false;
+
+  try {
+    const query = `cvNo=${encodeURIComponent(cvNo)}&branchCode=${encodeURIComponent(
+      rowBranchCode
+    )}&direction=`;
+    const response = await fetchData(`getCV?${query}`);
+    const cvData = response?.data?.[0]?.result
+      ? JSON.parse(response.data[0].result)
+      : null;
+
+    return getExplicitPostedCvStatus({
+      cvStatus: cvData?.cvStatus,
+      cvDocStatus: cvData?.docStatus,
+      documentStatus: cvData?.documentStatus,
+      tranStatus: cvData?.tranStatus,
+    }) === true;
+  } catch (error) {
+    console.error("CV posted status check failed:", error);
+    return false;
+  }
 }
 
 function buildStatusDisplay(codeOrText) {
@@ -436,99 +563,152 @@ export default function CheckRL() {
       const filtered = filterRowsByHeaderStatus(sourceRows, headerStatus);
       updateState({ rows: filtered });
       computeTotals(filtered);
+      return filtered;
     },
     [computeTotals]
   );
 
+  const fetchCheckReleasingRows = useCallback(async (filters) => {
+    const searchBranchCode = filters?.branchCode || "";
+
+    const resp = await fetchData(ENDPOINT, {
+      json_data: {
+        json_data: {
+          branchCode: searchBranchCode,
+          payeeCode: filters?.payeeCode || "",
+          startDate: filters?.startDate || "",
+          endDate: filters?.endDate || "",
+          status: "",
+        },
+      },
+    });
+
+    const parsed = resp?.data?.[0]?.result
+      ? JSON.parse(resp.data[0].result)
+      : [];
+
+    const dt1 = Array.isArray(parsed) ? parsed : [];
+    const postedChecks = await Promise.all(
+      dt1.map((row) => isPostedCvTransaction(row, searchBranchCode))
+    );
+    const postedCvRows = dt1.filter((_, index) => postedChecks[index]);
+
+    return postedCvRows.map((r) => {
+      const rawStatus =
+        r.releasedStat ??
+        r.released_stat ??
+        r.docStatus ??
+        r.doc_status ??
+        r.status ??
+        "";
+
+      const code = normalizeStatusCode(rawStatus);
+
+      return {
+        ...r,
+        statusCode: code,
+        originalDocStatus: rawStatus,
+        docStatusView: buildStatusDisplay(rawStatus),
+      };
+    });
+  }, []);
+
   const loadDefaults = useCallback(async () => {
     updateState({ showSpinner: true });
+    const defaults = {
+      branchCode: "",
+      branchName: "",
+      startDate: useGetFirstDayOfMonth(),
+      endDate: useGetCurrentDayV2(),
+      status: "ALL",
+    };
+
     try {
       const [, hsUser] = await Promise.all([
         useTopCompanyRow(),
         useTopUserRow(user?.USER_CODE),
       ]);
 
-      updateState({
-        startDate: useGetFirstDayOfMonth(),
-        endDate: useGetCurrentDayV2(),
-        status: "ALL",
-      });
-
       if (hsUser) {
         const hsBranch = await useTopBranchRow(hsUser.branchCode);
-        updateState({
-          branchCode: hsUser.branchCode,
-          branchName: hsBranch?.branchName || hsUser.branchName,
-        });
+        defaults.branchCode = hsUser.branchCode || "";
+        defaults.branchName = hsBranch?.branchName || hsUser.branchName || "";
       }
+
+      updateState(defaults);
+      return defaults;
     } catch (err) {
       console.error("Error loading defaults:", err);
+      updateState(defaults);
+      return defaults;
     } finally {
       updateState({ showSpinner: false });
     }
   }, [user?.USER_CODE]);
 
-  const handleReset = useCallback(() => {
-    updateState({
-      payeeCode: "",
-      payeeName: "",
-      status: "ALL",
-      allRows: [],
-      rows: [],
-      startDate: useGetFirstDayOfMonth(),
-      endDate: useGetCurrentDayV2(),
-      countU: 0,
-      countR: 0,
-      countH: 0,
-      countX: 0,
-      countV: 0,
-      countS: 0,
-      grandTotal: 0,
-    });
-  }, []);
+  const handleReset = useCallback(async () => {
+    updateState({ isLoading: true });
+
+    try {
+      const defaults = await loadDefaults();
+      const resetFilters = {
+        ...defaults,
+        payeeCode: "",
+        payeeName: "",
+      };
+
+      updateState({
+        ...resetFilters,
+        allRows: [],
+        rows: [],
+        countU: 0,
+        countR: 0,
+        countH: 0,
+        countX: 0,
+        countV: 0,
+        countS: 0,
+        grandTotal: 0,
+      });
+
+      const decorated = await fetchCheckReleasingRows(resetFilters);
+      updateState({ allRows: decorated });
+      applyHeaderStatusFilter(decorated, "ALL");
+    } catch (e) {
+      console.error("Reset failed:", e);
+      updateState({ allRows: [], rows: [] });
+      computeTotals([]);
+    } finally {
+      updateState({ isLoading: false });
+    }
+  }, [
+    applyHeaderStatusFilter,
+    computeTotals,
+    fetchCheckReleasingRows,
+    loadDefaults,
+  ]);
 
   const doFind = useCallback(async () => {
     updateState({ isLoading: true });
     try {
-      const resp = await fetchData(ENDPOINT, {
-        json_data: {
-          json_data: {
-            branchCode,
-            payeeCode,
-            startDate,
-            endDate,
-            status: "",
-          },
-        },
-      });
-
-      const parsed = resp?.data?.[0]?.result
-        ? JSON.parse(resp.data[0].result)
-        : [];
-
-      const dt1 = Array.isArray(parsed) ? parsed : [];
-
-      const decorated = dt1.map((r) => {
-        const rawStatus =
-          r.releasedStat ??
-          r.released_stat ??
-          r.docStatus ??
-          r.doc_status ??
-          r.status ??
-          "";
-
-        const code = normalizeStatusCode(rawStatus);
-
-        return {
-          ...r,
-          statusCode: code,
-          originalDocStatus: rawStatus,
-          docStatusView: buildStatusDisplay(rawStatus),
-        };
+      const decorated = await fetchCheckReleasingRows({
+        branchCode,
+        payeeCode,
+        startDate,
+        endDate,
       });
 
       updateState({ allRows: decorated });
-      applyHeaderStatusFilter(decorated, status);
+      const filteredRows = applyHeaderStatusFilter(decorated, status);
+
+      if (filteredRows.length === 0) {
+        useSwalValidationAlert({
+          icon: "info",
+          title: "No Records Found",
+          message: `No records found for the selected date range: ${
+            startDate || "N/A"
+          } to ${endDate || "N/A"}.`,
+        });
+      }
     } catch (e) {
       console.error("Find failed:", e);
       updateState({ allRows: [], rows: [] });
@@ -544,6 +724,7 @@ export default function CheckRL() {
     status,
     applyHeaderStatusFilter,
     computeTotals,
+    fetchCheckReleasingRows,
   ]);
 
   useEffect(() => {

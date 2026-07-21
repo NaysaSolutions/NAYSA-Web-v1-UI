@@ -5,7 +5,6 @@ import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 
 // Import Lookup Modals
 import BranchLookupModal from "@/NAYSA Cloud/Lookup/SearchBranchRef";
-import SearchCutoffRef from "@/NAYSA Cloud/Lookup/SearchCutoffRef";
 import SearchCurrRef from "@/NAYSA Cloud/Lookup/SearchCurrRef";
 import SearchBankMast from "@/NAYSA Cloud/Lookup/SearchBankMast";
 import SearchRCMast from "@/NAYSA Cloud/Lookup/SearchRCMast";
@@ -20,28 +19,10 @@ import DateFormatInput from "@/NAYSA Cloud/Global/DateFormatInput.jsx";
 
 // Icons & Globals
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import {
-  faChevronDown,
-  faFilePdf,
-  faSave,
-  faUndo,
-  faInfoCircle,
-  faVideo,
-} from "@fortawesome/free-solid-svg-icons";
-import {
-  reftables,
-  reftablesPDFGuide,
-  reftablesVideoGuide,
-} from "@/NAYSA Cloud/Global/reftable";
-import {
-  useSwalErrorAlert,
-  useSwalSuccessAlert,
-  useSwalErrorAlertAPI,
-} from "@/NAYSA Cloud/Global/behavior.jsx";
-import {
-  useFieldLenghtCheck,
-  useGetFieldLength,
-} from "@/NAYSA Cloud/Global/procedure";
+import { faChevronDown, faFilePdf, faSave, faUndo, faInfoCircle, faVideo, faTimes, faSpinner, faSearch } from "@fortawesome/free-solid-svg-icons";
+import { reftables, reftablesPDFGuide, reftablesVideoGuide } from "@/NAYSA Cloud/Global/reftable";
+import { useSwalErrorAlert, useSwalSuccessAlert, useSwalErrorAlertAPI} from "@/NAYSA Cloud/Global/behavior.jsx";
+import { useFieldLenghtCheck, useGetFieldLength,} from '@/NAYSA Cloud/Global/procedure';
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 // UI Helpers
@@ -75,6 +56,143 @@ const INITIAL_FORM = {
   userCode: "",
   tblFieldArray: [],
   tblFieldArrayBir: [],
+};
+
+const CompanyCutoffLookup = ({ isOpen, onClose }) => {
+  const [filters, setFilters] = useState({
+    cutoffCode: "",
+    cutoffName: "",
+  });
+
+  const {
+    data: cutoffs = [],
+    isLoading,
+    isFetching,
+  } = useQuery({
+    queryKey: ["companyOpenCutoffLookup"],
+    queryFn: async () => {
+      const { data } = await apiClient.get("/cutOff");
+      const raw = data?.data?.[0]?.result || data?.result;
+      return raw ? JSON.parse(raw) : [];
+    },
+    enabled: isOpen,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const filteredCutoffs = useMemo(() => {
+    const cutoffCodeFilter = filters.cutoffCode.toLowerCase();
+    const cutoffNameFilter = filters.cutoffName.toLowerCase();
+
+    return cutoffs.filter((item) => {
+      const status = String(item.status || item.Status || "").trim().toUpperCase();
+      const isClosed = status === "C" || status === "CLOSED";
+
+      return (
+        !isClosed &&
+        String(item.cutoffCode || "")
+          .toLowerCase()
+          .includes(cutoffCodeFilter) &&
+        String(item.cutoffName || "")
+          .toLowerCase()
+          .includes(cutoffNameFilter)
+      );
+    });
+  }, [cutoffs, filters]);
+
+  const handleApply = (cutoff) => {
+    onClose({
+      cutoffCode: cutoff.cutoffCode || "",
+      cutoffName: cutoff.cutoffName || "",
+    });
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 animate-fade-in">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col relative overflow-hidden transform animate-scale-in border border-slate-200">
+        <div className="flex items-center justify-between bg-slate-100 border-b border-slate-200">
+          <div className="flex items-center gap-2 pl-3">
+            <h2 className="global-lookup-headertext-ui">Search Cut Off</h2>
+            {isFetching && (
+              <div className="flex h-2 w-2 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={() => onClose(null)}
+            className="p-2 text-slate-400 hover:text-red-600 transition-colors"
+          >
+            <FontAwesomeIcon icon={faTimes} size="lg" />
+          </button>
+        </div>
+
+        <div className="flex-grow overflow-auto custom-scrollbar bg-white">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center h-64 text-slate-400">
+              <FontAwesomeIcon icon={faSpinner} spin size="2x" className="mb-4 text-blue-500" />
+              <p className="text-sm font-medium">Loading...</p>
+            </div>
+          ) : (
+            <table className="min-w-full border-separate border-spacing-0">
+              <thead className="sticky top-0 z-10 bg-slate-200">
+                <tr>
+                  {[
+                    { label: "Cut Off Code", key: "cutoffCode" },
+                    { label: "Description", key: "cutoffName" },
+                  ].map((col) => (
+                    <th key={col.key} className="global-lookup-th-ui">
+                      <span className="global-lookup-th-text-ui">{col.label}</span>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={filters[col.key]}
+                          onChange={(e) => setFilters((prev) => ({ ...prev, [col.key]: e.target.value }))}
+                          placeholder="Filter..."
+                          className="global-lookup-filter-text-ui"
+                        />
+                        <FontAwesomeIcon icon={faSearch} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-slate-100">
+                {filteredCutoffs.length > 0 ? (
+                  filteredCutoffs.map((cutoff, index) => (
+                    <tr
+                      key={cutoff.cutoffCode || index}
+                      onClick={() => handleApply(cutoff)}
+                      className="group hover:bg-blue-50 cursor-pointer transition-colors"
+                    >
+                      <td className="global-lookup-td-ui w-[180px] font-bold">{cutoff.cutoffCode}</td>
+                      <td className="global-lookup-td-ui w-[300px]">{cutoff.cutoffName}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="2" className="px-4 py-20 text-center text-slate-400 italic text-sm">
+                      No matching records found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="global-lookup-footer-records-div-ui">
+          <span className="global-lookup-footer-records-text-ui">
+            Total Records: {filteredCutoffs.length}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const Company = () => {
@@ -267,63 +385,12 @@ const Company = () => {
       {(isFetching || isSaving) && <LoadingSpinner />}
 
       {/* Lookup Modals Logic stays similar but triggers toggleModal */}
-      <BranchLookupModal
-        isOpen={modals.branch}
-        onClose={(v) => {
-          toggleModal("branch", false);
-          if (v)
-            updateForm({ branchCode: v.branchCode, branchName: v.branchName });
-        }}
-      />
-      <SearchCutoffRef
-        isOpen={modals.cutoff}
-        onClose={(v) => {
-          toggleModal("cutoff", false);
-          if (v)
-            updateForm({ cutoffCode: v.cutoffCode, cutoffName: v.cutoffName });
-        }}
-      />
-      <SearchCurrRef
-        isOpen={modals.currency}
-        onClose={(v) => {
-          toggleModal("currency", false);
-          if (v)
-            updateForm({ currencyCode: v.currCode, currencyName: v.currName });
-        }}
-      />
-      <SearchBankMast
-        isOpen={modals.disbBank}
-        onClose={(v) => {
-          toggleModal("disbBank", false);
-          if (v)
-            updateForm({
-              disbursementBankCode: v.bankCode,
-              disbursementBankName: v.bankAcctNo,
-            });
-        }}
-      />
-      <SearchBankMast
-        isOpen={modals.depBank}
-        onClose={(v) => {
-          toggleModal("depBank", false);
-          if (v)
-            updateForm({
-              depositBankCode: v.bankCode,
-              depositBankName: v.bankAcctNo,
-            });
-        }}
-      />
-      <SearchRCMast
-        isOpen={modals.rc}
-        onClose={(v) => {
-          toggleModal("rc", false);
-          if (v && rcType)
-            updateForm({
-              [`${rcType}RespCenter`]: v.rcCode,
-              [`${rcType}RespCenterName`]: v.rcName,
-            });
-        }}
-      />
+      <BranchLookupModal isOpen={modals.branch} onClose={(v) => { toggleModal("branch", false); if(v) updateForm({ branchCode: v.branchCode, branchName: v.branchName }) }} />
+      <CompanyCutoffLookup isOpen={modals.cutoff} onClose={(v) => { toggleModal("cutoff", false); if(v) updateForm({ cutoffCode: v.cutoffCode, cutoffName: v.cutoffName }) }} />
+      <SearchCurrRef isOpen={modals.currency} onClose={(v) => { toggleModal("currency", false); if(v) updateForm({ currencyCode: v.currCode, currencyName: v.currName }) }} />
+      <SearchBankMast isOpen={modals.disbBank} onClose={(v) => { toggleModal("disbBank", false); if(v) updateForm({ disbursementBankCode: v.bankCode , disbursementBankName: v.bankAcctNo }) }} />
+      <SearchBankMast isOpen={modals.depBank} onClose={(v) => { toggleModal("depBank", false); if(v) updateForm({ depositBankCode: v.bankCode , depositBankName: v.bankAcctNo }) }} />
+      <SearchRCMast isOpen={modals.rc} onClose={(v) => { toggleModal("rc", false); if(v && rcType) updateForm({ [`${rcType}RespCenter`]: v.rcCode, [`${rcType}RespCenterName`]: v.rcName  });}} />
 
       {/* Header & ButtonBar */}
       <div className="global-ref-header-ui">

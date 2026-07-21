@@ -61,8 +61,7 @@ const BillTermLookupModal = ({ isOpen, onClose }) => {
   } = useQuery({
     queryKey: ["lookupBillterm"],
     queryFn: async () => {
-      // Fix: Wrapping parameters in PARAMS string as required by your backend
-      const { data: result } = await apiClient.get("/lookupBillterm", {
+      const { data: result } = await apiClient.get("/billterm", {
         params: {
           PARAMS: JSON.stringify({
             search: "",
@@ -75,12 +74,28 @@ const BillTermLookupModal = ({ isOpen, onClose }) => {
       const rawData = result?.data?.[0]?.result || "[]";
       const parsedData = Array.isArray(rawData) ? rawData : JSON.parse(rawData);
 
-      return parsedData;
+      return parsedData.map((item) => ({
+        ...item,
+        billtermCode:
+          item.billtermCode ??
+          item.billterm_code ??
+          item.code ??
+          "",
+        billtermName:
+          item.billtermName ??
+          item.billterm_name ??
+          item.name ??
+          "",
+        daysDue:
+          item.daysDue ??
+          item.days_due ??
+          "",
+      }));
     },
     enabled: isOpen,
-    staleTime: 1000 * 60 * 5,
-    refetchInterval: 1000 * 30,
-    refetchIntervalInBackground: false,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
     placeholderData: keepPreviousData,
   });
 
