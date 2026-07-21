@@ -90,6 +90,7 @@ import {
   formatNumber,
   parseFormattedNumber,
   useSwalshowSaveSuccessDialog,
+  useSwalSuccessAlert,
   useSwalvalidateRequiredFields,
   useSwalValidationAlert,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
@@ -533,6 +534,7 @@ rrQty: "",
     Array.isArray(detailRows) &&
     detailRows.length > 0 &&
     detailRows.every((row) => !hasPONoValue(row));
+  const shouldHideFreeQuantity = isDirectReceiving;
 
   const msrrDetailColumnDefs = useMemo(
   () => [
@@ -603,11 +605,24 @@ rrQty: "",
       "poNo",
       "poBalance",
       "prBalance",
-      "freeQty",
+      ...(shouldHideFreeQuantity ? ["freeQty", "freeQuantity"] : []),
     ]);
-    return columns.filter((column) => !hiddenDirectReceivingColumns.has(column.key));
+    return columns.filter((column) => {
+      const normalizedKey = String(column.key || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+      const normalizedLabel = String(column.label || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+
+      if (shouldHideFreeQuantity && ["freeqty", "freequantity"].includes(normalizedKey)) {
+        return false;
+      }
+
+      if (shouldHideFreeQuantity && normalizedLabel === "freequantity") {
+        return false;
+      }
+
+      return !hiddenDirectReceivingColumns.has(column.key);
+    });
   },
-  [getOrderedMSRRDetailColumns, isDirectReceiving, msrrDetailColumnDefs]
+  [getOrderedMSRRDetailColumns, isDirectReceiving, msrrDetailColumnDefs, shouldHideFreeQuantity]
 );
 
   const getMSRRDetailFallbackWidth = (key) =>
@@ -3518,7 +3533,8 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
   };
 
  const handleDetailChange = async (index, field, value, extraData = {}) => {
-    const rows = Array.isArray(detailRows) ? detailRows : [];
+    const sourceRows = detailRowsRef.current || detailRows || [];
+    const rows = Array.isArray(sourceRows) ? sourceRows : [];
     const updatedRows = [...rows];
 
     // ✅ guard: invalid index or row not found
@@ -3648,6 +3664,7 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
 
     updatedRows[index] = row;
     if (field === "rrQty" && !validateRRQtyWithinPOBalance(updatedRows)) return;
+    detailRowsRef.current = updatedRows;
     updateState({ detailRows: updatedRows });
 
     // ✅ replicate only for header-like fields (codes)
@@ -4664,11 +4681,7 @@ const handleClosePayeeLookup = async (row) => {
       );
 
       if (result?.success) {
-        Swal.fire({
-          icon: "success",
-          title: "Success",
-          text: "Cancelled successfully.",
-        });
+        useSwalSuccessAlert("Success", "Cancellation Completed");
         await fetchTranData(documentNo, branchCode);
       }
     }
@@ -4856,19 +4869,23 @@ const handleClosePayeeLookup = async (row) => {
     }
   };
 
-  const handleMSRRGridKeyDown = (e, index, field, options = {}) => {
+  const handleMSRRGridKeyDown = async (e, index, field, options = {}) => {
     if (options.readOnly || options.disabled || isFormDisabled) return;
 
     if (e.key === "Enter") {
       e.preventDefault();
+      let nextValue = e.currentTarget.value;
+
       if (["rrQty", "freeQty", "unitCost", "vatRate"].includes(field)) {
-        const numericValue = parseFormattedNumber(e.target.value || 0);
-        e.target.value = formatMSRRByField(
+        const numericValue = parseFormattedNumber(nextValue || 0);
+        nextValue = formatMSRRByField(
           field,
           Number.isFinite(numericValue) ? numericValue : 0,
         );
+        e.currentTarget.value = nextValue;
       }
-      handleDetailChange(index, field, e.target.value, true);
+
+      await handleDetailChange(index, field, nextValue, true);
       setTimeout(() => focusNextMSRRDetailCell(index, field), 0);
       return;
     }
@@ -4886,6 +4903,48 @@ const handleClosePayeeLookup = async (row) => {
         Math.min((detailRowsRef.current || detailRows || []).length - 1, index + 1),
       );
     }
+  };
+
+  const handleAddBlankRow = (index) => {
+    if (isFormDisabled) return;
+
+    const currentRow = detailRows?.[index] || {};
+    const today = header.rr_date || new Date().toISOString().split("T")[0];
+    const newRow = recalcMSRRRow(getHeaderWarehouseLocationFields({
+      invType: currentRow.invType || "MS",
+      groupId: generateClientGroupId(),
+      poStatus: status || "",
+      itemCode: "",
+      itemName: "",
+      uomCode: "",
+      qtyOnHand: formatNumber(0, decQty),
+      qtyAlloc: formatNumber(0, decQty),
+      qtyNeeded: formatNumber(0, decQty),
+      uomCode2: "",
+      uomQty2: formatNumber(0, decQty),
+      dateNeeded: today,
+      itemSpecs: "",
+      serviceCode: "",
+      serviceName: "",
+      poQty: formatNumber(0, decQty),
+      rrQty: formatNumber(0, decQty),
+      freeQty: formatNumber(0, decQty),
+      unitCost: formatNumber(0, decUcost),
+      vatRate: formatNumber(0, 2),
+      whCode: state.WHCode || state.WHcode || WHCode || WHcode || "",
+      whName: state.WHName || WHName || "",
+      whouseCode: state.WHCode || state.WHcode || WHCode || WHcode || "",
+      whouseName: state.WHName || WHName || "",
+      LocCode: state.LocCode || LocCode || "",
+      locCode: state.LocCode || LocCode || "",
+      LocName: state.LocName || LocName || "",
+      locName: state.LocName || LocName || "",
+    }));
+
+    const updatedRows = [...detailRows];
+    updatedRows.splice(index + 1, 0, newRow);
+    updateState({ detailRows: updatedRows });
+    updateTotalsDisplay(updatedRows);
   };
 
   const renderMSRRDetailCell = (columnKey, row, index) => {
@@ -5980,13 +6039,22 @@ const handleClosePayeeLookup = async (row) => {
                           className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black"
                           style={transactionActionsCellStyle}
                         >
-                          <button
-                            type="button"
-                            className="global-tran-td-button-delete-ui"
-                            onClick={() => handleDeleteRow(originalIndex)}
-                          >
-                            <FontAwesomeIcon icon={faTrashAlt} />
-                          </button>
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              className="global-tran-td-button-add-ui"
+                              onClick={() => handleAddBlankRow(originalIndex)}
+                            >
+                              <FontAwesomeIcon icon={faPlus} />
+                            </button>
+                            <button
+                              type="button"
+                              className="global-tran-td-button-delete-ui"
+                              onClick={() => handleDeleteRow(originalIndex)}
+                            >
+                              <FontAwesomeIcon icon={faTrashAlt} />
+                            </button>
+                          </div>
                         </td>
                       )}
                     </tr>

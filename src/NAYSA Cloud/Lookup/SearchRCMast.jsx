@@ -29,6 +29,7 @@ const RCLookupModal = ({
   source, 
   customParam = "ActiveAll",
   title = "Select Responsibility Center",
+  fixedRcType = "",
   withPagination = false 
 }) => {
   const [filters, setFilters] = useState({
@@ -90,8 +91,13 @@ const RCLookupModal = ({
   const filteredAndSorted = useMemo(() => {
     if (!rcList.length) return [];
 
+    const fixedType = String(fixedRcType || "").trim().toLowerCase();
+
     let result = rcList.filter((item) => {
+      const itemType = String(item.rcType || "").trim().toLowerCase();
+
       return (
+        (!fixedType || itemType === fixedType) &&
         (item.rcCode || "").toLowerCase().includes(debouncedFilters.rcCode.toLowerCase()) &&
         (item.rcName || "").toLowerCase().includes(debouncedFilters.rcName.toLowerCase()) &&
         (item.rcType || "").toLowerCase().includes(debouncedFilters.rcType.toLowerCase())
@@ -109,7 +115,7 @@ const RCLookupModal = ({
     }
 
     return result;
-  }, [rcList, debouncedFilters, sortConfig]);
+  }, [rcList, debouncedFilters, sortConfig, fixedRcType]);
 
   // Pagination Logic
   const paginatedData = useMemo(() => {
