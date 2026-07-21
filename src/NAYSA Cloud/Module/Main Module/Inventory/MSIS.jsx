@@ -92,7 +92,7 @@ const MSIS = () => {
   const detailRowsRef = useRef([]);
   const detailRowsGLRef = useRef([]);
   const categoryAccountCacheRef = useRef({});
-  const { user } = useAuth();
+  const { user, currentUserRow } = useAuth();
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -144,8 +144,8 @@ useEffect(() => {
       rr_date: new Date().toISOString().split("T")[0], // PR Date
     },
 
-    branchCode: "HO",
-    branchName: "Head Office",
+    branchCode: currentUserRow?.branchCode||"",
+    branchName: currentUserRow?.branchName||"",
 
     // Responsibility Center / Requesting Dept
     // Responsibility Center / Requesting Dept
@@ -483,8 +483,9 @@ useEffect(() => {
 
     updateState({
       header: { rr_date: today },
-      branchCode: "HO",
-      branchName: "Head Office",
+      branchCode: currentUserRow?.branchCode||"",
+      branchName: currentUserRow?.branchName||"",
+      userCode:currentUserRow?.userCode||"",
       cutoffCode: "",
       rcCode: "",
       rcName: "",

@@ -131,7 +131,7 @@ const SLMastLookupModal = ({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 animate-fade-in">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col relative overflow-hidden transform animate-scale-in border border-slate-200">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col relative overflow-hidden transform animate-scale-in border border-slate-200">
         
         {/* Header Section */}
         <div className="flex items-center justify-between bg-slate-100 border-b border-slate-200">
