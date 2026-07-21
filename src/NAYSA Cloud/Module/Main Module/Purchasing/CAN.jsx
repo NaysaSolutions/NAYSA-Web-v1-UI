@@ -411,7 +411,7 @@ export const CAN = () => {
   const statusTextColor =
     normalizedDisplayStatus === "CANCELLED"
       ? "text-red-600"
-      : normalizedDisplayStatus === "AWARDED"
+      : ["AWARDED", "CLOSED"].includes(normalizedDisplayStatus)
         ? "text-blue-700"
         : "text-slate-900";
   
@@ -2817,7 +2817,7 @@ export const CAN = () => {
           aria-label="View Approval Status"
         >
           <p className="global-tran-headerstat-text-ui">Transaction Status</p>
-          <h1 className={`global-tran-stat-text-ui ${statusTextColor}`}>{displayStatus}</h1>
+          <h1 className={`global-tran-stat-text-ui uppercase ${statusTextColor}`}>{displayStatus}</h1>
         </button>
       </div>
     </div>

@@ -3152,7 +3152,7 @@ export const useResizableTableColumns = (columns = []) => {
     y: 0,
   });
   const [bypassColumnWidths, setBypassColumnWidths] = useState(false);
-  const [autoResizeRows, setAutoResizeRows] = useState(false);
+  const [autoResizeRows, setAutoResizeRows] = useState(true);
   const [showColumnVisibilityModal, setShowColumnVisibilityModal] = useState(false);
   const [showExportFileNameModal, setShowExportFileNameModal] = useState(false);
   const [showPdfTextCaptureModal, setShowPdfTextCaptureModal] = useState(false);
@@ -3181,6 +3181,173 @@ export const useResizableTableColumns = (columns = []) => {
   const contextMenuDragRef = useRef(null);
   const calculatorDragRef = useRef(null);
   const calculatorResizeRef = useRef(null);
+  const rowResizeRef = useRef(null);
+
+  const getMultilineRowInfo = useCallback((row) => {
+    if (!row) return { hasMultiline: false, lineCount: 1 };
+
+    let lineCount = 1;
+    let hasMultiline = false;
+
+    Array.from(row.cells || []).forEach((cell) => {
+      const control = cell.querySelector?.("textarea, input, select, [contenteditable='true']");
+      const liveValue = control?.value;
+      const serializedValue = control?.getAttribute?.("value");
+      const multilineControlValue = [liveValue, serializedValue].find((value) => /\r|\n/.test(String(value ?? "")));
+      const text = String(multilineControlValue ?? liveValue ?? cell.innerText ?? cell.textContent ?? "")
+        .replace(/\r\n?/g, "\n");
+      const isSingleLineControl = control?.tagName === "INPUT";
+      let multilineDisplay = cell.querySelector?.(":scope > [data-naysa-multiline-value-display='true']");
+
+      if (isSingleLineControl && multilineControlValue !== undefined) {
+        if (!multilineDisplay) {
+          multilineDisplay = document.createElement("div");
+          multilineDisplay.dataset.naysaMultilineValueDisplay = "true";
+          multilineDisplay.setAttribute("aria-hidden", "true");
+          cell.appendChild(multilineDisplay);
+        }
+        if (multilineDisplay.textContent !== text) {
+          multilineDisplay.textContent = text;
+        }
+        cell.dataset.naysaMultilineValueCell = "true";
+        control.dataset.naysaMultilineSourceControl = "true";
+      } else {
+        multilineDisplay?.remove();
+        cell.removeAttribute("data-naysa-multiline-value-cell");
+        control?.removeAttribute?.("data-naysa-multiline-source-control");
+      }
+
+      const explicitLines = text.split("\n").length;
+      const breakCount = cell.querySelectorAll?.("br").length || 0;
+      const cellLineCount = Math.max(explicitLines, breakCount + 1);
+
+      if (cellLineCount > 1 && text.trim()) {
+        hasMultiline = true;
+        cell.dataset.naysaMultilineContentCell = "true";
+      } else {
+        cell.removeAttribute("data-naysa-multiline-content-cell");
+      }
+      lineCount = Math.max(lineCount, cellLineCount);
+    });
+
+    return {
+      hasMultiline,
+      lineCount,
+    };
+  }, []);
+
+  const resetTableRowHeights = useCallback((table) => {
+    if (!table) return;
+    table.querySelectorAll("tbody tr").forEach((row) => {
+      row.style.removeProperty("height");
+      row.removeAttribute("data-naysa-multiline-row");
+      row.removeAttribute("data-naysa-manual-row-height");
+      row.removeAttribute("data-naysa-multiline-expanded");
+      row.querySelectorAll("[data-naysa-multiline-value-display='true']").forEach((display) => display.remove());
+      row.querySelectorAll("[data-naysa-multiline-toggle='true']").forEach((toggle) => toggle.remove());
+      row.querySelectorAll("[data-naysa-multiline-value-cell='true']").forEach((cell) => {
+        cell.removeAttribute("data-naysa-multiline-value-cell");
+      });
+      row.querySelectorAll("[data-naysa-multiline-content-cell='true']").forEach((cell) => {
+        cell.removeAttribute("data-naysa-multiline-content-cell");
+      });
+      row.querySelectorAll("[data-naysa-multiline-source-control='true']").forEach((control) => {
+        control.removeAttribute("data-naysa-multiline-source-control");
+      });
+    });
+  }, []);
+
+  const resizeMultilineRows = useCallback((table) => {
+    if (!table || table.dataset.naysaAutoRowSizing === "off") return;
+
+    table.querySelectorAll("tbody tr").forEach((row) => {
+      if (row.dataset.naysaManualRowHeight === "true") return;
+
+      if (!row.dataset.naysaDefaultRowHeight) {
+        const measuredHeight = Math.max(24, Math.round(row.getBoundingClientRect().height || 0));
+        row.dataset.naysaDefaultRowHeight = String(measuredHeight);
+      }
+
+      const { hasMultiline, lineCount } = getMultilineRowInfo(row);
+      if (!hasMultiline) {
+        row.style.removeProperty("height");
+        row.removeAttribute("data-naysa-multiline-row");
+        row.removeAttribute("data-naysa-multiline-expanded");
+        row.querySelectorAll("[data-naysa-multiline-toggle='true']").forEach((toggle) => toggle.remove());
+        return;
+      }
+
+      const maximumPreviewContentHeight = 120;
+      const hasHiddenLines = lineCount * 20 > maximumPreviewContentHeight;
+      const isExpanded = row.dataset.naysaMultilineExpanded === "true";
+      const multilineCells = Array.from(
+        row.querySelectorAll(
+          "td[data-naysa-multiline-content-cell='true'], td[data-naysa-multiline-value-cell='true']",
+        ),
+      );
+      const multilineCell = multilineCells.find((cell) => {
+        const multilineDisplay = cell.querySelector(
+          ":scope > [data-naysa-multiline-value-display='true']",
+        );
+        const control = cell.querySelector(
+          "textarea, input, select, [contenteditable='true']",
+        );
+        const cellValue = multilineDisplay?.textContent
+          ?? control?.value
+          ?? control?.getAttribute?.("value")
+          ?? cell.innerText
+          ?? cell.textContent
+          ?? "";
+
+        return Boolean(String(cellValue).trim());
+      });
+      const existingToggles = Array.from(
+        row.querySelectorAll("[data-naysa-multiline-toggle='true']"),
+      );
+      let multilineToggle = multilineCell?.querySelector(":scope > [data-naysa-multiline-toggle='true']");
+      const canToggleMultiline = hasHiddenLines && Boolean(multilineCell);
+      if (canToggleMultiline) {
+        existingToggles.forEach((toggle) => {
+          if (toggle !== multilineToggle) toggle.remove();
+        });
+        if (!multilineToggle) {
+          multilineToggle = document.createElement("button");
+          multilineToggle.type = "button";
+          multilineToggle.dataset.naysaMultilineToggle = "true";
+          multilineCell.appendChild(multilineToggle);
+        }
+        const toggleLabel = isExpanded ? "See less" : "See more...";
+        if (multilineToggle.textContent !== toggleLabel) {
+          multilineToggle.textContent = toggleLabel;
+        }
+      } else {
+        existingToggles.forEach((toggle) => toggle.remove());
+        row.removeAttribute("data-naysa-multiline-expanded");
+      }
+
+      const firstCell = row.cells?.[0];
+      const cellStyle = firstCell ? window.getComputedStyle(firstCell) : null;
+      const lineHeight = Number.parseFloat(cellStyle?.lineHeight) || 20;
+      const paddingTop = Number.parseFloat(cellStyle?.paddingTop) || 0;
+      const paddingBottom = Number.parseFloat(cellStyle?.paddingBottom) || 0;
+      const defaultHeight = Number(row.dataset.naysaDefaultRowHeight) || 24;
+      const toggleHeight = canToggleMultiline ? lineHeight + 4 : 0;
+      const naturalContentHeight = Math.ceil(lineHeight * lineCount + paddingTop + paddingBottom + 2);
+      const visibleContentHeight = isExpanded && canToggleMultiline
+        ? naturalContentHeight
+        : Math.min(naturalContentHeight, maximumPreviewContentHeight);
+      const autoHeight = Math.max(defaultHeight, visibleContentHeight + toggleHeight);
+
+      row.dataset.naysaMultilineRow = "true";
+      row.style.height = `${autoHeight}px`;
+    });
+  }, [getMultilineRowInfo]);
+
+  const prepareAutoResizeTable = useCallback((table) => {
+    if (!table || !table.querySelector(".global-tran-td-ui, .global-tran-th-ui")) return;
+    if (!table.dataset.naysaAutoRowSizing) table.dataset.naysaAutoRowSizing = "on";
+    resizeMultilineRows(table);
+  }, [resizeMultilineRows]);
 
   // Shared helpers for editable inputs and the table calculator.
   const setNativeControlValue = useCallback((control, value) => {
@@ -3238,6 +3405,194 @@ export const useResizableTableColumns = (columns = []) => {
       }
     };
   }, []);
+
+  useEffect(() => {
+    const styleId = "naysa-datatable-auto-row-sizing";
+    let style = document.getElementById(styleId);
+    if (!style) {
+      style = document.createElement("style");
+      style.id = styleId;
+      document.head.appendChild(style);
+    }
+    style.textContent = `
+        table[data-naysa-auto-row-sizing="on"] tbody tr[data-naysa-multiline-row="true"] > td {
+          white-space: pre-wrap !important;
+          vertical-align: top !important;
+          overflow: hidden !important;
+        }
+        table[data-naysa-auto-row-sizing="on"] tbody tr[data-naysa-multiline-row="true"] textarea {
+          height: 100% !important;
+          max-height: calc(6 * 1.25rem + 0.5rem) !important;
+          white-space: pre-wrap !important;
+          overflow: hidden !important;
+          resize: none !important;
+        }
+        table[data-naysa-auto-row-sizing="on"] tbody tr[data-naysa-multiline-row="true"][data-naysa-multiline-expanded="true"] textarea {
+          max-height: none !important;
+        }
+        table[data-naysa-auto-row-sizing="on"] td[data-naysa-multiline-value-cell="true"] input,
+        table[data-naysa-auto-row-sizing="on"] input[data-naysa-multiline-source-control="true"] {
+          display: none !important;
+        }
+        table[data-naysa-auto-row-sizing="on"] td[data-naysa-multiline-value-cell="true"] {
+          position: relative !important;
+        }
+        table[data-naysa-auto-row-sizing="on"] td[data-naysa-multiline-value-cell="true"] > .relative {
+          position: static !important;
+        }
+        table[data-naysa-auto-row-sizing="on"] td[data-naysa-multiline-value-cell="true"] svg[data-icon="magnifying-glass"],
+        table[data-naysa-auto-row-sizing="on"] td[data-naysa-multiline-value-cell="true"] svg[data-icon="search"] {
+          position: absolute !important;
+          top: 0.5rem !important;
+          right: 1.5rem !important;
+          transform: none !important;
+          z-index: 2;
+        }
+        table[data-naysa-auto-row-sizing="on"] [data-naysa-multiline-value-display="true"] {
+          display: block;
+          width: 100%;
+          max-height: 120px;
+          padding-right: 1.75rem;
+          white-space: pre-wrap;
+          overflow: hidden;
+          overflow-wrap: anywhere;
+          line-height: 1.25rem;
+          color: inherit;
+          text-align: left;
+          pointer-events: none;
+        }
+        table[data-naysa-auto-row-sizing="on"] tr[data-naysa-multiline-expanded="true"] [data-naysa-multiline-value-display="true"] {
+          max-height: none;
+          overflow: visible;
+        }
+        table[data-naysa-auto-row-sizing="on"] [data-naysa-multiline-toggle="true"] {
+          display: inline-flex;
+          margin-top: 0.2rem;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          color: #2563eb;
+          font-size: 0.7rem;
+          font-weight: 600;
+          line-height: 1.25rem;
+          cursor: pointer;
+        }
+        table[data-naysa-auto-row-sizing="on"] [data-naysa-multiline-toggle="true"]:hover {
+          color: #1d4ed8;
+          text-decoration: underline;
+        }
+        table[data-naysa-auto-row-sizing="on"] tbody tr[data-naysa-multiline-row="true"],
+        table[data-naysa-auto-row-sizing="on"] tbody tr[data-naysa-manual-row-height="true"] {
+          position: relative;
+        }
+        table[data-naysa-auto-row-sizing="on"] tbody tr[data-naysa-multiline-row="true"]:hover,
+        table[data-naysa-auto-row-sizing="on"] tbody tr[data-naysa-manual-row-height="true"]:hover {
+          cursor: row-resize;
+        }
+      `;
+
+    let animationFrame = 0;
+    const refreshTables = () => {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(() => {
+        document.querySelectorAll("table").forEach(prepareAutoResizeTable);
+      });
+    };
+
+    const handleValueChange = (event) => {
+      const table = event.target?.closest?.("table");
+      if (table) prepareAutoResizeTable(table);
+    };
+
+    const handleMultilineToggle = (event) => {
+      if (event.__naysaMultilineToggleHandled) return;
+      const toggle = event.target?.closest?.("[data-naysa-multiline-toggle='true']");
+      if (!toggle) return;
+      const row = toggle.closest("tr");
+      const table = row?.closest("table[data-naysa-auto-row-sizing='on']");
+      if (!row || !table) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      event.__naysaMultilineToggleHandled = true;
+      row.removeAttribute("data-naysa-manual-row-height");
+      row.dataset.naysaMultilineExpanded =
+        row.dataset.naysaMultilineExpanded === "true" ? "false" : "true";
+      resizeMultilineRows(table);
+    };
+
+    const handleRowResizeStart = (event) => {
+      if (event.button !== 0) return;
+      const row = event.target?.closest?.("tbody tr[data-naysa-multiline-row='true'], tbody tr[data-naysa-manual-row-height='true']");
+      const table = row?.closest?.("table[data-naysa-auto-row-sizing='on']");
+      if (!row || !table) return;
+
+      const bounds = row.getBoundingClientRect();
+      if (Math.abs(event.clientY - bounds.bottom) > 6) return;
+
+      event.preventDefault();
+      rowResizeRef.current = {
+        row,
+        startY: event.clientY,
+        startHeight: bounds.height,
+        minHeight: Number(row.dataset.naysaDefaultRowHeight) || 24,
+      };
+      document.body.style.cursor = "row-resize";
+      document.body.style.userSelect = "none";
+    };
+
+    const handleRowResizeMove = (event) => {
+      const activeResize = rowResizeRef.current;
+      if (!activeResize?.row?.isConnected) return;
+      const nextHeight = Math.max(
+        activeResize.minHeight,
+        Math.min(480, activeResize.startHeight + event.clientY - activeResize.startY),
+      );
+      activeResize.row.dataset.naysaManualRowHeight = "true";
+      activeResize.row.style.height = `${Math.round(nextHeight)}px`;
+    };
+
+    const handleRowResizeEnd = () => {
+      if (!rowResizeRef.current) return;
+      rowResizeRef.current = null;
+      document.body.style.removeProperty("cursor");
+      document.body.style.removeProperty("user-select");
+    };
+
+    const handleRowAutoFit = (event) => {
+      const row = event.target?.closest?.("tbody tr[data-naysa-manual-row-height='true']");
+      const table = row?.closest?.("table[data-naysa-auto-row-sizing='on']");
+      if (!row || !table) return;
+      const bounds = row.getBoundingClientRect();
+      if (Math.abs(event.clientY - bounds.bottom) > 6) return;
+      row.removeAttribute("data-naysa-manual-row-height");
+      resizeMultilineRows(table);
+    };
+
+    const observer = new MutationObserver(refreshTables);
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    document.addEventListener("input", handleValueChange, true);
+    document.addEventListener("change", handleValueChange, true);
+    document.addEventListener("click", handleMultilineToggle, true);
+    document.addEventListener("mousedown", handleRowResizeStart, true);
+    document.addEventListener("mousemove", handleRowResizeMove, true);
+    document.addEventListener("mouseup", handleRowResizeEnd, true);
+    document.addEventListener("dblclick", handleRowAutoFit, true);
+    refreshTables();
+
+    return () => {
+      observer.disconnect();
+      window.cancelAnimationFrame(animationFrame);
+      document.removeEventListener("input", handleValueChange, true);
+      document.removeEventListener("change", handleValueChange, true);
+      document.removeEventListener("click", handleMultilineToggle, true);
+      document.removeEventListener("mousedown", handleRowResizeStart, true);
+      document.removeEventListener("mousemove", handleRowResizeMove, true);
+      document.removeEventListener("mouseup", handleRowResizeEnd, true);
+      document.removeEventListener("dblclick", handleRowAutoFit, true);
+      handleRowResizeEnd();
+    };
+  }, [prepareAutoResizeTable, resizeMultilineRows]);
 
   const columnMetaMap = useMemo(
     () => new Map(columns.map((column) => [column.key, column])),
@@ -4325,6 +4680,7 @@ export const useResizableTableColumns = (columns = []) => {
     bodyContextCellRef.current = cell;
     bodyContextTableRef.current = table;
     headerContextTableRef.current = table;
+    setAutoResizeRows(table.dataset.naysaAutoRowSizing !== "off");
 
     setHeaderContextMenu({ visible: false, x: 0, y: 0, key: null });
     setBodyContextMenu({ visible: true, x: e.clientX, y: e.clientY });
@@ -4345,6 +4701,7 @@ export const useResizableTableColumns = (columns = []) => {
       bodyContextCellRef.current = cell;
       bodyContextTableRef.current = table;
       headerContextTableRef.current = table;
+      setAutoResizeRows(table.dataset.naysaAutoRowSizing !== "off");
 
       setHeaderContextMenu({ visible: false, x: 0, y: 0, key: null });
       setBodyContextMenu({ visible: true, x: e.clientX, y: e.clientY });
@@ -4856,9 +5213,31 @@ export const useResizableTableColumns = (columns = []) => {
   }, []);
 
   const toggleAutoResizeRows = useCallback(() => {
-    setAutoResizeRows((prev) => !prev);
+    const table = bodyContextTableRef.current;
+    if (!table) return;
+
+    const shouldEnable = table.dataset.naysaAutoRowSizing === "off";
+    table.dataset.naysaAutoRowSizing = shouldEnable ? "on" : "off";
+    setAutoResizeRows(shouldEnable);
+
+    if (shouldEnable) {
+      resizeMultilineRows(table);
+    } else {
+      resetTableRowHeights(table);
+    }
     setBodyContextMenu({ visible: false, x: 0, y: 0 });
-  }, []);
+  }, [resetTableRowHeights, resizeMultilineRows]);
+
+  const resetCurrentRowHeight = useCallback(() => {
+    const row = bodyContextCellRef.current?.closest?.("tr");
+    const table = bodyContextTableRef.current;
+    if (!row || !table) return;
+
+    row.removeAttribute("data-naysa-manual-row-height");
+    row.style.removeProperty("height");
+    resizeMultilineRows(table);
+    setBodyContextMenu({ visible: false, x: 0, y: 0 });
+  }, [resizeMultilineRows]);
 
   const showCopyDoneThenClose = useCallback((label = "Copied") => {
     if (copyFeedbackTimerRef.current) {
@@ -5512,7 +5891,19 @@ export const useResizableTableColumns = (columns = []) => {
             }}
           >
             <Rows3 className={getMenuIconClassName(true)} aria-hidden="true" />
-            <span>{autoResizeRows ? "Fixed row height" : "Auto resize rows"}</span>
+            <span>{autoResizeRows ? "Disable multiline row sizing" : "Enable multiline row sizing"}</span>
+          </button>
+          <button
+            type="button"
+            className={getMenuItemClassName(true)}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              resetCurrentRowHeight();
+            }}
+          >
+            <Rows3 className={getMenuIconClassName(true)} aria-hidden="true" />
+            <span>Auto-fit this row</span>
           </button>
           <button
             type="button"
@@ -5893,6 +6284,7 @@ export const useResizableTableColumns = (columns = []) => {
     startCalculatorResize,
     startContextMenuDrag,
     setBypassColumnWidths,
+    resetCurrentRowHeight,
     toggleColumnFiltering,
     toggleFreezeColumn,
     toggleColumnVisibility,

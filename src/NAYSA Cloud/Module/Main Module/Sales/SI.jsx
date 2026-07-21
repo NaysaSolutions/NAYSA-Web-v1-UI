@@ -5657,12 +5657,13 @@ const SI = () => {
   //Status Global Setup
   const displayStatus = status || 'OPEN';
   const statusMap = {
+    OPEN: "global-tran-stat-text-open-ui",
     FINALIZED: "global-tran-stat-text-finalized-ui",
     CANCELLED: "global-tran-stat-text-closed-ui",
-    CLOSED: "global-tran-stat-text-closed-ui",
+    CLOSED: "global-tran-stat-text-finalized-ui",
   };
 
-  const statusColor = statusMap[displayStatus] || "";
+  const statusColor = statusMap[String(displayStatus).trim().toUpperCase()] || "";
   const normalizedDisplayStatus = String(displayStatus || "").toUpperCase();
   const normalizedDocumentStatus = String(documentStatus || "").toUpperCase();
   const isOpenStatus =
@@ -9732,7 +9733,7 @@ return (
         <div className={`global-tran-headerstat-div-ui ${isViewDocument ? "max-md:!mt-0" : ""}`}>
           <div>
             <p className="global-tran-headerstat-text-ui">Transaction Status</p>
-            <h1 className={`global-tran-stat-text-ui ${statusColor}`}>{displayStatus}</h1>
+            <h1 className={`global-tran-stat-text-ui uppercase ${statusColor}`}>{displayStatus}</h1>
           </div>
         </div>
       </div>

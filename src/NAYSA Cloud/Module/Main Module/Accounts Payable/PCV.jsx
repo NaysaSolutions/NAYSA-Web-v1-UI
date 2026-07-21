@@ -367,10 +367,11 @@ const PCV = () => {
   const displayStatus = status || 'OPEN';
   const normalizedStatus = String(displayStatus).trim().toUpperCase();
   const statusMap = {
+    OPEN: "global-tran-stat-text-open-ui",
     POSTED: "global-tran-stat-text-finalized-ui",
     FINALIZED: "global-tran-stat-text-finalized-ui",
     CANCELLED: "global-tran-stat-text-closed-ui",
-    CLOSED: "global-tran-stat-text-closed-ui",
+    CLOSED: "global-tran-stat-text-finalized-ui",
   };
   const statusColor = statusMap[normalizedStatus] || "";
   const isFormDisabled = isViewDocumentUrl || ["POSTED", "FINALIZED", "CANCELLED", "CLOSED"].includes(normalizedStatus);
@@ -2762,7 +2763,7 @@ const handleCloseBranchModal = (selectedBranch) => {
         <div className={`global-tran-headerstat-div-ui ${isViewDocument ? "max-md:!mt-0" : ""}`}>
           <div>
             <p className="global-tran-headerstat-text-ui">Transaction Status</p>
-            <h1 className={`global-tran-stat-text-ui ${statusColor}`}>{displayStatus}</h1>
+            <h1 className={`global-tran-stat-text-ui uppercase ${statusColor}`}>{displayStatus}</h1>
           </div>
         </div>
       </div>

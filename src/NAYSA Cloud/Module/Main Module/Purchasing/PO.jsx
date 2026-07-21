@@ -731,12 +731,13 @@ const PO = () => {
   const displayStatus = getFullStatus(status);
 
   const statusMap = {
+    OPEN: "global-tran-stat-text-open-ui",
     FINALIZED: "global-tran-stat-text-finalized-ui",
     CANCELLED: "global-tran-stat-text-closed-ui",
     CLOSED: "global-tran-stat-text-finalized-ui",
   };
 
-  const statusColor = statusMap[displayStatus] || "";
+  const statusColor = statusMap[String(displayStatus).trim().toUpperCase()] || "";
   const maxApprovalLevel = Number(currentUserRow?.poMaxAppLevel || 0);
   const currentApprovalLevel = Number(appLevel ?? 0);
   const approvalStatusHiddenStatuses = ["CANCELLED", "POSTED", "FINALIZED"];
@@ -3871,7 +3872,7 @@ const PO = () => {
               <p className="global-tran-headerstat-text-ui">
                 Transaction Status
               </p>
-              <h1 className={`global-tran-stat-text-ui ${statusColor}`}>
+              <h1 className={`global-tran-stat-text-ui uppercase ${statusColor}`}>
                 {displayStatus}
               </h1>
             </div>

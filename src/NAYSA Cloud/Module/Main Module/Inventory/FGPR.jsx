@@ -488,11 +488,12 @@ const FGPR = () => {
     }, [state.documentStatus, state.status]);
 
     const statusColor = {
+        OPEN: "global-tran-stat-text-open-ui",
         FINALIZED: "global-tran-stat-text-finalized-ui",
         CANCELLED: "global-tran-stat-text-closed-ui",
-        CLOSED: "global-tran-stat-text-closed-ui",
+        CLOSED: "global-tran-stat-text-finalized-ui",
         POSTED: "global-tran-stat-text-finalized-ui",
-    }[displayStatus] || "";
+    }[String(displayStatus).trim().toUpperCase()] || "";
 
     const isFormDisabled =
         state.isViewDocument || ["FINALIZED", "CANCELLED", "CLOSED", "POSTED"].includes(displayStatus);
@@ -1983,7 +1984,7 @@ const FGPR = () => {
                     <div className="global-tran-headerstat-div-ui">
                         <div>
                             <p className="global-tran-headerstat-text-ui">Transaction Status</p>
-                            <h1 className={`global-tran-stat-text-ui ${statusColor}`}>{displayStatus}</h1>
+                            <h1 className={`global-tran-stat-text-ui uppercase ${statusColor}`}>{displayStatus}</h1>
                         </div>
                     </div>
                 </div>

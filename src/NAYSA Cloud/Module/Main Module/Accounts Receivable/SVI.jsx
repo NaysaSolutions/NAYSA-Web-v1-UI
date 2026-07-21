@@ -123,6 +123,21 @@ const normalizeGlRefNo = (value, fallback = "") => {
   return String(fallback || "").trim();
 };
 
+const normalizeGeneratedGlRows = (rows, fallbackDate = "") => {
+  return (Array.isArray(rows) ? rows : []).map((row) => {
+    const slRefNo = normalizeGlRefNo(row?.slRefNo);
+
+    return {
+      ...row,
+      slRefNo,
+      slRefDate: normalizeGlRefDate(
+        row?.slRefDate,
+        slRefNo ? fallbackDate : ""
+      ),
+    };
+  });
+};
+
 
 const SVI = () => {
 
@@ -146,6 +161,7 @@ const SVI = () => {
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
   const { resetFlag } = useReset();
   const [focusedCell, setFocusedCell] = useState(null); // { index: number, field: string }
+  const [glDateInputVersion, setGlDateInputVersion] = useState(0);
   const docType = docTypes.SVI; 
   const hsDoc = getAllTopHSDocRow(docType);
   const pdfLink = docTypePDFGuide[docType];
@@ -395,10 +411,11 @@ const SVI = () => {
   const displayStatus = status || 'OPEN';
   const normalizedStatus = String(displayStatus).trim().toUpperCase();
   const statusMap = {
+    OPEN: "global-tran-stat-text-open-ui",
     POSTED: "global-tran-stat-text-finalized-ui",
     FINALIZED: "global-tran-stat-text-finalized-ui",
     CANCELLED: "global-tran-stat-text-closed-ui",
-    CLOSED: "global-tran-stat-text-closed-ui",
+    CLOSED: "global-tran-stat-text-finalized-ui",
   };
   const statusColor = statusMap[normalizedStatus] || "";
   const isFormDisabled =
@@ -418,10 +435,10 @@ const SVI = () => {
     { key: "discRate", label: "Discount Rate", width: 120 },
     { key: "discAmount", label: "Discount Amount", width: 120 },
     { key: "netDisc", label: "Net Amount", width: 120 },
-    { key: "vatCode", label: "VAT Code", width: 80 },
+    { key: "vatCode", label: "VAT Code", width: 100 },
     { key: "vatName", label: "VAT Name", width: 220 },
     { key: "vatAmount", label: "VAT Amount", width: 120 },
-    { key: "atcCode", label: "ATC", width: 80 },
+    { key: "atcCode", label: "ATC", width: 100},
     { key: "atcName", label: "ATC Name", width: 220 },
     { key: "atcAmount", label: "ATC Amount", width: 120 },
     { key: "sviAmount", label: "Amount Due", width: 120 },
@@ -828,7 +845,11 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       creditFx1: formatNumber(glRow.creditFx1),
       debitFx2: formatNumber(glRow.debitFx2),
       creditFx2: formatNumber(glRow.creditFx2),
-      slRefDate:useformatToDatev2(glRow.slRefDate),
+      slRefNo: normalizeGlRefNo(glRow.slRefNo),
+      slRefDate: normalizeGlRefDate(
+        glRow.slRefDate,
+        glRow.slRefNo ? data.sviDate : ""
+      ),
     }));
 
   
@@ -1026,7 +1047,11 @@ const handleActivityOption = async (action) => {
           debitFx2: parseFormattedNumber(entry.debitFx2 || 0),
           creditFx2: parseFormattedNumber(entry.creditFx2 || 0),
           slRefNo: entry.slRefNo || "",
-          slRefDate: entry.slRefDate || null,
+          slRefDate:
+            normalizeGlRefDate(
+              entry.slRefDate,
+              entry.slRefNo ? documentDate : ""
+            ) || null,
           remarks: entry.remarks || "",
           dt1Lineno: entry.dt1Lineno || "",
         })),
@@ -1041,8 +1066,13 @@ const handleActivityOption = async (action) => {
               buildGlData(finalDetailRowsGL)
             );
     
+            const normalizedGlEntries = normalizeGeneratedGlRows(
+              newGlEntries,
+              documentDate
+            );
+
             updateState({
-              detailRowsGL: newGlEntries && newGlEntries.length > 0 ? newGlEntries : [],
+              detailRowsGL: normalizedGlEntries,
               isGeneratingGL: false,
             });
           } catch (error) {
@@ -1064,8 +1094,11 @@ const handleActivityOption = async (action) => {
             return;
           }
 
-          finalDetailRowsGL = newGlEntries;
-          updateState({ detailRowsGL: newGlEntries });
+          finalDetailRowsGL = normalizeGeneratedGlRows(
+            newGlEntries,
+            documentDate
+          );
+          updateState({ detailRowsGL: finalDetailRowsGL });
         }
 
         const response = await useTransactionUpsert(
@@ -1370,6 +1403,16 @@ const handleCopy = async () => {
   }
 
   if (documentID) {
+   const copiedSviDate = useGetCurrentDayV2();
+
+    const copiedGlRows = Array.isArray(detailRowsGLRef.current)
+      ? detailRowsGLRef.current.map((row) => ({
+          ...row,
+          slRefNo: "",
+          slRefDate: copiedSviDate,
+        }))
+      : [];
+
     updateState({
       documentNo: "",
       documentID: "",
@@ -1377,17 +1420,14 @@ const handleCopy = async () => {
       status: "OPEN",
       documentDate: useGetCurrentDayV2(),
       noReprints: "0",
+      isFetchDisabled: false,
+      detailRowsGL: copiedGlRows,
+      ...getGLTotalsState(copiedGlRows),
     });
 
-    updateState({
-      detailRowsGL: Array.isArray(state.detailRowsGL)
-        ? state.detailRowsGL.map((row) => ({
-            ...row,
-            slRefNo: "",
-            slRefDate: "",
-          }))
-        : [],
-    });
+    // Remount only the GL date inputs after the bulk clear. This prevents
+    // PatternFormat prop updates from restoring dates through stale row refs.
+    setGlDateInputVersion((version) => version + 1);
   }
 };
 
@@ -1614,6 +1654,8 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
       const newNetDiscount = +(newGrossAmt - newDiscAmount).toFixed(2);
       const newVatAmount = origVatCode ? getAllTopVatAmount(origVatCode, newNetDiscount) : 0;
       const newNetOfVat = +(newNetDiscount - newVatAmount).toFixed(2);
+
+
       const newATCAmount = origAtcCode ? getAllTopATCAmount(origAtcCode, newNetOfVat) : 0;
       const newAmountDue = +(newNetDiscount - newATCAmount).toFixed(2);
 
@@ -1993,8 +2035,8 @@ const handleCloseVatModal = async (selectedVat) => {
 const handleCloseAtcModal = async (selectedAtc) => {
   if (selectedAtc && selectedRowIndex !== null) {  
 
-    const result =  getAllTopATCRow(selectedAtc.atcCode);
-      if (!result) return;
+    
+    const result = getAllTopATCRow(selectedAtc.atcCode) || selectedAtc;
 
       accountModalSource !== null
         ? handleDetailChange(selectedRowIndex, 'atcCode', result, true)
@@ -2236,7 +2278,7 @@ const renderSviGlCell = (columnKey, row, index) => {
     creditFx1: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{glAmountInput(columnKey)}</td>,
     debitFx2: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{glAmountInput(columnKey)}</td>,
     creditFx2: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{glAmountInput(columnKey)}</td>,
-    slRefDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><DateFormatInput id={`slRefDate${index}`} value={row.slRefDate || ""} disabled={isFormDisabled} className="w-full global-tran-td-inputclass-ui text-center pr-7" updateState={(updates) => { if (updates[`slRefDate${index}`] !== undefined) handleDetailChangeGL(index, "slRefDate", updates[`slRefDate${index}`], false); }} onKeyDownCustom={(e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); focusNextGlCell("slRefDate"); }} /></td>,
+    slRefDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><DateFormatInput key={`slRefDate-${glDateInputVersion}-${index}`} id={`slRefDate${index}`} value={row.slRefDate || ""} disabled={isFormDisabled} className="w-full global-tran-td-inputclass-ui text-center pr-7" updateState={(updates) => { if (updates[`slRefDate${index}`] !== undefined) handleDetailChangeGL(index, "slRefDate", updates[`slRefDate${index}`], false); }} onKeyDownCustom={(e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); focusNextGlCell("slRefDate"); }} /></td>,
   };
 
   return glColumnRenderers[columnKey]?.() ?? null;
@@ -2300,7 +2342,7 @@ return (
           />
           <div>
             <p className="global-tran-headerstat-text-ui">Transaction Status</p>
-            <h1 className={`global-tran-stat-text-ui ${statusColor}`}>{displayStatus}</h1>
+            <h1 className={`global-tran-stat-text-ui uppercase ${statusColor}`}>{displayStatus}</h1>
           </div>
         </div>
       </div>
