@@ -45,6 +45,8 @@ import {
   docTypePDFGuide,
 } from "@/NAYSA Cloud/Global/doctype";
 
+import { useTopHSOption } from "@/NAYSA Cloud/Global/top1RefTable";
+
 
 
 import {
@@ -135,6 +137,15 @@ const isDateBeforeDate = (value, baseValue) => {
   return Boolean(normalizedValue && normalizedBase && normalizedValue < normalizedBase);
 };
 
+const resolveDecimalPlaces = (...values) => {
+  for (const value of values) {
+    if (value === null || value === undefined || value === "") continue;
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+};
+
 
 
   const PR = () => {
@@ -147,7 +158,14 @@ const isDateBeforeDate = (value, baseValue) => {
   const location = useLocation(); 
   const [isViewDocument, setIsViewDocument] = useState(false);
   const { companyInfo, currentUserRow,getAllDropDown,refsLoaded,getAllTopHSDocRow } = useAuth();
-  const decQty = companyInfo?.itemDecqtyPur ?? 2;
+  const [hsOptionRow, setHsOptionRow] = useState(null);
+  const decQty = resolveDecimalPlaces(
+    hsOptionRow?.itemDecqtyPur,
+    hsOptionRow?.itemDecQtyPur,
+    hsOptionRow?.item_decqty_pur,
+    hsOptionRow?.ITEM_DECQTY_PUR,
+    companyInfo?.itemDecqtyPur
+  ) ?? 2;
 
 
       
@@ -457,7 +475,7 @@ const isDateBeforeDate = (value, baseValue) => {
   const prDetailEnterNextRowZeroClearFields = ["qtyNeeded", "uomQty2"];
 
  const updateTotalsDisplay = (qtyNeeded) => {
-  setTotals({ totalQtyNeeded: formatNumber(qtyNeeded, 2) });
+  setTotals({ totalQtyNeeded: formatNumber(qtyNeeded, decQty) });
 };
 
   // ==========================
@@ -688,6 +706,11 @@ useEffect(() => {
           
               if (hdtblcol_result) {
                 updateState({ tblFieldArray: hdtblcol_result });
+              }
+
+              const hsOption = await useTopHSOption();
+              if (hsOption) {
+                setHsOptionRow(hsOption);
               }
             } catch (err) {
               console.error("Error fetching data:", err);
@@ -983,17 +1006,17 @@ const handleCloseItemLookup = async (selectedItems) => {
       itemCode: item?.itemCode || "",
       itemName: item?.itemName || "",
       uomCode: item?.uomCode || "",
-      qtyOnHand: formatNumber(item?.qtyHand ?? 0, 6),
-      qtyAlloc: "0.000000",
-      qtyNeeded: "0.000000",
+      qtyOnHand: formatNumber(item?.qtyHand ?? 0, decQty),
+      qtyAlloc: formatNumber(0, decQty),
+      qtyNeeded: formatNumber(0, decQty),
       uomCode2: item?.uomCode || "",
-      uomQty2: "0.000000",
+      uomQty2: formatNumber(0, decQty),
       dateNeeded: headerDateNeeded,
       itemSpecs: "",
       serviceCode: "",
       serviceName: "",
-      poQty: "0.000000",
-      rrQty: "0.000000",
+      poQty: formatNumber(0, decQty),
+      rrQty: formatNumber(0, decQty),
     }));
 
     updateState({
@@ -1120,15 +1143,15 @@ const handleAddBlankRow = (index) => {
       serviceName:"",
       itemName: "",
       uomCode: isJobOrder ? "Lot" : "",
-      qtyOnHand: "0.000000",
-      qtyAlloc: "0.000000",
-      qtyNeeded: "0.000000",
+      qtyOnHand: formatNumber(0, decQty),
+      qtyAlloc: formatNumber(0, decQty),
+      qtyNeeded: formatNumber(0, decQty),
       uomCode2: "",
-      uomQty2: "0.000000",
+      uomQty2: formatNumber(0, decQty),
       dateNeeded: headerDateNeeded,
       itemSpecs: "",
-      poQty: "0.000000",
-      rrQty: "0.000000",
+      poQty: formatNumber(0, decQty),
+      rrQty: formatNumber(0, decQty),
       joNo:"",
     };
 
@@ -1179,11 +1202,11 @@ const handleScanItem = async (scannedValue) => {
       serviceName: matchedItem.serviceName || "",
       itemName: matchedItem.itemName || "",
       uomCode: matchedItem.uomCode || (isJobOrder ? "Lot" : ""),
-      qtyOnHand: matchedItem.qtyOnHand || "0.000000",
-      qtyAlloc: matchedItem.qtyAlloc || "0.000000",
-      qtyNeeded: "0.000000",
+      qtyOnHand: formatNumber(matchedItem.qtyOnHand ?? 0, decQty),
+      qtyAlloc: formatNumber(matchedItem.qtyAlloc ?? 0, decQty),
+      qtyNeeded: formatNumber(0, decQty),
       uomCode2: matchedItem.uomCode2 || "",
-      uomQty2: matchedItem.uomQty2 || "0.000000",
+      uomQty2: formatNumber(matchedItem.uomQty2 ?? 0, decQty),
       dateNeeded: headerDateNeeded,
       itemSpecs: matchedItem.itemSpecs || "",
       poQty: formatNumber(matchedItem.poQuantity, decQty),
@@ -1360,7 +1383,7 @@ const handleDetailChange = (index, field, value, runCalculations = false) => {
       let num = parseFormattedNumber(sanitized);
       if (field === "qtyNeeded" && Number.isFinite(num) && num < 0) num = 0;
       row[field] = Number.isFinite(num)
-        ? formatNumber(num, field === "qtyNeeded" ? decQty : 2)
+        ? formatNumber(num, decQty)
         : "";
     } else {
       row[field] = sanitized;
@@ -1371,7 +1394,7 @@ const handleDetailChange = (index, field, value, runCalculations = false) => {
     row["itemCode"] = value.itemCode;
     row["itemName"] = value.itemName;
     row["uomCode"] = value.uomCode;
-    row["qtyOnHand"] = formatNumber(value.qtyHand, 6);
+    row["qtyOnHand"] = formatNumber(value.qtyHand, decQty);
   }
 
 
@@ -1413,8 +1436,8 @@ if (field === 'prStatus') {
     ).then((result) => {
       if (result.isConfirmed) {
         if (isCancel) {
-          row["qtyOnHand"] = formatNumber(0, 6);
-          row["qtyNeeded"] = formatNumber(0, 6);
+          row["qtyOnHand"] = formatNumber(0, decQty);
+          row["qtyNeeded"] = formatNumber(0, decQty);
           row["prStatus"] = "X";
         } else {
           row["prStatus"] = "C";
