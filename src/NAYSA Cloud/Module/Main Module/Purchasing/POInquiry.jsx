@@ -37,6 +37,13 @@ import POInq from "./POInq";
 
 const ENDPOINT = "getPOInquiry";
 
+const PO_STATUS_CODES = {
+  Posted: "P",
+  Open: "O",
+  Closed: "C",
+  Cancelled: "X",
+};
+
 const TABS = [
   { key: "inquiry", label: "PO Inquiry", icon: faList },
   { key: "tracker", label: "PO Tracker", icon: faRoute },
@@ -51,6 +58,32 @@ function getGlobalCache() {
 }
 
 const safeArray = (value) => (Array.isArray(value) ? value : []);
+
+const parseJsonValue = (value) => {
+  if (typeof value !== "string") return value;
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
+
+const extractResultRows = (response) => {
+  const candidates = [response?.data?.data, response?.data, response];
+
+  for (const candidate of candidates) {
+    const payload = parseJsonValue(candidate);
+    const firstRow = Array.isArray(payload) ? payload[0] : payload;
+    const resultPayload = parseJsonValue(firstRow?.result);
+    const container = resultPayload || firstRow;
+
+    if (Array.isArray(container?.dt1)) return container.dt1;
+    if (Array.isArray(container?.[0]?.dt1)) return container[0].dt1;
+  }
+
+  return [];
+};
 
 const joinCodeName = (code, name) => {
   const cleanCode = String(code || "").trim();
@@ -283,6 +316,7 @@ const aggregatePOInquiryRows = (rows) => {
     const vendCode = item.vendCode || item.vend_code || item.supplierCode || "";
     const branchCode =
       item.branchCode || item.branchcode || item.branch_code || "";
+    const branchName = item.branchName || item.branch_name || branchCode;
     const rcCode = item.rcCode || item.rc_code || "";
     const preparedBy =
       item.preparedBy ||
@@ -320,6 +354,7 @@ const aggregatePOInquiryRows = (rows) => {
         vendName,
         vendCode,
         branchCode,
+        branchName,
         rcCode,
         preparedBy,
         remarks,
@@ -372,7 +407,9 @@ const aggregatePOInquiryRows = (rows) => {
       poDate: formatDateDisplay(group.poDate),
       supplier: group.vendName,
       supplierCode: group.vendCode,
-      branch: group.branchCode,
+      branch: group.branchName || group.branchCode,
+      branchCode: group.branchCode,
+      branchName: group.branchName || group.branchCode,
       rcCode: group.rcCode,
       preparedBy: group.preparedBy || "—",
       remarks: group.remarks || "",
@@ -397,6 +434,7 @@ const normalizePODetailRows = (rows = []) => {
     const vendCode = item.vendCode || item.vend_code || item.supplierCode || "";
     const vendName = item.vendName || item.vend_name || item.supplier || "";
     const branchCode = item.branchCode || item.branchcode || item.branch_code || "";
+    const branchName = item.branchName || item.branch_name || branchCode;
     const rcCode = item.rcCode || item.rc_code || "";
     const preparedBy = item.preparedBy || item.prepared_by || item.userCode || item.user_code || "";
     const remarks = item.remarks || item.specs || item.item_specs || "";
@@ -437,7 +475,9 @@ const normalizePODetailRows = (rows = []) => {
       poDate,
       supplierCode: vendCode,
       supplier: vendName,
-      branch: branchCode,
+      branch: branchName,
+      branchCode,
+      branchName,
       rcCode,
       preparedBy: preparedBy || "—",
       remarks,
@@ -455,6 +495,7 @@ const normalizePODetailRows = (rows = []) => {
       supplier_code: vendCode,
       supplier_name: vendName,
       branch_code: branchCode,
+      branch_name: branchName,
       rc_code: rcCode,
       po_status: poStatusDesc,
       po_stat_desc: poStatusDesc,
@@ -590,7 +631,7 @@ export default function POInquiry() {
   const calculateTotals = useCallback((rows = []) => {
     const uniquePOs = new Set(
       safeArray(rows)
-        .map((row) => `${row.branch || row.branch_code || ""}-${row.poNo || row.po_no || ""}`)
+        .map((row) => `${row.branchCode || row.branch_code || ""}-${row.poNo || row.po_no || ""}`)
         .filter((key) => key !== "-")
     );
     const totalDoc = uniquePOs.size || rows.length;
@@ -643,7 +684,10 @@ export default function POInquiry() {
         json_data: {
           branchCode,
           itemCode,
-          poStatus: statusFilter === "All" ? "" : statusFilter,
+          poStatus:
+            statusFilter === "All" ? "" : PO_STATUS_CODES[statusFilter] || statusFilter,
+          startingDate: fromDate,
+          endingDate: toDate,
           startingCutoff: dateToCutoff(fromDate),
           endingCutoff: dateToCutoff(toDate),
           rcCode,
@@ -652,20 +696,11 @@ export default function POInquiry() {
         },
       });
 
-      const raw = response?.data?.[0]?.result;
-      const parsed = raw ? JSON.parse(raw) : [];
-      const rows = Array.isArray(parsed?.[0]?.dt1) ? parsed[0].dt1 : [];
+      const rows = extractResultRows(response);
       const detailRows = normalizePODetailRows(rows);
-      const filtered = detailRows.filter((po) => {
-        if (statusFilter === "All") return true;
-        return (
-          String(po.status || po.po_status || "").toLowerCase() ===
-          String(statusFilter).toLowerCase()
-        );
-      });
 
-      updateState({ poInquiryData: filtered });
-      calculateTotals(filtered);
+      updateState({ poInquiryData: detailRows });
+      calculateTotals(detailRows);
     } catch (err) {
       console.error("Error fetching PO inquiry:", err);
       filterReset();
@@ -767,7 +802,8 @@ export default function POInquiry() {
   const handleViewDocument = useCallback(
     (row) => {
       const poNo = row?.poNo || row?.po_no || "";
-      const rowBranch = row?.branch || row?.branch_code || branchCode || "";
+      const rowBranch =
+        row?.branchCode || row?.branch_code || branchCode || "";
       if (!poNo || !rowBranch) return;
 
       navigate(
@@ -1151,7 +1187,9 @@ function PODetailsModal({ selectedPO, setSelectedPO, handleViewDocument }) {
           </div>
           <div>
             <p className="text-xs text-slate-500">Branch</p>
-            <p className="font-medium">{selectedPO.branch || selectedPO.branch_code}</p>
+            <p className="font-medium">
+              {selectedPO.branchName || selectedPO.branch_name || selectedPO.branch || selectedPO.branch_code}
+            </p>
           </div>
           <div>
             <p className="text-xs text-slate-500">Status</p>

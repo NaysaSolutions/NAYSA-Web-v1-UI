@@ -153,6 +153,14 @@ const getFlowState = (row) => {
 };
 
 const getCurrentStatus = (flow, row = {}) => {
+  // ── 1. ADD THIS CHECK FOR CANCELLED STATUS ──
+  if (
+    row.poStatus === "X" ||
+    String(row.poStatusDesc).toUpperCase() === "CANCELLED"
+  ) {
+    return "Cancelled";
+  }
+
   const rrQty = Number(row.rrQty || row.totalRRQty || 0);
   const poQty = Number(row.poQuantity || row.totalPOQty || row.qty || 0);
 
@@ -202,8 +210,8 @@ const aggregatePOInqRows = (rows) => {
     const poDate = item.poDate || item.po_date || "";
     const vendName = item.vendName || item.vend_name || "";
     const vendCode = item.vendCode || item.vend_code || "";
-    const branchCode =
-      item.branchCode || item.branchcode || item.branch_code || "";
+    const branchCode = item.branchCode || item.branchcode || item.branch_code || "";
+    const branchName = item.branchName || item.branch_name || item.branchDesc || item.branch_desc || "";
     const rcCode = item.rcCode || item.rc_code || "";
     const rcName =
       item.rcName || item.rc_name || item.rcDesc || item.rc_desc || "";
@@ -238,6 +246,8 @@ const aggregatePOInqRows = (rows) => {
 
     const groupKey = `${branchCode}-${poNo}`;
 
+    
+
     if (!groups.has(groupKey)) {
       groups.set(groupKey, {
         header: {
@@ -248,6 +258,7 @@ const aggregatePOInqRows = (rows) => {
           vendName,
           vendCode,
           branchCode,
+          branchName,
           rcCode,
           rcName,
           preparedBy,
@@ -302,6 +313,7 @@ const aggregatePOInqRows = (rows) => {
       vendName,
       vendCode,
       branchCode,
+      branchName,
       rcCode,
       rcName,
       preparedBy,
@@ -397,6 +409,9 @@ const aggregatePOInqRows = (rows) => {
       supplierCode: vendCode,
       supplierDisplay: joinCodeName(vendCode, vendName) || vendName,
       branch: branchCode,
+      branchCode: branchCode,
+      branchName: branchName,
+      branchDisplay: joinCodeName(branchCode, branchName) || branchCode,
       department: rcCode,
       departmentName: rcName,
       departmentDisplay: joinCodeName(rcCode, rcName) || rcCode,
@@ -409,6 +424,8 @@ const aggregatePOInqRows = (rows) => {
     (sum, line) => sum + Number(line.qty || 0),
     0,
   ),
+  poStatus,
+  poStatusDesc,
 }),
       aging: "0 day",
       agingDays: 0,
@@ -453,8 +470,8 @@ const mapPOInqRow = (item) => {
   const poStatusDesc = item.poStatusDesc || item.po_stat_desc || poStatus || "";
   const vendName = item.vendName || item.vend_name || "";
   const vendCode = item.vendCode || item.vend_code || "";
-  const branchCode =
-    item.branchCode || item.branchcode || item.branch_code || "";
+  const branchCode = item.branchCode || item.branchcode || item.branch_code || "";
+  const branchName = item.branchName || item.branch_name || item.branchDesc || item.branch_desc || "";
   const rcCode = item.rcCode || item.rc_code || "";
   const rcName = item.rcName || item.rc_name || item.rcDesc || item.rc_desc || "";
   const itemCode = item.itemCode || item.item_no || item.item_code || "";
@@ -531,6 +548,8 @@ const mapPOInqRow = (item) => {
     supplierCode: vendCode,
     supplierDisplay: joinCodeName(vendCode, vendName) || vendName,
     branch: branchCode,
+    branchName: branchName,
+    branchDisplay: joinCodeName(branchCode, branchName) || branchCode,
     department: rcCode,
     departmentName: rcName,
     departmentDisplay: joinCodeName(rcCode, rcName) || rcCode,
@@ -539,6 +558,8 @@ const mapPOInqRow = (item) => {
     currentStatus: getCurrentStatus(flow, {
   rrQty,
   poQuantity: qty,
+  poStatus,
+  poStatusDesc,
 }),
     aging: "0 day",
     agingDays: 0,
@@ -842,7 +863,9 @@ export default function POInq() {
   const [drilldown, setDrilldown] = useState(null);
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [allBranchOptions, setAllBranchOptions] = useState(["All"]);
+  const [allBranchOptions, setAllBranchOptions] = useState([
+    { value: "All", label: "All" },
+  ]);
   const [selectedItem, setSelectedItem] = useState({ code: "", name: "" });
   const [selectedDepartment, setSelectedDepartment] = useState({
     code: "",
@@ -855,7 +878,7 @@ export default function POInq() {
 
   const handleViewPODocument = (row, selectedPoNo = "") => {
     const poNo = selectedPoNo || row?.poNo || row?.prNo || "";
-    const branchCode = row?.branch || row?.branchCode || "";
+    const branchCode = row?.branchCode || "";
 
     if (!poNo || !branchCode) return;
 
@@ -908,10 +931,18 @@ export default function POInq() {
       setData(aggregated);
 
       if (selectedBranch === "All") {
-        setAllBranchOptions([
-          "All",
-          ...new Set(aggregated.map((row) => row.branch).filter(Boolean)),
-        ]);
+        const seenBranchCodes = new Set();
+        const options = aggregated.reduce(
+          (list, row) => {
+            if (!row.branchCode || seenBranchCodes.has(row.branchCode)) return list;
+            seenBranchCodes.add(row.branchCode);
+            list.push({ value: row.branchCode, label: row.branchDisplay || bCode });
+            return list;
+          },
+          [{ value: "All", label: "All" }],
+
+        );
+        setAllBranchOptions(options);
       }
     } catch (error) {
       console.error("Error fetching PO inquiry:", error);
@@ -1046,13 +1077,16 @@ export default function POInq() {
       const matchesStatus =
         statusFilter === "All" || row.currentStatus === statusFilter;
       const matchesBranch =
-        branchFilter === "All" || row.branch === branchFilter;
+        branchFilter === "All" || (row.branchCode || row.branch) === branchFilter;
 
       return matchesSearch && matchesStatus && matchesBranch;
     });
   }, [data, search, statusFilter, branchFilter]);
 
   const branchOptions = allBranchOptions;
+  const selectedBranchLabel =
+    branchOptions.find((option) => option.value === branchFilter)?.label ||
+    branchFilter;
 
   const exportToExcel = () => {
     const headers = [
@@ -1080,7 +1114,7 @@ export default function POInq() {
     const rows = filteredData.map((row) => [
       row.prNo,
       row.prDate,
-      row.branch,
+      row.branchDisplay || row.branch,
       row.supplier,
       row.departmentDisplay || row.department,
       row.itemCode,
@@ -1113,6 +1147,10 @@ export default function POInq() {
   };
 
   const statusConfig = {
+  Cancelled: {
+      cls: "bg-rose-100 text-rose-700 border border-rose-200",
+      dot: "bg-rose-500",
+    },
     Completed: {
       cls: "bg-emerald-100 text-emerald-700 border border-emerald-200",
       dot: "bg-emerald-500",
@@ -1356,6 +1394,7 @@ export default function POInq() {
                   >
                     <option>All</option>
                     <option>Completed</option>
+                    <option>Cancelled</option>
                     <option>For APV</option>
                     <option>Partial RR</option>
                     <option>For RR</option>
@@ -1375,8 +1414,8 @@ export default function POInq() {
                     className="h-10 w-full appearance-none rounded-2xl border border-slate-200 bg-slate-50 pl-9 pr-8 text-sm outline-none transition focus:border-blue-400 focus:bg-white"
                   >
                     {branchOptions.map((branch) => (
-                      <option key={branch} value={branch}>
-                        {branch}
+                      <option key={branch.value} value={branch.value}>
+                        {branch.label}
                       </option>
                     ))}
                   </select>
@@ -1561,7 +1600,7 @@ export default function POInq() {
               {branchFilter !== "All" && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
                   <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                  {branchFilter}
+                  {selectedBranchLabel}
                 </span>
               )}
 
@@ -1668,8 +1707,8 @@ export default function POInq() {
                               {row.supplierDisplay || row.supplier}
                             </div>
                             <div className="mt-0.5 inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
-                              {row.branch} -{" "}
-                              {row.departmentDisplay || row.department}
+                            {row.branchDisplay || row.branch} -{" "}
+                            {row.departmentDisplay || row.department}
                             </div>
                           
                           </td>
