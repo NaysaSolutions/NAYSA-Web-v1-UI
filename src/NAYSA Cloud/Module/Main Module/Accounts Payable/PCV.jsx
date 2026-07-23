@@ -1087,6 +1087,7 @@ const handleAddRow = async (index = null) => {
           lnNo: "",
           vendCode: "",
           vendName: "",
+          siDate: documentDate || "",
           origAmount: "0.00",
           drAcct: sourceRow?.drAcct || sourceRow?.acctCode || "",
           acctCode: sourceRow?.acctCode || sourceRow?.drAcct || "",
@@ -1115,6 +1116,7 @@ const handleAddRow = async (index = null) => {
         lnNo: "",
         vendCode: "",
         vendName: "",
+        siDate: documentDate || "",
         origAmount: "0.00",
         acctCode: item.acctCode || item.drAcct || "",
         rcCode: item.rcCode || "",
@@ -1513,23 +1515,25 @@ const handleCopy = async () => {
       return;
       }
   if (documentID ) {
+     const copyDate = useGetCurrentDayV2();
 
      const updatedRows = detailRows.map((row) => ({
             ...row,
             siNo: "",
-            siDate: ""
+            siDate: copyDate
           }));
 
     detailRowsRef.current = updatedRows;
 
     updateState({ documentNo:"",
                   documentID:"",
-                  documentStatus:"",
-                  status:"OPEN",
-                  detailRows: updatedRows,
-                  documentDate:useGetCurrentDayV2(),
-                  noReprints:"0",
-                  detailRowsGL:[],
+                   documentStatus:"",
+                   status:"OPEN",
+                   detailRows: updatedRows,
+                   documentDate:copyDate,
+                   noReprints:"0",
+                   detailRowsGL:[],
+                   isFetchDisabled:false,
 
      });
 

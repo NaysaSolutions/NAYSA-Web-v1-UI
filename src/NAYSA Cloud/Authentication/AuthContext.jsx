@@ -841,7 +841,7 @@ export default function AuthProvider({ children }) {
             <div style="height:4px;width:44px;border-radius:999px;background:linear-gradient(90deg,#2563eb,#38bdf8);margin:0 auto 12px;"></div>
 
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-              <div style="height:34px;width:34px;min-width:34px;border-radius:12px;background:#eff6ff;display:flex;align-items:center;justify-content:center;color:#1d4ed8;font-size:18px;font-weight:900;">✓</div>
+              <div style="height:34px;width:34px;min-width:34px;border-radius:12px;background:#eff6ff;display:flex;align-items:center;justify-content:center;color:#1d4ed8;font-size:18px;font-weight:900;">âœ“</div>
               <div>
                 <div style="font-size:15px;font-weight:800;color:#0f172a;line-height:1.2;">Approve Login Request</div>
                 <div style="font-size:11px;color:#64748b;margin-top:3px;">A new device wants to use your account.</div>
