@@ -73,8 +73,20 @@ const PostMSST = ({ isOpen, onClose, userCode }) => {
  
 const pickDocAndBranch = (row) => {
   if (!row) return { docNo: null, branchCode: null };
-  const docNo = row.msstNo;
-  const branchCode = row.branchCode;
+  const docNo =
+    row.msstNo ||
+    row.MSSTNo ||
+    row.msst_no ||
+    row.MSST_NO ||
+    row.documentNo ||
+    row.docNo;
+  const branchCode =
+    row.branchCode ||
+    row.branch_code ||
+    row.BRANCH_CODE ||
+    row.bCode ||
+    row.BCode ||
+    row.BC;
   return { docNo, branchCode };
 };
 
@@ -94,7 +106,7 @@ const handleViewDocument = (row) => {
   const MSST_VIEW_URL = "/page/MSST";
   const url =
     `${window.location.origin}${MSST_VIEW_URL}` +
-    `?msstNo=${encodeURIComponent(docNo)}&branchCode=${encodeURIComponent(branchCode)}`;
+    `?msstNo=${encodeURIComponent(docNo)}&branchCode=${encodeURIComponent(branchCode)}&viewDocument=true`;
     window.open(url, "_blank", "noopener,noreferrer");
 
 };
