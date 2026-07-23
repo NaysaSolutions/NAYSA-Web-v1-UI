@@ -88,6 +88,20 @@ const getStoreLabel = (row = {}) => {
   return storeName || storeCode || "Unspecified Store";
 };
 
+const addUniqueValue = (values = [], value) => {
+  const normalizedValue = String(value ?? "").trim();
+  if (!normalizedValue || values.includes(normalizedValue)) return values;
+  return [...values, normalizedValue];
+};
+
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+
 const tabs = [
   {
     key: "forecastSummary",
@@ -265,6 +279,10 @@ const pivotRows = (rows = [], isDetailed = false) => {
         total: 0,
         sentQty: 0,
         unsentQty: 0,
+        soNumbers: [],
+        drNumbers: [],
+        soStatus: "",
+        drStatus: "",
         integrationStatus: "Not Sent",
       });
     }
@@ -277,6 +295,14 @@ const pivotRows = (rows = [], isDetailed = false) => {
       item.unsentQty === undefined || item.unsentQty === null
         ? qty
         : Number(item.unsentQty) || 0;
+    row.soNumbers = addUniqueValue(row.soNumbers, item.soNumber);
+    row.drNumbers = addUniqueValue(row.drNumbers, item.drNumber);
+    row.soStatus =
+      String(item.soStatus || "").trim() ||
+      (row.soNumbers.length > 0 ? "Closed" : "");
+    row.drStatus =
+      String(item.drStatus || "").trim() ||
+      (row.drNumbers.length > 0 ? "Open - For Picking" : "");
     row.integrationStatus =
       row.unsentQty <= 0
         ? "Sent"
@@ -285,7 +311,11 @@ const pivotRows = (rows = [], isDetailed = false) => {
           : "Not Sent";
   });
 
-  return Array.from(map.values());
+  return Array.from(map.values()).map((row) => ({
+    ...row,
+    soNumber: row.soNumbers.join(", "),
+    drNumber: row.drNumbers.join(", "),
+  }));
 };
 
 const buildMaterialSummaryRows = (rows = []) => {
@@ -906,6 +936,15 @@ export default function CommissaryForecast() {
       return;
     }
 
+    if (!String(soDrForm.customerCode || "").trim()) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Select customer",
+        text: "Please select the customer that will be used in the SO and DR.",
+      });
+      return;
+    }
+
     const selectedItems = selectedIntegrationRows.map((row) => ({
       storeCode: getStoreKey(row),
       itemCode: row.itemCode || "",
@@ -945,6 +984,7 @@ export default function CommissaryForecast() {
           soTranType: "SO01",
           drTranType: "DR01",
           customerCode: soDrForm.customerCode,
+          customerName: soDrForm.customerName,
           poNumber: soDrForm.poNumber,
           salesRepCode: soDrForm.salesRepCode,
           remarks: soDrForm.remarks,
@@ -952,10 +992,29 @@ export default function CommissaryForecast() {
         },
       );
 
-      const createdDocuments = Array.isArray(response?.data?.data)
-        ? response.data.data
-        : [];
+      const createdDocuments = Array.isArray(response?.data?.documents)
+        ? response.data.documents
+        : Array.isArray(response?.data?.data)
+          ? response.data.data
+          : [];
       const successMessage = `${createdDocuments.length.toLocaleString()} SO/DR pair(s) created. The SO is closed and the DR is open for picking.`;
+      const documentRowsHtml = createdDocuments
+        .map(
+          (document) => `
+            <tr>
+              <td style="padding:6px;border-bottom:1px solid #e2e8f0;text-align:left">${escapeHtml(document.storeName || document.storeCode || "-")}</td>
+              <td style="padding:6px;border-bottom:1px solid #e2e8f0;text-align:left">${escapeHtml(document.deliveryDate || "-")}</td>
+              <td style="padding:6px;border-bottom:1px solid #e2e8f0;text-align:left">
+                <div style="font-weight:700">${escapeHtml(document.soNumber || "-")}</div>
+                <div style="font-size:11px;color:#047857">${escapeHtml(document.soStatus || "Closed")}</div>
+              </td>
+              <td style="padding:6px;border-bottom:1px solid #e2e8f0;text-align:left">
+                <div style="font-weight:700">${escapeHtml(document.drNumber || "-")}</div>
+                <div style="font-size:11px;color:#1d4ed8">${escapeHtml(document.drStatus || "Open - For Picking")}</div>
+              </td>
+            </tr>`,
+        )
+        .join("");
 
       setShowSODRModal(false);
       setSelectedIntegrationRowIds([]);
@@ -965,7 +1024,27 @@ export default function CommissaryForecast() {
       await Swal.fire({
         icon: "success",
         title: "Sent successfully",
-        text: successMessage,
+        width: 900,
+        html: `
+          <p style="margin:0 0 12px">${escapeHtml(successMessage)}</p>
+          <div style="max-height:320px;overflow:auto;border:1px solid #e2e8f0;border-radius:8px">
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead style="position:sticky;top:0;background:#f1f5f9">
+                <tr>
+                  <th style="padding:7px;text-align:left">Store</th>
+                  <th style="padding:7px;text-align:left">Delivery Date</th>
+                  <th style="padding:7px;text-align:left">SO Document</th>
+                  <th style="padding:7px;text-align:left">DR Document</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${
+                  documentRowsHtml ||
+                  '<tr><td colspan="4" style="padding:12px;text-align:center">No document return value was received.</td></tr>'
+                }
+              </tbody>
+            </table>
+          </div>`,
       });
     } catch (error) {
       console.error("Failed to send confirmed details to SO/DR", error);
@@ -1338,7 +1417,11 @@ export default function CommissaryForecast() {
 
   const showsBranchColumn =
     activeTabConfig.detailed || activeTabConfig.materialSummary;
-  const colSpan = dates.length + (showsBranchColumn ? 5 : 4);
+  const showsSODRColumns = activeTab === "confirmedDetailed";
+  const colSpan =
+    dates.length +
+    (showsBranchColumn ? 5 : 4) +
+    (showsSODRColumns ? 3 : 0);
 
   return (
     <div className="global-tran-main-div-ui !mt-0 min-w-0 overflow-x-hidden px-2 pb-20 pt-[136px] sm:pt-[112px] md:pt-[116px] lg:pt-[120px]">
@@ -1517,6 +1600,20 @@ export default function CommissaryForecast() {
                     UOM
                   </th>
 
+                  {showsSODRColumns && (
+                    <>
+                      <th className="global-tran-th-ui sticky top-0 z-[210] w-[130px] min-w-[130px] bg-blue-100 text-left dark:bg-blue-900">
+                        SO Number
+                      </th>
+                      <th className="global-tran-th-ui sticky top-0 z-[210] w-[130px] min-w-[130px] bg-blue-100 text-left dark:bg-blue-900">
+                        DR Number
+                      </th>
+                      <th className="global-tran-th-ui sticky top-0 z-[210] w-[145px] min-w-[145px] bg-blue-100 text-left dark:bg-blue-900">
+                        Integration Status
+                      </th>
+                    </>
+                  )}
+
                   {dates.map((date) => (
                     <th
                       key={date}
@@ -1630,6 +1727,42 @@ export default function CommissaryForecast() {
                                 {row.uomCode || "-"}
                               </td>
 
+                              {showsSODRColumns && (
+                                <>
+                                  <td
+                                    className="global-tran-td-ui w-[130px] min-w-[130px] text-left font-mono text-xs font-semibold text-emerald-700 dark:text-emerald-300"
+                                    title={row.soNumber || "Not yet created"}
+                                  >
+                                    {row.soNumber || "-"}
+                                  </td>
+                                  <td
+                                    className="global-tran-td-ui w-[130px] min-w-[130px] text-left font-mono text-xs font-semibold text-blue-700 dark:text-blue-300"
+                                    title={row.drNumber || "Not yet created"}
+                                  >
+                                    {row.drNumber || "-"}
+                                  </td>
+                                  <td className="global-tran-td-ui w-[145px] min-w-[145px] text-left text-xs">
+                                    <span
+                                      className={`inline-flex rounded-full px-2 py-1 font-bold ${
+                                        row.integrationStatus === "Sent"
+                                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200"
+                                          : row.integrationStatus ===
+                                              "Partially Sent"
+                                            ? "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200"
+                                            : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                                      }`}
+                                      title={
+                                        row.integrationStatus === "Sent"
+                                          ? `SO: ${row.soStatus || "Closed"}; DR: ${row.drStatus || "Open - For Picking"}`
+                                          : row.integrationStatus
+                                      }
+                                    >
+                                      {row.integrationStatus}
+                                    </span>
+                                  </td>
+                                </>
+                              )}
+
                               {dates.map((date) => (
                                 <td
                                   key={date}
@@ -1679,9 +1812,7 @@ export default function CommissaryForecast() {
               <button
                 type="button"
                 onClick={() => {
-                  setSelectedIntegrationRowIds(
-                    integrationRows.map((row) => row.integrationRowId),
-                  );
+                  setSelectedIntegrationRowIds([]);
                   setShowSODRModal(true);
                 }}
                 disabled={isLoading || currentData.length === 0}
@@ -1936,11 +2067,13 @@ export default function CommissaryForecast() {
                 onClick={handleSendConfirmedToSODR}
                 disabled={
                   isSendingToSODR ||
-                  selectedIntegrationRows.length === 0
+                  selectedIntegrationRows.length === 0 ||
+                  !soDrForm.customerCode
                 }
                 className={`rounded-lg px-5 py-2 text-sm font-bold text-white shadow transition ${
                   isSendingToSODR ||
-                  selectedIntegrationRows.length === 0
+                  selectedIntegrationRows.length === 0 ||
+                  !soDrForm.customerCode
                     ? "cursor-not-allowed bg-gray-400 dark:bg-gray-700"
                     : "bg-indigo-600 hover:bg-indigo-700 active:scale-95 dark:bg-indigo-600 dark:hover:bg-indigo-500"
                 }`}
