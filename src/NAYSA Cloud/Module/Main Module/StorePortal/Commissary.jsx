@@ -94,6 +94,15 @@ const addUniqueValue = (values = [], value) => {
   return [...values, normalizedValue];
 };
 
+const getIntegrationStatus = (sentQty = 0, unsentQty = 0) => {
+  const sent = Number(sentQty) || 0;
+  const unsent = Number(unsentQty) || 0;
+
+  if (unsent <= 0) return "Sent";
+  if (sent > 0 && unsent > 0) return "Partially Sent";
+  return "Not Sent";
+};
+
 const escapeHtml = (value) =>
   String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -276,6 +285,7 @@ const pivotRows = (rows = [], isDetailed = false) => {
         categCode: item.categCode || item.categoryCode || "",
         uomCode: item.uomCode || "",
         dates: {},
+        dateIntegration: {},
         total: 0,
         sentQty: 0,
         unsentQty: 0,
@@ -288,13 +298,16 @@ const pivotRows = (rows = [], isDetailed = false) => {
     }
 
     const row = map.get(key);
-    row.dates[deliveryDate] = (Number(row.dates[deliveryDate]) || 0) + qty;
-    row.total += qty;
-    row.sentQty += Number(item.sentQty) || 0;
-    row.unsentQty +=
+    const itemSentQty = Number(item.sentQty) || 0;
+    const itemUnsentQty =
       item.unsentQty === undefined || item.unsentQty === null
         ? qty
         : Number(item.unsentQty) || 0;
+
+    row.dates[deliveryDate] = (Number(row.dates[deliveryDate]) || 0) + qty;
+    row.total += qty;
+    row.sentQty += itemSentQty;
+    row.unsentQty += itemUnsentQty;
     row.soNumbers = addUniqueValue(row.soNumbers, item.soNumber);
     row.drNumbers = addUniqueValue(row.drNumbers, item.drNumber);
     row.soStatus =
@@ -303,19 +316,67 @@ const pivotRows = (rows = [], isDetailed = false) => {
     row.drStatus =
       String(item.drStatus || "").trim() ||
       (row.drNumbers.length > 0 ? "Open - For Picking" : "");
-    row.integrationStatus =
-      row.unsentQty <= 0
-        ? "Sent"
-        : row.sentQty > 0
-          ? "Partially Sent"
-          : "Not Sent";
+    row.integrationStatus = getIntegrationStatus(
+      row.sentQty,
+      row.unsentQty,
+    );
+
+    if (!row.dateIntegration[deliveryDate]) {
+      row.dateIntegration[deliveryDate] = {
+        total: 0,
+        sentQty: 0,
+        unsentQty: 0,
+        soNumbers: [],
+        drNumbers: [],
+        soStatus: "",
+        drStatus: "",
+        integrationStatus: "Not Sent",
+      };
+    }
+
+    const dateIntegration = row.dateIntegration[deliveryDate];
+    dateIntegration.total += qty;
+    dateIntegration.sentQty += itemSentQty;
+    dateIntegration.unsentQty += itemUnsentQty;
+    dateIntegration.soNumbers = addUniqueValue(
+      dateIntegration.soNumbers,
+      item.soNumber,
+    );
+    dateIntegration.drNumbers = addUniqueValue(
+      dateIntegration.drNumbers,
+      item.drNumber,
+    );
+    dateIntegration.soStatus =
+      String(item.soStatus || "").trim() ||
+      (dateIntegration.soNumbers.length > 0 ? "Closed" : "");
+    dateIntegration.drStatus =
+      String(item.drStatus || "").trim() ||
+      (dateIntegration.drNumbers.length > 0 ? "Open - For Picking" : "");
+    dateIntegration.integrationStatus = getIntegrationStatus(
+      dateIntegration.sentQty,
+      dateIntegration.unsentQty,
+    );
   });
 
-  return Array.from(map.values()).map((row) => ({
-    ...row,
-    soNumber: row.soNumbers.join(", "),
-    drNumber: row.drNumbers.join(", "),
-  }));
+  return Array.from(map.values()).map((row) => {
+    const dateIntegration = Object.fromEntries(
+      Object.entries(row.dateIntegration || {}).map(([date, detail]) => [
+        date,
+        {
+          ...detail,
+          soNumber: (detail.soNumbers || []).join(", "),
+          drNumber: (detail.drNumbers || []).join(", "),
+        },
+      ]),
+    );
+
+    return {
+      ...row,
+      dateIntegration,
+      soNumber: row.soNumbers.join(", "),
+      drNumber: row.drNumbers.join(", "),
+    };
+  });
 };
 
 const buildMaterialSummaryRows = (rows = []) => {
@@ -425,7 +486,52 @@ const filterByDates = (rows = [], validDates = [], isMaterialSummary = false) =>
           (sum, date) => sum + (Number(row.dates?.[date]) || 0),
           0,
         );
-        return { ...row, dates, total };
+        const dateIntegration = normalizedDates.reduce((selected, date) => {
+          if (row.dateIntegration?.[date]) {
+            selected[date] = row.dateIntegration[date];
+          }
+          return selected;
+        }, {});
+        const sentQty = normalizedDates.reduce(
+          (sum, date) =>
+            sum + (Number(row.dateIntegration?.[date]?.sentQty) || 0),
+          0,
+        );
+        const unsentQty = normalizedDates.reduce(
+          (sum, date) =>
+            sum + (Number(row.dateIntegration?.[date]?.unsentQty) || 0),
+          0,
+        );
+        const soNumbers = normalizedDates.reduce(
+          (values, date) =>
+            (row.dateIntegration?.[date]?.soNumbers || []).reduce(
+              addUniqueValue,
+              values,
+            ),
+          [],
+        );
+        const drNumbers = normalizedDates.reduce(
+          (values, date) =>
+            (row.dateIntegration?.[date]?.drNumbers || []).reduce(
+              addUniqueValue,
+              values,
+            ),
+          [],
+        );
+
+        return {
+          ...row,
+          dates,
+          dateIntegration,
+          total,
+          sentQty,
+          unsentQty,
+          soNumbers,
+          drNumbers,
+          soNumber: soNumbers.join(", "),
+          drNumber: drNumbers.join(", "),
+          integrationStatus: getIntegrationStatus(sentQty, unsentQty),
+        };
       })
       .filter((row) => row.total > 0);
   }
@@ -483,6 +589,62 @@ const QuantityCells = ({ dates, row, className = "" }) => (
     </td>
   </>
 );
+
+const IntegrationDateCell = ({ date, row }) => {
+  const quantity = Number(row.dates?.[date]) || 0;
+  const detail = row.dateIntegration?.[date];
+
+  if (quantity <= 0) {
+    return (
+      <td className="global-tran-td-ui w-[170px] min-w-[170px] max-w-[170px] text-center text-slate-400">
+        -
+      </td>
+    );
+  }
+
+  const integrationStatus =
+    detail?.integrationStatus ||
+    getIntegrationStatus(detail?.sentQty, detail?.unsentQty);
+  const soNumber = detail?.soNumber || "";
+  const drNumber = detail?.drNumber || "";
+
+  return (
+    <td className="global-tran-td-ui w-[170px] min-w-[170px] max-w-[170px] text-left align-top">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-bold text-slate-800 dark:text-slate-100">
+          Qty: {quantity.toLocaleString()}
+        </span>
+        <span
+          className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+            integrationStatus === "Sent"
+              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200"
+              : integrationStatus === "Partially Sent"
+                ? "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200"
+                : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+          }`}
+        >
+          {integrationStatus}
+        </span>
+      </div>
+      {(soNumber || drNumber) && (
+        <div className="mt-1 space-y-0.5 text-[10px] leading-tight">
+          <div
+            className="truncate font-mono font-semibold text-emerald-700 dark:text-emerald-300"
+            title={soNumber || "No SO document"}
+          >
+            SO: {soNumber || "-"}
+          </div>
+          <div
+            className="truncate font-mono font-semibold text-blue-700 dark:text-blue-300"
+            title={drNumber || "No DR document"}
+          >
+            DR: {drNumber || "-"}
+          </div>
+        </div>
+      )}
+    </td>
+  );
+};
 
 const MaterialSummaryRows = ({
   materials,
@@ -623,6 +785,26 @@ export default function CommissaryForecast() {
     salesRepName: "",
   });
 
+  const resetSODRModalData = () => {
+    setSoDrForm({
+      customerCode: "",
+      customerName: "",
+      poNumber: "",
+      remarks: "",
+      salesRepCode: "",
+      salesRepName: "",
+    });
+    setSelectedIntegrationRowIds([]);
+    setIsLoadingCustomer(false);
+  };
+
+  const handleCloseSODRModal = () => {
+    setShowCustomerLookup(false);
+    setShowSalesRepLookup(false);
+    setShowSODRModal(false);
+    resetSODRModalData();
+  };
+
   const visibleTabs = useMemo(
     () => tabs.filter((tab) => tab.viewType === viewType),
     [viewType],
@@ -735,7 +917,7 @@ export default function CommissaryForecast() {
           confirmedMaterialNeededSummary: [],
           confirmedMaterialNeeded: [],
         });
-        setErrorMessage("Start Date and End Date are required.");
+        setErrorMessage("From Delivery Date and To Delivery Date are required.");
         return;
       }
 
@@ -793,7 +975,7 @@ export default function CommissaryForecast() {
 
   const handleGenerateWorkOrders = async () => {
     if (!startDate || !endDate) {
-      setErrorMessage("Please select both Start Date and End Date.");
+      setErrorMessage("Please select both From Delivery Date and To Delivery Date.");
       return;
     }
 
@@ -907,7 +1089,7 @@ export default function CommissaryForecast() {
 
   const handleSendConfirmedToSODR = async () => {
     if (!startDate || !endDate) {
-      setErrorMessage("Please select both Start Date and End Date.");
+      setErrorMessage("Please select both From Delivery Date and To Delivery Date.");
       return;
     }
 
@@ -948,16 +1130,14 @@ export default function CommissaryForecast() {
     const selectedItems = selectedIntegrationRows.map((row) => ({
       storeCode: getStoreKey(row),
       itemCode: row.itemCode || "",
-      deliveryDates: Object.keys(row.dates || {}).filter(
-        (deliveryDate) => Number(row.dates?.[deliveryDate]) > 0,
-      ),
+      deliveryDates: row.unsentDeliveryDates,
       quantity: Number(row.unsentQty ?? row.total) || 0,
     }));
 
     const confirmation = await Swal.fire({
       icon: "question",
       title: `Send ${selectedItems.length.toLocaleString()} selected item(s)?`,
-      text: "Only the checked items and their remaining unsent quantities will be integrated. This will create a closed SO and an open DR for picking per Store and Delivery Date.",
+      text: "Only the checked items and their remaining unsent quantities will be integrated. All selected items will be consolidated into one closed SO and one open DR for picking.",
       showCancelButton: true,
       confirmButtonText: "Send",
       cancelButtonText: "Cancel",
@@ -997,13 +1177,16 @@ export default function CommissaryForecast() {
         : Array.isArray(response?.data?.data)
           ? response.data.data
           : [];
-      const successMessage = `${createdDocuments.length.toLocaleString()} SO/DR pair(s) created. The SO is closed and the DR is open for picking.`;
+      const successMessage =
+        createdDocuments.length === 1
+          ? `One SO and one DR were created for ${selectedItems.length.toLocaleString()} selected item(s). The SO is closed and the DR is open for picking.`
+          : `${createdDocuments.length.toLocaleString()} SO/DR pair(s) were returned by the integration.`;
       const documentRowsHtml = createdDocuments
         .map(
           (document) => `
             <tr>
-              <td style="padding:6px;border-bottom:1px solid #e2e8f0;text-align:left">${escapeHtml(document.storeName || document.storeCode || "-")}</td>
-              <td style="padding:6px;border-bottom:1px solid #e2e8f0;text-align:left">${escapeHtml(document.deliveryDate || "-")}</td>
+              <td style="padding:6px;border-bottom:1px solid #e2e8f0;text-align:left">${escapeHtml(document.customerName || document.customerCode || "-")}</td>
+              <td style="padding:6px;border-bottom:1px solid #e2e8f0;text-align:left">${escapeHtml(document.documentDate || "-")}</td>
               <td style="padding:6px;border-bottom:1px solid #e2e8f0;text-align:left">
                 <div style="font-weight:700">${escapeHtml(document.soNumber || "-")}</div>
                 <div style="font-size:11px;color:#047857">${escapeHtml(document.soStatus || "Closed")}</div>
@@ -1016,8 +1199,7 @@ export default function CommissaryForecast() {
         )
         .join("");
 
-      setShowSODRModal(false);
-      setSelectedIntegrationRowIds([]);
+      handleCloseSODRModal();
       setWoSuccessMsg(successMessage);
       await loadCommissaryData();
 
@@ -1031,8 +1213,8 @@ export default function CommissaryForecast() {
             <table style="width:100%;border-collapse:collapse;font-size:12px">
               <thead style="position:sticky;top:0;background:#f1f5f9">
                 <tr>
-                  <th style="padding:7px;text-align:left">Store</th>
-                  <th style="padding:7px;text-align:left">Delivery Date</th>
+                  <th style="padding:7px;text-align:left">Customer</th>
+                  <th style="padding:7px;text-align:left">SO Date</th>
                   <th style="padding:7px;text-align:left">SO Document</th>
                   <th style="padding:7px;text-align:left">DR Document</th>
                 </tr>
@@ -1097,7 +1279,7 @@ export default function CommissaryForecast() {
     if (!showSODRModal) return undefined;
 
     const handleKeyDown = (event) => {
-      if (event.key === "Escape") setShowSODRModal(false);
+      if (event.key === "Escape") handleCloseSODRModal();
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -1209,16 +1391,24 @@ export default function CommissaryForecast() {
   const integrationRows = useMemo(
     () =>
       currentData
+        .map((row, index) => {
+          const unsentDeliveryDates = dates.filter(
+            (deliveryDate) =>
+              Number(row.dateIntegration?.[deliveryDate]?.unsentQty) > 0,
+          );
+
+          return {
+            ...row,
+            unsentDeliveryDates,
+            integrationRowId: `${getStoreKey(row)}|${row.itemCode || "item"}|${index}`,
+          };
+        })
         .filter(
           (row) =>
-            String(row.integrationStatus || "Not Sent") !== "Sent" &&
-            (row.unsentQty === undefined || Number(row.unsentQty) > 0),
-        )
-        .map((row, index) => ({
-          ...row,
-          integrationRowId: `${getStoreKey(row)}|${row.itemCode || "item"}|${index}`,
-        })),
-    [currentData],
+            row.unsentDeliveryDates.length > 0 &&
+            Number(row.unsentQty) > 0,
+        ),
+    [currentData, dates],
   );
 
   const selectedIntegrationRowIdSet = useMemo(
@@ -1417,11 +1607,11 @@ export default function CommissaryForecast() {
 
   const showsBranchColumn =
     activeTabConfig.detailed || activeTabConfig.materialSummary;
-  const showsSODRColumns = activeTab === "confirmedDetailed";
+  const showsIntegrationDetails = activeTab === "confirmedDetailed";
   const colSpan =
     dates.length +
     (showsBranchColumn ? 5 : 4) +
-    (showsSODRColumns ? 3 : 0);
+    (showsIntegrationDetails ? 1 : 0);
 
   return (
     <div className="global-tran-main-div-ui !mt-0 min-w-0 overflow-x-hidden px-2 pb-20 pt-[136px] sm:pt-[112px] md:pt-[116px] lg:pt-[120px]">
@@ -1451,7 +1641,7 @@ export default function CommissaryForecast() {
         >
           <FloatingField
             id="startDate"
-            label="Start Date"
+            label="From Delivery Date"
             type="date"
             value={startDate}
             onChange={setStartDate}
@@ -1459,7 +1649,7 @@ export default function CommissaryForecast() {
           />
           <FloatingField
             id="endDate"
-            label="End Date"
+            label="To Delivery Date"
             type="date"
             value={endDate}
             onChange={setEndDate}
@@ -1558,7 +1748,10 @@ export default function CommissaryForecast() {
               onClick={loadCommissaryData}
               disabled={isLoading}
             >
-              {isLoading ? "Querying..." : "Run Query"}
+              {isLoading ? "Refreshing..." : " Refresh Data"}
+
+
+              
             </ActionButton>
             <ActionButton
               icon={ChevronDown}
@@ -1600,24 +1793,20 @@ export default function CommissaryForecast() {
                     UOM
                   </th>
 
-                  {showsSODRColumns && (
-                    <>
-                      <th className="global-tran-th-ui sticky top-0 z-[210] w-[130px] min-w-[130px] bg-blue-100 text-left dark:bg-blue-900">
-                        SO Number
-                      </th>
-                      <th className="global-tran-th-ui sticky top-0 z-[210] w-[130px] min-w-[130px] bg-blue-100 text-left dark:bg-blue-900">
-                        DR Number
-                      </th>
-                      <th className="global-tran-th-ui sticky top-0 z-[210] w-[145px] min-w-[145px] bg-blue-100 text-left dark:bg-blue-900">
-                        Integration Status
-                      </th>
-                    </>
+                  {showsIntegrationDetails && (
+                    <th className="global-tran-th-ui sticky top-0 z-[210] w-[145px] min-w-[145px] bg-blue-100 text-left dark:bg-blue-900">
+                      Integration Status
+                    </th>
                   )}
 
                   {dates.map((date) => (
                     <th
                       key={date}
-                      className="global-tran-th-ui sticky top-0 z-[210] w-[96px] min-w-[96px] max-w-[96px] bg-blue-100 text-right dark:bg-blue-900"
+                      className={`global-tran-th-ui sticky top-0 z-[210] bg-blue-100 dark:bg-blue-900 ${
+                        showsIntegrationDetails
+                          ? "w-[170px] min-w-[170px] max-w-[170px] text-center"
+                          : "w-[96px] min-w-[96px] max-w-[96px] text-right"
+                      }`}
                     >
                       <div className="text-[10px] font-bold text-slate-500 dark:text-slate-300">
                         {dayLabel(date)}
@@ -1727,52 +1916,46 @@ export default function CommissaryForecast() {
                                 {row.uomCode || "-"}
                               </td>
 
-                              {showsSODRColumns && (
-                                <>
-                                  <td
-                                    className="global-tran-td-ui w-[130px] min-w-[130px] text-left font-mono text-xs font-semibold text-emerald-700 dark:text-emerald-300"
-                                    title={row.soNumber || "Not yet created"}
+                              {showsIntegrationDetails && (
+                                <td className="global-tran-td-ui w-[145px] min-w-[145px] text-left text-xs">
+                                  <span
+                                    className={`inline-flex rounded-full px-2 py-1 font-bold ${
+                                      row.integrationStatus === "Sent"
+                                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200"
+                                        : row.integrationStatus ===
+                                            "Partially Sent"
+                                          ? "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200"
+                                          : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                                    }`}
+                                    title={
+                                      row.integrationStatus === "Sent"
+                                        ? `SO: ${row.soStatus || "Closed"}; DR: ${row.drStatus || "Open - For Picking"}`
+                                        : row.integrationStatus
+                                    }
                                   >
-                                    {row.soNumber || "-"}
-                                  </td>
-                                  <td
-                                    className="global-tran-td-ui w-[130px] min-w-[130px] text-left font-mono text-xs font-semibold text-blue-700 dark:text-blue-300"
-                                    title={row.drNumber || "Not yet created"}
-                                  >
-                                    {row.drNumber || "-"}
-                                  </td>
-                                  <td className="global-tran-td-ui w-[145px] min-w-[145px] text-left text-xs">
-                                    <span
-                                      className={`inline-flex rounded-full px-2 py-1 font-bold ${
-                                        row.integrationStatus === "Sent"
-                                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200"
-                                          : row.integrationStatus ===
-                                              "Partially Sent"
-                                            ? "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200"
-                                            : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                                      }`}
-                                      title={
-                                        row.integrationStatus === "Sent"
-                                          ? `SO: ${row.soStatus || "Closed"}; DR: ${row.drStatus || "Open - For Picking"}`
-                                          : row.integrationStatus
-                                      }
-                                    >
-                                      {row.integrationStatus}
-                                    </span>
-                                  </td>
-                                </>
+                                    {row.integrationStatus}
+                                  </span>
+                                </td>
                               )}
 
-                              {dates.map((date) => (
-                                <td
-                                  key={date}
-                                  className="global-tran-td-ui w-[96px] min-w-[96px] max-w-[96px] text-right font-medium"
-                                >
-                                  {row.dates[date]
-                                    ? row.dates[date].toLocaleString()
-                                    : "-"}
-                                </td>
-                              ))}
+                              {dates.map((date) =>
+                                showsIntegrationDetails ? (
+                                  <IntegrationDateCell
+                                    key={date}
+                                    date={date}
+                                    row={row}
+                                  />
+                                ) : (
+                                  <td
+                                    key={date}
+                                    className="global-tran-td-ui w-[96px] min-w-[96px] max-w-[96px] text-right font-medium"
+                                  >
+                                    {row.dates[date]
+                                      ? row.dates[date].toLocaleString()
+                                      : "-"}
+                                  </td>
+                                ),
+                              )}
 
                               <td className="global-tran-td-ui w-[100px] min-w-[100px] max-w-[100px] bg-slate-50 text-right text-xs font-bold text-blue-700 dark:bg-gray-900 dark:text-blue-300">
                                 {row.total.toLocaleString()}
@@ -1846,7 +2029,7 @@ export default function CommissaryForecast() {
           className="fixed inset-0 z-[9998] flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm sm:p-6"
           role="presentation"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setShowSODRModal(false);
+            if (event.target === event.currentTarget) handleCloseSODRModal();
           }}
         >
           <section
@@ -1863,7 +2046,7 @@ export default function CommissaryForecast() {
               </div>
               <button
                 type="button"
-                onClick={() => setShowSODRModal(false)}
+                onClick={handleCloseSODRModal}
                 className="rounded-lg p-2 text-white/90 transition hover:bg-white/15 hover:text-white"
                 aria-label="Close SO/DR integration modal"
               >
@@ -1873,11 +2056,11 @@ export default function CommissaryForecast() {
 
             <div className="grid grid-cols-2 gap-2 border-b border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900 sm:grid-cols-4 sm:p-4">
               <div className="rounded-lg bg-white p-3 shadow-sm dark:bg-slate-950">
-                <div className="text-[10px] font-bold uppercase text-slate-400">Start Date</div>
+                <div className="text-[10px] font-bold uppercase text-slate-400">from Delivery Date</div>
                 <div className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">{startDate}</div>
               </div>
               <div className="rounded-lg bg-white p-3 shadow-sm dark:bg-slate-950">
-                <div className="text-[10px] font-bold uppercase text-slate-400">End Date</div>
+                <div className="text-[10px] font-bold uppercase text-slate-400">To Derlivery Date</div>
                 <div className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">{endDate}</div>
               </div>
               <div className="rounded-lg bg-white p-3 shadow-sm dark:bg-slate-950">
@@ -1996,10 +2179,11 @@ export default function CommissaryForecast() {
               <table className="w-full min-w-[760px] table-fixed border-collapse text-sm">
                 <colgroup>
                   <col className="w-12" />
-                  <col className="w-[16%]" />
-                  <col className="w-[19%]" />
+                  <col className="w-[15%]" />
+                  <col className="w-[17%]" />
                   <col />
                   <col className="w-[11%]" />
+                  <col className="w-[18%]" />
                   <col className="w-[13%]" />
                 </colgroup>
                 <thead>
@@ -2017,6 +2201,7 @@ export default function CommissaryForecast() {
                     <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-left shadow-[0_1px_0_rgba(148,163,184,0.45)] dark:border-slate-700 dark:bg-slate-900">Item Code</th>
                     <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-left shadow-[0_1px_0_rgba(148,163,184,0.45)] dark:border-slate-700 dark:bg-slate-900">Description</th>
                     <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-left shadow-[0_1px_0_rgba(148,163,184,0.45)] dark:border-slate-700 dark:bg-slate-900">UOM</th>
+                    <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-left shadow-[0_1px_0_rgba(148,163,184,0.45)] dark:border-slate-700 dark:bg-slate-900">Unsent Delivery Date(s)</th>
                     <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-right shadow-[0_1px_0_rgba(148,163,184,0.45)] dark:border-slate-700 dark:bg-slate-900">Quantity</th>
                   </tr>
                 </thead>
@@ -2050,6 +2235,14 @@ export default function CommissaryForecast() {
                       <td className="truncate border-b border-slate-100 px-3 py-2 font-mono dark:border-slate-800" title={row.itemCode || "-"}>{row.itemCode || "-"}</td>
                       <td className="truncate border-b border-slate-100 px-3 py-2 dark:border-slate-800" title={row.itemDesc || "-"}>{row.itemDesc || "-"}</td>
                       <td className="truncate border-b border-slate-100 px-3 py-2 dark:border-slate-800" title={row.uomCode || "-"}>{row.uomCode || "-"}</td>
+                      <td
+                        className="border-b border-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-800 dark:text-slate-200"
+                        title={row.unsentDeliveryDates.join(", ")}
+                      >
+                        {row.unsentDeliveryDates
+                          .map((date) => shortDate(date))
+                          .join(", ")}
+                      </td>
                       <td className="border-b border-slate-100 px-3 py-2 text-right font-semibold dark:border-slate-800">{Number(row.unsentQty ?? row.total ?? 0).toLocaleString()}</td>
                     </tr>
                     );
