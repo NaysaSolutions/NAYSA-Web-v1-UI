@@ -522,6 +522,7 @@ const PayeeMasterDataTab = ({
         docType={docType}
         onRowDoubleClick={handleRowDblClick}
         autoFillGrid={false}
+        onRefresh={() => onFilter?.()}
       />
     </div>
   );

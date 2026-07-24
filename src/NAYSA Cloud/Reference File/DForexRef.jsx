@@ -953,6 +953,7 @@ const DForexRef = ({ onSelect }) => {
                 showPagination={false}
                 autoFillGrid={true}
                 tableSize="Half"
+                onRefresh={() => queryClient.invalidateQueries({ queryKey: ["dforexList"] })}
               />
             </div>
           </div>
@@ -975,9 +976,10 @@ const DForexRef = ({ onSelect }) => {
                 showGroupBy={true}
                 initialState={{ groupBy: ["year", "monthName", "dateFrom", "dateTo"] }}
                 isFetching={forexListQuery.isFetching}
-                onRefresh={() => forexListQuery.refetch()}
+                onRefresh={() => queryClient.invalidateQueries({ queryKey: ["dforexList"] })}
                 onMobileRowOpen={openMobileActionSheet} // Piped into global table!
                 showPagination={false}
+                
               />
             </div>
           </div>

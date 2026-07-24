@@ -25,7 +25,7 @@ import {
   faCalendarAlt,
   faFilter,
   faDownload,
-  faUndo,
+  faRedo,
   faArrowUp,
   faArrowDown,
   faEye,
@@ -165,30 +165,6 @@ const parseNumber = (v) => {
 
 const isNumericColumn = (col) =>
   col?.renderType === "number" || col?.renderType === "currency";
-
-const statusFieldCandidates = [
-  "C",
-  "doc_stat",
-  "docStatus",
-  "status",
-  "stat",
-  "docStat",
-  "msisStatus",
-  "msis_status",
-];
-
-const getRowStatusValue = (row) =>
-  statusFieldCandidates
-    .map((field) => (row?.[field] !== undefined ? String(row[field]) : undefined))
-    .find((value) => value !== undefined) ?? "";
-
-const normalizeHistoryStatusRows = (rows) =>
-  (Array.isArray(rows) ? rows : []).map((row) => {
-    if (!row || typeof row !== "object" || Array.isArray(row)) return row;
-    const rowStatus = getRowStatusValue(row);
-    if (!rowStatus || row.docStatus !== undefined) return row;
-    return { ...row, docStatus: rowStatus };
-  });
 
 
 /* ============================== Component =============================== */
@@ -633,13 +609,7 @@ const AllTranHistory = (props) => {
       Object.keys(rootDataMap).forEach((k) => {
         const v = rootDataMap[k];
         if (v && typeof v === "object" && !Array.isArray(v) && Array.isArray(v.rows)) {
-          rootDataMap[k] = normalizeHistoryStatusRows(v.rows);
-        }
-      });
-
-      Object.keys(rootDataMap).forEach((k) => {
-        if (Array.isArray(rootDataMap[k])) {
-          rootDataMap[k] = normalizeHistoryStatusRows(rootDataMap[k]);
+          rootDataMap[k] = v.rows;
         }
       });
 
@@ -883,6 +853,11 @@ const AllTranHistory = (props) => {
     [orderedCols, groupBy]
   );
 
+  const protectedColumnKeys = useMemo(
+    () => chooserColumns.slice(0, 2).map((col) => col.key),
+    [chooserColumns]
+  );
+
   const draftVisibleChooserColumnCount = useMemo(
     () => chooserColumns.filter((col) => !columnChooserDraftHidden.includes(col.key)).length,
     [chooserColumns, columnChooserDraftHidden]
@@ -895,6 +870,17 @@ const AllTranHistory = (props) => {
       String(col.label || col.key || "").toLowerCase().includes(q)
     );
   }, [chooserColumns, columnChooserSearch]);
+
+  useEffect(() => {
+    if (!activeTab || protectedColumnKeys.length === 0) return;
+
+    setUserHiddenColsByTab((prev) => {
+      const current = prev[activeTab] || [];
+      const nextHidden = current.filter((key) => !protectedColumnKeys.includes(key));
+      if (nextHidden.length === current.length) return prev;
+      return { ...prev, [activeTab]: nextHidden };
+    });
+  }, [activeTab, protectedColumnKeys]);
 
   const primaryCardCol = useMemo(() => {
     if (!visibleCols.length) return null;
@@ -953,8 +939,12 @@ const AllTranHistory = (props) => {
 
   const statusFiltered = (() => {
     if (status === "All") return base;
+    const statusFieldCandidates = ["C", "doc_stat", "docStatus", "status", "stat"];
     return base.filter((row) => {
-      const rowStatus = getRowStatusValue(row);
+      const rowStatus =
+        statusFieldCandidates
+          .map((f) => (row[f] !== undefined ? String(row[f]) : undefined))
+          .find((v) => v !== undefined) ?? "";
       return rowStatus === status;
     });
   })();
@@ -1256,7 +1246,11 @@ const AllTranHistory = (props) => {
   };
 
   const getRowClassByStatus = (row) => {
-    const rowStatus = getRowStatusValue(row);
+    const statusFieldCandidates = ["C", "doc_stat", "docStatus", "status", "stat","docStat"];
+    const rowStatus =
+      statusFieldCandidates
+        .map((f) => (row[f] !== undefined ? String(row[f]) : undefined))
+        .find((v) => v !== undefined) ?? "";
 
     if (rowStatus === "X" ) return "text-red-600";
     if (rowStatus === "F" || rowStatus === "C") return "text-blue-700";
@@ -1747,7 +1741,10 @@ const handleExportConfirm = async (enteredFileName) => {
       return;
     }
 
-    const nextHidden = chooserColumns.slice(2).map((col) => col.key);
+    const protectedKeys = new Set(protectedColumnKeys);
+    const nextHidden = chooserColumns
+      .filter((col) => !protectedKeys.has(col.key))
+      .map((col) => col.key);
 
     setColumnChooserDraftHidden(nextHidden);
   };
@@ -1755,7 +1752,7 @@ const handleExportConfirm = async (enteredFileName) => {
   const handleToggleColumnVisibility = (colKey, checked) => {
     if (!activeTab) return;
 
-    if (!checked && draftVisibleChooserColumnCount <= 2) {
+    if (!checked && (protectedColumnKeys.includes(colKey) || draftVisibleChooserColumnCount <= 2)) {
       useSwalErrorAlert("Minimum columns required", "Please retain at least 2 columns.");
       return;
     }
@@ -2159,7 +2156,7 @@ const handleExportConfirm = async (enteredFileName) => {
                 onClick={handleResetUI}
                 disabled={loading || exporting}
               >
-                <FontAwesomeIcon icon={faUndo} className="text-[13px]" />
+                <FontAwesomeIcon icon={faRedo} className="text-[13px]" />
                 <span className="truncate">Reset</span>
               </button>
             </div>
@@ -2256,25 +2253,14 @@ const handleExportConfirm = async (enteredFileName) => {
                       </div>
                     </label>
                     <button type="button" onClick={clearActiveGrouping} className="font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition h-8 text-xs px-3">
-                      <FontAwesomeIcon icon={faTimes} className="mr-1" /> Remove
+                      <FontAwesomeIcon icon={faTimes} className="mr-1" /> Clear Grouping 
                     </button>
                   </div>
                 )}
 
-                <div className="relative flex items-center gap-2 min-w-0 flex-1 md:flex-none">
+                <div className="flex items-center gap-2 min-w-0 flex-1 md:flex-none">
                   <input type="text" value={globalSearch} onChange={e => setGlobalSearch(e.target.value)}
-                         placeholder="Quick Search..." className="w-full min-w-[120px] rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:ring-1 focus:ring-blue-300 dark:focus:ring-blue-500 outline-none h-8 md:w-48 pl-3 pr-8 text-xs" />
-                  {globalSearch && (
-                    <button
-                      type="button"
-                      onClick={() => setGlobalSearch("")}
-                      className="absolute right-2 text-gray-400 hover:text-gray-600 dark:text-slate-400 dark:hover:text-slate-200"
-                      aria-label="Clear quick search"
-                      title="Clear quick search"
-                    >
-                      <FontAwesomeIcon icon={faTimes} />
-                    </button>
-                  )}
+                         placeholder="Quick Search..." className="w-full min-w-[120px] rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:ring-1 focus:ring-blue-300 dark:focus:ring-blue-500 outline-none h-8 md:w-48 px-3 text-xs" />
                 </div>
 
                 {isMobile && (

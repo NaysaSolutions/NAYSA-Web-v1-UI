@@ -455,6 +455,7 @@ const ZoneRef = forwardRef(({ onStateChange }, ref) => {
                     showFilters
                     tableSize={tableSize}
                     autoFillGrid={true}
+                    onRefresh={() => queryClient.invalidateQueries({ queryKey: ["zoneList"] })}
                 />
             
         </div>
