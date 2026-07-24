@@ -57,6 +57,12 @@ function showToast(icon, title, text = "") {
   Toast.fire({ icon, title, text });
 }
 
+function getPostLoginPath(loggedInUser) {
+  return loggedInUser?.ACCOUNT_MODE === "LICENSE_ADMIN"
+    ? "/heartstrong"
+    : "/";
+}
+
 function Spinner({ size = 18 }) {
   return (
     <svg
@@ -343,7 +349,7 @@ export default function Login({ onSwitchToRegister }) {
   }
 
   async function continueAfterApproval(requestId) {
-    await login({
+    const loggedInUser = await login({
       companyCode,
       USER_CODE: form.USER_CODE.trim(),
       PASSWORD: form.PASSWORD,
@@ -351,7 +357,7 @@ export default function Login({ onSwitchToRegister }) {
     });
 
     showToast("success", "Welcome back!", "You have successfully signed in.");
-    navigate("/", { replace: true });
+    navigate(getPostLoginPath(loggedInUser), { replace: true });
   }
 
   async function handleSubmit(event) {
@@ -373,14 +379,14 @@ export default function Login({ onSwitchToRegister }) {
     setIsLoading(true);
 
     try {
-      await login({
+      const loggedInUser = await login({
         companyCode,
         USER_CODE: form.USER_CODE.trim(),
         PASSWORD: form.PASSWORD,
       });
 
       showToast("success", "Welcome back!", "You have successfully signed in.");
-      navigate("/", { replace: true });
+      navigate(getPostLoginPath(loggedInUser), { replace: true });
     } catch (err) {
       const status = err?.response?.status;
       const code = err?.response?.data?.code;
@@ -391,7 +397,17 @@ export default function Login({ onSwitchToRegister }) {
 
       const approvalRequired =
         status === 409 &&
-        (code === "LOGIN_APPROVAL_REQUIRED" || code === "ACTIVE_SESSION");
+        code === "LOGIN_APPROVAL_REQUIRED";
+
+      if (status === 409 && code === "ACTIVE_SESSION") {
+        showToast(
+          "warning",
+          "Account Already Logged In",
+          msg ||
+            "This account is active in another session. Please try again."
+        );
+        return;
+      }
 
       if (approvalRequired) {
         const requestId = err?.response?.data?.requestId;
@@ -409,7 +425,7 @@ export default function Login({ onSwitchToRegister }) {
 
         if (approvalStatus === "terminate") {
           try {
-            await login({
+            const loggedInUser = await login({
               companyCode,
               USER_CODE: form.USER_CODE.trim(),
               PASSWORD: form.PASSWORD,
@@ -423,7 +439,7 @@ export default function Login({ onSwitchToRegister }) {
               "You are now signed in on this device."
             );
 
-            navigate("/", { replace: true });
+            navigate(getPostLoginPath(loggedInUser), { replace: true });
           } catch (terminateError) {
             showToast(
               "error",
@@ -553,7 +569,7 @@ export default function Login({ onSwitchToRegister }) {
         throw new Error("Biometric authentication was cancelled.");
       }
 
-      await loginWithBiometric({
+      const loggedInUser = await loginWithBiometric({
         companyCode,
         payload: {
           credential: serializeLoginCredential(credential),
@@ -561,7 +577,7 @@ export default function Login({ onSwitchToRegister }) {
       });
 
       showToast("success", "Welcome back!", "Biometric authentication successful.");
-      navigate("/", { replace: true });
+      navigate(getPostLoginPath(loggedInUser), { replace: true });
     } catch (err) {
       const msg =
         err?.response?.data?.message ||

@@ -74,30 +74,10 @@ const DEFAULT_FORM = {
 const normalizeRecord = (record) => ({
   custTypeCode: record?.custTypeCode ?? record?.cust_type_code ?? record?.code ?? "",
   custTypeName: record?.custTypeName ?? record?.cust_type_name ?? record?.name ?? "",
-  registeredBy:
-    record?.registeredBy ??
-    record?.registered_by ??
-    record?.createdBy ??
-    record?.created_by ??
-    "",
-  registeredDate:
-    record?.registeredDate ??
-    record?.registered_date ??
-    record?.createdDate ??
-    record?.created_date ??
-    "",
-  lastUpdatedBy:
-    record?.lastUpdatedBy ??
-    record?.last_updated_by ??
-    record?.updatedBy ??
-    record?.updated_by ??
-    "",
-  lastUpdatedDate:
-    record?.lastUpdatedDate ??
-    record?.last_updated_date ??
-    record?.updatedDate ??
-    record?.updated_date ??
-    "",
+  registeredBy: record?.registeredBy ?? "",
+  registeredDate: record?.registeredDate ?? "",
+  lastUpdatedBy: record?.lastUpdatedBy ?? "",
+  lastUpdatedDate: record?.lastUpdatedDate ?? "",
   __existing: false,
 });
 
@@ -144,18 +124,6 @@ const CustTypeRef = forwardRef(({ onStateChange }, ref) => {
 
   const types = useMemo(() => listQuery.data || [], [listQuery.data]);
   const isInitialLoading = listQuery.isLoading;
-
-  const fetchCustTypeRecord = useCallback(async (custTypeCode) => {
-    const code = String(custTypeCode || "").trim();
-    if (!code) return null;
-
-    const res = await apiClient.get("/getCustType", {
-      params: { CUSTTYPE_CODE: code },
-    });
-
-    const record = extractRows(res)?.[0];
-    return record ? normalizeRecord(record) : null;
-  }, []);
 
   /* ================= DUPLICATE CHECK ================= */
 
@@ -204,20 +172,24 @@ const CustTypeRef = forwardRef(({ onStateChange }, ref) => {
     }
 
     try {
-      const record = await fetchCustTypeRecord(targetRow.custTypeCode);
+      const res = await apiClient.get("/getCustType", {
+        params: { CUSTTYPE_CODE: targetRow.custTypeCode },
+      });
+
+      const record = extractRows(res)?.[0];
       if (!record) {
         await useSwalErrorAlert("Error", "Record details could not be found.");
         return;
       }
 
-      setForm({ ...record, __existing: true });
+      setForm({ ...normalizeRecord(record), __existing: true });
       setIsEditing(true);
       setSelectedRow(targetRow);
       setIsDupCode(false);
     } catch (error) {
       await useSwalErrorAlert("Fetch Failed", "Could not retrieve record data.");
     }
-  }, [fetchCustTypeRecord, selectedRow]);
+  }, [selectedRow]);
 
   /* ================= VALIDATE CODE ================= */
 
@@ -266,24 +238,19 @@ const CustTypeRef = forwardRef(({ onStateChange }, ref) => {
         }),
       });
     },
-    onSuccess: async (response, payload) => {
+    onSuccess: async (response) => {
       const row = response?.data || {};
       if (Number(row?.errorcount ?? 0) > 0) {
         await useSwalErrorAlert("Validation Error", row?.errormsg || "Save failed.");
         return;
       }
 
-      await queryClient.invalidateQueries({ queryKey: ["custTypeList"] });
-      const savedRecord = await fetchCustTypeRecord(payload.custTypeCode);
-
-      if (savedRecord) {
-        setForm({ ...savedRecord, __existing: true });
-        setSelectedRow(savedRecord);
-      }
-
+      queryClient.invalidateQueries({ queryKey: ["custTypeList"] });
       await useSwalSuccessAlert("Success!", "Customer Type saved successfully.");
       setIsEditing(false);
+      setSelectedRow(null);
       setIsDupCode(false);
+      resetForm(DEFAULT_FORM);
     },
   });
 
@@ -462,6 +429,7 @@ const CustTypeRef = forwardRef(({ onStateChange }, ref) => {
           showFilters
           tableSize={tableSize}
           autoFillGrid={true}
+          onRefresh={() => queryClient.invalidateQueries({ queryKey: ["custTypeList"] })}
         />
      
     </div>

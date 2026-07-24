@@ -444,6 +444,7 @@ const handleEdit = useCallback(async (row) => {
           showFilters
           tableSize={tableSize}
           autoFillGrid={true}
+          onRefresh={() => queryClient.invalidateQueries({ queryKey: ["areaList"] })}
         />
       
     </div>

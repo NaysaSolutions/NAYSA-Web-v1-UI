@@ -1,403 +1,28 @@
-
-// import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
-// import {
-//   BrowserRouter as Router,
-//   Routes,
-//   Route,
-//   Navigate,
-//   useNavigate,
-//   useParams,
-//   useLocation,
-// } from "react-router-dom";
-// import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-// // import { AnimatePresence, motion } from "motion/react";
-// import { AnimatePresence, motion } from "framer-motion";
-// import { pageRegistry } from "./pageRegistry.jsx";
-// import ErrorBoundary from "./NAYSA Cloud/Components/ErrorBoundary";
-// import { fetchData, getTenant } from "./NAYSA Cloud/Configuration/BaseURL.jsx";
-// import Navbar from "./NAYSA Cloud/Components/Navbar";
-// import Sidebar from "./NAYSA Cloud/Components/Sidebar";
-// import { ResetProvider } from "./NAYSA Cloud/Components/ResetContext";
-// import Login from "./NAYSA Cloud/Authentication/Login.jsx";
-// import Register from "./NAYSA Cloud/Authentication/Register.jsx";
-// import Dashboard1 from "./NAYSA Cloud/Components/Dashboard1.jsx";
-// import ChangePassword from "./NAYSA Cloud/Authentication/ChangePassword.jsx";
-// import ApproveUser from "@/NAYSA Cloud/Authentication/ApproveUser.jsx";
-// import BiometricSettingsPage from "./NAYSA Cloud/Authentication/BiometricSettingsPage.jsx";
-// import AuthProvider, { useAuth } from "./NAYSA Cloud/Authentication/AuthContext.jsx";
-// import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
-// import ElectronScannerPage from "@/NAYSA Cloud/Electron/ElectronScannerPage.jsx";
-
-// const queryClient = new QueryClient();
-
-// /* -------------------- Universal Registry Route (The Gatekeeper) -------------------- */
-// const UniversalRegistryRoute = ({ routeRows, loadingMenu }) => {
-//   const location = useLocation();
-//   const { componentKey: paramKey } = useParams();
-//   const queryParams = new URLSearchParams(location.search);
-//   const isViewMode = queryParams.get("viewDocument") === "true";
-
-//   const normalizedRouteRows = Array.isArray(routeRows) ? routeRows : [];
-//   const hasRouteRows = normalizedRouteRows.length > 0;
-
-//   const matchingComponentKey = useMemo(() => {
-//     if (paramKey && pageRegistry[paramKey]) return paramKey;
-
-//     const currentPath = location.pathname.replace(/\/$/, "") || "/";
-//     const dbMatch = normalizedRouteRows.find((r) => {
-//       if (!r.path) return false;
-//       const dbPath = (r.path.startsWith("/") ? r.path : `/${r.path}`).replace(/\/$/, "");
-//       return dbPath === currentPath;
-//     });
-
-//     return dbMatch ? dbMatch.componentKey : null;
-//   }, [location.pathname, paramKey, normalizedRouteRows]);
-
-//   const Component = matchingComponentKey ? pageRegistry[matchingComponentKey] : null;
-
-//   if ((loadingMenu || !hasRouteRows) && !Component) {
-//     return (
-//       <div className="flex flex-col items-center justify-center min-h-[60vh]">
-//         <LoadingSpinner />
-//         <p className="mt-4 text-gray-400 animate-pulse font-medium">
-//           Validating Access...
-//         </p>
-//       </div>
-//     );
-//   }
-
-//   const isAuthorized = normalizedRouteRows.some(
-//     (r) => r.componentKey === matchingComponentKey
-//   );
-
-//   if (!Component || (!isAuthorized && !isViewMode)) {
-//     return <Navigate to="/" replace />;
-//   }
-
-//   return (
-//     <ErrorBoundary>
-//       <Component key={matchingComponentKey} />
-//     </ErrorBoundary>
-//   );
-// };
-
-// /* -------------------- Modal Host -------------------- */
-// const ModalHost = ({ modalKey, onClose }) => {
-//   const { user } = useAuth();
-//   if (!modalKey) return null;
-
-//   const Cmp = pageRegistry[modalKey];
-//   if (!Cmp) return null;
-
-//   return (
-//     <div
-//       className="fixed inset-0 z-[999] bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm"
-//       onClick={onClose}
-//     >
-//       <div
-//         className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-auto"
-//         onClick={(e) => e.stopPropagation()}
-//       >
-//         <Cmp isOpen={true} onClose={onClose} userCode={user?.USER_CODE} />
-//       </div>
-//     </div>
-//   );
-// };
-
-// /* -------------------- App Content -------------------- */
-// const AppContent = () => {
-//   const { user, loading, logout } = useAuth();
-//   const navigate = useNavigate();
-//   const location = useLocation();
-//   const isElectronScannerRoute = location.pathname === "/electron-scanner";
-
-//   const [menuItems, setMenuItems] = useState(
-//     () => JSON.parse(sessionStorage.getItem("menuItems")) || []
-//   );
-//   const [routeRows, setRouteRows] = useState(
-//     () => JSON.parse(sessionStorage.getItem("routeRows")) || []
-//   );
-//   const [loadingMenu, setLoadingMenu] = useState(false);
-//   const [isSidebarVisible, setIsSidebarVisible] = useState(false);
-//   const [activeModalKey, setActiveModalKey] = useState(null);
-//   const [pendingModalKey, setPendingModalKey] = useState(null);
-
-//   const menuFetchedRef = useRef(null);
-
-//   const [navDirection, setNavDirection] = useState(1);
-//   const pathnameHistoryRef = useRef([location.pathname]);
-
-//   const resetAppData = useCallback(() => {
-//     setMenuItems([]);
-//     setRouteRows([]);
-//     setLoadingMenu(false);
-//     setIsSidebarVisible(false);
-//     setActiveModalKey(null);
-//     setPendingModalKey(null);
-//     menuFetchedRef.current = null;
-//     sessionStorage.removeItem("menuItems");
-//     sessionStorage.removeItem("routeRows");
-//   }, []);
-
-//   const handleLogout = useCallback(async () => {
-//     resetAppData();
-//     await logout();
-//     navigate("/", { replace: true });
-//   }, [logout, resetAppData, navigate]);
-
-//   useEffect(() => {
-//     let alive = true;
-//     const tenant = getTenant();
-
-//     if (!user) {
-//       resetAppData();
-//       return;
-//     }
-
-//     if (loading || !tenant || menuFetchedRef.current === user.USER_CODE) return;
-
-//     if (routeRows.length === 0) {
-//       setLoadingMenu(true);
-//     }
-
-//     (async () => {
-//       try {
-//         const [menuResp, routesResp] = await Promise.all([
-//           fetchData("menu-items", { USER_CODE: user.USER_CODE }),
-//           fetchData("menu-routes", { USER_CODE: user.USER_CODE }),
-//         ]);
-
-//         if (!alive) return;
-
-//         const mData = menuResp?.menuItems ?? menuResp?.data ?? [];
-//         const rData = routesResp?.routes ?? routesResp?.data ?? [];
-
-//         const safeMenu = Array.isArray(mData) ? mData : [];
-//         const safeRoutes = Array.isArray(rData) ? rData : [];
-
-//         setMenuItems(safeMenu);
-//         setRouteRows(safeRoutes);
-//         sessionStorage.setItem("menuItems", JSON.stringify(safeMenu));
-//         sessionStorage.setItem("routeRows", JSON.stringify(safeRoutes));
-//         menuFetchedRef.current = user.USER_CODE;
-//       } catch (e) {
-//         console.error("Metadata Fetch Error:", e);
-//       } finally {
-//         if (alive) setLoadingMenu(false);
-//       }
-//     })();
-
-//     return () => {
-//       alive = false;
-//     };
-//   }, [user, loading, resetAppData, routeRows.length]);
-
-//   useEffect(() => {
-//     document.body.style.overflow = activeModalKey ? "hidden" : "auto";
-//     return () => { document.body.style.overflow = "auto"; };
-//   }, [activeModalKey]);
-
-//   useEffect(() => {
-//     if (pendingModalKey && location.pathname === "/") {
-//       const id = requestAnimationFrame(() => {
-//         setActiveModalKey(pendingModalKey);
-//         setPendingModalKey(null);
-//       });
-
-//       return () => cancelAnimationFrame(id);
-//     }
-//   }, [pendingModalKey, location.pathname]);
-
-//   useEffect(() => {
-//     const history = pathnameHistoryRef.current;
-//     const currentPath = location.pathname;
-//     const existingIndex = history.indexOf(currentPath);
-//     const lastPath = history[history.length - 1];
-
-//     if (currentPath === lastPath) return;
-
-//     if (existingIndex !== -1) {
-//       setNavDirection(-1);
-//       pathnameHistoryRef.current = history.slice(0, existingIndex + 1);
-//     } else {
-//       setNavDirection(1);
-//       pathnameHistoryRef.current = [...history, currentPath];
-//     }
-//   }, [location.pathname]);
-
-//   const pageVariants = {
-//     initial: (direction) => ({
-//       x: direction > 0 ? 50 : -50,
-//       opacity: 1,
-//     }),
-//     animate: {
-//       x: 0,
-//       opacity: 1,
-//       transition: {
-//         duration: 0.26,
-//         ease: [0.22, 1, 0.36, 1],
-//       },
-//     },
-//     exit: (direction) => ({
-//       x: direction > 0 ? -50 : 50,
-//       opacity: 1,
-//       transition: {
-//         duration: 0.2,
-//         ease: [0.4, 0, 0.2, 1],
-//       },
-//     }),
-//   };
-
-//   const handleOpenModalFromMenu = useCallback(
-//     (key) => {
-//       setIsSidebarVisible(false);
-//       setActiveModalKey(null);
-
-//       if (location.pathname !== "/") {
-//         setPendingModalKey(key);
-//         navigate("/", { replace: false });
-//       } else {
-//         setActiveModalKey(key);
-//       }
-//     },
-//     [location.pathname, navigate]
-//   );
-
-//   if (isElectronScannerRoute) {
-//     return <ElectronScannerPage />;
-//   }
-
-//   if (loading) {
-//     return (
-//       <div className="fixed inset-0 flex items-center justify-center bg-white z-[9999]">
-//         <LoadingSpinner />
-//       </div>
-//     );
-//   }
-
-//   if (!user) {
-//     return (
-//       <Routes>
-//         <Route path="/register" element={<Register />} />
-//         <Route path="/change-password" element={<ChangePassword />} />
-//         <Route path="/approve-user" element={<ApproveUser />} />
-//         <Route
-//           path="*"
-//           element={<Login onSwitchToRegister={() => navigate("/register")} />}
-//         />
-//       </Routes>
-//     );
-//   }
-
-//   return (
-//     <div className="relative min-h-screen flex flex-col bg-gray-50 dark:bg-black font-roboto overflow-hidden">
-//       <div className="sticky top-0 z-40">
-//         <Navbar
-//           onMenuClick={() => setIsSidebarVisible(!isSidebarVisible)}
-//           onLogout={handleLogout}
-//         />
-//       </div>
-
-//       {isSidebarVisible && (
-//         <div className="fixed inset-0 z-50 flex">
-//           <Sidebar
-//             menuItems={menuItems}
-//             onNavigate={() => setIsSidebarVisible(false)}
-//             onOpenModal={handleOpenModalFromMenu}
-//           />
-//           <div
-//             className="flex-1 bg-black/40 backdrop-blur-sm"
-//             onClick={() => setIsSidebarVisible(false)}
-//           />
-//         </div>
-//       )}
-
-//       <div className="flex-1 p-4 overflow-hidden">
-//         <AnimatePresence mode="wait" initial={false} custom={navDirection}>
-//           <motion.div
-//             key={location.pathname}
-//             custom={navDirection}
-//             variants={pageVariants}
-//             initial="initial"
-//             animate="animate"
-//             exit="exit"
-//             className="h-full overflow-y-auto"
-//           >
-//             <Routes location={location}>
-//               <Route path="/" element={<Dashboard1 user={user} />} />
-//               <Route path="/change-password" element={<ChangePassword />} />
-//               <Route path="/approve-user" element={<ApproveUser />} />
-//               <Route
-//                 path="/security-settings/biometric"
-//                 element={<BiometricSettingsPage />}
-//               />
-//               <Route
-//                 path="/page/:componentKey"
-//                 element={
-//                   <UniversalRegistryRoute
-//                     routeRows={routeRows}
-//                     loadingMenu={loadingMenu}
-//                   />
-//                 }
-//               />
-//               <Route
-//                 path="*"
-//                 element={
-//                   <UniversalRegistryRoute
-//                     routeRows={routeRows}
-//                     loadingMenu={loadingMenu}
-//                   />
-//                 }
-//               />
-//             </Routes>
-//           </motion.div>
-//         </AnimatePresence>
-//       </div>
-
-//       <ModalHost
-//         modalKey={activeModalKey}
-//         onClose={() => setActiveModalKey(null)}
-//       />
-//     </div>
-//   );
-// };
-
-// /* -------------------- App Root -------------------- */
-// const App = () => (
-//   <Router>
-//     <QueryClientProvider client={queryClient}>
-//       <AuthProvider>
-//         <ResetProvider>
-//           <AppContent />
-//         </ResetProvider>
-//       </AuthProvider>
-//     </QueryClientProvider>
-//   </Router>
-// );
-
-// export default App;
-
-
-
-
-
-
-import React, { Suspense, useEffect, useState, useMemo, useRef, useCallback } from "react";
+import React, {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   BrowserRouter as Router,
-  Routes,
-  Route,
   Navigate,
+  Route,
+  Routes,
+  useLocation,
   useNavigate,
   useParams,
-  useLocation,
 } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-// import { AnimatePresence, motion } from "motion/react";
 import { AnimatePresence, motion } from "framer-motion";
+
 import { pageRegistry } from "./pageRegistry.jsx";
 import ErrorBoundary from "./NAYSA Cloud/Components/ErrorBoundary";
-import { fetchData, getTenant } from "./NAYSA Cloud/Configuration/BaseURL.jsx";
+import {
+  fetchData,
+  getTenant,
+} from "./NAYSA Cloud/Configuration/BaseURL.jsx";
 import Navbar from "./NAYSA Cloud/Components/Navbar";
 import Sidebar from "./NAYSA Cloud/Components/Sidebar";
 import { ResetProvider } from "./NAYSA Cloud/Components/ResetContext";
@@ -407,23 +32,37 @@ import Dashboard1 from "./NAYSA Cloud/Components/Dashboard1.jsx";
 import ChangePassword from "./NAYSA Cloud/Authentication/ChangePassword.jsx";
 import ApproveUser from "@/NAYSA Cloud/Authentication/ApproveUser.jsx";
 import BiometricSettingsPage from "./NAYSA Cloud/Authentication/BiometricSettingsPage.jsx";
-import AuthProvider, { useAuth } from "./NAYSA Cloud/Authentication/AuthContext.jsx";
+import HS from "./NAYSA Cloud/Authentication/HS.jsx";
+import AuthProvider, {
+  useAuth,
+} from "./NAYSA Cloud/Authentication/AuthContext.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import ElectronScannerPage from "@/NAYSA Cloud/Electron/ElectronScannerPage.jsx";
 
-const queryClient = new QueryClient();
+const LICENSE_ADMIN_MODE = "LICENSE_ADMIN";
+const SYSTEM_ADMIN_MODE = "SYSTEM_ADMIN";
+
+const readSessionArray = (key) => {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(key) || "[]");
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+};
 
 const PageFallback = ({ label = "Loading..." }) => (
-  <div className="flex flex-col items-center justify-center min-h-[60vh]">
+  <div className="flex min-h-[60vh] flex-col items-center justify-center">
     <LoadingSpinner />
-    <p className="mt-4 text-gray-400 animate-pulse font-medium">{label}</p>
+    <p className="mt-4 animate-pulse font-medium text-gray-400">{label}</p>
   </div>
 );
 
-/* -------------------- Universal Registry Route (The Gatekeeper) -------------------- */
+/* -------------------- Universal Registry Route -------------------- */
 const UniversalRegistryRoute = ({ routeRows, loadingMenu }) => {
   const location = useLocation();
   const { componentKey: paramKey } = useParams();
+
   const queryParams = new URLSearchParams(location.search);
   const isViewMode = queryParams.get("viewDocument") === "true";
 
@@ -431,33 +70,35 @@ const UniversalRegistryRoute = ({ routeRows, loadingMenu }) => {
   const hasRouteRows = normalizedRouteRows.length > 0;
 
   const matchingComponentKey = useMemo(() => {
-    if (paramKey && pageRegistry[paramKey]) return paramKey;
+    if (paramKey && pageRegistry[paramKey]) {
+      return paramKey;
+    }
 
     const currentPath = location.pathname.replace(/\/$/, "") || "/";
-    const dbMatch = normalizedRouteRows.find((r) => {
-      if (!r.path) return false;
-      const dbPath = (r.path.startsWith("/") ? r.path : `/${r.path}`).replace(/\/$/, "");
+
+    const dbMatch = normalizedRouteRows.find((row) => {
+      if (!row?.path) return false;
+
+      const dbPath = (
+        row.path.startsWith("/") ? row.path : `/${row.path}`
+      ).replace(/\/$/, "");
+
       return dbPath === currentPath;
     });
 
-    return dbMatch ? dbMatch.componentKey : null;
-  }, [location.pathname, paramKey, normalizedRouteRows]);
+    return dbMatch?.componentKey || null;
+  }, [location.pathname, normalizedRouteRows, paramKey]);
 
-  const Component = matchingComponentKey ? pageRegistry[matchingComponentKey] : null;
+  const Component = matchingComponentKey
+    ? pageRegistry[matchingComponentKey]
+    : null;
 
   if ((loadingMenu || !hasRouteRows) && !Component) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh]">
-        <LoadingSpinner />
-        <p className="mt-4 text-gray-400 animate-pulse font-medium">
-          Validating Access...
-        </p>
-      </div>
-    );
+    return <PageFallback label="Validating Access..." />;
   }
 
   const isAuthorized = normalizedRouteRows.some(
-    (r) => r.componentKey === matchingComponentKey
+    (row) => row?.componentKey === matchingComponentKey
   );
 
   if (!Component || (!isAuthorized && !isViewMode)) {
@@ -476,22 +117,29 @@ const UniversalRegistryRoute = ({ routeRows, loadingMenu }) => {
 /* -------------------- Modal Host -------------------- */
 const ModalHost = ({ modalKey, onClose }) => {
   const { user } = useAuth();
+
   if (!modalKey) return null;
 
-  const Cmp = pageRegistry[modalKey];
-  if (!Cmp) return null;
+  const Component = pageRegistry[modalKey];
+  if (!Component) return null;
 
   return (
     <div
-      className="fixed inset-0 z-[999] bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
       onClick={onClose}
+      role="presentation"
     >
       <div
-        className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-auto"
-        onClick={(e) => e.stopPropagation()}
+        className="max-h-[90vh] w-full max-w-4xl overflow-auto rounded-2xl bg-white shadow-xl dark:bg-gray-900"
+        onClick={(event) => event.stopPropagation()}
+        role="presentation"
       >
-        <Suspense fallback={<PageFallback label="Loading..." />}>
-          <Cmp isOpen={true} onClose={onClose} userCode={user?.USER_CODE} />
+        <Suspense fallback={<PageFallback />}>
+          <Component
+            isOpen
+            onClose={onClose}
+            userCode={user?.USER_CODE}
+          />
         </Suspense>
       </div>
     </div>
@@ -503,22 +151,41 @@ const AppContent = () => {
   const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const isElectronScannerRoute = location.pathname === "/electron-scanner";
 
-  const [menuItems, setMenuItems] = useState(
-    () => JSON.parse(sessionStorage.getItem("menuItems")) || []
+  const isElectronScannerRoute =
+    location.pathname === "/electron-scanner";
+
+  const accountMode = String(user?.ACCOUNT_MODE || "").toUpperCase();
+  const isLicenseAdmin = accountMode === LICENSE_ADMIN_MODE;
+  const canAccessHeartStrong =
+    accountMode === LICENSE_ADMIN_MODE ||
+    accountMode === SYSTEM_ADMIN_MODE;
+
+  // MIRACLE receives PERMISSION_USER_CODE=NAYSA.
+  // Normal users fall back to their own USER_CODE.
+  const permissionUserCode =
+    user?.PERMISSION_USER_CODE ||
+    user?.AUTH_USER_CODE ||
+    user?.USER_CODE ||
+    "";
+
+  const menuFetchKey = user
+    ? `${user.USER_CODE || ""}:${permissionUserCode}:${accountMode}`
+    : "";
+
+  const [menuItems, setMenuItems] = useState(() =>
+    readSessionArray("menuItems")
   );
-  const [routeRows, setRouteRows] = useState(
-    () => JSON.parse(sessionStorage.getItem("routeRows")) || []
+  const [routeRows, setRouteRows] = useState(() =>
+    readSessionArray("routeRows")
   );
   const [loadingMenu, setLoadingMenu] = useState(false);
   const [isSidebarVisible, setIsSidebarVisible] = useState(false);
   const [activeModalKey, setActiveModalKey] = useState(null);
   const [pendingModalKey, setPendingModalKey] = useState(null);
+  const [navDirection, setNavDirection] = useState(1);
 
   const menuFetchedRef = useRef(null);
-
-  const [navDirection, setNavDirection] = useState(1);
   const pathnameHistoryRef = useRef([location.pathname]);
 
   const resetAppData = useCallback(() => {
@@ -528,77 +195,187 @@ const AppContent = () => {
     setIsSidebarVisible(false);
     setActiveModalKey(null);
     setPendingModalKey(null);
+
     menuFetchedRef.current = null;
-    sessionStorage.removeItem("menuItems");
-    sessionStorage.removeItem("routeRows");
+
+    try {
+      sessionStorage.removeItem("menuItems");
+      sessionStorage.removeItem("routeRows");
+    } catch {
+      // Ignore browser storage errors.
+    }
   }, []);
 
   const handleLogout = useCallback(async () => {
     resetAppData();
     await logout();
     navigate("/", { replace: true });
-  }, [logout, resetAppData, navigate]);
+  }, [logout, navigate, resetAppData]);
 
+  /* HEARTSTRONG is restricted to the HeartStrong setup page. */
+  useEffect(() => {
+    if (loading || !user) return;
+
+    if (
+      isLicenseAdmin &&
+      location.pathname !== "/heartstrong"
+    ) {
+      navigate("/heartstrong", { replace: true });
+      return;
+    }
+
+    if (
+      location.pathname === "/heartstrong" &&
+      !canAccessHeartStrong
+    ) {
+      navigate("/", { replace: true });
+    }
+  }, [
+    canAccessHeartStrong,
+    isLicenseAdmin,
+    loading,
+    location.pathname,
+    navigate,
+    user,
+  ]);
+
+  /* Load menu and route metadata using the permission account. */
   useEffect(() => {
     let alive = true;
     const tenant = getTenant();
 
     if (!user) {
       resetAppData();
-      return;
+      return undefined;
     }
 
-    if (loading || !tenant || menuFetchedRef.current === user.USER_CODE) return;
+    // HEARTSTRONG must not load the normal Financials menu.
+    if (isLicenseAdmin) {
+      setMenuItems([]);
+      setRouteRows([]);
+      setLoadingMenu(false);
+      setIsSidebarVisible(false);
+      menuFetchedRef.current = menuFetchKey;
+
+      try {
+        sessionStorage.removeItem("menuItems");
+        sessionStorage.removeItem("routeRows");
+      } catch {
+        // Ignore browser storage errors.
+      }
+
+      return undefined;
+    }
+
+    if (
+      loading ||
+      !tenant ||
+      !permissionUserCode ||
+      menuFetchedRef.current === menuFetchKey
+    ) {
+      return undefined;
+    }
 
     if (routeRows.length === 0) {
       setLoadingMenu(true);
     }
 
-    (async () => {
+    const loadMenuMetadata = async () => {
       try {
-        const [menuResp, routesResp] = await Promise.all([
-          fetchData("menu-items", { USER_CODE: user.USER_CODE }),
-          fetchData("menu-routes", { USER_CODE: user.USER_CODE }),
+        const [menuResponse, routesResponse] = await Promise.all([
+          fetchData("menu-items", {
+            USER_CODE: permissionUserCode,
+          }),
+          fetchData("menu-routes", {
+            USER_CODE: permissionUserCode,
+          }),
         ]);
 
         if (!alive) return;
 
-        const mData = menuResp?.menuItems ?? menuResp?.data ?? [];
-        const rData = routesResp?.routes ?? routesResp?.data ?? [];
+        const menuData =
+          menuResponse?.menuItems ?? menuResponse?.data ?? [];
+        const routesData =
+          routesResponse?.routes ?? routesResponse?.data ?? [];
 
-        const safeMenu = Array.isArray(mData) ? mData : [];
-        const safeRoutes = Array.isArray(rData) ? rData : [];
+        const safeMenu = Array.isArray(menuData) ? menuData : [];
+        const safeRoutes = Array.isArray(routesData)
+          ? routesData
+          : [];
 
         setMenuItems(safeMenu);
         setRouteRows(safeRoutes);
-        sessionStorage.setItem("menuItems", JSON.stringify(safeMenu));
-        sessionStorage.setItem("routeRows", JSON.stringify(safeRoutes));
-        menuFetchedRef.current = user.USER_CODE;
-      } catch (e) {
-        console.error("Metadata Fetch Error:", e);
+
+        try {
+          sessionStorage.setItem(
+            "menuItems",
+            JSON.stringify(safeMenu)
+          );
+          sessionStorage.setItem(
+            "routeRows",
+            JSON.stringify(safeRoutes)
+          );
+        } catch {
+          // Ignore browser storage errors.
+        }
+
+        menuFetchedRef.current = menuFetchKey;
+      } catch (error) {
+        console.error("Metadata Fetch Error:", error);
+
+        if (!alive) return;
+
+        setMenuItems([]);
+        setRouteRows([]);
       } finally {
-        if (alive) setLoadingMenu(false);
+        if (alive) {
+          setLoadingMenu(false);
+        }
       }
-    })();
+    };
+
+    loadMenuMetadata();
 
     return () => {
       alive = false;
     };
-  }, [user, loading, resetAppData, routeRows.length]);
+  }, [
+    isLicenseAdmin,
+    loading,
+    menuFetchKey,
+    permissionUserCode,
+    resetAppData,
+    routeRows.length,
+    user,
+  ]);
 
   useEffect(() => {
-    document.body.style.overflow = activeModalKey ? "hidden" : "auto";
-    return () => { document.body.style.overflow = "auto"; };
+    document.body.style.overflow = activeModalKey
+      ? "hidden"
+      : "auto";
+
+    return () => {
+      document.body.style.overflow = "auto";
+    };
   }, [activeModalKey]);
 
+  /* Open supported approval modals from URL query parameters. */
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const page = params.get("page");
 
-    if (!["PRApprovalModal", "JOApprovalModal"].includes(page)) return;
+    if (!["PRApprovalModal", "JOApprovalModal"].includes(page)) {
+      return;
+    }
 
     if (!user) {
       sessionStorage.setItem("pendingModalFromUrl", page);
+      return;
+    }
+
+    if (isLicenseAdmin) {
+      sessionStorage.removeItem("pendingModalFromUrl");
+      navigate("/heartstrong", { replace: true });
       return;
     }
 
@@ -620,12 +397,21 @@ const AppContent = () => {
       },
       { replace: true }
     );
-  }, [location.search, location.pathname, user, navigate]);
+  }, [
+    isLicenseAdmin,
+    location.pathname,
+    location.search,
+    navigate,
+    user,
+  ]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || isLicenseAdmin) return;
 
-    const pendingModalFromUrl = sessionStorage.getItem("pendingModalFromUrl");
+    const pendingModalFromUrl = sessionStorage.getItem(
+      "pendingModalFromUrl"
+    );
+
     if (!pendingModalFromUrl) return;
 
     if (location.pathname !== "/") {
@@ -637,18 +423,20 @@ const AppContent = () => {
 
     setActiveModalKey(pendingModalFromUrl);
     sessionStorage.removeItem("pendingModalFromUrl");
-  }, [user, location.pathname, navigate]);
+  }, [isLicenseAdmin, location.pathname, navigate, user]);
 
   useEffect(() => {
     if (pendingModalKey && location.pathname === "/") {
-      const id = requestAnimationFrame(() => {
+      const animationFrameId = requestAnimationFrame(() => {
         setActiveModalKey(pendingModalKey);
         setPendingModalKey(null);
       });
 
-      return () => cancelAnimationFrame(id);
+      return () => cancelAnimationFrame(animationFrameId);
     }
-  }, [pendingModalKey, location.pathname]);
+
+    return undefined;
+  }, [location.pathname, pendingModalKey]);
 
   useEffect(() => {
     const history = pathnameHistoryRef.current;
@@ -660,7 +448,10 @@ const AppContent = () => {
 
     if (existingIndex !== -1) {
       setNavDirection(-1);
-      pathnameHistoryRef.current = history.slice(0, existingIndex + 1);
+      pathnameHistoryRef.current = history.slice(
+        0,
+        existingIndex + 1
+      );
     } else {
       setNavDirection(1);
       pathnameHistoryRef.current = [...history, currentPath];
@@ -692,6 +483,8 @@ const AppContent = () => {
 
   const handleOpenModalFromMenu = useCallback(
     (key) => {
+      if (isLicenseAdmin) return;
+
       setIsSidebarVisible(false);
       setActiveModalKey(null);
 
@@ -702,7 +495,7 @@ const AppContent = () => {
         setActiveModalKey(key);
       }
     },
-    [location.pathname, navigate]
+    [isLicenseAdmin, location.pathname, navigate]
   );
 
   const handleSidebarNavigate = useCallback(() => {
@@ -715,7 +508,7 @@ const AppContent = () => {
 
   if (loading) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-white z-[9999]">
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-white">
         <LoadingSpinner />
       </div>
     );
@@ -725,41 +518,63 @@ const AppContent = () => {
     return (
       <Routes>
         <Route path="/register" element={<Register />} />
-        <Route path="/change-password" element={<ChangePassword />} />
+        <Route
+          path="/change-password"
+          element={<ChangePassword />}
+        />
         <Route path="/approve-user" element={<ApproveUser />} />
         <Route
           path="*"
-          element={<Login onSwitchToRegister={() => navigate("/register")} />}
+          element={
+            <Login
+              onSwitchToRegister={() => navigate("/register")}
+            />
+          }
         />
       </Routes>
     );
   }
 
   return (
-    <div className="relative min-h-screen flex flex-col bg-gray-50 dark:bg-black font-roboto overflow-hidden">
+    <div className="relative flex min-h-screen flex-col overflow-hidden bg-gray-50 font-roboto dark:bg-black">
       <div className="sticky top-0 z-40">
         <Navbar
-          onMenuClick={() => setIsSidebarVisible(!isSidebarVisible)}
+          onMenuClick={() => {
+            if (isLicenseAdmin) {
+              window.dispatchEvent(
+                new CustomEvent("heartstrong:toggle-sidebar")
+              );
+              return;
+            }
+
+            setIsSidebarVisible((current) => !current);
+          }}
           onLogout={handleLogout}
         />
       </div>
 
-      {isSidebarVisible && (
+      {!isLicenseAdmin && isSidebarVisible && (
         <div className="fixed inset-0 z-50 flex">
           <Sidebar
             menuItems={menuItems}
             onNavigate={handleSidebarNavigate}
             onOpenModal={handleOpenModalFromMenu}
           />
+
           <div
             className="flex-1 bg-black/40 backdrop-blur-sm"
             onClick={() => setIsSidebarVisible(false)}
+            role="presentation"
           />
         </div>
       )}
 
-      <div className="flex-1 p-4 overflow-hidden">
-        <AnimatePresence mode="wait" initial={false} custom={navDirection}>
+      <div className="flex-1 overflow-hidden p-4">
+        <AnimatePresence
+          mode="wait"
+          initial={false}
+          custom={navDirection}
+        >
           <motion.div
             key={location.pathname}
             custom={navDirection}
@@ -772,36 +587,107 @@ const AppContent = () => {
             <Routes location={location}>
               <Route
                 path="/"
-                element={<Dashboard1 user={user} />}
+                element={
+                  isLicenseAdmin ? (
+                    <Navigate
+                      to="/heartstrong"
+                      replace
+                    />
+                  ) : (
+                    <Dashboard1 user={user} />
+                  )
+                }
               />
+
+              <Route
+                path="/heartstrong"
+                element={
+                  canAccessHeartStrong ? (
+                    <HS />
+                  ) : (
+                    <Navigate to="/" replace />
+                  )
+                }
+              />
+
+              <Route
+                path="/license-management"
+                element={<Navigate to="/heartstrong" replace />}
+              />
+
               <Route
                 path="/change-password"
-                element={<ChangePassword />}
+                element={
+                  isLicenseAdmin ? (
+                    <Navigate
+                      to="/heartstrong"
+                      replace
+                    />
+                  ) : (
+                    <ChangePassword />
+                  )
+                }
               />
+
               <Route
                 path="/approve-user"
-                element={<ApproveUser />}
+                element={
+                  isLicenseAdmin ? (
+                    <Navigate
+                      to="/heartstrong"
+                      replace
+                    />
+                  ) : (
+                    <ApproveUser />
+                  )
+                }
               />
+
               <Route
                 path="/security-settings/biometric"
-                element={<BiometricSettingsPage />}
+                element={
+                  isLicenseAdmin ? (
+                    <Navigate
+                      to="/heartstrong"
+                      replace
+                    />
+                  ) : (
+                    <BiometricSettingsPage />
+                  )
+                }
               />
+
               <Route
                 path="/page/:componentKey"
                 element={
-                  <UniversalRegistryRoute
-                    routeRows={routeRows}
-                    loadingMenu={loadingMenu}
-                  />
+                  isLicenseAdmin ? (
+                    <Navigate
+                      to="/heartstrong"
+                      replace
+                    />
+                  ) : (
+                    <UniversalRegistryRoute
+                      routeRows={routeRows}
+                      loadingMenu={loadingMenu}
+                    />
+                  )
                 }
               />
+
               <Route
                 path="*"
                 element={
-                  <UniversalRegistryRoute
-                    routeRows={routeRows}
-                    loadingMenu={loadingMenu}
-                  />
+                  isLicenseAdmin ? (
+                    <Navigate
+                      to="/heartstrong"
+                      replace
+                    />
+                  ) : (
+                    <UniversalRegistryRoute
+                      routeRows={routeRows}
+                      loadingMenu={loadingMenu}
+                    />
+                  )
                 }
               />
             </Routes>
@@ -809,771 +695,25 @@ const AppContent = () => {
         </AnimatePresence>
       </div>
 
-      <ModalHost
-        modalKey={activeModalKey}
-        onClose={() => setActiveModalKey(null)}
-      />
+      {!isLicenseAdmin && (
+        <ModalHost
+          modalKey={activeModalKey}
+          onClose={() => setActiveModalKey(null)}
+        />
+      )}
     </div>
   );
 };
 
 /* -------------------- App Root -------------------- */
-// const App = () => (
-//   <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-//     <QueryClientProvider client={queryClient}>
-//       <AuthProvider>
-//         <ResetProvider>
-//           <AppContent />
-//         </ResetProvider>
-//       </AuthProvider>
-//     </QueryClientProvider>
-//   </Router>
-// );
-
 const App = () => (
   <Router>
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <ResetProvider>
-          <AppContent />
-        </ResetProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    <AuthProvider>
+      <ResetProvider>
+        <AppContent />
+      </ResetProvider>
+    </AuthProvider>
   </Router>
 );
 
-
-
-
 export default App;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -586,6 +586,7 @@ const PayTermRef = forwardRef(({
             onRowClick={(row) => setSelectedRow(row)}
             showFilters
             tableSize={tableSize}
+            onRefresh={() => queryClient.invalidateQueries({ queryKey: ["paytermList"] })}
           />
         </div>
       </div>

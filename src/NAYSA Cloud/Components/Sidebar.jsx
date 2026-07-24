@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { NavLink } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -348,11 +347,32 @@ const Sidebar = ({ menuItems = null, onNavigate, onOpenModal }) => {
   const menuScrollRef = useRef(null);
   const { user } = useAuth();
 
+  const accountMode = String(user?.ACCOUNT_MODE || "").toUpperCase();
+  const isLicenseAdmin = accountMode === "LICENSE_ADMIN";
+
+  // MIRACLE must load the menus of its permission template (for example NAYSA).
+  // Normal users continue to use their own USER_CODE.
+  const permissionUserCode =
+    user?.PERMISSION_USER_CODE ||
+    user?.AUTH_USER_CODE ||
+    user?.USER_CODE ||
+    "";
+
+  const hasProvidedMenu =
+    Array.isArray(menuItems) && menuItems.length > 0;
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ["sidebarMenu", user?.USER_CODE],
-    queryFn: () => fetchData("menu-items", { USER_CODE: user?.USER_CODE }),
-    enabled: !!user?.USER_CODE && (!menuItems || menuItems.length === 0),
+    queryKey: ["sidebarMenu", permissionUserCode],
+    queryFn: () =>
+      fetchData("menu-items", {
+        USER_CODE: permissionUserCode,
+      }),
+    enabled:
+      Boolean(permissionUserCode) &&
+      !isLicenseAdmin &&
+      !hasProvidedMenu,
     staleTime: 1000 * 60 * 5,
+    retry: 1,
   });
 
   useEffect(() => {
@@ -395,8 +415,11 @@ const Sidebar = ({ menuItems = null, onNavigate, onOpenModal }) => {
     }
   }, [isPinned, openMenuKeys]);
 
-  const items =
-    menuItems && menuItems.length > 0 ? menuItems : data?.menuItems ?? [];
+  const items = isLicenseAdmin
+    ? []
+    : hasProvidedMenu
+    ? menuItems
+    : data?.menuItems ?? data?.data ?? [];
   const allMenuKeys = useMemo(() => collectMenuKeys(items), [items]);
   const isAllExpanded =
     allMenuKeys.length > 0 && allMenuKeys.every((key) => openMenuKeys.includes(key));
