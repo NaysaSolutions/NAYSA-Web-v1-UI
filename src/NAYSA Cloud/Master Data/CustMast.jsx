@@ -177,11 +177,11 @@ const CustMast = () => {
     const allowedDuplicateCustNameRef = useRef("");
     const normalizeText = (value) => String(value || "").trim().replace(/\s+/g, " ").toUpperCase();
 
-    const findDuplicateCustName = (custName = form.custName) => {
+    const findDuplicateCustName = (custName = form.custName, rows = masterAllRows) => {
         const normalizedName = normalizeText(custName);
         if (!normalizedName) return null;
 
-        return masterAllRows.find((row) => {
+        return rows.find((row) => {
             const sameName = normalizeText(row?.custName) === normalizedName;
             const sameCode = normalizeText(row?.custCode) === normalizeText(selectedCustCode || form.custCode);
             return sameName && !sameCode;
@@ -189,11 +189,18 @@ const CustMast = () => {
     };
 
     const confirmDuplicateCustName = async (custName = form.custName) => {
-        const duplicateRecord = findDuplicateCustName(custName);
-        if (!duplicateRecord) return true;
-
         const normalizedName = normalizeText(custName);
+        if (!normalizedName) return true;
         if (allowedDuplicateCustNameRef.current === normalizedName) return true;
+
+        let rows = masterAllRowsRef.current;
+
+        if (!masterListLoadedRef.current) {
+            rows = await loadMasterList({ showLoader: false, showError: true });
+        }
+
+        const duplicateRecord = findDuplicateCustName(custName, rows);
+        if (!duplicateRecord) return true;
 
         const result = await useSwalProceedConfirm(
             "Duplicate Customer Name",
@@ -243,6 +250,9 @@ const CustMast = () => {
     const [masterFilters, setMasterFilters] = useState({});
     const [masterAllRows, setMasterAllRows] = useState([]);
     const [masterRows, setMasterRows] = useState([]);
+    const masterAllRowsRef = useRef([]);
+    const masterListLoadedRef = useRef(false);
+    const masterListPromiseRef = useRef(null);
 
     const updateForm = (patch) => {
         setForm((prev) => ({ ...prev, ...patch }));
@@ -358,38 +368,74 @@ const CustMast = () => {
         setIsAttachOpen(true);
     };
 
-    const loadMasterList = async () => {
-        setIsLoading(true);
+    const loadMasterList = async ({
+        showLoader = true,
+        showError = true,
+        force = false,
+    } = {}) => {
+        if (!force && masterListLoadedRef.current) {
+            return masterAllRowsRef.current;
+        }
+
+        if (!force && masterListPromiseRef.current) {
+            return masterListPromiseRef.current;
+        }
+
+        const request = (async () => {
+            if (showLoader) setIsLoading(true);
+
+            try {
+                const res = await apiClient.get("/customer");
+                const parsed = parseSprocJsonResult(res?.data?.data);
+                const list = Array.isArray(parsed) ? parsed : [];
+
+                const normalized = list.map((x) => ({
+                    ...x,
+                    sltypeCode: normalizeSlType(x?.sltypeCode ?? "CU"),
+                    custCode: x?.custCode ?? "",
+                    custName: x?.custName ?? "",
+                    address:
+                        x?.address ??
+                        [x?.custAddr1, x?.custAddr2, x?.custAddr3]
+                            .filter(Boolean)
+                            .join(" "),
+                }));
+
+                masterAllRowsRef.current = normalized;
+                masterListLoadedRef.current = true;
+                setMasterAllRows(normalized);
+                setMasterRows(normalized);
+                return normalized;
+            } catch (e) {
+                console.error(e);
+                masterListLoadedRef.current = false;
+
+                if (showError) {
+                    await useSwalErrorAlert("Error", "Failed to load customer list.");
+                }
+
+                return masterAllRowsRef.current;
+            } finally {
+                if (showLoader) setIsLoading(false);
+            }
+        })();
+
+        masterListPromiseRef.current = request;
+
         try {
-            const res = await apiClient.get("/customer");
-            const parsed = parseSprocJsonResult(res?.data?.data);
-            const list = Array.isArray(parsed) ? parsed : [];
-
-            const normalized = list.map((x) => ({
-                ...x,
-                sltypeCode: normalizeSlType(x?.sltypeCode ?? "CU"),
-                custCode: x?.custCode ?? "",
-                custName: x?.custName ?? "",
-                address:
-                    x?.address ??
-                    [x?.custAddr1, x?.custAddr2, x?.custAddr3].filter(Boolean).join(" "),
-            }));
-
-            setMasterAllRows(normalized);
-            setMasterRows(normalized);
-        } catch (e) {
-            console.error(e);
-            await useSwalErrorAlert("Error", "Failed to load customer list.");
-            setMasterAllRows([]);
-            setMasterRows([]);
+            return await request;
         } finally {
-            setIsLoading(false);
+            if (masterListPromiseRef.current === request) {
+                masterListPromiseRef.current = null;
+            }
         }
     };
 
     useEffect(() => {
-        loadMasterList();
-    }, []);
+        if (activeTab === "master" && !masterListLoadedRef.current) {
+            loadMasterList();
+        }
+    }, [activeTab]);
 
     const fetchCustomerByCode = async (custCode) => {
         const code = String(custCode || "").trim();
@@ -541,7 +587,7 @@ const CustMast = () => {
             setSelectedCustCode("");
             setIsEditing(false);
 
-            await loadMasterList();
+            await loadMasterList({ force: true });
         } catch (e) {
             console.error(e);
             const row = e?.response?.data?.data?.[0] || {};
@@ -667,7 +713,7 @@ const CustMast = () => {
             await useSwalSuccessAlert("Success!", "Customer saved successfully.");
             setSelectedCustCode(finalCode);
             setIsEditing(false);
-            await loadMasterList();
+            await loadMasterList({ force: true });
             await fetchCustomerByCode(finalCode);
         } catch (e) {
             console.error(e);

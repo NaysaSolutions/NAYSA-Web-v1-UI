@@ -88,7 +88,12 @@ const ZoneRef = forwardRef(({ onStateChange }, ref) => {
     const queryClient = useQueryClient();
     const tableSize = "Half";
 
-    const userCode = user?.USER_CODE ;
+    const userCode =
+        user?.userCode ||
+        user?.USER_CODE ||
+        user?.user_code ||
+        user?.code ||
+        "ADMIN";
 
     const codeInputRef = useRef(null);
     const enterValidatedRef = useRef(false);
@@ -115,6 +120,10 @@ const ZoneRef = forwardRef(({ onStateChange }, ref) => {
             const rows = extractRows(res);
             return Array.isArray(rows) ? rows.map(normalizeRecord) : [];
         },
+        staleTime: 5 * 60 * 1000,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        retry: 1,
     });
 
     const zones = useMemo(() => zoneListQuery.data || [], [zoneListQuery.data]);
@@ -279,15 +288,14 @@ const ZoneRef = forwardRef(({ onStateChange }, ref) => {
 
     /* ================= EDIT ================= */
 
-    // Inside ZoneRef.jsx
-
-    // 1. Update handleEdit to handle both double-clicks and header button clicks
-    const handleEdit = async (row) => {
-        // Use the passed row (double-click) or the selectedRow state (header button)
+    const handleEdit = useCallback(async (row) => {
         const targetRow = row?.zoneCode ? row : selectedRow;
 
-        if (!targetRow || !targetRow.zoneCode) {
-            await useSwalErrorAlert("Selection Required", "Please select a record from the list first.");
+        if (!targetRow?.zoneCode) {
+            await useSwalErrorAlert(
+                "Selection Required",
+                "Please select a record from the list first."
+            );
             return;
         }
 
@@ -298,38 +306,25 @@ const ZoneRef = forwardRef(({ onStateChange }, ref) => {
 
             const record = extractRows(res)?.[0];
             if (!record) {
-                await useSwalErrorAlert("Not Found", "The record details could not be retrieved.");
+                await useSwalErrorAlert(
+                    "Not Found",
+                    "The record details could not be retrieved."
+                );
                 return;
             }
 
             setForm({ ...normalizeRecord(record), __existing: true });
             setIsEditing(true);
-            setSelectedRow(targetRow); // Ensure state reflects the record being edited
+            setSelectedRow(targetRow);
             setIsDupCode(false);
         } catch (error) {
             console.error("Fetch Error:", error);
-            await useSwalErrorAlert("Error", "An error occurred while retrieving the record.");
+            await useSwalErrorAlert(
+                "Error",
+                "An error occurred while retrieving the record."
+            );
         }
-    };
-
-    // 2. EXTREMELY IMPORTANT: Expose the edit function to the parent
-    useImperativeHandle(ref, () => ({
-        add: () => {
-            setIsEditing(true);
-            setSelectedRow(null);
-            setIsDupCode(false);
-            resetForm(DEFAULT_FORM);
-            setTimeout(() => codeInputRef.current?.focus?.(), 0);
-        },
-        edit: handleEdit, // <--- ADD THIS LINE so ReferenceCodesTab can call it
-        save: handleSave,
-        reset: () => {
-            resetForm(DEFAULT_FORM);
-            setIsEditing(false);
-            setSelectedRow(null);
-            setIsDupCode(false);
-        },
-    }));
+    }, [selectedRow]);
 
     /* ================= TABLE ================= */
 
@@ -408,6 +403,7 @@ const ZoneRef = forwardRef(({ onStateChange }, ref) => {
             resetForm(DEFAULT_FORM);
             setTimeout(() => codeInputRef.current?.focus?.(), 0);
         },
+        edit: handleEdit,
         save: handleSave,
         reset: () => {
             resetForm(DEFAULT_FORM);

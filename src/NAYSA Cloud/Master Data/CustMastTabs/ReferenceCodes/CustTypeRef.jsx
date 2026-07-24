@@ -120,6 +120,10 @@ const CustTypeRef = forwardRef(({ onStateChange }, ref) => {
       const rows = extractRows(res);
       return Array.isArray(rows) ? rows.map(normalizeRecord) : [];
     },
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: 1,
   });
 
   const types = useMemo(() => listQuery.data || [], [listQuery.data]);
