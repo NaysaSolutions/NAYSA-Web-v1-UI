@@ -25,7 +25,7 @@ import {
   faCalendarAlt,
   faFilter,
   faDownload,
-  faRedo,
+  faUndo,
   faArrowUp,
   faArrowDown,
   faEye,
@@ -2159,7 +2159,7 @@ const handleExportConfirm = async (enteredFileName) => {
                 onClick={handleResetUI}
                 disabled={loading || exporting}
               >
-                <FontAwesomeIcon icon={faRedo} className="text-[13px]" />
+                <FontAwesomeIcon icon={faUndo} className="text-[13px]" />
                 <span className="truncate">Reset</span>
               </button>
             </div>
