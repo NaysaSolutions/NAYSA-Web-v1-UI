@@ -1841,6 +1841,7 @@ const extractOpenRRResponseRows = (response) => {
         rcCode: entry.rcCode,
         sltypeCode: entry.sltypeCode,
         slCode: entry.slCode,
+        atcCode: entry.atcCode,
         particular: entry.particular,
         debit: parseFormattedNumber(entry.debit),
         credit: parseFormattedNumber(entry.credit),

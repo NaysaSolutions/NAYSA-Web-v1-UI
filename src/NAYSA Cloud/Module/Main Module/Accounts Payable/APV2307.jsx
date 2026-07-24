@@ -1,27 +1,78 @@
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import bir2307Page1 from "./bir-2307-page1.svg";
 import { postRequest } from "../../../Configuration/BaseURL.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
-/**
- * APV2307.jsx
- *
- * Live NAYSA preview/print page for BIR Form 2307 January 2018 (ENCS).
- *
- * Supported document sources:
- * - APV
- * - CV  (requires CV rows in dbo.fntbl_ExpandedWtax)
- * - PCV
- *
- * The official BIR first page is used as the fixed SVG background. Values are
- * placed using the original PDF coordinates. The native page size is
- * 612 x 936 points, equivalent to 8.5 x 13 inches.
- */
 
 const PAGE_WIDTH = 612;
 const PAGE_HEIGHT = 936;
 const ROWS_PER_SECTION = 10;
+
+const FORM_NATIVE_WIDTH_IN = 8.5;
+const FORM_NATIVE_HEIGHT_IN = 13;
+const PRINT_MARGIN_IN = 0.05;
+const FILL_PAGE_MARGIN_IN = 0.08;
+const PDF_RENDER_DPI = 200;
+
+const PAPER_SIZE_OPTIONS = Object.freeze({
+  long: {
+    key: "long",
+    label: "Long / Folio",
+    shortLabel: "Long",
+    widthIn: 8.5,
+    heightIn: 13,
+  },
+  a4: {
+    key: "a4",
+    label: "A4",
+    shortLabel: "A4",
+    widthIn: 210 / 25.4,
+    heightIn: 297 / 25.4,
+  },
+  short: {
+    key: "short",
+    label: "Short / Letter",
+    shortLabel: "Short",
+    widthIn: 8.5,
+    heightIn: 11,
+  },
+});
+
+const getPaperLayout = (paperKey, fitMode = "fit") => {
+  const paper = PAPER_SIZE_OPTIONS[paperKey] || PAPER_SIZE_OPTIONS.long;
+  const isFillPage = fitMode === "stretch";
+  const marginIn = isFillPage ? FILL_PAGE_MARGIN_IN : PRINT_MARGIN_IN;
+  const availableWidthIn = Math.max(0.1, paper.widthIn - marginIn * 2);
+  const availableHeightIn = Math.max(0.1, paper.heightIn - marginIn * 2);
+  const scale = Math.min(
+    availableWidthIn / FORM_NATIVE_WIDTH_IN,
+    availableHeightIn / FORM_NATIVE_HEIGHT_IN,
+  );
+  const fittedWidthIn = FORM_NATIVE_WIDTH_IN * scale;
+  const fittedHeightIn = FORM_NATIVE_HEIGHT_IN * scale;
+
+  // Fit preserves the official 8.5 x 13 proportion. Fill Page intentionally
+  // uses nearly the full selected paper size. This removes the large side
+  // margins on A4 and Short/Letter while retaining a small printable margin.
+  const formWidthIn = isFillPage ? availableWidthIn : fittedWidthIn;
+  const formHeightIn = isFillPage ? availableHeightIn : fittedHeightIn;
+
+  return {
+    ...paper,
+    widthPt: paper.widthIn * 72,
+    heightPt: paper.heightIn * 72,
+    formWidthIn,
+    formHeightIn,
+    formLeftIn: (paper.widthIn - formWidthIn) / 2,
+    formTopIn: (paper.heightIn - formHeightIn) / 2,
+    formWidthPercent: (formWidthIn / paper.widthIn) * 100,
+    formHeightPercent: (formHeightIn / paper.heightIn) * 100,
+    aspectRatio: paper.widthIn / paper.heightIn,
+    isFillPage,
+  };
+};
 
 const DATE_FROM_X = [157.94, 171.14, 184.75, 197.86, 210.58, 223.78, 237.38, 250.5];
 const DATE_TO_X = [405.5, 418.73, 432.35, 445.48, 458.2, 471.42, 485.05, 498.17];
@@ -732,7 +783,190 @@ function DateField({ value, xPositions, y }) {
   return <DigitBoxes value={normalizeDate(value)} xPositions={xPositions} y={y} fontSize={7.2} />;
 }
 
-function BIR2307Page({ form, backgroundSrc }) {
+const assetDataUrlCache = new Map();
+
+const blobToDataUrl = (blob) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("Unable to read PDF asset."));
+    reader.readAsDataURL(blob);
+  });
+
+const resolveAssetDataUrl = async (source) => {
+  const value = String(source || "").trim();
+  if (!value || value.startsWith("data:")) return value;
+
+  const absoluteUrl = new URL(value, document.baseURI).href;
+  if (assetDataUrlCache.has(absoluteUrl)) return assetDataUrlCache.get(absoluteUrl);
+
+  const response = await fetch(absoluteUrl, { credentials: "same-origin" });
+  if (!response.ok) {
+    throw new Error(`Unable to load the BIR 2307 background (${response.status}).`);
+  }
+
+  const dataUrl = await blobToDataUrl(await response.blob());
+  assetDataUrlCache.set(absoluteUrl, dataUrl);
+  return dataUrl;
+};
+
+const loadImage = (source) =>
+  new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Unable to render the BIR 2307 page."));
+    image.src = source;
+  });
+
+const renderSvgElementToImage = async (svgElement, widthPx, heightPx) => {
+  const clone = svgElement.cloneNode(true);
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+  clone.setAttribute("width", String(widthPx));
+  clone.setAttribute("height", String(heightPx));
+
+  const imageNodes = Array.from(clone.querySelectorAll("image"));
+  for (const imageNode of imageNodes) {
+    const href =
+      imageNode.getAttribute("href") ||
+      imageNode.getAttributeNS("http://www.w3.org/1999/xlink", "href");
+    if (!href) continue;
+
+    const dataUrl = await resolveAssetDataUrl(href);
+    imageNode.setAttribute("href", dataUrl);
+    imageNode.setAttributeNS("http://www.w3.org/1999/xlink", "xlink:href", dataUrl);
+  }
+
+  const serialized = new XMLSerializer().serializeToString(clone);
+  const svgBlob = new Blob([serialized], { type: "image/svg+xml;charset=utf-8" });
+  const objectUrl = URL.createObjectURL(svgBlob);
+
+  try {
+    return await loadImage(objectUrl);
+  } finally {
+    // The image has already decoded when loadImage resolves.
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  }
+};
+
+const canvasToJpegBytes = (canvas) =>
+  new Promise((resolve, reject) => {
+    canvas.toBlob(
+      async (blob) => {
+        if (!blob) {
+          reject(new Error("Unable to create the PDF page image."));
+          return;
+        }
+
+        resolve(new Uint8Array(await blob.arrayBuffer()));
+      },
+      "image/jpeg",
+      0.97,
+    );
+  });
+
+const encodePdfText = (value) => new TextEncoder().encode(value);
+
+const joinByteArrays = (parts) => {
+  const totalLength = parts.reduce((total, part) => total + part.length, 0);
+  const output = new Uint8Array(totalLength);
+  let offset = 0;
+
+  parts.forEach((part) => {
+    output.set(part, offset);
+    offset += part.length;
+  });
+
+  return output;
+};
+
+/**
+ * Creates a compact multi-page PDF without adding a new npm dependency.
+ * Every generated page is rendered at PDF_RENDER_DPI before being embedded.
+ */
+const buildPdfFromJpegPages = (pages, paperLayout) => {
+  const pageCount = pages.length;
+  const maxObjectId = 2 + pageCount * 3;
+  const offsets = Array(maxObjectId + 1).fill(0);
+  const chunks = [];
+  let byteLength = 0;
+
+  const append = (bytes) => {
+    chunks.push(bytes);
+    byteLength += bytes.length;
+  };
+  const appendText = (value) => append(encodePdfText(value));
+  const beginObject = (objectId) => {
+    offsets[objectId] = byteLength;
+    appendText(`${objectId} 0 obj\n`);
+  };
+  const endObject = () => appendText("endobj\n");
+
+  append(new Uint8Array([37, 80, 68, 70, 45, 49, 46, 52, 10, 37, 226, 227, 207, 211, 10]));
+
+  beginObject(1);
+  appendText("<< /Type /Catalog /Pages 2 0 R >>\n");
+  endObject();
+
+  const pageObjectIds = pages.map((_, index) => 5 + index * 3);
+  beginObject(2);
+  appendText(
+    `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pageCount} >>\n`,
+  );
+  endObject();
+
+  pages.forEach((page, index) => {
+    const imageObjectId = 3 + index * 3;
+    const contentObjectId = 4 + index * 3;
+    const pageObjectId = 5 + index * 3;
+
+    beginObject(imageObjectId);
+    appendText(
+      `<< /Type /XObject /Subtype /Image /Width ${page.widthPx} /Height ${page.heightPx} ` +
+        `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${page.jpegBytes.length} >>\nstream\n`,
+    );
+    append(page.jpegBytes);
+    appendText("\nendstream\n");
+    endObject();
+
+    const content = [
+      "q",
+      `${paperLayout.widthPt.toFixed(4)} 0 0 ${paperLayout.heightPt.toFixed(4)} 0 0 cm`,
+      "/Im0 Do",
+      "Q",
+      "",
+    ].join("\n");
+    const contentBytes = encodePdfText(content);
+
+    beginObject(contentObjectId);
+    appendText(`<< /Length ${contentBytes.length} >>\nstream\n`);
+    append(contentBytes);
+    appendText("endstream\n");
+    endObject();
+
+    beginObject(pageObjectId);
+    appendText(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${paperLayout.widthPt.toFixed(4)} ${paperLayout.heightPt.toFixed(4)}] ` +
+        `/Resources << /XObject << /Im0 ${imageObjectId} 0 R >> >> /Contents ${contentObjectId} 0 R >>\n`,
+    );
+    endObject();
+  });
+
+  const xrefOffset = byteLength;
+  appendText(`xref\n0 ${maxObjectId + 1}\n`);
+  appendText("0000000000 65535 f \n");
+  for (let objectId = 1; objectId <= maxObjectId; objectId += 1) {
+    appendText(`${String(offsets[objectId]).padStart(10, "0")} 00000 n \n`);
+  }
+
+  appendText(
+    `trailer\n<< /Size ${maxObjectId + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`,
+  );
+
+  return joinByteArrays(chunks);
+};
+
+function BIR2307Page({ form, backgroundSrc, stretchMode = false }) {
   const descriptionClipId = `ap2307-description-clip-${String(
     form?.pageKey || "page",
   ).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
@@ -751,6 +985,7 @@ function BIR2307Page({ form, backgroundSrc }) {
       <svg
         className="ap2307-paper"
         viewBox={`0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}`}
+        preserveAspectRatio={stretchMode ? "none" : "xMidYMid meet"}
         role="img"
         aria-label={`Completed BIR Form 2307 for ${form.payee.registeredName || "payee"}`}
       >
@@ -765,9 +1000,10 @@ function BIR2307Page({ form, backgroundSrc }) {
           </clipPath>
         </defs>
 
-        <image href={backgroundSrc} x="0" y="0" width={PAGE_WIDTH} height={PAGE_HEIGHT} />
+        <g>
+          <image href={backgroundSrc} x="0" y="0" width={PAGE_WIDTH} height={PAGE_HEIGHT} />
 
-        <g id={`ap2307-values-${form.pageKey}`}>
+          <g id={`ap2307-values-${form.pageKey}`}>
           <DigitBoxes value={normalizeDate(form.periodFrom)} xPositions={DATE_FROM_X} y={114.3} />
           <DigitBoxes value={normalizeDate(form.periodTo)} xPositions={DATE_TO_X} y={113.6} />
 
@@ -974,6 +1210,7 @@ function BIR2307Page({ form, backgroundSrc }) {
             xPositions={PAYEE_EXPIRY_DATE_X}
             y={858.0}
           />
+          </g>
         </g>
       </svg>
     </div>
@@ -990,7 +1227,11 @@ export default function APV2307({
   const printRootRef = useRef(null);
   const [apiForms, setApiForms] = useState([]);
   const [isLoading, setIsLoading] = useState(!data);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [paperSize, setPaperSize] = useState("long");
+  const [fitMode, setFitMode] = useState("fit");
+  const [outputMode, setOutputMode] = useState("print");
 
   const requestParams = useMemo(() => {
     const query = new URLSearchParams(location.search);
@@ -1098,6 +1339,18 @@ export default function APV2307({
   }, [apiForms, data]);
 
   const printPages = useMemo(() => expandFormPages(normalizedForms), [normalizedForms]);
+  const paperLayout = useMemo(
+    () => getPaperLayout(paperSize, fitMode),
+    [paperSize, fitMode],
+  );
+
+  const outputFileName = useMemo(() => {
+    const docLabel = requestParams.documentNo || requestParams.tranId || "TRANSACTION";
+    return `BIR_2307_${requestParams.docCode || "AP"}_${docLabel}`.replace(
+      /[^A-Z0-9_-]+/gi,
+      "_",
+    );
+  }, [requestParams]);
 
   const handlePrint = () => {
     if (printPages.length === 0 || !printRootRef.current) return;
@@ -1105,22 +1358,15 @@ export default function APV2307({
     const pageElements = Array.from(
       printRootRef.current.querySelectorAll(".ap2307-paper-wrap"),
     );
-
     if (pageElements.length === 0) return;
-
-    const docLabel = requestParams.documentNo || requestParams.tranId || "TRANSACTION";
-    const printTitle = `BIR_2307_${requestParams.docCode || "AP"}_${docLabel}`.replace(
-      /[^A-Z0-9_-]+/gi,
-      "_",
-    );
 
     const iframe = document.createElement("iframe");
     iframe.setAttribute("title", "BIR 2307 Print");
     iframe.style.position = "fixed";
     iframe.style.left = "-10000px";
     iframe.style.top = "0";
-    iframe.style.width = "8.5in";
-    iframe.style.height = "13in";
+    iframe.style.width = `${paperLayout.widthIn}in`;
+    iframe.style.height = `${paperLayout.heightIn}in`;
     iframe.style.border = "0";
     document.body.appendChild(iframe);
 
@@ -1138,12 +1384,13 @@ export default function APV2307({
         <head>
           <meta charset="utf-8" />
           <base href="${document.baseURI}" />
-          <title>${printTitle}</title>
+          <title>${outputFileName}</title>
           <style>
-            @page { size: 8.5in 13in; margin: 0; }
+            @page { size: ${paperLayout.widthIn}in ${paperLayout.heightIn}in; margin: 0; }
             * { box-sizing: border-box; }
             html, body {
-              width: 8.5in;
+              width: ${paperLayout.widthIn}in;
+              min-width: ${paperLayout.widthIn}in;
               margin: 0;
               padding: 0;
               background: #fff;
@@ -1151,17 +1398,20 @@ export default function APV2307({
               print-color-adjust: exact;
             }
             .ap2307-paper-wrap {
-              display: block;
+              display: flex;
               position: relative;
-              width: 8.5in;
-              height: 13in;
+              width: ${paperLayout.widthIn}in;
+              height: ${paperLayout.heightIn}in;
               margin: 0;
               padding: 0;
+              align-items: center;
+              justify-content: center;
               overflow: hidden;
               break-inside: avoid;
               page-break-inside: avoid;
               break-after: page;
               page-break-after: always;
+              background: #fff;
             }
             .ap2307-paper-wrap:last-child {
               break-after: auto;
@@ -1169,8 +1419,11 @@ export default function APV2307({
             }
             .ap2307-paper {
               display: block;
-              width: 8.5in;
-              height: 13in;
+              flex: 0 0 auto;
+              width: ${paperLayout.formWidthIn}in;
+              height: ${paperLayout.formHeightIn}in;
+              max-width: none;
+              max-height: none;
               margin: 0;
               padding: 0;
               background: #fff;
@@ -1182,16 +1435,11 @@ export default function APV2307({
       </html>`);
     printDocument.close();
 
-    const cleanup = () => {
-      window.setTimeout(() => iframe.remove(), 1000);
-    };
+    const cleanup = () => window.setTimeout(() => iframe.remove(), 1000);
 
     const printAllPages = async () => {
       try {
-        if (printDocument.fonts?.ready) {
-          await printDocument.fonts.ready;
-        }
-
+        if (printDocument.fonts?.ready) await printDocument.fonts.ready;
         await new Promise((resolve) => window.setTimeout(resolve, 700));
         iframe.contentWindow?.focus();
         iframe.contentWindow?.print();
@@ -1207,12 +1455,95 @@ export default function APV2307({
     }
   };
 
+  const handleDownloadPdf = async () => {
+    if (printPages.length === 0 || !printRootRef.current || isGeneratingPdf) return;
+
+    const svgElements = Array.from(
+      printRootRef.current.querySelectorAll(".ap2307-paper"),
+    );
+    if (svgElements.length === 0) return;
+
+    setIsGeneratingPdf(true);
+
+    try {
+      const pageWidthPx = Math.max(1, Math.round(paperLayout.widthIn * PDF_RENDER_DPI));
+      const pageHeightPx = Math.max(1, Math.round(paperLayout.heightIn * PDF_RENDER_DPI));
+      const formWidthPx = Math.max(1, Math.round(paperLayout.formWidthIn * PDF_RENDER_DPI));
+      const formHeightPx = Math.max(1, Math.round(paperLayout.formHeightIn * PDF_RENDER_DPI));
+      const formLeftPx = Math.round(paperLayout.formLeftIn * PDF_RENDER_DPI);
+      const formTopPx = Math.round(paperLayout.formTopIn * PDF_RENDER_DPI);
+      const pdfPages = [];
+
+      for (const svgElement of svgElements) {
+        const canvas = document.createElement("canvas");
+        canvas.width = pageWidthPx;
+        canvas.height = pageHeightPx;
+
+        const context = canvas.getContext("2d", { alpha: false });
+        if (!context) throw new Error("Your browser cannot create the PDF canvas.");
+
+        context.fillStyle = "#ffffff";
+        context.fillRect(0, 0, pageWidthPx, pageHeightPx);
+        context.imageSmoothingEnabled = true;
+        context.imageSmoothingQuality = "high";
+
+        const formImage = await renderSvgElementToImage(
+          svgElement,
+          formWidthPx,
+          formHeightPx,
+        );
+        context.drawImage(formImage, formLeftPx, formTopPx, formWidthPx, formHeightPx);
+
+        pdfPages.push({
+          jpegBytes: await canvasToJpegBytes(canvas),
+          widthPx: pageWidthPx,
+          heightPx: pageHeightPx,
+        });
+      }
+
+      const pdfBytes = buildPdfFromJpegPages(pdfPages, paperLayout);
+      const pdfBlob = new Blob([pdfBytes], { type: "application/pdf" });
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      const downloadLink = document.createElement("a");
+      downloadLink.href = pdfUrl;
+      downloadLink.download = `${outputFileName}.pdf`;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      downloadLink.remove();
+      window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 1500);
+    } catch (error) {
+      console.error("Failed to generate BIR 2307 PDF:", error);
+      window.alert(error?.message || "Unable to generate the BIR 2307 PDF.");
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  const handlePrimaryOutput = () => {
+    if (outputMode === "pdf") {
+      handleDownloadPdf();
+      return;
+    }
+
+    handlePrint();
+  };
+
+  const rootStyle = {
+    "--ap2307-paper-width": `${paperLayout.widthIn}in`,
+    "--ap2307-paper-height": `${paperLayout.heightIn}in`,
+    "--ap2307-paper-aspect": String(paperLayout.aspectRatio),
+    "--ap2307-form-width-percent": `${paperLayout.formWidthPercent}%`,
+    "--ap2307-form-height-percent": `${paperLayout.formHeightPercent}%`,
+  };
+
   return (
-    <div ref={printRootRef} className={`ap2307-root ${className}`.trim()}>
+    <div
+      ref={printRootRef}
+      className={`ap2307-root ${className}`.trim()}
+      style={rootStyle}
+    >
       <style>{`
         .ap2307-root {
-          --ap2307-paper-width: 8.5in;
-          --ap2307-paper-height: 13in;
           box-sizing: border-box;
           min-height: 100vh;
           padding: 16px;
@@ -1223,76 +1554,123 @@ export default function APV2307({
         .ap2307-toolbar {
           position: fixed;
           top: 56px;
-          left: 50%;
-          transform: translateX(-50%);
+          left: 12px;
+          right: 12px;
           z-index: 40;
-          width: min(calc(100% - 32px), var(--ap2307-paper-width));
+          width: auto;
           margin: 0;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 12px;
-          padding: 10px 12px;
+          gap: 10px 14px;
+          padding: 6px 10px;
           border: 1px solid #d4d8de;
           border-radius: 8px;
-          background: #fff;
+          background: linear-gradient(to right, #bfdbfe, #dbeafe);
           box-shadow: 0 3px 14px rgba(16, 24, 40, 0.08);
         }
 
         .ap2307-toolbar-placeholder {
-          height: 94px;
-        }
-
-        @media (max-width: 640px) {
-          .ap2307-toolbar {
-            top: 72px;
-            align-items: stretch;
-            flex-direction: column;
-          }
-
-          .ap2307-toolbar-placeholder {
-            height: 150px;
-          }
-
-          .ap2307-print-button {
-            width: 100%;
-          }
+          height: 88px;
         }
 
         .ap2307-toolbar-title {
           display: flex;
+          flex: 1 1 auto;
           flex-direction: column;
           gap: 2px;
           min-width: 0;
         }
 
         .ap2307-toolbar-title strong {
-          color: #1f2937;
+          color: #1e3a8a;
           font-size: 14px;
         }
 
         .ap2307-toolbar-title span {
-          color: #667085;
+          color: #475569;
           font-size: 12px;
         }
 
-        .ap2307-print-button {
+        .ap2307-toolbar-controls {
+          display: flex;
           flex: 0 0 auto;
-          border: 1px solid #1d4ed8;
-          border-radius: 6px;
-          padding: 8px 14px;
-          background: #1d4ed8;
+          align-items: flex-end;
+          justify-content: flex-end;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .ap2307-option-group {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+        }
+
+        .ap2307-option-label {
+          color: #667085;
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.03em;
+          text-transform: uppercase;
+        }
+
+        .ap2307-segmented {
+          display: inline-flex;
+          height: 32px;
+          padding: 2px;
+          border: 1px solid #d0d5dd;
+          border-radius: 7px;
+          background: #f8fafc;
+        }
+
+        .ap2307-segment-button {
+          display: inline-flex;
+          height: 26px;
+          align-items: center;
+          justify-content: center;
+          border: 0;
+          border-radius: 5px;
+          padding: 0 10px;
+          background: transparent;
+          color: #475467;
+          font-size: 11px;
+          font-weight: 700;
+          line-height: 1;
+          cursor: pointer;
+          white-space: nowrap;
+        }
+
+        .ap2307-segment-button:hover {
+          background: #eef2ff;
+          color: #1d4ed8;
+        }
+
+        .ap2307-segment-button.is-active {
+          background: #2563eb;
           color: #fff;
-          font-size: 13px;
+          box-shadow: 0 1px 3px rgba(29, 78, 216, 0.22);
+        }
+
+        .ap2307-output-button {
+          flex: 0 0 auto;
+          height: 32px;
+          min-width: 126px;
+          border: 1px solid #2563eb;
+          border-radius: 6px;
+          padding: 0 12px;
+          background: #2563eb;
+          color: #fff;
+          font-size: 12px;
           font-weight: 700;
           cursor: pointer;
         }
 
-        .ap2307-print-button:hover:not(:disabled) {
+        .ap2307-output-button:hover:not(:disabled) {
           background: #1e40af;
         }
 
-        .ap2307-print-button:disabled {
+        .ap2307-output-button:disabled {
           border-color: #9ca3af;
           background: #9ca3af;
           cursor: not-allowed;
@@ -1301,21 +1679,29 @@ export default function APV2307({
         .ap2307-preview-scroll {
           width: 100%;
           overflow: auto;
+          padding-top: 10px;
           padding-bottom: 12px;
         }
 
         .ap2307-paper-wrap {
+          display: flex;
           width: min(100%, var(--ap2307-paper-width));
+          aspect-ratio: var(--ap2307-paper-aspect);
           margin: 0 auto 18px;
+          align-items: center;
+          justify-content: center;
+          overflow: hidden;
+          background: #fff;
+          box-shadow: 0 5px 24px rgba(16, 24, 40, 0.18);
         }
 
         .ap2307-paper {
           display: block;
-          width: 100%;
-          height: auto;
-          aspect-ratio: ${PAGE_WIDTH} / ${PAGE_HEIGHT};
+          flex: 0 0 auto;
+          width: var(--ap2307-form-width-percent);
+          height: var(--ap2307-form-height-percent);
           background: #fff;
-          box-shadow: 0 5px 24px rgba(16, 24, 40, 0.18);
+          box-shadow: none;
         }
 
         .ap2307-message {
@@ -1337,8 +1723,50 @@ export default function APV2307({
         }
 
         @page {
-          size: 8.5in 13in;
+          size: ${paperLayout.widthIn}in ${paperLayout.heightIn}in;
           margin: 0;
+        }
+
+        @media (max-width: 1050px) {
+          .ap2307-toolbar {
+            top: 64px;
+            display: flex;
+            align-items: stretch;
+            flex-direction: column;
+          }
+
+          .ap2307-toolbar-controls {
+            width: 100%;
+            justify-content: flex-end;
+          }
+
+          .ap2307-toolbar-placeholder {
+            height: 190px;
+          }
+        }
+
+        @media (max-width: 540px) {
+          .ap2307-toolbar {
+            top: 72px;
+          }
+
+          .ap2307-option-group,
+          .ap2307-output-button {
+            width: 100%;
+          }
+
+          .ap2307-segmented {
+            display: flex;
+            width: 100%;
+          }
+
+          .ap2307-segment-button {
+            flex: 1 1 0;
+          }
+
+          .ap2307-toolbar-placeholder {
+            height: 320px;
+          }
         }
 
         @media print {
@@ -1360,7 +1788,7 @@ export default function APV2307({
 
           .ap2307-root {
             position: static;
-            width: 8.5in;
+            width: ${paperLayout.widthIn}in;
             min-height: 0;
             padding: 0;
             margin: 0;
@@ -1375,15 +1803,15 @@ export default function APV2307({
           }
 
           .ap2307-preview-scroll {
-            width: 8.5in;
+            width: ${paperLayout.widthIn}in;
             padding: 0;
             margin: 0;
             overflow: visible;
           }
 
           .ap2307-paper-wrap {
-            width: 8.5in;
-            height: 13in;
+            width: ${paperLayout.widthIn}in;
+            height: ${paperLayout.heightIn}in;
             margin: 0;
             padding: 0;
             break-inside: avoid;
@@ -1391,6 +1819,7 @@ export default function APV2307({
             break-after: page;
             page-break-after: always;
             overflow: hidden;
+            box-shadow: none;
           }
 
           .ap2307-paper-wrap:last-child {
@@ -1399,15 +1828,15 @@ export default function APV2307({
           }
 
           .ap2307-paper {
-            width: 8.5in;
-            height: 13in;
+            width: ${paperLayout.formWidthIn}in;
+            height: ${paperLayout.formHeightIn}in;
             margin: 0;
             box-shadow: none;
           }
         }
       `}</style>
 
-      {isLoading ? <LoadingSpinner /> : null}
+      {isLoading || isGeneratingPdf ? <LoadingSpinner /> : null}
 
       {showToolbar ? (
         <div className="ap2307-toolbar">
@@ -1417,22 +1846,90 @@ export default function APV2307({
               {requestParams.docCode || "AP"}
               {requestParams.documentNo ? ` No. ${requestParams.documentNo}` : ""}
               {normalizedForms.length > 0
-                ? ` · ${normalizedForms.length} payee form${normalizedForms.length === 1 ? "" : "s"}`
+                ? ` | ${normalizedForms.length} payee form${normalizedForms.length === 1 ? "" : "s"}`
                 : ""}
               {printPages.length > normalizedForms.length
-                ? ` · ${printPages.length} printable pages`
+                ? ` | ${printPages.length} printable pages`
                 : ""}
+              {` | ${paperLayout.label} | ${fitMode === "stretch" ? "fill page" : "fit"}`}
             </span>
           </div>
 
-          <button
-            type="button"
-            className="ap2307-print-button"
-            onClick={handlePrint}
-            disabled={isLoading || printPages.length === 0}
-          >
-            Print / Save PDF
-          </button>
+          <div className="ap2307-toolbar-controls">
+            <div className="ap2307-option-group">
+              <span className="ap2307-option-label">Paper size</span>
+              <div className="ap2307-segmented">
+                {Object.values(PAPER_SIZE_OPTIONS).map((option) => (
+                  <button
+                    key={option.key}
+                    type="button"
+                    className={`ap2307-segment-button ${paperSize === option.key ? "is-active" : ""}`}
+                    aria-pressed={paperSize === option.key}
+                    onClick={() => setPaperSize(option.key)}
+                  >
+                    {option.shortLabel}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="ap2307-option-group">
+              <span className="ap2307-option-label">Page fit</span>
+              <div className="ap2307-segmented">
+                <button
+                  type="button"
+                  className={`ap2307-segment-button ${fitMode === "fit" ? "is-active" : ""}`}
+                  aria-pressed={fitMode === "fit"}
+                  onClick={() => setFitMode("fit")}
+                >
+                  Fit
+                </button>
+                <button
+                  type="button"
+                  className={`ap2307-segment-button ${fitMode === "stretch" ? "is-active" : ""}`}
+                  aria-pressed={fitMode === "stretch"}
+                  onClick={() => setFitMode("stretch")}
+                >
+                  Fill Page
+                </button>
+              </div>
+            </div>
+
+            <div className="ap2307-option-group">
+              <span className="ap2307-option-label">Output</span>
+              <div className="ap2307-segmented">
+                <button
+                  type="button"
+                  className={`ap2307-segment-button ${outputMode === "print" ? "is-active" : ""}`}
+                  aria-pressed={outputMode === "print"}
+                  onClick={() => setOutputMode("print")}
+                >
+                  Print
+                </button>
+                <button
+                  type="button"
+                  className={`ap2307-segment-button ${outputMode === "pdf" ? "is-active" : ""}`}
+                  aria-pressed={outputMode === "pdf"}
+                  onClick={() => setOutputMode("pdf")}
+                >
+                  Download PDF
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="ap2307-output-button"
+              onClick={handlePrimaryOutput}
+              disabled={isLoading || isGeneratingPdf || printPages.length === 0}
+            >
+              {isGeneratingPdf
+                ? "Generating PDF..."
+                : outputMode === "pdf"
+                  ? "Download PDF"
+                  : "Print All Pages"}
+            </button>
+          </div>
         </div>
       ) : null}
       {showToolbar ? <div className="ap2307-toolbar-placeholder" aria-hidden="true" /> : null}
@@ -1447,7 +1944,12 @@ export default function APV2307({
 
       <div className="ap2307-preview-scroll">
         {printPages.map((form) => (
-          <BIR2307Page key={form.pageKey} form={form} backgroundSrc={backgroundSrc} />
+          <BIR2307Page
+            key={form.pageKey}
+            form={form}
+            backgroundSrc={backgroundSrc}
+            stretchMode={fitMode === "stretch"}
+          />
         ))}
       </div>
     </div>
