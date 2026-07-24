@@ -335,6 +335,7 @@ const SO = () => {
 
   //Status Global Setup
   const displayStatus = status || 'OPEN';
+  const normalizedDocumentStatus = String(displayStatus).trim().toUpperCase();
   const statusMap = {
     OPEN: "global-tran-stat-text-open-ui",
     FINALIZED: "global-tran-stat-text-finalized-ui",
@@ -344,10 +345,16 @@ const SO = () => {
 
 
 
-  const statusColor = statusMap[String(displayStatus).trim().toUpperCase()] || "";
-  const isFormDisabled = isViewDocumentUrl || ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+  const statusColor = statusMap[normalizedDocumentStatus] || "";
+  const isFormDisabled =
+    isViewDocumentUrl ||
+    ["FINALIZED", "CANCELLED", "CLOSED"].includes(normalizedDocumentStatus);
+  const normalizedSoStatus = String(soStatus || "O").trim().toUpperCase();
+  const isSoDetailsDisabled =
+    isFormDisabled ||
+    ["C", "X", "CLOSED", "CANCELLED"].includes(normalizedSoStatus);
   const isHeaderSoStatusEditable = !!String(documentID || "").trim() && !isFormDisabled;
-  const isPosted = displayStatus === "FINALIZED";
+  const isPosted = normalizedDocumentStatus === "FINALIZED";
   const totalDrQuantity = detailRows.reduce((total, row) => total + (parseFormattedNumber(row.drQuantity || 0) || 0),0);
 
   const filteredHeaderSoStatusOptions =
@@ -2540,9 +2547,13 @@ const enterNextRowZeroClearFields = [
 const renderSODetailCell = (columnKey, row, index, soStatusOptions) => {
   const columnWidth = getDetailColumnFallbackWidth(columnKey);
   const style = getDetailCellStyle(columnKey, columnWidth);
+  const normalizedRowStatus = String(row.soStat || "O").trim().toUpperCase();
+  const isDetailRowDisabled =
+    isSoDetailsDisabled ||
+    ["C", "X", "CLOSED", "CANCELLED"].includes(normalizedRowStatus);
   const isRowWithDR = (parseFormattedNumber(row.drQuantity || 0) || 0) > 0;
-  const canSearchItem = !isRowWithDR;
-  const canEditDetailAfterDR = !isRowWithDR;
+  const canSearchItem = !isDetailRowDisabled && !isRowWithDR;
+  const canEditDetailAfterDR = !isDetailRowDisabled && !isRowWithDR;
   const detailModalHandlers = {
     itemCode: () => updateState({ selectedRowIndex: index, selectionContext: "rowItemLookup", insertAfterIndex: null, showItemModal: true }),
     salesRepCode: () => updateState({ showSalesRepModal: true, selectedRowIndex: index, modalContext: "detailSalesRep" }),
@@ -2566,10 +2577,10 @@ const renderSODetailCell = (columnKey, row, index, soStatusOptions) => {
       id={`${field}-${index}`}
       className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()}
       value={row[field] || ""}
-      readOnly={options.readOnly ?? isFormDisabled}
+      readOnly={isDetailRowDisabled || !!options.readOnly}
       onChange={(e) => handleSODetailRowChange(index, field, e.target.value)}
       onKeyDown={(e) => {
-        if (e.key !== "Enter" || options.readOnly || isFormDisabled) return;
+        if (e.key !== "Enter" || options.readOnly || isDetailRowDisabled) return;
         e.preventDefault();
         focusNextDetailCell(field);
       }}
@@ -2585,7 +2596,7 @@ const renderSODetailCell = (columnKey, row, index, soStatusOptions) => {
       value={row[field] || ""}
       readOnly
       onKeyDown={(e) => {
-        if (e.key !== "Enter" || isFormDisabled) return;
+        if (e.key !== "Enter" || isDetailRowDisabled) return;
         e.preventDefault();
         focusNextDetailCell(field);
       }}
@@ -2643,9 +2654,9 @@ const renderSODetailCell = (columnKey, row, index, soStatusOptions) => {
     id={`${field}-${index}`}
     className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
     value={row[field] || ""}
-    readOnly={options.readOnly ?? isFormDisabled}
+    readOnly={isDetailRowDisabled || !!options.readOnly}
     onChange={(e) => {
-      if (options.readOnly || options.blocked?.()) return;
+      if (isDetailRowDisabled || options.readOnly || options.blocked?.()) return;
       const sanitizedValue = e.target.value.replace(/[^0-9.]/g, "");
       const regex = options.regex || /^\d*\.?\d{0,2}$/;
       if (regex.test(sanitizedValue) || sanitizedValue === "") {
@@ -2655,19 +2666,19 @@ const renderSODetailCell = (columnKey, row, index, soStatusOptions) => {
       onFocus={(e) => {
       options.onFocus?.(e);
       clearSoDetailZeroOnFocus(e, {
-        isEditable: !(options.readOnly ?? isFormDisabled) && !options.blocked?.(),
+        isEditable: !isDetailRowDisabled && !options.readOnly && !options.blocked?.(),
         onClear: (value) => handleSODetailRowChange(index, field, value),
       });
     }}
     onBlur={(e) => {
-      if (options.readOnly || options.blocked?.()) return;
+      if (isDetailRowDisabled || options.readOnly || options.blocked?.()) return;
       if (typeof options.onBlur === "function" && options.onBlur(e) === false) return;
 
       const num = parseFormattedNumber(e.target.value);
       handleSODetailRowChange(index, field, Number.isFinite(num) ? formatNumber(num, options.decimals) : formatNumber(0, options.decimals));
     }}
     onKeyDown={(e) => {
-      if (e.key !== "Enter" || options.readOnly || options.blocked?.()) return;
+      if (e.key !== "Enter" || isDetailRowDisabled || options.readOnly || options.blocked?.()) return;
       e.preventDefault();
 
       if (typeof options.onKeyDown === "function" && options.onKeyDown(e) === false) return;
@@ -2685,27 +2696,27 @@ const renderSODetailCell = (columnKey, row, index, soStatusOptions) => {
       type="text"
       className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
       value={row[field] || ""}
-      readOnly={alwaysReadOnly || isFormDisabled}
+      readOnly={alwaysReadOnly || isDetailRowDisabled}
       onChange={(e) => handleSODetailRowChange(index, field, e.target.value)}
     />
   );
 
   const detailColumnRenderers = {
     ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
-    soStat: () => { const isStatusLocked = !documentID || ["X", "C"].includes(row.soStat || "O"); return <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`soStat-${index}`} className="w-full global-tran-td-inputclass-ui text-left" value={row.soStat || "O"} disabled={isFormDisabled || isStatusLocked} onChange={(e) => handleSODetailRowChange(index, "soStat", e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled || isStatusLocked) return; e.preventDefault(); focusNextDetailCell("soStat"); }}>{soStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></td>; }, 
+    soStat: () => { const isStatusLocked = !documentID || isDetailRowDisabled; return <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`soStat-${index}`} className="w-full global-tran-td-inputclass-ui text-left" value={row.soStat || "O"} disabled={isStatusLocked} onChange={(e) => handleSODetailRowChange(index, "soStat", e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || isStatusLocked) return; e.preventDefault(); focusNextDetailCell("soStat"); }}>{soStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></td>; }, 
     itemCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}><div className="flex items-center gap-1"><input type="text" value={row.itemCode || ""} readOnly className="w-full h-7 text-xs bg-transparent focus:outline-none focus:ring-0" />{canSearchItem && <button type="button" className="text-blue-600 hover:text-blue-800" onClick={() => updateState({ selectedRowIndex: index, selectionContext: "rowItemLookup", insertAfterIndex: null, showItemModal: true })}><FontAwesomeIcon icon={faSearch} /></button>}</div></td>, 
     itemName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey)}</td>,
-    itemSpecs: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="relative flex items-center">{textInput(columnKey, { className: "pr-8", readOnly: isFormDisabled })}{!isFormDisabled && <FontAwesomeIcon icon={faSearch} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={() => useSwalHandleOpenSpecsModal(index, detailRows, handleSODetailRowChange, row.itemSpecs, "Specification", "itemSpecs", `Enter specification for ${row.itemCode || "this item"}...`)} />}</div></td>,
+    itemSpecs: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="relative flex items-center">{textInput(columnKey, { className: "pr-8" })}{!isDetailRowDisabled && <FontAwesomeIcon icon={faSearch} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={() => useSwalHandleOpenSpecsModal(index, detailRows, handleSODetailRowChange, row.itemSpecs, "Specification", "itemSpecs", `Enter specification for ${row.itemCode || "this item"}...`)} />}</div></td>,
     uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { className: "text-center" })}<input type="hidden" value={row.pmType || ""} readOnly /><input type="hidden" value={row.groupId || ""} readOnly /><input type="hidden" value={row.pmId || ""} readOnly /></td>,
     soQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), onFocus: () => { originalSOQuantityRef.current[index] = row.soQuantity; }, onBlur: (e) => validateSOQuantity(index, e.target.value), onKeyDown: (e) => validateSOQuantity(index, e.target.value) })}</td>,
     sellingPrice: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: sellingPriceDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${sellingPriceDecimals}}$`), blocked: () => !isSellPriceOpenEditable || row.freeItem === "Y", readOnly: isFormDisabled || !isDiscountEditable || row.freeItem === "Y" })}</td>,
     grossAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey, true)}</td>,
     totDiscount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
     netAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey, true)}</td>,
-    delDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><DateFormatInput id={`delDate-${index}`} name="delDate" value={row.delDate || ""} disabled={isFormDisabled || isRowWithDR} updateState={(updates) => handleSODetailRowChange(index, "delDate", updates.delDate || "")} className="w-full h-7 text-xs bg-transparent focus:outline-none focus:ring-0" /></td>, 
-    customerPoNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { readOnly: isFormDisabled || isRowWithDR })}</td>,
+    delDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><DateFormatInput id={`delDate-${index}`} name="delDate" value={row.delDate || ""} disabled={isDetailRowDisabled || isRowWithDR} updateState={(updates) => handleSODetailRowChange(index, "delDate", updates.delDate || "")} className="w-full h-7 text-xs bg-transparent focus:outline-none focus:ring-0" /></td>, 
+    customerPoNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { readOnly: isRowWithDR })}</td>,
     salesRepCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}><div className="flex items-center gap-1"><input type="text" value={row.salesRepCode || ""} readOnly className="w-full h-7 text-xs bg-transparent focus:outline-none focus:ring-0" />{canEditDetailAfterDR && <button type="button" className="text-blue-600 hover:text-blue-800" onClick={() => updateState({ showSalesRepModal: true, selectedRowIndex: index, modalContext: "detailSalesRep" })}><FontAwesomeIcon icon={faSearch} /></button>}</div></td>,
-    freeItem: () => <td key={columnKey} className="global-tran-td-ui" style={style}><button type="button" className={`w-full h-7 rounded-full border text-[11px] font-semibold transition-colors ${row.freeItem === "Y" ? "border-blue-500 bg-blue-500/15 text-blue-700" : "border-slate-300 bg-white text-slate-600"} ${isFormDisabled || isRowWithDR ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`} disabled={isFormDisabled || isRowWithDR} onClick={() => handleSODetailRowChange(index, "freeItem", row.freeItem === "Y" ? "" : "Y")}>{row.freeItem === "Y" ? "Yes" : "No"}</button></td>,
+    freeItem: () => <td key={columnKey} className="global-tran-td-ui" style={style}><button type="button" className={`w-full h-7 rounded-full border text-[11px] font-semibold transition-colors ${row.freeItem === "Y" ? "border-blue-500 bg-blue-500/15 text-blue-700" : "border-slate-300 bg-white text-slate-600"} ${isDetailRowDisabled || isRowWithDR ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`} disabled={isDetailRowDisabled || isRowWithDR} onClick={() => handleSODetailRowChange(index, "freeItem", row.freeItem === "Y" ? "" : "Y")}>{row.freeItem === "Y" ? "Yes" : "No"}</button></td>,
     drQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), readOnly: true })}</td>,
     siQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), readOnly: true })}</td>,
   };
@@ -2750,9 +2761,9 @@ return (
         isSaveDisabled={state.isSaveDisabled || isFormDisabled || (detailRows?.length || 0) === 0}
         isResetDisabled={state.isResetDisabled}
         isAttachDisabled={!documentID}
-        isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
-        isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
-        isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED"|| displayStatus === "CLOSED" || totalDrQuantity > 0}
+        isPrintDisabled={!documentID || normalizedDocumentStatus === "CANCELLED"}
+        isCopyDisabled={!documentID || normalizedDocumentStatus === "CANCELLED"}
+        isCancelDisabled={!documentID || ["CANCELLED", "FINALIZED", "CLOSED"].includes(normalizedDocumentStatus) || totalDrQuantity > 0}
       />
       </div>
 
@@ -3227,7 +3238,7 @@ return (
                 })
               )}
 
-                {!isFormDisabled && (
+                {!isSoDetailsDisabled && (
                   <th
                     className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900"
                     style={transactionActionsHeaderStyle}
@@ -3260,7 +3271,7 @@ return (
               )}
 
 
-               {!isFormDisabled && (
+               {!isSoDetailsDisabled && (
                     <td
                       className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black"
                       style={transactionActionsCellStyle}
