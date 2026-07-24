@@ -31,6 +31,7 @@ const Header = ({
   // actions
   showActions = true,
   showBIRForm = true,
+  birFormLabel = "BIR Form",
   showCopyForm = true,
   showPrintCheck = false,
   isViewDocument = false,
@@ -38,6 +39,7 @@ const Header = ({
   showUpload = false,
   showNotify = false,
   isPrintDisabled = false,
+  isPrintBIRDisabled,
   isSaveDisabled = false,   
   isCopyDisabled = false,   
   isAttachDisabled = false, 
@@ -50,6 +52,7 @@ const Header = ({
   pdfLink,
   videoLink,
   onPrint,
+  onPrintBIR,
   onPrintCheck,
   printData,
   onReset,
@@ -126,6 +129,8 @@ const Header = ({
     setIsGuideOpen(false);
   };
   const handlePrint = () => onPrint?.(printData);
+  const handlePrintBIR = () => (onPrintBIR ?? onPrint)?.(printData);
+  const resolvedPrintBIRDisabled = isPrintBIRDisabled ?? isPrintDisabled;
   const handlePrintCheck = () => onPrintCheck?.();
   const handleUpload = () => onUpload?.();
   const handleNotify = () => onNotify?.();
@@ -239,13 +244,13 @@ const Header = ({
             )}
            {showBIRForm && (
               <button 
-                onClick={handlePrint} 
-                disabled={isPrintDisabled}
-                className={getBlueButtonClass(isPrintDisabled)}
+                onClick={handlePrintBIR} 
+                disabled={resolvedPrintBIRDisabled}
+                className={getBlueButtonClass(resolvedPrintBIRDisabled)}
               >
                 <FontAwesomeIcon icon={faPrint} />
-                <span className={mobileLabelClass}>BIR</span>
-                <span className={desktopLabelClass}>BIR Form</span>
+                <span className={mobileLabelClass}>{birFormLabel}</span>
+                <span className={desktopLabelClass}>{birFormLabel}</span>
               </button>
             )}
             <button

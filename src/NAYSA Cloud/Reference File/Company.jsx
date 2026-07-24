@@ -53,6 +53,9 @@ const INITIAL_FORM = {
   birAcNo: "",
   birReleaseNo: "",
   birAcDateIssued: "",
+  payor2307Name: "",
+  payor2307TIN: "",
+  payor2307Position: "",
   userCode: "",
   tblFieldArray: [],
   tblFieldArrayBir: [],
@@ -269,6 +272,9 @@ const Company = () => {
         // birAcDateIssued: (fetchedData.birAcDateIssued || "").split("T")[0],
         // birAcDateIssued: useformatToDatev2(fetchedData.birAcDateIssued),
         birAcDateIssued: formatRetrievedDate(fetchedData.birAcDateIssued),
+        payor2307Name: fetchedData.payor2307Name || "",
+        payor2307TIN: fetchedData.payor2307TIN || "",
+        payor2307Position: fetchedData.payor2307Position || "",
       });
     }
   }, [fetchedData]);
@@ -661,6 +667,35 @@ const Company = () => {
               Date Issued
             </label>
           </div>
+        </div>
+      </div>
+
+      <div className="global-ref-tab-div-ui mt-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <FieldRenderer
+            label="2307 Payor Name"
+            labelWidth="w-56"
+            type="text"
+            value={formData.payor2307Name}
+            onChange={(v) => updateForm({ payor2307Name: v })}
+            maxLength={getMax("PAYOR_2307_NAME")}
+          />
+          <FieldRenderer
+            label="2307 Payor TIN"
+            labelWidth="w-56"
+            type="text"
+            value={formData.payor2307TIN}
+            onChange={(v) => updateForm({ payor2307TIN: v })}
+            maxLength={getMax("PAYOR_2307_TIN")}
+          />
+          <FieldRenderer
+            label="2307 Payor Position"
+            labelWidth="w-56"
+            type="text"
+            value={formData.payor2307Position}
+            onChange={(v) => updateForm({ payor2307Position: v })}
+            maxLength={getMax("PAYOR_2307_POSITION")}
+          />
         </div>
       </div>
     </div>

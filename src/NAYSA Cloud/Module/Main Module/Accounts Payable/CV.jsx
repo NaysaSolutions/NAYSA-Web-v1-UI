@@ -1448,6 +1448,33 @@ const handlePrint = async () => {
   }
 };
 
+const handlePrint2307 = () => {
+  const hasPrintable2307Entry = (detailRowsGL || []).some(
+    (row) =>
+      String(row.atcCode || "").trim() !== "" &&
+      (
+        (parseFormattedNumber(row.debit) || 0) !== 0 ||
+        (parseFormattedNumber(row.credit) || 0) !== 0
+      ),
+  );
+
+  if (
+    !documentID ||
+    String(displayStatus || "").trim().toUpperCase() !== "FINALIZED" ||
+    !hasPrintable2307Entry
+  ) {
+    return;
+  }
+
+  const query = new URLSearchParams({
+    viewDocument: "true",
+    documentNo: documentNo || "",
+  });
+  const baseUrl = import.meta.env.BASE_URL || "/";
+  const previewUrl = `${baseUrl.replace(/\/?$/, "/")}page/APV2307?${query.toString()}`;
+  window.open(previewUrl, "_blank", "noopener,noreferrer");
+};
+
 const handlePrintCheck = async () => {
  if (!detailRows || detailRows.length === 0) {
       return;
@@ -2654,6 +2681,8 @@ const renderCvGlCell = (columnKey, row, index) => {
               pdfLink={pdfLink} 
               videoLink={videoLink}
               onPrint={handlePrint} 
+              onPrintBIR={handlePrint2307}
+              birFormLabel="BIR Form"
               showPrintCheck={true}
               onPrintCheck={handlePrintCheck}
               onPost={handlePost} 
@@ -2665,7 +2694,7 @@ const renderCvGlCell = (columnKey, row, index) => {
               onAttach={handleAttach}
               activeTopTab={topTab} 
               showActions={topTab === "details"} 
-              showBIRForm={false}      
+              showBIRForm={true}      
               isViewDocument={isViewDocument}
               onDetails={() => setTopTab("details")}
               onHistory={() => setTopTab("history")}
@@ -2675,6 +2704,18 @@ const renderCvGlCell = (columnKey, row, index) => {
               isResetDisabled={state.isResetDisabled}
               isAttachDisabled={!documentID}
               isPrintDisabled={!documentID || displayStatus === "Cancelled"}
+              isPrintBIRDisabled={
+                !documentID ||
+                String(displayStatus || "").trim().toUpperCase() !== "FINALIZED" ||
+                !(detailRowsGL || []).some(
+                  (row) =>
+                    String(row.atcCode || "").trim() !== "" &&
+                    (
+                      (parseFormattedNumber(row.debit) || 0) !== 0 ||
+                      (parseFormattedNumber(row.credit) || 0) !== 0
+                    )
+                )
+              }
               isCopyDisabled={!documentID || displayStatus === "Cancelled"}
               isCancelDisabled={!documentID ||displayStatus === "Cancelled" ||displayStatus === "Finalized"}
         />

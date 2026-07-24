@@ -1468,6 +1468,37 @@ const handlePrint = async () => {
   }
 };
 
+const handlePrint2307 = () => {
+  const hasPrintable2307Entry = (detailRowsGL || []).some(
+    (row) =>
+      String(row.atcCode || "").trim() !== "" &&
+      (
+        (parseFormattedNumber(row.debit) || 0) !== 0 ||
+        (parseFormattedNumber(row.credit) || 0) !== 0
+      ),
+  );
+
+  if (
+    !documentID ||
+    String(displayStatus || "").trim().toUpperCase() !== "FINALIZED" ||
+    !hasPrintable2307Entry
+  ) {
+    return;
+  }
+
+  const query = new URLSearchParams({
+    viewDocument: "true",
+    branchCode: branchCode || "",
+    docCode: docType || "PCV",
+    tranId: documentID || "",
+    documentNo: documentNo || "",
+  });
+
+  const baseUrl = import.meta.env.BASE_URL || "/";
+  const previewUrl = `${baseUrl.replace(/\/?$/, "/")}page/APV2307?${query.toString()}`;
+  window.open(previewUrl, "_blank", "noopener,noreferrer");
+};
+
 
 
 
@@ -2729,6 +2760,8 @@ const handleCloseBranchModal = (selectedBranch) => {
         pdfLink={pdfLink}
         videoLink={videoLink}
         onPrint={handlePrint}
+        onPrintBIR={handlePrint2307}
+        birFormLabel="BIR Form"
         onPost={handlePost}
         printData={printData}
         onReset={handleReset}
@@ -2748,6 +2781,18 @@ const handleCloseBranchModal = (selectedBranch) => {
         isResetDisabled={state.isResetDisabled}
         isAttachDisabled={!documentID}
         isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
+        isPrintBIRDisabled={
+          !documentID ||
+          String(displayStatus || "").trim().toUpperCase() !== "FINALIZED" ||
+          !(detailRowsGL || []).some(
+            (row) =>
+              String(row.atcCode || "").trim() !== "" &&
+              (
+                (parseFormattedNumber(row.debit) || 0) !== 0 ||
+                (parseFormattedNumber(row.credit) || 0) !== 0
+              )
+          )
+        }
         isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
         isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED"|| displayStatus === "CLOSED"}
 

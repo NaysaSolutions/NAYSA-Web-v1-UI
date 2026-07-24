@@ -477,17 +477,19 @@ const APV = () => {
   const documentTitle = docTypeNames[docType] || "Transaction";
 
   // Status Global Setup
-  const displayStatus =
-    documentStatus && documentStatus !== "" ? documentStatus : status || "OPEN";
+  const displayStatus = status || "OPEN";
+  const normalizedStatus = String(displayStatus).trim().toUpperCase();
   const statusMap = {
-    Finalized: "global-tran-stat-text-finalized-ui",
-    Cancelled: "global-tran-stat-text-closed-ui",
-    Closed: "global-tran-stat-text-closed-ui",
+    OPEN: "global-tran-stat-text-open-ui",
+    POSTED: "global-tran-stat-text-finalized-ui",
+    FINALIZED: "global-tran-stat-text-finalized-ui",
+    CANCELLED: "global-tran-stat-text-closed-ui",
+    CLOSED: "global-tran-stat-text-finalized-ui",
   };
-  const statusColor = statusMap[displayStatus] || "";
+  const statusColor = statusMap[normalizedStatus] || "";
   const isFormDisabled =
     isViewDocumentUrl ||
-    ["Finalized", "Cancelled", "Closed"].includes(displayStatus);
+    ["POSTED", "FINALIZED", "CANCELLED", "CLOSED"].includes(normalizedStatus);
 
   // Field visibility based on AP type
   useEffect(() => {
@@ -1936,7 +1938,8 @@ const extractOpenRRResponseRows = (response) => {
           updateState({ 
             isDocNoDisabled: true, 
             isFetchDisabled: true, 
-            documentStatus: response.data[0].docStatus || "OPEN" 
+            documentStatus: response.data[0].apvStatus || "",
+            status: response.data[0].docStatus || "OPEN",
           });
         }
       }
@@ -2723,6 +2726,36 @@ const calculatedAtcAmount = aCode
     if (documentID) {
       updateState({ showSignatoryModal: true });
     }
+  };
+
+  const handlePrint2307 = () => {
+    const hasPrintable2307Entry = (detailRowsGL || []).some(
+      (row) =>
+        String(row.atcCode || "").trim() !== "" &&
+        (
+          (parseFormattedNumber(row.debit) || 0) !== 0 ||
+          (parseFormattedNumber(row.credit) || 0) !== 0
+        ),
+    );
+
+    if (
+      !documentID ||
+      String(displayStatus || "").trim().toUpperCase() !== "FINALIZED" ||
+      !hasPrintable2307Entry
+    ) {
+      return;
+    }
+
+    const query = new URLSearchParams({
+      viewDocument: "true",
+      branchCode: branchCode || "",
+      docCode: docType || "APV",
+      tranId: documentID || "",
+      documentNo: documentNo || "",
+    });
+    const baseUrl = import.meta.env.BASE_URL || "/";
+    const previewUrl = `${baseUrl.replace(/\/?$/, "/")}page/APV2307?${query.toString()}`;
+    window.open(previewUrl, "_blank", "noopener,noreferrer");
   };
 
   const handleCancel = async () => {
@@ -4102,6 +4135,8 @@ const handleAtcNameDoubleClick = (index) => {
           pdfLink={pdfLink}
           videoLink={videoLink}
           onPrint={handlePrint}
+          onPrintBIR={handlePrint2307}
+          birFormLabel="BIR Form"
           onPost={handlePost}
           printData={printData}
           onReset={handleReset}
@@ -4111,7 +4146,7 @@ const handleAtcNameDoubleClick = (index) => {
           onAttach={handleAttach}
           activeTopTab={topTab}
           showActions={topTab === "details"}
-          showBIRForm={false}
+          showBIRForm={true}
           onDetails={() => setTopTab("details")}
           onHistory={() => setTopTab("history")}
           disableRouteNavigation={true}
@@ -4123,12 +4158,24 @@ const handleAtcNameDoubleClick = (index) => {
           }
           isResetDisabled={state.isResetDisabled}
           isAttachDisabled={!documentID}
-          isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
-          isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
+          isPrintDisabled={!documentID || normalizedStatus === "CANCELLED"}
+          isPrintBIRDisabled={
+            !documentID ||
+            String(displayStatus || "").trim().toUpperCase() !== "FINALIZED" ||
+            !(detailRowsGL || []).some(
+              (row) =>
+                String(row.atcCode || "").trim() !== "" &&
+                (
+                  (parseFormattedNumber(row.debit) || 0) !== 0 ||
+                  (parseFormattedNumber(row.credit) || 0) !== 0
+                )
+            )
+          }
+          isCopyDisabled={!documentID || normalizedStatus === "CANCELLED"}
           isCancelDisabled={
             !documentID ||
-            displayStatus === "CANCELLED" ||
-            displayStatus === "FINALIZED"
+            normalizedStatus === "CANCELLED" ||
+            normalizedStatus === "FINALIZED"
           }
         />
       </div>
@@ -4147,7 +4194,7 @@ const handleAtcNameDoubleClick = (index) => {
                 Transaction Status
               </p>
               <h1 className={`global-tran-stat-text-ui ${statusColor}`}>
-                {displayStatus}
+                {normalizedStatus}
               </h1>
             </div>
           </div>
