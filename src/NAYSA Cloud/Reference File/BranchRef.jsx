@@ -685,7 +685,7 @@ const BranchRef = () => {
         </div>
 
         {/* RIGHT: Registration Info */}
-        <div className="w-full lg:w-[320px] [&>div]:h-full">
+        <div className="w-full lg:w-[320px]">
           <RegistrationInfo layout="stacked" data={registrationInfo} />
         </div>
       </div>
@@ -699,6 +699,8 @@ const BranchRef = () => {
           isLoading={isListLoading}
           onRowDoubleClick={handleEdit}
           itemsPerPage={50}
+          onRefresh={() => queryClient.invalidateQueries({ queryKey: ["branchList"] })}
+
           // autoFillGrid="True"
         />
       </div>

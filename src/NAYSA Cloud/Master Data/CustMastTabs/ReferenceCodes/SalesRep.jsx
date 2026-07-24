@@ -932,6 +932,7 @@ const SalesRep = forwardRef(({
           onRowClick={(row) => setSelectedRow(row)}
           showFilters
           autoFillGrid={true}
+          onRefresh={() => queryClient.invalidateQueries({ queryKey: ["salesRepList"] })}
         />
       </div>
     </div>

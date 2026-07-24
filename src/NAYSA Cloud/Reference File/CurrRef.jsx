@@ -558,6 +558,7 @@ const CurrRef = () => {
             itemsPerPage={50}
             onMobileRowOpen={openMobileActionSheet}
             autoFillGrid={true}
+            onRefresh={() => queryClient.invalidateQueries({ queryKey: ["currList"] })}
           />
         </div>
 

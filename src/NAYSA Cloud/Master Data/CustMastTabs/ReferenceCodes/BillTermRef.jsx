@@ -389,6 +389,7 @@ const BillTermRef = forwardRef(({ onStateChange }, ref) => {
           onRowClick={(row) => setSelectedRow(row)}
           showFilters
           autoFillGrid={true}
+          onRefresh={() => queryClient.invalidateQueries({ queryKey: ["billtermList"] })}
         />
       </div>
     </div>

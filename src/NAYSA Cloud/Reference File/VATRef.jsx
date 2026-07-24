@@ -743,6 +743,7 @@ const VATRef = () => {
           isLoading={isListLoading}
           onRowDoubleClick={handleEdit}
           itemsPerPage={50}
+          onRefresh={() => queryClient.invalidateQueries({ queryKey: ["vatList"] })}
           onMobileRowOpen={openMobileActionSheet}
         />
       </div>

@@ -595,15 +595,61 @@ export default function AuthProvider({ children }) {
   useEffect(() => {
     if (loading || !user?.USER_CODE) return undefined;
 
+    /*
+     * HEARTSTRONG has its own administration portal and must not load the
+     * normal NAYSA user, menu, and global reference payloads.
+     */
+    if (user?.ACCOUNT_MODE === "LICENSE_ADMIN") {
+      setCurrentUserRow(null);
+      setCurrentMenu(null);
+      setGlobalTables(null);
+      setCompanyInfo(null);
+      setallDropDown(null);
+      setAllVATList(null);
+      setAllATCList(null);
+      setAllHSDoc(null);
+      setRefsLoading(false);
+      setRefsLoaded(true);
+
+      persistRefsToCache({
+        companyInfo: null,
+        allDropDown: null,
+        currentUserRow: null,
+        currentMenu: null,
+        globalTables: null,
+        allVATList: null,
+        allATCList: null,
+        allHSDoc: null,
+        refsLoaded: true,
+      });
+
+      return undefined;
+    }
+
     let cancelled = false;
+
+    /*
+     * Normal users use their own USER_CODE.
+     *
+     * MIRACLE and any other fixed system account can authenticate through a
+     * carrier/template account while loading permissions from a separate
+     * permission account.
+     */
+    const authUserCode =
+      user?.AUTH_USER_CODE || user.USER_CODE;
+
+    const permissionUserCode =
+      user?.PERMISSION_USER_CODE || user.USER_CODE;
 
     const loadStaticRefs = async () => {
       try {
         setRefsLoading(true);
 
         const results = await Promise.allSettled([
-          useTopUserRow(user.USER_CODE),
-          fetchData("menu-items", { USER_CODE: user.USER_CODE }),
+          useTopUserRow(authUserCode),
+          fetchData("menu-items", {
+            USER_CODE: permissionUserCode,
+          }),
           useTopCompanyGlobalTables(),
         ]);
 
@@ -628,11 +674,20 @@ export default function AuthProvider({ children }) {
             ? globalTableResult.value ?? null
             : null;
 
-        const nextCompanyInfo = nextGlobalTables?.company?.[0] ?? null;
-        const nextAllDropDown = nextGlobalTables?.allDropdown ?? null;
-        const nextAllVATList = nextGlobalTables?.vatList ?? null;
-        const nextAllATCList = nextGlobalTables?.atcList ?? null;
-        const nextAllHSDoc = nextGlobalTables?.hsDoc ?? null;
+        const nextCompanyInfo =
+          nextGlobalTables?.company?.[0] ?? null;
+
+        const nextAllDropDown =
+          nextGlobalTables?.allDropdown ?? null;
+
+        const nextAllVATList =
+          nextGlobalTables?.vatList ?? null;
+
+        const nextAllATCList =
+          nextGlobalTables?.atcList ?? null;
+
+        const nextAllHSDoc =
+          nextGlobalTables?.hsDoc ?? null;
 
         setCurrentUserRow(nextUserRow);
         setCurrentMenu(nextCurrentMenu);
@@ -657,14 +712,19 @@ export default function AuthProvider({ children }) {
         });
 
         if (userRowResult.status === "rejected") {
-          console.error("Failed to load user row:", userRowResult.reason);
+          console.error(
+            "Failed to load user row:",
+            userRowResult.reason
+          );
         }
+
         if (currentMenuResult.status === "rejected") {
           console.error(
             "Failed to load menu items:",
             currentMenuResult.reason
           );
         }
+
         if (globalTableResult.status === "rejected") {
           console.error(
             "Failed to load global tables:",
@@ -672,7 +732,10 @@ export default function AuthProvider({ children }) {
           );
         }
       } catch (error) {
-        console.error("Failed to load authentication references:", error);
+        console.error(
+          "Failed to load authentication references:",
+          error
+        );
       } finally {
         if (!cancelled) setRefsLoading(false);
       }
@@ -683,7 +746,14 @@ export default function AuthProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [loading, persistRefsToCache, user?.USER_CODE]);
+  }, [
+    loading,
+    persistRefsToCache,
+    user?.USER_CODE,
+    user?.AUTH_USER_CODE,
+    user?.PERMISSION_USER_CODE,
+    user?.ACCOUNT_MODE,
+  ]);
 
   useEffect(() => {
     const bumpActivity = () => {
