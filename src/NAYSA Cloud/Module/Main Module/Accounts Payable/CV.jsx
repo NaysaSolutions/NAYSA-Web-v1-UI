@@ -1468,6 +1468,9 @@ const handlePrint2307 = () => {
 
   const query = new URLSearchParams({
     viewDocument: "true",
+    branchCode: branchCode || "",
+    docCode: docType || "CV",
+    tranId: documentID || "",
     documentNo: documentNo || "",
   });
   const baseUrl = import.meta.env.BASE_URL || "/";
