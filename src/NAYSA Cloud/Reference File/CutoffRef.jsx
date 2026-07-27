@@ -850,8 +850,9 @@ const handleCodeChange = (v) => {
             fileName={`Cutoff_Reference_${selectedYear}_${new Date().toISOString().split("T")[0]}`}
             title="Cut off Reference Records"
             tableSize="Full"
+            onRowDoubleClick={handleEdit}
             onRefresh={() => queryClient.invalidateQueries({ queryKey: ["cutoffList"] })}
-            onMobileRowOpen={openMobileActionSheet} // <-- Hooked up action sheet
+            onMobileRowOpen={openMobileActionSheet}
           />
         </div>
       </div>

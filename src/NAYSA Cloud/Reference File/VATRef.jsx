@@ -49,6 +49,7 @@ import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer";
 import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
 
 import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
+import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 const INITIAL_FORM = {
   vatCode: "",
@@ -147,7 +148,11 @@ const VATRef = () => {
   });
 
   // --- Updated Save Mutation ---
-  const { mutate: saveVAT, isLoading: isSaving } = useMutation({
+  const {
+    mutate: saveVAT,
+    isLoading: isSavingLegacy,
+    isPending: isSavingPending,
+  } = useMutation({
     mutationFn: async (payload) => await apiClient.post("/upsertVat", payload),
 
     onSuccess: (response) => {
@@ -185,6 +190,8 @@ const VATRef = () => {
       resetForm(); // ✅ reset on request error too
     },
   });
+
+  const isSaving = Boolean(isSavingPending || isSavingLegacy);
 
   // --- UPDATED ACTIONS ---
   const handleSave = () => {
@@ -269,7 +276,11 @@ const VATRef = () => {
 
   };
 
-  const { mutate: deleteVat, isLoading: isDeleting } = useMutation({
+  const {
+    mutate: deleteVat,
+    isLoading: isDeletingLegacy,
+    isPending: isDeletingPending,
+  } = useMutation({
     mutationFn: async (payload) => await apiClient.post("/deleteVat", payload),
     onSuccess: (response) => {
       queryClient.invalidateQueries(["vatList"]);
@@ -282,6 +293,8 @@ const VATRef = () => {
     onError: (error) => useSwalErrorAlertAPI("Delete Error", error),
   });
 
+
+  const isDeleting = Boolean(isDeletingPending || isDeletingLegacy);
   const handleDelete = async (row) => {
     try {
       setIsLoading(true); 
@@ -489,25 +502,16 @@ const VATRef = () => {
   const getMax = (col) => useGetFieldLength(tblFieldArray, col);
 
   
+  const isPageLoading =
+    isDropdownLoading ||
+    isListLoading ||
+    isSaving ||
+    isDeleting ||
+    isLoading;
+
   return (
     <div className="global-ref-main-div-ui">
-      {(isDropdownLoading || isListLoading || isSaving || isDeleting) && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-2xl flex flex-col items-center gap-4">
-            <div className="relative">
-              <div className="w-12 h-12 border-4 border-blue-100 dark:border-gray-700 rounded-full"></div>
-              <div className="absolute top-0 left-0 w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-            </div>
-            <span className="text-sm font-semibold animate-pulse">
-              {isSaving
-                ? "Saving..."
-                : isDeleting
-                  ? "Deleting..."
-                  : "Loading..."}
-            </span>
-          </div>
-        </div>
-      )}
+      {isPageLoading && <LoadingSpinner />}
 
       {/* Header Section */}
       <div className="global-ref-header-ui">

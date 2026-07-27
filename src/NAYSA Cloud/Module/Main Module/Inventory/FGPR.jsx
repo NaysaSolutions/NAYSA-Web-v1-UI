@@ -27,6 +27,7 @@ import VATLookupModal from "../../../Lookup/SearchVATRef.jsx";
 import ATCLookupModal from "../../../Lookup/SearchATCRef.jsx";
 import CancelTranModal from "../../../Lookup/SearchCancelRef.jsx";
 import PostTranModal from "../../../Lookup/SearchPostRef.jsx";
+import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import WOLookupModal from "../../../Lookup/SearchWO.jsx";
@@ -54,7 +55,11 @@ import {
     useSwalErrorAlert,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
-import { useResizableTableColumns } from "@/NAYSA Cloud/Global/datatable.jsx";
+import {
+    transactionActionsCellStyle,
+    transactionActionsHeaderStyle,
+    useResizableTableColumns,
+} from "@/NAYSA Cloud/Global/datatable.jsx";
 
 const today = () => new Date().toISOString().split("T")[0];
 
@@ -453,6 +458,7 @@ const FGPR = () => {
             showEWTLookup: false,
             showCancelModal: false,
             showPostModal: false,
+            showAttachModal: false,
             showWOLookup: false,
             showStockCard: false,
         }),
@@ -1099,7 +1105,16 @@ const FGPR = () => {
     };
 
     const handleAttach = () => {
-        Swal.fire({ icon: "info", title: "Attachment", text: "Attach document modal can be connected here if needed." });
+        if (!state.documentID) {
+            Swal.fire({
+                icon: "info",
+                title: "Save Required",
+                text: "Please save or retrieve the FGPR transaction before attaching documents.",
+            });
+            return;
+        }
+
+        updateState({ showAttachModal: true });
     };
 
     const handleDocNoBlur = () => {
@@ -1973,6 +1988,7 @@ const FGPR = () => {
                     isResetDisabled={state.isResetDisabled}
                     isViewDocument={state.isViewDocument}
                     isCancelDisabled={!state.documentID || isFormDisabled}
+                    isAttachDisabled={!state.documentID}
                 />
             </div>
 
@@ -2113,19 +2129,23 @@ const FGPR = () => {
                                 </div>
 
                                 <div className="col-span-full">
-                                    <label
-                                        htmlFor="remarks"
-                                        className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300"
-                                    >
-                                        Remarks
-                                    </label>
-                                    <textarea
-                                        id="remarks"
-                                        className="w-full min-h-[95px] resize-y rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                                        value={state.remarks || ""}
-                                        onChange={(e) => updateState({ remarks: e.target.value })}
-                                        disabled={isFormDisabled}
-                                    />
+                                    <div className="relative p-2">
+                                        <textarea
+                                            id="remarks"
+                                            placeholder=""
+                                            rows={4}
+                                            className="peer global-tran-textbox-remarks-ui pt-2"
+                                            value={state.remarks || ""}
+                                            onChange={(e) => updateState({ remarks: e.target.value })}
+                                            disabled={isFormDisabled}
+                                        />
+                                        <label
+                                            htmlFor="remarks"
+                                            className="global-tran-floating-label-remarks"
+                                        >
+                                            Remarks
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
 
@@ -2143,7 +2163,7 @@ const FGPR = () => {
 
                                 <div className="global-tran-table-main-div-ui">
                                     <div className="global-tran-table-main-sub-div-ui">
-                                        <table className="min-w-full border-separate border-spacing-0 [&_td]:border-b [&_td]:border-r [&_td]:border-slate-200 [&_tr>td:first-child]:border-l [&_th]:border-b [&_th]:border-slate-200">
+                                        <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
                                             <thead className="global-tran-thead-div-ui">
                                                 <tr>
                                                     {orderedDetailColumns.map((column) =>
@@ -2152,7 +2172,12 @@ const FGPR = () => {
                                                         })
                                                     )}
                                                     {!isFormDisabled && (
-                                                        <th className="global-tran-th-ui" style={{ minWidth: 90 }}>Actions</th>
+                                                        <th
+                                                            className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900"
+                                                            style={transactionActionsHeaderStyle}
+                                                        >
+                                                            Actions
+                                                        </th>
                                                     )}
                                                 </tr>
                                             </thead>
@@ -2171,15 +2196,31 @@ const FGPR = () => {
                                                         <tr key={row.id || originalIndex} className="global-tran-tr-ui">
                                                             {orderedDetailColumns.map((column) => renderDetailCell(column, row, originalIndex))}
                                                             {!isFormDisabled && (
-                                                                <td className="global-tran-td-ui text-center" style={{ minWidth: 90 }}>
-                                                                    <button
-                                                                        type="button"
-                                                                        className="global-tran-td-button-delete-ui"
-                                                                        onClick={() => deleteDetailRow(originalIndex)}
-                                                                        disabled={isFormDisabled}
-                                                                    >
-                                                                        <FontAwesomeIcon icon={faMinus} />
-                                                                    </button>
+                                                                <td
+                                                                    className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black"
+                                                                    style={transactionActionsCellStyle}
+                                                                >
+                                                                    <div className="flex items-center justify-center gap-1">
+                                                                        {!state.isOpenReferenceWO && (
+                                                                            <button
+                                                                                type="button"
+                                                                                className="global-tran-td-button-add-ui"
+                                                                                onClick={() => addDetailRow(originalIndex)}
+                                                                                disabled={isFormDisabled || state.isOpenReferenceWO}
+                                                                            >
+                                                                                <FontAwesomeIcon icon={faPlus} />
+                                                                            </button>
+                                                                        )}
+
+                                                                        <button
+                                                                            type="button"
+                                                                            className="global-tran-td-button-delete-ui"
+                                                                            onClick={() => deleteDetailRow(originalIndex)}
+                                                                            disabled={isFormDisabled}
+                                                                        >
+                                                                            <FontAwesomeIcon icon={faMinus} />
+                                                                        </button>
+                                                                    </div>
                                                                 </td>
                                                             )}
                                                         </tr>
@@ -2302,7 +2343,7 @@ const FGPR = () => {
 
                                 <div className="global-tran-table-main-div-ui">
                                     <div className="global-tran-table-main-sub-div-ui">
-                                        <table className="min-w-full border-separate border-spacing-0 [&_td]:border-b [&_td]:border-r [&_td]:border-slate-200 [&_tr>td:first-child]:border-l [&_th]:border-b [&_th]:border-slate-200">
+                                        <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
                                             <thead className="global-tran-thead-div-ui">
                                                 <tr>
                                                     {orderedSummaryColumns.map((column) =>
@@ -2311,7 +2352,12 @@ const FGPR = () => {
                                                         })
                                                     )}
                                                     {!isFormDisabled && (
-                                                        <th className="global-tran-th-ui" style={{ minWidth: 90 }}>Actions</th>
+                                                        <th
+                                                            className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900"
+                                                            style={transactionActionsHeaderStyle}
+                                                        >
+                                                            Actions
+                                                        </th>
                                                     )}
                                                 </tr>
                                             </thead>
@@ -2330,15 +2376,29 @@ const FGPR = () => {
                                                         <tr key={row.id || originalIndex} className="global-tran-tr-ui">
                                                             {orderedSummaryColumns.map((column) => renderSummaryCell(column, row, originalIndex))}
                                                             {!isFormDisabled && (
-                                                                <td className="global-tran-td-ui text-center" style={{ minWidth: 90 }}>
-                                                                    <button
-                                                                        type="button"
-                                                                        className="global-tran-td-button-delete-ui"
-                                                                        onClick={() => deleteSummaryRow(originalIndex)}
-                                                                        disabled={isFormDisabled}
-                                                                    >
-                                                                        <FontAwesomeIcon icon={faMinus} />
-                                                                    </button>
+                                                                <td
+                                                                    className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black"
+                                                                    style={transactionActionsCellStyle}
+                                                                >
+                                                                    <div className="flex items-center justify-center gap-1">
+                                                                        <button
+                                                                            type="button"
+                                                                            className="global-tran-td-button-add-ui"
+                                                                            onClick={() => addSummaryRow(originalIndex)}
+                                                                            disabled={isFormDisabled}
+                                                                        >
+                                                                            <FontAwesomeIcon icon={faPlus} />
+                                                                        </button>
+
+                                                                        <button
+                                                                            type="button"
+                                                                            className="global-tran-td-button-delete-ui"
+                                                                            onClick={() => deleteSummaryRow(originalIndex)}
+                                                                            disabled={isFormDisabled}
+                                                                        >
+                                                                            <FontAwesomeIcon icon={faMinus} />
+                                                                        </button>
+                                                                    </div>
                                                                 </td>
                                                             )}
                                                         </tr>
@@ -2515,6 +2575,19 @@ const FGPR = () => {
                     isOpen={state.showPostModal}
                     onClose={handleClosePost}
                     onCancel={() => updateState({ showPostModal: false })}
+                />
+            )}
+
+            {state.showAttachModal && (
+                <AttachDocumentModal
+                    isOpen={state.showAttachModal}
+                    params={{
+                        DocumentID: state.documentID,
+                        DocumentName: documentTitle,
+                        BranchName: state.branchName,
+                        DocumentNo: state.documentNo,
+                    }}
+                    onClose={() => updateState({ showAttachModal: false })}
                 />
             )}
 
