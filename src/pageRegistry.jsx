@@ -124,6 +124,9 @@ export const pageRegistry = {
   ARINQ: lazyPage(() => import("./NAYSA Cloud/Query/ARInq/ARINQ.jsx")),
   APINQ: lazyPage(() => import("./NAYSA Cloud/Query/APInq/APINQ.jsx")),
   EWTINQ: lazyPage(() => import("./NAYSA Cloud/Query/EWTInq/EWTINQ.jsx")),
+  InvoiceEmailingHistory: lazyPage(() =>
+    import("./NAYSA Cloud/Module/Main Module/Sales/InvoiceEmailingHistory.jsx")
+  ),
   CWTINQ: lazyPage(() => import("./NAYSA Cloud/Query/CWTInq/CWTINQ.jsx")),
   INTAXINQ: lazyPage(() => import("./NAYSA Cloud/Query/INTAXInq/INTAXINQ.jsx")),
   OUTAXINQ: lazyPage(() => import("./NAYSA Cloud/Query/OUTAXInq/OUTAXINQ.jsx")),
@@ -199,6 +202,7 @@ export const pageRegistry = {
   PostFATR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Fixed Assets/PostFATR.jsx")),
   PostDR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/PostDR.jsx")),
   PostSI: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/PostSI.jsx")),
+  InvoiceEmailing: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/InvoiceEmailing.jsx")),
   PostCSI: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/PostCSI.jsx")),
   PostLC: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Importation/PostLC.jsx")),
   PostBUDBB: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Budget/PostBUDBB.jsx")),
