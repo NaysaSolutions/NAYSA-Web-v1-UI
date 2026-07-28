@@ -1,5 +1,3 @@
-// src/NAYSA Cloud/Reference File/ReferenceCodes/RMClassificationCodes.jsx
-
 import React, {
   forwardRef,
   useEffect,
@@ -371,7 +369,11 @@ const ClassificationCodes = forwardRef(({
         key: "__actions",
         label: <span className="hidden md:inline">Actions</span>,
         width: 90,
-        render: (row) => (
+        render: (row) => {
+          const rowCode = String(row?.code || row?.classCode || "").trim();
+          if (!rowCode) return null;
+
+          return (
           <div className="flex gap-2 justify-center w-full">
             <button
               type="button"
@@ -409,7 +411,8 @@ const ClassificationCodes = forwardRef(({
               <span className="md:hidden">Delete</span>
             </button>
           </div>
-        ),
+          );
+        },
       },
       { key: "code",        label: "Classification Code",              sortable: true, width: 150 },
       { key: "description", label: "Classification Description / Name", sortable: true, width: 280 },
@@ -434,13 +437,22 @@ const ClassificationCodes = forwardRef(({
     }));
 
     return mapped.filter((row) => {
+      const hasRecord =
+        String(row.code || "").trim() ||
+        String(row.description || "").trim() ||
+        String(row.categCode || "").trim() ||
+        String(row.categName || "").trim();
+
+      if (!hasRecord) return false;
+
       const s = String(search || "").trim().toLowerCase();
       if (!s) return true;
+
       return (
-        String(row.code        || "").toLowerCase().includes(s) ||
+        String(row.code || "").toLowerCase().includes(s) ||
         String(row.description || "").toLowerCase().includes(s) ||
-        String(row.categCode   || "").toLowerCase().includes(s) ||
-        String(row.categName   || "").toLowerCase().includes(s)
+        String(row.categCode || "").toLowerCase().includes(s) ||
+        String(row.categName || "").toLowerCase().includes(s)
       );
     });
   }, [classifications, search]);
@@ -492,7 +504,7 @@ const ClassificationCodes = forwardRef(({
         {/* BOX 1: BASIC INFORMATION */}
         <Card className="p-4 flex flex-col">
           <SectionHeader title="BASIC INFORMATION" />
-          <div className="space-y-3">
+          <div className="flex flex-col gap-5">
 
             <FieldRenderer
               label="Classification Code"
@@ -556,7 +568,7 @@ const ClassificationCodes = forwardRef(({
           onRowDoubleClick={handleRowDoubleClick}
           onRowClick={(row) => setSelectedRow(row)}
           showFilters
-          autoFillGrid={true}
+          autoFillGrid={false}
         />
       </div>
 

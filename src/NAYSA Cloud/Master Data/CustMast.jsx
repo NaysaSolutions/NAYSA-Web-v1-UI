@@ -112,6 +112,10 @@ const emptyForm = {
     custTelno: "",
     custMobileno: "",
     custEmail: "",
+    custtypeCode: "",
+    custtypeName: "",
+    customerType: "",
+    customerTypeName: "",
     custAddr1: "",
     custAddr2: "",
     custAddr3: "",
@@ -496,6 +500,30 @@ const CustMast = () => {
                 custTelno: row?.custTelno ?? "",
                 custMobileno: row?.custMobileno ?? "",
                 custEmail: row?.custEmail ?? "",
+                custtypeCode:
+                    row?.custtypeCode ??
+                    row?.custTypeCode ??
+                    row?.customerType ??
+                    row?.custtype_code ??
+                    "",
+                custtypeName:
+                    row?.custtypeName ??
+                    row?.custTypeName ??
+                    row?.customerTypeName ??
+                    row?.custtype_name ??
+                    "",
+                customerType:
+                    row?.customerType ??
+                    row?.custtypeCode ??
+                    row?.custTypeCode ??
+                    row?.custtype_code ??
+                    "",
+                customerTypeName:
+                    row?.customerTypeName ??
+                    row?.custtypeName ??
+                    row?.custTypeName ??
+                    row?.custtype_name ??
+                    "",
                 source: row?.source ?? "L",
                 currCode: row?.currCode ?? "PHP",
                 vatCode: row?.vatCode ?? "",
@@ -663,6 +691,11 @@ const CustMast = () => {
                     custTelno: form.custTelno || "",
                     custMobileno: form.custMobileno || "",
                     custEmail: form.custEmail || "",
+                    custtypeCode: form.custtypeCode || form.customerType || "",
+                    custTypeCode: form.custtypeCode || form.customerType || "",
+                    customerType: form.customerType || form.custtypeCode || "",
+                    custtypeName: form.custtypeName || form.customerTypeName || "",
+                    customerTypeName: form.customerTypeName || form.custtypeName || "",
                     source: form.source || "",
                     currCode: form.currCode || "",
                     vatCode: form.vatCode || "",

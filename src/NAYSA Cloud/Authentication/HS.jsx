@@ -39,6 +39,15 @@ import {
   getTenant,
 } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { useAuth } from "./AuthContext.jsx";
+import {
+  useSwalErrorAlertAPI,
+  useSwalValidationAlert,
+  useSwalSuccessAlert,
+  useSwalDeleteConfirm,
+  useSwalDeleteRecord,
+  useSwalProceedConfirm,
+} from "@/NAYSA Cloud/Global/behavior.jsx";
+import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 const TABS = [
   {
@@ -62,7 +71,7 @@ const TABS = [
   {
     id: "modules",
     label: "Module Licensing",
-    description: "License each HS_MENU row through LAC.",
+    description: "Remove and restore HS_MENU modules through a tenant JSON master.",
     icon: Boxes,
   },
   {
@@ -2433,70 +2442,156 @@ function ModuleLicensingTab() {
   const [meta, setMeta] = useState({});
   const [activeModuleCode, setActiveModuleCode] =
     useState("");
+  const [
+    selectedModuleCodes,
+    setSelectedModuleCodes,
+  ] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [savingRowKey, setSavingRowKey] =
-    useState("");
-  const [searchTerm, setSearchTerm] =
-    useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [savingKey, setSavingKey] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const showValidation = useCallback(
+    async ({
+      title,
+      message,
+      details = [],
+    }) => {
+      const detailText = details.length
+        ? `\n\n${details
+            .map((detail) => `• ${detail}`)
+            .join("\n")}`
+        : "";
 
-    try {
-      const { data } = await apiClient.get(
-        "/heartstrong/modules",
-        {
-          withCredentials: true,
-        }
+      return useSwalValidationAlert({
+        icon: "warning",
+        title,
+        message: `${message}${detailText}`,
+      });
+    },
+    []
+  );
+
+  const showApiError = useCallback(
+    async ({
+      title,
+      error,
+      fallback,
+      details = [],
+    }) => {
+      const detailText = details.length
+        ? `\n\n${details
+            .map((detail) => `• ${detail}`)
+            .join("\n")}`
+        : "";
+
+      return useSwalErrorAlertAPI(
+        title,
+        `${errorText(error, fallback)}${detailText}`
       );
+    },
+    []
+  );
 
-      const nextModules = Array.isArray(
-        data?.data?.modules
-      )
-        ? data.data.modules
-        : [];
+  const load = useCallback(
+    async ({
+      initial = false,
+      silent = false,
+    } = {}) => {
+      if (initial) {
+        setLoading(true);
+      } else if (!silent) {
+        setIsRefreshing(true);
+      }
 
-      setModules(nextModules);
-      setMeta({
-        licenseColumn:
-          data?.data?.licenseColumn || "LAC",
-        licenseValues:
-          data?.data?.licenseValues || [0, 1],
-        subMenuColumn:
-          data?.data?.subMenuColumn || "sub_menu",
-      });
+      try {
+        const { data } = await apiClient.get(
+          "/heartstrong/modules",
+          {
+            withCredentials: true,
+          }
+        );
 
-      setActiveModuleCode((current) => {
-        if (
-          current &&
-          nextModules.some(
-            (module) => module.code === current
-          )
-        ) {
-          return current;
+        const payload = data?.data || {};
+        const nextModules = Array.isArray(
+          payload.modules
+        )
+          ? payload.modules
+          : [];
+
+        setModules(nextModules);
+        setMeta({
+          mode: payload.mode || "delete_restore",
+          snapshotFile: payload.snapshotFile || "",
+          snapshotCreatedAt:
+            payload.snapshotCreatedAt || null,
+          snapshotUpdatedAt:
+            payload.snapshotUpdatedAt || null,
+          totalMasterRows: Number(
+            payload.totalMasterRows ?? 0
+          ),
+          totalExistingRows: Number(
+            payload.totalExistingRows ?? 0
+          ),
+          totalMissingRows: Number(
+            payload.totalMissingRows ?? 0
+          ),
+          tenant: payload.tenant || null,
+        });
+
+        setSelectedModuleCodes((current) => {
+          const validCodes = new Set(
+            nextModules.map((module) => module.code)
+          );
+
+          return current.filter((code) =>
+            validCodes.has(code)
+          );
+        });
+
+        setActiveModuleCode((current) => {
+          if (
+            current &&
+            nextModules.some(
+              (module) => module.code === current
+            )
+          ) {
+            return current;
+          }
+
+          return nextModules[0]?.code || "";
+        });
+      } catch (error) {
+        if (initial) {
+          setModules([]);
+          setSelectedModuleCodes([]);
         }
 
-        return nextModules[0]?.code || "";
-      });
-    } catch (error) {
-      setModules([]);
-
-      await Swal.fire({
-        icon: "error",
-        title: "Unable to load module licensing",
-        text: errorText(
+        await showApiError({
+          title: "Unable to load module licensing",
           error,
-          "HS_MENU rows could not be retrieved."
-        ),
-        confirmButtonColor: "#1d4ed8",
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+          fallback:
+            "The tenant HS_MENU JSON master could not be loaded.",
+          details: [
+            "Confirm that the selected tenant is reachable.",
+            "Confirm that storage/app/heartstrong/modules is writable.",
+          ],
+        });
+      } finally {
+        if (initial) {
+          setLoading(false);
+        }
+
+        if (!initial && !silent) {
+          setIsRefreshing(false);
+        }
+      }
+    },
+    [showApiError]
+  );
 
   useEffect(() => {
-    load();
+    load({ initial: true });
   }, [load]);
 
   const activeModule =
@@ -2504,6 +2599,42 @@ function ModuleLicensingTab() {
       (module) =>
         module.code === activeModuleCode
     ) || modules[0];
+
+  const selectedModules = useMemo(() => {
+    const selected = new Set(
+      selectedModuleCodes
+    );
+
+    return modules.filter((module) =>
+      selected.has(module.code)
+    );
+  }, [modules, selectedModuleCodes]);
+
+  const selectedInstalledRows = useMemo(
+    () =>
+      selectedModules.reduce(
+        (total, module) =>
+          total +
+          Number(module.existingCount ?? 0),
+        0
+      ),
+    [selectedModules]
+  );
+
+  const selectedRemovedRows = useMemo(
+    () =>
+      selectedModules.reduce(
+        (total, module) =>
+          total +
+          Number(module.missingCount ?? 0),
+        0
+      ),
+    [selectedModules]
+  );
+
+  const allModulesSelected =
+    modules.length > 0 &&
+    selectedModuleCodes.length === modules.length;
 
   const filteredItems = useMemo(() => {
     const items = Array.isArray(
@@ -2532,350 +2663,811 @@ function ModuleLicensingTab() {
     );
   }, [activeModule, searchTerm]);
 
-  const rowKey = (item) =>
-    JSON.stringify(
-      item?.keys || {
-        id: item?.id,
-        menuCode: item?.menuCode,
-      }
+  const toggleModuleSelection = (moduleCode) => {
+    setSelectedModuleCodes((current) =>
+      current.includes(moduleCode)
+        ? current.filter(
+            (code) => code !== moduleCode
+          )
+        : [...current, moduleCode]
     );
+  };
 
-  const updateRowLicense = async (
+  const toggleSelectAllModules = () => {
+    setSelectedModuleCodes(
+      allModulesSelected
+        ? []
+        : modules.map((module) => module.code)
+    );
+  };
+
+  const updateMenu = async (
     module,
     item,
-    licensed
+    enabled
   ) => {
-    const key = rowKey(item);
-    const previous = modules;
+    const operationKey =
+      `menu:${item.snapshotKey}`;
 
-    setSavingRowKey(key);
+    if (!enabled) {
+      const confirmation =
+        await useSwalDeleteConfirm(
+          "Remove Menu?",
+          `This will permanently remove ${item.menuName} (${item.menuCode}) from HS_MENU. The record will remain recoverable from the tenant JSON master.`
+        );
 
-    setModules((current) =>
-      current.map((currentModule) => {
-        if (
-          currentModule.code !== module.code
-        ) {
-          return currentModule;
-        }
+      if (!confirmation?.isConfirmed) return;
+    }
 
-        const previousLicensed =
-          Boolean(item.licensed);
-
-        return {
-          ...currentModule,
-          licensedCount:
-            Number(
-              currentModule.licensedCount ?? 0
-            ) +
-            (licensed && !previousLicensed
-              ? 1
-              : !licensed && previousLicensed
-                ? -1
-                : 0),
-          unlicensedCount:
-            Number(
-              currentModule.unlicensedCount ?? 0
-            ) +
-            (!licensed && previousLicensed
-              ? 1
-              : licensed && !previousLicensed
-                ? -1
-                : 0),
-          items: (
-            currentModule.items || []
-          ).map((currentItem) =>
-            rowKey(currentItem) === key
-              ? {
-                  ...currentItem,
-                  licensed,
-                  lacValue: licensed ? 1 : 0,
-                }
-              : currentItem
-          ),
-        };
-      })
-    );
+    setSavingKey(operationKey);
 
     try {
-      await apiClient.post(
+      const { data } = await apiClient.post(
         "/heartstrong/modules",
         {
-          keys: item.keys,
-          licensed,
+          scope: "menu",
+          snapshotKey: item.snapshotKey,
+          enabled,
         },
         {
           withCredentials: true,
         }
       );
-    } catch (error) {
-      setModules(previous);
 
-      await Swal.fire({
-        icon: "error",
-        title: "Unable to update row license",
-        text: errorText(
-          error,
-          "The HS_MENU LAC value was not updated."
-        ),
-        confirmButtonColor: "#1d4ed8",
+      await load({ silent: true });
+
+      if (enabled) {
+        await useSwalSuccessAlert(
+          "Success!",
+          data?.message ||
+            `${item.menuName} restored successfully.`
+        );
+      } else {
+        await useSwalDeleteRecord(
+          "Removed",
+          data?.message ||
+            `${item.menuName} has been removed.`
+        );
+      }
+    } catch (error) {
+      await showApiError({
+        title: enabled
+          ? "Unable to restore menu"
+          : "Unable to remove menu",
+        error,
+        fallback:
+          "The HS_MENU row was not updated.",
+        details: [
+          `${module?.code || "Module"} · ${
+            item.menuCode || "Menu"
+          }`,
+        ],
       });
     } finally {
-      setSavingRowKey("");
+      setSavingKey("");
     }
   };
 
-  const totalRows = modules.reduce(
-    (total, module) =>
-      total + Number(module.menuCount ?? 0),
-    0
-  );
+  const updateWholeModule = async (
+    module,
+    enabled
+  ) => {
+    if (!module) return;
 
-  const totalLicensed = modules.reduce(
-    (total, module) =>
-      total +
-      Number(module.licensedCount ?? 0),
-    0
+    const operationKey =
+      `module:${module.code}:${enabled}`;
+
+    if (
+      enabled &&
+      Number(module.missingCount ?? 0) === 0
+    ) {
+      await showValidation({
+        title: "Nothing to restore",
+        message:
+          "Every menu under this module is already installed in HS_MENU.",
+        details: [
+          `${module.name} (${module.code})`,
+        ],
+      });
+      return;
+    }
+
+    if (
+      !enabled &&
+      Number(module.existingCount ?? 0) === 0
+    ) {
+      await showValidation({
+        title: "Nothing to remove",
+        message:
+          "This module is already fully removed from HS_MENU.",
+        details: [
+          `${module.name} (${module.code})`,
+        ],
+      });
+      return;
+    }
+
+    const confirmation = enabled
+      ? await useSwalProceedConfirm(
+          "Restore Module?",
+          `${module.name} (${module.code}) will restore ${Number(
+            module.missingCount ?? 0
+          )} missing row(s) from the tenant JSON master.`,
+          "Restore"
+        )
+      : await useSwalDeleteConfirm(
+          "Remove Module?",
+          `${module.name} (${module.code}) will permanently remove ${Number(
+            module.existingCount ?? 0
+          )} installed row(s) from HS_MENU. The rows remain recoverable from JSON.`
+        );
+
+    if (!confirmation?.isConfirmed) return;
+
+    setSavingKey(operationKey);
+
+    try {
+      const { data } = await apiClient.post(
+        "/heartstrong/modules",
+        {
+          scope: "module",
+          moduleCode: module.code,
+          enabled,
+        },
+        {
+          withCredentials: true,
+        }
+      );
+
+      await load({ silent: true });
+
+      if (enabled) {
+        await useSwalSuccessAlert(
+          "Success!",
+          data?.message ||
+            `${module.name} restored successfully.`
+        );
+      } else {
+        await useSwalDeleteRecord(
+          "Removed",
+          data?.message ||
+            `${module.name} has been removed.`
+        );
+      }
+    } catch (error) {
+      await showApiError({
+        title: enabled
+          ? "Unable to restore module"
+          : "Unable to remove module",
+        error,
+        fallback:
+          "The module rows were not updated.",
+        details: [
+          `${module.name} (${module.code})`,
+        ],
+      });
+    } finally {
+      setSavingKey("");
+    }
+  };
+
+  const updateSelectedModules = async (
+    enabled
+  ) => {
+    if (selectedModules.length === 0) {
+      await showValidation({
+        title: "No modules selected",
+        message:
+          "Select at least one module using the checkbox before continuing.",
+        details: [
+          "Use Select All to mark every module.",
+          "You can still open a module without selecting it.",
+        ],
+        confirmButtonText: "Select Modules",
+      });
+      return;
+    }
+
+    const candidates = selectedModules.filter(
+      (module) =>
+        enabled
+          ? Number(module.missingCount ?? 0) > 0
+          : Number(module.existingCount ?? 0) > 0
+    );
+
+    if (candidates.length === 0) {
+      await showValidation({
+        title: enabled
+          ? "Selected modules are already installed"
+          : "Selected modules are already removed",
+        message: enabled
+          ? "None of the selected modules has a missing HS_MENU row to restore."
+          : "None of the selected modules has an installed HS_MENU row to remove.",
+        details: selectedModules
+          .slice(0, 8)
+          .map(
+            (module) =>
+              `${module.name} (${module.code})`
+          ),
+      });
+      return;
+    }
+
+    const skippedCount =
+      selectedModules.length - candidates.length;
+
+    const affectedEstimate = candidates.reduce(
+      (total, module) =>
+        total +
+        Number(
+          enabled
+            ? module.missingCount ?? 0
+            : module.existingCount ?? 0
+        ),
+      0
+    );
+
+    const skippedMessage =
+      skippedCount > 0
+        ? ` ${skippedCount} selected module(s) will be skipped because they do not require this action.`
+        : "";
+
+    const confirmation = enabled
+      ? await useSwalProceedConfirm(
+          `Restore ${candidates.length} Selected Module(s)?`,
+          `${affectedEstimate} missing row(s) will be restored from the tenant JSON master.${skippedMessage}`,
+          "Restore Selected"
+        )
+      : await useSwalDeleteConfirm(
+          `Remove ${candidates.length} Selected Module(s)?`,
+          `${affectedEstimate} installed row(s) will be permanently removed from HS_MENU. The rows remain recoverable from JSON.${skippedMessage}`
+        );
+
+    if (!confirmation?.isConfirmed) return;
+
+    setSavingKey(
+      enabled
+        ? "bulk-restore"
+        : "bulk-remove"
+    );
+
+    let successfulModules = 0;
+    let affectedRows = 0;
+    const failedModules = [];
+
+    for (const module of candidates) {
+      try {
+        const { data } = await apiClient.post(
+          "/heartstrong/modules",
+          {
+            scope: "module",
+            moduleCode: module.code,
+            enabled,
+          },
+          {
+            withCredentials: true,
+          }
+        );
+
+        successfulModules += 1;
+        affectedRows += Number(
+          data?.data?.affectedRows ?? 0
+        );
+      } catch (error) {
+        failedModules.push({
+          module,
+          message: errorText(
+            error,
+            "Unknown server error"
+          ),
+        });
+      }
+    }
+
+    await load({ silent: true });
+
+    setSelectedModuleCodes(
+      failedModules.map(
+        ({ module }) => module.code
+      )
+    );
+
+    if (successfulModules > 0) {
+      if (enabled) {
+        await useSwalSuccessAlert(
+          "Success!",
+          `${successfulModules} module(s) restored. ${affectedRows} row(s) were inserted.`
+        );
+      } else {
+        await useSwalDeleteRecord(
+          "Removed",
+          `${successfulModules} module(s) removed. ${affectedRows} row(s) were deleted.`
+        );
+      }
+    }
+
+    if (failedModules.length > 0) {
+      await showApiError({
+        title: `${failedModules.length} module operation(s) failed`,
+        error: {
+          message:
+            "Some selected modules could not be updated. Failed modules remain selected.",
+        },
+        fallback:
+          "Some modules could not be updated.",
+        details: failedModules.map(
+          ({ module, message }) =>
+            `${module.name} (${module.code}): ${message}`
+        ),
+      });
+    }
+
+    setSavingKey("");
+  };
+
+  const restoreAll = async () => {
+    if (Number(meta.totalMissingRows ?? 0) === 0) {
+      await showValidation({
+        title: "Nothing to restore",
+        message:
+          "Every row in the tenant JSON master is already installed in HS_MENU.",
+      });
+      return;
+    }
+
+    const confirmation =
+      await useSwalProceedConfirm(
+        "Restore All Removed Menus?",
+        `${Number(
+          meta.totalMissingRows ?? 0
+        )} missing HS_MENU row(s) will be restored from the current tenant JSON master.`,
+        "Restore All"
+      );
+
+    if (!confirmation?.isConfirmed) return;
+
+    setSavingKey("reset-all");
+
+    try {
+      const { data } = await apiClient.post(
+        "/heartstrong/modules/reset",
+        {},
+        {
+          withCredentials: true,
+        }
+      );
+
+      await load({ silent: true });
+      setSelectedModuleCodes([]);
+
+      await useSwalSuccessAlert(
+        "Success!",
+        data?.message ||
+          "Missing HS_MENU rows were restored."
+      );
+    } catch (error) {
+      await showApiError({
+        title: "Unable to restore all modules",
+        error,
+        fallback:
+          "HS_MENU could not be restored from JSON.",
+      });
+    } finally {
+      setSavingKey("");
+    }
+  };
+
+  const totalMasterRows = Number(
+    meta.totalMasterRows ?? 0
+  );
+  const totalExistingRows = Number(
+    meta.totalExistingRows ?? 0
+  );
+  const totalMissingRows = Number(
+    meta.totalMissingRows ?? 0
   );
 
   return (
-    <section>
-      <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-        <div>
-          <h2 className="text-xl font-black text-slate-950">
-            Module Licensing
-          </h2>
+    <section className="space-y-3">
+      {(savingKey !== "" || isRefreshing) && (
+        <LoadingSpinner />
+      )}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-3 bg-gradient-to-r from-slate-950 via-blue-950 to-blue-800 px-4 py-4 text-white lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-xl font-black">
+                Module Licensing
+              </h2>
 
-          <p className="mt-1 text-sm text-slate-600">
-            License each HS_MENU row through{" "}
-            <span className="font-mono font-black text-blue-700">
-              {meta.licenseColumn || "LAC"}
-            </span>
-            . Rows are listed by module without
-            Transaction, Reference Files, Queries,
-            or Reports grouping containers.
-          </p>
-        </div>
+              <span className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-blue-100">
+                JSON-backed
+              </span>
+            </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <div className="relative">
-            <Search
-              size={16}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-            />
+            <p className="mt-1 max-w-3xl text-xs font-semibold leading-5 text-blue-100/90">
+              Select modules on the left. Review and
+              manage the selected module's menus on the
+              right.
+            </p>
 
-            <input
-              type="search"
-              value={searchTerm}
-              onChange={(event) =>
-                setSearchTerm(event.target.value)
-              }
-              placeholder="Search selected module..."
-              className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm font-semibold outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 sm:w-64"
-            />
+            {!!meta.snapshotFile && (
+              <p
+                className="mt-2 max-w-4xl truncate font-mono text-[10px] font-bold text-blue-200"
+                title={meta.snapshotFile}
+              >
+                {meta.snapshotFile}
+              </p>
+            )}
           </div>
 
-          <button
-            type="button"
-            onClick={load}
-            disabled={loading}
-            className={secondaryButton}
-          >
-            <RefreshCw
-              size={16}
-              className={
-                loading ? "animate-spin" : ""
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-lg bg-white/10 px-3 py-2 text-xs font-black">
+              {modules.length} modules
+            </span>
+
+            <span className="rounded-lg bg-emerald-400/15 px-3 py-2 text-xs font-black text-emerald-100">
+              {totalExistingRows} installed
+            </span>
+
+            <span className="rounded-lg bg-rose-400/15 px-3 py-2 text-xs font-black text-rose-100">
+              {totalMissingRows} removed
+            </span>
+
+            <button
+              type="button"
+              onClick={restoreAll}
+              disabled={
+                loading ||
+                savingKey !== "" ||
+                totalMissingRows === 0
               }
-            />
-            Refresh
-          </button>
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-black text-blue-800 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RotateCcw size={14} />
+              {savingKey === "reset-all"
+                ? "Restoring..."
+                : "Restore All"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => load()}
+              disabled={
+                loading ||
+                savingKey !== "" ||
+                isRefreshing
+              }
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-xs font-black text-white transition hover:bg-white/20 disabled:opacity-50"
+            >
+              <RefreshCw
+                size={14}
+                className={
+                  loading || isRefreshing ? "animate-spin" : ""
+                }
+              />
+              Refresh
+            </button>
+          </div>
         </div>
-      </div>
-
-      <div className="mb-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <tbody className="divide-y divide-slate-100">
-            <tr>
-              <td className="px-4 py-3 font-extrabold text-slate-600">
-                Total Modules
-              </td>
-              <td className="px-4 py-3 font-black text-slate-950">
-                {loading ? "—" : modules.length}
-              </td>
-
-              <td className="px-4 py-3 font-extrabold text-slate-600">
-                Total Menu Rows
-              </td>
-              <td className="px-4 py-3 font-black text-slate-950">
-                {loading ? "—" : totalRows}
-              </td>
-
-              <td className="px-4 py-3 font-extrabold text-slate-600">
-                Licensed Rows
-              </td>
-              <td className="px-4 py-3 font-black text-emerald-700">
-                {loading ? "—" : totalLicensed}
-              </td>
-
-              <td className="px-4 py-3 font-extrabold text-slate-600">
-                License Values
-              </td>
-              <td className="px-4 py-3 font-mono text-xs font-black text-blue-700">
-                0 / 1
-              </td>
-            </tr>
-          </tbody>
-        </table>
       </div>
 
       {loading ? (
-        <LoadingCards count={6} />
+        <LoadingCards count={4} />
       ) : modules.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center text-sm text-slate-500">
-          No HS_MENU modules were found.
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center text-sm text-slate-500">
+          No HS_MENU modules were found in the JSON master.
         </div>
       ) : (
-        <>
-          <div className="mb-4 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-2">
-            <div className="flex min-w-max gap-2">
-              {modules.map((module) => {
-                const selected =
-                  module.code ===
-                  activeModule?.code;
+        <div className="grid gap-3 xl:h-[calc(100vh-225px)] xl:min-h-[620px] xl:grid-cols-[330px_minmax(0,1fr)]">
+          <aside className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-200 bg-slate-50 px-3 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-black text-slate-950">
+                    Module Selection
+                  </p>
 
-                return (
-                  <button
-                    key={module.code}
-                    type="button"
-                    onClick={() => {
-                      setActiveModuleCode(
-                        module.code
-                      );
-                      setSearchTerm("");
-                    }}
-                    className={`rounded-lg border px-4 py-2.5 text-left transition ${
-                      selected
-                        ? "border-blue-700 bg-blue-700 text-white shadow-sm"
-                        : "border-slate-200 bg-white text-slate-700 hover:border-sky-300 hover:bg-sky-50"
-                    }`}
-                  >
-                    <p className="text-sm font-black">
-                      {module.name}
-                    </p>
+                  <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    {selectedModules.length} selected
+                  </p>
+                </div>
 
-                    <p
-                      className={`mt-1 text-[10px] font-black uppercase tracking-wider ${
-                        selected
-                          ? "text-blue-100"
-                          : "text-slate-400"
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs font-black text-slate-700 transition hover:border-blue-300 hover:bg-blue-50">
+                  <input
+                    type="checkbox"
+                    checked={allModulesSelected}
+                    onChange={toggleSelectAllModules}
+                    disabled={savingKey !== ""}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+
+                  {allModulesSelected
+                    ? "Clear"
+                    : "Select All"}
+                </label>
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateSelectedModules(true)
+                  }
+                  disabled={savingKey !== ""}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-700 px-3 py-2 text-xs font-black text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <RotateCcw size={13} />
+                  {savingKey === "bulk-restore"
+                    ? "Restoring..."
+                    : "Restore"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateSelectedModules(false)
+                  }
+                  disabled={savingKey !== ""}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-rose-600 px-3 py-2 text-xs font-black text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Trash2 size={13} />
+                  {savingKey === "bulk-remove"
+                    ? "Removing..."
+                    : "Remove"}
+                </button>
+              </div>
+
+              <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] font-black">
+                <div className="rounded-lg bg-emerald-50 px-2.5 py-2 text-emerald-700">
+                  {selectedInstalledRows} installed rows
+                </div>
+
+                <div className="rounded-lg bg-rose-50 px-2.5 py-2 text-rose-700">
+                  {selectedRemovedRows} removed rows
+                </div>
+              </div>
+            </div>
+
+            <div className="min-h-[320px] flex-1 overflow-y-auto p-2 xl:min-h-0">
+              <div className="space-y-1.5">
+                {modules.map((module) => {
+                  const selected =
+                    selectedModuleCodes.includes(
+                      module.code
+                    );
+                  const active =
+                    module.code ===
+                    activeModule?.code;
+                  const fullyRemoved =
+                    Number(module.existingCount ?? 0) ===
+                    0;
+                  const fullyInstalled =
+                    Number(module.missingCount ?? 0) ===
+                    0;
+
+                  return (
+                    <div
+                      key={module.code}
+                      className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 transition ${
+                        active
+                          ? "border-blue-400 bg-blue-50 ring-1 ring-blue-100"
+                          : selected
+                            ? "border-sky-300 bg-sky-50/60"
+                            : "border-slate-200 bg-white hover:border-sky-300 hover:bg-sky-50/40"
                       }`}
                     >
-                      {module.code} ·{" "}
-                      {module.licensedCount ?? 0}/
-                      {module.menuCount ?? 0} licensed
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() =>
+                          toggleModuleSelection(
+                            module.code
+                          )
+                        }
+                        disabled={savingKey !== ""}
+                        title={`Select ${module.name}`}
+                        className="h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveModuleCode(
+                            module.code
+                          );
+                          setSearchTerm("");
+                        }}
+                        className="min-w-0 flex-1 text-left"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-black text-slate-900">
+                              {module.name}
+                            </p>
+
+                            <p className="mt-0.5 font-mono text-[10px] font-black text-blue-700">
+                              {module.code}
+                            </p>
+                          </div>
+
+                          <div className="shrink-0 text-right">
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-wider ${
+                                fullyRemoved
+                                  ? "bg-rose-100 text-rose-700"
+                                  : fullyInstalled
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : "bg-amber-100 text-amber-700"
+                              }`}
+                            >
+                              {fullyRemoved
+                                ? "Removed"
+                                : fullyInstalled
+                                  ? "Installed"
+                                  : "Partial"}
+                            </span>
+
+                            <p className="mt-1 text-[10px] font-black text-slate-500">
+                              {module.existingCount ?? 0}/
+                              {module.menuCount ?? 0}
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </aside>
+
+          <main className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-200 bg-slate-50 px-3 py-3">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate text-base font-black text-slate-950">
+                      {activeModule?.name}
                     </p>
+
+                    <span className="rounded-full bg-blue-100 px-2 py-1 font-mono text-[9px] font-black text-blue-700">
+                      {activeModule?.code}
+                    </span>
+
+                    <span className="rounded-full bg-slate-200 px-2 py-1 text-[9px] font-black text-slate-600">
+                      {activeModule?.existingCount ?? 0}/
+                      {activeModule?.menuCount ?? 0} installed
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <div className="relative">
+                    <Search
+                      size={14}
+                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                    />
+
+                    <input
+                      type="search"
+                      value={searchTerm}
+                      onChange={(event) =>
+                        setSearchTerm(
+                          event.target.value
+                        )
+                      }
+                      placeholder="Search menu..."
+                      className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-8 pr-3 text-xs font-semibold outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 sm:w-52"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateWholeModule(
+                        activeModule,
+                        true
+                      )
+                    }
+                    disabled={
+                      savingKey !== "" ||
+                      Number(
+                        activeModule?.missingCount ?? 0
+                      ) === 0
+                    }
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-700 px-3 py-2 text-xs font-black text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <RotateCcw size={13} />
+                    {savingKey ===
+                    `module:${activeModule?.code}:true`
+                      ? "Restoring..."
+                      : "Restore Module"}
                   </button>
-                );
-              })}
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateWholeModule(
+                        activeModule,
+                        false
+                      )
+                    }
+                    disabled={
+                      savingKey !== "" ||
+                      Number(
+                        activeModule?.existingCount ?? 0
+                      ) === 0
+                    }
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-rose-600 px-3 py-2 text-xs font-black text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Trash2 size={13} />
+                    {savingKey ===
+                    `module:${activeModule?.code}:false`
+                      ? "Removing..."
+                      : "Remove Module"}
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
 
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-lg font-black text-slate-950">
-                {activeModule?.name}
-              </p>
-
-              <p className="mt-1 text-xs text-slate-500">
-                Module Code:{" "}
-                <span className="font-mono font-black text-blue-700">
-                  {activeModule?.code}
-                </span>
-                {" · "}
-                {activeModule?.licensedCount ?? 0} of{" "}
-                {activeModule?.menuCount ?? 0} rows
-                licensed
-              </p>
-            </div>
-
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">
-              {filteredItems.length} rows displayed
-            </span>
-          </div>
-
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="max-h-[680px] overflow-auto">
-              <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <div className="min-h-[360px] flex-1 overflow-auto xl:min-h-0">
+              <table className="min-w-full divide-y divide-slate-200 text-xs">
                 <thead className="sticky top-0 z-10 bg-slate-100">
                   <tr>
-                    <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600">
+                    <th className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-slate-600">
                       Menu Code
                     </th>
 
-                    <th className="min-w-[230px] px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600">
+                    <th className="min-w-[220px] px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-slate-600">
                       Menu Name
                     </th>
 
-                    <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600">
+                    <th className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-slate-600">
                       Sub Menu
                     </th>
 
-                    <th className="min-w-[220px] px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600">
-                      Path
+                    <th className="px-3 py-2.5 text-center text-[10px] font-black uppercase tracking-wider text-slate-600">
+                      Visibility
                     </th>
 
-                    <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600">
-                      Component
-                    </th>
-
-                    <th className="px-4 py-3 text-center text-xs font-black uppercase tracking-wider text-slate-600">
-                      Menu Visibility
-                    </th>
-
-                    <th className="px-4 py-3 text-center text-xs font-black uppercase tracking-wider text-slate-600">
-                      Type
-                    </th>
-
-                    <th className="sticky right-0 bg-slate-100 px-4 py-3 text-center text-xs font-black uppercase tracking-wider text-slate-600">
-                      Licensed (LAC)
+                    <th className="sticky right-0 bg-slate-100 px-3 py-2.5 text-center text-[10px] font-black uppercase tracking-wider text-slate-600">
+                      Installed
                     </th>
                   </tr>
                 </thead>
 
                 <tbody className="divide-y divide-slate-100">
                   {filteredItems.map((item) => {
-                    const key = rowKey(item);
+                    const key =
+                      item.snapshotKey;
+                    const operationKey =
+                      `menu:${key}`;
 
                     return (
                       <tr
                         key={key}
-                        className="hover:bg-sky-50/40"
+                        className={
+                          item.exists
+                            ? "hover:bg-sky-50/40"
+                            : "bg-rose-50/50 hover:bg-rose-50"
+                        }
                       >
-                        <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-black text-blue-700">
+                        <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[10px] font-black text-blue-700">
                           {item.menuCode || "—"}
                         </td>
 
-                        <td className="px-4 py-3 font-semibold text-slate-800">
+                        <td className="px-3 py-2.5 font-semibold text-slate-800">
                           {item.menuName || "—"}
                         </td>
 
-                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                        <td className="whitespace-nowrap px-3 py-2.5 text-slate-600">
                           {item.subMenu || "—"}
                         </td>
 
-                        <td
-                          className="max-w-[300px] truncate px-4 py-3 text-xs text-slate-600"
-                          title={item.path || ""}
-                        >
-                          {item.path || "—"}
-                        </td>
-
-                        <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-slate-500">
-                          {item.componentKey || "—"}
-                        </td>
-
-                        <td className="px-4 py-3 text-center">
+                        <td className="px-3 py-2.5 text-center">
                           <span
-                            className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${
+                            className={`rounded-full px-2 py-1 text-[8px] font-black uppercase tracking-wider ${
                               item.isVisible
                                 ? "bg-emerald-50 text-emerald-700"
                                 : "bg-slate-100 text-slate-500"
@@ -2887,32 +3479,24 @@ function ModuleLicensingTab() {
                           </span>
                         </td>
 
-                        <td className="px-4 py-3 text-center">
-                          <span
-                            className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${
-                              item.isModal
-                                ? "bg-violet-50 text-violet-700"
-                                : "bg-sky-50 text-sky-700"
-                            }`}
-                          >
-                            {item.isModal
-                              ? "Modal"
-                              : "Page"}
-                          </span>
-                        </td>
-
-                        <td className="sticky right-0 bg-white px-4 py-3">
-                          <div className="flex items-center justify-center gap-3">
+                        <td
+                          className={`sticky right-0 px-3 py-2.5 ${
+                            item.exists
+                              ? "bg-white"
+                              : "bg-rose-50"
+                          }`}
+                        >
+                          <div className="flex items-center justify-center gap-2">
                             <Switch
-                              label={`License ${item.menuName}`}
+                              label={`Install ${item.menuName}`}
                               enabled={Boolean(
-                                item.licensed
+                                item.exists
                               )}
                               disabled={
-                                savingRowKey === key
+                                savingKey !== ""
                               }
                               onChange={(next) =>
-                                updateRowLicense(
+                                updateMenu(
                                   activeModule,
                                   item,
                                   next
@@ -2921,15 +3505,17 @@ function ModuleLicensingTab() {
                             />
 
                             <span
-                              className={`min-w-[82px] text-left text-xs font-black ${
-                                item.licensed
+                              className={`min-w-[72px] text-left text-[10px] font-black ${
+                                item.exists
                                   ? "text-emerald-700"
-                                  : "text-slate-400"
+                                  : "text-rose-600"
                               }`}
                             >
-                              {item.licensed
-                                ? "1 · Licensed"
-                                : "0 · Not Licensed"}
+                              {savingKey === operationKey
+                                ? "Updating..."
+                                : item.exists
+                                  ? "Installed"
+                                  : "Removed"}
                             </span>
                           </div>
                         </td>
@@ -2940,11 +3526,10 @@ function ModuleLicensingTab() {
                   {filteredItems.length === 0 && (
                     <tr>
                       <td
-                        colSpan={8}
-                        className="px-6 py-14 text-center text-slate-500"
+                        colSpan={5}
+                        className="px-6 py-12 text-center text-sm text-slate-500"
                       >
-                        No matching rows were found in{" "}
-                        {activeModule?.name}.
+                        No matching menu rows were found.
                       </td>
                     </tr>
                   )}
@@ -2952,14 +3537,18 @@ function ModuleLicensingTab() {
               </table>
             </div>
 
-            <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">
-              Rows remain ordered by HS_MENU sort
-              columns. Sub Menu is displayed as a
-              normal column and is not used for
-              grouping.
+            <div className="flex flex-col gap-1 border-t border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-semibold text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                {filteredItems.length} menu row(s)
+                displayed.
+              </span>
+
+              <span>
+                Removed rows remain recoverable from JSON.
+              </span>
             </div>
-          </div>
-        </>
+          </main>
+        </div>
       )}
     </section>
   );

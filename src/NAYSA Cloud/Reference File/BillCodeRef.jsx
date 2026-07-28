@@ -534,74 +534,85 @@ const BillCodeRef = React.forwardRef((props, ref) => {
   }));
 
   const headerButtons = (
-    <div className="flex flex-wrap justify-center gap-2 text-xs">
+    <div className="flex w-full flex-wrap items-center justify-center gap-1.5 lg:w-auto lg:justify-end">
       <button
         type="button"
         onClick={startNew}
-        className={`flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 ${
+        className={`flex h-8 w-8 items-center justify-center rounded-md bg-blue-600 text-[12px] font-medium text-white shadow-sm transition-all hover:bg-blue-700 sm:w-auto sm:px-4 ${
           isEditing ? "cursor-not-allowed opacity-50" : ""
         }`}
         disabled={isEditing}
+        title="Add"
       >
-        <Plus size={16} /> Add
+        <Plus size={14} />
+        <span className="hidden sm:inline ml-1">Add</span>
       </button>
 
       <button
         type="button"
         onClick={handleSave}
-        className={`flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 ${
+        className={`flex h-8 w-8 items-center justify-center rounded-md bg-blue-600 text-[12px] font-medium text-white shadow-sm transition-all hover:bg-blue-700 sm:w-auto sm:px-4 ${
           !isEditing || saveMutation.isPending
             ? "cursor-not-allowed opacity-50"
             : ""
         }`}
         disabled={!isEditing || saveMutation.isPending}
+        title="Save"
       >
-        <Save size={16} /> Save
+        <Save size={14} />
+        <span className="hidden sm:inline ml-1">Save</span>
       </button>
 
       <button
         type="button"
         onClick={handleReset}
-        className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700"
+        className={`flex h-8 w-8 items-center justify-center rounded-md bg-blue-500 text-[12px] font-medium text-white shadow-sm transition-all hover:bg-blue-600 sm:w-auto sm:px-4 ${
+          saveMutation.isPending ? "cursor-not-allowed opacity-50" : ""
+        }`}
         disabled={saveMutation.isPending}
+        title="Reset"
       >
-        <Undo2 size={16} /> Reset
+        <Undo2 size={14} />
+        <span className="hidden sm:inline ml-1">Reset</span>
       </button>
 
-      {/* Info Dropdown */}
-      <div ref={guideRef} className="relative">
+      <div ref={guideRef} className="relative z-[60]">
         <button
+          type="button"
           onClick={() => setOpenGuide((v) => !v)}
-          className="bg-blue-600 text-white h-7 w-16 sm:w-auto sm:h-8 sm:px-4 rounded-md flex items-center justify-center gap-1 hover:bg-blue-700 transition-all"
+          className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-600 text-[12px] font-medium text-white shadow-sm transition-all hover:bg-blue-700 sm:w-auto sm:px-4"
+          title="Information"
         >
           <FontAwesomeIcon icon={faInfoCircle} className="text-[12px]" />
-          <span className="sm:inline ml-1 text-[11px] font-medium">Info</span>
+          <span className="hidden sm:inline ml-1">Info</span>
           <FontAwesomeIcon
             icon={faChevronDown}
-            className="hidden sm:inline text-[10px] opacity-80"
+            className="hidden sm:inline ml-1 text-[10px] opacity-80"
           />
         </button>
 
         {isOpenGuide && (
-          <div className="absolute right-0 mt-2 w-52 rounded-md shadow-xl bg-white ring-1 ring-black/10 z-[60] dark:bg-gray-800 overflow-hidden">
+          <div className="absolute right-0 z-[60] mt-2 w-52 overflow-hidden rounded-md bg-white shadow-xl ring-1 ring-black/10 dark:bg-gray-800">
             <button
+              type="button"
               onClick={() => {
                 window.open(pdfLink, "_blank");
                 setOpenGuide(false);
               }}
-              className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 dark:hover:bg-blue-900 border-b border-gray-100 dark:border-gray-700"
+              className="block w-full border-b border-gray-100 px-4 py-2 text-left text-xs transition-colors hover:bg-blue-50 dark:border-gray-700 dark:hover:bg-blue-900"
             >
-              <FontAwesomeIcon icon={faFilePdf} className="mr-2 text-red-500" />{" "}
+              <FontAwesomeIcon icon={faFilePdf} className="mr-2 text-red-500" />
               PDF Guide
             </button>
             <button
+              type="button"
               onClick={() => {
                 window.open(videoLink, "_blank");
                 setOpenGuide(false);
               }}
-              className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 dark:hover:bg-blue-900"
+              className="block w-full px-4 py-2 text-left text-xs transition-colors hover:bg-blue-50 dark:hover:bg-blue-900"
             >
-              <FontAwesomeIcon icon={faVideo} className="mr-2 text-blue-500" />{" "}
+              <FontAwesomeIcon icon={faVideo} className="mr-2 text-blue-500" />
               Video Guide
             </button>
           </div>
@@ -611,18 +622,27 @@ const BillCodeRef = React.forwardRef((props, ref) => {
   );
 
   return (
-    <div className="global-ref-main-div-ui mt-24">
+    <div className="global-ref-main-div-ui">
       {(isInitialLoading ||
         saveMutation.isPending ||
         deleteMutation.isPending) && <LoadingSpinner />}
 
-      <div className="fixed top-14 left-6 right-6 z-30 mt-4 global-ref-header-ui flex flex-col gap-4 rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm backdrop-blur sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="global-ref-headertext-ui">{documentTitle}</h1>
-        {headerButtons}
+      <div className="global-ref-header-ui">
+        <div className="flex w-full flex-col items-center justify-between gap-3 lg:flex-row">
+          <div className="w-full min-w-0 text-center lg:w-auto lg:text-left">
+            <h1 className="global-ref-headertext-ui truncate">
+              {documentTitle}
+            </h1>
+          </div>
+
+          <div className="flex w-full flex-shrink-0 flex-wrap items-center justify-center gap-1.5 lg:w-auto lg:justify-end">
+            {headerButtons}
+          </div>
+        </div>
       </div>
 
       <div
-        className="global-tran-tab-div-ui mt-8 p-6"
+        className="global-tran-tab-div-ui mt-24 p-6 sm:mt-20"
         style={{ minHeight: "calc(100vh - 170px)" }}
       >
         <div className="grid grid-cols-1 gap-6 md:grid-cols-12">

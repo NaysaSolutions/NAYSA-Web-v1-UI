@@ -700,7 +700,12 @@ const CustSetupTab = forwardRef(
                       <FieldRenderer
                         label="Customer Type"
                         type="lookup"
-                        value={form?.customerType || ""}
+                        value={
+                          form?.custtypeCode ||
+                          form?.custTypeCode ||
+                          form?.customerType ||
+                          ""
+                        }
                         onLookup={isDisabled ? undefined : () => setIsCustTypeLookupOpen(true)}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
@@ -1076,9 +1081,27 @@ const CustSetupTab = forwardRef(
           onClose={(selected) => {
             setIsCustTypeLookupOpen(false);
             if (!selected) return;
+
+            const custtypeCode =
+              getValue(selected?.custTypeCode) ||
+              getValue(selected?.custtypeCode) ||
+              getValue(selected?.custtype_code) ||
+              getValue(selected?.code);
+
+            const custtypeName =
+              getValue(selected?.custTypeName) ||
+              getValue(selected?.custtypeName) ||
+              getValue(selected?.custtype_name) ||
+              getValue(selected?.name);
+
+            if (!custtypeCode) return;
+
             onChangeForm({
-              customerType: getValue(selected?.custTypeCode),
-              customerTypeName: getValue(selected?.custTypeName),
+              custtypeCode,
+              custTypeCode: custtypeCode,
+              customerType: custtypeCode,
+              custtypeName,
+              customerTypeName: custtypeName,
             });
           }}
         />
