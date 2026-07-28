@@ -1507,14 +1507,29 @@ const extractOpenRRResponseRows = (response) => {
     window.history.replaceState({}, "", window.location.origin);
    }, []);
 
-     const handleHistoryRowPick = useCallback(async (row) => {
-       const docNo = row?.docNo;
-       const branchCode = row?.branchCode;
-       if (!docNo || !branchCode) return;
-       await fetchTranData(docNo, branchCode);
-       setTopTab("details");
-       cleanUrl();
-     }, [fetchTranData]);
+  const handleHistoryRowPick = useCallback(
+    async (row) => {
+      const docNo = row?.docNo;
+      const branchCode = row?.branchCode;
+      if (!docNo || !branchCode) return;
+
+      await fetchTranData(docNo, branchCode);
+      setTopTab("details");
+      cleanUrl();
+    },
+    [fetchTranData, cleanUrl],
+  );
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const docNo = params.get("apvNo");
+    const branchCode = params.get("branchCode");
+
+    if (!loadedFromUrlRef.current && docNo && branchCode) {
+      loadedFromUrlRef.current = true;
+      handleHistoryRowPick({ docNo, branchCode });
+    }
+  }, [location.search, handleHistoryRowPick]);
 
   const fetchRCNameByCode = async (rcCode) => {
     if (!rcCode) return "";
@@ -4148,6 +4163,7 @@ const handleAtcNameDoubleClick = (index) => {
           activeTopTab={topTab}
           showActions={topTab === "details"}
           showBIRForm={true}
+          isViewDocument={isViewDocument}
           onDetails={() => setTopTab("details")}
           onHistory={() => setTopTab("history")}
           disableRouteNavigation={true}

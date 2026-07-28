@@ -2168,7 +2168,8 @@ export const exportGenericQueryExcel = async (
   compName = "",
   compAddr = "",
   telNo = "",
-  reportTitle = ""
+  reportTitle = "",
+  autoExpandGroups = false
 ) => {
   if (!data || data.length === 0) return;
 
@@ -2346,7 +2347,7 @@ export const exportGenericQueryExcel = async (
   const addRows = (nodes, currentLevel = 0) => {
     nodes.forEach((node) => {
       if (node.isGroup) {
-        const uniqueId = `${node.key}-${node.value}-${node.level}`;
+        const uniqueId = `${node.key}:${node.value}:${node.level}`;
 
         const groupRow = worksheet.getRow(currentRowIndex++);
         groupRow.getCell(1).value = `${
@@ -2366,7 +2367,11 @@ export const exportGenericQueryExcel = async (
 
         worksheet.mergeCells(groupRow.number, 1, groupRow.number, colCount);
 
-        if (expandedGroups[uniqueId] || groupBy.length === 1) {
+        if (
+          autoExpandGroups ||
+          expandedGroups?.[uniqueId] ||
+          groupBy.length === 1
+        ) {
           addRows(node.children, currentLevel + 1);
 
           const subtotalRow = worksheet.getRow(currentRowIndex++);

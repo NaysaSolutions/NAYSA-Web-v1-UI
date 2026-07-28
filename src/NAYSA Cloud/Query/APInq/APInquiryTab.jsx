@@ -165,6 +165,7 @@ const APInquiryTab = forwardRef(function APInquiryTab({ registerActions }, ref) 
     });
 
     filterReset();
+    tableRef.current?.clearAllState();
   }, [companyInfo]);
 
   const calculateTotals = useCallback(

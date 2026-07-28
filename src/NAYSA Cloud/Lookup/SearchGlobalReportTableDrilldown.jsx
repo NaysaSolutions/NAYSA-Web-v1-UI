@@ -868,6 +868,7 @@ const SearchGlobalReportTableDrilldown = forwardRef(
         companyInfo?.compAddr,
         companyInfo?.telNo,
         docType,
+        autoExpandGroups,
       );
     };
 

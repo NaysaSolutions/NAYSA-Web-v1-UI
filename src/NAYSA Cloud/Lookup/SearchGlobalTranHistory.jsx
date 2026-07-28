@@ -1807,7 +1807,7 @@ const handleExportConfirm = async (enteredFileName) => {
                 e.stopPropagation();
                 handleRowDoubleClick(row);
               }}
-              className="h-7 w-7 rounded-md bg-blue-500 text-white hover:bg-blue-600 shrink-0"
+              className="h-7 w-7 rounded-md bg-blue-600 text-white hover:bg-blue-700 shrink-0"
               title="View"
             >
               <FontAwesomeIcon icon={faEye} className="text-[11px]" />
@@ -2144,7 +2144,7 @@ const handleExportConfirm = async (enteredFileName) => {
 
             <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-2 w-full md:w-auto mt-auto">
               <button
-                className="inline-flex h-[35px] min-w-[96px] items-center justify-center gap-2 rounded-md bg-blue-500 px-4 text-sm font-medium leading-none text-white shadow-sm transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 w-full md:w-auto"
+                className="inline-flex h-[35px] min-w-[96px] items-center justify-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-medium leading-none text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 w-full md:w-auto"
                 onClick={handleApplyFilter}
                 disabled={loading || exporting}
               >
@@ -2713,7 +2713,7 @@ const handleExportConfirm = async (enteredFileName) => {
                                       e.stopPropagation();
                                       handleRowDoubleClick(row);
                                     }}
-                                    className="px-2 py-0 bg-blue-500 text-white rounded hover:bg-blue-600 transition leading-none"
+                                    className="px-2 py-0 bg-blue-600 text-white rounded hover:bg-blue-700 transition leading-none"
                                     title="View"
                                   >
                                     <FontAwesomeIcon icon={faEye} className="w-2.5 h-3.5" />

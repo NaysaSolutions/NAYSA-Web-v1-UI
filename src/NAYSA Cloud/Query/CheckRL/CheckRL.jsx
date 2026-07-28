@@ -648,6 +648,7 @@ export default function CheckRL() {
 
   const handleReset = useCallback(async () => {
     updateState({ isLoading: true });
+    tableRef.current?.clearAllState();
 
     try {
       const defaults = await loadDefaults();

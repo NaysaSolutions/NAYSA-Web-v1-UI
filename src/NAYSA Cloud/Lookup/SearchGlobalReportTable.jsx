@@ -48,7 +48,6 @@ import ExportFileNameModal from "@/NAYSA Cloud/Lookup/SearchExport.jsx";
 const ACTION_COL_WIDTH = 80;
 const DEFAULT_MIN_COL_WIDTH = 100;
 const DEFAULT_MAX_COL_WIDTH = 260;
-const AUTO_FIT_MIN_WIDTH = 90;
 const AUTO_MEASURE_SAMPLE_SIZE = 1000;
 
 const TableLoader = ({ message = "Loading Report...", spinner = false }) => (
@@ -93,7 +92,6 @@ const SearchGlobalReportTable = forwardRef(
   ) => {
     const scrollRef = useRef(null);
     const exportContainerRef = useRef(null);
-    const autoFitTriggeredRef = useRef(false);
     const userResizedColsRef = useRef(new Set());
 
     const [isMobile, setIsMobile] = useState(false);
@@ -119,6 +117,10 @@ const SearchGlobalReportTable = forwardRef(
     const [autoFillGridState, setAutoFillGridState] = useState(
       autoFit || autoFillGrid,
     );
+
+    useEffect(() => {
+      setAutoFillGridState(autoFit || autoFillGrid);
+    }, [autoFit, autoFillGrid]);
 
     const [columnOrder, setColumnOrder] = useState([]);
     const [groupBy, setGroupBy] = useState(() => initialState?.groupBy || []);
@@ -586,49 +588,28 @@ const SearchGlobalReportTable = forwardRef(
       return getColumnMinWidth(col);
     };
 
-    const getAutoFitWidth = () => {
-      const count = visibleCols.length + (hasActionCol ? 1 : 0);
-
-      if (count >= 14) return 100;
-      if (count >= 12) return 110;
-      if (count >= 10) return 130;
-      if (count >= 8) return 150;
-      return 180;
-    };
-
     const getHeaderWidth = (col) => {
       const measuredWidth = getColWidth(col);
       const minWidth = getColumnMinWidth(col);
       const maxWidth = getColumnMaxWidth(col);
 
-      if (autoFillGridState) {
-        return Math.min(
-          maxWidth,
-          Math.max(
-            measuredWidth,
-            Math.max(getAutoFitWidth(), AUTO_FIT_MIN_WIDTH),
-          ),
-        );
-      }
-
       return Math.min(maxWidth, Math.max(minWidth, measuredWidth));
     };
 
     const getCellWidthStyle = (col) => {
+      if (autoFillGridState) {
+        return {
+          minWidth: 0,
+          maxWidth: "none",
+        };
+      }
+
       const width = getHeaderWidth(col);
       return {
         width,
         minWidth: width,
         maxWidth: width,
       };
-    };
-
-    const getEstimatedTableWidth = () => {
-      const columnsWidth = visibleCols.reduce(
-        (sum, col) => sum + getHeaderWidth(col),
-        0,
-      );
-      return columnsWidth + (hasActionCol ? ACTION_COL_WIDTH : 0);
     };
 
     const moveColumn = (fromKey, toKey) => {
@@ -653,6 +634,23 @@ const SearchGlobalReportTable = forwardRef(
         return updated;
       });
 
+      setDraggedCol(null);
+    };
+
+    const addGroupColumn = (columnKey) => {
+      if (!showGroupBy || !columnKey || !baseColumnKeys.has(columnKey)) return;
+
+      setGroupBy((prev) => {
+        const current = prev.filter(
+          (key, index, arr) =>
+            baseColumnKeys.has(key) && arr.indexOf(key) === index,
+        );
+        return current.includes(columnKey)
+          ? current
+          : [...current, columnKey];
+      });
+
+      if (!autoExpandGroups) setExpandedGroups({});
       setDraggedCol(null);
     };
 
@@ -728,37 +726,6 @@ const SearchGlobalReportTable = forwardRef(
         });
       }
     }, [areColumnsReady, visibleCols, data, isLoading]);
-
-    useLayoutEffect(() => {
-      if (!areColumnsReady) return;
-      if (isLoading) return;
-      if (!scrollRef.current) return;
-      if (!visibleCols.length) return;
-
-      const containerWidth = scrollRef.current.clientWidth || 0;
-      const tableWidth = getEstimatedTableWidth();
-
-      if (containerWidth > 0 && tableWidth > 0 && tableWidth < containerWidth) {
-        if (!autoFitTriggeredRef.current) {
-          autoFitTriggeredRef.current = true;
-        }
-      } else {
-        autoFitTriggeredRef.current = false;
-      }
-    }, [
-      areColumnsReady,
-      isLoading,
-      visibleCols,
-      hasActionCol,
-      colWidths,
-      userHiddenCols,
-      groupBy,
-      columns,
-    ]);
-
-    useEffect(() => {
-      autoFitTriggeredRef.current = false;
-    }, [columns]);
 
     const startResizing = (e, key) => {
       setAutoFillGridState(false);
@@ -888,6 +855,7 @@ const SearchGlobalReportTable = forwardRef(
         companyInfo?.compAddr,
         companyInfo?.telNo,
         docType,
+        autoExpandGroups,
       );
     };
 
@@ -1048,21 +1016,17 @@ const SearchGlobalReportTable = forwardRef(
       >
         <div
           className="p-2 rounded-md flex flex-col md:flex-row md:items-center md:justify-between gap-2"
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => {
+          onDragOver={(e) => {
+            if (!showGroupBy) return;
             e.preventDefault();
-            if (!draggedCol) return;
-            setGroupBy((p) => {
-              const current = p.filter(
-                (key, index, arr) =>
-                  baseColumnKeys.has(key) && arr.indexOf(key) === index,
-              );
-              return current.includes(draggedCol)
-                ? current
-                : [...current, draggedCol];
-            });
-            if (!autoExpandGroups) setExpandedGroups({});
-            setDraggedCol(null);
+            e.dataTransfer.dropEffect = "move";
+          }}
+          onDrop={(e) => {
+            if (!showGroupBy) return;
+            e.preventDefault();
+            const droppedColumn =
+              e.dataTransfer.getData("text/plain") || draggedCol;
+            addGroupColumn(droppedColumn);
           }}
         >
           <div className="flex-1 flex flex-wrap gap-2 items-center min-w-0">

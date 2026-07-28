@@ -134,7 +134,8 @@ const ARInquiryTab = forwardRef(function ARInquiryTab({ registerActions }, ref) 
       endingCutoffName: companyInfo.cutoffName,
     });
 
-      filterReset()
+    filterReset();
+    tableRef.current?.clearAllState();
   }, []);
 
   // totals

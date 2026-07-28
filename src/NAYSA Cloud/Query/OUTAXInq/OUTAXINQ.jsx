@@ -104,7 +104,9 @@ export default function OUTAXINQ() {
     showGenerateMenu,
   } = state;
 
-  const tableRef = useRef(null);
+  const summaryTableRef = useRef(null);
+  const detailedTableRef = useRef(null);
+  const detailedSectionRef = useRef(null);
   const exportMenuRef = useRef(null);
   const generateMenuRef = useRef(null);
 
@@ -220,6 +222,8 @@ export default function OUTAXINQ() {
     });
 
     filterReset();
+    summaryTableRef.current?.clearAllState();
+    detailedTableRef.current?.clearAllState();
   }, [companyInfo, filterReset]);
 
   function useNormalizeDat(data) {
@@ -313,6 +317,13 @@ export default function OUTAXINQ() {
       });
 
       computeTotals(filteredRows);
+
+      requestAnimationFrame(() => {
+        detailedSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
     },
     [originalRows, computeTotals]
   );
@@ -699,7 +710,7 @@ export default function OUTAXINQ() {
 
           <div className="global-tran-table-main-div-ui">
             <SearchGlobalReportTable
-              ref={tableRef}
+              ref={summaryTableRef}
               columns={cols_Att}
               data={rows_Att}
               itemsPerPage={50}
@@ -710,7 +721,10 @@ export default function OUTAXINQ() {
           </div>
         </div>
 
-        <div className="global-tran-tab-div-ui">
+        <div
+          ref={detailedSectionRef}
+          className="global-tran-tab-div-ui scroll-mt-24 sm:scroll-mt-20"
+        >
           <div className="global-tran-tab-nav-ui">
             <div className="flex flex-row sm:flex-row">
               <button className="global-tran-tab-padding-ui global-tran-tab-text_active-ui">
@@ -721,7 +735,7 @@ export default function OUTAXINQ() {
 
           <div className="global-tran-table-main-div-ui">
             <SearchGlobalReportTable
-              ref={tableRef}
+              ref={detailedTableRef}
               columns={cols}
               data={rows}
               itemsPerPage={50}

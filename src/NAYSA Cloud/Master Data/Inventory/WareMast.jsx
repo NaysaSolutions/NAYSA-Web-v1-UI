@@ -545,7 +545,8 @@ const WareMast = () => {
                 {[
                   { id: "warehouse", label: "Warehouse" },
                   { id: "location", label: "Location" },
-                  { id: "parameter", label: "Reference Codes" }, // <-- NEW TAB
+                  // TEMPORARILY HIDDEN: Uncomment this entry to restore the Reference Codes tab.
+                  // { id: "parameter", label: "Reference Codes" },
                 ].map((tab) => (
                   <button
                     key={tab.id}

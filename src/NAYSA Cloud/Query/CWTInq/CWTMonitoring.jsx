@@ -325,6 +325,7 @@ export default function CWTMonitoring() {
       startDate: firstDayStr,
       endDate: todayStr,
     });
+    tableRef.current?.clearAllState();
   }, []);
 
   // Compute summary totals (still computed, not displayed)

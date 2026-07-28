@@ -234,6 +234,8 @@ const APAgingSummaryTab = forwardRef(function APAgingSummaryTab({ registerAction
       const safeRowsBottom = Array.isArray(rowsBottom) ? rowsBottom : [];
       const safeRowsTop = Array.isArray(rowsTop) ? rowsTop : [];
 
+     
+
       if (safeRowsBottom.length === 0 && safeRowsTop.length === 0) {
         updateState({
           apAgingData: [],
