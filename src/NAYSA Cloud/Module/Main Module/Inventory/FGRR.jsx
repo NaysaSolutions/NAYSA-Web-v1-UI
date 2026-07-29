@@ -5305,17 +5305,23 @@ const handleClosePayeeLookup = async (row) => {
           onAttach={handleAttach}
           activeTopTab={topTab}
           showActions={topTab === "details"}
+          showBIRForm={false}
+          showCopyForm={false}
           onDetails={() => setTopTab("details")}
           onHistory={() => setTopTab("history")}
           disableRouteNavigation={true}
           detailsRoute="/page/FGRR"
-          isSaveDisabled={isSaveDisabled}
+          isSaveDisabled={state.isSaveDisabled || isFormDisabled || ((detailRows?.length || 0) + (detailRowsGL?.length || 0) === 0)}
           isResetDisabled={isResetDisabled}
+          isAttachDisabled={!documentID}
+          isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
+          isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
           isViewDocument={isViewDocument}
           isCancelDisabled={
             !documentID ||
             displayStatus === "CANCELLED" ||
-            displayStatus === "FINALIZED"
+            displayStatus === "FINALIZED" ||
+            displayStatus === "CLOSED"
           }
 />
       </div>
