@@ -204,10 +204,7 @@ useEffect(() => {
     setFiltered(current);
   }, [records, debouncedFilters, sortConfig, columnConfig, debouncedGlobal, visibleCols]);
 
-  const displayData = useMemo(
-    () => (hasPasswordValue ? selected : filtered),
-    [filtered, hasPasswordValue, selected],
-  );
+  const displayData = filtered;
   const totalItems = filtered.length;
   const startItem = totalItems > 0 ? 1 : 0;
   const endItem = totalItems;
@@ -468,7 +465,19 @@ useEffect(() => {
                         return (
                           <td key={col.key} className={`px-2 py-1 border-b ${meta.sticky ? "sticky z-[60] bg-slate-200" : "bg-slate-200"}`} style={{ left: meta.left, width, minWidth: width, maxWidth: width }}>
                             <div className="relative">
-                              <input type="text" value={filters[col.key] || ""} onChange={(e) => handleFilterChange(e, col.key)} placeholder="Filter..." className="global-lookup-filter-text-ui" />
+                              <input
+                                type="text"
+                                name={`gl_posting_filter_${col.key}`}
+                                value={filters[col.key] || ""}
+                                onChange={(e) => handleFilterChange(e, col.key)}
+                                placeholder="Filter..."
+                                autoComplete="off"
+                                data-form-type="other"
+                                data-lpignore="true"
+                                data-1p-ignore="true"
+                                spellCheck={false}
+                                className="global-lookup-filter-text-ui"
+                              />
                               <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
                             </div>
                           </td>
@@ -515,6 +524,16 @@ useEffect(() => {
                 <span className="font-medium">Password</span>
                 <div className="relative min-w-[200px]">
                   <input
+                    type="text"
+                    name="username"
+                    autoComplete="username"
+                    value=""
+                    readOnly
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    className="pointer-events-none absolute -left-[9999px] h-px w-px opacity-0"
+                  />
+                  <input
                     ref={firstFocusableRef}
                     type={showPassword ? "text" : "password"}
                     name="gl_posting_authorization"
@@ -524,7 +543,7 @@ useEffect(() => {
                     onCopy={(e) => e.preventDefault()}
                     onCut={(e) => e.preventDefault()}
                     onContextMenu={(e) => e.preventDefault()}
-                    autoComplete="off"
+                    autoComplete="new-password"
                     data-form-type="other"
                     data-lpignore="true"
                     data-1p-ignore="true"
