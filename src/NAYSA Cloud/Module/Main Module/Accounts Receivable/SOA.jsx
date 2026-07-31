@@ -126,7 +126,10 @@ const SOA = () => {
   const videoLink = docTypeVideoGuide[docType];
   const documentTitle = hsDoc.docName + ' Transaction';
  
-
+  useEffect(() => {
+    document.title = documentTitle;
+  }, [documentTitle]);
+  
   const [state, setState] = useState({
 
     // HS Option
