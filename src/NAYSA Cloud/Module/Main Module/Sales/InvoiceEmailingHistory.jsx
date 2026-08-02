@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faCalendarAlt,
-  faDatabase,
   faMagnifyingGlass,
   faUndo,
   faUser,
@@ -17,7 +16,7 @@ import SearchGlobalReportTable from "@/NAYSA Cloud/Lookup/SearchGlobalReportTabl
 import BranchLookupModal from "@/NAYSA Cloud/Lookup/SearchBranchRef";
 import CustomerMastLookupModal from "@/NAYSA Cloud/Lookup/SearchCustMast";
 
-const API_ENDPOINT = "eisHistory";
+const API_ENDPOINT = "iesHistory";
 const COLUMN_CONFIG_ENDPOINT = "iesHistory";
 
 const formatDateInput = (date) => {
@@ -37,7 +36,7 @@ const getDefaultDates = () => {
   };
 };
 
-export default function InvoiceEmailingHistory() {
+export default function InvoiceQueuingHistory() {
   const defaults = getDefaultDates();
   const tableRef = useRef(null);
   const loadedColumnsRef = useRef(false);
@@ -106,11 +105,11 @@ export default function InvoiceEmailingHistory() {
         });
         loadedColumnsRef.current = true;
       } catch (error) {
-        console.error("Unable to load invoice emailing history columns:", error);
+        console.error("Unable to load invoice queuing history columns:", error);
         if (active) {
           Swal.fire(
             "Column setup unavailable",
-            "Unable to load the invoice emailing history column configuration.",
+            "Unable to load the invoice queuing history column configuration.",
             "error"
           );
         }
@@ -187,14 +186,14 @@ export default function InvoiceEmailingHistory() {
         rows: Array.isArray(historyRows) ? historyRows : [],
       });
     } catch (error) {
-      console.error("Unable to load invoice emailing history:", error);
+      console.error("Unable to load invoice queuing history:", error);
       updateState({ rows: [] });
 
       await Swal.fire(
-        "Invoice Emailing History",
+        "Invoice Queuing History",
         error?.response?.data?.message ||
           error?.message ||
-          "Unable to retrieve the invoice emailing history.",
+          "Unable to retrieve the invoice queuing history.",
         "error"
       );
     } finally {
@@ -235,8 +234,7 @@ export default function InvoiceEmailingHistory() {
       <div className="global-ref-header-ui">
         <div className="w-full flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <h1 className="global-ref-headertext-ui w-full md:w-auto truncate text-center md:text-left">
-            <FontAwesomeIcon icon={faDatabase} className="mr-2" />
-            Invoice Emailing History
+            Invoice Queuing History
           </h1>
 
           <div className="flex flex-nowrap items-center justify-center gap-2 md:justify-end">
@@ -266,7 +264,7 @@ export default function InvoiceEmailingHistory() {
       <div className="mt-32 sm:mt-24 px-1">
         <div className="global-tran-tab-div-ui">
           <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-            <div className="grid grid-cols-1 divide-y divide-gray-200 lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+            <div className="grid grid-cols-1 divide-y divide-gray-200 lg:grid-cols-[3fr_2fr] lg:divide-x lg:divide-y-0">
               <section className="p-5">
                 <h3 className="flex items-center gap-2 text-gray-800 font-semibold mb-4">
                   <FontAwesomeIcon className="text-blue-600" icon={faUser} />
@@ -379,7 +377,7 @@ export default function InvoiceEmailingHistory() {
               columns={columns}
               data={rows}
               itemsPerPage={50}
-              docType="Invoice Emailing History"
+              docType="Invoice Queuing History"
               rightActionLabel="View"
               onRowAction={handleViewDocument}
             />

@@ -16,7 +16,7 @@ import {
 
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
-const InvoiceTransmission = ({
+const InvoiceQueuing = ({
   isOpen,
   onClose,
   userCode,
@@ -41,7 +41,7 @@ const InvoiceTransmission = ({
       alertFired.current = false;
 
       try {
-        const endpoint = "eisPosting";
+        const endpoint = "iesPosting";
 
         /*
          * Load eligible SI, SVI, ARCM and ARDM records.
@@ -51,7 +51,7 @@ const InvoiceTransmission = ({
         if (response?.success === false) {
           throw new Error(
             response?.message ||
-              "Unable to retrieve Invoice Transmission records."
+              "Unable to retrieve Invoice Queuing records."
           );
         }
 
@@ -115,17 +115,17 @@ const InvoiceTransmission = ({
         }
       } catch (error) {
         console.error(
-          "Error loading Invoice Transmission records:",
+          "Error loading Invoice Queuing records:",
           error
         );
 
         useSwalValidationAlert({
           icon: "error",
-          title: "Invoice Transmission",
+          title: "Invoice Queuing",
           message:
             error?.response?.data?.message ||
             error?.message ||
-            "Unable to load Invoice Transmission records.",
+            "Unable to load Invoice Queuing records.",
         });
 
         onClose?.();
@@ -244,7 +244,7 @@ const InvoiceTransmission = ({
     if (unsupportedDocument) {
       const message =
         `Document Type ${unsupportedDocument.documentType} ` +
-        "is not supported for Invoice Transmission.";
+        "is not supported for Invoice Queuing.";
 
       useSwalValidationAlert({
         icon: "warning",
@@ -286,7 +286,7 @@ const InvoiceTransmission = ({
        * Never log the actual posting password.
        */
       console.log(
-        "Invoice Transmission request:",
+        "Invoice Queuing request:",
         {
           userCode: requestBody.userCode,
           userPassword:
@@ -298,7 +298,7 @@ const InvoiceTransmission = ({
       );
 
       const rawResponse = await postRequest(
-        "invoiceTransmission",
+        "invoiceEmailing",
         requestBody
       );
 
@@ -333,7 +333,7 @@ const InvoiceTransmission = ({
           : rawResponse;
 
       console.log(
-        "Invoice Transmission controller response:",
+        "Invoice Queuing controller response:",
         response
       );
 
@@ -342,14 +342,14 @@ const InvoiceTransmission = ({
         typeof response !== "object"
       ) {
         throw new Error(
-          "The Invoice Transmission API returned an invalid response."
+          "The Invoice Queuing API returned an invalid response."
         );
       }
 
       if (response?.success === false) {
         throw new Error(
           response?.message ||
-            "Invoice Transmission failed."
+            "Invoice Queuing failed."
         );
       }
 
@@ -384,7 +384,7 @@ const InvoiceTransmission = ({
         throw new Error(
           response?.message ||
             integrationRow?.message ||
-            `Unexpected Invoice Transmission status: ${
+            `Unexpected Invoice Queuing status: ${
               status || "UNKNOWN"
             }.`
         );
@@ -496,7 +496,7 @@ const InvoiceTransmission = ({
       }
 
       await useSwalSuccessAlert(
-        "Invoice Transmission Accepted",
+        "Invoice Queuing Accepted",
         successMessage
       );
 
@@ -514,7 +514,7 @@ const InvoiceTransmission = ({
       };
     } catch (error) {
       console.error(
-        "Invoice Transmission error:",
+        "Invoice Queuing error:",
         error
       );
 
@@ -569,7 +569,7 @@ const InvoiceTransmission = ({
 
       useSwalValidationAlert({
         icon: "error",
-        title: "Invoice Transmission Failed",
+        title: "Invoice Queuing Failed",
         message,
       });
 
@@ -618,7 +618,7 @@ const InvoiceTransmission = ({
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-          title="Invoice Transmission"
+          title="Invoice Queuing"
           btnCaption="Okay"
           onClose={onClose}
           onPost={handlePost}
@@ -631,4 +631,4 @@ const InvoiceTransmission = ({
   );
 };
 
-export default InvoiceTransmission;
+export default InvoiceQueuing;

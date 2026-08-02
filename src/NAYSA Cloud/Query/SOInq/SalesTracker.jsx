@@ -5,11 +5,17 @@ import {
   faChartLine,
   faChevronLeft,
   faChevronRight,
+  faColumns,
   faClock,
   faDownload,
   faEye,
   faArrowUpRightFromSquare,
+  faFileCsv,
+  faFileExcel,
+  faFileExport,
+  faFileImage,
   faFileInvoiceDollar,
+  faFilePdf,
   faFilter,
   faLayerGroup,
   faMagnifyingGlass,
@@ -18,6 +24,9 @@ import {
   faProjectDiagram,
   faReceipt,
   faRotateLeft,
+  faSort,
+  faSortDown,
+  faSortUp,
   faTimes,
   faTruck,
   faUndo,
@@ -27,6 +36,9 @@ import { postRequest } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import SearchGlobalReportTable from "@/NAYSA Cloud/Lookup/SearchGlobalReportTable.jsx";
+import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
+import { exportGenericQueryExcel } from "@/NAYSA Cloud/Global/report";
+import ExportFileNameModal from "@/NAYSA Cloud/Lookup/SearchExport.jsx";
 
 import SearchBranchRef from "@/NAYSA Cloud/Lookup/SearchBranchRef.jsx";
 import SearchCustMast from "@/NAYSA Cloud/Lookup/SearchCustMast.jsx";
@@ -37,51 +49,53 @@ import SalesTrackerDetailsModal from "./SalesTrackerDetailsModal.jsx";
 const PAGE_CONFIGS = {
   lifecycle: {
     title: "Sales Lifecycle Tracker",
-    subtitle: "Monitor SO to collection: SO → DR Qty → SI → ARDM / ARCM → CR",
     endpoint: "getSalesLifecycleTracker",
     icon: faProjectDiagram,
     empty: "No sales lifecycle records found.",
   },
   itemFlow: {
     title: "Sales Item Flow Tracker",
-    subtitle: "Track ordered, delivered, invoiced, and remaining quantity per item.",
     endpoint: "getSalesItemFlowTracker",
     icon: faLayerGroup,
     empty: "No item flow records found.",
   },
-  aging: {
-    title: "Sales Aging Analysis",
-    subtitle: "Analyze outstanding receivables by customer and aging bucket.",
-    endpoint: "getSalesAgingAnalysis",
-    icon: faClock,
-    empty: "No aging records found.",
-  },
   performance: {
     title: "Sales Performance Analysis",
-    subtitle: "Analyze SO, SI, collection, and balance by customer / salesman.",
     endpoint: "getSalesPerformanceAnalysis",
     icon: faChartLine,
     empty: "No sales performance records found.",
   },
-  collection: {
-    title: "Collection Analysis",
-    subtitle: "Analyze CR, ARCM, ARDM, and applied collection movement.",
-    endpoint: "getSalesCollectionAnalysis",
-    icon: faMoneyBillWave,
-    empty: "No collection records found.",
-  },
 };
 
 const NAV_ITEMS = [
-  { key: "lifecycle", label: "Lifecycle Tracker", description: "SO to Collection", icon: faProjectDiagram },
-  { key: "itemFlow", label: "Item Flow Tracker", description: "SO / DR / SI Qty", icon: faLayerGroup },
-  { key: "aging", label: "Aging Analysis", description: "AR Balance", icon: faClock },
-  { key: "performance", label: "Sales Performance", description: "Sales trend", icon: faChartLine },
-  { key: "collection", label: "Collection Analysis", description: "CR / CM / DM", icon: faMoneyBillWave },
+  { key: "lifecycle", label: "Lifecycle Tracker", icon: faProjectDiagram },
+  { key: "itemFlow", label: "Item Flow Tracker", icon: faLayerGroup },
+  { key: "performance", label: "Sales Performance", icon: faChartLine },
 ];
 
+const SALES_PERFORMANCE_GROUP_OPTIONS = [
+  { value: "SALES_REP", label: "Sales Rep" },
+  { value: "BRANCH", label: "Branch" },
+  { value: "CUSTOMER", label: "Customer" },
+  { value: "CHAIN", label: "Chain Customer" },
+  { value: "AREA", label: "Area" },
+  { value: "ZONE", label: "Zone" },
+  { value: "CUSTOMER_TYPE", label: "Customer Type" },
+  { value: "ITEM", label: "Item" },
+];
+
+const SALES_PERFORMANCE_GROUP_LABELS = {
+  SALES_REP: { code: "Sales Rep Code", name: "Sales Rep Name" },
+  BRANCH: { code: "Branch Code", name: "Branch Name" },
+  CUSTOMER: { code: "Customer Code", name: "Customer Name" },
+  CHAIN: { code: "Chain Code", name: "Chain Customer" },
+  AREA: { code: "Area Code", name: "Area Name" },
+  ZONE: { code: "Zone Code", name: "Zone Name" },
+  CUSTOMER_TYPE: { code: "Customer Type Code", name: "Customer Type" },
+  ITEM: { code: "Item Code", name: "Item Name" },
+};
+
 const SALES_STATUS_OPTIONS = [
-  { value: "", label: "All Status" },
   { value: "PENDING_DELIVERY", label: "Pending Delivery" },
   { value: "PARTIALLY_DELIVERED", label: "Partially Delivered" },
   { value: "PENDING_INVOICE", label: "Pending Invoice" },
@@ -104,111 +118,122 @@ const DATE_BASIS_OPTIONS = [
 const LIFECYCLE_ACTION_WIDTH = 74;
 const LIFECYCLE_STATUS_WIDTH = 160;
 const LIFECYCLE_FLOW_WIDTH = 170;
-
-const LIFECYCLE_STICKY_RIGHT = {
-  currentStatus: LIFECYCLE_ACTION_WIDTH + LIFECYCLE_FLOW_WIDTH,
-  flow: LIFECYCLE_ACTION_WIDTH,
-};
+const LIFECYCLE_DOCUMENT_NO_WIDTH = 100;
 
 const LIFECYCLE_COLUMNS = [
-  { key: "soNo", label: "SO No", type: "link", minWidth: 130 },
-  { key: "soDate", label: "SO Date", type: "date", minWidth: 105 },
-  { key: "custName", label: "Customer", minWidth: 190 },
-  { key: "salesRepName", label: "Salesman", minWidth: 155 },
-  { key: "soQuantity", label: "SO Qty", type: "qty", align: "right", minWidth: 95 },
-  { key: "soAmount", label: "SO Amount", type: "amount", align: "right", minWidth: 125 },
-  { key: "drCount", label: "DR Count", type: "number", align: "right", minWidth: 90 },
-  { key: "drQuantity", label: "DR QUANTITY", type: "qty", align: "right", minWidth: 115 },
-  { key: "siCount", label: "SI Count", type: "number", align: "right", minWidth: 90 },
-  { key: "invoiceAmount", label: "SI Amount", type: "amount", align: "right", minWidth: 125 },
-  { key: "debitMemoAmount", label: "ARDM", type: "amount", align: "right", minWidth: 115 },
-  { key: "creditMemoAmount", label: "ARCM", type: "amount", align: "right", minWidth: 115 },
-  { key: "collectionAmount", label: "Collected", type: "amount", align: "right", minWidth: 125 },
-  { key: "balanceAmount", label: "AR Balance", type: "amount", align: "right", minWidth: 125 },
-  { key: "agingDays", label: "Aging", type: "number", align: "right", minWidth: 80 },
   { key: "currentStatus", label: "Lifecycle Status", type: "status", minWidth: LIFECYCLE_STATUS_WIDTH },
   { key: "flow", label: "Flow", type: "flow", minWidth: LIFECYCLE_FLOW_WIDTH },
+  { key: "branchCode", label: "Branch", minWidth: 90 },
+  { key: "soNo", label: "SO No", type: "link", minWidth: LIFECYCLE_DOCUMENT_NO_WIDTH },
+  { key: "soDate", label: "SO Date", type: "date", minWidth: 100 },
+  { key: "custPO", label: "Cust PO No.", minWidth: 100 },
+  { key: "custCode", label: "Customer Code", minWidth: 100 },
+  { key: "custName", label: "Customer Name", minWidth: 190 },
+  { key: "shipToAddr", label: "Ship to Address", minWidth: 260 },
+  { key: "salesRepName", label: "Salesman", minWidth: 155 },
+  { key: "soQuantity", label: "SO Quantity", type: "qty", align: "right", minWidth: 95 },
+  { key: "soAmount", label: "SO Amount", type: "amount", align: "right", minWidth: 125 },
+  { key: "drNos", label: "DR No", minWidth: LIFECYCLE_DOCUMENT_NO_WIDTH },
+  { key: "lastDrDate", label: "Last DR Date", type: "date", minWidth: 100 },
+  { key: "drQuantity", label: "DR Quantity", type: "qty", align: "right", minWidth: 115 },
+  { key: "siNos", label: "SI No", minWidth: LIFECYCLE_DOCUMENT_NO_WIDTH },
+  { key: "lastSiDate", label: "Last SI Date", type: "date", minWidth: 100 },
+  { key: "siGrossAmount", label: "Gross Amount", type: "amount", align: "right", minWidth: 130 },
+  { key: "siDiscountAmount", label: "Discount Amount", type: "amount", align: "right", minWidth: 135 },
+  { key: "siVatAmount", label: "VAT Amount", type: "amount", align: "right", minWidth: 120 },
+  { key: "siAtcAmount", label: "ATC Amount", type: "amount", align: "right", minWidth: 120 },
+  { key: "amountToBePaid", label: "Amount to be Paid", type: "amount", align: "right", minWidth: 145 },
+  { key: "arcmNos", label: "ARCM No", minWidth: LIFECYCLE_DOCUMENT_NO_WIDTH },
+  { key: "arcmAmount", label: "ARCM Amount", type: "amount", align: "right", minWidth: 130 },
+  { key: "ardmNos", label: "ARDM No", minWidth: LIFECYCLE_DOCUMENT_NO_WIDTH },
+  { key: "ardmAmount", label: "ARDM Amount", type: "amount", align: "right", minWidth: 130 },
+  { key: "crNos", label: "CR No", minWidth: LIFECYCLE_DOCUMENT_NO_WIDTH },
+  { key: "lastCrDate", label: "Last CR Date", type: "date", minWidth: 100 },
+  { key: "crAppliedAmount", label: "CR Applied", type: "amount", align: "right", minWidth: 125 },
+  { key: "balanceAmount", label: "AR Balance", type: "amount", align: "right", minWidth: 125 },
 ];
+
+const NORMAL_WEIGHT_COLUMN_KEYS = new Set(["branchCode", "soNo"]);
 
 const ITEM_FLOW_COLUMNS = [
-  { key: "soNo", label: "SO No", minWidth: 130 },
-  { key: "soDate", label: "SO Date", type: "date", minWidth: 105 },
-  { key: "custName", label: "Customer", minWidth: 190 },
-  { key: "salesRepName", label: "Salesman", minWidth: 150 },
-  { key: "custPoNo", label: "Cust PO No", minWidth: 130 },
-  { key: "groupId", label: "Line Ref", minWidth: 100 },
+  { key: "branchCode", label: "Branch", minWidth: 90 },
+  { key: "soNo", label: "SO No", minWidth: 100 },
+  { key: "soDate", label: "SO Date", type: "date", minWidth: 100 },
+  { key: "custPoNo", label: "Cust PO No", minWidth: 110 },
+  { key: "custCode", label: "Customer Code", minWidth: 115 },
+  { key: "custName", label: "Customer Name", minWidth: 190 },
+  { key: "shipToName", label: "Ship to Customer Name", minWidth: 190 },
+  { key: "shipToAddr", label: "Ship to Address", minWidth: 240 },
+  { key: "contactPerson", label: "Contact Person", minWidth: 150 },
+  { key: "billingTerm", label: "Billing Term", minWidth: 150 },
+  { key: "salesRepName", label: "Sales Rep", minWidth: 155 },
+  { key: "responsibilityCenter", label: "Responsibility Center", minWidth: 180 },
+  { key: "deliveryDate", label: "Delivery Date", type: "date", minWidth: 105 },
+  { key: "soRemarks", label: "SO Remarks", minWidth: 220 },
+  { key: "soLineNo", label: "SO LN", minWidth: 80 },
+  { key: "lineStatus", label: "Line Status", minWidth: 105 },
   { key: "itemCode", label: "Item Code", minWidth: 120 },
-  { key: "itemDescription", label: "Item Description", minWidth: 240 },
-  { key: "itemSpecs", label: "Item Specs", minWidth: 220 },
+  { key: "itemName", label: "Item Name", minWidth: 220 },
   { key: "uom", label: "UOM", minWidth: 80 },
   { key: "soQuantity", label: "SO Qty", type: "qty", align: "right", minWidth: 105 },
-  { key: "soUnitPrice", label: "SO Unit Price", type: "amount", align: "right", minWidth: 125 },
-  { key: "soGrossAmount", label: "SO Gross", type: "amount", align: "right", minWidth: 125 },
-  { key: "soDiscountAmount", label: "SO Discount", type: "amount", align: "right", minWidth: 125 },
-  { key: "soVatAmount", label: "SO VAT", type: "amount", align: "right", minWidth: 115 },
-  { key: "soNetAmount", label: "SO Net", type: "amount", align: "right", minWidth: 120 },
-  { key: "drCount", label: "DR Count", type: "number", align: "right", minWidth: 95 },
-  { key: "drNos", label: "DR No/s", minWidth: 190 },
-  { key: "firstDrDate", label: "First DR", type: "date", minWidth: 105 },
-  { key: "lastDrDate", label: "Last DR", type: "date", minWidth: 105 },
-  { key: "drQuantity", label: "DR QUANTITY", type: "qty", align: "right", minWidth: 120 },
-  { key: "undeliveredQuantity", label: "Undelivered", type: "qty", align: "right", minWidth: 120 },
-  { key: "siCount", label: "SI Count", type: "number", align: "right", minWidth: 95 },
-  { key: "siNos", label: "SI No/s", minWidth: 190 },
-  { key: "firstSiDate", label: "First SI", type: "date", minWidth: 105 },
-  { key: "lastSiDate", label: "Last SI", type: "date", minWidth: 105 },
+  { key: "soSellingPrice", label: "Selling Price", type: "price", align: "right", minWidth: 120 },
+  { key: "soGrossAmount", label: "SO Gross Amount", type: "amount", align: "right", minWidth: 135 },
+  { key: "soDiscountAmount", label: "SO Discount Amount", type: "amount", align: "right", minWidth: 145 },
+  { key: "soNetAmount", label: "SO Net Amount", type: "amount", align: "right", minWidth: 130 },
+  { key: "drNos", label: "DR No", minWidth: 100 },
+  { key: "lastDrDate", label: "Last DR Date", type: "date", minWidth: 105 },
+  { key: "drQuantity", label: "DR Quantity", type: "qty", align: "right", minWidth: 115 },
+  { key: "siNos", label: "SI No", minWidth: 100 },
+  { key: "lastSiDate", label: "Last SI Date", type: "date", minWidth: 105 },
   { key: "siQuantity", label: "SI Qty", type: "qty", align: "right", minWidth: 105 },
-  { key: "uninvoicedQuantity", label: "Uninvoiced", type: "qty", align: "right", minWidth: 115 },
-  { key: "siGrossAmount", label: "SI Gross", type: "amount", align: "right", minWidth: 125 },
-  { key: "siDiscountAmount", label: "SI Discount", type: "amount", align: "right", minWidth: 125 },
-  { key: "siVatAmount", label: "SI VAT", type: "amount", align: "right", minWidth: 115 },
-  { key: "siNetAmount", label: "SI Net", type: "amount", align: "right", minWidth: 120 },
-  { key: "invoiceAmount", label: "SI Amount", type: "amount", align: "right", minWidth: 130 },
-  { key: "itemStatus", label: "Status", type: "status", minWidth: 150 },
-];
-
-const AGING_COLUMNS = [
-  { key: "custCode", label: "Customer Code", minWidth: 130 },
-  { key: "custName", label: "Customer", minWidth: 220 },
-  { key: "currentAmount", label: "Current", type: "amount", align: "right", minWidth: 120 },
-  { key: "days1To30", label: "1-30 Days", type: "amount", align: "right", minWidth: 120 },
-  { key: "days31To60", label: "31-60 Days", type: "amount", align: "right", minWidth: 120 },
-  { key: "days61To90", label: "61-90 Days", type: "amount", align: "right", minWidth: 120 },
-  { key: "over90Days", label: "Over 90 Days", type: "amount", align: "right", minWidth: 130 },
-  { key: "balanceAmount", label: "Total Balance", type: "amount", align: "right", minWidth: 135 },
-  { key: "invoiceCount", label: "Open SI", type: "number", align: "right", minWidth: 90 },
+  { key: "siSellingPrice", label: "SI Sell Price", type: "price", align: "right", minWidth: 120 },
+  { key: "siGrossAmount", label: "SI Gross Amount", type: "amount", align: "right", minWidth: 135 },
+  { key: "siDiscountAmount", label: "SI Discount Amount", type: "amount", align: "right", minWidth: 145 },
+  { key: "siVatAmount", label: "SI VAT Amount", type: "amount", align: "right", minWidth: 125 },
+  { key: "siAtcAmount", label: "SI ATC Amount", type: "amount", align: "right", minWidth: 125 },
+  { key: "siSalesAmount", label: "SI Sales Amount", type: "amount", align: "right", minWidth: 135 },
+  { key: "siAmountToBePaid", label: "SI Amount to be Paid", type: "amount", align: "right", minWidth: 155 },
 ];
 
 const PERFORMANCE_COLUMNS = [
-  { key: "groupName", label: "Group", minWidth: 220 },
+  { key: "groupCode", label: "Group Code", minWidth: 120 },
+  { key: "groupName", label: "Group Name", minWidth: 210 },
+  { key: "customerCount", label: "Customers", type: "number", align: "right", minWidth: 100 },
   { key: "soCount", label: "SO Count", type: "number", align: "right", minWidth: 90 },
-  { key: "soAmount", label: "SO Amount", type: "amount", align: "right", minWidth: 130 },
-  { key: "invoiceAmount", label: "SI Amount", type: "amount", align: "right", minWidth: 130 },
-  { key: "collectionAmount", label: "Collected", type: "amount", align: "right", minWidth: 130 },
-  { key: "balanceAmount", label: "AR Balance", type: "amount", align: "right", minWidth: 130 },
+  { key: "soQuantity", label: "SO Quantity", type: "qty", align: "right", minWidth: 115 },
+  { key: "soNetAmount", label: "SO Net Amount", type: "amount", align: "right", minWidth: 135 },
+  { key: "drQuantity", label: "DR Quantity", type: "qty", align: "right", minWidth: 115 },
+  { key: "deliveryRate", label: "Delivery %", type: "percent", align: "right", minWidth: 105 },
+  { key: "siGrossAmount", label: "SI Gross Amount", type: "amount", align: "right", minWidth: 135 },
+  { key: "siDiscountAmount", label: "SI Discount Amount", type: "amount", align: "right", minWidth: 145 },
+  { key: "siVatAmount", label: "SI VAT Amount", type: "amount", align: "right", minWidth: 125 },
+  { key: "siAtcAmount", label: "SI ATC Amount", type: "amount", align: "right", minWidth: 125 },
+  { key: "siSalesAmount", label: "SI Sales Amount", type: "amount", align: "right", minWidth: 135 },
+  { key: "siAmountToBePaid", label: "SI Amount to be Paid", type: "amount", align: "right", minWidth: 155 },
+  { key: "salesConversionRate", label: "Sales Conversion %", type: "percent", align: "right", minWidth: 145 },
+  { key: "crAppliedAmount", label: "CR Applied", type: "amount", align: "right", minWidth: 125 },
   { key: "collectionRate", label: "Collection %", type: "percent", align: "right", minWidth: 115 },
+  { key: "arcmAmount", label: "ARCM Amount", type: "amount", align: "right", minWidth: 125 },
+  { key: "ardmAmount", label: "ARDM Amount", type: "amount", align: "right", minWidth: 125 },
+  { key: "arBalance", label: "AR Balance", type: "amount", align: "right", minWidth: 125 },
+  { key: "averageSalesPerSo", label: "Average Sales / SO", type: "amount", align: "right", minWidth: 145 },
   { key: "pendingCount", label: "Pending", type: "number", align: "right", minWidth: 95 },
   { key: "closedCount", label: "Closed", type: "number", align: "right", minWidth: 90 },
 ];
 
-const COLLECTION_COLUMNS = [
-  { key: "docType", label: "Doc Type", type: "docBadge", minWidth: 95 },
-  { key: "docNo", label: "Doc No", minWidth: 140 },
-  { key: "docDate", label: "Doc Date", type: "date", minWidth: 105 },
-  { key: "siNo", label: "SI No", minWidth: 130 },
-  { key: "soNo", label: "SO No", minWidth: 130 },
-  { key: "custName", label: "Customer", minWidth: 210 },
-  { key: "appliedAmount", label: "Applied Amount", type: "amount", align: "right", minWidth: 135 },
-  { key: "balanceEffect", label: "Balance Effect", minWidth: 140 },
-  { key: "remarks", label: "Remarks", minWidth: 230 },
-];
+const getPerformanceColumns = (groupBy) => {
+  const labels = SALES_PERFORMANCE_GROUP_LABELS[groupBy] || SALES_PERFORMANCE_GROUP_LABELS.SALES_REP;
+  return PERFORMANCE_COLUMNS.map((column) => {
+    if (column.key === "groupCode") return { ...column, label: labels.code };
+    if (column.key === "groupName") return { ...column, label: labels.name };
+    return column;
+  });
+};
 
 const COLUMNS_BY_PAGE = {
   lifecycle: LIFECYCLE_COLUMNS,
   itemFlow: ITEM_FLOW_COLUMNS,
-  aging: AGING_COLUMNS,
   performance: PERFORMANCE_COLUMNS,
-  collection: COLLECTION_COLUMNS,
 };
 
 const getDefaultStartDate = () => {
@@ -234,9 +259,37 @@ const formatCompactAmount = (value) => {
   return formatAmount(amount);
 };
 const formatPesoAmount = (value, compact = false) => `₱ ${compact ? formatCompactAmount(value) : formatAmount(value)}`;
-const formatQty = (value) => toNumber(value).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 4 });
+const normalizeDecimalPlaces = (value, fallback = 2) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.min(8, Math.max(0, Math.trunc(parsed))) : fallback;
+};
+const formatQty = (value, decimals = 4) => toNumber(value).toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+const formatPrice = (value, decimals = 2) => toNumber(value).toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 const formatDate = (value) => (value ? String(value).slice(0, 10) : "-");
 const formatPercent = (value) => `${toNumber(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+const TABLE_HEADER_ACRONYMS = new Set([
+  "AR",
+  "ARCM",
+  "ARDM",
+  "ATC",
+  "CR",
+  "DR",
+  "ID",
+  "PO",
+  "SI",
+  "SO",
+  "UOM",
+  "VAT",
+]);
+const toProperCase = (value = "") =>
+  String(value)
+    .split(/(\s+|\/)/)
+    .map((part) => {
+      const upperPart = part.toUpperCase();
+      if (TABLE_HEADER_ACRONYMS.has(upperPart)) return upperPart;
+      return part.replace(/[A-Za-z]+/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
+    })
+    .join("");
 
 const parseResultRows = (response) => {
   const resultStr = response?.data?.[0]?.result;
@@ -271,7 +324,9 @@ const createEmptyPageRows = () =>
   Object.keys(PAGE_CONFIGS).reduce((acc, key) => ({ ...acc, [key]: [] }), {});
 
 const SalesTracker = () => {
-  const { currentUserRow } = useAuth();
+  const { currentUserRow, companyInfo } = useAuth();
+  const sellingPriceDecimals = normalizeDecimalPlaces(companyInfo?.item_decsellprice, 2);
+  const quantityDecimals = normalizeDecimalPlaces(companyInfo?.itemDescQtyFG, 2);
 
   const defaultFilters = useMemo(() => ({
     branchCode: currentUserRow?.branchCode || currentUserRow?.BRANCH_CODE || "",
@@ -285,6 +340,9 @@ const SalesTracker = () => {
     endDate: getDefaultEndDate(),
     status: "",
     searchText: "",
+    performanceGroupBy: "SALES_REP",
+    itemFlowGroupBy: "",
+    itemFlowGroupCode: "",
   }), [currentUserRow]);
 
   const [activePage, setActivePage] = useState("lifecycle");
@@ -296,21 +354,30 @@ const SalesTracker = () => {
   const [selectedSalesRow, setSelectedSalesRow] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [lookup, setLookup] = useState(null);
-  const [tablePage, setTablePage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [columnFilters, setColumnFilters] = useState({});
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
+  const [tableSearchText, setTableSearchText] = useState("");
 
   useEffect(() => {
     setFilters(defaultFilters);
     setLoadedPages({});
     setPageRows(createEmptyPageRows());
-    setTablePage(1);
+    setColumnFilters({});
+    setSortConfig({ key: null, direction: null });
+    setTableSearchText("");
   }, [defaultFilters]);
 
   const activeConfig = PAGE_CONFIGS[activePage];
   const rows = pageRows[activePage] || [];
-  const columns = COLUMNS_BY_PAGE[activePage] || LIFECYCLE_COLUMNS;
+  const columns = useMemo(
+    () => activePage === "performance"
+      ? getPerformanceColumns(filters.performanceGroupBy)
+      : COLUMNS_BY_PAGE[activePage] || LIFECYCLE_COLUMNS,
+    [activePage, filters.performanceGroupBy]
+  );
+  const usesCustomSalesTable = activePage === "lifecycle" || activePage === "itemFlow";
 
-  const buildPayload = useCallback((nextFilters = filters) => ({
+  const buildPayload = useCallback((nextFilters = filters, pageKey = activePage) => ({
     json_data: {
       branchCode: nextFilters.branchCode || "",
       custCode: nextFilters.custCode || "",
@@ -320,8 +387,12 @@ const SalesTracker = () => {
       endDate: normalizeDate(nextFilters.endDate),
       status: nextFilters.status || "",
       searchText: nextFilters.searchText || "",
+      groupBy: pageKey === "itemFlow" && nextFilters.itemFlowGroupCode
+        ? nextFilters.itemFlowGroupBy || ""
+        : nextFilters.performanceGroupBy || "SALES_REP",
+      groupCode: nextFilters.itemFlowGroupCode || "",
     },
-  }), [filters]);
+  }), [activePage, filters]);
 
   const loadPage = useCallback(async (pageKey = activePage, nextFilters = filters) => {
     const config = PAGE_CONFIGS[pageKey];
@@ -329,11 +400,10 @@ const SalesTracker = () => {
 
     setIsLoading(true);
     try {
-      const response = await postRequest(config.endpoint, buildPayload(nextFilters));
+      const response = await postRequest(config.endpoint, buildPayload(nextFilters, pageKey));
       const nextRows = parseResultRows(response);
       setPageRows((prev) => ({ ...prev, [pageKey]: nextRows }));
       setLoadedPages((prev) => ({ ...prev, [pageKey]: true }));
-      setTablePage(1);
     } catch (error) {
       console.error(`Sales Query load error [${pageKey}]:`, error);
       setPageRows((prev) => ({ ...prev, [pageKey]: [] }));
@@ -344,13 +414,16 @@ const SalesTracker = () => {
   }, [activePage, buildPayload, filters]);
 
   const handleNavSelect = (pageKey) => {
+    if (pageKey === "itemFlow") {
+      setFilters((prev) => ({ ...prev, itemFlowGroupBy: "", itemFlowGroupCode: "" }));
+    }
     setActivePage(pageKey);
-    setTablePage(1);
   };
 
-  const applyFilters = () => {
+  const applyFilters = (nextFilters) => {
+    const appliedFilters = nextFilters?.performanceGroupBy ? nextFilters : filters;
     setLoadedPages({});
-    loadPage(activePage, filters);
+    loadPage(activePage, appliedFilters);
   };
 
   const resetFilters = () => {
@@ -358,7 +431,9 @@ const SalesTracker = () => {
     setFilters(next);
     setLoadedPages({});
     setPageRows(createEmptyPageRows());
-    setTablePage(1);
+    setColumnFilters({});
+    setSortConfig({ key: null, direction: null });
+    setTableSearchText("");
   };
 
   const handleViewDetails = (row) => {
@@ -377,30 +452,80 @@ const SalesTracker = () => {
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  const dashboardRows = pageRows.lifecycle || [];
-  const metrics = useMemo(() => buildMetrics(activePage, rows, dashboardRows), [activePage, rows, dashboardRows]);
-  const lifecycleSummary = useMemo(() => buildLifecycleSummary(dashboardRows), [dashboardRows]);
-  const arSummary = useMemo(() => buildArSummary(dashboardRows), [dashboardRows]);
-  const filteredRows = useMemo(() => filterRowsForSearch(rows, filters.searchText), [rows, filters.searchText]);
-  const pagedRows = useMemo(() => {
-    const start = (tablePage - 1) * pageSize;
-    return filteredRows.slice(start, start + pageSize);
-  }, [filteredRows, pageSize, tablePage]);
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const handleViewPerformanceItems = (row) => {
+    const groupCode = String(row?.groupCode || "").trim();
+    if (!groupCode) return;
 
-  const activeContext = useMemo(() => {
-    const pieces = [];
-    if (filters.branchCode) pieces.push(`Branch: ${filters.branchCode}${filters.branchName ? ` - ${filters.branchName}` : ""}`);
-    if (filters.custCode) pieces.push(`Customer: ${filters.custCode}${filters.custName ? ` - ${filters.custName}` : ""}`);
-    if (filters.salesRepCode) pieces.push(`Salesman: ${filters.salesRepCode}${filters.salesRepName ? ` - ${filters.salesRepName}` : ""}`);
-    pieces.push(`${DATE_BASIS_OPTIONS.find((x) => x.value === filters.dateBasis)?.label || "SO Date"}: ${normalizeDate(filters.startDate)} to ${normalizeDate(filters.endDate)}`);
-    if (filters.status) pieces.push(`Status: ${SALES_STATUS_OPTIONS.find((x) => x.value === filters.status)?.label || filters.status}`);
-    return pieces.join(" | ");
-  }, [filters]);
+    const nextFilters = {
+      ...filters,
+      itemFlowGroupBy: filters.performanceGroupBy || "SALES_REP",
+      itemFlowGroupCode: groupCode,
+    };
+    setFilters(nextFilters);
+    setActivePage("itemFlow");
+    setPageRows((prev) => ({ ...prev, itemFlow: [] }));
+    setLoadedPages((prev) => ({ ...prev, itemFlow: false }));
+    loadPage("itemFlow", nextFilters);
+  };
+
+  const filteredRows = useMemo(() => {
+    const searchedRows = filterRowsForSearch(
+      filterRowsForSearch(rows, filters.searchText),
+      usesCustomSalesTable ? tableSearchText : ""
+    );
+    return usesCustomSalesTable
+      ? applyLifecycleTableState(searchedRows, columns, columnFilters, sortConfig)
+      : searchedRows;
+  }, [usesCustomSalesTable, rows, columns, filters.searchText, tableSearchText, columnFilters, sortConfig]);
+
+  const handleColumnFilterChange = (key, value) => {
+    setColumnFilters((current) => ({ ...current, [key]: value }));
+  };
+
+  const handleColumnSort = (key) => {
+    setSortConfig((current) => ({
+      key,
+      direction: current.key === key && current.direction === "asc" ? "desc" : "asc",
+    }));
+  };
 
   const exportCsv = () => {
     const filename = `${activeConfig.title.replace(/\s+/g, "_")}_${normalizeDate(new Date().toISOString())}.csv`;
     downloadCsv(filename, columns, filteredRows);
+  };
+
+  const exportReport = async (format, exportColumns = columns, requestedFileName = "") => {
+    const filename = sanitizeExportFileName(requestedFileName) || `${activeConfig.title.replace(/\s+/g, "_")}_${normalizeDate(new Date().toISOString())}`;
+
+    if (format === "excel") {
+      const reportColumns = exportColumns.map((column) => ({
+        ...column,
+        label: toProperCase(column.label),
+        width: columnWidthsToExportWidth(column.minWidth),
+        renderType: ["amount", "price"].includes(column.type) ? "currency" : column.type === "date" ? "date" : ["qty", "number", "percent"].includes(column.type) ? "number" : undefined,
+        roundingOff: column.type === "qty" ? quantityDecimals : column.type === "price" ? sellingPriceDecimals : column.type === "number" ? 0 : ["amount", "percent"].includes(column.type) ? 2 : undefined,
+      }));
+      const excelRows = filteredRows.map((row) => ({ ...row, flow: row?.currentStatus }));
+      await exportGenericQueryExcel(
+        excelRows,
+        {},
+        reportColumns,
+        [],
+        reportColumns,
+        {},
+        7,
+        filename,
+        currentUserRow?.userName,
+        companyInfo?.compName,
+        companyInfo?.compAddr,
+        companyInfo?.telNo,
+        activeConfig.title,
+        false
+      );
+      return;
+    }
+
+    await exportSalesQuery(format, filename, exportColumns, filteredRows);
   };
 
   return (
@@ -443,14 +568,74 @@ const SalesTracker = () => {
         .sales-donut-breathe {
           animation: salesDonutBreathe 3.2s ease-in-out infinite;
         }
+        .sales-performance-table table thead tr > th:nth-child(2) {
+          position: sticky;
+          left: 80px;
+          z-index: 30;
+          width: 120px !important;
+          min-width: 120px !important;
+          max-width: 120px !important;
+        }
+        .sales-performance-table table thead tr > th:nth-child(3) {
+          position: sticky;
+          left: 200px;
+          z-index: 30;
+          width: 210px !important;
+          min-width: 210px !important;
+          max-width: 210px !important;
+          box-shadow: 1px 0 0 #dbeafe;
+        }
+        .sales-performance-table table tbody tr > td:not([colspan]):nth-child(2) {
+          position: sticky;
+          left: 80px;
+          z-index: 5;
+          width: 120px !important;
+          min-width: 120px !important;
+          max-width: 120px !important;
+          background: #fff;
+        }
+        .sales-performance-table table tbody tr > td:not([colspan]):nth-child(3) {
+          position: sticky;
+          left: 200px;
+          z-index: 5;
+          width: 210px !important;
+          min-width: 210px !important;
+          max-width: 210px !important;
+          background: #fff;
+          box-shadow: 1px 0 0 #e2e8f0;
+        }
+        .sales-performance-table table tbody tr:hover > td:not([colspan]):nth-child(2),
+        .sales-performance-table table tbody tr:hover > td:not([colspan]):nth-child(3),
+        .sales-performance-table table tbody tr.bg-blue-50 > td:not([colspan]):nth-child(2),
+        .sales-performance-table table tbody tr.bg-blue-50 > td:not([colspan]):nth-child(3) {
+          background: #eff6ff;
+        }
+        .sales-performance-table table tfoot tr > td:nth-child(2) {
+          position: sticky;
+          left: 80px;
+          z-index: 15;
+          width: 120px !important;
+          min-width: 120px !important;
+          max-width: 120px !important;
+          background: #dbeafe;
+        }
+        .sales-performance-table table tfoot tr > td:nth-child(3) {
+          position: sticky;
+          left: 200px;
+          z-index: 15;
+          width: 210px !important;
+          min-width: 210px !important;
+          max-width: 210px !important;
+          background: #dbeafe;
+          box-shadow: 1px 0 0 #bfdbfe;
+        }
       `}</style>
       {isLoading && <LoadingSpinner />}
 
       <div className="global-ref-header-ui">
         <div className="flex w-full flex-col gap-4 md:flex-row md:items-center md:justify-between lg:min-h-[40px]">
           <div className="min-w-0">
-            <h1 className="global-ref-headertext-ui truncate text-center md:text-left">Sales Query</h1>
-            <p className="mt-1 hidden text-xs text-slate-500 md:block">Modern sales analysis from Sales Order to Collection</p>
+            <h1 className="global-ref-headertext-ui truncate text-center md:text-left">{activeConfig.title}</h1>
           </div>
 
           <div className="flex w-full flex-nowrap items-center justify-center gap-2 md:w-auto md:justify-end">
@@ -471,20 +656,15 @@ const SalesTracker = () => {
 
       <div className="mb-6 mt-[8.25rem] px-0 sm:mt-[6.25rem]">
         <div className="flex gap-4">
-          <aside className={`hidden transition-all duration-200 lg:block ${hideNav ? "w-[88px]" : "w-[290px]"}`}>
-            <div className="global-tran-tab-div-ui h-full !m-0 !p-4">
-              <div className="h-full overflow-hidden rounded-2xl border bg-white shadow-sm">
-                <div className="border-b px-4 py-4">
-                  {hideNav ? (
-                    <div className="text-center text-[11px] font-semibold text-blue-700">SAL</div>
-                  ) : (
-                    <>
-                      <div className="text-sm font-semibold text-gray-800">Sales Query</div>
-                      <div className="mt-1 text-xs text-gray-500">Select a sales report, set filters, then load data.</div>
-                    </>
-                  )}
-                </div>
-                <div className="p-3">
+          <aside className={`hidden shrink-0 transition-all duration-200 lg:block ${hideNav ? "w-[68px]" : "w-[290px]"}`}>
+            <div className={`global-tran-tab-div-ui h-full !m-0 ${hideNav ? "!p-1.5" : "!p-4"}`}>
+              <div className={`h-full overflow-hidden border bg-white shadow-sm ${hideNav ? "rounded-xl" : "rounded-2xl"}`}>
+                {!hideNav && (
+                  <div className="border-b px-4 py-4">
+                    <div className="text-sm font-semibold text-gray-800">Sales Query</div>
+                  </div>
+                )}
+                <div className={hideNav ? "p-1.5" : "p-3"}>
                   <SalesQueryNav activePage={activePage} collapsed={hideNav} onSelect={handleNavSelect} />
                 </div>
               </div>
@@ -493,63 +673,20 @@ const SalesTracker = () => {
 
           <main className="min-w-0 flex-1 space-y-4">
             <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-100 bg-gradient-to-r from-blue-50 via-white to-white px-4 py-4">
-                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
-                        <FontAwesomeIcon icon={activeConfig.icon} />
-                      </span>
-                      <div>
-                        <h2 className="text-lg font-extrabold text-slate-900">{activeConfig.title}</h2>
-                        <p className="text-xs text-slate-500">{activeConfig.subtitle}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="rounded-full border border-blue-100 bg-white px-3 py-1.5 text-[11px] font-semibold text-blue-700 shadow-sm">
-                    {activeContext}
-                  </div>
-                </div>
-              </div>
-
-              <FilterPanel filters={filters} setFilters={setFilters} setLookup={setLookup} onApply={applyFilters} onReset={resetFilters} />
+              <FilterPanel activePage={activePage} filters={filters} setFilters={setFilters} setLookup={setLookup} onApply={applyFilters} onReset={resetFilters} />
             </section>
-
-            <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
-              {metrics.map((metric) => <MetricCard key={metric.key} metric={metric} />)}
-            </section>
-
-            {activePage === "lifecycle" && (
-              <section className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_270px]">
-                <LifecycleStatusSummary items={lifecycleSummary} />
-                <ArBalanceSummary summary={arSummary} />
-              </section>
-            )}
-
-            {activePage !== "lifecycle" && <AnalysisSummary activePage={activePage} rows={filteredRows} />}
 
             <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <div className="text-sm font-bold text-slate-800">{activeConfig.title} Records</div>
-                  <div className="text-[11px] text-slate-500">Showing {getShownRange(activePage, tablePage, pageSize, filteredRows.length)} of {filteredRows.length} entries</div>
+                  <div className="text-sm font-bold text-slate-800">Records</div>
+                  <div className="text-[11px] text-slate-500">Showing {getShownRange(filteredRows.length)} of {filteredRows.length} entries</div>
                 </div>
-                {activePage === "lifecycle" && (
-                  <div className="flex items-center gap-2">
-                    <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setTablePage(1); }} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-blue-400">
-                      <option value={10}>10 per page</option>
-                      <option value={25}>25 per page</option>
-                      <option value={50}>50 per page</option>
-                      <option value={100}>100 per page</option>
-                    </select>
-                  </div>
-                )}
               </div>
 
               <ReportGrid
                 columns={columns}
                 rows={filteredRows}
-                pagedRows={pagedRows}
                 activePage={activePage}
                 activeTitle={activeConfig.title}
                 hasLoaded={!!loadedPages[activePage]}
@@ -557,9 +694,18 @@ const SalesTracker = () => {
                 emptyMessage={activeConfig.empty}
                 onViewDetails={handleViewDetails}
                 onOpenSource={handleOpenSource}
+                onViewPerformanceItems={handleViewPerformanceItems}
+                columnFilters={columnFilters}
+                sortConfig={sortConfig}
+                onColumnFilterChange={handleColumnFilterChange}
+                onSort={handleColumnSort}
+                tableSearchText={tableSearchText}
+                onTableSearchChange={setTableSearchText}
+                onExport={exportReport}
+                quantityDecimals={quantityDecimals}
+                sellingPriceDecimals={sellingPriceDecimals}
               />
 
-              {activePage === "lifecycle" && <Pagination page={tablePage} totalPages={totalPages} onPageChange={setTablePage} />}
             </section>
           </main>
         </div>
@@ -624,26 +770,27 @@ const HeaderButton = ({ icon, label, title, onClick, disabled = false, className
 );
 
 const SalesQueryNav = ({ activePage, collapsed, onSelect }) => (
-  <ul className="w-full space-y-2 text-sm">
+  <ul className={`w-full text-sm ${collapsed ? "space-y-1.5" : "space-y-2"}`}>
     {NAV_ITEMS.map((item) => (
       <li key={item.key} className="w-full">
         <button
           type="button"
           onClick={() => onSelect(item.key)}
           title={collapsed ? item.label : undefined}
-          className={`w-full rounded-xl border text-left transition ${
+          className={`w-full border text-left transition ${
             activePage === item.key
               ? "border-blue-200 bg-blue-50 text-blue-700 shadow-sm"
-              : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
-          } ${collapsed ? "flex justify-center px-2 py-3" : "flex items-center gap-3 px-3 py-2.5"}`}
+              : collapsed
+                ? "border-transparent bg-transparent text-gray-700 hover:border-slate-200 hover:bg-slate-50"
+                : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+          } ${collapsed ? "flex h-11 items-center justify-center rounded-lg p-1" : "flex items-center gap-3 rounded-xl px-3 py-2.5"}`}
         >
-          <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${activePage === item.key ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-500"}`}>
+          <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${activePage === item.key ? "bg-blue-100 text-blue-700" : collapsed ? "bg-transparent text-slate-500" : "bg-slate-100 text-slate-500"}`}>
             <FontAwesomeIcon icon={item.icon} />
           </span>
           {!collapsed && (
             <span className="min-w-0">
               <span className="block truncate text-xs font-bold">{item.label}</span>
-              <span className="mt-0.5 block truncate text-[10px] opacity-70">{item.description}</span>
             </span>
           )}
         </button>
@@ -652,32 +799,35 @@ const SalesQueryNav = ({ activePage, collapsed, onSelect }) => (
   </ul>
 );
 
-const FilterPanel = ({ filters, setFilters, setLookup, onApply, onReset }) => {
+const FilterPanel = ({ activePage, filters, setFilters, setLookup, onApply, onReset }) => {
   const setField = (key, value) => setFilters((prev) => ({ ...prev, [key]: value }));
+  const setPerformanceGroup = (value) => {
+    const nextFilters = { ...filters, performanceGroupBy: value };
+    setFilters(nextFilters);
+    onApply(nextFilters);
+  };
 
   return (
-    <div className="border-t border-blue-50 bg-gradient-to-b from-white to-slate-50/70 px-4 py-3">
+    <div className="bg-gradient-to-b from-white to-slate-50/70 px-4 py-3">
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
         <FilterGroupCard
           title="Customer / Scope"
-          subtitle="Branch, customer, and salesman"
           icon={faLayerGroup}
           className="xl:col-span-5"
         >
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
-            <CompactLookup label="Branch" code={filters.branchCode} name={filters.branchName || "All Branches"} onLookup={() => setLookup("branch")} onClear={() => setFilters((prev) => ({ ...prev, branchCode: "", branchName: "" }))} />
-            <CompactLookup label="Customer" code={filters.custCode} name={filters.custName || "All Customers"} onLookup={() => setLookup("customer")} onClear={() => setFilters((prev) => ({ ...prev, custCode: "", custName: "" }))} />
-            <CompactLookup label="Salesman" code={filters.salesRepCode} name={filters.salesRepName || "All Salesmen"} onLookup={() => setLookup("salesman")} onClear={() => setFilters((prev) => ({ ...prev, salesRepCode: "", salesRepName: "" }))} />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+            <CompactLookup label="Branch" code={filters.branchCode} name={filters.branchName} onLookup={() => setLookup("branch")} onClear={() => setFilters((prev) => ({ ...prev, branchCode: "", branchName: "" }))} />
+            <CompactLookup label="Customer" code={filters.custCode} name={filters.custName} onLookup={() => setLookup("customer")} onClear={() => setFilters((prev) => ({ ...prev, custCode: "", custName: "" }))} />
+            <CompactLookup label="Salesman" code={filters.salesRepCode} name={filters.salesRepName} onLookup={() => setLookup("salesman")} onClear={() => setFilters((prev) => ({ ...prev, salesRepCode: "", salesRepName: "" }))} />
           </div>
         </FilterGroupCard>
 
         <FilterGroupCard
           title="Date Coverage"
-          subtitle="Choose the date basis and range"
           icon={faClock}
           className="xl:col-span-3"
         >
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-3 xl:grid-cols-1">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-1">
             <SelectInput label="Date Basis" value={filters.dateBasis} onChange={(value) => setField("dateBasis", value)} options={DATE_BASIS_OPTIONS} />
             <TextInput label="Date From" type="date" value={filters.startDate || ""} onChange={(value) => setField("startDate", value)} />
             <TextInput label="Date To" type="date" value={filters.endDate || ""} onChange={(value) => setField("endDate", value)} />
@@ -685,8 +835,7 @@ const FilterPanel = ({ filters, setFilters, setLookup, onApply, onReset }) => {
         </FilterGroupCard>
 
         <FilterGroupCard
-          title="Document Filter"
-          subtitle="Status and document number search"
+          title={activePage === "performance" ? "Performance Grouping" : "Document Filter"}
           icon={faFilter}
           className="xl:col-span-4"
           actions={(
@@ -700,9 +849,13 @@ const FilterPanel = ({ filters, setFilters, setLookup, onApply, onReset }) => {
             </div>
           )}
         >
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-1 2xl:grid-cols-[220px_minmax(0,1fr)]">
-            <SelectInput label="Lifecycle Status" value={filters.status || ""} onChange={(value) => setField("status", value)} options={SALES_STATUS_OPTIONS} />
-            <TextInput label="Search Any Document No" placeholder="SO / DR / SI / AR / CR / ARCM / ARDM no..." value={filters.searchText || ""} onChange={(value) => setField("searchText", value)} />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-1 2xl:grid-cols-[220px_minmax(0,1fr)]">
+            {activePage === "performance" ? (
+              <SelectInput label="Analyze By" value={filters.performanceGroupBy || "SALES_REP"} onChange={setPerformanceGroup} options={SALES_PERFORMANCE_GROUP_OPTIONS} />
+            ) : (
+              <SelectInput label="Lifecycle Status" value={filters.status || ""} onChange={(value) => setField("status", value)} options={SALES_STATUS_OPTIONS} />
+            )}
+            <TextInput label="Document No." value={filters.searchText || ""} onChange={(value) => setField("searchText", value)} />
           </div>
         </FilterGroupCard>
       </div>
@@ -710,17 +863,14 @@ const FilterPanel = ({ filters, setFilters, setLookup, onApply, onReset }) => {
   );
 };
 
-const FilterGroupCard = ({ title, subtitle, icon, actions, className = "", children }) => (
+const FilterGroupCard = ({ title, icon, actions, className = "", children }) => (
   <div className={`flex min-h-[142px] flex-col rounded-2xl border border-slate-200 bg-white p-3 shadow-sm ${className}`}>
     <div className="mb-3 flex items-start justify-between gap-3 border-b border-slate-100 pb-2">
       <div className="flex min-w-0 items-start gap-2">
         <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
           <FontAwesomeIcon icon={icon} />
         </span>
-        <div className="min-w-0">
-          <div className="truncate text-xs font-extrabold uppercase tracking-wide text-blue-700">{title}</div>
-          <div className="truncate text-[10px] font-medium text-slate-500">{subtitle}</div>
-        </div>
+        <div className="min-w-0 truncate text-xs font-extrabold uppercase tracking-wide text-blue-700">{title}</div>
       </div>
       {actions ? <div className="shrink-0">{actions}</div> : null}
     </div>
@@ -729,49 +879,33 @@ const FilterGroupCard = ({ title, subtitle, icon, actions, className = "", child
 );
 
 const CompactLookup = ({ label, code, name, onLookup, onClear }) => (
-  <div>
-    <label className="mb-1 block text-[11px] font-bold text-slate-600">{label}</label>
-    <div className="flex h-[32px] overflow-hidden rounded-md border border-slate-200 bg-white focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-50">
-      <button type="button" onClick={onLookup} className="min-w-0 flex-1 px-3 text-left text-xs font-semibold text-slate-700">
-        <span className="block truncate">{code ? `${code} - ${name || ""}` : name}</span>
-      </button>
-      {code && (
-        <button type="button" onClick={onClear} className="w-8 border-l border-slate-100 text-slate-400 hover:bg-slate-50 hover:text-slate-700">
-          <FontAwesomeIcon icon={faTimes} />
-        </button>
-      )}
-      <button type="button" onClick={onLookup} className="w-9 border-l border-slate-100 text-blue-600 hover:bg-blue-50">
-        <FontAwesomeIcon icon={faMagnifyingGlass} />
-      </button>
-    </div>
-  </div>
+  <FieldRenderer
+    type="lookup"
+    label={label}
+    value={code ? `${code}${name ? ` - ${name}` : ""}` : ""}
+    placeholder=" "
+    editableLookup
+    onLookup={onLookup}
+    onClear={onClear}
+  />
 );
 
 const TextInput = ({ label, value, onChange, type = "text", placeholder = "" }) => (
-  <div>
-    <label className="mb-1 block text-[11px] font-bold text-slate-600">{label}</label>
-    <input
-      type={type}
-      value={value || ""}
-      placeholder={placeholder}
-      onChange={(e) => onChange(e.target.value)}
-      className="h-[32px] w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-50"
-    />
-  </div>
+  <FieldRenderer type={type} label={label} value={value || ""} placeholder={placeholder || " "} onChange={onChange} />
 );
 
-const SelectInput = ({ label, value, onChange, options = [] }) => (
-  <div>
-    <label className="mb-1 block text-[11px] font-bold text-slate-600">{label}</label>
-    <select
+const SelectInput = ({ label, value, onChange, options = [] }) => {
+  return (
+    <FieldRenderer
+      type="select"
+      label={label}
       value={value || ""}
-      onChange={(e) => onChange(e.target.value)}
-      className="h-[32px] w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-50"
-    >
-      {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-    </select>
-  </div>
-);
+      placeholder=" "
+      onChange={onChange}
+      options={options.filter((option) => option.value !== "")}
+    />
+  );
+};
 
 const MetricCard = ({ metric }) => {
   const toneClass = {
@@ -904,44 +1038,50 @@ const AnalysisSummary = ({ activePage, rows }) => {
   );
 };
 
-const ReportGrid = ({ columns, rows, pagedRows, activePage, activeTitle, hasLoaded, isLoading, emptyMessage, onViewDetails, onOpenSource }) => {
-  if (activePage === "lifecycle") {
+const ReportGrid = ({ columns, rows, activePage, activeTitle, hasLoaded, isLoading, emptyMessage, onViewDetails, onOpenSource, onViewPerformanceItems, columnFilters, sortConfig, onColumnFilterChange, onSort, tableSearchText, onTableSearchChange, onExport, quantityDecimals, sellingPriceDecimals }) => {
+  if (activePage === "lifecycle" || activePage === "itemFlow") {
     return (
       <ModernDataTable
         columns={columns}
-        rows={pagedRows}
+        rows={rows}
         activePage={activePage}
         hasLoaded={hasLoaded}
         isLoading={isLoading}
         emptyMessage={emptyMessage}
         onViewDetails={onViewDetails}
         onOpenSource={onOpenSource}
+        columnFilters={columnFilters}
+        sortConfig={sortConfig}
+        onColumnFilterChange={onColumnFilterChange}
+        onSort={onSort}
+        tableSearchText={tableSearchText}
+        onTableSearchChange={onTableSearchChange}
+        onExport={onExport}
+        quantityDecimals={quantityDecimals}
+        sellingPriceDecimals={sellingPriceDecimals}
       />
     );
   }
 
-  if (!hasLoaded && isLoading) return <EmptyState title="Loading records" description="Please wait while Sales Query loads the data." />;
-  if (!hasLoaded) return <EmptyState title="Ready to load" description="Set your filters, then click Load to retrieve records." />;
-  if (!rows.length) return <EmptyState title="No records found" description={emptyMessage || "Try changing the filter criteria."} />;
-
-  const globalRows = rows.map((row, index) => ({ rowNo: index + 1, ...row }));
-  const globalColumns = toGlobalColumns(columns);
+  const globalRows = rows;
+  const globalColumns = toGlobalColumns(columns, quantityDecimals, sellingPriceDecimals);
 
   return (
-    <div className="min-h-[340px]" style={{ height: `${getTableHeight(globalRows.length)}px` }}>
+    <div className="sales-performance-table min-h-[340px]" style={{ height: `${getTableHeight(globalRows.length)}px` }}>
       <SearchGlobalReportTable
         columns={globalColumns}
         data={globalRows}
         itemsPerPage={50}
         docType={activeTitle}
-        totalExemptions={["rowNo", "soNo", "soDate", "custCode", "custName", "salesRepCode", "salesRepName", "custPoNo", "groupId", "itemCode", "itemDescription", "itemSpecs", "uom", "drNos", "siNos", "itemStatus", "docType", "docNo", "siNo", "balanceEffect", "remarks"]}
+        rightActionLabel="Action"
+        onRowAction={onViewPerformanceItems}
+        totalExemptions={["groupCode", "groupName", "branchCode", "soNo", "soDate", "custCode", "custName", "salesRepCode", "salesRepName", "custPoNo", "shipToName", "shipToAddr", "contactPerson", "billingTerm", "responsibilityCenter", "deliveryDate", "soRemarks", "soLineNo", "lineStatus", "groupId", "itemCode", "itemName", "itemDescription", "itemSpecs", "uom", "drNos", "lastDrDate", "siNos", "lastSiDate", "itemStatus", "docType", "docNo", "siNo", "balanceEffect", "remarks"]}
       />
     </div>
   );
 };
 
-const toGlobalColumns = (columns = []) => [
-  { key: "rowNo", label: "Row No.", minWidth: 90, maxWidth: 110 },
+const toGlobalColumns = (columns = [], quantityDecimals = 2, sellingPriceDecimals = 2) => [
   ...columns
     .filter((column) => column.key !== "flow")
     .map((column) => ({
@@ -949,84 +1089,385 @@ const toGlobalColumns = (columns = []) => [
       label: column.label,
       minWidth: column.minWidth,
       maxWidth: column.maxWidth,
-      renderType: column.type === "amount" ? "currency" : column.type === "date" ? "date" : column.type === "qty" || column.type === "number" || column.type === "percent" ? "number" : undefined,
-      roundingOff: column.type === "qty" ? 4 : column.type === "amount" || column.type === "percent" ? 2 : undefined,
+      renderType: column.type === "amount" || column.type === "price" ? "currency" : column.type === "date" ? "date" : column.type === "qty" || column.type === "number" || column.type === "percent" ? "number" : undefined,
+      roundingOff: column.type === "qty" ? quantityDecimals : column.type === "price" ? sellingPriceDecimals : column.type === "number" ? 0 : column.type === "amount" || column.type === "percent" ? 2 : undefined,
     })),
 ];
 
 const getTableHeight = (rowCount) => Math.min(620, Math.max(340, 170 + Math.min(rowCount, 25) * 32));
 
-const getShownRange = (activePage, page, pageSize, totalRows) => {
+const getShownRange = (totalRows) => {
   if (!totalRows) return "0 to 0";
-  if (activePage !== "lifecycle") return `1 to ${totalRows.toLocaleString("en-US")}`;
-  const start = ((page - 1) * pageSize) + 1;
-  const end = Math.min(page * pageSize, totalRows);
-  return `${start.toLocaleString("en-US")} to ${end.toLocaleString("en-US")}`;
+  return `1 to ${totalRows.toLocaleString("en-US")}`;
 };
 
-const ModernDataTable = ({ columns, rows, activePage, hasLoaded, isLoading, emptyMessage, onViewDetails, onOpenSource }) => {
-  if (!hasLoaded && isLoading) return <EmptyState title="Loading records" description="Please wait while Sales Query loads the data." />;
-  if (!hasLoaded) return <EmptyState title="Ready to load" description="Set your filters, then click Load to retrieve records." />;
-  if (!rows.length) return <EmptyState title="No records found" description={emptyMessage || "Try changing the filter criteria."} />;
+const ModernDataTable = ({ columns, rows, activePage, hasLoaded, isLoading, emptyMessage, onViewDetails, onOpenSource, columnFilters, sortConfig, onColumnFilterChange, onSort, tableSearchText, onTableSearchChange, onExport, quantityDecimals, sellingPriceDecimals }) => {
+  const [columnWidths, setColumnWidths] = useState({});
+  const [groupByKey, setGroupByKey] = useState(null);
+  const [hiddenColumns, setHiddenColumns] = useState([]);
+  const [showColumns, setShowColumns] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exportModal, setExportModal] = useState({
+    isOpen: false,
+    title: "Export File",
+    confirmText: "Export",
+    defaultFileName: "",
+    type: null,
+  });
+  const [columnChooserSearch, setColumnChooserSearch] = useState("");
+  const [autoFit, setAutoFit] = useState(false);
+  const hasActiveColumnFilters = Object.values(columnFilters || {}).some((value) => String(value || "").trim() !== "");
+  const showColumnFilters = rows.length > 0 || hasActiveColumnFilters;
+  const pinnedColumnKeys = new Set(activePage === "lifecycle" ? ["currentStatus", "flow", "branchCode", "soNo"] : ["branchCode", "soNo"]);
+  const visibleColumns = columns.filter((column) => !hiddenColumns.includes(column.key));
+
+  const getColumnWidth = (column) => columnWidths[column.key] || column.minWidth || 110;
+  const tableWidth = visibleColumns.reduce((total, column) => total + getColumnWidth(column), LIFECYCLE_ACTION_WIDTH);
+  const startColumnResize = (event, column) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const startX = event.clientX;
+    const startWidth = getColumnWidth(column);
+    const onMouseMove = (moveEvent) => {
+      const nextWidth = Math.max(70, startWidth + moveEvent.clientX - startX);
+      setColumnWidths((current) => ({ ...current, [column.key]: nextWidth }));
+    };
+    const onMouseUp = () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  };
+
+  const handleAutoFit = () => {
+    if (autoFit) {
+      setColumnWidths({});
+      setAutoFit(false);
+      return;
+    }
+
+    const fittedWidths = {};
+    visibleColumns.forEach((column) => {
+      const longestValue = rows.reduce((longest, row) => {
+        const value = column.key === "flow" ? row?.currentStatus : row?.[column.key];
+        return Math.max(longest, String(value ?? "").length);
+      }, String(column.label || "").length);
+      fittedWidths[column.key] = Math.min(320, Math.max(column.minWidth || 70, longestValue * 7 + 34));
+    });
+    setColumnWidths(fittedWidths);
+    setAutoFit(true);
+  };
+
+  const toggleColumn = (key) => {
+    if (pinnedColumnKeys.has(key)) return;
+    setHiddenColumns((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
+  };
+
+  const renderedRows = groupByKey
+    ? Object.entries(rows.reduce((groups, row) => {
+        const rawGroupValue = groupByKey === "flow" ? row?.currentStatus : row?.[groupByKey];
+        const groupValue = String(rawGroupValue ?? "(Blank)");
+        if (!groups[groupValue]) groups[groupValue] = [];
+        groups[groupValue].push(row);
+        return groups;
+      }, {})).flatMap(([groupValue, groupRows]) => [
+        { __group: true, groupValue, groupCount: groupRows.length },
+        ...groupRows,
+      ])
+    : rows;
+
+  const openExportModal = (type) => {
+    const titleMap = { excel: "Export Excel", csv: "Export CSV", pdf: "Export PDF", image: "Export Image" };
+    setShowExportMenu(false);
+    setExportModal({
+      isOpen: true,
+      title: titleMap[type] || "Export File",
+      confirmText: "Export",
+      defaultFileName: sanitizeExportFileName(`${PAGE_CONFIGS[activePage]?.title || "Sales Query"} ${getExportDateTimeStamp()}`),
+      type,
+    });
+  };
+
+  const closeExportModal = () => {
+    setExportModal({ isOpen: false, title: "Export File", confirmText: "Export", defaultFileName: "", type: null });
+  };
+
+  const handleExportConfirm = async (enteredFileName) => {
+    const safeFileName = sanitizeExportFileName(enteredFileName);
+    if (!safeFileName) return;
+    try {
+      await onExport(exportModal.type, visibleColumns, safeFileName);
+    } finally {
+      closeExportModal();
+    }
+  };
 
   return (
-    <div className="relative overflow-hidden rounded-b-2xl bg-white">
+    <div className="relative isolate z-0 overflow-hidden rounded-b-2xl bg-white">
+      <div className="relative flex flex-col gap-2 border-b border-slate-200 bg-white px-3 py-3 md:flex-row md:items-center md:justify-between">
+        <div
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            event.preventDefault();
+            const key = event.dataTransfer.getData("text/plain");
+            if (columns.some((column) => column.key === key)) setGroupByKey(key);
+          }}
+          className="flex min-h-9 min-w-[280px] items-center rounded border border-dashed border-slate-300 px-4 text-xs italic text-slate-400"
+        >
+          <FontAwesomeIcon icon={faLayerGroup} className="mr-2" />
+          {groupByKey ? (
+            <span className="inline-flex items-center rounded border border-blue-200 bg-blue-50 px-2 py-1 font-medium not-italic text-blue-700">
+              {columns.find((column) => column.key === groupByKey)?.label}
+              <button type="button" onClick={() => setGroupByKey(null)} className="ml-2 text-blue-500 hover:text-red-600" aria-label="Remove grouping">
+                <FontAwesomeIcon icon={faTimes} />
+              </button>
+            </span>
+          ) : "Drag column here to Group"}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="relative">
+            <input
+              type="text"
+              value={tableSearchText || ""}
+              onChange={(event) => onTableSearchChange(event.target.value)}
+              placeholder="Quick Search..."
+              className="h-8 w-48 rounded-md border border-slate-300 bg-white px-3 pr-8 text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200"
+            />
+            {tableSearchText && (
+              <button type="button" onClick={() => onTableSearchChange("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-600" aria-label="Clear Quick Search">
+                <FontAwesomeIcon icon={faTimes} className="text-[10px]" />
+              </button>
+            )}
+          </div>
+
+          <label className="inline-flex h-8 shrink-0 cursor-pointer select-none items-center">
+            <input type="checkbox" checked={autoFit} onChange={handleAutoFit} className="sr-only" />
+            <div className={`relative h-8 w-20 rounded-full transition-colors duration-200 ${autoFit ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-700"}`}>
+              <span className={`absolute top-[2px] h-7 w-7 rounded-full bg-white shadow-md transition-all duration-200 ${autoFit ? "left-[50px]" : "left-[2px]"}`} />
+              <span className={`pointer-events-none absolute inset-0 flex items-center text-[11px] font-medium transition-all duration-200 ${autoFit ? "justify-start pl-2 text-white" : "justify-end pr-2"}`}>
+                Auto Fit
+              </span>
+            </div>
+          </label>
+          <div className="relative">
+            <button type="button" onClick={() => rows.length > 0 && setShowExportMenu((value) => !value)} disabled={!rows.length} className="flex h-8 items-center justify-center rounded-md bg-green-600 px-3 text-xs font-medium text-white transition hover:bg-green-700 disabled:opacity-50">
+              <FontAwesomeIcon icon={faFileExport} className="mr-1" /> Export
+            </button>
+            {showExportMenu && (
+              <div className="absolute right-0 z-[60] mt-1 min-w-[120px] overflow-hidden rounded-lg bg-white py-1 shadow-lg ring-1 ring-black/10">
+                {[
+                  { format: "excel", label: "Excel", icon: faFileExcel, color: "text-green-600" },
+                  { format: "csv", label: "CSV", icon: faFileCsv, color: "text-emerald-600" },
+                  { format: "pdf", label: "PDF", icon: faFilePdf, color: "text-red-600" },
+                  { format: "image", label: "Image", icon: faFileImage, color: "text-blue-600" },
+                ].map((item) => (
+                  <button
+                    key={item.format}
+                    type="button"
+                    onClick={() => openExportModal(item.format)}
+                    className="flex w-full items-center px-4 py-2 text-xs transition-colors hover:bg-blue-50"
+                  >
+                    <FontAwesomeIcon icon={item.icon} className={`mr-2 ${item.color}`} />
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button type="button" disabled={!rows.length} onClick={() => { setShowColumns(true); setColumnChooserSearch(""); }} className="flex h-8 items-center justify-center rounded-md bg-blue-600 px-3 text-xs font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+            <FontAwesomeIcon icon={faColumns} className="mr-1" /> Columns
+          </button>
+        </div>
+      </div>
+
+      {showColumns && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/45 px-3 py-3">
+          <div className="flex max-h-[60vh] w-full max-w-[480px] flex-col overflow-hidden rounded-md bg-white shadow-2xl ring-1 ring-black/10">
+            <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-3 py-2">
+              <div className="min-w-0">
+                <h2 className="text-sm font-bold text-slate-900">Manage Columns - {PAGE_CONFIGS[activePage]?.title || "Sales Query"}</h2>
+                <p className="mt-0.5 text-[11px] text-slate-500">Choose the columns to display in the table.</p>
+              </div>
+              <button type="button" className="h-6 w-6 shrink-0 text-slate-500 hover:text-red-600" onClick={() => setShowColumns(false)} title="Close">
+                <FontAwesomeIcon icon={faTimes} className="text-sm" />
+              </button>
+            </div>
+
+            <div className="border-b border-gray-200 px-3 py-2">
+              <div className="flex flex-col gap-2">
+                <div className="relative min-w-0 flex-1">
+                  <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400" />
+                  <input type="text" value={columnChooserSearch} onChange={(event) => setColumnChooserSearch(event.target.value)} placeholder="Search columns..." className="h-7 w-full rounded-md border border-gray-300 pl-9 pr-2 text-[11px] outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                </div>
+                <div className="flex items-center gap-2 overflow-x-auto">
+                  <button type="button" className="h-7 shrink-0 px-1.5 text-[11px] font-medium text-blue-600 hover:text-blue-700" onClick={() => setHiddenColumns([])}>Show All</button>
+                  <button type="button" className="h-7 shrink-0 rounded-md border border-gray-300 px-2 text-[11px] font-medium text-slate-600 hover:bg-gray-50" onClick={() => setHiddenColumns(columns.filter((column) => !pinnedColumnKeys.has(column.key)).map((column) => column.key))}>Hide Optional</button>
+                </div>
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-auto px-3 py-2">
+              <div className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
+                {columns.filter((column) => toProperCase(column.label).toLowerCase().includes(columnChooserSearch.trim().toLowerCase())).map((column) => {
+                  const pinned = pinnedColumnKeys.has(column.key);
+                  return (
+                    <label key={column.key} className={`flex h-7 items-center gap-1.5 rounded border border-gray-200 bg-white px-2 text-[11px] shadow-sm select-none ${pinned ? "cursor-default text-slate-400" : "cursor-pointer text-slate-800 hover:bg-blue-50"}`}>
+                      <input type="checkbox" className="h-3 w-3 shrink-0 accent-blue-600" checked={!hiddenColumns.includes(column.key)} disabled={pinned} onChange={() => toggleColumn(column.key)} />
+                      <span className="min-w-0 flex-1 truncate">{toProperCase(column.label)}</span>
+                      {pinned && <span className="text-[9px] uppercase">Pinned</span>}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-gray-200 px-3 py-2">
+              <div className="text-[11px] text-slate-500">{visibleColumns.length} of {columns.length} columns visible</div>
+              <button type="button" className="h-7 min-w-[72px] rounded-md bg-blue-600 px-3 text-[11px] font-medium text-white hover:bg-blue-700" onClick={() => setShowColumns(false)}>Apply</button>
+            </div>
+          </div>
+        </div>
+      )}
+      <ExportFileNameModal
+        isOpen={exportModal.isOpen}
+        title={exportModal.title}
+        defaultFileName={exportModal.defaultFileName}
+        confirmText={exportModal.confirmText}
+        onClose={closeExportModal}
+        onConfirm={handleExportConfirm}
+      />
       <div className="max-h-[66vh] overflow-auto sales-lifecycle-grid-scroll">
-        <table className="w-full min-w-[1620px] border-separate border-spacing-0 text-[11px]">
-          <thead className="sticky top-0 z-30 bg-blue-100 shadow-sm">
+        <table style={{ width: tableWidth, minWidth: "100%" }} className="table-fixed border-separate border-spacing-0 text-[11px]">
+          <thead className="bg-blue-100 shadow-sm">
             <tr>
-              {columns.map((column) => {
-                const sticky = getLifecycleStickyStyle(column.key);
+              <th
+                style={{ width: LIFECYCLE_ACTION_WIDTH, minWidth: LIFECYCLE_ACTION_WIDTH, maxWidth: LIFECYCLE_ACTION_WIDTH }}
+                className={`sticky left-0 top-0 z-50 h-[30px] border-b border-blue-200 bg-blue-100 px-2 py-1.5 text-center text-[11px] font-bold text-blue-900 ${activePage === "lifecycle" ? "border-r shadow-[10px_0_18px_-15px_rgba(15,23,42,0.95)]" : ""}`}
+              >
+                Actions
+              </th>
+              {visibleColumns.map((column) => {
+                const columnWidth = getColumnWidth(column);
+                const sticky = getSalesTableStickyStyle(activePage, column.key, columnWidths);
                 return (
                   <th
                     key={column.key}
-                    style={{ minWidth: column.minWidth || 110, width: column.minWidth || 110, ...sticky.style }}
-                    className={`border-b border-blue-200 bg-blue-100 px-2 py-1.5 text-[11px] font-bold text-blue-900 ${column.align === "right" ? "text-right" : "text-left"} ${sticky.headerClassName || ""}`}
+                    draggable
+                    onDragStart={(event) => event.dataTransfer.setData("text/plain", column.key)}
+                    style={{ minWidth: columnWidth, width: columnWidth, maxWidth: columnWidth, ...sticky.style }}
+                    onClick={() => onSort(column.key)}
+                    className={`sticky top-0 z-30 h-[30px] cursor-pointer select-none border-b border-blue-200 bg-blue-100 px-2 py-1.5 text-[11px] font-bold text-blue-900 ${column.align === "right" ? "text-right" : "text-left"} ${sticky.headerClassName || ""}`}
                   >
-                    <div className="truncate overflow-hidden whitespace-nowrap" title={column.label}>{column.label}</div>
+                    <div className={`flex items-center gap-2 overflow-hidden ${column.align === "right" ? "justify-end" : "justify-between"}`} title={toProperCase(column.label)}>
+                      <span className="truncate whitespace-nowrap">{toProperCase(column.label)}</span>
+                      <FontAwesomeIcon
+                        icon={sortConfig?.key === column.key ? (sortConfig.direction === "asc" ? faSortUp : faSortDown) : faSort}
+                        className={`shrink-0 text-[9px] ${sortConfig?.key === column.key ? "opacity-100" : "opacity-30"}`}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      aria-label={`Resize ${toProperCase(column.label)} column`}
+                      title="Drag to resize column"
+                      onMouseDown={(event) => startColumnResize(event, column)}
+                      className="absolute -right-1 top-0 z-[60] h-full w-2 cursor-col-resize touch-none border-0 bg-transparent p-0 hover:bg-blue-400/40"
+                    />
                   </th>
                 );
               })}
-              {activePage === "lifecycle" && (
-                <th
-                  style={{ width: LIFECYCLE_ACTION_WIDTH, minWidth: LIFECYCLE_ACTION_WIDTH, maxWidth: LIFECYCLE_ACTION_WIDTH }}
-                  className="sticky right-0 z-50 border-b border-l border-blue-200 bg-blue-100 px-2 py-1.5 text-center text-[11px] font-bold text-blue-900 shadow-[-10px_0_18px_-15px_rgba(15,23,42,0.95)]"
-                >
-                  Actions
-                </th>
-              )}
             </tr>
+            {showColumnFilters && <tr className="bg-slate-100">
+              <th
+                style={{ width: LIFECYCLE_ACTION_WIDTH, minWidth: LIFECYCLE_ACTION_WIDTH, maxWidth: LIFECYCLE_ACTION_WIDTH }}
+                className={`sticky left-0 top-[30px] z-50 h-9 border-b border-slate-200 bg-slate-100 ${activePage === "lifecycle" ? "border-r" : ""}`}
+              />
+              {visibleColumns.map((column) => {
+                const columnWidth = getColumnWidth(column);
+                const sticky = getSalesTableStickyStyle(activePage, column.key, columnWidths);
+                return (
+                  <th
+                    key={`filter-${column.key}`}
+                    style={{ minWidth: columnWidth, width: columnWidth, maxWidth: columnWidth, ...sticky.style }}
+                    className={`sticky top-[30px] z-30 border-b border-slate-200 bg-slate-100 px-1 py-1 ${sticky.isSticky ? "z-40 border-r border-slate-200" : ""}`}
+                  >
+                    <input
+                      type="text"
+                      value={columnFilters?.[column.key] || ""}
+                      onChange={(event) => onColumnFilterChange(column.key, event.target.value)}
+                      onClick={(event) => event.stopPropagation()}
+                      placeholder="Filter..."
+                      aria-label={`Filter ${toProperCase(column.label)}`}
+                      className="h-7 w-full rounded border border-slate-300 bg-white px-2 text-[10px] font-normal text-slate-700 outline-none placeholder:text-slate-400 focus:border-blue-400 focus:ring-1 focus:ring-blue-200"
+                    />
+                  </th>
+                );
+              })}
+            </tr>}
           </thead>
           <tbody className="bg-white">
-            {rows.map((row, rowIndex) => {
+            {!rows.length && (
+              <tr>
+                <td
+                  colSpan={visibleColumns.length + 1}
+                  className="h-28 border-b border-slate-100 px-4 text-center text-xs font-medium text-slate-500"
+                >
+                  {!hasLoaded && isLoading
+                    ? "Loading records..."
+                    : !hasLoaded
+                      ? "Ready to load"
+                      : emptyMessage || "No records found"}
+                </td>
+              </tr>
+            )}
+            {renderedRows.map((row, rowIndex) => {
+              if (row.__group) {
+                return (
+                  <tr key={`group-${row.groupValue}`} className="bg-slate-100">
+                    <td colSpan={visibleColumns.length + 1} className="border-b border-slate-200 px-3 py-2 text-xs font-bold text-blue-800">
+                      {columns.find((column) => column.key === groupByKey)?.label}: {row.groupValue} ({row.groupCount})
+                    </td>
+                  </tr>
+                );
+              }
               const rowTone = getLifecycleRowTone(row?.currentStatus);
               const rowBg = rowIndex % 2 === 0 ? "bg-white" : "bg-slate-50/40";
               const stickyBg = rowIndex % 2 === 0 ? "bg-white" : "bg-slate-50";
               return (
                 <tr key={`${row.soId || row.soNo || row.docNo || rowIndex}-${rowIndex}`} className={`group border-b border-slate-100 transition-colors ${rowBg} hover:bg-blue-50`}>
-                  {columns.map((column, columnIndex) => {
-                    const sticky = getLifecycleStickyStyle(column.key);
+                  <td
+                    style={{ width: LIFECYCLE_ACTION_WIDTH, minWidth: LIFECYCLE_ACTION_WIDTH, maxWidth: LIFECYCLE_ACTION_WIDTH }}
+                    className={`sticky left-0 z-30 border-b border-slate-200 px-1.5 py-1 text-center ${activePage === "lifecycle" ? "border-r shadow-[10px_0_18px_-15px_rgba(15,23,42,0.95)]" : ""} ${stickyBg} group-hover:bg-blue-50`}
+                  >
+                    <div className="flex h-6 items-center justify-center gap-1">
+                      {activePage === "lifecycle" ? (
+                        <>
+                          <ActionIconButton title="View document flow" icon={faArrowUpRightFromSquare} onClick={() => onViewDetails(row)} tone="primary" />
+                          <ActionIconButton title="Open Sales Order" icon={faEye} onClick={() => onOpenSource(row)} tone="primary" />
+                        </>
+                      ) : (
+                        <ActionIconButton title="View Sales Order" icon={faEye} onClick={() => onOpenSource(row)} tone="primary" />
+                      )}
+                    </div>
+                  </td>
+                  {visibleColumns.map((column, columnIndex) => {
+                    const columnWidth = getColumnWidth(column);
+                    const sticky = getSalesTableStickyStyle(activePage, column.key, columnWidths);
                     return (
                       <td
                         key={column.key}
-                        style={{ minWidth: column.minWidth || 110, width: column.minWidth || 110, ...sticky.style }}
-                        className={`border-b border-slate-100 px-1.5 py-1 text-[11px] leading-tight whitespace-nowrap align-middle ${columnIndex === 0 ? `border-l-4 ${rowTone.border}` : "border-l border-slate-100/70"} ${column.align === "right" ? "text-right tabular-nums" : "text-left"} ${sticky.className} ${sticky.isSticky ? `${stickyBg} group-hover:bg-blue-50` : ""}`}
+                        style={{ minWidth: columnWidth, width: columnWidth, maxWidth: columnWidth, ...sticky.style }}
+                        className={`overflow-hidden border-b border-slate-100 px-1.5 py-1 text-[11px] leading-tight whitespace-nowrap align-middle ${activePage === "lifecycle" && columnIndex === 0 ? `border-l-4 ${rowTone.border}` : columnIndex === 0 ? "" : "border-l border-slate-100/70"} ${column.align === "right" ? "text-right tabular-nums" : "text-left"} ${sticky.className} ${sticky.isSticky ? `${stickyBg} group-hover:bg-blue-50` : ""}`}
                       >
-                        <CellRenderer column={column} row={row} onViewDetails={onViewDetails} />
+                        <div className="min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap" title={String(row?.[column.key] ?? "")}>
+                          <CellRenderer column={column} row={row} onViewDetails={onViewDetails} isSticky={activePage === "lifecycle" && sticky.isSticky} quantityDecimals={quantityDecimals} sellingPriceDecimals={sellingPriceDecimals} />
+                        </div>
                       </td>
                     );
                   })}
-                  {activePage === "lifecycle" && (
-                    <td
-                      style={{ width: LIFECYCLE_ACTION_WIDTH, minWidth: LIFECYCLE_ACTION_WIDTH, maxWidth: LIFECYCLE_ACTION_WIDTH }}
-                      className={`sticky right-0 z-30 border-b border-l border-slate-200 px-1.5 py-1 text-center shadow-[-10px_0_18px_-15px_rgba(15,23,42,0.95)] ${stickyBg} group-hover:bg-blue-50`}
-                    >
-                      <div className="flex h-6 items-center justify-center gap-1">
-                        <ActionIconButton title="View document flow" icon={faEye} onClick={() => onViewDetails(row)} tone="primary" />
-                        <ActionIconButton title="Open Sales Order" icon={faArrowUpRightFromSquare} onClick={() => onOpenSource(row)} tone="secondary" />
-                      </div>
-                    </td>
-                  )}
                 </tr>
               );
             })}
@@ -1037,18 +1478,51 @@ const ModernDataTable = ({ columns, rows, activePage, hasLoaded, isLoading, empt
   );
 };
 
-const getLifecycleStickyStyle = (key) => {
+const getSalesTableStickyStyle = (activePage, key, columnWidths = {}) => {
+  if (activePage === "itemFlow") {
+    const branchWidth = columnWidths.branchCode || 90;
+
+    if (key === "branchCode") {
+      return {
+        isSticky: true,
+        style: {
+          left: LIFECYCLE_ACTION_WIDTH,
+          width: branchWidth,
+          minWidth: branchWidth,
+          maxWidth: branchWidth,
+        },
+        headerClassName: "sticky z-40 border-r border-blue-200 bg-blue-100",
+        className: "sticky z-20 border-r border-slate-200",
+      };
+    }
+
+    if (key === "soNo") {
+      return {
+        isSticky: true,
+        style: { left: LIFECYCLE_ACTION_WIDTH + branchWidth },
+        headerClassName: "sticky z-40 border-r border-blue-200 bg-blue-100 shadow-[10px_0_18px_-15px_rgba(15,23,42,0.95)]",
+        className: "sticky z-20 border-r border-slate-200 shadow-[10px_0_18px_-15px_rgba(15,23,42,0.95)]",
+      };
+    }
+
+    return { isSticky: false, style: {}, className: "", headerClassName: "" };
+  }
+
+  const flowWidth = columnWidths.flow || LIFECYCLE_FLOW_WIDTH;
+  const statusWidth = columnWidths.currentStatus || LIFECYCLE_STATUS_WIDTH;
+  const branchWidth = columnWidths.branchCode || 90;
+
   if (key === "currentStatus") {
     return {
       isSticky: true,
       style: {
-        right: LIFECYCLE_STICKY_RIGHT.currentStatus,
-        width: LIFECYCLE_STATUS_WIDTH,
-        minWidth: LIFECYCLE_STATUS_WIDTH,
-        maxWidth: LIFECYCLE_STATUS_WIDTH,
+        left: LIFECYCLE_ACTION_WIDTH,
+        width: statusWidth,
+        minWidth: statusWidth,
+        maxWidth: statusWidth,
       },
-      headerClassName: "sticky z-40 border-l border-blue-200 bg-blue-100 shadow-[-10px_0_18px_-15px_rgba(15,23,42,0.95)]",
-      className: "sticky z-20 border-l border-slate-200 shadow-[-10px_0_18px_-15px_rgba(15,23,42,0.95)]",
+      headerClassName: "sticky z-40 border-r border-blue-200 bg-blue-100",
+      className: "sticky z-20 border-r border-slate-200",
     };
   }
 
@@ -1056,13 +1530,38 @@ const getLifecycleStickyStyle = (key) => {
     return {
       isSticky: true,
       style: {
-        right: LIFECYCLE_STICKY_RIGHT.flow,
-        width: LIFECYCLE_FLOW_WIDTH,
-        minWidth: LIFECYCLE_FLOW_WIDTH,
-        maxWidth: LIFECYCLE_FLOW_WIDTH,
+        left: LIFECYCLE_ACTION_WIDTH + statusWidth,
+        width: flowWidth,
+        minWidth: flowWidth,
+        maxWidth: flowWidth,
       },
-      headerClassName: "sticky z-40 border-l border-blue-200 bg-blue-100",
-      className: "sticky z-20 border-l border-slate-200",
+      headerClassName: "sticky z-40 border-r border-blue-200 bg-blue-100",
+      className: "sticky z-20 border-r border-slate-200",
+    };
+  }
+
+  if (key === "branchCode") {
+    return {
+      isSticky: true,
+      style: {
+        left: LIFECYCLE_ACTION_WIDTH + statusWidth + flowWidth,
+        width: branchWidth,
+        minWidth: branchWidth,
+        maxWidth: branchWidth,
+      },
+      headerClassName: "sticky z-40 border-r border-blue-200 bg-blue-100",
+      className: "sticky z-20 border-r border-slate-200",
+    };
+  }
+
+  if (key === "soNo") {
+    return {
+      isSticky: true,
+      style: {
+        left: LIFECYCLE_ACTION_WIDTH + statusWidth + flowWidth + branchWidth,
+      },
+      headerClassName: "sticky z-40 border-r border-blue-200 bg-blue-100 shadow-[10px_0_18px_-15px_rgba(15,23,42,0.95)]",
+      className: "sticky z-20 border-r border-slate-200 shadow-[10px_0_18px_-15px_rgba(15,23,42,0.95)]",
     };
   }
 
@@ -1098,33 +1597,37 @@ const getLifecycleRowTone = (status) => {
   return { border: "border-l-slate-300" };
 };
 
-const CellRenderer = ({ column, row, onViewDetails }) => {
+const CellRenderer = ({ column, row, onViewDetails, isSticky = false, quantityDecimals = 2, sellingPriceDecimals = 2 }) => {
   const value = row?.[column.key];
+  const weightClass = isSticky && !NORMAL_WEIGHT_COLUMN_KEYS.has(column.key)
+    ? "font-bold"
+    : "font-normal";
 
   if (column.type === "link") {
     return (
-      <button type="button" onClick={() => onViewDetails(row)} className="inline-flex max-w-[130px] truncate rounded bg-blue-50 px-2 py-0.5 text-[11px] font-extrabold text-blue-700 transition hover:bg-blue-100 hover:text-blue-800">
+      <button type="button" onClick={() => onViewDetails(row)} className={`inline-flex max-w-full truncate text-[11px] text-slate-700 transition hover:text-slate-700 ${weightClass}`}>
         {value || "-"}
       </button>
     );
   }
 
-  if (column.type === "date") return <span className="font-semibold text-slate-600">{formatDate(value)}</span>;
-  if (column.type === "amount") return <span className="font-bold tabular-nums text-slate-800">{formatPesoAmount(value)}</span>;
-  if (column.type === "qty") return <span className="font-bold tabular-nums text-slate-800">{formatQty(value)}</span>;
-  if (column.type === "number") return <span className="font-bold tabular-nums text-slate-800">{toNumber(value).toLocaleString()}</span>;
-  if (column.type === "percent") return <span className="font-bold tabular-nums text-slate-800">{formatPercent(value)}</span>;
-  if (column.type === "status") return <StatusBadge value={value} />;
+  if (column.type === "date") return <span className={`${weightClass} text-slate-600`}>{formatDate(value)}</span>;
+  if (column.type === "amount") return <span className={`${weightClass} tabular-nums text-slate-800`}>{formatAmount(value)}</span>;
+  if (column.type === "price") return <span className={`${weightClass} tabular-nums text-slate-800`}>{formatPrice(value, sellingPriceDecimals)}</span>;
+  if (column.type === "qty") return <span className={`${weightClass} tabular-nums text-slate-800`}>{formatQty(value, quantityDecimals)}</span>;
+  if (column.type === "number") return <span className={`${weightClass} tabular-nums text-slate-800`}>{toNumber(value).toLocaleString()}</span>;
+  if (column.type === "percent") return <span className={`${weightClass} tabular-nums text-slate-800`}>{formatPercent(value)}</span>;
+  if (column.type === "status") return <StatusBadge value={value} isSticky={isSticky} />;
   if (column.type === "flow") return <FlowProgress status={row?.currentStatus || row?.itemStatus} />;
   if (column.type === "docBadge") return <DocTypeBadge value={value} />;
 
-  return <span className="font-medium text-slate-700">{value ?? ""}</span>;
+  return <span className={`${weightClass} text-slate-700`}>{value ?? ""}</span>;
 };
 
-const StatusBadge = ({ value }) => {
+const StatusBadge = ({ value, isSticky = false }) => {
   const meta = getStatusMeta(value);
   return (
-    <span className={`inline-flex max-w-[150px] items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-extrabold ${meta.cls}`} title={meta.label}>
+    <span className={`inline-flex max-w-[150px] items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] ${isSticky ? "font-bold" : "font-normal"} ${meta.cls}`} title={meta.label}>
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${meta.dot}`} />
       <span className="truncate">{meta.label}</span>
     </span>
@@ -1138,7 +1641,7 @@ const DocTypeBadge = ({ value }) => {
     : type === "ARCM"
       ? "border-violet-200 bg-violet-50 text-violet-700"
       : "border-emerald-200 bg-emerald-50 text-emerald-700";
-  return <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-extrabold ${cls}`}>{type || "DOC"}</span>;
+  return <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-normal ${cls}`}>{type || "DOC"}</span>;
 };
 
 const FlowProgress = ({ status }) => {
@@ -1160,24 +1663,6 @@ const FlowProgress = ({ status }) => {
       </div>
       <div className="mt-1 flex justify-between text-[8px] font-bold text-slate-400">
         {stages.map((stage) => <span key={stage}>{stage}</span>)}
-      </div>
-    </div>
-  );
-};
-
-const Pagination = ({ page, totalPages, onPageChange }) => {
-  const pages = buildPageButtons(page, totalPages);
-
-  return (
-    <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-end">
-      <div className="flex items-center justify-end gap-1">
-        <button type="button" onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page <= 1} className="h-8 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40">Prev</button>
-        {pages.map((pageNo, index) => pageNo === "..." ? (
-          <span key={`dots-${index}`} className="px-2 text-xs text-slate-400">...</span>
-        ) : (
-          <button key={pageNo} type="button" onClick={() => onPageChange(pageNo)} className={`h-8 min-w-8 rounded-lg border px-3 text-xs font-bold ${page === pageNo ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>{pageNo}</button>
-        ))}
-        <button type="button" onClick={() => onPageChange(Math.min(totalPages, page + 1))} disabled={page >= totalPages} className="h-8 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40">Next</button>
       </div>
     </div>
   );
@@ -1295,29 +1780,131 @@ const buildDonutGradient = (items, total) => {
   return `conic-gradient(${stops.join(", ")})`;
 };
 
+const applyLifecycleTableState = (rows, columns, columnFilters, sortConfig) => {
+  const getCellValue = (row, key) => key === "flow" ? row?.currentStatus : row?.[key];
+  const activeFilters = Object.entries(columnFilters || {}).filter(([, value]) => String(value || "").trim() !== "");
+
+  const filtered = activeFilters.length
+    ? rows.filter((row) => activeFilters.every(([key, filterValue]) =>
+        String(getCellValue(row, key) ?? "").toLowerCase().includes(String(filterValue).trim().toLowerCase())
+      ))
+    : rows;
+
+  if (!sortConfig?.key || !sortConfig?.direction) return filtered;
+
+  const column = columns.find((item) => item.key === sortConfig.key);
+  const numericType = ["amount", "price", "qty", "number", "percent"].includes(column?.type);
+  const direction = sortConfig.direction === "desc" ? -1 : 1;
+
+  return [...filtered].sort((leftRow, rightRow) => {
+    const leftValue = getCellValue(leftRow, sortConfig.key);
+    const rightValue = getCellValue(rightRow, sortConfig.key);
+
+    if (numericType) return (toNumber(leftValue) - toNumber(rightValue)) * direction;
+    if (column?.type === "date") {
+      const leftDate = Date.parse(leftValue || "") || 0;
+      const rightDate = Date.parse(rightValue || "") || 0;
+      return (leftDate - rightDate) * direction;
+    }
+
+    return String(leftValue ?? "").localeCompare(String(rightValue ?? ""), undefined, { numeric: true, sensitivity: "base" }) * direction;
+  });
+};
+
 const filterRowsForSearch = (rows, searchText) => {
   const value = String(searchText || "").trim().toLowerCase();
   if (!value) return rows;
   return rows.filter((row) => Object.values(row || {}).some((cell) => String(cell ?? "").toLowerCase().includes(value)));
 };
 
-const buildPageButtons = (page, totalPages) => {
-  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1);
-  const pages = [1];
-  const start = Math.max(2, page - 1);
-  const end = Math.min(totalPages - 1, page + 1);
-  if (start > 2) pages.push("...");
-  for (let pageNo = start; pageNo <= end; pageNo += 1) pages.push(pageNo);
-  if (end < totalPages - 1) pages.push("...");
-  pages.push(totalPages);
-  return pages;
+const sanitizeExportFileName = (name) => String(name ?? "")
+  .trim()
+  .replace(/[\\/:*?"<>|]/g, "")
+  .replace(/\s+/g, " ")
+  .substring(0, 120);
+
+const getExportDateTimeStamp = () => {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mi = String(now.getMinutes()).padStart(2, "0");
+  const ss = String(now.getSeconds()).padStart(2, "0");
+  return `${yyyy}${mm}${dd}_${hh}${mi}${ss}`;
+};
+
+const columnWidthsToExportWidth = (minWidth) => Number(minWidth || 100);
+
+const exportSalesQuery = async (format, filename, columns, rows) => {
+  const getValue = (row, column) => column.key === "flow" ? row?.currentStatus : row?.[column.key];
+  const headers = columns.map((column) => toProperCase(column.label));
+  const body = rows.map((row) => columns.map((column) => getValue(row, column) ?? ""));
+
+  if (format === "csv") {
+    downloadCsv(`${filename}.csv`, columns, rows);
+    return;
+  }
+
+  if (format === "pdf") {
+    const [{ jsPDF }, autoTableModule] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
+    const documentPdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+    const autoTable = autoTableModule.default || autoTableModule.autoTable;
+    documentPdf.text(filename.replace(/_/g, " "), 28, 24);
+    autoTable(documentPdf, {
+      head: [headers],
+      body,
+      startY: 34,
+      styles: { fontSize: 6, cellPadding: 2 },
+      headStyles: { fillColor: [219, 234, 254], textColor: [30, 64, 175] },
+    });
+    documentPdf.save(`${filename}.pdf`);
+    return;
+  }
+
+  if (format === "image") {
+    const container = document.createElement("div");
+    container.style.cssText = "position:fixed;left:-100000px;top:0;background:#fff;padding:16px;font:11px Arial;color:#1e293b;";
+    const title = document.createElement("h2");
+    title.textContent = filename.replace(/_/g, " ");
+    const table = document.createElement("table");
+    table.style.cssText = "border-collapse:collapse;white-space:nowrap;";
+    const headerRow = table.insertRow();
+    headers.forEach((header) => {
+      const cell = document.createElement("th");
+      cell.textContent = header;
+      cell.style.cssText = "border:1px solid #bfdbfe;background:#dbeafe;padding:5px;text-align:left;";
+      headerRow.appendChild(cell);
+    });
+    body.forEach((row) => {
+      const tableRow = table.insertRow();
+      row.forEach((value) => {
+        const cell = tableRow.insertCell();
+        cell.textContent = String(value ?? "");
+        cell.style.cssText = "border:1px solid #e2e8f0;padding:4px;";
+      });
+    });
+    container.append(title, table);
+    document.body.appendChild(container);
+    try {
+      const html2canvasModule = await import("html2canvas");
+      const html2canvas = html2canvasModule.default || html2canvasModule;
+      const canvas = await html2canvas(container, { backgroundColor: "#ffffff", scale: 1 });
+      const link = document.createElement("a");
+      link.download = `${filename}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } finally {
+      document.body.removeChild(container);
+    }
+  }
 };
 
 const downloadCsv = (filename, columns, rows) => {
   const headers = columns.map((column) => column.label);
   const lines = [headers.join(",")];
   rows.forEach((row) => {
-    lines.push(columns.map((column) => csvValue(row?.[column.key])).join(","));
+    lines.push(columns.map((column) => csvValue(column.key === "flow" ? row?.currentStatus : row?.[column.key])).join(","));
   });
   const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
   const link = document.createElement("a");
