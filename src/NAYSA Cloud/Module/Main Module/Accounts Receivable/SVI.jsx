@@ -168,6 +168,10 @@ const SVI = () => {
   const videoLink = docTypeVideoGuide[docType];
   const documentTitle = hsDoc.docName + ' Transaction';
 
+  useEffect(() => {
+    document.title = documentTitle;
+  }, [documentTitle]);
+
   const {
     pagePermission,
     isReadOnly,

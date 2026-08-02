@@ -145,6 +145,10 @@ const CV = () => {
    const videoLink = docTypeVideoGuide[docType];
    const documentTitle = hsDoc.docName + ' Transaction';
  
+  useEffect(() => {
+    document.title = documentTitle;
+  }, [documentTitle]);
+  
    const [state, setState] = useState({
 
 
@@ -1036,10 +1040,17 @@ const handleCvNoBlur = () => {
 
 const handleWithAPVChange = (e) => {
   const selectedWithAPV = e.target.value; 
+  const nextCvType = selectedWithAPV === "Y" ? "APV01" : selectedCvType;
+
   updateState({
-    selectedWithAPV: selectedWithAPV,
-    ...(selectedWithAPV === "Y" ? { selectedCvType: "APV01" } : {}),
-  }); 
+    selectedWithAPV,
+    ...(selectedWithAPV === "Y" ? { selectedCvType: nextCvType } : {}),
+  });
+
+  void recalculateAllCvDetailRows({
+    withAPV: selectedWithAPV,
+    cvType: nextCvType,
+  });
 };
 
 const handlePayTypeChange = (e) => {
@@ -1053,11 +1064,16 @@ const handlePayTypeChange = (e) => {
     selectedPayType: selectedPayType,
     ...(cashPayment ? { checkNo: "", checkDate: "" } : {}),
   }); 
+
 };
 
 const handleCvTypeChange = (e) => {
   const selectedCvType = e.target.value;
   updateState({ selectedCvType: selectedCvType });
+  void recalculateAllCvDetailRows({
+    withAPV: selectedWithAPV,
+    cvType: selectedCvType,
+  });
 };
 
 
@@ -1640,22 +1656,45 @@ const handleCopy = async () => {
 };
 
 
-const recomputeCvDetailRowAmounts = async (row, changedField = "") => {
+const recomputeCvDetailRowAmounts = async (
+  row,
+  changedField = "",
+  {
+    withAPV = selectedWithAPV,
+    cvType = selectedCvType,
+    forceTaxRecalculation = false,
+  } = {}
+) => {
   const invoiceAmount = parseFormattedNumber(row.siAmount || 0) || 0;
   const appliedAmount = parseFormattedNumber(row.appliedAmount || 0) || 0;
   const unappliedAmount = parseFormattedNumber(row.unappliedAmount || 0) || 0;
   const invoiceBalance = +(invoiceAmount - unappliedAmount).toFixed(2);
   const appliedBalance = +(appliedAmount - unappliedAmount).toFixed(2);
+  const isWithoutAPV02 = withAPV === "N" && cvType === "APV02";
+  const preserveApvAmounts = withAPV === "Y" && cvType === "APV01";
 
   let vatAmount = parseFormattedNumber(row.vatAmount || 0) || 0;
 
-  if (changedField === "vatCode" || changedField === "vatName" || changedField === "vatClear") {
+  if (isWithoutAPV02) {
+    vatAmount = 0;
+  } else if (
+    !preserveApvAmounts && (
+    forceTaxRecalculation ||
+    changedField === "vatCode" ||
+    changedField === "vatName" ||
+    changedField === "vatClear"
+    )
+  ) {
     vatAmount = row.vatCode ? await useTopVatAmount(row.vatCode, invoiceBalance) : 0;
   }
 
   const netOfVat = +(invoiceBalance - vatAmount).toFixed(2);
-  const atcAmount = row.atcCode ? await useTopATCAmount(row.atcCode, netOfVat) : 0;
-  const amountDue = selectedWithAPV === "Y"
+  const atcAmount = isWithoutAPV02 || preserveApvAmounts
+    ? 0
+    : (forceTaxRecalculation || changedField === "atcCode"
+      ? (row.atcCode ? await useTopATCAmount(row.atcCode, netOfVat) : 0)
+      : (parseFormattedNumber(row.atcAmount || 0) || 0));
+  const amountDue = withAPV === "Y"
     ? appliedBalance
     : +(invoiceBalance - atcAmount).toFixed(2);
 
@@ -1666,6 +1705,22 @@ const recomputeCvDetailRowAmounts = async (row, changedField = "") => {
   row.balanceAmount = formatNumber(invoiceBalance);
 
   return row;
+};
+
+const recalculateAllCvDetailRows = async (options = {}) => {
+  if (!detailRows.length) return;
+
+  const updatedRows = await Promise.all(
+    detailRows.map((row) =>
+      recomputeCvDetailRowAmounts(row, "", {
+        ...options,
+        forceTaxRecalculation: true,
+      })
+    )
+  );
+
+  updateState({ detailRows: updatedRows });
+  updateTotals(updatedRows);
 };
 
 
@@ -1770,8 +1825,10 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
   const origAmtDue = parseFormattedNumber(row.amountDue) || 0;
   const origVatCode = row.vatCode || "";
   const origAtcCode = row.atcCode || "";
-  const cvType = row.cvType || "APV01"; 
-  const withAPV = row.withAPV || "Y";
+  const origVatAmount = parseFormattedNumber(row.vatAmount) || 0;
+  const origAtcAmount = parseFormattedNumber(row.atcAmount) || 0;
+  const cvType = row.cvType || selectedCvType;
+  const withAPV = row.withAPV || selectedWithAPV;
 
     const applied = parseFormattedNumber(row.appliedAmount) || 0;
     const unapplied = parseFormattedNumber(row.unappliedAmount) || 0;
@@ -1781,9 +1838,22 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
     const newInvoiceAmount = (origAmount * origCurrRate).toFixed(2);
     const finalAppliedAmount = cvType === "APV01" && withAPV === "Y" ? newInvoiceAmount : newAppliedAmount; 
     const newBalance = +(finalAppliedAmount - newUnapplied).toFixed(2);
-    const newVatAmount = origVatCode ? await useTopVatAmount(origVatCode, newBalance) : 0;
-    const newNetOfVat = +(newBalance - newVatAmount).toFixed(2);
-    const newATCAmount = origAtcCode ? await useTopATCAmount(origAtcCode, newNetOfVat) : 0;
+    const taxBase = withAPV === "N"
+      ? +(parseFormattedNumber(newInvoiceAmount) - newUnapplied).toFixed(2)
+      : newBalance;
+    const noApv02 = withAPV === "N" && cvType === "APV02";
+    const preserveApvAmounts = withAPV === "Y" && cvType === "APV01";
+    const newVatAmount = noApv02
+      ? 0
+      : preserveApvAmounts
+        ? origVatAmount
+        : (origVatCode ? await useTopVatAmount(origVatCode, taxBase) : 0);
+    const newNetOfVat = +(taxBase - newVatAmount).toFixed(2);
+    const newATCAmount = noApv02
+      ? 0
+      : preserveApvAmounts
+        ? origAtcAmount
+        : (origAtcCode ? await useTopATCAmount(origAtcCode, newNetOfVat) : 0);
 
     row.siAmount = formatNumber(newInvoiceAmount);
     row.balanceAmount = formatNumber(newBalance);
@@ -1796,12 +1866,11 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
     row.currRate = formatNumber(parseFormattedNumber(row.currRate),6);
 
     
-  if (selectedWithAPV === "Y") {
-      row.amountDue = formatNumber(applied - unapplied);
-  };
-  if (selectedWithAPV === "N") {
-      row.amountDue = formatNumber(newInvoiceAmount - newATCAmount);
-  } 
+  row.amountDue = formatNumber(
+    selectedWithAPV === "Y"
+      ? applied - unapplied
+      : parseFormattedNumber(newInvoiceAmount) - newATCAmount
+  );
 
   }
 
@@ -1815,12 +1884,11 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
     row.siAmount = newInvoiceAmount.toFixed(2);
     row.balanceAmount = newBalance.toFixed(2);
 
-  if (selectedWithAPV === "Y") {
-      row.amountDue = formatNumber(applied - unapplied);
-  };
-  if (selectedWithAPV === "N") {
-      row.amountDue = formatNumber(newBalance - newATCAmount);
-  } 
+  row.amountDue = formatNumber(
+    selectedWithAPV === "Y"
+      ? applied - unapplied
+      : newBalance - newATCAmount
+  );
 
     await recalcRow(newAppliedAmount, newUnapplied);
   }
@@ -1835,7 +1903,11 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
     const appliedBalance = +(parseFormattedNumber(row.appliedAmount || 0) - parseFormattedNumber(row.unappliedAmount || 0)).toFixed(2);
     const newATCAmount = parseFormattedNumber(row.atcAmount || 0) || 0;
     row.atcAmount = formatNumber(newATCAmount);
-    row.amountDue = formatNumber(selectedWithAPV === "Y" ? appliedBalance : invoiceBal - newATCAmount);
+    row.amountDue = formatNumber(
+      selectedWithAPV === "Y"
+        ? appliedBalance
+        : invoiceBal - newATCAmount
+    );
   }
 }
 
@@ -2091,14 +2163,32 @@ const handleCloseSignatory = async (mode) => {
 const handleOpenAPBalance = async () => {
   console.log('[APBAL] handler fired');
 
+  if (!String(vendCode || '').trim()) {
+    await Swal.fire({
+      icon: 'info',
+      title: 'Payee Required',
+      text: 'Select a payee before loading Open AP Balance.',
+    });
+    return;
+  }
+
   updateState({ isLoading: true });
 
   const endpoint = 'getOpenAPBalance';
-  console.log('[APBAL] params', { vendCode, branchCode, endpoint });
+  const groupIdSelected = {
+    dt1: detailRows.map((row) => ({ groupId: row.groupId }))
+  };
+  const params = {
+    vendCode,
+    branchCode,
+    tranType: selectedCvType,
+    groupIdSelected,
+  };
+  console.log('[APBAL] params', { ...params, endpoint });
 
   try {
     console.log('[APBAL] before fetchDataJson');
-    const response = await fetchDataJsonLookup(endpoint, { vendCode, branchCode });
+    const response = await fetchDataJsonLookup(endpoint, params);
     // Log a safe snapshot so DevTools doesn’t “live mutate” objects
     console.log('[APBAL] response(raw)', response);
     try {
@@ -2180,7 +2270,16 @@ const handleCloseAPBalance = async (payload) => {
       
        updateState({ isLoading: true });
 
-      const result = await useSelectedOpenAPBalance(payload);
+      const selectionPayload = {
+        ...payload,
+        branchCode,
+        vendCode,
+        tranType: selectedCvType,
+        groupIdSelected: {
+          dt1: detailRows.map((row) => ({ groupId: row.groupId }))
+        },
+      };
+      const result = await useSelectedOpenAPBalance(selectionPayload);
       if (result) {   
       const resultRows = Array.isArray(result) ? result : [];
       const resultPayeeCodes = [

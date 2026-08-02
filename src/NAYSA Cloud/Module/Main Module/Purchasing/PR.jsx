@@ -2166,7 +2166,7 @@ const renderPrDetailColumn = (columnKey, row, index) => {
           isResetDisabled={state.isResetDisabled}
           isAttachDisabled={!documentID}
           isNotifyDisabled={!documentID || displayStatus === "CANCELLED" || approvalStatus === "Approved Transaction"}
-          isPrintDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "CLOSED" || hasExistingPO || displayStatus === "APPROVED" }
+          isPrintDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "APPROVED" }
           isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
           isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED"|| displayStatus === "CLOSED" || hasExistingPO }
 

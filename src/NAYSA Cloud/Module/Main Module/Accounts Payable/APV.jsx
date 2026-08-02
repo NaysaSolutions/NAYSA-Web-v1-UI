@@ -2726,7 +2726,7 @@ const calculatedAtcAmount = aCode
   };
 
   const handlePost = async () => {
-    if (!detailRows || detailRows.length === 0) {
+    if (!detailRowsGL || detailRowsGL.length === 0) {
       return;
     }
 
@@ -2736,7 +2736,7 @@ const calculatedAtcAmount = aCode
   };
 
   const handlePrint = async () => {
-    if (!detailRows || detailRows.length === 0) {
+    if (detailRowsGL.length === 0) {
       return;
     }
     if (documentID) {
@@ -2775,7 +2775,7 @@ const calculatedAtcAmount = aCode
   };
 
   const handleCancel = async () => {
-    if (!detailRows || detailRows.length === 0) {
+    if (!detailRowsGL || detailRowsGL.length === 0) {
       return;
     }
 
@@ -2792,7 +2792,7 @@ const calculatedAtcAmount = aCode
   };
 
   const handleCopy = async () => {
-    if (!detailRows || detailRows.length === 0) {
+    if (!detailRowsGL || detailRowsGL.length === 0) {
       return;
     }
 
