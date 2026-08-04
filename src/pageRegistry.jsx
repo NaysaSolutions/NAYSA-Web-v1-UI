@@ -221,6 +221,7 @@ export const pageRegistry = {
 
   // Matrix
   SalesPMCustomerItem: lazyPage(() => import("./NAYSA Cloud/Matrix/SalesPMCustomerItem.jsx")),
+  CommisaryPriceMatrix: lazyPage(() => import("./NAYSA Cloud/Matrix/CommisaryPriceMatrix.jsx")),
   CAN: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Purchasing/CAN.jsx")),
 
   // Purchasing Inquiry (Unified/Merged)

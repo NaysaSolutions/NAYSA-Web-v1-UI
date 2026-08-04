@@ -1596,7 +1596,10 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
     );
     setEditingSupplementIndex(null);
 
-    useSwalSuccessAlert("Asset Details Updated", "Serial breakdown and warranty information were applied to the selected asset detail.");
+    useSwalSuccessAlert(
+      "Asset Details Updated",
+      "Serial breakdown and warranty information were applied to the selected asset detail. Click the Save button to save these changes to the FARR transaction."
+    );
   };
 
   const updateDetailRow = (index, updates) => {
