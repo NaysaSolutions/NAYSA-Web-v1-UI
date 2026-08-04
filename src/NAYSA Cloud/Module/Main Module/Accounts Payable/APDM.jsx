@@ -74,6 +74,7 @@ import {
 import { 
   formatNumber,
   parseFormattedNumber,
+  useSwalInfoAlert,
   useSwalshowSaveSuccessDialog,
 } from '@/NAYSA Cloud/Global/behavior.jsx';
 
@@ -607,6 +608,10 @@ const moveFocusBeforeSave = () => {
         detailRowsGL
     } = state;
 
+    if (!validateAppliedAmounts(detailRows)) {
+      return;
+    }
+
     let finalDetailRowsGL = [...detailRowsGL];
 
     const buildGlData = (glRows) => ({
@@ -990,7 +995,7 @@ useEffect(() => {
     }
 };
 
-  const updateTotals = (rows) => {
+const updateTotals = (rows) => {
   let totalSIAmt = 0;
   let totalApplied = 0;
   let totalVAT = 0;
@@ -1009,6 +1014,33 @@ useEffect(() => {
   });
 
     updateTotalsDisplay (totalSIAmt,totalApplied, totalVAT,totalATC);
+};
+
+const showAppliedAmountValidation = (rowNo, invoiceAmount, appliedAmount) => {
+  useSwalInfoAlert(
+    "Validation",
+    `Line ${rowNo}: Applied Amount (${formatNumber(appliedAmount)}) cannot exceed Invoice Amount (${formatNumber(invoiceAmount)}).`
+  );
+};
+
+const validateAppliedAmounts = (rows) => {
+  if (selectedAPDMType === "APDM02") return true;
+
+  const invalidIndex = rows.findIndex((row) => {
+    const invoiceAmount = parseFormattedNumber(row.siAmount || 0) || 0;
+    const appliedAmount = parseFormattedNumber(row.appliedAmount || 0) || 0;
+    return +(appliedAmount - invoiceAmount).toFixed(2) > 0;
+  });
+
+  if (invalidIndex === -1) return true;
+
+  const invalidRow = rows[invalidIndex];
+  showAppliedAmountValidation(
+    invalidIndex + 1,
+    parseFormattedNumber(invalidRow.siAmount || 0) || 0,
+    parseFormattedNumber(invalidRow.appliedAmount || 0) || 0
+  );
+  return false;
 };
 
 const handleDetailChange = async (index, field, value, runCalculations = true) => {
@@ -1049,6 +1081,12 @@ const isAPDM02 = selectedAPDMType === "APDM02";
 const isAllTypes = isAPDM02 || selectedAPDMType === "APDM01";
 
 if (field === "appliedAmount") {
+  if (!isAPDM02 && +(origApplied - siAmount).toFixed(2) > 0) {
+    showAppliedAmountValidation(index + 1, siAmount, origApplied);
+    origApplied = siAmount;
+    row.appliedAmount = formatNumber(siAmount);
+  }
+
   if (isAPDM02) {
     siAmount = parseFormattedNumber(row.appliedAmount);
     row.siAmount = formatNumber(siAmount);
@@ -1324,6 +1362,16 @@ const handleOpenAPBalance = async () => {
     const custData = response?.data?.[0]?.result ? JSON.parse(response.data[0].result) : [];
 
     const colConfig = await useSelectedHSColConfig(endpoint);
+    const displayRows = custData.map((row) => ({
+      ...row,
+      branchCode:
+        row.branchName ||
+        row.brName ||
+        row.branch_name ||
+        row.BRANCH_NAME ||
+        branchName ||
+        row.branchCode,
+    }));
 
    if (custData.length === 0) {
       await Swal.fire({
@@ -1335,7 +1383,7 @@ const handleOpenAPBalance = async () => {
       return; 
     }
 
-    updateState({ globalLookupRow: custData,
+    updateState({ globalLookupRow: displayRows,
                   globalLookupHeader:colConfig,
                   showAPBalanceModal: true
       });
@@ -1503,11 +1551,11 @@ const handleCloseBranchModal = (selectedBranch) => {
               onReset={handleReset}
               onSave={() => handleActivityOption("Upsert")}
               onCancel={handleCancel} 
-              onCopy={handleCopy} 
               onAttach={handleAttach}
               activeTopTab={topTab} 
               showActions={topTab === "details"} 
               showBIRForm={false}  
+              showCopyForm={false}
               isViewDocument={isViewDocument}      
               onDetails={() => setTopTab("details")}
               onHistory={() => setTopTab("history")}
@@ -1517,7 +1565,6 @@ const handleCloseBranchModal = (selectedBranch) => {
               isResetDisabled={state.isResetDisabled}
               isAttachDisabled={!documentID}
               isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
-              isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
               isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED"|| displayStatus === "CLOSED"}
         />
       </div>
