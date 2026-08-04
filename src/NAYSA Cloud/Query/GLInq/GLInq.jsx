@@ -1173,6 +1173,9 @@ export default function GLINQ() {
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [hideNav, setHideNav] = useState(false);
+  const [incomeStatementMTDView, setIncomeStatementMTDView] =
+    useState("perMonth");
+  const [incomeExpenseView, setIncomeExpenseView] = useState("perMonth");
 
   const [drilldownExpandedByTab, setDrilldownExpandedByTab] = useState({
     balSheetYTD: {},
@@ -1266,6 +1269,7 @@ export default function GLINQ() {
       isEmpty: false,
       emptyMessage: "",
       comparisonPeriods: [],
+      reportData: null,
       summary: {
         totalDebit: 0,
         totalCredit: 0,
@@ -1669,14 +1673,29 @@ export default function GLINQ() {
 
       try {
         const jsonData = Report.buildJsonData(payload);
+        const usesDynamicColumns = Report?.meta?.dynamicColumns === true;
 
-        const [colsResp, rowsResp] = await Promise.all([
-          useSelectedHSColConfig(endpoint),
-          fetchData(endpoint, { json_data: { json_data: jsonData } }),
-        ]);
+        let colsResp = [];
+        let rowsResp;
 
-        const colsArray = Array.isArray(colsResp) ? colsResp : [];
-        const finalRows = normalizeRows(rowsResp);
+        if (usesDynamicColumns) {
+          rowsResp = await fetchData(endpoint, {
+            json_data: { json_data: jsonData },
+          });
+        } else {
+          [colsResp, rowsResp] = await Promise.all([
+            useSelectedHSColConfig(endpoint),
+            fetchData(endpoint, { json_data: { json_data: jsonData } }),
+          ]);
+        }
+
+        const parsedReport =
+          typeof Report?.parseResponse === "function"
+            ? Report.parseResponse(rowsResp)
+            : null;
+        const colsArray = parsedReport?.cols ??
+          (Array.isArray(colsResp) ? colsResp : []);
+        const finalRows = parsedReport?.rows ?? normalizeRows(rowsResp);
         const isEmpty = !finalRows || finalRows.length === 0;
 
         setViews((prev) => ({
@@ -1693,6 +1712,7 @@ export default function GLINQ() {
               ? "No records found for the selected filters."
               : "",
             comparisonPeriods: [],
+            reportData: parsedReport?.reportData ?? null,
             summary: summarizeRows(finalRows),
           },
         }));
@@ -2087,24 +2107,22 @@ export default function GLINQ() {
                   </div>
                 </div>
 
-                <div className="p-4">
-                  <ContextCards summary={view.summary} activeTab={activeTab} />
-                </div>
+                {!['isMTD', 'incStatementYTD', 'incExp'].includes(activeTab) && (
+                  <div className="p-4">
+                    <ContextCards summary={view.summary} activeTab={activeTab} />
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="global-tran-tab-div-ui !m-0 !p-4">
-              <div className="global-tran-tab-nav-ui">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <button className="global-tran-tab-padding-ui global-tran-tab-text_active-ui">
-                      {activeTabConfig.label}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="global-tran-table-main-div-ui">
+              <div
+                className={
+                  ["isMTD", "incExp"].includes(activeTab)
+                    ? "min-h-0 overflow-hidden"
+                    : "global-tran-table-main-div-ui"
+                }
+              >
                 <ActiveReport
                   view={view}
                   filters={filters}
@@ -2118,6 +2136,16 @@ export default function GLINQ() {
                   }
                   SearchGlobalReportTable={SearchGlobalReportTable}
                   NoRecordsState={NoRecordsState}
+                  activeView={
+                    activeTab === "incExp"
+                      ? incomeExpenseView
+                      : incomeStatementMTDView
+                  }
+                  onActiveViewChange={
+                    activeTab === "incExp"
+                      ? setIncomeExpenseView
+                      : setIncomeStatementMTDView
+                  }
                 />
               </div>
             </div>
