@@ -15,18 +15,13 @@ import {
   XCircle,
   RefreshCw,
   AlertTriangle,
+  Eye,
   X,
 } from "lucide-react";
 import Swal from "sweetalert2";
-import {
-  apiClient,
-  fetchData,
-  postRequest,
-} from "../../../Configuration/BaseURL.jsx";
+import { useNavigate } from "react-router-dom";
+import { apiClient, fetchData } from "../../../Configuration/BaseURL.jsx";
 import { LoadingSpinner } from "../../../Global/utilities.jsx";
-import CustomerMastLookupModal from "../../../Lookup/SearchCustMast";
-import SearchSalesRepRef from "../../../Lookup/SearchSalesRepRef.jsx";
-import { useTopSalesRepRow as getTopSalesRepRow } from "../../../Global/top1RefTable";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
@@ -35,6 +30,44 @@ const pad2 = (value) => String(value).padStart(2, "0");
 const formatDate = (date) => {
   const d = new Date(date);
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
+
+const formatDisplayDate = (value, includeTime = false) => {
+  if (!value) return "-";
+
+  const rawValue = String(value).trim();
+  const dateMatch = rawValue.match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2}))?/,
+  );
+
+  if (dateMatch) {
+    const [, year, month, day, hour, minute] = dateMatch;
+    const formattedDate = `${month}-${day}-${year}`;
+
+    if (!includeTime || hour === undefined || minute === undefined) {
+      return formattedDate;
+    }
+
+    const numericHour = Number(hour);
+    const displayHour = numericHour % 12 || 12;
+    const meridiem = numericHour >= 12 ? "PM" : "AM";
+    return `${formattedDate} ${pad2(displayHour)}:${minute} ${meridiem}`;
+  }
+
+  const parsedDate = new Date(rawValue);
+  if (Number.isNaN(parsedDate.getTime())) return rawValue;
+
+  const formattedDate = `${pad2(parsedDate.getMonth() + 1)}-${pad2(
+    parsedDate.getDate(),
+  )}-${parsedDate.getFullYear()}`;
+
+  if (!includeTime) return formattedDate;
+
+  return `${formattedDate} ${parsedDate.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  })}`;
 };
 
 const addDays = (date, days) => {
@@ -117,6 +150,80 @@ const escapeHtml = (value) =>
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+
+const findReadableErrorMessage = (value) => {
+  if (typeof value === "string") return value.trim();
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const message = findReadableErrorMessage(item);
+      if (message) return message;
+    }
+    return "";
+  }
+
+  if (!value || typeof value !== "object") return "";
+
+  for (const key of ["errorMessage", "message", "detail", "description"]) {
+    const message = findReadableErrorMessage(value[key]);
+    if (message) return message;
+  }
+
+  const technicalKeys = new Set([
+    "errornumber",
+    "errorline",
+    "mode",
+    "code",
+    "status",
+  ]);
+
+  for (const [key, item] of Object.entries(value)) {
+    if (technicalKeys.has(key.toLowerCase())) continue;
+
+    const message = findReadableErrorMessage(item);
+    if (message) return message;
+  }
+
+  return "";
+};
+
+const getApiErrorMessage = (error, fallbackMessage) => {
+  let responseData = error?.response?.data;
+
+  if (typeof responseData === "string") {
+    const plainResponse = responseData.trim();
+
+    if (plainResponse) {
+      try {
+        responseData = JSON.parse(plainResponse);
+      } catch {
+        return plainResponse;
+      }
+    }
+  }
+
+  const responseErrorMessage = findReadableErrorMessage(
+    responseData?.errorMessage,
+  );
+  const procedureErrorMessage = findReadableErrorMessage(
+    responseData?.errors?.errorMessage,
+  );
+  const nestedErrorMessage = findReadableErrorMessage(responseData?.error);
+  const validationErrorMessage = findReadableErrorMessage(
+    responseData?.errors,
+  );
+  const responseMessage = findReadableErrorMessage(responseData?.message);
+
+  return (
+    responseErrorMessage ||
+    procedureErrorMessage ||
+    nestedErrorMessage ||
+    validationErrorMessage ||
+    responseMessage ||
+    (typeof error?.message === "string" ? error.message.trim() : "") ||
+    fallbackMessage
+  );
+};
 
 const tabs = [
   {
@@ -244,22 +351,6 @@ const FloatingField = ({
   );
 };
 
-const ActionButton = ({ children, icon: Icon, onClick, disabled = false }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    disabled={disabled}
-    className={`inline-flex min-h-[38px] w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-white transition-colors sm:w-auto sm:px-4 sm:text-sm ${
-      disabled
-        ? "cursor-not-allowed bg-gray-400 hover:bg-gray-400 dark:bg-gray-700"
-        : "bg-blue-600 hover:bg-blue-700 dark:bg-blue-900 dark:hover:bg-blue-800"
-    }`}
-  >
-    {Icon && <Icon className="h-4 w-4 shrink-0" />}
-    {children}
-  </button>
-);
-
 const unwrapData = (response) => {
   if (Array.isArray(response)) return response;
   if (Array.isArray(response?.data)) return response.data;
@@ -323,10 +414,7 @@ const pivotRows = (rows = [], isDetailed = false) => {
     row.drStatus =
       String(item.drStatus || "").trim() ||
       (row.drNumbers.length > 0 ? "Open - For Picking" : "");
-    row.integrationStatus = getIntegrationStatus(
-      row.sentQty,
-      row.unsentQty,
-    );
+    row.integrationStatus = getIntegrationStatus(row.sentQty, row.unsentQty);
 
     if (!row.dateIntegration[deliveryDate]) {
       row.dateIntegration[deliveryDate] = {
@@ -335,6 +423,8 @@ const pivotRows = (rows = [], isDetailed = false) => {
         unsentQty: 0,
         soNumbers: [],
         drNumbers: [],
+        soBranchCode: "",
+        drBranchCode: "",
         soStatus: "",
         drStatus: "",
         integrationStatus: "Not Sent",
@@ -353,6 +443,12 @@ const pivotRows = (rows = [], isDetailed = false) => {
       dateIntegration.drNumbers,
       item.drNumber,
     );
+    dateIntegration.soBranchCode =
+      String(item.soBranchCode || "").trim() ||
+      dateIntegration.soBranchCode;
+    dateIntegration.drBranchCode =
+      String(item.drBranchCode || "").trim() ||
+      dateIntegration.drBranchCode;
     dateIntegration.soStatus =
       String(item.soStatus || "").trim() ||
       (dateIntegration.soNumbers.length > 0 ? "Closed" : "");
@@ -474,7 +570,11 @@ const buildMaterialSummaryRows = (rows = []) => {
 };
 
 /* ─── Dynamic Date Range & Zero-Qty Filtering Helper ─────────────────── */
-const filterByDates = (rows = [], validDates = [], isMaterialSummary = false) => {
+const filterByDates = (
+  rows = [],
+  validDates = [],
+  isMaterialSummary = false,
+) => {
   if (!validDates.length) return [];
 
   const normalizedDates = validDates.map(normalizeDateKey).filter(Boolean);
@@ -598,6 +698,7 @@ const QuantityCells = ({ dates, row, className = "" }) => (
 );
 
 const IntegrationDateCell = ({ date, row }) => {
+  const navigate = useNavigate();
   const quantity = Number(row.dates?.[date]) || 0;
   const detail = row.dateIntegration?.[date];
 
@@ -612,11 +713,99 @@ const IntegrationDateCell = ({ date, row }) => {
   const integrationStatus =
     detail?.integrationStatus ||
     getIntegrationStatus(detail?.sentQty, detail?.unsentQty);
-  const soNumber = detail?.soNumber || "";
-  const drNumber = detail?.drNumber || "";
+  const getDocumentNumbers = (numbers, fallbackNumber) => {
+    const values =
+      Array.isArray(numbers) && numbers.length > 0
+        ? numbers
+        : String(fallbackNumber || "")
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean);
+
+    return [...new Set(values.map((value) => String(value).trim()))].filter(
+      Boolean,
+    );
+  };
+  const soNumbers = getDocumentNumbers(detail?.soNumbers, detail?.soNumber);
+  const drNumbers = getDocumentNumbers(detail?.drNumbers, detail?.drNumber);
+  const hasDocuments = soNumbers.length > 0 || drNumbers.length > 0;
+
+  const handleViewDocument = (documentType, documentNumber) => {
+    const branchCode = String(
+      documentType === "SO"
+        ? detail?.soBranchCode
+        : detail?.drBranchCode,
+    ).trim();
+
+    if (!branchCode) {
+      Swal.fire({
+        icon: "warning",
+        title: `Unable to view ${documentType}`,
+        text: `The branch code for ${documentType} ${documentNumber} is missing.`,
+      });
+      return;
+    }
+
+    const params = new URLSearchParams({
+      branchCode,
+      viewDocument: "true",
+    });
+
+    if (documentType === "SO") {
+      params.set("soNo", documentNumber);
+    } else {
+      // DR currently reads "soNo" when loading a document from the URL.
+      // Keep "drNo" too so this remains compatible once DR uses its own key.
+      params.set("drNo", documentNumber);
+      params.set("soNo", documentNumber);
+    }
+
+    navigate(`/page/${documentType}?${params.toString()}`);
+  };
+
+  const renderDocumentReference = (
+    documentType,
+    documentNumbers,
+    colorClasses,
+  ) => (
+    <div className="space-y-1">
+      <div className="text-[9px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+        {documentType}
+      </div>
+      {documentNumbers.length > 0 ? (
+        documentNumbers.map((documentNumber) => (
+          <div
+            key={`${documentType}-${documentNumber}`}
+            className="flex items-center justify-between gap-1.5"
+          >
+            <span
+              className={`min-w-0 truncate font-mono text-[10px] font-semibold ${colorClasses}`}
+              title={documentNumber}
+            >
+              {documentNumber}
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                handleViewDocument(documentType, documentNumber)
+              }
+              className="inline-flex shrink-0 items-center gap-1 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-bold text-slate-600 shadow-sm transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400/40 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-blue-500 dark:hover:bg-blue-950 dark:hover:text-blue-200"
+              title={`View ${documentType} ${documentNumber}`}
+              aria-label={`View ${documentType} ${documentNumber}`}
+            >
+              <Eye className="h-2.5 w-2.5" />
+              View
+            </button>
+          </div>
+        ))
+      ) : (
+        <div className="text-[10px] text-slate-400">-</div>
+      )}
+    </div>
+  );
 
   return (
-    <td className="global-tran-td-ui w-[170px] min-w-[170px] max-w-[170px] text-left align-top">
+    <td className="global-tran-td-ui w-[210px] min-w-[210px] max-w-[210px] text-left align-top">
       <div className="flex items-center justify-between gap-2">
         <span className="font-bold text-slate-800 dark:text-slate-100">
           Qty: {quantity.toLocaleString()}
@@ -633,20 +822,18 @@ const IntegrationDateCell = ({ date, row }) => {
           {integrationStatus}
         </span>
       </div>
-      {(soNumber || drNumber) && (
-        <div className="mt-1 space-y-0.5 text-[10px] leading-tight">
-          <div
-            className="truncate font-mono font-semibold text-emerald-700 dark:text-emerald-300"
-            title={soNumber || "No SO document"}
-          >
-            SO: {soNumber || "-"}
-          </div>
-          <div
-            className="truncate font-mono font-semibold text-blue-700 dark:text-blue-300"
-            title={drNumber || "No DR document"}
-          >
-            DR: {drNumber || "-"}
-          </div>
+      {hasDocuments && (
+        <div className="mt-1.5 grid gap-1.5 border-t border-slate-100 pt-1.5 leading-tight dark:border-slate-700">
+          {renderDocumentReference(
+            "SO",
+            soNumbers,
+            "text-emerald-700 dark:text-emerald-300",
+          )}
+          {renderDocumentReference(
+            "DR",
+            drNumbers,
+            "text-blue-700 dark:text-blue-300",
+          )}
         </div>
       )}
     </td>
@@ -703,9 +890,7 @@ const MaterialSummaryRows = ({
                 key={`produce-${material.itemCode}-${produceItem.itemCode}`}
               >
                 <tr className="bg-emerald-50/70 dark:bg-emerald-950/20">
-                  <td className="global-tran-td-ui w-[180px] min-w-[180px] text-left text-xs font-bold uppercase text-emerald-700 dark:text-emerald-300">
-                    
-                  </td>
+                  <td className="global-tran-td-ui w-[180px] min-w-[180px] text-left text-xs font-bold uppercase text-emerald-700 dark:text-emerald-300"></td>
                   <td className="global-tran-td-ui w-[120px] min-w-[120px] pl-7 text-left font-mono text-sm font-semibold text-emerald-800 dark:text-emerald-200">
                     {produceItem.itemCode}
                   </td>
@@ -730,7 +915,7 @@ const MaterialSummaryRows = ({
                       Required
                     </td>
                     <td className="global-tran-td-ui w-[260px] min-w-[260px] text-left text-xs text-slate-500">
-                      Material needed 
+                      Material needed
                     </td>
                     <td className="global-tran-td-ui w-[90px] min-w-[90px] text-left font-semibold text-slate-600 dark:text-slate-300">
                       {material.uomCode || "-"}
@@ -771,7 +956,9 @@ export default function CommissaryForecast() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [categories, setCategories] = useState([]);
-  const [categoryDescriptionsByCode, setCategoryDescriptionsByCode] = useState({});
+  const [categoryDescriptionsByCode, setCategoryDescriptionsByCode] = useState(
+    {},
+  );
   const [branchNamesByCode, setBranchNamesByCode] = useState({});
   const [errorMessage, setErrorMessage] = useState("");
   const [setupRows, setSetupRows] = useState([]);
@@ -779,44 +966,50 @@ export default function CommissaryForecast() {
   const [isLoadingSetup, setIsLoadingSetup] = useState(false);
   const [isSavingSetup, setIsSavingSetup] = useState(false);
   const [unconfirmedOrders, setUnconfirmedOrders] = useState([]);
+  const [collapsedUnconfirmedCategories, setCollapsedUnconfirmedCategories] =
+    useState([]);
   const [isLoadingUnconfirmed, setIsLoadingUnconfirmed] = useState(false);
   const [decisionKey, setDecisionKey] = useState("");
   const [setupMessage, setSetupMessage] = useState("");
   const [setupError, setSetupError] = useState("");
+  const [unconfirmedMessage, setUnconfirmedMessage] = useState("");
+  const [unconfirmedError, setUnconfirmedError] = useState("");
 
   const [isGeneratingWO, setIsGeneratingWO] = useState(false);
   const [isSendingToSODR, setIsSendingToSODR] = useState(false);
   const [woSuccessMsg, setWoSuccessMsg] = useState("");
   const [showSODRModal, setShowSODRModal] = useState(false);
-  const [showCustomerLookup, setShowCustomerLookup] = useState(false);
-  const [showSalesRepLookup, setShowSalesRepLookup] = useState(false);
-  const [selectedIntegrationRowIds, setSelectedIntegrationRowIds] = useState([]);
-  const [isLoadingCustomer, setIsLoadingCustomer] = useState(false);
+  const [selectedIntegrationRowIds, setSelectedIntegrationRowIds] = useState(
+    [],
+  );
+  const [integrationCustomers, setIntegrationCustomers] = useState([]);
+  const [isLoadingIntegrationCustomers, setIsLoadingIntegrationCustomers] =
+    useState(false);
+  const [
+    selectedIntegrationCustomersByStore,
+    setSelectedIntegrationCustomersByStore,
+  ] = useState({});
+  const [customerLookupStoreCode, setCustomerLookupStoreCode] = useState("");
+  const [customerLookupSearch, setCustomerLookupSearch] = useState("");
   const [soDrForm, setSoDrForm] = useState({
-    customerCode: "",
-    customerName: "",
     poNumber: "",
     remarks: "",
-    salesRepCode: "",
-    salesRepName: "",
   });
 
   const resetSODRModalData = () => {
     setSoDrForm({
-      customerCode: "",
-      customerName: "",
       poNumber: "",
       remarks: "",
-      salesRepCode: "",
-      salesRepName: "",
     });
+    setIntegrationCustomers([]);
+    setSelectedIntegrationCustomersByStore({});
+    setCustomerLookupStoreCode("");
+    setCustomerLookupSearch("");
     setSelectedIntegrationRowIds([]);
-    setIsLoadingCustomer(false);
+    setIsLoadingIntegrationCustomers(false);
   };
 
   const handleCloseSODRModal = () => {
-    setShowCustomerLookup(false);
-    setShowSalesRepLookup(false);
     setShowSODRModal(false);
     resetSODRModalData();
   };
@@ -877,12 +1070,14 @@ export default function CommissaryForecast() {
 
   const loadUnconfirmedOrders = async () => {
     if (!startDate || !endDate) {
-      setSetupError("From Delivery Date and To Delivery Date are required.");
+      setUnconfirmedError(
+        "From Delivery Date and To Delivery Date are required.",
+      );
       return;
     }
 
     setIsLoadingUnconfirmed(true);
-    setSetupError("");
+    setUnconfirmedError("");
 
     try {
       const response = await fetchData("commissary/unconfirmed-orders", {
@@ -895,7 +1090,7 @@ export default function CommissaryForecast() {
     } catch (error) {
       console.error("Failed to load unconfirmed orders", error);
       setUnconfirmedOrders([]);
-      setSetupError(
+      setUnconfirmedError(
         error?.response?.data?.message ||
           error?.message ||
           "Failed to load unconfirmed orders.",
@@ -957,7 +1152,6 @@ export default function CommissaryForecast() {
         response?.data?.message ||
           "Delivery lead-time setup saved successfully.",
       );
-      await loadUnconfirmedOrders();
     } catch (error) {
       console.error("Failed to save Commissary setup", error);
       const responseData = error?.response?.data;
@@ -977,7 +1171,7 @@ export default function CommissaryForecast() {
 
   const handleUnconfirmedDecision = async (order, decision) => {
     if (!currentUserRow?.userCode) {
-      setSetupError("Your User Code is missing. Please log in again.");
+      setUnconfirmedError("Your User Code is missing. Please log in again.");
       return;
     }
 
@@ -985,7 +1179,7 @@ export default function CommissaryForecast() {
     const confirmation = await Swal.fire({
       icon: isAccept ? "question" : "warning",
       title: isAccept ? "Accept late order?" : "Reject late order?",
-      text: `${order.storeCode} • ${order.categName || order.categCode} • Delivery ${order.deliveryDate}`,
+      text: `${order.storeCode} • ${order.itemCode} • ${order.itemName || order.categName || order.categCode} • Delivery ${order.deliveryDate}`,
       input: "textarea",
       inputLabel: "Remarks (optional)",
       inputPlaceholder: "Enter the reason or instruction...",
@@ -997,10 +1191,10 @@ export default function CommissaryForecast() {
 
     if (!confirmation.isConfirmed) return;
 
-    const rowKey = `${order.storeCode}|${order.categCode}|${order.deliveryDate}`;
+    const rowKey = `${order.storeCode}|${order.categCode}|${order.itemCode}|${order.deliveryDate}`;
     setDecisionKey(rowKey);
-    setSetupError("");
-    setSetupMessage("");
+    setUnconfirmedError("");
+    setUnconfirmedMessage("");
 
     try {
       const response = await apiClient.post(
@@ -1008,6 +1202,7 @@ export default function CommissaryForecast() {
         {
           storeCode: order.storeCode,
           categCode: order.categCode,
+          itemCode: order.itemCode,
           deliveryDate: order.deliveryDate,
           decision,
           remarks: String(confirmation.value || "").trim(),
@@ -1015,16 +1210,28 @@ export default function CommissaryForecast() {
         },
       );
 
-      setSetupMessage(
+      setUnconfirmedMessage(
         response?.data?.message ||
           (isAccept
-            ? "The store may now confirm this late order."
-            : "The late order was rejected."),
+            ? "The item was accepted and moved to confirmed orders."
+            : "The item was rejected and removed from unconfirmed orders."),
       );
-      await loadUnconfirmedOrders();
+      setUnconfirmedOrders((previous) =>
+        previous.filter(
+          (row) =>
+            `${row.storeCode}|${row.categCode}|${row.itemCode}|${row.deliveryDate}` !==
+            rowKey,
+        ),
+      );
+
+      if (isAccept) {
+        await Promise.all([loadUnconfirmedOrders(), loadCommissaryData()]);
+      } else {
+        await loadUnconfirmedOrders();
+      }
     } catch (error) {
       console.error("Failed to update unconfirmed-order decision", error);
-      setSetupError(
+      setUnconfirmedError(
         error?.response?.data?.message ||
           error?.message ||
           "Failed to save the decision.",
@@ -1118,7 +1325,9 @@ export default function CommissaryForecast() {
           confirmedMaterialNeededSummary: [],
           confirmedMaterialNeeded: [],
         });
-        setErrorMessage("From Delivery Date and To Delivery Date are required.");
+        setErrorMessage(
+          "From Delivery Date and To Delivery Date are required.",
+        );
         return;
       }
 
@@ -1176,12 +1385,14 @@ export default function CommissaryForecast() {
 
   const handleGenerateWorkOrders = async () => {
     if (!startDate || !endDate) {
-      setErrorMessage("Please select both From Delivery Date and To Delivery Date.");
+      setErrorMessage(
+        "Please select both From Delivery Date and To Delivery Date.",
+      );
       return;
     }
 
     const confirmAction = window.confirm(
-      `Generate consolidated Work Orders for all confirmed items between ${startDate} and ${endDate}?\n\nNote: Once generated, the confirmation records will be locked and cannot be edited or integrated again.`
+      `Generate consolidated Work Orders for all confirmed items between ${startDate} and ${endDate}?\n\nNote: Once generated, the confirmation records will be locked and cannot be edited or integrated again.`,
     );
     if (!confirmAction) return;
 
@@ -1196,7 +1407,10 @@ export default function CommissaryForecast() {
       });
       const response = res.data;
 
-      setWoSuccessMsg(response?.message || "Consolidated Work Orders generated and locked successfully!");
+      setWoSuccessMsg(
+        response?.message ||
+          "Consolidated Work Orders generated and locked successfully!",
+      );
       await loadCommissaryData();
     } catch (error) {
       console.error("Failed to generate Work Orders", error);
@@ -1209,88 +1423,18 @@ export default function CommissaryForecast() {
         firstValidationError ||
           responseData?.message ||
           error?.message ||
-          "Failed to generate Work Orders."
+          "Failed to generate Work Orders.",
       );
     } finally {
       setIsGeneratingWO(false);
     }
   };
 
-  const handleSelectIntegrationCustomer = async (selectedCustomer) => {
-    setShowCustomerLookup(false);
-    if (!selectedCustomer) return;
-
-    const customerCode = String(selectedCustomer.custCode || "").trim();
-    const customerName = selectedCustomer.custName || "";
-    let salesRepCode = selectedCustomer.salesRepCode || "";
-    let salesRepName = selectedCustomer.salesRepName || "";
-
-    setSoDrForm((previous) => ({
-      ...previous,
-      customerCode,
-      customerName,
-      salesRepCode,
-      salesRepName,
-    }));
-
-    if (!customerCode) return;
-
-    setIsLoadingCustomer(true);
-    setErrorMessage("");
-
-    try {
-      const response = await postRequest(
-        "getCustomer",
-        JSON.stringify({ CUST_CODE: customerCode }),
-      );
-
-      if (response?.success && response?.data?.[0]?.result) {
-        const customerRows = JSON.parse(response.data[0].result);
-        const customerSetup = Array.isArray(customerRows)
-          ? customerRows[0] || {}
-          : {};
-        salesRepCode = customerSetup.salesRepCode || salesRepCode;
-        salesRepName = customerSetup.salesRepName || salesRepName;
-      }
-
-      if (salesRepCode) {
-        const salesRep = await getTopSalesRepRow(salesRepCode);
-        salesRepName = salesRep?.salesRepName || salesRepName;
-      }
-
-      setSoDrForm((previous) => ({
-        ...previous,
-        customerCode,
-        customerName,
-        salesRepCode,
-        salesRepName,
-      }));
-    } catch (error) {
-      console.error("Failed to load customer sales representative", error);
-      setErrorMessage(
-        error?.response?.data?.message ||
-          error?.message ||
-          "Unable to load the customer's configured sales representative.",
-      );
-    } finally {
-      setIsLoadingCustomer(false);
-    }
-  };
-
-  const handleSelectIntegrationSalesRep = (selectedSalesRep) => {
-    setShowSalesRepLookup(false);
-    if (!selectedSalesRep) return;
-
-    setSoDrForm((previous) => ({
-      ...previous,
-      salesRepCode: selectedSalesRep.salesRepCode || "",
-      salesRepName: selectedSalesRep.salesRepName || "",
-    }));
-  };
-
   const handleSendConfirmedToSODR = async () => {
     if (!startDate || !endDate) {
-      setErrorMessage("Please select both From Delivery Date and To Delivery Date.");
+      setErrorMessage(
+        "Please select both From Delivery Date and To Delivery Date.",
+      );
       return;
     }
 
@@ -1319,11 +1463,33 @@ export default function CommissaryForecast() {
       return;
     }
 
-    if (!String(soDrForm.customerCode || "").trim()) {
+    if (isLoadingIntegrationCustomers) {
+      await Swal.fire({
+        icon: "info",
+        title: "Loading customers",
+        text: "Please wait while the Customer Master records are loaded for the selected branches.",
+      });
+      return;
+    }
+
+    if (storesWithoutIntegrationCustomers.length > 0) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Customer setup required",
+        text: `No Customer Master record is tagged under: ${storesWithoutIntegrationCustomers.join(
+          ", ",
+        )}.`,
+      });
+      return;
+    }
+
+    if (storesWithoutSelectedCustomer.length > 0) {
       await Swal.fire({
         icon: "warning",
         title: "Select customer",
-        text: "Please select the customer that will be used in the SO and DR.",
+        text: `Please select a customer for: ${storesWithoutSelectedCustomer.join(
+          ", ",
+        )}.`,
       });
       return;
     }
@@ -1335,10 +1501,15 @@ export default function CommissaryForecast() {
       quantity: Number(row.unsentQty ?? row.total) || 0,
     }));
 
+    const selectedCustomers = selectedIntegrationCustomers.map((customer) => ({
+      storeCode: customer.storeCode,
+      customerCode: customer.customerCode,
+    }));
+
     const confirmation = await Swal.fire({
       icon: "question",
-      title: `Send ${selectedItems.length.toLocaleString()} selected item(s)?`,
-      text: "Only the checked items and their remaining unsent quantities will be integrated. All selected items will be consolidated into one closed SO and one open DR for picking.",
+      title: `Create ${selectedStoreCodes.length.toLocaleString()} SO/DR pair(s)?`,
+      text: "The checked items will be grouped by store. Each store will use the selected customer and receive one closed SO and one open DR.",
       showCancelButton: true,
       confirmButtonText: "Send",
       cancelButtonText: "Cancel",
@@ -1364,12 +1535,10 @@ export default function CommissaryForecast() {
           documentDate: formatDate(new Date()),
           soTranType: "SO01",
           drTranType: "DR01",
-          customerCode: soDrForm.customerCode,
-          customerName: soDrForm.customerName,
           poNumber: soDrForm.poNumber,
-          salesRepCode: soDrForm.salesRepCode,
           remarks: soDrForm.remarks,
           selectedItems,
+          selectedCustomers,
         },
       );
 
@@ -1381,11 +1550,12 @@ export default function CommissaryForecast() {
       const successMessage =
         createdDocuments.length === 1
           ? `One SO and one DR were created for ${selectedItems.length.toLocaleString()} selected item(s). The SO is closed and the DR is open for picking.`
-          : `${createdDocuments.length.toLocaleString()} SO/DR pair(s) were returned by the integration.`;
+          : `${createdDocuments.length.toLocaleString()} SO/DR pairs were created, one pair per store.`;
       const documentRowsHtml = createdDocuments
         .map(
           (document) => `
             <tr>
+              <td style="padding:6px;border-bottom:1px solid #e2e8f0;text-align:left">${escapeHtml(document.storeCode || "-")}</td>
               <td style="padding:6px;border-bottom:1px solid #e2e8f0;text-align:left">${escapeHtml(document.customerName || document.customerCode || "-")}</td>
               <td style="padding:6px;border-bottom:1px solid #e2e8f0;text-align:left">${escapeHtml(document.documentDate || "-")}</td>
               <td style="padding:6px;border-bottom:1px solid #e2e8f0;text-align:left">
@@ -1411,9 +1581,10 @@ export default function CommissaryForecast() {
         html: `
           <p style="margin:0 0 12px">${escapeHtml(successMessage)}</p>
           <div style="max-height:320px;overflow:auto;border:1px solid #e2e8f0;border-radius:8px">
-            <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <table style="width:100%;border-collapse:collapse;font-size:10px">
               <thead style="position:sticky;top:0;background:#f1f5f9">
                 <tr>
+                  <th style="padding:7px;text-align:left">Store</th>
                   <th style="padding:7px;text-align:left">Customer</th>
                   <th style="padding:7px;text-align:left">SO Date</th>
                   <th style="padding:7px;text-align:left">SO Document</th>
@@ -1423,30 +1594,23 @@ export default function CommissaryForecast() {
               <tbody>
                 ${
                   documentRowsHtml ||
-                  '<tr><td colspan="4" style="padding:12px;text-align:center">No document return value was received.</td></tr>'
+                  '<tr><td colspan="5" style="padding:12px;text-align:center">No document return value was received.</td></tr>'
                 }
               </tbody>
             </table>
           </div>`,
       });
     } catch (error) {
-      console.error("Failed to send confirmed details to SO/DR", error);
-      const responseData = error?.response?.data;
       const responseStatus = error?.response?.status;
       const allowedMethods = error?.response?.headers?.allow;
-      const firstValidationError = responseData?.errors
-        ? Object.values(responseData.errors).flat().find(Boolean)
-        : "";
       const message =
         responseStatus === 405
           ? `The backend route POST /api/commissary/send-confirmed-to-so-dr is not registered.${
               allowedMethods ? ` Allowed method(s): ${allowedMethods}.` : ""
             } Please add the POST route in the API before sending.`
-          : firstValidationError ||
-            responseData?.message ||
-            error?.message ||
-            "SO/DR integration failed.";
+          : getApiErrorMessage(error, "SO/DR integration failed.");
 
+      console.error("Failed to send confirmed details to SO/DR:", message);
       setErrorMessage(message);
       await Swal.fire({
         icon: "error",
@@ -1467,7 +1631,9 @@ export default function CommissaryForecast() {
   }, []);
 
   useEffect(() => {
-    if (activeTab === "commissarySetup") return;
+    if (activeTab === "commissarySetup" || activeTab === "unconfirmedOrders") {
+      return;
+    }
 
     const currentTab = tabs.find((tab) => tab.key === activeTab);
     if (currentTab?.viewType === viewType) return;
@@ -1479,11 +1645,14 @@ export default function CommissaryForecast() {
   }, [activeTab, viewType]);
 
   useEffect(() => {
-    if (activeTab !== "commissarySetup") return;
+    if (activeTab === "commissarySetup") {
+      loadCommissarySetup();
+    }
 
-    loadCommissarySetup();
-    loadUnconfirmedOrders();
-    // The Setup tab intentionally refreshes from the database whenever opened.
+    if (activeTab === "unconfirmedOrders") {
+      loadUnconfirmedOrders();
+    }
+    // Each maintenance tab intentionally refreshes from the database when opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -1491,12 +1660,20 @@ export default function CommissaryForecast() {
     if (!showSODRModal) return undefined;
 
     const handleKeyDown = (event) => {
-      if (event.key === "Escape") handleCloseSODRModal();
+      if (event.key !== "Escape") return;
+
+      if (customerLookupStoreCode) {
+        setCustomerLookupStoreCode("");
+        setCustomerLookupSearch("");
+        return;
+      }
+
+      handleCloseSODRModal();
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showSODRModal]);
+  }, [customerLookupStoreCode, showSODRModal]);
 
   const storeOptions = useMemo(() => {
     const map = new Map();
@@ -1617,8 +1794,7 @@ export default function CommissaryForecast() {
         })
         .filter(
           (row) =>
-            row.unsentDeliveryDates.length > 0 &&
-            Number(row.unsentQty) > 0,
+            row.unsentDeliveryDates.length > 0 && Number(row.unsentQty) > 0,
         ),
     [currentData, dates],
   );
@@ -1636,11 +1812,158 @@ export default function CommissaryForecast() {
     [integrationRows, selectedIntegrationRowIdSet],
   );
 
+  const selectedStoreCodes = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          selectedIntegrationRows
+            .map((row) => String(getStoreKey(row) || "").trim())
+            .filter(Boolean),
+        ),
+      ).sort((a, b) => a.localeCompare(b)),
+    [selectedIntegrationRows],
+  );
+
+  const selectedIntegrationCustomers = useMemo(
+    () =>
+      selectedStoreCodes
+        .map((storeCode) => selectedIntegrationCustomersByStore[storeCode])
+        .filter(Boolean),
+    [selectedIntegrationCustomersByStore, selectedStoreCodes],
+  );
+
+  const storesWithoutIntegrationCustomers = useMemo(
+    () =>
+      selectedStoreCodes.filter(
+        (storeCode) =>
+          !integrationCustomers.some(
+            (customer) =>
+              customer?.storeCode === storeCode &&
+              customer?.hasCustomer &&
+              customer?.customerCode,
+          ),
+      ),
+    [integrationCustomers, selectedStoreCodes],
+  );
+
+  const storesWithoutSelectedCustomer = useMemo(
+    () =>
+      selectedStoreCodes.filter(
+        (storeCode) => !selectedIntegrationCustomersByStore[storeCode],
+      ),
+    [selectedIntegrationCustomersByStore, selectedStoreCodes],
+  );
+
+  const customerLookupOptions = useMemo(() => {
+    const searchText = String(customerLookupSearch || "")
+      .trim()
+      .toLowerCase();
+
+    return integrationCustomers
+      .filter(
+        (customer) =>
+          customer?.storeCode === customerLookupStoreCode &&
+          customer?.hasCustomer &&
+          customer?.customerCode,
+      )
+      .filter((customer) => {
+        if (!searchText) return true;
+
+        return [customer.customerCode, customer.customerName].some((value) =>
+          String(value || "")
+            .toLowerCase()
+            .includes(searchText),
+        );
+      })
+      .sort((a, b) =>
+        String(a.customerCode || "").localeCompare(
+          String(b.customerCode || ""),
+        ),
+      );
+  }, [customerLookupSearch, customerLookupStoreCode, integrationCustomers]);
+
+  useEffect(() => {
+    if (!showSODRModal || selectedStoreCodes.length === 0) {
+      setIntegrationCustomers([]);
+      setSelectedIntegrationCustomersByStore({});
+      setCustomerLookupStoreCode("");
+      setCustomerLookupSearch("");
+      setIsLoadingIntegrationCustomers(false);
+      return undefined;
+    }
+
+    let isCurrent = true;
+
+    const loadIntegrationCustomers = async () => {
+      setIsLoadingIntegrationCustomers(true);
+
+      try {
+        const response = await apiClient.get(
+          "commissary/integration-customers",
+          {
+            params: { storeCodes: selectedStoreCodes },
+          },
+        );
+
+        if (isCurrent) {
+          const customerRows = Array.isArray(response?.data?.data)
+            ? response.data.data
+            : [];
+
+          setIntegrationCustomers(customerRows);
+          setSelectedIntegrationCustomersByStore((previous) => {
+            const nextSelection = {};
+
+            selectedStoreCodes.forEach((storeCode) => {
+              const selectedCustomer = previous[storeCode];
+              const validCustomers = customerRows.filter(
+                (customer) =>
+                  customer?.storeCode === storeCode &&
+                  customer?.hasCustomer &&
+                  customer?.customerCode,
+              );
+              const isStillValid = validCustomers.some(
+                (customer) =>
+                  customer.customerCode === selectedCustomer?.customerCode,
+              );
+
+              if (isStillValid) {
+                nextSelection[storeCode] = selectedCustomer;
+              } else if (validCustomers.length > 0) {
+                nextSelection[storeCode] = validCustomers[0];
+              }
+            });
+
+            return nextSelection;
+          });
+        }
+      } catch (error) {
+        console.error("Failed to match stores to Customer Master", error);
+
+        if (isCurrent) {
+          setIntegrationCustomers([]);
+          setErrorMessage(
+            error?.response?.data?.message ||
+              error?.message ||
+              "Unable to match the selected stores to Customer Master.",
+          );
+        }
+      } finally {
+        if (isCurrent) setIsLoadingIntegrationCustomers(false);
+      }
+    };
+
+    loadIntegrationCustomers();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [showSODRModal, selectedStoreCodes]);
+
   const selectedIntegrationQuantity = useMemo(
     () =>
       selectedIntegrationRows.reduce(
-        (sum, row) =>
-          sum + (Number(row.unsentQty ?? row.total) || 0),
+        (sum, row) => sum + (Number(row.unsentQty ?? row.total) || 0),
         0,
       ),
     [selectedIntegrationRows],
@@ -1664,6 +1987,26 @@ export default function CommissaryForecast() {
         ? previous.filter((id) => id !== rowId)
         : [...previous, rowId],
     );
+  };
+
+  const openCustomerLookup = (storeCode) => {
+    setCustomerLookupStoreCode(storeCode);
+    setCustomerLookupSearch("");
+  };
+
+  const closeCustomerLookup = () => {
+    setCustomerLookupStoreCode("");
+    setCustomerLookupSearch("");
+  };
+
+  const selectIntegrationCustomer = (customer) => {
+    if (!customerLookupStoreCode || !customer?.customerCode) return;
+
+    setSelectedIntegrationCustomersByStore((previous) => ({
+      ...previous,
+      [customerLookupStoreCode]: customer,
+    }));
+    closeCustomerLookup();
   };
 
   const activeCollapsedCategories = collapsedCategoriesByTab[activeTab] || [];
@@ -1712,6 +2055,82 @@ export default function CommissaryForecast() {
       a.categoryDescription.localeCompare(b.categoryDescription),
     );
   }, [activeTabConfig.detailed, currentData, categoryDescriptionsByCode]);
+
+  const groupedUnconfirmedOrders = useMemo(() => {
+    const groups = new Map();
+
+    unconfirmedOrders.forEach((order) => {
+      const categoryCode = getCategoryLabel(order);
+
+      if (!groups.has(categoryCode)) {
+        groups.set(categoryCode, []);
+      }
+
+      groups.get(categoryCode).push(order);
+    });
+
+    return Array.from(groups, ([categoryCode, rows]) => {
+      const categoryDescription =
+        rows[0]?.categName ||
+        categoryDescriptionsByCode[categoryCode] ||
+        categoryDescriptionsByCode[categoryCode.toUpperCase()] ||
+        categoryCode;
+
+      return {
+        categoryCode,
+        categoryDescription,
+        rows: rows.sort((a, b) => {
+          const itemCompare = String(
+            a.itemName || a.itemCode || "",
+          ).localeCompare(String(b.itemName || b.itemCode || ""));
+          if (itemCompare !== 0) return itemCompare;
+
+          const dateCompare = String(a.deliveryDate || "").localeCompare(
+            String(b.deliveryDate || ""),
+          );
+          if (dateCompare !== 0) return dateCompare;
+
+          return String(a.storeCode || "").localeCompare(
+            String(b.storeCode || ""),
+          );
+        }),
+      };
+    }).sort((a, b) =>
+      a.categoryDescription.localeCompare(b.categoryDescription),
+    );
+  }, [unconfirmedOrders, categoryDescriptionsByCode]);
+
+  const collapsedUnconfirmedCategorySet = useMemo(
+    () => new Set(collapsedUnconfirmedCategories),
+    [collapsedUnconfirmedCategories],
+  );
+
+  const toggleUnconfirmedCategory = (categoryCode) => {
+    setCollapsedUnconfirmedCategories((previous) =>
+      previous.includes(categoryCode)
+        ? previous.filter((value) => value !== categoryCode)
+        : [...previous, categoryCode],
+    );
+  };
+
+  const toggleAllUnconfirmedCategories = () => {
+    const visibleCategories = groupedUnconfirmedOrders.map(
+      (group) => group.categoryCode,
+    );
+    const allCollapsed =
+      visibleCategories.length > 0 &&
+      visibleCategories.every((categoryCode) =>
+        collapsedUnconfirmedCategorySet.has(categoryCode),
+      );
+
+    setCollapsedUnconfirmedCategories(allCollapsed ? [] : visibleCategories);
+  };
+
+  const allUnconfirmedCategoriesCollapsed =
+    groupedUnconfirmedOrders.length > 0 &&
+    groupedUnconfirmedOrders.every((group) =>
+      collapsedUnconfirmedCategorySet.has(group.categoryCode),
+    );
 
   const totalQueryQty = useMemo(
     () => currentData.reduce((sum, row) => sum + (Number(row.total) || 0), 0),
@@ -1826,17 +2245,23 @@ export default function CommissaryForecast() {
     (showsIntegrationDetails ? 1 : 0);
 
   const filteredSetupRows = useMemo(() => {
-    const search = String(setupSearch || "").trim().toLowerCase();
+    const search = String(setupSearch || "")
+      .trim()
+      .toLowerCase();
     if (!search) return setupRows;
 
     return setupRows.filter(
       (row) =>
-        String(row.categCode || "").toLowerCase().includes(search) ||
-        String(row.categName || "").toLowerCase().includes(search),
+        String(row.categCode || "")
+          .toLowerCase()
+          .includes(search) ||
+        String(row.categName || "")
+          .toLowerCase()
+          .includes(search),
     );
   }, [setupRows, setupSearch]);
 
-  const renderTabButtons = () => (
+  const renderTabButtons = (includeDataActions = false) => (
     <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
       {visibleTabs.map((tab) => {
         const Icon = tab.icon;
@@ -1859,400 +2284,538 @@ export default function CommissaryForecast() {
 
       <button
         type="button"
-        onClick={() => setActiveTab("commissarySetup")}
+        onClick={() => setActiveTab("unconfirmedOrders")}
         className={`global-tran-tab-padding-ui flex items-center gap-2 ${
-          activeTab === "commissarySetup"
+          activeTab === "unconfirmedOrders"
             ? "global-tran-tab-text_active-ui"
             : "rounded-lg bg-slate-100 text-slate-600 dark:bg-gray-800 dark:text-slate-300"
         }`}
       >
-        <Settings className="h-4 w-4" />
-        Setup
+        <AlertTriangle className="h-4 w-4" />
+        Unconfirmed
       </button>
+
+      {includeDataActions && (
+        <>
+          <button
+            type="button"
+            onClick={
+              activeTab === "unconfirmedOrders"
+                ? loadUnconfirmedOrders
+                : loadCommissaryData
+            }
+            disabled={
+              activeTab === "unconfirmedOrders"
+                ? isLoadingUnconfirmed
+                : isLoading
+            }
+            className="global-tran-tab-padding-ui flex items-center gap-2 rounded-lg bg-slate-100 text-slate-600 transition-colors hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-800 dark:text-slate-300 dark:hover:bg-gray-700"
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${
+                (
+                  activeTab === "unconfirmedOrders"
+                    ? isLoadingUnconfirmed
+                    : isLoading
+                )
+                  ? "animate-spin"
+                  : ""
+              }`}
+            />
+            {(
+              activeTab === "unconfirmedOrders"
+                ? isLoadingUnconfirmed
+                : isLoading
+            )
+              ? "Refreshing..."
+              : "Refresh Data"}
+          </button>
+
+          <button
+            type="button"
+            onClick={
+              activeTab === "unconfirmedOrders"
+                ? toggleAllUnconfirmedCategories
+                : handleToggleAllCategories
+            }
+            disabled={
+              activeTab === "unconfirmedOrders"
+                ? isLoadingUnconfirmed || groupedUnconfirmedOrders.length === 0
+                : isLoading || groupedCurrentData.length === 0
+            }
+            className="global-tran-tab-padding-ui flex items-center gap-2 rounded-lg bg-slate-100 text-slate-600 transition-colors hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-800 dark:text-slate-300 dark:hover:bg-gray-700"
+          >
+            <ChevronDown className="h-4 w-4" />
+            {activeTab === "unconfirmedOrders"
+              ? allUnconfirmedCategoriesCollapsed
+                ? "Show"
+                : "Collapse"
+              : visibleCollapsedCategoryCount === groupedCurrentData.length &&
+                  groupedCurrentData.length > 0
+                ? "Show"
+                : "Collapse"}
+          </button>
+        </>
+      )}
     </div>
   );
 
-  if (activeTab === "commissarySetup") {
+  const renderCommissarySetupButton = () => (
+    <button
+      type="button"
+      onClick={() => setActiveTab("commissarySetup")}
+      title="Commissary Setup"
+      aria-label="Commissary Setup"
+      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors ${
+        activeTab === "commissarySetup"
+          ? "bg-blue-600 text-white shadow"
+          : "text-blue-900 hover:bg-blue-200/80 dark:text-white dark:hover:bg-blue-800"
+      }`}
+    >
+      <Settings className="h-5 w-5" />
+    </button>
+  );
+
+  if (activeTab === "commissarySetup" || activeTab === "unconfirmedOrders") {
     return (
       <div className="global-tran-main-div-ui !mt-0 min-w-0 overflow-x-hidden px-2 pb-20 pt-[136px] sm:pt-[112px] md:pt-[116px] lg:pt-[120px]">
         {isLoading && <LoadingSpinner />}
 
-        <div className="fixed left-2 right-2 top-[54px] z-[20] flex max-w-[calc(100vw-1rem)] flex-col gap-2 rounded-lg bg-gradient-to-r from-blue-200 to-blue-100 p-2 text-blue-900 shadow-xl dark:bg-blue-900 dark:text-white sm:left-4 sm:right-4 sm:top-[62px] sm:max-w-none sm:flex-row sm:items-center sm:justify-between md:left-6 md:right-6">
+        <div className="fixed left-2 right-2 top-[54px] z-[20] flex max-w-[calc(100vw-1rem)] items-center justify-between gap-2 rounded-lg bg-gradient-to-r from-blue-200 to-blue-100 p-2 text-blue-900 shadow-xl dark:bg-blue-900 dark:text-white sm:left-4 sm:right-4 sm:top-[62px] sm:max-w-none md:left-6 md:right-6">
           <div className="min-w-0 text-center sm:text-left">
             <h1 className="break-words px-1 text-base font-semibold leading-tight sm:px-3 sm:text-xl lg:text-2xl">
               Commissary
             </h1>
           </div>
+          {renderCommissarySetupButton()}
         </div>
 
         <div className="global-tran-tab-div-ui !p-3 sm:!p-4 lg:!p-6">
           <div className="global-tran-tab-nav-ui !items-stretch !gap-3 sm:!items-center">
-            {renderTabButtons()}
+            {renderTabButtons(activeTab === "unconfirmedOrders")}
           </div>
 
-          <section className="mt-4 overflow-hidden rounded-xl border border-blue-200 bg-white shadow-sm dark:border-blue-900 dark:bg-gray-950">
-            <header className="border-b border-blue-100 bg-blue-50/70 px-4 py-3 dark:border-blue-900 dark:bg-blue-950/30 sm:px-6">
-              <div className="flex items-center gap-3">
-                <span className="rounded-lg bg-blue-600 p-2 text-white">
-                  <Settings className="h-5 w-5" />
-                </span>
-                <div>
-                  <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 sm:text-lg">
-                    Commissary Setup
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 sm:text-sm">
-                    Set the delivery lead days and confirmation cutoff time per
-                    FG category.
-                  </p>
+          {activeTab === "commissarySetup" && (
+            <section className="mt-3 w-full overflow-hidden rounded-lg border border-blue-200 bg-white shadow-sm dark:border-blue-900 dark:bg-gray-950">
+              <header className="border-b border-blue-100 bg-blue-50/70 px-3 py-2 dark:border-blue-900 dark:bg-blue-950/30">
+                <div className="flex items-center gap-2">
+                  <span className="rounded-md bg-blue-600 p-1.5 text-white">
+                    <Settings className="h-4 w-4" />
+                  </span>
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 sm:text-base">
+                      Commissary Setup
+                    </h2>
+                  </div>
                 </div>
-              </div>
-            </header>
+              </header>
 
-            <div className="p-3 sm:p-5">
-              {setupError && (
-                <div className="mb-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>{setupError}</span>
+              <div className="p-2 sm:p-3">
+                {setupError && (
+                  <div className="mb-2 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    <span>{setupError}</span>
+                  </div>
+                )}
+
+                {setupMessage && (
+                  <div className="mb-2 flex items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-xs text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                    <span>{setupMessage}</span>
+                  </div>
+                )}
+
+                <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="relative w-full sm:max-w-xs">
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="search"
+                      value={setupSearch}
+                      onChange={(event) => setSetupSearch(event.target.value)}
+                      placeholder="Search category code or name"
+                      className="global-tran-textbox-ui !h-8 !py-1 !pl-8 text-xs"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveCommissarySetup}
+                    disabled={
+                      isSavingSetup || isLoadingSetup || setupRows.length === 0
+                    }
+                    className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-bold text-white shadow-sm ${
+                      isSavingSetup || isLoadingSetup || setupRows.length === 0
+                        ? "cursor-not-allowed bg-gray-400 dark:bg-gray-700"
+                        : "bg-blue-600 hover:bg-blue-700 dark:bg-blue-800 dark:hover:bg-blue-700"
+                    }`}
+                  >
+                    <Save className="h-3.5 w-3.5" />
+                    {isSavingSetup ? "Saving..." : "Save Setup"}
+                  </button>
                 </div>
-              )}
 
-              {setupMessage && (
-                <div className="mb-3 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>{setupMessage}</span>
-                </div>
-              )}
-
-              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="relative w-full sm:max-w-sm">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="search"
-                    value={setupSearch}
-                    onChange={(event) => setSetupSearch(event.target.value)}
-                    placeholder="Search category code or name"
-                    className="global-tran-textbox-ui !pl-9"
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleSaveCommissarySetup}
-                  disabled={
-                    isSavingSetup || isLoadingSetup || setupRows.length === 0
-                  }
-                  className={`inline-flex min-h-[38px] items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-bold text-white shadow ${
-                    isSavingSetup || isLoadingSetup || setupRows.length === 0
-                      ? "cursor-not-allowed bg-gray-400 dark:bg-gray-700"
-                      : "bg-blue-600 hover:bg-blue-700 dark:bg-blue-800 dark:hover:bg-blue-700"
-                  }`}
-                >
-                  <Save className="h-4 w-4" />
-                  {isSavingSetup ? "Saving..." : "Save Setup"}
-                </button>
-              </div>
-
-              <div className="global-tran-table-main-div-ui block max-w-full overflow-x-auto">
-                <div className="global-tran-table-main-sub-div-ui relative isolate !max-h-[420px]">
-                  <table className="min-w-full table-fixed border-separate border-spacing-0">
-                    <thead className="global-tran-thead-ui">
-                      <tr>
-                        <th className="global-tran-th-ui w-[160px] text-left">
-                          Category Code
-                        </th>
-                        <th className="global-tran-th-ui min-w-[260px] text-left">
-                          Category Name
-                        </th>
-                        <th className="global-tran-th-ui w-[160px] text-center">
-                          Lead Days
-                        </th>
-                        <th className="global-tran-th-ui w-[190px] text-center">
-                          Cutoff Time
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {isLoadingSetup ? (
+                <div className="global-tran-table-main-div-ui block max-w-full overflow-x-auto">
+                  <div className="global-tran-table-main-sub-div-ui relative isolate !max-h-[360px]">
+                    <table className="w-full min-w-[620px] table-fixed border-separate border-spacing-0 text-xs [&_td]:!px-2 [&_td]:!py-1 [&_th]:!px-2 [&_th]:!py-1.5">
+                      <thead className="global-tran-thead-ui">
                         <tr>
-                          <td
-                            colSpan={4}
-                            className="global-tran-td-ui py-10 text-center text-slate-500"
-                          >
-                            Loading all FG categories...
-                          </td>
+                          <th className="global-tran-th-ui w-[120px] text-left">
+                            Category Code
+                          </th>
+                          <th className="global-tran-th-ui text-left">
+                            Category Name
+                          </th>
+                          <th className="global-tran-th-ui w-[110px] text-center">
+                            Lead Days
+                          </th>
+                          <th className="global-tran-th-ui w-[150px] text-center">
+                            Cutoff Time
+                          </th>
                         </tr>
-                      ) : filteredSetupRows.length === 0 ? (
-                        <tr>
-                          <td
-                            colSpan={4}
-                            className="global-tran-td-ui py-10 text-center text-slate-500"
-                          >
-                            No matching FG category found.
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredSetupRows.map((row) => (
-                          <tr
-                            key={row.categCode}
-                            className="bg-white hover:bg-slate-50 dark:bg-black dark:hover:bg-gray-900/50"
-                          >
-                            <td className="global-tran-td-ui font-mono font-semibold text-blue-700 dark:text-blue-300">
-                              {row.categCode}
+                      </thead>
+                      <tbody>
+                        {isLoadingSetup ? (
+                          <tr>
+                            <td
+                              colSpan={4}
+                              className="global-tran-td-ui !py-6 text-center text-slate-500"
+                            >
+                              Loading all FG categories...
                             </td>
-                            <td className="global-tran-td-ui font-medium">
-                              {row.categName}
+                          </tr>
+                        ) : filteredSetupRows.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={4}
+                              className="global-tran-td-ui !py-6 text-center text-slate-500"
+                            >
+                              No matching FG category found.
                             </td>
-                            <td className="global-tran-td-ui">
-                              <input
-                                type="number"
-                                min="0"
-                                max="365"
-                                step="1"
-                                value={row.days}
-                                onChange={(event) =>
-                                  updateSetupRow(
-                                    row.categCode,
-                                    "days",
-                                    event.target.value,
-                                  )
-                                }
-                                className="global-tran-textbox-ui !mx-auto !w-28 text-center"
-                                aria-label={`${row.categName} delivery lead days`}
-                              />
-                            </td>
-                            <td className="global-tran-td-ui">
-                              <div className="flex items-center justify-center gap-2">
-                                <Clock3 className="h-4 w-4 shrink-0 text-slate-400" />
+                          </tr>
+                        ) : (
+                          filteredSetupRows.map((row) => (
+                            <tr
+                              key={row.categCode}
+                              className="bg-white hover:bg-slate-50 dark:bg-black dark:hover:bg-gray-900/50"
+                            >
+                              <td className="global-tran-td-ui font-mono font-semibold text-blue-700 dark:text-blue-300">
+                                {row.categCode}
+                              </td>
+                              <td className="global-tran-td-ui font-medium">
+                                {row.categName}
+                              </td>
+                              <td className="global-tran-td-ui">
                                 <input
-                                  type="time"
-                                  value={row.cutoffTime}
+                                  type="number"
+                                  min="0"
+                                  max="365"
+                                  step="1"
+                                  value={row.days}
                                   onChange={(event) =>
                                     updateSetupRow(
                                       row.categCode,
-                                      "cutoffTime",
+                                      "days",
                                       event.target.value,
                                     )
                                   }
-                                  className="global-tran-textbox-ui !w-32 text-center"
-                                  aria-label={`${row.categName} confirmation cutoff time`}
+                                  className="global-tran-textbox-ui !mx-auto !h-7 !w-20 !px-2 !py-0.5 text-center text-xs"
+                                  aria-label={`${row.categName} delivery lead days`}
                                 />
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-                Example: Delivery date July 27 with 2 lead days and a 3:00 PM
-                cutoff must be confirmed on or before July 25 at 3:00 PM. A
-                blank cutoff time means 11:59:59 PM on the computed cutoff date.
-              </p>
-            </div>
-          </section>
-
-          <section className="mt-5 overflow-hidden rounded-xl border border-amber-200 bg-white shadow-sm dark:border-amber-900 dark:bg-gray-950">
-            <header className="border-b border-amber-100 bg-amber-50/70 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/20 sm:px-6">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="rounded-lg bg-amber-500 p-2 text-white">
-                    <AlertTriangle className="h-5 w-5" />
-                  </span>
-                  <div>
-                    <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 sm:text-lg">
-                      Unconfirmed Orders
-                    </h2>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 sm:text-sm">
-                      Review Store Portal orders that missed the configured
-                      confirmation cutoff.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[160px_160px_auto]">
-                  <FloatingField
-                    id="setup-unconfirmed-from"
-                    label="From Delivery Date"
-                    type="date"
-                    value={startDate}
-                    onChange={setStartDate}
-                  />
-                  <FloatingField
-                    id="setup-unconfirmed-to"
-                    label="To Delivery Date"
-                    type="date"
-                    value={endDate}
-                    onChange={setEndDate}
-                  />
-                  <button
-                    type="button"
-                    onClick={loadUnconfirmedOrders}
-                    disabled={isLoadingUnconfirmed}
-                    className={`inline-flex min-h-[38px] items-center justify-center gap-2 self-center rounded-lg px-4 py-2 text-sm font-bold text-white ${
-                      isLoadingUnconfirmed
-                        ? "cursor-not-allowed bg-gray-400"
-                        : "bg-amber-600 hover:bg-amber-700"
-                    }`}
-                  >
-                    <RefreshCw
-                      className={`h-4 w-4 ${
-                        isLoadingUnconfirmed ? "animate-spin" : ""
-                      }`}
-                    />
-                    Refresh
-                  </button>
-                </div>
-              </div>
-            </header>
-
-            <div className="p-3 sm:p-5">
-              <div className="global-tran-table-main-div-ui block max-w-full overflow-x-auto">
-                <div className="global-tran-table-main-sub-div-ui relative isolate !max-h-[430px]">
-                  <table className="min-w-[1050px] table-fixed border-separate border-spacing-0">
-                    <thead className="global-tran-thead-ui">
-                      <tr>
-                        <th className="global-tran-th-ui w-[130px] text-left">
-                          Store
-                        </th>
-                        <th className="global-tran-th-ui w-[210px] text-left">
-                          Category
-                        </th>
-                        <th className="global-tran-th-ui w-[130px] text-center">
-                          Delivery Date
-                        </th>
-                        <th className="global-tran-th-ui w-[180px] text-center">
-                          Confirmation Cutoff
-                        </th>
-                        <th className="global-tran-th-ui w-[95px] text-right">
-                          Items
-                        </th>
-                        <th className="global-tran-th-ui w-[120px] text-right">
-                          Order Qty
-                        </th>
-                        <th className="global-tran-th-ui w-[120px] text-center">
-                          Status
-                        </th>
-                        <th className="global-tran-th-ui w-[190px] text-center">
-                          Action
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {isLoadingUnconfirmed ? (
-                        <tr>
-                          <td
-                            colSpan={8}
-                            className="global-tran-td-ui py-10 text-center text-slate-500"
-                          >
-                            Loading orders that missed the cutoff...
-                          </td>
-                        </tr>
-                      ) : unconfirmedOrders.length === 0 ? (
-                        <tr>
-                          <td
-                            colSpan={8}
-                            className="global-tran-td-ui py-10 text-center text-slate-500"
-                          >
-                            No unconfirmed late orders found for this delivery
-                            date range.
-                          </td>
-                        </tr>
-                      ) : (
-                        unconfirmedOrders.map((order) => {
-                          const rowKey = `${order.storeCode}|${order.categCode}|${order.deliveryDate}`;
-                          const isSavingDecision = decisionKey === rowKey;
-                          const status = String(
-                            order.decisionStatus || "PENDING",
-                          ).toUpperCase();
-
-                          return (
-                            <tr
-                              key={rowKey}
-                              className="bg-white hover:bg-slate-50 dark:bg-black dark:hover:bg-gray-900/50"
-                            >
-                              <td className="global-tran-td-ui font-mono font-semibold">
-                                {branchNamesByCode[order.storeCode] ||
-                                  order.storeCode}
                               </td>
                               <td className="global-tran-td-ui">
-                                <div className="font-medium">
-                                  {order.categName || order.categCode}
-                                </div>
-                                <div className="text-[11px] text-slate-500">
-                                  {order.categCode}
-                                </div>
-                              </td>
-                              <td className="global-tran-td-ui text-center font-medium">
-                                {order.deliveryDate}
-                              </td>
-                              <td className="global-tran-td-ui text-center text-xs">
-                                {order.cutoffDateTime || "-"}
-                              </td>
-                              <td className="global-tran-td-ui text-right">
-                                {Number(order.itemCount || 0).toLocaleString()}
-                              </td>
-                              <td className="global-tran-td-ui text-right font-bold text-blue-700 dark:text-blue-300">
-                                {Number(order.orderQty || 0).toLocaleString()}
-                              </td>
-                              <td className="global-tran-td-ui text-center">
-                                <span
-                                  className={`inline-flex rounded-full px-2 py-1 text-[11px] font-bold ${
-                                    status === "ACCEPTED"
-                                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
-                                      : status === "REJECTED"
-                                        ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300"
-                                        : "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
-                                  }`}
-                                  title={order.decisionRemarks || ""}
-                                >
-                                  {status}
-                                </span>
-                              </td>
-                              <td className="global-tran-td-ui">
-                                <div className="flex items-center justify-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleUnconfirmedDecision(
-                                        order,
-                                        "ACCEPTED",
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <Clock3 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                                  <input
+                                    type="time"
+                                    value={row.cutoffTime}
+                                    onChange={(event) =>
+                                      updateSetupRow(
+                                        row.categCode,
+                                        "cutoffTime",
+                                        event.target.value,
                                       )
                                     }
-                                    disabled={isSavingDecision}
-                                    className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-400"
-                                  >
-                                    <CheckCircle2 className="h-3.5 w-3.5" />
-                                    Accept
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleUnconfirmedDecision(
-                                        order,
-                                        "REJECTED",
-                                      )
-                                    }
-                                    disabled={isSavingDecision}
-                                    className="inline-flex items-center gap-1 rounded-md bg-red-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-400"
-                                  >
-                                    <XCircle className="h-3.5 w-3.5" />
-                                    Reject
-                                  </button>
+                                    className="global-tran-textbox-ui !h-7 !w-28 !px-1 !py-0.5 text-center text-xs"
+                                    aria-label={`${row.categName} confirmation cutoff time`}
+                                  />
                                 </div>
                               </td>
                             </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
-            </div>
-          </section>
+            </section>
+          )}
+
+          {activeTab === "unconfirmedOrders" && (
+            <section className="mt-4 overflow-hidden rounded-xl border border-amber-200 bg-white shadow-sm dark:border-amber-900 dark:bg-gray-950">
+              <header className="border-b border-amber-100 bg-amber-50/70 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/20 sm:px-6">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="rounded-lg bg-amber-500 p-2 text-white">
+                      <AlertTriangle className="h-5 w-5" />
+                    </span>
+                    <div>
+                      <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 sm:text-lg">
+                        Unconfirmed Orders
+                      </h2>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 sm:text-sm">
+                        Review Store Portal orders that missed the configured
+                        confirmation cutoff.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-[160px_160px]">
+                    <FloatingField
+                      id="setup-unconfirmed-from"
+                      label="From Delivery Date"
+                      type="date"
+                      value={startDate}
+                      onChange={setStartDate}
+                    />
+                    <FloatingField
+                      id="setup-unconfirmed-to"
+                      label="To Delivery Date"
+                      type="date"
+                      value={endDate}
+                      onChange={setEndDate}
+                    />
+                  </div>
+                </div>
+              </header>
+
+              <div className="p-3 sm:p-5">
+                {unconfirmedError && (
+                  <div className="mb-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{unconfirmedError}</span>
+                  </div>
+                )}
+
+                {unconfirmedMessage && (
+                  <div className="mb-3 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{unconfirmedMessage}</span>
+                  </div>
+                )}
+
+                <div className="global-tran-table-main-div-ui block max-w-full overflow-x-auto">
+                  <div className="global-tran-table-main-sub-div-ui relative isolate !max-h-[430px]">
+                    <table className="min-w-[1380px] table-fixed border-separate border-spacing-0">
+                      <thead className="global-tran-thead-ui">
+                        <tr>
+                          <th className="global-tran-th-ui w-[180px] text-left">
+                            Store
+                          </th>
+                          <th className="global-tran-th-ui w-[130px] text-left">
+                            Item Number
+                          </th>
+                          <th className="global-tran-th-ui w-[260px] text-left">
+                            Description
+                          </th>
+                          <th className="global-tran-th-ui w-[130px] text-center">
+                            Delivery Date
+                          </th>
+                          <th className="global-tran-th-ui w-[180px] text-center">
+                            Confirmation Cutoff
+                          </th>
+                          <th className="global-tran-th-ui w-[90px] text-center">
+                            UOM
+                          </th>
+                          <th className="global-tran-th-ui w-[100px] text-right">
+                            Qty
+                          </th>
+                          <th className="global-tran-th-ui w-[120px] text-center">
+                            Status
+                          </th>
+                          <th className="global-tran-th-ui w-[190px] text-center">
+                            Action
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {isLoadingUnconfirmed ? (
+                          <tr>
+                            <td
+                              colSpan={9}
+                              className="global-tran-td-ui py-10 text-center text-slate-500"
+                            >
+                              Loading orders that missed the cutoff...
+                            </td>
+                          </tr>
+                        ) : unconfirmedOrders.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={9}
+                              className="global-tran-td-ui py-10 text-center text-slate-500"
+                            >
+                              No unconfirmed late orders found for this delivery
+                              date range.
+                            </td>
+                          </tr>
+                        ) : (
+                          groupedUnconfirmedOrders.map((group) => {
+                            const isCollapsed =
+                              collapsedUnconfirmedCategorySet.has(
+                                group.categoryCode,
+                              );
+
+                            return (
+                              <React.Fragment key={group.categoryCode}>
+                                <tr className="bg-blue-50 dark:bg-blue-950/40">
+                                  <td
+                                    colSpan={9}
+                                    className="global-tran-td-ui !p-0"
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        toggleUnconfirmedCategory(
+                                          group.categoryCode,
+                                        )
+                                      }
+                                      aria-expanded={!isCollapsed}
+                                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs font-bold uppercase text-blue-900 hover:bg-blue-100 dark:text-blue-100 dark:hover:bg-blue-900/60"
+                                    >
+                                      <span className="flex min-w-0 items-center gap-2">
+                                        <ChevronDown
+                                          className={`h-4 w-4 shrink-0 transition-transform ${
+                                            isCollapsed ? "-rotate-90" : ""
+                                          }`}
+                                        />
+                                        <span className="truncate">
+                                          Category: {group.categoryDescription}
+                                        </span>
+                                      </span>
+                                      <span className="shrink-0 text-[11px] font-semibold normal-case text-slate-600 dark:text-slate-300">
+                                        {group.rows.length} item
+                                        {group.rows.length === 1 ? "" : "s"}
+                                      </span>
+                                    </button>
+                                  </td>
+                                </tr>
+
+                                {!isCollapsed &&
+                                  group.rows.map((order) => {
+                                    const rowKey = `${order.storeCode}|${order.categCode}|${order.itemCode}|${order.deliveryDate}`;
+                                    const isSavingDecision =
+                                      decisionKey === rowKey;
+                                    const status = String(
+                                      order.decisionStatus || "PENDING",
+                                    ).toUpperCase();
+
+                                    return (
+                                      <tr
+                                        key={rowKey}
+                                        className="bg-white hover:bg-slate-50 dark:bg-black dark:hover:bg-gray-900/50"
+                                      >
+                                        <td className="global-tran-td-ui font-semibold text-slate-800 dark:text-slate-200">
+                                          {branchNamesByCode[order.storeCode] ||
+                                            order.storeName ||
+                                            order.storeCode ||
+                                            "-"}
+                                        </td>
+                                        <td className="global-tran-td-ui">
+                                          <div className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                                            {order.itemCode || "-"}
+                                          </div>
+                                        </td>
+                                        <td
+                                          className="global-tran-td-ui truncate"
+                                          title={order.itemName || ""}
+                                        >
+                                          <div className="truncate text-slate-700 dark:text-slate-300">
+                                            {order.itemName || "-"}
+                                          </div>
+                                        </td>
+                                        <td className="global-tran-td-ui text-center font-medium">
+                                          {formatDisplayDate(
+                                            order.deliveryDate,
+                                          )}
+                                        </td>
+                                        <td className="global-tran-td-ui text-center text-xs">
+                                          {formatDisplayDate(
+                                            order.cutoffDateTime,
+                                            true,
+                                          )}
+                                        </td>
+                                        <td className="global-tran-td-ui text-center font-medium">
+                                          {order.uomCode || "-"}
+                                        </td>
+                                        <td className="global-tran-td-ui text-right font-semibold tabular-nums">
+                                          {Number(
+                                            order.orderQty ??
+                                              order.qty ??
+                                              order.storeQty ??
+                                              order.totalQty ??
+                                              0,
+                                          ).toLocaleString()}
+                                        </td>
+                                        <td className="global-tran-td-ui text-center">
+                                          <span
+                                            className={`inline-flex rounded-full px-2 py-1 text-[11px] font-bold ${
+                                              status === "ACCEPTED"
+                                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
+                                                : status === "REJECTED"
+                                                  ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300"
+                                                  : "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
+                                            }`}
+                                            title={order.decisionRemarks || ""}
+                                          >
+                                            {status}
+                                          </span>
+                                        </td>
+                                        <td className="global-tran-td-ui">
+                                          <div className="flex items-center justify-center gap-2">
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                handleUnconfirmedDecision(
+                                                  order,
+                                                  "ACCEPTED",
+                                                )
+                                              }
+                                              disabled={isSavingDecision}
+                                              className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+                                            >
+                                              <CheckCircle2 className="h-3.5 w-3.5" />
+                                              Accept
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                handleUnconfirmedDecision(
+                                                  order,
+                                                  "REJECTED",
+                                                )
+                                              }
+                                              disabled={isSavingDecision}
+                                              className="inline-flex items-center gap-1 rounded-md bg-red-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+                                            >
+                                              <XCircle className="h-3.5 w-3.5" />
+                                              Reject
+                                            </button>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                              </React.Fragment>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
         </div>
       </div>
     );
@@ -2263,12 +2826,13 @@ export default function CommissaryForecast() {
       {isLoading && <LoadingSpinner />}
 
       {/* Floating Header */}
-      <div className="fixed left-2 right-2 top-[54px] z-[20] flex max-w-[calc(100vw-1rem)] flex-col gap-2 rounded-lg bg-gradient-to-r from-blue-200 to-blue-100 p-2 text-blue-900 shadow-xl dark:bg-blue-900 dark:text-white sm:left-4 sm:right-4 sm:top-[62px] sm:max-w-none sm:flex-row sm:items-center sm:justify-between md:left-6 md:right-6">
+      <div className="fixed left-2 right-2 top-[54px] z-[20] flex max-w-[calc(100vw-1rem)] items-center justify-between gap-2 rounded-lg bg-gradient-to-r from-blue-200 to-blue-100 p-2 text-blue-900 shadow-xl dark:bg-blue-900 dark:text-white sm:left-4 sm:right-4 sm:top-[62px] sm:max-w-none md:left-6 md:right-6">
         <div className="min-w-0 text-center sm:text-left">
           <h1 className="break-words px-1 text-base font-semibold leading-tight sm:px-3 sm:text-xl lg:text-2xl">
             Commissary
           </h1>
         </div>
+        {renderCommissarySetupButton()}
       </div>
 
       {/* Query Parameters */}
@@ -2366,30 +2930,7 @@ export default function CommissaryForecast() {
       {/* Main Tab Div */}
       <div className="global-tran-tab-div-ui !p-3 sm:!p-4 lg:!p-6 mt-4">
         <div className="global-tran-tab-nav-ui !items-stretch !gap-3 sm:!items-center">
-          {renderTabButtons()}
-
-          <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:items-center">
-            <ActionButton
-              icon={Search}
-              onClick={loadCommissaryData}
-              disabled={isLoading}
-            >
-              {isLoading ? "Refreshing..." : " Refresh Data"}
-
-
-              
-            </ActionButton>
-            <ActionButton
-              icon={ChevronDown}
-              onClick={handleToggleAllCategories}
-              disabled={isLoading || groupedCurrentData.length === 0}
-            >
-              {visibleCollapsedCategoryCount === groupedCurrentData.length &&
-              groupedCurrentData.length > 0
-                ? "Show Categories"
-                : "Collapse Categories"}
-            </ActionButton>
-          </div>
+          {renderTabButtons(true)}
         </div>
 
         {woSuccessMsg && (
@@ -2430,7 +2971,7 @@ export default function CommissaryForecast() {
                       key={date}
                       className={`global-tran-th-ui sticky top-0 z-[210] bg-blue-100 dark:bg-blue-900 ${
                         showsIntegrationDetails
-                          ? "w-[170px] min-w-[170px] max-w-[170px] text-center"
+                          ? "w-[210px] min-w-[210px] max-w-[210px] text-center"
                           : "w-[96px] min-w-[96px] max-w-[96px] text-right"
                       }`}
                     >
@@ -2605,7 +3146,9 @@ export default function CommissaryForecast() {
               <button
                 type="button"
                 onClick={handleGenerateWorkOrders}
-                disabled={isGeneratingWO || isLoading || currentData.length === 0}
+                disabled={
+                  isGeneratingWO || isLoading || currentData.length === 0
+                }
                 className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-xs font-bold text-white shadow transition-all sm:text-sm ${
                   isGeneratingWO || currentData.length === 0 || isLoading
                     ? "cursor-not-allowed bg-gray-400 dark:bg-gray-700"
@@ -2613,7 +3156,9 @@ export default function CommissaryForecast() {
                 }`}
               >
                 <Boxes className="h-4 w-4 shrink-0" />
-                {isGeneratingWO ? "Integrating Work Orders..." : "Integrate to Work Order"}
+                {isGeneratingWO
+                  ? "Integrating Work Orders..."
+                  : "Integrate to Work Order"}
               </button>
             )}
 
@@ -2650,7 +3195,7 @@ export default function CommissaryForecast() {
         )}
       </div>
 
-      {showSODRModal && !showCustomerLookup && !showSalesRepLookup && (
+      {showSODRModal && (
         <div
           className="fixed inset-0 z-[9998] flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm sm:p-6"
           role="presentation"
@@ -2666,7 +3211,10 @@ export default function CommissaryForecast() {
           >
             <header className="flex items-start justify-between gap-4 border-b border-slate-200 bg-gradient-to-r from-indigo-600 to-blue-600 px-4 py-4 text-white dark:border-slate-700 sm:px-6">
               <div>
-                <h2 id="so-dr-modal-title" className="text-lg font-bold sm:text-xl">
+                <h2
+                  id="so-dr-modal-title"
+                  className="text-lg font-bold sm:text-xl"
+                >
                   Integrate Confirmed Orders to SO/DR
                 </h2>
               </div>
@@ -2682,57 +3230,142 @@ export default function CommissaryForecast() {
 
             <div className="grid grid-cols-2 gap-2 border-b border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900 sm:grid-cols-4 sm:p-4">
               <div className="rounded-lg bg-white p-3 shadow-sm dark:bg-slate-950">
-                <div className="text-[10px] font-bold uppercase text-slate-400">from Delivery Date</div>
-                <div className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">{startDate}</div>
-              </div>
-              <div className="rounded-lg bg-white p-3 shadow-sm dark:bg-slate-950">
-                <div className="text-[10px] font-bold uppercase text-slate-400">To Derlivery Date</div>
-                <div className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">{endDate}</div>
-              </div>
-              <div className="rounded-lg bg-white p-3 shadow-sm dark:bg-slate-950">
-                <div className="text-[10px] font-bold uppercase text-slate-400">Selected Records</div>
+                <div className="text-[10px] font-bold uppercase text-slate-400">
+                  from Delivery Date
+                </div>
                 <div className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
-                  {selectedIntegrationRows.length.toLocaleString()} / {integrationRows.length.toLocaleString()}
+                  {startDate}
                 </div>
               </div>
               <div className="rounded-lg bg-white p-3 shadow-sm dark:bg-slate-950">
-                <div className="text-[10px] font-bold uppercase text-slate-400">Selected Quantity</div>
-                <div className="mt-1 text-sm font-semibold text-indigo-700 dark:text-indigo-300">{selectedIntegrationQuantity.toLocaleString()}</div>
+                <div className="text-[10px] font-bold uppercase text-slate-400">
+                  To Derlivery Date
+                </div>
+                <div className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  {endDate}
+                </div>
+              </div>
+              <div className="rounded-lg bg-white p-3 shadow-sm dark:bg-slate-950">
+                <div className="text-[10px] font-bold uppercase text-slate-400">
+                  Selected Records
+                </div>
+                <div className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  {selectedIntegrationRows.length.toLocaleString()} /{" "}
+                  {integrationRows.length.toLocaleString()}
+                </div>
+              </div>
+              <div className="rounded-lg bg-white p-3 shadow-sm dark:bg-slate-950">
+                <div className="text-[10px] font-bold uppercase text-slate-400">
+                  Selected Quantity
+                </div>
+                <div className="mt-1 text-sm font-semibold text-indigo-700 dark:text-indigo-300">
+                  {selectedIntegrationQuantity.toLocaleString()}
+                </div>
               </div>
             </div>
 
-            <div className="grid gap-3 border-b border-slate-200 p-3 dark:border-slate-800 sm:grid-cols-2 sm:p-4 lg:grid-cols-4 lg:grid-rows-2 lg:items-stretch">
-              <div className="relative sm:col-span-2 lg:col-span-2 lg:col-start-1 lg:row-start-1">
-                <label htmlFor="soDrCustomer" className="mb-1 block text-xs font-bold text-slate-600 dark:text-slate-300">
-                  Customer <span className="text-red-500">*</span>
-                </label>
-                <div className="flex overflow-hidden rounded-lg border border-slate-300 bg-white focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:focus-within:ring-indigo-900/40">
-                  <input
-                    id="soDrCustomer"
-                    type="text"
-                    value={
-                      soDrForm.customerCode
-                        ? `${soDrForm.customerCode}${soDrForm.customerName ? ` - ${soDrForm.customerName}` : ""}`
-                        : ""
-                    }
-                    readOnly
-                    placeholder="Select customer"
-                    className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowCustomerLookup(true)}
-                    disabled={isLoadingCustomer}
-                    className="flex w-11 shrink-0 items-center justify-center border-l border-slate-300 bg-indigo-50 text-indigo-700 transition hover:bg-indigo-600 hover:text-white disabled:cursor-wait disabled:opacity-60 dark:border-slate-700 dark:bg-indigo-950 dark:text-indigo-300"
-                    aria-label="Select customer"
-                  >
-                    <Search className="h-4 w-4" />
-                  </button>
+            <div className="grid gap-3 border-b border-slate-200 p-3 dark:border-slate-800 sm:grid-cols-2 sm:p-4 lg:grid-cols-4 lg:items-stretch">
+              <div className="sm:col-span-2 lg:col-span-2">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-300">
+                    Customer Selection by Store
+                  </label>
+                  {isLoadingIntegrationCustomers && (
+                    <span className="text-[10px] font-semibold text-indigo-600">
+                      Loading...
+                    </span>
+                  )}
+                </div>
+                <div className="max-h-28 overflow-auto rounded-lg border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-950">
+                  {selectedStoreCodes.length === 0 ? (
+                    <div className="px-3 py-3 text-xs text-slate-500">
+                      Select at least one item to load its store customer.
+                    </div>
+                  ) : (
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                        <tr>
+                          <th className="px-3 py-2 text-left">Store</th>
+                          <th className="px-3 py-2 text-left">Customer</th>
+                          <th className="px-3 py-2 text-center">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedStoreCodes.map((storeCode) => {
+                          const selectedCustomer =
+                            selectedIntegrationCustomersByStore[storeCode];
+                          const customerCount = integrationCustomers.filter(
+                            (customer) =>
+                              customer?.storeCode === storeCode &&
+                              customer?.hasCustomer &&
+                              customer?.customerCode,
+                          ).length;
+                          const hasCustomerOptions = customerCount > 0;
+
+                          return (
+                            <tr
+                              key={storeCode}
+                              className="border-t border-slate-100 dark:border-slate-800"
+                            >
+                              <td className="px-3 py-2 font-semibold">
+                                {branchNamesByCode[storeCode] ||
+                                  branchNamesByCode[storeCode.toUpperCase()] ||
+                                  storeCode}
+                                <span className="ml-1 font-mono text-[10px] text-slate-400">
+                                  ({storeCode})
+                                </span>
+                              </td>
+                              <td
+                                className={`px-3 py-2 ${
+                                  selectedCustomer
+                                    ? "text-slate-700 dark:text-slate-200"
+                                    : hasCustomerOptions
+                                      ? "font-semibold text-amber-600"
+                                      : "font-semibold text-red-600"
+                                }`}
+                              >
+                                {isLoadingIntegrationCustomers
+                                  ? "Loading customers..."
+                                  : selectedCustomer
+                                    ? `${selectedCustomer.customerCode} - ${selectedCustomer.customerName || ""}`
+                                    : hasCustomerOptions
+                                      ? "Auto-selecting customer..."
+                                      : "No customer tagged under this branch"}
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => openCustomerLookup(storeCode)}
+                                  disabled={
+                                    isLoadingIntegrationCustomers ||
+                                    !hasCustomerOptions
+                                  }
+                                  className={`inline-flex items-center justify-center gap-1 rounded-md border px-2.5 py-1.5 text-[11px] font-bold transition ${
+                                    isLoadingIntegrationCustomers ||
+                                    !hasCustomerOptions
+                                      ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-slate-800 dark:bg-slate-900"
+                                      : "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300"
+                                  }`}
+                                  aria-label={`Search customer for ${storeCode}`}
+                                >
+                                  <Search className="h-3.5 w-3.5" />
+                                  Search
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               </div>
 
-              <div className="lg:col-start-1 lg:row-start-2">
-                <label htmlFor="soDrPoNumber" className="mb-1 block text-xs font-bold text-slate-600 dark:text-slate-300">
+              <div>
+                <label
+                  htmlFor="soDrPoNumber"
+                  className="mb-1 block text-xs font-bold text-slate-600 dark:text-slate-300"
+                >
                   PO Number
                 </label>
                 <input
@@ -2745,44 +3378,16 @@ export default function CommissaryForecast() {
                       poNumber: event.target.value,
                     }))
                   }
-                  placeholder="Enter customer PO number"
+                  placeholder="Next SO Number"
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:focus:ring-indigo-900/40"
                 />
               </div>
 
-              <div className="lg:col-start-2 lg:row-start-2">
-                <label htmlFor="soDrSalesRep" className="mb-1 block text-xs font-bold text-slate-600 dark:text-slate-300">
-                  Sales Rep
-                </label>
-                <div className="flex overflow-hidden rounded-lg border border-slate-300 bg-white focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:focus-within:ring-indigo-900/40">
-                  <input
-                    id="soDrSalesRep"
-                    type="text"
-                    value={
-                      isLoadingCustomer
-                        ? "Loading customer setup..."
-                        : soDrForm.salesRepCode
-                          ? `${soDrForm.salesRepCode}${soDrForm.salesRepName ? ` - ${soDrForm.salesRepName}` : ""}`
-                          : ""
-                    }
-                    readOnly
-                    placeholder="Select sales representative"
-                    className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowSalesRepLookup(true)}
-                    disabled={isLoadingCustomer}
-                    className="flex w-11 shrink-0 items-center justify-center border-l border-slate-300 bg-indigo-50 text-indigo-700 transition hover:bg-indigo-600 hover:text-white disabled:cursor-wait disabled:opacity-60 dark:border-slate-700 dark:bg-indigo-950 dark:text-indigo-300"
-                    aria-label="Select sales representative"
-                  >
-                    <Search className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:col-span-2 lg:col-span-2 lg:col-start-3 lg:row-span-2 lg:row-start-1">
-                <label htmlFor="soDrRemarks" className="mb-1 block text-xs font-bold text-slate-600 dark:text-slate-300">
+              <div className="flex flex-col sm:col-span-2 lg:col-span-1">
+                <label
+                  htmlFor="soDrRemarks"
+                  className="mb-1 block text-xs font-bold text-slate-600 dark:text-slate-300"
+                >
                   Remarks
                 </label>
                 <textarea
@@ -2823,12 +3428,24 @@ export default function CommissaryForecast() {
                         className="h-4 w-4 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                       />
                     </th>
-                    <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-left shadow-[0_1px_0_rgba(148,163,184,0.45)] dark:border-slate-700 dark:bg-slate-900">Branch</th>
-                    <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-left shadow-[0_1px_0_rgba(148,163,184,0.45)] dark:border-slate-700 dark:bg-slate-900">Item Code</th>
-                    <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-left shadow-[0_1px_0_rgba(148,163,184,0.45)] dark:border-slate-700 dark:bg-slate-900">Description</th>
-                    <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-left shadow-[0_1px_0_rgba(148,163,184,0.45)] dark:border-slate-700 dark:bg-slate-900">UOM</th>
-                    <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-left shadow-[0_1px_0_rgba(148,163,184,0.45)] dark:border-slate-700 dark:bg-slate-900">Unsent Delivery Date(s)</th>
-                    <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-right shadow-[0_1px_0_rgba(148,163,184,0.45)] dark:border-slate-700 dark:bg-slate-900">Quantity</th>
+                    <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-left shadow-[0_1px_0_rgba(148,163,184,0.45)] dark:border-slate-700 dark:bg-slate-900">
+                      Branch
+                    </th>
+                    <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-left shadow-[0_1px_0_rgba(148,163,184,0.45)] dark:border-slate-700 dark:bg-slate-900">
+                      Item Code
+                    </th>
+                    <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-left shadow-[0_1px_0_rgba(148,163,184,0.45)] dark:border-slate-700 dark:bg-slate-900">
+                      Description
+                    </th>
+                    <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-left shadow-[0_1px_0_rgba(148,163,184,0.45)] dark:border-slate-700 dark:bg-slate-900">
+                      UOM
+                    </th>
+                    <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-left shadow-[0_1px_0_rgba(148,163,184,0.45)] dark:border-slate-700 dark:bg-slate-900">
+                      Unsent Delivery Date(s)
+                    </th>
+                    <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-right shadow-[0_1px_0_rgba(148,163,184,0.45)] dark:border-slate-700 dark:bg-slate-900">
+                      Quantity
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2838,39 +3455,63 @@ export default function CommissaryForecast() {
                     );
 
                     return (
-                    <tr
-                      key={row.integrationRowId}
-                      className={
-                        isSelected
-                          ? "bg-indigo-50/60 hover:bg-indigo-50 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/30"
-                          : "hover:bg-slate-50 dark:hover:bg-slate-900/70"
-                      }
-                    >
-                      <td className="border-b border-slate-100 px-3 py-2 text-center dark:border-slate-800">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() =>
-                            toggleIntegrationRow(row.integrationRowId)
-                          }
-                          aria-label={`Select ${row.itemCode || "item"} for SO/DR integration`}
-                          className="h-4 w-4 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                        />
-                      </td>
-                      <td className="truncate border-b border-slate-100 px-3 py-2 font-medium dark:border-slate-800" title={getStoreLabel(row)}>{getStoreLabel(row)}</td>
-                      <td className="truncate border-b border-slate-100 px-3 py-2 font-mono dark:border-slate-800" title={row.itemCode || "-"}>{row.itemCode || "-"}</td>
-                      <td className="truncate border-b border-slate-100 px-3 py-2 dark:border-slate-800" title={row.itemDesc || "-"}>{row.itemDesc || "-"}</td>
-                      <td className="truncate border-b border-slate-100 px-3 py-2 dark:border-slate-800" title={row.uomCode || "-"}>{row.uomCode || "-"}</td>
-                      <td
-                        className="border-b border-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-800 dark:text-slate-200"
-                        title={row.unsentDeliveryDates.join(", ")}
+                      <tr
+                        key={row.integrationRowId}
+                        className={
+                          isSelected
+                            ? "bg-indigo-50/60 hover:bg-indigo-50 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/30"
+                            : "hover:bg-slate-50 dark:hover:bg-slate-900/70"
+                        }
                       >
-                        {row.unsentDeliveryDates
-                          .map((date) => shortDate(date))
-                          .join(", ")}
-                      </td>
-                      <td className="border-b border-slate-100 px-3 py-2 text-right font-semibold dark:border-slate-800">{Number(row.unsentQty ?? row.total ?? 0).toLocaleString()}</td>
-                    </tr>
+                        <td className="border-b border-slate-100 px-3 py-2 text-center dark:border-slate-800">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() =>
+                              toggleIntegrationRow(row.integrationRowId)
+                            }
+                            aria-label={`Select ${row.itemCode || "item"} for SO/DR integration`}
+                            className="h-4 w-4 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                        </td>
+                        <td
+                          className="truncate border-b border-slate-100 px-3 py-2 font-medium dark:border-slate-800"
+                          title={getStoreLabel(row)}
+                        >
+                          {getStoreLabel(row)}
+                        </td>
+                        <td
+                          className="truncate border-b border-slate-100 px-3 py-2 font-mono dark:border-slate-800"
+                          title={row.itemCode || "-"}
+                        >
+                          {row.itemCode || "-"}
+                        </td>
+                        <td
+                          className="truncate border-b border-slate-100 px-3 py-2 dark:border-slate-800"
+                          title={row.itemDesc || "-"}
+                        >
+                          {row.itemDesc || "-"}
+                        </td>
+                        <td
+                          className="truncate border-b border-slate-100 px-3 py-2 dark:border-slate-800"
+                          title={row.uomCode || "-"}
+                        >
+                          {row.uomCode || "-"}
+                        </td>
+                        <td
+                          className="border-b border-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-800 dark:text-slate-200"
+                          title={row.unsentDeliveryDates.join(", ")}
+                        >
+                          {row.unsentDeliveryDates
+                            .map((date) => shortDate(date))
+                            .join(", ")}
+                        </td>
+                        <td className="border-b border-slate-100 px-3 py-2 text-right font-semibold dark:border-slate-800">
+                          {Number(
+                            row.unsentQty ?? row.total ?? 0,
+                          ).toLocaleString()}
+                        </td>
+                      </tr>
                     );
                   })}
                 </tbody>
@@ -2879,7 +3520,8 @@ export default function CommissaryForecast() {
 
             <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900 sm:px-6">
               <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                {selectedIntegrationRows.length.toLocaleString()} item(s) selected
+                {selectedIntegrationRows.length.toLocaleString()} item(s)
+                selected
               </span>
               <button
                 type="button"
@@ -2887,12 +3529,16 @@ export default function CommissaryForecast() {
                 disabled={
                   isSendingToSODR ||
                   selectedIntegrationRows.length === 0 ||
-                  !soDrForm.customerCode
+                  isLoadingIntegrationCustomers ||
+                  storesWithoutIntegrationCustomers.length > 0 ||
+                  storesWithoutSelectedCustomer.length > 0
                 }
                 className={`rounded-lg px-5 py-2 text-sm font-bold text-white shadow transition ${
                   isSendingToSODR ||
                   selectedIntegrationRows.length === 0 ||
-                  !soDrForm.customerCode
+                  isLoadingIntegrationCustomers ||
+                  storesWithoutIntegrationCustomers.length > 0 ||
+                  storesWithoutSelectedCustomer.length > 0
                     ? "cursor-not-allowed bg-gray-400 dark:bg-gray-700"
                     : "bg-indigo-600 hover:bg-indigo-700 active:scale-95 dark:bg-indigo-600 dark:hover:bg-indigo-500"
                 }`}
@@ -2901,22 +3547,134 @@ export default function CommissaryForecast() {
               </button>
             </footer>
           </section>
+
+          {customerLookupStoreCode && (
+            <div
+              className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-6"
+              role="presentation"
+              onMouseDown={(event) => {
+                if (event.target === event.currentTarget) closeCustomerLookup();
+              }}
+            >
+              <section
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="customer-lookup-title"
+                className="flex max-h-[75vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-950"
+              >
+                <header className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+                  <div>
+                    <h3
+                      id="customer-lookup-title"
+                      className="text-base font-bold text-slate-800 dark:text-slate-100"
+                    >
+                      Select Customer
+                    </h3>
+                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                      Showing customers tagged under{" "}
+                      <span className="font-semibold">
+                        {branchNamesByCode[customerLookupStoreCode] ||
+                          branchNamesByCode[
+                            customerLookupStoreCode.toUpperCase()
+                          ] ||
+                          customerLookupStoreCode}
+                      </span>{" "}
+                      ({customerLookupStoreCode})
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={closeCustomerLookup}
+                    className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-200 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                    aria-label="Close customer search"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </header>
+
+                <div className="border-b border-slate-200 p-3 dark:border-slate-800 sm:p-4">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      autoFocus
+                      value={customerLookupSearch}
+                      onChange={(event) =>
+                        setCustomerLookupSearch(event.target.value)
+                      }
+                      placeholder="Search customer code or name"
+                      className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:focus:ring-indigo-900/40"
+                    />
+                  </div>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-auto">
+                  <table className="w-full min-w-[520px] text-sm">
+                    <thead className="sticky top-0 bg-slate-100 text-xs uppercase text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                      <tr>
+                        <th className="px-4 py-2.5 text-left">Customer Code</th>
+                        <th className="px-4 py-2.5 text-left">Customer Name</th>
+                        <th className="w-24 px-4 py-2.5 text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {customerLookupOptions.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={3}
+                            className="px-4 py-10 text-center text-sm text-slate-500"
+                          >
+                            No customer found under this branch.
+                          </td>
+                        </tr>
+                      ) : (
+                        customerLookupOptions.map((customer) => {
+                          const isSelected =
+                            selectedIntegrationCustomersByStore[
+                              customerLookupStoreCode
+                            ]?.customerCode === customer.customerCode;
+
+                          return (
+                            <tr
+                              key={`${customer.storeCode}-${customer.customerCode}`}
+                              className={`border-t border-slate-100 dark:border-slate-800 ${
+                                isSelected
+                                  ? "bg-indigo-50 dark:bg-indigo-950/30"
+                                  : "hover:bg-slate-50 dark:hover:bg-slate-900/70"
+                              }`}
+                            >
+                              <td className="px-4 py-3 font-mono font-semibold text-slate-700 dark:text-slate-200">
+                                {customer.customerCode}
+                              </td>
+                              <td className="px-4 py-3 text-slate-700 dark:text-slate-200">
+                                {customer.customerName || "-"}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    selectIntegrationCustomer(customer)
+                                  }
+                                  className={`rounded-md px-3 py-1.5 text-xs font-bold transition ${
+                                    isSelected
+                                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                                      : "bg-indigo-600 text-white hover:bg-indigo-700"
+                                  }`}
+                                >
+                                  {isSelected ? "Selected" : "Select"}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          )}
         </div>
-      )}
-
-      {showCustomerLookup && (
-        <CustomerMastLookupModal
-          isOpen={showCustomerLookup}
-          customParam="ActiveAll"
-          onClose={handleSelectIntegrationCustomer}
-        />
-      )}
-
-      {showSalesRepLookup && (
-        <SearchSalesRepRef
-          isOpen={showSalesRepLookup}
-          onClose={handleSelectIntegrationSalesRep}
-        />
       )}
     </div>
   );
