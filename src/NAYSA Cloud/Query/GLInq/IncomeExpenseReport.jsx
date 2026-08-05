@@ -1,6 +1,12 @@
 import React, { useMemo } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faWallet } from "@fortawesome/free-solid-svg-icons";
+import {
+  faBuilding,
+  faCalendarCheck,
+  faCalendarDay,
+  faChartLine,
+  faWallet,
+} from "@fortawesome/free-solid-svg-icons";
 
 const safeArray = (value) => (Array.isArray(value) ? value : []);
 const FIXED_COLUMNS = [
@@ -16,25 +22,26 @@ const TOTAL_COLUMN = {
   maxWidth: 190,
 };
 const REPORT_VIEWS = [
-  ["perMonth", "Per Month MTD"],
-  ["perMonthYTD", "Per Month YTD"],
-  ["perRC", "Per RC MTD"],
-  ["perRCYTD", "Per RC YTD"],
+  ["perMonth", "Per Month MTD", faCalendarDay],
+  ["perMonthYTD", "Per Month YTD", faCalendarCheck],
+  ["perRC", "Per RC MTD", faBuilding],
+  ["perRCYTD", "Per RC YTD", faChartLine],
 ];
 
 const ReportViewTabs = ({ activeView, onChange, className = "" }) => (
   <div className={`grid grid-cols-2 gap-1.5 sm:grid-cols-4 ${className}`}>
-    {REPORT_VIEWS.map(([key, label]) => (
+    {REPORT_VIEWS.map(([key, label, icon]) => (
       <button
         key={key}
         type="button"
         onClick={() => onChange?.(key)}
-        className={`w-[108px] rounded-md px-2 py-2 text-xs font-medium transition-colors sm:w-[116px] ${
+        className={`inline-flex w-[108px] items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs font-medium transition-colors sm:w-[116px] ${
           activeView === key
             ? "bg-blue-600 text-white shadow-sm hover:opacity-90"
             : "border border-slate-200 bg-white text-slate-600 hover:text-blue-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
         }`}
       >
+        <FontAwesomeIcon icon={icon} className="shrink-0 text-[11px]" />
         {label}
       </button>
     ))}
@@ -225,7 +232,7 @@ function IncomeExpenseReport({
         }
       `}</style>
       <ReportViewTabs activeView={activeView} onChange={onActiveViewChange} className="mb-2 xl:hidden" />
-      <ReportViewTabs activeView={activeView} onChange={onActiveViewChange} className="absolute left-2 top-2 z-30 hidden xl:grid" />
+      <ReportViewTabs activeView={activeView} onChange={onActiveViewChange} className="absolute left-0 top-2 z-30 hidden xl:grid" />
       <div className="min-h-0 flex-1">
         <SearchGlobalReportTable
           key={`incExp-${activeView}-${view.loadedAt || "idle"}`}

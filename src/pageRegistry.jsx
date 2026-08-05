@@ -133,6 +133,7 @@ export const pageRegistry = {
   CWTMonitoring: lazyPage(() => import("./NAYSA Cloud/Query/CWTInq/CWTMonitoring.jsx")),
   CheckRL: lazyPage(() => import("./NAYSA Cloud/Query/CheckRL/CheckRL.jsx")),
   GLINQ: lazyPage(() => import("./NAYSA Cloud/Query/GLInq/GLInq.jsx")),
+  GLANALYSIS: lazyPage(() => import("./NAYSA Cloud/Query/GLInq/GLAnalysis.jsx")),
   AuditTrail: lazyPage(() => import("./NAYSA Cloud/Query/AuditTrail/AuditTail.jsx")),
   SecurityAuditTrail: lazyPage(() => import("./NAYSA Cloud/Query/AuditTrail/SecurityAuditTrail.jsx")),
   MSINQ: lazyPage(() => import("./NAYSA Cloud/Query/INVInq/MSStockCard.jsx")),
