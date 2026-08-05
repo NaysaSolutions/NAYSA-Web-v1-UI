@@ -146,7 +146,20 @@ export const useTransactionUpsert = async (docCode, glData, updateState, idKey, 
         }
         return null;
     } catch (error) {
-        useSwalErrorAlert("Connection Error", error.message);
+        const backendError = error?.response?.data || {};
+        const backendMessage =
+            backendError.details ||
+            backendError.message ||
+            backendError.error ||
+            error.message;
+
+        console.error("Transaction upsert failed:", {
+            status: error?.response?.status,
+            data: backendError,
+            message: error.message,
+        });
+
+        useSwalErrorAlert("Connection Error", backendMessage);
         return null;
     } finally {
         updateState({ isSaveDisabled: false, isResetDisabled: false, isLoading: false });

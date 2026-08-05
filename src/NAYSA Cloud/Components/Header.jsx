@@ -16,6 +16,7 @@ import {
   faFileImport,
   faBell,
   faEllipsisH,
+  faLock,
 } from "@fortawesome/free-solid-svg-icons";
 import { useNavigate, useLocation } from "react-router-dom";
 // import { useReset } from "./ResetContext"; // if you need it, keep; otherwise remove
@@ -36,6 +37,7 @@ const Header = ({
   showPrintCheck = false,
   isViewDocument = false,
   showPost = false,
+  showCloseTransaction = false,
   showUpload = false,
   showNotify = false,
   isPrintDisabled = false,
@@ -44,6 +46,7 @@ const Header = ({
   isCopyDisabled = false,   
   isAttachDisabled = false, 
   isCancelDisabled = false,
+  isCloseTransactionDisabled = false,
   isResetDisabled = false, 
   isNotifyDisabled = false,
 
@@ -58,6 +61,7 @@ const Header = ({
   onReset,
   onSave,
   onPost,
+  onCloseTransaction,
   onCancel,
   onCopy,
   onAttach,
@@ -116,6 +120,7 @@ const Header = ({
   // ---- actions ----
   const handleSave = () => onSave?.();
   const handlePost = () => onPost?.();
+  const handleCloseTransaction = () => onCloseTransaction?.();
   const handleAttach = () => onAttach?.();
   const handleReset = () => onReset?.();
   const handleCancel = () => onCancel?.();
@@ -399,6 +404,17 @@ const Header = ({
                   </div>
                 )}
               </div>
+            )}
+            {showCloseTransaction && (
+              <button
+                onClick={handleCloseTransaction}
+                disabled={isCloseTransactionDisabled}
+                className={getRedButtonClass(isCloseTransactionDisabled)}
+              >
+                <FontAwesomeIcon icon={faLock} />{" "}
+                <span className={mobileLabelClass}>Close</span>
+                <span className={desktopLabelClass}>Close</span>
+              </button>
             )}
            <button
               onClick={handleCancel}

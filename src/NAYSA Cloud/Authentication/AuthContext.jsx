@@ -845,7 +845,7 @@ export default function AuthProvider({ children }) {
 
       return true;
     }
-  }, [loading, serverLogout, user?.USER_CODE]);
+  }, [loading, user?.USER_CODE]);
 
   useEffect(() => {
     if (loading || !user?.USER_CODE) return undefined;
@@ -978,13 +978,7 @@ export default function AuthProvider({ children }) {
     } catch (error) {
       const status = error?.response?.status;
 
-      if (status === 401 || status === 419) {
-        pendingApprovalDisabledRef.current = true;
-        await serverLogout(status === 419 ? "expired" : "remote");
-        return;
-      }
-
-      if (status === 403) {
+      if (status === 401 || status === 403 || status === 419) {
         pendingApprovalDisabledRef.current = true;
         return;
       }

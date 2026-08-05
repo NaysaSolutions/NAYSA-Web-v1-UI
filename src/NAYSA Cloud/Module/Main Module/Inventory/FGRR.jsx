@@ -534,6 +534,7 @@ rrQty: "",
   const getFullStatus = (s) => {
     const map = {
       O: "OPEN",
+      P: "POSTED",
       C: "CLOSED",
       X: "CANCELLED",
       F: "FINALIZED",
@@ -544,14 +545,51 @@ rrQty: "",
   const displayStatus = getFullStatus(status);
   const statusMap = {
     OPEN: "global-tran-stat-text-open-ui",
+    POSTED: "global-tran-stat-text-finalized-ui",
     FINALIZED: "global-tran-stat-text-finalized-ui",
     CANCELLED: "global-tran-stat-text-closed-ui",
     CLOSED: "global-tran-stat-text-finalized-ui",
   };
   const statusColor = statusMap[String(displayStatus).trim().toUpperCase()] || "";
-  const isFormDisabled =
+  const isFormDisabled =
   isViewDocumentUrl ||
-  ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+  ["POSTED", "FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+  const normalizeTransactionStatusCode = (value) => {
+    const text = String(value || "").trim().toUpperCase();
+    if (!text) return "";
+    if (text === "C" || text === "CLOSED") return "C";
+    if (text === "F" || text === "FINALIZED") return "F";
+    if (text === "P" || text === "POSTED") return "P";
+    if (["X", "CANCELLED", "CANCELED"].includes(text)) return "X";
+    if (text === "O" || text === "OPEN") return "";
+    return text;
+  };
+  const getFGRRCloseStorageKeys = ({ rrNo, rrId, rrHdId, branch }) =>
+    [
+      rrNo ? `FGRR:CLOSED:NO:${String(branch || "").trim()}:${String(rrNo).trim()}` : "",
+      rrId ? `FGRR:CLOSED:ID:${String(rrId).trim()}` : "",
+      rrHdId ? `FGRR:CLOSED:ID:${String(rrHdId).trim()}` : "",
+    ].filter(Boolean);
+  const rememberClosedFGRR = (keys = {}) => {
+    try {
+      getFGRRCloseStorageKeys(keys).forEach((key) => localStorage.setItem(key, "C"));
+    } catch {}
+  };
+  const forgetClosedFGRR = (keys = {}) => {
+    try {
+      getFGRRCloseStorageKeys(keys).forEach((key) => localStorage.removeItem(key));
+    } catch {}
+  };
+  const isRememberedClosedFGRR = (keys = {}) => {
+    try {
+      return getFGRRCloseStorageKeys(keys).some((key) => localStorage.getItem(key) === "C");
+    } catch {
+      return false;
+    }
+  };
+  const headerCurrCode = String(currCode || state.currCode || "PHP").trim();
+  const isForeignHeaderCurrency =
+    Boolean(headerCurrCode) && headerCurrCode.toUpperCase() !== "PHP";
 
   const fgrrDetailColumnDefs = useMemo(
     () => [
@@ -564,8 +602,14 @@ rrQty: "",
       { key: "poBalance", label: "PO Balance", width: 130 },
       { key: "rrQty", label: "RR Quantity", width: 130 },
       { key: "freeQty", label: "Free Quantity", width: 130 },
-      { key: "unitCost", label: "Unit Cost", width: 120 },
-      { key: "grossAmount", label: "Amount", width: 140 },
+      { key: "unitCost", label: `Unit Cost (${headerCurrCode || "PHP"})`, width: 140 },
+      { key: "grossAmount", label: `Amount (${headerCurrCode || "PHP"})`, width: 140 },
+      ...(isForeignHeaderCurrency
+        ? [
+            { key: "unitCostPhp", label: "Unit Cost (PHP)", width: 140 },
+            { key: "grossAmountPhp", label: "Amount (PHP)", width: 140 },
+          ]
+        : []),
       { key: "vatCode", label: "VAT", width: 110 },
       { key: "vatRate", label: "VAT Rate", width: 120 },
       { key: "vatAmount", label: "VAT Amount", width: 120 },
@@ -576,7 +620,7 @@ rrQty: "",
       { key: "whouseCode", label: "Warehouse", width: 120 },
       { key: "LocCode", label: "Location", width: 120 },
     ],
-    [],
+    [headerCurrCode, isForeignHeaderCurrency],
   );
 
   const {
@@ -821,6 +865,25 @@ setTotals({
         return row[key];
       }
     }
+
+    if (row && typeof row === "object") {
+      const normalizeKey = (key) =>
+        String(key || "")
+          .replace(/[_\s-]/g, "")
+          .toLowerCase();
+      const normalizedEntries = Object.entries(row).reduce((acc, [key, value]) => {
+        acc[normalizeKey(key)] = value;
+        return acc;
+      }, {});
+
+      for (const key of keys) {
+        const value = normalizedEntries[normalizeKey(key)];
+        if (value !== undefined && value !== null && value !== "") {
+          return value;
+        }
+      }
+    }
+
     return "";
   };
 
@@ -1531,14 +1594,42 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
 
  const getOpenPOVendorCode = (row = {}) =>
    String(
-     getPOField(row, "VendCode", "VEND_CODE", "vendCode", "vend_code") || "",
+     getPOField(
+       row,
+       "VendCode",
+       "VEND_CODE",
+       "vendCode",
+       "vend_code",
+       "PayeeCode",
+       "PAYEE_CODE",
+       "payeeCode",
+       "payee_code",
+       "SupplierCode",
+       "SUPPLIER_CODE",
+       "supplierCode",
+       "supplier_code",
+     ) || "",
    )
      .trim()
      .toUpperCase();
 
  const getOpenPOVendorName = (row = {}) =>
    String(
-     getPOField(row, "VendName", "VEND_NAME", "vendName", "vend_name") || "",
+     getPOField(
+       row,
+       "VendName",
+       "VEND_NAME",
+       "vendName",
+       "vend_name",
+       "PayeeName",
+       "PAYEE_NAME",
+       "payeeName",
+       "payee_name",
+       "SupplierName",
+       "SUPPLIER_NAME",
+       "supplierName",
+       "supplier_name",
+     ) || "",
    ).trim();
 
  const getUniqueOpenPOSuppliers = (records = []) => {
@@ -1577,42 +1668,80 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
     try {
       updateState({ isLoading: true });
 
-      const endpoint = "getFGPORR_OpenSummary";
-      const response = await fetchDataJson(endpoint, { branchCode });
-      const rawRows = response?.data?.[0]?.result
-        ? JSON.parse(response.data[0].result)
-        : [];
-      const colConfig = await getSelectedHSColConfig(endpoint);
-      const colConfigDetail =
-        await getSelectedHSColConfig("getFGPORR_OpenDetail");
-
-      const rows = Array.isArray(rawRows) ? rawRows : [];
+      const lookupBranchCode = state.branchCode || branchCode;
       const selectedPayeeCode = String(state.vendCode || vendCode || "")
         .trim()
         .toUpperCase();
       const selectedPayeeName = String(state.vendName || vendName || "")
         .trim()
         .toUpperCase();
-      const openRows = rows
-        .filter((row) => {
-          const statusText = String(
-            getPOField(row, "PO_STATUS", "PoStatus", "Status", "status"),
-          ).toUpperCase();
 
-          return !statusText || statusText.includes("OPEN");
-        })
-        .map(normalizeOpenPOSummaryRow)
-        .filter((row) => {
-          if (!selectedPayeeCode && !selectedPayeeName) return true;
-
-          const rowPayeeCode = getOpenPOVendorCode(row);
-          const rowPayeeName = getOpenPOVendorName(row).toUpperCase();
-
-          return (
-            (selectedPayeeCode && rowPayeeCode === selectedPayeeCode) ||
-            (selectedPayeeName && rowPayeeName === selectedPayeeName)
+      const normalizeAndFilterOpenPORows = (rows = []) =>
+        (Array.isArray(rows) ? rows : [])
+          .filter((row) => {
+            const statusText = String(
+              getPOField(row, "PO_STATUS", "PoStatus", "poStatus", "Status", "status"),
+            ).toUpperCase();
+          const qtyBalance = parseFormattedNumber(
+            getPOField(
+              row,
+              "QtyBalance",
+              "qtyBalance",
+              "QTY_BALANCE",
+              "PO_BALANCE",
+              "poBalance",
+              "balanceQty",
+              "BalanceQty",
+            ) || 0,
           );
+
+            return !statusText || statusText === "O" || statusText.includes("OPEN") || qtyBalance > 0;
+          })
+          .map(normalizeOpenPOSummaryRow)
+          .filter((row) => {
+            if (!selectedPayeeCode && !selectedPayeeName) return true;
+
+            const rowPayeeCode = getOpenPOVendorCode(row);
+            const rowPayeeName = getOpenPOVendorName(row).toUpperCase();
+
+            return (
+              (selectedPayeeCode && rowPayeeCode === selectedPayeeCode) ||
+              (selectedPayeeName && rowPayeeName === selectedPayeeName)
+            );
+          });
+
+      const loadJsonSummaryRows = async (summaryEndpoint) => {
+        const response = await fetchDataJson(summaryEndpoint, { branchCode: lookupBranchCode });
+        return response?.data?.[0]?.result
+          ? JSON.parse(response.data[0].result)
+          : [];
+      };
+
+      let endpoint = "getFGPORR_OpenSummary";
+      let detailEndpoint = "getFGPORR_OpenDetail";
+      let rawRows = await loadJsonSummaryRows(endpoint);
+      let openRows = normalizeAndFilterOpenPORows(rawRows);
+
+      if (openRows.length === 0) {
+        endpoint = "getPORR_OpenSummary";
+        detailEndpoint = "getPORR_OpenDetail";
+        rawRows = await loadJsonSummaryRows(endpoint);
+        openRows = normalizeAndFilterOpenPORows(rawRows);
+      }
+
+      if (openRows.length === 0) {
+        endpoint = "getPOOpen";
+        detailEndpoint = "/getPOOpen";
+        const response = await postRequest("/getPOOpen", {
+          mode: "Header",
+          branchCode: lookupBranchCode,
+          poTranType: null,
         });
+        openRows = normalizeAndFilterOpenPORows(response?.data || []);
+      }
+
+      const colConfig = endpoint === "getPOOpen" ? [] : await getSelectedHSColConfig(endpoint);
+      const colConfigDetail = endpoint === "getPOOpen" ? [] : await getSelectedHSColConfig(detailEndpoint);
 
       if (openRows.length === 0) {
         await Swal.fire({
@@ -1642,6 +1771,7 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           Array.isArray(colConfigDetail) && colConfigDetail.length > 0
  ? withEditableCurrencyRateColumn(colConfigDetail)
  : withEditableCurrencyRateColumn(openPOColDetail),
+        openPODetailEndpoint: detailEndpoint,
         poLookupModalOpen: true,
         isLoading: false,
       });
@@ -1776,6 +1906,15 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
       const discAmt = parseFormattedNumber(d.discAmount || 0);
       const vatAmt = parseFormattedNumber(d.vatAmount || 0);
       const net = parseFormattedNumber(d.netAmount || gross - discAmt);
+      const rowCurrRate =
+        parseFormattedNumber(
+          getPOField(d, "CurrRate", "CURR_RATE", "currRate", "curr_rate") ||
+            selectedCurrRate ||
+            1,
+        ) || 1;
+      const rowCurrCode = normalizeCurrencyCode(getCurrencyCode(d) || selectedCurrCode || "PHP");
+      const unitCostPhp = rowCurrCode !== "PHP" ? unitCost * rowCurrRate : unitCost;
+      const grossPhp = rowCurrCode !== "PHP" ? gross * rowCurrRate : gross;
 
       const rrStatus =
         getPOField(d, "rrStatus", "RR_STATUS", "RrStatus") ||
@@ -1827,17 +1966,16 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
         poBalance: formatNumber(qtyBalance, 6),
         freeQty: formatNumber(0, 6),
 
-        currCode: normalizeCurrencyCode(getCurrencyCode(d) || selectedCurrCode || "PHP"),
-        currRate: formatNumber(
-          getPOField(d, "CurrRate", "CURR_RATE", "currRate", "curr_rate") ||
-            selectedCurrRate ||
-            1,
-          6,
-        ),
+        currCode: rowCurrCode,
+        currRate: formatNumber(rowCurrRate, 6),
         unitCost: formatNumber(unitCost, 6),
+        unitCostPhp: formatNumber(unitCostPhp, decUcost),
 
         amount: formatNumber(d.itemAmount || gross, 2),
         grossAmount: formatNumber(gross, 2),
+        amountPhp: formatNumber(grossPhp, 2),
+        itemAmountPhp: formatNumber(grossPhp, 2),
+        grossAmountPhp: formatNumber(grossPhp, 2),
         discRate: formatNumber(d.discRate || 0, 2),
         discAmount: formatNumber(discAmt, 2),
         vatCode: d.vatCode || "",
@@ -2196,14 +2334,54 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
       const parsed = data;
       const parsedDocumentNo = parsed.rrNo || "";
       const parsedDocumentId = parsed.rrId || parsed.rrHdId;
+      const rawParsedStatus = getPOField(
+        parsed,
+        "rrStatus",
+        "RRStatus",
+        "rr_status",
+        "fgrrStatus",
+        "FGRRStatus",
+        "docStatus",
+        "documentStatus",
+        "tranStatus",
+        "status",
+      ) || "";
+      const localClosedKeys = {
+        rrNo: parsedDocumentNo || rrNo,
+        rrId: parsedDocumentId,
+        rrHdId: parsed.rrHdId,
+        branch: getPOField(parsed, "branchCode", "BranchCode", "BRANCH_CODE") || branchCode || state.branchCode || "",
+      };
+      const normalizedParsedStatus = normalizeTransactionStatusCode(rawParsedStatus);
+      const parsedStatus =
+        normalizedParsedStatus ||
+        (isRememberedClosedFGRR(localClosedKeys) ? "C" : "");
+      if (parsedStatus === "C") {
+        rememberClosedFGRR(localClosedKeys);
+      } else if (["X", "P", "F"].includes(parsedStatus)) {
+        forgetClosedFGRR(localClosedKeys);
+      }
       const isCancelledTran = ["X", "CANCELLED", "CANCELED"].includes(
-        String(parsed.rrStatus || parsed.status || "").trim().toUpperCase(),
+        String(parsedStatus).trim().toUpperCase(),
       );
 
       const parsedWHCode = parsed.WHCode || parsed.whCode || parsed.warehouseCode || "";
       const parsedWHName = parsed.WHName || parsed.whName || parsed.warehouseName || "";
       const parsedLocCode = parsed.LocCode || parsed.locCode || parsed.locationCode || "";
       const parsedLocName = parsed.LocName || parsed.locName || parsed.locationName || "";
+      const parsedCurrencyCode = normalizeCurrencyCode(
+        getCurrencyCode(parsed) || state.currCode || companyInfo?.currCode || "PHP",
+      );
+      const parsedCurrencyRate = parseFormattedNumber(
+        getPOField(parsed, "currRate", "CurrRate", "currencyRate", "CurrencyRate") || 1,
+      ) || 1;
+      const parsedRRDate = parsed.rrDate || parsed.RRDate || parsed.documentDate || null;
+      const parsedSIDate = parsed.siDate || parsed.SIDate || null;
+
+      setHeader((prev) => ({
+        ...prev,
+        rr_date: parsedRRDate ? String(parsedRRDate).substring(0, 10) : prev.rr_date,
+      }));
 
       // ===========================
       // HEADER (FGRR)
@@ -2211,14 +2389,19 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
       updateState({
         documentNo: parsedDocumentNo,
         documentID: parsedDocumentId,
-        documentDate: parsed.rrDate || null,
+        documentDate: parsedRRDate,
         cutoffCode: parsed.cutoffCode || "",
+        branchCode: getPOField(parsed, "branchCode", "BranchCode", "BRANCH_CODE") || branchCode || state.branchCode || "",
+        branchName: getPOField(parsed, "branchName", "BranchName", "BRANCH_NAME") || state.branchName || "",
 
         poNo: parsed.poNo || "",
         prNo: parsed.prNo || "",
 
         vendCode: parsed.vendCode || "",
         vendName: parsed.vendName || "",
+        payTerm: getPOField(parsed, "payTerm", "paytermCode", "payTermCode", "PAYTERM_CODE") || "",
+        billtermCode: getPOField(parsed, "billtermCode", "billTermCode", "BillTermCode", "BILLTERM_CODE") || "",
+        billtermName: getPOField(parsed, "billtermName", "billTermName", "BillTermName", "BILLTERM_NAME") || "",
 
         WHCode: parsedWHCode || "",
         WHcode: parsedWHCode || "",
@@ -2228,7 +2411,15 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
 
         drNo: parsed.drNo || "",
         siNo: parsed.siNo || "",
-        siDate: parsed.siDate || null,
+        siDate: parsedSIDate,
+        currCode: parsedCurrencyCode,
+        currName: getCurrencyName(parsed) || parsedCurrencyCode,
+        currRate: formatNumber(parsedCurrencyRate, 6),
+        rcCode: getPOField(parsed, "rcCode", "rc_code", "RC_CODE") || "",
+        rcName: getPOField(parsed, "rcName", "rc_name", "RC_NAME") || "",
+        reqRcCode: getPOField(parsed, "reqRcCode", "req_rc_code", "REQ_RC_CODE") || "",
+        reqRcName: getPOField(parsed, "reqRcName", "req_rc_name", "REQ_RC_NAME") || "",
+        attention: getPOField(parsed, "attention", "Attention") || "",
 
         vatCode: parsed.vatCode || "",
         rrAmount: parsed.rrAmount ?? 0,
@@ -2238,7 +2429,8 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
         refDocNo2: parsed.refrrNo2 || "",
 
         remarks: parsed.remarks || "",
-        documentStatus: parsed.rrStatus || "",
+        documentStatus: parsedStatus,
+        status: getFullStatus(parsedStatus),
       });
 
       // ===========================
@@ -2500,6 +2692,26 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
   const lotDetails = normalizeRetrievedLots(matchedLots, r);
   const retrievedLotNos = lotDetails.map((lot) => lot.lotNo).filter(Boolean);
   const firstLot = lotDetails[0] || {};
+  const rowCurrCode = normalizeCurrencyCode(
+    getCurrencyCode(r) || parsedCurrencyCode || state.currCode || "PHP",
+  );
+  const rowCurrRate = parseFormattedNumber(
+    getPOField(r, "currRate", "CurrRate", "currencyRate", "CurrencyRate") || parsedCurrencyRate || 1,
+  ) || 1;
+  const rowUnitCostFx = parseFormattedNumber(
+    getPOField(r, "unitCostFx", "unit_cost_fx", "fxUnitCost", "foreignUnitCost", "unitCost", "unitPrice") || 0,
+  );
+  const rowUnitCostPhp = parseFormattedNumber(
+    getPOField(r, "unitCostPhp", "unit_cost_php", "pesoUnitCost", "phpUnitCost") ||
+      (rowCurrCode !== "PHP" ? rowUnitCostFx * rowCurrRate : rowUnitCostFx),
+  );
+  const rowItemAmount = parseFormattedNumber(
+    getPOField(r, "itemAmount", "grossAmount", "amount", "fxAmount", "netAmount") || 0,
+  );
+  const rowItemAmountPhp = parseFormattedNumber(
+    getPOField(r, "itemAmountPhp", "grossAmountPhp", "amountPhp", "pesoAmount") ||
+      (rowCurrCode !== "PHP" ? rowItemAmount * rowCurrRate : rowItemAmount),
+  );
 
   return {
     lnNo: Number(rowLineNo),
@@ -2507,6 +2719,14 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
     rrStatus: r.rrStatus || r.poStatus || "",
     poStatus: r.poStatus || r.rrStatus || "",
     poNo: r.poNo || parsed.poNo || "",
+    poId: getPOField(r, "poId", "po_id", "PO_ID") || parsed.poId || "",
+    prId: getPOField(r, "prId", "pr_id", "PR_ID") || "",
+    prNo: getPOField(r, "prNo", "pr_no", "PR_NO") || parsed.prNo || "",
+    poLineno: getPOField(r, "poLineno", "poLineNo", "po_line_no", "PO_LINENO", "PO_LINE_NO") || "",
+    poLineNo: getPOField(r, "poLineno", "poLineNo", "po_line_no", "PO_LINENO", "PO_LINE_NO") || "",
+    poQty: formatNumber(getPOField(r, "poQty", "poQuantity", "PO_QTY", "PO_QUANTITY") || 0, decQty),
+    poBalance: formatNumber(getPOField(r, "poBalance", "qtyBalance", "QtyBalance", "PO_BALANCE") || 0, decQty),
+    qtyBalance: formatNumber(getPOField(r, "qtyBalance", "QtyBalance", "poBalance", "PO_BALANCE") || 0, decQty),
 
     itemCode: getPOField(r, "itemCode", "itemNo", "ITEM_CODE", "ITEM_NO") || "",
     itemName:
@@ -2536,9 +2756,14 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
     rrQty: formatNumber(r.rrQty || r.quantity || 0, decQty),
     freeQty: formatNumber(r.freeQty || r.freeQuantity || 0, decQty),
 
-    amount: formatNumber(r.itemAmount || r.grossAmount || 0),
-    itemAmount: formatNumber(r.itemAmount || r.grossAmount || 0),
-    grossAmount: formatNumber(r.itemAmount || r.grossAmount || 0),
+    amount: formatNumber(rowItemAmount),
+    itemAmount: formatNumber(rowItemAmount),
+    grossAmount: formatNumber(rowItemAmount),
+    fxAmount: formatNumber(rowItemAmount),
+    amountPhp: formatNumber(rowItemAmountPhp),
+    itemAmountPhp: formatNumber(rowItemAmountPhp),
+    grossAmountPhp: formatNumber(rowItemAmountPhp),
+    pesoAmount: formatNumber(rowItemAmountPhp),
     vatCode: r.vatCode || "",
     vatRate: r.vatCode ? formatNumber(vatRateMap[r.vatCode] ?? 0, 2) : "",
     vatAmount: formatNumber(r.vatAmount ?? 0),
@@ -2553,8 +2778,27 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
     LocCode: firstLot.LocCode || r.locCode || parsedLocCode || "",
 
     uomCode: r.uomCode || "",
-    unitCost: formatNumber(r.unitCost || r.unitPrice || 0, decUcost),
+    uomCode2: getPOField(r, "uomCode2", "uom_code2", "UOM_CODE2") || "",
+    uomQty2: formatNumber(getPOField(r, "uomQty2", "uom_qty2", "UOM_QTY2") || 0, decQty),
+    unitCost: formatNumber(rowUnitCostFx, decUcost),
+    unitCostFx: formatNumber(rowUnitCostFx, decUcost),
+    unitCostPhp: formatNumber(rowUnitCostPhp, decUcost),
+    currCode: rowCurrCode,
+    currRate: formatNumber(rowCurrRate, 6),
     netAmount: formatNumber(r.netAmount ?? 0),
+    discountRate: formatNumber(getPOField(r, "discountRate", "discRate", "DISC_RATE") || 0, 2),
+    discountAmount: formatNumber(getPOField(r, "discountAmount", "discAmount", "DISC_AMOUNT") || 0),
+    rcCode: getPOField(r, "rcCode", "rc_code", "RC_CODE") || parsed.rcCode || "",
+    categCode: getPOField(r, "categCode", "categoryCode", "categ_code", "CATEG_CODE") || "",
+    invType: getPOField(r, "invType", "inv_type", "INV_TYPE") || "FG",
+    itemStat: getPOField(r, "itemStat", "itemStatus", "ITEM_STAT") || "",
+    altItemno: getPOField(r, "altItemno", "altItemNo", "ALT_ITEMNO", "ALT_ITEM_NO") || "",
+    prLineno: getPOField(r, "prLineno", "prLineNo", "PR_LINENO", "PR_LINE_NO") || "",
+    dateNeeded: getPOField(r, "dateNeeded", "date_needed", "DATE_NEEDED") || "",
+    shippingCost: formatNumber(getPOField(r, "shippingCost", "shipping_cost", "SHIPPING_COST") || 0),
+    landedCost: formatNumber(getPOField(r, "landedCost", "landed_cost", "LANDED_COST") || 0),
+    unitShipcost: formatNumber(getPOField(r, "unitShipcost", "unitShipCost", "unit_shipcost") || 0, decUcost),
+    unitLandedcost: formatNumber(getPOField(r, "unitLandedcost", "unitLandedCost", "unit_landedcost") || 0, decUcost),
 
     // Display summary only, actual breakdown is in lotDetails
     lotNo: retrievedLotNos.length > 0 ? retrievedLotNos.join(", ") : "",
@@ -3390,6 +3634,8 @@ return recalcFGRRRowWithCurrencyRate(row);
     const vatAmt = vatRate ? gross - gross / (1 + vatRate / 100) : 0;
     const netAmtFx = gross - vatAmt;
     const netAmt = rowCurrCode !== "PHP" ? netAmtFx * rowCurrRate : netAmtFx;
+    const unitCostPhp = rowCurrCode !== "PHP" ? unitCost * rowCurrRate : unitCost;
+    const grossPhp = rowCurrCode !== "PHP" ? gross * rowCurrRate : gross;
 
     return {
       ...row,
@@ -3401,6 +3647,10 @@ return recalcFGRRRowWithCurrencyRate(row);
       fxAmount: formatNumber(netAmtFx, 2),
       netAmount: formatNumber(netAmt, 2),
       amount: formatNumber(gross, 2),
+      unitCostPhp: formatNumber(unitCostPhp, decUcost),
+      grossAmountPhp: formatNumber(grossPhp, 2),
+      itemAmountPhp: formatNumber(grossPhp, 2),
+      amountPhp: formatNumber(grossPhp, 2),
     };
   };
 
@@ -3620,10 +3870,27 @@ return recalcFGRRRowWithCurrencyRate(row);
   // SAVE / UPSERT (FGRR + DT1 + DT2)
   // ==========================
   const handleActivityOption = async (action) => {
+    const isCloseAction = action === "Close";
     // If already posted/cancelled/finalized, do not allow save / generate
-    if (documentStatus !== "") return;
+    if (documentStatus !== "" && !isCloseAction) return;
+
+    if (isCloseAction && (!documentID || documentStatus !== "")) return;
 
     if (action === "Upsert" && !validateRRQtyWithinPOBalance()) return;
+
+    if (isCloseAction) {
+      const confirmation = await Swal.fire({
+        icon: "warning",
+        title: "Close transaction?",
+        text: "This will mark the receiving report as Closed and prevent further editing. It will not post to FG Stock Card or GL.",
+        showCancelButton: true,
+        confirmButtonText: "Yes, close it",
+        cancelButtonText: "No",
+        confirmButtonColor: "#dc2626",
+      });
+
+      if (!confirmation.isConfirmed) return;
+    }
 
     updateState({ isLoading: true });
 
@@ -3741,13 +4008,17 @@ return recalcFGRRRowWithCurrencyRate(row);
 
           unitCost: parseFormattedNumber(r.unitCost || 0),
           unitCostFx: parseFormattedNumber(r.unitCostFx || r.unitCost || 0),
+          unitCostPhp: parseFormattedNumber(r.unitCostPhp || 0),
           itemAmount: parseFormattedNumber(r.itemAmount || r.grossAmount || 0),
+          itemAmountPhp: parseFormattedNumber(r.itemAmountPhp || r.grossAmountPhp || 0),
           vatCode: r.vatCode || "",
           vatAmount: parseFormattedNumber(r.vatAmount || 0),
           currCode: r.currCode || state.currCode || "PHP",
           currRate: Number(r.currRate || state.currRate || 1),
           fxAmount: parseFormattedNumber(r.fxAmount || r.itemAmount || r.grossAmount || 0),
           netAmount: parseFormattedNumber(r.netAmount || 0),
+          grossAmountPhp: parseFormattedNumber(r.grossAmountPhp || r.amountPhp || 0),
+          pesoAmount: parseFormattedNumber(r.grossAmountPhp || r.amountPhp || 0),
 
           whouseCode: r.whouseCode || r.whCode || state.WHCode || state.WHcode || "",
           locCode: r.locCode || r.LocCode || state.LocCode || "",
@@ -3870,11 +4141,26 @@ return recalcFGRRRowWithCurrencyRate(row);
         branchCode: state.branchCode,
 
         // NEW vs EDIT
-        rrNo: documentNo || "",
-        rrId: documentID || "",
+      rrNo: documentNo || "",
+      rrId: documentID || "",
 rrHdId: documentID || "",
+        rrStatus: isCloseAction ? "C" : documentStatus || "",
+        RRStatus: isCloseAction ? "C" : documentStatus || "",
+        rr_status: isCloseAction ? "C" : documentStatus || "",
+        fgrrStatus: isCloseAction ? "C" : documentStatus || "",
+        FGRRStatus: isCloseAction ? "C" : documentStatus || "",
+        docStatus: isCloseAction ? "C" : documentStatus || "",
+        documentStatus: isCloseAction ? "C" : documentStatus || "",
+        status: isCloseAction ? "C" : documentStatus || "",
+        stat: isCloseAction ? "C" : documentStatus || "",
+        STAT: isCloseAction ? "C" : documentStatus || "",
+        tranStatus: isCloseAction ? "C" : documentStatus || "",
+        TranStatus: isCloseAction ? "C" : documentStatus || "",
+        TRAN_STATUS: isCloseAction ? "C" : documentStatus || "",
+        closeOnly: isCloseAction ? true : undefined,
+        statusOnly: isCloseAction ? true : undefined,
 
-        rrDate:
+      rrDate:
           header?.rr_date ||
           state.RRDate ||
           new Date().toISOString().split("T")[0],
@@ -3909,7 +4195,7 @@ rrHdId: documentID || "",
         dt3: dt3Payload,
 
         // DT2 (GL)
-        dt2: shouldAutoGenerateGLOnSave ? (glRowsForSave || []).map((r, i) => ({
+        dt2: isCloseAction ? [] : shouldAutoGenerateGLOnSave ? (glRowsForSave || []).map((r, i) => ({
           recNo: String(i + 1),
           acctCode: r.acctCode || "",
           rcCode: r.rcCode || "",
@@ -4005,16 +4291,19 @@ const newGlEntries = await useGenerateGLEntries(docType, getNetAmountGLData());
       // ================
       // UPSERT / SAVE
       // ================
-      if (action === "Upsert") {
-        const res = await useTransactionUpsert(
-          docType,
-          glData,
-          updateState,
-          "rrHdId",
-          "rrNo",
-        );
+    if (action === "Upsert" || isCloseAction) {
+        const res = isCloseAction
+          ? await postRequest("closeFGRR", JSON.stringify({ json_data: glData }))
+          : await useTransactionUpsert(
+              docType,
+              glData,
+              updateState,
+              "rrHdId",
+              "rrNo",
+            );
 
         console.log("FGRR upsert response:", res);
+        if (isCloseAction && !res) return;
         // normalize row (supports: array, axios response, unwrapped response)
         const normalizeSaveRow = (value) => {
           if (!value) return null;
@@ -4144,9 +4433,29 @@ const newGlEntries = await useGenerateGLEntries(docType, getNetAmountGLData());
           row?.RR_NO ||
           row?.rr_no ||
           row?.documentNo ||
-          row?.docNo ||
-          documentNo ||
-          "";
+            row?.docNo ||
+            documentNo ||
+            "";
+
+        if (isCloseAction) {
+          updateState({
+            documentID: savedId || documentID,
+            documentNo: savedNo || documentNo,
+            documentStatus: "C",
+            status: "CLOSED",
+            isDocNoDisabled: true,
+            isFetchDisabled: true,
+            isSaveDisabled: true,
+          });
+
+          Swal.fire({
+            icon: "success",
+            title: "Closed",
+            text: "Transaction closed successfully.",
+          });
+
+          return;
+        }
 
         // reflect auto-generated RR No / RR ID in UI
         updateState({
@@ -4352,6 +4661,96 @@ const newGlEntries = await useGenerateGLEntries(docType, getNetAmountGLData());
       updateState({ showPostModal: true });
     }
   };
+
+  const handleCloseTransaction = async () => {
+    if (!documentID || documentStatus !== "") return;
+
+    const confirmation = await Swal.fire({
+      icon: "warning",
+      title: "Close transaction?",
+      text: "This will mark the receiving report as Closed and prevent further editing. It will not post to FG Stock Card or GL.",
+      showCancelButton: true,
+      confirmButtonText: "Yes, close it",
+      cancelButtonText: "No",
+      confirmButtonColor: "#dc2626",
+    });
+
+    if (!confirmation.isConfirmed) return;
+
+    updateState({ isLoading: true });
+
+    try {
+      const closePayload = {
+        rrId: documentID || "",
+        rrHdId: documentID || "",
+        documentID: documentID || "",
+        rrNo: documentNo || "",
+        branchCode: state.branchCode || branchCode || "",
+        rrStatus: "C",
+        status: "C",
+        userCode: state.userCode || userCode || "",
+      };
+
+      const response = await postRequest("closeFGRR", { json_data: closePayload });
+      const resultRow = Array.isArray(response?.data) ? response.data[0] : response?.data || response;
+      const errorCount = Number(getPOField(resultRow, "errorCount", "ErrorCount") || 0);
+      const errorMsg =
+        getPOField(resultRow, "errorMsg", "ErrorMsg", "message", "Message") ||
+        response?.message ||
+        response?.details ||
+        "";
+
+      if (errorCount > 0 || response?.success === false || response?.status === "error" || response?.status === "validation") {
+        Swal.fire({
+          icon: "warning",
+          title: "Close Transaction",
+          text: errorMsg || "Unable to close transaction.",
+        });
+        return;
+      }
+
+      const closeKeys = {
+        rrNo: documentNo,
+        rrId: documentID,
+        rrHdId: documentID,
+        branch: state.branchCode || branchCode || "",
+      };
+      rememberClosedFGRR(closeKeys);
+
+      updateState({
+        documentStatus: "C",
+        status: "CLOSED",
+        isDocNoDisabled: true,
+        isFetchDisabled: true,
+        isSaveDisabled: true,
+      });
+
+      await fetchTranData(documentNo, state.branchCode || branchCode);
+
+      updateState({
+        documentStatus: "C",
+        status: "CLOSED",
+        isDocNoDisabled: true,
+        isFetchDisabled: true,
+        isSaveDisabled: true,
+      });
+
+      Swal.fire({
+        icon: "success",
+        title: "Closed",
+        text: "Transaction closed successfully.",
+      });
+    } catch (error) {
+      console.error("FGRR close error:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Close Transaction",
+        text: error?.response?.data?.message || error?.message || "Unable to close transaction.",
+      });
+    } finally {
+      updateState({ isLoading: false });
+    }
+  };
 
   const handleAttach = async () => {
     updateState({ showAttachModal: true });
@@ -4912,6 +5311,40 @@ const handleClosePayeeLookup = async (row) => {
           )}
         </td>
       ),
+      unitCostPhp: () => {
+        const convertedUnitCost =
+          row.unitCostPhp ??
+          parseFormattedNumber(row.unitCost || row.unit_price || row.unit_cost || 0) *
+            parseFormattedNumber(row.currRate || currRate || state.currRate || 1);
+
+        return (
+          <td key={columnKey} className="global-tran-td-ui" style={style}>
+            {readOnlyNumberInput(
+              "unitCostPhp",
+              convertedUnitCost
+                ? formatNumber(parseFormattedNumber(convertedUnitCost), decUcost)
+                : "",
+            )}
+          </td>
+        );
+      },
+      grossAmountPhp: () => {
+        const convertedAmount =
+          row.grossAmountPhp ??
+          row.amountPhp ??
+          row.itemAmountPhp ??
+          parseFormattedNumber(row.grossAmount ?? row.amount ?? row.itemAmount ?? 0) *
+            parseFormattedNumber(row.currRate || currRate || state.currRate || 1);
+
+        return (
+          <td key={columnKey} className="global-tran-td-ui" style={style}>
+            {readOnlyNumberInput(
+              "grossAmountPhp",
+              formatNumber(parseFormattedNumber(convertedAmount)) || "",
+            )}
+          </td>
+        );
+      },
       vatCode: () => (
         <td key={columnKey} className="global-tran-td-ui relative" style={style}>
           <div className="flex items-center">
@@ -5298,8 +5731,9 @@ const handleClosePayeeLookup = async (row) => {
             isGeneralLedgerEnabled
               ? () => handleActivityOption("GenerateGL")
               : undefined
-          }
+          }
           onPost={handlePost}
+              onCloseTransaction={handleCloseTransaction}
           onCancel={handleCancel}
           onCopy={handleCopy}
           onAttach={handleAttach}
@@ -5307,6 +5741,7 @@ const handleClosePayeeLookup = async (row) => {
           showActions={topTab === "details"}
           showBIRForm={false}
           showCopyForm={false}
+          showCloseTransaction={true}
           onDetails={() => setTopTab("details")}
           onHistory={() => setTopTab("history")}
           disableRouteNavigation={true}
@@ -5317,9 +5752,17 @@ const handleClosePayeeLookup = async (row) => {
           isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
           isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
           isViewDocument={isViewDocument}
+          isCloseTransactionDisabled={
+            !documentID ||
+            displayStatus === "CANCELLED" ||
+            displayStatus === "POSTED" ||
+            displayStatus === "FINALIZED" ||
+            displayStatus === "CLOSED"
+          }
           isCancelDisabled={
             !documentID ||
             displayStatus === "CANCELLED" ||
+            displayStatus === "POSTED" ||
             displayStatus === "FINALIZED" ||
             displayStatus === "CLOSED"
           }
@@ -6938,19 +7381,40 @@ const handleClosePayeeLookup = async (row) => {
         ? selectedIds.join(",")
         : selectedIds;
 
-      const payload = {
-        json_data: JSON.stringify({
-          json_data: {
-            selectedId: idString,
-            tranIds: idString,
-          },
-        }),
-      };
+      let rows = [];
 
-      const response = await postRequest("getFGPORR_OpenDetail", payload);
-      const rows = response?.data?.[0]?.result
-        ? extractLookupRows(response.data[0].result)
-        : extractLookupRows(response?.data || response);
+      if (state.openPODetailEndpoint === "/getPOOpen") {
+        const detailResponses = await Promise.all(
+          selectedSummaries.map((summary) =>
+            postRequest("/getPOOpen", {
+              mode: "Detail",
+              branchCode:
+                getPOField(summary, "BC", "branchCode", "BranchCode", "BRANCH_CODE") ||
+                state.branchCode ||
+                branchCode,
+              poId: getPOField(summary, "PoId", "PO_ID", "poId", "po_id", "groupId"),
+            }),
+          ),
+        );
+
+        rows = detailResponses.flatMap((response) =>
+          Array.isArray(response?.data) ? response.data : [],
+        );
+      } else {
+        const payload = {
+          json_data: JSON.stringify({
+            json_data: {
+              selectedId: idString,
+              tranIds: idString,
+            },
+          }),
+        };
+
+        const response = await postRequest(state.openPODetailEndpoint || "getFGPORR_OpenDetail", payload);
+        rows = response?.data?.[0]?.result
+          ? extractLookupRows(response.data[0].result)
+          : extractLookupRows(response?.data || response);
+      }
 
       const currencyRateByPoNo = Object.fromEntries(
         selectedSummaries
