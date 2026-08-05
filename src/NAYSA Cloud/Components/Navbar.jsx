@@ -1,5 +1,3 @@
-
-
 import React, {
   useState,
   useEffect,
@@ -23,6 +21,7 @@ import {
   X,
   RotateCcw,
   ImagePlus,
+  CircleHelp,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { FiSun, FiMoon } from "react-icons/fi";
@@ -766,6 +765,29 @@ const Navbar = ({
                   Edit profile/password
                 </div>
               </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsDropdownOpen(false);
+                navigate("/help-support");
+              }}
+              className={`${dropdownItemClass} hover:bg-blue-50 dark:hover:bg-blue-500/10`}
+            >
+              <div className={`${dropdownIconWrapClass} group-hover:bg-blue-100 group-hover:text-blue-600 dark:group-hover:bg-blue-500/20 dark:group-hover:text-blue-300`}>
+                <CircleHelp className="h-4 w-4" />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                  Help &amp; Support Center
+                </div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">
+                  User manuals, videos, and support
+                </div>
+              </div>
+
             </button>
           </div>
 

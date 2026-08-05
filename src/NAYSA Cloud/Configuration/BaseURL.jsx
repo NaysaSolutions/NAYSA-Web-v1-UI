@@ -343,12 +343,18 @@ apiClient.interceptors.request.use((config) => {
 /* 401/419 broadcast rules */
 const SKIP_401_BC = [
   /\/login$/i,
+  /\/login\/pending-request$/i,
   /\/sanctum\/csrf-cookie$/i,
   /\/api\/companies$/i,
 ];
 
 function shouldSkip401Broadcast(cfg) {
-  const skipHeader = cfg?.headers?.["X-Skip-Logout-Broadcast"] === "1";
+  const headers = cfg?.headers || {};
+  const skipHeader =
+    headers?.["X-Skip-Logout-Broadcast"] === "1" ||
+    headers?.["x-skip-logout-broadcast"] === "1" ||
+    (typeof headers?.get === "function" &&
+      headers.get("X-Skip-Logout-Broadcast") === "1");
   if (skipHeader) return true;
   if (cfg?.withCredentials === false) return true;
   const path = toPath(cfg?.url || "");

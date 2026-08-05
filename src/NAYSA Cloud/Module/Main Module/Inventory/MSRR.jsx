@@ -497,6 +497,7 @@ rrQty: "",
   const getFullStatus = (s) => {
     const map = {
       O: "OPEN",
+      P: "POSTED",
       C: "CLOSED",
       X: "CANCELLED",
       F: "FINALIZED",
@@ -514,7 +515,45 @@ rrQty: "",
   const statusColor = statusMap[String(displayStatus).trim().toUpperCase()] || "";
   const isFormDisabled =
   isViewDocumentUrl ||
-  ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+  ["POSTED", "FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+
+  const normalizeTransactionStatusCode = (value) => {
+    const text = String(value || "").trim().toUpperCase();
+    if (!text) return "";
+    if (text === "C" || text === "CLOSED") return "C";
+    if (text === "F" || text === "FINALIZED") return "F";
+    if (text === "P" || text === "POSTED") return "P";
+    if (["X", "CANCELLED", "CANCELED"].includes(text)) return "X";
+    if (text === "O" || text === "OPEN") return "";
+    return text;
+  };
+
+  const getMSRRCloseStorageKeys = ({ rrNo, rrId, rrHdId, branch }) =>
+    [
+      rrNo ? `MSRR:CLOSED:NO:${String(branch || "").trim()}:${String(rrNo).trim()}` : "",
+      rrId ? `MSRR:CLOSED:ID:${String(rrId).trim()}` : "",
+      rrHdId ? `MSRR:CLOSED:ID:${String(rrHdId).trim()}` : "",
+    ].filter(Boolean);
+
+  const rememberClosedMSRR = (keys = {}) => {
+    try {
+      getMSRRCloseStorageKeys(keys).forEach((key) => localStorage.setItem(key, "C"));
+    } catch {}
+  };
+
+  const forgetClosedMSRR = (keys = {}) => {
+    try {
+      getMSRRCloseStorageKeys(keys).forEach((key) => localStorage.removeItem(key));
+    } catch {}
+  };
+
+  const isRememberedClosedMSRR = (keys = {}) => {
+    try {
+      return getMSRRCloseStorageKeys(keys).some((key) => localStorage.getItem(key) === "C");
+    } catch {
+      return false;
+    }
+  };
 
   const companyDefaultCurrCode = String(
     companyInfo?.currCode ||
@@ -2279,6 +2318,34 @@ if (shouldAutoGenerateGLOnSave) {
       const parsed = data;
       const parsedDocumentNo = parsed.rrNo || "";
       const parsedDocumentId = parsed.rrId || parsed.rrHdId;
+      const rawParsedStatus = getPOField(
+        parsed,
+        "rrStatus",
+        "RRStatus",
+        "rr_status",
+        "msrrStatus",
+        "MSRRStatus",
+        "docStatus",
+        "documentStatus",
+        "tranStatus",
+        "status",
+      ) || "";
+      const localClosedKeys = {
+        rrNo: parsedDocumentNo || rrNo,
+        rrId: parsedDocumentId,
+        rrHdId: parsed.rrHdId,
+        branch: getPOField(parsed, "branchCode", "BranchCode", "BRANCH_CODE") || branchCode || state.branchCode || "",
+      };
+      const normalizedParsedStatus = normalizeTransactionStatusCode(rawParsedStatus);
+      const parsedStatus =
+        normalizedParsedStatus ||
+        (isRememberedClosedMSRR(localClosedKeys) ? "C" : "");
+
+      if (parsedStatus === "C") {
+        rememberClosedMSRR(localClosedKeys);
+      } else if (["X", "P", "F"].includes(parsedStatus)) {
+        forgetClosedMSRR(localClosedKeys);
+      }
 
       const parsedWHCode =
   parsed.whouseCode ||
@@ -2339,8 +2406,8 @@ const parsedLocName =
         refDocNo2: parsed.refrrNo2 || "",
 
         remarks: parsed.remarks || "",
-        documentStatus: parsed.rrStatus || "",
-        status: parsed.rrStatus || "OPEN",
+        documentStatus: parsedStatus,
+        status: getFullStatus(parsedStatus),
       });
 
       // ===========================
@@ -4574,6 +4641,96 @@ const newGlEntries = await useGenerateGLEntries(docType, getNetAmountGLData());
     }
   };
 
+  const handleCloseTransaction = async () => {
+    if (!documentID || documentStatus !== "") return;
+
+    const confirmation = await Swal.fire({
+      icon: "warning",
+      title: "Close transaction?",
+      text: "This will mark the receiving report as Closed and prevent further editing. It will not post to MS Stock Card or GL.",
+      showCancelButton: true,
+      confirmButtonText: "Yes, close it",
+      cancelButtonText: "No",
+      confirmButtonColor: "#dc2626",
+    });
+
+    if (!confirmation.isConfirmed) return;
+
+    updateState({ isLoading: true });
+
+    try {
+      const closePayload = {
+        rrId: documentID || "",
+        rrHdId: documentID || "",
+        documentID: documentID || "",
+        rrNo: documentNo || "",
+        branchCode: state.branchCode || branchCode || "",
+        rrStatus: "C",
+        status: "C",
+        userCode: state.userCode || userCode || "",
+      };
+
+      const response = await postRequest("closeMSRR", { json_data: closePayload });
+      const resultRow = Array.isArray(response?.data) ? response.data[0] : response?.data || response;
+      const errorCount = Number(getPOField(resultRow, "errorCount", "ErrorCount") || 0);
+      const errorMsg =
+        getPOField(resultRow, "errorMsg", "ErrorMsg", "message", "Message") ||
+        response?.message ||
+        response?.details ||
+        "";
+
+      if (errorCount > 0 || response?.success === false || response?.status === "error" || response?.status === "validation") {
+        Swal.fire({
+          icon: "warning",
+          title: "Close Transaction",
+          text: errorMsg || "Unable to close transaction.",
+        });
+        return;
+      }
+
+      const closeKeys = {
+        rrNo: documentNo,
+        rrId: documentID,
+        rrHdId: documentID,
+        branch: state.branchCode || branchCode || "",
+      };
+      rememberClosedMSRR(closeKeys);
+
+      updateState({
+        documentStatus: "C",
+        status: "CLOSED",
+        isDocNoDisabled: true,
+        isFetchDisabled: true,
+        isSaveDisabled: true,
+      });
+
+      await fetchTranData(documentNo, state.branchCode || branchCode);
+
+      updateState({
+        documentStatus: "C",
+        status: "CLOSED",
+        isDocNoDisabled: true,
+        isFetchDisabled: true,
+        isSaveDisabled: true,
+      });
+
+      Swal.fire({
+        icon: "success",
+        title: "Closed",
+        text: "Transaction closed successfully.",
+      });
+    } catch (error) {
+      console.error("MSRR close error:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Close Transaction",
+        text: error?.response?.data?.message || error?.message || "Unable to close transaction.",
+      });
+    } finally {
+      updateState({ isLoading: false });
+    }
+  };
+
 const handleClosePayeeLookup = async (row) => {
     if (!row) {
       updateState({ payeeLookupOpen: false });
@@ -5565,6 +5722,7 @@ const handleClosePayeeLookup = async (row) => {
           onCancel={handleCancel}
           onCopy={handleCopy}
           onAttach={handleAttach}
+          onCloseTransaction={handleCloseTransaction}
           activeTopTab={topTab}
           showActions={topTab === "details"}
           showBIRForm={false}
@@ -5583,6 +5741,8 @@ const handleClosePayeeLookup = async (row) => {
           isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
           isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
           isViewDocument={isViewDocument}
+          showCloseTransaction={true}
+          isCloseTransactionDisabled={!documentID || documentStatus !== "" || isFormDisabled}
           isCancelDisabled={
             !documentID ||
             displayStatus === "CANCELLED" ||
