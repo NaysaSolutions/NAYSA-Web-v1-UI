@@ -549,11 +549,37 @@ const parsePossibleJson = (value) => {
   }
 };
 
+const getFriendlyReportError = (rawMessage) => {
+  const message = String(rawMessage || "").trim();
+  const lower = message.toLowerCase();
+  const reportMatch = message.match(/Error in File\s+(.+?)(?:_\d+_\{[A-F0-9-]+\})?\.rpt/i);
+  const reportName = reportMatch?.[1]?.replace(/\s+\d+$/, "")?.trim();
+  const reportLabel = reportName ? ` in ${reportName}` : "";
+
+  if (lower.includes("operation illegal on linked parameter")) {
+    return `The report template${reportLabel} contains an invalid linked parameter. Please ask the report designer to review the parameter links.`;
+  }
+  if (lower.includes("missing parameter values")) {
+    return `The report${reportLabel} is missing one or more required values. Please complete the report filters and try again.`;
+  }
+  if (lower.includes("database logon failed")) {
+    return "The printing service could not connect to the report database. Please contact your system administrator.";
+  }
+  if (lower.includes("load report failed")) {
+    return `The report template${reportLabel} could not be opened. It may be missing, damaged, or incompatible with the server.`;
+  }
+  if (lower.includes("maximum report processing jobs")) {
+    return "The printing service is temporarily busy. Please wait a moment and try printing again.";
+  }
+
+  return message;
+};
+
 export const getApiErrorMessage = (error, fallback = "Unable to generate the report.") => {
   const data = parsePossibleJson(error?.response?.data);
   const details = parsePossibleJson(data?.details ?? data?.Details);
 
-  return (
+  const rawMessage = (
     details?.ExceptionMessage ||
     details?.exceptionMessage ||
     details?.Message ||
@@ -566,6 +592,8 @@ export const getApiErrorMessage = (error, fallback = "Unable to generate the rep
     error?.message ||
     fallback
   );
+
+  return getFriendlyReportError(rawMessage);
 };
 
 export const postPdfRequest = async (endpoint, body = {}) => {

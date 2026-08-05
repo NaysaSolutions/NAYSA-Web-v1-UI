@@ -10,6 +10,18 @@ const showPrintError = (error) => {
   return useSwalErrorAlert("Printing Error", message);
 };
 
+const openPdfPreview = (pdfBlob) => {
+  const fileURL = URL.createObjectURL(pdfBlob);
+  const previewWindow = window.open(fileURL, "_blank");
+
+  if (!previewWindow) {
+    URL.revokeObjectURL(fileURL);
+    throw new Error("The report is ready, but the preview was blocked. Please allow popups for this site and try again.");
+  }
+
+  setTimeout(() => URL.revokeObjectURL(fileURL), 60000);
+};
+
 
 export function injectLoadingSpinner(printWindow) {
   if (!printWindow || !printWindow.document) return;
@@ -74,12 +86,6 @@ export function injectLoadingSpinner(printWindow) {
 
 export async function useHandlePrint(documentID, docCode, printMode, userCode) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked — please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
     const responseDocControl = await useTopDocControlRow(docCode);
     const formName = responseDocControl?.formName;
 
@@ -96,8 +102,7 @@ export async function useHandlePrint(documentID, docCode, printMode, userCode) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
 
   } catch (error) {
     showPrintError(error);
@@ -187,13 +192,6 @@ export async function useHandlePrint(documentID, docCode, printMode, userCode) {
 
 export async function useHandlePrintQuery(formName, userCode,params) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked — please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
-   
     if (!formName) {
       throw new Error("Report Name not defined");
     }
@@ -206,8 +204,7 @@ export async function useHandlePrintQuery(formName, userCode,params) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
 
   } catch (error) {
     showPrintError(error);
@@ -222,14 +219,6 @@ export async function useHandlePrintQuery(formName, userCode,params) {
 
 export async function useHandlePrintARReport(params) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked — please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
-
-  
     const responseDocRpt = await useTopHSRptRow(params.reportId);
     const formName = responseDocRpt?.reportName;
     if (!formName) {
@@ -255,8 +244,7 @@ export async function useHandlePrintARReport(params) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
 
   } catch (error) {
     showPrintError(error);
@@ -300,14 +288,6 @@ export async function useHandleDownloadExcelARReport(params) {
 
 export async function useHandlePrintAPReport(params) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked — please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
-
-  
     const responseDocRpt = await useTopHSRptRow(params.reportId);
     const formName = responseDocRpt?.reportName;
     if (!formName) {
@@ -332,8 +312,7 @@ export async function useHandlePrintAPReport(params) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
 
   } catch (error) {
     showPrintError(error);
@@ -371,13 +350,6 @@ export async function useHandleDownloadExcelAPReport(params) {
 
 export async function useHandlePrintFGINVReport(params) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked â€” please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
-
     const responseDocRpt = await useTopHSRptRow(params.reportId);
     const formName = responseDocRpt?.reportName;
     if (!formName) {
@@ -403,8 +375,7 @@ export async function useHandlePrintFGINVReport(params) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
   } catch (error) {
     showPrintError(error);
   }
@@ -435,13 +406,6 @@ export async function useHandleDownloadExcelFGINVReport(params) {
 
 export async function useHandlePrintMSINVReport(params) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked Ã¢â‚¬â€ please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
-
     const responseDocRpt = await useTopHSRptRow(params.reportId);
     const formName = responseDocRpt?.reportName;
     if (!formName) {
@@ -467,8 +431,7 @@ export async function useHandlePrintMSINVReport(params) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
   } catch (error) {
     showPrintError(error);
   }
@@ -499,13 +462,6 @@ export async function useHandleDownloadExcelMSINVReport(params) {
 
 export async function useHandlePrintRMINVReport(params) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked - please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
-
     const responseDocRpt = await useTopHSRptRow(params.reportId);
     const formName = responseDocRpt?.reportName;
     if (!formName) {
@@ -531,8 +487,7 @@ export async function useHandlePrintRMINVReport(params) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
   } catch (error) {
     showPrintError(error);
   }
@@ -611,13 +566,6 @@ export async function useHandleDownloadExcelFAReport(params) {
 
 export async function useHandlePrintFAReport(params) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked â€” please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
-
     const responseDocRpt = await useTopHSRptRow(params.reportId);
     const formName = responseDocRpt?.reportName;
     if (!formName) {
@@ -645,8 +593,7 @@ export async function useHandlePrintFAReport(params) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
   } catch (error) {
     showPrintError(error);
   }
@@ -701,13 +648,6 @@ export async function useHandleDownloadExcelSalesReport(params) {
 
 export async function useHandlePrintSalesReport(params) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked â€” please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
-
     const responseDocRpt = await useTopHSRptRow(params.reportId);
     const formName = responseDocRpt?.reportName;
     if (!formName) {
@@ -733,8 +673,7 @@ export async function useHandlePrintSalesReport(params) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
   } catch (error) {
     showPrintError(error);
   }
@@ -770,13 +709,6 @@ export async function useHandleDownloadExcelBUDReport(params) {
 
 export async function useHandlePrintBUDReport(params) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked â€” please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
-
     const responseDocRpt = await useTopHSRptRow(params.reportId);
     const formName = responseDocRpt?.reportName;
     if (!formName) {
@@ -806,8 +738,7 @@ export async function useHandlePrintBUDReport(params) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
   } catch (error) {
     showPrintError(error);
   }
@@ -817,13 +748,6 @@ export async function useHandlePrintBUDReport(params) {
 
 export async function useHandlePrintPRDReport(params) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked - please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
-
     const responseDocRpt = await useTopHSRptRow(params.reportId);
     const formName = responseDocRpt?.reportName;
     if (!formName) {
@@ -849,8 +773,7 @@ export async function useHandlePrintPRDReport(params) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
   } catch (error) {
     showPrintError(error);
   }
@@ -907,14 +830,6 @@ export async function useHandleDownloadExcelBIRReport(params) {
 
 export async function useHandlePrintGLReport(params) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked — please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
-
-  
     const responseDocRpt = await useTopHSRptRow(params.reportId);
     const formName = responseDocRpt?.reportName;
     if (!formName) {
@@ -944,8 +859,7 @@ export async function useHandlePrintGLReport(params) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
 
   } catch (error) {
     showPrintError(error);
