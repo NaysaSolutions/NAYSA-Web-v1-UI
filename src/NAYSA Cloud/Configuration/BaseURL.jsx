@@ -536,6 +536,38 @@ export const postRequest = async (endpoint, body = {}, config = {}) => {
   return data;
 };
 
+const parsePossibleJson = (value) => {
+  if (typeof value !== "string") return value;
+
+  const text = value.trim();
+  if (!text) return text;
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+};
+
+export const getApiErrorMessage = (error, fallback = "Unable to generate the report.") => {
+  const data = parsePossibleJson(error?.response?.data);
+  const details = parsePossibleJson(data?.details ?? data?.Details);
+
+  return (
+    details?.ExceptionMessage ||
+    details?.exceptionMessage ||
+    details?.Message ||
+    details?.message ||
+    (typeof details === "string" ? details : "") ||
+    data?.ExceptionMessage ||
+    data?.exceptionMessage ||
+    data?.Message ||
+    data?.message ||
+    error?.message ||
+    fallback
+  );
+};
+
 export const postPdfRequest = async (endpoint, body = {}) => {
   try {
     const { data } = await apiClient.post(endpoint, body, {
@@ -564,6 +596,8 @@ export const postPdfRequest = async (endpoint, body = {}) => {
         error.response.data = backendError;
       }
     }
+
+    error.message = getApiErrorMessage(error);
 
     console.error("PDF REQUEST FAILED:", {
       endpoint,

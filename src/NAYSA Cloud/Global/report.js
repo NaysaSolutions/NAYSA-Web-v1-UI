@@ -1,8 +1,14 @@
-import { apiClient ,postPdfRequest,postRequest } from '@/NAYSA Cloud/Configuration/BaseURL';
+import { apiClient, getApiErrorMessage, postPdfRequest, postRequest } from '@/NAYSA Cloud/Configuration/BaseURL';
 import { useTopDocControlRow,useTopHSRptRow } from '@/NAYSA Cloud/Global/top1RefTable';
-import { formatNumber } from "@/NAYSA Cloud/Global/behavior.jsx";
+import { formatNumber, useSwalErrorAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
+
+const showPrintError = (error) => {
+  const message = getApiErrorMessage(error);
+  console.error("Error printing report:", error);
+  return useSwalErrorAlert("Printing Error", message);
+};
 
 
 export function injectLoadingSpinner(printWindow) {
@@ -94,7 +100,7 @@ export async function useHandlePrint(documentID, docCode, printMode, userCode) {
     printWindow.location.href = fileURL;
 
   } catch (error) {
-    console.error("Error printing report:", error);
+    showPrintError(error);
   }
 }
 
@@ -204,7 +210,7 @@ export async function useHandlePrintQuery(formName, userCode,params) {
     printWindow.location.href = fileURL;
 
   } catch (error) {
-    console.error("Error printing report:", error);
+    showPrintError(error);
   }
 }
 
@@ -253,7 +259,7 @@ export async function useHandlePrintARReport(params) {
     printWindow.location.href = fileURL;
 
   } catch (error) {
-    console.error("Error printing report:", error);
+    showPrintError(error);
   }
 }
 
@@ -330,7 +336,7 @@ export async function useHandlePrintAPReport(params) {
     printWindow.location.href = fileURL;
 
   } catch (error) {
-    console.error("Error printing report:", error);
+    showPrintError(error);
   }
 }
 
@@ -400,7 +406,7 @@ export async function useHandlePrintFGINVReport(params) {
     const fileURL = URL.createObjectURL(pdfBlob);
     printWindow.location.href = fileURL;
   } catch (error) {
-    console.error("Error printing FG inventory report:", error);
+    showPrintError(error);
   }
 }
 
@@ -464,7 +470,7 @@ export async function useHandlePrintMSINVReport(params) {
     const fileURL = URL.createObjectURL(pdfBlob);
     printWindow.location.href = fileURL;
   } catch (error) {
-    console.error("Error printing MS inventory report:", error);
+    showPrintError(error);
   }
 }
 
@@ -528,7 +534,7 @@ export async function useHandlePrintRMINVReport(params) {
     const fileURL = URL.createObjectURL(pdfBlob);
     printWindow.location.href = fileURL;
   } catch (error) {
-    console.error("Error printing RM inventory report:", error);
+    showPrintError(error);
   }
 }
 
@@ -642,7 +648,7 @@ export async function useHandlePrintFAReport(params) {
     const fileURL = URL.createObjectURL(pdfBlob);
     printWindow.location.href = fileURL;
   } catch (error) {
-    console.error("Error printing fixed asset report:", error);
+    showPrintError(error);
   }
 }
 
@@ -730,7 +736,7 @@ export async function useHandlePrintSalesReport(params) {
     const fileURL = URL.createObjectURL(pdfBlob);
     printWindow.location.href = fileURL;
   } catch (error) {
-    console.error("Error printing Sales report:", error);
+    showPrintError(error);
   }
 }
 
@@ -803,7 +809,7 @@ export async function useHandlePrintBUDReport(params) {
     const fileURL = URL.createObjectURL(pdfBlob);
     printWindow.location.href = fileURL;
   } catch (error) {
-    console.error("Error printing Budget report:", error);
+    showPrintError(error);
   }
 }
 
@@ -846,7 +852,7 @@ export async function useHandlePrintPRDReport(params) {
     const fileURL = URL.createObjectURL(pdfBlob);
     printWindow.location.href = fileURL;
   } catch (error) {
-    console.error("Error printing PRD report:", error);
+    showPrintError(error);
   }
 }
 
@@ -942,7 +948,7 @@ export async function useHandlePrintGLReport(params) {
     printWindow.location.href = fileURL;
 
   } catch (error) {
-    console.error("Error printing report:", error);
+    showPrintError(error);
   }
 }
 
