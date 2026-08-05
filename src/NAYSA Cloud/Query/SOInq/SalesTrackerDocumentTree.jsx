@@ -30,21 +30,26 @@ const SalesTrackerDocumentTree = ({ rows = [], header = {}, currency = "PHP" }) 
   }];
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-3">
       {branches.map((branch, index) => (
-        <FlowBranch key={`${branch.drNo || "no-dr"}-${index}`} branch={branch} header={header} currency={currency} />
+        <FlowBranch key={`${branch.drNo || "no-dr"}-${index}`} branch={branch} header={header} currency={currency} branchIndex={index} />
       ))}
     </div>
   );
 };
 
-const FlowBranch = ({ branch, header, currency }) => {
+const FlowBranch = ({ branch, header, currency, branchIndex }) => {
   const invoices = branch.invoices || [];
   const hasDr = !!branch.drNo;
 
   return (
-    <div className="overflow-auto rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm">
-      <div className="flex min-w-[650px] items-start gap-2">
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-3 py-2">
+        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Document Branch {branchIndex + 1}</div>
+        <div className="text-[10px] text-slate-400">{branch.drNo ? `Delivery ${branch.drNo}` : "Awaiting delivery"}</div>
+      </div>
+      <div className="overflow-x-auto p-3 [scrollbar-width:thin]">
+      <div className="flex min-w-max items-start gap-3">
         <DocCard
           type="SO"
           title="Sales Order"
@@ -75,13 +80,14 @@ const FlowBranch = ({ branch, header, currency }) => {
 
         <Connector />
 
-        <div className="min-w-[165px] max-w-[220px] space-y-1.5">
+        <div className="w-[210px] shrink-0 space-y-2">
           {invoices.length ? invoices.map((invoice) => (
             <InvoiceStack key={invoice.siId || invoice.siNo} invoice={invoice} currency={currency} />
           )) : <PendingCard title="No SI" description="Pending invoice" />}
         </div>
       </div>
-    </div>
+      </div>
+    </section>
   );
 };
 
@@ -131,17 +137,17 @@ const DocCard = ({ type, title, docNo, date, value, tone, icon, caption, compact
   }[tone] || "border-slate-100 bg-slate-50 text-slate-700";
 
   return (
-    <div className={`min-w-[155px] rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${compact ? "min-w-[150px]" : ""}`}>
+    <div className={`${compact ? "w-[200px]" : "w-[210px]"} shrink-0 rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md`}>
       <div className="flex items-start justify-between gap-2">
         <span className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border ${cls}`}>
           <FontAwesomeIcon icon={icon} className="text-[10px]" />
         </span>
         <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-extrabold ${cls}`}>{type}</span>
       </div>
-      <div className="mt-2 text-[9px] font-bold uppercase tracking-wide text-slate-400">{title}</div>
-      <div className="mt-0.5 truncate text-xs font-extrabold text-slate-900">{docNo || "-"}</div>
-      <div className="mt-0.5 text-[11px] font-semibold text-slate-500">{formatDate(date)}</div>
-      <div className="mt-2 rounded-lg bg-slate-50 px-2 py-1.5 text-right text-xs font-extrabold text-slate-800">{value}</div>
+      <div className="mt-2.5 text-[9px] font-bold uppercase tracking-wide text-slate-400">{title}</div>
+      <div className="mt-0.5 truncate text-sm font-bold text-slate-900">{docNo || "-"}</div>
+      <div className="mt-0.5 text-[11px] font-medium text-slate-500">{formatDate(date)}</div>
+      <div className="mt-2.5 rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-2 text-right text-xs font-bold tabular-nums text-slate-800">{value}</div>
       {caption && <div className="mt-1.5 text-right text-[9px] font-semibold text-slate-400">{caption}</div>}
     </div>
   );
@@ -155,7 +161,7 @@ const PendingCard = ({ title, description }) => (
 );
 
 const Connector = () => (
-  <div className="mt-[54px] flex w-6 shrink-0 items-center justify-center">
+  <div className="mt-[62px] flex w-7 shrink-0 items-center justify-center">
     <div className="h-0.5 flex-1 bg-slate-200" />
     <div className="h-1.5 w-1.5 rounded-full bg-slate-300" />
   </div>

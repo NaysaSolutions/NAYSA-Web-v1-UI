@@ -1558,14 +1558,43 @@ const handleExportExcel = async (customFileName) => {
 
     const formatMMddyyyyNoSlash = (dateValue) => {
       if (!dateValue) return "";
-      return format(new Date(dateValue), "MMddyyyy");
+
+      // Handle yyyy-MM-dd without UTC date shifting.
+      const rawValue = String(dateValue).trim();
+      const isoDateMatch = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (isoDateMatch) {
+        const [, yyyy, mm, dd] = isoDateMatch;
+        return `${mm}${dd}${yyyy}`;
+      }
+
+      const parsedDate = dateValue instanceof Date ? dateValue : new Date(dateValue);
+      if (Number.isNaN(parsedDate.getTime())) return "";
+
+      return format(parsedDate, "MMddyyyy");
     };
 
-    const reportTitle = activeTab
-      ? `${activeTab.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())} ${formatMMddyyyyNoSlash(
-          dates?.[0]
-        )} to ${formatMMddyyyyNoSlash(dates?.[1])}`
-      : `History ${formatMMddyyyyNoSlash(dates?.[0])} to ${formatMMddyyyyNoSlash(dates?.[1])}`;
+    const baseReportTitle = activeTab
+      ? activeTab.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+      : historyExportNameProp || "Transaction History";
+
+    // Preset ranges always use the applied start and end dates.
+    // For Custom Range, do not append dates until both dates are selected.
+    const customRangeHasNoCompleteDates =
+      dateRangeType === "Custom Range" && (!dates?.[0] || !dates?.[1]);
+
+    const reportStartDate = customRangeHasNoCompleteDates
+      ? null
+      : appliedFilters?.startDate || dates?.[0];
+    const reportEndDate = customRangeHasNoCompleteDates
+      ? null
+      : appliedFilters?.endDate || dates?.[1];
+
+    const formattedStartDate = formatMMddyyyyNoSlash(reportStartDate);
+    const formattedEndDate = formatMMddyyyyNoSlash(reportEndDate);
+
+    const reportTitle = formattedStartDate && formattedEndDate
+      ? `${baseReportTitle} ${formattedStartDate} to ${formattedEndDate}`
+      : baseReportTitle;
 
     const exportData = groupBy.length > 0 ? groupedStructure : filteredData;
 

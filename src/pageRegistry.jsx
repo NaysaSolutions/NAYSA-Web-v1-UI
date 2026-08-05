@@ -133,6 +133,7 @@ export const pageRegistry = {
   CWTMonitoring: lazyPage(() => import("./NAYSA Cloud/Query/CWTInq/CWTMonitoring.jsx")),
   CheckRL: lazyPage(() => import("./NAYSA Cloud/Query/CheckRL/CheckRL.jsx")),
   GLINQ: lazyPage(() => import("./NAYSA Cloud/Query/GLInq/GLInq.jsx")),
+  GLANALYSIS: lazyPage(() => import("./NAYSA Cloud/Query/GLInq/GLAnalysis.jsx")),
   AuditTrail: lazyPage(() => import("./NAYSA Cloud/Query/AuditTrail/AuditTail.jsx")),
   SecurityAuditTrail: lazyPage(() => import("./NAYSA Cloud/Query/AuditTrail/SecurityAuditTrail.jsx")),
   MSINQ: lazyPage(() => import("./NAYSA Cloud/Query/INVInq/MSStockCard.jsx")),
@@ -221,6 +222,7 @@ export const pageRegistry = {
 
   // Matrix
   SalesPMCustomerItem: lazyPage(() => import("./NAYSA Cloud/Matrix/SalesPMCustomerItem.jsx")),
+  CommisaryPriceMatrix: lazyPage(() => import("./NAYSA Cloud/Matrix/CommisaryPriceMatrix.jsx")),
   CAN: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Purchasing/CAN.jsx")),
 
   // Purchasing Inquiry (Unified/Merged)

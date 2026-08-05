@@ -511,6 +511,25 @@ rrQty: "",
   const isFormDisabled =
   isViewDocumentUrl ||
   ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+  const companyDefaultCurrCode = String(
+    companyInfo?.currCode ||
+      companyInfo?.currencyCode ||
+      companyInfo?.CURR_CODE ||
+      glCurrDefault ||
+      "PHP",
+  ).trim();
+  const headerCurrCode = String(currCode || companyDefaultCurrCode || "PHP").trim();
+  const isForeignHeaderCurrency =
+    Boolean(headerCurrCode && companyDefaultCurrCode) &&
+    headerCurrCode.toUpperCase() !== companyDefaultCurrCode.toUpperCase();
+  const hasPONoValue = (row = {}) =>
+    [row?.poNo, row?.PONo, row?.PoNo, row?.PO_NO, row?.po_no].some(
+      (value) => value !== undefined && value !== null && String(value).trim() !== "",
+    );
+  const isDirectReceiving =
+    Array.isArray(detailRows) &&
+    detailRows.length > 0 &&
+    detailRows.every((row) => !hasPONoValue(row));
 
   const rmrrDetailColumnDefs = useMemo(
   () => [
@@ -676,6 +695,35 @@ rrQty: "",
     detailRowsGLRef.current = detailRowsGL || [];
   }, [detailRowsGL]);
 
+  const hasItemDetailValue = useMemo(
+    () =>
+      (detailRows || []).some((row) => {
+        const hasItemReference = [
+          row?.itemCode,
+          row?.itemName,
+          row?.rmCode,
+          row?.RMCode,
+          row?.jobCode,
+          row?.itemNo,
+        ].some((value) => String(value || "").trim() !== "");
+
+        const hasQtyOrAmount = [
+          row?.rrQty,
+          row?.rrQuantity,
+          row?.quantity,
+          row?.grossAmount,
+          row?.itemAmount,
+          row?.amount,
+          row?.netAmount,
+          row?.net_amount,
+        ].some((value) => (parseFormattedNumber(value || 0) || 0) > 0);
+
+        return hasItemReference && hasQtyOrAmount;
+      }),
+    [detailRows],
+  );
+  const isGeneralLedgerLocked = !hasItemDetailValue;
+
 
   const generateClientGroupId = () => {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -817,6 +865,14 @@ setTotals({
     if (Array.isArray(parsed)) return parsed;
     return [];
   };
+
+  const getCurrencyCode = (row = {}) =>
+    getPOField(row, "CurrCode", "CURR_CODE", "currCode", "curr_code", "currency", "Currency");
+
+  const getCurrencyName = (row = {}) =>
+    getPOField(row, "CurrName", "CURR_NAME", "currName", "curr_name", "currencyName", "CurrencyName");
+
+  const normalizeCurrencyCode = (code) => String(code || "").trim().toUpperCase();
 
   const formatOpenPODate = (value) => {
     if (!value) return "";
@@ -2768,6 +2824,29 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
   // ==========================
   // DETAIL (PR_DT1) HANDLERS
   // ==========================
+  const handleCurrRateRecalcBlur = (e) => {
+    const numericRate = parseFormattedNumber(e.target.value || 0);
+    const nextRate = Number.isNaN(numericRate)
+      ? "0.000000"
+      : formatNumber(numericRate, 6);
+    const nextRows = (detailRows || []).map((row) =>
+      recalcRMRRRowWithCurrencyRate({
+        ...row,
+        currCode: row.currCode || currCode || state.currCode || "PHP",
+        currRate: nextRate,
+      }),
+    );
+
+    updateState({
+      currRate: nextRate,
+      detailRows: nextRows,
+      withCurr2:
+        (glCurrMode === "M" && glCurrDefault !== currCode) ||
+        glCurrMode === "D",
+      withCurr3: glCurrMode === "T",
+    });
+    updateTotalsDisplay(nextRows);
+  };
 
   const fetchVatRate = async (vatCode) => {
     if (!vatCode) return "";
@@ -3372,6 +3451,32 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
     };
   };
 
+  const recalcRMRRRowWithCurrencyRate = (row) => {
+    const rrQty = parseFormattedNumber(row.rrQty || 0);
+    const freeQty = parseFormattedNumber(row.freeQty || 0);
+    const unitCost = parseFormattedNumber(row.unitCost || 0);
+    const vatRate = parseFormattedNumber(row.vatRate || 0);
+    const rowCurrCode = normalizeCurrencyCode(row.currCode || currCode || state.currCode || "PHP");
+    const rowCurrRate = parseFormattedNumber(row.currRate ?? currRate ?? state.currRate ?? 1) || 1;
+    const chargeableQty = Math.max(rrQty - freeQty, 0);
+    const gross = chargeableQty * unitCost;
+    const vatAmt = vatRate ? gross - gross / (1 + vatRate / 100) : 0;
+    const netAmtFx = gross - vatAmt;
+    const netAmt = rowCurrCode !== "PHP" ? netAmtFx * rowCurrRate : netAmtFx;
+
+    return {
+      ...row,
+      currCode: rowCurrCode,
+      currRate: formatNumber(rowCurrRate, 6),
+      grossAmount: formatNumber(gross, 2),
+      itemAmount: formatNumber(gross, 2),
+      vatAmount: formatNumber(vatAmt, 2),
+      fxAmount: formatNumber(netAmtFx, 2),
+      netAmount: formatNumber(netAmt, 2),
+      amount: formatNumber(gross, 2),
+    };
+  };
+
   const sanitizeRMRRNumeric = (value) => {
     const raw = String(value ?? "");
     const cleaned = raw.replace(/[^0-9.]/g, "");
@@ -3554,6 +3659,8 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
   };
 
   const validateRRQtyWithinPOBalance = (rowsToValidate = state.detailRows) => {
+    if (isDirectReceiving) return true;
+
     const errors = [];
 
     (rowsToValidate || []).forEach((row, index) => {
@@ -4004,7 +4111,7 @@ rrHdId: documentID || "",
       });
 
 if (action === "GenerateGL") {
-      if (!isGeneralLedgerEnabled) return;
+      if (!isGeneralLedgerEnabled || isGeneralLedgerLocked) return;
 const newGlEntries = await useGenerateGLEntries(docType, getNetAmountGLData());
         if (newGlEntries) updateState({ detailRowsGL: newGlEntries });
         return;
@@ -4231,7 +4338,7 @@ const newGlEntries = await useGenerateGLEntries(docType, getNetAmountGLData());
   };
 
   const handleAddGLRow = (index = null) => {
-    if (isFormDisabled) return;
+    if (isFormDisabled || isGeneralLedgerLocked) return;
 
     const rows = [...(state.detailRowsGL || [])];
 
@@ -4296,7 +4403,7 @@ const newGlEntries = await useGenerateGLEntries(docType, getNetAmountGLData());
   };
 
   const openGLModal = (index, modalKey) => {
-    if (isFormDisabled) return;
+    if (isFormDisabled || isGeneralLedgerLocked) return;
     updateState({ glRowIndex: index, [modalKey]: true });
   };
 
@@ -4449,13 +4556,44 @@ const handleClosePayeeLookup = async (row) => {
       nextVatRate !== "" && nextVatRate !== null && nextVatRate !== undefined
         ? formatNumber(parseFormattedNumber(nextVatRate), 2)
         : "";
+    const selectedCurrCode = normalizeCurrencyCode(getCurrencyCode(row));
+    const lookupCurrRate =
+      row?.currRate ??
+      row?.CurrRate ??
+      row?.CURR_RATE ??
+      row?.curr_rate ??
+      row?.currencyRate ??
+      row?.CurrencyRate ??
+      row?.CURRENCY_RATE ??
+      "";
+    let nextCurrCode = currCode || state.currCode || companyDefaultCurrCode || "PHP";
+    let nextCurrName = currName || "";
+    let formattedCurrRate = currRate || state.currRate || defaultCurrRate || "1.000000";
+
+    if (selectedCurrCode) {
+      const currRow = await useTopCurrencyRow(selectedCurrCode);
+      const fetchedRate =
+        selectedCurrCode === normalizeCurrencyCode(glCurrDefault || companyDefaultCurrCode)
+          ? defaultCurrRate
+          : await useTopForexRate(selectedCurrCode, header.rr_date);
+
+      nextCurrCode = selectedCurrCode;
+      nextCurrName = getCurrencyName(row) || getCurrencyName(currRow) || selectedCurrCode;
+      formattedCurrRate = formatNumber(
+        parseFormattedNumber(lookupCurrRate || fetchedRate || 1),
+        6,
+      );
+    }
+
     const updatedDetails = (detailRows || []).map((item) =>
-      recalcRMRRRow({
+      recalcRMRRRowWithCurrencyRate({
         ...item,
         vatCode: nextVatCode,
         vatName: nextVatName,
         vatRate: formattedVatRate,
-      })
+        currCode: selectedCurrCode || item.currCode || nextCurrCode,
+        currRate: formattedCurrRate,
+      }),
     );
 
     updateState({
@@ -4465,6 +4603,9 @@ const handleClosePayeeLookup = async (row) => {
       vendVatCode: nextVatCode,
       vendVatName: nextVatName,
       vendVatRate: formattedVatRate,
+      currCode: nextCurrCode,
+      currName: nextCurrName,
+      currRate: formattedCurrRate,
       ...(updatedDetails.length > 0 ? { detailRows: updatedDetails } : {}),
     });
 
@@ -4647,25 +4788,35 @@ const handleClosePayeeLookup = async (row) => {
     updateState({ currencyModalOpen: false });
   };
 
-  const handleSelectCurrency = async (code) => {
-    if (code) {
-      const result = await useTopCurrencyRow(code);
-      if (result) {
-        const rate =
-          code === glCurrDefault
-            ? defaultCurrRate
-            : await useTopForexRate(code, header.rr_date);
+    const handleSelectCurrency = async (code) => {
+    if (code) {
+      const selectedCode = normalizeCurrencyCode(code);
+      const result = await useTopCurrencyRow(selectedCode);
+      if (result) {
+        const rate =
+          selectedCode === normalizeCurrencyCode(glCurrDefault)
+            ? defaultCurrRate
+            : await useTopForexRate(selectedCode, header.rr_date);
+        const nextRate = formatNumber(parseFormattedNumber(rate), 6);
+        const nextRows = (detailRows || []).map((row) =>
+          recalcRMRRRowWithCurrencyRate({
+            ...row,
+            currCode: selectedCode,
+            currRate: nextRate,
+          }),
+        );
 
-        updateState({
-          currCode: result.currCode,
-          currName: result.currName,
-          currRate: formatNumber(parseFormattedNumber(rate), 6),
-        });
-      }
-    }
-  };
-
-  const handleCloseBillTermModal = async (selectedBillTerm) => {
+        updateState({
+          currCode: selectedCode,
+          currName: getCurrencyName(result) || result.currName || selectedCode,
+          detailRows: nextRows,
+          currRate: nextRate,
+        });
+        updateTotalsDisplay(nextRows);
+      }
+    }
+  };
+const handleCloseBillTermModal = async (selectedBillTerm) => {
     if (selectedBillTerm) {
       await handleSelectBillTerm(selectedBillTerm.billtermCode);
     }
@@ -5095,7 +5246,7 @@ const handleClosePayeeLookup = async (row) => {
   const renderRMRRGlCell = (columnKey, row, index) => {
     const columnWidth = getRMRRGlFallbackWidth(columnKey);
     const style = getRMRRGlCellStyle(columnKey, columnWidth);
-    const rowLocked = isFormDisabled || row.operation === "S";
+    const rowLocked = isFormDisabled || isGeneralLedgerLocked || row.operation === "S";
 
     const focusNextGlCell = (field) => {
       if (typeof focusNextRMRRGlRowInput === "function") {
@@ -5331,7 +5482,7 @@ const handleClosePayeeLookup = async (row) => {
           onReset={handleReset}
           onSave={() => handleActivityOption("Upsert")}
           onGenerateGL={
-            isGeneralLedgerEnabled
+            isGeneralLedgerEnabled && !isGeneralLedgerLocked
               ? () => handleActivityOption("GenerateGL")
               : undefined
           }
@@ -5555,6 +5706,60 @@ const handleClosePayeeLookup = async (row) => {
              
                
 
+                <div className="flex gap-4">
+                  <input type="hidden" id="currCode" value={currCode || ""} readOnly />
+
+                  <div className="flex-grow w-2/3">
+                    <FieldRenderer
+                      id="currName"
+                      label="Currency"
+                      type="text"
+                      value={
+                        currCode
+                          ? `${currCode}${currName ? ` - ${currName}` : ""}`
+                          : ""
+                      }
+                      disabled
+                      readOnly
+                    />
+                  </div>
+
+                  <div className="flex-grow">
+                    <FieldRenderer
+                      id="currRate"
+                      label="Currency Rate"
+                      type="amount"
+                      value={currRate || ""}
+                      disabled={isFormDisabled || !isForeignHeaderCurrency}
+                      onChange={(val) => {
+                        const sanitizedValue = String(val).replace(/[^0-9.]/g, "");
+                        if (/^\d*\.?\d{0,6}$/.test(sanitizedValue) || sanitizedValue === "") {
+                          const nextRows = (detailRows || []).map((row) =>
+                            recalcRMRRRowWithCurrencyRate({
+                              ...row,
+                              currCode: row.currCode || currCode || state.currCode || "PHP",
+                              currRate: sanitizedValue || 0,
+                            }),
+                          );
+                          updateState({ currRate: sanitizedValue, detailRows: nextRows });
+                          updateTotalsDisplay(nextRows);
+                        }
+                      }}
+                      onBlur={handleCurrRateRecalcBlur}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          document.getElementById("WHcode")?.focus();
+                        }
+                      }}
+                      onFocus={(e) => {
+                        if (!isFormDisabled && parseFormattedNumber(e.target.value) === 0) {
+                          updateState({ currRate: "" });
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
                 {/* WareHouse  */}
 
                 <FieldRenderer
@@ -5922,7 +6127,7 @@ const handleClosePayeeLookup = async (row) => {
                   type="button"
                   onClick={() => handleActivityOption("GenerateGL")}
                   className="global-tran-button-generateGL"
-                  disabled={isLoading || isFormDisabled}
+                  disabled={isLoading || isFormDisabled || isGeneralLedgerLocked}
                   style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
                 >
                   {isLoading ? "Generating..." : "Generate GL Entries"}
@@ -5966,6 +6171,7 @@ const handleClosePayeeLookup = async (row) => {
                   type="button"
                   onClick={() => handleAddGLRow()}
                   className="global-tran-tab-footer-button-add-ui"
+                  disabled={isGeneralLedgerLocked}
                   style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
                 >
                   <FontAwesomeIcon icon={faPlus} className="mr-2" />
@@ -5974,6 +6180,14 @@ const handleClosePayeeLookup = async (row) => {
               </div>
 
               <div className="global-tran-tab-footer-total-main-div-ui">
+                <div className="global-tran-tab-footer-total-div-ui">
+                  <label className="global-tran-tab-footer-total-label-ui">
+                    Total Amount:
+                  </label>
+                  <label className="global-tran-tab-footer-total-value-ui">
+                    {totals.amount}
+                  </label>
+                </div>
                 <div className="global-tran-tab-footer-total-div-ui">
                   <label className="global-tran-tab-footer-total-label-ui">
                     Total Debit ({glCurrDefault}):

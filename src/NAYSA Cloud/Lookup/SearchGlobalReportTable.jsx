@@ -946,11 +946,7 @@ const SearchGlobalReportTable = forwardRef(
     };
 
     const toggleColumnVisibility = (colKey, checked) => {
-      if (
-        !checked &&
-        (protectedColumnKeys.includes(colKey) ||
-          draftVisibleChooserColumnCount <= 2)
-      ) {
+      if (!checked && draftVisibleChooserColumnCount <= 2) {
         useSwalErrorAlert(
           "Minimum columns required",
           "Please retain at least 2 columns.",

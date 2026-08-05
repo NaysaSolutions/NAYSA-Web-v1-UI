@@ -1159,20 +1159,25 @@ import CurrLookupModal from "@/NAYSA Cloud/Lookup/SearchCurrRef.jsx";
 
 import GLQueryReport from "./GLQueryReport.jsx";
 import SLQueryReport from "./SLQueryReport.jsx";
-import TBQueryReport from "./TBQueryReport.jsx";
 import TrialBalanceReport from "./TrialBalanceReport.jsx";
 import BalSheetYTDReport from "./BalSheetYTDReport.jsx";
 import IncomeStatementYTDReport from "./IncomeStatementYTDReport.jsx";
 import IncomeStatementMTDReport from "./IncomeStatementMTDReport.jsx";
 import IncomeExpenseReport from "./IncomeExpenseReport.jsx";
 
-export default function GLINQ() {
+export default function GLINQ({
+  pageTitle = "GL Query",
+  sourceMode = "GL_QUERY",
+}) {
   const { user, companyInfo, currentUserRow } = useAuth();
 
   const [activeTab, setActiveTab] = useState("glQuery");
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [hideNav, setHideNav] = useState(false);
+  const [incomeStatementMTDView, setIncomeStatementMTDView] =
+    useState("perMonth");
+  const [incomeExpenseView, setIncomeExpenseView] = useState("perMonth");
 
   const [drilldownExpandedByTab, setDrilldownExpandedByTab] = useState({
     balSheetYTD: {},
@@ -1183,7 +1188,6 @@ export default function GLINQ() {
     () => ({
       glQuery: GLQueryReport,
       slQuery: SLQueryReport,
-      tbQuery: TBQueryReport,
       trialBalance: TrialBalanceReport,
       balSheetYTD: BalSheetYTDReport,
       incStatementYTD: IncomeStatementYTDReport,
@@ -1266,6 +1270,7 @@ export default function GLINQ() {
       isEmpty: false,
       emptyMessage: "",
       comparisonPeriods: [],
+      reportData: null,
       summary: {
         totalDebit: 0,
         totalCredit: 0,
@@ -1531,6 +1536,8 @@ export default function GLINQ() {
                 userCode: currentUserRow.userCode,
               });
 
+              requestJson.sourceMode = sourceMode;
+
               return fetchData(endpoint, {
                 json_data: { json_data: requestJson },
               });
@@ -1638,6 +1645,7 @@ export default function GLINQ() {
       summarizeIncomeStatementRows,
       EMPTY_VIEW,
       currentUserRow?.userCode,
+      sourceMode,
     ]
   );
 
@@ -1668,15 +1676,33 @@ export default function GLINQ() {
       const startedAt = new Date().toISOString();
 
       try {
-        const jsonData = Report.buildJsonData(payload);
+        const jsonData = {
+          ...Report.buildJsonData(payload),
+          sourceMode,
+        };
+        const usesDynamicColumns = Report?.meta?.dynamicColumns === true;
 
-        const [colsResp, rowsResp] = await Promise.all([
-          useSelectedHSColConfig(endpoint),
-          fetchData(endpoint, { json_data: { json_data: jsonData } }),
-        ]);
+        let colsResp = [];
+        let rowsResp;
 
-        const colsArray = Array.isArray(colsResp) ? colsResp : [];
-        const finalRows = normalizeRows(rowsResp);
+        if (usesDynamicColumns) {
+          rowsResp = await fetchData(endpoint, {
+            json_data: { json_data: jsonData },
+          });
+        } else {
+          [colsResp, rowsResp] = await Promise.all([
+            useSelectedHSColConfig(endpoint),
+            fetchData(endpoint, { json_data: { json_data: jsonData } }),
+          ]);
+        }
+
+        const parsedReport =
+          typeof Report?.parseResponse === "function"
+            ? Report.parseResponse(rowsResp)
+            : null;
+        const colsArray = parsedReport?.cols ??
+          (Array.isArray(colsResp) ? colsResp : []);
+        const finalRows = parsedReport?.rows ?? normalizeRows(rowsResp);
         const isEmpty = !finalRows || finalRows.length === 0;
 
         setViews((prev) => ({
@@ -1693,6 +1719,7 @@ export default function GLINQ() {
               ? "No records found for the selected filters."
               : "",
             comparisonPeriods: [],
+            reportData: parsedReport?.reportData ?? null,
             summary: summarizeRows(finalRows),
           },
         }));
@@ -1733,6 +1760,7 @@ export default function GLINQ() {
       summarizeRows,
       EMPTY_VIEW,
       runSharedFinancialStatementYTD,
+      sourceMode,
     ]
   );
 
@@ -1749,10 +1777,6 @@ export default function GLINQ() {
       case "slQuery": {
         const [branchCode, cutOffCode, acctCode, sltypeCode, slCode] = parts;
         return { branchCode, cutOffCode, acctCode, sltypeCode, slCode };
-      }
-      case "tbQuery": {
-        const [tbCutOff, tbAcct, rcCode] = parts;
-        return { cutOffCode: tbCutOff, acctCode: tbAcct, rcCode };
       }
       default:
         return null;
@@ -1781,45 +1805,6 @@ export default function GLINQ() {
         accName: fAcct?.acctName || "",
         slCode: decoded.slCode,
         slName: fSL?.slName || "",
-        cutoffStartCode: decoded.cutOffCode,
-        cutoffStartName: fPeriod?.cutoffName || "",
-        cutoffEndCode: decoded.cutOffCode,
-        cutoffEndName: fPeriod?.cutoffName || "",
-        rcCode: "",
-        rcName: "",
-        rcCodeStart: "",
-        rcNameStart: "",
-        rcCodeEnd: "",
-        rcNameEnd: "",
-      };
-
-      updateFilters(glFilters, "glQuery");
-      setActiveTab("glQuery");
-      await runTabQuery("glQuery", glFilters);
-    },
-    [parseGroupId, filtersByTab, DEFAULT_FILTERS, updateFilters, runTabQuery]
-  );
-
-  const jumpToGLQueryFromTB = useCallback(
-    async (row) => {
-      const decoded = parseGroupId(row?.groupId, "tbQuery");
-      if (!decoded) return;
-
-      const currentGL = filtersByTab.glQuery || DEFAULT_FILTERS;
-
-      const [fAcct, fPeriod] = await Promise.all([
-        useTopAccountRow(decoded?.acctCode),
-        useTopCutOffRow(decoded?.cutOffCode),
-      ]);
-
-      const glFilters = {
-        ...currentGL,
-        branchCode: "",
-        branchName: "",
-        accCode: decoded.acctCode,
-        accName: fAcct?.acctName || "",
-        slCode: "",
-        slName: "",
         cutoffStartCode: decoded.cutOffCode,
         cutoffStartName: fPeriod?.cutoffName || "",
         cutoffEndCode: decoded.cutOffCode,
@@ -1978,7 +1963,7 @@ export default function GLINQ() {
         <div className="flex w-full flex-col gap-6 md:flex-row md:items-center md:justify-between lg:min-h-[40px]">
           <div className="flex w-full md:w-auto md:justify-start">
             <h1 className="global-ref-headertext-ui w-full truncate text-center md:w-auto md:text-left">
-              GL Inquiry
+              {pageTitle}
             </h1>
           </div>
 
@@ -2046,7 +2031,7 @@ export default function GLINQ() {
                   {!hideNav ? (
                     <>
                       <div className="text-sm font-semibold text-gray-800">
-                        GL Reports
+                        {pageTitle}
                       </div>
                       <div className="mt-1 text-xs text-gray-500">
                         Select a report, set filters, then load data.
@@ -2087,30 +2072,27 @@ export default function GLINQ() {
                   </div>
                 </div>
 
-                <div className="p-4">
-                  <ContextCards summary={view.summary} activeTab={activeTab} />
-                </div>
+                {!['isMTD', 'incStatementYTD', 'incExp'].includes(activeTab) && (
+                  <div className="p-4">
+                    <ContextCards summary={view.summary} activeTab={activeTab} />
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="global-tran-tab-div-ui !m-0 !p-4">
-              <div className="global-tran-tab-nav-ui">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <button className="global-tran-tab-padding-ui global-tran-tab-text_active-ui">
-                      {activeTabConfig.label}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="global-tran-table-main-div-ui">
+              <div
+                className={
+                  ["isMTD", "incExp"].includes(activeTab)
+                    ? "min-h-0 overflow-hidden"
+                    : "global-tran-table-main-div-ui"
+                }
+              >
                 <ActiveReport
                   view={view}
                   filters={filters}
                   tabConfig={activeTabConfig}
                   onJumpToGLFromSL={jumpToGLQueryFromSL}
-                  onJumpToGLFromTB={jumpToGLQueryFromTB}
                   onJumpToGLInquiry={jumpToGLInquiryFromBS}
                   expandedMap={drilldownExpandedByTab[activeTab] || {}}
                   setExpandedMap={(updater) =>
@@ -2118,6 +2100,16 @@ export default function GLINQ() {
                   }
                   SearchGlobalReportTable={SearchGlobalReportTable}
                   NoRecordsState={NoRecordsState}
+                  activeView={
+                    activeTab === "incExp"
+                      ? incomeExpenseView
+                      : incomeStatementMTDView
+                  }
+                  onActiveViewChange={
+                    activeTab === "incExp"
+                      ? setIncomeExpenseView
+                      : setIncomeStatementMTDView
+                  }
                 />
               </div>
             </div>
@@ -2127,6 +2119,7 @@ export default function GLINQ() {
 
       {showFilterModal && (
         <FilterModal
+          pageTitle={pageTitle}
           tabConfig={activeTabConfig}
           filters={filters}
           onClose={() => setShowFilterModal(false)}
@@ -2139,6 +2132,7 @@ export default function GLINQ() {
       <MobileNavDrawer
         isOpen={isMobileNavOpen}
         onClose={() => setIsMobileNavOpen(false)}
+        pageTitle={pageTitle}
         activeTab={activeTab}
         tabConfigs={tabConfigs}
         handleSelect={handleNavSelect}
@@ -2450,6 +2444,7 @@ const ReportNavList = ({ activeTab, tabConfigs, handleSelect, collapsed }) => (
 const MobileNavDrawer = ({
   isOpen,
   onClose,
+  pageTitle,
   activeTab,
   tabConfigs,
   handleSelect,
@@ -2472,7 +2467,7 @@ const MobileNavDrawer = ({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between border-b pb-2">
-          <h3 className="text-lg font-semibold text-gray-800">GL Reports</h3>
+          <h3 className="text-lg font-semibold text-gray-800">{pageTitle}</h3>
           <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-800">
             <FontAwesomeIcon icon={faTimes} />
           </button>
@@ -2513,6 +2508,7 @@ const NoRecordsState = ({ title, subtitle, hint }) => (
 );
 
 const FilterModal = ({
+  pageTitle,
   tabConfig,
   filters,
   onClose,
@@ -2547,7 +2543,7 @@ const FilterModal = ({
               icon={faFilter}
               className="text-[13px] text-blue-600 sm:text-sm"
             />
-            <span>Filters – {tabConfig.label}</span>
+            <span>Filters - {pageTitle}</span>
           </h3>
 
           <button

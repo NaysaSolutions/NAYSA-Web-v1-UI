@@ -34,6 +34,12 @@ import BranchSelectionModal from "@/NAYSA Cloud/Lookup/SearchMBranchRef.jsx";
 const DEFAULT_VALIDATION_MESSAGE =
   "Select branch(es) and cut off range, then click Check Transactions.";
 
+const compareCutOffValues = (left, right) =>
+  String(left || "").localeCompare(String(right || ""), undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+
 const YearendGLProcessingModal = ({
   isOpen,
   onClose,
@@ -165,10 +171,14 @@ const YearendGLProcessingModal = ({
       const parsedRows = rawResult ? JSON.parse(rawResult) : [];
 
       return Array.isArray(parsedRows)
-        ? parsedRows.map((item) => ({
-            value: item.cutoffCode ?? "",
-            label: item.cutoffName ?? "",
-          }))
+        ? parsedRows
+            .map((item) => ({
+              value: item.cutoffCode ?? "",
+              label: item.cutoffName ?? "",
+            }))
+            .sort((left, right) =>
+              compareCutOffValues(left.value, right.value)
+            )
         : [];
     },
     onSuccess: (rows) => {
@@ -589,16 +599,15 @@ const YearendGLProcessingModal = ({
   // =========================================================
   const processMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiClient.post("/processGLBranchCutoffRange", {
+      const response = await apiClient.post("/processGLYearEnd", {
         userCode: currentUserRow?.userCode || "",
         userPassword: password,
-        PARAMS: JSON.stringify({
-          mode: "ProcessGlBranchRange",
+        json_data: {
           branchCodes: selectedBranches,
           startCutOff,
           endCutOff,
           userCode: currentUserRow?.userCode || "",
-        }),
+        },
       });
 
       return response?.data;
@@ -637,11 +646,14 @@ const YearendGLProcessingModal = ({
   const isGeneratingExcel = generateExcelMutation.isPending;
   const isGeneratingProforma = generateProformaMutation.isPending;
   const isProcessing = processMutation.isPending;
+  const hasValidCutOffRange =
+    !!startCutOff &&
+    !!endCutOff &&
+    compareCutOffValues(startCutOff, endCutOff) < 0;
 
   const canCheck =
     selectedBranches.length > 0 &&
-    !!startCutOff &&
-    !!endCutOff &&
+    hasValidCutOffRange &&
     !isChecking &&
     !isGeneratingExcel &&
     !isGeneratingProforma &&
@@ -657,7 +669,10 @@ const YearendGLProcessingModal = ({
     !isProcessing;
 
   const canFinalOk =
-    passwordEnabled && password.trim() !== "" && !isProcessing;
+    passwordEnabled &&
+    proformaGenerated &&
+    password.trim() !== "" &&
+    !isProcessing;
 
   const currentUserName =
     currentUserRow?.userName ||
@@ -682,10 +697,10 @@ const YearendGLProcessingModal = ({
       return;
     }
 
-    if (startCutOff > endCutOff) {
+    if (compareCutOffValues(startCutOff, endCutOff) >= 0) {
       await swalWarning(
         "Invalid Cut Off Range",
-        "Starting cut off must not be greater than ending cut off."
+        "Starting cut off must be earlier than ending cut off. The two values cannot be the same."
       );
       return;
     }
@@ -725,10 +740,10 @@ const YearendGLProcessingModal = ({
       return;
     }
 
-    if (startCutOff > endCutOff) {
+    if (compareCutOffValues(startCutOff, endCutOff) >= 0) {
       await swalWarning(
         "Invalid Cut Off Range",
-        "Starting cut off must not be greater than ending cut off."
+        "Starting cut off must be earlier than ending cut off. The two values cannot be the same."
       );
       return;
     }
@@ -745,6 +760,14 @@ const YearendGLProcessingModal = ({
       await swalWarning(
         "Validation Failed",
         "Processing cannot continue because open/unposted transactions still exist."
+      );
+      return;
+    }
+
+    if (!proformaGenerated) {
+      await swalWarning(
+        "Proforma Required",
+        "Please generate and review the Year-End Proforma Excel file before processing."
       );
       return;
     }
@@ -916,7 +939,14 @@ const YearendGLProcessingModal = ({
                               : "Select Starting Cut Off"}
                           </option>
                           {cutOffData.map((item) => (
-                            <option key={item.value} value={item.value}>
+                            <option
+                              key={item.value}
+                              value={item.value}
+                              disabled={
+                                !!endCutOff &&
+                                compareCutOffValues(item.value, endCutOff) >= 0
+                              }
+                            >
                               {item.label}
                             </option>
                           ))}
@@ -939,7 +969,14 @@ const YearendGLProcessingModal = ({
                               : "Select Ending Cut Off"}
                           </option>
                           {cutOffData.map((item) => (
-                            <option key={item.value} value={item.value}>
+                            <option
+                              key={item.value}
+                              value={item.value}
+                              disabled={
+                                !!startCutOff &&
+                                compareCutOffValues(item.value, startCutOff) <= 0
+                              }
+                            >
                               {item.label}
                             </option>
                           ))}

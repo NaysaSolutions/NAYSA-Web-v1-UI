@@ -1113,6 +1113,7 @@ function MSStockCardQuery() {
                 selectedRow={selectedBalanceItem}
                 showPagination={false}
                 autoFillGrid = "true"
+                docType={tabLabel}
                 // tableSize="Half"
               />
             </TablePanel>
@@ -1138,6 +1139,7 @@ function MSStockCardQuery() {
                 isFetching={balanceQuery.isFetching}
                 showPagination={false}
                 autoFillGrid = "true"
+                docType={tabLabel}
               />
             </TablePanel>
 
@@ -1150,6 +1152,7 @@ function MSStockCardQuery() {
                 isFetching={balanceQuery.isFetching}
                 showPagination={false}
                 autoFillGrid = "true"
+                docType={tabLabel}
               />
             </TablePanel>
           </div>
@@ -1329,6 +1332,7 @@ function MSStockCardQuery() {
             isLoading={stockCardQuery.isLoading}
             isFetching={stockCardQuery.isFetching}
             tableHeight="2000px"
+            docType="Stock Card"
             // autoFillGrid
           />
         </TablePanel>
@@ -1487,6 +1491,7 @@ function MSStockCardQuery() {
             data={stockStatusRows}
             isLoading={stockStatusQuery.isLoading}
             isFetching={stockStatusQuery.isFetching}
+            docType="Stock Status"
             // autoFillGrid
             // pagination
           />

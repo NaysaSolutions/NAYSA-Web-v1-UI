@@ -2726,7 +2726,7 @@ const calculatedAtcAmount = aCode
   };
 
   const handlePost = async () => {
-    if (!detailRows || detailRows.length === 0) {
+    if (!detailRowsGL || detailRowsGL.length === 0) {
       return;
     }
 
@@ -2736,7 +2736,7 @@ const calculatedAtcAmount = aCode
   };
 
   const handlePrint = async () => {
-    if (!detailRows || detailRows.length === 0) {
+    if (detailRowsGL.length === 0) {
       return;
     }
     if (documentID) {
@@ -2775,7 +2775,7 @@ const calculatedAtcAmount = aCode
   };
 
   const handleCancel = async () => {
-    if (!detailRows || detailRows.length === 0) {
+    if (!detailRowsGL || detailRowsGL.length === 0) {
       return;
     }
 
@@ -2792,7 +2792,7 @@ const calculatedAtcAmount = aCode
   };
 
   const handleCopy = async () => {
-    if (!detailRows || detailRows.length === 0) {
+    if (!detailRowsGL || detailRowsGL.length === 0) {
       return;
     }
 
@@ -4058,9 +4058,11 @@ const handleAtcNameDoubleClick = (index) => {
   ];
   const {
     getColumnStyle: getApvDetailColumnStyle,
+    getOrderedColumns: getOrderedApvDetailColumns,
     renderHeaderContextMenu: renderApvDetailHeaderContextMenu,
     renderResizableHeader: renderApvDetailHeader,
   } = useResizableTableColumns(apvDetailColumnDefs);
+  const orderedApvDetailColumns = getOrderedApvDetailColumns(apvDetailColumnDefs);
   const getApvDetailCellStyle = (key, fallbackWidth) =>
     getApvDetailColumnStyle(key, fallbackWidth);
 
@@ -4095,11 +4097,110 @@ const handleAtcNameDoubleClick = (index) => {
   ];
   const {
     getColumnStyle: getApvGlColumnStyle,
+    getOrderedColumns: getOrderedApvGlColumns,
     renderHeaderContextMenu: renderApvGlHeaderContextMenu,
     renderResizableHeader: renderApvGlHeader,
   } = useResizableTableColumns(apvGlColumnDefs);
+  const orderedApvGlColumns = getOrderedApvGlColumns(apvGlColumnDefs);
+  const orderedApvDetailColumnKeys = orderedApvDetailColumns.map((column) => column.key).join("|");
+  const orderedApvGlColumnKeys = orderedApvGlColumns.map((column) => column.key).join("|");
   const getApvGlCellStyle = (key, fallbackWidth) =>
     getApvGlColumnStyle(key, fallbackWidth);
+
+  const renderApvGlCell = (columnKey, row, index) => {
+    const width = apvGlColumnDefs.find((column) => column.key === columnKey)?.width || 120;
+    const style = getApvGlCellStyle(columnKey, width);
+    const value = row[columnKey] || "";
+    const input = (options = {}) => (
+      <input
+        type="text"
+        className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`}
+        value={value}
+        readOnly={options.readOnly}
+        disabled={isFormDisabled}
+        onChange={options.readOnly ? undefined : (e) => handleDetailChangeGL(index, columnKey, e.target.value)}
+      />
+    );
+    const lookupInput = (source, options = {}) => (
+      <div className="relative w-full">
+        {input({ readOnly: true, className: "pr-6 text-center" })}
+        {!isFormDisabled && (
+          <FontAwesomeIcon
+            icon={faMagnifyingGlass}
+            className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+            onClick={() => updateState({ selectedRowIndex: index, accountModalSource: source, ...options })}
+          />
+        )}
+      </div>
+    );
+
+    if (columnKey === "ln") return <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>;
+    if (["acctCode", "rcCode", "slCode", "vatCode", "atcCode"].includes(columnKey)) {
+      const modal = {
+        acctCode: { showAccountModal: true },
+        rcCode: { showRcModal: true },
+        slCode: { showSlModal: true },
+        vatCode: { showVatModal: true },
+        atcCode: { showAtcModal: true },
+      }[columnKey];
+      return <td key={columnKey} className="global-tran-td-ui" style={style}>{lookupInput(columnKey, modal)}</td>;
+    }
+    if (["debit", "credit", "debitFx1", "creditFx1", "debitFx2", "creditFx2"].includes(columnKey)) {
+      return <td key={columnKey} className="global-tran-td-ui text-right" style={style}>
+        <input type="text" className="w-full global-tran-td-inputclass-ui text-right" value={value} disabled={isFormDisabled}
+          onChange={(e) => { const next = e.target.value.replace(/[^0-9.]/g, ""); if (/^\d*\.?\d{0,2}$/.test(next) || next === "") handleDetailChangeGL(index, columnKey, next); }} />
+      </td>;
+    }
+    return <td key={columnKey} className="global-tran-td-ui" style={style}>{input({ readOnly: ["vatName", "atcName", "slRefNo", "slrefDate"].includes(columnKey) })}</td>;
+  };
+
+  // The APV row markup is intentionally kept in its existing form because it
+  // contains several conditional lookup cells. Reconcile those cells with the
+  // hook's ordered/visible column state after each render so drag-and-drop and
+  // Manage columns apply to the data rows as well as the header.
+  useEffect(() => {
+    const reconcileTableColumns = (tableSelector, columns) => {
+      document.querySelectorAll(tableSelector).forEach((table) => {
+        const visibleKeys = new Set(columns.map((column) => column.key));
+        const orderedKeys = columns.map((column) => column.key);
+        table.querySelectorAll("tbody tr").forEach((row) => {
+          const cells = Array.from(row.children);
+          const actionCell = !isFormDisabled ? cells.pop() : null;
+          const definitionColumns =
+            table.dataset.apvTableType === "detail"
+              ? apvDetailColumnDefs
+              : apvGlColumnDefs;
+          const cellByKey = new Map();
+          cells.forEach((cell, index) => {
+            const key = cell.dataset.apvColumnKey || definitionColumns[index]?.key;
+            if (!key) return;
+            cell.dataset.apvColumnKey = key;
+            cellByKey.set(key, cell);
+          });
+          orderedKeys.forEach((key) => {
+            const cell = cellByKey.get(key);
+            if (cell) {
+              cell.style.display = visibleKeys.has(key) ? "" : "none";
+              row.appendChild(cell);
+            }
+          });
+          cellByKey.forEach((cell, key) => {
+            if (!visibleKeys.has(key)) {
+              cell.style.display = "none";
+              row.appendChild(cell);
+            }
+          });
+          if (actionCell) row.appendChild(actionCell);
+        });
+      });
+    };
+
+    reconcileTableColumns('table[data-apv-table-type="detail"]', orderedApvDetailColumns);
+  }, [
+    isFormDisabled,
+    orderedApvDetailColumnKeys,
+    orderedApvGlColumnKeys,
+  ]);
   const hasSelectedReference = detailRows.some((row) =>
     String(
       row.advpoNo ||
@@ -4468,9 +4569,9 @@ const handleAtcNameDoubleClick = (index) => {
               {/* Invoice Details Button */}
               <div className="global-tran-table-main-div-ui">
                 <div className="global-tran-table-main-sub-div-ui">
-                  <table className="min-w-full table-fixed border-collapse [&_input]:w-full [&_select]:w-full">
+                  <table data-apv-table-type="detail" className="min-w-full table-fixed border-collapse [&_input]:w-full [&_select]:w-full">
                     <colgroup>
-                      {apvDetailColumnDefs.map((column) => (
+                      {orderedApvDetailColumns.map((column) => (
                         <col
                           key={column.key}
                           style={getApvDetailCellStyle(column.key, column.width)}
@@ -4480,8 +4581,10 @@ const handleAtcNameDoubleClick = (index) => {
                     </colgroup>
                     <thead className="global-tran-thead-div-ui">
                       <tr>
-                        {apvDetailColumnDefs.map((column) =>
-                          renderApvDetailHeader(column.label, column.key, column.width)
+                        {orderedApvDetailColumns.map((column) =>
+                          renderApvDetailHeader(column.label, column.key, column.width, {
+                            orderedColumns: orderedApvDetailColumns,
+                          })
                         )}
                         {!isFormDisabled && (
                           <th
@@ -5301,6 +5404,38 @@ const handleAtcNameDoubleClick = (index) => {
             <div className="global-tran-table-main-sub-div-ui">
               <table className="min-w-full table-fixed border-collapse [&_input]:w-full [&_select]:w-full">
                 <colgroup>
+                  {orderedApvGlColumns.map((column) => <col key={column.key} style={getApvGlCellStyle(column.key, column.width)} />)}
+                  {!isFormDisabled && <col style={transactionActionsCellStyle} />}
+                </colgroup>
+                <thead className="global-tran-thead-div-ui">
+                  <tr>
+                    {orderedApvGlColumns.map((column) => renderApvGlHeader(column.label, column.key, column.width, { orderedColumns: orderedApvGlColumns }))}
+                    {!isFormDisabled && <th className="global-tran-th-ui sticky right-0 bg-blue-300 dark:bg-blue-900 z-30" style={transactionActionsHeaderStyle}>Actions</th>}
+                  </tr>
+                </thead>
+                <tbody className="relative">
+                  {detailRowsGL.map((row, index) => (
+                    <tr key={index} className="global-tran-tr-ui">
+                      {orderedApvGlColumns.map((column) => renderApvGlCell(column.key, row, index))}
+                      {!isFormDisabled && (
+                        <td className="global-tran-td-ui text-center sticky right-0" style={transactionActionsCellStyle}>
+                          <div className="flex items-center justify-center gap-1">
+                            <button type="button" className="global-tran-td-button-add-ui" onClick={() => handleAddRowGL(index)}><FontAwesomeIcon icon={faPlus} /></button>
+                            <button type="button" className="global-tran-td-button-delete-ui" onClick={() => handleDeleteRowGL(index)}><FontAwesomeIcon icon={faTrashAlt} /></button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {renderApvGlHeaderContextMenu()}
+            </div>
+          </div>
+          <div className="global-tran-table-main-div-ui">
+            <div className="global-tran-table-main-sub-div-ui">
+              <table style={{ display: "none" }} className="min-w-full table-fixed border-collapse [&_input]:w-full [&_select]:w-full">
+                <colgroup>
                   {apvGlColumnDefs.map((column) => (
                     <col
                       key={column.key}
@@ -5312,7 +5447,9 @@ const handleAtcNameDoubleClick = (index) => {
                 <thead className="global-tran-thead-div-ui">
                   <tr>
                     {apvGlColumnDefs.map((column) =>
-                      renderApvGlHeader(column.label, column.key, column.width)
+                      renderApvGlHeader(column.label, column.key, column.width, {
+                        orderedColumns: apvGlColumnDefs,
+                      })
                     )}
 
                     {!isFormDisabled && (
@@ -5328,11 +5465,11 @@ const handleAtcNameDoubleClick = (index) => {
                 <tbody className="relative">
                   {detailRowsGL.map((row, index) => (
                     <tr key={index} className="global-tran-tr-ui">
-                      <td className="global-tran-td-ui text-center">
+                      <td key="ln" className="global-tran-td-ui text-center">
                         {index + 1}
                       </td>
 
-                      <td className="global-tran-td-ui">
+                      <td key="acctCode" className="global-tran-td-ui">
                         <div className="relative w-fit">
                           <input
                             type="text"
@@ -5363,7 +5500,7 @@ const handleAtcNameDoubleClick = (index) => {
                         </div>
                       </td>
 
-                      <td className="global-tran-td-ui">
+                      <td key="rcCode" className="global-tran-td-ui">
                         <div className="relative w-fit">
                           <input
                             type="text"
@@ -5400,7 +5537,7 @@ const handleAtcNameDoubleClick = (index) => {
                         </div>
                       </td>
 
-                      <td className="global-tran-td-ui">
+                      <td key="sltypeCode" className="global-tran-td-ui">
                         <input
                           type="text"
                           className="w-[100px] global-tran-td-inputclass-ui"
@@ -5416,7 +5553,7 @@ const handleAtcNameDoubleClick = (index) => {
                         />
                       </td>
 
-                      <td className="global-tran-td-ui">
+                      <td key="slCode" className="global-tran-td-ui">
                         <div className="relative w-fit">
                           <input
                             type="text"
@@ -5454,7 +5591,7 @@ const handleAtcNameDoubleClick = (index) => {
                         </div>
                       </td>
 
-                      <td className="global-tran-td-ui">
+                      <td key="particular" className="global-tran-td-ui">
                         <div className="relative inline-block">
                           {/* Hidden span to measure text width */}
                           <span className="invisible absolute whitespace-pre px-2">
@@ -5480,7 +5617,7 @@ const handleAtcNameDoubleClick = (index) => {
                         </div>
                       </td>
 
-                      <td className="global-tran-td-ui">
+                      <td key="vatCode" className="global-tran-td-ui">
                         <div className="relative w-fit">
                           <input
                             type="text"
@@ -5513,7 +5650,7 @@ const handleAtcNameDoubleClick = (index) => {
                         </div>
                       </td>
 
-                      <td className="global-tran-td-ui">
+                      <td key="vatName" className="global-tran-td-ui">
                         <input
                           type="text"
                           className="w-[200px] global-tran-td-inputclass-ui"
@@ -5523,7 +5660,7 @@ const handleAtcNameDoubleClick = (index) => {
                         />
                       </td>
 
-                      <td className="global-tran-td-ui">
+                      <td key="atcCode" className="global-tran-td-ui">
                         <div className="relative w-fit">
                           <input
                             type="text"
@@ -5557,7 +5694,7 @@ const handleAtcNameDoubleClick = (index) => {
                         </div>
                       </td>
 
-                      <td className="global-tran-td-ui">
+                      <td key="atcName" className="global-tran-td-ui">
                         <input
                           type="text"
                           className="w-[200px] global-tran-td-inputclass-ui"
@@ -5573,7 +5710,7 @@ const handleAtcNameDoubleClick = (index) => {
                         />
                       </td>
 
-                      <td className="global-tran-td-ui text-right">
+                      <td key="debit" className="global-tran-td-ui text-right">
                         <input
                           type="text"
                           className="w-[120px] global-tran-td-inputclass-ui text-right"
@@ -5622,7 +5759,7 @@ const handleAtcNameDoubleClick = (index) => {
                         />
                       </td>
 
-                      <td className="global-tran-td-ui text-right">
+                      <td key="credit" className="global-tran-td-ui text-right">
                         <input
                           type="text"
                           className="w-[120px] global-tran-td-inputclass-ui text-right"
@@ -5672,6 +5809,7 @@ const handleAtcNameDoubleClick = (index) => {
                       </td>
 
                       <td
+                        key="debitFx1"
                         className={`global-tran-td-ui text-right ${
                           withCurr2 ? "" : "hidden"
                         }`}
@@ -5724,6 +5862,7 @@ const handleAtcNameDoubleClick = (index) => {
                         />
                       </td>
                       <td
+                        key="creditFx1"
                         className={`global-tran-td-ui text-right ${
                           withCurr2 ? "" : "hidden"
                         }`}
@@ -5777,6 +5916,7 @@ const handleAtcNameDoubleClick = (index) => {
                       </td>
 
                       <td
+                        key="debitFx2"
                         className={`global-tran-td-ui text-right ${
                           withCurr3 ? "" : "hidden"
                         }`}
@@ -5829,6 +5969,7 @@ const handleAtcNameDoubleClick = (index) => {
                         />
                       </td>
                       <td
+                        key="creditFx2"
                         className={`global-tran-td-ui text-right ${
                           withCurr3 ? "" : "hidden"
                         }`}
@@ -5881,7 +6022,7 @@ const handleAtcNameDoubleClick = (index) => {
                         />
                       </td>
 
-                      <td className="global-tran-td-ui">
+                      <td key="slRefNo" className="global-tran-td-ui">
                         <input
                           type="text"
                           className="w-[100px] global-tran-td-inputclass-ui"
@@ -5898,7 +6039,7 @@ const handleAtcNameDoubleClick = (index) => {
                         />
                       </td>
 
-                      <td className="global-tran-td-ui">
+                      <td key="slrefDate" className="global-tran-td-ui">
                         <div className="w-[110px]">
                           <input
                             type="text"
@@ -5918,7 +6059,7 @@ const handleAtcNameDoubleClick = (index) => {
                         </div>
                       </td>
 
-                      <td className="global-tran-td-ui">
+                      <td key="remarks" className="global-tran-td-ui">
                         <div className="relative flex w-[220px] items-center">
                           <input
                             type="text"
@@ -5980,7 +6121,6 @@ const handleAtcNameDoubleClick = (index) => {
                   ))}
                 </tbody>
               </table>
-              {renderApvGlHeaderContextMenu()}
             </div>
           </div>
 
