@@ -1,4 +1,3 @@
-// src/NAYSA Cloud/Master Data/CustMastTabs/CustSetupTab.jsx
 import React, {
   forwardRef,
   useEffect,
@@ -347,10 +346,18 @@ const CustSetupTab = forwardRef(
                 required
                 type="lookup"
                 value={form.custCode || ""}
-                onChange={isNewRecord ? (v) => onChangeForm({ custCode: getValue(v) }) : undefined}
-                onLookup={isNewRecord ? undefined : () => !isLoading && setIsCustLookupOpen(true)}
+                onChange={
+                  isNewRecord
+                    ? (v) => onChangeForm({ custCode: getValue(v) })
+                    : undefined
+                }
+                onLookup={
+                  !isNewRecord && !form?.custCode && !isLoading
+                    ? () => setIsCustLookupOpen(true)
+                    : undefined
+                }
                 readOnly={!isNewRecord}
-                disabled={isLoading}
+                disabled={isLoading || (!isNewRecord && Boolean(form?.custCode))}
                 maxLength={getLen("cust_code", 20)}
               />
               <FieldRenderer
@@ -661,7 +668,7 @@ const CustSetupTab = forwardRef(
                         maxLength={getLen("billterm_code", 20)}
                         labelClassName="!text-[12px]"
                       />
-                      <FieldRenderer
+                      {/* <FieldRenderer
                         label="Business Style"
                         type="select"
                         value={form?.businessStyle || ""}
@@ -669,7 +676,7 @@ const CustSetupTab = forwardRef(
                         onChange={(v) => onChangeForm({ businessStyle: getValue(v) })}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
-                      />
+                      /> */}
                       <FieldRenderer
                         label="Currency"
                         type="lookup"
@@ -740,7 +747,7 @@ const CustSetupTab = forwardRef(
                         readOnly={isReadOnly}
                         disabled={isDisabled}
                       />
-                      <FieldRenderer
+                      {/* <FieldRenderer
                         label="Price Group"
                         type="select"
                         value={form?.priceGroup || ""}
@@ -748,7 +755,7 @@ const CustSetupTab = forwardRef(
                         onChange={(v) => onChangeForm({ priceGroup: getValue(v) })}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
-                      />
+                      /> */}
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -807,7 +814,7 @@ const CustSetupTab = forwardRef(
                       />
                     </div>
 
-                    <FieldRenderer
+                    {/* <FieldRenderer
                       label="Shipping Lines"
                       type="select"
                       value={form?.shippingLines || ""}
@@ -815,7 +822,7 @@ const CustSetupTab = forwardRef(
                       onChange={(v) => onChangeForm({ shippingLines: getValue(v) })}
                       readOnly={isReadOnly}
                       disabled={isDisabled}
-                    />
+                    /> */}
 
                     <FieldRenderer
                       label="Direct SI/DR WH"
