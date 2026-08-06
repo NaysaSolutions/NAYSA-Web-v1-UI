@@ -11,14 +11,16 @@ const FIXED_COLUMNS = [
   {
     key: "fsCode",
     label: "FS Code",
-    minWidth: 100,
-    maxWidth: 100,
+    width: 100,
+    minWidth: 70,
+    maxWidth: 600,
   },
   {
     key: "fsName",
     label: "Description",
-    minWidth: 240,
-    maxWidth: 240,
+    width: 240,
+    minWidth: 120,
+    maxWidth: 800,
   },
 ];
 
@@ -209,10 +211,8 @@ function IncomeStatementMTDReport({
 
         .income-statement-mtd-table > .global-tran-table-main-sub-div-ui {
           background: white !important;
-          border-left: 0 !important;
-          border-right: 0 !important;
-          border-bottom: 0 !important;
-          border-radius: 0 !important;
+          border: 1px solid rgb(229 231 235) !important;
+          border-radius: 0.5rem !important;
         }
 
         .income-statement-mtd-table table {
@@ -222,27 +222,7 @@ function IncomeStatementMTDReport({
 
         @media (min-width: 769px) {
           .income-statement-mtd-table .global-tran-table-main-sub-div-ui > div.relative.isolate.flex-1.h-0::before {
-            content: "";
-            position: sticky;
-            left: 0;
-            top: 0;
-            z-index: 100;
-            display: block;
-            width: 340px;
-            min-width: 340px;
-            height: 31px;
-            margin-bottom: -31px;
-            box-sizing: border-box;
-            padding: 0;
-            overflow: hidden;
-            white-space: pre;
-            background-color: rgb(219 234 254);
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='340' height='31'%3E%3Ctext x='12' y='20' font-family='Arial,sans-serif' font-size='11' font-weight='700' fill='%231e40af'%3EFS Code%3C/text%3E%3Ctext x='108' y='20' font-family='Arial,sans-serif' font-size='11' font-weight='700' fill='%231e40af'%3EDescription%3C/text%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: left top;
-            border-bottom: 1px solid rgb(191 219 254);
-            box-shadow: 3px 0 4px -3px rgb(15 23 42 / 35%);
-            pointer-events: none;
+            display: none;
           }
 
           .income-statement-mtd-table table thead {
@@ -265,61 +245,6 @@ function IncomeStatementMTDReport({
             background-clip: padding-box !important;
           }
 
-          .income-statement-mtd-table table thead tr > :nth-child(1) {
-            left: 0 !important;
-            z-index: 62 !important;
-            background-color: rgb(219 234 254) !important;
-            width: 100px !important;
-            min-width: 100px !important;
-            max-width: 100px !important;
-            transform: translateZ(0);
-          }
-
-          .income-statement-mtd-table table thead tr > :nth-child(2) {
-            left: 100px !important;
-            z-index: 61 !important;
-            background-color: rgb(219 234 254) !important;
-            box-shadow: 3px 0 4px -3px rgb(15 23 42 / 35%);
-            width: 240px !important;
-            min-width: 240px !important;
-            max-width: 240px !important;
-            transform: translateZ(0);
-          }
-
-          .income-statement-mtd-table table thead tr:nth-child(2) > :nth-child(-n+2) {
-            background-color: rgb(243 244 246) !important;
-            z-index: 120 !important;
-            transform: translateZ(0);
-          }
-
-          .income-statement-mtd-table table thead tr > :nth-child(n+3) {
-            left: auto !important;
-            right: auto !important;
-            z-index: 10 !important;
-          }
-
-          .income-statement-mtd-table table tbody tr > :nth-child(1) {
-            position: sticky !important;
-            left: 0 !important;
-            z-index: 18 !important;
-            width: 100px !important;
-            min-width: 100px !important;
-            max-width: 100px !important;
-          }
-
-          .income-statement-mtd-table table tbody tr > :nth-child(2) {
-            position: sticky !important;
-            left: 100px !important;
-            z-index: 17 !important;
-            width: 240px !important;
-            min-width: 240px !important;
-            max-width: 240px !important;
-          }
-
-          .income-statement-mtd-table table tbody tr > :nth-child(-n+2) {
-            background: white;
-          }
-
           .income-statement-mtd-table table tbody tr > td {
             border-bottom: 1px solid rgb(229 231 235) !important;
           }
@@ -334,13 +259,11 @@ function IncomeStatementMTDReport({
           }
 
           .income-statement-mtd-table table tbody tr:last-child > :nth-child(1) {
-            left: 0 !important;
             z-index: 20 !important;
             background: rgb(239 246 255);
           }
 
           .income-statement-mtd-table table tbody tr:last-child > :nth-child(2) {
-            left: 100px !important;
             z-index: 19 !important;
             background: rgb(239 246 255);
           }

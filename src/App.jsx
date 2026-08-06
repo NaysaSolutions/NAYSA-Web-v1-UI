@@ -54,6 +54,7 @@ import AuthProvider, {
   useAuth,
 } from "./NAYSA Cloud/Authentication/AuthContext.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
+import PdfViewer from "@/NAYSA Cloud/Printing/PdfViewer.jsx";
 import ElectronScannerPage from "@/NAYSA Cloud/Electron/ElectronScannerPage.jsx";
 
 const LICENSE_ADMIN_MODE = "LICENSE_ADMIN";
@@ -1000,7 +1001,10 @@ const App = () => (
   <Router>
     <AuthProvider>
       <ResetProvider>
-        <AppContent />
+        <Routes>
+          <Route path="/pdf-viewer" element={<PdfViewer />} />
+          <Route path="*" element={<AppContent />} />
+        </Routes>
       </ResetProvider>
     </AuthProvider>
   </Router>

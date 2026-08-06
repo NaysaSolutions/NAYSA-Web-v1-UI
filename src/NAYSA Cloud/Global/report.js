@@ -11,15 +11,37 @@ const showPrintError = (error) => {
 };
 
 const openPdfPreview = (pdfBlob) => {
-  const fileURL = URL.createObjectURL(pdfBlob);
-  const previewWindow = window.open(fileURL, "_blank");
+  const base = (import.meta.env.BASE_URL || "/").replace(/\/?$/, "/");
+  let previewWindow = null;
+
+  const handleViewerReady = (event) => {
+    if (
+      event.origin !== window.location.origin ||
+      event.source !== previewWindow ||
+      event.data?.type !== "naysa-pdf-viewer-ready"
+    ) {
+      return;
+    }
+
+    previewWindow.postMessage(
+      { type: "naysa-pdf-viewer-data", blob: pdfBlob },
+      window.location.origin
+    );
+    window.removeEventListener("message", handleViewerReady);
+  };
+
+  window.addEventListener("message", handleViewerReady);
+  previewWindow = window.open(`${base}pdf-viewer`, "_blank");
 
   if (!previewWindow) {
-    URL.revokeObjectURL(fileURL);
+    window.removeEventListener("message", handleViewerReady);
     throw new Error("The report is ready, but the preview was blocked. Please allow popups for this site and try again.");
   }
 
-  setTimeout(() => URL.revokeObjectURL(fileURL), 60000);
+  setTimeout(
+    () => window.removeEventListener("message", handleViewerReady),
+    60000
+  );
 };
 
 
