@@ -88,11 +88,11 @@ const CustTypeRef = forwardRef(({ onStateChange }, ref) => {
   const queryClient = useQueryClient();
   const tableSize = "Half";
 
-  const userCode = 
-    user?.userCode || 
-    user?.USER_CODE || 
-    user?.user_code || 
-    user?.code || 
+  const userCode =
+    user?.userCode ||
+    user?.USER_CODE ||
+    user?.user_code ||
+    user?.code ||
     "ADMIN";
 
   const codeInputRef = useRef(null);
@@ -165,36 +165,29 @@ const CustTypeRef = forwardRef(({ onStateChange }, ref) => {
     }
   };
 
-  /* ================= EDIT (Stabilized) ================= */
+  const handleEdit = useCallback(
+    async (row) => {
+      const targetRow = row?.custTypeCode ? row : selectedRow;
 
-  const handleEdit = useCallback(async (row) => {
-    const targetRow = row?.custTypeCode ? row : selectedRow;
-
-    if (!targetRow || !targetRow.custTypeCode) {
-      await useSwalErrorAlert("Selection Required", "Please select a Customer Type from the list first.");
-      return;
-    }
-
-    try {
-      const res = await apiClient.get("/getCustType", {
-        params: { CUSTTYPE_CODE: targetRow.custTypeCode },
-      });
-
-      const record = extractRows(res)?.[0];
-      if (!record) {
-        await useSwalErrorAlert("Error", "Record details could not be found.");
+      if (!targetRow?.custTypeCode) {
+        await useSwalErrorAlert(
+          "Selection Required",
+          "Please select a Customer Type record first."
+        );
         return;
       }
 
-      setForm({ ...normalizeRecord(record), __existing: true });
-      setIsEditing(true);
-      setSelectedRow(targetRow);
-      setIsDupCode(false);
-    } catch (error) {
-      await useSwalErrorAlert("Fetch Failed", "Could not retrieve record data.");
-    }
-  }, [selectedRow]);
+      setForm({
+        ...normalizeRecord(targetRow),
+        __existing: true,
+      });
 
+      setSelectedRow(targetRow);
+      setIsEditing(true);
+      setIsDupCode(false);
+    },
+    [selectedRow]
+  );
   /* ================= VALIDATE CODE ================= */
 
   const handleCodeValidate = async (arg) => {
@@ -421,21 +414,21 @@ const CustTypeRef = forwardRef(({ onStateChange }, ref) => {
         <RegistrationInfo data={form} layout="stacked" />
       </Card>
 
-      
-        <SearchGlobalReferenceTable
-          columns={tableColumns}
-          data={tableData}
-          isLoading={isInitialLoading}
-          docType="Customer Types"
-          itemsPerPage={10}
-          onRowDoubleClick={handleEdit}
-          onRowClick={(row) => setSelectedRow(row)}
-          showFilters
-          tableSize={tableSize}
-          autoFillGrid={true}
-          onRefresh={() => queryClient.invalidateQueries({ queryKey: ["custTypeList"] })}
-        />
-     
+
+      <SearchGlobalReferenceTable
+        columns={tableColumns}
+        data={tableData}
+        isLoading={isInitialLoading}
+        docType="Customer Types"
+        itemsPerPage={10}
+        onRowDoubleClick={handleEdit}
+        onRowClick={(row) => setSelectedRow(row)}
+        showFilters
+        tableSize={tableSize}
+        autoFillGrid={true}
+        onRefresh={() => queryClient.invalidateQueries({ queryKey: ["custTypeList"] })}
+      />
+
     </div>
   );
 });

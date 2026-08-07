@@ -288,43 +288,29 @@ const ZoneRef = forwardRef(({ onStateChange }, ref) => {
 
     /* ================= EDIT ================= */
 
-    const handleEdit = useCallback(async (row) => {
-        const targetRow = row?.zoneCode ? row : selectedRow;
+    const handleEdit = useCallback(
+        async (row) => {
+            const targetRow = row?.zoneCode ? row : selectedRow;
 
-        if (!targetRow?.zoneCode) {
-            await useSwalErrorAlert(
-                "Selection Required",
-                "Please select a record from the list first."
-            );
-            return;
-        }
-
-        try {
-            const res = await apiClient.get("/getZone", {
-                params: { ZONE_CODE: targetRow.zoneCode },
-            });
-
-            const record = extractRows(res)?.[0];
-            if (!record) {
+            if (!targetRow?.zoneCode) {
                 await useSwalErrorAlert(
-                    "Not Found",
-                    "The record details could not be retrieved."
+                    "Selection Required",
+                    "Please select a Zone record first."
                 );
                 return;
             }
 
-            setForm({ ...normalizeRecord(record), __existing: true });
-            setIsEditing(true);
+            setForm({
+                ...normalizeRecord(targetRow),
+                __existing: true,
+            });
+
             setSelectedRow(targetRow);
+            setIsEditing(true);
             setIsDupCode(false);
-        } catch (error) {
-            console.error("Fetch Error:", error);
-            await useSwalErrorAlert(
-                "Error",
-                "An error occurred while retrieving the record."
-            );
-        }
-    }, [selectedRow]);
+        },
+        [selectedRow]
+    );
 
     /* ================= TABLE ================= */
 
@@ -439,21 +425,21 @@ const ZoneRef = forwardRef(({ onStateChange }, ref) => {
                 <RegistrationInfo data={form} layout="stacked" />
             </Card>
 
-            
-                <SearchGlobalReferenceTable
-                    columns={tableColumns}
-                    data={tableData}
-                    isLoading={isInitialLoading}
-                    docType="Zones"
-                    itemsPerPage={10}
-                    onRowDoubleClick={handleEdit}
-                    onRowClick={(row) => setSelectedRow(row)}
-                    showFilters
-                    tableSize={tableSize}
-                    autoFillGrid={true}
-                    onRefresh={() => queryClient.invalidateQueries({ queryKey: ["zoneList"] })}
-                />
-            
+
+            <SearchGlobalReferenceTable
+                columns={tableColumns}
+                data={tableData}
+                isLoading={isInitialLoading}
+                docType="Zones"
+                itemsPerPage={10}
+                onRowDoubleClick={handleEdit}
+                onRowClick={(row) => setSelectedRow(row)}
+                showFilters
+                tableSize={tableSize}
+                autoFillGrid={true}
+                onRefresh={() => queryClient.invalidateQueries({ queryKey: ["zoneList"] })}
+            />
+
         </div>
     );
 });

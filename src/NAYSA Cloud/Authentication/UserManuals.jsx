@@ -18,7 +18,7 @@ import useHelpSupportResources from "./useHelpSupportResources";
 
 const PAGE_SIZE = 10;
 
-const UserManuals = ({ manualBaseUrl = "/manuals" }) => {
+const UserManuals = ({ manualBaseUrl = "/Guide" }) => {
   const navigate = useNavigate();
   const previewRef = useRef(null);
 
