@@ -4655,6 +4655,9 @@ const handleAtcNameDoubleClick = (index) => {
                                 <option value="FG">FG</option>
                                 <option value="MS">MS</option>
                                 <option value="RM">RM</option>
+                                {selectedApType === "APV01" && <option value="JO">JO</option>}
+                                {isAdvancesAPType && <option value="PO">PO</option>}
+                                {isAdvancesAPType && <option value="JO">JO</option>}
                               </select>
                             </td>
                           )}
