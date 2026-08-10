@@ -348,17 +348,24 @@ export async function useHandlePrintAPReport(params) {
 
 
 export async function useHandleDownloadExcelAPReport(params) {
-  const { mode, branchCode, startDate, endDate, sVendCode, eVendCode } = params;
+  const {
+    mode,
+    branchCode,
+    startDate,
+    endDate,
+    sPayeeCode,
+    ePayeeCode,
+  } = params;
 
   try {
     const payload = {
       PARAMS: JSON.stringify({
         mode,
-        branchCode: params.branchCode,
-        startDate: params.startDate,
-        endDate: params.endDate,
-        spayeeCode: params.sVendCode,
-        epayeeCode: params.eVendCode,
+        branchCode,
+        startDate,
+        endDate,
+        sPayeeCode,
+        ePayeeCode,
       })
     };
 

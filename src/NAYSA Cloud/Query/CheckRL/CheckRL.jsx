@@ -53,6 +53,7 @@ import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import DateFormatInput from "@/NAYSA Cloud/Global/DateFormatInput.jsx";
 
 const ENDPOINT = "getAPCheckRelasing";
+const EXPORT_FILE_NAME = "Check Releasing and Return";
 
 /* ---------------- Status Helpers ---------------- */
 
@@ -754,7 +755,7 @@ export default function CheckRL() {
       };
 
       const payload = {
-        ReportName: "Check Releasing Report",
+        ReportName: EXPORT_FILE_NAME,
         UserCode: currentUserRow?.userName,
         Branch: branchCode || "",
         JsonData: exportData,
@@ -1207,6 +1208,7 @@ export default function CheckRL() {
         <div className="global-tran-table-main-div-ui">
           <SearchGlobalReportTable
             ref={tableRef}
+            docType={EXPORT_FILE_NAME}
             columns={colsWithActions}
             data={rows}
             itemsPerPage={50}

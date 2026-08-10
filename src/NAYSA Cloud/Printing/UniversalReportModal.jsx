@@ -82,7 +82,7 @@ const RMLookupModal = (props) => (
 );
 
 const MODULE_DEFS = {
-  AP:  { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelPURReport,    hasExtra: false, hasCutoff: false, hasReportType: false },
+  AP:  { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelAPReport,    hasExtra: false, hasCutoff: false, hasReportType: false },
   VI:  { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelAPReport,    hasExtra: false, hasCutoff: false, hasReportType: false },
   EWT: { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelAPReport,    hasExtra: false, hasCutoff: false, hasReportType: false },
   PUR: { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelAPReport,    hasExtra: false, hasCutoff: false, hasReportType: false, hasSingleMain: true, hasSingleRc: true, rcLabel: "Department/RC" },
