@@ -1,5 +1,7 @@
 import Swal from 'sweetalert2';
 
+const SWAL_AUTO_CLOSE_TIMER = 5000; // 5 seconds
+
 export function focusNextRowField(fieldName, currentIndex) {
   const selector = `#${fieldName}-input-${currentIndex + 1}`;
   const nextInput = document.querySelector(selector);
@@ -34,7 +36,7 @@ export const useSwalValidationAlert = ({ icon = "info", title = "", message = ""
   Swal.fire({
     icon,
     title,
-    timer: 3000,
+    timer: SWAL_AUTO_CLOSE_TIMER,
     timerProgressBar: true, 
     html: `<div style="text-align: left; padding: 0 10px;">${formattedMessage}</div>`,
     didOpen: () => {
@@ -105,7 +107,7 @@ export const useSwalvalidateRequiredFields = async (
       `,
       showConfirmButton: false,
       showCloseButton: true,
-      timer: 4000,
+      timer: SWAL_AUTO_CLOSE_TIMER,
       timerProgressBar: true,
       width: 320,
       padding: "0",
@@ -215,7 +217,7 @@ export const useSwalshowSaveSuccessDialog = (
     padding: "0",
     background: "#ffffff",
 
-    timer: 5000,
+    timer: SWAL_AUTO_CLOSE_TIMER,
     timerProgressBar: true,
 
     customClass: {
@@ -285,7 +287,7 @@ export const useSwalshowSave = (onConfirm, onPrint) => {
     confirmButtonText: "Confirm",
     // denyButtonText: "Print Preview",
     // cancelButtonText: "Completed",
-    timer: 5000,
+    timer: SWAL_AUTO_CLOSE_TIMER,
     timerProgressBar: true
   }).then((result) => {
     if (result.isConfirmed && typeof onConfirm === "function") {
@@ -343,7 +345,7 @@ export const useSwalErrorAlert = (
     `,
     showConfirmButton: false,
     showCloseButton: true,
-    timer: 4000,
+    timer: SWAL_AUTO_CLOSE_TIMER,
     timerProgressBar: true,
     width: 320, // Reduced width (from 400)
     padding: "0",
@@ -416,7 +418,7 @@ export const useSwalErrorAlertAPI = (
     `,
     showConfirmButton: false,
     showCloseButton: true,
-    timer: 3000,
+    timer: SWAL_AUTO_CLOSE_TIMER,
     timerProgressBar: true,
     width: 400,
     padding: "0",
@@ -505,7 +507,7 @@ export const useSwalSuccessAlert = (
     `,
     showConfirmButton: false,
     showCloseButton: true,
-    timer: 2200,
+    timer: SWAL_AUTO_CLOSE_TIMER,
     timerProgressBar: true,
     width: 400,
     padding: "0",
@@ -568,7 +570,7 @@ export const useSwalWarningAlert = (title = "Warning!", message = "Please check 
     icon: "warning",
     title,
     text: message,
-    timer: 3000,
+    timer: SWAL_AUTO_CLOSE_TIMER,
     timerProgressBar: true,
     confirmButtonText: "OK",
     confirmButtonColor: "#f8bb86", // A standard warning orange for the button
@@ -621,7 +623,7 @@ export const useSwalInfoAlert = (
     `,
     showConfirmButton: false,
     showCloseButton: true,
-    timer: 4000,
+    timer: SWAL_AUTO_CLOSE_TIMER,
     timerProgressBar: true,
     width: 320,
     padding: "0",
@@ -866,7 +868,7 @@ export const useSwalDeleteSuccess = () => {
     `,
     showConfirmButton: false,
     showCloseButton: true,
-    timer: 2500,
+    timer: SWAL_AUTO_CLOSE_TIMER,
     timerProgressBar: true,
     width: 400,
     padding: "0",
@@ -957,7 +959,7 @@ export const useSwalDeleteRecord = (
     `,
     showConfirmButton: false,
     showCloseButton: true,
-    timer: 3000,
+    timer: SWAL_AUTO_CLOSE_TIMER,
     timerProgressBar: true,
     width: 400,
     padding: "0",

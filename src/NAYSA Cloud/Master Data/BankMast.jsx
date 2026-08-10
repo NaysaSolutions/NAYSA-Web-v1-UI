@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Save, Undo2, Info } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
+  faPlus,
+  faSave,
+  faUndo,
   faEdit,
   faTrashAlt,
   faInfoCircle,
@@ -23,6 +25,7 @@ import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import SearchGlobalReferenceTable from "../Lookup/SearchGlobalReferenceTable";
 import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
+import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
 import BankRef from "../Reference File/BankRef";
 
 import {
@@ -394,7 +397,7 @@ const BankMast = () => {
                   handleEdit(row);
                 }
               }}
-              className="flex-1 h-7 md:flex-none flex items-center justify-center gap-1 py-2 md:py-2 px-3 md:px-2 bg-blue-50 border border-blue-100 text-blue-600 rounded-md hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-colors text-xs"
+              className="global-ref-td-button-edit-ui"
               title="Edit"
             >
               <FontAwesomeIcon icon={faEdit} />
@@ -410,7 +413,7 @@ const BankMast = () => {
                   handleDelete(row);
                 }
               }}
-              className="flex-1 h-7 md:flex-none flex items-center justify-center gap-1 py-2 md:py-2 px-3 md:px-2 bg-red-50 border border-red-100 text-red-600 rounded-md hover:bg-red-600 hover:text-white transition-colors text-xs"
+              className="global-ref-td-button-delete-ui"
               title="Delete"
             >
               <FontAwesomeIcon icon={faTrashAlt} />
@@ -448,53 +451,72 @@ const BankMast = () => {
   /* ================= DYNAMIC HEADER BUTTONS ================= */
 
   const bankMastButtons = (
-    <div className="flex flex-wrap justify-center gap-2 text-xs">
-      <button
-        type="button"
-        onClick={startNew}
-        className={`flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 ${isEditing ? "cursor-not-allowed opacity-50" : ""}`}
-        disabled={isEditing}
-      >
-        <Plus size={16} /> Add
-      </button>
-
-      <button
-        type="button"
-        onClick={handleSave}
-        className={`flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 ${!isEditing || saveMutation.isPending || isDupCode ? "cursor-not-allowed opacity-50" : ""}`}
-        disabled={!isEditing || saveMutation.isPending || isDupCode}
-      >
-        <Save size={16} /> Save
-      </button>
-
-      <button
-        type="button"
-        onClick={handleReset}
-        className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700"
-        disabled={saveMutation.isPending}
-      >
-        <Undo2 size={16} /> Reset
-      </button>
+    <div className="w-full md:w-auto flex items-center justify-center md:justify-end gap-2 flex-wrap">
+      <div className="flex flex-wrap justify-center md:justify-end gap-2">
+        <ButtonBar
+          buttons={[
+            {
+              key: "add",
+              label: <span className="sm:inline ml-1">Add</span>,
+              icon: faPlus,
+              onClick: startNew,
+              disabled: isEditing,
+              className: `flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md transition-all
+                ${isEditing
+                  ? "bg-blue-500 opacity-50 cursor-not-allowed text-white"
+                  : "bg-blue-600 text-white hover:bg-blue-700"
+                }`,
+            },
+            {
+              key: "save",
+              label: <span className="sm:inline ml-1">Save</span>,
+              icon: faSave,
+              onClick: handleSave,
+              disabled: !isEditing || saveMutation.isPending || isDupCode,
+              className: `flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md transition-all
+                ${(!isEditing || saveMutation.isPending || isDupCode)
+                  ? "bg-blue-500 opacity-50 cursor-not-allowed text-white"
+                  : "bg-blue-600 text-white hover:bg-blue-700"
+                }`,
+            },
+            {
+              key: "reset",
+              label: <span className="sm:inline ml-1">Reset</span>,
+              icon: faUndo,
+              onClick: handleReset,
+              disabled: saveMutation.isPending,
+              className: `flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md transition-all
+                ${saveMutation.isPending
+                  ? "bg-blue-500 opacity-50 cursor-not-allowed text-white"
+                  : "bg-blue-600 text-white hover:bg-blue-700"
+                }`,
+            },
+          ]}
+        />
+      </div>
 
       <div ref={guideRef} className="relative">
         <button
+          type="button"
           onClick={() => setOpenGuide((v) => !v)}
-          className="bg-blue-600 text-white h-8 px-4 rounded-md flex items-center justify-center gap-1 hover:bg-blue-700 transition-all"
+          className="bg-blue-600 text-white h-7 w-16 sm:w-auto sm:h-8 sm:px-4 rounded-md flex items-center justify-center gap-1 hover:bg-blue-700 transition-all"
         >
           <FontAwesomeIcon icon={faInfoCircle} className="text-[12px]" />
-          <span className="ml-1 text-[11px] font-medium">Info</span>
-          <FontAwesomeIcon icon={faChevronDown} className="text-[10px] opacity-80" />
+          <span className="sm:inline ml-1 text-[11px] font-medium">Info</span>
+          <FontAwesomeIcon icon={faChevronDown} className="hidden sm:inline text-[10px] opacity-80" />
         </button>
 
         {isOpenGuide && (
           <div className="absolute right-0 mt-2 w-52 rounded-md shadow-xl bg-white ring-1 ring-black/10 z-[60] dark:bg-gray-800 overflow-hidden">
             <button
+              type="button"
               onClick={() => { window.open(pdfLink, "_blank"); setOpenGuide(false); }}
               className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 dark:hover:bg-blue-900 border-b border-gray-100 dark:border-gray-700"
             >
               <FontAwesomeIcon icon={faFilePdf} className="mr-2 text-red-500" /> PDF Guide
             </button>
             <button
+              type="button"
               onClick={() => { window.open(videoLink, "_blank"); setOpenGuide(false); }}
               className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 dark:hover:bg-blue-900"
             >
@@ -507,11 +529,37 @@ const BankMast = () => {
   );
 
   const bankTypeButtons = (
-    <div className="flex flex-wrap justify-center gap-2 text-xs">
-      <button type="button" onClick={() => bankRefTabRef.current?.startNew?.()} className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700"><Plus size={16} /> Add</button>
-      <button type="button" onClick={() => bankRefTabRef.current?.save?.()} className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700"><Save size={16} /> Save</button>
-      <button type="button" onClick={() => bankRefTabRef.current?.reset?.()} className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700"><Undo2 size={16} /> Reset</button>
-      {/* Guide button omitted for brevity but logic remains same */}
+    <div className="w-full md:w-auto flex items-center justify-center md:justify-end gap-2 flex-wrap">
+      <div className="flex flex-wrap justify-center md:justify-end gap-2">
+        <ButtonBar
+          buttons={[
+            {
+              key: "add",
+              label: <span className="sm:inline ml-1">Add</span>,
+              icon: faPlus,
+              onClick: () => bankRefTabRef.current?.startNew?.(),
+              className:
+                "flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all",
+            },
+            {
+              key: "save",
+              label: <span className="sm:inline ml-1">Save</span>,
+              icon: faSave,
+              onClick: () => bankRefTabRef.current?.save?.(),
+              className:
+                "flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all",
+            },
+            {
+              key: "reset",
+              label: <span className="sm:inline ml-1">Reset</span>,
+              icon: faUndo,
+              onClick: () => bankRefTabRef.current?.reset?.(),
+              className:
+                "flex items-center justify-center h-7 w-16 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all",
+            },
+          ]}
+        />
+      </div>
     </div>
   );
 
@@ -739,7 +787,7 @@ const BankMast = () => {
             <div className="space-y-2">
               <button
                 onClick={() => handleEdit(selectedMobileRow)}
-                className="w-full flex items-center justify-center gap-2 rounded-lg bg-blue-50 text-blue-600 py-3 text-sm font-medium hover:bg-blue-600 hover:text-white transition-colors"
+                className="global-ref-td-button-edit-ui-mobile"
               >
                 <FontAwesomeIcon icon={faEdit} />
                 Edit
@@ -750,7 +798,7 @@ const BankMast = () => {
                   e.stopPropagation();
                   handleDelete(selectedMobileRow);
                 }}
-                className="w-full flex items-center justify-center gap-1 py-2 md:py-2 px-3 md:px-2 bg-red-50 text-red-600 rounded-md hover:bg-red-600 hover:text-white transition-colors text-xs"
+                className="global-ref-td-button-delete-ui-mobile"
                 title="Delete"
               >
                 <FontAwesomeIcon icon={faTrashAlt} />
@@ -759,7 +807,7 @@ const BankMast = () => {
 
               <button
                 onClick={closeMobileActionSheet}
-                className="w-full rounded-lg bg-gray-100 text-gray-700 py-3 text-sm font-medium"
+                className="global-ref-td-button-cancel-ui-mobile"
               >
                 Cancel
               </button>
