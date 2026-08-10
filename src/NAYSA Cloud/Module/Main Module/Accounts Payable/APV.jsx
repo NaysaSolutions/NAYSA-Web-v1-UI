@@ -592,9 +592,24 @@ const handleOpenReferencePOAdvance = async (overrides = {}) => {
       vendCode: lookupVendCode,
     };
 
-    const response = await fetchDataJson("getPOAPV_Summary", lookupPayload);
+    // Keep both payload shapes for compatibility with PO procedure versions
+    // that read either $.branchCode/$.vendCode or $.json_data.*.
+    const response = await fetchData("getPOAPV_Summary", {
+      PARAMS: JSON.stringify({
+        ...lookupPayload,
+        json_data: lookupPayload,
+      }),
+    });
 
-    const rawRows = extractOpenRRResponseRows(response);
+    const rawRows = extractOpenRRResponseRows(response).filter((row) => {
+      const rowBranchCode = String(row.branchCode ??  "").trim();
+      const rowVendCode = String( row.vendCode ??  "").trim();
+
+      return (
+        (!lookupBranchCode || rowBranchCode === lookupBranchCode) &&
+        (!lookupVendCode || rowVendCode === lookupVendCode)
+      );
+    });
 
     const normalizedRows = rawRows.map((row, index) => ({
       ...row,
@@ -2174,56 +2189,24 @@ const extractOpenRRResponseRows = (response) => {
       vendCode: lookupVendCode,
     };
 
-    const requestAttempts = [
-  async () => {
-    const rrResponse = await fetchDataJson("getAPVRR_OpenSummary", lookupPayload);
-    const joResponse = await fetchDataJson("getAPVJO_OpenSummary", lookupPayload);
+    // Match the advances lookup payload: support procedure versions that read
+    // either the top-level values or the nested $.json_data values.
+    const requestParams = {
+      PARAMS: JSON.stringify({
+        ...lookupPayload,
+        json_data: lookupPayload,
+      }),
+    };
 
-    return [
+    const [rrResponse, joResponse] = await Promise.all([
+      fetchData("getAPVRR_OpenSummary", requestParams),
+      fetchData("getAPVJO_OpenSummary", requestParams),
+    ]);
+
+    const rawRows = [
       ...extractOpenRRResponseRows(rrResponse),
       ...extractOpenRRResponseRows(joResponse),
     ];
-  },
-
-  async () => {
-    const rrResponse = await fetchData("getAPVRR_OpenSummary", {
-      PARAMS: JSON.stringify({ json_data: lookupPayload }),
-    });
-    const joResponse = await fetchData("getAPVJO_OpenSummary", {
-      PARAMS: JSON.stringify({ json_data: lookupPayload }),
-    });
-
-    return [
-      ...extractOpenRRResponseRows(rrResponse),
-      ...extractOpenRRResponseRows(joResponse),
-    ];
-  },
-
-  async () => {
-    const rrResponse = await fetchData("getAPVRR_OpenSummary", {
-      PARAMS: JSON.stringify(lookupPayload),
-    });
-    const joResponse = await fetchData("getAPVJO_OpenSummary", {
-      PARAMS: JSON.stringify(lookupPayload),
-    });
-
-    return [
-      ...extractOpenRRResponseRows(rrResponse),
-      ...extractOpenRRResponseRows(joResponse),
-    ];
-  },
-];
-
-let rawRows = [];
-
-for (const requestOpenReference of requestAttempts) {
-  try {
-    rawRows = await requestOpenReference();
-    if (rawRows.length > 0) break;
-  } catch (requestError) {
-    console.warn("Open RR/JO lookup attempt failed:", requestError);
-  }
-}
 
     const normalizedRows = rawRows.map((row, index) =>
       normalizeOpenRRRow(row, index),
@@ -2571,8 +2554,9 @@ const calculatedAtcAmount = aCode
     const updatedRows = [...detailRows, ...mappedRows];
     updateState({
       detailRows: updatedRows,
+      detailRowsGL: [],
       showRRRefModal: false,
-      triggerGLEntries: true, // Triggers automatic general ledger account generation rules seamlessly
+      triggerGLEntries: false,
       modalContext: "",
       globalLookupTitle: "",
       globalLookupBtnCaption: "",
@@ -4272,7 +4256,7 @@ const handleAtcNameDoubleClick = (index) => {
           // isResetDisabled={isResetDisabled} // Pass disabled state
           detailsRoute="/page/APV"
           isSaveDisabled={
-            state.isSaveDisabled || isFormDisabled || detailRowsGL.length === 0
+            state.isSaveDisabled || isFormDisabled
           }
           isResetDisabled={state.isResetDisabled}
           isAttachDisabled={!documentID}

@@ -6,6 +6,7 @@ import React, {
   useRef,
   useCallback,
 } from "react";
+import { createPortal } from "react-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faTimes,
@@ -1352,7 +1353,7 @@ const handleExportExcelClick = async (customFileName) => {
                         <FontAwesomeIcon icon={faColumns} className="mr-1" /> Columns
                       </button>
 
-                      {showColumnChooser && (
+                      {showColumnChooser && createPortal(
                         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/45 px-3 py-3">
                           <div className="flex max-h-[60vh] w-full max-w-[480px] flex-col overflow-hidden rounded-md bg-white dark:bg-slate-800 shadow-2xl ring-1 ring-black/10 dark:ring-slate-700">
                             <div className="flex items-start justify-between gap-3 border-b border-gray-200 dark:border-slate-700 px-3 py-2">
@@ -1397,7 +1398,8 @@ const handleExportExcelClick = async (customFileName) => {
                               </div>
                             </div>
                           </div>
-                        </div>
+                        </div>,
+                        document.body
                       )}
                     </div>
                   </div>
