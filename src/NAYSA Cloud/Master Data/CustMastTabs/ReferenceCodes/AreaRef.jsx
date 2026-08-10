@@ -290,38 +290,29 @@ const AreaRef = forwardRef(({ onStateChange }, ref) => {
   /* ================= EDIT ================= */
 
  
-// Use useCallback to stabilize the function for the Table component
-const handleEdit = useCallback(async (row) => {
-  // 1. Identify the target row (either from double-click 'row' or 'selectedRow' state)
-  const targetRow = row?.areaCode ? row : selectedRow;
+const handleEdit = useCallback(
+  async (row) => {
+    const targetRow = row?.areaCode ? row : selectedRow;
 
-  if (!targetRow || !targetRow.areaCode) {
-    await useSwalErrorAlert("Selection Required", "Please select a record from the list first.");
-    return;
-  }
-
-  try {
-    // 2. Fetch the full record from the backend
-    const res = await apiClient.get("/getArea", {
-      params: { AREA_CODE: targetRow.areaCode },
-    });
-
-    const record = extractRows(res)?.[0];
-    if (!record) {
-      await useSwalErrorAlert("Error", "Record details could not be found.");
+    if (!targetRow?.areaCode) {
+      await useSwalErrorAlert(
+        "Selection Required",
+        "Please select an Area record first."
+      );
       return;
     }
 
-    // 3. Update form state and enter edit mode
-    setForm({ ...normalizeRecord(record), __existing: true });
+    setForm({
+      ...normalizeRecord(targetRow),
+      __existing: true,
+    });
+
+    setSelectedRow(targetRow);
     setIsEditing(true);
-    setSelectedRow(targetRow); // Sync selection state
     setIsDupCode(false);
-  } catch (error) {
-    console.error("Fetch Error:", error);
-    await useSwalErrorAlert("Fetch Failed", "An error occurred while retrieving the data.");
-  }
-}, [selectedRow, apiClient]); // Depend on selectedRow and apiClient
+  },
+  [selectedRow]
+);
 
   /* ================= TABLE ================= */
 
