@@ -47,7 +47,7 @@ import SearchFSConso from "@/NAYSA Cloud/Lookup/SearchFSConso.jsx";
 const EMPTY_ROW = {
   fsConsoCode: "",
   fsConsoName: "",
-  fsType: "",
+  fsType: "BS",
   acctBalance: "",
   sumGrp: "",
   sumOper: "",
@@ -193,7 +193,7 @@ const FSConsolidation = forwardRef(function FSConsolidation(
   useEffect(() => {
     const normalized = (fsconso || []).map((row) => ({
       ...row,
-      fsType: row.fsType ?? "",
+      fsType: String(row.fsType || "BS").toUpperCase(),
       fsConsoCode: row.fsConsoCode ?? "",
       fsConsoName: row.fsConsoName ?? "",
       acctBalance: row.acctBalance ?? "",
@@ -324,7 +324,7 @@ const FSConsolidation = forwardRef(function FSConsolidation(
   const resetTable = () => {
     const normalized = (fsconso || []).map((row) => ({
       ...row,
-      fsType: row.fsType ?? "",
+      fsType: String(row.fsType || "BS").toUpperCase(),
       fsConsoCode: row.fsConsoCode ?? "",
       fsConsoName: row.fsConsoName ?? "",
       acctBalance: row.acctBalance ?? "",
@@ -447,7 +447,7 @@ const FSConsolidation = forwardRef(function FSConsolidation(
         json_data: {
           fsConsoCode: row.fsConsoCode,
           fsConsoName: row.fsConsoName,
-          fsType: row.fsType,
+          fsType: row.fsType || "BS",
           acctBalance: row.acctBalance,
           sumGrp: row.sumGrp,
           sumOper: row.sumOper,
@@ -700,7 +700,7 @@ const FSConsolidation = forwardRef(function FSConsolidation(
           return (
             <select
               className="w-full min-w-[120px] rounded-md border border-gray-300 px-2 py-1 text-[11px] bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
-              value={row.fsType ?? ""}
+              value={row.fsType || "BS"}
               onChange={(e) => updateRow(rowKey, "fsType", e.target.value)}
             >
               {/* <option value=""></option> */}
