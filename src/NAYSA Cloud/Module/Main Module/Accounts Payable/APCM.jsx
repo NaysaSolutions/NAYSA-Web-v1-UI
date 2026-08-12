@@ -646,6 +646,34 @@ const APCM = () => {
   };
 
   const handleAddRowGL = (index = null) => { 
+    // Detect Without Invoice from the actual dropdown configuration, not only a hardcoded code.
+    const selectedTranType = apcmTypes.find(
+      (item) => String(item?.DROPDOWN_CODE || "").trim() === String(selectedAPCMType || "").trim()
+    );
+
+    const selectedTranTypeName = String(
+      selectedTranType?.DROPDOWN_NAME || ""
+    ).trim().toLowerCase();
+
+    const isWithoutInvoice =
+      String(selectedAPCMType || "").trim().toUpperCase() === "APCM02" ||
+      selectedTranTypeName === "without invoice" ||
+      selectedTranTypeName.includes("without invoice");
+
+    const hasSelectedPayee =
+      String(vendCode || "").trim() !== "" &&
+      String(vendName || "").trim() !== "";
+
+    if (isWithoutInvoice && !hasSelectedPayee) {
+      Swal.fire({
+        icon: "warning",
+        title: "Payee Required",
+        text: "Please select a Payee before adding a General Ledger entry.",
+        confirmButtonText: "OK",
+      });
+      return;
+    }
+
     if (handleFieldBehavior("CWTReversal")) return;
 
     const newRow = {
@@ -1003,12 +1031,34 @@ const APCM = () => {
       const custData = response?.data?.[0]?.result ? JSON.parse(response.data[0].result) : [];
       const colConfig = await useSelectedHSColConfig(endpoint);
 
-      if (custData.length === 0) {
+      const openAPRows = Array.isArray(custData)
+        ? custData.map((row) => ({
+            ...row,
+            // IMPORTANT:
+            // Keep the configured key as branchCode so the original HS column
+            // position and the configured label "Branch" are unchanged.
+            // Replace only the value shown in that column with the branch name.
+            branchCode:
+              row.branchName ||
+              row.BranchName ||
+              row.BRANCH_NAME ||
+              branchName ||
+              row.branchCode ||
+              "",
+          }))
+        : [];
+
+      if (openAPRows.length === 0) {
         await Swal.fire({ icon: "info", title: "Open AP Balance", text: "There are no AP balance records for the selected payee/branch." });
         updateState({ isLoading: false });
         return; 
       }
-      updateState({ globalLookupRow: custData, globalLookupHeader: colConfig, showAPBalanceModal: true });
+
+      updateState({
+        globalLookupRow: openAPRows,
+        globalLookupHeader: colConfig,
+        showAPBalanceModal: true,
+      });
     } catch (error) {
       console.error("Failed to fetch Open AP Balance:", error);
       Swal.fire({ icon: "error", title: "Error", text: "Failed to fetch Open AP Balance." });
@@ -1110,6 +1160,7 @@ const APCM = () => {
           activeTopTab={topTab} 
           showActions={topTab === "details"} 
           showBIRForm={false}  
+          showCopyForm={false}
           isViewDocument={isViewDocument}      
           onDetails={() => setTopTab("details")}
           onHistory={() => setTopTab("history")}
