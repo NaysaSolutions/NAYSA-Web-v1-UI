@@ -42,6 +42,11 @@ const mainTabs = {
     icon: faTableList,
     endpoint: "getBUDBudgetMonthlyComparative",
   },
+  incomeStatementYtd: {
+    label: "Budget vs Actual (IS)",
+    icon: faScaleBalanced,
+    endpoint: "getBUDBudgetIncomeStatementYTD",
+  },
 };
 
 const reportGroups = {
@@ -55,6 +60,8 @@ const createEmptyGroupRows = () =>
 
 const createEmptyView = () => ({
   rowsByGroup: createEmptyGroupRows(),
+  incomeStatementRows: [],
+  glComparativeRows: [],
   hasLoaded: false,
   loadedAt: "",
 });
@@ -96,6 +103,24 @@ const monthColumns = [
   minWidth: 120,
   maxWidth: 160,
 }));
+
+const incomeStatementColumns = [
+  { key: "fsConsoCode", label: "FS Code", minWidth: 100, maxWidth: 130 },
+  { key: "fsConsoName", label: "Description", minWidth: 320, maxWidth: 520 },
+  { key: "budgetYtd", label: "Budget YTD", renderType: "currency", roundingOff: 2, minWidth: 140 },
+  { key: "actualYtd", label: "Actual YTD", renderType: "currency", roundingOff: 2, minWidth: 140 },
+  { key: "variance", label: "Variance", renderType: "currency", roundingOff: 2, minWidth: 140 },
+  { key: "usedPercent", label: "% Used", renderType: "number", roundingOff: 2, minWidth: 110 },
+];
+
+const glComparativeColumns = [
+  { key: "acctCode", label: "GL Account", minWidth: 120, maxWidth: 160 },
+  { key: "acctName", label: "Account Name", minWidth: 320, maxWidth: 520 },
+  { key: "budgetYtd", label: "Budget YTD", renderType: "currency", roundingOff: 2, minWidth: 140 },
+  { key: "actualYtd", label: "Actual YTD", renderType: "currency", roundingOff: 2, minWidth: 140 },
+  { key: "variance", label: "Variance", renderType: "currency", roundingOff: 2, minWidth: 140 },
+  { key: "usedPercent", label: "% Used", renderType: "number", roundingOff: 2, minWidth: 110 },
+];
 
 const summaryFields = [
   { key: "uploaded", label: "Uploaded", icon: faDatabase, tone: "blue" },
@@ -282,23 +307,41 @@ const BudgetInquiry = () => {
           budgetCode: filterValues.budgetCode || "",
           monthlyView: filterValues.monthlyView || "BUDGET",
         };
-        const groupResults = await Promise.all(
-          Object.entries(reportGroups).map(async ([key, group]) => {
-            const response = await postRequest(endpoint, {
-              json_data: { ...commonParams, groupBy: group.groupBy },
-            });
-            return [key, extractRows(response)];
-          }),
-        );
+        if (reportTab === "incomeStatementYtd") {
+          const [incomeStatementResponse, glComparativeResponse] = await Promise.all([
+            postRequest(endpoint, { json_data: commonParams }),
+            postRequest("getBUDGLAccountComparativeYTD", { json_data: commonParams }),
+          ]);
+          setViewsByTab((previous) => ({
+            ...previous,
+            [reportTab]: {
+              ...createEmptyView(),
+              incomeStatementRows: extractRows(incomeStatementResponse),
+              glComparativeRows: extractRows(glComparativeResponse),
+              loadedAt: new Date().toISOString(),
+              hasLoaded: true,
+            },
+          }));
+        } else {
+          const groupResults = await Promise.all(
+            Object.entries(reportGroups).map(async ([key, group]) => {
+              const response = await postRequest(endpoint, {
+                json_data: { ...commonParams, groupBy: group.groupBy },
+              });
+              return [key, extractRows(response)];
+            }),
+          );
 
-        setViewsByTab((previous) => ({
-          ...previous,
-          [reportTab]: {
-            rowsByGroup: Object.fromEntries(groupResults),
-            loadedAt: new Date().toISOString(),
-            hasLoaded: true,
-          },
-        }));
+          setViewsByTab((previous) => ({
+            ...previous,
+            [reportTab]: {
+              ...createEmptyView(),
+              rowsByGroup: Object.fromEntries(groupResults),
+              loadedAt: new Date().toISOString(),
+              hasLoaded: true,
+            },
+          }));
+        }
       } catch (error) {
         console.error("Budget Inquiry query failed", error);
         setViewsByTab((previous) => ({
@@ -427,6 +470,21 @@ const BudgetInquiry = () => {
                         </div>
                       </div>
                     </div>
+                  ) : tabKey === "incomeStatementYtd" ? (
+                    <>
+                      <ComparativeTable
+                        title="Income Statement YTD"
+                        rows={tabView.incomeStatementRows || []}
+                        columns={incomeStatementColumns}
+                        reportLabel={tab.label}
+                      />
+                      <ComparativeTable
+                        title="Comparative per GL Accounts"
+                        rows={tabView.glComparativeRows || []}
+                        columns={glComparativeColumns}
+                        reportLabel={`${tab.label} - Comparative per GL Accounts`}
+                      />
+                    </>
                   ) : (
                     Object.entries(reportGroups).map(([key, group]) => (
                       <ReportTableSection
@@ -533,6 +591,46 @@ const ReportTableSection = ({ title, reportLabel, columns, rows }) => (
             itemsPerPage={50}
             docType={`${reportLabel} - ${title}`}
             totalExemptions={["rowNo", "acctCode", "rcCode", "usedPercent"]}
+          />
+        </div>
+      )}
+    </div>
+  </section>
+);
+
+const ComparativeTable = ({ title, rows, columns, reportLabel }) => (
+  <section className="global-tran-tab-div-ui !m-0 !p-4">
+    <div className="global-tran-table-main-div-ui overflow-hidden">
+      <div className="border-b bg-gradient-to-r from-blue-50 to-white px-4 py-3">
+        <div className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+          <FontAwesomeIcon icon={faScaleBalanced} className="text-blue-600" />
+          <span>{title}</span>
+          <span className="ml-auto rounded-full bg-blue-100 px-2 py-1 text-[10px] font-bold text-blue-700">
+            {rows.length.toLocaleString("en-US")} rows
+          </span>
+        </div>
+      </div>
+
+      {rows.length === 0 ? (
+        <NoRecordsState reportLabel={reportLabel} />
+      ) : (
+        <div className="min-h-[420px] max-h-[620px]" style={{ height: `${getTableHeight(rows.length)}px` }}>
+          <SearchGlobalReportTable
+            columns={columns}
+            data={rows}
+            itemsPerPage={100}
+            docType={reportLabel}
+            showGroupBy={false}
+            autoFit
+            totalExemptions={[
+              "rowno",
+              "fsconsocode",
+              "acctcode",
+              "actualytd",
+              "budgetytd",
+              "variance",
+              "usedpercent",
+            ]}
           />
         </div>
       )}
