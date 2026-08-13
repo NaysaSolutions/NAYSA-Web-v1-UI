@@ -11,11 +11,13 @@ import {
     faSave,
     faUndo,
     faPenToSquare,
+    faPaperclip,
     faTrash,
 } from "@fortawesome/free-solid-svg-icons";
 
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
+import SearchAttachment from "@/NAYSA Cloud/Lookup/SearchAttachment.jsx";
 import RMMast_SetupTab from "@/NAYSA Cloud/Master Data/RMMasterData/RMMast_SetupTab.jsx";
 import RMMast_DataTab from "@/NAYSA Cloud/Master Data/RMMasterData/RMMast_DataTab.jsx";
 import RMMast_ReferenceCodeTab from "@/NAYSA Cloud/Master Data/RMMasterData/RMMast_ReferenceCodeTab.jsx";
@@ -113,6 +115,7 @@ const RMMast = () => {
     const [form, setForm]                         = useState({ ...emptyForm });
     const [selectedItemCode, setSelectedItemCode] = useState("");
     const [isEditing, setIsEditing]               = useState(false);
+    const [isAttachOpen, setIsAttachOpen]         = useState(false);
 
     const [masterAllRows, setMasterAllRows] = useState([]);
     const [masterRows, setMasterRows]       = useState([]);
@@ -399,6 +402,19 @@ const RMMast = () => {
         setIsEditing(false);
     };
 
+    const handleOpenAttach = async () => {
+        if (!isFullAccess) {
+            await useSwalErrorAlert("Read Only", "You only have read access. Attaching files is not allowed.");
+            return;
+        }
+
+        if (!String(form?.itemCode || "").trim()) {
+            await useSwalErrorAlert("Required", "Item Code is required.");
+            return;
+        }
+        setIsAttachOpen(true);
+    };
+
     // ── tabs ──────────────────────────────────────────────────────────────────
     const tabs = [
         { id: "setup",  label: "Item Masterfile Set Up", icon: faFolderOpen },
@@ -444,6 +460,14 @@ const RMMast = () => {
                     onClick: handleEdit,
                     disabled: isLoading || isEditing || !hasRecord || !canEdit,
                     className: `${baseBtn} ${isEditing || !hasRecord || !canEdit ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}`,
+                },
+                {
+                    key: "attach",
+                    label: <span className="hidden sm:inline ml-1">Attach File</span>,
+                    icon: faPaperclip,
+                    onClick: handleOpenAttach,
+                    disabled: isLoading || !hasRecord || !isFullAccess,
+                    className: `${baseBtn} ${isLoading || !hasRecord || !isFullAccess ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}`,
                 },
                 {
                     key: "delete",
@@ -497,7 +521,7 @@ const RMMast = () => {
         }
 
         return [];
-    }, [activeTab, isLoading, isEditing, form, refState, isReadOnly, canAdd, canEdit, canSave, canDelete]);
+    }, [activeTab, isLoading, isEditing, form, refState, isReadOnly, canAdd, canEdit, canSave, canDelete, isFullAccess]);
 
     // ── render ────────────────────────────────────────────────────────────────
     return (
@@ -585,6 +609,19 @@ const RMMast = () => {
                 )}
 
             </div>
+
+            <SearchAttachment
+                isOpen={isAttachOpen}
+                onClose={() => setIsAttachOpen(false)}
+                params={{
+                    DocumentID: String(form?.itemCode || "").trim(),
+                    Title: "RM Master Data",
+                    CodeLabel: "Item Code",
+                    Code: String(form?.itemCode || "").trim(),
+                    NameLabel: "Item Description",
+                    Name: form?.itemDesc || "N/A",
+                }}
+            />
         </div>
     );
 };
