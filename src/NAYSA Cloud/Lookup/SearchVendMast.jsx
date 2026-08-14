@@ -192,7 +192,7 @@ const PayeeMastLookupModal = ({ isOpen, onClose, customParam }) => {
                                 {filteredAndSorted.length > 0 ? filteredAndSorted.map((payee, idx) => (
                                     <tr key={idx} onClick={() => onClose(payee)} className="hover:bg-blue-100 cursor-pointer transition-colors group">
                                         {columnConfig.map(col => (
-                                            <td key={col.key} className="px-3 py-1.5 text-[11px] text-slate-700">
+                                            <td key={col.key} className="px-3 py-1.5 text-[11px] text-slate-700 border-b border-slate-100">
                                                 {col.key === "vendCode" ? <span className="font-bold">{payee[col.key]}</span> : payee[col.key]}
                                             </td>
                                         ))}
