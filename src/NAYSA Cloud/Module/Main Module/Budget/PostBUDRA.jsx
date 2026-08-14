@@ -31,13 +31,19 @@ const PostBUDRA = ({ isOpen, onClose, userCode }) => {
         const endpoint = "postingBUDRA";
         const response = await fetchDataJson(endpoint);
 
-        const budraData = response?.data?.[0]?.result
-          ? JSON.parse(response.data[0].result)
-          : Array.isArray(response?.data)
-            ? response.data
-            : response?.data?.result
-              ? JSON.parse(response.data.result)
-              : [];
+        const responseData = response?.data;
+        const hasWrappedResult =
+          Array.isArray(responseData) &&
+          responseData.length > 0 &&
+          Object.prototype.hasOwnProperty.call(responseData[0], "result");
+        const rawData = hasWrappedResult
+          ? responseData[0].result
+          : responseData?.result ?? responseData;
+        const parsedData =
+          typeof rawData === "string"
+            ? JSON.parse(rawData.trim() || "[]")
+            : rawData;
+        const budraData = Array.isArray(parsedData) ? parsedData : [];
 
         if (budraData.length === 0 && !alertFired.current) {
           useSwalInfoAlert("No Records Found", "There are no records to display.");

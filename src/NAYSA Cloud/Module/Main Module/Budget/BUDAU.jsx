@@ -276,7 +276,7 @@ const BUDAU = () => {
     { key: "acctName", label: "Account Name", width: 260, readOnly: true },
     { key: "budgetCode", label: "Budget Code", width: 140, type: "lookup", lookupType: "budgetItem" },
     { key: "budgetName", label: "Budget Name", width: 260, readOnly: true },
-    { key: "budgetBalance", label: "Budget Balance", width: 150, type: "amount" },
+    { key: "budgetBalance", label: "Budget Balance", width: 150, type: "amount", readOnly: true },
     { key: "adjustmentAmount", label: "Adjustment Amount", width: 170, type: "amount" },
     { key: "newBudgetBalance", label: "New Budget Balance", width: 170, type: "amount", readOnly: true },
     { key: "remarks", label: "Remarks", width: 240, type: "remarks" },
@@ -672,6 +672,7 @@ const BUDAU = () => {
 
       if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
         const editableColumns = orderedDetailColumns
+          .filter((item) => !item.readOnly)
           .map((item) => item.key)
           .filter((key) => !["ln", "branchCode", "branchRef", "rcCode", "rcName", "acctCode", "acctName", "budgetCode", "budgetName"].includes(key));
 
@@ -1679,7 +1680,7 @@ const BUDAU = () => {
       {showSignatoryModal && (
         <DocumentSignatories
           isOpen={showSignatoryModal}
-          params={{ noReprints, documentID, docType }}
+        params={{ noReprints, documentID, docType, docNo: documentNo }}
           onClose={handleCloseSignatory}
           onCancel={() => updateState({ showSignatoryModal: false })}
         />

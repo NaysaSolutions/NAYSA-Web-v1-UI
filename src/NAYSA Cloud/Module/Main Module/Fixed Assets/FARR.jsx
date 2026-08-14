@@ -3420,9 +3420,10 @@ const fetchTranData = async (documentNo, branchCode, direction = "") => {
         <DocumentSignatories
           isOpen={state.showSignatoryModal}
           params={{
-            noReprints: state.noReprints,
-            documentID: state.documentID,
-            docType,
+          noReprints: state.noReprints,
+          documentID: state.documentID,
+          docType,
+          docNo: state.documentNo,
           }}
           onClose={handleCloseSignatory}
           onCancel={() => updateState({ showSignatoryModal: false })}

@@ -482,7 +482,7 @@ const UOM = () => {
         <div className="w-full flex flex-col gap-3 md:grid md:grid-cols-3 md:items-center md:gap-0">
           <div className="w-full md:w-auto md:justify-start flex">
             <h1 className="global-ref-headertext-ui w-full md:w-auto truncate text-center md:text-left">
-              {reftables[docType] || "UOM Codes"}
+              {reftables[docType] || "UOM"}
             </h1>
           </div>
           <div className="hidden md:flex justify-center w-full" />

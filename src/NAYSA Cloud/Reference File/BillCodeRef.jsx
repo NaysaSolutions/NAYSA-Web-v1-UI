@@ -67,7 +67,6 @@ const DEFAULT_FORM = {
   billCode: "",
   billName: "",
   uomCode: "",
-  billingClass: "",
   unitPriceRequired: "N",
   rcCode: "",
   rcName: "",
@@ -75,8 +74,6 @@ const DEFAULT_FORM = {
   arName: "",
   salesAcct: "",
   salesName: "",
-  vatAcct: "",
-  vatName: "",
   advancesAcct: "",
   advancesName: "",
   sDiscAcct: "",
@@ -302,8 +299,6 @@ const BillCodeRef = React.forwardRef((props, ref) => {
     const rcCode = String(form.rcCode || "").trim();
     const arAcct = String(form.arAcct || "").trim();
     const salesAcct = String(form.salesAcct || "").trim();
-    const vatAcct = String(form.vatAcct || "").trim();
-
     try {
       if (!form.__existing) {
         const isDup = await checkDuplicate(billCode);
@@ -315,24 +310,15 @@ const BillCodeRef = React.forwardRef((props, ref) => {
         }
       }
 
-      const {
-        __existing,
-        registeredBy,
-        registeredDate,
-        updatedBy,
-        updatedDate,
-        ...payload
-      } = form;
-
       saveMutation.mutate({
-        ...payload,
         billCode,
         billName,
         uomCode,
         rcCode,
         arAcct,
         salesAcct,
-        vatAcct,
+        advancesAcct: String(form.advancesAcct || "").trim(),
+        sDiscAcct: String(form.sDiscAcct || "").trim(),
         unitPriceRequired: toYN(form.unitPriceRequired, "N"),
         userCode: user?.USER_CODE || "ADMIN",
       });
@@ -506,7 +492,6 @@ const BillCodeRef = React.forwardRef((props, ref) => {
         width: 100, 
         minWidth: 100,
       },
-      { key: "billingClass", label: "Billing Class", sortable: true, width: 100, minWidth: 100 },
       {
         key: "unitPriceRequired",
         label: "Unit Price Required?",
@@ -519,7 +504,6 @@ const BillCodeRef = React.forwardRef((props, ref) => {
       { key: "rcCode", label: "RC Code", sortable: true, width: 100, minWidth: 100 },
       { key: "arAcct", label: "AR Account", sortable: true, width: 100, minWidth: 100 },
       { key: "salesAcct", label: "Sales Account", sortable: true, width: 100, minWidth: 100 },
-      { key: "vatAcct", label: "VAT Account", sortable: true, width: 100, minWidth: 100 },
       { key: "advancesAcct", label: "Advances Account", sortable: true, width: 100, minWidth: 100 },
       { key: "sDiscAcct", label: "Discount Account", sortable: true, width: 100, minWidth: 100 },
     ],
@@ -691,13 +675,6 @@ const BillCodeRef = React.forwardRef((props, ref) => {
                   required
                 />
 
-                <FieldRenderer
-                  label="Billing Class"
-                  value={form.billingClass}
-                  maxLength={20}
-                  onChange={(val) => setField("billingClass", val)}
-                  disabled={!isEditing}
-                />
               </div>
 
               <div className="flex flex-col gap-4">
@@ -744,6 +721,9 @@ const BillCodeRef = React.forwardRef((props, ref) => {
                   required
                 />
 
+              </div>
+
+              <div className="flex flex-col gap-4">
                 <FieldRenderer
                   label="Sales Account"
                   type="lookup"
@@ -755,23 +735,6 @@ const BillCodeRef = React.forwardRef((props, ref) => {
                   maxLength={25}
                   onChange={(val) => setField("salesAcct", val)}
                   onLookup={() => handleOpenAccountLookup("salesAcct")}
-                  disabled={!isEditing}
-                  required
-                />
-              </div>
-
-              <div className="flex flex-col gap-4">
-                <FieldRenderer
-                  label="VAT Account"
-                  type="lookup"
-                  value={
-                    form.vatAcct
-                      ? `${form.vatAcct}${form.vatName ? ` - ${form.vatName}` : ""}`
-                      : ""
-                  }
-                  maxLength={25}
-                  onChange={(val) => setField("vatAcct", val)}
-                  onLookup={() => handleOpenAccountLookup("vatAcct")}
                   disabled={!isEditing}
                   required
                 />
@@ -918,8 +881,6 @@ const BillCodeRef = React.forwardRef((props, ref) => {
                 salesAcct: code,
                 salesName: name,
               }));
-            } else if (activeAccountField === "vatAcct") {
-              setForm((prev) => ({ ...prev, vatAcct: code, vatName: name }));
             } else if (activeAccountField === "advancesAcct") {
               setForm((prev) => ({
                 ...prev,

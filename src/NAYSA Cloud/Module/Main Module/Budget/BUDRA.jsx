@@ -609,22 +609,32 @@ const BUDRA = () => {
             acctCode: "",
             budgetCode: "",
             positiveOnly: "Y",
+            docCode: docType,
+            docId: documentID || "",
           },
         });
 
-      const lookupRows = extractLookupRows(response).map((row, rowIndex) => ({
-        ...row,
-        groupId:
-          row?.groupId ||
-          [
-            row?.branchRef || row?.branchCode  || branchCode || "",
-            row?.rcCode ||  "",
-            row?.acctCode || "",
-            row?.budgetCode || "",
-            rowIndex + 1,
-          ].join("|") ||
-          String(rowIndex + 1),
-      }));
+      const lookupRows = extractLookupRows(response)
+        .filter((row) => {
+          const outstandingBalance = parseFormattedNumber(
+            row?.outstandingBudgetBalance ?? row?.budgetBalance ?? 0
+          );
+
+          return Number.isFinite(outstandingBalance) && outstandingBalance !== 0;
+        })
+        .map((row, rowIndex) => ({
+          ...row,
+          groupId:
+            row?.groupId ||
+            [
+              row?.branchRef || row?.branchCode || branchCode || "",
+              row?.rcCode || "",
+              row?.acctCode || "",
+              row?.budgetCode || "",
+              rowIndex + 1,
+            ].join("|") ||
+            String(rowIndex + 1),
+        }));
 
       if (!lookupRows.length) {
         useSwalErrorAlert("Open Budget Balance", "No open budget balance records were found.");
@@ -877,6 +887,19 @@ const BUDRA = () => {
       return;
     }
 
+    const restrictedRecord = selectedRecords.find(
+      (record) => String(record?.isRestricted || "").toUpperCase() === "Y"
+    );
+
+    if (restrictedRecord) {
+      useSwalErrorAlert(
+        "Selection Not Allowed",
+        restrictedRecord.restrictionMessage ||
+          "This budget item is already used by an unposted budget transaction."
+      );
+      return;
+    }
+
     const mappedRows = selectedRecords.map((record) => mapOpenBudgetBalanceRow(record));
     const currentRows = [...(detailRowsRef.current || detailRows || [])];
     const insertIndex = Number.isInteger(addRowInsertIndex)
@@ -892,6 +915,18 @@ const BUDRA = () => {
       openBudgetBalanceColumns: [],
       addRowInsertIndex: null,
     });
+  };
+
+  const handleOpenBudgetBalanceSelection = (selectedRecords = []) => {
+    const latestRecord = selectedRecords[selectedRecords.length - 1];
+
+    if (String(latestRecord?.isRestricted || "").toUpperCase() === "Y") {
+      useSwalErrorAlert(
+        "Selection Not Allowed",
+        latestRecord.restrictionMessage ||
+          "This budget item is already used by an unposted budget transaction."
+      );
+    }
   };
 
   const handleRemarksCell = (index, _field, value) => {
@@ -2064,6 +2099,7 @@ const BUDRA = () => {
           btnCaption="Get Selected Budget"
           idKey="groupId"
           onClose={handleCloseOpenBudgetBalanceLookup}
+          onSelectionReset={handleOpenBudgetBalanceSelection}
           onCancel={() =>
             updateState({
               showOpenBudgetBalanceModal: false,
@@ -2100,7 +2136,7 @@ const BUDRA = () => {
       {showSignatoryModal && (
         <DocumentSignatories
           isOpen={showSignatoryModal}
-          params={{ noReprints, documentID, docType }}
+        params={{ noReprints, documentID, docType, docNo: documentNo }}
           onClose={handleCloseSignatory}
           onCancel={() => updateState({ showSignatoryModal: false })}
         />

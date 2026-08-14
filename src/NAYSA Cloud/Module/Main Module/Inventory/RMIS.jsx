@@ -3172,7 +3172,7 @@ useEffect(() => {
       {showSignatoryModal && (
         <DocumentSignatories
           isOpen={showSignatoryModal}
-          params={{ noReprints, documentID, docType }}
+        params={{ noReprints, documentID, docType, docNo: documentNo }}
           onClose={handleCloseSignatory}
           onCancel={() => updateState({ showSignatoryModal: false })}
         />
