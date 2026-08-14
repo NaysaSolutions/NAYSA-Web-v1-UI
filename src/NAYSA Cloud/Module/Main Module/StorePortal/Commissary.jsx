@@ -19,7 +19,6 @@ import {
   X,
 } from "lucide-react";
 import Swal from "sweetalert2";
-import { useNavigate } from "react-router-dom";
 import { apiClient, fetchData } from "../../../Configuration/BaseURL.jsx";
 import { LoadingSpinner } from "../../../Global/utilities.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
@@ -761,7 +760,6 @@ const QuantityCells = ({ dates, row, className = "" }) => (
 );
 
 const IntegrationDateCell = ({ date, row }) => {
-  const navigate = useNavigate();
   const quantity = Number(row.dates?.[date]) || 0;
   const detail = row.dateIntegration?.[date];
 
@@ -823,7 +821,42 @@ const IntegrationDateCell = ({ date, row }) => {
       params.set("soNo", documentNumber);
     }
 
-    navigate(`/page/${documentType}?${params.toString()}`);
+    const documentUrl = new URL(
+      `/page/${documentType}?${params.toString()}`,
+      window.location.origin,
+    ).href;
+    const documentWindow = window.open("", "_blank");
+
+    if (documentWindow) {
+      // Prepare the new tab's authenticated session before loading the app.
+      // Opening the destination first can let AuthProvider run before the
+      // browser has copied the current tab's session storage.
+      try {
+        for (let index = 0; index < sessionStorage.length; index += 1) {
+          const key = sessionStorage.key(index);
+          if (!key || key === "naysa_tab_id") continue;
+
+          const value = sessionStorage.getItem(key);
+          if (value !== null) {
+            documentWindow.sessionStorage.setItem(key, value);
+          }
+        }
+
+        documentWindow.sessionStorage.removeItem("naysa_tab_id");
+      } catch {
+        // Shared local storage and authentication cookies remain available
+        // when direct child session-storage access is restricted.
+      }
+
+      documentWindow.location.replace(documentUrl);
+      documentWindow.opener = null;
+    } else {
+      Swal.fire({
+        icon: "warning",
+        title: "Unable to open document",
+        text: "Please allow pop-ups for this site, then try View again.",
+      });
+    }
   };
 
   const renderDocumentReference = (
@@ -2651,10 +2684,6 @@ export default function CommissaryForecast() {
                       <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 sm:text-lg">
                         Unconfirmed Orders
                       </h2>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 sm:text-sm">
-                        Review Store Portal orders that missed the configured
-                        confirmation cutoff.
-                      </p>
                     </div>
                   </div>
 
