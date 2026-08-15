@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
@@ -6,6 +6,7 @@ import {
     faSearch, faEraser 
 } from '@fortawesome/free-solid-svg-icons';
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
+import { useSwalErrorAlert as showErrorToast } from "@/NAYSA Cloud/Global/behavior.jsx";
 
 // Custom hook for debouncing client-side column filters
 function useDebounce(value, delay) {
@@ -18,6 +19,7 @@ function useDebounce(value, delay) {
 }
 
 const PayeeMastLookupModal = ({ isOpen, onClose, customParam }) => {
+    const emptyOpenPoNoticeRef = useRef("");
     const columnConfig = [
         { key: "vendCode", label: "Payee Code", width: "120px" },
         { key: "vendName", label: "Payee Name", width: "350px" },
@@ -44,7 +46,7 @@ const PayeeMastLookupModal = ({ isOpen, onClose, customParam }) => {
     };
 
     // TanStack Query for Server-Side Fetching
-    const { data: payees = [], isLoading, isFetching, refetch } = useQuery({
+    const { data: payees = [], isLoading, isFetching, isError, refetch } = useQuery({
         queryKey: ['lookupVendMast', finalSearch, searchMode, customParam],
         queryFn: async () => {
             // THE FIX: Wrapping the parameters inside 'json_data' so SQL Server can read $.json_data.search
@@ -67,6 +69,33 @@ const PayeeMastLookupModal = ({ isOpen, onClose, customParam }) => {
         staleTime: 0, // Always fetch fresh data on manual search
         placeholderData: keepPreviousData,
     });
+
+    useEffect(() => {
+        if (!isOpen) {
+            emptyOpenPoNoticeRef.current = "";
+            return;
+        }
+
+        const openPoFilters = ["OpenFGRR", "OpenRMRR", "OpenMSRR"];
+        if (
+            !openPoFilters.includes(customParam) ||
+            isLoading ||
+            isFetching ||
+            isError ||
+            finalSearch.trim() ||
+            payees.length > 0 ||
+            emptyOpenPoNoticeRef.current === customParam
+        ) {
+            return;
+        }
+
+        emptyOpenPoNoticeRef.current = customParam;
+        showErrorToast(
+            "No Open Purchase Order",
+            "No payee with open purchase order.",
+        );
+        onClose(null);
+    }, [customParam, finalSearch, isError, isFetching, isLoading, isOpen, onClose, payees.length]);
 
     const handleManualSearch = (e) => {
         e.preventDefault();
