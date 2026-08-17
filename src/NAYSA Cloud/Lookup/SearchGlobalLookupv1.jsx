@@ -56,6 +56,7 @@ const GlobalLookupModalv1 = ({
   modalMaxWidthClass = "max-w-8xl",
   overlayZIndexClass = "z-50",
   exportFileName = "Lookup",
+  preferenceKey = "",
 }) => {
   const [records, setRecords] = useState([]);
   const [filtered, setFiltered] = useState([]);
@@ -142,6 +143,9 @@ const GlobalLookupModalv1 = ({
   // Persistence (localStorage)
   // =========================
   const persistKey = useMemo(() => {
+    const explicitKey = String(preferenceKey || "").trim();
+    if (explicitKey) return `GlobalLookupModalv1:${explicitKey}`;
+
     const t = String(title || "").trim();
     if (t) return `GlobalLookupModalv1:${t}`;
 
@@ -154,7 +158,7 @@ const GlobalLookupModalv1 = ({
     }
 
     return "GlobalLookupModalv1:default";
-  }, [title, endpoint]);
+  }, [title, endpoint, preferenceKey]);
 
   const safeParse = (s) => {
     try {
@@ -173,15 +177,23 @@ const GlobalLookupModalv1 = ({
 
     if (saved?.columnOrder && Array.isArray(saved.columnOrder)) {
       setColumnOrder(saved.columnOrder);
+    } else {
+      setColumnOrder([]);
     }
     if (saved?.colWidths && typeof saved.colWidths === "object") {
       setColWidths(saved.colWidths);
+    } else {
+      setColWidths({});
     }
     if (saved?.groupBy && Array.isArray(saved.groupBy)) {
       setGroupBy(saved.groupBy);
+    } else {
+      setGroupBy([]);
     }
     if (saved?.userHiddenCols && Array.isArray(saved.userHiddenCols)) {
       setUserHiddenCols(saved.userHiddenCols);
+    } else {
+      setUserHiddenCols([]);
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
