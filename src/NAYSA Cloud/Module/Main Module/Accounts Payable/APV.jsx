@@ -4138,7 +4138,7 @@ const handleAtcNameDoubleClick = (index) => {
     if (["acctCode", "rcCode", "slCode", "vatCode", "atcCode"].includes(columnKey)) {
       const modal = {
         acctCode: { showAccountModal: true },
-        rcCode: { showRcModal: true },
+        rcCode: { showRcModal: true, accountModalSource: null },
         slCode: { showSlModal: true },
         vatCode: { showVatModal: true },
         atcCode: { showAtcModal: true },
