@@ -20,7 +20,7 @@ import {
     faVideo
 } from "@fortawesome/free-solid-svg-icons";
 
-import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
+import { apiClient, fetchData } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
 import SearchAttachment from "@/NAYSA Cloud/Lookup/SearchAttachment.jsx";
 import SearchCusMast from "@/NAYSA Cloud/Lookup/SearchCustMast.jsx";
@@ -242,6 +242,115 @@ const CustMast = () => {
 
     const { user } = useAuth();
     const userCode = user?.userCode || user?.USER_CODE || user?.code || "";
+
+    // ============================================================
+    // CUSTOMER CODE GENERATION MODE
+    // Read directly from HS_DOC through HSDocController.
+    //
+    // HS_DOC CU:
+    //   Manual -> Customer Code is editable when adding a new record.
+    //   Auto   -> Customer Code remains read-only and is generated on Save.
+    //
+    // Important:
+    // HSDocController returns sproc_PHP_HSDoc output in data[0].result
+    // as a JSON string, so it must be parsed before reading docSeries.
+    // ============================================================
+    const [generationMode, setGenerationMode] = useState("Auto");
+
+    const parseHSDocRow = (response) => {
+        const rows = response?.data;
+
+        if (!Array.isArray(rows) || rows.length === 0) {
+            return null;
+        }
+
+        const firstRow = rows[0];
+
+        // Standard sproc_PHP_HSDoc response:
+        // { result: '[{"docCode":"CU","docSeries":"Manual",...}]' }
+        if (typeof firstRow?.result === "string") {
+            try {
+                const parsed = JSON.parse(firstRow.result);
+
+                if (Array.isArray(parsed)) {
+                    return parsed[0] || null;
+                }
+
+                if (parsed && typeof parsed === "object") {
+                    return parsed;
+                }
+            } catch (error) {
+                console.error("Unable to parse CU HS_DOC result:", error);
+            }
+        }
+
+        // Defensive fallback if the stored procedure later returns a direct row.
+        return firstRow && typeof firstRow === "object"
+            ? firstRow
+            : null;
+    };
+
+    const normalizeGenerationMode = (value) => {
+        const mode = String(value ?? "")
+            .trim()
+            .toUpperCase();
+
+        if (mode === "MANUAL" || mode === "M") {
+            return "Manual";
+        }
+
+        return "Auto";
+    };
+
+    const loadCustomerGenerationMode = async ({ showError = false } = {}) => {
+        try {
+            const response = await fetchData("getHSDoc", {
+                DOC_ID: "CU",
+            });
+
+            if (!response?.success) {
+                throw new Error(
+                    response?.message || "Unable to retrieve Customer document setup."
+                );
+            }
+
+            const hsDoc = parseHSDocRow(response);
+
+            if (!hsDoc) {
+                throw new Error("HS_DOC setup for CU was not found.");
+            }
+
+            const mode = normalizeGenerationMode(
+                hsDoc?.docSeries ??
+                hsDoc?.DOC_SERIES ??
+                hsDoc?.doc_series
+            );
+
+            setGenerationMode(mode);
+            return mode;
+        } catch (error) {
+            console.error("Failed to load CU HS_DOC:", error);
+
+            // Safe fallback: if HS_DOC cannot be verified, do not allow
+            // accidental manual entry.
+            setGenerationMode("Auto");
+
+            if (showError) {
+                await useSwalErrorAlert(
+                    "Customer Code Setup",
+                    error?.message ||
+                    "Unable to determine whether Customer Code is Manual or Auto."
+                );
+            }
+
+            return null;
+        }
+    };
+
+    // Load once when Customer Master opens.
+    useEffect(() => {
+        loadCustomerGenerationMode();
+    }, []);
 
     const [form, setForm] = useState({ ...emptyForm });
     const [selectedCustCode, setSelectedCustCode] = useState("");
@@ -639,6 +748,19 @@ const CustMast = () => {
         let code = String(form?.custCode || "").trim();
         const isAddMode = !selectedCustCode;
 
+        // Manual CU setup requires the user to supply Customer Code.
+        if (
+            isAddMode &&
+            String(generationMode || "").trim().toUpperCase() === "MANUAL" &&
+            !code
+        ) {
+            await showValidation(
+                "Missing Required Field(s)",
+                ["• Customer Code"]
+            );
+            return;
+        }
+
         // 2. DUPLICATE CODE CHECK
         if (isAddMode && code) {
             const isDuplicate = await checkDuplicateCustomer(code);
@@ -793,12 +915,27 @@ const CustMast = () => {
 
     const handleAdd = async () => {
         if (!canAdd) {
-            await useSwalErrorAlert("Read Only", "You only have read access. Adding customers is not allowed.");
+            await useSwalErrorAlert(
+                "Read Only",
+                "You only have read access. Adding customers is not allowed."
+            );
             return;
         }
 
-        allowedDuplicateCustNameRef.current = ""; // Reset ref
+        // Always re-read HS_DOC before entering Add mode.
+        // This makes a recent SQL change from Auto -> Manual take effect
+        // without depending on cached AuthContext reference data.
+        const latestGenerationMode = await loadCustomerGenerationMode({
+            showError: true,
+        });
+
+        if (!latestGenerationMode) {
+            return;
+        }
+
+        allowedDuplicateCustNameRef.current = "";
         const sl = normalizeSlType(form?.sltypeCode || "CU") || "CU";
+
         setSelectedCustCode("");
         setForm({
             ...emptyForm,
@@ -806,6 +943,7 @@ const CustMast = () => {
             custCode: "",
             __isNew: true,
         });
+
         setIsEditing(true);
         setActiveTab("setup");
     };
@@ -1040,6 +1178,7 @@ const CustMast = () => {
                 {activeTab === "setup" && (
                     <CustSetupTab
                         form={form}
+                        generationMode={generationMode}
                         isEditing={isEditing && isFullAccess}
                         isReadOnly={isReadOnly}
                         pagePermission={pagePermission}

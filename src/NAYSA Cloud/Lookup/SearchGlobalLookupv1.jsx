@@ -6,6 +6,7 @@ import React, {
   useRef,
   useCallback,
 } from "react";
+import { createPortal } from "react-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faTimes,
@@ -55,6 +56,7 @@ const GlobalLookupModalv1 = ({
   modalMaxWidthClass = "max-w-8xl",
   overlayZIndexClass = "z-50",
   exportFileName = "Lookup",
+  preferenceKey = "",
 }) => {
   const [records, setRecords] = useState([]);
   const [filtered, setFiltered] = useState([]);
@@ -141,6 +143,9 @@ const GlobalLookupModalv1 = ({
   // Persistence (localStorage)
   // =========================
   const persistKey = useMemo(() => {
+    const explicitKey = String(preferenceKey || "").trim();
+    if (explicitKey) return `GlobalLookupModalv1:${explicitKey}`;
+
     const t = String(title || "").trim();
     if (t) return `GlobalLookupModalv1:${t}`;
 
@@ -153,7 +158,7 @@ const GlobalLookupModalv1 = ({
     }
 
     return "GlobalLookupModalv1:default";
-  }, [title, endpoint]);
+  }, [title, endpoint, preferenceKey]);
 
   const safeParse = (s) => {
     try {
@@ -172,15 +177,23 @@ const GlobalLookupModalv1 = ({
 
     if (saved?.columnOrder && Array.isArray(saved.columnOrder)) {
       setColumnOrder(saved.columnOrder);
+    } else {
+      setColumnOrder([]);
     }
     if (saved?.colWidths && typeof saved.colWidths === "object") {
       setColWidths(saved.colWidths);
+    } else {
+      setColWidths({});
     }
     if (saved?.groupBy && Array.isArray(saved.groupBy)) {
       setGroupBy(saved.groupBy);
+    } else {
+      setGroupBy([]);
     }
     if (saved?.userHiddenCols && Array.isArray(saved.userHiddenCols)) {
       setUserHiddenCols(saved.userHiddenCols);
+    } else {
+      setUserHiddenCols([]);
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1352,7 +1365,7 @@ const handleExportExcelClick = async (customFileName) => {
                         <FontAwesomeIcon icon={faColumns} className="mr-1" /> Columns
                       </button>
 
-                      {showColumnChooser && (
+                      {showColumnChooser && createPortal(
                         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/45 px-3 py-3">
                           <div className="flex max-h-[60vh] w-full max-w-[480px] flex-col overflow-hidden rounded-md bg-white dark:bg-slate-800 shadow-2xl ring-1 ring-black/10 dark:ring-slate-700">
                             <div className="flex items-start justify-between gap-3 border-b border-gray-200 dark:border-slate-700 px-3 py-2">
@@ -1397,7 +1410,8 @@ const handleExportExcelClick = async (customFileName) => {
                               </div>
                             </div>
                           </div>
-                        </div>
+                        </div>,
+                        document.body
                       )}
                     </div>
                   </div>

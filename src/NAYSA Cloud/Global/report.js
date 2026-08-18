@@ -1,8 +1,48 @@
-import { apiClient ,postPdfRequest,postRequest } from '@/NAYSA Cloud/Configuration/BaseURL';
+import { apiClient, getApiErrorMessage, postPdfRequest, postRequest } from '@/NAYSA Cloud/Configuration/BaseURL';
 import { useTopDocControlRow,useTopHSRptRow } from '@/NAYSA Cloud/Global/top1RefTable';
-import { formatNumber } from "@/NAYSA Cloud/Global/behavior.jsx";
+import { formatNumber, useSwalErrorAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
+
+const showPrintError = (error) => {
+  const message = getApiErrorMessage(error);
+  console.error("Error printing report:", error);
+  return useSwalErrorAlert("Printing Error", message);
+};
+
+const openPdfPreview = (pdfBlob) => {
+  const base = (import.meta.env.BASE_URL || "/").replace(/\/?$/, "/");
+  let previewWindow = null;
+
+  const handleViewerReady = (event) => {
+    if (
+      event.origin !== window.location.origin ||
+      event.source !== previewWindow ||
+      event.data?.type !== "naysa-pdf-viewer-ready"
+    ) {
+      return;
+    }
+
+    previewWindow.postMessage(
+      { type: "naysa-pdf-viewer-data", blob: pdfBlob },
+      window.location.origin
+    );
+    window.removeEventListener("message", handleViewerReady);
+  };
+
+  window.addEventListener("message", handleViewerReady);
+  previewWindow = window.open(`${base}pdf-viewer`, "_blank");
+
+  if (!previewWindow) {
+    window.removeEventListener("message", handleViewerReady);
+    throw new Error("The report is ready, but the preview was blocked. Please allow popups for this site and try again.");
+  }
+
+  setTimeout(
+    () => window.removeEventListener("message", handleViewerReady),
+    60000
+  );
+};
 
 
 export function injectLoadingSpinner(printWindow) {
@@ -68,12 +108,6 @@ export function injectLoadingSpinner(printWindow) {
 
 export async function useHandlePrint(documentID, docCode, printMode, userCode) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked — please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
     const responseDocControl = await useTopDocControlRow(docCode);
     const formName = responseDocControl?.formName;
 
@@ -90,11 +124,10 @@ export async function useHandlePrint(documentID, docCode, printMode, userCode) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
 
   } catch (error) {
-    console.error("Error printing report:", error);
+    showPrintError(error);
   }
 }
 
@@ -181,13 +214,6 @@ export async function useHandlePrint(documentID, docCode, printMode, userCode) {
 
 export async function useHandlePrintQuery(formName, userCode,params) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked — please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
-   
     if (!formName) {
       throw new Error("Report Name not defined");
     }
@@ -200,11 +226,10 @@ export async function useHandlePrintQuery(formName, userCode,params) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
 
   } catch (error) {
-    console.error("Error printing report:", error);
+    showPrintError(error);
   }
 }
 
@@ -216,14 +241,6 @@ export async function useHandlePrintQuery(formName, userCode,params) {
 
 export async function useHandlePrintARReport(params) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked — please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
-
-  
     const responseDocRpt = await useTopHSRptRow(params.reportId);
     const formName = responseDocRpt?.reportName;
     if (!formName) {
@@ -249,11 +266,10 @@ export async function useHandlePrintARReport(params) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
 
   } catch (error) {
-    console.error("Error printing report:", error);
+    showPrintError(error);
   }
 }
 
@@ -294,14 +310,6 @@ export async function useHandleDownloadExcelARReport(params) {
 
 export async function useHandlePrintAPReport(params) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked — please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
-
-  
     const responseDocRpt = await useTopHSRptRow(params.reportId);
     const formName = responseDocRpt?.reportName;
     if (!formName) {
@@ -326,11 +334,10 @@ export async function useHandlePrintAPReport(params) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
 
   } catch (error) {
-    console.error("Error printing report:", error);
+    showPrintError(error);
   }
 }
 
@@ -341,17 +348,24 @@ export async function useHandlePrintAPReport(params) {
 
 
 export async function useHandleDownloadExcelAPReport(params) {
-  const { mode, branchCode, startDate, endDate, sVendCode, eVendCode } = params;
+  const {
+    mode,
+    branchCode,
+    startDate,
+    endDate,
+    sPayeeCode,
+    ePayeeCode,
+  } = params;
 
   try {
     const payload = {
       PARAMS: JSON.stringify({
         mode,
-        branchCode: params.branchCode,
-        startDate: params.startDate,
-        endDate: params.endDate,
-        spayeeCode: params.sVendCode,
-        epayeeCode: params.eVendCode,
+        branchCode,
+        startDate,
+        endDate,
+        sPayeeCode,
+        ePayeeCode,
       })
     };
 
@@ -365,13 +379,6 @@ export async function useHandleDownloadExcelAPReport(params) {
 
 export async function useHandlePrintFGINVReport(params) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked â€” please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
-
     const responseDocRpt = await useTopHSRptRow(params.reportId);
     const formName = responseDocRpt?.reportName;
     if (!formName) {
@@ -397,10 +404,9 @@ export async function useHandlePrintFGINVReport(params) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
   } catch (error) {
-    console.error("Error printing FG inventory report:", error);
+    showPrintError(error);
   }
 }
 
@@ -429,13 +435,6 @@ export async function useHandleDownloadExcelFGINVReport(params) {
 
 export async function useHandlePrintMSINVReport(params) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked Ã¢â‚¬â€ please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
-
     const responseDocRpt = await useTopHSRptRow(params.reportId);
     const formName = responseDocRpt?.reportName;
     if (!formName) {
@@ -461,10 +460,9 @@ export async function useHandlePrintMSINVReport(params) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
   } catch (error) {
-    console.error("Error printing MS inventory report:", error);
+    showPrintError(error);
   }
 }
 
@@ -493,13 +491,6 @@ export async function useHandleDownloadExcelMSINVReport(params) {
 
 export async function useHandlePrintRMINVReport(params) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked - please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
-
     const responseDocRpt = await useTopHSRptRow(params.reportId);
     const formName = responseDocRpt?.reportName;
     if (!formName) {
@@ -525,10 +516,9 @@ export async function useHandlePrintRMINVReport(params) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
   } catch (error) {
-    console.error("Error printing RM inventory report:", error);
+    showPrintError(error);
   }
 }
 
@@ -605,13 +595,6 @@ export async function useHandleDownloadExcelFAReport(params) {
 
 export async function useHandlePrintFAReport(params) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked â€” please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
-
     const responseDocRpt = await useTopHSRptRow(params.reportId);
     const formName = responseDocRpt?.reportName;
     if (!formName) {
@@ -639,10 +622,9 @@ export async function useHandlePrintFAReport(params) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
   } catch (error) {
-    console.error("Error printing fixed asset report:", error);
+    showPrintError(error);
   }
 }
 
@@ -695,13 +677,6 @@ export async function useHandleDownloadExcelSalesReport(params) {
 
 export async function useHandlePrintSalesReport(params) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked â€” please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
-
     const responseDocRpt = await useTopHSRptRow(params.reportId);
     const formName = responseDocRpt?.reportName;
     if (!formName) {
@@ -727,10 +702,9 @@ export async function useHandlePrintSalesReport(params) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
   } catch (error) {
-    console.error("Error printing Sales report:", error);
+    showPrintError(error);
   }
 }
 
@@ -764,13 +738,6 @@ export async function useHandleDownloadExcelBUDReport(params) {
 
 export async function useHandlePrintBUDReport(params) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked â€” please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
-
     const responseDocRpt = await useTopHSRptRow(params.reportId);
     const formName = responseDocRpt?.reportName;
     if (!formName) {
@@ -800,10 +767,9 @@ export async function useHandlePrintBUDReport(params) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
   } catch (error) {
-    console.error("Error printing Budget report:", error);
+    showPrintError(error);
   }
 }
 
@@ -811,13 +777,6 @@ export async function useHandlePrintBUDReport(params) {
 
 export async function useHandlePrintPRDReport(params) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked - please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
-
     const responseDocRpt = await useTopHSRptRow(params.reportId);
     const formName = responseDocRpt?.reportName;
     if (!formName) {
@@ -843,10 +802,9 @@ export async function useHandlePrintPRDReport(params) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
   } catch (error) {
-    console.error("Error printing PRD report:", error);
+    showPrintError(error);
   }
 }
 
@@ -901,14 +859,6 @@ export async function useHandleDownloadExcelBIRReport(params) {
 
 export async function useHandlePrintGLReport(params) {
   try {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      throw new Error("Popup blocked — please allow popups for this site.");
-    }
-
-    injectLoadingSpinner(printWindow);
-
-  
     const responseDocRpt = await useTopHSRptRow(params.reportId);
     const formName = responseDocRpt?.reportName;
     if (!formName) {
@@ -938,11 +888,10 @@ export async function useHandlePrintGLReport(params) {
       throw new Error("Expected a PDF file but received something else.");
     }
 
-    const fileURL = URL.createObjectURL(pdfBlob);
-    printWindow.location.href = fileURL;
+    openPdfPreview(pdfBlob);
 
   } catch (error) {
-    console.error("Error printing report:", error);
+    showPrintError(error);
   }
 }
 

@@ -1297,6 +1297,7 @@ export default function GLINQ({
   });
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
   const [showSpinner, setShowSpinner] = useState(false);
 
   useEffect(() => {
@@ -1928,18 +1929,19 @@ export default function GLINQ({
     setIsMobileNavOpen(false);
   }, []);
 
-  const handlePrint = useCallback(() => {
+  const handlePrint = useCallback(async () => {
     const { cutoffCode, currCode, rcCode } = filters;
 
-    if (activeTab === "balSheetYTD") {
+    if (activeTab === "balSheetYTD" || activeTab === "incStatementYTD") {
+      const formName = activeTab === "balSheetYTD" ? "BSYTD.rpt" : "ISYTD.rpt";
       const params = `cutoffCode:${cutoffCode}|currCode:${currCode}|rcCode:${rcCode}`;
-      useHandlePrintQuery("BSYTD.rpt", currentUserRow?.userCode, params);
-      return;
-    }
 
-    if (activeTab === "incStatementYTD") {
-      const params = `cutoffCode:${cutoffCode}|currCode:${currCode}|rcCode:${rcCode}`;
-      useHandlePrintQuery("ISYTD.rpt", currentUserRow?.userCode, params);
+      setIsPrinting(true);
+      try {
+        await useHandlePrintQuery(formName, currentUserRow?.userCode, params);
+      } finally {
+        setIsPrinting(false);
+      }
       return;
     }
 
@@ -1957,7 +1959,7 @@ export default function GLINQ({
 
   return (
     <div className="global-ref-main-div-ui">
-      {showSpinner && <LoadingSpinner />}
+      {(showSpinner || isPrinting) && <LoadingSpinner />}
 
       <div className="global-ref-header-ui">
         <div className="flex w-full flex-col gap-6 md:flex-row md:items-center md:justify-between lg:min-h-[40px]">

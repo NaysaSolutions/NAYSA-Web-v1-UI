@@ -24,37 +24,47 @@ const PostBUDBB = ({ isOpen, onClose, userCode }) => {
       if (!isOpen) return;
 
       setLoading(true);
+      setModalReady(false);
       alertFired.current = false;
 
       try {
         const endpoint = "postingBUDBB";
         const response = await fetchDataJson(endpoint);
 
-        const budbbData = response?.data?.[0]?.result
-          ? JSON.parse(response.data[0].result)
-          : Array.isArray(response?.data)
-            ? response.data
-            : response?.data?.result
-              ? JSON.parse(response.data.result)
-              : [];
+        const responseData = response?.data;
+        const hasWrappedResult =
+          Array.isArray(responseData) &&
+          responseData.length > 0 &&
+          Object.prototype.hasOwnProperty.call(responseData[0], "result");
+        const rawData = hasWrappedResult
+          ? responseData[0].result
+          : responseData?.result ?? responseData;
+        const parsedData =
+          typeof rawData === "string"
+            ? JSON.parse(rawData.trim() || "[]")
+            : rawData;
+        const budbbData = Array.isArray(parsedData) ? parsedData : [];
 
         if (budbbData.length === 0 && !alertFired.current) {
           useSwalInfoAlert("No Records Found", "There are no records to display.");
           alertFired.current = true;
           onClose?.();
+          return;
         }
 
         const colConfig = await useSelectedHSColConfig(endpoint);
 
         if (isMounted) {
           setData(budbbData);
-          setcolConfigData(colConfig);
+          setcolConfigData(colConfig || []);
           setModalReady(true);
         }
       } catch (error) {
         console.error("Error fetching BUDBB posting data:", error);
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
@@ -79,8 +89,8 @@ const PostBUDBB = ({ isOpen, onClose, userCode }) => {
 
  
 
-  const handleViewDocument = (row) => {
-    const { docNo } = row.docNo;
+  const handleViewDocument = (row = {}) => {
+    const docNo = row.docNo || row.documentNo || row.budbbNo || "";
 
     if (!docNo) {
       useSwalValidationAlert({

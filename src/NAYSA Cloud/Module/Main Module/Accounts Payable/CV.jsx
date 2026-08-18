@@ -2227,8 +2227,68 @@ const handleOpenAPBalance = async () => {
       return;
     }
 
+    // Display Branch Name under the existing configured `branchCode` column.
+    // IMPORTANT: Do not change the HS column key, label, or sequence.
+    // The configured column remains `branchCode` with label `Branch`.
+    const branchNameCache = new Map();
+
+    const displayPayeeData = await Promise.all(
+      payeeData.map(async (row) => {
+        const rowBranchCode = String(
+          row.branchCode ||
+          row.branchcode ||
+          row.branch_code ||
+          ""
+        ).trim();
+
+        let rowBranchName = String(
+          row.branchName ||
+          row.BranchName ||
+          row.branch_name ||
+          row.BRANCH_NAME ||
+          ""
+        ).trim();
+
+        // If the API only returned the branch code, resolve its branch name.
+        if (rowBranchCode && !rowBranchName) {
+          if (branchNameCache.has(rowBranchCode)) {
+            rowBranchName = branchNameCache.get(rowBranchCode);
+          } else {
+            try {
+              const branchRow = await useTopBranchRow(rowBranchCode);
+              rowBranchName = String(
+                branchRow?.branchName ||
+                branchRow?.BranchName ||
+                branchRow?.branch_name ||
+                ""
+              ).trim();
+            } catch (branchError) {
+              console.warn(
+                `[APBAL] Failed to resolve branch name for ${rowBranchCode}:`,
+                branchError
+              );
+            }
+
+            branchNameCache.set(rowBranchCode, rowBranchName);
+          }
+        }
+
+        return {
+          ...row,
+
+          // Keep the property name `branchCode` so GlobalLookupModalv1
+          // renders it in the ORIGINAL configured Branch column position.
+          // Only its DISPLAY VALUE is changed to the branch name.
+          branchCode: rowBranchName || rowBranchCode,
+        };
+      })
+    );
+
     updateState({
-      globalLookupRow: payeeData,
+      globalLookupRow: displayPayeeData,
+
+      // Keep HS column configuration untouched:
+      // key = branchCode, label = Branch, original sequence preserved.
       globalLookupHeader: colConfig ?? [],
       showAPBalanceModal: true,
     });

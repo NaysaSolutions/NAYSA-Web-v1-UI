@@ -27,7 +27,7 @@ function useDebounce(value, delay) {
 // ── Inventory item columns (FG / RM / MS) ────────────────────────────────────
 const invColumnConfig = [
   { key: "itemCode",  label: "Item Code",     width: "140px", hidden: 0, classNames: "text-left"  },
-  { key: "itemName",  label: "Item Name",     width: "320px", hidden: 0, classNames: "text-left"  },
+  { key: "itemName",  label: "Item Name",     width: "350px", hidden: 0, classNames: "text-left"  },
   { key: "uomCode",   label: "UOM",           width: "80px",  hidden: 0, classNames: "text-left"  },
   { key: "qtyHand",   label: "Qty On Hand",   width: "120px", hidden: 0, classNames: "text-right" },
   { key: "unitCost",  label: "Unit Cost",     width: "130px", hidden: 0, classNames: "text-right" },
@@ -435,7 +435,7 @@ const ItemMastLookupModal = ({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 animate-fade-in font-sans">
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-[90rem] max-h-[85vh] flex flex-col relative overflow-hidden border border-slate-200 dark:border-slate-700">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-7xl max-h-[85vh] flex flex-col relative overflow-hidden border border-slate-200 dark:border-slate-700">
         <div className="flex items-center justify-between px-4 py-3 bg-slate-100 dark:bg-slate-700 border-b dark:border-slate-600">
           <h2 className="text-[16px] font-bold text-[#1e40af] dark:text-blue-300">
             {itemSelectTitle}
@@ -541,7 +541,7 @@ const ItemMastLookupModal = ({
                 <tr>
                   {enableMultiSelect && (
                     <th
-                      style={{ width: "110px" }}
+                      style={{ width: "80px" }}
                       className="px-4 py-3 text-left border-b border-slate-200 dark:border-slate-600"
                     >
                       <div className="flex items-center gap-2 mb-2">
@@ -641,8 +641,8 @@ const ItemMastLookupModal = ({
                       >
                         {enableMultiSelect && (
                           <td
-                            style={{ width: "110px" }}
-                            className="px-4 py-3 text-[12px] text-slate-700 dark:text-slate-200 font-medium align-middle"
+                            style={{ width: "80px" }}
+                            className="px-4 py-1.5 text-[11px] text-slate-700 dark:text-slate-200 font-medium align-middle border-b border-slate-100 dark:border-slate-700"
                           >
                             <div
                               className="flex items-center"
@@ -661,7 +661,7 @@ const ItemMastLookupModal = ({
                         {visibleColumns.map((col) => (
                           <td
                             key={col.key}
-                            className={`px-4 py-3 text-[12px] text-slate-700 dark:text-slate-200 font-medium ${col.classNames || ""}`}
+                            className={`px-4 py-1.5 text-[11px] text-slate-700 dark:text-slate-200 font-medium border-b border-slate-100 dark:border-slate-700 ${col.classNames || ""}`}
                           >
                             {col.key === "itemCode" ? (
                               <span className="font-bold">

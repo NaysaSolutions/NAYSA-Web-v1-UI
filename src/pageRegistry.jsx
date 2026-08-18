@@ -52,7 +52,7 @@ export const pageRegistry = {
   DR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/DR.jsx")),
   SI: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/SI.jsx")),
   CSI: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Sales/CSI.jsx")),
-
+  SALESANALYSIS: lazyPage(() => import("./NAYSA Cloud/Query/SOInq/SalesAnalysis.jsx")),
   // Inventory
   MSRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSRR.jsx")),
   MSIS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSIS.jsx")),

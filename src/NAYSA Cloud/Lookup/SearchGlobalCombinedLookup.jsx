@@ -172,6 +172,9 @@ const GlobalCombinedLookup = ({
           onCancel={onCancel}
           modalMaxWidthClass="max-w-[86rem]"
           exportFileName={tabTitles[0]}
+          preferenceKey={`GlobalCombinedLookup:${title}:${tabTitles[0]}:${(summaryColumns || [])
+            .map((column) => `${column.key}:${column.hidden ? 1 : 0}`)
+            .join(",")}`}
         />
       </div>
 
@@ -215,6 +218,9 @@ const GlobalCombinedLookup = ({
           onCancel={onCancel}
           modalMaxWidthClass="max-w-[86rem]"
           exportFileName={tabTitles[1]}
+          preferenceKey={`GlobalCombinedLookup:${title}:${tabTitles[1]}:${(detailColumns || [])
+            .map((column) => `${column.key}:${column.hidden ? 1 : 0}`)
+            .join(",")}`}
         />
       </div>
 

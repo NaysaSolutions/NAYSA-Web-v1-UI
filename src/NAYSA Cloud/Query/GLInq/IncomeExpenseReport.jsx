@@ -10,8 +10,8 @@ import {
 
 const safeArray = (value) => (Array.isArray(value) ? value : []);
 const FIXED_COLUMNS = [
-  { key: "accountCode", label: "Account Code", minWidth: 120, maxWidth: 120 },
-  { key: "accountName", label: "Account Name", minWidth: 290, maxWidth: 290 },
+  { key: "accountCode", label: "Account Code", width: 120, minWidth: 70, maxWidth: 600 },
+  { key: "accountName", label: "Account Name", width: 290, minWidth: 120, maxWidth: 800 },
 ];
 const TOTAL_COLUMN = {
   key: "totalAmount",
@@ -193,42 +193,20 @@ function IncomeExpenseReport({
     <div className="income-expense-scope relative flex min-h-0 flex-1 flex-col">
       <style>{`
         .income-expense-table { background: transparent !important; border-radius: 0 !important; box-shadow: none !important; }
-        .income-expense-table > .global-tran-table-main-sub-div-ui { background: white !important; border: 0 !important; border-radius: 0 !important; }
+        .income-expense-table > .global-tran-table-main-sub-div-ui { background: white !important; border: 1px solid rgb(229 231 235) !important; border-radius: 0.5rem !important; }
         .income-expense-table table { border-collapse: separate !important; border-spacing: 0 !important; }
         @media (min-width: 769px) {
           .income-expense-table .global-tran-table-main-sub-div-ui > div.relative.isolate.flex-1.h-0::before {
-            content: "";
-            position: sticky;
-            left: 0;
-            top: 0;
-            z-index: 100;
-            display: block;
-            width: 410px;
-            min-width: 410px;
-            height: 31px;
-            margin-bottom: -31px;
-            background-color: rgb(219 234 254);
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='410' height='31'%3E%3Ctext x='12' y='20' font-family='Arial,sans-serif' font-size='11' font-weight='700' fill='%231e40af'%3EAccount Code%3C/text%3E%3Ctext x='128' y='20' font-family='Arial,sans-serif' font-size='11' font-weight='700' fill='%231e40af'%3EAccount Name%3C/text%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            border-bottom: 1px solid rgb(191 219 254);
-            box-shadow: 3px 0 4px -3px rgb(15 23 42 / 35%);
-            pointer-events: none;
+            display: none;
           }
           .income-expense-table table thead { position: static !important; }
           .income-expense-table table thead tr:first-child > th { position: sticky !important; top: 0 !important; z-index: 21 !important; background: rgb(219 234 254) !important; }
           .income-expense-table table thead tr:nth-child(2) > th { position: sticky !important; top: 31px !important; z-index: 20 !important; background: rgb(243 244 246) !important; }
-          .income-expense-table table thead tr > :nth-child(1) { left: 0 !important; z-index: 62 !important; width: 120px !important; min-width: 120px !important; max-width: 120px !important; transform: translateZ(0); }
-          .income-expense-table table thead tr > :nth-child(2) { left: 120px !important; z-index: 61 !important; width: 290px !important; min-width: 290px !important; max-width: 290px !important; transform: translateZ(0); }
-          .income-expense-table table thead tr:nth-child(2) > :nth-child(-n+2) { z-index: 120 !important; transform: translateZ(0); }
-          .income-expense-table table thead tr > :nth-child(n+3) { left: auto !important; right: auto !important; z-index: 10 !important; }
-          .income-expense-table table tbody tr > :nth-child(1) { position: sticky !important; left: 0 !important; z-index: 18 !important; width: 120px !important; min-width: 120px !important; max-width: 120px !important; }
-          .income-expense-table table tbody tr > :nth-child(2) { position: sticky !important; left: 120px !important; z-index: 17 !important; width: 290px !important; min-width: 290px !important; max-width: 290px !important; }
-          .income-expense-table table tbody tr > :nth-child(-n+2) { background: white; }
           .income-expense-table table tbody tr > td { border-bottom: 1px solid rgb(229 231 235) !important; }
           .income-expense-table table tbody tr:nth-last-child(-n+3) > td { background: rgb(248 250 252); font-weight: 700; }
           .income-expense-table table tbody tr:last-child > td { position: sticky !important; bottom: 0 !important; z-index: 7; background: rgb(239 246 255); box-shadow: 0 -3px 6px rgb(15 23 42 / 12%); }
-          .income-expense-table table tbody tr:last-child > :nth-child(1) { left: 0 !important; z-index: 20 !important; background: rgb(239 246 255); }
-          .income-expense-table table tbody tr:last-child > :nth-child(2) { left: 120px !important; z-index: 19 !important; background: rgb(239 246 255); }
+          .income-expense-table table tbody tr:last-child > :nth-child(1) { z-index: 20 !important; background: rgb(239 246 255); }
+          .income-expense-table table tbody tr:last-child > :nth-child(2) { z-index: 19 !important; background: rgb(239 246 255); }
         }
       `}</style>
       <ReportViewTabs activeView={activeView} onChange={onActiveViewChange} className="mb-2 xl:hidden" />

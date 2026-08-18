@@ -2413,15 +2413,42 @@ const PO = () => {
       return;
     }
 
-    const updatedRows = [...detailRows];
-    const row = { ...updatedRows[selectedRowIndex] };
-    row.vatCode = selectedVAT.vatCode || "";
-    row.vatName = selectedVAT.vatName || "";
-    row.acctCode = selectedVAT.acctCode || row.acctCode || "";
-    row.vatRate = vatRate;
+    const sourceRows = detailRowsRef.current?.length
+      ? detailRowsRef.current
+      : detailRows || [];
+    const selectedVatCode = selectedVAT.vatCode || "";
+    const shouldConfirmApplyToAll =
+      selectedRowIndex === 0 &&
+      sourceRows.length > 1 &&
+      String(sourceRows[0]?.vatCode || "").trim() !== String(selectedVatCode).trim();
 
-    const recalculated = recalcDetailRow(row);
-    updatedRows[selectedRowIndex] = recalculated;
+    let applyToAllRows = false;
+    if (shouldConfirmApplyToAll) {
+      const result = await useSwalProceedConfirm(
+        "Apply VAT Code changes?",
+        "PO Detail already has record(s).\nDo you want to apply the selected VAT Code to all PO Detail rows?",
+        "Yes, update all",
+        "No, first row only"
+      );
+
+      applyToAllRows = Boolean(result?.isConfirmed);
+    }
+
+    const applySelectedVat = (detailRow) => recalcDetailRow({
+      ...detailRow,
+      vatCode: selectedVatCode,
+      vatName: selectedVAT.vatName || "",
+      acctCode: selectedVAT.acctCode || detailRow.acctCode || "",
+      vatRate,
+    });
+
+    const updatedRows = applyToAllRows
+      ? sourceRows.map(applySelectedVat)
+      : sourceRows.map((detailRow, rowIndex) =>
+        rowIndex === selectedRowIndex ? applySelectedVat(detailRow) : detailRow
+      );
+
+    detailRowsRef.current = updatedRows;
     updateTotalsDisplay(updatedRows);
     updateState({
       vatLookupModalOpen: false,
@@ -4554,7 +4581,7 @@ const PO = () => {
       {showSignatoryModal && (
         <DocumentSignatories
           isOpen={showSignatoryModal}
-          params={{ noReprints, documentID, docType }}
+        params={{ noReprints, documentID, docType, docNo: documentNo }}
           onClose={handleCloseSignatory}
           onCancel={() => updateState({ showSignatoryModal: false })}
         />
@@ -4575,6 +4602,7 @@ const PO = () => {
         <VATLookupModal
           isOpen={vatLookupModalOpen}
           onClose={handleCloseVATLookup}
+          customParam="InputGoods"
         />
       )}
 

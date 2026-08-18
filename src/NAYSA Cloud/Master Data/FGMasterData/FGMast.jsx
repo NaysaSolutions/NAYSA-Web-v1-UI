@@ -9,11 +9,13 @@ import {
     faSave,
     faUndo,
     faPenToSquare,
+    faPaperclip,
     faTrash,
 } from "@fortawesome/free-solid-svg-icons";
 
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
+import SearchAttachment from "@/NAYSA Cloud/Lookup/SearchAttachment.jsx";
 import { usePagePermission } from "@/NAYSA Cloud/Global/usePagePermission.js";
 import PermissionBadge from "@/NAYSA Cloud/Global/PermissionBadge.jsx";
 import FGMast_SetupTab from "./FGMast_SetupTab.jsx";
@@ -105,6 +107,7 @@ const FGMast = () => {
     const [form, setForm] = useState({ ...emptyForm });
     const [selectedItemCode, setSelectedItemCode] = useState("");
     const [isEditing, setIsEditing] = useState(false);
+    const [isAttachOpen, setIsAttachOpen] = useState(false);
 
     const [masterAllRows, setMasterAllRows] = useState([]);
     const [masterRows, setMasterRows] = useState([]);
@@ -352,6 +355,19 @@ const FGMast = () => {
         setIsEditing(false);
     };
 
+    const handleOpenAttach = async () => {
+        if (!isFullAccess) {
+            await useSwalErrorAlert("Read Only", "You only have read access. Attaching files is not allowed.");
+            return;
+        }
+
+        if (!String(form?.itemCode || "").trim()) {
+            await useSwalErrorAlert("Required", "Item Code is required.");
+            return;
+        }
+        setIsAttachOpen(true);
+    };
+
     const tabs = [
         { id: "setup", label: "Item Masterfile Set Up", icon: faFolderOpen },
         { id: "master", label: "Item Master Data", icon: faList },
@@ -368,6 +384,7 @@ const FGMast = () => {
                 { key: "save",   label: <span className="hidden sm:inline ml-1">Save</span>,   icon: faSave,        onClick: upsertItem,       disabled: isLoading || !isEditing || !canSave,                className: `${baseBtn} ${!isEditing || !canSave ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
                 { key: "reset",  label: <span className="hidden sm:inline ml-1">Reset</span>,  icon: faUndo,        onClick: handleResetSetup, disabled: false,                              className: `${baseBtn} bg-blue-600 hover:bg-blue-700` },
                 { key: "edit",   label: <span className="hidden sm:inline ml-1">Edit</span>,   icon: faPenToSquare, onClick: handleEdit,       disabled: isLoading || isEditing || !hasRecord || !canEdit,   className: `${baseBtn} ${isEditing || !hasRecord || !canEdit ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
+                { key: "attach", label: <span className="hidden sm:inline ml-1">Attach File</span>, icon: faPaperclip, onClick: handleOpenAttach, disabled: isLoading || !hasRecord || !isFullAccess, className: `${baseBtn} ${isLoading || !hasRecord || !isFullAccess ? "bg-blue-400 cursor-not-allowed opacity-50" : "bg-blue-600 hover:bg-blue-700"}` },
                 { key: "delete", label: <span className="hidden sm:inline ml-1">Delete</span>, icon: faTrash,       onClick: deleteItem,       disabled: isLoading || isEditing || !hasRecord || !canDelete,   className: `${baseBtn} ${isEditing || !hasRecord || !canDelete ? "bg-red-400 cursor-not-allowed opacity-50" : "bg-red-500 hover:bg-red-600"}` },
             ];
         }
@@ -381,7 +398,7 @@ const FGMast = () => {
         }
 
         return [];
-    }, [activeTab, isLoading, isEditing, form, refState, canAdd, canEdit, canSave, canDelete]);
+    }, [activeTab, isLoading, isEditing, form, refState, canAdd, canEdit, canSave, canDelete, isFullAccess]);
 
     return (
         <div className="global-ref-main-div-ui">
@@ -460,6 +477,19 @@ const FGMast = () => {
                     />
                 )}
             </div>
+
+            <SearchAttachment
+                isOpen={isAttachOpen}
+                onClose={() => setIsAttachOpen(false)}
+                params={{
+                    DocumentID: String(form?.itemCode || "").trim(),
+                    Title: "FG Master Data",
+                    CodeLabel: "Item Code",
+                    Code: String(form?.itemCode || "").trim(),
+                    NameLabel: "Item Description",
+                    Name: form?.itemDesc || "N/A",
+                }}
+            />
         </div>
     );
 };

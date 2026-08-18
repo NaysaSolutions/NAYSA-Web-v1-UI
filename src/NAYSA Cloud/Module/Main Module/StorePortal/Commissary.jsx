@@ -19,7 +19,6 @@ import {
   X,
 } from "lucide-react";
 import Swal from "sweetalert2";
-import { useNavigate } from "react-router-dom";
 import { apiClient, fetchData } from "../../../Configuration/BaseURL.jsx";
 import { LoadingSpinner } from "../../../Global/utilities.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
@@ -76,6 +75,14 @@ const addDays = (date, days) => {
   return formatDate(d);
 };
 
+const getStartOfWeek = (date = new Date()) => {
+  const d = new Date(date);
+  const day = d.getDay();
+  const daysSinceMonday = day === 0 ? 6 : day - 1;
+  d.setDate(d.getDate() - daysSinceMonday);
+  return formatDate(d);
+};
+
 const getDateRange = (start, end) => {
   if (!start || !end) return [];
   const dates = [];
@@ -86,6 +93,20 @@ const getDateRange = (start, end) => {
     current.setDate(current.getDate() + 1);
   }
   return dates;
+};
+
+const getDisplayDateRange = (start, end, today = formatDate(new Date())) => {
+  const dates = getDateRange(start, end);
+
+  if (dates.length <= 7) return dates;
+
+  const currentDateIndex = dates.indexOf(today);
+  if (currentDateIndex <= 0) return dates;
+
+  return [
+    ...dates.slice(currentDateIndex),
+    ...dates.slice(0, currentDateIndex),
+  ];
 };
 
 const shortDate = (iso) => {
@@ -126,6 +147,47 @@ const getStoreLabel = (row = {}) => {
   const storeCode = String(row?.storeCode ?? "").trim();
 
   return storeName || storeCode || "Unspecified Store";
+};
+
+const getUnconfirmedOrderKey = (order = {}) =>
+  `${order.storeCode}|${order.categCode}|${order.itemCode}|${order.deliveryDate}`;
+
+const getUnconfirmedOrderQty = (order = {}) =>
+  Number(
+    order.editableQty ??
+      order.orderQty ??
+      order.qty ??
+      order.storeQty ??
+      order.totalQty ??
+      0,
+  );
+
+const normalizeCommissarySetupRows = (rows = []) =>
+  rows.map((row) => ({
+    categCode: String(row.categCode || "").trim(),
+    categName: String(row.categName || row.categCode || "").trim(),
+    days: Math.max(0, Number.parseInt(row.days, 10) || 0),
+    cutoffTime: String(row.cutoffTime || "").slice(0, 5),
+  }));
+
+const getDefaultUnconfirmedDeliveryDate = (
+  rows = [],
+  selectedCategory = "All",
+) => {
+  const categoryCode = String(selectedCategory || "All").trim().toUpperCase();
+  const applicableRows =
+    categoryCode === "ALL"
+      ? rows
+      : rows.filter(
+          (row) => String(row.categCode || "").trim().toUpperCase() === categoryCode,
+        );
+  const deliveryLeadTimes = applicableRows
+    .map((row) => Number.parseInt(row.days, 10))
+    .filter((days) => Number.isFinite(days) && days >= 0);
+  const deliveryLeadTime =
+    deliveryLeadTimes.length > 0 ? Math.min(...deliveryLeadTimes) : 0;
+
+  return addDays(formatDate(new Date()), deliveryLeadTime);
 };
 
 const addUniqueValue = (values = [], value) => {
@@ -384,9 +446,12 @@ const pivotRows = (rows = [], isDetailed = false) => {
         uomCode: item.uomCode || "",
         dates: {},
         dateIntegration: {},
+        dateWorkOrder: {},
         total: 0,
         sentQty: 0,
         unsentQty: 0,
+        workOrderQty: 0,
+        remainingWorkOrderQty: 0,
         soNumbers: [],
         drNumbers: [],
         soStatus: "",
@@ -401,11 +466,19 @@ const pivotRows = (rows = [], isDetailed = false) => {
       item.unsentQty === undefined || item.unsentQty === null
         ? qty
         : Number(item.unsentQty) || 0;
+    const itemWorkOrderQty = Number(item.workOrderQty) || 0;
+    const itemRemainingWorkOrderQty =
+      item.remainingWorkOrderQty === undefined ||
+      item.remainingWorkOrderQty === null
+        ? Math.max(0, qty - itemWorkOrderQty)
+        : Number(item.remainingWorkOrderQty) || 0;
 
     row.dates[deliveryDate] = (Number(row.dates[deliveryDate]) || 0) + qty;
     row.total += qty;
     row.sentQty += itemSentQty;
     row.unsentQty += itemUnsentQty;
+    row.workOrderQty += itemWorkOrderQty;
+    row.remainingWorkOrderQty += itemRemainingWorkOrderQty;
     row.soNumbers = addUniqueValue(row.soNumbers, item.soNumber);
     row.drNumbers = addUniqueValue(row.drNumbers, item.drNumber);
     row.soStatus =
@@ -459,6 +532,26 @@ const pivotRows = (rows = [], isDetailed = false) => {
       dateIntegration.sentQty,
       dateIntegration.unsentQty,
     );
+
+    if (!row.dateWorkOrder[deliveryDate]) {
+      row.dateWorkOrder[deliveryDate] = {
+        total: 0,
+        integratedQty: 0,
+        remainingQty: 0,
+        integrationStatus: "Not Integrated",
+      };
+    }
+
+    const dateWorkOrder = row.dateWorkOrder[deliveryDate];
+    dateWorkOrder.total += qty;
+    dateWorkOrder.integratedQty += itemWorkOrderQty;
+    dateWorkOrder.remainingQty += itemRemainingWorkOrderQty;
+    dateWorkOrder.integrationStatus =
+      dateWorkOrder.remainingQty <= 0
+        ? "Integrated"
+        : dateWorkOrder.integratedQty > 0
+          ? "Partially Integrated"
+          : "Not Integrated";
   });
 
   return Array.from(map.values()).map((row) => {
@@ -476,6 +569,12 @@ const pivotRows = (rows = [], isDetailed = false) => {
     return {
       ...row,
       dateIntegration,
+      workOrderIntegrationStatus:
+        row.remainingWorkOrderQty <= 0
+          ? "Integrated"
+          : row.workOrderQty > 0
+            ? "Partially Integrated"
+            : "Not Integrated",
       soNumber: row.soNumbers.join(", "),
       drNumber: row.drNumbers.join(", "),
     };
@@ -609,6 +708,22 @@ const filterByDates = (
             sum + (Number(row.dateIntegration?.[date]?.unsentQty) || 0),
           0,
         );
+        const dateWorkOrder = normalizedDates.reduce((selected, date) => {
+          if (row.dateWorkOrder?.[date]) {
+            selected[date] = row.dateWorkOrder[date];
+          }
+          return selected;
+        }, {});
+        const workOrderQty = normalizedDates.reduce(
+          (sum, date) =>
+            sum + (Number(row.dateWorkOrder?.[date]?.integratedQty) || 0),
+          0,
+        );
+        const remainingWorkOrderQty = normalizedDates.reduce(
+          (sum, date) =>
+            sum + (Number(row.dateWorkOrder?.[date]?.remainingQty) || 0),
+          0,
+        );
         const soNumbers = normalizedDates.reduce(
           (values, date) =>
             (row.dateIntegration?.[date]?.soNumbers || []).reduce(
@@ -630,14 +745,23 @@ const filterByDates = (
           ...row,
           dates,
           dateIntegration,
+          dateWorkOrder,
           total,
           sentQty,
           unsentQty,
+          workOrderQty,
+          remainingWorkOrderQty,
           soNumbers,
           drNumbers,
           soNumber: soNumbers.join(", "),
           drNumber: drNumbers.join(", "),
           integrationStatus: getIntegrationStatus(sentQty, unsentQty),
+          workOrderIntegrationStatus:
+            remainingWorkOrderQty <= 0
+              ? "Integrated"
+              : workOrderQty > 0
+                ? "Partially Integrated"
+                : "Not Integrated",
         };
       })
       .filter((row) => row.total > 0);
@@ -698,13 +822,12 @@ const QuantityCells = ({ dates, row, className = "" }) => (
 );
 
 const IntegrationDateCell = ({ date, row }) => {
-  const navigate = useNavigate();
   const quantity = Number(row.dates?.[date]) || 0;
   const detail = row.dateIntegration?.[date];
 
   if (quantity <= 0) {
     return (
-      <td className="global-tran-td-ui w-[170px] min-w-[170px] max-w-[170px] text-center text-slate-400">
+      <td className="global-tran-td-ui w-[160px] min-w-[160px] max-w-[160px] text-center text-slate-400">
         -
       </td>
     );
@@ -760,7 +883,42 @@ const IntegrationDateCell = ({ date, row }) => {
       params.set("soNo", documentNumber);
     }
 
-    navigate(`/page/${documentType}?${params.toString()}`);
+    const documentUrl = new URL(
+      `/page/${documentType}?${params.toString()}`,
+      window.location.origin,
+    ).href;
+    const documentWindow = window.open("", "_blank");
+
+    if (documentWindow) {
+      // Prepare the new tab's authenticated session before loading the app.
+      // Opening the destination first can let AuthProvider run before the
+      // browser has copied the current tab's session storage.
+      try {
+        for (let index = 0; index < sessionStorage.length; index += 1) {
+          const key = sessionStorage.key(index);
+          if (!key || key === "naysa_tab_id") continue;
+
+          const value = sessionStorage.getItem(key);
+          if (value !== null) {
+            documentWindow.sessionStorage.setItem(key, value);
+          }
+        }
+
+        documentWindow.sessionStorage.removeItem("naysa_tab_id");
+      } catch {
+        // Shared local storage and authentication cookies remain available
+        // when direct child session-storage access is restricted.
+      }
+
+      documentWindow.location.replace(documentUrl);
+      documentWindow.opener = null;
+    } else {
+      Swal.fire({
+        icon: "warning",
+        title: "Unable to open document",
+        text: "Please allow pop-ups for this site, then try View again.",
+      });
+    }
   };
 
   const renderDocumentReference = (
@@ -768,19 +926,16 @@ const IntegrationDateCell = ({ date, row }) => {
     documentNumbers,
     colorClasses,
   ) => (
-    <div className="space-y-1">
-      <div className="text-[9px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-        {documentType}
-      </div>
+    <>
       {documentNumbers.length > 0 ? (
         documentNumbers.map((documentNumber) => (
           <div
             key={`${documentType}-${documentNumber}`}
-            className="flex items-center justify-between gap-1.5"
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1"
           >
             <span
               className={`min-w-0 truncate font-mono text-[10px] font-semibold ${colorClasses}`}
-              title={documentNumber}
+              title={`${documentType} ${documentNumber}`}
             >
               {documentNumber}
             </span>
@@ -789,29 +944,27 @@ const IntegrationDateCell = ({ date, row }) => {
               onClick={() =>
                 handleViewDocument(documentType, documentNumber)
               }
-              className="inline-flex shrink-0 items-center gap-1 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-bold text-slate-600 shadow-sm transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400/40 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-blue-500 dark:hover:bg-blue-950 dark:hover:text-blue-200"
+              className="inline-flex shrink-0 items-center gap-0.5 rounded border border-slate-200 bg-white px-1 py-0 text-[9px] font-bold leading-4 text-slate-600 shadow-sm transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400/40 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-blue-500 dark:hover:bg-blue-950 dark:hover:text-blue-200"
               title={`View ${documentType} ${documentNumber}`}
               aria-label={`View ${documentType} ${documentNumber}`}
             >
-              <Eye className="h-2.5 w-2.5" />
+              <Eye className="h-2 w-2" />
               View
             </button>
           </div>
         ))
-      ) : (
-        <div className="text-[10px] text-slate-400">-</div>
-      )}
-    </div>
+      ) : null}
+    </>
   );
 
   return (
-    <td className="global-tran-td-ui w-[210px] min-w-[210px] max-w-[210px] text-left align-top">
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-bold text-slate-800 dark:text-slate-100">
+    <td className="global-tran-td-ui w-[160px] min-w-[160px] max-w-[160px] !px-1.5 !py-1 text-left align-top leading-tight">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1">
+        <span className="truncate text-[10px] font-bold text-slate-800 dark:text-slate-100">
           Qty: {quantity.toLocaleString()}
         </span>
         <span
-          className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+          className={`inline-flex shrink-0 rounded-full px-1.5 py-0 text-[9px] font-bold leading-4 ${
             integrationStatus === "Sent"
               ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200"
               : integrationStatus === "Partially Sent"
@@ -823,7 +976,7 @@ const IntegrationDateCell = ({ date, row }) => {
         </span>
       </div>
       {hasDocuments && (
-        <div className="mt-1.5 grid gap-1.5 border-t border-slate-100 pt-1.5 leading-tight dark:border-slate-700">
+        <div className="mt-1 grid gap-0.5 border-t border-slate-100 pt-1 dark:border-slate-700">
           {renderDocumentReference(
             "SO",
             soNumbers,
@@ -934,8 +1087,10 @@ const MaterialSummaryRows = ({
 /* ─── main component ──────────────────────────────────────────────────────── */
 export default function CommissaryForecast() {
   const { currentUserRow } = useAuth();
-  const [startDate, setStartDate] = useState(formatDate(new Date()));
-  const [endDate, setEndDate] = useState(addDays(formatDate(new Date()), 6));
+  const [startDate, setStartDate] = useState(() => getStartOfWeek());
+  const [endDate, setEndDate] = useState(() =>
+    addDays(getStartOfWeek(), 6),
+  );
   const [category, setCategory] = useState("All");
   const [viewType, setViewType] = useState("forecast");
   const [activeTab, setActiveTab] = useState("forecastSummary");
@@ -966,6 +1121,7 @@ export default function CommissaryForecast() {
   const [isLoadingSetup, setIsLoadingSetup] = useState(false);
   const [isSavingSetup, setIsSavingSetup] = useState(false);
   const [unconfirmedOrders, setUnconfirmedOrders] = useState([]);
+  const [unconfirmedDeliveryDate, setUnconfirmedDeliveryDate] = useState("");
   const [collapsedUnconfirmedCategories, setCollapsedUnconfirmedCategories] =
     useState([]);
   const [isLoadingUnconfirmed, setIsLoadingUnconfirmed] = useState(false);
@@ -976,6 +1132,10 @@ export default function CommissaryForecast() {
   const [unconfirmedError, setUnconfirmedError] = useState("");
 
   const [isGeneratingWO, setIsGeneratingWO] = useState(false);
+  const [showWOModal, setShowWOModal] = useState(false);
+  const [selectedWorkOrderRowIds, setSelectedWorkOrderRowIds] = useState([]);
+  const [workOrderQuantities, setWorkOrderQuantities] = useState({});
+  const [workOrderRemarks, setWorkOrderRemarks] = useState("");
   const [isSendingToSODR, setIsSendingToSODR] = useState(false);
   const [woSuccessMsg, setWoSuccessMsg] = useState("");
   const [showSODRModal, setShowSODRModal] = useState(false);
@@ -1014,6 +1174,14 @@ export default function CommissaryForecast() {
     resetSODRModalData();
   };
 
+  const handleCloseWOModal = () => {
+    if (isGeneratingWO) return;
+    setShowWOModal(false);
+    setSelectedWorkOrderRowIds([]);
+    setWorkOrderQuantities({});
+    setWorkOrderRemarks("");
+  };
+
   const visibleTabs = useMemo(
     () => tabs.filter((tab) => tab.viewType === viewType),
     [viewType],
@@ -1028,7 +1196,7 @@ export default function CommissaryForecast() {
   );
 
   const dates = useMemo(
-    () => getDateRange(startDate, endDate),
+    () => getDisplayDateRange(startDate, endDate),
     [startDate, endDate],
   );
 
@@ -1048,12 +1216,7 @@ export default function CommissaryForecast() {
 
     try {
       const response = await fetchData("commissary/setup");
-      const rows = unwrapData(response).map((row) => ({
-        categCode: String(row.categCode || "").trim(),
-        categName: String(row.categName || row.categCode || "").trim(),
-        days: Math.max(0, Number.parseInt(row.days, 10) || 0),
-        cutoffTime: String(row.cutoffTime || "").slice(0, 5),
-      }));
+      const rows = normalizeCommissarySetupRows(unwrapData(response));
       setSetupRows(rows);
     } catch (error) {
       console.error("Failed to load Commissary setup", error);
@@ -1068,25 +1231,37 @@ export default function CommissaryForecast() {
     }
   };
 
-  const loadUnconfirmedOrders = async () => {
-    if (!startDate || !endDate) {
-      setUnconfirmedError(
-        "From Delivery Date and To Delivery Date are required.",
-      );
-      return;
-    }
-
+  const loadUnconfirmedOrders = async (deliveryDateOverride = "") => {
     setIsLoadingUnconfirmed(true);
     setUnconfirmedError("");
 
     try {
+      const requestedDeliveryDate =
+        typeof deliveryDateOverride === "string" ? deliveryDateOverride : "";
+      let deliveryDate = normalizeDateKey(
+        requestedDeliveryDate || unconfirmedDeliveryDate,
+      );
+
+      if (!deliveryDate) {
+        const setupResponse = await fetchData("commissary/setup");
+        const rows = normalizeCommissarySetupRows(unwrapData(setupResponse));
+        setSetupRows(rows);
+        deliveryDate = getDefaultUnconfirmedDeliveryDate(rows, category);
+        setUnconfirmedDeliveryDate(deliveryDate);
+      }
+
       const response = await fetchData("commissary/unconfirmed-orders", {
-        startDate,
-        endDate,
+        startDate: deliveryDate,
+        endDate: deliveryDate,
         category: category || "All",
         storeCode: storeFilter || "All",
       });
-      setUnconfirmedOrders(unwrapData(response));
+      setUnconfirmedOrders(
+        unwrapData(response).map((order) => ({
+          ...order,
+          editableQty: String(getUnconfirmedOrderQty(order)),
+        })),
+      );
     } catch (error) {
       console.error("Failed to load unconfirmed orders", error);
       setUnconfirmedOrders([]);
@@ -1098,6 +1273,20 @@ export default function CommissaryForecast() {
     } finally {
       setIsLoadingUnconfirmed(false);
     }
+  };
+
+  const updateUnconfirmedQty = (order, value) => {
+    const rowKey = getUnconfirmedOrderKey(order);
+
+    setUnconfirmedOrders((previous) =>
+      previous.map((row) =>
+        getUnconfirmedOrderKey(row) === rowKey
+          ? { ...row, editableQty: value }
+          : row,
+      ),
+    );
+    setUnconfirmedError("");
+    setUnconfirmedMessage("");
   };
 
   const updateSetupRow = (categCode, field, value) => {
@@ -1176,10 +1365,17 @@ export default function CommissaryForecast() {
     }
 
     const isAccept = decision === "ACCEPTED";
+    const quantity = getUnconfirmedOrderQty(order);
+
+    if (isAccept && (!Number.isFinite(quantity) || quantity <= 0)) {
+      setUnconfirmedError("Qty must be greater than zero before accepting.");
+      return;
+    }
+
     const confirmation = await Swal.fire({
       icon: isAccept ? "question" : "warning",
       title: isAccept ? "Accept late order?" : "Reject late order?",
-      text: `${order.storeCode} • ${order.itemCode} • ${order.itemName || order.categName || order.categCode} • Delivery ${order.deliveryDate}`,
+      text: `${order.storeCode} • ${order.itemCode} • ${order.itemName || order.categName || order.categCode} • Qty ${quantity} • Delivery ${order.deliveryDate}`,
       input: "textarea",
       inputLabel: "Remarks (optional)",
       inputPlaceholder: "Enter the reason or instruction...",
@@ -1191,7 +1387,7 @@ export default function CommissaryForecast() {
 
     if (!confirmation.isConfirmed) return;
 
-    const rowKey = `${order.storeCode}|${order.categCode}|${order.itemCode}|${order.deliveryDate}`;
+    const rowKey = getUnconfirmedOrderKey(order);
     setDecisionKey(rowKey);
     setUnconfirmedError("");
     setUnconfirmedMessage("");
@@ -1204,6 +1400,7 @@ export default function CommissaryForecast() {
           categCode: order.categCode,
           itemCode: order.itemCode,
           deliveryDate: order.deliveryDate,
+          qty: quantity,
           decision,
           remarks: String(confirmation.value || "").trim(),
           userCode: currentUserRow.userCode,
@@ -1218,9 +1415,7 @@ export default function CommissaryForecast() {
       );
       setUnconfirmedOrders((previous) =>
         previous.filter(
-          (row) =>
-            `${row.storeCode}|${row.categCode}|${row.itemCode}|${row.deliveryDate}` !==
-            rowKey,
+          (row) => getUnconfirmedOrderKey(row) !== rowKey,
         ),
       );
 
@@ -1391,10 +1586,57 @@ export default function CommissaryForecast() {
       return;
     }
 
-    const confirmAction = window.confirm(
-      `Generate consolidated Work Orders for all confirmed items between ${startDate} and ${endDate}?\n\nNote: Once generated, the confirmation records will be locked and cannot be edited or integrated again.`,
-    );
-    if (!confirmAction) return;
+    if (!currentUserRow?.branchCode || !currentUserRow?.userCode) {
+      setErrorMessage(
+        "Your Branch Code or User Code is missing. Please log in again before integrating.",
+      );
+      return;
+    }
+
+    if (selectedWorkOrderRows.length === 0) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Select item(s)",
+        text: "Please select at least one confirmed item to integrate to Work Order.",
+      });
+      return;
+    }
+
+    const selectedItems = selectedWorkOrderRows.map((row) => ({
+      itemCode: row.itemCode || "",
+      deliveryDates: row.workOrderDeliveryDates,
+      quantity: Number(workOrderQuantities[row.workOrderRowId]),
+    }));
+    const invalidItem = selectedWorkOrderRows.find((row) => {
+      const requestedQty = Number(workOrderQuantities[row.workOrderRowId]);
+      return (
+        !Number.isFinite(requestedQty) ||
+        requestedQty <= 0 ||
+        requestedQty > Number(row.availableWorkOrderQty) + 0.000001
+      );
+    });
+
+    if (invalidItem) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Invalid quantity",
+        text: `Enter a quantity greater than zero and not more than ${Number(
+          invalidItem.availableWorkOrderQty,
+        ).toLocaleString()} for ${invalidItem.itemCode}.`,
+      });
+      return;
+    }
+
+    const confirmation = await Swal.fire({
+      icon: "question",
+      title: `Create ${selectedItems.length.toLocaleString()} Work Order(s)?`,
+      text: "One consolidated Work Order will be created for each checked finished item using its active BOM and the quantity entered.",
+      showCancelButton: true,
+      confirmButtonText: "Create Work Orders",
+      cancelButtonText: "Cancel",
+      reverseButtons: true,
+    });
+    if (!confirmation.isConfirmed) return;
 
     setIsGeneratingWO(true);
     setErrorMessage("");
@@ -1404,27 +1646,79 @@ export default function CommissaryForecast() {
       const res = await apiClient.post("commissary/generate-work-orders", {
         startDate,
         endDate,
+        category: category || "All",
+        branchCode: currentUserRow.branchCode,
+        userCode: currentUserRow.userCode,
+        documentDate: formatDate(new Date()),
+        remarks: workOrderRemarks,
+        selectedItems,
       });
       const response = res.data;
-
-      setWoSuccessMsg(
+      const generatedWorkOrders = Array.isArray(response?.data)
+        ? response.data
+        : [];
+      const successMessage =
         response?.message ||
-          "Consolidated Work Orders generated and locked successfully!",
-      );
-      await loadCommissaryData();
-    } catch (error) {
-      console.error("Failed to generate Work Orders", error);
-      const responseData = error?.response?.data;
-      const firstValidationError = responseData?.errors
-        ? Object.values(responseData.errors).flat().find(Boolean)
-        : "";
+        `${generatedWorkOrders.length.toLocaleString()} Work Order(s) were created successfully.`;
+      const documentRowsHtml = generatedWorkOrders
+        .map(
+          (document) => `
+            <tr>
+              <td style="padding:7px;border-bottom:1px solid #e2e8f0;text-align:left;font-family:monospace">${escapeHtml(document.woNumber || "-")}</td>
+              <td style="padding:7px;border-bottom:1px solid #e2e8f0;text-align:left;font-family:monospace">${escapeHtml(document.itemCode || "-")}</td>
+              <td style="padding:7px;border-bottom:1px solid #e2e8f0;text-align:left">${escapeHtml(document.itemName || "-")}</td>
+              <td style="padding:7px;border-bottom:1px solid #e2e8f0;text-align:left;font-family:monospace">${escapeHtml(document.bomCode || "-")}</td>
+              <td style="padding:7px;border-bottom:1px solid #e2e8f0;text-align:right">${Number(document.quantity || 0).toLocaleString()}</td>
+            </tr>`,
+        )
+        .join("");
 
-      setErrorMessage(
-        firstValidationError ||
-          responseData?.message ||
-          error?.message ||
-          "Failed to generate Work Orders.",
-      );
+      setShowWOModal(false);
+      setSelectedWorkOrderRowIds([]);
+      setWorkOrderQuantities({});
+      setWorkOrderRemarks("");
+      setWoSuccessMsg(successMessage);
+      await loadCommissaryData();
+
+      await Swal.fire({
+        icon: "success",
+        title: "Work Orders created",
+        width: 850,
+        html: `
+          <p style="margin:0 0 12px">${escapeHtml(successMessage)}</p>
+          <div style="max-height:320px;overflow:auto;border:1px solid #e2e8f0;border-radius:8px">
+            <table style="width:100%;border-collapse:collapse;font-size:11px">
+              <thead style="position:sticky;top:0;background:#f1f5f9">
+                <tr>
+                  <th style="padding:7px;text-align:left">WO No.</th>
+                  <th style="padding:7px;text-align:left">Item Code</th>
+                  <th style="padding:7px;text-align:left">Description</th>
+                  <th style="padding:7px;text-align:left">BOM</th>
+                  <th style="padding:7px;text-align:right">WO Qty</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${
+                  documentRowsHtml ||
+                  '<tr><td colspan="5" style="padding:12px;text-align:center">No Work Order return value was received.</td></tr>'
+                }
+              </tbody>
+            </table>
+          </div>`,
+      });
+    } catch (error) {
+      const message =
+        error?.response?.status === 405
+          ? "The backend route POST /api/commissary/generate-work-orders is not registered."
+          : getApiErrorMessage(error, "Work Order integration failed.");
+
+      console.error("Failed to generate Work Orders", message);
+      setErrorMessage(message);
+      await Swal.fire({
+        icon: "error",
+        title: "Unable to create Work Orders",
+        text: message,
+      });
     } finally {
       setIsGeneratingWO(false);
     }
@@ -1675,6 +1969,19 @@ export default function CommissaryForecast() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [customerLookupStoreCode, showSODRModal]);
 
+  useEffect(() => {
+    if (!showWOModal) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape" && !isGeneratingWO) {
+        handleCloseWOModal();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isGeneratingWO, showWOModal]);
+
   const storeOptions = useMemo(() => {
     const map = new Map();
     const sourceRows =
@@ -1810,6 +2117,45 @@ export default function CommissaryForecast() {
         selectedIntegrationRowIdSet.has(row.integrationRowId),
       ),
     [integrationRows, selectedIntegrationRowIdSet],
+  );
+
+  const workOrderIntegrationRows = useMemo(
+    () =>
+      currentData
+        .map((row, index) => {
+          const workOrderDeliveryDates = dates.filter(
+            (deliveryDate) =>
+              Number(row.dateWorkOrder?.[deliveryDate]?.remainingQty) > 0,
+          );
+          const availableWorkOrderQty = workOrderDeliveryDates.reduce(
+            (sum, deliveryDate) =>
+              sum +
+              (Number(row.dateWorkOrder?.[deliveryDate]?.remainingQty) || 0),
+            0,
+          );
+
+          return {
+            ...row,
+            workOrderDeliveryDates,
+            availableWorkOrderQty,
+            workOrderRowId: `${row.itemCode || "item"}|${index}`,
+          };
+        })
+        .filter((row) => row.availableWorkOrderQty > 0),
+    [currentData, dates],
+  );
+
+  const selectedWorkOrderRowIdSet = useMemo(
+    () => new Set(selectedWorkOrderRowIds),
+    [selectedWorkOrderRowIds],
+  );
+
+  const selectedWorkOrderRows = useMemo(
+    () =>
+      workOrderIntegrationRows.filter((row) =>
+        selectedWorkOrderRowIdSet.has(row.workOrderRowId),
+      ),
+    [selectedWorkOrderRowIdSet, workOrderIntegrationRows],
   );
 
   const selectedStoreCodes = useMemo(
@@ -1968,6 +2314,79 @@ export default function CommissaryForecast() {
       ),
     [selectedIntegrationRows],
   );
+
+  const selectedWorkOrderQuantity = useMemo(
+    () =>
+      selectedWorkOrderRows.reduce(
+        (sum, row) =>
+          sum + (Number(workOrderQuantities[row.workOrderRowId]) || 0),
+        0,
+      ),
+    [selectedWorkOrderRows, workOrderQuantities],
+  );
+
+  const hasInvalidSelectedWorkOrderQuantity = useMemo(
+    () =>
+      selectedWorkOrderRows.some((row) => {
+        const quantity = Number(workOrderQuantities[row.workOrderRowId]);
+        return (
+          !Number.isFinite(quantity) ||
+          quantity <= 0 ||
+          quantity > Number(row.availableWorkOrderQty) + 0.000001
+        );
+      }),
+    [selectedWorkOrderRows, workOrderQuantities],
+  );
+
+  const allWorkOrderRowsSelected =
+    workOrderIntegrationRows.length > 0 &&
+    selectedWorkOrderRows.length === workOrderIntegrationRows.length;
+
+  const openWorkOrderModal = async () => {
+    if (workOrderIntegrationRows.length === 0) {
+      await Swal.fire({
+        icon: "info",
+        title: "Nothing to integrate",
+        text: "All confirmed quantities in the selected filters are already linked to Work Orders.",
+      });
+      return;
+    }
+
+    setSelectedWorkOrderRowIds([]);
+    setWorkOrderQuantities(
+      Object.fromEntries(
+        workOrderIntegrationRows.map((row) => [
+          row.workOrderRowId,
+          row.availableWorkOrderQty,
+        ]),
+      ),
+    );
+    setWorkOrderRemarks("");
+    setShowWOModal(true);
+  };
+
+  const toggleAllWorkOrderRows = () => {
+    setSelectedWorkOrderRowIds(
+      allWorkOrderRowsSelected
+        ? []
+        : workOrderIntegrationRows.map((row) => row.workOrderRowId),
+    );
+  };
+
+  const toggleWorkOrderRow = (rowId) => {
+    setSelectedWorkOrderRowIds((previous) =>
+      previous.includes(rowId)
+        ? previous.filter((id) => id !== rowId)
+        : [...previous, rowId],
+    );
+  };
+
+  const updateWorkOrderQuantity = (rowId, value) => {
+    setWorkOrderQuantities((previous) => ({
+      ...previous,
+      [rowId]: value,
+    }));
+  };
 
   const allIntegrationRowsSelected =
     integrationRows.length > 0 &&
@@ -2563,27 +2982,16 @@ export default function CommissaryForecast() {
                       <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 sm:text-lg">
                         Unconfirmed Orders
                       </h2>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 sm:text-sm">
-                        Review Store Portal orders that missed the configured
-                        confirmation cutoff.
-                      </p>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-[160px_160px]">
+                  <div className="w-full sm:w-[180px]">
                     <FloatingField
-                      id="setup-unconfirmed-from"
-                      label="From Delivery Date"
+                      id="setup-unconfirmed-delivery-date"
+                      label="Delivery Date"
                       type="date"
-                      value={startDate}
-                      onChange={setStartDate}
-                    />
-                    <FloatingField
-                      id="setup-unconfirmed-to"
-                      label="To Delivery Date"
-                      type="date"
-                      value={endDate}
-                      onChange={setEndDate}
+                      value={unconfirmedDeliveryDate}
+                      onChange={setUnconfirmedDeliveryDate}
                     />
                   </div>
                 </div>
@@ -2655,7 +3063,7 @@ export default function CommissaryForecast() {
                               className="global-tran-td-ui py-10 text-center text-slate-500"
                             >
                               No unconfirmed late orders found for this delivery
-                              date range.
+                              date.
                             </td>
                           </tr>
                         ) : (
@@ -2702,7 +3110,8 @@ export default function CommissaryForecast() {
 
                                 {!isCollapsed &&
                                   group.rows.map((order) => {
-                                    const rowKey = `${order.storeCode}|${order.categCode}|${order.itemCode}|${order.deliveryDate}`;
+                                    const rowKey =
+                                      getUnconfirmedOrderKey(order);
                                     const isSavingDecision =
                                       decisionKey === rowKey;
                                     const status = String(
@@ -2747,14 +3156,23 @@ export default function CommissaryForecast() {
                                         <td className="global-tran-td-ui text-center font-medium">
                                           {order.uomCode || "-"}
                                         </td>
-                                        <td className="global-tran-td-ui text-right font-semibold tabular-nums">
-                                          {Number(
-                                            order.orderQty ??
-                                              order.qty ??
-                                              order.storeQty ??
-                                              order.totalQty ??
-                                              0,
-                                          ).toLocaleString()}
+                                        <td className="global-tran-td-ui text-right">
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            step="any"
+                                            inputMode="decimal"
+                                            value={order.editableQty ?? ""}
+                                            onChange={(event) =>
+                                              updateUnconfirmedQty(
+                                                order,
+                                                event.target.value,
+                                              )
+                                            }
+                                            disabled={isSavingDecision}
+                                            aria-label={`Qty for ${order.itemCode || "item"}`}
+                                            className="w-24 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-right font-semibold tabular-nums text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-gray-950 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-900"
+                                          />
                                         </td>
                                         <td className="global-tran-td-ui text-center">
                                           <span
@@ -2971,7 +3389,7 @@ export default function CommissaryForecast() {
                       key={date}
                       className={`global-tran-th-ui sticky top-0 z-[210] bg-blue-100 dark:bg-blue-900 ${
                         showsIntegrationDetails
-                          ? "w-[210px] min-w-[210px] max-w-[210px] text-center"
+                          ? "w-[160px] min-w-[160px] max-w-[160px] text-center"
                           : "w-[96px] min-w-[96px] max-w-[96px] text-right"
                       }`}
                     >
@@ -3145,7 +3563,7 @@ export default function CommissaryForecast() {
             {activeTab === "confirmedSummary" && (
               <button
                 type="button"
-                onClick={handleGenerateWorkOrders}
+                onClick={openWorkOrderModal}
                 disabled={
                   isGeneratingWO || isLoading || currentData.length === 0
                 }
@@ -3156,9 +3574,7 @@ export default function CommissaryForecast() {
                 }`}
               >
                 <Boxes className="h-4 w-4 shrink-0" />
-                {isGeneratingWO
-                  ? "Integrating Work Orders..."
-                  : "Integrate to Work Order"}
+                Integrate to Work Order
               </button>
             )}
 
@@ -3194,6 +3610,273 @@ export default function CommissaryForecast() {
           </div>
         )}
       </div>
+
+      {showWOModal && (
+        <div
+          className="fixed inset-0 z-[9998] flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm sm:p-6"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isGeneratingWO) {
+              handleCloseWOModal();
+            }
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="work-order-modal-title"
+            className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-950"
+          >
+            <header className="flex items-start justify-between gap-4 border-b border-slate-200 bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-4 text-white dark:border-slate-700 sm:px-6">
+              <div>
+                <h2
+                  id="work-order-modal-title"
+                  className="text-lg font-bold sm:text-xl"
+                >
+                  Integrate Confirmed Orders to Work Order
+                </h2>
+                <p className="mt-1 text-xs text-emerald-50">
+                  Select finished items and enter the quantity to produce.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseWOModal}
+                disabled={isGeneratingWO}
+                className="rounded-lg p-2 text-white/90 transition hover:bg-white/15 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label="Close Work Order integration modal"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </header>
+
+            <div className="grid grid-cols-2 gap-2 border-b border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900 sm:grid-cols-4 sm:p-4">
+              <div className="rounded-lg bg-white p-3 shadow-sm dark:bg-slate-950">
+                <div className="text-[10px] font-bold uppercase text-slate-400">
+                  From Delivery Date
+                </div>
+                <div className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  {startDate}
+                </div>
+              </div>
+              <div className="rounded-lg bg-white p-3 shadow-sm dark:bg-slate-950">
+                <div className="text-[10px] font-bold uppercase text-slate-400">
+                  To Delivery Date
+                </div>
+                <div className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  {endDate}
+                </div>
+              </div>
+              <div className="rounded-lg bg-white p-3 shadow-sm dark:bg-slate-950">
+                <div className="text-[10px] font-bold uppercase text-slate-400">
+                  Selected Items
+                </div>
+                <div className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  {selectedWorkOrderRows.length.toLocaleString()} /{" "}
+                  {workOrderIntegrationRows.length.toLocaleString()}
+                </div>
+              </div>
+              <div className="rounded-lg bg-white p-3 shadow-sm dark:bg-slate-950">
+                <div className="text-[10px] font-bold uppercase text-slate-400">
+                  Work Order Quantity
+                </div>
+                <div className="mt-1 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+                  {selectedWorkOrderQuantity.toLocaleString()}
+                </div>
+              </div>
+            </div>
+
+            <div className="border-b border-slate-200 p-3 dark:border-slate-800 sm:p-4">
+              <label
+                htmlFor="workOrderRemarks"
+                className="mb-1 block text-xs font-bold text-slate-600 dark:text-slate-300"
+              >
+                Remarks
+              </label>
+              <input
+                id="workOrderRemarks"
+                type="text"
+                value={workOrderRemarks}
+                onChange={(event) => setWorkOrderRemarks(event.target.value)}
+                maxLength={200}
+                placeholder="Optional remarks for the generated Work Orders"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 dark:border-slate-700 dark:bg-slate-950 dark:focus:ring-emerald-900/40"
+              />
+            </div>
+
+            <div className="relative isolate min-h-0 flex-1 overflow-auto overscroll-contain px-3 pb-3 pt-0 sm:px-4 sm:pb-4">
+              <table className="w-full min-w-[980px] table-fixed border-collapse text-sm">
+                <colgroup>
+                  <col className="w-12" />
+                  <col className="w-[15%]" />
+                  <col />
+                  <col className="w-[9%]" />
+                  <col className="w-[19%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[15%]" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-center dark:border-slate-700 dark:bg-slate-900">
+                      <input
+                        type="checkbox"
+                        checked={allWorkOrderRowsSelected}
+                        onChange={toggleAllWorkOrderRows}
+                        aria-label="Select all items for Work Order integration"
+                        className="h-4 w-4 cursor-pointer rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                    </th>
+                    <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-left dark:border-slate-700 dark:bg-slate-900">
+                      Item Code
+                    </th>
+                    <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-left dark:border-slate-700 dark:bg-slate-900">
+                      Description
+                    </th>
+                    <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-left dark:border-slate-700 dark:bg-slate-900">
+                      UOM
+                    </th>
+                    <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-left dark:border-slate-700 dark:bg-slate-900">
+                      Delivery Date(s)
+                    </th>
+                    <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-right dark:border-slate-700 dark:bg-slate-900">
+                      Confirmed
+                    </th>
+                    <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-right dark:border-slate-700 dark:bg-slate-900">
+                      Integrated
+                    </th>
+                    <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-right dark:border-slate-700 dark:bg-slate-900">
+                      Available
+                    </th>
+                    <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-right dark:border-slate-700 dark:bg-slate-900">
+                      Integrate Qty
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {workOrderIntegrationRows.map((row) => {
+                    const isSelected = selectedWorkOrderRowIdSet.has(
+                      row.workOrderRowId,
+                    );
+                    const requestedQuantity =
+                      workOrderQuantities[row.workOrderRowId] ?? "";
+                    const invalidQuantity =
+                      isSelected &&
+                      (!Number.isFinite(Number(requestedQuantity)) ||
+                        Number(requestedQuantity) <= 0 ||
+                        Number(requestedQuantity) >
+                          Number(row.availableWorkOrderQty) + 0.000001);
+
+                    return (
+                      <tr
+                        key={row.workOrderRowId}
+                        className={
+                          isSelected
+                            ? "bg-emerald-50/60 hover:bg-emerald-50 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/30"
+                            : "hover:bg-slate-50 dark:hover:bg-slate-900/70"
+                        }
+                      >
+                        <td className="border-b border-slate-100 px-3 py-2 text-center dark:border-slate-800">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() =>
+                              toggleWorkOrderRow(row.workOrderRowId)
+                            }
+                            aria-label={`Select ${row.itemCode || "item"} for Work Order integration`}
+                            className="h-4 w-4 cursor-pointer rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                          />
+                        </td>
+                        <td
+                          className="truncate border-b border-slate-100 px-3 py-2 font-mono font-semibold dark:border-slate-800"
+                          title={row.itemCode || "-"}
+                        >
+                          {row.itemCode || "-"}
+                        </td>
+                        <td
+                          className="truncate border-b border-slate-100 px-3 py-2 dark:border-slate-800"
+                          title={row.itemDesc || "-"}
+                        >
+                          {row.itemDesc || "-"}
+                        </td>
+                        <td className="border-b border-slate-100 px-3 py-2 dark:border-slate-800">
+                          {row.uomCode || "-"}
+                        </td>
+                        <td
+                          className="border-b border-slate-100 px-3 py-2 text-xs font-semibold dark:border-slate-800"
+                          title={row.workOrderDeliveryDates.join(", ")}
+                        >
+                          {row.workOrderDeliveryDates
+                            .map((date) => shortDate(date))
+                            .join(", ")}
+                        </td>
+                        <td className="border-b border-slate-100 px-3 py-2 text-right dark:border-slate-800">
+                          {Number(row.total || 0).toLocaleString()}
+                        </td>
+                        <td className="border-b border-slate-100 px-3 py-2 text-right text-slate-600 dark:border-slate-800 dark:text-slate-300">
+                          {Number(row.workOrderQty || 0).toLocaleString()}
+                        </td>
+                        <td className="border-b border-slate-100 px-3 py-2 text-right font-bold text-emerald-700 dark:border-slate-800 dark:text-emerald-300">
+                          {Number(
+                            row.availableWorkOrderQty || 0,
+                          ).toLocaleString()}
+                        </td>
+                        <td className="border-b border-slate-100 px-3 py-2 text-right dark:border-slate-800">
+                          <input
+                            type="number"
+                            min="0.000001"
+                            max={row.availableWorkOrderQty}
+                            step="0.000001"
+                            value={requestedQuantity}
+                            disabled={!isSelected || isGeneratingWO}
+                            onChange={(event) =>
+                              updateWorkOrderQuantity(
+                                row.workOrderRowId,
+                                event.target.value,
+                              )
+                            }
+                            aria-label={`Work Order quantity for ${row.itemCode}`}
+                            className={`w-full rounded-md border px-2 py-1.5 text-right text-sm font-semibold outline-none transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:disabled:bg-slate-900 ${
+                              invalidQuantity
+                                ? "border-red-500 focus:ring-2 focus:ring-red-100 dark:focus:ring-red-900/40"
+                                : "border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 dark:border-slate-700 dark:bg-slate-950 dark:focus:ring-emerald-900/40"
+                            }`}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900 sm:px-6">
+              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                {selectedWorkOrderRows.length.toLocaleString()} item(s) selected
+              </span>
+              <button
+                type="button"
+                onClick={handleGenerateWorkOrders}
+                disabled={
+                  isGeneratingWO ||
+                  selectedWorkOrderRows.length === 0 ||
+                  hasInvalidSelectedWorkOrderQuantity
+                }
+                className={`rounded-lg px-5 py-2 text-sm font-bold text-white shadow transition ${
+                  isGeneratingWO ||
+                  selectedWorkOrderRows.length === 0 ||
+                  hasInvalidSelectedWorkOrderQuantity
+                    ? "cursor-not-allowed bg-gray-400 dark:bg-gray-700"
+                    : "bg-emerald-600 hover:bg-emerald-700 active:scale-95 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                }`}
+              >
+                {isGeneratingWO ? "Creating..." : "Create Work Orders"}
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
 
       {showSODRModal && (
         <div

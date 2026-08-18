@@ -1,4 +1,3 @@
-// src/NAYSA Cloud/Master Data/CustMastTabs/CustSetupTab.jsx
 import React, {
   forwardRef,
   useEffect,
@@ -119,6 +118,7 @@ const CustSetupTab = forwardRef(
       isLoading,
       isEditing,
       form = {},
+      generationMode,
       sltypeOptions = [],
       sourceOptions = [],
       activeOptions = [],
@@ -155,6 +155,57 @@ const CustSetupTab = forwardRef(
       const n = useGetFieldLength(tblFieldArray, col);
       return n || fallback;
     };
+
+    // Same Manual/Auto behavior used by Payee Code.
+    // Manual + new record = editable.
+    // Auto + new record = read-only with lookup.
+    // Existing record = read-only with lookup.
+    const isManualMode = useMemo(() => {
+      const mode = normalizeUpper(generationMode || "Auto");
+      return mode === "MANUAL" || mode === "M";
+    }, [generationMode]);
+
+    const canTypeCustomerCode = isNewRecord && isManualMode;
+    const customerCodeOverrideRef = useRef(null);
+
+    useEffect(() => {
+      const wrapper = customerCodeOverrideRef.current;
+      if (!wrapper) return undefined;
+
+      const input = wrapper.querySelector("input");
+      if (!input) return undefined;
+
+      if (canTypeCustomerCode) {
+        const maxLen = getLen("cust_code", 20);
+
+        input.removeAttribute("readonly");
+        input.removeAttribute("disabled");
+        input.setAttribute("maxlength", maxLen);
+        input.style.pointerEvents = "auto";
+        input.onclick = (e) => e.stopPropagation();
+
+        input.oninput = (e) => {
+          let val = e.target.value;
+
+          if (val.length > maxLen) {
+            val = val.substring(0, maxLen);
+            e.target.value = val;
+          }
+
+          onChangeForm({ custCode: val });
+        };
+      } else {
+        input.setAttribute("readonly", "true");
+        input.style.pointerEvents = "";
+        input.onclick = null;
+        input.oninput = null;
+      }
+
+      return () => {
+        input.onclick = null;
+        input.oninput = null;
+      };
+    }, [canTypeCustomerCode, onChangeForm, tblFieldArray]);
 
     const sl = useMemo(
       () => normalizeUpper(form?.sltypeCode || ""),
@@ -290,6 +341,11 @@ const CustSetupTab = forwardRef(
     const [isWarehouseLookupOpen, setIsWarehouseLookupOpen] = useState(false);
     const [isChainCustomerLookupOpen, setIsChainCustomerLookupOpen] = useState(false);
 
+    const openCustomerLookup = () => {
+      if (isLoading) return;
+      setIsCustLookupOpen(true);
+    };
+
     return (
       <>
         <div className="flex flex-col gap-6 rounded-lg relative">
@@ -342,17 +398,36 @@ const CustSetupTab = forwardRef(
 
             {/* Row 2: Customer Code | Tax Rate Class | Old Code */}
             <div className="grid grid-cols-3 gap-3">
-              <FieldRenderer
-                label="Customer Code"
-                required
-                type="lookup"
-                value={form.custCode || ""}
-                onChange={isNewRecord ? (v) => onChangeForm({ custCode: getValue(v) }) : undefined}
-                onLookup={isNewRecord ? undefined : () => !isLoading && setIsCustLookupOpen(true)}
-                readOnly={!isNewRecord}
-                disabled={isLoading}
-                maxLength={getLen("cust_code", 20)}
-              />
+              <div
+                ref={customerCodeOverrideRef}
+                className={`w-full ${
+                  !canTypeCustomerCode
+                    ? "[&>div]:!bg-[#F1F5F9] [&_input]:!bg-transparent [&_input]:!pointer-events-none [&_input]:!text-slate-600 [&_button]:!text-slate-400 [&_label]:!bg-[#F1F5F9]"
+                    : ""
+                }`}
+              >
+                <FieldRenderer
+                  key={`customer-code-${canTypeCustomerCode ? "manual" : "readonly"}`}
+                  label="Customer Code"
+                  required
+                  type="lookup"
+                  editableLookup
+                  value={form?.custCode || ""}
+                  onChange={
+                    canTypeCustomerCode
+                      ? (v) => onChangeForm({ custCode: getValue(v) })
+                      : undefined
+                  }
+                  onLookup={
+                    canTypeCustomerCode
+                      ? undefined
+                      : openCustomerLookup
+                  }
+                  readOnly={!canTypeCustomerCode}
+                  disabled={isLoading}
+                  maxLength={getLen("cust_code", 20)}
+                />
+              </div>
               <FieldRenderer
                 label="Tax Rate Class"
                 required
@@ -661,7 +736,7 @@ const CustSetupTab = forwardRef(
                         maxLength={getLen("billterm_code", 20)}
                         labelClassName="!text-[12px]"
                       />
-                      <FieldRenderer
+                      {/* <FieldRenderer
                         label="Business Style"
                         type="select"
                         value={form?.businessStyle || ""}
@@ -669,7 +744,7 @@ const CustSetupTab = forwardRef(
                         onChange={(v) => onChangeForm({ businessStyle: getValue(v) })}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
-                      />
+                      /> */}
                       <FieldRenderer
                         label="Currency"
                         type="lookup"
@@ -740,7 +815,7 @@ const CustSetupTab = forwardRef(
                         readOnly={isReadOnly}
                         disabled={isDisabled}
                       />
-                      <FieldRenderer
+                      {/* <FieldRenderer
                         label="Price Group"
                         type="select"
                         value={form?.priceGroup || ""}
@@ -748,7 +823,7 @@ const CustSetupTab = forwardRef(
                         onChange={(v) => onChangeForm({ priceGroup: getValue(v) })}
                         readOnly={isReadOnly}
                         disabled={isDisabled}
-                      />
+                      /> */}
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -807,7 +882,7 @@ const CustSetupTab = forwardRef(
                       />
                     </div>
 
-                    <FieldRenderer
+                    {/* <FieldRenderer
                       label="Shipping Lines"
                       type="select"
                       value={form?.shippingLines || ""}
@@ -815,7 +890,7 @@ const CustSetupTab = forwardRef(
                       onChange={(v) => onChangeForm({ shippingLines: getValue(v) })}
                       readOnly={isReadOnly}
                       disabled={isDisabled}
-                    />
+                    /> */}
 
                     <FieldRenderer
                       label="Direct SI/DR WH"

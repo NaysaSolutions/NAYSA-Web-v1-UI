@@ -592,9 +592,24 @@ const handleOpenReferencePOAdvance = async (overrides = {}) => {
       vendCode: lookupVendCode,
     };
 
-    const response = await fetchDataJson("getPOAPV_Summary", lookupPayload);
+    // Keep both payload shapes for compatibility with PO procedure versions
+    // that read either $.branchCode/$.vendCode or $.json_data.*.
+    const response = await fetchData("getPOAPV_Summary", {
+      PARAMS: JSON.stringify({
+        ...lookupPayload,
+        json_data: lookupPayload,
+      }),
+    });
 
-    const rawRows = extractOpenRRResponseRows(response);
+    const rawRows = extractOpenRRResponseRows(response).filter((row) => {
+      const rowBranchCode = String(row.branchCode ??  "").trim();
+      const rowVendCode = String( row.vendCode ??  "").trim();
+
+      return (
+        (!lookupBranchCode || rowBranchCode === lookupBranchCode) &&
+        (!lookupVendCode || rowVendCode === lookupVendCode)
+      );
+    });
 
     const normalizedRows = rawRows.map((row, index) => ({
       ...row,
@@ -741,6 +756,152 @@ const handleOpenReferenceLCImportation = async (overrides = {}) => {
     }
 
     return "";
+  };
+
+  const rrAmountKeys = [
+    "siAmount",
+    "si_amount",
+    "SI_AMOUNT",
+    "amount",
+    "AMOUNT",
+    "rrAmount",
+    "RR_AMOUNT",
+    "joAmount",
+    "JO_AMOUNT",
+    "itemAmount",
+    "item_amount",
+    "ITEM_AMOUNT",
+    "grossAmount",
+    "gross_amount",
+    "GROSS_AMOUNT",
+    "netAmount",
+    "net_amount",
+    "NET_AMOUNT",
+    "totalAmount",
+    "total_amount",
+    "TOTAL_AMOUNT",
+    "extendedAmount",
+    "extended_amount",
+    "EXTENDED_AMOUNT",
+  ];
+
+  const rrVatAmountKeys = [
+    "vatAmount",
+    "vat_amount",
+    "VAT_AMOUNT",
+    "vatAmt",
+    "vat_amt",
+    "VAT_AMT",
+  ];
+
+  const rrQuantityKeys = ["qty", "QTY", "quantity", "QUANTITY", "recQty", "rec_qty", "REC_QTY"];
+
+  const rrUnitCostKeys = [
+    "unitCost",
+    "unit_cost",
+    "UNIT_COST",
+    "cost",
+    "COST",
+    "price",
+    "PRICE",
+  ];
+
+  const getLookupNumber = (row, keys) => {
+    const value = getLookupValue(row, ...keys);
+    const parsed = parseFormattedNumber(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const getRRLineAmount = (row) => {
+    const explicitAmount = getLookupNumber(row, rrAmountKeys);
+    if (explicitAmount) return explicitAmount;
+
+    const quantity = getLookupNumber(row, rrQuantityKeys);
+    const unitCost = getLookupNumber(row, rrUnitCostKeys);
+
+    return quantity && unitCost ? quantity * unitCost : 0;
+  };
+
+  const fetchRRReferenceDetails = async (item) => {
+    const referenceType = String(item.type || item.invType || item.rrSource || "").toUpperCase();
+
+    if (referenceType === "JO") {
+      return [];
+    }
+
+    const selectedIds = [item.rrId, item.groupId, item.id]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .join(",");
+
+    const detailPayload = {
+      json_data: {
+        selectedIds,
+        selectedId: selectedIds,
+        rrId: item.rrId || "",
+        rrHdId: item.rrId || "",
+        rrNo: item.rrNo || "",
+        poNo: item.poNo || "",
+        branchCode: item.branchCode || branchCode || "",
+        vendCode: item.vendCode || vendCode || "",
+        invType: item.type || item.invType || "MS",
+        type: item.type || item.invType || "MS",
+        rrSource: item.rrSource || item.type || item.invType || "",
+      },
+    };
+
+    try {
+      const response = await postRequest("getAPVRR_OpenDetail", detailPayload);
+      return extractOpenRRResponseRows(response).map((row, index) =>
+        normalizeOpenRRRow(row, index),
+      );
+    } catch (error) {
+      console.warn("Unable to fetch RR reference details; using summary row.", error);
+      return [];
+    }
+  };
+
+  const enrichRRReferenceItem = async (item) => {
+    const detailRows = await fetchRRReferenceDetails(item);
+
+    if (detailRows.length === 0) {
+      return item;
+    }
+
+    const detailAmount = detailRows.reduce(
+      (total, detailRow) => total + getRRLineAmount(detailRow),
+      0,
+    );
+    const detailVatAmount = detailRows.reduce(
+      (total, detailRow) => total + getLookupNumber(detailRow, rrVatAmountKeys),
+      0,
+    );
+    const firstDetail = detailRows[0] || {};
+
+    return {
+      ...item,
+      ...Object.fromEntries(
+        Object.entries({
+          drAcct: item.drAcct || item.debitAcct || firstDetail.drAcct || firstDetail.debitAcct,
+          debitAcct: item.debitAcct || item.drAcct || firstDetail.debitAcct || firstDetail.drAcct,
+          rcCode: item.rcCode || firstDetail.rcCode,
+          rcName: item.rcName || firstDetail.rcName,
+          vatCode: item.vatCode || firstDetail.vatCode,
+          vatDesc: item.vatDesc || firstDetail.vatDesc,
+          categCode: item.categCode || firstDetail.categCode,
+          siNo: item.siNo || firstDetail.siNo,
+          siDate: item.siDate || firstDetail.siDate,
+          paytermCode: item.paytermCode || firstDetail.paytermCode,
+          terms: item.terms || firstDetail.terms,
+          dueDate: item.dueDate || firstDetail.dueDate,
+          remarks: item.remarks || firstDetail.remarks,
+        }).filter(([, value]) => value !== undefined && value !== null && value !== ""),
+      ),
+      siAmount: detailAmount || getRRLineAmount(item),
+      amount: detailAmount || getRRLineAmount(item),
+      vatAmount: detailVatAmount || getLookupNumber(item, rrVatAmountKeys),
+      rrDetailRows: detailRows,
+    };
   };
 
   const extractOpenRRRows = (value) => {
@@ -2172,58 +2333,28 @@ const extractOpenRRResponseRows = (response) => {
     const lookupPayload = {
       branchCode: lookupBranchCode,
       vendCode: lookupVendCode,
+      includeClosed: true,
+      includeClosedRR: true,
     };
 
-    const requestAttempts = [
-  async () => {
-    const rrResponse = await fetchDataJson("getAPVRR_OpenSummary", lookupPayload);
-    const joResponse = await fetchDataJson("getAPVJO_OpenSummary", lookupPayload);
+    // Match the advances lookup payload: support procedure versions that read
+    // either the top-level values or the nested $.json_data values.
+    const requestParams = {
+      PARAMS: JSON.stringify({
+        ...lookupPayload,
+        json_data: lookupPayload,
+      }),
+    };
 
-    return [
+    const [rrResponse, joResponse] = await Promise.all([
+      fetchData("getAPVRR_OpenSummary", requestParams),
+      fetchData("getAPVJO_OpenSummary", requestParams),
+    ]);
+
+    const rawRows = [
       ...extractOpenRRResponseRows(rrResponse),
       ...extractOpenRRResponseRows(joResponse),
     ];
-  },
-
-  async () => {
-    const rrResponse = await fetchData("getAPVRR_OpenSummary", {
-      PARAMS: JSON.stringify({ json_data: lookupPayload }),
-    });
-    const joResponse = await fetchData("getAPVJO_OpenSummary", {
-      PARAMS: JSON.stringify({ json_data: lookupPayload }),
-    });
-
-    return [
-      ...extractOpenRRResponseRows(rrResponse),
-      ...extractOpenRRResponseRows(joResponse),
-    ];
-  },
-
-  async () => {
-    const rrResponse = await fetchData("getAPVRR_OpenSummary", {
-      PARAMS: JSON.stringify(lookupPayload),
-    });
-    const joResponse = await fetchData("getAPVJO_OpenSummary", {
-      PARAMS: JSON.stringify(lookupPayload),
-    });
-
-    return [
-      ...extractOpenRRResponseRows(rrResponse),
-      ...extractOpenRRResponseRows(joResponse),
-    ];
-  },
-];
-
-let rawRows = [];
-
-for (const requestOpenReference of requestAttempts) {
-  try {
-    rawRows = await requestOpenReference();
-    if (rawRows.length > 0) break;
-  } catch (requestError) {
-    console.warn("Open RR/JO lookup attempt failed:", requestError);
-  }
-}
 
     const normalizedRows = rawRows.map((row, index) =>
       normalizeOpenRRRow(row, index),
@@ -2396,10 +2527,14 @@ const handleCloseRRRefModal = async (selectedItems) => {
       return;
     }
 
+    const referenceItems = isPOAdvanceFlow
+      ? itemsArray
+      : await Promise.all(itemsArray.map((item) => enrichRRReferenceItem(item)));
+
     const defaultAdvancesAcctCode = await getDefaultAdvancesAcctCode();
 
     const mappedRows = await Promise.all(
-      itemsArray.map(async (item) => {
+      referenceItems.map(async (item) => {
         // 1. Resolve DR Account: Use the record's drAcct value, fallback to dynamic category lookup if missing
         let resolvedDebitAcct = item.drAcct || item.debitAcct || "";
         const itemCategoryCode = item.categCode || item.CATEG_CODE || item.categoryCode || item.category || "";
@@ -2571,8 +2706,9 @@ const calculatedAtcAmount = aCode
     const updatedRows = [...detailRows, ...mappedRows];
     updateState({
       detailRows: updatedRows,
+      detailRowsGL: [],
       showRRRefModal: false,
-      triggerGLEntries: true, // Triggers automatic general ledger account generation rules seamlessly
+      triggerGLEntries: false,
       modalContext: "",
       globalLookupTitle: "",
       globalLookupBtnCaption: "",
@@ -4058,11 +4194,9 @@ const handleAtcNameDoubleClick = (index) => {
   ];
   const {
     getColumnStyle: getApvDetailColumnStyle,
-    getOrderedColumns: getOrderedApvDetailColumns,
     renderHeaderContextMenu: renderApvDetailHeaderContextMenu,
     renderResizableHeader: renderApvDetailHeader,
   } = useResizableTableColumns(apvDetailColumnDefs);
-  const orderedApvDetailColumns = getOrderedApvDetailColumns(apvDetailColumnDefs);
   const getApvDetailCellStyle = (key, fallbackWidth) =>
     getApvDetailColumnStyle(key, fallbackWidth);
 
@@ -4097,13 +4231,9 @@ const handleAtcNameDoubleClick = (index) => {
   ];
   const {
     getColumnStyle: getApvGlColumnStyle,
-    getOrderedColumns: getOrderedApvGlColumns,
     renderHeaderContextMenu: renderApvGlHeaderContextMenu,
     renderResizableHeader: renderApvGlHeader,
   } = useResizableTableColumns(apvGlColumnDefs);
-  const orderedApvGlColumns = getOrderedApvGlColumns(apvGlColumnDefs);
-  const orderedApvDetailColumnKeys = orderedApvDetailColumns.map((column) => column.key).join("|");
-  const orderedApvGlColumnKeys = orderedApvGlColumns.map((column) => column.key).join("|");
   const getApvGlCellStyle = (key, fallbackWidth) =>
     getApvGlColumnStyle(key, fallbackWidth);
 
@@ -4272,7 +4402,7 @@ const handleAtcNameDoubleClick = (index) => {
           // isResetDisabled={isResetDisabled} // Pass disabled state
           detailsRoute="/page/APV"
           isSaveDisabled={
-            state.isSaveDisabled || isFormDisabled || detailRowsGL.length === 0
+            state.isSaveDisabled || isFormDisabled
           }
           isResetDisabled={state.isResetDisabled}
           isAttachDisabled={!documentID}
@@ -4569,9 +4699,9 @@ const handleAtcNameDoubleClick = (index) => {
               {/* Invoice Details Button */}
               <div className="global-tran-table-main-div-ui">
                 <div className="global-tran-table-main-sub-div-ui">
-                  <table data-apv-table-type="detail" className="min-w-full table-fixed border-collapse [&_input]:w-full [&_select]:w-full">
+                  <table className="min-w-full table-fixed border-collapse [&_input]:w-full [&_select]:w-full">
                     <colgroup>
-                      {orderedApvDetailColumns.map((column) => (
+                      {apvDetailColumnDefs.map((column) => (
                         <col
                           key={column.key}
                           style={getApvDetailCellStyle(column.key, column.width)}
@@ -4581,10 +4711,8 @@ const handleAtcNameDoubleClick = (index) => {
                     </colgroup>
                     <thead className="global-tran-thead-div-ui">
                       <tr>
-                        {orderedApvDetailColumns.map((column) =>
-                          renderApvDetailHeader(column.label, column.key, column.width, {
-                            orderedColumns: orderedApvDetailColumns,
-                          })
+                        {apvDetailColumnDefs.map((column) =>
+                          renderApvDetailHeader(column.label, column.key, column.width)
                         )}
                         {!isFormDisabled && (
                           <th
@@ -4622,6 +4750,9 @@ const handleAtcNameDoubleClick = (index) => {
                                 <option value="FG">FG</option>
                                 <option value="MS">MS</option>
                                 <option value="RM">RM</option>
+                                {selectedApType === "APV01" && <option value="JO">JO</option>}
+                                {isAdvancesAPType && <option value="PO">PO</option>}
+                                {isAdvancesAPType && <option value="JO">JO</option>}
                               </select>
                             </td>
                           )}
@@ -5404,38 +5535,6 @@ const handleAtcNameDoubleClick = (index) => {
             <div className="global-tran-table-main-sub-div-ui">
               <table className="min-w-full table-fixed border-collapse [&_input]:w-full [&_select]:w-full">
                 <colgroup>
-                  {orderedApvGlColumns.map((column) => <col key={column.key} style={getApvGlCellStyle(column.key, column.width)} />)}
-                  {!isFormDisabled && <col style={transactionActionsCellStyle} />}
-                </colgroup>
-                <thead className="global-tran-thead-div-ui">
-                  <tr>
-                    {orderedApvGlColumns.map((column) => renderApvGlHeader(column.label, column.key, column.width, { orderedColumns: orderedApvGlColumns }))}
-                    {!isFormDisabled && <th className="global-tran-th-ui sticky right-0 bg-blue-300 dark:bg-blue-900 z-30" style={transactionActionsHeaderStyle}>Actions</th>}
-                  </tr>
-                </thead>
-                <tbody className="relative">
-                  {detailRowsGL.map((row, index) => (
-                    <tr key={index} className="global-tran-tr-ui">
-                      {orderedApvGlColumns.map((column) => renderApvGlCell(column.key, row, index))}
-                      {!isFormDisabled && (
-                        <td className="global-tran-td-ui text-center sticky right-0" style={transactionActionsCellStyle}>
-                          <div className="flex items-center justify-center gap-1">
-                            <button type="button" className="global-tran-td-button-add-ui" onClick={() => handleAddRowGL(index)}><FontAwesomeIcon icon={faPlus} /></button>
-                            <button type="button" className="global-tran-td-button-delete-ui" onClick={() => handleDeleteRowGL(index)}><FontAwesomeIcon icon={faTrashAlt} /></button>
-                          </div>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {renderApvGlHeaderContextMenu()}
-            </div>
-          </div>
-          <div className="global-tran-table-main-div-ui">
-            <div className="global-tran-table-main-sub-div-ui">
-              <table style={{ display: "none" }} className="min-w-full table-fixed border-collapse [&_input]:w-full [&_select]:w-full">
-                <colgroup>
                   {apvGlColumnDefs.map((column) => (
                     <col
                       key={column.key}
@@ -5447,9 +5546,7 @@ const handleAtcNameDoubleClick = (index) => {
                 <thead className="global-tran-thead-div-ui">
                   <tr>
                     {apvGlColumnDefs.map((column) =>
-                      renderApvGlHeader(column.label, column.key, column.width, {
-                        orderedColumns: apvGlColumnDefs,
-                      })
+                      renderApvGlHeader(column.label, column.key, column.width)
                     )}
 
                     {!isFormDisabled && (
@@ -5465,11 +5562,11 @@ const handleAtcNameDoubleClick = (index) => {
                 <tbody className="relative">
                   {detailRowsGL.map((row, index) => (
                     <tr key={index} className="global-tran-tr-ui">
-                      <td key="ln" className="global-tran-td-ui text-center">
+                      <td className="global-tran-td-ui text-center">
                         {index + 1}
                       </td>
 
-                      <td key="acctCode" className="global-tran-td-ui">
+                      <td className="global-tran-td-ui">
                         <div className="relative w-fit">
                           <input
                             type="text"
@@ -5500,7 +5597,7 @@ const handleAtcNameDoubleClick = (index) => {
                         </div>
                       </td>
 
-                      <td key="rcCode" className="global-tran-td-ui">
+                      <td className="global-tran-td-ui">
                         <div className="relative w-fit">
                           <input
                             type="text"
@@ -5537,7 +5634,7 @@ const handleAtcNameDoubleClick = (index) => {
                         </div>
                       </td>
 
-                      <td key="sltypeCode" className="global-tran-td-ui">
+                      <td className="global-tran-td-ui">
                         <input
                           type="text"
                           className="w-[100px] global-tran-td-inputclass-ui"
@@ -5553,7 +5650,7 @@ const handleAtcNameDoubleClick = (index) => {
                         />
                       </td>
 
-                      <td key="slCode" className="global-tran-td-ui">
+                      <td className="global-tran-td-ui">
                         <div className="relative w-fit">
                           <input
                             type="text"
@@ -5591,7 +5688,7 @@ const handleAtcNameDoubleClick = (index) => {
                         </div>
                       </td>
 
-                      <td key="particular" className="global-tran-td-ui">
+                      <td className="global-tran-td-ui">
                         <div className="relative inline-block">
                           {/* Hidden span to measure text width */}
                           <span className="invisible absolute whitespace-pre px-2">
@@ -5617,7 +5714,7 @@ const handleAtcNameDoubleClick = (index) => {
                         </div>
                       </td>
 
-                      <td key="vatCode" className="global-tran-td-ui">
+                      <td className="global-tran-td-ui">
                         <div className="relative w-fit">
                           <input
                             type="text"
@@ -5650,7 +5747,7 @@ const handleAtcNameDoubleClick = (index) => {
                         </div>
                       </td>
 
-                      <td key="vatName" className="global-tran-td-ui">
+                      <td className="global-tran-td-ui">
                         <input
                           type="text"
                           className="w-[200px] global-tran-td-inputclass-ui"
@@ -5660,7 +5757,7 @@ const handleAtcNameDoubleClick = (index) => {
                         />
                       </td>
 
-                      <td key="atcCode" className="global-tran-td-ui">
+                      <td className="global-tran-td-ui">
                         <div className="relative w-fit">
                           <input
                             type="text"
@@ -5694,7 +5791,7 @@ const handleAtcNameDoubleClick = (index) => {
                         </div>
                       </td>
 
-                      <td key="atcName" className="global-tran-td-ui">
+                      <td className="global-tran-td-ui">
                         <input
                           type="text"
                           className="w-[200px] global-tran-td-inputclass-ui"
@@ -5710,7 +5807,7 @@ const handleAtcNameDoubleClick = (index) => {
                         />
                       </td>
 
-                      <td key="debit" className="global-tran-td-ui text-right">
+                      <td className="global-tran-td-ui text-right">
                         <input
                           type="text"
                           className="w-[120px] global-tran-td-inputclass-ui text-right"
@@ -5759,7 +5856,7 @@ const handleAtcNameDoubleClick = (index) => {
                         />
                       </td>
 
-                      <td key="credit" className="global-tran-td-ui text-right">
+                      <td className="global-tran-td-ui text-right">
                         <input
                           type="text"
                           className="w-[120px] global-tran-td-inputclass-ui text-right"
@@ -5809,7 +5906,6 @@ const handleAtcNameDoubleClick = (index) => {
                       </td>
 
                       <td
-                        key="debitFx1"
                         className={`global-tran-td-ui text-right ${
                           withCurr2 ? "" : "hidden"
                         }`}
@@ -5862,7 +5958,6 @@ const handleAtcNameDoubleClick = (index) => {
                         />
                       </td>
                       <td
-                        key="creditFx1"
                         className={`global-tran-td-ui text-right ${
                           withCurr2 ? "" : "hidden"
                         }`}
@@ -5916,7 +6011,6 @@ const handleAtcNameDoubleClick = (index) => {
                       </td>
 
                       <td
-                        key="debitFx2"
                         className={`global-tran-td-ui text-right ${
                           withCurr3 ? "" : "hidden"
                         }`}
@@ -5969,7 +6063,6 @@ const handleAtcNameDoubleClick = (index) => {
                         />
                       </td>
                       <td
-                        key="creditFx2"
                         className={`global-tran-td-ui text-right ${
                           withCurr3 ? "" : "hidden"
                         }`}
@@ -6022,7 +6115,7 @@ const handleAtcNameDoubleClick = (index) => {
                         />
                       </td>
 
-                      <td key="slRefNo" className="global-tran-td-ui">
+                      <td className="global-tran-td-ui">
                         <input
                           type="text"
                           className="w-[100px] global-tran-td-inputclass-ui"
@@ -6039,7 +6132,7 @@ const handleAtcNameDoubleClick = (index) => {
                         />
                       </td>
 
-                      <td key="slrefDate" className="global-tran-td-ui">
+                      <td className="global-tran-td-ui">
                         <div className="w-[110px]">
                           <input
                             type="text"
@@ -6059,7 +6152,7 @@ const handleAtcNameDoubleClick = (index) => {
                         </div>
                       </td>
 
-                      <td key="remarks" className="global-tran-td-ui">
+                      <td className="global-tran-td-ui">
                         <div className="relative flex w-[220px] items-center">
                           <input
                             type="text"
@@ -6121,6 +6214,7 @@ const handleAtcNameDoubleClick = (index) => {
                   ))}
                 </tbody>
               </table>
+              {renderApvGlHeaderContextMenu()}
             </div>
           </div>
 

@@ -88,6 +88,7 @@ import {
   useSwalshowSaveSuccessDialog,
   useSwalErrorAlert,
   useSwalInfoAlert,
+  useSwalProceedConfirm,
   useSwalvalidateRequiredFields
 } from '@/NAYSA Cloud/Global/behavior.jsx';
 
@@ -1871,16 +1872,13 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
         };
       
       if (hasBlanks) {
-        const result = await Swal.fire({
-          title: 'Replicate Data?',
-          text: `Do you want to copy this ${fieldLabels[field] } to all blank rows?`,
-          icon: 'question',
-          showCancelButton: true,
-          confirmButtonColor: '#3085d6',
-          cancelButtonColor: '#d33',
-          confirmButtonText: 'Yes, copy it!',
-          cancelButtonText: 'No'
-        });
+        const fieldLabel = fieldLabels[field] || fieldName;
+        const result = await useSwalProceedConfirm(
+          `Apply ${fieldLabel} changes?`,
+          `Detail already has record(s).\nDo you want to apply the updated ${fieldLabel} to all blank detail rows?`,
+          "Yes, update all",
+          "No",
+        );
 
         if (result.isConfirmed) {
           updatedRows.forEach((r, i) => {
@@ -2248,14 +2246,12 @@ const handleCloseWarehouseLookup = (row) => {
     const hasDetails = detailRows && detailRows.length > 0;
     if (!accountModalSource && (selectedAJType === "IG" || selectedAJType === "BB") && hasDetails) {
       
-      Swal.fire({
-        title: 'Apply to Details?',
-        text: "Do you want to apply this Warehouse to all detail items?",
-        icon: 'info',
-        showCancelButton: true,
-        confirmButtonText: 'Yes, update all',
-        cancelButtonText: 'No, header only'
-      }).then((result) => {
+      useSwalProceedConfirm(
+        "Apply to Details?",
+        "Do you want to apply this Warehouse to all detail items?",
+        "Yes, update all",
+        "No, header only",
+      ).then((result) => {
         if (result.isConfirmed) {
           const updatedDetails = detailRows.map((item) => ({
             ...item,
@@ -2292,14 +2288,12 @@ const handleCloseLocationLookup = (row) => {
      const hasDetails = detailRows && detailRows.length > 0;
       if (!accountModalSource && (selectedAJType === "IG" || selectedAJType === "BB") && hasDetails) {
         
-        Swal.fire({
-          title: 'Apply to Details?',
-          text: "Do you want to apply this Location to all detail items?",
-          icon: 'info',
-          showCancelButton: true,
-          confirmButtonText: 'Yes, update all',
-          cancelButtonText: 'No, header only'
-        }).then((result) => {
+        useSwalProceedConfirm(
+          "Apply to Details?",
+          "Do you want to apply this Location to all detail items?",
+          "Yes, update all",
+          "No, header only",
+        ).then((result) => {
           if (result.isConfirmed) {
             const updatedDetails = detailRows.map((item) => ({
               ...item,
@@ -3204,7 +3198,7 @@ return (
     {showSignatoryModal && (
       <DocumentSignatories
         isOpen={showSignatoryModal}
-        params={{noReprints,documentID,docType}}
+        params={{noReprints,documentID,docType,docNo: documentNo}}
         onClose={handleCloseSignatory}
         onCancel={() => updateState({ showSignatoryModal: false })}
       />

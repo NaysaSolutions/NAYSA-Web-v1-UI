@@ -82,7 +82,7 @@ const RMLookupModal = (props) => (
 );
 
 const MODULE_DEFS = {
-  AP:  { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelPURReport,    hasExtra: false, hasCutoff: false, hasReportType: false },
+  AP:  { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelAPReport,    hasExtra: false, hasCutoff: false, hasReportType: false },
   VI:  { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelAPReport,    hasExtra: false, hasCutoff: false, hasReportType: false },
   EWT: { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelAPReport,    hasExtra: false, hasCutoff: false, hasReportType: false },
   PUR: { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelAPReport,    hasExtra: false, hasCutoff: false, hasReportType: false, hasSingleMain: true, hasSingleRc: true, rcLabel: "Department/RC" },
@@ -209,7 +209,7 @@ const extractReportRows = (response) => {
 // ─── REUSABLE COMPONENTS ──────────────────────────────────────────────────────
 
 /** Labeled lookup input with search button */
-const LookupField = ({ label, value, placeholder, onOpen, ring, btnClass, readOnly = true }) => (
+const LookupField = ({ label, value, placeholder, onOpen, onClear, ring, btnClass, readOnly = true }) => (
   <div className="contents">
     <label className="text-[10px] font-semibold tracking-widest text-gray-400 uppercase self-center">
       {label}
@@ -219,8 +219,19 @@ const LookupField = ({ label, value, placeholder, onOpen, ring, btnClass, readOn
         readOnly={readOnly}
         value={value}
         placeholder={placeholder}
-        className={`w-full min-w-0 border border-gray-200 rounded-xl px-3 py-2.5 pr-12 text-xs bg-gray-50 outline-none transition focus:ring-2 focus:border-transparent ${ring}`}
+        className={`w-full min-w-0 border border-gray-200 rounded-xl px-3 py-2.5 ${value && onClear ? "pr-20" : "pr-12"} text-xs bg-gray-50 outline-none transition focus:ring-2 focus:border-transparent ${ring}`}
       />
+      {value && onClear && (
+        <button
+          type="button"
+          onClick={onClear}
+          title={`Clear ${label}`}
+          aria-label={`Clear ${label}`}
+          className="absolute right-10 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500 transition-all active:scale-95"
+        >
+          <FontAwesomeIcon icon={faXmark} className="text-[11px]" />
+        </button>
+      )}
       <button
         type="button"
         onClick={onOpen}
@@ -787,6 +798,7 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
                         value={filters.branchName}
                         placeholder="Select Branch…"
                         onOpen={() => updateUi({ branchModal: true })}
+                        onClear={() => updateFilters({ branchCode: "", branchName: "" })}
                         ring={ring} btnClass={btnCls}
                       />
 
@@ -795,10 +807,12 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
                         <LookupField label="Start Cutoff" value={filters.sCutOffName || filters.sCutOff}
                           placeholder="Select Starting Cutoff…"
                           onOpen={() => updateUi({ cutoffLookupMode: "S", cutoffModal: true })}
+                          onClear={() => updateFilters({ sCutOff: "", sCutOffName: "" })}
                           ring={ring} btnClass={btnCls} />
                         <LookupField label="End Cutoff" value={filters.eCutOffName || filters.eCutOff}
                           placeholder="Select Ending Cutoff…"
                           onOpen={() => updateUi({ cutoffLookupMode: "E", cutoffModal: true })}
+                          onClear={() => updateFilters({ eCutOff: "", eCutOffName: "" })}
                           ring={ring} btnClass={btnCls} />
                       </>)}
 
@@ -852,21 +866,25 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
                         <LookupField label="Cutoff" value={filters.cutoffName || filters.cutoffCode}
                           placeholder="Select Cutoff…"
                           onOpen={() => updateUi({ cutoffLookupMode: "BUD", cutoffModal: true })}
+                          onClear={() => updateFilters({ cutoffCode: "", cutoffName: "" })}
                           ring={ring} btnClass={btnCls} />
 
                         <LookupField label="Budget Code" value={filters.budgetName || filters.budgetCode}
                           placeholder="Select Budget Code…"
                           onOpen={() => updateUi({ budgetItemModal: true })}
+                          onClear={() => updateFilters({ budgetCode: "", budgetName: "" })}
                           ring={ring} btnClass={btnCls} />
 
                         <LookupField label="Account" value={filters.acctName || filters.acctCode}
                           placeholder="Select Account…"
                           onOpen={() => updateUi({ budgetAccountModal: true })}
+                          onClear={() => updateFilters({ acctCode: "", acctName: "" })}
                           ring={ring} btnClass={btnCls} />
 
                         <LookupField label={config.rcLabel || "Department/RC"} value={filters.rcName || filters.rcCode}
                           placeholder={`Select ${config.rcLabel || "Department/RC"}…`}
                           onOpen={() => updateUi({ rcLookupMode: "SINGLE", rcModal: true })}
+                          onClear={() => updateFilters({ rcCode: "", rcName: "" })}
                           ring={ring} btnClass={btnCls} />
 
                         <label className="text-[10px] font-semibold tracking-widest text-gray-400 uppercase self-center">
@@ -903,16 +921,19 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
                           value={filters.custName || filters.custCode}
                           placeholder="Select Customer..."
                           onOpen={() => updateUi({ salesCustomerModal: true })}
+                          onClear={() => updateFilters({ custCode: "", custName: "" })}
                           ring={ring} btnClass={btnCls} />
                         <LookupField label="Chain Customer"
                           value={filters.chainCustomerName || filters.chainCustomer}
                           placeholder="Select Chain Customer..."
                           onOpen={() => updateUi({ salesChainModal: true })}
+                          onClear={() => updateFilters({ chainCustomer: "", chainCustomerName: "" })}
                           ring={ring} btnClass={btnCls} />
                         <LookupField label="Item"
                           value={filters.itemName || filters.itemCode}
                           placeholder="Select Item..."
                           onOpen={() => updateUi({ salesItemModal: true })}
+                          onClear={() => updateFilters({ itemCode: "", itemName: "" })}
                           ring={ring} btnClass={btnCls} />
                       </>)}
 
@@ -922,6 +943,7 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
                           <LookupField label={config.label}
                             value={filters.sName} placeholder={`Select ${config.label}…`}
                             onOpen={() => updateUi({ lookupMode: "S", mainLookup: true })}
+                            onClear={() => updateFilters({ sCode: "", sName: "", eCode: "", eName: "" })}
                             ring={ring} btnClass={btnCls} />
                         ) : (
                           ["s", "e"].map(dir => (
@@ -929,6 +951,7 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
                               label={`${dir === "s" ? "Start" : "End"} ${config.label}`}
                               value={filters[`${dir}Name`]} placeholder={`Select ${config.label}…`}
                               onOpen={() => updateUi({ lookupMode: dir.toUpperCase(), mainLookup: true })}
+                              onClear={() => updateFilters({ [`${dir}Code`]: "", [`${dir}Name`]: "" })}
                               ring={ring} btnClass={btnCls} />
                           ))
                         )
@@ -939,6 +962,7 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
                         <LookupField label="Category" value={filters.categName || filters.categCode}
                           placeholder="Select Category..."
                           onOpen={() => updateUi({ faCategoryModal: true })}
+                          onClear={() => updateFilters({ categCode: "", categName: "", classCode: "", className: "", faCode: "", faName: "" })}
                           ring={ring} btnClass={btnCls} />
                         <LookupField label="Sub Category" value={filters.className || filters.classCode}
                           placeholder="Select Sub Category..."
@@ -949,18 +973,22 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
                             }
                             updateUi({ faClassModal: true });
                           }}
+                          onClear={() => updateFilters({ classCode: "", className: "", faCode: "", faName: "" })}
                           ring={ring} btnClass={btnCls} />
                         <LookupField label={config.rcLabel || "Department/RC"} value={filters.rcName || filters.rcCode}
                           placeholder={`Select ${config.rcLabel || "Department/RC"}...`}
                           onOpen={() => updateUi({ rcLookupMode: "SINGLE", rcModal: true })}
+                          onClear={() => updateFilters({ rcCode: "", rcName: "" })}
                           ring={ring} btnClass={btnCls} />
                         <LookupField label="Location" value={filters.locName || filters.locCode}
                           placeholder="Select Location..."
                           onOpen={() => updateUi({ faLocationModal: true })}
+                          onClear={() => updateFilters({ locCode: "", locName: "", faCode: "", faName: "" })}
                           ring={ring} btnClass={btnCls} />
                         <LookupField label="Asset" value={filters.faName || filters.faCode}
                           placeholder="Select Fixed Asset..."
                           onOpen={openFAAssetLookup}
+                          onClear={() => updateFilters({ faCode: "", faName: "" })}
                           ring={ring} btnClass={btnCls} />
                       </>)}
 
@@ -969,14 +997,17 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
                         <LookupField label="Item Code" value={filters.sName || filters.sCode}
                           placeholder="Select Item…"
                           onOpen={() => updateUi({ lookupMode: "S", mainLookup: true })}
+                          onClear={() => updateFilters({ sCode: "", sName: "", eCode: "", eName: "" })}
                           ring={ring} btnClass={btnCls} />
                         <LookupField label="Warehouse" value={filters.whName || filters.whCode}
                           placeholder="Select Warehouse…"
                           onOpen={() => updateUi({ warehouseModal: true })}
+                          onClear={() => updateFilters({ whCode: "", whName: "", locCode: "", locName: "" })}
                           ring={ring} btnClass={btnCls} />
                         <LookupField label="Location" value={filters.locName || filters.locCode}
                           placeholder="Select Location…"
                           onOpen={() => updateUi({ locationModal: true })}
+                          onClear={() => updateFilters({ locCode: "", locName: "" })}
                           ring={ring} btnClass={btnCls} />
                       </>)}
 
@@ -985,6 +1016,7 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
                         <LookupField label={config.rcLabel || "Dept/RC"}
                           value={filters.rcName} placeholder={`Select ${config.rcLabel || "Dept/RC"}…`}
                           onOpen={() => updateUi({ rcLookupMode: "SINGLE", rcModal: true })}
+                          onClear={() => updateFilters({ rcCode: "", rcName: "" })}
                           ring={ring} btnClass={btnCls} />
                       )}
 
@@ -997,9 +1029,11 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
                           </p>
                         </div> */}
                         <LookupField label="Start SL" value={filters.sSlName} placeholder="Select Starting SL…"
-                          onOpen={() => updateUi({ slLookupMode: "S", slModal: true })} ring={ring} btnClass={btnCls} />
+                          onOpen={() => updateUi({ slLookupMode: "S", slModal: true })}
+                          onClear={() => updateFilters({ sSlCode: "", sSlName: "" })} ring={ring} btnClass={btnCls} />
                         <LookupField label="End SL" value={filters.eSlName} placeholder="Select Ending SL…"
-                          onOpen={() => updateUi({ slLookupMode: "E", slModal: true })} ring={ring} btnClass={btnCls} />
+                          onOpen={() => updateUi({ slLookupMode: "E", slModal: true })}
+                          onClear={() => updateFilters({ eSlCode: "", eSlName: "" })} ring={ring} btnClass={btnCls} />
 
                         {/* <div className="col-span-2">
                           <p className="text-[9px] tracking-widest text-gray-300 uppercase font-semibold border-t border-gray-100 pt-3">
@@ -1007,9 +1041,11 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
                           </p>
                         </div> */}
                         <LookupField label="Start RC" value={filters.sRcName} placeholder="Select Starting RC…"
-                          onOpen={() => updateUi({ rcLookupMode: "S", rcModal: true })} ring={ring} btnClass={btnCls} />
+                          onOpen={() => updateUi({ rcLookupMode: "S", rcModal: true })}
+                          onClear={() => updateFilters({ sRcCode: "", sRcName: "" })} ring={ring} btnClass={btnCls} />
                         <LookupField label="End RC" value={filters.eRcName} placeholder="Select Ending RC…"
-                          onOpen={() => updateUi({ rcLookupMode: "E", rcModal: true })} ring={ring} btnClass={btnCls} />
+                          onOpen={() => updateUi({ rcLookupMode: "E", rcModal: true })}
+                          onClear={() => updateFilters({ eRcCode: "", eRcName: "" })} ring={ring} btnClass={btnCls} />
                       </>)}
 
                     </div>

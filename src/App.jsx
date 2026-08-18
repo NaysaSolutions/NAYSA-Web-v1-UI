@@ -15,6 +15,18 @@ import {
   useNavigate,
   useParams,
 } from "react-router-dom";
+
+import {
+  Download,
+  ExternalLink,
+  FileText,
+  Maximize2,
+  Minimize2,
+  Play,
+  Printer,
+  X,
+} from "lucide-react";
+
 import { AnimatePresence, motion } from "framer-motion";
 
 import { pageRegistry } from "./pageRegistry.jsx";
@@ -33,10 +45,16 @@ import ChangePassword from "./NAYSA Cloud/Authentication/ChangePassword.jsx";
 import ApproveUser from "@/NAYSA Cloud/Authentication/ApproveUser.jsx";
 import BiometricSettingsPage from "./NAYSA Cloud/Authentication/BiometricSettingsPage.jsx";
 import HS from "./NAYSA Cloud/Authentication/HS.jsx";
+import HelpSupport from "./NAYSA Cloud/Authentication/HelpSupport.jsx";
+import UserManuals from "./NAYSA Cloud/Authentication/UserManuals.jsx";
+import VideoTutorials from "./NAYSA Cloud/Authentication/VideoTutorials.jsx";
+import SupportTicket from "./NAYSA Cloud/Authentication/SupportTicket.jsx";
+import ContactUs from "./NAYSA Cloud/Authentication/ContactUs.jsx";
 import AuthProvider, {
   useAuth,
 } from "./NAYSA Cloud/Authentication/AuthContext.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
+import PdfViewer from "@/NAYSA Cloud/Printing/PdfViewer.jsx";
 import ElectronScannerPage from "@/NAYSA Cloud/Electron/ElectronScannerPage.jsx";
 
 const LICENSE_ADMIN_MODE = "LICENSE_ADMIN";
@@ -172,6 +190,222 @@ const ModalHost = ({ modalKey, onClose }) => {
     </div>
   );
 };
+
+
+/* -------------------- Persistent Floating Support -------------------- */
+const FloatingSupportDock = () => {
+  const previewRef = useRef(null);
+  const [resource, setResource] = useState(null);
+  const [isMinimized, setIsMinimized] = useState(false);
+
+  useEffect(() => {
+    const handleOpen = (event) => {
+      const nextResource = event?.detail;
+      if (!nextResource?.url) return;
+
+      setResource(nextResource);
+      setIsMinimized(false);
+    };
+
+    const handleClose = () => {
+      setResource(null);
+      setIsMinimized(false);
+    };
+
+    window.addEventListener("support:open", handleOpen);
+    window.addEventListener("support:close", handleClose);
+
+    return () => {
+      window.removeEventListener("support:open", handleOpen);
+      window.removeEventListener("support:close", handleClose);
+    };
+  }, []);
+
+  if (!resource) return null;
+
+  const resourceType =
+    String(resource.type || "pdf").toLowerCase() === "video"
+      ? "video"
+      : "pdf";
+
+  const handleDownload = () => {
+    if (resourceType !== "pdf") return;
+
+    const anchor = document.createElement("a");
+    anchor.href = resource.url;
+    anchor.download =
+      resource.fileName?.split("/").pop() || "user-manual.pdf";
+
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+  };
+
+  const handlePrint = () => {
+    if (resourceType !== "pdf") return;
+
+    try {
+      const frameWindow = previewRef.current?.contentWindow;
+
+      if (frameWindow) {
+        frameWindow.focus();
+        frameWindow.print();
+        return;
+      }
+    } catch (error) {
+      console.warn("Unable to print embedded PDF:", error);
+    }
+
+    window.open(resource.url, "_blank", "noopener,noreferrer");
+  };
+
+  const openInNewTab = () => {
+    window.open(
+      resource.originalUrl || resource.url,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  };
+
+  if (isMinimized) {
+    return (
+      <div className="fixed bottom-5 right-5 z-[998] flex max-w-[380px] items-center gap-2 rounded-2xl border border-blue-200 bg-white p-2 shadow-2xl dark:border-blue-900 dark:bg-slate-900">
+        <button
+          type="button"
+          onClick={() => setIsMinimized(false)}
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-1.5 text-left transition hover:bg-blue-50 dark:hover:bg-blue-500/10"
+          title={`Restore ${resourceType === "video" ? "video tutorial" : "support manual"}`}
+        >
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white">
+            {resourceType === "video" ? (
+              <Play className="h-4 w-4 fill-white" />
+            ) : (
+              <FileText className="h-4 w-4" />
+            )}
+          </div>
+
+          <div className="min-w-0">
+            <div className="text-[10px] font-bold uppercase tracking-wide text-blue-600 dark:text-blue-300">
+              {resourceType === "video"
+                ? "Video Tutorial"
+                : "Support Manual"}
+            </div>
+
+            <div className="truncate text-sm font-semibold text-slate-800 dark:text-white">
+              {resource.title || "Help & Support"}
+            </div>
+          </div>
+
+          <Maximize2 className="h-4 w-4 shrink-0 text-slate-400" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setResource(null)}
+          className="rounded-lg p-2 text-slate-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
+          title="Close"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <aside className="fixed bottom-4 right-4 top-20 z-[998] flex w-[min(560px,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+        <div className="min-w-0">
+          <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-blue-600 dark:text-blue-300">
+            {resourceType === "video"
+              ? "Video Tutorial"
+              : "Help & Support"}
+          </div>
+
+          <h2 className="mt-1 truncate text-sm font-bold text-slate-900 dark:text-white">
+            {resource.title || "Help & Support"}
+          </h2>
+
+          <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
+            {resource.fileName || resource.originalUrl || resource.url}
+          </p>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setIsMinimized(true)}
+            className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 dark:hover:bg-slate-800"
+            title="Minimize"
+          >
+            <Minimize2 className="h-4 w-4" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setResource(null)}
+            className="rounded-lg p-2 text-slate-500 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
+            title="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+        {resourceType === "pdf" && (
+          <>
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <Download className="h-4 w-4" />
+              Download
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700"
+            >
+              <Printer className="h-4 w-4" />
+              Print
+            </button>
+          </>
+        )}
+
+        <button
+          type="button"
+          onClick={openInNewTab}
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+        >
+          <ExternalLink className="h-4 w-4" />
+          Open in New Tab
+        </button>
+      </div>
+
+      <div className="min-h-0 flex-1 bg-black">
+        <iframe
+          ref={previewRef}
+          src={
+            resourceType === "pdf"
+              ? `${resource.url}#toolbar=1&navpanes=0&scrollbar=1`
+              : resource.url
+          }
+          title={resource.title || "Support Preview"}
+          allow={
+            resourceType === "video"
+              ? "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              : undefined
+          }
+          allowFullScreen={resourceType === "video"}
+          className="h-full w-full border-0"
+        />
+      </div>
+    </aside>
+  );
+};
+
 
 /* -------------------- App Content -------------------- */
 const AppContent = () => {
@@ -685,6 +919,61 @@ const AppContent = () => {
               />
 
               <Route
+                path="/help-support"
+                element={
+                  isLicenseAdmin ? (
+                    <Navigate to="/heartstrong" replace />
+                  ) : (
+                    <HelpSupport />
+                  )
+                }
+              />
+
+              <Route
+                path="/help-support/manuals"
+                element={
+                  isLicenseAdmin ? (
+                    <Navigate to="/heartstrong" replace />
+                  ) : (
+                    <UserManuals />
+                  )
+                }
+              />
+
+              <Route
+                path="/help-support/videos"
+                element={
+                  isLicenseAdmin ? (
+                    <Navigate to="/heartstrong" replace />
+                  ) : (
+                    <VideoTutorials />
+                  )
+                }
+              />
+
+              <Route
+                path="/help-support/ticket"
+                element={
+                  isLicenseAdmin ? (
+                    <Navigate to="/heartstrong" replace />
+                  ) : (
+                    <SupportTicket />
+                  )
+                }
+              />
+
+              <Route
+                path="/help-support/contact"
+                element={
+                  isLicenseAdmin ? (
+                    <Navigate to="/heartstrong" replace />
+                  ) : (
+                    <ContactUs />
+                  )
+                }
+              />
+
+              <Route
                 path="/page/:componentKey"
                 element={
                   isLicenseAdmin ? (
@@ -730,6 +1019,8 @@ const AppContent = () => {
           onClose={() => setActiveModalKey(null)}
         />
       )}
+
+      {!isLicenseAdmin && <FloatingSupportDock />}
     </div>
   );
 };
@@ -739,7 +1030,10 @@ const App = () => (
   <Router>
     <AuthProvider>
       <ResetProvider>
-        <AppContent />
+        <Routes>
+          <Route path="/pdf-viewer" element={<PdfViewer />} />
+          <Route path="*" element={<AppContent />} />
+        </Routes>
       </ResetProvider>
     </AuthProvider>
   </Router>
