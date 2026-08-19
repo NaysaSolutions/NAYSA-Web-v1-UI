@@ -4236,6 +4236,101 @@ const handleAtcNameDoubleClick = (index) => {
   } = useResizableTableColumns(apvGlColumnDefs);
   const getApvGlCellStyle = (key, fallbackWidth) =>
     getApvGlColumnStyle(key, fallbackWidth);
+
+  const renderApvGlCell = (columnKey, row, index) => {
+    const width = apvGlColumnDefs.find((column) => column.key === columnKey)?.width || 120;
+    const style = getApvGlCellStyle(columnKey, width);
+    const value = row[columnKey] || "";
+    const input = (options = {}) => (
+      <input
+        type="text"
+        className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`}
+        value={value}
+        readOnly={options.readOnly}
+        disabled={isFormDisabled}
+        onChange={options.readOnly ? undefined : (e) => handleDetailChangeGL(index, columnKey, e.target.value)}
+      />
+    );
+    const lookupInput = (source, options = {}) => (
+      <div className="relative w-full">
+        {input({ readOnly: true, className: "pr-6 text-center" })}
+        {!isFormDisabled && (
+          <FontAwesomeIcon
+            icon={faMagnifyingGlass}
+            className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+            onClick={() => updateState({ selectedRowIndex: index, accountModalSource: source, ...options })}
+          />
+        )}
+      </div>
+    );
+
+    if (columnKey === "ln") return <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>;
+    if (["acctCode", "rcCode", "slCode", "vatCode", "atcCode"].includes(columnKey)) {
+      const modal = {
+        acctCode: { showAccountModal: true },
+        rcCode: { showRcModal: true, accountModalSource: null },
+        slCode: { showSlModal: true },
+        vatCode: { showVatModal: true },
+        atcCode: { showAtcModal: true },
+      }[columnKey];
+      return <td key={columnKey} className="global-tran-td-ui" style={style}>{lookupInput(columnKey, modal)}</td>;
+    }
+    if (["debit", "credit", "debitFx1", "creditFx1", "debitFx2", "creditFx2"].includes(columnKey)) {
+      return <td key={columnKey} className="global-tran-td-ui text-right" style={style}>
+        <input type="text" className="w-full global-tran-td-inputclass-ui text-right" value={value} disabled={isFormDisabled}
+          onChange={(e) => { const next = e.target.value.replace(/[^0-9.]/g, ""); if (/^\d*\.?\d{0,2}$/.test(next) || next === "") handleDetailChangeGL(index, columnKey, next); }} />
+      </td>;
+    }
+    return <td key={columnKey} className="global-tran-td-ui" style={style}>{input({ readOnly: ["vatName", "atcName", "slRefNo", "slrefDate"].includes(columnKey) })}</td>;
+  };
+
+  // The APV row markup is intentionally kept in its existing form because it
+  // contains several conditional lookup cells. Reconcile those cells with the
+  // hook's ordered/visible column state after each render so drag-and-drop and
+  // Manage columns apply to the data rows as well as the header.
+  useEffect(() => {
+    const reconcileTableColumns = (tableSelector, columns) => {
+      document.querySelectorAll(tableSelector).forEach((table) => {
+        const visibleKeys = new Set(columns.map((column) => column.key));
+        const orderedKeys = columns.map((column) => column.key);
+        table.querySelectorAll("tbody tr").forEach((row) => {
+          const cells = Array.from(row.children);
+          const actionCell = !isFormDisabled ? cells.pop() : null;
+          const definitionColumns =
+            table.dataset.apvTableType === "detail"
+              ? apvDetailColumnDefs
+              : apvGlColumnDefs;
+          const cellByKey = new Map();
+          cells.forEach((cell, index) => {
+            const key = cell.dataset.apvColumnKey || definitionColumns[index]?.key;
+            if (!key) return;
+            cell.dataset.apvColumnKey = key;
+            cellByKey.set(key, cell);
+          });
+          orderedKeys.forEach((key) => {
+            const cell = cellByKey.get(key);
+            if (cell) {
+              cell.style.display = visibleKeys.has(key) ? "" : "none";
+              row.appendChild(cell);
+            }
+          });
+          cellByKey.forEach((cell, key) => {
+            if (!visibleKeys.has(key)) {
+              cell.style.display = "none";
+              row.appendChild(cell);
+            }
+          });
+          if (actionCell) row.appendChild(actionCell);
+        });
+      });
+    };
+
+    reconcileTableColumns('table[data-apv-table-type="detail"]', orderedApvDetailColumns);
+  }, [
+    isFormDisabled,
+    orderedApvDetailColumnKeys,
+    orderedApvGlColumnKeys,
+  ]);
   const hasSelectedReference = detailRows.some((row) =>
     String(
       row.advpoNo ||

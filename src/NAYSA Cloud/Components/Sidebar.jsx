@@ -105,6 +105,28 @@ const readStoredOpenKeys = () => {
   }
 };
 
+const MENU_NAME_ROUTE_MAP = {
+  "rm inventory master data": "/page/RMMast",
+  "rm master data": "/page/RMMast",
+  "raw material master data": "/page/RMMast",
+  "raw material inventory master data": "/page/RMMast",
+  "item brand matrix": "/page/ItemBrandMatrix",
+  "item/brand matrix": "/page/ItemBrandMatrix",
+};
+
+const normalizeMenuName = (name) =>
+  String(name || "").trim().replace(/\s+/g, " ").toLowerCase();
+
+const getMenuItemPath = (item) => {
+  const mappedPath = MENU_NAME_ROUTE_MAP[normalizeMenuName(item?.name)];
+  if (mappedPath) return mappedPath;
+
+  const explicitPath = item?.path || item?.pathUrl || item?.route || item?.url;
+  if (explicitPath) return explicitPath;
+
+  return item?.componentKey ? `/page/${item.componentKey}` : "#";
+};
+
 const collectMenuKeys = (items = [], parentKey = "") =>
   items.flatMap((item, index) => {
     const key = parentKey
@@ -305,7 +327,7 @@ const MenuItem = ({
   return (
     <li className="mb-1">
       <NavLink
-        to={item?.path || "#"}
+        to={getMenuItemPath(item)}
         state={{ permissionType: item?.permissionType }}
         onClick={() => {
           onNavigate?.();

@@ -76,8 +76,35 @@ const PageFallback = ({ label = "Loading..." }) => (
   </div>
 );
 
+const normalizeRoutePath = (path) =>
+  (String(path || "").startsWith("/") ? String(path || "") : `/${path || ""}`)
+    .replace(/\/$/, "") || "/";
+
+const menuTreeHasPage = (items = [], componentKey, path) => {
+  if (!componentKey && !path) return false;
+
+  const normalizedPath = path ? normalizeRoutePath(path) : "";
+
+  return items.some((item) => {
+    const itemComponentKey = item?.componentKey;
+    const itemPath = item?.path || item?.pathUrl || "";
+
+    if (componentKey && itemComponentKey === componentKey) {
+      return true;
+    }
+
+    if (normalizedPath && itemPath && normalizeRoutePath(itemPath) === normalizedPath) {
+      return true;
+    }
+
+    return Array.isArray(item?.subMenu)
+      ? menuTreeHasPage(item.subMenu, componentKey, path)
+      : false;
+  });
+};
+
 /* -------------------- Universal Registry Route -------------------- */
-const UniversalRegistryRoute = ({ routeRows, loadingMenu }) => {
+const UniversalRegistryRoute = ({ routeRows, menuItems, loadingMenu }) => {
   const location = useLocation();
   const { componentKey: paramKey } = useParams();
 
@@ -92,14 +119,12 @@ const UniversalRegistryRoute = ({ routeRows, loadingMenu }) => {
       return paramKey;
     }
 
-    const currentPath = location.pathname.replace(/\/$/, "") || "/";
+    const currentPath = normalizeRoutePath(location.pathname);
 
     const dbMatch = normalizedRouteRows.find((row) => {
       if (!row?.path) return false;
 
-      const dbPath = (
-        row.path.startsWith("/") ? row.path : `/${row.path}`
-      ).replace(/\/$/, "");
+      const dbPath = normalizeRoutePath(row.path);
 
       return dbPath === currentPath;
     });
@@ -115,9 +140,11 @@ const UniversalRegistryRoute = ({ routeRows, loadingMenu }) => {
     return <PageFallback label="Validating Access..." />;
   }
 
-  const isAuthorized = normalizedRouteRows.some(
-    (row) => row?.componentKey === matchingComponentKey
-  );
+  const isAuthorized =
+    normalizedRouteRows.some(
+      (row) => row?.componentKey === matchingComponentKey
+    ) ||
+    menuTreeHasPage(menuItems, matchingComponentKey, location.pathname);
 
   if (!Component || (!isAuthorized && !isViewMode)) {
     return <Navigate to="/" replace />;
@@ -957,6 +984,7 @@ const AppContent = () => {
                   ) : (
                     <UniversalRegistryRoute
                       routeRows={routeRows}
+                      menuItems={menuItems}
                       loadingMenu={loadingMenu}
                     />
                   )
@@ -974,6 +1002,7 @@ const AppContent = () => {
                   ) : (
                     <UniversalRegistryRoute
                       routeRows={routeRows}
+                      menuItems={menuItems}
                       loadingMenu={loadingMenu}
                     />
                   )
