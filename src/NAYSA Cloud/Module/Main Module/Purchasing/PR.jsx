@@ -11,6 +11,7 @@ import {
   faTrashAlt,
   faBoxOpen,
   faWarehouse,
+  faCar,
   faQrcode,
   faTableCellsLarge,
 } from "@fortawesome/free-solid-svg-icons";
@@ -887,7 +888,9 @@ const handleCloseJobCodesLookup = (selectedItems) => {
 
 const getItemLookupConfig = (lookupDocType) => {
   const normalizedDocType = String(lookupDocType || "").toUpperCase();
-  const invType = normalizedDocType.endsWith("FG")
+  const invType = normalizedDocType.endsWith("VE")
+    ? "VE"
+    : normalizedDocType.endsWith("FG")
     ? "FG"
     : normalizedDocType.endsWith("RM")
       ? "RM"
@@ -2107,7 +2110,7 @@ const renderPrDetailColumn = (columnKey, row, index) => {
   const detailColumnRenderers = {
     ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
     prStatus: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`prStatus-${index}`} className="w-full global-tran-td-inputclass-ui" value={row.prStatus || "O"} onChange={(e) => handleDetailChange(index, "prStatus", e.target.value)} disabled={isDocumentLocked || !documentID?.length || row.prStatus !== "O" || row.joNo?.length} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("prStatus"); } }}><option value="O">Open</option><option value="C">Closed</option>{(!row.poQty || parseFloat(row.poQty) === 0) && <option value="X">Cancelled</option>}</select></td>,
-    invType: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`invType-${index}`} className="w-full global-tran-td-inputclass-ui bg-white outline-none" value={row.invType || ""} onChange={(e) => handleDetailChange(index, "invType", e.target.value)} disabled={isFormDisabled || (row.itemCode?.length > 0) || isJobOrder} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("invType"); } }}><option value="" disabled>Select</option>{isJobOrder ? <option value="JO">JO</option> : <><option value="MS">MS</option><option value="RM">RM</option><option value="FG">FG</option></>}</select></td>,
+    invType: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`invType-${index}`} className="w-full global-tran-td-inputclass-ui bg-white outline-none" value={row.invType || ""} onChange={(e) => handleDetailChange(index, "invType", e.target.value)} disabled={isFormDisabled || (row.itemCode?.length > 0) || isJobOrder} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("invType"); } }}><option value="" disabled>Select</option>{isJobOrder ? <option value="JO">JO</option> : <><option value="MS">MS</option><option value="RM">RM</option><option value="FG">FG</option><option value="VE">VE</option></>}</select></td>,
     serviceCode: () => lookupCell("serviceCode", () => updateState({ showJobCodesModal: true, selectedRowIndex: index }), { hideIcon: isFormDisabled || row.prStatus !== "O" }),
     serviceName: () => modalTextCell("serviceName", "Scope of Work", "Enter scope of work..."),
     itemCode: () => lookupCell("itemCode", () => handleAddItem(index, "PR" + row.invType), { hideIcon: isFormDisabled || Number(row.poQty || 0) !== 0 || row.prStatus !== "O" || row.invType === "" || row.invType == null }),
@@ -2576,6 +2579,30 @@ const renderPrDetailColumn = (columnKey, row, index) => {
             </div>
             <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
               RM
+            </span>
+          </button>
+
+          <button
+            type="button"
+            className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
+            onClick={() => {
+              setShowTypeDropdown(false);
+              handleOpenItemLookup(false, "PRVE");
+            }}
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                <FontAwesomeIcon icon={faCar} />
+              </span>
+              <div className="flex flex-col items-start">
+                <span>Vehicle</span>
+                <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
+                  Add vehicle item
+                </span>
+              </div>
+            </div>
+            <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
+              VE
             </span>
           </button>
 

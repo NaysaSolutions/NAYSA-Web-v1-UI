@@ -13,6 +13,7 @@ import {
   faTrashAlt,
   faBoxOpen,
   faWarehouse,
+  faCar,
   faTableCellsLarge,
   faFileLines,
   faPlus as faPlusIcon,
@@ -744,6 +745,7 @@ const PO = () => {
 
   const getInvTypeFromDocType = (lookupDocType) => {
     const normalized = String(lookupDocType || "").toUpperCase();
+    if (normalized.endsWith("VE")) return "VE";
     if (normalized.endsWith("FG")) return "FG";
     if (normalized.endsWith("RM")) return "RM";
     return "MS";
@@ -3421,6 +3423,7 @@ const PO = () => {
   const renderPOSummaryCell = (columnKey, row, index) => {
     const columnWidth = getPoSummaryFallbackWidth(columnKey);
     const style = getPoSummaryCellStyle(columnKey, columnWidth);
+    const displayInvType = String(row?.invType || "").trim().toUpperCase() || "Select";
     const numericColumns = [
       "poQty",
       "unitPrice",
@@ -3512,6 +3515,20 @@ const PO = () => {
         >
           <div className="whitespace-pre-wrap break-words py-1 text-xs leading-4">
             {row.itemSpecs || ""}
+          </div>
+        </td>
+      );
+    }
+
+    if (columnKey === "invType") {
+      return (
+        <td
+          key={columnKey}
+          className="global-tran-td-ui"
+          style={style}
+        >
+          <div className="h-7 min-h-7 flex items-center text-xs">
+            {displayInvType}
           </div>
         </td>
       );
@@ -3632,7 +3649,7 @@ const PO = () => {
       ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
       poStatus: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`poStatus-${index}`} className="w-full global-tran-td-inputclass-ui" value={row.poStatus || "O"} onChange={(e) => handleDetailChange(index, "poStatus", e.target.value)} disabled={statusDisabled} onKeyDown={(e) => handleGridKeyDown(e, "poStatus", { disabled: statusDisabled })}><option value="O">Open</option><option value="C">Closed</option>{showCancelStatusOption && !hasPartialRR && <option value="X">Cancelled</option>}</select></td>,
       prNo: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{textInput("prNo", { readOnly: true })}</td>,
-      invType: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`invType-${index}`} className="w-full global-tran-td-inputclass-ui" value={row.invType || ""} onChange={(e) => handleDetailChange(index, "invType", e.target.value)} disabled={rowLocked || !!row.itemCode} onKeyDown={(e) => handleGridKeyDown(e, "invType", { disabled: rowLocked || !!row.itemCode })}><option value="">Select</option><option value="MS">MS</option><option value="RM">RM</option><option value="FG">FG</option></select></td>,
+      invType: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`invType-${index}`} className="w-full global-tran-td-inputclass-ui" value={row.invType || ""} onChange={(e) => handleDetailChange(index, "invType", e.target.value)} disabled={rowLocked || !!row.itemCode} onKeyDown={(e) => handleGridKeyDown(e, "invType", { disabled: rowLocked || !!row.itemCode })}><option value="">Select</option><option value="MS">MS</option><option value="RM">RM</option><option value="FG">FG</option><option value="VE">VE</option></select></td>,
       itemCode: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`itemCode-${index}`} className="w-full global-tran-td-inputclass-ui pr-6" value={row.itemCode || ""} readOnly disabled={rowLocked} />{!rowLocked && row.invType && !String(row.prNo || "").trim() && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 cursor-pointer hover:text-blue-900" onClick={() => handleAddItem(index, "PO" + row.invType)} />}</div></td>,
       itemName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("itemName", { readOnly: true })}</td>,
       itemSpecs: () => {
@@ -4315,6 +4332,30 @@ const PO = () => {
                             </div>
                             <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
                               RM
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
+                            onClick={() => {
+                              setShowTypeDropdown(false);
+                              handleOpenMSLookup(false, "POVE");
+                            }}
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                                <FontAwesomeIcon icon={faCar} />
+                              </span>
+                              <div className="flex flex-col items-start">
+                                <span>Vehicle</span>
+                                <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
+                                  Add vehicle item
+                                </span>
+                              </div>
+                            </div>
+                            <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
+                              VE
                             </span>
                           </button>
 

@@ -2742,12 +2742,12 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
         vatName: g.vatName || "",
         atcCode: g.atcCode || "",
         atcName: g.atcName || "",
-        debit: formatNumber(g.debit || 0),
-        credit: formatNumber(g.credit || 0),
-        debitFx1: formatNumber(g.debitFx1 || 0),
-        creditFx1: formatNumber(g.creditFx1 || 0),
-        debitFx2: formatNumber(g.debitFx2 || 0),
-        creditFx2: formatNumber(g.creditFx2 || 0),
+        debit: formatNumber(g.debit || 0, 2),
+        credit: formatNumber(g.credit || 0, 2),
+        debitFx1: formatNumber(g.debitFx1 || 0, 2),
+        creditFx1: formatNumber(g.creditFx1 || 0, 2),
+        debitFx2: formatNumber(g.debitFx2 || 0, 2),
+        creditFx2: formatNumber(g.creditFx2 || 0, 2),
         slRefNo: g.slRefNo || "",
         slRefDate: normalizeGLDate(g.slRefDate || ""),
         remarks: g.remarks || "",
@@ -4680,7 +4680,9 @@ const newGlEntries = await useGenerateGLEntries(docType, getNetAmountGLData());
         vatName: lookedUp.vatName ?? currentRow.vatName,
         atcCode: lookedUp.atcCode ?? currentRow.atcCode,
         atcName: lookedUp.atcName ?? currentRow.atcName,
-        particular: lookedUp.particular ?? currentRow.particular,
+        particular: lookedUp.particular ?? currentRow.particular,
+        rcRequired: lookedUp.rcRequired ?? lookedUp.rcReq ?? lookedUp.REQ_RC ?? lookedUp.REQRC ?? lookedUp.rc_required ?? currentRow.rcRequired,
+        slRequired: lookedUp.slRequired ?? lookedUp.slReq ?? lookedUp.REQ_SL ?? lookedUp.REQSL ?? lookedUp.sl_required ?? currentRow.slRequired,
       };
     } else {
       // fallback if lookupGL didn’t return anything
@@ -4692,8 +4694,12 @@ const newGlEntries = await useGenerateGLEntries(docType, getNetAmountGLData());
 
   const handleGLAmountChange = async (index, field, value) => {
     const rows = [...(state.detailRowsGL || [])];
-    rows[index] = { ...rows[index], [field]: value };
+    const pairs = { debit: "credit", credit: "debit", debitFx1: "creditFx1", creditFx1: "debitFx1", debitFx2: "creditFx2", creditFx2: "debitFx2" };
+    const pairedField = pairs[field];
+    rows[index] = { ...rows[index], [field]: value, ...(pairedField && parseFormattedNumber(value || 0) > 0 ? { [pairedField]: "0.00" } : {}) };
+    rows[index][field] = formatNumber(parseFormattedNumber(value || 0), 2);
     updateState({ detailRowsGL: rows });
+    if (parseFormattedNumber(value || 0) <= 0) return;
 
     // ✅ recompute Fx fields like MSAJ (editEntries API)
     const edited = await useUpdateRowEditEntries(
@@ -4729,9 +4735,11 @@ const newGlEntries = await useGenerateGLEntries(docType, getNetAmountGLData());
     }
   };
 
-  const handleGLFieldChange = (index, field, value) => {
-    const rows = [...(state.detailRowsGL || [])];
-    rows[index] = { ...rows[index], [field]: value };
+  const handleGLFieldChange = (index, field, value) => {
+    const rows = [...(state.detailRowsGL || [])];
+    const pairs = { debit: "credit", credit: "debit", debitFx1: "creditFx1", creditFx1: "debitFx1", debitFx2: "creditFx2", creditFx2: "debitFx2" };
+    const pairedField = pairs[field];
+    rows[index] = { ...rows[index], [field]: value, ...(pairedField && parseFormattedNumber(value || 0) > 0 ? { [pairedField]: "0.00" } : {}) };
     updateState({ detailRowsGL: rows });
   };
 
@@ -5370,7 +5378,7 @@ const handleClosePayeeLookup = async (row) => {
       !rowLocked && (
         <FontAwesomeIcon
           icon={faMagnifyingGlass}
-          className="absolute right-2 text-blue-600 cursor-pointer hover:text-blue-900"
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
           onClick={onClick}
         />
       );
@@ -5440,7 +5448,7 @@ const handleClosePayeeLookup = async (row) => {
             {!isFormDisabled && (
               <FontAwesomeIcon
                 icon={faMagnifyingGlass}
-                className="absolute right-2 text-blue-600 cursor-pointer hover:text-blue-900"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
                 onClick={() => openSpecsModal(index)}
               />
             )}
@@ -5782,9 +5790,11 @@ const handleClosePayeeLookup = async (row) => {
     );
 
     const lookupCell = (field, options = {}) => {
-      const canOpenLookup =
-        !rowLocked &&
-        Boolean(options.alwaysShowIcon || String(row[field] || "").trim());
+      const isRequired = (value) => ["Y", "YES", "TRUE", "1"].includes(String(value ?? "").trim().toUpperCase());
+      const requirementValue = field === "rcCode"
+        ? row.rcRequired ?? row.rcReq ?? row.REQ_RC ?? row.REQRC ?? row.rc_required
+        : row.slRequired ?? row.slReq ?? row.REQ_SL ?? row.REQSL ?? row.sl_required;
+      const canOpenLookup = !rowLocked && (options.alwaysShowIcon || isRequired(requirementValue));
 
       return (
         <td key={columnKey} className="global-tran-td-ui" style={style}>

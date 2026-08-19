@@ -55,6 +55,7 @@ export const pageRegistry = {
   SALESANALYSIS: lazyPage(() => import("./NAYSA Cloud/Query/SOInq/SalesAnalysis.jsx")),
   // Inventory
   MSRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSRR.jsx")),
+  VERR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/VERR.jsx")),
   MSIS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSIS.jsx")),
   MSST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSST.jsx")),
   RMST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMST.jsx")),
@@ -113,6 +114,7 @@ export const pageRegistry = {
   RMMast: lazyPage(() => import("./NAYSA Cloud/Master Data/RMMasterData/RMMast.jsx")),
   RMMast: lazyPage(() => import("./NAYSA Cloud/Master Data/RMMasterData/RMMast.jsx")),
   FAMast: lazyPage(() => import("./NAYSA Cloud/Master Data/FAMasterData/FAMast.jsx")),
+  VEMast: lazyPage(() => import("./NAYSA Cloud/Master Data/VEMasterData/VEMast.jsx")),
   ProdBOM: lazyPage(() => import("./NAYSA Cloud/Master Data/BillofMaterial/Reference File/ProdBOM.jsx")),
   ProdWorkCenter: lazyPage(() => import("./NAYSA Cloud/Master Data/BillofMaterial/Reference File/ProdWorkCenter.jsx")),
   ProdParameters: lazyPage(() => import("./NAYSA Cloud/Master Data/BillofMaterial/Reference File/ProdParameters.jsx")),
