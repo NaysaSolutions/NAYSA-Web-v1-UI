@@ -216,7 +216,7 @@ const InvoiceQueuing = ({
 
     if (invalidRow) {
       const message =
-        "One or more selected records are missing Document Type, Branch Code, or Group ID.";
+        "One or more selected records are missing Document Code, Branch Code, or Group ID.";
 
       useSwalValidationAlert({
         icon: "warning",
@@ -243,12 +243,12 @@ const InvoiceQueuing = ({
 
     if (unsupportedDocument) {
       const message =
-        `Document Type ${unsupportedDocument.documentType} ` +
+        `Document Code ${unsupportedDocument.documentType} ` +
         "is not supported for Invoice Queuing.";
 
       useSwalValidationAlert({
         icon: "warning",
-        title: "Unsupported Document Type",
+        title: "Unsupported Document Code",
         message,
       });
 

@@ -412,9 +412,13 @@ const isCashPayment = selectedPayTypeCode.includes("CV02") || selectedPayTypeNam
     CLOSED: "global-tran-stat-text-finalized-ui",
   };
   const statusColor = statusMap[String(displayStatus).trim().toUpperCase()] || "";
+  const isTransactionOpen = ["", "O", "OPEN"].includes(
+    String(displayStatus || "").trim().toUpperCase(),
+  );
   const isFormDisabled =
   isViewDocumentUrl ||
   ["Finalized", "Cancelled", "Closed"].includes(displayStatus);
+  const isBankSelectionDisabled = isFormDisabled || !isTransactionOpen;
 
   const FIELD_CONFIG = {
     apType: { requireWithAPV: "Y", hideOnCvTypes: ["APV02"] },
@@ -1599,7 +1603,7 @@ const handleCopy = async () => {
 
 
   const printData = {
-    apv_no: documentNo,
+    cv_no: documentNo,
     branch: branchCode,
     doc_id: docType
   };
@@ -3028,9 +3032,9 @@ const renderCvGlCell = (columnKey, row, index) => {
                       required
                       type="lookup"
                       value={bankAcctName || ""}
-                      disabled={isFormDisabled}
+                      disabled={isBankSelectionDisabled}
                       readOnly
-                      lookupDisabled={isFetchDisabled}
+                      lookupDisabled={isBankSelectionDisabled}
                       onLookup={() => updateState({ bankModalOpen: true })}
                     />
                 </div>

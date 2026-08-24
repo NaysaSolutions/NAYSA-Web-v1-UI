@@ -846,7 +846,7 @@ function MSStockCardQuery() {
 
   const allocationColumns = useMemo(
     () => [
-      { key: "docType", header: "Document Type", size: 100, width: 100, minWidth: 100, cellClassName: "text-[11px]" },
+      { key: "docType", header: "Document Code", size: 100, width: 100, minWidth: 100, cellClassName: "text-[11px]" },
       { key: "docNo", header: "Document No", size: 100, width: 100, minWidth: 100, cellClassName: "text-[11px]" },
       { key: "docDate", header: "Document Date", size: 100, width: 100, minWidth: 100, cellClassName: "text-left text-[11px]", type: "date" },
       { key: "itemCode", header: "Item Code", size: 110, width: 110, minWidth: 110, cellClassName: "text-left text-[11px]" },

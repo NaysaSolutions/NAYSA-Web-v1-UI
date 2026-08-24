@@ -107,7 +107,7 @@ const WhParameter = forwardRef(({ isMobile, onMobileActionOpen, onStateChange },
     return rawValue.split(",").map(normalizeDepartmentValue).filter(Boolean);
   };
 
-  // --- NEW: React Query for Document Types ---
+  // --- NEW: React Query for Document Codes ---
 const { data: dropdowns, isLoading: isDropdownLoading } = useQuery({
     queryKey: ["whParameterDropdowns"],
     queryFn: async () => {
@@ -121,7 +121,7 @@ const { data: dropdowns, isLoading: isDropdownLoading } = useQuery({
 
   const docTypeOptions = useMemo(() => {
     // ADD THIS LOG to see what your API is actually returning
-    console.log("Document Types API Response:", dropdowns?.docTypes);
+    console.log("Document Codes API Response:", dropdowns?.docTypes);
 
     return (dropdowns?.docTypes || []).map((d) => {
       // If your API returns docCode instead of DROPDOWN_CODE, change this below:
@@ -353,7 +353,7 @@ const { data: dropdowns, isLoading: isDropdownLoading } = useQuery({
 
   const validateRows = () => {
     if (!docType) {
-      useSwalErrorAlert("Required Fields", "Document Type is required.");
+      useSwalErrorAlert("Required Fields", "Document Code is required.");
       return false;
     }
     if (!rows.length) {
@@ -721,7 +721,7 @@ const { data: dropdowns, isLoading: isDropdownLoading } = useQuery({
           </h3>
           <div className="max-w-[420px]">
             <FieldRenderer
-              label="Document Type"
+              label="Document Code"
               required
               type="select"
               value={docType}

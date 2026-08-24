@@ -300,7 +300,7 @@ const GlobalApprovalStatus = ({
 
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold text-slate-500">
-                  Document Type
+                  Document Code
                 </p>
                 <p className="mt-0.5 text-[12px] font-bold leading-5 text-slate-950">
                   {documentLabel}
