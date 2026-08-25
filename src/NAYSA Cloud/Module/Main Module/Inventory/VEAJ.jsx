@@ -1,20 +1,29 @@
-import { useState, useEffect,useRef,useCallback, Fragment } from "react";
+import { useState, useEffect,useRef,useCallback,useMemo, Fragment } from "react";
 import Swal from 'sweetalert2';
 import { useNavigate,useLocation  } from "react-router-dom";
+
+const MODEL_YEAR_MIN = 1900;
+const getMaximumModelYear = () => new Date().getFullYear() + 1;
+const sanitizeModelYear = (value) => String(value ?? "").replace(/\D/g, "").slice(0, 4);
+const isValidModelYear = (value) => {
+  const yearText = String(value ?? "").trim();
+  const year = Number(yearText);
+  return /^\d{4}$/.test(yearText) && year >= MODEL_YEAR_MIN && year <= getMaximumModelYear();
+};
 
 // UI
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faDownload, faMagnifyingGlass, faPlus, faMinus, faTrashAlt, faFolderOpen, faUpload } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
-import BranchLookupModal from "../../../Lookup/SearchBranchRef.jsx";
+import BranchLookupModal from "../../../Lookup/SearchBranchRef";
 import COAMastLookupModal from "../../../Lookup/SearchCOAMast.jsx";
 import RCLookupModal from "../../../Lookup/SearchRCMast.jsx";
 import SLMastLookupModal from "../../../Lookup/SearchSLMast.jsx";
 import CancelTranModal from "../../../Lookup/SearchCancelRef.jsx";
 import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
-import PostRMAJ from "./PostRMAJ.jsx";
+import PostVEAJ from "./PostVEAJ.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
@@ -27,7 +36,7 @@ import ItemMastLookupModal from "../../../Lookup/SearchItemMast.jsx";
 
 // Configuration
 import { postRequest,fetchDataJson} from '../../../Configuration/BaseURL.jsx'
-import { useReset } from "../../../Components/ResetContext.jsx";
+import { useReset } from "../../../Components/ResetContext";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import {
   docTypeNames,
@@ -72,8 +81,6 @@ import {
   showSingleUploadErrorList,
   transactionActionsCellStyle,
   transactionActionsHeaderStyle,
-  toSingleUploadDateValue,
-  toSingleUploadExcelDate,
   useResizableTableColumns,
 } from '@/NAYSA Cloud/Global/datatable.jsx';
 
@@ -124,8 +131,26 @@ const toDateInputValue = (value) => {
   return "";
 };
 
+const normalizeLookupName = (code, name) => {
+  const normalizedCode = String(code || "").trim();
+  let normalizedName = String(name || "").trim();
+  if (!normalizedCode) return normalizedName;
+  const prefix = `${normalizedCode} - `;
+  if (normalizedName.startsWith(prefix)) {
+    normalizedName = normalizedName.slice(prefix.length).trim();
+  }
+  return normalizedName;
+};
 
-const RMAJ = () => {
+const formatLookupValue = (code, name) => {
+  const normalizedCode = String(code || "").trim();
+  const normalizedName = normalizeLookupName(normalizedCode, name);
+  return normalizedCode && normalizedName
+    ? `${normalizedCode} - ${normalizedName}`
+    : normalizedCode || normalizedName;
+};
+
+const VEAJ = () => {
 
   // View Document Const
   const loadedFromUrlRef = useRef(false);
@@ -137,8 +162,8 @@ const RMAJ = () => {
   const location = useLocation(); 
   const [isViewDocument, setIsViewDocument] = useState(false);
   const { companyInfo, currentUserRow, getAllDropDown, refsLoaded, getAllTopHSDocRow } = useAuth();
-  const decQty = companyInfo?.itemDecqtyRM ?? 2;
-  const decUcost = companyInfo?.itemDecUcostRM ?? 6;
+  const decQty = companyInfo?.itemDecqtyFG ?? 2;
+  const decUcost = companyInfo?.itemDecUcostFG ?? 6;
 
 
   useEffect(() => {
@@ -156,11 +181,11 @@ const RMAJ = () => {
   const [pendingHeaderLocationWH, setPendingHeaderLocationWH] = useState("");
   const { user } = useAuth();
   const { resetFlag } = useReset();
-  const docType = docTypes.RMAJ;
+  const docType = docTypes.VEAJ;
   const hsDoc = getAllTopHSDocRow(docType);
   const pdfLink = docTypePDFGuide[docType];
   const videoLink = docTypeVideoGuide[docType];
-  const documentTitle = hsDoc?.docName + " Transaction";
+  const documentTitle = hsDoc?.docName;
   const [state, setState] = useState({
 
 
@@ -190,6 +215,8 @@ const RMAJ = () => {
     // UI state
     activeTab: "basic",
     GLactiveTab: "invoice",
+    assemblyTab: "veSource",
+    assemblyLookupTarget: "",
     isLoading: false,
     showSpinner: false,
     triggerGLEntries:false,
@@ -203,10 +230,10 @@ const RMAJ = () => {
 
     branchCode: currentUserRow?.branchCode||"",
     branchName: currentUserRow?.branchName||"",
-    WHCode:"",
-    WHName:"",
-    LocCode:"",
-    LocName:"",
+    whouseCode:"",
+    whouseName:"",
+    locCode:"",
+    locName:"",
     itemSingleSelect:false,
     selectedWH:"",
 
@@ -230,6 +257,8 @@ const RMAJ = () => {
     //Detail 1-2
     detailRows  :[],
     detailRowsGL :[],
+    detailRowsFG: [],
+    detailRowsDestination: [],
     globalLookupRow:[],
     globalLookupHeader:[],
 
@@ -285,6 +314,8 @@ const RMAJ = () => {
   // Tabs & loading
   activeTab,
   GLactiveTab,
+  assemblyTab,
+  assemblyLookupTarget,
   isLoading,
   showSpinner,
 
@@ -321,16 +352,18 @@ const RMAJ = () => {
   refDocNo2,
   remarks,
   selectedAJType,
-  WHCode,
-  WHName,
-  LocCode,
-  LocName,
+  whouseCode,
+  whouseName,
+  locCode,
+  locName,
 
 
   // Transaction details
   tblFieldArray,
   detailRows,
   detailRowsGL,
+  detailRowsFG,
+  detailRowsDestination,
   globalLookupRow,
   globalLookupHeader,
   totalDebit,
@@ -366,6 +399,46 @@ const RMAJ = () => {
 
 } = state;
 
+  const assemblyDestinationCost = useMemo(
+    () => [...(detailRows || []), ...(detailRowsFG || [])].reduce(
+      (total, source) => total + Math.abs(parseFormattedNumber(source.itemAmount || source.amount || 0)),
+      0
+    ),
+    [detailRows, detailRowsFG]
+  );
+
+  const assemblyTotals = useMemo(() => ({
+    veSource: {
+      quantity: (detailRows || []).reduce((total, row) => total + parseFormattedNumber(row.quantity ?? row.qtyAdj ?? 0), 0),
+      amount: (detailRows || []).reduce((total, row) => total + parseFormattedNumber(row.itemAmount ?? row.amount ?? 0), 0),
+    },
+    fgSource: {
+      quantity: (detailRowsFG || []).reduce((total, row) => total + parseFormattedNumber(row.quantity || 0), 0),
+      amount: (detailRowsFG || []).reduce((total, row) => total + parseFormattedNumber(row.itemAmount ?? row.amount ?? 0), 0),
+    },
+    destination: {
+      quantity: (detailRowsDestination || []).reduce((total, row) => total + parseFormattedNumber(row.quantity || 0), 0),
+      amount: (detailRowsDestination || []).reduce((total, row) => total + parseFormattedNumber(row.itemAmount ?? row.amount ?? 0), 0),
+    },
+  }), [detailRows, detailRowsFG, detailRowsDestination]);
+
+  useEffect(() => {
+    if (selectedAJType !== "VA" || detailRowsDestination.length === 0) return;
+
+    const formattedUnitCost = formatNumber(assemblyDestinationCost, decUcost);
+    const formattedAmount = formatNumber(assemblyDestinationCost, 2);
+    const destination = detailRowsDestination[0];
+
+    if (destination.unitCost === formattedUnitCost && destination.itemAmount === formattedAmount) return;
+
+    setState((previous) => ({
+      ...previous,
+      detailRowsDestination: previous.detailRowsDestination.map((row, index) => index === 0
+        ? { ...row, quantity: "1", unitCost: formattedUnitCost, itemAmount: formattedAmount }
+        : row),
+    }));
+  }, [assemblyDestinationCost, decUcost, detailRowsDestination, selectedAJType]);
+
 
   const [focusedCell, setFocusedCell] = useState(null); // { index: number, field: string }
 
@@ -383,29 +456,27 @@ const RMAJ = () => {
 
 
   //Status Global Setup
-  const displayStatus = status || 'OPEN';
+  const displayStatus = String(status || "OPEN").trim().toUpperCase();
   const statusMap = {
     OPEN: "global-tran-stat-text-open-ui",
     FINALIZED: "global-tran-stat-text-finalized-ui",
     CANCELLED: "global-tran-stat-text-closed-ui",
     CLOSED: "global-tran-stat-text-finalized-ui",
   };
-  const statusColor = statusMap[String(displayStatus).trim().toUpperCase()] || "";
+  const statusColor = statusMap[displayStatus] || "";
   const isFormDisabled =
   isViewDocumentUrl ||
   ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
   const canUseSingleUploadOptions =
     String(hsDoc?.docUpload || "").toUpperCase() === "S" &&
-    (
-      selectedAJType === "IG" ||
-      (selectedAJType === "BB" && !bbUploadExists)
-    );
+    selectedAJType === "BB" &&
+    !bbUploadExists;
 
   //Variables
 
 
   const [totals, setTotals] = useState({
-  totalQuantity: '0.00',
+  totalQuantity: '0',
   totalItemAmount: '0.00',
   });
 
@@ -418,7 +489,7 @@ const RMAJ = () => {
 
   const updateTotalsDisplay = (quantity, amount) => {
     setTotals({
-          totalQuantity: formatNumber(quantity,decQty),
+          totalQuantity: formatNumber(quantity, 0),
           totalItemAmount: formatNumber(amount),
       });
   };
@@ -484,7 +555,7 @@ useEffect(() => {
     if (!refsLoaded) return;
     const ajDrop = getAllDropDown("AJTRAN_TYPE", docType);
     if (ajDrop.length > 0) {
-      updateState({ ajTypes: ajDrop, selectedAJType: "BB" });
+      updateState({ ajTypes: ajDrop });
     }
   }, [docType, refsLoaded]);
 
@@ -504,38 +575,28 @@ useEffect(() => {
 
   useEffect(() => {
     if (!pendingHeaderLocationWH || isFormDisabled) return;
-    if (WHCode !== pendingHeaderLocationWH || !WHName) return;
+    if (whouseCode !== pendingHeaderLocationWH || !whouseName) return;
 
     updateState({
       locationLookupOpen: true,
       selectedWH: pendingHeaderLocationWH,
     });
     setPendingHeaderLocationWH("");
-  }, [pendingHeaderLocationWH, WHCode, WHName, isFormDisabled]);
+  }, [pendingHeaderLocationWH, whouseCode, whouseName, isFormDisabled]);
 
 
 
 const handleCheckBBUploaded = useCallback(async (targetBranchCode) => {
   if (!targetBranchCode) return false;
-
   try {
-    const payload = {
-      PARAMS: JSON.stringify({
-        branchCode: targetBranchCode,
-      }),
-    };
-
-    const response = await postRequest("checkRMAJBBUploaded", payload);
-    const result =
-      response?.result ||
-      response?.data?.result ||
-      response?.Data?.result ||
-      response?.data?.Data?.result ||
-      {};
-
+    const response = await postRequest("checkVEAJBBUploaded", {
+      PARAMS: JSON.stringify({ branchCode: targetBranchCode }),
+    });
+    const rawResult = response?.data?.result ?? response?.result ?? {};
+    const result = typeof rawResult === "string" ? JSON.parse(rawResult) : rawResult;
     return Boolean(result?.bbUploaded);
   } catch (error) {
-    console.error("Error checking BB upload status:", error);
+    console.error("Error checking VEAJ BB upload status:", error);
     return false;
   }
 }, []);
@@ -570,8 +631,8 @@ useEffect(() => {
 
 
 const handleReset = () => {
-      clearFgajDetailSorting();
-      clearFgajGlSorting();
+      clearVeajDetailSorting();
+      clearVeajGlSorting();
 
       updateState({
         
@@ -588,19 +649,22 @@ const handleReset = () => {
       documentID: "",
       detailRows: [],
       detailRowsGL:[],
+      detailRowsFG:[],
+      detailRowsDestination:[],
       documentStatus:"",
       itemSingleSelect:false,
       selectedAJType:"BB",
-      WHCode:"",
-      WHName:"",
-      LocCode:"",
-      LocName:"",
+      whouseCode:"",
+      whouseName:"",
+      locCode:"",
+      locName:"",
 
       
       
       // UI state
       activeTab: "basic",
       GLactiveTab: "invoice",
+      assemblyTab: "veSource",
       isDocNoDisabled: false,
       isSaveDisabled: false,
       isResetDisabled: false,
@@ -616,7 +680,7 @@ const handleReset = () => {
    const loadCompanyData = async () => {
     updateState({isLoading:true})
     try {     
-     const tbls = 'rmaj_hd,rmaj_dt1,rmaj_dt2'
+     const tbls = 'veaj_hd,veaj_dt1,veaj_dt2'
      const hdtblcol_result = await useFieldLenghtCheck(tbls);
      if (hdtblcol_result){
        updateState({tblFieldArray :hdtblcol_result })
@@ -644,8 +708,8 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
   updateState({ isLoading: true });
 
   try {
-    const data = await useFetchTranData(documentNo, branchCode,docType,"rmajNo",direction);
-    if (!data?.rmajId) {
+    const data = await useFetchTranData(documentNo, branchCode,docType,"adjNo",direction);
+    if (!data?.veajId) {
       Swal.fire({ icon: 'info', title: 'No Records Found', text: 'Transaction does not exist.' });
       return resetState();
     }
@@ -654,10 +718,11 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
     // Format rows
     const retrievedDetailRows = (data.dt1 || []).map(item => ({
       ...item,
-      quantity: formatNumber(item.quantity,decQty),
+      rcCode: item.rcCode || item.actCode || "",
+      quantity: formatNumber(item.qtyAdj ?? item.quantity,decQty),
       unitCost: formatNumber(item.unitCost,decUcost),
-      itemAmount: formatNumber(item.itemAmount,2),
-      qtyHand: formatNumber(item.qtyHand,decQty),
+      itemAmount: formatNumber(item.amount ?? item.itemAmount,2),
+      qtyHand: formatNumber(item.qtyHand, 0),
     }));
 
     const formattedGLRows = (data.dt2 || []).map(glRow => ({
@@ -671,25 +736,46 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
     }));
 
   
+    const retrievedWhCode = data.whouseCode || "";
+    const retrievedWhName = normalizeLookupName(
+      retrievedWhCode,
+      data.whouseName,
+    );
+    const retrievedLocCode = data.locCode || "";
+    const retrievedLocName = normalizeLookupName(
+      retrievedLocCode,
+      data.locName,
+    );
+
     // Update state with fetched data
     updateState({
-      documentStatus: data.rmajStatus,
+      documentStatus: data.veajStatus,
       status: data.docStatus,
       noReprints:data.noReprints,
-      documentID: data.rmajId,
-      documentNo: data.rmajNo,
+      documentID: data.veajId,
+      documentNo: data.adjNo,
       branchCode: data.branchCode,
-      WHCode:data.whCode,
-      WHName:data.whName,
-      LocCode:data.locCode,
-      LocName:data.locName,
-      documentDate: useformatToDatev2(data.rmajDate),
-      selectedAJType: data.ajtranType,
-      refDocNo1: data.refDocNo1,
-      refDocNo2: data.refDocNo2,   
-      remarks: data.remarks,
+      whouseCode: retrievedWhCode,
+      whouseName: retrievedWhName,
+      locCode: retrievedLocCode,
+      locName: retrievedLocName,
+      documentDate: useformatToDatev2(data.adjDate),
+      selectedAJType: data.adjType,
+      refDocNo1: data.refadjNo || "",
+      refDocNo2: data.refadjNo2 || "",
+      remarks: data.particular,
       detailRows: retrievedDetailRows,
       detailRowsGL: formattedGLRows,
+      detailRowsFG: Array.isArray(data.dt3) ? data.dt3.map((item) => ({
+        ...item,
+        quantity: formatNumber(item.quantity, decQty),
+        unitCost: formatNumber(item.unitCost, decUcost),
+        amount: formatNumber(item.itemAmount ?? item.amount, 2),
+        itemAmount: formatNumber(item.itemAmount ?? item.amount, 2),
+        qtyHand: formatNumber(item.qtyHand ?? item.qtyOnHand, decQty),
+        qtyOnHand: formatNumber(item.qtyOnHand ?? item.qtyHand, decQty),
+      })) : [],
+      detailRowsDestination: Array.isArray(data.dt4) ? data.dt4 : [],
       isDocNoDisabled: true,
       isFetchDisabled: true,
     });
@@ -725,8 +811,62 @@ const handleDocNoBlur = () => {
 
 
 const handleActivityOption = async (action) => {
-  if ((detailRows?.length || 0) + (detailRowsGL?.length || 0) === 0) {
+  if ((detailRows?.length || 0) + (detailRowsGL?.length || 0) +
+      (detailRowsFG?.length || 0) + (detailRowsDestination?.length || 0) === 0) {
     return;
+  }
+
+  if (action === "Upsert") {
+    const invalidModelYearRows = [
+      ...(detailRows || []).map((row, index) => ({ row, lineNo: row.lnNo || index + 1, section: "Item Details" })),
+      ...(detailRowsDestination || []).map((row, index) => ({ row, lineNo: row.lnNo || index + 1, section: "Destination Vehicle" })),
+    ].filter(({ row }) => String(row.modelYear || "").trim() && !isValidModelYear(row.modelYear));
+
+    if (invalidModelYearRows.length > 0) {
+      await useSwalErrorAlert(
+        "Validation Failed",
+        invalidModelYearRows
+          .map(({ lineNo, section }) => `${section} Line ${lineNo} - Model Year must be a 4-digit year from ${MODEL_YEAR_MIN} to ${getMaximumModelYear()}`)
+          .join("\n")
+      );
+      return;
+    }
+
+    if (selectedAJType === "VA") {
+      const assemblyErrors = [];
+      if ((detailRows || []).length === 0) assemblyErrors.push("At least one source vehicle is required.");
+      if ((detailRowsDestination || []).length !== 1) assemblyErrors.push("Exactly one destination vehicle is required.");
+      const destination = detailRowsDestination?.[0];
+      if (destination && !String(destination.itemCode || "").trim()) assemblyErrors.push("Destination Item Code is required.");
+      if (destination && !String(destination.chassisNo || "").trim()) assemblyErrors.push("Destination CS No. is required.");
+      if (assemblyErrors.length) {
+        await useSwalErrorAlert("Validation Failed", assemblyErrors.join("\n"));
+        return;
+      }
+    }
+    const requiresNewVehicle = ["BB", "IG"].includes(selectedAJType);
+    if (requiresNewVehicle) {
+      const chassisSeen = new Map();
+      const chassisErrors = [];
+
+      (detailRows || []).forEach((row, index) => {
+        const lineNo = row.lnNo || index + 1;
+        const chassisNo = String(row.chassisNo || "").trim().toUpperCase();
+
+        if (!chassisNo) {
+          chassisErrors.push(`Line ${lineNo} - CS No. Required`);
+        } else if (chassisSeen.has(chassisNo)) {
+          chassisErrors.push(`Line ${lineNo} - Duplicate CS No. ${chassisNo}`);
+        } else {
+          chassisSeen.set(chassisNo, lineNo);
+        }
+      });
+
+      if (chassisErrors.length > 0) {
+        await useSwalErrorAlert("Validation Failed", chassisErrors.join("\n"));
+        return;
+      }
+    }
   }
 
 
@@ -745,24 +885,27 @@ const handleActivityOption = async (action) => {
       userCode,
       detailRows,
       detailRowsGL,
+      detailRowsFG,
+      detailRowsDestination,
     } = state;
 
     let finalDetailRowsGL = [...detailRowsGL];
 
     const buildGlData = (glRows) => ({
       branchCode,
-      rmajNo: documentNo || "",
-      rmajId: documentID || "",
-      rmajDate: documentDate,
-      ajtranType: selectedAJType,
-      refDocNo1,
-      refDocNo2,
-      remarks: remarks || "",
-      whCode: WHCode || "",
-      locCode: LocCode || "",
+      adjNo: documentNo || "",
+      veajId: documentID || "",
+      adjDate: documentDate,
+      adjType: selectedAJType,
+      refadjNo: refDocNo1,
+      refadjNo2: refDocNo2,
+      particular: remarks || "",
+      whouseCode: whouseCode || "",
+      locCode: locCode || "",
       userCode,
 
       dt1: detailRows.map((row, index) => ({
+        veId: row.veId || "",
         lnNo: String(index + 1),
         itemCode: row.itemCode || "",
         itemName: row.itemName || "",
@@ -771,10 +914,9 @@ const handleActivityOption = async (action) => {
         quantity: parseFormattedNumber(row.quantity || 0),
         uomCode: row.uomCode || "",
         unitCost: parseFormattedNumber(row.unitCost || 0),
-        itemAmount: parseFormattedNumber(row.itemAmount || 0),
-        lotNo: row.lotNo || "",
+        amount: parseFormattedNumber(row.itemAmount || row.amount || 0),
+        qtyAdj: parseFormattedNumber(row.quantity || row.qtyAdj || 0),
         qstatCode: row.qstatCode || "",
-        bbDate: row.bbDate || null,
         qtyHand: parseFormattedNumber(row.qtyHand || 0),
         whouseCode: row.whouseCode || "",
         locCode: row.locCode || "",
@@ -784,6 +926,20 @@ const handleActivityOption = async (action) => {
         slCode: row.slCode || "",
         uniqueKey: row.uniqueKey || "",
         operation: row.operation || "",
+        make: row.make || "",
+        modelYear: row.modelYear || "",
+        model: row.model || "",
+        serialNo: row.serialNo || "",
+        engineNo: row.engineNo || "",
+        prodNo: row.prodNo || "",
+        color: row.color || "",
+        chassisNo: row.chassisNo || "",
+        rrNo: row.rrNo || "",
+        actCode: row.rcCode || row.actCode || "",
+        orderStamp: row.orderStamp || "",
+        pnpNo: row.pnpNo || "",
+        csrNo: row.csrNo || "",
+        veajId: documentID || "",
       })),
 
       dt2: glRows.map((entry, index) => ({
@@ -806,57 +962,66 @@ const handleActivityOption = async (action) => {
         slRefNo: entry.slRefNo || "",
         slRefDate: entry.slRefDate || null,
         remarks: entry.remarks || "",
+        dt1LineId: entry.dt1LineId || "",
+      })),
+
+      dt3: (detailRowsFG || []).map((row, index) => ({
+        ...row,
+        lnNo: index + 1,
+        quantity: parseFormattedNumber(row.quantity || 0),
+        unitCost: parseFormattedNumber(row.unitCost || 0),
+        itemAmount: parseFormattedNumber(row.amount || row.itemAmount || 0),
+        amount: parseFormattedNumber(row.amount || row.itemAmount || 0),
+        qtyHand: parseFormattedNumber(row.qtyOnHand || row.qtyHand || 0),
+        qtyOnHand: parseFormattedNumber(row.qtyOnHand || row.qtyHand || 0),
+      })),
+
+      dt4: (detailRowsDestination || []).map((row, index) => ({
+        ...row,
+        lnNo: index + 1,
+        quantity: 1,
+        unitCost: assemblyDestinationCost,
+        itemAmount: assemblyDestinationCost,
+        acctCode: row.acctCode || "",
       })),
     });
 
     if (action === "GenerateGL") {
-      try {
-        updateState({ detailRowsGL: [], isGeneratingGL: true });
+      const generatedEntries = await useGenerateGLEntries(docType, buildGlData([]));
 
-        const newGlEntries = await useGenerateGLEntries(
-          docType,
-          buildGlData(finalDetailRowsGL)
-        );
-
-        updateState({
-          detailRowsGL: newGlEntries && newGlEntries.length > 0 ? newGlEntries : [],
-          isGeneratingGL: false,
-        });
-      } catch (error) {
-        updateState({ detailRowsGL: [], isGeneratingGL: false });
-        console.error(error);
+      if (generatedEntries) {
+        updateState({ detailRowsGL: generatedEntries });
       }
-
       return;
     }
 
     if (action === "Upsert") {
-      if (finalDetailRowsGL.length === 0 && selectedAJType !== "BB") {
-        const newGlEntries = await useGenerateGLEntries(
-          docType,
-          buildGlData([])
-        );
+      if (selectedAJType !== 'BB') {
+        const generatedEntries = await useGenerateGLEntries(docType, buildGlData([]));
 
-        if (!newGlEntries || newGlEntries.length === 0) {
-          console.warn("GL entries generation failed or returned no data.");
+        if (!Array.isArray(generatedEntries) || generatedEntries.length === 0) {
+          console.warn("VEAJ save stopped because no accounting entries were generated.");
           return;
         }
 
-        finalDetailRowsGL = newGlEntries;
-        updateState({ detailRowsGL: newGlEntries });
+        finalDetailRowsGL = generatedEntries;
+        updateState({ detailRowsGL: generatedEntries });
+      } else {
+        finalDetailRowsGL = [];
+        updateState({ detailRowsGL: [] });
       }
 
       const response = await useTransactionUpsert(
         docType,
         buildGlData(finalDetailRowsGL),
         updateState,
-        "rmajId",
-        "rmajNo"
+        "veajId",
+        "adjNo"
       );
 
       if (response) {
-        const responseDocNo = response.data?.[0]?.rmajNo || "";
-        const responseDocId = response.data?.[0]?.rmajId || "";
+        const responseDocNo = response.data?.[0]?.adjNo || "";
+        const responseDocId = response.data?.[0]?.veajId || "";
 
         if (responseDocNo) {
           await fetchTranData(responseDocNo, branchCode);
@@ -871,8 +1036,8 @@ const handleActivityOption = async (action) => {
       }
 
       updateState({
-        documentNo: response?.data?.[0]?.rmajNo || "",
-        documentID: response?.data?.[0]?.rmajId || "",
+        documentNo: response?.data?.[0]?.adjNo || "",
+        documentID: response?.data?.[0]?.veajId || "",
         isDocNoDisabled: true,
         isFetchDisabled: true,
       });
@@ -908,15 +1073,15 @@ const handleActivityOption = async (action) => {
 
 //     return {
 //       branchCode: branchCode,
-//       rmajNo: documentNo || "",
-//       rmajId: documentID || "",
-//       rmajDate: documentDate,
+//       veajNo: documentNo || "",
+//       veajId: documentID || "",
+//       veajDate: documentDate,
 //       ajtranType: selectedAJType,
 //       refDocNo1: refDocNo1,
 //       refDocNo2: refDocNo2,
 //       remarks: remarks || "",
-//       whCode:WHCode||"",
-//       locCode:LocCode || "",
+//       whCode:whouseCode||"",
+//       locCode:locCode || "",
 //       userCode: userCode,
 //       dt1: detailRows.map((row, index) => ({
 //         lnNo: String(index + 1),
@@ -928,9 +1093,7 @@ const handleActivityOption = async (action) => {
 //         uomCode: row.uomCode || "",
 //         unitCost: parseFormattedNumber(row.unitCost || 0),
 //         itemAmount: parseFormattedNumber(row.itemAmount || 0),
-//         lotNo: row.lotNo || "",
 //         qstatCode: row.qstatCode || "",
-//         bbDate: row.bbDate ? new Date(row.bbDate).toISOString().split("T")[0] : null,
 //         qtyHand: parseFormattedNumber(row.qtyHand || 0),
 //         whouseCode: row.whouseCode || "",
 //         locCode: row.locCode || "",
@@ -1001,13 +1164,13 @@ const handleActivityOption = async (action) => {
 //       // We use currentGL variable because state updates are async 
 //       // and wouldn't be available yet if we just generated them.
 //       const savePayload = getFormattedPayload(currentGL);
-//       const response = await useTransactionUpsert(docType, savePayload, updateState, 'rmajId', 'rmajNo');
+//       const response = await useTransactionUpsert(docType, savePayload, updateState, 'veajId', 'veajNo');
 
 //       if (response) {
 //         const isZero = Number(noReprints) === 0;
 //         const onSaveAndPrint = isZero
 //           ? () => updateState({ showSignatoryModal: true })
-//           : () => handleSaveAndPrint(response.data[0].rmajId);
+//           : () => handleSaveAndPrint(response.data[0].veajId);
 
 //         useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
 //         updateState({ isDocNoDisabled: true, isFetchDisabled: true });
@@ -1025,6 +1188,7 @@ const handleActivityOption = async (action) => {
 
 
 const createEmptyDetailRow = () => ({
+  veId: "",
   lnNo: "",
   itemCode: "",
   itemName: "",
@@ -1034,10 +1198,18 @@ const createEmptyDetailRow = () => ({
   uomCode: "",
   unitCost: formatNumber(0, decUcost),
   itemAmount: "0.00",
-  lotNo: "",
+  chassisNo: "",
+  make: "",
+  model: "",
+  modelYear: "",
+  serialNo: "",
+  engineNo: "",
+  prodNo: "",
+  color: "",
   qstatCode: "",
-  bbDate: "",
-  qtyHand: formatNumber(0, decQty),
+  pnpNo: "",
+  csrNo: "",
+  qtyHand: formatNumber(0, 0),
   whouseCode: "",
   locCode: "",
   acctCode: "",
@@ -1052,7 +1224,32 @@ const handleGetItem = async (index = null) => {
   if (!selectedAJType) return;
 
   const updatedRows = [...detailRows];
-  const newRow = createEmptyDetailRow();
+  let newRow = createEmptyDetailRow();
+
+  if (selectedAJType === "BB" && index !== null && index >= 0) {
+    const sourceRow = updatedRows[index];
+    const result = await useSwalProceedConfirm(
+      "Insert Beginning Balance Row",
+      "Do you want to copy the selected row?",
+      "Yes",
+      "No",
+    );
+
+    if (result.isConfirmed && sourceRow) {
+      newRow = {
+        ...newRow,
+        itemCode: sourceRow.itemCode || "",
+        itemName: sourceRow.itemName || "",
+        categCode: sourceRow.categCode || "",
+        uomCode: sourceRow.uomCode || "",
+        make: sourceRow.make || "",
+        whouseCode: sourceRow.whouseCode || whouseCode || "",
+        locCode: sourceRow.locCode || locCode || "",
+      };
+    } else if (result.dismiss !== Swal.DismissReason.cancel) {
+      return;
+    }
+  }
 
   if (index !== null && index >= 0) {
     updatedRows.splice(index + 1, 0, newRow);
@@ -1060,7 +1257,11 @@ const handleGetItem = async (index = null) => {
     updatedRows.push(newRow);
   }
 
-  updateState({ detailRows: updatedRows });
+  updateState({
+    detailRows: updatedRows,
+    detailRowsGL: [],
+    selectedRowIndex: index !== null && index >= 0 ? index + 1 : updatedRows.length - 1,
+  });
   updateTotals(updatedRows);
 };
 
@@ -1069,7 +1270,7 @@ const handleGetItem = async (index = null) => {
   const handleAddRow = async () => {
 
     const fieldsToCheck = {
-      "Header : Warehouse": WHCode,
+      "Header : Warehouse": whouseCode,
       "Header : Adjustment Type": selectedAJType,
     };
     const isValid = await useSwalvalidateRequiredFields(fieldsToCheck, "Add Item");
@@ -1302,7 +1503,7 @@ const handleColumnLabel = (columnName) =>{
     detailRowsGLRef.current = detailRowsGL || [];
   }, [detailRows, detailRowsGL]);
 
-  const rmajDetailColumnDefs = [
+  const veajDetailColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
     { key: "itemCode", label: "Item Code", width: 120 },
     { key: "itemName", label: "Item Name", width: 260 },
@@ -1310,9 +1511,17 @@ const handleColumnLabel = (columnName) =>{
     { key: "quantity", label: "Quantity", width: 120 },
     { key: "unitCost", label: handleColumnLabel("UnitCost"), width: 130 },
     { key: "itemAmount", label: "Amount", width: 130 },
-    { key: "lotNo", label: "Lot No", width: 130 },
-    { key: "bbDate", label: "BB Date", width: 130 },
-    { key: "qstatCode", label: "Quality Status", width: 130 },
+    { key: "chassisNo", label: "CS No.", width: 170 },
+    { key: "make", label: "Make", width: 120 },
+    { key: "model", label: "Model", width: 140 },
+    { key: "modelYear", label: "Model Year", width: 110 },
+    { key: "serialNo", label: "Serial No.", width: 150 },
+    { key: "engineNo", label: "Engine No.", width: 150 },
+    { key: "prodNo", label: "Production No.", width: 150 },
+    { key: "color", label: "Color", width: 120 },
+    { key: "qstatCode", label: "QC Status", width: 130 },
+    { key: "pnpNo", label: "PNP Clearance No.", width: 160 },
+    { key: "csrNo", label: "CSR No.", width: 130 },
     { key: "whouseCode", label: "Warehouse", width: 120 },
     { key: "locCode", label: "Location", width: 120 },
     { key: "acctCode", label: "Account Code", width: 130 },
@@ -1327,19 +1536,19 @@ const handleColumnLabel = (columnName) =>{
   ];
 
   const {
-    getColumnStyle: getFgajDetailColumnStyle,
-    getFrozenColumnStyle: getFgajDetailFrozenStyle,
-    getOrderedColumns: getOrderedFgajDetailColumns,
-    getSortedRows: getSortedFgajDetailRows,
-    clearAllSorting: clearFgajDetailSorting,
-    clearZeroValueOnFocus: clearFgajDetailZeroOnFocus,
-    focusNextRowInput: focusNextFgajDetailRowInput,
-    renderHeaderContextMenu: renderFgajDetailHeaderContextMenu,
-    renderResizableHeader: renderFgajDetailHeader,
-  } = useResizableTableColumns(rmajDetailColumnDefs);
+    getColumnStyle: getVeajDetailColumnStyle,
+    getFrozenColumnStyle: getVeajDetailFrozenStyle,
+    getOrderedColumns: getOrderedVeajDetailColumns,
+    getSortedRows: getSortedVeajDetailRows,
+    clearAllSorting: clearVeajDetailSorting,
+    clearZeroValueOnFocus: clearVeajDetailZeroOnFocus,
+    focusNextRowInput: focusNextVeajDetailRowInput,
+    renderHeaderContextMenu: renderVeajDetailHeaderContextMenu,
+    renderResizableHeader: renderVeajDetailHeader,
+  } = useResizableTableColumns(veajDetailColumnDefs);
 
-  const orderedFgajDetailColumns = getOrderedFgajDetailColumns(rmajDetailColumnDefs);
-  const visibleFgajDetailColumns = orderedFgajDetailColumns.filter((column) => {
+  const orderedVeajDetailColumns = getOrderedVeajDetailColumns(veajDetailColumnDefs);
+  const visibleVeajDetailColumns = orderedVeajDetailColumns.filter((column) => {
     if (["categCode", "oldValue", "uniqueKey", "operation", "sltypeCode"].includes(column.key)) return false;
     if (column.key === "quantity") return !handleFieldBehavior("hiddenCAMode");
     if (column.key === "unitCost") return !handleFieldBehavior("noViewCostamt");
@@ -1347,37 +1556,95 @@ const handleColumnLabel = (columnName) =>{
     if (["acctCode", "rcCode", "slCode"].includes(column.key)) return !handleFieldBehavior("hiddenBBMode");
     return true;
   });
-  const getFgajDetailFallbackWidth = (key) => rmajDetailColumnDefs.find((column) => column.key === key)?.width || 120;
-  const getFgajDetailCellStyle = (key, fallbackWidth) => ({
-    ...getFgajDetailColumnStyle(key, fallbackWidth),
-    ...getFgajDetailFrozenStyle(key, visibleFgajDetailColumns, fallbackWidth, { isHeader: false }),
+  const getVeajDetailFallbackWidth = (key) => veajDetailColumnDefs.find((column) => column.key === key)?.width || 120;
+  const getVeajDetailCellStyle = (key, fallbackWidth) => ({
+    ...getVeajDetailColumnStyle(key, fallbackWidth),
+    ...getVeajDetailFrozenStyle(key, visibleVeajDetailColumns, fallbackWidth, { isHeader: false }),
   });
-  const sortedFgajDetailRows = getSortedFgajDetailRows(
+  const sortedVeajDetailRows = getSortedVeajDetailRows(
     detailRows.map((row, originalIndex) => ({ row, originalIndex })),
     (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? ""
   );
 
+  const assemblyFgColumnDefs = useMemo(() => [
+    { key: "ln", label: "LN", width: 56 },
+    { key: "itemCode", label: "Item Code", width: 130 },
+    { key: "itemName", label: "Item Description", width: 300 },
+    { key: "uomCode", label: "UOM", width: 90 },
+    { key: "quantity", label: "Quantity", width: 130 },
+    { key: "unitCost", label: "Unit Cost", width: 130 },
+    { key: "amount", label: "Amount", width: 140 },
+    { key: "lotNo", label: "Lot No", width: 130 },
+    { key: "bbDate", label: "BB Date", width: 140 },
+    { key: "itemStat", label: "QC Status", width: 120 },
+    { key: "whouseCode", label: "Warehouse", width: 160 },
+    { key: "locCode", label: "Location", width: 160 },
+    { key: "drAcctCode", label: "DR Acct", width: 130 },
+    { key: "rcCode", label: "RC Code", width: 120 },
+    { key: "slCode", label: "SL Code", width: 120 },
+    { key: "qtyOnHand", label: "Qty on Hand", width: 130 },
+  ], []);
+  const {
+    getColumnStyle: getAssemblyFgColumnStyle,
+    getFrozenColumnStyle: getAssemblyFgFrozenStyle,
+    getOrderedColumns: getOrderedAssemblyFgColumns,
+    getSortedRows: getSortedAssemblyFgRows,
+    renderHeaderContextMenu: renderAssemblyFgHeaderContextMenu,
+    renderResizableHeader: renderAssemblyFgHeader,
+  } = useResizableTableColumns(assemblyFgColumnDefs);
+  const orderedAssemblyFgColumns = getOrderedAssemblyFgColumns(assemblyFgColumnDefs);
+  const sortedAssemblyFgRows = getSortedAssemblyFgRows(
+    detailRowsFG.map((row, originalIndex) => ({ row, originalIndex })),
+    (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? ""
+  );
+  const getAssemblyFgCellStyle = (key, width) => ({
+    ...getAssemblyFgColumnStyle(key, width),
+    ...getAssemblyFgFrozenStyle(key, orderedAssemblyFgColumns, width, { isHeader: false }),
+  });
+
+  const assemblyDestinationColumnDefs = useMemo(
+    () => veajDetailColumnDefs.map((column) => ({ ...column })),
+    []
+  );
+  const {
+    getColumnStyle: getAssemblyDestinationColumnStyle,
+    getFrozenColumnStyle: getAssemblyDestinationFrozenStyle,
+    getOrderedColumns: getOrderedAssemblyDestinationColumns,
+    getSortedRows: getSortedAssemblyDestinationRows,
+    renderHeaderContextMenu: renderAssemblyDestinationHeaderContextMenu,
+    renderResizableHeader: renderAssemblyDestinationHeader,
+  } = useResizableTableColumns(assemblyDestinationColumnDefs);
+  const orderedAssemblyDestinationColumns = getOrderedAssemblyDestinationColumns(assemblyDestinationColumnDefs)
+    .filter((column) => !["categCode", "oldValue", "uniqueKey", "operation", "sltypeCode"].includes(column.key));
+  const sortedAssemblyDestinationRows = getSortedAssemblyDestinationRows(
+    detailRowsDestination.map((row, originalIndex) => ({ row, originalIndex })),
+    (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? ""
+  );
+  const getAssemblyDestinationCellStyle = (key, width) => ({
+    ...getAssemblyDestinationColumnStyle(key, width),
+    ...getAssemblyDestinationFrozenStyle(key, orderedAssemblyDestinationColumns, width, { isHeader: false }),
+  });
+
   const getSingleUploadTemplateColumns = () =>
-    getGlobalSingleUploadTemplateColumns(visibleFgajDetailColumns, { excludeKeys: ["qtyHand"] });
+    getGlobalSingleUploadTemplateColumns(visibleVeajDetailColumns, { excludeKeys: ["qtyHand"] });
 
   const handleDownloadSingleUploadTemplate = async () => {
     await downloadGlobalSingleUploadTemplate({
       columns: getSingleUploadTemplateColumns(),
-      rows: sortedFgajDetailRows,
-      fileName: "RM Adjustment Single Transaction Uploading Template.xlsx",
+      rows: sortedVeajDetailRows,
+      fileName: "Vehicle Adjustment Beginning Balance Upload Template.xlsx",
       sheetName: "Item Details",
       decimalColumnFormats: {
         quantity: decQty,
         unitCost: decUcost,
         itemAmount: 2,
       },
-      dateColumns: ["bbDate"],
+      dateColumns: [],
       rightAlignedColumns: ["quantity", "unitCost", "itemAmount"],
       centerAlignedColumns: [
         "ln",
         "itemCode",
         "uomCode",
-        "bbDate",
         "qstatCode",
         "whouseCode",
         "locCode",
@@ -1394,8 +1661,6 @@ const handleColumnLabel = (columnName) =>{
           case "unitCost":
           case "itemAmount":
             return parseFormattedNumber(row[column.key] || 0);
-          case "bbDate":
-            return toSingleUploadExcelDate(row.bbDate, toDateInputValue);
           default:
             return String(row[column.key] ?? "");
         }
@@ -1406,10 +1671,10 @@ const handleColumnLabel = (columnName) =>{
   const buildUploadValidationPayload = (rows) => ({
     json_data: {
       branchCode,
-      rmajDate: documentDate,
-      ajtranType: selectedAJType,
-      whCode: WHCode || "",
-      locCode: LocCode || "",
+      adjDate: documentDate,
+      adjType: selectedAJType,
+      whouseCode: whouseCode || "",
+      locCode: locCode || "",
       userCode,
       dt1: rows.map((row, index) => ({
         lnNo: index + 1,
@@ -1417,15 +1682,25 @@ const handleColumnLabel = (columnName) =>{
         itemName: row.itemName || "",
         categCode: row.categCode || "",
         quantity: parseFormattedNumber(row.quantity || 0) || 0,
+        qtyAdj: parseFormattedNumber(row.quantity || 0) || 0,
         uomCode: row.uomCode || "",
         unitCost: parseFormattedNumber(row.unitCost || 0) || 0,
         itemAmount: parseFormattedNumber(row.itemAmount || 0) || 0,
-        lotNo: row.lotNo || "",
+        amount: parseFormattedNumber(row.itemAmount || 0) || 0,
+        chassisNo: row.chassisNo || "",
+        make: row.make || "",
+        model: row.model || "",
+        modelYear: row.modelYear || "",
+        serialNo: row.serialNo || "",
+        engineNo: row.engineNo || "",
+        prodNo: row.prodNo || "",
+        color: row.color || "",
         qstatCode: row.qstatCode || "",
-        bbDate: row.bbDate || null,
+        pnpNo: row.pnpNo || "",
+        csrNo: row.csrNo || "",
         qtyHand: 0,
-        whouseCode: row.whouseCode || WHCode || "",
-        locCode: row.locCode || LocCode || "",
+        whouseCode: row.whouseCode || whouseCode || "",
+        locCode: row.locCode || locCode || "",
         acctCode: row.acctCode || "",
         rcCode: row.rcCode || "",
         slTypeCode: row.sltypeCode || row.slTypeCode || "",
@@ -1452,9 +1727,6 @@ const handleColumnLabel = (columnName) =>{
         case "itemAmount":
           rowData[column.key] = parseFormattedNumber(rawValue || 0) || 0;
           break;
-        case "bbDate":
-          rowData.bbDate = toSingleUploadDateValue(rawCell?.cell?.value || rawValue, toDateInputValue);
-          break;
         default:
           rowData[column.key] = String(rawValue ?? "").trim();
           break;
@@ -1466,8 +1738,8 @@ const handleColumnLabel = (columnName) =>{
     rowData.quantity = quantity;
     rowData.unitCost = unitCost;
     rowData.itemAmount = +(quantity * unitCost).toFixed(2);
-    rowData.whouseCode = rowData.whouseCode || WHCode || "";
-    rowData.locCode = rowData.locCode || LocCode || "";
+    rowData.whouseCode = rowData.whouseCode || whouseCode || "";
+    rowData.locCode = rowData.locCode || locCode || "";
     rowData.operation = "A";
     rowData.qtyHand = 0;
     rowData.uniqueKey = "";
@@ -1481,7 +1753,7 @@ const handleColumnLabel = (columnName) =>{
     if (!file) return;
 
     const fieldsToCheck = {
-      "Header : Warehouse": WHCode,
+      "Header : Warehouse": whouseCode,
       "Header : Adjustment Type": selectedAJType,
     };
     const isValid = await useSwalvalidateRequiredFields(fieldsToCheck, "Upload Transaction");
@@ -1496,7 +1768,7 @@ const handleColumnLabel = (columnName) =>{
         createEmptyRow: createEmptyDetailRow,
         parseRow: parseSingleUploadRow,
         validateRows: async (uploadedRows) => {
-          const response = await postRequest("validateRMAJUpload", buildUploadValidationPayload(uploadedRows));
+          const response = await postRequest("validateVEAJUpload", buildUploadValidationPayload(uploadedRows));
           const result = extractSingleUploadValidationResult(response);
           if (!result) {
             console.error("Unable to read upload validation response:", response);
@@ -1530,7 +1802,7 @@ const handleColumnLabel = (columnName) =>{
       if (validRows.length === 0) {
         showSingleUploadErrorList("Upload Validation Error", [
           "The server returned no validated rows.",
-          "Please check the Laravel validateRMAJUpload response and the SQL ValidateUpload block.",
+          "Please check the Laravel validateVEAJUpload response and the SQL ValidateUpload block.",
           "Uploaded rows read from Excel: " + uploadedRows.length,
         ]);
         console.error("ValidateUpload returned zero rows:", { result, uploadedRows });
@@ -1547,10 +1819,18 @@ const handleColumnLabel = (columnName) =>{
         uomCode: row.uomCode || "",
         unitCost: formatNumber(parseFormattedNumber(row.unitCost || 0), decUcost),
         itemAmount: formatNumber(parseFormattedNumber(row.itemAmount || 0), 2),
-        lotNo: row.lotNo || "",
+        chassisNo: row.chassisNo || "",
+        make: row.make || "",
+        model: row.model || "",
+        modelYear: row.modelYear || "",
+        serialNo: row.serialNo || "",
+        engineNo: row.engineNo || "",
+        prodNo: row.prodNo || "",
+        color: row.color || "",
+        pnpNo: row.pnpNo || "",
+        csrNo: row.csrNo || "",
         qstatCode: row.qstatCode || "",
-        bbDate: toDateInputValue(row.bbDate),
-        qtyHand: formatNumber(parseFormattedNumber(row.qtyHand || 0), decQty),
+        qtyHand: formatNumber(parseFormattedNumber(row.qtyHand || 0), 0),
         whouseCode: row.whouseCode || "",
         locCode: row.locCode || "",
         acctCode: row.acctCode || "",
@@ -1580,7 +1860,7 @@ const handleColumnLabel = (columnName) =>{
     uploadInputRef.current?.click();
   };
 
-  const rmajGlColumnDefs = [
+  const veajGlColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
     { key: "acctCode", label: "Account Code", width: 120 },
     { key: "rcCode", label: "RC Code", width: 120 },
@@ -1602,33 +1882,33 @@ const handleColumnLabel = (columnName) =>{
     { key: "remarks", label: "Remarks", width: 160 },
   ];
   const {
-    getColumnStyle: getFgajGlColumnStyle,
-    getFrozenColumnStyle: getFgajGlFrozenStyle,
-    getOrderedColumns: getOrderedFgajGlColumns,
-    getSortedRows: getSortedFgajGlRows,
-    setColumnOrder: setFgajGlColumnOrder,
-    clearAllSorting: clearFgajGlSorting,
-    clearZeroValueOnFocus: clearFgajGlZeroOnFocus,
-    focusNextRowInput: focusNextFgajGlRowInput,
-    renderHeaderContextMenu: renderFgajGlHeaderContextMenu,
-    renderResizableHeader: renderFgajGlHeader,
-  } = useResizableTableColumns(rmajGlColumnDefs);
-  const orderedFgajGlColumns = getOrderedFgajGlColumns(rmajGlColumnDefs);
-  const getFgajGlFallbackWidth = (key) => rmajGlColumnDefs.find((column) => column.key === key)?.width || 120;
-  const getFgajGlCellStyle = (key, fallbackWidth) => ({
-    ...getFgajGlColumnStyle(key, fallbackWidth),
-    ...getFgajGlFrozenStyle(key, orderedFgajGlColumns, fallbackWidth, { isHeader: false }),
+    getColumnStyle: getVeajGlColumnStyle,
+    getFrozenColumnStyle: getVeajGlFrozenStyle,
+    getOrderedColumns: getOrderedVeajGlColumns,
+    getSortedRows: getSortedVeajGlRows,
+    setColumnOrder: setVeajGlColumnOrder,
+    clearAllSorting: clearVeajGlSorting,
+    clearZeroValueOnFocus: clearVeajGlZeroOnFocus,
+    focusNextRowInput: focusNextVeajGlRowInput,
+    renderHeaderContextMenu: renderVeajGlHeaderContextMenu,
+    renderResizableHeader: renderVeajGlHeader,
+  } = useResizableTableColumns(veajGlColumnDefs);
+  const orderedVeajGlColumns = getOrderedVeajGlColumns(veajGlColumnDefs);
+  const getVeajGlFallbackWidth = (key) => veajGlColumnDefs.find((column) => column.key === key)?.width || 120;
+  const getVeajGlCellStyle = (key, fallbackWidth) => ({
+    ...getVeajGlColumnStyle(key, fallbackWidth),
+    ...getVeajGlFrozenStyle(key, orderedVeajGlColumns, fallbackWidth, { isHeader: false }),
   });
   useEffect(() => {
-    setFgajGlColumnOrder(rmajGlColumnDefs.map((column) => column.key));
-  }, [setFgajGlColumnOrder, withCurr2, withCurr3, glCurrDefault, currCode, glCurrGlobal2, glCurrGlobal3]);
-  const sortedFgajGlRows = getSortedFgajGlRows(
+    setVeajGlColumnOrder(veajGlColumnDefs.map((column) => column.key));
+  }, [setVeajGlColumnOrder, withCurr2, withCurr3, glCurrDefault, currCode, glCurrGlobal2, glCurrGlobal3]);
+  const sortedVeajGlRows = getSortedVeajGlRows(
     detailRowsGL.map((row, originalIndex) => ({ row, originalIndex })),
     (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? ""
   );
 
-  const rmajDetailEnterNextRowZeroClearFields = ["quantity", "unitCost"];
-  const rmajGlEnterNextRowZeroClearFields = ["debit", "credit", "debitFx1", "creditFx1", "debitFx2", "creditFx2"];
+  const veajDetailEnterNextRowZeroClearFields = ["quantity", "unitCost"];
+  const veajGlEnterNextRowZeroClearFields = ["debit", "credit", "debitFx1", "creditFx1", "debitFx2", "creditFx2"];
 
   const getGLTotalsState = (rows) => {
     const sourceRows = Array.isArray(rows) ? rows : [];
@@ -1663,7 +1943,7 @@ const handleHistoryRowPick = useCallback(
 
 useEffect(() => {
   const params = new URLSearchParams(location.search);
-  const docNo = params.get("rmajNo");
+  const docNo = params.get("adjNo") || params.get("veajNo");
   const branchCode = params.get("branchCode");
 
   if (!loadedFromUrlRef.current && docNo && branchCode) {
@@ -1760,10 +2040,6 @@ useEffect(() => {
 
 
   
-//    if (['bbDate'].includes(field)) {
-//         row[field] = value;
-//     }
-
 //   if (runCalculations) {
 //     const origQuantity = parseFormattedNumber(row.quantity) || 0;
 //     const origUnitCost = parseFormattedNumber(row.unitCost) || 0;
@@ -1825,7 +2101,7 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
           slCode: 'SL Code',
           whouseCode: 'Warehouse',
           locCode: 'Location',
-          qstatCode: 'Quality Status'
+          qstatCode: 'QC Status'
         };
       
       if (hasBlanks) {
@@ -1888,16 +2164,67 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
     await autoFillBlanks('qstatCode', value.qstatCode);
   }
 
-  if (['bbDate'].includes(field)) {
-    row[field] = value;
-  }
 
 
  if (field === 'itemCode') {
     row["itemCode"] = value.itemCode;
     row["itemName"] = value.itemName;
     row["uomCode"] = value.uomCode;
-    row["categCode"] = value.categCode;   
+    row["categCode"] = value.categCode;
+
+    if (selectedAJType === "BB" && detailRows.length > 0) {
+      const activeIndex =
+        selectedRowIndex !== null && selectedRowIndex >= 0 && selectedRowIndex < detailRows.length
+          ? selectedRowIndex
+          : detailRows.length - 1;
+      const sourceRow = detailRows[activeIndex];
+      const result = await useSwalProceedConfirm(
+        "Add Beginning Balance Row",
+        "Do you want to copy the active item or insert a blank row?",
+        "Copy Active Item",
+        "Insert Blank Row",
+      );
+
+      let newRow = createEmptyDetailRow();
+
+      if (result.isConfirmed && sourceRow) {
+        newRow = {
+          ...newRow,
+          itemCode: sourceRow.itemCode || "",
+          itemName: sourceRow.itemName || "",
+          categCode: sourceRow.categCode || "",
+          uomCode: sourceRow.uomCode || "",
+          make: sourceRow.make || "",
+          whouseCode: sourceRow.whouseCode || whouseCode || "",
+          locCode: sourceRow.locCode || locCode || "",
+        };
+      } else if (result.dismiss !== Swal.DismissReason.cancel) {
+        return;
+      }
+
+      const updatedRows = [...detailRows];
+      updatedRows.splice(activeIndex + 1, 0, newRow);
+      updateState({
+        detailRows: updatedRows,
+        detailRowsGL: [],
+        selectedRowIndex: activeIndex + 1,
+      });
+      updateTotals(updatedRows);
+      return;
+    }
+
+    if (["BB", "IG"].includes(selectedAJType)) {
+      row["make"] = value.make || value.vehicleMake || "";
+    }
+
+    if (["BB", "IG", "IL"].includes(selectedAJType)) {
+      const fixedQuantity = selectedAJType === "IL" ? -1 : 1;
+      row["quantity"] = String(fixedQuantity);
+      row["itemAmount"] = formatNumber(
+        parseFormattedNumber(row.unitCost || value.unitCost || 0) * fixedQuantity,
+        2,
+      );
+    }
   }
 
 
@@ -2119,19 +2446,12 @@ const handleTranDocNoSelection = async (data) => {
 
 
 const handleCloseCancel = async (confirmation) => {
-    if(confirmation && documentStatus !== "OPEN" && documentID !== null ) {
+    if (confirmation && documentID && documentStatus === "") {
 
       const result = await useHandleCancel(docType,documentID,userCode,confirmation.password,confirmation.reason,updateState);
       if (result.success) 
       {
-       Swal.fire({
-          icon: "success",
-          title: "Success",
-          text: "Cancellation Completed",
-          timer: 5000, 
-          timerProgressBar: true,
-          showConfirmButton: false,
-        });    
+       useSwalSuccessAlert("Success", "Cancellation Completed");
       }    
      await fetchTranData(documentNo,branchCode);
     }
@@ -2187,10 +2507,10 @@ const handleCloseWarehouseLookup = (row) => {
     accountModalSource
       ? handleDetailChange(selectedRowIndex, 'whouseCode', row, false)
       : updateState({
-          WHCode: row.whCode,
-          WHName: row.whName,
-          LocCode: "", 
-          LocName: ""
+          whouseCode: row.whCode,
+          whouseName: row.whName,
+          locCode: "", 
+          locName: ""
         });
 
 
@@ -2234,7 +2554,7 @@ const handleCloseLocationLookup = (row) => {
   if (row) {
     accountModalSource
       ? handleDetailChange(selectedRowIndex, 'locCode', row, false)
-      : updateState({ LocCode: row.locCode, LocName: row.locName });
+      : updateState({ locCode: row.locCode, locName: row.locName });
 
      const hasDetails = detailRows && detailRows.length > 0;
       if (!accountModalSource && (selectedAJType === "IG" || selectedAJType === "BB") && hasDetails) {
@@ -2295,17 +2615,27 @@ const handleCloseBranchModal = (selectedBranch) => {
       updateState({ isLoading: true,
                     itemSingleSelect : itemSingleSelect });
   
-      const endpoint ="getInvLookupRM"
-      const response = await fetchDataJson(endpoint, { userCode, whouseCode :WHCode || "", locCode: LocCode || "", docType:"RMAJ" ,tranType :itemSingleSelect? "IRR" :selectedAJType });
+      const endpoint = "getInvLookupVE";
+      const response = await fetchDataJson(endpoint, {
+        userCode,
+        branchCode: branchCode || "",
+        whouseCode: whouseCode || "",
+        locCode: locCode || "",
+        docType: "VEAJ",
+        tranType: selectedAJType,
+      });
       const custData = response?.data?.[0]?.result ? JSON.parse(response.data[0].result) : [];
   
 
       const lookupTypes = ["BB", "IG"];  
-      const colConfig = await useSelectedHSColConfig((lookupTypes.includes(selectedAJType) || itemSingleSelect) ? "AllMastItemLookup" : "getInvLookupRM");
+      const colConfig = await useSelectedHSColConfig(
+        (lookupTypes.includes(selectedAJType) || itemSingleSelect) ? "AllMastItemLookup" : "getInvLookupVE",
+        userCode,
+      );
 
 
      if (custData.length === 0) {
-        useSwalInfoAlert(lookupTypes.includes(selectedAJType) ? "RM Master Data" : "RM Location Balance","No records found")
+        useSwalInfoAlert(lookupTypes.includes(selectedAJType) ? "Vehicle Master Data" : "Vehicle Location Balance", "No records found")
          updateState({ isLoading: false });
         return; 
       }
@@ -2318,12 +2648,64 @@ const handleCloseBranchModal = (selectedBranch) => {
   
 
     } catch (error) {
-      useSwalErrorAlert(lookupTypes.includes(selectedAJType) ? "RM Master Data" : "RM Location Balance","No records found")
+      useSwalErrorAlert(lookupTypes.includes(selectedAJType) ? "Vehicle Master Data" : "Vehicle Location Balance", "No records found")
       updateState({ 
           globalLookupRow: [] ,
           globalLookupHeader: [],
           isLoading: false  });
     }
+  };
+
+  const handleOpenAssemblyFGSource = async () => {
+    try {
+      updateState({ isLoading: true, assemblyLookupTarget: "fgSource" });
+      const response = await fetchDataJson("getInvLookupFG", {
+        userCode,
+        branchCode: branchCode || "",
+        whouseCode: whouseCode || "",
+        locCode: locCode || "",
+        docType: "FGAJ",
+        tranType: "IL",
+      });
+      const rows = response?.data?.[0]?.result ? JSON.parse(response.data[0].result) : [];
+      const columns = await useSelectedHSColConfig("getInvLookupFG", userCode);
+      if (!rows.length) {
+        useSwalInfoAlert("FG Location Balance", "No records found");
+        updateState({ isLoading: false, assemblyLookupTarget: "" });
+        return;
+      }
+      updateState({ globalLookupRow: rows, globalLookupHeader: columns, msLookupModalOpen: true, isLoading: false });
+    } catch (error) {
+      useSwalErrorAlert("FG Location Balance", error?.message || "Unable to load FG inventory.");
+      updateState({ isLoading: false, assemblyLookupTarget: "" });
+    }
+  };
+
+  const updateAssemblyFgQuantity = (index, inputValue, shouldFormat = false) => {
+    const sanitizedValue = String(inputValue ?? "").replace(/[^0-9.-]/g, "");
+    const decimalPattern = new RegExp(`^-?\\d*\\.?\\d{0,${decQty}}$`);
+    if (!shouldFormat && sanitizedValue !== "" && sanitizedValue !== "-" && !decimalPattern.test(sanitizedValue)) return;
+
+    setState((previous) => {
+      const rows = [...(previous.detailRowsFG || [])];
+      const row = { ...rows[index] };
+      const qtyHand = parseFormattedNumber(row.qtyOnHand ?? row.qtyHand ?? 0);
+      let quantity = -Math.abs(parseFormattedNumber(sanitizedValue || 0));
+      if (qtyHand > 0 && Math.abs(quantity) > qtyHand) quantity = -qtyHand;
+      const amount = quantity * parseFormattedNumber(row.unitCost || 0);
+
+      row.quantity = shouldFormat
+        ? formatNumber(quantity, decQty)
+        : sanitizedValue === "" || sanitizedValue === "-"
+          ? sanitizedValue
+          : `-${String(sanitizedValue).replace(/-/g, "")}`;
+      row.unitCost = formatNumber(parseFormattedNumber(row.unitCost || 0), decUcost);
+      row.itemAmount = formatNumber(amount, 2);
+      row.amount = formatNumber(amount, 2);
+      rows[index] = row;
+
+      return { ...previous, detailRowsFG: rows, detailRowsGL: [] };
+    });
   };
   
   
@@ -2351,11 +2733,9 @@ const handleCloseBranchModal = (selectedBranch) => {
 //     quantity: formatNumber(0, decQty),
 //     unitCost: formatNumber(parseFormattedNumber(item?.unitCost ?? 0), decUcost),
 //     amount: formatNumber(0, 2),
-//     lotNo: item?.lotNo ?? "",
-//     bbDate: item?.bbDate ? new Date(item.bbDate).toISOString().split("T")[0] : "",
 //     qstatCode: item?.qstatCode ?? "",
-//     whouseCode: item?.whouseCode ?? WHCode ?? "",
-//     locCode: item?.locCode ?? LocCode ?? "",
+//     whouseCode: item?.whouseCode ?? whouseCode ?? "",
+//     locCode: item?.locCode ?? locCode ?? "",
 //     qtyHand: formatNumber(parseFormattedNumber(item?.qtyHand ?? 0), decQty),
 //     uniqueKey: item?.uniqueKey ?? "",
 //     operation:  (selectedAJType === "IL" || selectedAJType === "IR") ? "S" : "A",
@@ -2382,19 +2762,27 @@ const handleAddBlankRow = (index) => {
     categCode: "",
     uomCode: "",
     unitCost: formatNumber(0, decUcost),
-    lotNo: "",
-    bbDate: "",
     qstatCode: "",
-    whouseCode: WHCode ?? "",
-    locCode: LocCode ?? "",
+    whouseCode: whouseCode ?? "",
+    locCode: locCode ?? "",
     acctCode: "",
     sltypeCode: "",
     rcCode: "",
     slCode: "",
     uniqueKey: "",
     quantity: formatNumber(0, decQty),
-    qtyHand: formatNumber(0, decQty),
+    qtyHand: formatNumber(0, 0),
     itemAmount: formatNumber(0, 2),
+    chassisNo: "",
+    make: "",
+    model: "",
+    modelYear: "",
+    serialNo: "",
+    engineNo: "",
+    prodNo: "",
+    color: "",
+    pnpNo: "",
+    csrNo: "",
     operation: "A"
   };
 
@@ -2418,6 +2806,37 @@ const handleCloseMSLookup = (selectedItems) => {
   const itemsArray = Array.isArray(selectedItems.records) ? selectedItems.records : [selectedItems.records];
   if (itemsArray.length === 0) return;
 
+  if (assemblyLookupTarget === "fgSource") {
+    const fgRows = itemsArray.map((item, index) => ({
+      lnNo: detailRowsFG.length + index + 1,
+      itemCode: item.itemCode || "",
+      itemName: item.itemName || "",
+      uomCode: item.uomCode || "",
+      whouseCode: item.whouseCode || whouseCode || "",
+      locCode: item.locCode || locCode || "",
+      lotNo: item.lotNo || "",
+      qstatCode: item.qstatCode || "",
+      itemStat: item.itemStat || item.qstatCode || "",
+      bbDate: item.bbDate || null,
+      qtyHand: formatNumber(parseFormattedNumber(item.qtyOnHand || item.qtyHand || 0), decQty),
+      qtyOnHand: formatNumber(parseFormattedNumber(item.qtyOnHand || item.qtyHand || 0), decQty),
+      quantity: formatNumber(-1, decQty),
+      unitCost: formatNumber(parseFormattedNumber(item.unitCost || 0), decUcost),
+      itemAmount: formatNumber(parseFormattedNumber(item.unitCost || 0) * -1, 2),
+      amount: formatNumber(parseFormattedNumber(item.unitCost || 0) * -1, 2),
+      uniqueKey: item.uniqueKey || "",
+      fgFifoLocId: item.fgFifoLocId || item.uniqueKey || "",
+      acctCode: item.invAcctCode || item.acctCode || "",
+      drAcctCode: item.invAcctCode || item.acctCode || "",
+      rcCode: item.rcCode || "",
+      sltypeCode: item.sltypeCode || "",
+      slCode: item.slCode || "",
+      groupId: crypto.randomUUID(),
+    }));
+    updateState({ detailRowsFG: [...detailRowsFG, ...fgRows], msLookupModalOpen: false, assemblyLookupTarget: "" });
+    return;
+  }
+
   const newRows = itemsArray.flatMap((item) => {
   const rawQtyHand = parseFormattedNumber(item?.qtyHand ?? 0);
   const rawUnitCost = parseFormattedNumber(item?.unitCost ?? 0);
@@ -2439,20 +2858,31 @@ const handleCloseMSLookup = (selectedItems) => {
 
     // Base configuration shared by both rows
     const baseRow = {
+      veId: item?.veId ?? "",
       itemCode: item?.itemCode ?? "",
       oldValue: item?.itemCode ?? "",
       itemName: item?.itemName ?? "",
       categCode: item?.categCode ?? "",
       uomCode: item?.uomCode ?? "",
       unitCost: formatNumber(rawUnitCost, decUcost),     
-      lotNo: item?.lotNo ?? "",
-      bbDate: item?.bbDate ? new Date(item.bbDate).toISOString().split("T")[0] : "",
       qstatCode: item?.qstatCode ?? "",
-      whouseCode: item?.whouseCode ?? WHCode ?? "",
-      locCode: item?.locCode ?? LocCode ?? "",
-      acctCode: "",
+      chassisNo: item?.chassisNo ?? "",
+      make: item?.make ?? "",
+      model: item?.model ?? "",
+      modelYear: item?.modelYear ?? "",
+      serialNo: item?.serialNo ?? "",
+      engineNo: item?.engineNo ?? "",
+      prodNo: item?.prodNo ?? "",
+      color: item?.color ?? "",
+      pnpNo: item?.pnpNo ?? "",
+      csrNo: item?.csrNo ?? "",
+      whouseCode: item?.whouseCode ?? whouseCode ?? "",
+      locCode: item?.locCode ?? locCode ?? "",
+      acctCode: selectedAJType === "VA"
+        ? (item?.invAcctCode || item?.acctCode || "")
+        : (item?.rrAcctCode || ""),
       sltypeCode: "",
-      rcCode: "",
+      rcCode: item?.rcCode ?? "",
       slCode: ""
     };
 
@@ -2463,7 +2893,7 @@ const handleCloseMSLookup = (selectedItems) => {
           ...baseRow,
           uniqueKey: originalKey,
           quantity: formatNumber(rawQtyHand * -1, decQty),
-          qtyHand: formatNumber(rawQtyHand, decQty),
+          qtyHand: formatNumber(rawQtyHand, 0),
           itemAmount: formatNumber((rawQtyHand * rawUnitCost)*-1, 2),
           operation:"S"
         },
@@ -2472,8 +2902,8 @@ const handleCloseMSLookup = (selectedItems) => {
           ...baseRow,
           uniqueKey: "", // No value as requested
           quantity: formatNumber(rawQtyHand, decQty),
-          qtyHand: formatNumber(0, decQty),
-          itemAmount: formatNumber((rawQtyHand), 2),
+          qtyHand: formatNumber(0, 0),
+          itemAmount: formatNumber(rawQtyHand * rawUnitCost, 2),
           operation:"A"
         }
       ];
@@ -2484,10 +2914,18 @@ const handleCloseMSLookup = (selectedItems) => {
       {
         ...baseRow,
         uniqueKey: originalKey,
-        qtyHand: formatNumber(rawQtyHand, decQty),
-        quantity: formatNumber(0, decQty),
-        itemAmount: formatNumber(0, 2),
-        operation: (selectedAJType === "IL") ? "S" : "A"
+        qtyHand: formatNumber(rawQtyHand, 0),
+        quantity: ["BB", "IG"].includes(selectedAJType)
+          ? "1"
+          : ["IL", "VA"].includes(selectedAJType)
+            ? "-1"
+            : formatNumber(0, decQty),
+        itemAmount: ["BB", "IG"].includes(selectedAJType)
+          ? formatNumber(rawUnitCost, 2)
+          : ["IL", "VA"].includes(selectedAJType)
+            ? formatNumber(rawUnitCost * -1, 2)
+            : formatNumber(0, 2),
+        operation: (["IL", "VA"].includes(selectedAJType)) ? "S" : "A"
       }
     ];
   });
@@ -2512,6 +2950,50 @@ const handleCloseItemMastLookup = (selectedItems) => {
     ? selectedItems.records
     : selectedItems.records ? [selectedItems.records] : [];
 
+  if (assemblyLookupTarget === "destination") {
+    const item = itemsArray[0];
+    if (item) {
+      updateState({
+        detailRowsDestination: [{
+          ...createEmptyDetailRow(),
+          lnNo: 1,
+          veId: "",
+          sourceVeId: "",
+          csSourceMode: "New",
+          itemCode: item.itemCode || "",
+          itemName: item.itemName || "",
+          categCode: item.categCode || "",
+          uomCode: item.uomCode || "UNIT",
+          quantity: "1",
+          unitCost: formatNumber(
+            [...detailRows, ...detailRowsFG].reduce(
+              (total, source) => total + Math.abs(parseFormattedNumber(source.itemAmount || source.amount || 0)),
+              0
+            ),
+            decUcost
+          ),
+          itemAmount: formatNumber(
+            [...detailRows, ...detailRowsFG].reduce(
+              (total, source) => total + Math.abs(parseFormattedNumber(source.itemAmount || source.amount || 0)),
+              0
+            ),
+            2
+          ),
+          acctCode: item.invAcctCode || item.acctCode || "",
+          make: item.make || "",
+          whouseCode: whouseCode || "",
+          locCode: locCode || "",
+          groupId: crypto.randomUUID(),
+          operation: "A",
+        }],
+        assemblyLookupTarget: "",
+        itemMastLookupOpen: false,
+        itemSingleSelect: false,
+      });
+    }
+    return;
+  }
+
   if (itemSingleSelect) {
     if (itemsArray.length > 0 && selectedRowIndex !== null) {
       handleDetailChange(selectedRowIndex, "itemCode", itemsArray[0], false);
@@ -2533,24 +3015,24 @@ const handleCloseItemMastLookup = (selectedItems) => {
 
 
 
-const renderFgajDetailColumn = (columnKey, row, index) => {
-  const columnWidth = getFgajDetailFallbackWidth(columnKey);
-  const style = getFgajDetailCellStyle(columnKey, columnWidth);
+const renderVeajDetailColumn = (columnKey, row, index) => {
+  const columnWidth = getVeajDetailFallbackWidth(columnKey);
+  const style = getVeajDetailCellStyle(columnKey, columnWidth);
   const isNegative = parseFormattedNumber(row.quantity) < 0;
   const textColorClass = isNegative ? "text-red-600" : "";
   const canLookupStock = ["BB", "IG", "IR"].includes(selectedAJType) && !isFormDisabled && row.operation !== "S";
 
   const focusNextDetailCell = (field) => {
-    focusNextFgajDetailRowInput(index, field, {
+    focusNextVeajDetailRowInput(index, field, {
       rows: detailRows,
-      zeroClearFields: rmajDetailEnterNextRowZeroClearFields,
+      zeroClearFields: veajDetailEnterNextRowZeroClearFields,
       parseValue: parseFormattedNumber,
       onClearNextValue: (nextIndex, nextField, value) => handleDetailChange(nextIndex, nextField, value, false),
     });
   };
 
   const textInput = (field, options = {}) => (
-    <input type="text" id={`${field}-${index}`} className={`w-full global-tran-td-inputclass-ui ${textColorClass} ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? isFormDisabled} maxLength={options.maxLength} onChange={(e) => handleDetailChange(index, field, e.target.value, false)} onKeyDown={(e) => { if (e.key !== "Enter" || options.readOnly || isFormDisabled) return; e.preventDefault(); focusNextDetailCell(field); }} />
+    <input type="text" id={`${field}-${index}`} className={`w-full global-tran-td-inputclass-ui ${textColorClass} ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? isFormDisabled} maxLength={options.maxLength} onChange={(e) => handleDetailChange(index, field, field === "modelYear" ? sanitizeModelYear(e.target.value) : e.target.value, false)} onKeyDown={(e) => { if (e.key !== "Enter" || options.readOnly || isFormDisabled) return; e.preventDefault(); focusNextDetailCell(field); }} />
   );
 
   const lookupCell = (field, onClick, options = {}) => (
@@ -2564,7 +3046,7 @@ const renderFgajDetailColumn = (columnKey, row, index) => {
       : new RegExp(`^\\d*\\.?\\d{0,${decimalPlaces}}$`);
 
     return (
-      <input type="text" id={`${field}-${index}`} className={`w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 ${textColorClass}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? isFormDisabled} onChange={(e) => { const sanitizedValue = e.target.value.replace(options.allowNegative ? /[^0-9.-]/g : /[^0-9.]/g, ""); if (pattern.test(sanitizedValue) || sanitizedValue === "") handleDetailChange(index, field, sanitizedValue, false); }} onFocus={(e) => clearFgajDetailZeroOnFocus(e, { isEditable: !(options.readOnly ?? isFormDisabled), onClear: (value) => handleDetailChange(index, field, value, false) })} onBlur={async (e) => { if (options.readOnly ?? isFormDisabled) return; const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, field, num, true); setFocusedCell(null); }} onKeyDown={async (e) => { if (e.key !== "Enter" || (options.readOnly ?? isFormDisabled)) return; e.preventDefault(); const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, field, num, true); focusNextFgajDetailRowInput(index, field, { rows: detailRows, zeroClearFields: rmajDetailEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChange(nextIndex, nextField, value, false) }); }} />
+      <input type="text" id={`${field}-${index}`} className={`w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 ${textColorClass}`.trim()} value={options.value ?? row[field] ?? ""} readOnly={options.readOnly ?? isFormDisabled} onChange={(e) => { const sanitizedValue = e.target.value.replace(options.allowNegative ? /[^0-9.-]/g : /[^0-9.]/g, ""); if (pattern.test(sanitizedValue) || sanitizedValue === "") handleDetailChange(index, field, sanitizedValue, false); }} onFocus={(e) => clearVeajDetailZeroOnFocus(e, { isEditable: !(options.readOnly ?? isFormDisabled), onClear: (value) => handleDetailChange(index, field, value, false) })} onBlur={async (e) => { if (options.readOnly ?? isFormDisabled) return; const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, field, num, true); setFocusedCell(null); }} onKeyDown={async (e) => { if (e.key !== "Enter" || (options.readOnly ?? isFormDisabled)) return; e.preventDefault(); const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, field, num, true); focusNextVeajDetailRowInput(index, field, { rows: detailRows, zeroClearFields: veajDetailEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChange(nextIndex, nextField, value, false) }); }} />
     );
   };
 
@@ -2573,12 +3055,25 @@ const renderFgajDetailColumn = (columnKey, row, index) => {
     itemCode: () => lookupCell("itemCode", () => handleAddItem(index), { hideIcon: !(["BB", "IG"].includes(selectedAJType) || (row.operation === "A" && selectedAJType === "IR")) }),
     itemName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("itemName", { readOnly: true })}</td>,
     uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("uomCode", { readOnly: true, className: "text-center" })}</td>,
-    quantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("quantity", { allowNegative: true, decimals: decQty })}</td>,
+    quantity: () => {
+      const hasFixedVehicleQuantity = ["BB", "IG", "IL"].includes(selectedAJType);
+      const fixedVehicleQuantity = selectedAJType === "IL" ? "-1" : "1";
+
+      return <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("quantity", { allowNegative: true, decimals: hasFixedVehicleQuantity ? 0 : decQty, readOnly: isFormDisabled || hasFixedVehicleQuantity, value: hasFixedVehicleQuantity ? fixedVehicleQuantity : undefined })}</td>;
+    },
     unitCost: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("unitCost", { decimals: decUcost, readOnly: isFormDisabled || selectedAJType === "IL" || (selectedAJType === "IR" && row.operation === "S") })}</td>,
     itemAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className={`w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 ${textColorClass}`.trim()} value={formatNumber(parseFormattedNumber(row.itemAmount)) || ""} readOnly /></td>,
-    lotNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("lotNo", { readOnly: isFormDisabled || selectedAJType === "IL" || selectedAJType === "CA" || (selectedAJType === "IR" && row.operation === "S"), maxLength: useGetFieldLength(tblFieldArray, "lot_no") })}</td>,
-    bbDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="date" id={`bbDate-${index}`} className={`w-full global-tran-td-inputclass-ui text-center ${textColorClass}`.trim()} value={toDateInputValue(row.bbDate)} readOnly={isFormDisabled || selectedAJType === "IL" || selectedAJType === "CA" || (selectedAJType === "IR" && row.operation === "S")} onChange={(e) => handleDetailChange(index, "bbDate", e.target.value, false)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextDetailCell("bbDate"); } }} /></td>,
+    chassisNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("chassisNo", { maxLength: useGetFieldLength(tblFieldArray, "cs_no") })}</td>,
+    make: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("make", { readOnly: isFormDisabled || ["BB", "IG"].includes(selectedAJType), maxLength: useGetFieldLength(tblFieldArray, "make") })}</td>,
+    model: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("model", { maxLength: useGetFieldLength(tblFieldArray, "model") })}</td>,
+    modelYear: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("modelYear", { maxLength: 4, className: "text-center" })}</td>,
+    serialNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("serialNo", { maxLength: useGetFieldLength(tblFieldArray, "serial_no") })}</td>,
+    engineNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("engineNo", { maxLength: useGetFieldLength(tblFieldArray, "engine_no") })}</td>,
+    prodNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("prodNo", { maxLength: useGetFieldLength(tblFieldArray, "prod_no") })}</td>,
+    color: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("color", { maxLength: useGetFieldLength(tblFieldArray, "color") })}</td>,
     qstatCode: () => lookupCell("qstatCode", () => updateState({ selectedRowIndex: index, showQstatModal: true }), { hideIcon: !canLookupStock }),
+    pnpNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("pnpNo", { maxLength: useGetFieldLength(tblFieldArray, "pnp_no") })}</td>,
+    csrNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("csrNo", { maxLength: useGetFieldLength(tblFieldArray, "csr_no") })}</td>,
     whouseCode: () => lookupCell("whouseCode", () => updateState({ selectedRowIndex: index, warehouseLookupOpen: true, accountModalSource: "whouseCode" }), { hideIcon: !canLookupStock }),
     locCode: () => lookupCell("locCode", () => updateState({ selectedRowIndex: index, locationLookupOpen: true, selectedWH: row.whouseCode, accountModalSource: "locCode" }), { hideIcon: !canLookupStock }),
     acctCode: () => lookupCell("acctCode", () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "invAcct" })),
@@ -2595,14 +3090,14 @@ const renderFgajDetailColumn = (columnKey, row, index) => {
   return detailColumnRenderers[columnKey]?.() ?? <td key={columnKey} className="global-tran-td-ui" style={style}>{String(row[columnKey] ?? "")}</td>;
 };
 
-const renderFgajGlColumn = (columnKey, row, index) => {
-  const columnWidth = getFgajGlFallbackWidth(columnKey);
-  const style = getFgajGlCellStyle(columnKey, columnWidth);
-  const focusNextGlCell = (field) => focusNextFgajGlRowInput(index, field, { rows: detailRowsGL, zeroClearFields: rmajGlEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChangeGL(nextIndex, nextField, value) });
+const renderVeajGlColumn = (columnKey, row, index) => {
+  const columnWidth = getVeajGlFallbackWidth(columnKey);
+  const style = getVeajGlCellStyle(columnKey, columnWidth);
+  const focusNextGlCell = (field) => focusNextVeajGlRowInput(index, field, { rows: detailRowsGL, zeroClearFields: veajGlEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChangeGL(nextIndex, nextField, value) });
   const modalHandlers = { acctCode: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "acctCode" }), rcCode: () => updateState({ selectedRowIndex: index, showRcModal: true }), slCode: () => updateState({ selectedRowIndex: index, showSlModal: true }) };
   const textInput = (field, options = {}) => <input type="text" id={`${field}-${index}`} className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? isFormDisabled} maxLength={options.maxLength} onChange={(e) => handleDetailChangeGL(index, field, e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || options.readOnly || isFormDisabled) return; e.preventDefault(); focusNextGlCell(field); }} />;
   const lookupCell = (field, options = {}) => <td key={columnKey} className="global-tran-td-ui" style={style}><div className="relative w-full"><input type="text" id={`${field}-${index}`} className={`w-full pr-6 global-tran-td-inputclass-ui cursor-pointer ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? true} onChange={(e) => handleDetailChangeGL(index, field, e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); focusNextGlCell(field); }} />{!isFormDisabled && (options.alwaysShowIcon || String(row[field] || "").trim()) && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={modalHandlers[field]} />}</div></td>;
-  const amountInput = (field) => <input type="text" id={`${field}-${index}`} className="w-full global-tran-td-inputclass-ui text-right" value={row[field] || ""} readOnly={isFormDisabled} onChange={(e) => { const sanitizedValue = e.target.value.replace(/[^0-9.]/g, ""); if (/^\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") handleDetailChangeGL(index, field, sanitizedValue); }} onFocus={(e) => clearFgajGlZeroOnFocus(e, { isEditable: !isFormDisabled, onClear: (value) => handleDetailChangeGL(index, field, value) })} onBlur={(e) => { if (isFormDisabled) return; handleBlurGL(index, field, e.target.value); }} onKeyDown={async (e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); await handleBlurGL(index, field, e.target.value, true); focusNextGlCell(field); }} />;
+  const amountInput = (field) => <input type="text" id={`${field}-${index}`} className="w-full global-tran-td-inputclass-ui text-right" value={row[field] || ""} readOnly={isFormDisabled} onChange={(e) => { const sanitizedValue = e.target.value.replace(/[^0-9.]/g, ""); if (/^\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") handleDetailChangeGL(index, field, sanitizedValue); }} onFocus={(e) => clearVeajGlZeroOnFocus(e, { isEditable: !isFormDisabled, onClear: (value) => handleDetailChangeGL(index, field, value) })} onBlur={(e) => { if (isFormDisabled) return; handleBlurGL(index, field, e.target.value); }} onKeyDown={async (e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); await handleBlurGL(index, field, e.target.value, true); focusNextGlCell(field); }} />;
   const glColumnRenderers = {
     ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
     acctCode: () => lookupCell("acctCode", { alwaysShowIcon: true, readOnly: false }),
@@ -2669,7 +3164,7 @@ return (
         isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
         isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
         isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED" || displayStatus === "CLOSED"}
-        detailsRoute="/page/RMAJ"
+        detailsRoute="/page/VEAJ"
       />
       </div>
 
@@ -2715,8 +3210,8 @@ return (
             {/* Provision for Other Tabs */}
         </div>
 
-        {/* RMAJ Header Form Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 rounded-lg relative" id="rmaj_hd">
+        {/* VEAJ Header Form Section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 rounded-lg relative" id="veaj_hd">
           <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="global-tran-textbox-group-div-ui">
               <FieldRenderer
@@ -2727,12 +3222,12 @@ return (
                 disabled={state.isFetchDisabled || state.isDocNoDisabled || isFormDisabled}
                 readOnly
                 lookupDisabled={isFetchDisabled}
-                onLookup={() => !isFormDisabled && uypepdateState({ branchModalOpen: true })}
+                onLookup={() => !isFormDisabled && updateState({ branchModalOpen: true })}
               />
 
               <FieldRenderer
-                id="rmajNo"
-                label="RMAJ No."
+                id="veajNo"
+                label="VEAJ No."
                 type="lookup"
                 value={state.documentNo || ""}
                 disabled={state.isDocNoDisabled}
@@ -2742,7 +3237,7 @@ return (
                   if (e.key === "Enter") {
                     handleDocNoBlur();
                     e.preventDefault();
-                    document.getElementById("rmajDate")?.focus();
+                    document.getElementById("veajDate")?.focus();
                   }
                 }}
               />
@@ -2750,17 +3245,17 @@ return (
               <div className="relative w-full">
                 <div className={`flex items-stretch global-ref-textbox-ui ${!isFormDisabled ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"}`}>
                   <DateFormatInput
-                    id="rmajDate"
+                    id="veajDate"
                     className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
                     value={documentDate}
                     disabled={isFormDisabled}
                     updateState={(updates) => {
-                      if (updates.rmajDate !== undefined) updateState({ documentDate: updates.rmajDate });
+                      if (updates.veajDate !== undefined) updateState({ documentDate: updates.veajDate });
                       else updateState(updates);
                     }}
                   />
                 </div>
-                <label htmlFor="rmajDate" className="global-ref-floating-label">RMAJ Date</label>
+                <label htmlFor="veajDate" className="global-ref-floating-label">VEAJ Date</label>
               </div>
             </div>
 
@@ -2784,7 +3279,7 @@ return (
                 value={refDocNo1 || ""}
                 disabled={isFormDisabled}
                 onChange={(val) => updateState({ refDocNo1: val })}
-                maxLength={useGetFieldLength(tblFieldArray, "refaj_no1")}
+                maxLength={useGetFieldLength(tblFieldArray, "refadj_no") || 25}
               />
 
               <FieldRenderer
@@ -2794,7 +3289,7 @@ return (
                 value={refDocNo2 || ""}
                 disabled={isFormDisabled}
                 onChange={(val) => updateState({ refDocNo2: val })}
-                maxLength={useGetFieldLength(tblFieldArray, "refaj_no2")}
+                maxLength={useGetFieldLength(tblFieldArray, "refadj_no2") || 25}
               />
             </div>
 
@@ -2804,7 +3299,7 @@ return (
                 label="Warehouse"
                 type="lookup"
                 required
-                value={WHName || WHCode || ""}
+                value={formatLookupValue(whouseCode, whouseName)}
                 disabled={isFormDisabled}
                 readOnly
                 lookupDisabled={isFormDisabled}
@@ -2815,11 +3310,11 @@ return (
                 id="locName"
                 label="Location"
                 type="lookup"
-                value={LocName || ""}
-                disabled={isFormDisabled || WHName === ""}
+                value={formatLookupValue(locCode, locName)}
+                disabled={isFormDisabled || !whouseCode}
                 readOnly
-                lookupDisabled={isFormDisabled || WHName === ""}
-                onLookup={() => !isFormDisabled && WHName !== "" && updateState({ locationLookupOpen: true, selectedWH: WHCode })}
+                lookupDisabled={isFormDisabled || !whouseCode}
+                onLookup={() => !isFormDisabled && whouseCode && updateState({ locationLookupOpen: true, selectedWH: whouseCode })}
               />
             </div>
 
@@ -2851,28 +3346,35 @@ return (
 
           {/* Tabs */}
           <div className="flex flex-row sm:flex-row">
-            <button
-              className={`global-tran-tab-padding-ui ${
-                GLactiveTab === 'invoice'
-                  ? 'global-tran-tab-text_active-ui'
-                  : 'global-tran-tab-text_inactive-ui'
-              }`}
-              // onClick={() => updateState({ GLactiveTab: "invoice" })}
-            >
-              Item Details
-            </button>
+            {(selectedAJType === "VA"
+              ? [
+                  ["veSource", "Vehicle Sources"],
+                  ["fgSource", "FG Sources"],
+                  ["destination", "Destination Vehicle"],
+                ]
+              : [["veSource", "Item Details"]]
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                className={`global-tran-tab-padding-ui ${assemblyTab === key ? 'global-tran-tab-text_active-ui' : 'global-tran-tab-text_inactive-ui'}`}
+                onClick={() => updateState({ assemblyTab: key })}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
 
-      <div className="global-tran-table-main-div-ui">
+      <div className={`global-tran-table-main-div-ui ${selectedAJType === "VA" && assemblyTab !== "veSource" ? "hidden" : ""}`}>
         <div className="global-tran-table-main-sub-div-ui">
           <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
             <thead className="global-tran-thead-div-ui">
               <tr>
-                {visibleFgajDetailColumns.map((column) => (
+                {visibleVeajDetailColumns.map((column) => (
                   <Fragment key={`detail-header-${column.key}`}>
-                    {renderFgajDetailHeader(column.label, column.key, column.width, {
-                      orderedColumns: visibleFgajDetailColumns,
+                    {renderVeajDetailHeader(column.label, column.key, column.width, {
+                      orderedColumns: visibleVeajDetailColumns,
                     })}
                   </Fragment>
                 ))}
@@ -2880,12 +3382,16 @@ return (
                   <th key="detail-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
                 )}
               </tr>
-              {renderFgajDetailHeaderContextMenu()}
+              {renderVeajDetailHeaderContextMenu()}
             </thead>
             <tbody className="relative">
-              {sortedFgajDetailRows.map(({ row, originalIndex }) => (
-                <tr key={`${row.uniqueKey || row.itemCode || "row"}-${originalIndex}`} className="global-tran-tr-ui">
-                  {visibleFgajDetailColumns.map((column) => renderFgajDetailColumn(column.key, row, originalIndex))}
+              {sortedVeajDetailRows.map(({ row, originalIndex }) => (
+                <tr
+                  key={`${row.uniqueKey || row.itemCode || "row"}-${originalIndex}`}
+                  className="global-tran-tr-ui"
+                  onClick={() => updateState({ selectedRowIndex: originalIndex })}
+                >
+                  {visibleVeajDetailColumns.map((column) => renderVeajDetailColumn(column.key, row, originalIndex))}
                   {!isFormDisabled && (
                     <td className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black" style={transactionActionsCellStyle}>
                       <div className="flex items-center justify-center gap-1">
@@ -2908,7 +3414,53 @@ return (
       </div>
 
 
-    <div className="global-tran-tab-footer-main-div-ui">
+    {selectedAJType === "VA" && assemblyTab === "fgSource" && (
+      <>
+      <div className="global-tran-table-main-div-ui">
+        <div className="global-tran-table-main-sub-div-ui"><table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
+          <thead className="global-tran-thead-div-ui"><tr>{orderedAssemblyFgColumns.map(column => <Fragment key={column.key}>{renderAssemblyFgHeader(column.label,column.key,column.width,{orderedColumns:orderedAssemblyFgColumns})}</Fragment>)}{!isFormDisabled && <th className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>}</tr>{renderAssemblyFgHeaderContextMenu()}</thead>
+          <tbody>{sortedAssemblyFgRows.map(({row,originalIndex}) => <tr key={row.groupId || originalIndex} className="global-tran-tr-ui">
+            {orderedAssemblyFgColumns.map(column => { const key=column.key; const value=key === "ln" ? originalIndex+1 : row[key] ?? ""; const editable=key === "quantity" && !isFormDisabled; const numericField=["quantity","unitCost","amount","itemAmount","qtyHand","qtyOnHand"].includes(key); return <td key={key} className="global-tran-td-ui" style={getAssemblyFgCellStyle(key,column.width)}><input className={`global-tran-td-inputclass-ui w-full ${numericField ? "text-right" : ""}`.trim()} value={value} readOnly={!editable} onChange={e => updateAssemblyFgQuantity(originalIndex,e.target.value,false)} onBlur={e => {if(editable) updateAssemblyFgQuantity(originalIndex,e.target.value,true);}} onKeyDown={e => {if(editable && e.key === "Enter"){e.preventDefault();updateAssemblyFgQuantity(originalIndex,e.currentTarget.value,true);}}} /></td>;})}
+            {!isFormDisabled && <td className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black" style={transactionActionsCellStyle}><button type="button" className="global-tran-td-button-delete-ui" onClick={() => updateState({detailRowsFG:detailRowsFG.filter((_,i)=>i!==originalIndex)})}><FontAwesomeIcon icon={faTrashAlt}/></button></td>}
+          </tr>)}</tbody>
+        </table></div>
+      </div>
+      <div className="global-tran-tab-footer-main-div-ui">
+        <div className="global-tran-tab-footer-button-div-ui">
+          {!isFormDisabled && <button type="button" className="global-tran-tab-footer-button-add-ui" onClick={handleOpenAssemblyFGSource}><FontAwesomeIcon icon={faPlus} className="mr-2"/>Add</button>}
+        </div>
+        <div className="global-tran-tab-footer-total-main-div-ui">
+          <div className="global-tran-tab-footer-total-div-ui"><label className="global-tran-tab-footer-total-label-ui">Total Quantity:</label><label className="global-tran-tab-footer-total-value-ui">{formatNumber(assemblyTotals.fgSource.quantity, decQty)}</label></div>
+          <div className="global-tran-tab-footer-total-div-ui"><label className="global-tran-tab-footer-total-label-ui">Total Amount:</label><label className="global-tran-tab-footer-total-value-ui">{formatNumber(assemblyTotals.fgSource.amount, 2)}</label></div>
+        </div>
+      </div>
+      </>
+    )}
+
+    {selectedAJType === "VA" && assemblyTab === "destination" && (
+      <>
+      <div className="global-tran-table-main-div-ui">
+        <div className="global-tran-table-main-sub-div-ui"><table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
+          <thead className="global-tran-thead-div-ui"><tr>{orderedAssemblyDestinationColumns.map(column => <Fragment key={column.key}>{renderAssemblyDestinationHeader(column.label,column.key,column.width,{orderedColumns:orderedAssemblyDestinationColumns})}</Fragment>)}{!isFormDisabled && <th className="global-tran-th-ui sticky top-0 right-0 bg-blue-300 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>}</tr>{renderAssemblyDestinationHeaderContextMenu()}</thead>
+          <tbody>{sortedAssemblyDestinationRows.map(({row,originalIndex}) => <tr key={row.groupId || originalIndex} className="global-tran-tr-ui">
+            {orderedAssemblyDestinationColumns.map(column => {const key=column.key; const value=key === "ln" ? originalIndex+1 : row[key] ?? ""; const numericField=["quantity","unitCost","itemAmount","qtyHand"].includes(key); const readOnly=isFormDisabled || ["ln","itemName","uomCode","quantity","unitCost","itemAmount","qtyHand","categCode","oldValue","uniqueKey","operation","acctCode"].includes(key); return <td key={key} className="global-tran-td-ui" style={getAssemblyDestinationCellStyle(key,column.width)}><div className="relative"><input className={`global-tran-td-inputclass-ui w-full ${numericField ? "text-right" : ""}`.trim()} value={value} readOnly={readOnly || key === "itemCode"} maxLength={key === "modelYear" ? 4 : undefined} onChange={e => {const rows=[...detailRowsDestination]; rows[originalIndex]={...rows[originalIndex],[key]:key === "modelYear" ? sanitizeModelYear(e.target.value) : e.target.value,quantity:1}; updateState({detailRowsDestination:rows});}} />{key === "itemCode" && !isFormDisabled && <button type="button" className="absolute right-1 top-1/2 -translate-y-1/2 text-blue-600" onClick={() => updateState({assemblyLookupTarget:"destination",itemSingleSelect:true,itemMastLookupOpen:true})}><FontAwesomeIcon icon={faMagnifyingGlass}/></button>}</div></td>;})}
+            {!isFormDisabled && <td className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black" style={transactionActionsCellStyle}><button type="button" className="global-tran-td-button-delete-ui" onClick={() => updateState({detailRowsDestination:[]})}><FontAwesomeIcon icon={faTrashAlt}/></button></td>}
+          </tr>)}</tbody>
+        </table></div>
+      </div>
+      <div className="global-tran-tab-footer-main-div-ui">
+        <div className="global-tran-tab-footer-button-div-ui">
+          {!isFormDisabled && detailRowsDestination.length === 0 && <button type="button" className="global-tran-tab-footer-button-add-ui" onClick={() => updateState({assemblyLookupTarget:"destination",itemSingleSelect:true,itemMastLookupOpen:true})}><FontAwesomeIcon icon={faPlus} className="mr-2"/>Add</button>}
+        </div>
+        <div className="global-tran-tab-footer-total-main-div-ui">
+          <div className="global-tran-tab-footer-total-div-ui"><label className="global-tran-tab-footer-total-label-ui">Total Quantity:</label><label className="global-tran-tab-footer-total-value-ui">{formatNumber(assemblyTotals.destination.quantity, decQty)}</label></div>
+          <div className="global-tran-tab-footer-total-div-ui"><label className="global-tran-tab-footer-total-label-ui">Total Amount:</label><label className="global-tran-tab-footer-total-value-ui">{formatNumber(assemblyTotals.destination.amount, 2)}</label></div>
+        </div>
+      </div>
+      </>
+    )}
+
+    <div className={`global-tran-tab-footer-main-div-ui ${selectedAJType === "VA" && assemblyTab !== "veSource" ? "hidden" : ""}`}>
 
 
     {/* Add Button */}
@@ -3017,7 +3569,7 @@ return (
           Total Quantity:
         </label>
         <label id="totalQuantity" className="global-tran-tab-footer-total-value-ui">
-          {totals.totalQuantity}
+          {selectedAJType === "VA" ? formatNumber(assemblyTotals.veSource.quantity, 0) : totals.totalQuantity}
         </label>
       </div>
 
@@ -3028,7 +3580,7 @@ return (
           Total Amount:
         </label>
         <label id="totalItemAmount" className="global-tran-tab-footer-total-value-ui">
-          {totals.totalItemAmount}
+          {selectedAJType === "VA" ? formatNumber(assemblyTotals.veSource.amount, 2) : totals.totalItemAmount}
         </label>
       </div>
     )}
@@ -3060,18 +3612,6 @@ return (
             </button>
           </div>
 
-          {/* Action Button */}
-          <div className="flex justify-end">
-            <button
-              onClick={() => handleActivityOption("GenerateGL")}
-              className="global-tran-button-generateGL"
-              disabled={isLoading} // Optionally disable button while loading
-              style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
-            >
-              {isLoading ? 'Generating...' : 'Generate GL Entries'}
-            </button>
-            
-          </div>
         </div>
 
         {/* GL Details Table */}
@@ -3080,20 +3620,20 @@ return (
             <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
               <thead className="global-tran-thead-div-ui">
                 <tr>
-                  {orderedFgajGlColumns.map((column) => (
+                  {orderedVeajGlColumns.map((column) => (
                     <Fragment key={`gl-header-${column.key}`}>
-                      {renderFgajGlHeader(column.label, column.key, column.width, {
-                        orderedColumns: orderedFgajGlColumns,
+                      {renderVeajGlHeader(column.label, column.key, column.width, {
+                        orderedColumns: orderedVeajGlColumns,
                       })}
                     </Fragment>
                   ))}
                 </tr>
-                {renderFgajGlHeaderContextMenu()}
+                {renderVeajGlHeaderContextMenu()}
               </thead>
               <tbody className="relative">
-                {sortedFgajGlRows.map(({ row, originalIndex }) => (
+                {sortedVeajGlRows.map(({ row, originalIndex }) => (
                   <tr key={`${row.acctCode || "gl"}-${originalIndex}`} className="global-tran-tr-ui">
-                    {orderedFgajGlColumns.map((column) => renderFgajGlColumn(column.key, row, originalIndex))}
+                    {orderedVeajGlColumns.map((column) => renderVeajGlColumn(column.key, row, originalIndex))}
                   </tr>
                 ))}
               </tbody>
@@ -3213,7 +3753,7 @@ return (
 
 
     {showPostingModal && (
-      <PostRMAJ
+      <PostVEAJ
         isOpen={showPostingModal}
         userCode={userCode}
         docType={docType}
@@ -3228,7 +3768,7 @@ return (
     {showAllTranDocNo && (
       <AllTranDocNo
         isOpen={showAllTranDocNo}
-        params={{branchCode,branchName,docType,documentTitle,fieldNo : "rmajNo"}}
+        params={{branchCode,branchName,docType,documentTitle,fieldNo : "adjNo"}}
         onRetrieve={handleTranDocNoRetrieval}
         onResponse={{documentNo}}
         onSelected={handleTranDocNoSelection}
@@ -3243,7 +3783,7 @@ return (
                 isOpen={msLookupModalOpen}
                 data={globalLookupRow}
                 btnCaption="Get Selected Items"
-                title="RM Location Balance"
+                title={assemblyLookupTarget === "fgSource" ? "FG Location Balance" : "Vehicle Location Balance"}
                 endpoint={globalLookupHeader}
                 onClose={handleCloseMSLookup}
                 onCancel={() => updateState({ msLookupModalOpen: false })}
@@ -3254,11 +3794,12 @@ return (
       {itemMastLookupOpen && (
         <ItemMastLookupModal
           isOpen={itemMastLookupOpen}
-          endpoint="getInvLookupRM"
+          endpoint="getInvLookupVE"
           onClose={handleCloseItemMastLookup}
           onCancel={() => updateState({ itemMastLookupOpen: false, itemSingleSelect: false })}
           enableMultiSelect={!itemSingleSelect}
-          docType="PRRM"
+          docType="VEAJ"
+          tranType={assemblyLookupTarget === "destination" ? "BB" : selectedAJType}
         />
       )}
         
@@ -3271,7 +3812,7 @@ return (
               filter={"ByBC" + branchCode}
               branchCode={branchCode || ""}
               source={accountModalSource}
-            invType="RM"
+            invType="VE"
             />
           )}  
    
@@ -3301,9 +3842,9 @@ return (
     <div className={topTab === "history" ? "" : "hidden"}>
       <AllTranHistory
         showHeader={false}
-        endpoint="/getRMAJHistory"
-        cacheKey={`RMAJ:${state.branchCode || ""}:${state.docNo || ""}`}  // âœ… per-transaction
-        activeTabKey="RMAJ_Summary"
+        endpoint="/getVEAJHistory"
+        cacheKey={`VEAJ:${state.branchCode || ""}:${state.docNo || ""}`}  // âœ… per-transaction
+        activeTabKey="VEAJ_Summary"
         branchCode={state.branchCode}
         startDate={state.fromDate}
         endDate={state.toDate}
@@ -3336,4 +3877,4 @@ return (
 
 };
 
-export default RMAJ;
+export default VEAJ;

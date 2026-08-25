@@ -1,8 +1,18 @@
-// VERR_LatestSproc_FieldAlignment_v14 - PO breakdown + latest sproc poln/prln alignment - 2026-08-19
+// VERR_v18 - VERR02 flexible Excel upload + VERR01 direct Add when no PO details - 2026-08-19
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Swal from "sweetalert2";
+import ExcelJS from "exceljs";
+
+const MODEL_YEAR_MIN = 1900;
+const getMaximumModelYear = () => new Date().getFullYear() + 1;
+const sanitizeModelYear = (value) => String(value ?? "").replace(/\D/g, "").slice(0, 4);
+const isValidModelYear = (value) => {
+  const yearText = String(value ?? "").trim();
+  const year = Number(yearText);
+  return /^\d{4}$/.test(yearText) && year >= MODEL_YEAR_MIN && year <= getMaximumModelYear();
+};
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faPlus, faTrashAlt } from "@fortawesome/free-solid-svg-icons";
+import { faDownload, faFolderOpen, faMagnifyingGlass, faPlus, faTrashAlt, faUpload } from "@fortawesome/free-solid-svg-icons";
 
 // NAYSA Cloud standard lookups / modals
 import BranchLookupModal from "../../../Lookup/SearchBranchRef";
@@ -61,11 +71,17 @@ import {
   formatNumber,
   parseFormattedNumber,
   useSwalErrorAlert,
+  useSwalInfoAlert,
   useSwalshowSaveSuccessDialog,
   useSwalSuccessAlert,
   useSwalProceedConfirm,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 import {
+  getSingleUploadExcelCellValue,
+  getSingleUploadTemplateColumns as getGlobalSingleUploadTemplateColumns,
+  handleDownloadSingleUploadTemplate as downloadGlobalSingleUploadTemplate,
+  handleSingleUploadExcelFile,
+  showSingleUploadErrorList,
   transactionActionsCellStyle,
   transactionActionsHeaderStyle,
   useResizableTableColumns,
@@ -90,6 +106,9 @@ const VERR = () => {
     rr_date: new Date().toISOString().split("T")[0],
   });
   const [editingVehicleCostCell, setEditingVehicleCostCell] = useState(null);
+  const [showSingleUploadDropdown, setShowSingleUploadDropdown] = useState(false);
+  const singleUploadDropdownRef = useRef(null);
+  const uploadInputRef = useRef(null);
 
   const [state, setState] = useState({
     documentName: "",
@@ -131,10 +150,10 @@ const VERR = () => {
     withCurr2: false,
     withCurr3: false,
 
-    WHCode: "",
-    WHName: "",
-    LocCode: "",
-    LocName: "",
+    whouseCode: "",
+    whouseName: "",
+    locCode: "",
+    locName: "",
     selectedWH: "",
 
     detailRows: [],
@@ -189,6 +208,19 @@ const VERR = () => {
   const detailRowsGLRef = useRef([]);
   const currRateBeforeEditRef = useRef("1.000000");
 
+
+  useEffect(() => {
+    if (!showSingleUploadDropdown) return;
+
+    const handleClickOutside = (event) => {
+      if (singleUploadDropdownRef.current?.contains(event.target)) return;
+      setShowSingleUploadDropdown(false);
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showSingleUploadDropdown]);
+
   // Match FGRR: PO rows keep PO_DT1.group_id; direct/no-PO rows get a client UUID.
   const generateClientGroupId = () => {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -234,6 +266,13 @@ const VERR = () => {
     displayStatus,
   );
 
+
+  useEffect(() => {
+    if (isFormDisabled) {
+      setShowSingleUploadDropdown(false);
+    }
+  }, [isFormDisabled]);
+
   const normalizeLookupName = (code, name) => {
     const normalizedCode = String(code || "").trim();
     let normalizedName = String(name || "").trim();
@@ -249,24 +288,6 @@ const VERR = () => {
     const c = String(code || "").trim();
     const n = normalizeLookupName(c, name);
     return c && n ? `${c} - ${n}` : c || n;
-  };
-
-  const getField = (row, ...keys) => {
-    for (const key of keys) {
-      if (row?.[key] !== undefined && row?.[key] !== null && row?.[key] !== "") {
-        return row[key];
-      }
-    }
-    if (!row || typeof row !== "object") return "";
-    const normalized = Object.entries(row).reduce((acc, [key, value]) => {
-      acc[String(key).replace(/[_\s-]/g, "").toLowerCase()] = value;
-      return acc;
-    }, {});
-    for (const key of keys) {
-      const value = normalized[String(key).replace(/[_\s-]/g, "").toLowerCase()];
-      if (value !== undefined && value !== null && value !== "") return value;
-    }
-    return "";
   };
 
   const extractRows = (value) => {
@@ -288,7 +309,7 @@ const VERR = () => {
   const loadVehicleMasterInfo = async (itemCode) => {
     if (!itemCode) return null;
     try {
-      const response = await fetchDataJson("getVEMast", { ITEM_CODE: itemCode });
+      const response = await postRequest("getVEMast", { ITEM_CODE: itemCode });
       const rows = extractRows(response?.data?.[0]?.result ?? response?.data ?? response);
       const mast = rows?.[0] || null;
       if (!mast) return null;
@@ -297,7 +318,7 @@ const VERR = () => {
       if (!categoryCode) return mast;
 
       try {
-        const categoryResponse = await fetchDataJson("getVECateg", { CATEG_CODE: categoryCode });
+        const categoryResponse = await postRequest("getVECateg", { CATEG_CODE: categoryCode });
         const categoryRows = extractRows(
           categoryResponse?.data?.[0]?.result ?? categoryResponse?.data ?? categoryResponse,
         );
@@ -389,6 +410,14 @@ const VERR = () => {
   const isDirectReceiving =
     String(state.verrTranType || "VERR01").trim().toUpperCase() === "VERR02";
   const payeeLookupFilter = isDirectReceiving ? "ActiveAll" : "OpenVERR";
+  const hasVehicleDetailRows = Array.isArray(state.detailRows) && state.detailRows.length > 0;
+  const canUseSingleUploadMenu = isDirectReceiving || hasVehicleDetailRows;
+
+  useEffect(() => {
+    if (!canUseSingleUploadMenu && showSingleUploadDropdown) {
+      setShowSingleUploadDropdown(false);
+    }
+  }, [canUseSingleUploadMenu, showSingleUploadDropdown]);
 
   useEffect(() => {
     if (isDirectReceiving) {
@@ -407,7 +436,7 @@ const VERR = () => {
       { key: "lnNo", label: "LN", width: 56 },
       { key: "poNo", label: "PO No.", width: 140 },
       { key: "itemCode", label: "Item Code", width: 120 },
-      { key: "itemName", label: "Item Description", width: 300 },
+      { key: "itemName", label: "Item Name", width: 300 },
       { key: "specs", label: "Specification", width: 300 },
       { key: "uomCode", label: "UOM", width: 80 },
       { key: "balance", label: "PO Balance", width: 130 },
@@ -482,7 +511,19 @@ const VERR = () => {
   );
 
   const visibleDetailColumns = useMemo(() => {
-    const columns = [...orderedDetailColumns];
+    // Keep the transaction identity columns fixed at the beginning even when
+    // the global resizable table restores a previously saved column order.
+    // VERR01 must always display/export: LN -> PO No. -> Item Code -> ...
+    const leadingColumnKeys = ["lnNo", "poNo"];
+    const leadingColumns = leadingColumnKeys
+      .map((key) => orderedDetailColumns.find((column) => column.key === key))
+      .filter(Boolean);
+    const columns = [
+      ...leadingColumns,
+      ...orderedDetailColumns.filter(
+        (column) => !leadingColumnKeys.includes(column.key),
+      ),
+    ];
     const fxColumnKeys = ["unitCostFx"];
     const fxColumns = fxColumnKeys
       .map((key) => columns.find((column) => column.key === key))
@@ -615,43 +656,33 @@ const VERR = () => {
         useTopDocDropDown(docType, "VERRTRAN_TYPE"),
       ]);
 
-      const defaultCurr = String(
-        hsOption?.glCurrDefault || hsOption?.GLCURR_DEFAULT || baseCurrency,
-      ).toUpperCase();
+      const defaultCurr = String(hsOption?.glCurrDefault || baseCurrency).toUpperCase();
       const transactionCurr = baseCurrency || defaultCurr || "PHP";
       const currencyRow = await useTopCurrencyRow(transactionCurr);
 
       const loadedVEGLMode =
         hsOption?.veinvGLMode ||
-        hsOption?.veInvGLMode ||
-        hsOption?.VEINV_GLMODE ||
-        hsOption?.veinv_glmode ||
         companyInfo?.veinvGLMode ||
-        companyInfo?.VEINV_GLMODE ||
         "E";
 
       setVEInvGLMode(String(loadedVEGLMode || "E").toUpperCase());
 
       updateState({
-        documentName:
-          docControl?.docName || docControl?.DOC_NAME || documentTitle,
-        documentSeries:
-          docControl?.docSeries || docControl?.DOC_SERIES || "S",
-        documentDocLen: Number(
-          docControl?.docLen || docControl?.DOC_LEN || docControl?.DOC_LENGTH || 8,
-        ),
-        glCurrMode: hsOption?.glCurrMode || hsOption?.GLCURR_MODE || "M",
+        documentName: docControl?.docName || documentTitle,
+        documentSeries: docControl?.docSeries || "S",
+        documentDocLen: Number(docControl?.docLen || 8),
+        glCurrMode: hsOption?.glCurrMode || "M",
         glCurrDefault: defaultCurr,
-        glCurrGlobal1: hsOption?.glCurrGlobal1 || hsOption?.GLCURR_GLOBAL1 || "",
-        glCurrGlobal2: hsOption?.glCurrGlobal2 || hsOption?.GLCURR_GLOBAL2 || "",
-        glCurrGlobal3: hsOption?.glCurrGlobal3 || hsOption?.GLCURR_GLOBAL3 || "",
+        glCurrGlobal1: hsOption?.glCurrGlobal1 || "",
+        glCurrGlobal2: hsOption?.glCurrGlobal2 || "",
+        glCurrGlobal3: hsOption?.glCurrGlobal3 || "",
         withCurr2:
-          String(hsOption?.withCurr2 || hsOption?.WITH_CURR2 || "N").toUpperCase() === "Y",
+          String(hsOption?.withCurr2 || "N").toUpperCase() === "Y",
         withCurr3:
-          String(hsOption?.withCurr3 || hsOption?.WITH_CURR3 || "N").toUpperCase() === "Y",
+          String(hsOption?.withCurr3 || "N").toUpperCase() === "Y",
         currCode: transactionCurr,
         currName:
-          currencyRow?.currName || currencyRow?.CURR_NAME || transactionCurr,
+          currencyRow?.currName || transactionCurr,
         currRate: "1.000000",
         verrTranTypes: verrTranTypeData || [],
         verrTranType: verrTranTypeData?.[0]?.DROPDOWN_CODE || "VERR01",
@@ -696,10 +727,10 @@ const VERR = () => {
       currCode: baseCurrency,
       currName: baseCurrency,
       currRate: "1.000000",
-      WHCode: "",
-      WHName: "",
-      LocCode: "",
-      LocName: "",
+      whouseCode: "",
+      whouseName: "",
+      locCode: "",
+      locName: "",
       selectedWH: "",
       detailRows: [],
       detailRowsGL: [],
@@ -765,7 +796,7 @@ const VERR = () => {
       try {
         const data = await useFetchTranData(rrNo, branchCode, docType, "rrNo", direction);
         const parsed = data?.result && typeof data.result === "object" ? data.result : data;
-        const verrId = parsed?.verrId || parsed?.verrHdId || parsed?.documentID;
+        const verrId = parsed?.verrId;
 
         if (!verrId) {
           useSwalErrorAlert("No Records Found", "Transaction does not exist.");
@@ -776,15 +807,15 @@ const VERR = () => {
         const parsedStatus = getFullStatus(rawStatus, parsed?.cancelled);
         const parsedCurrency = String(parsed?.currCode || baseCurrency).toUpperCase();
         const currRow = await useTopCurrencyRow(parsedCurrency);
-        const retrievedWhCode = getField(parsed, "whouseCode", "whCode", "WHCode", "WH_CODE");
+        const retrievedWhCode = parsed?.whouseCode || "";
         const retrievedWhName = normalizeLookupName(
           retrievedWhCode,
-          getField(parsed, "whouseName", "whName", "WHName", "WH_NAME"),
+          parsed?.whouseName,
         );
-        const retrievedLocCode = getField(parsed, "locCode", "LocCode", "LOC_CODE");
+        const retrievedLocCode = parsed?.locCode || "";
         const retrievedLocName = normalizeLookupName(
           retrievedLocCode,
-          getField(parsed, "locName", "LocName", "LOC_NAME"),
+          parsed?.locName,
         );
 
         setHeader({
@@ -796,7 +827,7 @@ const VERR = () => {
         const loadedDetails = (Array.isArray(parsed?.dt1) ? parsed.dt1 : []).map((row, index) =>
           recalcVehicleRow({
             ...row,
-            groupId: row.groupId || row.group_id || "",
+            groupId: row.groupId || "",
             lnNo: row.lnNo || index + 1,
             // Latest sproc Get returns PO/PR line numbers as poln/prln.
             // Keep the JSX internal names poLineno/prLineno for the UI.
@@ -818,12 +849,7 @@ const VERR = () => {
           branchCode: parsed?.branchCode || branchCode,
           branchName: parsed?.branchName || state.branchName,
           cutoffCode: parsed?.cutoffCode || "",
-          verrTranType:
-            parsed?.verrTranType ||
-            parsed?.VERRTranType ||
-            parsed?.VERRTRAN_TYPE ||
-            state.verrTranType ||
-            "VERR01",
+          verrTranType: parsed?.verrTranType || "VERR01",
           vendCode: parsed?.vendCode || "",
           vendName: parsed?.vendName || "",
           poNo: parsed?.poNo || "",
@@ -836,19 +862,19 @@ const VERR = () => {
           apvNo: parsed?.apvNo || "",
           particular: parsed?.particular || "",
           currCode: parsedCurrency,
-          currName: currRow?.currName || currRow?.CURR_NAME || parsedCurrency,
+          currName: currRow?.currName || parsedCurrency,
           currRate: formatNumber(parsed?.currRate || 1, 6),
-          WHCode: retrievedWhCode || "",
-          WHName: retrievedWhName || "",
-          LocCode: retrievedLocCode || "",
-          LocName: retrievedLocName || "",
+          whouseCode: retrievedWhCode || "",
+          whouseName: retrievedWhName || "",
+          locCode: retrievedLocCode || "",
+          locName: retrievedLocName || "",
           detailRows: loadedDetails,
           detailRowsGL: Array.isArray(parsed?.dt2)
             ? parsed.dt2.map((row, index) => ({
                 ...row,
                 id: index + 1,
-                rcCode: row.rcCode || row.actCode || "",
-                slRefNo: row.slRefNo || row.slrefNo || "",
+                rcCode: row.rcCode || "",
+                slRefNo: row.slRefNo || "",
                 debit: formatNumber(parseFormattedNumber(row.debit || 0), 2),
                 credit: formatNumber(parseFormattedNumber(row.credit || 0), 2),
                 debitFx1: formatNumber(parseFormattedNumber(row.debitFx1 || 0), 2),
@@ -897,7 +923,7 @@ const VERR = () => {
     if (!String(state.drNo || "").trim()) errors.push("Header - DR No.");
     if (String(state.siNo || "").trim() && !state.siDate) errors.push("Header - SI Date");
     if (state.siDate && !String(state.siNo || "").trim()) errors.push("Header - SI No.");
-    if (!state.WHCode) errors.push("Header - Warehouse");
+    if (!state.whouseCode) errors.push("Header - Warehouse");
     if (!state.currCode) errors.push("Header - Currency");
     if (parseFormattedNumber(state.currRate || 0) <= 0) errors.push("Header - Currency Rate must be greater than zero");
     if (!state.detailRows?.length) errors.push("RR Details Empty");
@@ -910,6 +936,7 @@ const VERR = () => {
       const qty = parseFormattedNumber(row.quantity || 0);
       const balance = parseFormattedNumber(row.balance || 0);
       const chassis = String(row.chassisNo || "").trim().toUpperCase();
+      const modelYear = String(row.modelYear || "").trim();
 
       if (!itemCode) errors.push(`Line ${ln} - Item Code Required`);
       if (qty <= 0) errors.push(`Line ${ln} - Quantity must be greater than zero`);
@@ -930,6 +957,9 @@ const VERR = () => {
       if (String(row.requireModel || "N").toUpperCase() === "Y") {
         if (!String(row.model || "").trim()) errors.push(`Line ${ln} - Model Required`);
         if (!String(row.modelYear || "").trim()) errors.push(`Line ${ln} - Model Year Required`);
+      }
+      if (modelYear && !isValidModelYear(modelYear)) {
+        errors.push(`Line ${ln} - Model Year must be a 4-digit year from ${MODEL_YEAR_MIN} to ${getMaximumModelYear()}`);
       }
       if (String(row.requireSerial || "N").toUpperCase() === "Y" && !String(row.serialNo || "").trim()) {
         errors.push(`Line ${ln} - Serial No. Required`);
@@ -983,21 +1013,10 @@ const VERR = () => {
 
   const handleCloseWarehouseLookup = (selected) => {
     if (selected) {
-      const pickedWhCode =
-        selected.whCode ??
-        selected.WHCode ??
-        selected.WH_CODE ??
-        selected.whouseCode ??
-        selected.code ??
-        "";
+      const pickedWhCode = selected.whCode || "";
       const pickedWhName = normalizeLookupName(
         pickedWhCode,
-        selected.whName ??
-          selected.WHName ??
-          selected.WH_NAME ??
-          selected.whouseName ??
-          selected.name ??
-          "",
+        selected.whName,
       );
 
       const rowIndex = state.warehouseLookupRowIndex;
@@ -1020,10 +1039,10 @@ const VERR = () => {
         // Match FGRR: update header first, trigger confirmation without awaiting it,
         // then close the lookup modal immediately below.
         updateState({
-          WHCode: pickedWhCode,
-          WHName: pickedWhName,
-          LocCode: "",
-          LocName: "",
+          whouseCode: pickedWhCode,
+          whouseName: pickedWhName,
+          locCode: "",
+          locName: "",
         });
 
         const currentRows = detailRowsRef.current || state.detailRows || [];
@@ -1060,11 +1079,10 @@ const VERR = () => {
 
   const handleCloseLocationLookup = (selected) => {
     if (selected) {
-      const pickedLocCode =
-        selected.locCode ?? selected.LocCode ?? selected.LOC_CODE ?? selected.code ?? "";
+      const pickedLocCode = selected.locCode || "";
       const pickedLocName = normalizeLookupName(
         pickedLocCode,
-        selected.locName ?? selected.LocName ?? selected.LOC_NAME ?? selected.name ?? "",
+        selected.locName,
       );
 
       const rowIndex = state.locationLookupRowIndex;
@@ -1085,8 +1103,8 @@ const VERR = () => {
         // Match FGRR: update header first, trigger confirmation without awaiting it,
         // then close the lookup modal immediately below.
         updateState({
-          LocCode: pickedLocCode,
-          LocName: pickedLocName,
+          locCode: pickedLocCode,
+          locName: pickedLocName,
         });
 
         const currentRows = detailRowsRef.current || state.detailRows || [];
@@ -1135,55 +1153,52 @@ const VERR = () => {
       const rawResult = response?.data?.[0]?.result ?? response?.result ?? response?.data ?? response;
       const parsedResult = typeof rawResult === "string" ? JSON.parse(rawResult) : rawResult;
       const vatRow = Array.isArray(parsedResult) ? parsedResult[0] : parsedResult;
-      return parseFormattedNumber(
-        getField(vatRow, "vatRate", "VAT_RATE", "rate", "vatPerc", "vat_percent") || 0,
-      );
+      return parseFormattedNumber(vatRow?.vatRate || 0);
     } catch (error) {
       console.warn("VERR: unable to load VAT rate", vatCode, error);
       return 0;
     }
   };
 
-  const buildDirectVehicleRow = async (selectedItem = {}, baseRow = {}) => {
-    const itemCode = String(
-      getField(selectedItem, "itemCode", "ItemCode", "ITEM_CODE", "item_code") || "",
-    ).trim();
+  const buildDirectVehicleRow = async (selectedItem = {}, baseRow = {}, vehicleMasterOverride) => {
+    const itemCode = String(selectedItem.itemCode || "").trim();
 
     if (!itemCode) return null;
 
-    const mast = await loadVehicleMasterInfo(itemCode);
-    const selectedUnitCost = parseFormattedNumber(
-      getField(selectedItem, "unitCost", "UnitCost", "UNIT_COST", "unit_cost") || 0,
-    );
+    const mast =
+      vehicleMasterOverride !== undefined
+        ? vehicleMasterOverride
+        : await loadVehicleMasterInfo(itemCode);
+    const selectedUnitCost = parseFormattedNumber(selectedItem.unitCost || 0);
     const currentRate = Math.max(parseFormattedNumber(state.currRate || 1), 0.000001);
     const currentCurrency = String(state.currCode || baseCurrency).toUpperCase();
     const itemName =
-      getField(selectedItem, "itemName", "ItemName", "ITEM_NAME", "item_name") ||
+      selectedItem.itemName ||
       mast?.itemDesc ||
       mast?.itemName ||
       "";
     const uomCode =
-      getField(selectedItem, "uomCode", "UomCode", "UOM_CODE", "uom_code", "uom") ||
+      selectedItem.uomCode ||
       mast?.uom ||
       mast?.uomCode ||
       "";
     const categCode =
-      getField(selectedItem, "categCode", "CategCode", "CATEG_CODE", "categ_code") ||
+      selectedItem.categCode ||
       mast?.categoryCode ||
       mast?.categCode ||
       "";
     const selectedVatCode =
-      getField(selectedItem, "vatCode", "VatCode", "VAT_CODE", "vat_code") ||
+      selectedItem.vatCode ||
       baseRow.vatCode ||
       state.vatCode ||
       "";
     const selectedVatName =
-      getField(selectedItem, "vatName", "VatName", "VAT_NAME", "vat_name") ||
+      selectedItem.vatName ||
       baseRow.vatName ||
       state.vatName ||
       "";
     const lookupVatRate = parseFormattedNumber(
-      getField(selectedItem, "vatRate", "VatRate", "VAT_RATE", "vat_rate", "rate") ||
+      selectedItem.vatRate ||
         baseRow.vatRate ||
         state.vatRate ||
         0,
@@ -1192,7 +1207,7 @@ const VERR = () => {
 
     return recalcVehicleRow({
       ...baseRow,
-      groupId: baseRow.groupId || baseRow.group_id || generateClientGroupId(),
+      groupId: baseRow.groupId || generateClientGroupId(),
       lnNo: "",
       itemCode,
       categCode,
@@ -1209,7 +1224,7 @@ const VERR = () => {
           ? selectedUnitCost
           : selectedUnitCost / currentRate,
       itemCost: 0,
-      locCode: state.LocCode || baseRow.locCode || "",
+      locCode: state.locCode || baseRow.locCode || "",
       vatCode: selectedVatCode,
       vatName: selectedVatName,
       vatRate: selectedVatRate,
@@ -1245,7 +1260,7 @@ const VERR = () => {
       unitLandedCost: parseFormattedNumber(baseRow.unitLandedCost || 0),
       poNo: "",
       prNo: "",
-      whouseCode: state.WHCode || baseRow.whouseCode || "",
+      whouseCode: state.whouseCode || baseRow.whouseCode || "",
 
       requireModel: mast?.requireModel || "N",
       requireSerial: mast?.requireSerial || "N",
@@ -1323,6 +1338,593 @@ const VERR = () => {
     handleOpenPOOpenLookup();
   };
 
+
+  const getSingleUploadTemplateColumns = () =>
+    getGlobalSingleUploadTemplateColumns(visibleDetailColumns);
+
+  const singleUploadNumericKeys = new Set([
+    "balance",
+    "quantity",
+    "unitCost",
+    "unitCostFx",
+    "itemCost",
+    "vatRate",
+    "vatAmount",
+    "netAmount",
+  ]);
+
+  const handleDownloadSingleUploadTemplate = async () => {
+    await downloadGlobalSingleUploadTemplate({
+      columns: getSingleUploadTemplateColumns(),
+      rows: sortedDetailRows,
+      fileName: "VE Receiving Report Single Transaction Uploading Template.xlsx",
+      sheetName: "Vehicle Details",
+      decimalColumnFormats: {
+        balance: state.decQty,
+        quantity: state.decQty,
+        unitCost: state.decUcost,
+        unitCostFx: state.decUcost,
+        itemCost: 2,
+        vatRate: 6,
+        vatAmount: 2,
+        netAmount: 2,
+      },
+      rightAlignedColumns: [
+        "balance",
+        "quantity",
+        "unitCost",
+        "unitCostFx",
+        "itemCost",
+        "vatRate",
+        "vatAmount",
+        "netAmount",
+      ],
+      centerAlignedColumns: [
+        "lnNo",
+        "poNo",
+        "itemCode",
+        "uomCode",
+        "vatCode",
+        "modelYear",
+        "serialNo",
+        "engineNo",
+        "prodNo",
+        "color",
+        "chassisNo",
+        "pnpNo",
+        "csrNo",
+        "qstatCode",
+        "whouseCode",
+        "locCode",
+      ],
+      getCellValue: ({ rowEntry, column }) => {
+        const { row, originalIndex } = rowEntry;
+        if (column.key === "lnNo") return originalIndex + 1;
+        if (singleUploadNumericKeys.has(column.key)) {
+          return parseFormattedNumber(row[column.key] || 0);
+        }
+        return String(row[column.key] ?? "");
+      },
+    });
+  };
+
+  const createEmptySingleUploadRow = () => ({
+    lnNo: "",
+    poNo: "",
+    itemCode: "",
+    itemName: "",
+    specs: "",
+    uomCode: "",
+    balance: 0,
+    quantity: 0,
+    unitCost: 0,
+    unitCostFx: 0,
+    itemCost: 0,
+    vatCode: "",
+    vatRate: 0,
+    vatAmount: 0,
+    netAmount: 0,
+    make: "",
+    modelYear: "",
+    model: "",
+    serialNo: "",
+    engineNo: "",
+    prodNo: "",
+    color: "",
+    chassisNo: "",
+    pnpNo: "",
+    csrNo: "",
+    qstatCode: "",
+    whouseCode: "",
+    locCode: "",
+  });
+
+  const parseSingleUploadRow = ({ rawValuesByKey }) => {
+    const rowData = createEmptySingleUploadRow();
+
+    getSingleUploadTemplateColumns().forEach((column) => {
+      const rawValue = rawValuesByKey[column.key]?.value;
+      if (column.key === "lnNo") {
+        rowData.lnNo = parseInt(rawValue || 0, 10) || "";
+      } else if (singleUploadNumericKeys.has(column.key)) {
+        rowData[column.key] = parseFormattedNumber(rawValue || 0) || 0;
+      } else {
+        rowData[column.key] = String(rawValue ?? "").trim();
+      }
+    });
+
+    return rowData;
+  };
+
+  const normalizeDirectUploadHeader = (value) =>
+    String(value ?? "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .toUpperCase();
+
+  const getDirectUploadHeaderKeyMap = () => {
+    const headerKeyMap = new Map();
+
+    // Current VERR02 template columns remain the primary aliases.
+    getSingleUploadTemplateColumns().forEach((column) => {
+      headerKeyMap.set(normalizeDirectUploadHeader(column.label), column.key);
+    });
+
+    // VERR01-only columns are intentionally accepted and ignored by the
+    // direct-receiving business logic. This allows a PO-receiving template
+    // to be reused when Tran Type is VERR02 without triggering a format error.
+    headerKeyMap.set("PO NO.", "poNo");
+    headerKeyMap.set("PO NO", "poNo");
+    headerKeyMap.set("PO BALANCE", "balance");
+
+    // Common alternate headings from manually prepared Excel files.
+    [
+      ["LINE NO", "lnNo"],
+      ["LINE NO.", "lnNo"],
+      ["ITEM NO", "itemCode"],
+      ["ITEM NO.", "itemCode"],
+      ["DESCRIPTION", "itemName"],
+      ["ITEM NAME", "itemName"],
+      ["SPECS", "specs"],
+      ["QUANTITY", "quantity"],
+      ["QTY", "quantity"],
+      ["UNIT COST", "unitCost"],
+      ["VAT CODE", "vatCode"],
+      ["QS STATUS", "qstatCode"],
+      ["QSTAT", "qstatCode"],
+      ["WHOUSE", "whouseCode"],
+      ["WAREHOUSE CODE", "whouseCode"],
+      ["LOCATION CODE", "locCode"],
+      ["CHASSIS NO", "chassisNo"],
+      ["CHASSIS NO.", "chassisNo"],
+      ["CS NO", "chassisNo"],
+      ["CS NO.", "chassisNo"],
+      ["PROD NO", "prodNo"],
+      ["PROD NO.", "prodNo"],
+    ].forEach(([label, key]) => headerKeyMap.set(label, key));
+
+    return headerKeyMap;
+  };
+
+  const handleDirectReceivingExcelFile = async (file) => {
+    const lowerFileName = String(file?.name || "").toLowerCase();
+    if (!lowerFileName.endsWith(".xlsx")) {
+      return {
+        ok: false,
+        title: "Invalid File",
+        errors: ["Please upload an Excel .xlsx file."],
+      };
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const buffer = await file.arrayBuffer();
+    await workbook.xlsx.load(buffer);
+    const worksheet = workbook.worksheets?.[0];
+
+    if (!worksheet) {
+      return {
+        ok: false,
+        title: "Invalid Excel File",
+        errors: ["No worksheet found in the uploaded file."],
+      };
+    }
+
+    const headerKeyMap = getDirectUploadHeaderKeyMap();
+    const headerColumns = [];
+    const recognizedKeys = new Set();
+    const headerRow = worksheet.getRow(1);
+
+    headerRow.eachCell({ includeEmpty: false }, (cell, columnNumber) => {
+      const headerText = normalizeDirectUploadHeader(getSingleUploadExcelCellValue(cell));
+      const key = headerKeyMap.get(headerText);
+      if (!key) return; // VERR02 intentionally ignores unrelated/extra columns.
+
+      headerColumns.push({ columnNumber, key });
+      recognizedKeys.add(key);
+    });
+
+    if (!recognizedKeys.has("itemCode")) {
+      return {
+        ok: false,
+        title: "Upload Error",
+        errors: ["Item Code column was not found in the Excel file."],
+      };
+    }
+
+    const rows = [];
+    worksheet.eachRow({ includeEmpty: false }, (excelRow, rowNumber) => {
+      if (rowNumber === 1) return;
+
+      const rowData = createEmptySingleUploadRow();
+      let hasValue = false;
+
+      headerColumns.forEach(({ columnNumber, key }) => {
+        const rawValue = getSingleUploadExcelCellValue(excelRow.getCell(columnNumber));
+        if (String(rawValue ?? "").trim() !== "") hasValue = true;
+
+        if (key === "lnNo") {
+          rowData.lnNo = parseInt(rawValue || 0, 10) || "";
+        } else if (singleUploadNumericKeys.has(key)) {
+          rowData[key] = parseFormattedNumber(rawValue || 0) || 0;
+        } else {
+          rowData[key] = String(rawValue ?? "").trim();
+        }
+      });
+
+      if (hasValue) rows.push(rowData);
+    });
+
+    if (!rows.length) {
+      return {
+        ok: false,
+        title: "No Records Found",
+        errors: ["The uploaded Excel file has no detail rows."],
+      };
+    }
+
+    return {
+      ok: true,
+      rows,
+      validationResult: { rows, errorCount: 0, errors: [] },
+    };
+  };
+
+  const getUploadedDetailErrors = (rows) => {
+    const errors = [];
+    const chassisSeen = new Map();
+
+    rows.forEach((row, index) => {
+      const ln = row.lnNo || index + 1;
+      const itemCode = String(row.itemCode || "").trim();
+      const qty = parseFormattedNumber(row.quantity || 0);
+      const balance = parseFormattedNumber(row.balance || 0);
+      const chassis = String(row.chassisNo || "").trim().toUpperCase();
+      const modelYear = String(row.modelYear || "").trim();
+
+      if (!itemCode) errors.push(`Line ${ln} - Item Code Required`);
+      if (qty <= 0) errors.push(`Line ${ln} - Quantity must be greater than zero`);
+      if (!isDirectReceiving && balance > 0 && qty > balance + 0.000001) {
+        errors.push(`Line ${ln} - Quantity exceeds PO Balance ${formatNumber(balance, state.decQty)}`);
+      }
+      if (!String(row.vatCode || "").trim()) errors.push(`Line ${ln} - VAT Code Required`);
+      if (!String(row.locCode || "").trim()) errors.push(`Line ${ln} - Location Required`);
+      if (!chassis) errors.push(`Line ${ln} - Chassis / CS No. Required`);
+
+      if (chassis) {
+        if (chassisSeen.has(chassis)) {
+          errors.push(`Line ${ln} - Duplicate Chassis / CS No. ${chassis}`);
+        } else {
+          chassisSeen.set(chassis, ln);
+        }
+      }
+
+      if (String(row.requireModel || "N").toUpperCase() === "Y") {
+        if (!String(row.model || "").trim()) errors.push(`Line ${ln} - Model Required`);
+        if (!String(row.modelYear || "").trim()) errors.push(`Line ${ln} - Model Year Required`);
+      }
+      if (modelYear && !isValidModelYear(modelYear)) {
+        errors.push(`Line ${ln} - Model Year must be a 4-digit year from ${MODEL_YEAR_MIN} to ${getMaximumModelYear()}`);
+      }
+      if (String(row.requireSerial || "N").toUpperCase() === "Y" && !String(row.serialNo || "").trim()) {
+        errors.push(`Line ${ln} - Serial No. Required`);
+      }
+      if (String(row.requireEngine || "N").toUpperCase() === "Y" && !String(row.engineNo || "").trim()) {
+        errors.push(`Line ${ln} - Engine No. Required`);
+      }
+      if (String(row.requireProdNo || "N").toUpperCase() === "Y" && !String(row.prodNo || "").trim()) {
+        errors.push(`Line ${ln} - Production No. Required`);
+      }
+      if (String(row.requireColor || "N").toUpperCase() === "Y" && !String(row.color || "").trim()) {
+        errors.push(`Line ${ln} - Color Required`);
+      }
+      if (String(row.requireQsCode || "N").toUpperCase() === "Y" && !String(row.qstatCode || "").trim()) {
+        errors.push(`Line ${ln} - QS Status Required`);
+      }
+    });
+
+    return errors;
+  };
+
+  const buildDirectUploadedRows = async (uploadedRows) => {
+    const finalRows = [];
+    const errors = [];
+    const vehicleMasterCache = new Map();
+
+    for (let index = 0; index < uploadedRows.length; index += 1) {
+      const uploaded = uploadedRows[index];
+      const lineNo = uploaded.lnNo || index + 1;
+      const itemCode = String(uploaded.itemCode || "").trim();
+
+      if (!itemCode) {
+        finalRows.push({ ...uploaded, lnNo: index + 1 });
+        continue;
+      }
+
+      // VERR02 upload is allowed to use a flexible Excel layout, but every
+      // uploaded Item Code must still be a valid Vehicle Master item.
+      // Cache by Item Code so repeated physical units only hit the API once.
+      const cacheKey = itemCode.toUpperCase();
+      let mast = vehicleMasterCache.get(cacheKey);
+      if (mast === undefined) {
+        mast = await loadVehicleMasterInfo(itemCode);
+        vehicleMasterCache.set(cacheKey, mast || null);
+      }
+      if (!mast) {
+        errors.push(`Line ${lineNo} - Item Code ${itemCode} was not found in Vehicle Master.`);
+        continue;
+      }
+
+      const masterRow = await buildDirectVehicleRow(
+        {
+          itemCode,
+          itemName: uploaded.itemName,
+          uomCode: uploaded.uomCode,
+          unitCost: uploaded.unitCost,
+          vatCode: uploaded.vatCode,
+          vatRate: uploaded.vatRate,
+        },
+        {
+          ...uploaded,
+          quantity: parseFormattedNumber(uploaded.quantity || 0) || 1,
+          whouseCode: uploaded.whouseCode || state.whouseCode || "",
+          locCode: uploaded.locCode || state.locCode || "",
+        },
+        mast,
+      );
+
+      if (!masterRow) {
+        errors.push(`Line ${lineNo} - Unable to load Vehicle Master defaults for ${itemCode}.`);
+        continue;
+      }
+
+      const finalRow = recalcVehicleRow({
+        ...masterRow,
+        specs: uploaded.specs || masterRow.specs || "",
+        quantity: parseFormattedNumber(uploaded.quantity || 0) || 1,
+        unitCost: parseFormattedNumber(uploaded.unitCost || 0),
+        unitCostFx: parseFormattedNumber(uploaded.unitCostFx || 0),
+        vatCode: uploaded.vatCode || masterRow.vatCode || "",
+        vatRate: parseFormattedNumber(uploaded.vatRate || masterRow.vatRate || 0),
+        make: uploaded.make || masterRow.make || "",
+        modelYear: uploaded.modelYear || "",
+        model: uploaded.model || "",
+        serialNo: uploaded.serialNo || "",
+        engineNo: uploaded.engineNo || "",
+        prodNo: uploaded.prodNo || "",
+        color: uploaded.color || "",
+        chassisNo: uploaded.chassisNo || "",
+        pnpNo: uploaded.pnpNo || "",
+        csrNo: uploaded.csrNo || "",
+        qstatCode: uploaded.qstatCode || masterRow.qstatCode || "",
+        whouseCode: uploaded.whouseCode || state.whouseCode || masterRow.whouseCode || "",
+        locCode: uploaded.locCode || state.locCode || masterRow.locCode || "",
+        groupId: masterRow.groupId || generateClientGroupId(),
+        lnNo: index + 1,
+      });
+
+      finalRows.push(finalRow);
+    }
+
+    return { rows: finalRows, errors };
+  };
+
+  const buildPOUploadedRows = (uploadedRows) => {
+    const existingRows = detailRowsRef.current || state.detailRows || [];
+    const errors = [];
+
+    if (existingRows.length === 0) {
+      return {
+        errors: ["For PO Receiving, select the PO details first before uploading the completed template."],
+        rows: [],
+      };
+    }
+
+    if (uploadedRows.length !== existingRows.length) {
+      return {
+        errors: [
+          `Uploaded row count (${uploadedRows.length}) must match the currently loaded PO detail row count (${existingRows.length}).`,
+          "Download the template after selecting the PO, then update that same file.",
+        ],
+        rows: [],
+      };
+    }
+
+    const finalRowsByLine = new Array(existingRows.length);
+
+    uploadedRows.forEach((uploaded, uploadIndex) => {
+      const uploadedLine = parseInt(uploaded.lnNo || 0, 10);
+      const sourceIndex =
+        uploadedLine >= 1 && uploadedLine <= existingRows.length
+          ? uploadedLine - 1
+          : uploadIndex;
+      const source = existingRows[sourceIndex] || {};
+
+      if (!source || !source.itemCode) {
+        errors.push(`Line ${uploadedLine || uploadIndex + 1} - Unable to match the uploaded row to the loaded PO detail.`);
+        return;
+      }
+
+      if (finalRowsByLine[sourceIndex]) {
+        errors.push(`Line ${uploadedLine || uploadIndex + 1} - Duplicate LN in the uploaded template.`);
+        return;
+      }
+
+      const uploadedItem = String(uploaded.itemCode || "").trim().toUpperCase();
+      const sourceItem = String(source.itemCode || "").trim().toUpperCase();
+      const uploadedPo = String(uploaded.poNo || "").trim().toUpperCase();
+      const sourcePo = String(source.poNo || state.poNo || "").trim().toUpperCase();
+
+      if (uploadedItem && sourceItem && uploadedItem !== sourceItem) {
+        errors.push(`Line ${uploadedLine || uploadIndex + 1} - Item Code cannot be changed from ${source.itemCode}.`);
+      }
+      if (uploadedPo && sourcePo && uploadedPo !== sourcePo) {
+        errors.push(`Line ${uploadedLine || uploadIndex + 1} - PO No. cannot be changed from ${source.poNo || state.poNo}.`);
+      }
+
+      finalRowsByLine[sourceIndex] = recalcVehicleRow({
+        ...source,
+        ...uploaded,
+        lnNo: sourceIndex + 1,
+        groupId: source.groupId || "",
+        itemCode: source.itemCode || uploaded.itemCode || "",
+        categCode: source.categCode || "",
+        itemName: source.itemName || uploaded.itemName || "",
+        uomCode: source.uomCode || uploaded.uomCode || "",
+        balance: parseFormattedNumber(source.balance || 0),
+        poQty: parseFormattedNumber(source.poQty || 0),
+        poNo: source.poNo || state.poNo || "",
+        prNo: source.prNo || state.prNo || "",
+        poln: source.poln || source.poLineno || "",
+        poLineno: source.poLineno || source.poln || "",
+        prln: source.prln || source.prLineno || "",
+        prLineno: source.prLineno || source.prln || "",
+        requireModel: source.requireModel || "N",
+        requireSerial: source.requireSerial || "N",
+        requireEngine: source.requireEngine || "N",
+        requireColor: source.requireColor || "N",
+        requireQsCode: source.requireQsCode || "N",
+        requireProdNo: source.requireProdNo || "N",
+        currCode: source.currCode || state.currCode || baseCurrency,
+        currRate: parseFormattedNumber(source.currRate || state.currRate || 1),
+        whouseCode: uploaded.whouseCode || source.whouseCode || state.whouseCode || "",
+        locCode: uploaded.locCode || source.locCode || state.locCode || "",
+      });
+    });
+
+    if (finalRowsByLine.some((row) => !row)) {
+      errors.push("One or more loaded PO detail lines are missing from the uploaded template.");
+    }
+
+    return { errors, rows: finalRowsByLine.filter(Boolean) };
+  };
+
+  const handleUploadExcelFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || isFormDisabled) return;
+
+    updateState({ isLoading: true, showSpinner: true });
+
+    try {
+      const uploadResult = isDirectReceiving
+        ? await handleDirectReceivingExcelFile(file)
+        : await handleSingleUploadExcelFile({
+            file,
+            columns: getSingleUploadTemplateColumns(),
+            createEmptyRow: createEmptySingleUploadRow,
+            parseRow: parseSingleUploadRow,
+            validateRows: async (uploadedRows) => ({
+              errorCount: 0,
+              errors: [],
+              rows: uploadedRows,
+            }),
+          });
+
+      if (uploadResult?.cancelled) return;
+
+      if (!uploadResult?.ok) {
+        showSingleUploadErrorList(
+          uploadResult?.title || "Upload Error",
+          uploadResult?.errors || [],
+        );
+        return;
+      }
+
+      const uploadedRows =
+        uploadResult?.validationResult?.rows ||
+        uploadResult?.rows ||
+        [];
+
+      if (!uploadedRows.length) {
+        showSingleUploadErrorList("Upload Error", ["No detail rows were found in the Excel file."]);
+        return;
+      }
+
+      let finalRows = [];
+      let mappingErrors = [];
+
+      if (isDirectReceiving) {
+        const directUpload = await buildDirectUploadedRows(uploadedRows);
+        finalRows = directUpload.rows;
+        mappingErrors = directUpload.errors;
+      } else {
+        const poUpload = buildPOUploadedRows(uploadedRows);
+        finalRows = poUpload.rows;
+        mappingErrors = poUpload.errors;
+      }
+
+      if (mappingErrors.length > 0) {
+        showSingleUploadErrorList("Upload Rejected", mappingErrors);
+        return;
+      }
+
+      const validationErrors = getUploadedDetailErrors(finalRows);
+      if (validationErrors.length > 0) {
+        showSingleUploadErrorList("Upload Rejected", validationErrors);
+        return;
+      }
+
+      const renumberedRows = finalRows.map((row, index) => ({
+        ...row,
+        lnNo: index + 1,
+      }));
+
+      detailRowsRef.current = renumberedRows;
+      detailRowsGLRef.current = [];
+      updateState({
+        detailRows: renumberedRows,
+        detailRowsGL: [],
+      });
+
+      useSwalSuccessAlert(
+        "Upload Completed",
+        `${renumberedRows.length} vehicle row(s) uploaded successfully.`,
+      );
+    } catch (error) {
+      console.error("VERR upload transaction error:", error);
+      showSingleUploadErrorList(
+        "Upload Error",
+        [error?.message || "Unable to process the uploaded Excel file."],
+      );
+    } finally {
+      updateState({ isLoading: false, showSpinner: false });
+    }
+  };
+
+  const handleUploadSingleTransaction = () => {
+    if (isFormDisabled) return;
+
+    if (!isDirectReceiving && !(detailRowsRef.current || state.detailRows || []).length) {
+      useSwalInfoAlert(
+        "Select PO Details First",
+        "For PO Receiving, select the PO detail rows first, download the template, complete the vehicle information, then upload the same template.",
+      );
+      return;
+    }
+
+    uploadInputRef.current?.click();
+  };
+
   const handleCopyVehicleDetailRow = (index) => {
     if (isFormDisabled || !isDirectReceiving) return;
 
@@ -1380,7 +1982,7 @@ const VERR = () => {
       unitCost: 0,
       unitCostFx: 0,
       itemCost: 0,
-      locCode: state.LocCode || sourceRow.locCode || "",
+      locCode: state.locCode || sourceRow.locCode || "",
       vatCode: "",
       vatRate: 0,
       vatAmount: 0,
@@ -1411,7 +2013,7 @@ const VERR = () => {
       csrNo: "",
       poNo: "",
       prNo: "",
-      whouseCode: state.WHCode || sourceRow.whouseCode || "",
+      whouseCode: state.whouseCode || sourceRow.whouseCode || "",
     });
 
     rows.splice(index + 1, 0, blankRow);
@@ -1475,7 +2077,7 @@ const VERR = () => {
     { key: "poNo", label: "PO No", renderType: "text", width: 130 },
     { key: "ln", label: "LN", renderType: "number", width: 60 },
     { key: "itemCode", label: "Item Code", renderType: "text", width: 120 },
-    { key: "itemName", label: "Item Description", renderType: "text", width: 240 },
+    { key: "itemName", label: "Item Name", renderType: "text", width: 240 },
     { key: "itemSpecs", label: "Specification", renderType: "text", width: 260 },
     { key: "uomCode", label: "UOM", renderType: "text", width: 80 },
     { key: "poQuantity", label: "PO Qty", renderType: "number", width: 100 },
@@ -1488,6 +2090,47 @@ const VERR = () => {
     { key: "delDate", label: "Del Date", renderType: "date", width: 120 },
   ];
 
+  const handleOpenPayeeLookup = async () => {
+    if (isFormDisabled || (state.detailRows || []).length > 0) return;
+
+    // Match FGRR behavior for regular receiving: do not display an empty
+    // Payee modal. VERR01 payees are only those with an open Vehicle PO.
+    if (!isDirectReceiving) {
+      updateState({ isLoading: true, payeeLookupOpen: false });
+
+      try {
+        const response = await fetchDataJson("getVEPORR_OpenSummary", {
+          branchCode: state.branchCode,
+        });
+
+        const availablePayees = extractRows(
+          response?.data?.[0]?.result ?? response?.data ?? response,
+        ).filter((row) =>
+          String(row.vendCode || "").trim(),
+        );
+
+        if (!availablePayees.length) {
+          useSwalErrorAlert(
+            "No Records Found",
+            "There are no available payees with an open Vehicle Purchase Order.",
+          );
+          return;
+        }
+      } catch (error) {
+        console.error("VERR Payee lookup availability error:", error);
+        useSwalErrorAlert(
+          "Payee Lookup",
+          error?.message || "Unable to check available payees.",
+        );
+        return;
+      } finally {
+        updateState({ isLoading: false });
+      }
+    }
+
+    updateState({ payeeLookupOpen: true });
+  };
+
   const handleOpenPOOpenLookup = async (payeeOverride = null) => {
     if (isFormDisabled) return;
 
@@ -1496,11 +2139,7 @@ const VERR = () => {
     ).trim().toUpperCase();
 
     if (!selectedPayeeCode) {
-      useSwalErrorAlert(
-        "Payee Required",
-        "Select the payee/vendor before selecting a Purchase Order.",
-      );
-      updateState({ payeeLookupOpen: true });
+      await handleOpenPayeeLookup();
       return;
     }
 
@@ -1630,6 +2269,31 @@ const VERR = () => {
         Row 4 -> quantity 1 / PO balance 2
         Row 5 -> quantity 1 / PO balance 1
       */
+      // PO detail rows do not always include VAT rate. Resolve it once per VAT code
+      // before exploding quantity so every physical vehicle row receives the same
+      // valid VAT code/rate and recalcVehicleRow can compute VAT Amount / Net Amount.
+      const vatRateCache = new Map();
+      const resolveExplosionVatRate = async (vatCode, explicitRate) => {
+        const normalizedVatCode = String(vatCode || "").trim().toUpperCase();
+        const hasExplicitRate =
+          explicitRate !== undefined &&
+          explicitRate !== null &&
+          String(explicitRate).trim() !== "";
+        const parsedExplicitRate = hasExplicitRate ? parseFormattedNumber(explicitRate) : 0;
+
+        // A positive rate from PO/header is already usable. A zero rate can also
+        // simply mean the rate was not supplied, so when a VAT code exists we
+        // confirm it against VAT Master. Genuine zero-rated/non-VAT codes will
+        // still resolve back to 0 from VAT Master.
+        if (parsedExplicitRate > 0) return parsedExplicitRate;
+        if (!normalizedVatCode) return parsedExplicitRate;
+        if (vatRateCache.has(normalizedVatCode)) return vatRateCache.get(normalizedVatCode);
+
+        const resolvedRate = await fetchVatRate(normalizedVatCode);
+        vatRateCache.set(normalizedVatCode, resolvedRate);
+        return resolvedRate;
+      };
+
       const expandedRowGroups = await Promise.all(
         details.map(async (row, detailIndex) => {
           const itemCode = row?.itemCode || "";
@@ -1638,6 +2302,22 @@ const VERR = () => {
           const poQuantity = parseFormattedNumber(row?.poQuantity || 0);
           const qtyBalance = parseFormattedNumber(row?.qtyBalance || 0);
           const rowCurrCode = String(row?.currCode || selectedCurrCode).toUpperCase();
+
+          const rowVatCode = String(
+            row.vatCode ||
+              summary.vatCode ||
+              state.vatCode ||
+              "",
+          ).trim();
+          const rowVatRateValue = row.vatRate;
+          const summaryVatRateValue = summary.vatRate;
+          const explicitVatRate =
+            rowVatRateValue !== ""
+              ? rowVatRateValue
+              : summaryVatRateValue !== ""
+                ? summaryVatRateValue
+                : state.vatRate;
+          const resolvedVatRate = await resolveExplosionVatRate(rowVatCode, explicitVatRate);
 
           // qtyBalance comes from the single PO detail returned by the API/SP.
           // This JSX value controls how many one-vehicle VERR rows are created.
@@ -1648,7 +2328,7 @@ const VERR = () => {
             const runningPoBalance = unitCount - unitIndex;
 
             return recalcVehicleRow({
-              groupId: row?.groupId || row?.group_id || "",
+              groupId: row?.groupId || "",
               poId: row?.poId || "",
               lnNo: "",
               poNo: row?.poNo || poNo,
@@ -1670,11 +2350,11 @@ const VERR = () => {
                   : unitCost / Math.max(selectedCurrRate, 0.000001),
               currCode: rowCurrCode,
               currRate: selectedCurrRate,
-              vatCode: row?.vatCode || "",
-              vatRate: parseFormattedNumber(row?.vatRate || 0),
+              vatCode: rowVatCode,
+              vatRate: resolvedVatRate,
               qstatCode: mast?.defaultQsCode || "",
-              whouseCode: summary?.whCode || state.WHCode || "",
-              locCode: state.LocCode || "",
+              whouseCode: summary?.whCode || state.whouseCode || "",
+              locCode: state.locCode || "",
               make: mast?.vehicleMake || mast?.make || "",
 
               // Unique vehicle fields are entered per physical vehicle.
@@ -1709,11 +2389,13 @@ const VERR = () => {
 
       const mappedRows = expandedRowGroups
         .flat()
-        .map((row, index) => ({
-          ...row,
-          lnNo: index + 1,
-          quantity: 1,
-        }));
+        .map((row, index) =>
+          recalcVehicleRow({
+            ...row,
+            lnNo: index + 1,
+            quantity: 1,
+          }),
+        );
 
       updateState({
         vendCode: summary?.vendCode || state.vendCode,
@@ -1722,10 +2404,10 @@ const VERR = () => {
         poDate: summary?.poDate || "",
         currCode: selectedCurrCode,
         currName:
-          currencyRow?.currName || currencyRow?.CURR_NAME || selectedCurrCode,
+          currencyRow?.currName || selectedCurrCode,
         currRate: formatNumber(selectedCurrRate, 6),
-        WHCode: summary?.whCode || state.WHCode,
-        WHName: summary?.whName || state.WHName,
+        whouseCode: summary?.whCode || state.whouseCode,
+        whouseName: summary?.whName || state.whouseName,
         detailRows: mappedRows,
         detailRowsGL: [],
         isDocNoDisabled: true,
@@ -1748,19 +2430,19 @@ const VERR = () => {
     rows.map((row, index) => ({
       recNo: String(index + 1).padStart(3, "0"),
       acctCode: row.acctCode || "",
-      actCode: row.actCode || row.rcCode || "",
-      sltypeCode: row.sltypeCode || row.slTypeCode || "",
+      actCode: row.actCode || "",
+      sltypeCode: row.sltypeCode || "",
       slCode: row.slCode || "",
       particular: row.particular || "",
       vatCode: row.vatCode || "",
-      vatDesc: row.vatDesc || row.vatName || "",
-      ewtCode: row.ewtCode || row.atcCode || "",
-      ewtDesc: row.ewtDesc || row.atcName || "",
+      vatDesc: row.vatDesc || "",
+      ewtCode: row.ewtCode || "",
+      ewtDesc: row.ewtDesc || "",
       debit: parseFormattedNumber(row.debit || 0),
       credit: parseFormattedNumber(row.credit || 0),
       remarks: row.remarks || "",
-      slrefNo: row.slRefNo || row.slrefNo || "",
-      slRefDate: row.slRefDate || row.slrefDate || null,
+      slrefNo: row.slrefNo || "",
+      slRefDate: row.slRefDate || null,
       vendCode: row.vendCode || state.vendCode || "",
       debitFx1: parseFormattedNumber(row.debitFx1 || 0),
       creditFx1: parseFormattedNumber(row.creditFx1 || 0),
@@ -1772,12 +2454,11 @@ const VERR = () => {
     branchCode: state.branchCode,
     rrNo: state.documentNo || "",
     verrId: state.documentID || "",
-    documentID: state.documentID || "",
     rrDate: header.rr_date,
     cutoffCode: state.cutoffCode || "",
     verrTranType: state.verrTranType || "VERR01",
-    whouseCode: state.WHCode || "",
-    locCode: state.LocCode || "",
+    whouseCode: state.whouseCode || "",
+    locCode: state.locCode || "",
     vendCode: state.vendCode || "",
     vendName: state.vendName || "",
     poNo: state.poNo || "",
@@ -1796,7 +2477,7 @@ const VERR = () => {
     userCode: user?.USER_CODE || user?.userCode || "NSI",
     dt1: (state.detailRows || []).map((row, index) => ({
       lnNo: index + 1,
-      groupId: row.groupId || row.group_id || "",
+      groupId: row.groupId || "",
       itemCode: row.itemCode || "",
       categCode: row.categCode || "",
       itemName: row.itemName || "",
@@ -1806,7 +2487,7 @@ const VERR = () => {
       unitCost: parseFormattedNumber(row.unitCost || 0),
       unitCostFx: parseFormattedNumber(row.unitCostFx || 0),
       itemCost: parseFormattedNumber(row.itemCost || 0),
-      locCode: row.locCode || state.LocCode || "",
+      locCode: row.locCode || state.locCode || "",
       vatCode: row.vatCode || "",
       vatRate: parseFormattedNumber(row.vatRate || 0),
       vatAmount: parseFormattedNumber(row.vatAmount || 0),
@@ -1839,7 +2520,7 @@ const VERR = () => {
       csrNo: row.csrNo || "",
       poNo: row.poNo || state.poNo || "",
       prNo: row.prNo || state.prNo || "",
-      whouseCode: row.whouseCode || state.WHCode || "",
+      whouseCode: row.whouseCode || state.whouseCode || "",
     })),
     dt2: mapGLRowsForSave(glRows),
   });
@@ -1911,7 +2592,7 @@ const VERR = () => {
         return;
       }
 
-      const savedId = row?.verrId || row?.verrHdId || state.documentID;
+      const savedId = row?.verrId || state.documentID;
       const savedNo = row?.rrNo || state.documentNo;
       if (!savedId || !savedNo) {
         useSwalErrorAlert("Invalid Save Response", "VERR did not return the generated RR No. and transaction ID.");
@@ -1957,7 +2638,7 @@ const VERR = () => {
         updateState,
       );
       if (result?.success) {
-        useSwalSuccessAlert("Success", "Cancelled successfully.");
+        useSwalSuccessAlert("Success", "Cancellation Completed");
         await fetchTranData(state.documentNo, state.branchCode);
       }
     }
@@ -2228,7 +2909,7 @@ const VERR = () => {
                 updateState({
                   locationLookupOpen: true,
                   locationLookupRowIndex: index,
-                  selectedWH: row.whouseCode || state.WHCode,
+                  selectedWH: row.whouseCode || state.whouseCode,
                 })
               }
             />
@@ -2265,9 +2946,12 @@ const VERR = () => {
                 : row[column.key] ?? ""
           }
           disabled={isFormDisabled}
-          maxLength={maxLengthMap[column.key] ? useGetFieldLength(state.tblFieldArray, maxLengthMap[column.key]) : undefined}
+          maxLength={column.key === "modelYear" ? 4 : maxLengthMap[column.key] ? useGetFieldLength(state.tblFieldArray, maxLengthMap[column.key]) : undefined}
           onChange={(event) => {
             let value = event.target.value;
+            if (column.key === "modelYear") {
+              value = sanitizeModelYear(value);
+            }
             if (["quantity", "unitCost", "unitCostFx", "vatRate"].includes(column.key)) {
               value = value.replace(/[^0-9.]/g, "");
             }
@@ -2371,7 +3055,7 @@ const VERR = () => {
             id={`${column.key}-${index}`}
             type="date"
             className="global-tran-td-inputclass-ui w-full"
-            value={row.slRefDate || row.slrefDate || ""}
+            value={row.slRefDate || ""}
             readOnly={rowLocked}
             disabled={rowLocked}
             onChange={(event) => handleGLFieldChange(index, "slRefDate", event.target.value)}
@@ -2461,6 +3145,14 @@ const VERR = () => {
     <div className="global-tran-main-div-ui">
       {state.showSpinner && <LoadingSpinner />}
 
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept=".xlsx"
+        className="hidden"
+        onChange={handleUploadExcelFile}
+      />
+
       <div className="global-tran-headerToolbar-ui">
         <Header
           docType={docType}
@@ -2524,8 +3216,8 @@ const VERR = () => {
                   type="lookup"
                   value={state.branchName || state.branchCode || ""}
                   readOnly
-                  disabled={state.isFetchDisabled || state.isDocNoDisabled || isFormDisabled}
-                  lookupDisabled={state.isFetchDisabled}
+                  disabled={isFormDisabled}
+                  lookupDisabled={state.isFetchDisabled || Boolean(state.documentID)}
                   onLookup={() =>
                     !isFormDisabled && updateState({ branchModalOpen: true })
                   }
@@ -2536,7 +3228,9 @@ const VERR = () => {
                   label="VERR No."
                   type="lookup"
                   value={state.documentNo || ""}
-                  disabled={state.isDocNoDisabled}
+                  readOnly={state.isDocNoDisabled}
+                  disabled={isFormDisabled}
+                  lookupDisabled={state.isFetchDisabled || Boolean(state.documentID)}
                   onChange={(value) => updateState({ documentNo: value })}
                   onLookup={() => updateState({ showAllTranDocNo: true })}
                   onKeyDown={(event) => {
@@ -2596,11 +3290,7 @@ const VERR = () => {
                   disabled={isFormDisabled || (state.detailRows || []).length > 0}
                   readOnly
                   lookupDisabled={state.isFetchDisabled || (state.detailRows || []).length > 0}
-                  onLookup={() =>
-                    !isFormDisabled &&
-                    !(state.detailRows || []).length &&
-                    updateState({ payeeLookupOpen: true })
-                  }
+                  onLookup={handleOpenPayeeLookup}
                 />
 
                 <FieldRenderer
@@ -2688,7 +3378,7 @@ const VERR = () => {
                   label="Warehouse"
                   required
                   type="lookup"
-                  value={formatLookupValue(state.WHCode, state.WHName)}
+                  value={formatLookupValue(state.whouseCode, state.whouseName)}
                   readOnly
                   disabled={isFormDisabled}
                   lookupDisabled={state.isFetchDisabled}
@@ -2703,17 +3393,17 @@ const VERR = () => {
                   label="Location"
                   required
                   type="lookup"
-                  value={formatLookupValue(state.LocCode, state.LocName)}
+                  value={formatLookupValue(state.locCode, state.locName)}
                   readOnly
-                  disabled={isFormDisabled || !state.WHCode}
+                  disabled={isFormDisabled || !state.whouseCode}
                   lookupDisabled={state.isFetchDisabled}
                   onLookup={() =>
                     !isFormDisabled &&
-                    state.WHCode &&
+                    state.whouseCode &&
                     updateState({
                       locationLookupOpen: true,
                       locationLookupRowIndex: null,
-                      selectedWH: state.WHCode,
+                      selectedWH: state.whouseCode,
                     })
                   }
                 />
@@ -2775,7 +3465,7 @@ const VERR = () => {
                 </thead>
                 <tbody className="relative">
                   {sortedDetailRows.map(({ row, originalIndex }) => (
-                    <tr key={row.groupId || row.group_id || `${row.itemCode}-${originalIndex}`} className="global-tran-tr-ui">
+                    <tr key={row.groupId || `${row.itemCode}-${originalIndex}`} className="global-tran-tr-ui">
                       {visibleDetailColumns.map((column) =>
                         renderDetailCell(column, row, originalIndex),
                       )}
@@ -2816,9 +3506,96 @@ const VERR = () => {
           {/* Detail Footer: same position/design as FGRR */}
           <div className="global-tran-tab-footer-main-div-ui">
             <div className="global-tran-tab-footer-button-div-ui">
-              <div className="relative inline-block">
+              <div ref={singleUploadDropdownRef} className="relative inline-block">
+                {showSingleUploadDropdown && canUseSingleUploadMenu && !isFormDisabled && (
+                  <div className="absolute bottom-[110%] left-0 mb-3 z-[9999] w-[260px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur-sm dark:border-slate-700 dark:bg-slate-800">
+                    <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-700">
+                      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
+                        Add Item
+                      </div>
+                    </div>
+
+                    <div className="p-2">
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
+                        onClick={() => {
+                          setShowSingleUploadDropdown(false);
+                          handleAddRowClick();
+                        }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                            <FontAwesomeIcon icon={faFolderOpen} />
+                          </span>
+                          <div className="flex flex-col items-start">
+                            <span>Add Item</span>
+                            <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
+                              {isDirectReceiving ? "Select vehicle details" : "Select PO details"}
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-blue-700 transition-all duration-150 hover:bg-blue-50 hover:text-blue-900 dark:text-blue-300 dark:hover:bg-slate-700"
+                        onClick={() => {
+                          setShowSingleUploadDropdown(false);
+                          handleDownloadSingleUploadTemplate();
+                        }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-slate-700 dark:text-blue-300">
+                            <FontAwesomeIcon icon={faDownload} />
+                          </span>
+                          <div className="flex flex-col items-start">
+                            <span>Download Template</span>
+                            <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
+                              Excel vehicle columns
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-blue-700 transition-all duration-150 hover:bg-blue-50 hover:text-blue-900 dark:text-blue-300 dark:hover:bg-slate-700"
+                        onClick={() => {
+                          setShowSingleUploadDropdown(false);
+                          handleUploadSingleTransaction();
+                        }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-slate-700 dark:text-blue-300">
+                            <FontAwesomeIcon icon={faUpload} />
+                          </span>
+                          <div className="flex flex-col items-start">
+                            <span>Upload Transaction</span>
+                            <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
+                              Import Excel file
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <button
-                  onClick={handleAddRowClick}
+                  onClick={() => {
+                    if (isFormDisabled) return;
+
+                    // VERR01 starts with direct Add Item behavior. Download/Upload
+                    // become available only after PO details have been loaded.
+                    if (!canUseSingleUploadMenu) {
+                      setShowSingleUploadDropdown(false);
+                      handleAddRowClick();
+                      return;
+                    }
+
+                    setShowSingleUploadDropdown((prev) => !prev);
+                  }}
                   disabled={isFormDisabled}
                   className={`global-tran-tab-footer-button-add-ui ${
                     isFormDisabled ? "opacity-50 cursor-not-allowed" : ""
@@ -2833,7 +3610,7 @@ const VERR = () => {
 
             <div className="global-tran-tab-footer-total-main-div-ui">
               {!hideCostAmount && (
-                <div className="global-tran-tab-footer-total-div-ui">
+                <div className="global-tran-tab-footer-total-div-ui order-2">
                   <label
                     htmlFor="TotalNetAmount"
                     className="global-tran-tab-footer-total-label-ui"
@@ -2848,7 +3625,7 @@ const VERR = () => {
                   </label>
                 </div>
               )}
-              <div className="global-tran-tab-footer-total-div-ui">
+              <div className="global-tran-tab-footer-total-div-ui order-1">
                 <label
                   htmlFor="TotalQty"
                   className="global-tran-tab-footer-total-label-ui"
@@ -2984,12 +3761,12 @@ const VERR = () => {
           onClose={(selected) => {
             if (selected) {
               updateState({
-                branchCode: selected.branchCode || selected.BRANCH_CODE || "",
-                branchName: selected.branchName || selected.BRANCH_NAME || "",
-                WHCode: "",
-                WHName: "",
-                LocCode: "",
-                LocName: "",
+                branchCode: selected.branchCode || "",
+                branchName: selected.branchName || "",
+                whouseCode: "",
+                whouseName: "",
+                locCode: "",
+                locName: "",
               });
             }
             updateState({ branchModalOpen: false });
@@ -3002,8 +3779,8 @@ const VERR = () => {
           isOpen={state.currencyModalOpen}
           onClose={(selected) => {
             if (selected) {
-              const code = selected.currCode || selected.CURR_CODE || "";
-              const name = selected.currName || selected.CURR_NAME || code;
+              const code = selected.currCode || "";
+              const name = selected.currName || code;
               updateState({
                 currCode: String(code).toUpperCase(),
                 currName: name,
@@ -3021,15 +3798,15 @@ const VERR = () => {
           customParam={payeeLookupFilter}
           onClose={async (selected) => {
             if (selected) {
-              const selectedVatCode = getField(selected, "vatCode", "VatCode", "VAT_CODE", "vat_code") || "";
+              const selectedVatCode = selected.vatCode || "";
               const selectedVatRate = parseFormattedNumber(
-                getField(selected, "vatRate", "VatRate", "VAT_RATE", "vat_rate", "rate") || 0,
+                selected.vatRate || 0,
               ) || await fetchVatRate(selectedVatCode);
               updateState({
-                vendCode: selected.vendCode || selected.VEND_CODE || selected.code || "",
-                vendName: selected.vendName || selected.VEND_NAME || selected.name || "",
+                vendCode: selected.vendCode || "",
+                vendName: selected.vendName || "",
                 vatCode: selectedVatCode,
-                vatName: getField(selected, "vatName", "VatName", "VAT_NAME", "vat_name") || "",
+                vatName: selected.vatName || "",
                 vatRate: selectedVatRate,
               });
             }
@@ -3052,7 +3829,7 @@ const VERR = () => {
         <LocationLookupModal
           isOpen={state.locationLookupOpen}
           filter="ActiveAll"
-          whCode={state.selectedWH || state.WHCode || ""}
+          whCode={state.selectedWH || state.whouseCode || ""}
           onClose={handleCloseLocationLookup}
         />
       )}
@@ -3067,7 +3844,7 @@ const VERR = () => {
               const index = state.qstatLookupRowIndex;
               rows[index] = {
                 ...rows[index],
-                qstatCode: selected.qstatCode || selected.QS_CODE || selected.code || "",
+                qstatCode: selected.qstatCode || "",
               };
               updateState({ detailRows: rows });
             }
@@ -3086,9 +3863,9 @@ const VERR = () => {
               const rows = [...(state.detailRows || [])];
               rows[index] = recalcVehicleRow({
                 ...rows[index],
-                vatCode: selected.vatCode || selected.VAT_CODE || selected.code || "",
+                vatCode: selected.vatCode || "",
                 vatRate: parseFormattedNumber(
-                  selected.vatRate || selected.VAT_RATE || selected.rate || 0,
+                  selected.vatRate || 0,
                 ),
               });
               updateState({ detailRows: rows });

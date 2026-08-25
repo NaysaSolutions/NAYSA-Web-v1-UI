@@ -1024,7 +1024,7 @@ const handleActivityOption = async (action) => {
     }
 
 
-    if (['ARCM01','ARCM02','ARCM04','ARCM03','ARCM05','ARCM06'].includes(selectedARCMType)) {
+    if (['ARCM01','ARCM02','ARCM04','ARCM03','ARCM05','ARCM06','ARCM08'].includes(selectedARCMType)) {
       await handleOpenARBalance();
       return;
     }

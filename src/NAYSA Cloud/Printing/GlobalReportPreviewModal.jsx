@@ -285,8 +285,6 @@ const GlobalReportPreviewModal = ({
             showGroupBy
             pagination
             itemsPerPage={100}
-            autoFit
-            autoFillGrid
             tableSize="Full"
             className="h-full"
           />

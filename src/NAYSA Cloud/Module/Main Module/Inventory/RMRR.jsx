@@ -6466,7 +6466,7 @@ const handleCloseBillTermModal = async (selectedBillTerm) => {
 
             <div className="global-tran-tab-footer-total-main-div-ui">
 
-  {!hideCostAmount && <div className="global-tran-tab-footer-total-div-ui">
+  {!hideCostAmount && <div className="global-tran-tab-footer-total-div-ui order-2">
                 <label
                   htmlFor="TotalNetAmount"
                   className="global-tran-tab-footer-total-label-ui"
@@ -6480,7 +6480,7 @@ const handleCloseBillTermModal = async (selectedBillTerm) => {
                   {totals.amount}
                 </label>
               </div>}
-              <div className="global-tran-tab-footer-total-div-ui">
+              <div className="global-tran-tab-footer-total-div-ui order-1">
                 <label
                   htmlFor="TotalQty"
                   className="global-tran-tab-footer-total-label-ui"

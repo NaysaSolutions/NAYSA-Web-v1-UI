@@ -29,6 +29,7 @@ import {
 import VEMast_SetupTab from "@/NAYSA Cloud/Master Data/VEMasterData/VEMast_SetupTab.jsx";
 import VEMast_DataTab from "@/NAYSA Cloud/Master Data/VEMasterData/VEMast_DataTab.jsx";
 import VEMast_ReferenceCodeTab from "@/NAYSA Cloud/Master Data/VEMasterData/VEMast_ReferenceCodeTab.jsx";
+import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 const parsePossibleJson = (value, fallback = []) => {
   if (value == null) return fallback;
@@ -386,6 +387,7 @@ const VEMast = () => {
 
   return (
     <div className="global-ref-main-div-ui">
+      {isLoading && <LoadingSpinner />}
       <div className="global-ref-header-ui">
         <div className="w-full flex flex-col lg:flex-row items-center justify-between gap-3">
           <div className="flex flex-col lg:flex-row items-center gap-2 lg:gap-4 w-full lg:w-auto">
@@ -433,6 +435,8 @@ const VEMast = () => {
           <VEMast_DataTab
             rows={rows}
             isLoading={isLoading}
+            onFilter={loadMasterList}
+            onReset={loadMasterList}
             onRowDoubleClick={async (row) => {
               const code = row?.itemCode ?? row?.item_code ?? "";
               if (!code) return;

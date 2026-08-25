@@ -2736,7 +2736,7 @@ const handleExportConfirm = async (enteredFileName) => {
                               onDoubleClick={() => handleRowDoubleClick(row)}
                             >
                               <td className="sticky left-0 z-10 px-2 py-0 border-r border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-700 group-hover:bg-blue-50 dark:group-hover:bg-slate-600 text-center w-[64px] min-w-[64px]">
-                                <div className="flex items-center justify-center h-6">
+                                <div className="flex items-center justify-center h-[26px]">
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -2770,7 +2770,7 @@ const handleExportConfirm = async (enteredFileName) => {
                                 return (
                                   <td
                                     key={col.key}
-                                    className={`px-1.5 py-1 leading-tight whitespace-nowrap ${
+                                    className={`px-1.5 py-[5px] leading-tight whitespace-nowrap ${
                                       alignRight ? "text-right tabular-nums" : col.classNames || "text-left"
                                     } ${meta.sticky ? "sticky z-10 bg-inherit" : ""}`}
                                     title={String(row?.[col.key] ?? "")}

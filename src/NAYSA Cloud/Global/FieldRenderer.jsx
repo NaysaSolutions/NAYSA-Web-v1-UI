@@ -303,7 +303,7 @@ const FieldRenderer = ({
       )}
 
       {/* ── TEXT / NUMBER / DATE ────────────────────────────────── */}
-      {(type === "text" || type === "number" || type === "date") && (
+      {(type === "text" || type === "number" || type === "date" || type === "datetime-local") && (
         <>
           <Input
             id={inputId}

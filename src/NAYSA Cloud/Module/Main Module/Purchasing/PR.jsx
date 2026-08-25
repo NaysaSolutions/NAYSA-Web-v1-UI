@@ -979,8 +979,8 @@ const handleCloseItemLookup = async (selectedItems) => {
       useSwalProceedConfirm(
         "Duplicate Item Detected",
         "This item is already in the list. Do you want to select it anyway?",
-        "Yes, Cancel",
-        "Cancel"
+        "Yes",
+        "No"
       ).then(async (result) => {
         if (result.isConfirmed) {
           await applySingleItem();
@@ -1034,8 +1034,8 @@ const handleCloseItemLookup = async (selectedItems) => {
     useSwalProceedConfirm(
       "Duplicate Items Detected",
       "Some items are already in the list. Do you want to add them anyway?",
-      "Yes, Cancel",
-      "Cancel"
+      "Yes",
+      "No"
     ).then(async (result) => {
       if (result.isConfirmed) {
         await processAddition(itemsArray);

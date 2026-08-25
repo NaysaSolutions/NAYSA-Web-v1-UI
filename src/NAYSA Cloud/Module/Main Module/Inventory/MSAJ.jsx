@@ -86,6 +86,7 @@ import {
   formatNumber,
   parseFormattedNumber,
   useSwalshowSaveSuccessDialog,
+  useSwalSuccessAlert,
   useSwalErrorAlert,
   useSwalInfoAlert,
   useSwalProceedConfirm,
@@ -1694,13 +1695,10 @@ const handleColumnLabel = (columnName) =>{
       updateState({ detailRows: finalRows, detailRowsGL: [] });
       updateTotals(finalRows);
 
-      Swal.fire({
-        icon: "success",
-        title: "Upload Completed",
-        text: `${finalRows.length} row(s) uploaded and validated successfully.`,
-        timer: 3000,
-        timerProgressBar: true,
-      });
+      useSwalSuccessAlert(
+        "Upload Completed",
+        `${finalRows.length} row(s) uploaded and validated successfully.`
+      );
     } catch (error) {
       console.error("Upload transaction error:", error);
       showUploadErrorList("Upload Error", [error?.message || "Unable to process the uploaded Excel file."]);

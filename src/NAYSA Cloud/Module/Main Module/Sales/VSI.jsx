@@ -29,7 +29,7 @@ import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
 import SearchGlobalItemPickingModal from "../../../Lookup/SearchGlobalItemPickingModal.jsx";
 
 // Configuration
-import { apiClient, fetchDataJson, postRequest} from '../../../Configuration/BaseURL.jsx'
+import { apiClient, fetchData, fetchDataJson, postRequest} from '../../../Configuration/BaseURL.jsx'
 import { useReset } from "../../../Components/ResetContext";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import {
@@ -91,7 +91,7 @@ import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 // Header
 import Header from '@/NAYSA Cloud/Components/Header';
-const SI = () => {
+const VSI = () => {
 
   // View Document Const
   const loadedFromUrlRef = useRef(false);
@@ -120,7 +120,7 @@ const SI = () => {
   const [itemPickingRowIndex, setItemPickingRowIndex] = useState(null);
   const [itemPickingStockRows, setItemPickingStockRows] = useState([]);
   const [itemPickingExistingAllocations, setItemPickingExistingAllocations] = useState([]);
-  const docType = docTypes.SI;
+  const docType = docTypes.VSI || "VSI";
   const hsDoc = getAllTopHSDocRow(docType) || {};
   const pdfLink = docTypePDFGuide[docType];
   const videoLink = docTypeVideoGuide[docType];
@@ -169,8 +169,6 @@ const SI = () => {
     billToCustCode: "",
     billToCustName: "",
     contactPerson: "",
-    customerPoNo: "",
-    customerPoDate: null,
     salesRepCode: "",
     salesRepName: "",
     atcCode: "",
@@ -193,6 +191,9 @@ const SI = () => {
     siStatusOptions: [],
     refSiNo1: "",
     refSiNo2: "",
+    vdrId: "",
+    vsoId: "",
+    veId: "",
     remarks: "",
     billtermCode: "",
     billtermName: "",
@@ -275,8 +276,6 @@ const SI = () => {
   branchName,
   billToCustCode,
   billToCustName,
-  customerPoNo,
-  customerPoDate,
   salesRepCode,
   salesRepName,
   atcCode,
@@ -292,6 +291,9 @@ const SI = () => {
   siStatusOptions = [],
   refSiNo1,
   refSiNo2,
+  vdrId,
+  vsoId,
+  veId,
   remarks,
   contactPerson,
   billtermCode,
@@ -438,15 +440,9 @@ const SI = () => {
     Math.max(Number(companyInfo?.salesDiscLevel ?? 8), 1),
     8
   );
-  const showTotalDiscountColumn = discountLevel > 1;
-  const visibleDiscountRateFields = Array.from(
-    { length: discountLevel },
-    (_, index) => `discRate${index + 1}`
-  );
-  const visibleDiscountAmountFields = Array.from(
-    { length: discountLevel },
-    (_, index) => `discAmount${index + 1}`
-  );
+  const showTotalDiscountColumn = true;
+  const visibleDiscountRateFields = [];
+  const visibleDiscountAmountFields = [];
 
   const detailColumnDefs = [
     { key: "drId", label: "DR ID", width: 120 },
@@ -458,6 +454,14 @@ const SI = () => {
     { key: "itemCode", label: "Item Code", width: 140 },
     { key: "itemName", label: "Item Name", width: 240 },
     { key: "itemSpecs", label: "Specification", width: 240 },
+    { key: "csNo", label: "CS No.", width: 130 },
+    { key: "make", label: "Make", width: 120 },
+    { key: "model", label: "Model", width: 140 },
+    { key: "modelYear", label: "Model Year", width: 100 },
+    { key: "color", label: "Color", width: 120 },
+    { key: "serialNo", label: "Serial No.", width: 150 },
+    { key: "engineNo", label: "Engine No.", width: 150 },
+    { key: "prodNo", label: "Product No.", width: 150 },
     { key: "uomCode", label: "UOM", width: 100 },
     { key: "siQuantity", label: "SI Quantity", width: 120 },
     { key: "quantityPicked", label: "Quantity Picked", width: 130 },
@@ -475,14 +479,13 @@ const SI = () => {
       width: 120,
     })),
     ...(showTotalDiscountColumn
-      ? [{ key: "totDiscount", label: "Total Discount", width: 130 }]
+      ? [{ key: "totDiscount", label: "Discount Amount", width: 130 }]
       : []),
     { key: "netAmount", label: "Net Amount", width: 130 },
     { key: "vatCode", label: "VAT Code", width: 120 },
     { key: "vatRate", label: "VAT Rate", width: 110 },
     { key: "vatAmount", label: "VAT Amount", width: 130 },
     { key: "salesAmount", label: "Sales Amount", width: 130 },
-    { key: "freeItem", label: "Free Item", width: 110 },
   ];
 
 
@@ -1055,11 +1058,11 @@ useEffect(() => {
 
 useEffect(() => {
     if (!refsLoaded) return;
-    const filteredTypes = getAllDropDown("SITRAN_TYPE", docType) || [];
+    const filteredTypes = getAllDropDown("VSITRAN_TYPE", docType) || [];
     const defaultSiType =
-      filteredTypes.find((type) => type.DROPDOWN_CODE === "SI01")?.DROPDOWN_CODE ||
+      filteredTypes.find((type) => type.DROPDOWN_CODE === "VSI01")?.DROPDOWN_CODE ||
       filteredTypes[0]?.DROPDOWN_CODE ||
-      "";
+      "VSI01";
     const mapHeaderSiStatus = (value) => {
       const normalizedValue = String(value || "").toUpperCase();
       if (normalizedValue === "OPEN" || normalizedValue === "O") return "O";
@@ -1077,11 +1080,11 @@ useEffect(() => {
 
   const handleReset = () => {
       clearSoDetailSorting();
-      const filteredTypes = getAllDropDown("SITRAN_TYPE", docType) || [];
+      const filteredTypes = getAllDropDown("VSITRAN_TYPE", docType) || [];
       const defaultSiType =
-        filteredTypes.find((type) => type.DROPDOWN_CODE === "SI01")?.DROPDOWN_CODE ||
+        filteredTypes.find((type) => type.DROPDOWN_CODE === "VSI01")?.DROPDOWN_CODE ||
         filteredTypes[0]?.DROPDOWN_CODE ||
-        "";
+        "VSI01";
 
       updateState({
 
@@ -1095,6 +1098,9 @@ useEffect(() => {
       currRate:formatNumber(companyInfo?.currRate||1,6),
       refSiNo1: "",
       refSiNo2: "",
+      vdrId: "",
+      vsoId: "",
+      veId: "",
       salesRepCode:"",
       salesRepName:"",
       remarks:"",
@@ -1105,8 +1111,6 @@ useEffect(() => {
       noReprints:"0",
       billToCustCode:"",
       billToCustName:"",
-      customerPoNo: "",
-      customerPoDate: null,
       contactPerson: "",
       atcCode: "",
       atcName: "",
@@ -1146,7 +1150,7 @@ useEffect(() => {
 
         try {
           const hdtblcol_result = await useFieldLenghtCheck(
-            "si_hd,si_dt1,'si_dt2"
+            "vsi_hd,vsi_dt1,vsi_dt2,vsi_ln"
           );
 
           if (hdtblcol_result) {
@@ -1168,9 +1172,9 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
   updateState({ isLoading: true });
   
   try {
-    const data = await useFetchTranData(documentNo, branchCode, docType, "siNo", direction);
+    const data = await useFetchTranData(documentNo, branchCode, docType, "vsiNo", direction);
 
-    if (!data?.siId) {
+    if (!data?.vsiId) {
       Swal.fire({ icon: 'info', title: 'No Records Found', text: 'Transaction does not exist.' });
       return resetState();
     }
@@ -1178,14 +1182,14 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
     // Format rows
     const retrievedDetailRows = distributeVatAcrossDetailRows((data.dt1 || []).map(item => ({
       ...item,
-      siStat: item.pickStat || item.siStat || "F",
-      siQuantity: formatNumber(item.siQuantity ?? 0,quantityDecimals),
+      siStat: "F",
+      siQuantity: formatNumber(item.quantity ?? 1,quantityDecimals),
       drNo: item.drNo || "",
       drId: item.drId || "",
       soId: item.soId || "",
       groupId: item.groupId || "",
-      unitPrice: formatNumber(item.unitPrice??0,sellingPriceDecimals),
-      grossAmount: formatNumber(item.grossAmount),
+      unitPrice: formatNumber(item.sellingPrice??0,sellingPriceDecimals),
+      grossAmount: formatNumber(item.grossAmt),
       discRate1: formatNumber(item.discRate1 ?? 0),
       discRate2: formatNumber(item.discRate2 ?? 0),
       discRate3: formatNumber(item.discRate3 ?? 0),
@@ -1202,14 +1206,14 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
       discAmount6: formatNumber(item.discAmount6 ?? 0),
       discAmount7: formatNumber(item.discAmount7 ?? 0),
       discAmount8: formatNumber(item.discAmount8 ?? 0),
-      totDiscount: formatNumber(item.totDiscount ?? 0),      
-      vatAmount: formatNumber(item.vatAmount ?? 0),
+      totDiscount: formatNumber(item.discAmt ?? 0),      
+      vatAmount: formatNumber(item.vatAmt ?? 0),
       vatCode: item.vatCode || data.vatCode || "",
       vatRate: formatNumber(item.vatRate ?? 0),
       salesAmount: formatSalesAmount(item.netAmount ?? 0, item.vatAmount ?? 0),
       atcAmount: formatNumber(item.atcAmount ?? 0),
-      amountDue: formatNumber(item.amountDue ?? 0),
-      netAmount: formatNumber(item.netAmount ?? 0),
+      amountDue: formatNumber(item.netAmt ?? 0),
+      netAmount: formatNumber(item.netAmt ?? 0),
       quantityPicked: formatNumber(item.quantityPicked ?? item.qtyPicked ?? 0, quantityDecimals),
       itemAmount: item.itemAmount ?? formatNumber( 0),
       drQuantity: formatNumber(item.drQuantity ?? 0, quantityDecimals),
@@ -1227,28 +1231,35 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
       slRefDate: useformatToDatev2(glRow.slRefDate),
     }));
 
+    const retrievedAtcCode = data.atcCode || (data.dt2 || []).find((row) => row?.ewtCode)?.ewtCode || "";
+    const retrievedAtcName = data.atcName || (data.dt2 || []).find((row) => row?.ewtDesc)?.ewtDesc || "";
+    const retrievedVatCode = data.vatCode || "";
+    const retrievedAtcRow = retrievedAtcCode ? getAllTopATCRow(retrievedAtcCode) : null;
+    const retrievedVatRow = retrievedVatCode ? getAllTopVatRow(retrievedVatCode) : null;
+
     updateState({
-      documentStatus: data.siStatus,
+      documentStatus: data.stat,
       status: data.docStatus,
       noReprints:data.noReprints,
-      documentID: data.siId,
-      documentNo: data.siNo,
-      refSiNo1: data.refSiNo1 || "",
+      documentID: data.vsiId,
+      documentNo: data.vsiNo,
+      refSiNo1: data.drNo || "",
       refSiNo2: data.refSiNo2 || "",
+      vdrId: data.vdrId || "",
+      vsoId: data.vsoId || "",
+      veId: data.veId || "",
       branchCode: data.branchCode,
-      branchName:data.branchName,
-      documentDate: useformatToDatev2(data.siDate),
-      siTranType: data.siTranType,
+      branchName: data.branchName || state.branchName || currentUserRow?.branchName || "",
+      documentDate: useformatToDatev2(data.vsiDate),
+      siTranType: "VSI01",
       billToCustCode: data.custCode,
       billToCustName: data.custName,
-      customerPoNo: data.customerPoNo || "",
-      customerPoDate: data.customerPoDate ? useformatToDatev2(data.customerPoDate) : null,
-      atcCode: data.atcCode || "",
-      atcName: data.atcName || "",
-      vatCode: data.vatCode || "",
-      vatName: data.vatName || "",
-      billtermCode: data.billtermCode,
-      billtermName: data.billtermName,
+      atcCode: retrievedAtcCode,
+      atcName: retrievedAtcName || retrievedAtcRow?.atcName || "",
+      vatCode: retrievedVatCode,
+      vatName: data.vatName || data.vatDesc || retrievedVatRow?.vatName || "",
+      billtermCode: data.billTerm,
+      billtermName: data.billTerm,
       salesRepCode: data.salesRepCode || "",
       salesRepName: data.salesRepName || "",
       dueDate: data.dueDate ? useformatToDatev2(data.dueDate) : "",
@@ -1331,8 +1342,6 @@ const handleActivityOption = async (action) => {
         dueDate,
         userCode,
         contactPerson,
-        customerPoNo,
-        customerPoDate,
         siTranType,
         siStatus,
         detailRows,
@@ -1341,77 +1350,69 @@ const handleActivityOption = async (action) => {
 
       let finalDetailRowsGL = [...detailRowsGL];
 
-      const buildSoData = (glRows = finalDetailRowsGL) => ({
+      const buildVsiData = (glRows = finalDetailRowsGL) => ({
         branchCode: branchCode,
-        siNo: documentNo || "",
-        siId: documentID || "",
-        siDate: documentDate,
-        sitranType: siTranType,
-        billtermCode: billtermCode,
+        vsiNo: documentNo || "",
+        vsiId: documentID || "",
+        vsiDate: documentDate,
+        vsiTranType: "VSI01",
+        billTerm: billtermCode,
+        vdrId: vdrId || "",
+        vsoId: vsoId || "",
+        veId: veId || detailRows[0]?.veId || "",
+        drNo: refSiNo1 || detailRows[0]?.drNo || "",
         custCode: billToCustCode,
         custName: billToCustName,
-        attention: contactPerson,
-        refSiNo1: refSiNo1,
-        refSiNo2: refSiNo2,
         currCode: currCode || "PHP",
         currRate: parseFormattedNumber(currRate),
-        atcAmount: parseFormattedNumber(totals.totalAtcAmount),
+        atcAmount: parseFormattedNumber(totals.totalAtcAmount || 0),
+        ewtAmt: parseFormattedNumber(totals.totalAtcAmount || 0),
         atcCode: atcCode || "",
+        vendType: atcCode || "",
+        grossAmt: parseFormattedNumber(totals.totalGrossAmount || detailRows[0]?.grossAmount || 0),
+        discAmt: parseFormattedNumber(totals.totalDiscountAmount || detailRows[0]?.totDiscount || 0),
         vatCode: vatCode || "",
+        vatDesc: vatName || "",
+        vatAmt: parseFormattedNumber(totals.totalVatAmount || detailRows[0]?.vatAmount || 0),
+        netAmt: parseFormattedNumber(totals.totalAmountDue || detailRows[0]?.netAmount || 0),
         dueDate: dueDate || "",
-        remarks: remarks || "",
+        particular: remarks || "",
         userCode: userCode,
-        customerPoNo: customerPoNo || '',
-        customerPoDate: customerPoDate || null,
-        salesRepCode,
-        salesRepName,
-        soStatus: siStatus || 'O',
+        stat: "",
+        make: detailRows[0]?.make || "",
+        model: detailRows[0]?.model || "",
+        serialNo: detailRows[0]?.serialNo || "",
+        engineNo: detailRows[0]?.engineNo || "",
+        prodNo: detailRows[0]?.prodNo || detailRows[0]?.productNo || "",
+        color: detailRows[0]?.color || "",
+        pnpNo: detailRows[0]?.pnpNo || "",
+        csrNo: detailRows[0]?.csrNo || "",
         dt1: detailRows.map((row, index) => ({
           lnNo: String(index + 1),
-          pickStat: row.siStat || "F",
-          siStat: row.siStat || "F",
+          veId: row.veId || veId || "",
           drNo: row.drNo || "",
-          drId: row.drId || "",
-          soId: row.soId || "",
-          groupId: row.groupId || "",
+          drDate: row.drDate || null,
+          vdrId: row.vdrId || vdrId || "",
+          vsoId: row.vsoId || vsoId || "",
           itemCode: row.itemCode || "",
           itemName: row.itemName || "",
-          itemSpecs: row.itemSpecs || "",
           uomCode: row.uomCode || "",
-          pmType: row.pmType || "",
-          pmId: row.pmId || "",
-          siQuantity: parseFormattedNumber(row.siQuantity || 0),
-          unitPrice: parseFormattedNumber(row.unitPrice || 0),
-          grossAmount: parseFormattedNumber(row.grossAmount || 0),
-          discRate1: parseFormattedNumber(row.discRate1 || 0),
-          discRate2: parseFormattedNumber(row.discRate2 || 0),
-          discRate3: parseFormattedNumber(row.discRate3 || 0),
-          discRate4: parseFormattedNumber(row.discRate4 || 0),
-          discRate5: parseFormattedNumber(row.discRate5 || 0),
-          discRate6: parseFormattedNumber(row.discRate6 || 0),
-          discRate7: parseFormattedNumber(row.discRate7 || 0),
-          discRate8: parseFormattedNumber(row.discRate8 || 0),
-          discAmount1: parseFormattedNumber(row.discAmount1 || 0),
-          discAmount2: parseFormattedNumber(row.discAmount2 || 0),
-          discAmount3: parseFormattedNumber(row.discAmount3 || 0),
-          discAmount4: parseFormattedNumber(row.discAmount4 || 0),
-          discAmount5: parseFormattedNumber(row.discAmount5 || 0),
-          discAmount6: parseFormattedNumber(row.discAmount6 || 0),
-          discAmount7: parseFormattedNumber(row.discAmount7 || 0),
-          discAmount8: parseFormattedNumber(row.discAmount8 || 0),
-          totDiscount: parseFormattedNumber(row.totDiscount || 0),          
+          quantity: parseFormattedNumber(row.siQuantity || row.quantity || 1),
+          siQuantity: parseFormattedNumber(row.siQuantity || row.quantity || 1),
+          sellingPrice: parseFormattedNumber(row.unitPrice || row.sellingPrice || 0),
+          unitPrice: parseFormattedNumber(row.unitPrice || row.sellingPrice || 0),
+          grossAmt: parseFormattedNumber(row.grossAmount || row.grossAmt || 0),
+          grossAmount: parseFormattedNumber(row.grossAmount || row.grossAmt || 0),
+          discAmt: parseFormattedNumber(row.totDiscount || row.discAmt || 0),
+          totDiscount: parseFormattedNumber(row.totDiscount || row.discAmt || 0),
+          discRate: parseFormattedNumber(row.discRate || row.discRate1 || 0),
           vatCode: row.vatCode || "",
-          vatRate: parseFormattedNumber(row.vatRate || 0),
-          vatAmount: parseFormattedNumber(row.vatAmount || 0),
-          salesAmount: parseFormattedNumber(row.salesAmount || 0),
-          atcAmount: parseFormattedNumber(row.atcAmount || 0),
-          amountDue: parseFormattedNumber(row.amountDue || 0),
-          netAmount: parseFormattedNumber(row.netAmount || 0),
-          // No delivery date, customer PO, sales rep in SI details
-          freeItem: row.freeItem || "",
-          quantityPicked: parseFormattedNumber(row.quantityPicked || 0),
-          itemAmount: parseFormattedNumber(row.itemAmount || 0),
-          drQuantity: parseFormattedNumber(row.drQuantity || 0),
+          vatAmt: parseFormattedNumber(row.vatAmount || row.vatAmt || 0),
+          vatAmount: parseFormattedNumber(row.vatAmount || row.vatAmt || 0),
+          netAmt: parseFormattedNumber(row.netAmount || row.netAmt || 0),
+          soNo: row.vsoNo || row.soNo || "",
+          soDate: row.vsoDate || row.soDate || null,
+          drLineno: row.drLineno || "1",
         })),
         dt2: glRows.map((entry, index) => ({
           recNo: String(index + 1),
@@ -1421,9 +1422,7 @@ const handleActivityOption = async (action) => {
           slCode: entry.slCode || "",
           particular: entry.particular || "",
           vatCode: entry.vatCode || "",
-          vatName: entry.vatName || "",
           atcCode: entry.atcCode || "",
-          atcName: entry.atcName || "",
           debit: parseFormattedNumber(entry.debit || 0),
           credit: parseFormattedNumber(entry.credit || 0),
           debitFx1: parseFormattedNumber(entry.debitFx1 || 0),
@@ -1435,6 +1434,24 @@ const handleActivityOption = async (action) => {
           remarks: entry.remarks || "",
           dt1Lineno: entry.dt1Lineno || "",
         })),
+        dt3: detailRows.slice(0, 1).map((row) => ({
+          veId: row.veId || veId || "",
+          itemCode: row.itemCode || "",
+          itemName: row.itemName || "",
+          uomCode: row.uomCode || "",
+          make: row.make || "",
+          modelYr: row.modelYear || row.modelYr || "",
+          model: row.model || "",
+          serialNo: row.serialNo || "",
+          engineNo: row.engineNo || "",
+          prodNo: row.prodNo || row.productNo || "",
+          color: row.color || "",
+          csNo: row.csNo || "",
+          pnpNo: row.pnpNo || "",
+          csrNo: row.csrNo || "",
+          vsoNo: row.vsoNo || "",
+          plateNo: row.plateNo || "",
+        })),
       });
 
       if (action === "GenerateGL") {
@@ -1442,7 +1459,7 @@ const handleActivityOption = async (action) => {
           updateState({ detailRowsGL: [], isGeneratingGL: true });
           const newGlEntries = await useGenerateGLEntries(
             docType,
-            buildSoData([])
+            buildVsiData([])
           );
 
           updateState({
@@ -1460,7 +1477,7 @@ const handleActivityOption = async (action) => {
         if (finalDetailRowsGL.length === 0) {
           const newGlEntries = await useGenerateGLEntries(
             docType,
-            buildSoData([])
+            buildVsiData([])
           );
 
           if (!newGlEntries || newGlEntries.length === 0) {
@@ -1474,15 +1491,15 @@ const handleActivityOption = async (action) => {
 
         const response = await useTransactionUpsert(
           docType,
-          buildSoData(finalDetailRowsGL),
+          buildVsiData(finalDetailRowsGL),
           updateState,          
-          "siId",
-          "siNo"
+          "vsiId",
+          "vsiNo"
         );
 
         if (response) {
-          const responseDocNo =  response.data[0].siNo;
-          const responseDocId =  response.data[0].siId;
+          const responseDocNo =  response.data[0].vsiNo;
+          const responseDocId =  response.data[0].vsiId;
 
           await fetchTranData(responseDocNo,branchCode);
 
@@ -1494,8 +1511,8 @@ const handleActivityOption = async (action) => {
           useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
         }
         updateState({
-          documentNo: response?.data?.[0]?.siNo || "",
-          documentID: response?.data?.[0]?.siId || "",
+          documentNo: response?.data?.[0]?.vsiNo || "",
+          documentID: response?.data?.[0]?.vsiId || "",
           isDocNoDisabled: true,
           isFetchDisabled: true,
         });
@@ -1670,23 +1687,11 @@ const handleActivityOption = async (action) => {
       }
     }
 
-    const nextCustPoNo = topRecord?.custpoNo || "";
-    if (nextCustPoNo) {
-      updates.customerPoNo = nextCustPoNo;
-    }
-
-    const nextCustPoDate = topRecord?.custpoDate || "";
-    if (nextCustPoDate) {
-      updates.customerPoDate = useformatToDatev2(nextCustPoDate);
-    }
-
     if (siTranType === "SI03") {
        const data = await useFetchTranData(topRecord?.drNo, branchCode, "FADS", "fadsNo", "");
        updateState({
         vatCodeFADisposal: data?.vatCode || "",
         billToCustName: data?.custName || "",
-        customerPoNo: data?.fadsNo ? `FADS-${data.fadsNo}` : "",
-        customerPoDate: data?.fadsDate ? useformatToDatev2(data.fadsDate) : "",
        })
     }
 
@@ -1791,84 +1796,53 @@ const handleActivityOption = async (action) => {
   };
 
   const handleInsertSelectedOpenDR = async (payload) => {
-   
-    const selectedIds = Array.isArray(payload?.data) ? payload.data : [];
     const selectedSummaryRecords = Array.isArray(payload?.records) ? payload.records : [];
-
-    if (!selectedIds.length) {
+    const selectedRecord = selectedSummaryRecords[0];
+    if (!selectedRecord) {
       updateState({ showOpenDRModal: false });
       return;
     }
-
-    const idString = selectedIds.join(",");
-    const requestPayload = {
-      json_data: {
-        selectedId: idString,
-        selectedIds: idString,
-      },
-    };
-
-    try {
-      updateState({ isLoading: true, showSpinner: true });
-      const response = await postRequest("getDRSI_Selected", JSON.stringify(requestPayload));
-
-     
-
-
-      const rawRows = response?.data?.[0]?.result
-        ? JSON.parse(response.data[0].result)
-        : response?.data || response;
-      const selectedRecords = Array.isArray(rawRows)
-        ? applySelectedOpenDRSummaryKeys(rawRows, selectedSummaryRecords)
-        : [];
-
-
-      if (!selectedRecords.length) {
-        useSwalErrorAlert("Open DR", "No SI detail rows were returned for the selected Delivery Receipt record(s).");
-        return;
-      }
-
-
-      const duplicateRows = getDuplicateOpenDRRows(selectedRecords);
-      if (duplicateRows.length > 0) {
-        const duplicateList = duplicateRows
-          .map((row) => {
-            const drNo = row?.drNo || "";
-            const itemCode = row?.itemCode || "";
-            return `DR No. ${drNo || "-"} / Item Code ${itemCode || "-"}`;
-          })
-          .filter(Boolean);
-        useSwalErrorAlert(
-          "Duplicate Open DR Detail",
-          `Duplicate DR item(s) are not allowed:\n${[...new Set(duplicateList)].join("\n")}`
-        );
-        return;
-      }
-
-
-
-      const headerUpdates = await buildOpenDRHeaderUpdates(selectedRecords, selectedSummaryRecords);
-
-      insertDetailRows(selectedRecords.map(mapOpenDRRecordToDetailRow), insertAfterIndex);
-      setTopTab("details");
-      updateState({
-        ...headerUpdates,
-        showOpenDRModal: false,
-        openDRSI_Data_Summary: [],
-        openDRSI_Col_Summary: [],
-        insertAfterIndex: null,
-      });
-    } catch (error) {
-      console.error("getDRSI_Selected failed:", {
-        payload: requestPayload,
-        status: error?.response?.status,
-        data: error?.response?.data,
-        error,
-      });
-      useSwalErrorAlert("Open DR", getApiErrorMessage(error));
-    } finally {
-      updateState({ isLoading: false, showSpinner: false });
-    }
+    const selectedVatCode = selectedRecord.vatCode || vatCode || "";
+    const selectedVatRow = getAllTopVatRow(selectedVatCode);
+    const selectedAtcCode = selectedRecord.atcCode || atcCode || "";
+    const selectedAtcRow = getAllTopATCRow(selectedAtcCode);
+    const row = calculateRowAmountsFromRates(createSIDetailRow({
+      ...selectedRecord,
+      drId: selectedRecord.vdrId,
+      soId: selectedRecord.vsoId,
+      groupId: selectedRecord.vdrId,
+      siQuantity: formatNumber(1, quantityDecimals),
+      quantityPicked: formatNumber(1, quantityDecimals),
+      unitPrice: formatNumber(selectedRecord.sellingPrice || 0, sellingPriceDecimals),
+      vatCode: selectedVatCode,
+      vatRate: formatNumber(selectedRecord.vatRate ?? selectedVatRow?.vatRate ?? 0),
+      vatAmount: formatNumber(selectedRecord.vatAmt || 0),
+      totDiscount: formatNumber(selectedRecord.discAmt || 0),
+      itemSpecs: selectedRecord.itemSpecs || "",
+    }));
+    updateState({
+      refSiNo1: selectedRecord.drNo || "",
+      vdrId: selectedRecord.vdrId || "",
+      vsoId: selectedRecord.vsoId || "",
+      veId: selectedRecord.veId || "",
+      billToCustCode: selectedRecord.custCode || "",
+      billToCustName: selectedRecord.custName || "",
+      salesRepCode: selectedRecord.repCode || "",
+      billtermCode: selectedRecord.billTerm || "",
+      billtermName: selectedRecord.billTerm || "",
+      remarks: selectedRecord.remarks || remarks || "",
+      vatCode: selectedVatCode,
+      vatName: selectedVatRow?.vatName || vatName || "",
+      atcCode: selectedAtcCode,
+      atcName: selectedAtcRow?.atcName || atcName || "",
+      detailRows: [row],
+      showOpenDRModal: false,
+      openDRSI_Data_Summary: [],
+      openDRSI_Col_Summary: [],
+      insertAfterIndex: null,
+    });
+    updateTotals([row]);
+    setTopTab("details");
   };
 
   const normalizeItemModalRecords = (selectedItems) => {
@@ -2056,7 +2030,7 @@ const handleActivityOption = async (action) => {
 
     const grossAmount = toFormattedAmountNumber(quantity * unitPrice);
     let runningBase = grossAmount;
-    let totalDiscount = 0;
+    let totalDiscount = toFormattedAmountNumber(row.totDiscount || 0);
     const updatedAmounts = {};
 
     discountRateFields.forEach((rateField, index) => {
@@ -2675,27 +2649,8 @@ const handlePrint = async () => {
   };
 
   const handleOpenDRLookup = async (overrides = {}) => {
-    const lookupCustCode = String(overrides.billToCustCode ?? billToCustCode ?? "").trim();
     const lookupBranchCode = String(overrides.branchCode ?? branchCode ?? "").trim();
-
-    if (!lookupCustCode) {
-      const branchIsValid = await useSwalvalidateRequiredFields(
-        { "Header : Branch": lookupBranchCode },
-        "Open DR Lookup"
-      );
-      if (!branchIsValid) return;
-
-      updateState({
-        custModalOpen: true,
-        modalContext: siTranType === "SI03" ? "openFADS" : "openDR",
-      });
-      return;
-    }
-
-    const fieldsToCheck = {
-      "Header : Bill To Customer Code": lookupCustCode,
-      "Header : Branch": lookupBranchCode,
-    };
+    const fieldsToCheck = { "Header : Branch": lookupBranchCode };
 
     const isValid = await useSwalvalidateRequiredFields(fieldsToCheck, "Open DR Lookup");
     if (!isValid) return;
@@ -2703,16 +2658,9 @@ const handlePrint = async () => {
     try {
       updateState({ isLoading: true, showSpinner: true });
 
-      const endpoint = "getDRSI_OpenSummary";
-      const payload = {
-          custCode: lookupCustCode,
-          billToCustCode: lookupCustCode,
-          branchCode: lookupBranchCode,
-          siTranType: siTranType || "",
-        };
-
-     console.log("GetDRSI_OpenSummary payload:", payload);
-      const response = await fetchDataJson(endpoint, payload);
+      const endpoint = "getVSI_OpenVDR";
+      const payload = { branchCode: lookupBranchCode };
+      const response = await fetchData(endpoint, payload);
 
       const drRows = response?.data?.[0]?.result
         ? JSON.parse(response.data[0].result).map(normalizeOpenDRLookupRow)
@@ -2721,7 +2669,7 @@ const handlePrint = async () => {
       if (!drRows.length) {
         useSwalErrorAlert(
           "Open DR",
-          "There are no open Delivery Receipt records for the selected customer/branch."
+          "There are no posted Vehicle Delivery Receipt records available for invoicing in this branch."
         );
         return;
       }
@@ -2811,7 +2759,7 @@ const handleHistoryRowPick = useCallback(
 
 useEffect(() => {
   const params = new URLSearchParams(location.search);
-  const docNo = params.get("siNo");
+  const docNo = params.get("vsiNo");
   const branchCode = params.get("branchCode");
   
   if (!loadedFromUrlRef.current && docNo && branchCode) {
@@ -2844,7 +2792,7 @@ const handleCloseCancel = async (confirmation) => {
       const result = await useHandleCancel(docType,documentID,currentUserRow.userCode,confirmation.password,confirmation.reason,updateState);
       if (result.success)
       {
-       useSwalSuccessAlert("Success","Cancellation Completed")
+       useSwalSuccessAlert("Success", "Cancellation Completed");
       }
      await fetchTranData(documentNo,branchCode);
     }
@@ -3058,7 +3006,7 @@ const handleSaveAndPrint = async (documentID) => {
     );
   };
 
-  const buildSiDataForGl = (rows = detailRows, glRows = [], headerOverrides = {}) => {
+  const buildVsiDataForGl = (rows = detailRows, glRows = [], headerOverrides = {}) => {
     const nextVatCode =
       headerOverrides.vatCode !== undefined ? headerOverrides.vatCode : vatCode;
     const nextAtcCode =
@@ -3067,74 +3015,52 @@ const handleSaveAndPrint = async (documentID) => {
 
     return {
       branchCode,
-      siNo: documentNo || "",
-      siId: documentID || "",
-      siDate: documentDate,
-      sitranType: siTranType,
-      billtermCode,
+      vsiNo: documentNo || "",
+      vsiId: documentID || "",
+      vsiDate: documentDate,
+      vsiTranType: "VSI01",
+      billTerm: billtermCode,
+      vdrId: vdrId || rows[0]?.vdrId || "",
+      vsoId: vsoId || rows[0]?.vsoId || rows[0]?.soId || "",
+      veId: veId || rows[0]?.veId || "",
+      drNo: refSiNo1 || rows[0]?.drNo || "",
       custCode: billToCustCode,
       custName: billToCustName,
-      attention: contactPerson,
-      refSiNo1,
-      refSiNo2,
       currCode: currCode || "PHP",
       currRate: parseFormattedNumber(currRate),
       atcAmount: totalValues.totalAtcAmt,
+      ewtAmt: totalValues.totalAtcAmt,
       atcCode: nextAtcCode || "",
+      vendType: nextAtcCode || "",
       vatCode: nextVatCode || "",
+      grossAmt: totalValues.totalGrossAmt,
+      discAmt: totalValues.totalDiscAmt,
+      vatAmt: totalValues.totalVatAmt,
+      netAmt: totalValues.totalAmountDue,
       dueDate: dueDate || "",
-      remarks: remarks || "",
+      particular: remarks || "",
       userCode,
-      customerPoNo: customerPoNo || "",
-      customerPoDate: customerPoDate || null,
-      salesRepCode,
-      salesRepName,
-      soStatus: siStatus || "O",
+      stat: "",
       dt1: rows.map((row, index) => ({
         lnNo: String(index + 1),
-        pickStat: row.siStat || "F",
-        siStat: row.siStat || "F",
+        veId: row.veId || veId || "",
         drNo: row.drNo || "",
-        drId: row.drId || "",
-        soId: row.soId || "",
+        drDate: row.drDate || null,
+        vdrId: row.vdrId || row.drId || vdrId || "",
+        vsoId: row.vsoId || row.soId || vsoId || "",
         groupId: row.groupId || "",
         itemCode: row.itemCode || "",
         itemName: row.itemName || "",
         itemSpecs: row.itemSpecs || "",
         uomCode: row.uomCode || "",
-        pmType: row.pmType || "",
-        pmId: row.pmId || "",
-        siQuantity: parseFormattedNumber(row.siQuantity || 0),
-        unitPrice: parseFormattedNumber(row.unitPrice || 0),
-        grossAmount: parseFormattedNumber(row.grossAmount || 0),
-        discRate1: parseFormattedNumber(row.discRate1 || 0),
-        discRate2: parseFormattedNumber(row.discRate2 || 0),
-        discRate3: parseFormattedNumber(row.discRate3 || 0),
-        discRate4: parseFormattedNumber(row.discRate4 || 0),
-        discRate5: parseFormattedNumber(row.discRate5 || 0),
-        discRate6: parseFormattedNumber(row.discRate6 || 0),
-        discRate7: parseFormattedNumber(row.discRate7 || 0),
-        discRate8: parseFormattedNumber(row.discRate8 || 0),
-        discAmount1: parseFormattedNumber(row.discAmount1 || 0),
-        discAmount2: parseFormattedNumber(row.discAmount2 || 0),
-        discAmount3: parseFormattedNumber(row.discAmount3 || 0),
-        discAmount4: parseFormattedNumber(row.discAmount4 || 0),
-        discAmount5: parseFormattedNumber(row.discAmount5 || 0),
-        discAmount6: parseFormattedNumber(row.discAmount6 || 0),
-        discAmount7: parseFormattedNumber(row.discAmount7 || 0),
-        discAmount8: parseFormattedNumber(row.discAmount8 || 0),
-        totDiscount: parseFormattedNumber(row.totDiscount || 0),
+        quantity: parseFormattedNumber(row.siQuantity || row.quantity || 1),
+        sellingPrice: parseFormattedNumber(row.unitPrice || row.sellingPrice || 0),
+        grossAmt: parseFormattedNumber(row.grossAmount || row.grossAmt || 0),
+        discAmt: parseFormattedNumber(row.totDiscount || row.discAmt || 0),
+        discRate: parseFormattedNumber(row.discRate || row.discRate1 || 0),
         vatCode: row.vatCode || "",
-        vatRate: parseFormattedNumber(row.vatRate || 0),
-        vatAmount: parseFormattedNumber(row.vatAmount || 0),
-        salesAmount: parseFormattedNumber(row.salesAmount || 0),
-        atcAmount: parseFormattedNumber(row.atcAmount || 0),
-        amountDue: parseFormattedNumber(row.amountDue || 0),
-        netAmount: parseFormattedNumber(row.netAmount || 0),
-        freeItem: row.freeItem || "",
-        quantityPicked: parseFormattedNumber(row.quantityPicked || 0),
-        itemAmount: parseFormattedNumber(row.itemAmount || 0),
-        drQuantity: parseFormattedNumber(row.drQuantity || 0),
+        vatAmt: parseFormattedNumber(row.vatAmount || row.vatAmt || 0),
+        netAmt: parseFormattedNumber(row.netAmount || row.netAmt || 0),
       })),
       dt2: glRows.map((entry, index) => ({
         recNo: String(index + 1),
@@ -3171,7 +3097,7 @@ const handleSaveAndPrint = async (documentID) => {
       updateState({ detailRowsGL: [], isGeneratingGL: true });
       const newGlEntries = await useGenerateGLEntries(
         docType,
-        buildSiDataForGl(rows, [], headerOverrides)
+        buildVsiDataForGl(rows, [], headerOverrides)
       );
       updateState({
         detailRowsGL: newGlEntries && newGlEntries.length > 0 ? newGlEntries : [],
@@ -4018,6 +3944,28 @@ const handleSODetailRowChange = (index, field, value) => {
     return;
   }
 
+  if (field === "totDiscount") {
+    const grossAmount = parseFormattedNumber(updatedRow.grossAmount || 0) || 0;
+    const discountAmount = Math.min(
+      Math.max(parseFormattedNumber(value || 0) || 0, 0),
+      grossAmount
+    );
+    const netAmount = toFormattedAmountNumber(grossAmount - discountAmount);
+    updatedRow = {
+      ...updatedRow,
+      totDiscount: formatNumber(discountAmount),
+      netAmount: formatNumber(netAmount),
+      salesAmount: formatNumber(
+        netAmount - (parseFormattedNumber(updatedRow.vatAmount || 0) || 0)
+      ),
+    };
+    updatedRows[index] = updatedRow;
+    const normalizedRows = distributeVatAcrossDetailRows(updatedRows);
+    updateState({ detailRows: normalizedRows });
+    updateTotals(normalizedRows);
+    return;
+  }
+
   if (
     updatedRows[index]?.freeItem === "Y" &&
     ["unitPrice", ...discountRateFields, ...discountAmountFields].includes(field)
@@ -4077,7 +4025,7 @@ const renderSIDetailCell = (columnKey, row, index) => {
   const isRowWithDR = Boolean(String(row.drNo || "").trim());
   const quantityPickedValue = parseFormattedNumber(row.quantityPicked || 0) || 0;
   const canEditPickingStatus = isRowWithDR && quantityPickedValue === 0;
-  const canSearchItem = !isRowWithDR; // Can't change item if it's from a DR
+  const canSearchItem = false;
   
   // Removed salesRepCode from detailModalHandlers
   // Added ATC lookup for detail rows if needed, but not explicitly requested for details.
@@ -4185,9 +4133,17 @@ const renderSIDetailCell = (columnKey, row, index) => {
     siStat: () => <td key={columnKey} className="global-tran-td-ui" style={style}><select id={`siStat-${index}`} className="w-full global-tran-td-inputclass-ui text-left" value={row.siStat || "F"} disabled={isFormDisabled || !canEditPickingStatus} onChange={(e) => handleSIDetailRowChange(index, "siStat", e.target.value)} onKeyDown={(e) => { if (e.key !== "Enter" || isFormDisabled || !canEditPickingStatus) return; e.preventDefault(); focusNextDetailCell("siStat"); }}><option value="F">For Picking</option>{canEditPickingStatus ? <option value="X">Cancelled</option> : <><option value="T">Partially Picked</option><option value="P">Picked</option><option value="X">Cancelled</option></>}</select></td>,
     drNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { readOnly: true })}</td>,
     itemCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}><div className="flex items-center gap-1"><input type="text" value={row.itemCode || ""} readOnly className="w-full h-7 text-xs bg-transparent focus:outline-none focus:ring-0" />{canSearchItem && <button type="button" className="text-blue-600 hover:text-blue-800" onClick={() => updateState({ selectedRowIndex: index, selectionContext: "rowItemLookup", insertAfterIndex: null, showItemModal: true })}><FontAwesomeIcon icon={faSearch} /></button>}</div></td>, 
-    itemName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey)}</td>,
-    itemSpecs: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey)}</td>,
-    uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { className: "text-center" })}<input type="hidden" value={row.pmType || ""} readOnly /><input type="hidden" value={row.groupId || ""} readOnly /><input type="hidden" value={row.pmId || ""} readOnly /></td>,
+    itemName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { readOnly: true })}</td>,
+    itemSpecs: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { readOnly: true })}</td>,
+    csNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { readOnly: true })}</td>,
+    make: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { readOnly: true })}</td>,
+    model: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { readOnly: true })}</td>,
+    modelYear: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { readOnly: true })}</td>,
+    color: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { readOnly: true })}</td>,
+    serialNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { readOnly: true })}</td>,
+    engineNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { readOnly: true })}</td>,
+    prodNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { readOnly: true })}</td>,
+    uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { className: "text-center", readOnly: true })}<input type="hidden" value={row.pmType || ""} readOnly /><input type="hidden" value={row.groupId || ""} readOnly /><input type="hidden" value={row.pmId || ""} readOnly /></td>,
     siQuantity: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { decimals: quantityDecimals, regex: new RegExp(`^\\d*\\.?\\d{0,${quantityDecimals}}$`), readOnly: isFormDisabled || isRowWithDR, onBlur: (e) => validateSIQuantity(index, e.target.value), onKeyDown: (e) => validateSIQuantity(index, e.target.value) })}</td>,
     quantityPicked: () => (
       <td key={columnKey} className="global-tran-td-ui" style={style}>
@@ -4244,7 +4200,7 @@ const renderSIDetailCell = (columnKey, row, index) => {
     vatAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>, // New field
     salesAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
     atcAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>, // New field
-    totDiscount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
+    totDiscount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput(columnKey, { readOnly: isFormDisabled })}</td>,
     netAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>,
     amountDue: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readonlyAmountInput(columnKey)}</td>, // New field
     freeItem: () => <td key={columnKey} className="global-tran-td-ui" style={style}><button type="button" className={`w-full h-7 rounded-full border text-[11px] font-semibold transition-colors ${row.freeItem === "Y" ? "border-blue-500 bg-blue-500/15 text-blue-700" : "border-slate-300 bg-white text-slate-600"} ${isFormDisabled || isRowWithDR ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`} disabled={isFormDisabled || isRowWithDR} onClick={() => handleSIDetailRowChange(index, "freeItem", row.freeItem === "Y" ? "" : "Y")}>{row.freeItem === "Y" ? "Yes" : "No"}</button></td>,
@@ -4395,6 +4351,7 @@ return (
         activeTopTab={topTab}
         showActions={topTab === "details"}
         showBIRForm={false}
+        showCopyForm={false}
         isViewDocument={isViewDocument}
         onDetails={() => setTopTab("details")}
         onHistory={() => setTopTab("history")}
@@ -4461,8 +4418,8 @@ return (
             />
 
             <FieldRenderer
-              id="siNo"
-              label="SI No."
+              id="vsiNo"
+              label="VSI No."
               type="lookup"
               value={state.documentNo || documentNo || ""}
               disabled={state.isDocNoDisabled}
@@ -4508,20 +4465,34 @@ return (
                     : "global-ref-label-disabled"
                 }`}
               >
-                SI Date
+                VSI Date
               </label>
             </div>
 
+            <FieldRenderer
+              id="vdrNo"
+              label="VDR No."
+              required
+              type="lookup"
+              value={refSiNo1 || ""}
+              disabled={isFormDisabled || isFetchDisabled}
+              readOnly
+              lookupDisabled={isFormDisabled || isFetchDisabled}
+              onLookup={() => handleOpenDRLookup()}
+            />
+
+          </div>
+
+          <div className="global-tran-textbox-group-div-ui">
             <FieldRenderer
               id="billToCustCode"
               label="Bill To Customer Code"
               required
               type="lookup"
               value={billToCustCode || ""}
-              disabled={isFormDisabled || hasDRLinkedDetailRows}
+              disabled
               readOnly
-              lookupDisabled={isFetchDisabled || hasDRLinkedDetailRows}
-              onLookup={() => updateState({ custModalOpen: true, modalContext: "OpenDR" })}
+              lookupDisabled
             />
 
             <FieldRenderer
@@ -4532,21 +4503,6 @@ return (
               value={billToCustName || ""}
               disabled
               readOnly
-            />
-          </div>
-
-          <div className="global-tran-textbox-group-div-ui">
-            <FieldRenderer
-              id="siTranType"
-              label="SI Type"
-              type="select"
-              value={siTranType || ""}
-              disabled={isFormDisabled || hasSiDetailRows}
-              onChange={(val) => updateState({ siTranType: val })}
-              options={(siTranTypeOptions || []).map((t) => ({
-                label: t.DROPDOWN_NAME,
-                value: t.DROPDOWN_CODE,
-              }))}
             />
 
             <FieldRenderer
@@ -4573,6 +4529,21 @@ return (
               onLookup={() => updateState({ showVatModal: true, selectedRowIndex: null, modalContext: "headerVAT" })}
             />
 
+          </div>
+
+          <div className="global-tran-textbox-group-div-ui">
+            <FieldRenderer
+              id="salesRepName"
+              label="Sales Rep"
+              required
+              type="lookup"
+              value={salesRepName || ""}
+              disabled={isFormDisabled}
+              readOnly
+              lookupDisabled={isFormDisabled}
+              onLookup={() => updateState({ showSalesRepModal: true, modalContext: "headerSalesRep" })}
+            />
+
             <FieldRenderer
               id="billtermName"
               label="Billing Term"
@@ -4585,8 +4556,7 @@ return (
               onLookup={() => updateState({ billtermModalOpen: true })}
             />
 
-           
-              <div className="relative w-full">
+            <div className="relative w-full">
               <div
                 className={`flex items-stretch global-ref-textbox-ui ${
                   !isFormDisabled
@@ -4607,72 +4577,6 @@ return (
               </label>
             </div>
 
-
-          </div>
-
-          <div className="global-tran-textbox-group-div-ui">
-            <FieldRenderer
-              id="salesRepName"
-              label="Sales Rep"
-              required
-              type="lookup"
-              value={salesRepName || ""}
-              disabled={isFormDisabled}
-              readOnly
-              lookupDisabled={isFormDisabled}
-              onLookup={() => updateState({ showSalesRepModal: true, modalContext: "headerSalesRep" })}
-            />
-
-            <FieldRenderer
-              id="customerPoNo"
-              label="Customer PO No."
-              type="text"
-              value={customerPoNo || ""}
-              disabled={isFormDisabled}
-              onChange={(val) => updateState({ customerPoNo: val })}
-              maxLength={useGetFieldLength(tblFieldArray, "cust_po_no")}
-            />
-
-            <div className="relative w-full">
-              <div
-                className={`flex items-stretch global-ref-textbox-ui ${
-                  !isFormDisabled
-                    ? "global-ref-textbox-enabled"
-                    : "global-ref-textbox-disabled"
-                }`}
-              >
-                <DateFormatInput
-                  id="customerPoDate"
-                  className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
-                  value={customerPoDate}
-                  disabled={isFormDisabled}
-                  updateState={updateState}
-                />
-              </div>
-              <label htmlFor="customerPoDate" className="global-ref-floating-label">
-                Customer PO Date
-              </label>
-            </div>
-
-            <FieldRenderer
-              id="refSiNo1"
-              label="Ref SI No. 1"
-              type="text"
-              value={refSiNo1 || ""}
-              disabled={isFormDisabled}
-              onChange={(val) => updateState({ refSiNo1: val })}
-              maxLength={useGetFieldLength(tblFieldArray, "refsi_no1")}
-            />
-
-            <FieldRenderer
-              id="refSiNo2"
-              label="Ref SI No. 2"
-              type="text"
-              value={refSiNo2 || ""}
-              disabled={isFormDisabled}
-              onChange={(val) => updateState({ refSiNo2: val })}
-              maxLength={useGetFieldLength(tblFieldArray, "refsi_no2")}
-            />
           </div>
 
           <div className="col-span-full">
@@ -4867,7 +4771,7 @@ return (
                     style={transactionActionsCellStyle}
                   >
                     <div className="flex items-center justify-center gap-1">
-                      {!isDirectSiType && (
+                      {false && (
                         <button
                           type="button"
                           className="global-tran-td-button-add-ui"
@@ -4905,7 +4809,7 @@ return (
     {topTab === "details" && (
     <>
     {/* Invoice Details Footer */}
-    <div className="global-tran-tab-footer-main-div-ui relative">
+    <div className="hidden">
 
     {/* Add Button */}
     <div className="global-tran-tab-footer-button-div-ui">
@@ -5230,6 +5134,7 @@ return (
         endpoint={openDRSI_Col_Summary}
         data={openDRSI_Data_Summary}
         btnCaption="Get Selected DR"
+        singleSelect
         onClose={handleInsertSelectedOpenDR}
         onCancel={() =>
           updateState({
@@ -5324,7 +5229,7 @@ return (
     {showAllTranDocNo && (
       <AllTranDocNo
         isOpen={showAllTranDocNo}
-        params={{branchCode,branchName,docType,documentTitle,fieldNo : "siNo"}}
+        params={{branchCode,branchName,docType,documentTitle,fieldNo : "vsiNo"}}
         onRetrieve={handleTranDocNoRetrieval}
         onResponse={{documentNo}}
         onSelected={handleTranDocNoSelection}
@@ -5341,9 +5246,9 @@ return (
   <AllTranHistory
     showHeader={false}
     isActive={topTab === "history"}
-    endpoint="/getSIHistory"
-    cacheKey={`SI:${state.branchCode || ""}`}
-    activeTabKey="SI_Summary"
+    endpoint="/getVSIHistory"
+    cacheKey={`VSI:${state.branchCode || ""}`}
+    activeTabKey="VSI_Summary"
     branchCode={state.branchCode}
     status="All"
     onRowDoubleClick={handleHistoryRowPick}
@@ -5357,7 +5262,7 @@ return (
 
 };
 
-export default SI;
+export default VSI;
 
 
 

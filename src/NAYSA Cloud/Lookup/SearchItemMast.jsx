@@ -77,6 +77,7 @@ const ItemMastLookupModal = ({
   onGetSelectedItems,
   endpoint = "/getInvLookupMS",
   docType=null,
+  tranType=null,
   method = "get",
   selectedItems: externalSelectedItems = [],
 }) => {
@@ -180,6 +181,8 @@ const ItemMastLookupModal = ({
       appliedSearch,
       searchMode,
       customParam,
+      docType,
+      tranType,
       hasSubmittedSearch,
     ],
     queryFn: async () => {
@@ -189,6 +192,7 @@ const ItemMastLookupModal = ({
             search: appliedSearch?.trim() || null,
             filter: customParam || "ActiveAll",
             docType: docType,
+            tranType: tranType,
             searchMode,
           },
         }),
