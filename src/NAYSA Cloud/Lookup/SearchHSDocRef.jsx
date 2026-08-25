@@ -4,7 +4,9 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTimes, faSpinner, faSyncAlt, faEraser } from '@fortawesome/free-solid-svg-icons';
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 
-const HSDocLookupModal = ({ isOpen, onClose }) => {
+const normalizeDocCode = (value) => String(value || '').trim().toUpperCase();
+
+const HSDocLookupModal = ({ isOpen, onClose, allowedDocCodes }) => {
     const [filters, setFilters] = useState({ 
         docCode: '', 
         docName: ''
@@ -17,6 +19,16 @@ const HSDocLookupModal = ({ isOpen, onClose }) => {
         docCode: '', 
         docName: ''
     });
+
+    const allowedDocCodeSet = useMemo(() => {
+        if (!Array.isArray(allowedDocCodes)) return null;
+
+        return new Set(
+            allowedDocCodes
+                .map(normalizeDocCode)
+                .filter(Boolean)
+        );
+    }, [allowedDocCodes]);
 
     // 1. Fetching Logic
     const { 
@@ -39,23 +51,31 @@ const HSDocLookupModal = ({ isOpen, onClose }) => {
 
     // 2. Filtering Logic
     const filtered = useMemo(() => {
-        return documents.filter(item =>
-            (item.docCode || '').toLowerCase().includes(filters.docCode.toLowerCase()) &&
-            (item.docName || '').toLowerCase().includes(filters.docName.toLowerCase())
-        );
-    }, [filters, documents]);
+        return documents.filter(item => {
+            const docCode = normalizeDocCode(item.docCode || item.DOC_CODE);
+
+            if (allowedDocCodeSet && !allowedDocCodeSet.has(docCode)) {
+                return false;
+            }
+
+            return (
+                (item.docCode || '').toLowerCase().includes(filters.docCode.toLowerCase()) &&
+                (item.docName || '').toLowerCase().includes(filters.docName.toLowerCase())
+            );
+        });
+    }, [filters, documents, allowedDocCodeSet]);
 
     if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 animate-fade-in">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col relative overflow-hidden transform animate-scale-in border border-slate-200">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[70vh] flex flex-col relative overflow-hidden transform animate-scale-in border border-slate-200">
                 
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b bg-slate-50">
                     <div className="flex items-center gap-3">
                         <div className="relative">
-                            <h2 className="text-sm font-bold text-slate-800 uppercase tracking-tight">Select Document Type</h2>
+                            <h2 className="text-sm font-bold text-slate-800 uppercase tracking-tight">Select Document Code</h2>
                             <div className="absolute -top-1 -right-4 flex h-2 w-2">
                                 <span className={`animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75 ${isFetching ? 'block' : 'hidden'}`}></span>
                                 <span className={`relative inline-flex rounded-full h-2 w-2 bg-blue-500 ${isFetching ? 'block' : 'hidden'}`}></span>
@@ -101,7 +121,7 @@ const HSDocLookupModal = ({ isOpen, onClose }) => {
                                 <thead className="bg-slate-100 sticky top-0 z-10">
                                     <tr>
                                         {[
-                                            { label: 'Document Type', key: 'docCode' },
+                                            { label: 'Document Code', key: 'docCode' },
                                             { label: 'Document Name', key: 'docName' }
                                         ].map((col) => (
                                             <th key={col.key} className="px-4 py-3 text-left border-b border-slate-200">

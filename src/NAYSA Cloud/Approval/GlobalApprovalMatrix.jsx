@@ -395,7 +395,7 @@
 
 // const validateRows = () => {
 //   if (!docType) {
-//     useSwalErrorAlert("Required Fields", "Document Type is required.");
+//     useSwalErrorAlert("Required Fields", "Document Code is required.");
 //     return false;
 //   }
 
@@ -863,7 +863,7 @@
 //             </h3>
 //             <div className="max-w-[420px]">
 //               <FieldRenderer
-//                 label="Document Type"
+//                 label="Document Code"
 //                 required
 //                 type="select"
 //                 value={docType}
@@ -1292,7 +1292,7 @@ export default function ApprovalMatrixModal() {
 
 const validateRows = () => {
   if (!docType) {
-    useSwalErrorAlert("Required Fields", "Document Type is required.");
+    useSwalErrorAlert("Required Fields", "Document Code is required.");
     return false;
   }
 
@@ -1760,7 +1760,7 @@ const validateRows = () => {
             </h3>
             <div className="max-w-[420px]">
               <FieldRenderer
-                label="Document Type"
+                label="Document Code"
                 required
                 type="select"
                 value={docType}

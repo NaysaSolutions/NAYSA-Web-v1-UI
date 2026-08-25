@@ -44,6 +44,20 @@ const openPdfPreview = (pdfBlob) => {
   );
 };
 
+const getCachedUserCode = () => {
+  try {
+    const cachedUser = JSON.parse(localStorage.getItem("naysa_user") || "null");
+    return cachedUser?.USER_CODE || cachedUser?.userCode || "";
+  } catch {
+    return "";
+  }
+};
+
+const buildPrintPayload = (payload) =>
+  Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined)
+  );
+
 
 export function injectLoadingSpinner(printWindow) {
   if (!printWindow || !printWindow.document) return;
@@ -115,8 +129,15 @@ export async function useHandlePrint(documentID, docCode, printMode, userCode) {
       throw new Error("Report Name not defined");
     }
 
-    const payload = { tranId: documentID, formName, docCode, printMode ,userCode};
-        console.log("Received PDF blob:", payload);
+    const payload = buildPrintPayload({
+      tranId: documentID,
+      formName,
+      docCode,
+      printMode,
+      userCode: userCode || getCachedUserCode(),
+    });
+
+    console.log("Print PDF payload:", payload);
     const pdfBlob = await postPdfRequest("/printForm", payload);
 
 

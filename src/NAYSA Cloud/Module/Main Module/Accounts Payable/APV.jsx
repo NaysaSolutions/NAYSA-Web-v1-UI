@@ -184,6 +184,17 @@ const getAssignedUserBranch = (userRow) => {
 const isNonPurchasesApType = (value) =>
   ["APV02", "APV002"].includes(String(value || "").trim().toUpperCase());
 
+const isRequirementEnabled = (...values) =>
+  values.some((value) =>
+    ["Y", "YES", "TRUE"].includes(String(value ?? "").trim().toUpperCase()),
+  );
+
+const isDetailSlRequired = (row) =>
+  isRequirementEnabled(row?.REC_SL, row?.REQ_SL, row?.slReq, row?.REQSL);
+
+const isGlSlRequired = (row) =>
+  isRequirementEnabled(row?.REQ_SL, row?.REC_SL, row?.slReq, row?.REQSL);
+
 const APV = () => {
   // View Document Const
   const loadedFromUrlRef = useRef(false);
@@ -470,7 +481,7 @@ const APV = () => {
     documentNo,
   ]);
 
-  // Document type constants
+  // Document code constants
   const docType = docTypes.APV;
   const pdfLink = docTypePDFGuide[docType];
   const videoLink = docTypeVideoGuide[docType];
@@ -528,25 +539,59 @@ const APV = () => {
 
   const openRRLookupColumns = [
   { key: "type", label: "Type", width: 60 },
+  { key: "referenceSource", label: "Source", width: 70 },
+
   { key: "branchCode", label: "BC", width: 60 },
   { key: "rrNo", label: "RR No", width: 110 },
-  { key: "rrDate", label: "RR Date", width: 100 },
+  { key: "rrDate", label: "RR/PO Date", width: 100 },
   { key: "poNo", label: "PO No", width: 110 },
+
   { key: "vendCode", label: "Payee Code", width: 100 },
   { key: "vendName", label: "Payee Name", width: 200 },
+
   { key: "siNo", label: "SI No", width: 110 },
   { key: "siDate", label: "SI Date", width: 100 },
-  { key: "siAmount", label: "SI Amt", width: 110, type: "amount" },
+
+  {
+    key: "siAmount",
+    label: "SI Amt",
+    width: 110,
+    type: "amount",
+  },
+
   { key: "drAcct", label: "DR Account", width: 90 },
   { key: "rcCode", label: "Responsibility Code", width: 90 },
+
   { key: "vatCode", label: "VAT Code", width: 90 },
   { key: "vatDesc", label: "VAT Desc", width: 200 },
-  { key: "vatAmount", label: "VAT Amount", width: 110, type: "amount" },
+
+  {
+    key: "vatAmount",
+    label: "VAT Amount",
+    width: 110,
+    type: "amount",
+  },
+];
+
+const openPCVLookupColumns = [
+  { key: "type", label: "Type", width: 70 },
+  { key: "branchCode", label: "Branch", width: 80 },
+  { key: "pcvNo", label: "PCV No.", width: 120 },
+  { key: "pcvDate", label: "PCV Date", width: 110 },
+  {
+    key: "pcvAmount",
+    label: "PCV Amount",
+    width: 130,
+    type: "amount",
+  },
+  { key: "drAcct", label: "DR Account", width: 120 },
+  { key: "rcCode", label: "RC Code", width: 100 },
+  { key: "rcName", label: "RC Name", width: 200 },
 ];
 
 const openPOAPVLookupColumns = [
   { key: "branchCode", label: "Branch", width: 80 },
-  { key: "docType", label: "Document Type", width: 110 },
+  { key: "docType", label: "Document Code", width: 110 },
   { key: "poJoNo", label: "PO/JO No", width: 120 },
   { key: "poJoDate", label: "PO/JO Date", width: 110 },
   { key: "vendCode", label: "Payee Code", width: 110 },
@@ -823,50 +868,174 @@ const handleOpenReferenceLCImportation = async (overrides = {}) => {
   };
 
   const fetchRRReferenceDetails = async (item) => {
-    const referenceType = String(item.type || item.invType || item.rrSource || "").toUpperCase();
+  const referenceType = String(
+    item.type ||
+    item.invType ||
+    item.rrSource ||
+    ""
+  )
+    .trim()
+    .toUpperCase();
 
-    if (referenceType === "JO") {
-      return [];
+  const referenceSource = String(
+    item.referenceSource ||
+    item.refSource ||
+    "RR"
+  )
+    .trim()
+    .toUpperCase();
+
+
+  if (referenceType === "JO") {
+    return [];
+  }
+
+
+  try {
+
+    // =========================================================
+    // PO WITHOUT RR
+    // =========================================================
+    if (referenceSource === "PO") {
+
+      const detailPayload = {
+        json_data: {
+          poId:
+            item.poId ||
+            "",
+
+          poNo:
+            item.poNo ||
+            "",
+
+          branchCode:
+            item.branchCode ||
+            branchCode ||
+            "",
+
+          vendCode:
+            item.vendCode ||
+            vendCode ||
+            "",
+
+          invType: referenceType,
+          type: referenceType,
+
+          referenceSource: "PO",
+        },
+      };
+
+
+      const response = await postRequest(
+        "getAPVPO_OpenDetail",
+        detailPayload
+      );
+
+
+      return extractOpenRRResponseRows(response).map(
+        (row, index) =>
+          normalizeOpenRRRow(
+            {
+              ...row,
+
+              type:
+                row.type ||
+                referenceType,
+
+              invType:
+                row.invType ||
+                referenceType,
+
+              referenceSource: "PO",
+            },
+            index,
+          )
+      );
     }
 
-    const selectedIds = [item.rrId, item.groupId, item.id]
+
+    // =========================================================
+    // ACTUAL RR
+    // =========================================================
+    const selectedIds = [
+      item.rrId,
+      item.groupId,
+      item.id,
+    ]
       .map((value) => String(value || "").trim())
       .filter(Boolean)
       .join(",");
+
 
     const detailPayload = {
       json_data: {
         selectedIds,
         selectedId: selectedIds,
+
         rrId: item.rrId || "",
         rrHdId: item.rrId || "",
         rrNo: item.rrNo || "",
         poNo: item.poNo || "",
-        branchCode: item.branchCode || branchCode || "",
-        vendCode: item.vendCode || vendCode || "",
-        invType: item.type || item.invType || "MS",
-        type: item.type || item.invType || "MS",
-        rrSource: item.rrSource || item.type || item.invType || "",
+
+        branchCode:
+          item.branchCode ||
+          branchCode ||
+          "",
+
+        vendCode:
+          item.vendCode ||
+          vendCode ||
+          "",
+
+        invType: referenceType,
+        type: referenceType,
+
+        referenceSource: "RR",
       },
     };
 
-    try {
-      const response = await postRequest("getAPVRR_OpenDetail", detailPayload);
-      return extractOpenRRResponseRows(response).map((row, index) =>
-        normalizeOpenRRRow(row, index),
-      );
-    } catch (error) {
-      console.warn("Unable to fetch RR reference details; using summary row.", error);
-      return [];
-    }
-  };
+
+    const response = await postRequest(
+      "getAPVRR_OpenDetail",
+      detailPayload
+    );
+
+
+    return extractOpenRRResponseRows(response).map(
+      (row, index) =>
+        normalizeOpenRRRow(row, index)
+    );
+
+  } catch (error) {
+
+    console.warn(
+      "Unable to fetch APV reference details:",
+      error
+    );
+
+    return [];
+  }
+};
 
   const enrichRRReferenceItem = async (item) => {
-    const detailRows = await fetchRRReferenceDetails(item);
 
-    if (detailRows.length === 0) {
-      return item;
-    }
+  const referenceSource = String(
+    item.referenceSource || "RR"
+  )
+    .trim()
+    .toUpperCase();
+
+  // PO without RR already has the information
+  // required by APV. Do not call RR/PO detail endpoint.
+  if (referenceSource === "PO") {
+    return item;
+  }
+
+  const detailRows = await fetchRRReferenceDetails(item);
+
+  if (detailRows.length === 0) {
+    return item;
+  }
 
     const detailAmount = detailRows.reduce(
       (total, detailRow) => total + getRRLineAmount(detailRow),
@@ -943,138 +1112,599 @@ const extractOpenRRResponseRows = (response) => {
 };
 
   const normalizeOpenRRRow = (row, index) => {
-  const type = getLookupValue(row, "type", "Type", "TYPE", "invType", "INV_TYPE");
+  // =========================================================
+  // TYPE / INVENTORY TYPE
+  // =========================================================
+  const type = String(
+    getLookupValue(
+      row,
+      "type",
+      "Type",
+      "TYPE",
+      "invType",
+      "inv_type",
+      "INV_TYPE"
+    ) || ""
+  )
+    .trim()
+    .toUpperCase();
 
+
+  // =========================================================
+  // REFERENCE SOURCE
+  // RR = actual receiving
+  // PO = PO without receiving
+  // JO = Job Order
+  // =========================================================
+  let referenceSource = String(
+    getLookupValue(
+      row,
+      "referenceSource",
+      "reference_source",
+      "REFERENCE_SOURCE",
+      "refSource",
+      "REF_SOURCE"
+    ) || ""
+  )
+    .trim()
+    .toUpperCase();
+
+
+  // Backward compatibility:
+  // old RR procedures may not yet return referenceSource
+  if (!referenceSource) {
+    referenceSource =
+      type === "JO"
+        ? "JO"
+        : "RR";
+  }
+
+
+  // =========================================================
+  // MENU CODE
+  // FG0020 = FGRR
+  // MS0190 = MSRR
+  // RM0320 = RMRR
+  // =========================================================
+  let menuCode = String(
+    getLookupValue(
+      row,
+      "menuCode",
+      "menu_code",
+      "MENU_CODE"
+    ) || ""
+  )
+    .trim()
+    .toUpperCase();
+
+
+  // Backward compatibility if old RR query
+  // does not yet return menuCode.
+  if (!menuCode) {
+    switch (type) {
+      case "FG":
+      case "FGRR":
+        menuCode = "FG0020";
+        break;
+
+      case "MS":
+      case "MSRR":
+        menuCode = "MS0190";
+        break;
+
+      case "RM":
+      case "RMRR":
+        menuCode = "RM0320";
+        break;
+
+      default:
+        menuCode = "";
+        break;
+    }
+  }
+
+
+  // =========================================================
+  // RR NUMBER
+  // =========================================================
   const rrNo = getLookupValue(
     row,
     "rrNo",
     "rr_no",
     "RR_NO",
+
     "msrrNo",
     "MSRR_NO",
+
+    "fgrrNo",
+    "FGRR_NO",
+
+    "rmrrNo",
+    "RMRR_NO",
+
     "joNo",
     "jo_no",
     "JO_NO",
+
     "docNo",
     "DOC_NO",
+
     "tranNo",
-    "TRAN_NO",
+    "TRAN_NO"
   );
 
+
+  // =========================================================
+  // RR ID
+  // =========================================================
   const rrId = getLookupValue(
     row,
     "rrId",
     "rr_id",
     "RR_ID",
+
     "rrHdId",
     "RR_HD_ID",
+
     "msrrId",
     "MSRR_ID",
+
+    "fgrrId",
+    "FGRR_ID",
+
+    "rmrrId",
+    "RMRR_ID",
+
     "joId",
     "jo_id",
-    "JO_ID",
+    "JO_ID"
   );
 
+
+  // =========================================================
+  // PO ID
+  // Important for PO without RR
+  // =========================================================
+  const poId = getLookupValue(
+    row,
+    "poId",
+    "po_id",
+    "PO_ID"
+  );
+
+
+  // =========================================================
+  // PO NUMBER
+  // =========================================================
   const poNo = getLookupValue(
     row,
     "poNo",
     "po_no",
     "PO_NO",
+
+    "poJoNo",
+    "PO_JO_NO",
+
     "joNo",
     "jo_no",
-    "JO_NO",
+    "JO_NO"
   );
 
+
+  // =========================================================
+  // BRANCH
+  // =========================================================
+  const normalizedBranchCode = getLookupValue(
+    row,
+    "branchCode",
+    "BranchCode",
+    "branch_code",
+    "BRANCH_CODE",
+    "bc",
+    "BC"
+  );
+
+
+  // =========================================================
+  // DATES
+  // =========================================================
+  const rrDate = getLookupValue(
+    row,
+    "rrDate",
+    "rr_date",
+    "RR_DATE",
+
+    "poDate",
+    "po_date",
+    "PO_DATE",
+
+    "poJoDate",
+    "PO_JO_DATE",
+
+    "joDate",
+    "jo_date",
+    "JO_DATE"
+  );
+
+
+  const poDate = getLookupValue(
+    row,
+    "poDate",
+    "po_date",
+    "PO_DATE",
+
+    "poJoDate",
+    "PO_JO_DATE",
+
+    "rrDate",
+    "rr_date",
+    "RR_DATE"
+  );
+
+
+  // =========================================================
+  // VENDOR
+  // =========================================================
+  const normalizedVendCode = getLookupValue(
+    row,
+    "vendCode",
+    "vend_code",
+    "VEND_CODE"
+  );
+
+
+  const normalizedVendName = getLookupValue(
+    row,
+    "vendName",
+    "vend_name",
+    "VEND_NAME"
+  );
+
+
+  // =========================================================
+  // SALES INVOICE
+  // =========================================================
+  const siNo = getLookupValue(
+    row,
+    "siNo",
+    "si_no",
+    "SI_NO",
+
+    "drNo",
+    "dr_no",
+    "DR_NO"
+  );
+
+
+  const siDate = getLookupValue(
+    row,
+    "siDate",
+    "si_date",
+    "SI_DATE",
+
+    "rrDate",
+    "rr_date",
+    "RR_DATE",
+
+    "poDate",
+    "po_date",
+    "PO_DATE",
+
+    "joDate",
+    "jo_date",
+    "JO_DATE"
+  );
+
+
+  // =========================================================
+  // AMOUNT
+  // =========================================================
+  const siAmount = getLookupValue(
+    row,
+    "siAmount",
+    "si_amount",
+    "SI_AMOUNT",
+
+    "amount",
+    "AMOUNT",
+
+    "rrAmount",
+    "rr_amount",
+    "RR_AMOUNT",
+
+    "joAmount",
+    "jo_amount",
+    "JO_AMOUNT",
+
+    "itemAmount",
+    "item_amount",
+    "ITEM_AMOUNT",
+
+    "netAmount",
+    "net_amount",
+    "NET_AMOUNT",
+
+    "poAmount",
+    "po_amount",
+    "PO_AMOUNT"
+  );
+
+
+  // =========================================================
+  // DR ACCOUNT
+  // =========================================================
+  const drAcct = getLookupValue(
+    row,
+    "drAcct",
+    "dr_acct",
+    "DR_ACCT",
+
+    "debitAcct",
+    "debit_acct",
+    "DEBIT_ACCT",
+
+    "expAcct",
+    "exp_acct",
+    "EXP_ACCT",
+
+    "invAcct",
+    "inv_acct",
+    "INV_ACCT"
+  );
+
+
+  // =========================================================
+  // RESPONSIBILITY CENTER
+  // =========================================================
+  const rcCode = getLookupValue(
+    row,
+    "rcCode",
+    "rc_code",
+    "RC_CODE"
+  );
+
+
+  const rcName = getLookupValue(
+    row,
+    "rcName",
+    "rc_name",
+    "RC_NAME"
+  );
+
+
+  // =========================================================
+  // VAT
+  // =========================================================
+  const vatCode = getLookupValue(
+    row,
+    "vatCode",
+    "vat_code",
+    "VAT_CODE"
+  );
+
+
+  const vatDesc = getLookupValue(
+    row,
+    "vatDesc",
+    "vat_desc",
+    "VAT_DESC",
+
+    "vatName",
+    "vat_name",
+    "VAT_NAME"
+  );
+
+
+  const vatAmount = getLookupValue(
+    row,
+    "vatAmount",
+    "vat_amount",
+    "VAT_AMOUNT",
+
+    "vatAmt",
+    "vat_amt",
+    "VAT_AMT"
+  );
+
+
+  // =========================================================
+  // CATEGORY
+  // =========================================================
+  const categCode = getLookupValue(
+    row,
+    "categCode",
+    "categ_code",
+    "CATEG_CODE",
+
+    "categoryCode",
+    "category_code",
+    "CATEGORY_CODE",
+
+    "category",
+    "CATEGORY"
+  );
+
+
+  // =========================================================
+  // TRANSACTION TYPE
+  // =========================================================
+  const rrTranType = getLookupValue(
+    row,
+    "rrTranType",
+    "rr_tran_type",
+    "RR_TRAN_TYPE",
+
+    "msrrtranType",
+    "MSRRTRAN_TYPE",
+
+    "fgrrtranType",
+    "FGRRTRAN_TYPE",
+
+    "rmrrtranType",
+    "RMRRTRAN_TYPE"
+  );
+
+
+  // =========================================================
+  // REMARKS
+  // =========================================================
+  const remarks = getLookupValue(
+    row,
+    "remarks",
+    "REMARKS",
+
+    "particular",
+    "PARTICULAR"
+  );
+
+
+  // =========================================================
+  // GROUP ID
+  //
+  // Important:
+  // PO fallback groupId may be something like:
+  //
+  // PO_GUID|MS|VAT|RC|ACCOUNT
+  //
+  // So preserve SQL's groupId whenever available.
+  // =========================================================
+  const existingGroupId = getLookupValue(
+    row,
+    "groupId",
+    "group_id",
+    "GROUP_ID",
+
+    "id",
+    "ID"
+  );
+
+
+  const generatedGroupId =
+    [
+      referenceSource,
+      menuCode,
+      poId,
+      rrId,
+      rrNo,
+      poNo,
+      normalizedBranchCode,
+      index + 1,
+    ]
+      .filter(
+        (value) =>
+          value !== undefined &&
+          value !== null &&
+          String(value).trim() !== ""
+      )
+      .join("-") || String(index + 1);
+
+
+  // =========================================================
+  // RETURN NORMALIZED ROW
+  // =========================================================
   return {
     ...row,
-    groupId:
-      getLookupValue(row, "groupId", "GROUP_ID", "id", "ID") ||
-      [rrId, rrNo, poNo, index + 1].filter(Boolean).join("-") ||
-      String(index + 1),
 
+    // ---------------------------------------------------------
+    // Reference identification
+    // ---------------------------------------------------------
     type,
-    branchCode: getLookupValue(
-      row,
-      "branchCode",
-      "BranchCode",
-      "BRANCH_CODE",
-      "bc",
-      "BC",
-    ),
+    invType: type,
 
-    rrNo,
-    rrDate: getLookupValue(
-      row,
-      "rrDate",
-      "rr_date",
-      "RR_DATE",
-      "joDate",
-      "jo_date",
-      "JO_DATE",
-    ),
-    rrId,
+    menuCode,
+    referenceSource,
 
-    poNo,
+    // Keep this for compatibility with existing code.
+    // For RR, rrSource represents inventory/source type.
+    rrSource: type,
 
-    vendCode: getLookupValue(row, "vendCode", "vend_code", "VEND_CODE"),
-    vendName: getLookupValue(row, "vendName", "vend_name", "VEND_NAME"),
+    // ---------------------------------------------------------
+    // IDs
+    // ---------------------------------------------------------
+    groupId: existingGroupId || generatedGroupId,
 
-    siNo: getLookupValue(row, "siNo", "si_no", "SI_NO", "drNo", "DR_NO"),
-    siDate: getLookupValue(
-      row,
-      "siDate",
-      "si_date",
-      "SI_DATE",
-      "rrDate",
-      "RR_DATE",
-      "joDate",
-      "JO_DATE",
-    ),
+    rrId: rrId || "",
+    poId: poId || "",
 
-    siAmount: getLookupValue(
-      row,
-      "siAmount",
-      "si_amount",
-      "SI_AMOUNT",
-      "amount",
-      "AMOUNT",
-      "rrAmount",
-      "RR_AMOUNT",
-      "joAmount",
-      "JO_AMOUNT",
-    ),
+    // ---------------------------------------------------------
+    // Branch
+    // ---------------------------------------------------------
+    branchCode: normalizedBranchCode || "",
 
-    drAcct: getLookupValue(
-      row,
-      "drAcct",
-      "dr_acct",
-      "DR_ACCT",
-      "debitAcct",
-      "DEBIT_ACCT",
-    ),
+    // ---------------------------------------------------------
+    // Reference numbers
+    // ---------------------------------------------------------
+    rrNo: rrNo || "",
+    poNo: poNo || "",
 
-    rcCode: getLookupValue(row, "rcCode", "rc_code", "RC_CODE"),
-    rcName: getLookupValue(row, "rcName", "rc_name", "RC_NAME"),
+    // ---------------------------------------------------------
+    // Dates
+    // ---------------------------------------------------------
+    rrDate: rrDate || "",
+    poDate: poDate || "",
 
-    vatCode: getLookupValue(row, "vatCode", "vat_code", "VAT_CODE"),
-    vatDesc: getLookupValue(
-      row,
-      "vatDesc",
-      "vat_desc",
-      "VAT_DESC",
-      "vatName",
-      "VAT_NAME",
-    ),
-    vatAmount: getLookupValue(row, "vatAmount", "vat_amount", "VAT_AMOUNT"),
+    // ---------------------------------------------------------
+    // Transaction
+    // ---------------------------------------------------------
+    rrTranType: rrTranType || "",
 
-    categCode: getLookupValue(
-      row,
-      "categCode",
-      "categ_code",
-      "CATEG_CODE",
-      "categoryCode",
-      "CATEGORY_CODE",
-    ),
+    // ---------------------------------------------------------
+    // Vendor
+    // ---------------------------------------------------------
+    vendCode: normalizedVendCode || "",
+    vendName: normalizedVendName || "",
+
+    // ---------------------------------------------------------
+    // Invoice
+    // ---------------------------------------------------------
+    siNo: siNo || "",
+    siDate: siDate || "",
+
+    siAmount:
+      siAmount !== undefined &&
+      siAmount !== null &&
+      siAmount !== ""
+        ? siAmount
+        : 0,
+
+    amount:
+      siAmount !== undefined &&
+      siAmount !== null &&
+      siAmount !== ""
+        ? siAmount
+        : 0,
+
+    // ---------------------------------------------------------
+    // GL / RC
+    // ---------------------------------------------------------
+    drAcct: drAcct || "",
+    debitAcct: drAcct || "",
+
+    rcCode: rcCode || "",
+    rcName: rcName || "",
+
+    // ---------------------------------------------------------
+    // VAT
+    // ---------------------------------------------------------
+    vatCode: vatCode || "",
+    vatDesc: vatDesc || "",
+
+    vatAmount:
+      vatAmount !== undefined &&
+      vatAmount !== null &&
+      vatAmount !== ""
+        ? vatAmount
+        : 0,
+
+    // ---------------------------------------------------------
+    // Category
+    // ---------------------------------------------------------
+    categCode: categCode || "",
+
+    // ---------------------------------------------------------
+    // Remarks
+    // ---------------------------------------------------------
+    remarks: remarks || "",
   };
 };
 
@@ -1980,7 +2610,11 @@ const extractOpenRRResponseRows = (response) => {
       currCode: currencyCode,
       currRate: parseFormattedNumber(currencyRate) || 1,
       remarks: header.remarks || "",
-      userCode: user?.USER_CODE ,
+      userCode:
+  userCode ||
+  currentUserRow?.userCode ||
+  user?.USER_CODE ||
+  "",
       dt1: detailRows.map((row, index) => ({
         lnNo: String(index + 1),
         invType: row.invType,
@@ -1993,7 +2627,7 @@ const extractOpenRRResponseRows = (response) => {
         debitAcct: row.debitAcct,
         vatAcct: row.vatAcct,
         advAcct: row.advAcct || "",
-        sltypeCode: row.sltypeCode,
+        sltypeCode: isDetailSlRequired(row) ? row.sltypeCode : "",
         slCode: row.slCode,
         slName: row.slName,
         rcCode: row.rcCode,
@@ -2015,7 +2649,7 @@ const extractOpenRRResponseRows = (response) => {
         recNo: String(index + 1),
         acctCode: entry.acctCode,
         rcCode: entry.rcCode,
-        sltypeCode: entry.sltypeCode,
+        sltypeCode: isGlSlRequired(entry) ? entry.sltypeCode : "",
         slCode: entry.slCode,
         atcCode: entry.atcCode,
         particular: entry.particular,
@@ -2030,6 +2664,36 @@ const extractOpenRRResponseRows = (response) => {
     };
 
     try {
+
+      if (action === "GenerateGL" && isReplenishmentAPType) {
+  if (!apAccountCode) {
+    useSwalErrorAlert(
+      "Generate GL",
+      "AP Account is required for Replenishment."
+    );
+    return;
+  }
+
+  if (!detailRows.length) {
+    useSwalErrorAlert(
+      "Generate GL",
+      "Please select a PCV reference first."
+    );
+    return;
+  }
+
+  const missingDebitAccount = detailRows.find(
+    (row) => !String(row.debitAcct || "").trim()
+  );
+
+  if (missingDebitAccount) {
+    useSwalErrorAlert(
+      "Generate GL",
+      "Petty Cash GL Account is missing from the selected PCV."
+    );
+    return;
+  }
+}
       if (action === "GenerateGL") {
         let finalGlEntries = [];
 
@@ -2099,6 +2763,7 @@ const extractOpenRRResponseRows = (response) => {
                 slrefDate: normalizeSlrefDate(entry.slrefDate),
                 // Set the placeholder text if required but code is empty
                 rcCode: (isRcRequired && (!entry.rcCode || entry.rcCode === "")) ? "REQ RC" : entry.rcCode,
+                sltypeCode: isSlRequired ? entry.sltypeCode : "",
                 slCode: (isSlRequired && (!entry.slCode || entry.slCode === "")) ? "REQ SL" : entry.slCode,
               };
             });
@@ -2312,6 +2977,129 @@ const extractOpenRRResponseRows = (response) => {
     await handleAddRow();
   };
 
+  const handleOpenReferencePCV = async (overrides = {}) => {
+  setShowInvoiceAddDropdown(false);
+
+  const lookupVendCode = String(
+    overrides.vendCode ?? vendCode ?? ""
+  ).trim();
+
+  const lookupBranchCode = String(
+    overrides.branchCode ?? branchCode ?? ""
+  ).trim();
+
+  if (!lookupVendCode) {
+    updateState({
+      payeeModalOpen: true,
+      modalContext: "openPCV",
+    });
+    return;
+  }
+
+  try {
+    updateState({
+      isLoading: true,
+      showSpinner: true,
+    });
+
+    // IMPORTANT:
+    // Use POST because Laravel route is Route::post(...)
+    // Also use the exact Laravel route name.
+    const response = await postRequest(
+      "getPCVAPV_Summary",
+      JSON.stringify({
+        json_data: {
+          branchCode: lookupBranchCode,
+          vendCode: lookupVendCode,
+        },
+      })
+    );
+
+    const rawRows = extractOpenRRResponseRows(response);
+
+    const normalizedRows = rawRows.map((row, index) => ({
+      ...row,
+
+      groupId:
+        row.groupId ||
+        row.pcvId ||
+        `${row.pcvNo || "PCV"}-${index + 1}`,
+
+      type: row.type || "PCV",
+
+      branchCode: row.branchCode || "",
+
+      pcvNo: row.pcvNo || "",
+
+      pcvDate: row.pcvDate || "",
+
+      pcvAmount:
+        row.pcvAmount ??
+        row.amount ??
+        0,
+
+      currCode:
+        row.currCode ||
+        currencyCode ||
+        "PHP",
+
+      currRate:
+        row.currRate ||
+        1,
+
+      drAcct:
+        row.drAcct ||
+        row.debitAcct ||
+        "",
+
+      rcCode: row.rcCode || "",
+      rcName: row.rcName || "",
+
+      vendCode: row.vendCode || "",
+      vendName: row.vendName || "",
+    }));
+
+    console.log("PCV APV References:", normalizedRows);
+
+    if (normalizedRows.length === 0) {
+      useSwalErrorAlert(
+        "Open Reference PCV",
+        "No posted PCV available for replenishment."
+      );
+      return;
+    }
+
+    updateState({
+      globalLookupRow: normalizedRows,
+      globalLookupHeader: openPCVLookupColumns,
+      globalLookupTitle: "Open PCV References",
+      globalLookupBtnCaption: "Get Selected PCV",
+      showRRRefModal: true,
+      modalContext: "openPCV",
+    });
+
+  } catch (error) {
+    console.error(
+      "Failed to fetch Open PCV reference:",
+      error
+    );
+
+    useSwalErrorAlert(
+      "Open Reference PCV",
+      error?.response?.data?.message ||
+        error?.response?.data?.details ||
+        error?.message ||
+        "Error fetching posted PCV references."
+    );
+
+  } finally {
+    updateState({
+      isLoading: false,
+      showSpinner: false,
+    });
+  }
+};
+
   const handleOpenReferenceRR = async (overrides = {}) => {
   setShowInvoiceAddDropdown(false);
   
@@ -2346,15 +3134,17 @@ const extractOpenRRResponseRows = (response) => {
       }),
     };
 
-    const [rrResponse, joResponse] = await Promise.all([
-      fetchData("getAPVRR_OpenSummary", requestParams),
-      fetchData("getAPVJO_OpenSummary", requestParams),
-    ]);
+    const [rrResponse, poResponse, joResponse] = await Promise.all([
+  fetchData("getAPVRR_OpenSummary", requestParams),
+  fetchData("getAPVPO_OpenSummary", requestParams),
+  fetchData("getAPVJO_OpenSummary", requestParams),
+]);
 
     const rawRows = [
-      ...extractOpenRRResponseRows(rrResponse),
-      ...extractOpenRRResponseRows(joResponse),
-    ];
+  ...extractOpenRRResponseRows(rrResponse),
+  ...extractOpenRRResponseRows(poResponse),
+  ...extractOpenRRResponseRows(joResponse),
+];
 
     const normalizedRows = rawRows.map((row, index) =>
       normalizeOpenRRRow(row, index),
@@ -2392,7 +3182,8 @@ const handleCloseRRRefModal = async (selectedItems) => {
   }
 
   const isPOAdvanceFlow = modalContext === "openPOAdvance";
-  const isLCImportationFlow = modalContext === "openLCImportation";
+const isLCImportationFlow = modalContext === "openLCImportation";
+const isPCVFlow = modalContext === "openPCV";
 
   const itemsArray = Array.isArray(selectedItems.records)
     ? selectedItems.records
@@ -2401,6 +3192,124 @@ const handleCloseRRRefModal = async (selectedItems) => {
   updateState({ isLoading: true, showSpinner: true });
 
   try {
+    if (isPCVFlow) {
+  const mappedRows = await Promise.all(
+    itemsArray.map(async (item) => {
+      const amount =
+        parseFormattedNumber(
+          item.pcvAmount ||
+            item.PCV_AMOUNT ||
+            item.amount ||
+            0,
+        ) || 0;
+
+      const rcCode =
+        item.rcCode ||
+        item.RC_CODE ||
+        "";
+
+      const rcName =
+        item.rcName ||
+        item.RC_NAME ||
+        (rcCode
+          ? await fetchRCNameByCode(rcCode)
+          : "");
+
+      return {
+        lnNo: "",
+
+        // Type
+        invType:
+          item.type ||
+          item.invType ||
+          "PCV",
+
+        // PCV No. stored in existing rrNo field
+        rrNo:
+          item.pcvNo ||
+          item.PCV_NO ||
+          "",
+
+        poNo: "",
+        siNo: "",
+
+        // PCV Date stored in existing siDate field
+        siDate:
+          item.pcvDate ||
+          item.PCV_DATE ||
+          useGetCurrentDayV2(),
+
+        // PCV Amount
+        amount: formatNumber(amount),
+
+        // Invoice Amount
+        siAmount: formatNumber(amount),
+
+        debitAcct:
+          item.drAcct ||
+          item.DR_ACCT ||
+          item.debitAcct ||
+          item.DEBIT_ACCT ||
+          "",
+
+        rcCode,
+        rcName,
+
+        sltypeCode: "",
+        slCode: "",
+        slName: "",
+
+        vatCode: "",
+        vatName: "",
+        vatAmount: "0.00",
+
+        atcCode: "",
+        atcName: "",
+        atcAmount: "0.00",
+
+        paytermCode: "",
+        dueDate: "",
+
+        advpoNo: "",
+        advpoAmount: "0.00",
+        advpoVatAmount: "0.00",
+        advpoAtcAmount: "0.00",
+        advAcct: "",
+
+        REC_RC:
+          item.REC_RC ||
+          item.reqRc ||
+          (rcCode ? "Y" : "N"),
+
+        REC_SL: "N",
+
+        pcvId:
+          item.pcvId ||
+          item.PCV_ID ||
+          item.groupId ||
+          "",
+      };
+    }),
+  );
+
+  const updatedRows = [
+    ...detailRows,
+    ...mappedRows,
+  ];
+
+  updateState({
+    detailRows: updatedRows,
+    detailRowsGL: [],
+    showRRRefModal: false,
+    modalContext: "",
+    globalLookupTitle: "",
+    globalLookupBtnCaption: "",
+    triggerGLEntries: false,
+  });
+
+  updateTotals(updatedRows);
+  return;
+}
     if (isLCImportationFlow) {
       const selectedLC = itemsArray[0] || {};
       const selectedIds = itemsArray
@@ -2726,7 +3635,7 @@ const calculatedAtcAmount = aCode
     const newRow = {
       acctCode: "",
       rcCode: "",
-      sltypeCode: "SU",
+      sltypeCode: "",
       slCode: "",
       particular: "",
       vatCode: "",
@@ -2742,6 +3651,8 @@ const calculatedAtcAmount = aCode
       slRefNo: "",
       slrefDate: "",
       remarks: header.remarks || "",
+      REQ_RC: "N",
+      REQ_SL: "N",
     };
 
     const updatedRows = [...detailRowsGL];
@@ -3007,126 +3918,242 @@ const calculatedAtcAmount = aCode
 
   const handleClosePayeeModal = async (selectedData) => {
   if (!selectedData) {
-    updateState({ payeeModalOpen: false, modalContext: "" });
+    updateState({
+      payeeModalOpen: false,
+      modalContext: "",
+    });
     return;
   }
 
-  // 1. Isolate the specific context
+  // Save the lookup flow BEFORE changing modal state
   const isRRFlow = modalContext === "openRR";
   const isPOAdvanceFlow = modalContext === "openPOAdvance";
+  const isPCVFlow = modalContext === "openPCV";
 
-  // 2. Start Loading
-  updateState({ payeeModalOpen: false, isLoading: true, showSpinner: true });
+  updateState({
+    payeeModalOpen: false,
+    isLoading: true,
+    showSpinner: true,
+  });
 
   try {
-    const selectedVendCode = selectedData.vendCode || selectedData.VEND_CODE || "";
-    
-    // 3. Fetch Full Payee Details (Auto-fill Logic)
+    const selectedVendCode =
+      selectedData.vendCode ||
+      selectedData.VEND_CODE ||
+      "";
+
+    // Fetch complete vendor details
     const payeeRow = await fetchPayeeByCode(selectedVendCode);
     const finalPayee = payeeRow || selectedData;
 
-    const foundVendCode = finalPayee?.vendCode || finalPayee?.VEND_CODE || "";
-    const foundVendName = finalPayee?.vendName || finalPayee?.VEND_NAME || "";
-    const foundAcctCode = finalPayee?.apAccountCode || finalPayee?.acctCode || finalPayee?.AP_ACCT || "";
-    const foundAcctName = finalPayee?.apAccountName || finalPayee?.acctName || "";
-    const foundCurrCode = finalPayee?.currCode || finalPayee?.currencyCode || "";
-    const foundCurrName = finalPayee?.currName || finalPayee?.currencyName || "";
-    const foundVatCode = finalPayee?.vatCode || finalPayee?.VAT_CODE || "";
-    const foundAtcCode = finalPayee?.atcCode || finalPayee?.ATC_CODE || "";
+    const foundVendCode =
+      finalPayee?.vendCode ||
+      finalPayee?.VEND_CODE ||
+      "";
 
-    // 🌟 REACTIVE BRIDGE: Pull master records for description layouts instantly
-    const masterVatRow = foundVatCode ? await useTopVatRow(foundVatCode) : null;
-    const masterVatRate = foundVatCode ? await getVatRate(foundVatCode) : 0;
-    const masterAtcRow = foundAtcCode ? await useTopATCRow(foundAtcCode) : null;
+    const foundVendName =
+      finalPayee?.vendName ||
+      finalPayee?.VEND_NAME ||
+      "";
 
-    // 4. Update Header States
+    const foundAcctCode =
+      finalPayee?.apAccountCode ||
+      finalPayee?.acctCode ||
+      finalPayee?.AP_ACCT ||
+      "";
+
+    const foundAcctName =
+      finalPayee?.apAccountName ||
+      finalPayee?.acctName ||
+      "";
+
+    const foundCurrCode =
+      finalPayee?.currCode ||
+      finalPayee?.currencyCode ||
+      "";
+
+    const foundCurrName =
+      finalPayee?.currName ||
+      finalPayee?.currencyName ||
+      "";
+
+    const foundVatCode =
+      finalPayee?.vatCode ||
+      finalPayee?.VAT_CODE ||
+      "";
+
+    const foundAtcCode =
+      finalPayee?.atcCode ||
+      finalPayee?.ATC_CODE ||
+      "";
+
+    // Master descriptions
+    const masterVatRow = foundVatCode
+      ? await useTopVatRow(foundVatCode)
+      : null;
+
+    const masterVatRate = foundVatCode
+      ? await getVatRate(foundVatCode)
+      : 0;
+
+    const masterAtcRow = foundAtcCode
+      ? await useTopATCRow(foundAtcCode)
+      : null;
+
     const headerUpdates = {
       vendCode: foundVendCode,
+
       vendName: {
         vendCode: foundVendCode,
         vendName: foundVendName,
         currCode: foundCurrCode,
         currName: foundCurrName,
-        vatCode: foundVatCode, 
+        vatCode: foundVatCode,
         atcCode: foundAtcCode,
       },
+
       apAccountCode: foundAcctCode,
-      apAccountName: foundAcctCode && foundAcctName ? `${foundAcctCode} - ${foundAcctName}` : foundAcctCode,
+
+      apAccountName:
+        foundAcctCode && foundAcctName
+          ? `${foundAcctCode} - ${foundAcctName}`
+          : foundAcctCode,
+
       currencyCode: foundCurrCode,
       currencyName: foundCurrName,
     };
 
-    // 5. Apply cascade down updates to existing rows in Invoice Details if present
+    // Update existing invoice rows
     if (detailRows.length > 0) {
       headerUpdates.detailRows = detailRows.map((row) => {
-        const rowVatCode = row.vatCode && row.vatCode !== "" ? row.vatCode : (foundVatCode || "");
-        const rowVatName = row.vatCode && row.vatCode !== "" ? row.vatName : (masterVatRow?.vatName || "");
-        const rowAtcCode = row.atcCode && row.atcCode !== "" ? row.atcCode : (foundAtcCode || "");
-        const rowAtcName = row.atcCode && row.atcCode !== "" ? row.atcName : (masterAtcRow?.atcName || "");
-        
-        const currentAmount = parseFormattedNumber(row.amount) || 0;
-        const lineVatRate = rowVatCode === foundVatCode ? masterVatRate : 0; 
-        
-        // Correct inclusive formula deployment on master update change events
-        const calculatedVatAmount = row.vatCode && row.vatCode !== "" 
-          ? parseFormattedNumber(row.vatAmount) 
-          : lineVatRate > 0 ? (currentAmount / (1 + lineVatRate)) * lineVatRate : 0;
+        const rowVatCode =
+          row.vatCode && row.vatCode !== ""
+            ? row.vatCode
+            : foundVatCode || "";
+
+        const rowVatName =
+          row.vatCode && row.vatCode !== ""
+            ? row.vatName
+            : masterVatRow?.vatName || "";
+
+        const rowAtcCode =
+          row.atcCode && row.atcCode !== ""
+            ? row.atcCode
+            : foundAtcCode || "";
+
+        const rowAtcName =
+          row.atcCode && row.atcCode !== ""
+            ? row.atcName
+            : masterAtcRow?.atcName || "";
+
+        const currentAmount =
+          parseFormattedNumber(row.amount) || 0;
+
+        const lineVatRate =
+          rowVatCode === foundVatCode
+            ? masterVatRate
+            : 0;
+
+        const calculatedVatAmount =
+          row.vatCode && row.vatCode !== ""
+            ? parseFormattedNumber(row.vatAmount)
+            : lineVatRate > 0
+              ? (currentAmount / (1 + lineVatRate)) * lineVatRate
+              : 0;
 
         return {
           ...row,
+
           slCode: foundVendCode,
           slName: foundVendName,
+
           vatCode: rowVatCode,
           vatName: rowVatName,
           vatAmount: formatNumber(calculatedVatAmount),
+
           atcCode: rowAtcCode,
           atcName: rowAtcName,
         };
       });
     }
 
-    // Apply the updates to state
     updateState(headerUpdates);
 
-    // 6. Handle Currency Rate (Forex) based on the auto-filled currency
+    // Forex
     if (foundCurrCode) {
       let rate = defaultCurrRate;
+
       if (foundCurrCode !== glCurrDefault) {
-        rate = await useTopForexRate(foundCurrCode, header.apv_date);
+        rate = await useTopForexRate(
+          foundCurrCode,
+          header.apv_date
+        );
       }
-      updateState({ currencyRate: formatNumber(parseFormattedNumber(rate || 1), 6) });
+
+      updateState({
+        currencyRate: formatNumber(
+          parseFormattedNumber(rate || 1),
+          6
+        ),
+      });
     }
 
-    // Trigger total calculation recalculation step safely
     if (headerUpdates.detailRows) {
       updateTotals(headerUpdates.detailRows);
     }
 
-    // 7. THE BRIDGE: If this was for an RR/JO or PO/JO Advances lookup, trigger Step 2 now
+    /*
+    ============================================================
+    CONTINUE THE ORIGINAL REFERENCE LOOKUP
+    ============================================================
+    */
+
     if (isRRFlow) {
       setTimeout(() => {
         handleOpenReferenceRR({
           vendCode: foundVendCode,
-          branchCode: branchCode,
+          branchCode,
         });
       }, 100);
+
     } else if (isPOAdvanceFlow) {
       setTimeout(() => {
         handleOpenReferencePOAdvance({
           vendCode: foundVendCode,
-          branchCode: branchCode,
+          branchCode,
+        });
+      }, 100);
+
+    } else if (isPCVFlow) {
+
+      // THIS WAS MISSING
+      setTimeout(() => {
+        handleOpenReferencePCV({
+          vendCode: foundVendCode,
+          branchCode,
         });
       }, 100);
     }
 
   } catch (error) {
-    console.error("Error auto-filling payee details:", error);
-    useSwalErrorAlert("Error", "Failed to fetch vendor details.");
+    console.error(
+      "Error auto-filling payee details:",
+      error
+    );
+
+    useSwalErrorAlert(
+      "Error",
+      "Failed to fetch vendor details."
+    );
+
   } finally {
-    updateState({ isLoading: false, showSpinner: false, modalContext: "" });
+    updateState({
+      isLoading: false,
+      showSpinner: false,
+      modalContext: "",
+    });
   }
 };
-
 
 
   const getVatRate = async (vatCode) => {
@@ -3196,6 +4223,7 @@ const calculatedAtcAmount = aCode
           row.slCode = "REQ SL";
           row.slName = "";
         } else {
+          row.sltypeCode = "";
           row.slCode = vendCode || "";
           row.slName = vendName?.vendName || "";
         }
@@ -3214,6 +4242,10 @@ const calculatedAtcAmount = aCode
     if (field === "slCode") {
       row.slCode = value?.slCode || value?.sl_code || "";
       row.slName = value?.slName || value?.sl_name || "";
+    }
+
+    if (!isDetailSlRequired(row)) {
+      row.sltypeCode = "";
     }
 
     // VAT code selection from modal
@@ -3409,7 +4441,7 @@ const calculatedAtcAmount = aCode
 
         // Map data specifically to this row index
         row.acctCode = data.acctCode;
-        row.sltypeCode = data.sltypeCode;
+        row.sltypeCode = isSlReq ? data.sltypeCode : "";
 
         // --- Strict RC Isolation ---
         if (isRcReq) {
@@ -3429,6 +4461,7 @@ const calculatedAtcAmount = aCode
             data.slCode && data.slCode !== "" ? data.slCode : "REQ SL";
         } else {
           // EXPLICITLY WIPE for this specific row if flag is N
+          row.sltypeCode = "";
           row.slCode = "";
           row.slName = "";
         }
@@ -3474,6 +4507,10 @@ const calculatedAtcAmount = aCode
 
     if (["slRefNo", "slrefDate", "remarks"].includes(field)) {
       row[field] = value;
+    }
+
+    if (!isGlSlRequired(row)) {
+      row.sltypeCode = "";
     }
 
     // 3. Final Step: Put the isolated row back into the array at its specific index
@@ -4076,6 +5113,19 @@ const handleAtcNameDoubleClick = (index) => {
         visibility.tin = false;
         break;
 
+        case "APV04": // replenishment
+  visibility.sltypeCode = false;
+  visibility.slName = false;
+  visibility.address = false;
+  visibility.tin = false;
+
+  visibility.invType = true;
+  visibility.rrNo = true;   // reused as PCV No
+  visibility.poNo = false;
+  visibility.siNo = false;
+  visibility.siDate = true; // reused as PCV Date
+  break;
+
       case "APV05": // reimbursements
         visibility.invType = false;
         visibility.rrNo = false;
@@ -4142,63 +5192,133 @@ const handleAtcNameDoubleClick = (index) => {
     String(selectedApType || "").toUpperCase().includes("ADV") ||
     String(selectedApTypeName || "").toUpperCase().includes("ADVANCE");
 
+    const isReplenishmentAPType =
+  selectedApType === "APV04" ||
+  String(selectedApTypeName || "")
+    .toUpperCase()
+    .includes("REPLENISH");
+
   const isImportationAPType = selectedApType === "APV07";
 
   const showAppliedAdvancesColumns = selectedApType === "APV01" || isImportationAPType;
 
   const showAdvancesAccountColumn = selectedApType === "APV01" || isAdvancesAPType || isImportationAPType;
   const showDrAccountColumn = !isAdvancesAPType;
-  const apvDetailColumnDefs = [
-    { key: "ln", label: "LN", width: 56 },
-    ...(fieldVisibility.invType ? [{ key: "invType", label: "Type", width: 70 }] : []),
-    ...(fieldVisibility.rrNo && !isImportationAPType
-      ? [{ key: "rrNo", label: "RR No.", width: 120 }]
-      : []),
-    ...(fieldVisibility.poNo
-      ? [{ key: "poNo", label: isImportationAPType ? "LC No" : "PO/JO No.", width: 120 }]
-      : []),
-    { key: "siNo", label: "Invoice No.", width: 120 },
-    { key: "siDate", label: "Invoice Date", width: 130 },
-    {
-      key: "amount",
-      label: isAdvancesAPType ? "Advances Amount" : "Original Amount",
-      width: 140,
-    },
-    { key: "currCode", label: "Currency", width: 90 },
-    { key: "siAmount", label: "Invoice Amount", width: 130 },
-    ...(showDrAccountColumn ? [{ key: "debitAcct", label: "DR Account", width: 120 }] : []),
-    { key: "rcCode", label: "RC Code", width: 120 },
-    { key: "rcName", label: "RC Name", width: 260 },
-    ...(fieldVisibility.sltypeCode
-      ? [{ key: "sltypeCode", label: "SL Type Code", width: 120 }]
-      : []),
-    { key: "slCode", label: "SL Code", width: 120 },
-    { key: "vatCode", label: "VAT Code", width: 120 },
-    { key: "vatName", label: "VAT Name", width: 260 },
-    { key: "vatAmount", label: "VAT Amount", width: 130 },
-    { key: "atcCode", label: "ATC", width: 120 },
-    { key: "atcName", label: "ATC Name", width: 260 },
-    { key: "atcAmount", label: "ATC Amount", width: 130 },
-    { key: "paytermCode", label: "Payment Terms", width: 130 },
-    { key: "dueDate", label: "Due Date", width: 130 },
-    ...(showAppliedAdvancesColumns
-      ? [
-          { key: "advpoNo", label: "Applied Advances PO", width: 150 },
-          { key: "advpoAmount", label: "Applied Advances Amt", width: 150 },
-          { key: "advpoVatAmount", label: "Applied Advances VAT", width: 150 },
-        ]
-      : []),
-    ...(showAdvancesAccountColumn
-      ? [{ key: "advAcct", label: "Advances Account", width: 150 }]
-      : []),
-  ];
+  const replenishmentDetailColumnDefs = [
+  { key: "ln", label: "LN", width: 56 },
+  { key: "invType", label: "Type", width: 70 },
+  { key: "rrNo", label: "PCV No.", width: 120 },
+  { key: "siDate", label: "PCV Date", width: 130 },
+  { key: "amount", label: "PCV Amt", width: 140 },
+  { key: "currCode", label: "Curr", width: 90 },
+  { key: "siAmount", label: "Invoice Amount", width: 130 },
+  { key: "debitAcct", label: "DR Acct", width: 120 },
+  { key: "rcCode", label: "RC Code", width: 120 },
+  { key: "rcName", label: "RC Name", width: 260 },
+];
+
+const regularApvDetailColumnDefs = [
+  { key: "ln", label: "LN", width: 56 },
+
+  ...(fieldVisibility.invType
+    ? [{ key: "invType", label: "Type", width: 70 }]
+    : []),
+
+  ...(fieldVisibility.rrNo && !isImportationAPType
+    ? [{ key: "rrNo", label: "RR No.", width: 120 }]
+    : []),
+
+  ...(fieldVisibility.poNo
+    ? [
+        {
+          key: "poNo",
+          label: isImportationAPType ? "LC No" : "PO/JO No.",
+          width: 120,
+        },
+      ]
+    : []),
+
+  { key: "siNo", label: "Invoice No.", width: 120 },
+  { key: "siDate", label: "Invoice Date", width: 130 },
+
+  {
+    key: "amount",
+    label: isAdvancesAPType
+      ? "Advances Amount"
+      : "Original Amount",
+    width: 140,
+  },
+
+  { key: "currCode", label: "Currency", width: 90 },
+  { key: "siAmount", label: "Invoice Amount", width: 130 },
+
+  ...(showDrAccountColumn
+    ? [{ key: "debitAcct", label: "DR Account", width: 120 }]
+    : []),
+
+  { key: "rcCode", label: "RC Code", width: 120 },
+  { key: "rcName", label: "RC Name", width: 260 },
+
+  ...(fieldVisibility.sltypeCode
+    ? [{ key: "sltypeCode", label: "SL Type Code", width: 120 }]
+    : []),
+
+  { key: "slCode", label: "SL Code", width: 120 },
+  { key: "vatCode", label: "VAT Code", width: 120 },
+  { key: "vatName", label: "VAT Name", width: 260 },
+  { key: "vatAmount", label: "VAT Amount", width: 130 },
+  { key: "atcCode", label: "ATC", width: 120 },
+  { key: "atcName", label: "ATC Name", width: 260 },
+  { key: "atcAmount", label: "ATC Amount", width: 130 },
+  { key: "paytermCode", label: "Payment Terms", width: 130 },
+  { key: "dueDate", label: "Due Date", width: 130 },
+
+  ...(showAppliedAdvancesColumns
+    ? [
+        {
+          key: "advpoNo",
+          label: "Applied Advances PO",
+          width: 150,
+        },
+        {
+          key: "advpoAmount",
+          label: "Applied Advances Amt",
+          width: 150,
+        },
+        {
+          key: "advpoVatAmount",
+          label: "Applied Advances VAT",
+          width: 150,
+        },
+      ]
+    : []),
+
+  ...(showAdvancesAccountColumn
+    ? [
+        {
+          key: "advAcct",
+          label: "Advances Account",
+          width: 150,
+        },
+      ]
+    : []),
+];
+
+const apvDetailColumnDefs = isReplenishmentAPType
+  ? replenishmentDetailColumnDefs
+  : regularApvDetailColumnDefs;
   const {
-    getColumnStyle: getApvDetailColumnStyle,
-    renderHeaderContextMenu: renderApvDetailHeaderContextMenu,
-    renderResizableHeader: renderApvDetailHeader,
-  } = useResizableTableColumns(apvDetailColumnDefs);
-  const getApvDetailCellStyle = (key, fallbackWidth) =>
-    getApvDetailColumnStyle(key, fallbackWidth);
+  getColumnStyle: getApvDetailColumnStyle,
+  getOrderedColumns: getOrderedApvDetailColumns,
+  renderHeaderContextMenu: renderApvDetailHeaderContextMenu,
+  renderResizableHeader: renderApvDetailHeader,
+} = useResizableTableColumns(apvDetailColumnDefs);
+
+const orderedApvDetailColumns =
+  getOrderedApvDetailColumns(apvDetailColumnDefs);
+
+const getApvDetailCellStyle = (key, fallbackWidth) =>
+  getApvDetailColumnStyle(key, fallbackWidth);
 
   const apvGlColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
@@ -4230,12 +5350,27 @@ const handleAtcNameDoubleClick = (index) => {
     { key: "remarks", label: "Remarks", width: 240 },
   ];
   const {
-    getColumnStyle: getApvGlColumnStyle,
-    renderHeaderContextMenu: renderApvGlHeaderContextMenu,
-    renderResizableHeader: renderApvGlHeader,
-  } = useResizableTableColumns(apvGlColumnDefs);
-  const getApvGlCellStyle = (key, fallbackWidth) =>
-    getApvGlColumnStyle(key, fallbackWidth);
+  getColumnStyle: getApvGlColumnStyle,
+  getOrderedColumns: getOrderedApvGlColumns,
+  renderHeaderContextMenu: renderApvGlHeaderContextMenu,
+  renderResizableHeader: renderApvGlHeader,
+} = useResizableTableColumns(apvGlColumnDefs);
+
+const orderedApvGlColumns =
+  getOrderedApvGlColumns(apvGlColumnDefs);
+
+const orderedApvDetailColumnKeys =
+  orderedApvDetailColumns
+    .map((column) => column.key)
+    .join("|");
+
+const orderedApvGlColumnKeys =
+  orderedApvGlColumns
+    .map((column) => column.key)
+    .join("|");
+
+const getApvGlCellStyle = (key, fallbackWidth) =>
+  getApvGlColumnStyle(key, fallbackWidth);
 
   const renderApvGlCell = (columnKey, row, index) => {
     const width = apvGlColumnDefs.find((column) => column.key === columnKey)?.width || 120;
@@ -4359,13 +5494,17 @@ const handleAtcNameDoubleClick = (index) => {
   );
 
   const openReferenceLabel = isImportationAPType
-    ? "Open Reference LC"
+  ? "Open Reference LC"
+  : isReplenishmentAPType
+    ? "Open Reference PCV"
     : isAdvancesAPType
       ? "Open Reference PO/JO"
       : "Open Reference RR/JO";
 
   const openReferenceDescription = isImportationAPType
-    ? "Pull LC Importation details"
+  ? "Pull LC Importation details"
+  : isReplenishmentAPType
+    ? "Pull PCV details"
     : isAdvancesAPType
       ? "Pull PO/JO advances"
       : "Pull RR/JO details";
@@ -4699,21 +5838,34 @@ const handleAtcNameDoubleClick = (index) => {
               {/* Invoice Details Button */}
               <div className="global-tran-table-main-div-ui">
                 <div className="global-tran-table-main-sub-div-ui">
-                  <table className="min-w-full table-fixed border-collapse [&_input]:w-full [&_select]:w-full">
+                  <table
+  data-apv-table-type="detail"
+  className="min-w-full table-fixed border-collapse [&_input]:w-full [&_select]:w-full"
+>
                     <colgroup>
-                      {apvDetailColumnDefs.map((column) => (
-                        <col
-                          key={column.key}
-                          style={getApvDetailCellStyle(column.key, column.width)}
-                        />
-                      ))}
-                      {!isFormDisabled && <col style={transactionActionsCellStyle} />}
-                    </colgroup>
+  {orderedApvDetailColumns.map((column) => (
+    <col
+      key={column.key}
+      style={getApvDetailCellStyle(column.key, column.width)}
+    />
+  ))}
+
+  {!isFormDisabled && (
+    <col style={transactionActionsCellStyle} />
+  )}
+</colgroup>
                     <thead className="global-tran-thead-div-ui">
                       <tr>
-                        {apvDetailColumnDefs.map((column) =>
-                          renderApvDetailHeader(column.label, column.key, column.width)
-                        )}
+                        {orderedApvDetailColumns.map((column) =>
+  renderApvDetailHeader(
+    column.label,
+    column.key,
+    column.width,
+    {
+      orderedColumns: orderedApvDetailColumns,
+    }
+  )
+)}
                         {!isFormDisabled && (
                           <th
                             className="global-tran-th-ui sticky right-0 bg-blue-300 dark:bg-blue-900 z-30"
@@ -4725,8 +5877,207 @@ const handleAtcNameDoubleClick = (index) => {
                       </tr>
                     </thead>
                     <tbody className="relative">
-                      {detailRows.map((row, index) => (
-                        <tr key={index} className="global-tran-tr-ui">
+                      {detailRows.map((row, index) =>
+  isReplenishmentAPType ? (
+    <tr key={index} className="global-tran-tr-ui">
+
+      {/* LN */}
+      <td
+        data-apv-column-key="ln"
+        className="global-tran-td-ui text-center"
+      >
+        {index + 1}
+      </td>
+
+      {/* Type */}
+      <td
+        data-apv-column-key="invType"
+        className="global-tran-td-ui"
+      >
+        <input
+          type="text"
+          className="w-full global-tran-td-inputclass-ui text-center"
+          value={row.invType || "PCV"}
+          readOnly
+          disabled={isFormDisabled}
+        />
+      </td>
+
+      {/* PCV No. */}
+      <td
+        data-apv-column-key="rrNo"
+        className="global-tran-td-ui"
+      >
+        <input
+          type="text"
+          className="w-full global-tran-td-inputclass-ui"
+          value={row.rrNo || ""}
+          readOnly
+          disabled={isFormDisabled}
+        />
+      </td>
+
+      {/* PCV Date */}
+      <td
+        data-apv-column-key="siDate"
+        className="global-tran-td-ui"
+      >
+        <div className="w-[110px]">
+          <DateFormatInput
+            id={`siDate_${index}`}
+            value={row.siDate || ""}
+            disabled={isFormDisabled}
+            className="w-[100px] global-tran-td-inputclass-ui text-center pr-7"
+            updateState={(updates) => {
+              if (updates[`siDate_${index}`] !== undefined) {
+                handleDetailChange(
+                  index,
+                  "siDate",
+                  updates[`siDate_${index}`],
+                  false,
+                );
+              }
+            }}
+          />
+        </div>
+      </td>
+
+      {/* PCV Amount */}
+      <td
+        data-apv-column-key="amount"
+        className="global-tran-td-ui"
+      >
+        <input
+          type="text"
+          className="w-full global-tran-td-inputclass-ui text-right"
+          value={row.amount || "0.00"}
+          readOnly
+          disabled={isFormDisabled}
+        />
+      </td>
+
+      {/* Currency */}
+      <td
+        data-apv-column-key="currCode"
+        className="global-tran-td-ui"
+      >
+        <input
+          type="text"
+          className="w-full global-tran-td-inputclass-ui text-center"
+          value={currencyCode || vendName?.currCode || "PHP"}
+          readOnly
+          disabled={isFormDisabled}
+        />
+      </td>
+
+      {/* Invoice Amount */}
+      <td
+        data-apv-column-key="siAmount"
+        className="global-tran-td-ui"
+      >
+        <input
+          type="text"
+          className="w-full global-tran-td-inputclass-ui text-right"
+          value={row.siAmount || row.amount || "0.00"}
+          readOnly
+          disabled={isFormDisabled}
+        />
+      </td>
+
+      {/* DR Account */}
+      <td
+        data-apv-column-key="debitAcct"
+        className="global-tran-td-ui relative"
+      >
+        <div className="flex items-center">
+          <input
+            type="text"
+            className="w-full global-tran-td-inputclass-ui text-center pr-6"
+            value={row.debitAcct || ""}
+            readOnly
+            disabled={isFormDisabled}
+          />
+
+          {!isFormDisabled && (
+            <FontAwesomeIcon
+              icon={faMagnifyingGlass}
+              className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+              onClick={() => {
+                updateState({
+                  selectedRowIndex: index,
+                  showAccountModal: true,
+                  accountModalSource: "debitAcct",
+                });
+              }}
+            />
+          )}
+        </div>
+      </td>
+
+      {/* RC Code */}
+      <td
+        data-apv-column-key="rcCode"
+        className="global-tran-td-ui relative"
+      >
+        <div className="flex items-center">
+          <input
+            type="text"
+            className="w-full global-tran-td-inputclass-ui text-center pr-6"
+            value={row.rcCode || ""}
+            readOnly
+            disabled={isFormDisabled}
+          />
+
+          {!isFormDisabled &&
+            (row.REC_RC === "Y" || row.rcCode === "REQ RC") && (
+              <FontAwesomeIcon
+                icon={faMagnifyingGlass}
+                className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                onClick={() => {
+                  updateState({
+                    selectedRowIndex: index,
+                    showRcModal: true,
+                    accountModalSource: "rcCode",
+                  });
+                }}
+              />
+            )}
+        </div>
+      </td>
+
+      {/* RC Name */}
+      <td
+        data-apv-column-key="rcName"
+        className="global-tran-td-ui"
+      >
+        <input
+          type="text"
+          className="w-full global-tran-td-inputclass-ui"
+          value={row.rcName || ""}
+          readOnly
+          disabled={isFormDisabled}
+        />
+      </td>
+
+      {!isFormDisabled && (
+        <td
+          className="global-tran-td-ui text-center sticky right-0"
+          style={transactionActionsCellStyle}
+        >
+          <div className="flex items-center justify-center gap-1">
+            <button
+              type="button"
+              className="global-tran-td-button-delete-ui"
+              onClick={() => handleDeleteRow(index)}
+            >
+              <FontAwesomeIcon icon={faTrashAlt} />
+            </button>
+          </div>
+        </td>
+      )}
+    </tr>
+  ) : (
+    <tr key={index} className="global-tran-tr-ui">
                           <td className="global-tran-td-ui text-center">
                             {index + 1}
                           </td>
@@ -5401,13 +6752,14 @@ const handleAtcNameDoubleClick = (index) => {
                             onClick={() => {
   setShowInvoiceAddDropdown(false);
   if (isImportationAPType) {
-    handleOpenReferenceLCImportation();
-  } else if (isAdvancesAPType) {
-    handleOpenReferencePOAdvance();
-  } else {
-    handleOpenReferenceRR();
-  }
-}}
+  handleOpenReferenceLCImportation();
+} else if (isReplenishmentAPType) {
+  handleOpenReferencePCV();
+} else if (isAdvancesAPType) {
+  handleOpenReferencePOAdvance();
+} else {
+  handleOpenReferenceRR();
+}}}
                           >
                             <div className="flex items-center gap-2">
                               <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-slate-700 dark:text-blue-300">
@@ -6324,23 +7676,27 @@ const handleAtcNameDoubleClick = (index) => {
   <GlobalLookupModalv1
     isOpen={state.showRRRefModal}
     title={
-      state.globalLookupTitle ||
-      (modalContext === "openLCImportation"
-        ? "Open LC Importation References"
-        : modalContext === "openPOAdvance"
-          ? "Open PO / JO References"
-          : "Open RR / JO References")
-    }
+  state.globalLookupTitle ||
+  (modalContext === "openLCImportation"
+    ? "Open LC Importation References"
+    : modalContext === "openPCV"
+      ? "Open PCV References"
+      : modalContext === "openPOAdvance"
+        ? "Open PO / JO References"
+        : "Open RR / JO References")
+}
     data={state.globalLookupRow}
     endpoint={Array.isArray(state.globalLookupHeader) ? state.globalLookupHeader : openRRLookupColumns}
     btnCaption={
-      state.globalLookupBtnCaption ||
-      (modalContext === "openLCImportation"
-        ? "Get Selected LC"
-        : modalContext === "openPOAdvance"
-          ? "Get Selected PO/JO"
-          : "Get Selected RR/JO")
-    }
+  state.globalLookupBtnCaption ||
+  (modalContext === "openLCImportation"
+    ? "Get Selected LC"
+    : modalContext === "openPCV"
+      ? "Get Selected PCV"
+      : modalContext === "openPOAdvance"
+        ? "Get Selected PO/JO"
+        : "Get Selected RR/JO")
+}
     idKey="groupId"
     onClose={handleCloseRRRefModal}
     onCancel={() =>

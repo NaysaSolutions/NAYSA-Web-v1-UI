@@ -1486,7 +1486,7 @@ const BankReconProcessing1 = () => {
     const config = documentViewConfig[docCode];
 
     if (!config || (allowedDocCodes.length > 0 && !allowedDocCodes.includes(docCode))) {
-      useSwalInfoAlert("View Document", `No view action is configured for ${docCode || "this document type"}.`);
+      useSwalInfoAlert("View Document", `No view action is configured for ${docCode || "this document code"}.`);
       return;
     }
 

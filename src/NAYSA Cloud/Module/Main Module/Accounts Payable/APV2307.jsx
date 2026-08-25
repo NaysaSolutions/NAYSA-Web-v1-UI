@@ -1259,7 +1259,7 @@ export default function APV2307({
       if (!requestParams.branchCode || !requestParams.docCode || !requestParams.tranId) {
         setApiForms([]);
         setErrorMessage(
-          "Missing BIR 2307 request information. Branch, document type, and transaction ID are required.",
+          "Missing BIR 2307 request information. Branch, document code, and transaction ID are required.",
         );
         setIsLoading(false);
         return;

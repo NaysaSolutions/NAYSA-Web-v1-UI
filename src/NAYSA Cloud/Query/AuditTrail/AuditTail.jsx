@@ -184,11 +184,79 @@ const getInitialDate = (offsetMonth = 0) => {
 const TODAY = getInitialDate(0);
 const ONE_MONTH_AGO = getInitialDate(1);
 
+const normalizeCode = (value) => String(value || "").trim().toUpperCase();
+
+const readSessionArray = (key) => {
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(key) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const getNodeChildren = (node) => [
+  ...(Array.isArray(node?.subMenu) ? node.subMenu : []),
+  ...(Array.isArray(node?.submenu) ? node.submenu : []),
+  ...(Array.isArray(node?.children) ? node.children : []),
+  ...(Array.isArray(node?.items) ? node.items : []),
+];
+
+const collectAllowedMenuCodes = (nodes = []) => {
+  const codes = new Set();
+
+  const visit = (node) => {
+    if (!node || typeof node !== "object") return;
+
+    [
+      node.componentKey,
+      node.component_key,
+      node.COMPONENT_KEY,
+      node.docCode,
+      node.doc_code,
+      node.DOC_CODE,
+      node.menuCode,
+      node.menu_code,
+      node.MENU_CODE,
+      node.code,
+      node.key,
+    ].forEach((value) => {
+      const code = normalizeCode(value);
+      if (code) codes.add(code);
+      if (code.startsWith("POST") && code.length > 4) codes.add(code.slice(4));
+    });
+
+    [node.path, node.pathUrl, node.route, node.url].forEach((value) => {
+      const match = String(value || "").match(/\/page\/([^/?#]+)/i);
+      if (!match) return;
+
+      const code = normalizeCode(match[1]);
+      if (code) codes.add(code);
+      if (code.startsWith("POST") && code.length > 4) codes.add(code.slice(4));
+    });
+
+    getNodeChildren(node).forEach(visit);
+  };
+
+  nodes.forEach(visit);
+
+  return codes;
+};
+
+const getUserType = (user) =>
+  normalizeCode(
+    user?.USER_TYPE ||
+      user?.userType ||
+      user?.user_type ||
+      user?.type ||
+      ""
+  );
+
 /* =========================================================
    MAIN PAGE COMPONENT
 ========================================================= */
 const AuditTrail = () => {
-  const { currentUserRow } = useAuth();
+  const { currentUserRow, user } = useAuth();
   const queryClient = useQueryClient();
 
   const tableRefTrans = useRef(null);
@@ -249,6 +317,21 @@ const AuditTrail = () => {
   const [hasSearchedRef, setHasSearchedRef] = useState(false);
 
   const [isManualSearch, setIsManualSearch] = useState(false);
+
+  const allowedAuditDocCodes = useMemo(() => {
+    const userType = getUserType(user);
+
+    if (userType === "S" || userType === "X") {
+      return null;
+    }
+
+    const allowedCodes = collectAllowedMenuCodes([
+      ...readSessionArray("routeRows"),
+      ...readSessionArray("menuItems"),
+    ]);
+
+    return Array.from(allowedCodes);
+  }, [user]);
 
   useEffect(() => {
     if (currentUserRow) {
@@ -501,6 +584,7 @@ const AuditTrail = () => {
 
       <HSDocLookupModal
         isOpen={modals.docCode}
+        allowedDocCodes={allowedAuditDocCodes}
         onClose={(v) => {
           setModals((prev) => ({ ...prev, docCode: false }));
           if (v) {
@@ -616,7 +700,7 @@ const AuditTrail = () => {
 
             <div className="relative">
               <FieldRenderer
-                label="Document Type"
+                label="Document Code"
                 type="lookup"
                 value={filterTrans.docName}
                 onLookup={() => setModals((prev) => ({ ...prev, docCode: true }))}
