@@ -12,7 +12,7 @@ const PostTranModal = ({ isOpen, onClose }) => {
     }
 
     setError("");
-    onClose(confirmation);
+    onClose({ ...confirmation, password });
     setReason("");
     setPassword("");
   };

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import GlobalLookupModalv1 from "@/NAYSA Cloud/Lookup/SearchGlobalLookupv1.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -26,6 +26,7 @@ const GlobalCombinedLookup = ({
   const [detailKey, setDetailKey] = useState(0);
   const [loadedFingerprint, setLoadedFingerprint] = useState("");
   const [selectedSummaryIds, setSelectedSummaryIds] = useState([]);
+  const autoAdvanceTimerRef = useRef(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -35,6 +36,13 @@ const GlobalCombinedLookup = ({
       setSelectedSummaryIds([]);
       setActiveTab("Summary");
     }
+
+    return () => {
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current);
+        autoAdvanceTimerRef.current = null;
+      }
+    };
   }, [isOpen, initialSummaryData]);
 
   const handleTabDetailClick = () => {
@@ -55,6 +63,11 @@ const GlobalCombinedLookup = ({
   };
 
   const handleSummaryAction = async (payload) => {
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
+
     const selectedIds = payload.data || [];
     if (selectedIds.length === 0) return;
 
@@ -85,12 +98,33 @@ const GlobalCombinedLookup = ({
     }
   };
 
+  useEffect(() => {
+    if (!isOpen || activeTab !== "Summary" || summaryData.length !== 1) return;
+
+    const onlyRecord = summaryData[0];
+    const onlyRecordId = onlyRecord?.groupId;
+    if (onlyRecordId === undefined || onlyRecordId === null || onlyRecordId === "") return;
+
+    setSelectedSummaryIds([onlyRecordId]);
+    autoAdvanceTimerRef.current = setTimeout(() => {
+      autoAdvanceTimerRef.current = null;
+      handleSummaryAction({ data: [onlyRecordId], records: [onlyRecord] });
+    }, 2000);
+
+    return () => {
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current);
+        autoAdvanceTimerRef.current = null;
+      }
+    };
+  }, [isOpen, activeTab, summaryData]);
+
   if (!isOpen) return null;
 
   const isDetailEnabled = detailData.length > 0;
 
   const tabBaseClass =
-    "flex h-8 w-40 items-center justify-center gap-2 rounded-md px-3 text-[11px] font-semibold transition-all";
+    "flex h-8 min-w-40 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md px-4 text-[11px] font-semibold transition-all";
 
   const TabHeader = (
     <div className="flex w-full flex-wrap items-center justify-between gap-3">
@@ -101,7 +135,7 @@ const GlobalCombinedLookup = ({
         </div>
       </div>
 
-      <div className="flex items-center rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+      <div className="flex max-w-full items-center overflow-x-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); setActiveTab("Summary"); }}
@@ -167,6 +201,7 @@ const GlobalCombinedLookup = ({
           data={summaryData}
           btnCaption={detailData.length > 0 ? `Update/View ${tabTitles[1]} ->` : `Load ${tabTitles[1]} ->`}
           singleSelect={summarySelectionMode === "single"}
+          autoSelectAll={summaryData.length === 1}
           onSelectionReset={resetLoadedDetails}
           onClose={handleSummaryAction}
           onCancel={onCancel}

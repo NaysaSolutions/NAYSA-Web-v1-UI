@@ -927,17 +927,6 @@ const GlobalApprovalModal = forwardRef(
             }`}
             onMouseDown={(event) => event.stopPropagation()}
           >
-          {isProcessing && (
-            <div className="absolute inset-0 z-[120] flex flex-col items-center justify-center bg-white/45 backdrop-blur-[1px]">
-              <div className="rounded-xl border border-slate-200 bg-white/95 px-5 py-4 text-center shadow-xl">
-                <LoadingSpinner />
-                <div className="mt-2 text-[12px] font-semibold text-slate-700">
-                  Processing approval...
-                </div>
-              </div>
-            </div>
-          )}
-
           <div className="flex items-center justify-between border-b border-slate-200 bg-slate-100 py-0.5 md:py-1">
             <div className="flex min-w-0 items-center gap-2 pl-2 sm:pl-3">
               <div className="min-w-0">

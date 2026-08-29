@@ -34,6 +34,7 @@ import ItemMastLookupModal from "../../../Lookup/SearchItemMast.jsx";
 import PayeeMastLookupModal from "../../../Lookup/SearchVendMast";
 import PaytermLookupModal from "../../../Lookup/SearchPayTermRef.jsx";
 import GlobalCombinedLookup from "../../../Lookup/SearchGlobalCombinedLookup.jsx";
+import RequiredUomLookupModal from "../../../Lookup/SearchRequiredUOM.jsx";
 import VATLookupModal from "../../../Lookup/SearchVATRef.jsx";
 import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
@@ -41,7 +42,7 @@ import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import GlobalApprovalStatus from "@/NAYSA Cloud/Approval/GlobalApprovalStatus.jsx";
 
 // Configuration
-import { postRequest, fetchDataJson } from "../../../Configuration/BaseURL.jsx";
+import { apiClient, postRequest, fetchDataJson } from "../../../Configuration/BaseURL.jsx";
 import { useReset } from "../../../Components/ResetContext";
 import {
   useGetCurrentDayV2,
@@ -130,6 +131,7 @@ const PO = () => {
   const loadedFromUrlRef = useRef(false);
   const detailRowsRef = useRef([]);
   const deliveryDateRef = useRef("");
+  const quantityEditStartRef = useRef({});
   const suppressDeliveryDatePromptRef = useRef(true);
   const addTypeDropdownRef = useRef(null);
   const navigate = useNavigate();
@@ -139,6 +141,7 @@ const PO = () => {
   const [isViewDocument, setIsViewDocument] = useState(false);
   const decQty = companyInfo?.itemDecqtyPur ?? 2;
   const decUPrice = companyInfo?.pur_decuprice ?? 2;
+  const isInventoryConversionEnabled = companyInfo?.allInvConversion === "E";
   const docType = docTypes?.PO || "PO";
   const hsDoc = getAllTopHSDocRow(docType) || {};
 
@@ -152,6 +155,13 @@ const PO = () => {
   const isViewDocumentUrl = isViewDocument;
 
   const [topTab, setTopTab] = useState("details"); // "details" | "history"
+  const [requiredUomLookup, setRequiredUomLookup] = useState({
+    isOpen: false,
+    rowIndex: null,
+    context: "detail",
+    summaryKey: "",
+    data: [],
+  });
 
   const [state, setState] = useState({
     // HS Option / Currency
@@ -414,6 +424,7 @@ const PO = () => {
   });
 
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+  const isDirectPo = selectedPoType === "PO12";
 
   useEffect(() => {
     if (!showTypeDropdown) return;
@@ -476,8 +487,14 @@ const PO = () => {
     { key: "itemCode", label: "Item Code", width: 130 },
     { key: "itemName", label: "Item Name", width: 300 },
     { key: "itemSpecs", label: "Specification", width: 300 },
-    { key: "uomCode", label: "UOM", width: 90 },
-    { key: "poQty", label: "PO Quantity", width: 130 },
+    ...(isInventoryConversionEnabled
+      ? [
+        { key: "requiredUomCode", label: "Required UOM", width: 120 },
+        { key: "requiredQty", label: "Required Quantity", width: 145 },
+      ]
+      : []),
+    { key: "uomCode", label: "UOM", width: 100 },
+    { key: "poQty", label: "PO Quantity", width: 145 },
     { key: "unitPrice", label: "Unit Price", width: 130 },
     { key: "grossAmt", label: "Gross Amount", width: 140 },
     { key: "discRate", label: "Discount Rate", width: 130 },
@@ -552,6 +569,9 @@ const PO = () => {
     [
       String(row.itemCode || "").trim().toUpperCase(),
       String(row.invType || "").trim().toUpperCase(),
+      isInventoryConversionEnabled
+        ? String(row.requiredUomCode || row.uomCode || "").trim().toUpperCase()
+        : "",
       String(row.itemSpecs || "").trim().toUpperCase(),
     ].join("||");
 
@@ -568,6 +588,15 @@ const PO = () => {
     return Array.from(groupCount.values()).some((count) => count > 1);
   }, [detailRows]);
 
+  const isPoSummaryApplicable = hasDuplicatePoSummaryKey && !isDirectPo;
+
+  const visiblePoDetailColumns = (isPoSummaryApplicable
+    ? orderedPoDetailColumns.filter(
+      (column) => !["requiredUomCode", "requiredQty"].includes(column.key)
+    )
+    : orderedPoDetailColumns
+  ).filter((column) => !isDirectPo || !["prNo", "prBalance"].includes(column.key));
+
   const poSummaryRows = useMemo(() => {
     const summaryMap = new Map();
 
@@ -578,6 +607,7 @@ const PO = () => {
       const existing = summaryMap.get(key);
 
       const poQty = parseFormattedNumber(row.poQty || 0) || 0;
+      const requiredQty = parseFormattedNumber(row.requiredQty ?? row.poQty ?? 0) || 0;
       const grossAmt = parseFormattedNumber(row.grossAmt || 0) || 0;
       const discAmt = parseFormattedNumber(row.discAmt || 0) || 0;
       const totalAmt = parseFormattedNumber(row.totalAmt || 0) || 0;
@@ -595,6 +625,9 @@ const PO = () => {
             row.itemSpecs ??
             "",
           uomCode: row.uomCode || "",
+          requiredUomCode: row.requiredUomCode || row.uomCode || "",
+          requiredQty,
+          conversionFactor: parseFormattedNumber(row.conversionFactor) || 1,
           poQty,
           unitPrice: parseFormattedNumber(row.unitPrice || 0) || 0,
           grossAmt,
@@ -610,6 +643,7 @@ const PO = () => {
       }
 
       existing.poQty += poQty;
+      existing.requiredQty += requiredQty;
       existing.grossAmt += grossAmt;
       existing.discAmt += discAmt;
       existing.totalAmt += totalAmt;
@@ -621,11 +655,13 @@ const PO = () => {
     });
 
     return Array.from(summaryMap.values()).map((row) => {
-      const computedUnitPrice = row.poQty ? row.grossAmt / row.poQty : row.unitPrice;
+      const summaryQty = isInventoryConversionEnabled ? row.requiredQty : row.poQty;
+      const computedUnitPrice = summaryQty ? row.grossAmt / summaryQty : row.unitPrice;
       const computedDiscRate = row.grossAmt ? (row.discAmt / row.grossAmt) * 100 : row.discRate;
 
       return {
         ...row,
+        requiredQty: formatNumber(row.requiredQty || 0, decQty),
         poQty: formatNumber(row.poQty || 0, decQty),
         unitPrice: formatNumber(computedUnitPrice || 0, decUPrice),
         grossAmt: formatNumber(row.grossAmt || 0, DEC_AMT),
@@ -662,7 +698,7 @@ const PO = () => {
     (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? ""
   );
 
-  const poDetailEnterNextRowZeroClearFields = ["poQty", "unitPrice", "discRate", "discAmt"];
+  const poDetailEnterNextRowZeroClearFields = ["requiredQty", "poQty", "unitPrice", "discRate", "discAmt"];
 
   const pdfLink = docTypePDFGuide[docType];
   const videoLink = docTypeVideoGuide[docType];
@@ -788,7 +824,11 @@ const PO = () => {
 
 
   const recalcDetailRow = (row, changedField = "") => {
-    const qty = parseFormattedNumber(row.poQty || row.prBalance || 0);
+    const qty = parseFormattedNumber(
+      isInventoryConversionEnabled
+        ? row.requiredQty ?? row.poQty ?? row.prBalance ?? 0
+        : row.poQty ?? row.prBalance ?? 0
+    );
     const unitPrice = parseFormattedNumber(row.unitPrice || 0);
 
 
@@ -812,6 +852,12 @@ const PO = () => {
     row.qtyOnHand = formatNumber(parseFormattedNumber(row.qtyOnHand) || 0, decQty);
     row.prBalance = formatNumber(parseFormattedNumber(row.prBalance) || 0, decQty);
     row.poQty = formatNumber(parseFormattedNumber(row.poQty) || 0, decQty);
+    row.requiredUomCode = row.requiredUomCode || row.uomCode || "";
+    row.requiredQty = formatNumber(
+      parseFormattedNumber(row.requiredQty ?? row.poQty) || 0,
+      decQty
+    );
+    row.conversionFactor = parseFormattedNumber(row.conversionFactor) || 1;
     row.unitPrice = formatNumber(parseFormattedNumber(row.unitPrice) || 0, decUPrice);
 
     row.grossAmt = formatNumber(gross || 0, DEC_AMT);
@@ -862,6 +908,9 @@ const PO = () => {
       itemCode: "",
       itemName: "",
       uomCode: "",
+      requiredUomCode: "",
+      requiredQty: formatNumber(0, decQty),
+      conversionFactor: 1,
       qtyOnHand: formatNumber(0, decQty),
       qtyAlloc: formatNumber(0, decQty),
       prBalance: formatNumber(0, decQty),
@@ -1038,13 +1087,13 @@ const PO = () => {
   }, [poDate]);
 
   useEffect(() => {
-    if (hasDuplicatePoSummaryKey) {
+    if (isPoSummaryApplicable) {
       setPoDetailActiveTab("summary");
       return;
     }
 
     setPoDetailActiveTab("detailed");
-  }, [hasDuplicatePoSummaryKey]);
+  }, [isPoSummaryApplicable]);
 
 
   const handleReset = () => {
@@ -1286,6 +1335,9 @@ const PO = () => {
         itemName: item.itemName || "",
         itemSpecs: item.itemSpecs || "",
         uomCode: item.uomCode || "",
+        requiredUomCode: item.requiredUomCode || item.uomCode || "",
+        requiredQty: formatNumber(item.requiredQty ?? item.poQty ?? item.poQuantity ?? 0, decQty),
+        conversionFactor: parseFormattedNumber(item.conversionFactor) || 1,
         poQty: formatNumber(item.poQty ?? item.poQuantity ?? 0, decQty),
         unitPrice: formatNumber(item.unitCost ?? item.unitPrice ?? 0, decUPrice),
         grossAmt: formatNumber(item.grossAmount ?? item.grossAmt ?? 0, DEC_AMT),
@@ -1321,6 +1373,9 @@ const PO = () => {
           itemCode: item.itemCode || "",
           itemName: item.itemName || "",
           uomCode: item.uomCode || "",
+          requiredUomCode: item.requiredUomCode || item.uomCode || "",
+          requiredQty: formatNumber(item.requiredQty ?? poQty, decQty),
+          conversionFactor: parseFormattedNumber(item.conversionFactor) || 1,
           qtyOnHand: formatNumber(item.qtyOnHand ?? 0, decQty),
           qtyAlloc: formatNumber(item.qtyAlloc ?? 0, decQty),
           prBalance: formatNumber(item.prBalance ?? 0, decQty),
@@ -1521,7 +1576,12 @@ const PO = () => {
   };
 
 
-  const handlePrTypeChange = (e) => updateState({ selectedPoType: e.target.value });
+  const handlePrTypeChange = (e) => {
+    if ((detailRows?.length || 0) > 0) return;
+
+    updateState({ selectedPoType: e.target.value });
+    setPoDetailActiveTab("detailed");
+  };
 
   const formatFetchedHeaderDate = (value) => {
     const raw = String(value || "").trim();
@@ -2520,7 +2580,7 @@ const PO = () => {
   const formatByField = (field, num) => {
     if (!Number.isFinite(num)) return "";
     if (["unitPrice"].includes(field)) return formatNumber(num, DEC_PRICE);
-    if (["qtyOnHand", "prBalance", "poQty"].includes(field)) return formatNumber(num, DEC_QTY);
+    if (["qtyOnHand", "prBalance", "poQty", "requiredQty"].includes(field)) return formatNumber(num, DEC_QTY);
     if (["grossAmt", "discRate", "discAmt", "totalAmt", "vatAmt", "netAmt"].includes(field)) return formatNumber(num, DEC_AMT);
     return formatNumber(num);
   };
@@ -2531,7 +2591,7 @@ const PO = () => {
   const handleDetailChange = (index, field, value, commit = false) => {
     const updatedRows = [...(detailRowsRef.current || detailRows || [])];
     const row = { ...(updatedRows[index] || {}) };
-    const editableFields = ["unitPrice", "poQty", "discRate", "discAmt"];
+    const editableFields = ["unitPrice", "poQty", "requiredQty", "discRate", "discAmt"];
 
     const nonNumericFields = ["invType", "prStatus", "poStatus", "itemName", "uomCode", "vatCode", "dateNeeded", "itemSpecs", "serviceCode", "serviceName"];
 
@@ -2584,6 +2644,9 @@ const PO = () => {
       row["itemCode"] = value.itemCode || "";
       row["itemName"] = value.itemName || "";
       row["uomCode"] = value.uomCode || value.uom || "";
+      row["requiredUomCode"] = row.uomCode;
+      row["requiredQty"] = formatNumber(parseFormattedNumber(row.poQty) || 0, decQty);
+      row["conversionFactor"] = 1;
       row["qtyOnHand"] = formatNumber(value.qtyHand ?? 0, decQty);
       row["unitPrice"] = formatNumber(value.unitCost ?? 0, DEC_PRICE);
     } else if (nonNumericFields.includes(field)) {
@@ -2628,6 +2691,24 @@ const PO = () => {
       } else {
         row[field] = sanitized;
       }
+
+      if (field === "requiredQty") {
+        const requiredQty = parseFormattedNumber(row.requiredQty) || 0;
+        const conversionFactor = parseFormattedNumber(row.conversionFactor) || 1;
+        row.poQty = formatNumber(requiredQty * conversionFactor, decQty);
+      }
+
+      if (field === "poQty") {
+        const poQty = parseFormattedNumber(row.poQty) || 0;
+        if (isInventoryConversionEnabled) {
+          const conversionFactor = parseFormattedNumber(row.conversionFactor) || 1;
+          row.requiredQty = formatNumber(poQty / conversionFactor, decQty);
+        } else {
+          row.requiredUomCode = row.uomCode || "";
+          row.requiredQty = formatNumber(poQty, decQty);
+          row.conversionFactor = 1;
+        }
+      }
     }
 
     const activeInputValue = row[field];
@@ -2639,6 +2720,172 @@ const PO = () => {
     detailRowsRef.current = updatedRows;
     updateState({ detailRows: updatedRows });
     updateTotalsDisplay(updatedRows);
+  };
+
+  const parseItemConversionRows = (response) => {
+    const result = response?.data?.data?.[0]?.result;
+    if (typeof result === "string") {
+      try {
+        return JSON.parse(result);
+      } catch {
+        return [];
+      }
+    }
+
+    return Array.isArray(response?.data?.data) ? response.data.data : [];
+  };
+
+  const convertItemQuantity = async (row, fromUomCode, toUomCode, quantity) => {
+    const response = await postRequest("convertItemUom", {
+      json_data: {
+        invType: row.invType,
+        itemCode: row.itemCode,
+        fromUomCode,
+        toUomCode,
+        quantity,
+      },
+    });
+    const result = response?.data?.[0] || response?.data?.data?.[0] || {};
+
+    if (Number(result.errorcount || 0) > 0) {
+      throw new Error(result.errormsg || "Unable to convert the item quantity.");
+    }
+
+    return result;
+  };
+
+  const isSameUom = (leftUomCode, rightUomCode) =>
+    String(leftUomCode || "").trim().toUpperCase() ===
+    String(rightUomCode || "").trim().toUpperCase();
+
+  const openRequiredUomLookup = async (index, context = "detail", summaryKey = "") => {
+    const row = detailRowsRef.current?.[index];
+    if (!row?.itemCode || !row?.invType) {
+      useSwalInfoAlert("Required UOM", "Select an item first.");
+      return;
+    }
+
+    try {
+      updateState({ showSpinner: true });
+      const response = await apiClient.get("/itemConversion", {
+        params: {
+          invType: row.invType,
+          itemCode: row.itemCode,
+        },
+      });
+      const data = parseItemConversionRows(response)
+        .map((item) => ({
+          ...item,
+          groupId: item.itemUomConvId || item.uomCode,
+        }));
+
+      const hasAlternateUom = data.some(
+        (item) => !isSameUom(item.uomCode, row.uomCode)
+      );
+
+      if (!hasAlternateUom) {
+        setRequiredUomLookup({ isOpen: false, rowIndex: null, context: "detail", summaryKey: "", data: [] });
+        useSwalInfoAlert("Required UOM", "No other UOM is defined.");
+        return;
+      }
+
+      setRequiredUomLookup({ isOpen: true, rowIndex: index, context, summaryKey, data });
+    } catch (error) {
+      useSwalErrorAlert(
+        "Required UOM",
+        error?.response?.data?.message || error.message || "Unable to load item conversions."
+      );
+    } finally {
+      updateState({ showSpinner: false });
+    }
+  };
+
+  const handleRequiredUomSelect = async (selection) => {
+    const selected = selection;
+    const index = requiredUomLookup.rowIndex;
+    const lookupContext = requiredUomLookup.context;
+    const lookupSummaryKey = requiredUomLookup.summaryKey;
+    setRequiredUomLookup({ isOpen: false, rowIndex: null, context: "detail", summaryKey: "", data: [] });
+    if (!selected || index === null) return;
+
+    const rows = [...detailRowsRef.current];
+    const row = { ...rows[index] };
+    const targetIndexes = lookupContext === "summary"
+      ? rows.reduce((indexes, detailRow, detailIndex) => {
+        if (getPoSummaryGroupKey(detailRow) === lookupSummaryKey) indexes.push(detailIndex);
+        return indexes;
+      }, [])
+      : [index];
+
+    try {
+      updateState({ showSpinner: true });
+      let conversionFactor = 1;
+
+      if (isSameUom(selected.uomCode, row.uomCode)) {
+        conversionFactor = 1;
+      } else {
+        const result = await convertItemQuantity(
+          row,
+          row.uomCode,
+          selected.uomCode,
+          parseFormattedNumber(row.poQty) || 0
+        );
+        conversionFactor = parseFormattedNumber(result.toConvQty) || 1;
+      }
+
+      targetIndexes.forEach((targetIndex) => {
+        const targetRow = { ...rows[targetIndex] };
+        targetRow.requiredUomCode = selected.uomCode;
+        targetRow.conversionFactor = conversionFactor;
+        targetRow.requiredQty = formatNumber(
+          (parseFormattedNumber(targetRow.poQty) || 0) / conversionFactor,
+          decQty
+        );
+        rows[targetIndex] = recalcDetailRow(targetRow);
+      });
+
+      detailRowsRef.current = rows;
+      updateState({ detailRows: rows });
+      updateTotalsDisplay(rows);
+    } catch (error) {
+      useSwalErrorAlert("Conversion Failed", error.message || "Unable to convert the item quantity.");
+    } finally {
+      updateState({ showSpinner: false });
+    }
+  };
+
+  const commitRequiredQuantity = (index, value) => {
+    const row = detailRowsRef.current?.[index] || {};
+    const requiredQty = Math.max(parseFormattedNumber(value) || 0, 0);
+    const conversionFactor = parseFormattedNumber(row.conversionFactor) || 1;
+    const convertedQty = requiredQty * conversionFactor;
+    const prBalance = parseFormattedNumber(row.prBalance) || 0;
+
+    if (row.prNo && convertedQty > prBalance) {
+      const previous = quantityEditStartRef.current[index] || {};
+      const rows = [...detailRowsRef.current];
+      rows[index] = recalcDetailRow({
+        ...row,
+        requiredQty: previous.requiredQty ?? row.requiredQty,
+        poQty: previous.poQty ?? row.poQty,
+      });
+      detailRowsRef.current = rows;
+      updateState({ detailRows: rows });
+      updateTotalsDisplay(rows);
+      delete quantityEditStartRef.current[index];
+      useSwalErrorAlert(
+        "Invalid Quantity",
+        "Converted Quantity exceeded the PR Balance. The previous quantities were restored."
+      );
+      return;
+    }
+
+    handleDetailChange(index, "requiredQty", value, true);
+    delete quantityEditStartRef.current[index];
+  };
+
+  const commitConvertedQuantity = (index, value) => {
+    handleDetailChange(index, "poQty", value, true);
   };
 
 
@@ -2787,6 +3034,9 @@ const PO = () => {
           itemCode: row.itemCode || "",
           itemName: row.itemName || "",
           uomCode: row.uomCode || "",
+          requiredUomCode: row.requiredUomCode || row.uomCode || "",
+          requiredQty: parseFormattedNumber(row.requiredQty ?? row.poQty ?? 0),
+          conversionFactor: parseFormattedNumber(row.conversionFactor) || 1,
           qtyOnHand: parseFormattedNumber(row.qtyOnHand || 0),
           prBalance: parseFormattedNumber(row.prBalance || 0),
           poQty: parseFormattedNumber(row.poQty || 0),
@@ -2815,6 +3065,9 @@ const PO = () => {
           itemName: row.itemName || "",
           itemSpecs: row.itemSpecs || "",
           uomCode: row.uomCode || "",
+          requiredUomCode: row.requiredUomCode || row.uomCode || "",
+          requiredQty: parseFormattedNumber(row.requiredQty ?? row.poQty ?? 0),
+          conversionFactor: parseFormattedNumber(row.conversionFactor) || 1,
           poQty: parseFormattedNumber(row.poQty || 0),
           unitCost: parseFormattedNumber(row.unitPrice || 0),
           grossAmount: parseFormattedNumber(row.grossAmt || 0),
@@ -3420,11 +3673,22 @@ const PO = () => {
     });
   };
 
+  const handleOpenSummaryRequiredUomLookup = (summaryRow) => {
+    const detailIndex = (detailRowsRef.current || detailRows || []).findIndex(
+      (detailRow) => getPoSummaryGroupKey(detailRow) === summaryRow._summaryKey
+    );
+
+    if (detailIndex >= 0) {
+      openRequiredUomLookup(detailIndex, "summary", summaryRow._summaryKey);
+    }
+  };
+
   const renderPOSummaryCell = (columnKey, row, index) => {
     const columnWidth = getPoSummaryFallbackWidth(columnKey);
     const style = getPoSummaryCellStyle(columnKey, columnWidth);
     const displayInvType = String(row?.invType || "").trim().toUpperCase() || "Select";
     const numericColumns = [
+      "requiredQty",
       "poQty",
       "unitPrice",
       "grossAmt",
@@ -3440,6 +3704,29 @@ const PO = () => {
         <td key={columnKey} className="global-tran-td-ui text-center" style={style}>
           <div className="h-7 min-h-7 flex items-center justify-center text-xs">
             {index + 1}
+          </div>
+        </td>
+      );
+    }
+
+    if (columnKey === "requiredUomCode") {
+      return (
+        <td key={columnKey} className="global-tran-td-ui relative" style={style}>
+          <div className="flex items-center">
+            <input
+              type="text"
+              className="w-full global-tran-td-inputclass-ui pr-6"
+              value={row.requiredUomCode || row.uomCode || ""}
+              readOnly
+              disabled={isFormDisabled}
+            />
+            {!isFormDisabled && row.itemCode && (
+              <FontAwesomeIcon
+                icon={faMagnifyingGlass}
+                className="absolute right-2 cursor-pointer text-blue-600 hover:text-blue-900"
+                onClick={() => handleOpenSummaryRequiredUomLookup(row)}
+              />
+            )}
           </div>
         </td>
       );
@@ -3639,9 +3926,21 @@ const PO = () => {
         }
         onBlur={(e) => {
           if (isFormDisabled || options.readOnly || options.disabled) return;
-          handleDetailChange(index, field, e.target.value, true);
+          if (options.onCommit) {
+            options.onCommit(index, e.target.value);
+          } else {
+            handleDetailChange(index, field, e.target.value, true);
+          }
         }}
-        onKeyDown={(e) => handleGridKeyDown(e, field, { ...options, commitOnEnter: true })}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && options.onCommit && !options.readOnly && !options.disabled) {
+            e.preventDefault();
+            e.currentTarget.blur();
+            window.setTimeout(() => focusNextDetailCell(field), 0);
+            return;
+          }
+          handleGridKeyDown(e, field, { ...options, commitOnEnter: true });
+        }}
       />
     );
 
@@ -3708,14 +4007,70 @@ const PO = () => {
           </td>
         );
       },
+      requiredUomCode: () => (
+        <td key={columnKey} className="global-tran-td-ui relative" style={style}>
+          <div className="flex items-center">
+            <input
+              type="text"
+              id={`requiredUomCode-${index}`}
+              className="w-full global-tran-td-inputclass-ui pr-6"
+              value={row.requiredUomCode || row.uomCode || ""}
+              readOnly
+              disabled={rowLocked}
+            />
+            {!rowLocked && !isPoSummaryApplicable && row.itemCode && (
+              <FontAwesomeIcon
+                icon={faMagnifyingGlass}
+                className="absolute right-2 cursor-pointer text-blue-600 hover:text-blue-900"
+                onClick={() => openRequiredUomLookup(index, "detail")}
+              />
+            )}
+          </div>
+        </td>
+      ),
+      requiredQty: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          <input
+            type="text"
+            id={`requiredQty-${index}`}
+            className="w-full h-7 bg-transparent text-right text-xs focus:outline-none focus:ring-0"
+            value={row.requiredQty ?? row.poQty ?? ""}
+            readOnly={rowLocked}
+            onChange={(e) => handleDetailChange(index, "requiredQty", e.target.value, false)}
+            onFocus={(e) => {
+              quantityEditStartRef.current[index] = {
+                requiredQty: row.requiredQty,
+                poQty: row.poQty,
+              };
+              clearPoDetailZeroOnFocus(e, {
+                isEditable: !rowLocked,
+                onClear: (value) => handleDetailChange(index, "requiredQty", value, false),
+              });
+            }}
+            onBlur={(e) => {
+              if (!rowLocked) commitRequiredQuantity(index, e.target.value);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !rowLocked) {
+                e.preventDefault();
+                e.currentTarget.blur();
+                window.setTimeout(() => focusNextDetailCell("requiredQty"), 0);
+              }
+            }}
+          />
+        </td>
+      ),
       uomCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("uomCode", { readOnly: true })}</td>,
-      poQty: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("poQty", { readOnly: rowLocked })}</td>,
-      unitPrice: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("unitPrice", { readOnly: rowLocked || hasDuplicatePoSummaryKey })}</td>,
+      poQty: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("poQty", {
+        readOnly: rowLocked,
+        ...(isInventoryConversionEnabled ? { onCommit: commitConvertedQuantity } : {}),
+      })}</td>,
+      unitPrice: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("unitPrice", { readOnly: rowLocked || isPoSummaryApplicable })}</td>,
       grossAmt: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("grossAmt", { readOnly: true })}</td>,
-      discRate: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("discRate", { readOnly: rowLocked || hasDuplicatePoSummaryKey })}</td>,
-      discAmt: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("discAmt", { readOnly: rowLocked || hasDuplicatePoSummaryKey })}</td>,
+      discRate: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("discRate", { readOnly: rowLocked || isPoSummaryApplicable })}</td>,
+      discAmt: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("discAmt", { readOnly: rowLocked || isPoSummaryApplicable })}</td>,
       totalAmt: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("totalAmt", { readOnly: true })}</td>,
-      vatCode: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`vatCode-${index}`} className="w-full global-tran-td-inputclass-ui pr-6" value={row.vatCode || ""} readOnly disabled={rowLocked} />{!rowLocked && !hasDuplicatePoSummaryKey && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 cursor-pointer hover:text-blue-900" onClick={() => handleOpenVATLookup(index)} />}</div></td>,
+      vatCode: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" id={`vatCode-${index}`} className="w-full global-tran-td-inputclass-ui pr-6" value={row.vatCode || ""} readOnly disabled={rowLocked} />{!rowLocked && !isPoSummaryApplicable && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 cursor-pointer hover:text-blue-900" onClick={() => handleOpenVATLookup(index)} />}</div></td>,
       vatAmt: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("vatAmt", { readOnly: true })}</td>,
       netAmt: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{numericInput("netAmt", { readOnly: true })}</td>,
       dateNeeded: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="date" id={`dateNeeded-${index}`} className="w-full global-tran-td-inputclass-ui text-center" value={toDateInputValue(row.dateNeeded)} readOnly={rowLocked} disabled={isFormDisabled} min={toDateInputValue(poDate)} onChange={(e) => handleDetailChange(index, "dateNeeded", e.target.value, false)} onKeyDown={(e) => handleGridKeyDown(e, "dateNeeded", { readOnly: rowLocked })} /></td>,
@@ -3913,7 +4268,7 @@ const PO = () => {
                   label="PO Type"
                   type="select"
                   value={selectedPoType || ""}
-                  disabled={isFormDisabled}
+                  disabled={isFormDisabled || (detailRows?.length || 0) > 0}
                   onChange={(val) => handlePrTypeChange({ target: { value: val } })}
                   options={poTypes.map((t) => ({
                     label: t.DROPDOWN_NAME,
@@ -4146,7 +4501,7 @@ const PO = () => {
                 Detailed
               </button>
 
-              {hasDuplicatePoSummaryKey && (
+              {isPoSummaryApplicable && (
                 <button
                   type="button"
                   className={`global-tran-tab-padding-ui w-32 !text-left text-left ${poDetailActiveTab === "summary"
@@ -4163,7 +4518,7 @@ const PO = () => {
             <div className="flex justify-end" />
           </div>
 
-          {poDetailActiveTab === "summary" && hasDuplicatePoSummaryKey ? (
+          {poDetailActiveTab === "summary" && isPoSummaryApplicable ? (
             <>
               <div className="global-tran-table-main-div-ui">
                 <div className="global-tran-table-main-sub-div-ui">
@@ -4210,9 +4565,9 @@ const PO = () => {
                   <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
                     <thead className="global-tran-thead-div-ui">
                       <tr>
-                        {orderedPoDetailColumns.map((column) =>
+                        {visiblePoDetailColumns.map((column) =>
                           renderPoDetailHeader(column.label, column.key, column.width, {
-                            orderedColumns: orderedPoDetailColumns,
+                            orderedColumns: visiblePoDetailColumns,
                           })
                         )}
                         {!isFormDisabled && (
@@ -4228,7 +4583,7 @@ const PO = () => {
                     <tbody className="relative">
                       {sortedPoDetailRows.map(({ row, originalIndex }) => (
                         <tr key={originalIndex} className="global-tran-tr-ui">
-                          {orderedPoDetailColumns.map((column) => renderPODetailCell(column.key, row, originalIndex))}
+                          {visiblePoDetailColumns.map((column) => renderPODetailCell(column.key, row, originalIndex))}
                           {!isFormDisabled && (
                             <td
                               className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black"
@@ -4359,6 +4714,7 @@ const PO = () => {
                             </span>
                           </button>
 
+                          {!isDirectPo && <>
                           <div className="my-2 border-t border-slate-100 dark:border-slate-700" />
 
                           <button
@@ -4384,6 +4740,7 @@ const PO = () => {
                               PR
                             </span>
                           </button>
+                          </>}
 
                         </div>
                       </div>
@@ -4439,6 +4796,16 @@ const PO = () => {
       </div>
 
       {/* MODALS */}
+      {requiredUomLookup.isOpen && (
+        <RequiredUomLookupModal
+          isOpen={requiredUomLookup.isOpen}
+          title="Select Required UOM"
+          decimalPlaces={decQty}
+          data={requiredUomLookup.data}
+          onClose={handleRequiredUomSelect}
+        />
+      )}
+
       {branchModalOpen && (
         <BranchLookupModal
           isOpen={branchModalOpen}
@@ -4446,7 +4813,7 @@ const PO = () => {
         />
       )}
 
-      {showOpenPRModal && (
+      {showOpenPRModal && !isDirectPo && (
         <GlobalCombinedLookup
           isOpen={showOpenPRModal}
           title="Open Purchase Requisition"

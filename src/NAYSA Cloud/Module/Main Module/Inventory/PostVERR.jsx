@@ -34,7 +34,10 @@ const PostVERR = ({ isOpen, onClose, userCode }) => {
           // Case 1: JSON string response
           if (response.data?.[0]?.result) {
             try {
-              rawData = JSON.parse(response.data[0].result || "[]");
+              rawData = JSON.parse(response.data[0].result || "[]").map((row) => ({
+                ...row,
+                groupId: row.verrId,
+              }));
             } catch (err) {
               console.error("VERR posting JSON parse error:", err);
               rawData = [];
@@ -85,7 +88,7 @@ const PostVERR = ({ isOpen, onClose, userCode }) => {
   // =========================================
   const handlePost = async (selectedData, userPw) => {
     await useHandlePostTran(
-      selectedData,
+      selectedData.map((row) => ({ ...row, groupId: row.verrId })),
       userPw,
       "VERR",
       userCode,
