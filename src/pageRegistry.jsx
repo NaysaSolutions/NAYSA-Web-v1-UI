@@ -200,6 +200,7 @@ export const pageRegistry = {
   PostFGRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGRTV.jsx")),
   PostVERTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostVERTV.jsx")),
   PostFGST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGST.jsx")),
+  PostVEST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostVEST.jsx")),
   PostFGSR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGSR.jsx")),
   PostMSIS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSIS.jsx")),
   PostRMRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostRMRTV.jsx")),
