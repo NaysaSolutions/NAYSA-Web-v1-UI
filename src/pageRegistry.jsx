@@ -62,6 +62,7 @@ export const pageRegistry = {
   MSIS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSIS.jsx")),
   MSST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSST.jsx")),
   RMST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMST.jsx")),
+  VEST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/VEST.jsx")),
   MSAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSAJ.jsx")),
   FGAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGAJ.jsx")),
   VEAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/VEAJ.jsx")),
