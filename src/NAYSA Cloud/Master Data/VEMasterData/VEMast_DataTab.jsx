@@ -2,6 +2,8 @@ import React, { useCallback, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faBoxOpen, faFilter, faTimes, faUndo } from "@fortawesome/free-solid-svg-icons";
 import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable";
+import { useQuery } from "@tanstack/react-query";
+import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 
 const pick = (obj, keys = []) => {
   for (const key of keys) {
@@ -65,10 +67,19 @@ const VEMast_DataTab = ({
     }));
   }, [rows]);
 
-  const vehicleMakeOptions = useMemo(() => {
-    return [...new Set(tableDataRaw.map((row) => String(row.vehicleMake || "").trim()).filter(Boolean))]
-      .sort((a, b) => a.localeCompare(b));
-  }, [tableDataRaw]);
+  const vehicleMakeQuery = useQuery({
+    queryKey: ["veMakeList", "vehicleMasterFilter"],
+    queryFn: async () => {
+      const response = await apiClient.get("/veMake");
+      const raw = response?.data?.data?.[0]?.result;
+      return raw ? JSON.parse(raw) : [];
+    },
+  });
+
+  const vehicleMakeOptions = useMemo(() => (vehicleMakeQuery.data || []).map((row) => ({
+    value: String(row.code || "").trim(),
+    label: row.description ? `${row.code} - ${row.description}` : row.code,
+  })), [vehicleMakeQuery.data]);
 
   const tableDataFiltered = useMemo(() => {
     const query = String(searchTerm || "").trim().toLowerCase();
@@ -128,7 +139,7 @@ const VEMast_DataTab = ({
           aria-label="Vehicle Make"
         >
           <option value="">All Vehicle Makes</option>
-          {vehicleMakeOptions.map((make) => <option key={make} value={make}>{make}</option>)}
+          {vehicleMakeOptions.map((make) => <option key={make.value} value={make.value}>{make.label}</option>)}
         </select>
 
         <div className="flex items-center gap-3 px-3 border-l border-gray-300">

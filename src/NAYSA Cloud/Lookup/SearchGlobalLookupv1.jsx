@@ -53,6 +53,7 @@ const GlobalLookupModalv1 = ({
   onSelectionChange,
   onSelectionReset,
   singleSelect = false,
+  autoSelectAll = false,
   modalMaxWidthClass = "max-w-8xl",
   overlayZIndexClass = "z-50",
   exportFileName = "Lookup",
@@ -554,6 +555,11 @@ const baseVisibleCols = useMemo(() => {
 
     fetchData();
   }, [data, endpoint, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !autoSelectAll || records.length === 0) return;
+    setSelected(records);
+  }, [isOpen, autoSelectAll, records]);
 
   // init widths (auto for missing keys; keep persisted/user widths)
   useEffect(() => {

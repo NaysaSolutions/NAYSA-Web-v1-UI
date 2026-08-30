@@ -68,6 +68,7 @@ export const pageRegistry = {
   VEAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/VEAJ.jsx")),
   MSRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSRTV.jsx")),
   FGRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGRTV.jsx")),
+  VERTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/VERTV.jsx")),
   RMRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMRTV.jsx")),
   FGRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGRR.jsx")),
   RMRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMRR.jsx")),
@@ -81,6 +82,7 @@ export const pageRegistry = {
   FGRFP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGRFP.jsx")),
   RMRFP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMRFP.jsx")),
   MSRFP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSRFP.jsx")),
+  ItemConversionMatrix: lazyPage(() => import("./NAYSA Cloud/Matrix/ItemConversionMatrix.jsx")),
 
 
 
@@ -146,6 +148,7 @@ export const pageRegistry = {
   MSINQ: lazyPage(() => import("./NAYSA Cloud/Query/INVInq/MSStockCard.jsx")),
   FGINQ: lazyPage(() => import("./NAYSA Cloud/Query/INVInq/FGStockCard.jsx")),
   RMINQ: lazyPage(() => import("./NAYSA Cloud/Query/INVInq/RMStockCard.jsx")),
+  VEINQ: lazyPage(() => import("./NAYSA Cloud/Query/INVInq/VEStockCard.jsx")),
   SalesTracker: lazyPage(() => import("./NAYSA Cloud/Query/SOInq/SalesTracker.jsx")),
   FAINQ: lazyPage(() => import("./NAYSA Cloud/Query/FAInq/FAAssetInquiry.jsx")),
   FAAssetInquiry: lazyPage(() => import("./NAYSA Cloud/Query/FAInq/FAAssetInquiry.jsx")),
@@ -195,6 +198,7 @@ export const pageRegistry = {
   PostMSST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSST.jsx")),
   PostRMST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostRMST.jsx")),
   PostFGRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGRTV.jsx")),
+  PostVERTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostVERTV.jsx")),
   PostFGST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGST.jsx")),
   PostFGSR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGSR.jsx")),
   PostMSIS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSIS.jsx")),

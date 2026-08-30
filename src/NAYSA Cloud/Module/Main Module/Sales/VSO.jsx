@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faCar,
@@ -127,7 +127,7 @@ const TabButton = ({ active, icon, label, onClick }) => (
 // VSO continues to use the shared renderer. Amount fields only keep a local draft
 // while focused so formatting does not move the caret after every keystroke.
 const Field = FieldRenderer;
-const DecimalField = ({ value, onChange, onBlur, onKeyDown, ...props }) => {
+const DecimalField = ({ value, onChange, onBlur, onKeyDown, maxValue, ...props }) => {
   const [draftValue, setDraftValue] = useState("");
   const [isEditing, setIsEditing] = useState(false);
 
@@ -140,13 +140,15 @@ const DecimalField = ({ value, onChange, onBlur, onKeyDown, ...props }) => {
   const handleChange = (nextValue) => {
     const cleanValue = String(nextValue ?? "").replace(/,/g, "");
     if (!/^\d*(?:\.\d{0,2})?$/.test(cleanValue)) return;
+    if (cleanValue !== "" && cleanValue !== "." && maxValue !== undefined && Number(cleanValue) > maxValue) return;
 
     setDraftValue(cleanValue);
     onChange?.(cleanValue);
   };
 
   const handleBlur = (event) => {
-    const finalValue = draftValue === "" || draftValue === "." ? "0" : draftValue;
+    const rawValue = draftValue === "" || draftValue === "." ? "0" : draftValue;
+    const finalValue = maxValue !== undefined ? String(Math.min(Number(rawValue) || 0, maxValue)) : rawValue;
     setIsEditing(false);
     onChange?.(finalValue);
     onBlur?.(event);
@@ -345,6 +347,7 @@ const IssueGrid = ({ rows, onChange, onAdd, onDelete, disabled, warehouseValue, 
 };
 
 const VSO = () => {
+  const loadedFromUrlRef = useRef(false);
   const { resetFlag } = useReset();
   const {
     user,
@@ -877,6 +880,16 @@ const VSO = () => {
     }
   }, [docType, getSalesVatRate, updateState]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const vsoNo = params.get("vsoNo");
+    const branchCode = params.get("branchCode");
+    if (!loadedFromUrlRef.current && vsoNo && branchCode) {
+      loadedFromUrlRef.current = true;
+      fetchTranData(vsoNo, branchCode);
+    }
+  }, [fetchTranData]);
+
   const buildOtherRows = useCallback(() => {
     const mapRows = (rows, dtlType) => (rows || []).map((row, index) => ({
       branchCode: state.branchCode,
@@ -954,6 +967,9 @@ const VSO = () => {
   const handleSave = useCallback(async () => {
     if (isFormDisabled) return;
     const dateErrors = [];
+    if (n(state.interestRate) > 99.99) dateErrors.push("Interest Rate cannot exceed 99.99%.");
+    if (n(state.financedRate) > 100) dateErrors.push("Finance Rate cannot exceed 100%.");
+    if (n(state.moInstallmentrate) > 999) dateErrors.push("Terms (Months) cannot exceed 999.");
     const issuedFields = [
       ["Customer ID Date Issued", state.custIddateissued],
       ["Co-Maker 1 ID Date Issued", state.cmIddateissued],
@@ -1481,10 +1497,10 @@ const VSO = () => {
                       <p className="text-[0.68rem] text-slate-500 dark:text-slate-400">Set the financing terms first, then review the computed charges and contract totals.</p>
                     </div>
                     <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
-                      <DecimalField id="financedRate" label="Finance Rate %" value={formatNumber(state.financedRate, 2)} disabled={isFormDisabled} onChange={recalcFromFinanceRate} />
+                      <DecimalField id="financedRate" label="Finance Rate %" value={formatNumber(state.financedRate, 2)} maxValue={100} disabled={isFormDisabled} onChange={recalcFromFinanceRate} />
                       <DecimalField id="financedAmt" label="Amount Financed" value={formatNumber(state.financedAmt, 2)} disabled={isFormDisabled} onChange={(value) => updateState({ financedAmt: value })} />
-                      <DecimalField id="interestRate" label="Interest Rate (AOR) %" value={formatNumber(state.interestRate, 2)} disabled={isFormDisabled} onChange={(value) => { updateState({ interestRate: value }); recalcInstallmentFromTerm({ interestRate: value }); }} />
-                      <DecimalField id="moInstallmentrate" label="Terms (Months)" value={formatNumber(state.moInstallmentrate, 2)} disabled={isFormDisabled} onChange={(value) => { updateState({ moInstallmentrate: value }); recalcInstallmentFromTerm({ moInstallmentrate: value }); }} />
+                      <DecimalField id="interestRate" label="Interest Rate (AOR) %" value={formatNumber(state.interestRate, 2)} maxValue={99.99} disabled={isFormDisabled} onChange={(value) => { updateState({ interestRate: value }); recalcInstallmentFromTerm({ interestRate: value }); }} />
+                      <DecimalField id="moInstallmentrate" label="Terms (Months)" value={formatNumber(state.moInstallmentrate, 2)} maxValue={999} disabled={isFormDisabled} onChange={(value) => { updateState({ moInstallmentrate: value }); recalcInstallmentFromTerm({ moInstallmentrate: value }); }} />
                       <DecimalField id="moPerce" label="Interest per Month %" value={formatNumber(state.moPerce, 2)} disabled readOnly />
                       <DecimalField id="moInstallment" label="Monthly Installment" value={formatNumber(state.moInstallment, 2)} disabled={isFormDisabled} onChange={recalcInstallmentFromAmount} />
                       <DecimalField id="promptDisc" label="Prompt Payment Discount" value={formatNumber(state.promptDisc, 2)} disabled={isFormDisabled} onChange={(value) => updateState({ promptDisc: value })} />
