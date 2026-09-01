@@ -25,10 +25,12 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 
 import VECarMakeCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VECarMakeCodes.jsx";
-// import VETypeCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VETypeCodes.jsx";
+import VETypeCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VETypeCodes.jsx";
 import VECarModelCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEModelCodes.jsx";
+import VEPartClass from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEPartClass.jsx";
+
+// Add these imports once the actual components are available:
 // import VEClassCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEClassCodes.jsx";
-// import VEPartClassCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEPartClassCodes.jsx";
 // import VEServiceTypeCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEServiceTypeCodes.jsx";
 // import VEServiceCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEServiceCodes.jsx";
 
@@ -178,10 +180,6 @@ const VEHSVMast_ReferenceCodeTab = forwardRef(
      * ============================================================
      * CHILD STATE HANDLER
      * ============================================================
-     *
-     * Each reference-code component reports whether it is
-     * editing / savable. This passes that status back to
-     * VEHSVMast.jsx so the parent header buttons work.
      */
 
     const childStateChange = useCallback(
@@ -226,12 +224,6 @@ const VEHSVMast_ReferenceCodeTab = forwardRef(
      * ============================================================
      * PARENT HEADER BUTTON COMMANDS
      * ============================================================
-     *
-     * VEHSVMast.jsx calls:
-     *
-     * refTabRef.current.add()
-     * refTabRef.current.save()
-     * refTabRef.current.reset()
      */
 
     useImperativeHandle(
@@ -380,44 +372,54 @@ const VEHSVMast_ReferenceCodeTab = forwardRef(
             />
           );
 
-        case "class":
-          return (
-            <VEClassCodes
-              ref={classRef}
-              onStateChange={childStateChange}
-              {...permissionProps}
-            />
-          );
+        /*
+         * Uncomment this case once VEClassCodes exists/imported.
+         */
+        // case "class":
+        //   return (
+        //     <VEClassCodes
+        //       ref={classRef}
+        //       onStateChange={childStateChange}
+        //       {...permissionProps}
+        //     />
+        //   );
 
         case "partClass":
           return (
-            <VEPartClassCodes
+            <VEPartClass
               ref={partClassRef}
               onStateChange={childStateChange}
               {...permissionProps}
             />
           );
 
-        case "serviceType":
-          return (
-            <VEServiceTypeCodes
-              ref={serviceTypeRef}
-              onStateChange={childStateChange}
-              {...permissionProps}
-            />
-          );
+        /*
+         * Uncomment these cases once the components exist/imported.
+         */
+        // case "serviceType":
+        //   return (
+        //     <VEServiceTypeCodes
+        //       ref={serviceTypeRef}
+        //       onStateChange={childStateChange}
+        //       {...permissionProps}
+        //     />
+        //   );
 
-        case "serviceCodes":
-          return (
-            <VEServiceCodes
-              ref={serviceCodeRef}
-              onStateChange={childStateChange}
-              {...permissionProps}
-            />
-          );
+        // case "serviceCodes":
+        //   return (
+        //     <VEServiceCodes
+        //       ref={serviceCodeRef}
+        //       onStateChange={childStateChange}
+        //       {...permissionProps}
+        //     />
+        //   );
 
         default:
-          return null;
+          return (
+            <div className="p-4 text-sm text-gray-500">
+              This reference-code component is not yet connected.
+            </div>
+          );
       }
     };
 

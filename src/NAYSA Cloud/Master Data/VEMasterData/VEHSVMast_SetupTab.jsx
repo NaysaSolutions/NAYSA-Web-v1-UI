@@ -20,6 +20,11 @@ import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
 import SearchCustMast from "@/NAYSA Cloud/Lookup/SearchCustMast.jsx";
 import SearchVEMakeRef from "@/NAYSA Cloud/Lookup/SearchVEMakeRef.jsx";
 import SearchVEModelRef from "@/NAYSA Cloud/Lookup/SearchVEModelRef.jsx";
+import SearchVETypeRef from "@/NAYSA Cloud/Lookup/SearchVETypeRef.jsx";
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   SHARED UI
+   ───────────────────────────────────────────────────────────────────────────── */
 
 const SectionHeader = ({ title, icon }) => (
   <div className="mb-3 mt-1">
@@ -151,8 +156,8 @@ const VEHSVMast_SetupTab = ({
   const [isModelOpen, setIsModelOpen] =
     useState(false);
 
-  const [types, setTypes] =
-    useState([]);
+  const [isTypeOpen, setIsTypeOpen] =
+    useState(false);
 
   const [classes, setClasses] =
     useState([]);
@@ -173,7 +178,6 @@ const VEHSVMast_SetupTab = ({
       try {
         const results =
           await Promise.allSettled([
-            apiClient.get("/veHSVType"),
             apiClient.get("/veHSVClass"),
           ]);
 
@@ -184,12 +188,8 @@ const VEHSVMast_SetupTab = ({
             ? extractRows(result.value)
             : [];
 
-        setTypes(
-          rowsFrom(results[0])
-        );
-
         setClasses(
-          rowsFrom(results[1])
+          rowsFrom(results[0])
         );
       } catch (error) {
         console.error(
@@ -199,7 +199,6 @@ const VEHSVMast_SetupTab = ({
 
         if (!mounted) return;
 
-        setTypes([]);
         setClasses([]);
       } finally {
         if (mounted) {
@@ -219,31 +218,7 @@ const VEHSVMast_SetupTab = ({
      REFERENCE OPTIONS
      ───────────────────────────────────────────────────────────────────────── */
 
-    const typeList = useMemo(
-    () =>
-      makeOptions(
-        types,
-        [
-          "code",
-          "typeCode",
-          "type_code",
-          "TYPE_CODE",
-          "vehType",
-          "VEH_TYPE",
-        ],
-        [
-          "description",
-          "typeName",
-          "type_name",
-          "TYPE_NAME",
-          "vehTypeName",
-          "VEH_TYPE_NAME",
-        ]
-      ),
-    [types]
-  );
-
-  const classList = useMemo(
+    const classList = useMemo(
     () =>
       makeOptions(
         classes,
@@ -278,10 +253,6 @@ const VEHSVMast_SetupTab = ({
           value: "MT",
           label: "Manual",
         },
-        {
-          value: "CVT",
-          label: "CVT",
-        },
       ],
       []
     );
@@ -299,37 +270,6 @@ const VEHSVMast_SetupTab = ({
   /* ─────────────────────────────────────────────────────────────────────────
      VEHICLE REFERENCE CHANGE HANDLERS
      ───────────────────────────────────────────────────────────────────────── */
-
-  const setType = (input) => {
-    const value =
-      getValue(input);
-
-    const row =
-      getRawRow(
-        typeList,
-        value
-      );
-
-    onChangeForm?.({
-      vehType:
-        value,
-
-      vehTypeName:
-        row?.description ??
-        row?.typeName ??
-        row?.type_name ??
-        row?.TYPE_NAME ??
-        row?.vehTypeName ??
-        row?.VEH_TYPE_NAME ??
-        "",
-
-      /*
-       * Model may depend on Type.
-       */
-      vehModel: "",
-      vehModelName: "",
-    });
-  };
 
   const setClass = (input) => {
     const value =
@@ -561,17 +501,32 @@ const VEHSVMast_SetupTab = ({
 
             <FieldRenderer
               label="Vehicle Type"
-              type="select"
-              options={typeList}
+              type="lookup"
               value={
                 form.vehType || ""
               }
-              onChange={setType}
+              onChange={(v) => {
+                const value = String(
+                  getValue(v) ?? ""
+                )
+                  .trim()
+                  .toUpperCase();
+
+                onChangeForm?.({
+                  vehType: value,
+                  vehTypeName:
+                    value === form.vehType
+                      ? form.vehTypeName || ""
+                      : "",
+                });
+              }}
+              onLookup={() => {
+                if (!isDisabled) {
+                  setIsTypeOpen(true);
+                }
+              }}
               readOnly={readOnly}
-              disabled={
-                isDisabled ||
-                loadingRefs
-              }
+              disabled={isDisabled}
             />
 
           </div>
@@ -1052,6 +1007,42 @@ const VEHSVMast_SetupTab = ({
              */
             vehModel: "",
             vehModelName: "",
+          });
+        }}
+      />
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          VEHICLE TYPE LOOKUP
+          ══════════════════════════════════════════════════════════════════════ */}
+
+      <SearchVETypeRef
+        isOpen={isTypeOpen}
+        onClose={(selected) => {
+          setIsTypeOpen(false);
+
+          if (!selected) {
+            return;
+          }
+
+          const typeCode = String(
+            selected.code ??
+            selected.typeCode ??
+            selected.type_code ??
+            ""
+          )
+            .trim()
+            .toUpperCase();
+
+          const typeName = String(
+            selected.description ??
+            selected.typeName ??
+            selected.type_name ??
+            ""
+          ).trim();
+
+          onChangeForm?.({
+            vehType: typeCode,
+            vehTypeName: typeName,
           });
         }}
       />
