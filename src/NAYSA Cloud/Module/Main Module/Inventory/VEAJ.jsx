@@ -3841,6 +3841,7 @@ return (
       {showColorModal && (
         <VEColorLookupModal
           isOpen={showColorModal}
+          itemCode={detailRows?.[selectedRowIndex]?.itemCode || ""}
           onClose={(selected) => {
             if (selected && selectedRowIndex !== null) {
               handleDetailChange(selectedRowIndex, "color", selected.code || "", false);

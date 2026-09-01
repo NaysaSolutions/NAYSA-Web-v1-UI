@@ -979,27 +979,8 @@ const VERR = () => {
         }
       }
 
-      if (String(row.requireModel || "N").toUpperCase() === "Y") {
-        if (!String(row.model || "").trim()) errors.push(`Line ${ln} - Model Required`);
-        if (!String(row.modelYear || "").trim()) errors.push(`Line ${ln} - Model Year Required`);
-      }
       if (modelYear && !isValidModelYear(modelYear)) {
         errors.push(`Line ${ln} - Model Year must be a 4-digit year from ${MODEL_YEAR_MIN} to ${getMaximumModelYear()}`);
-      }
-      if (String(row.requireSerial || "N").toUpperCase() === "Y" && !String(row.serialNo || "").trim()) {
-        errors.push(`Line ${ln} - Serial No. Required`);
-      }
-      if (String(row.requireEngine || "N").toUpperCase() === "Y" && !String(row.engineNo || "").trim()) {
-        errors.push(`Line ${ln} - Engine No. Required`);
-      }
-      if (String(row.requireProdNo || "N").toUpperCase() === "Y" && !String(row.prodNo || "").trim()) {
-        errors.push(`Line ${ln} - Production No. Required`);
-      }
-      if (String(row.requireColor || "N").toUpperCase() === "Y" && !String(row.color || "").trim()) {
-        errors.push(`Line ${ln} - Color Required`);
-      }
-      if (String(row.requireQsCode || "N").toUpperCase() === "Y" && !String(row.qstatCode || "").trim()) {
-        errors.push(`Line ${ln} - QS Status Required`);
       }
     });
 
@@ -1287,12 +1268,6 @@ const VERR = () => {
       prNo: "",
       whouseCode: state.whouseCode || baseRow.whouseCode || "",
 
-      requireModel: mast?.requireModel || "N",
-      requireSerial: mast?.requireSerial || "N",
-      requireEngine: mast?.requireEngine || "N",
-      requireColor: mast?.requireColor || "N",
-      requireQsCode: mast?.requireQsCode || "N",
-      requireProdNo: mast?.requireProdNo || "N",
     });
   };
 
@@ -1643,27 +1618,8 @@ const VERR = () => {
         }
       }
 
-      if (String(row.requireModel || "N").toUpperCase() === "Y") {
-        if (!String(row.model || "").trim()) errors.push(`Line ${ln} - Model Required`);
-        if (!String(row.modelYear || "").trim()) errors.push(`Line ${ln} - Model Year Required`);
-      }
       if (modelYear && !isValidModelYear(modelYear)) {
         errors.push(`Line ${ln} - Model Year must be a 4-digit year from ${MODEL_YEAR_MIN} to ${getMaximumModelYear()}`);
-      }
-      if (String(row.requireSerial || "N").toUpperCase() === "Y" && !String(row.serialNo || "").trim()) {
-        errors.push(`Line ${ln} - Serial No. Required`);
-      }
-      if (String(row.requireEngine || "N").toUpperCase() === "Y" && !String(row.engineNo || "").trim()) {
-        errors.push(`Line ${ln} - Engine No. Required`);
-      }
-      if (String(row.requireProdNo || "N").toUpperCase() === "Y" && !String(row.prodNo || "").trim()) {
-        errors.push(`Line ${ln} - Production No. Required`);
-      }
-      if (String(row.requireColor || "N").toUpperCase() === "Y" && !String(row.color || "").trim()) {
-        errors.push(`Line ${ln} - Color Required`);
-      }
-      if (String(row.requireQsCode || "N").toUpperCase() === "Y" && !String(row.qstatCode || "").trim()) {
-        errors.push(`Line ${ln} - QS Status Required`);
       }
     });
 
@@ -1823,12 +1779,6 @@ const VERR = () => {
         poLineno: source.poLineno || source.poln || "",
         prln: source.prln || source.prLineno || "",
         prLineno: source.prLineno || source.prln || "",
-        requireModel: source.requireModel || "N",
-        requireSerial: source.requireSerial || "N",
-        requireEngine: source.requireEngine || "N",
-        requireColor: source.requireColor || "N",
-        requireQsCode: source.requireQsCode || "N",
-        requireProdNo: source.requireProdNo || "N",
         currCode: source.currCode || state.currCode || baseCurrency,
         currRate: parseFormattedNumber(source.currRate || state.currRate || 1),
         whouseCode: uploaded.whouseCode || source.whouseCode || state.whouseCode || "",
@@ -2401,12 +2351,6 @@ const VERR = () => {
               landedCost: 0,
               unitShipCost: 0,
               unitLandedCost: 0,
-              requireModel: mast?.requireModel || "N",
-              requireSerial: mast?.requireSerial || "N",
-              requireEngine: mast?.requireEngine || "N",
-              requireColor: mast?.requireColor || "N",
-              requireQsCode: mast?.requireQsCode || "N",
-              requireProdNo: mast?.requireProdNo || "N",
             });
           });
         }),
@@ -3921,6 +3865,7 @@ const VERR = () => {
       {state.colorLookupOpen && (
         <VEColorLookupModal
           isOpen={state.colorLookupOpen}
+          itemCode={state.detailRows?.[state.colorLookupRowIndex]?.itemCode || ""}
           onClose={(selected) => {
             if (selected && state.colorLookupRowIndex !== null) {
               const rows = [...(state.detailRows || [])];

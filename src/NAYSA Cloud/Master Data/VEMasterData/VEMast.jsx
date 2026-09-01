@@ -29,6 +29,7 @@ import {
 import VEMast_SetupTab from "@/NAYSA Cloud/Master Data/VEMasterData/VEMast_SetupTab.jsx";
 import VEMast_DataTab from "@/NAYSA Cloud/Master Data/VEMasterData/VEMast_DataTab.jsx";
 import VEMast_ReferenceCodeTab from "@/NAYSA Cloud/Master Data/VEMasterData/VEMast_ReferenceCodeTab.jsx";
+import genericVehicleImage from "@/NAYSA Cloud/Master Data/VEMasterData/naysa-generic-vehicle.png";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 const parsePossibleJson = (value, fallback = []) => {
@@ -80,7 +81,9 @@ const EMPTY_FORM = {
   defaultQsCode: "",
   color: "",
   colorCodes: [],
-  vehicleImageBase64: "",
+  vehicleImageUrl: genericVehicleImage,
+  vehicleImagePreviewUrl: "",
+  vehicleImageFile: null,
   removeVehicleImage: false,
   registeredBy: "",
   registeredDate: "",
@@ -116,6 +119,7 @@ const VEMast = () => {
   const [rows, setRows] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRecordLoading, setIsRecordLoading] = useState(false);
   const refTabRef = useRef(null);
   const [refState, setRefState] = useState({ isEditing: false, canSave: false, activeRefTab: "category" });
 
@@ -141,19 +145,19 @@ const VEMast = () => {
     if (activeTab === "master") loadMasterList();
   }, [activeTab, loadMasterList]);
 
-  const loadColorMatrix = useCallback(async (itemCode) => {
-    const code = String(itemCode || "").trim();
-    if (!code) return [];
+  const loadVehicleImage = useCallback(async (itemCode) => {
     try {
-      const res = await apiClient.post("/loadVEMastColorMatrix", { ITEM_CODE: code });
-      const matrixRows = extractRows(res);
-      return matrixRows
-        .filter((row) => row.value === true || row.value === 1 || String(row.value) === "1")
-        .map((row) => row.colorCode ?? row.code)
-        .filter(Boolean);
+      const response = await apiClient.get(`/getVEMastImage/${encodeURIComponent(itemCode)}`);
+      const dataUrl = String(response?.data?.data?.dataUrl || "");
+      if (!/^data:image\/(jpeg|png|webp);base64,/i.test(dataUrl)) {
+        throw new Error("Vehicle image response is not a valid image.");
+      }
+      return dataUrl;
     } catch (error) {
-      console.error("Failed to load Vehicle Color Matrix", error);
-      return [];
+      if (error?.response?.status !== 404) {
+        console.error("Failed to load Vehicle Master image", error);
+      }
+      return genericVehicleImage;
     }
   }, []);
 
@@ -162,10 +166,11 @@ const VEMast = () => {
     if (!code) return false;
 
     setIsLoading(true);
+    setIsRecordLoading(true);
     try {
-      const [itemRes, selectedColors] = await Promise.all([
+      const [itemRes, vehicleImageUrl] = await Promise.all([
         apiClient.post("/getVEMast", { ITEM_CODE: code }),
-        loadColorMatrix(code),
+        loadVehicleImage(code),
       ]);
 
       const itemRows = extractRows(itemRes);
@@ -174,6 +179,11 @@ const VEMast = () => {
         await useSwalErrorAlert("Info", `Vehicle Item "${code}" was not found.`);
         return false;
       }
+
+      const selectedColors = parsePossibleJson(row.colorCodes, [])
+        .map((value) => typeof value === "object" ? value?.colorCode ?? value?.code : value)
+        .map((value) => String(value ?? "").trim())
+        .filter(Boolean);
 
       setForm({
         ...EMPTY_FORM,
@@ -184,7 +194,9 @@ const VEMast = () => {
         classCode: row.classCode ?? "",
         className: row.className ?? "",
         colorCodes: selectedColors,
-        vehicleImageBase64: row.vehicleImageBase64 || "",
+        vehicleImageUrl,
+        vehicleImagePreviewUrl: "",
+        vehicleImageFile: null,
         removeVehicleImage: false,
         __isNew: false,
       });
@@ -195,9 +207,10 @@ const VEMast = () => {
       await useSwalErrorAlertAPI("Fetch Error", "Failed to retrieve Vehicle Master record.");
       return false;
     } finally {
+      setIsRecordLoading(false);
       setIsLoading(false);
     }
-  }, [loadColorMatrix, canEdit, isReadOnly]);
+  }, [canEdit, isReadOnly, loadVehicleImage]);
 
   const checkDuplicate = useCallback(async (itemCode) => {
     const code = String(itemCode || "").trim();
@@ -268,8 +281,6 @@ const VEMast = () => {
         defaultQsCode: form.defaultQsCode || "",
         color: form.color || "",
         colorCodes: (form.colorCodes || []).map((value) => typeof value === "object" ? value : { colorCode: value }),
-        vehicleImageBase64: form.vehicleImageBase64 || null,
-        removeVehicleImage: Boolean(form.removeVehicleImage),
         userCode,
       };
 
@@ -281,6 +292,17 @@ const VEMast = () => {
       if (result.errorcount > 0 || res?.data?.success === false) {
         await useSwalErrorAlert("Validation Error", result.errormsg || "Vehicle Master could not be saved.");
         return;
+      }
+
+      if (form.vehicleImageFile) {
+        const imageData = new FormData();
+        imageData.append("itemCode", form.itemCode);
+        imageData.append("image", form.vehicleImageFile);
+        await apiClient.post("/uploadVEMastImage", imageData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+      } else if (form.removeVehicleImage) {
+        await apiClient.delete(`/deleteVEMastImage/${encodeURIComponent(form.itemCode)}`);
       }
 
       await useSwalSuccessAlert("Success!", `Vehicle Item "${form.itemCode}" saved successfully.`);
@@ -357,7 +379,7 @@ const VEMast = () => {
     { id: "ref", label: "Reference Codes", icon: faTags },
   ], []);
 
-  const baseBtn = "inline-flex items-center justify-center px-3 py-2 rounded-md text-white text-xs font-semibold transition";
+  const baseBtn = "inline-flex items-center justify-center px-3 py-2 rounded-md text-white text-[11px] font-medium transition";
   const headerButtons = useMemo(() => {
     if (activeTab === "setup") {
       return [
@@ -387,7 +409,7 @@ const VEMast = () => {
 
   return (
     <div className="global-ref-main-div-ui">
-      {isLoading && <LoadingSpinner />}
+      {isLoading && !isRecordLoading && <LoadingSpinner />}
       <div className="global-ref-header-ui">
         <div className="w-full flex flex-col lg:flex-row items-center justify-between gap-3">
           <div className="flex flex-col lg:flex-row items-center gap-2 lg:gap-4 w-full lg:w-auto">
@@ -426,6 +448,7 @@ const VEMast = () => {
             isEditing={isEditing && isFullAccess}
             isReadOnly={isReadOnly}
             isLoading={isLoading}
+            isColorMatrixLoading={isRecordLoading}
             onChangeForm={updateForm}
             onBlurItemCode={checkDuplicate}
           />
@@ -440,8 +463,8 @@ const VEMast = () => {
             onRowDoubleClick={async (row) => {
               const code = row?.itemCode ?? row?.item_code ?? "";
               if (!code) return;
-              await fetchItemByCode(code, canEdit);
               setActiveTab("setup");
+              await fetchItemByCode(code, canEdit);
             }}
           />
         ) : null}

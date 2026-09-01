@@ -595,7 +595,11 @@ const PO = () => {
       (column) => !["requiredUomCode", "requiredQty"].includes(column.key)
     )
     : orderedPoDetailColumns
-  ).filter((column) => !isDirectPo || !["prNo", "prBalance"].includes(column.key));
+  ).filter(
+    (column) =>
+      !isDirectPo ||
+      !["prNo", "prBalance", "rcCode", "rcName"].includes(column.key)
+  );
 
   const poSummaryRows = useMemo(() => {
     const summaryMap = new Map();
@@ -1733,8 +1737,15 @@ const PO = () => {
     }
   };
 
-  const handleAddRowClick = () => {
+  const handleAddRowClick = async () => {
     if (isFormDisabled) return;
+
+    if (!isDirectPo) {
+      setShowTypeDropdown(false);
+      await handleOpenPRLookup();
+      return;
+    }
+
     setShowTypeDropdown((prev) => !prev);
   };
 

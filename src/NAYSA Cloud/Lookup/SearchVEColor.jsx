@@ -15,21 +15,38 @@ const useDebounce = (value, delay) => {
   return debouncedValue;
 };
 
-const VEColorLookupModal = ({ isOpen, onClose, title = "Search Vehicle Color" }) => {
+const VEColorLookupModal = ({ isOpen, onClose, title = "Search Vehicle Color", itemCode = null }) => {
   const [filters, setFilters] = useState({ code: "", description: "" });
   const [sortConfig, setSortConfig] = useState({ key: "", direction: "asc" });
   const debouncedFilters = useDebounce(filters, 300);
   const hasActiveFilters = Object.values(filters).some(Boolean);
 
+  const normalizedItemCode = String(itemCode || "").trim();
+  const hasItemFilter = itemCode !== null && itemCode !== undefined;
+
   const { data: colors = [], isLoading, isFetching, refetch } = useQuery({
-    queryKey: ["lookupVEColor"],
-    enabled: isOpen,
+    queryKey: ["lookupVEColor", hasItemFilter ? "matrix" : "master", normalizedItemCode],
+    enabled: isOpen && (!hasItemFilter || Boolean(normalizedItemCode)),
     staleTime: 1000 * 60 * 5,
     placeholderData: keepPreviousData,
     queryFn: async () => {
-      const response = await apiClient.get("/veColor");
+      if (hasItemFilter && !normalizedItemCode) return [];
+
+      const response = hasItemFilter
+        ? await apiClient.get("/loadVEColorMatrix", { params: { ITEM_CODE: normalizedItemCode } })
+        : await apiClient.get("/veColor");
       const result = response?.data?.data?.[0]?.result || "[]";
-      return Array.isArray(result) ? result : JSON.parse(result);
+      const rows = Array.isArray(result) ? result : JSON.parse(result);
+
+      if (!hasItemFilter) return rows;
+
+      return rows
+        .filter((row) => row.value === true || row.value === 1 || String(row.value) === "1")
+        .map((row) => ({
+          ...row,
+          code: row.code ?? row.colorCode ?? "",
+          description: row.description ?? row.colorDescription ?? "",
+        }));
     },
   });
 
