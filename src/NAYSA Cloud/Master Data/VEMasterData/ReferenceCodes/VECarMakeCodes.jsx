@@ -204,6 +204,8 @@ const VECarMakeCodes = forwardRef(({
         await useSwalErrorAlert("Validation Error", errormsg || "Failed to save Vehicle Make Code.");
         return;
       }
+      
+      
 
       queryClient.invalidateQueries({ queryKey: ["veMakeList"] });
       await useSwalSuccessAlert("Success!", "Vehicle Make Code saved successfully.");
@@ -468,6 +470,7 @@ const VECarMakeCodes = forwardRef(({
               onChange={(v) => setField("description", v ?? "")}
               disabled={isReadOnly || !isEditing}
             />
+            
           </div>
         </Card>
 

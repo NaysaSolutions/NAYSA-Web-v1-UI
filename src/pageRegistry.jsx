@@ -83,7 +83,9 @@ export const pageRegistry = {
   RMRFP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMRFP.jsx")),
   MSRFP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSRFP.jsx")),
   ItemConversionMatrix: lazyPage(() => import("./NAYSA Cloud/Matrix/ItemConversionMatrix.jsx")),
-
+  
+  // Vehicle Service
+  VEHSVMast: lazyPage(() => import("./NAYSA Cloud/Master Data/VEMasterData/VEHSVMast.jsx")),
 
 
 
