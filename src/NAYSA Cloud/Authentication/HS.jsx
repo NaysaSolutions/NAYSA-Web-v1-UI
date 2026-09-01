@@ -100,8 +100,8 @@ const secondaryButton =
   "hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700 disabled:opacity-50";
 
 const errorText = (error, fallback) =>
-  error?.response?.data?.message ||
   error?.response?.data?.details ||
+  error?.response?.data?.message ||
   error?.message ||
   fallback;
 
@@ -2440,16 +2440,25 @@ function EnvironmentTab() {
 function ModuleLicensingTab() {
   const [modules, setModules] = useState([]);
   const [meta, setMeta] = useState({});
-  const [activeModuleCode, setActiveModuleCode] =
+  const [activeModuleKey, setActiveModuleKey] =
     useState("");
   const [
-    selectedModuleCodes,
-    setSelectedModuleCodes,
+    selectedModuleKeys,
+    setSelectedModuleKeys,
   ] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [savingKey, setSavingKey] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+
+  const moduleKeyFor = useCallback(
+    (module) =>
+      String(
+        module?.key ||
+          `${module?.code || ""}::${module?.name || ""}`
+      ).toUpperCase(),
+    []
+  );
 
   const showValidation = useCallback(
     async ({
@@ -2539,32 +2548,37 @@ function ModuleLicensingTab() {
           tenant: payload.tenant || null,
         });
 
-        setSelectedModuleCodes((current) => {
-          const validCodes = new Set(
-            nextModules.map((module) => module.code)
+        setSelectedModuleKeys((current) => {
+          const validKeys = new Set(
+            nextModules.map((module) =>
+              moduleKeyFor(module)
+            )
           );
 
-          return current.filter((code) =>
-            validCodes.has(code)
+          return current.filter((key) =>
+            validKeys.has(key)
           );
         });
 
-        setActiveModuleCode((current) => {
+        setActiveModuleKey((current) => {
           if (
             current &&
             nextModules.some(
-              (module) => module.code === current
+              (module) =>
+                moduleKeyFor(module) === current
             )
           ) {
             return current;
           }
 
-          return nextModules[0]?.code || "";
+          return nextModules[0]
+            ? moduleKeyFor(nextModules[0])
+            : "";
         });
       } catch (error) {
         if (initial) {
           setModules([]);
-          setSelectedModuleCodes([]);
+          setSelectedModuleKeys([]);
         }
 
         await showApiError({
@@ -2587,7 +2601,7 @@ function ModuleLicensingTab() {
         }
       }
     },
-    [showApiError]
+    [moduleKeyFor, showApiError]
   );
 
   useEffect(() => {
@@ -2597,18 +2611,18 @@ function ModuleLicensingTab() {
   const activeModule =
     modules.find(
       (module) =>
-        module.code === activeModuleCode
+        moduleKeyFor(module) === activeModuleKey
     ) || modules[0];
 
   const selectedModules = useMemo(() => {
     const selected = new Set(
-      selectedModuleCodes
+      selectedModuleKeys
     );
 
     return modules.filter((module) =>
-      selected.has(module.code)
+      selected.has(moduleKeyFor(module))
     );
-  }, [modules, selectedModuleCodes]);
+  }, [moduleKeyFor, modules, selectedModuleKeys]);
 
   const selectedInstalledRows = useMemo(
     () =>
@@ -2634,7 +2648,7 @@ function ModuleLicensingTab() {
 
   const allModulesSelected =
     modules.length > 0 &&
-    selectedModuleCodes.length === modules.length;
+    selectedModuleKeys.length === modules.length;
 
   const filteredItems = useMemo(() => {
     const items = Array.isArray(
@@ -2663,21 +2677,23 @@ function ModuleLicensingTab() {
     );
   }, [activeModule, searchTerm]);
 
-  const toggleModuleSelection = (moduleCode) => {
-    setSelectedModuleCodes((current) =>
-      current.includes(moduleCode)
+  const toggleModuleSelection = (moduleKey) => {
+    setSelectedModuleKeys((current) =>
+      current.includes(moduleKey)
         ? current.filter(
-            (code) => code !== moduleCode
+            (key) => key !== moduleKey
           )
-        : [...current, moduleCode]
+        : [...current, moduleKey]
     );
   };
 
   const toggleSelectAllModules = () => {
-    setSelectedModuleCodes(
+    setSelectedModuleKeys(
       allModulesSelected
         ? []
-        : modules.map((module) => module.code)
+        : modules.map((module) =>
+            moduleKeyFor(module)
+          )
     );
   };
 
@@ -2755,7 +2771,7 @@ function ModuleLicensingTab() {
     if (!module) return;
 
     const operationKey =
-      `module:${module.code}:${enabled}`;
+      `module:${moduleKeyFor(module)}:${enabled}`;
 
     if (
       enabled &&
@@ -2812,6 +2828,7 @@ function ModuleLicensingTab() {
         {
           scope: "module",
           moduleCode: module.code,
+          moduleName: module.name,
           enabled,
         },
         {
@@ -2966,9 +2983,10 @@ function ModuleLicensingTab() {
 
     await load({ silent: true });
 
-    setSelectedModuleCodes(
+    setSelectedModuleKeys(
       failedModules.map(
-        ({ module }) => module.code
+        ({ module }) =>
+          moduleKeyFor(module)
       )
     );
 
@@ -3038,7 +3056,7 @@ function ModuleLicensingTab() {
       );
 
       await load({ silent: true });
-      setSelectedModuleCodes([]);
+      setSelectedModuleKeys([]);
 
       await useSwalSuccessAlert(
         "Success!",
@@ -3232,13 +3250,15 @@ function ModuleLicensingTab() {
             <div className="min-h-[320px] flex-1 overflow-y-auto p-2 xl:min-h-0">
               <div className="space-y-1.5">
                 {modules.map((module) => {
+                  const moduleKey =
+                    moduleKeyFor(module);
                   const selected =
-                    selectedModuleCodes.includes(
-                      module.code
+                    selectedModuleKeys.includes(
+                      moduleKey
                     );
                   const active =
-                    module.code ===
-                    activeModule?.code;
+                    moduleKey ===
+                    moduleKeyFor(activeModule);
                   const fullyRemoved =
                     Number(module.existingCount ?? 0) ===
                     0;
@@ -3248,7 +3268,7 @@ function ModuleLicensingTab() {
 
                   return (
                     <div
-                      key={module.code}
+                      key={moduleKey}
                       className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 transition ${
                         active
                           ? "border-blue-400 bg-blue-50 ring-1 ring-blue-100"
@@ -3262,7 +3282,7 @@ function ModuleLicensingTab() {
                         checked={selected}
                         onChange={() =>
                           toggleModuleSelection(
-                            module.code
+                            moduleKey
                           )
                         }
                         disabled={savingKey !== ""}
@@ -3273,8 +3293,8 @@ function ModuleLicensingTab() {
                       <button
                         type="button"
                         onClick={() => {
-                          setActiveModuleCode(
-                            module.code
+                          setActiveModuleKey(
+                            moduleKey
                           );
                           setSearchTerm("");
                         }}
@@ -3380,7 +3400,7 @@ function ModuleLicensingTab() {
                   >
                     <RotateCcw size={13} />
                     {savingKey ===
-                    `module:${activeModule?.code}:true`
+                    `module:${moduleKeyFor(activeModule)}:true`
                       ? "Restoring..."
                       : "Restore Module"}
                   </button>
@@ -3403,7 +3423,7 @@ function ModuleLicensingTab() {
                   >
                     <Trash2 size={13} />
                     {savingKey ===
-                    `module:${activeModule?.code}:false`
+                    `module:${moduleKeyFor(activeModule)}:false`
                       ? "Removing..."
                       : "Remove Module"}
                   </button>
