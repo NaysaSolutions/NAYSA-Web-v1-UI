@@ -23,6 +23,10 @@ import {
   Wallet,
   FileText,
   ExternalLink,
+  Car,
+  Fingerprint,
+  MapPin,
+  ImageIcon,
 } from "lucide-react";
 
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
@@ -235,6 +239,35 @@ function HeaderStatusCard({ label, value }) {
       <span className="text-xs font-bold leading-tight text-slate-600 dark:text-slate-300">{label}</span>
       <span className="text-[16px] font-extrabold leading-tight text-blue-700 dark:text-blue-300">{value || "—"}</span>
     </div>
+  );
+}
+
+function VehicleProfileField({ label, value, accent = false, fullWidth = false }) {
+  return (
+    <div className={`min-w-0 rounded-lg border border-slate-100 bg-slate-50/70 px-3 py-2 dark:border-slate-700/70 dark:bg-slate-800/50 ${fullWidth ? "col-span-2" : ""}`}>
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+        {label}
+      </div>
+      <div className={`mt-0.5 break-words text-sm font-semibold leading-5 ${accent ? "text-blue-700 dark:text-blue-300" : "text-slate-800 dark:text-slate-100"}`}>
+        {value || "—"}
+      </div>
+    </div>
+  );
+}
+
+function VehicleProfileSection({ icon: Icon, title, children, className = "" }) {
+  return (
+    <section className={`rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900 ${className}`}>
+      <div className="mb-2.5 flex items-center gap-2 border-b border-slate-100 pb-2 dark:border-slate-800">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300">
+          <Icon size={15} strokeWidth={2} />
+        </span>
+        <h3 className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300">
+          {title}
+        </h3>
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -1707,28 +1740,53 @@ function VEStockCardQuery() {
               </span>
             </div>
           </div>
-          <div className="flex flex-col gap-4 p-4 lg:flex-row">
-          <div className="flex h-48 w-full shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-inner dark:border-slate-700 dark:bg-slate-800 lg:w-72">
-            {trackedVehicleImage ? (
-              <img src={trackedVehicleImage} alt={trackedVehicle.itemName || "Vehicle"} className="h-full w-full object-contain" />
-            ) : (
-              <span className="text-xs font-medium text-slate-400">No vehicle image registered</span>
-            )}
-          </div>
-          <div className="grid flex-1 auto-rows-fr grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
-            <HeaderStatusCard label="CS No." value={trackedVehicle.csNo} />
-            <HeaderStatusCard label="Item" value={trackedVehicle.itemCode} />
-            <HeaderStatusCard label="Make" value={trackedVehicle.make} />
-            <HeaderStatusCard label="Model" value={trackedVehicle.model} />
-            <HeaderStatusCard label="Model Year" value={trackedVehicle.modelYear} />
-            <HeaderStatusCard label="Engine No." value={trackedVehicle.engineNo} />
-            <HeaderStatusCard label="Serial No." value={trackedVehicle.serialNo} />
-            <HeaderStatusCard label="Color" value={trackedVehicle.color} />
-            <HeaderStatusCard label="PNP No." value={trackedVehicle.pnpNo} />
-            <HeaderStatusCard label="CSR No." value={trackedVehicle.csrNo} />
-            <HeaderStatusCard label="Current Branch" value={trackedVehicle.branchCode} />
-            <HeaderStatusCard label="Current Location" value={[trackedVehicle.whouseCode, trackedVehicle.locCode].filter(Boolean).join(" / ")} />
-          </div>
+          <div className="grid gap-4 p-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+            <div className="flex min-h-52 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-slate-100 shadow-inner dark:border-slate-700 dark:from-slate-800 dark:to-slate-900">
+              {trackedVehicleImage ? (
+                <img
+                  src={trackedVehicleImage}
+                  alt={trackedVehicle.itemName || "Vehicle"}
+                  className="h-full max-h-64 w-full object-contain p-2"
+                />
+              ) : (
+                <div className="flex flex-col items-center gap-2 px-5 text-center text-slate-400 dark:text-slate-500">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+                    <ImageIcon size={22} strokeWidth={1.7} />
+                  </span>
+                  <span className="text-xs font-medium">No vehicle image registered</span>
+                </div>
+              )}
+            </div>
+
+            <div className="grid min-w-0 gap-3 xl:grid-cols-[1.15fr_1.15fr_0.8fr]">
+              <VehicleProfileSection icon={Car} title="Vehicle Details">
+                <div className="grid grid-cols-2 gap-2">
+                  <VehicleProfileField label="Item" value={trackedVehicle.itemCode} accent fullWidth />
+                  <VehicleProfileField label="Make" value={trackedVehicle.make} />
+                  <VehicleProfileField label="Model" value={trackedVehicle.model} />
+                  <VehicleProfileField label="Model Year" value={trackedVehicle.modelYear} />
+                  <VehicleProfileField label="Color" value={trackedVehicle.color} />
+                </div>
+              </VehicleProfileSection>
+
+              <VehicleProfileSection icon={Fingerprint} title="Vehicle Identifiers">
+                <div className="grid grid-cols-2 gap-2">
+                  <VehicleProfileField label="CS No." value={trackedVehicle.csNo} accent fullWidth />
+                  <VehicleProfileField label="Engine No." value={trackedVehicle.engineNo} />
+                  <VehicleProfileField label="Serial No." value={trackedVehicle.serialNo} />
+                  <VehicleProfileField label="PNP No." value={trackedVehicle.pnpNo} />
+                  <VehicleProfileField label="CSR No." value={trackedVehicle.csrNo} />
+                </div>
+              </VehicleProfileSection>
+
+              <VehicleProfileSection icon={MapPin} title="Current Position">
+                <div className="grid grid-cols-1 gap-2">
+                  <VehicleProfileField label="Branch" value={trackedVehicle.branchCode} accent />
+                  <VehicleProfileField label="Warehouse" value={trackedVehicle.whouseCode} />
+                  <VehicleProfileField label="Location" value={trackedVehicle.locCode} />
+                </div>
+              </VehicleProfileSection>
+            </div>
           </div>
         </div>
       )}

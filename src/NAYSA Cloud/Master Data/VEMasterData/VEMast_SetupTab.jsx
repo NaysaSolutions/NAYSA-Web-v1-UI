@@ -1,12 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faCar, faCamera, faBoxesStacked, faClipboardCheck } from "@fortawesome/free-solid-svg-icons";
+import { faCar, faCamera, faBoxesStacked, faClipboardCheck, faPenToSquare, faTrash, faXmark } from "@fortawesome/free-solid-svg-icons";
 
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
+import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import SearchVendMast from "@/NAYSA Cloud/Lookup/SearchVendMast.jsx";
 import VEMast_ColorMatrix from "@/NAYSA Cloud/Master Data/VEMasterData/VEMast_ColorMatrix.jsx";
+import { formatNumber, parseFormattedNumber, useSwalErrorAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
+import genericVehicleImage from "@/NAYSA Cloud/Master Data/VEMasterData/naysa-generic-vehicle.png";
 
 
 const extractRows = (payload) => {
@@ -25,6 +28,38 @@ const extractRows = (payload) => {
     }
   }
   return [];
+};
+
+const AmountField = ({ value, onChange, ...props }) => {
+  const [draftValue, setDraftValue] = useState("");
+  const [isEditingAmount, setIsEditingAmount] = useState(false);
+
+  return (
+    <FieldRenderer
+      {...props}
+      type="amount"
+      inputMode="decimal"
+      hideClearButton
+      value={isEditingAmount ? draftValue : formatNumber(parseFormattedNumber(value), 2)}
+      onFocus={(event) => {
+        const rawValue = String(parseFormattedNumber(value ?? 0));
+        setDraftValue(rawValue);
+        setIsEditingAmount(true);
+        event.target.select();
+      }}
+      onChange={(nextValue) => {
+        const cleanValue = String(nextValue ?? "").replace(/,/g, "");
+        if (!/^\d*(?:\.\d{0,2})?$/.test(cleanValue)) return;
+        setDraftValue(cleanValue);
+        onChange?.(cleanValue);
+      }}
+      onBlur={() => {
+        const finalValue = draftValue === "" || draftValue === "." ? "0" : draftValue;
+        setIsEditingAmount(false);
+        onChange?.(finalValue);
+      }}
+    />
+  );
 };
 
 const yesNoOptions = [
@@ -48,12 +83,14 @@ const SectionHeader = ({ title, icon }) => (
   </div>
 );
 
-const VEMast_SetupTab = ({ form, isEditing = false, isReadOnly = false, isLoading = false, onChangeForm, onBlurItemCode }) => {
+const VEMast_SetupTab = ({ form, isEditing = false, isReadOnly = false, isLoading = false, isColorMatrixLoading = false, onChangeForm, onBlurItemCode }) => {
   const [categories, setCategories] = useState([]);
   const [classes, setClasses] = useState([]);
   const [colors, setColors] = useState([]);
   const [loadingRefs, setLoadingRefs] = useState(false);
   const [isVendOpen, setIsVendOpen] = useState(false);
+  const [isColorMatrixOpen, setIsColorMatrixOpen] = useState(false);
+  const [draftColorCodes, setDraftColorCodes] = useState([]);
   const imageInputRef = useRef(null);
 
   const disabled = isReadOnly || !isEditing || isLoading;
@@ -120,20 +157,30 @@ const VEMast_SetupTab = ({ form, isEditing = false, isReadOnly = false, isLoadin
     [classes, form.categoryCode, form.classCode]
   );
 
-  const imageSrc = form.vehicleImageBase64
-    ? (String(form.vehicleImageBase64).startsWith("data:")
-        ? form.vehicleImageBase64
-        : `data:image/jpeg;base64,${form.vehicleImageBase64}`)
-    : "";
+  const imageSrc = form.vehicleImagePreviewUrl || form.vehicleImageUrl || genericVehicleImage;
 
-  const handleImage = (file) => {
+  const handleImage = async (file) => {
     if (!file) return;
-    if (!/^image\//i.test(file.type || "")) return;
+
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowedTypes.includes(String(file.type || "").toLowerCase())) {
+      await useSwalErrorAlert("Invalid Image", "Please select a JPG, JPEG, PNG, or WebP image file.");
+      return;
+    }
+
+    if (file.size >= 10 * 1024 * 1024) {
+      await useSwalErrorAlert("Image Too Large", "Vehicle image must be less than 10 MB.");
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = String(reader.result || "");
-      onChangeForm?.({ vehicleImageBase64: dataUrl, removeVehicleImage: false });
+      onChangeForm?.({
+        vehicleImageFile: file,
+        vehicleImagePreviewUrl: dataUrl,
+        removeVehicleImage: false,
+      });
     };
     reader.readAsDataURL(file);
   };
@@ -161,6 +208,16 @@ const VEMast_SetupTab = ({ form, isEditing = false, isReadOnly = false, isLoadin
     colorDescription: row.description ?? row.colorDescription ?? "",
     ltoColor: row.ltoColor ?? row.LTO_COLOR ?? row.lto_color ?? "",
   })), [colors]);
+
+  const openColorMatrix = () => {
+    setDraftColorCodes([...(Array.isArray(form.colorCodes) ? form.colorCodes : [])]);
+    setIsColorMatrixOpen(true);
+  };
+
+  const applyColorMatrix = () => {
+    onChangeForm?.({ colorCodes: draftColorCodes });
+    setIsColorMatrixOpen(false);
+  };
 
   return (
     <div className="flex flex-col gap-3">
@@ -259,67 +316,82 @@ const VEMast_SetupTab = ({ form, isEditing = false, isReadOnly = false, isLoadin
 
         <Card className="p-4">
           <SectionHeader title="IMAGE AND PRICING" icon={faCamera} />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <FieldRenderer
-              label="Standard PO Price"
-              type="number"
-              value={form.stdPoPrice ?? "0.00"}
-              onChange={(v) => onChangeForm?.({ stdPoPrice: v ?? "0" })}
-              disabled={disabled}
-            />
-            <FieldRenderer
-              label="Selling Price"
-              type="number"
-              value={form.sellingPrice ?? "0.00"}
-              onChange={(v) => onChangeForm?.({ sellingPrice: v ?? "0" })}
-              disabled={disabled}
-            />
-            <FieldRenderer label="Qty On Hand" type="number" value={form.qtyOnHand ?? "0"} readOnly disabled />
-            <FieldRenderer label="Stock Valuation" type="number" value={form.stockValuation ?? "0.00"} readOnly disabled />
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="mb-2 flex items-center gap-1.5">
+              <div className="mr-auto text-[11px] font-bold text-slate-700">Vehicle Image</div>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                className="hidden"
+                onChange={(e) => handleImage(e.target.files?.[0])}
+              />
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click?.()}
+                disabled={disabled}
+                title="Select Image"
+                aria-label="Select Image"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-[10px] text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                <FontAwesomeIcon icon={faCamera} />
+              </button>
+              <button
+                type="button"
+                onClick={() => onChangeForm?.({
+                  vehicleImageFile: null,
+                  vehicleImagePreviewUrl: "",
+                  vehicleImageUrl: genericVehicleImage,
+                  removeVehicleImage: true,
+                })}
+                disabled={disabled || imageSrc === genericVehicleImage}
+                title="Remove Image"
+                aria-label="Remove Image"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-300 bg-white text-[10px] text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+              >
+                <FontAwesomeIcon icon={faTrash} />
+              </button>
+            </div>
+            <div className="h-52 w-full overflow-hidden rounded-md border border-slate-200 bg-white flex items-center justify-center">
+                <img
+                  src={imageSrc}
+                  alt="Vehicle"
+                  className="block max-h-full max-w-full"
+                  style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "center" }}
+                  onError={(event) => {
+                    if (event.currentTarget.dataset.fallbackApplied === "1") return;
+                    event.currentTarget.dataset.fallbackApplied = "1";
+                    event.currentTarget.src = genericVehicleImage;
+                  }}
+                />
+            </div>
           </div>
 
-          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div className="mb-2 text-[11px] font-bold text-slate-700">Vehicle Image</div>
-            <div className="flex flex-col sm:flex-row gap-3 items-start">
-              <div className="h-36 w-full sm:w-52 overflow-hidden rounded-md border border-slate-200 bg-white flex items-center justify-center">
-                {imageSrc ? (
-                  <img src={imageSrc} alt="Vehicle" className="h-full w-full object-contain" />
-                ) : (
-                  <div className="text-xs text-slate-400">No image</div>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <input
-                  ref={imageInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/jpg"
-                  className="hidden"
-                  onChange={(e) => handleImage(e.target.files?.[0])}
-                />
-                <button
-                  type="button"
-                  onClick={() => imageInputRef.current?.click?.()}
-                  disabled={disabled}
-                  className="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-                >
-                  Select Image
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onChangeForm?.({ vehicleImageBase64: "", removeVehicleImage: true })}
-                  disabled={disabled || !imageSrc}
-                  className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
-                >
-                  Remove Image
-                </button>
-              </div>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="flex flex-col gap-3">
+              <AmountField
+                label="Standard PO Price"
+                value={form.stdPoPrice ?? "0.00"}
+                onChange={(v) => onChangeForm?.({ stdPoPrice: v ?? "0" })}
+                disabled={disabled}
+              />
+              <AmountField
+                label="Selling Price"
+                value={form.sellingPrice ?? "0.00"}
+                onChange={(v) => onChangeForm?.({ sellingPrice: v ?? "0" })}
+                disabled={disabled}
+              />
+            </div>
+            <div className="flex flex-col gap-3">
+              <FieldRenderer label="Qty On Hand" type="number" value={form.qtyOnHand ?? "0"} readOnly disabled />
+              <FieldRenderer label="Stock Valuation" type="amount" value={formatNumber(parseFormattedNumber(form.stockValuation), 2)} readOnly disabled />
             </div>
           </div>
         </Card>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)] gap-3">
-        <Card className="p-4">
+        <Card className="min-h-[18rem] p-4">
           <SectionHeader title="REQUIRED VEHICLE DETAILS" icon={faClipboardCheck} />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <FieldRenderer label="Require Model" type="select" options={yesNoOptions} value={form.requireModel || "Y"} onChange={(v) => onChangeForm?.({ requireModel: v })} disabled={disabled} />
@@ -334,14 +406,34 @@ const VEMast_SetupTab = ({ form, isEditing = false, isReadOnly = false, isLoadin
           </div>
         </Card>
 
-        <Card className="p-4">
-          <SectionHeader title="AVAILABLE COLOR MATRIX" icon={faBoxesStacked} />
-          <VEMast_ColorMatrix
-            rows={colorRows}
-            selectedCodes={form.colorCodes || []}
-            disabled={disabled}
-            onChange={(colorCodes) => onChangeForm?.({ colorCodes })}
-          />
+        <Card className="min-h-[18rem] p-4">
+          <div className="relative mb-3 mt-1 flex items-center border-b border-blue-100 pb-2 pr-28">
+            <div className="flex items-center gap-2 text-[10px] sm:text-[11px] font-bold tracking-widest text-blue-600/80">
+              <FontAwesomeIcon icon={faBoxesStacked} />
+              AVAILABLE COLOR MATRIX
+            </div>
+            <button
+              type="button"
+              onClick={openColorMatrix}
+              disabled={isLoading || loadingRefs}
+              className="absolute bottom-2 right-0 inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <FontAwesomeIcon icon={faPenToSquare} />
+              {disabled ? "View Colors" : "Edit Colors"}
+            </button>
+          </div>
+          <div className="relative min-h-[11rem]">
+            {isColorMatrixLoading ? (
+              <LoadingSpinner inline />
+            ) : (
+              <VEMast_ColorMatrix
+                rows={colorRows}
+                selectedCodes={form.colorCodes || []}
+                disabled={disabled}
+                onChange={(colorCodes) => onChangeForm?.({ colorCodes })}
+              />
+            )}
+          </div>
         </Card>
       </div>
 
@@ -366,6 +458,65 @@ const VEMast_SetupTab = ({ form, isEditing = false, isReadOnly = false, isLoadin
           });
         }}
       />
+
+      {isColorMatrixOpen ? (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ve-color-matrix-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setIsColorMatrixOpen(false);
+          }}
+        >
+          <div className="flex h-[84vh] max-h-[84vh] w-full max-w-xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <div>
+                <h2 id="ve-color-matrix-title" className="text-sm font-bold text-slate-800">Available Color Matrix</h2>
+                <p className="mt-0.5 text-[10px] text-slate-500">
+                  {draftColorCodes.length} color{draftColorCodes.length === 1 ? "" : "s"} selected
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsColorMatrixOpen(false)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100"
+                aria-label="Close color matrix"
+              >
+                <FontAwesomeIcon icon={faXmark} />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-5 [&>div]:max-h-none">
+              <VEMast_ColorMatrix
+                rows={colorRows}
+                selectedCodes={draftColorCodes}
+                disabled={disabled}
+                onChange={setDraftColorCodes}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+              <button
+                type="button"
+                onClick={() => setIsColorMatrixOpen(false)}
+                className="rounded-md border border-slate-300 bg-white px-4 py-2 text-[11px] font-medium text-slate-600 hover:bg-slate-100"
+              >
+                {disabled ? "Close" : "Cancel"}
+              </button>
+              {!disabled ? (
+                <button
+                  type="button"
+                  onClick={applyColorMatrix}
+                  className="rounded-md bg-blue-600 px-4 py-2 text-[11px] font-medium text-white hover:bg-blue-700"
+                >
+                  Update Colors
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
     </div>
   );
