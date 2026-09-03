@@ -103,7 +103,7 @@ const APAdvancesTab = forwardRef(function APAdvancesTab({ registerActions }, ref
     branchName: "",
     vendCode: "",
     vendName: "",
-    status: "Open",
+    status: "All",
     apAdvancesDataUnfiltered: [],
     apAdvancesData: [],
     apAdvancesDataS: [],
@@ -186,6 +186,7 @@ const APAdvancesTab = forwardRef(function APAdvancesTab({ registerActions }, ref
     updateState({
       vendCode: "",
       vendName: "",
+      status: "All",
       apAdvancesData: [],
       apAdvancesDataS: [],
       apAdvancesDataUnfiltered: [],

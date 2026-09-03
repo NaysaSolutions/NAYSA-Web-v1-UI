@@ -59,6 +59,7 @@ export const pageRegistry = {
   // Inventory
   MSRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSRR.jsx")),
   VERR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/VERR.jsx")),
+  VESR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/VESR.jsx")),
   MSIS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSIS.jsx")),
   MSST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSST.jsx")),
   RMST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMST.jsx")),
@@ -194,6 +195,7 @@ export const pageRegistry = {
   PostAPDM: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Accounts Payable/PostAPDM.jsx")),
   PostMSRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSRR.jsx")),
   PostVERR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostVERR.jsx")),
+  PostVESR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostVESR.jsx")),
   PostVEAJ: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostVEAJ.jsx")),
   PostMSIS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSIS.jsx")),
   PostMSRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSRTV.jsx")),

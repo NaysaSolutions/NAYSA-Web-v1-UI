@@ -196,6 +196,59 @@ const addUniqueValue = (values = [], value) => {
   return [...values, normalizedValue];
 };
 
+const normalizeWorkOrderReferences = (references = []) => {
+  let source = references;
+
+  if (typeof source === "string") {
+    try {
+      source = JSON.parse(source);
+    } catch {
+      source = source
+        .split(",")
+        .map((woNumber) => ({ woNumber: woNumber.trim() }))
+        .filter((reference) => reference.woNumber);
+    }
+  }
+
+  if (!Array.isArray(source)) return [];
+
+  return source
+    .map((reference) => {
+      if (typeof reference === "string") {
+        return { woNumber: reference.trim() };
+      }
+
+      return {
+        woNumber: String(
+          reference?.woNumber ?? reference?.woNo ?? reference?.WO_NO ?? "",
+        ).trim(),
+        woId: String(reference?.woId ?? reference?.WO_ID ?? "").trim(),
+        branchCode: String(
+          reference?.branchCode ?? reference?.BRANCH_CODE ?? "",
+        ).trim(),
+        workOrderStatus: String(
+          reference?.workOrderStatus ?? reference?.WO_STATUS ?? "",
+        ).trim(),
+      };
+    })
+    .filter((reference) => reference.woNumber);
+};
+
+const mergeWorkOrderReferences = (...referenceGroups) => {
+  const uniqueReferences = new Map();
+
+  referenceGroups.forEach((references) => {
+    normalizeWorkOrderReferences(references).forEach((reference) => {
+      const key =
+        reference.woId || `${reference.branchCode}|${reference.woNumber}`;
+      const existing = uniqueReferences.get(key) || {};
+      uniqueReferences.set(key, { ...existing, ...reference });
+    });
+  });
+
+  return Array.from(uniqueReferences.values());
+};
+
 const getIntegrationStatus = (sentQty = 0, unsentQty = 0) => {
   const sent = Number(sentQty) || 0;
   const unsent = Number(unsentQty) || 0;
@@ -452,6 +505,7 @@ const pivotRows = (rows = [], isDetailed = false) => {
         unsentQty: 0,
         workOrderQty: 0,
         remainingWorkOrderQty: 0,
+        workOrderReferences: [],
         soNumbers: [],
         drNumbers: [],
         soStatus: "",
@@ -472,6 +526,9 @@ const pivotRows = (rows = [], isDetailed = false) => {
       item.remainingWorkOrderQty === null
         ? Math.max(0, qty - itemWorkOrderQty)
         : Number(item.remainingWorkOrderQty) || 0;
+    const itemWorkOrderReferences = normalizeWorkOrderReferences(
+      item.workOrderReferences,
+    );
 
     row.dates[deliveryDate] = (Number(row.dates[deliveryDate]) || 0) + qty;
     row.total += qty;
@@ -479,6 +536,10 @@ const pivotRows = (rows = [], isDetailed = false) => {
     row.unsentQty += itemUnsentQty;
     row.workOrderQty += itemWorkOrderQty;
     row.remainingWorkOrderQty += itemRemainingWorkOrderQty;
+    row.workOrderReferences = mergeWorkOrderReferences(
+      row.workOrderReferences,
+      itemWorkOrderReferences,
+    );
     row.soNumbers = addUniqueValue(row.soNumbers, item.soNumber);
     row.drNumbers = addUniqueValue(row.drNumbers, item.drNumber);
     row.soStatus =
@@ -538,6 +599,7 @@ const pivotRows = (rows = [], isDetailed = false) => {
         total: 0,
         integratedQty: 0,
         remainingQty: 0,
+        workOrderReferences: [],
         integrationStatus: "Not Integrated",
       };
     }
@@ -546,6 +608,10 @@ const pivotRows = (rows = [], isDetailed = false) => {
     dateWorkOrder.total += qty;
     dateWorkOrder.integratedQty += itemWorkOrderQty;
     dateWorkOrder.remainingQty += itemRemainingWorkOrderQty;
+    dateWorkOrder.workOrderReferences = mergeWorkOrderReferences(
+      dateWorkOrder.workOrderReferences,
+      itemWorkOrderReferences,
+    );
     dateWorkOrder.integrationStatus =
       dateWorkOrder.remainingQty <= 0
         ? "Integrated"
@@ -575,6 +641,9 @@ const pivotRows = (rows = [], isDetailed = false) => {
           : row.workOrderQty > 0
             ? "Partially Integrated"
             : "Not Integrated",
+      workOrderNumbers: row.workOrderReferences.map(
+        (reference) => reference.woNumber,
+      ),
       soNumber: row.soNumbers.join(", "),
       drNumber: row.drNumbers.join(", "),
     };
@@ -724,6 +793,14 @@ const filterByDates = (
             sum + (Number(row.dateWorkOrder?.[date]?.remainingQty) || 0),
           0,
         );
+        const workOrderReferences = normalizedDates.reduce(
+          (references, date) =>
+            mergeWorkOrderReferences(
+              references,
+              row.dateWorkOrder?.[date]?.workOrderReferences,
+            ),
+          [],
+        );
         const soNumbers = normalizedDates.reduce(
           (values, date) =>
             (row.dateIntegration?.[date]?.soNumbers || []).reduce(
@@ -751,6 +828,10 @@ const filterByDates = (
           unsentQty,
           workOrderQty,
           remainingWorkOrderQty,
+          workOrderReferences,
+          workOrderNumbers: workOrderReferences.map(
+            (reference) => reference.woNumber,
+          ),
           soNumbers,
           drNumbers,
           soNumber: soNumbers.join(", "),
@@ -803,6 +884,38 @@ const filterByDates = (
     .filter((material) => material.total > 0);
 };
 
+const openAuthenticatedDocumentTab = (documentUrl) => {
+  const tabName = `naysa_document_${Date.now()}_${Math.random()
+    .toString(36)
+    .slice(2)}`;
+  const documentWindow = window.open("", tabName);
+
+  if (!documentWindow) return null;
+
+  try {
+    // A named child window keeps the opener relationship. Copy the current
+    // tab's session values before the application and AuthProvider start.
+    for (let index = 0; index < sessionStorage.length; index += 1) {
+      const key = sessionStorage.key(index);
+      if (!key || key === "naysa_tab_id") continue;
+
+      const value = sessionStorage.getItem(key);
+      if (value !== null) {
+        documentWindow.sessionStorage.setItem(key, value);
+      }
+    }
+
+    // BaseURL will assign the document tab its own heartbeat identity.
+    documentWindow.sessionStorage.removeItem("naysa_tab_id");
+  } catch {
+    // Same-origin cookies and shared local storage are still available.
+  }
+
+  documentWindow.location.replace(documentUrl);
+  documentWindow.focus();
+  return documentWindow;
+};
+
 const QuantityCells = ({ dates, row, className = "" }) => (
   <>
     {dates.map((date) => (
@@ -820,6 +933,124 @@ const QuantityCells = ({ dates, row, className = "" }) => (
     </td>
   </>
 );
+
+const WorkOrderDateCell = ({ date, row }) => {
+  const quantity = Number(row.dates?.[date]) || 0;
+  const detail = row.dateWorkOrder?.[date];
+
+  if (quantity <= 0) {
+    return (
+      <td className="global-tran-td-ui w-[180px] min-w-[180px] max-w-[180px] text-center text-slate-400">
+        -
+      </td>
+    );
+  }
+
+  const integratedQty = Number(detail?.integratedQty) || 0;
+  const remainingQty = Number(detail?.remainingQty) || 0;
+  const integrationStatus =
+    detail?.integrationStatus ||
+    (remainingQty <= 0
+      ? "Integrated"
+      : integratedQty > 0
+        ? "Partially Integrated"
+        : "Not Integrated");
+  const workOrderReferences = normalizeWorkOrderReferences(
+    detail?.workOrderReferences,
+  );
+
+  const handleViewWorkOrder = (reference) => {
+    const woNumber = String(reference?.woNumber || "").trim();
+    const branchCode = String(reference?.branchCode || "").trim();
+
+    if (!woNumber || !branchCode) {
+      Swal.fire({
+        icon: "warning",
+        title: "Unable to view Work Order",
+        text: `The Work Order number or branch code is missing for ${woNumber || "this reference"}.`,
+      });
+      return;
+    }
+
+    const params = new URLSearchParams({
+      branchCode,
+      woNo: woNumber,
+      viewDocument: "true",
+    });
+    const documentUrl = new URL(
+      `/page/WO?${params.toString()}`,
+      window.location.origin,
+    ).href;
+    const documentWindow = openAuthenticatedDocumentTab(documentUrl);
+
+    if (!documentWindow) {
+      Swal.fire({
+        icon: "warning",
+        title: "Unable to open Work Order",
+        text: "Please allow pop-ups for this site, then try View again.",
+      });
+      return;
+    }
+  };
+
+  return (
+    <td className="global-tran-td-ui w-[180px] min-w-[180px] max-w-[180px] !px-1.5 !py-1 text-left align-top leading-tight">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1">
+        <span className="truncate text-[10px] font-bold text-slate-800 dark:text-slate-100">
+          Qty: {quantity.toLocaleString()}
+        </span>
+        <span
+          className={`inline-flex shrink-0 rounded-full px-1.5 py-0 text-[9px] font-bold leading-4 ${
+            integrationStatus === "Integrated"
+              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200"
+              : integrationStatus === "Partially Integrated"
+                ? "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200"
+                : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+          }`}
+        >
+          {integrationStatus}
+        </span>
+      </div>
+
+      {integratedQty > 0 && (
+        <div className="mt-0.5 text-[9px] font-semibold text-slate-500 dark:text-slate-400">
+          WO Qty: {integratedQty.toLocaleString()}
+          {remainingQty > 0
+            ? ` • Balance: ${remainingQty.toLocaleString()}`
+            : ""}
+        </div>
+      )}
+
+      {workOrderReferences.length > 0 && (
+        <div className="mt-1 grid gap-0.5 border-t border-slate-100 pt-1 dark:border-slate-700">
+          {workOrderReferences.map((reference) => (
+            <div
+              key={reference.woId || `${reference.branchCode}-${reference.woNumber}`}
+              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1"
+            >
+              <span
+                className="min-w-0 truncate font-mono text-[10px] font-semibold text-emerald-700 dark:text-emerald-300"
+                title={`WO ${reference.woNumber}`}
+              >
+                WO: {reference.woNumber}
+              </span>
+              <button
+                type="button"
+                onClick={() => handleViewWorkOrder(reference)}
+                className="inline-flex shrink-0 items-center gap-0.5 rounded border border-slate-200 bg-white px-1 py-0 text-[9px] font-bold leading-4 text-slate-600 shadow-sm transition-colors hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-emerald-500 dark:hover:bg-emerald-950 dark:hover:text-emerald-200"
+                title={`View Work Order ${reference.woNumber}`}
+                aria-label={`View Work Order ${reference.woNumber}`}
+              >
+                <Eye className="h-2 w-2" />
+                View
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </td>
+  );
+};
 
 const IntegrationDateCell = ({ date, row }) => {
   const quantity = Number(row.dates?.[date]) || 0;
@@ -887,32 +1118,9 @@ const IntegrationDateCell = ({ date, row }) => {
       `/page/${documentType}?${params.toString()}`,
       window.location.origin,
     ).href;
-    const documentWindow = window.open("", "_blank");
+    const documentWindow = openAuthenticatedDocumentTab(documentUrl);
 
-    if (documentWindow) {
-      // Prepare the new tab's authenticated session before loading the app.
-      // Opening the destination first can let AuthProvider run before the
-      // browser has copied the current tab's session storage.
-      try {
-        for (let index = 0; index < sessionStorage.length; index += 1) {
-          const key = sessionStorage.key(index);
-          if (!key || key === "naysa_tab_id") continue;
-
-          const value = sessionStorage.getItem(key);
-          if (value !== null) {
-            documentWindow.sessionStorage.setItem(key, value);
-          }
-        }
-
-        documentWindow.sessionStorage.removeItem("naysa_tab_id");
-      } catch {
-        // Shared local storage and authentication cookies remain available
-        // when direct child session-storage access is restricted.
-      }
-
-      documentWindow.location.replace(documentUrl);
-      documentWindow.opener = null;
-    } else {
+    if (!documentWindow) {
       Swal.fire({
         icon: "warning",
         title: "Unable to open document",
@@ -2658,10 +2866,13 @@ export default function CommissaryForecast() {
   const showsBranchColumn =
     activeTabConfig.detailed || activeTabConfig.materialSummary;
   const showsIntegrationDetails = activeTab === "confirmedDetailed";
+  const showsWorkOrderDetails = activeTab === "confirmedSummary";
+  const showsReferenceDetails =
+    showsIntegrationDetails || showsWorkOrderDetails;
   const colSpan =
     dates.length +
     (showsBranchColumn ? 5 : 4) +
-    (showsIntegrationDetails ? 1 : 0);
+    (showsReferenceDetails ? 1 : 0);
 
   const filteredSetupRows = useMemo(() => {
     const search = String(setupSearch || "")
@@ -3378,9 +3589,11 @@ export default function CommissaryForecast() {
                     UOM
                   </th>
 
-                  {showsIntegrationDetails && (
+                  {showsReferenceDetails && (
                     <th className="global-tran-th-ui sticky top-0 z-[210] w-[145px] min-w-[145px] bg-blue-100 text-left dark:bg-blue-900">
-                      Integration Status
+                      {showsWorkOrderDetails
+                        ? "Work Order Status"
+                        : "Integration Status"}
                     </th>
                   )}
 
@@ -3388,8 +3601,12 @@ export default function CommissaryForecast() {
                     <th
                       key={date}
                       className={`global-tran-th-ui sticky top-0 z-[210] bg-blue-100 dark:bg-blue-900 ${
-                        showsIntegrationDetails
-                          ? "w-[160px] min-w-[160px] max-w-[160px] text-center"
+                        showsReferenceDetails
+                          ? `${
+                              showsWorkOrderDetails
+                                ? "w-[180px] min-w-[180px] max-w-[180px]"
+                                : "w-[160px] min-w-[160px] max-w-[160px]"
+                            } text-center`
                           : "w-[96px] min-w-[96px] max-w-[96px] text-right"
                       }`}
                     >
@@ -3523,9 +3740,38 @@ export default function CommissaryForecast() {
                                 </td>
                               )}
 
+                              {showsWorkOrderDetails && (
+                                <td className="global-tran-td-ui w-[145px] min-w-[145px] text-left text-xs">
+                                  <span
+                                    className={`inline-flex rounded-full px-2 py-1 font-bold ${
+                                      row.workOrderIntegrationStatus ===
+                                      "Integrated"
+                                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200"
+                                        : row.workOrderIntegrationStatus ===
+                                            "Partially Integrated"
+                                          ? "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200"
+                                          : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                                    }`}
+                                    title={
+                                      row.workOrderNumbers?.length > 0
+                                        ? `WO: ${row.workOrderNumbers.join(", ")}`
+                                        : row.workOrderIntegrationStatus
+                                    }
+                                  >
+                                    {row.workOrderIntegrationStatus}
+                                  </span>
+                                </td>
+                              )}
+
                               {dates.map((date) =>
                                 showsIntegrationDetails ? (
                                   <IntegrationDateCell
+                                    key={date}
+                                    date={date}
+                                    row={row}
+                                  />
+                                ) : showsWorkOrderDetails ? (
+                                  <WorkOrderDateCell
                                     key={date}
                                     date={date}
                                     row={row}
@@ -3570,7 +3816,7 @@ export default function CommissaryForecast() {
                 className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-xs font-bold text-white shadow transition-all sm:text-sm ${
                   isGeneratingWO || currentData.length === 0 || isLoading
                     ? "cursor-not-allowed bg-gray-400 dark:bg-gray-700"
-                    : "bg-emerald-600 hover:bg-emerald-700 active:scale-95 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                    : "bg-indigo-600 hover:bg-indigo-700 active:scale-95 dark:bg-indigo-600 dark:hover:bg-indigo-500"
                 }`}
               >
                 <Boxes className="h-4 w-4 shrink-0" />
@@ -3627,7 +3873,7 @@ export default function CommissaryForecast() {
             aria-labelledby="work-order-modal-title"
             className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-950"
           >
-            <header className="flex items-start justify-between gap-4 border-b border-slate-200 bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-4 text-white dark:border-slate-700 sm:px-6">
+            <header className="flex items-start justify-between gap-4 border-b border-slate-200 bg-gradient-to-r from-indigo-600 to-blue-600 px-4 py-4 text-white dark:border-slate-700 sm:px-6">
               <div>
                 <h2
                   id="work-order-modal-title"
@@ -3635,7 +3881,7 @@ export default function CommissaryForecast() {
                 >
                   Integrate Confirmed Orders to Work Order
                 </h2>
-                <p className="mt-1 text-xs text-emerald-50">
+                <p className="mt-1 text-xs text-indigo-50">
                   Select finished items and enter the quantity to produce.
                 </p>
               </div>
@@ -3680,7 +3926,7 @@ export default function CommissaryForecast() {
                 <div className="text-[10px] font-bold uppercase text-slate-400">
                   Work Order Quantity
                 </div>
-                <div className="mt-1 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+                <div className="mt-1 text-sm font-semibold text-indigo-700 dark:text-indigo-300">
                   {selectedWorkOrderQuantity.toLocaleString()}
                 </div>
               </div>
@@ -3700,7 +3946,7 @@ export default function CommissaryForecast() {
                 onChange={(event) => setWorkOrderRemarks(event.target.value)}
                 maxLength={200}
                 placeholder="Optional remarks for the generated Work Orders"
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 dark:border-slate-700 dark:bg-slate-950 dark:focus:ring-emerald-900/40"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:focus:ring-indigo-900/40"
               />
             </div>
 
@@ -3725,7 +3971,7 @@ export default function CommissaryForecast() {
                         checked={allWorkOrderRowsSelected}
                         onChange={toggleAllWorkOrderRows}
                         aria-label="Select all items for Work Order integration"
-                        className="h-4 w-4 cursor-pointer rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                        className="h-4 w-4 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                       />
                     </th>
                     <th className="sticky top-0 z-30 border-b border-slate-300 bg-slate-100 px-3 py-2 text-left dark:border-slate-700 dark:bg-slate-900">
@@ -3773,7 +4019,7 @@ export default function CommissaryForecast() {
                         key={row.workOrderRowId}
                         className={
                           isSelected
-                            ? "bg-emerald-50/60 hover:bg-emerald-50 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/30"
+                            ? "bg-indigo-50/60 hover:bg-indigo-50 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/30"
                             : "hover:bg-slate-50 dark:hover:bg-slate-900/70"
                         }
                       >
@@ -3785,7 +4031,7 @@ export default function CommissaryForecast() {
                               toggleWorkOrderRow(row.workOrderRowId)
                             }
                             aria-label={`Select ${row.itemCode || "item"} for Work Order integration`}
-                            className="h-4 w-4 cursor-pointer rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                            className="h-4 w-4 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                           />
                         </td>
                         <td
@@ -3817,7 +4063,7 @@ export default function CommissaryForecast() {
                         <td className="border-b border-slate-100 px-3 py-2 text-right text-slate-600 dark:border-slate-800 dark:text-slate-300">
                           {Number(row.workOrderQty || 0).toLocaleString()}
                         </td>
-                        <td className="border-b border-slate-100 px-3 py-2 text-right font-bold text-emerald-700 dark:border-slate-800 dark:text-emerald-300">
+                        <td className="border-b border-slate-100 px-3 py-2 text-right font-bold text-indigo-700 dark:border-slate-800 dark:text-indigo-300">
                           {Number(
                             row.availableWorkOrderQty || 0,
                           ).toLocaleString()}
@@ -3840,7 +4086,7 @@ export default function CommissaryForecast() {
                             className={`w-full rounded-md border px-2 py-1.5 text-right text-sm font-semibold outline-none transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:disabled:bg-slate-900 ${
                               invalidQuantity
                                 ? "border-red-500 focus:ring-2 focus:ring-red-100 dark:focus:ring-red-900/40"
-                                : "border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 dark:border-slate-700 dark:bg-slate-950 dark:focus:ring-emerald-900/40"
+                                : "border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:focus:ring-indigo-900/40"
                             }`}
                           />
                         </td>
@@ -3868,7 +4114,7 @@ export default function CommissaryForecast() {
                   selectedWorkOrderRows.length === 0 ||
                   hasInvalidSelectedWorkOrderQuantity
                     ? "cursor-not-allowed bg-gray-400 dark:bg-gray-700"
-                    : "bg-emerald-600 hover:bg-emerald-700 active:scale-95 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                    : "bg-indigo-600 hover:bg-indigo-700 active:scale-95 dark:bg-indigo-600 dark:hover:bg-indigo-500"
                 }`}
               >
                 {isGeneratingWO ? "Creating..." : "Create Work Orders"}

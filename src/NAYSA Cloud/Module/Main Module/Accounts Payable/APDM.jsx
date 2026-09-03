@@ -1377,7 +1377,7 @@ const handleOpenAPBalance = async () => {
       await Swal.fire({
         icon: "info",
         title: "Open AP Balance",
-        text: "There are no AR balance records for the selected customer/branch.",
+        text: "There are no AP balance records for the selected supplier/branch.",
       });
        updateState({ isLoading: false });
       return; 

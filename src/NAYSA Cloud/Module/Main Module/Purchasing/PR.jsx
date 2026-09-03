@@ -1559,10 +1559,24 @@ if (field === 'prStatus') {
       }
 
 
-      const normalizedDetailRows = rowsForSave.map((row) => ({
-        ...row,
-        prStatus: row.prStatus || "O",
-      }));
+      const normalizedDetailRows = rowsForSave.map((row) => {
+        const prStatus = row.prStatus || "O";
+
+        if (String(prStatus).toUpperCase() === "X") {
+          return {
+            ...row,
+            prStatus,
+            qtyOnHand: formatNumber(0, decQty),
+            qtyNeeded: formatNumber(0, decQty),
+          };
+        }
+
+        return {
+          ...row,
+          prStatus,
+        };
+      });
+      rowsForSave = normalizedDetailRows;
       const hasOpenDetail = normalizedDetailRows.some(
         (row) => String(row.prStatus || "O").toUpperCase() === "O"
       );
@@ -1588,7 +1602,7 @@ if (field === 'prStatus') {
         prStatus: finalHeaderPrStatus,
         userCode: userCode,
         // ⬇️ THIS PART guarantees ALL CURRENT detailRows (including newly added) are sent
-        dt1: rowsForSave.map((row, index) => ({
+        dt1: normalizedDetailRows.map((row, index) => ({
           prId: documentID || "",
           groupId: row.groupId || "",       
           invType: row.invType || "",

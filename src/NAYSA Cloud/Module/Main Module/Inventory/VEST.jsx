@@ -70,7 +70,6 @@ import {
   useHandleCancel,
   useFieldLenghtCheck,
   useGetFieldLength,
-  useHandlePostTran,
 } from "@/NAYSA Cloud/Global/procedure";
 
 import {
@@ -105,6 +104,33 @@ import {
 // Header
 import Header from "@/NAYSA Cloud/Components/Header";
 
+const POSTING_AUTH_FLAG = "naysa_posting_auth_in_progress";
+
+const getVESTPostingRows = (response) => {
+  const body = response?.data ?? response;
+
+  if (Array.isArray(body)) return body;
+  if (Array.isArray(body?.data)) return body.data;
+  if (body && typeof body === "object") return [body];
+
+  return [];
+};
+
+const getVESTPostingResult = (response) => {
+  const rows = getVESTPostingRows(response);
+
+  return (
+    rows.find(
+      (row) =>
+        row &&
+        (Object.prototype.hasOwnProperty.call(row, "result") ||
+          Object.prototype.hasOwnProperty.call(row, "errorMsg") ||
+          Object.prototype.hasOwnProperty.call(row, "errorCount")),
+    ) ||
+    rows[0] ||
+    {}
+  );
+};
 
 const toDateInputValue = (value) => {
   const raw = String(value || "").trim();
@@ -208,6 +234,20 @@ const PostVEST = ({ isOpen, onClose, userCode, docType = "VEST", documentTitle =
   const [userPassword] = useState(null);
 
   useEffect(() => {
+    if (!isOpen) return undefined;
+
+    try {
+      sessionStorage.setItem(POSTING_AUTH_FLAG, "1");
+    } catch {}
+
+    return () => {
+      try {
+        sessionStorage.removeItem(POSTING_AUTH_FLAG);
+      } catch {}
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
     let isMounted = true;
 
     const fetchPostingData = async () => {
@@ -264,7 +304,90 @@ const PostVEST = ({ isOpen, onClose, userCode, docType = "VEST", documentTitle =
   }, [isOpen, onClose]);
 
   const handlePost = async (selectedData, userPw) => {
-    await useHandlePostTran(selectedData, userPw, docType, userCode, setLoading, onClose);
+    const selectedRows = Array.isArray(selectedData)
+      ? selectedData
+      : Array.isArray(selectedData?.records)
+        ? selectedData.records
+        : selectedData
+          ? [selectedData]
+          : [];
+
+    const dt1 = selectedRows
+      .map((row, index) => ({
+        lnNo: index + 1,
+        groupId:
+          row?.groupId ||
+          row?.vestId ||
+          row?.documentID ||
+          row?.docId ||
+          "",
+      }))
+      .filter((row) => row.groupId);
+
+    if (dt1.length === 0) {
+      useSwalValidationAlert({
+        icon: "warning",
+        title: "Posting failed",
+        message: "No valid VEST transaction was selected for posting.",
+      });
+      return false;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await postRequest("finalizeVEST", {
+        userCode,
+        userPassword: userPw,
+        json_data: {
+          userCode,
+          dt1,
+        },
+      });
+      const result = getVESTPostingResult(response);
+      const errorCount = Number(result?.errorCount || 0);
+      const errorMessage = String(
+        result?.errorMsg || (errorCount > 0 ? result?.result : "") || "",
+      ).trim();
+
+      if (errorCount > 0 || errorMessage) {
+        useSwalValidationAlert({
+          icon: "error",
+          title: "Posting failed",
+          message: errorMessage || "VEST finalization failed.",
+        });
+        return false;
+      }
+
+      useSwalValidationAlert({
+        icon: "success",
+        title: "Posting successful",
+        message:
+          String(result?.result || "").trim() ||
+          "The selected VEST transaction was posted successfully.",
+      });
+      onClose?.();
+      return true;
+    } catch (error) {
+      const serverResult = getVESTPostingResult(error?.response?.data);
+      const message = String(
+        serverResult?.errorMsg ||
+          serverResult?.result ||
+          error?.response?.data?.message ||
+          error?.message ||
+          "Unable to finalize VEST.",
+      ).trim();
+
+      console.error("VEST finalize error:", error);
+      useSwalValidationAlert({
+        icon: "error",
+        title: "Posting failed",
+        message,
+      });
+      return false;
+    } finally {
+      setLoading(false);
+    }
   };
 
   const pickDocAndBranch = (row) => ({
@@ -637,8 +760,8 @@ const VEST = () => {
     if (!row) return false;
     const name = getTranTypeName(row);
     const code = getTranTypeCode(row);
-    return normalizeCode(name).includes("INTER BRANCH") || normalizeCode(code) === "VEST06" || normalizeCode(code) === "IB";
-  };
+    return normalizeCode(name).includes("INTER BRANCH") || normalizeCode(code) === "VEST03" 
+    };
 
   const isIntransitToBranch = (tranTypeCode = selectedTranType, list = tranTypes) => {
     const row = (list || []).find(
@@ -647,7 +770,7 @@ const VEST = () => {
     if (!row) return false;
     const name = getTranTypeName(row);
     const code = getTranTypeCode(row);
-    return normalizeCode(name).includes("INTRANSIT TO BRANCH") || normalizeCode(code) === "VEST05" || normalizeCode(code) === "INB";
+    return normalizeCode(name).includes("INTRANSIT TO BRANCH") || normalizeCode(code) === "VEST02"
   };
 
   const isIntransitToWarehouse = (tranTypeCode = selectedTranType, list = tranTypes) => {
@@ -660,8 +783,7 @@ const VEST = () => {
     return (
       name.includes("INTRANSIT TO WAREHOUSE") ||
       name.includes("INTRANSIT TO WARE HOUSE") ||
-      code === "VEST07" ||
-      code === "INW"
+      code === "VEST04"
     );
   };
 
@@ -688,13 +810,15 @@ const VEST = () => {
     const name = normalizeCode(getTranTypeName(row));
 
     return (
-      ["IW", "IB", "VEST02", "VEST04", "VEST06"].includes(normalizedCode) ||
+      ["VEST01", "VEST03"].includes(normalizedCode) ||
       ["WH_TRANSFER", "BRANCH_TRANSFER"].includes(column) ||
       name.includes("INTER WAREHOUSE") ||
       name.includes("INTER WARE HOUSE") ||
       name.includes("INTER BRANCH")
     );
   };
+
+  
 
   const hideFromWarehouseAndLocationSearch = (tranTypeCode = selectedTranType, list = tranTypes) =>
     isInterWarehouseOrInterBranch(tranTypeCode, list) || isIntransitTransfer(tranTypeCode, list);
@@ -1078,6 +1202,15 @@ const VEST = () => {
 
       const retrievedDetailRows = (data.dt1 || []).map((item) => ({
         ...item,
+        // Keep the persisted vehicle identity when an existing VEST is loaded.
+        // The aliases make this tolerant of either SQL-style or API-style keys.
+        veId:
+          item.veId ||
+          item.ve_id ||
+          item.VE_ID ||
+          item.VeId ||
+          item.uniqueKey ||
+          "",
         invType: "VE",
         make: item.make || item.carMake || item.car_make || "",
         modelYear: item.modelYear || item.modelYr || item.model_yr || "",
@@ -1245,6 +1378,14 @@ const VEST = () => {
           rcCode: row.rcCode || "",
           slTypeCode: row.sltypeCode || "",
           slCode: row.slCode || "",
+          // sproc_PHP_VEST stores this value in VEST_DT1.VE_ID.
+          veId:
+            row.veId ||
+            row.ve_id ||
+            row.VE_ID ||
+            row.VeId ||
+            row.uniqueKey ||
+            "",
           uniqueKey: row.uniqueKey || "",
           operation: row.operation || "",
         })),
@@ -1392,6 +1533,7 @@ const VEST = () => {
     rcCode: "",
     sltypeCode: "",
     slCode: "",
+    veId: "",
     uniqueKey: "",
     operation: "",
   });
@@ -1644,11 +1786,12 @@ const VEST = () => {
     { key: "slCode", label: "SL Code", width: 120 },
     { key: "qtyHand", label: "Qty On Hand", width: 130 },
     { key: "categCode", label: "Category", width: 120 },
+    { key: "veId", label: "VE ID", width: 160 },
     { key: "uniqueKey", label: "Unique Key", width: 120 },
     { key: "operation", label: "Operation", width: 120 },
   ];
   const visibleVestDetailColumns = vestDetailColumnDefs.filter((column) => {
-    if (["categCode", "uniqueKey", "operation", "sltypeCode"].includes(column.key)) return false;
+    if (["categCode", "veId", "uniqueKey", "operation", "sltypeCode"].includes(column.key)) return false;
     if (["quantity", "itemAmount"].includes(column.key)) return !handleFieldBehavior("hiddenCAMode");
     if (["acctCode", "rcCode", "slCode"].includes(column.key)) return !handleFieldBehavior("hiddenBBMode");
     return true;
@@ -2678,7 +2821,14 @@ const VEST = () => {
         item?.qtyOnHand ?? item?.qtyHand ?? 0,
       );
       const rawUnitCost = parseFormattedNumber(item?.unitCost ?? 0);
-      const originalKey = item?.uniqueKey ?? "";
+      const originalKey =
+        item?.uniqueKey ?? item?.UNIQUE_KEY ?? item?.unique_key ?? "";
+      const originalVeId =
+        item?.veId ??
+        item?.VE_ID ??
+        item?.ve_id ??
+        item?.VeId ??
+        originalKey;
 
       // Resolve the VE inventory account from the lookup response aliases.
       const invAccountCode = item?.invAcct ?? item?.invAcctCode ?? item?.invAcct_code ?? item?.INV_ACCT ?? item?.acctCode ?? item?.ACCT_CODE ?? "";
@@ -2693,6 +2843,8 @@ const VEST = () => {
       }
 
       const baseRow = {
+        // Preserve the real VEFIFO_LOC.VE_ID selected by the user.
+        veId: originalVeId,
         invType: "VE",
         itemCode: item?.itemCode ?? "",
         itemName: item?.itemName ?? "",
@@ -2751,8 +2903,10 @@ const VEST = () => {
           ...baseRow,
           uniqueKey: originalKey,
           qtyHand: formatNumber(rawQtyHand, decQty),
-          quantity: formatNumber(0, decQty),
-          itemAmount: formatNumber(0, 2),
+          // A VE lookup row identifies a specific stock-card vehicle, so use
+          // that vehicle's full on-hand balance as the transfer quantity.
+          quantity: formatNumber(rawQtyHand, decQty),
+          itemAmount: formatNumber(rawQtyHand * rawUnitCost, 2),
           operation: selectedTranType === "IL" ? "S" : "A",
         },
       ];
@@ -3095,7 +3249,7 @@ const VEST = () => {
 
                 <tbody className="relative">
                   {sortedVestDetailRows.map(({ row, originalIndex: index }) => (
-                    <tr key={`${row.uniqueKey || row.itemCode || "row"}-${index}`} className="global-tran-tr-ui">
+                    <tr key={`${row.veId || row.uniqueKey || row.itemCode || "row"}-${index}`} className="global-tran-tr-ui">
                       <td className="global-tran-td-ui text-center">
                         {index + 1}
                       </td>
@@ -3581,6 +3735,15 @@ const VEST = () => {
                           type="text"
                           className="w-[200px] global-tran-td-inputclass-ui"
                           value={row.categCode || ""}
+                          readOnly
+                        />
+                      </td>
+
+                      <td className="global-tran-td-ui hidden">
+                        <input
+                          type="text"
+                          className="w-[200px] global-tran-td-inputclass-ui"
+                          value={row.veId || ""}
                           readOnly
                         />
                       </td>
