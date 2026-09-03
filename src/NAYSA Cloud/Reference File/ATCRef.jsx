@@ -62,6 +62,12 @@ const DEFAULT_FORM = {
   __existing: false,
 };
 
+const formatAtcRate = (value) => {
+  if (value === "" || value === null || value === undefined) return "";
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue.toFixed(2) : "0.00";
+};
+
 /* ================= HELPERS ================= */
 
 const formatDate = (value) => {
@@ -144,7 +150,7 @@ const getRegistrationValue = (row = {}, keys = []) => {
 const mapAtcRow = (row) => ({
   atcCode: row?.atccode ?? row?.ATCCODE ?? row?.atcCode ?? "",
   atcName: row?.atcname ?? row?.ATCNAME ?? row?.atcName ?? "",
-  atcRate: String(row?.atcrate ?? row?.ATCRATE ?? row?.atcRate ?? ""),
+  atcRate: formatAtcRate(row?.atcrate ?? row?.ATCRATE ?? row?.atcRate ?? ""),
 
   ewtAcct: row?.ewtacct ?? row?.EWTACCT ?? row?.ewtAcct ?? "",
   ewtAcctName:
@@ -826,6 +832,9 @@ const ATCRef = () => {
                       setField("atcRate", val);
                     }
                   }}
+                  onBlur={() => setField("atcRate", formatAtcRate(form.atcRate))}
+                  step="0.01"
+                  min="0"
                   disabled={!isEditing}
                   required
                 />
@@ -986,7 +995,7 @@ const ATCRef = () => {
         <SearchCOAMast
           isOpen={isCwtAcctModalOpen}
           source="cwtAcct"
-          customParam="CWT"
+          customParam="CWT_CWVT"
           classCode="CWT"
           title="Select CWT Account"
           onClose={(value) => {
@@ -1003,7 +1012,7 @@ const ATCRef = () => {
         <SearchCOAMast
           isOpen={isClAcctModalOpen}
           source="clAcct"
-          customParam="CWTCL"
+          customParam="CWTCL_CWVTCL"
           classCode="CWTCL"
           title="Select CWT Clearing Account"
           onClose={(value) => {

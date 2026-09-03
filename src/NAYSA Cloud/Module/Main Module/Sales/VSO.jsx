@@ -1010,7 +1010,7 @@ const VSO = () => {
       }
       updateState({ documentID: savedId, documentNo: savedNo, isDocNoDisabled: true });
       useSwalshowSaveSuccessDialog(
-        () => { handleReset(); setTopTab("history"); },
+        handleReset,
         () => useHandlePrint(savedId, docType),
       );
     } catch (error) {

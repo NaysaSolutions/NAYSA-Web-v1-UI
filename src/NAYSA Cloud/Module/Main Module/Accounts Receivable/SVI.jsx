@@ -426,6 +426,7 @@ const SVI = () => {
   isReadOnly ||
   isViewDocumentUrl ||
   ["POSTED", "FINALIZED", "CANCELLED", "CLOSED"].includes(normalizedStatus);
+  const isCwvatEnabled = String(companyInfo?.oeCWVat || "").toUpperCase() === "E";
 
   const sviDetailColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
@@ -445,6 +446,13 @@ const SVI = () => {
     { key: "atcCode", label: "ATC", width: 100},
     { key: "atcName", label: "ATC Name", width: 220 },
     { key: "atcAmount", label: "ATC Amount", width: 120 },
+    ...(isCwvatEnabled
+      ? [
+          { key: "cwvatCode", label: "CW VAT", width: 100 },
+          { key: "cwvatName", label: "CW VAT Name", width: 220 },
+          { key: "cwvatAmt", label: "CW VAT Amount", width: 130 },
+        ]
+      : []),
     { key: "sviAmount", label: "Amount Due", width: 120 },
     { key: "salesAcct", label: "Sales Account", width: 120 },
     { key: "arAcct", label: "AR Account", width: 120 },
@@ -564,6 +572,7 @@ const SVI = () => {
   totalVatAmount: '0.00',
   totalSalesAmount: '0.00',
   totalAtcAmount: '0.00',
+  totalCwvatAmount: '0.00',
   totalAmountDue: '0.00',
   });
 
@@ -577,7 +586,7 @@ const SVI = () => {
   
 
 
-  const updateTotalsDisplay = (grossAmt, discAmt, netDisc, vat, atc, amtDue) => {
+  const updateTotalsDisplay = (grossAmt, discAmt, netDisc, vat, atc, cwvat, amtDue) => {
   //console.log("updateTotalsDisplay received RAW totals:", { grossAmt, discAmt, netDisc, vat, atc, amtDue });
     setTotals({
           totalGrossAmount: formatNumber(grossAmt),
@@ -585,7 +594,8 @@ const SVI = () => {
           totalNetAmount: formatNumber(netDisc),
           totalVatAmount: formatNumber(vat),
           totalSalesAmount: formatNumber(netDisc - vat),
-          totalAtcAmount: formatNumber(atc),
+          totalAtcAmount: formatNumber(atc + cwvat),
+          totalCwvatAmount: formatNumber(cwvat),
           totalAmountDue: formatNumber(amtDue),
       });
   };
@@ -762,7 +772,7 @@ useEffect(() => {
 
     });
 
-      updateTotalsDisplay (0, 0, 0, 0, 0, 0)
+      updateTotalsDisplay (0, 0, 0, 0, 0, 0, 0)
   };
 
    
@@ -838,6 +848,7 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       netDisc: formatNumber(item.netDisc),
       vatAmount: formatNumber(item.vatAmount),
       atcAmount: formatNumber(item.atcAmount),
+      cwvatAmt: formatNumber(item.cwvatAmt),
       sviAmount: formatNumber(item.sviAmount),
     }));
 
@@ -1026,6 +1037,9 @@ const handleActivityOption = async (action) => {
           atcCode: row.atcCode || "",
           atcName: row.atcName || "",
           atcAmount: parseFormattedNumber(row.atcAmount || 0),
+          cwvatCode: row.cwvatCode || "",
+          cwvatName: row.cwvatName || "",
+          cwvatAmt: parseFormattedNumber(row.cwvatAmt || 0),
           sviAmount: parseFormattedNumber(row.sviAmount || 0),
           salesAcct: row.salesAcct || "",
           arAcct: row.arAcct || "",
@@ -1177,6 +1191,9 @@ const handleActivityOption = async (action) => {
           atcCode: item.atcCode || "",
           atcName: item.atcName || "",
           atcAmount: "0.00",
+          cwvatCode: "",
+          cwvatName: "",
+          cwvatAmt: "0.00",
           sviAmount: "0.00",
           salesAcct: "",
           arAcct: "",
@@ -1564,6 +1581,7 @@ useEffect(() => {
   let totalNetDiscount = 0;
   let totalVAT = 0;
   let totalATC = 0;
+  let totalCWVAT = 0;
   let totalAmtDue = 0;
   let totalGrossAmt =0;
   let totalDiscAmt=0;
@@ -1572,6 +1590,7 @@ useEffect(() => {
 
     const vatAmount = parseFormattedNumber(row.vatAmount || 0) || 0;
     const atcAmount = parseFormattedNumber(row.atcAmount || 0) || 0;
+    const cwvatAmt = parseFormattedNumber(row.cwvatAmt || 0) || 0;
     const invoiceGross = parseFormattedNumber(row.grossAmount || 0) || 0;
     const invoiceNetDisc = parseFormattedNumber(row.netDisc || row.netDisc || 0) || 0;
     const invoiceDiscount = parseFormattedNumber(row.discAmount || 0) || 0;
@@ -1582,10 +1601,11 @@ useEffect(() => {
     totalNetDiscount+= invoiceNetDisc;
     totalVAT += vatAmount;
     totalATC += atcAmount;
+    totalCWVAT += cwvatAmt;
   });
 
-  totalAmtDue = totalNetDiscount - totalATC; 
-    updateTotalsDisplay (totalGrossAmt,totalDiscAmt,totalNetDiscount, totalVAT, totalATC, totalAmtDue);
+  totalAmtDue = totalNetDiscount - totalATC - totalCWVAT;
+    updateTotalsDisplay (totalGrossAmt,totalDiscAmt,totalNetDiscount, totalVAT, totalATC, totalCWVAT, totalAmtDue);
 
 };
 
@@ -1615,10 +1635,21 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
     row.atcName = value.atcName;
   }
 
+  if (field === "cwvatCode") {
+    row.cwvatCode = value.atcCode;
+    row.cwvatName = value.atcName;
+  }
+
   if (field === "atcName") {
     row.atcCode = "";
     row.atcName = "";
     row.atcAmount = "0.00";
+  }
+
+  if (field === "cwvatName") {
+    row.cwvatCode = "";
+    row.cwvatName = "";
+    row.cwvatAmt = "0.00";
   }
 
   if (field === "billCode") {
@@ -1634,6 +1665,9 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
     row.unitPrice = "0.00";
     row.vatAmount = "0.00";
     row.atcAmount = "0.00";
+    row.cwvatCode = "";
+    row.cwvatName = "";
+    row.cwvatAmt = "0.00";
     row.amountDue = "0.00";
     row.discRate = "0.00";
     row.discAmount = "0.00";
@@ -1653,6 +1687,7 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
     const origUnitPrice = parseFormattedNumber(row.unitPrice) || 0;
     const origVatCode = row.vatCode || "";
     const origAtcCode = row.atcCode || "";
+    const origCwvatCode = row.cwvatCode || "";
 
     async function recalcRow(newGrossAmt, newDiscAmount) {
       const newNetDiscount = +(newGrossAmt - newDiscAmount).toFixed(2);
@@ -1661,12 +1696,14 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
 
 
       const newATCAmount = origAtcCode ? getAllTopATCAmount(origAtcCode, newNetOfVat) : 0;
-      const newAmountDue = +(newNetDiscount - newATCAmount).toFixed(2);
+      const newCWVATAmount = origCwvatCode ? getAllTopATCAmount(origCwvatCode, newNetOfVat) : 0;
+      const newAmountDue = +(newNetDiscount - newATCAmount - newCWVATAmount).toFixed(2);
 
       row.grossAmount = formatNumber(newGrossAmt);
       row.netDisc = formatNumber(newNetDiscount);
       row.vatAmount = formatNumber(newVatAmount);
       row.atcAmount = formatNumber(newATCAmount);
+      row.cwvatAmt = formatNumber(newCWVATAmount);
       row.sviAmount = formatNumber(newAmountDue);
       row.discAmount = formatNumber(newDiscAmount);
       row.quantity = formatNumber(parseFormattedNumber(row.quantity));
@@ -1707,7 +1744,7 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
       await recalcRow(newGrossAmt, newDiscAmt);
     }
 
-    if (field === "vatCode" || field === "atcCode" || field === "atcName") {
+    if (["vatCode", "atcCode", "atcName", "cwvatCode", "cwvatName"].includes(field)) {
       async function updateVatAndAtc() {
         const newNetDiscount = +(
           parseFormattedNumber(row.grossAmount) - parseFormattedNumber(row.discAmount)
@@ -1722,9 +1759,11 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
 
         const newNetOfVat = +(newNetDiscount - newVatAmount).toFixed(2);
         const newATCAmount = row.atcCode ? getAllTopATCAmount(row.atcCode, newNetOfVat) : 0;
+        const newCWVATAmount = row.cwvatCode ? getAllTopATCAmount(row.cwvatCode, newNetOfVat) : 0;
 
         row.atcAmount = newATCAmount.toFixed(2);
-        row.sviAmount = formatNumber(newNetDiscount - newATCAmount);
+        row.cwvatAmt = newCWVATAmount.toFixed(2);
+        row.sviAmount = formatNumber(newNetDiscount - newATCAmount - newCWVATAmount);
       }
 
       await updateVatAndAtc();
@@ -2043,7 +2082,12 @@ const handleCloseAtcModal = async (selectedAtc) => {
     const result = getAllTopATCRow(selectedAtc.atcCode) || selectedAtc;
 
       accountModalSource !== null
-        ? handleDetailChange(selectedRowIndex, 'atcCode', result, true)
+        ? handleDetailChange(
+            selectedRowIndex,
+            accountModalSource === 'cwvatCode' ? 'cwvatCode' : 'atcCode',
+            result,
+            true
+          )
         : handleDetailChangeGL(selectedRowIndex, 'atcCode', result);   
   }
   updateState({ showAtcModal: false ,
@@ -2185,11 +2229,13 @@ const renderSviDetailCell = (columnKey, row, index) => {
     netDisc: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0" value={formatNumber(parseFormattedNumber(row[columnKey])) || ""} readOnly /></td>,
     vatAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0" value={formatNumber(parseFormattedNumber(row[columnKey])) || ""} readOnly /></td>,
     atcAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0" value={formatNumber(parseFormattedNumber(row[columnKey])) || ""} readOnly /></td>,
+    cwvatAmt: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0" value={formatNumber(parseFormattedNumber(row[columnKey])) || ""} readOnly /></td>,
     sviAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0" value={formatNumber(parseFormattedNumber(row[columnKey])) || ""} readOnly /></td>,
     discRate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" id={`${columnKey}-${index}`} className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0" value={row[columnKey] || ""} readOnly={isFormDisabled} onChange={(e) => { const value = e.target.value; if (/^\d{0,12}(\.\d{0,2})?$/.test(value) || value === "") handleDetailChange(index, columnKey, value, false); }} onKeyDown={async (e) => { if (e.key === "Enter") { e.preventDefault(); const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, columnKey, num.toFixed(2), true); focusNextSviDetailRowInput(index, columnKey, { rows: detailRows, zeroClearFields: sviDetailEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChange(nextIndex, nextField, value, false) }); } }} onFocus={(e) => clearSviDetailZeroOnFocus(e, { isEditable: !isFormDisabled, onClear: (value) => handleDetailChange(index, columnKey, value, false) })} onBlur={async (e) => { if (isFormDisabled) return; const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, columnKey, num.toFixed(2), true); }} /></td>,
     discAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" id={`${columnKey}-${index}`} className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0" value={row[columnKey] || ""} readOnly={isFormDisabled} onChange={(e) => { const value = e.target.value; if (/^\d{0,12}(\.\d{0,2})?$/.test(value) || value === "") handleDetailChange(index, columnKey, value, false); }} onKeyDown={async (e) => { if (e.key === "Enter") { e.preventDefault(); const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, columnKey, num.toFixed(2), true); focusNextSviDetailRowInput(index, columnKey, { rows: detailRows, zeroClearFields: sviDetailEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChange(nextIndex, nextField, value, false) }); } }} onFocus={(e) => clearSviDetailZeroOnFocus(e, { isEditable: !isFormDisabled, onClear: (value) => handleDetailChange(index, columnKey, value, false) })} onBlur={async (e) => { if (isFormDisabled) return; const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, columnKey, num.toFixed(2), true); }} /></td>,
     vatCode: () => { const modalHandlers = { vatCode: () => updateState({ selectedRowIndex: index, showVatModal: true, accountModalSource: "vatCode" }), atcCode: () => updateState({ selectedRowIndex: index, showAtcModal: true, accountModalSource: "atcCode" }), salesAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "salesAcct" }), arAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "arAcct" }), vatAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "vatAcct" }), discAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "discAcct" }), rcCode: () => updateState({ selectedRowIndex: index, showRcModal: true, accountModalSource: "rcCode" }) }; return <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" className="w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer" value={row[columnKey] || ""} readOnly />{!isFormDisabled && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={modalHandlers[columnKey]} />}</div></td>; },
     atcCode: () => { const modalHandlers = { vatCode: () => updateState({ selectedRowIndex: index, showVatModal: true, accountModalSource: "vatCode" }), atcCode: () => updateState({ selectedRowIndex: index, showAtcModal: true, accountModalSource: "atcCode" }), salesAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "salesAcct" }), arAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "arAcct" }), vatAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "vatAcct" }), discAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "discAcct" }), rcCode: () => updateState({ selectedRowIndex: index, showRcModal: true, accountModalSource: "rcCode" }) }; return <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" className="w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer" value={row[columnKey] || ""} readOnly />{!isFormDisabled && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={modalHandlers[columnKey]} />}</div></td>; },
+    cwvatCode: () => <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" className="w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer" value={row[columnKey] || ""} readOnly />{!isFormDisabled && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={() => updateState({ selectedRowIndex: index, showAtcModal: true, accountModalSource: "cwvatCode" })} />}</div></td>,
     salesAcct: () => { const modalHandlers = { vatCode: () => updateState({ selectedRowIndex: index, showVatModal: true, accountModalSource: "vatCode" }), atcCode: () => updateState({ selectedRowIndex: index, showAtcModal: true, accountModalSource: "atcCode" }), salesAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "salesAcct" }), arAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "arAcct" }), vatAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "vatAcct" }), discAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "discAcct" }), rcCode: () => updateState({ selectedRowIndex: index, showRcModal: true, accountModalSource: "rcCode" }) }; return <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" className="w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer" value={row[columnKey] || ""} readOnly />{!isFormDisabled && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={modalHandlers[columnKey]} />}</div></td>; },
     arAcct: () => { const modalHandlers = { vatCode: () => updateState({ selectedRowIndex: index, showVatModal: true, accountModalSource: "vatCode" }), atcCode: () => updateState({ selectedRowIndex: index, showAtcModal: true, accountModalSource: "atcCode" }), salesAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "salesAcct" }), arAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "arAcct" }), vatAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "vatAcct" }), discAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "discAcct" }), rcCode: () => updateState({ selectedRowIndex: index, showRcModal: true, accountModalSource: "rcCode" }) }; return <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" className="w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer" value={row[columnKey] || ""} readOnly />{!isFormDisabled && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={modalHandlers[columnKey]} />}</div></td>; },
     vatAcct: () => { const modalHandlers = { vatCode: () => updateState({ selectedRowIndex: index, showVatModal: true, accountModalSource: "vatCode" }), atcCode: () => updateState({ selectedRowIndex: index, showAtcModal: true, accountModalSource: "atcCode" }), salesAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "salesAcct" }), arAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "arAcct" }), vatAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "vatAcct" }), discAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "discAcct" }), rcCode: () => updateState({ selectedRowIndex: index, showRcModal: true, accountModalSource: "rcCode" }) }; return <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" className="w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer" value={row[columnKey] || ""} readOnly />{!isFormDisabled && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={modalHandlers[columnKey]} />}</div></td>; },
@@ -2197,6 +2243,7 @@ const renderSviDetailCell = (columnKey, row, index) => {
     rcCode: () => { const modalHandlers = { vatCode: () => updateState({ selectedRowIndex: index, showVatModal: true, accountModalSource: "vatCode" }), atcCode: () => updateState({ selectedRowIndex: index, showAtcModal: true, accountModalSource: "atcCode" }), salesAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "salesAcct" }), arAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "arAcct" }), vatAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "vatAcct" }), discAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "discAcct" }), rcCode: () => updateState({ selectedRowIndex: index, showRcModal: true, accountModalSource: "rcCode" }) }; return <td key={columnKey} className="global-tran-td-ui relative" style={style}><div className="flex items-center"><input type="text" className="w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer" value={row[columnKey] || ""} readOnly />{!isFormDisabled && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={modalHandlers[columnKey]} />}</div></td>; },
     vatName: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full global-tran-td-inputclass-ui" value={row[columnKey] || ""} readOnly /></td>,
     atcName: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full global-tran-td-inputclass-ui" value={row[columnKey] || ""} readOnly={isFormDisabled} onChange={(e) => handleDetailChange(index, "atcName", e.target.value)} onDoubleClick={!isFormDisabled ? () => handleDetailChange(index, "atcName", 0, true) : undefined} /></td>,
+    cwvatName: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full global-tran-td-inputclass-ui" value={row[columnKey] || ""} readOnly={isFormDisabled} onChange={(e) => handleDetailChange(index, "cwvatName", e.target.value)} onDoubleClick={!isFormDisabled ? () => handleDetailChange(index, "cwvatName", "", true) : undefined} /></td>,
   };
 
   return detailColumnRenderers[columnKey]?.() ?? null;
@@ -2722,7 +2769,11 @@ return (
 
                   <FieldRenderer
                     id="totalAtcAmount"
-                    label="ATC Amount"
+                    label={
+                      isCwvatEnabled && parseFormattedNumber(totals.totalCwvatAmount) > 0
+                        ? "ATC / CW VAT Amount"
+                        : "ATC Amount"
+                    }
                     type="amount"
                     value={totals.totalAtcAmount || ""}
                     disabled
@@ -2906,6 +2957,24 @@ return (
           <div className="global-tran-tab-footer-total-value-ui">
             {totals.totalAtcAmount}
           </div>
+        )}
+
+        {isCwvatEnabled && (
+          <>
+            <div className="global-tran-tab-footer-total-label-ui">
+              Total CW VAT Amount:
+            </div>
+            <div id="totCWVATAmount" className="global-tran-tab-footer-total-value-ui">
+              {currRate === 1
+                ? totals.totalCwvatAmount
+                : formatNumber(parseFormattedNumber(totals.totalCwvatAmount) * currRate)}
+            </div>
+            {currRate > 1 && (
+              <div className="global-tran-tab-footer-total-value-ui">
+                {totals.totalCwvatAmount}
+              </div>
+            )}
+          </>
         )}
 
         {/* Total Amount Due */}
@@ -3187,6 +3256,7 @@ return (
       <ATCLookupModal  
         isOpen={showAtcModal}
         onClose={handleCloseAtcModal}
+        customParam={accountModalSource === "cwvatCode" ? "CWVT" : ""}
       />
     )}
 

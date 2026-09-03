@@ -51,7 +51,7 @@ const ATCLookupModal = ({ isOpen, onClose, customParam }) => {
 
   const paramToSend = useMemo(() => {
     if (customParam === "apv_hd") return "ATC";
-    return customParam ?? "ActiveAll";
+    return customParam ?? "";
   }, [customParam]);
 
   useEffect(() => {
@@ -68,9 +68,11 @@ const ATCLookupModal = ({ isOpen, onClose, customParam }) => {
     queryFn: async () => {
       const { data: result } = await apiClient.get("/lookupATC", {
         params: {
-          search: paramToSend,
-          page: 1,
-          itemsPerPage: 1000,
+          PARAMS: JSON.stringify({
+            search: paramToSend,
+            page: 1,
+            pageSize: 1000,
+          }),
         },
       });
 
@@ -281,7 +283,7 @@ const ATCLookupModal = ({ isOpen, onClose, customParam }) => {
                         {atc.atcName ?? atc.atcDesc}
                       </td>
                       <td className="px-4 py-2 text-xs text-slate-500 w-[160px] text-right">
-                        {atc.atcRate ?? atc.taxRate}
+                        {Number.parseFloat(atc.atcRate ?? atc.taxRate ?? 0).toFixed(2)}
                       </td>
                     </tr>
                   ))

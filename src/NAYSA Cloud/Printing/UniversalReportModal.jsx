@@ -20,6 +20,7 @@ import Swal from "sweetalert2";
 
 // --- Project Imports ---
 import { fetchData, postRequest } from "@/NAYSA Cloud/Configuration/BaseURL";
+import { useSwalErrorAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 import { useTopUserRow, useTopHSRptRow } from "@/NAYSA Cloud/Global/top1RefTable";
 import {
   useHandlePrintAPReport,
@@ -469,7 +470,10 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
 
         if (requestedAction === "preview") {
           if (!dataRows.length) {
-            Swal.fire("Report Preview", "No records found for the selected filters.", "info");
+            useSwalErrorAlert(
+              "Report Preview",
+              "No records found for the selected filters.",
+            );
             return response;
           }
 
@@ -515,7 +519,10 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
 
       if (requestedAction === "preview") {
         if (!rawRows.length) {
-          Swal.fire("Report Preview", "No records found for the selected filters.", "info");
+          useSwalErrorAlert(
+            "Report Preview",
+            "No records found for the selected filters.",
+          );
           return response;
         }
 

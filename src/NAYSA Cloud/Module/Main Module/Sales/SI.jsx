@@ -175,6 +175,9 @@ const SI = () => {
     salesRepName: "",
     atcCode: "",
     atcName: "",
+    cwvatCode: "",
+    cwvatName: "",
+    cwvatAmt: "0.00",
     vatCode: "",
     vatName: "",
     vatCodeFADisposal:"",
@@ -281,6 +284,9 @@ const SI = () => {
   salesRepName,
   atcCode,
   atcName,
+  cwvatCode,
+  cwvatName,
+  cwvatAmt,
   vatCode,
   vatName,
   currCode,
@@ -363,6 +369,7 @@ const SI = () => {
   const isPosted = ["FINALIZED", "POSTED"].includes(normalizedDisplayStatus);
   const isCancelled = normalizedDisplayStatus === "CANCELLED";
   const isFormDisabled = isViewDocumentUrl || ["FINALIZED", "POSTED", "CANCELLED", "CLOSED"].includes(normalizedDisplayStatus);  
+  const isCwvatEnabled = String(companyInfo?.oeCWVat || "").toUpperCase() === "E";
   const isHeaderSiStatusEditable = !!String(documentID || "").trim() && !isFormDisabled;
   const totalSiQuantity = detailRows.reduce((total, row) => total + (parseFormattedNumber(row.siQuantity || 0) || 0),0);
   const hasPickedQuantity = (detailRows || []).some(
@@ -384,6 +391,7 @@ const SI = () => {
   totalDiscountAmount: '0.00',
   totalVatAmount: '0.00',
   totalAtcAmount: '0.00',
+  totalCwvatAmount: '0.00',
   totalSalesAmount: '0.00',
   totalNetAmount: '0.00',
   totalAmountDue: '0.00',
@@ -805,7 +813,8 @@ const SI = () => {
     salesAmt,
     netAmt,
     amountDue,
-    atcCodeOverride = atcCode
+    atcCodeOverride = atcCode,
+    cwvatCodeOverride = cwvatCode
   ) => {
     const grossAmount = toFormattedAmountNumber(grossAmt);
     const discountAmount = toFormattedAmountNumber(discAmt);
@@ -818,13 +827,19 @@ const SI = () => {
     const computedAtcAmount = toFormattedAmountNumber(
       getAllTopATCAmount(atcCodeOverride, salesBaseAmount)
     );
-    const computedAmountDue = toFormattedAmountNumber(netAmount - computedAtcAmount);
+    const computedCwvatAmount = toFormattedAmountNumber(
+      getAllTopATCAmount(cwvatCodeOverride, salesBaseAmount)
+    );
+    const computedAmountDue = toFormattedAmountNumber(
+      netAmount - computedAtcAmount - computedCwvatAmount
+    );
 
     setTotals({
       totalGrossAmount: formatNumber(grossAmount),
       totalDiscountAmount: formatNumber(discountAmount),
       totalVatAmount: formatNumber(vatAmount),
-      totalAtcAmount: formatNumber(computedAtcAmount),
+      totalAtcAmount: formatNumber(computedAtcAmount + computedCwvatAmount),
+      totalCwvatAmount: formatNumber(computedCwvatAmount),
       totalSalesAmount: formatNumber(salesBaseAmount),
       totalNetAmount: formatNumber(netAmount),
       totalAmountDue: formatNumber(computedAmountDue),
@@ -1110,6 +1125,9 @@ useEffect(() => {
       contactPerson: "",
       atcCode: "",
       atcName: "",
+      cwvatCode: "",
+      cwvatName: "",
+      cwvatAmt: "0.00",
       vatCode: "",
       vatName: "",
       documentNo: "",
@@ -1214,7 +1232,10 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
       itemAmount: item.itemAmount ?? formatNumber( 0),
       drQuantity: formatNumber(item.drQuantity ?? 0, quantityDecimals),
       linkedSiQuantity: formatNumber(item.siQuantity ?? 0, quantityDecimals), // Renamed to avoid confusion
-    })), { atcCode: data.atcCode || "" });
+    })), {
+      atcCode: data.atcCode || "",
+      cwvatCode: data.cwvatCode || "",
+    });
 
     const formattedGLRows = (data.dt2 || []).map(glRow => ({
       ...glRow,
@@ -1245,6 +1266,9 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
       customerPoDate: data.customerPoDate ? useformatToDatev2(data.customerPoDate) : null,
       atcCode: data.atcCode || "",
       atcName: data.atcName || "",
+      cwvatCode: data.cwvatCode || "",
+      cwvatName: data.cwvatName || "",
+      cwvatAmt: formatNumber(data.cwvatAmt || 0),
       vatCode: data.vatCode || "",
       vatName: data.vatName || "",
       billtermCode: data.billtermCode,
@@ -1269,7 +1293,11 @@ const fetchTranData = async (documentNo, branchCode, direction='') => {
       isFetchDisabled: true,
     });
 
-    updateTotals(retrievedDetailRows, data.atcCode || "");
+    updateTotals(
+      retrievedDetailRows,
+      data.atcCode || "",
+      data.cwvatCode || ""
+    );
 
   } catch (error) {
     console.error("Error fetching transaction data:", error);
@@ -1327,6 +1355,8 @@ const handleActivityOption = async (action) => {
         salesRepName,
         currCode,
         currRate,
+        atcCode,
+        cwvatCode,
         remarks,
         dueDate,
         userCode,
@@ -1355,8 +1385,12 @@ const handleActivityOption = async (action) => {
         refSiNo2: refSiNo2,
         currCode: currCode || "PHP",
         currRate: parseFormattedNumber(currRate),
-        atcAmount: parseFormattedNumber(totals.totalAtcAmount),
+        atcAmount:
+          parseFormattedNumber(totals.totalAtcAmount) -
+          parseFormattedNumber(totals.totalCwvatAmount),
         atcCode: atcCode || "",
+        cwvatCode: cwvatCode || "",
+        cwvatAmt: parseFormattedNumber(totals.totalCwvatAmount),
         vatCode: vatCode || "",
         dueDate: dueDate || "",
         remarks: remarks || "",
@@ -3003,7 +3037,11 @@ const handleSaveAndPrint = async (documentID) => {
     }
 };
 
-  const computeTotalsFromRows = (rows = [], atcCodeOverride = atcCode) => {
+  const computeTotalsFromRows = (
+    rows = [],
+    atcCodeOverride = atcCode,
+    cwvatCodeOverride = cwvatCode
+  ) => {
     let totalGrossAmt = 0;
     let totalDiscAmt = 0;
     let totalVatAmt = 0;
@@ -3022,29 +3060,40 @@ const handleSaveAndPrint = async (documentID) => {
     const totalAtcAmt = toFormattedAmountNumber(
       getAllTopATCAmount(atcCodeOverride, totalSalesAmt)
     );
-    const totalAmountDue = toFormattedAmountNumber(totalNetAmt - totalAtcAmt);
+    const totalCwvatAmt = toFormattedAmountNumber(
+      getAllTopATCAmount(cwvatCodeOverride, totalSalesAmt)
+    );
+    const totalAmountDue = toFormattedAmountNumber(
+      totalNetAmt - totalAtcAmt - totalCwvatAmt
+    );
 
     return {
       totalGrossAmt,
       totalDiscAmt,
       totalVatAmt,
       totalAtcAmt,
+      totalCwvatAmt,
       totalSalesAmt,
       totalNetAmt,
       totalAmountDue,
     };
   };
 
-  const updateTotals = (rows = [], atcCodeOverride = atcCode) => {
+  const updateTotals = (
+    rows = [],
+    atcCodeOverride = atcCode,
+    cwvatCodeOverride = cwvatCode
+  ) => {
     const {
       totalGrossAmt,
       totalDiscAmt,
       totalVatAmt,
       totalAtcAmt,
+      totalCwvatAmt,
       totalSalesAmt,
       totalNetAmt,
       totalAmountDue,
-    } = computeTotalsFromRows(rows, atcCodeOverride);
+    } = computeTotalsFromRows(rows, atcCodeOverride, cwvatCodeOverride);
 
     updateTotalsDisplay(
       totalGrossAmt,
@@ -3054,7 +3103,8 @@ const handleSaveAndPrint = async (documentID) => {
       totalSalesAmt,
       totalNetAmt,
       totalAmountDue,
-      atcCodeOverride
+      atcCodeOverride,
+      cwvatCodeOverride
     );
   };
 
@@ -3063,7 +3113,9 @@ const handleSaveAndPrint = async (documentID) => {
       headerOverrides.vatCode !== undefined ? headerOverrides.vatCode : vatCode;
     const nextAtcCode =
       headerOverrides.atcCode !== undefined ? headerOverrides.atcCode : atcCode;
-    const totalValues = computeTotalsFromRows(rows, nextAtcCode);
+    const nextCwvatCode =
+      headerOverrides.cwvatCode !== undefined ? headerOverrides.cwvatCode : cwvatCode;
+    const totalValues = computeTotalsFromRows(rows, nextAtcCode, nextCwvatCode);
 
     return {
       branchCode,
@@ -3081,6 +3133,8 @@ const handleSaveAndPrint = async (documentID) => {
       currRate: parseFormattedNumber(currRate),
       atcAmount: totalValues.totalAtcAmt,
       atcCode: nextAtcCode || "",
+      cwvatCode: nextCwvatCode || "",
+      cwvatAmt: totalValues.totalCwvatAmt,
       vatCode: nextVatCode || "",
       dueDate: dueDate || "",
       remarks: remarks || "",
@@ -3245,6 +3299,29 @@ const handleCloseATCModal = async (selectedATC) => {
     return;
   }
 
+  if (modalContext === "headerCWVAT") {
+    const nextCwvatCode = selectedATC.atcCode || "";
+    const nextCwvatName = selectedATC.atcName || "";
+    const normalizedRows = distributeVatAcrossDetailRows(detailRowsRef.current || detailRows, {
+      atcCode,
+    });
+
+    updateState({
+      cwvatCode: nextCwvatCode,
+      cwvatName: nextCwvatName,
+      detailRows: normalizedRows,
+      showATCModal: false,
+      selectedRowIndex: null,
+      modalContext: "",
+    });
+    updateTotals(normalizedRows, atcCode, nextCwvatCode);
+    await regenerateGlEntriesForRows(normalizedRows, {
+      atcCode,
+      cwvatCode: nextCwvatCode,
+    });
+    return;
+  }
+
   const nextAtcCode = selectedATC.atcCode || "";
   const normalizedRows = distributeVatAcrossDetailRows(detailRowsRef.current || detailRows, {
     atcCode: nextAtcCode,
@@ -3260,6 +3337,43 @@ const handleCloseATCModal = async (selectedATC) => {
   });
   updateTotals(normalizedRows, nextAtcCode);
   await regenerateGlEntriesForRows(normalizedRows, { atcCode: nextAtcCode });
+};
+
+const handleClearCWVAT = async () => {
+  const normalizedRows = distributeVatAcrossDetailRows(
+    detailRowsRef.current || detailRows,
+    { atcCode }
+  );
+
+  updateState({
+    cwvatCode: "",
+    cwvatName: "",
+    cwvatAmt: "0.00",
+    detailRows: normalizedRows,
+  });
+  updateTotals(normalizedRows, atcCode, "");
+  await regenerateGlEntriesForRows(normalizedRows, {
+    atcCode,
+    cwvatCode: "",
+  });
+};
+
+const handleClearATC = async () => {
+  const normalizedRows = distributeVatAcrossDetailRows(
+    detailRowsRef.current || detailRows,
+    { atcCode: "" }
+  );
+
+  updateState({
+    atcCode: "",
+    atcName: "",
+    detailRows: normalizedRows,
+  });
+  updateTotals(normalizedRows, "", cwvatCode);
+  await regenerateGlEntriesForRows(normalizedRows, {
+    atcCode: "",
+    cwvatCode,
+  });
 };
 
 const handleCloseVatModal = async (selectedVat) => {
@@ -4266,8 +4380,6 @@ const renderSiGlCell = (columnKey, row, index) => {
     acctCode: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "acctCode" }),
     rcCode: () => updateState({ selectedRowIndex: index, showRcModal: true, modalContext: "glRC" }),
     slCode: () => updateState({ selectedRowIndex: index, showSlModal: true }),
-    vatCode: () => updateState({ selectedRowIndex: index, showVatModal: true, modalContext: "glVAT" }),
-    atcCode: () => updateState({ selectedRowIndex: index, showATCModal: true, modalContext: "glATC" }),
   };
 
   const focusNextGlCell = (field) => {
@@ -4349,8 +4461,8 @@ const renderSiGlCell = (columnKey, row, index) => {
     acctCode: () => { const showLookupIcon = !isFormDisabled; return <td key={columnKey} className="global-tran-td-ui" style={style}><div className="relative w-full">{glLookupInput(columnKey, { readOnly: false })}{showLookupIcon && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={glModalHandlers[columnKey]} />}</div></td>; },
     rcCode: () => { const hasLookupValue = Boolean(String(row[columnKey] || "").trim()); const showLookupIcon = !isFormDisabled && hasLookupValue; return <td key={columnKey} className="global-tran-td-ui" style={style}><div className="relative w-full">{glLookupInput(columnKey, { readOnly: true })}{showLookupIcon && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={glModalHandlers[columnKey]} />}</div></td>; },
     slCode: () => { const hasLookupValue = Boolean(String(row[columnKey] || "").trim()); const showLookupIcon = !isFormDisabled && hasLookupValue; return <td key={columnKey} className="global-tran-td-ui" style={style}><div className="relative w-full">{glLookupInput(columnKey, { readOnly: true })}{showLookupIcon && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={glModalHandlers[columnKey]} />}</div></td>; },
-    vatCode: () => { const hasLookupValue = Boolean(String(row[columnKey] || "").trim()); const showLookupIcon = !isFormDisabled && hasLookupValue; return <td key={columnKey} className="global-tran-td-ui" style={style}><div className="relative w-full">{glLookupInput(columnKey, { readOnly: true })}{showLookupIcon && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={glModalHandlers[columnKey]} />}</div></td>; },
-    atcCode: () => { const hasLookupValue = Boolean(String(row[columnKey] || "").trim()); const showLookupIcon = !isFormDisabled && hasLookupValue; return <td key={columnKey} className="global-tran-td-ui" style={style}><div className="relative w-full">{glLookupInput(columnKey, { readOnly: true })}{showLookupIcon && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={glModalHandlers[columnKey]} />}</div></td>; },
+    vatCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{glTextInput(columnKey, { readOnly: true, className: "text-center" })}</td>,
+    atcCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{glTextInput(columnKey, { readOnly: true, className: "text-center" })}</td>,
     sltypeCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{glTextInput(columnKey)}</td>,
     slRefNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{glTextInput(columnKey, { maxLength: useGetFieldLength(tblFieldArray, "slref_no") })}</td>,
     remarks: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{glTextInput(columnKey, { maxLength: useGetFieldLength(tblFieldArray, "remarks") })}</td>,
@@ -4533,9 +4645,7 @@ return (
               disabled
               readOnly
             />
-          </div>
 
-          <div className="global-tran-textbox-group-div-ui">
             <FieldRenderer
               id="siTranType"
               label="SI Type"
@@ -4548,18 +4658,37 @@ return (
                 value: t.DROPDOWN_CODE,
               }))}
             />
+          </div>
+
+          <div className="global-tran-textbox-group-div-ui">
 
             <FieldRenderer
               id="atcName"
               label="ATC (Goods)"
-              required
               type="lookup"
               value={atcName || ""}
               disabled={isFormDisabled}
               readOnly
+              editableLookup
               lookupDisabled={isFormDisabled}
               onLookup={() => updateState({ showATCModal: true })}
+              onClear={handleClearATC}
             />
+
+            {isCwvatEnabled && (
+              <FieldRenderer
+                id="cwvatName"
+                label="CWVAT (Govt)"
+                type="lookup"
+                value={cwvatName || ""}
+                disabled={isFormDisabled}
+                readOnly
+                editableLookup
+                lookupDisabled={isFormDisabled}
+                onLookup={() => updateState({ showATCModal: true, modalContext: "headerCWVAT" })}
+                onClear={handleClearCWVAT}
+              />
+            )}
 
             <FieldRenderer
               id="vatName"
@@ -4791,7 +4920,11 @@ return (
 
             <FieldRenderer
               id="totalAtcAmount"
-              label="ATC Amount"
+              label={
+                isCwvatEnabled && parseFormattedNumber(totals.totalCwvatAmount) > 0
+                  ? "ATC / CW VAT Amount"
+                  : "ATC Amount"
+              }
               type="amount"
               value={totals.totalAtcAmount || ""}
               disabled
@@ -5245,6 +5378,7 @@ return (
       <ATCLookupModal
         isOpen={showATCModal}
         onClose={handleCloseATCModal}
+        customParam={modalContext === "headerCWVAT" ? "CWVT" : ""}
       />
     )}
 
