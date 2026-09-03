@@ -195,6 +195,138 @@ const isDetailSlRequired = (row) =>
 const isGlSlRequired = (row) =>
   isRequirementEnabled(row?.REQ_SL, row?.REC_SL, row?.slReq, row?.REQSL);
 
+const buildApvDetailPayloadRow = (row, index, selectedApType) => {
+  const apType = String(selectedApType || "")
+    .trim()
+    .toUpperCase();
+
+  const isAdvance = apType === "APV03";
+  const isReplenishment = apType === "APV04";
+
+  const pcvNo =
+    row.pcvNo ||
+    row.PCV_NO ||
+    row.rrNo ||
+    row.rr_no ||
+    row.RR_NO ||
+    "";
+
+  const pcvId =
+    row.pcvId ||
+    row.PCV_ID ||
+    row.groupId ||
+    row.GROUP_ID ||
+    "";
+
+  return {
+    lnNo: String(index + 1),
+
+    invType: isReplenishment
+      ? row.invType || "PCV"
+      : row.invType || "",
+
+    rrNo: isReplenishment
+      ? pcvNo
+      : row.rrNo || "",
+
+    poNo: row.poNo || "",
+
+    siNo: isReplenishment
+      ? row.siNo || pcvNo
+      : row.siNo || "",
+
+    siDate: row.siDate || "",
+
+    amount:
+      parseFormattedNumber(row.amount || 0),
+
+    siAmount:
+      parseFormattedNumber(row.siAmount || 0),
+
+    debitAcct: row.debitAcct || "",
+    vatAcct: row.vatAcct || "",
+
+    // ==========================================
+    // ADVANCE
+    // ==========================================
+
+    advAcct:
+      row.advAcct || "",
+
+    advpoNo:
+      isReplenishment
+        ? row.advpoNo || pcvNo
+        : row.advpoNo || "",
+
+    advpoAmount:
+      parseFormattedNumber(
+        row.advpoAmount || 0
+      ),
+
+    // Separate VAT
+    advVatAmount:
+  isAdvance
+    ? parseFormattedNumber(row.vatAmount || 0)
+    : parseFormattedNumber(row.advpoVatAmount || 0),
+
+advAtcAmount:
+  isAdvance
+    ? parseFormattedNumber(row.atcAmount || 0)
+    : parseFormattedNumber(row.advpoAtcAmount || 0),
+
+    // ==========================================
+
+    sltypeCode:
+      isDetailSlRequired(row)
+        ? row.sltypeCode || ""
+        : "",
+
+    slCode: row.slCode || "",
+    slName: row.slName || "",
+
+    rcCode: row.rcCode || "",
+
+    vatCode: row.vatCode || "",
+
+    vatAmount:
+      parseFormattedNumber(
+        row.vatAmount || 0
+      ),
+
+    atcCode: row.atcCode || "",
+
+    atcAmount:
+      parseFormattedNumber(
+        row.atcAmount || 0
+      ),
+
+    paytermCode:
+      row.paytermCode || "",
+
+    dueDate:
+      row.dueDate || "",
+
+    pcvNo: isReplenishment
+      ? pcvNo
+      : row.pcvNo || "",
+
+    pcvId: isReplenishment
+      ? pcvId
+      : row.pcvId || "",
+
+    refPcvNo: isReplenishment
+      ? pcvNo
+      : "",
+
+    refPcvId: isReplenishment
+      ? pcvId
+      : "",
+
+    groupId:
+      row.groupId || "",
+  };
+};
+
 const APV = () => {
   // View Document Const
   const loadedFromUrlRef = useRef(false);
@@ -603,6 +735,13 @@ const openPOAPVLookupColumns = [
   { key: "vatAmount", label: "VAT Amount", width: 130, type: "amount" },
 ];
 
+const advancePayeeBalanceColumns = [
+  { key: "vendCode", label: "Payee Code", width: 120 },
+  { key: "vendName", label: "Payee Name", width: 260 },
+  { key: "currCode", label: "Currency", width: 90 },
+  { key: "balanceAmount", label: "Balance", width: 130, renderType: "number" },
+];
+
 
 
 const resolveGlobalLookupColumns = async (endpointKey) => {
@@ -804,6 +943,20 @@ const handleOpenReferenceLCImportation = async (overrides = {}) => {
   };
 
   const rrAmountKeys = [
+    "balanceAmount",
+    "balance_amount",
+    "BALANCE_AMOUNT",
+    "balance",
+    "BALANCE",
+    "balAmount",
+    "bal_amount",
+    "BAL_AMOUNT",
+    "openBalance",
+    "open_balance",
+    "OPEN_BALANCE",
+    "remainingAmount",
+    "remaining_amount",
+    "REMAINING_AMOUNT",
     "siAmount",
     "si_amount",
     "SI_AMOUNT",
@@ -865,6 +1018,98 @@ const handleOpenReferenceLCImportation = async (overrides = {}) => {
     const unitCost = getLookupNumber(row, rrUnitCostKeys);
 
     return quantity && unitCost ? quantity * unitCost : 0;
+  };
+
+  const buildAdvancePayeeBalanceRows = (rows = []) => {
+    const payeeMap = new Map();
+
+    rows.forEach((row, index) => {
+      const vendCode = String(
+        getLookupValue(row, "vendCode", "vend_code", "VEND_CODE")
+      ).trim();
+
+      if (!vendCode) return;
+
+      const balanceAmount =
+        getLookupNumber(row, rrAmountKeys) ||
+        getLookupNumber(row, ["poAmount", "po_amount", "PO_AMOUNT"]);
+
+      if (balanceAmount <= 0) return;
+
+      const existing = payeeMap.get(vendCode);
+      const vendName = getLookupValue(row, "vendName", "vend_name", "VEND_NAME");
+      const currCode = getLookupValue(row, "currCode", "curr_code", "CURR_CODE");
+
+      payeeMap.set(vendCode, {
+        groupId: existing?.groupId || vendCode || `PAYEE-${index + 1}`,
+        vendCode,
+        vendName: existing?.vendName || vendName || "",
+        currCode: existing?.currCode || currCode || "",
+        balanceAmount: (existing?.balanceAmount || 0) + balanceAmount,
+      });
+    });
+
+    return Array.from(payeeMap.values());
+  };
+
+  const handleOpenPayeeLookup = async (context = "") => {
+    const isManualAddFlow = context === "addPayeeDetail";
+
+    if (!isAdvancesAPType || isManualAddFlow) {
+      updateState({
+        payeeModalOpen: true,
+        modalContext: context,
+      });
+      return;
+    }
+
+    try {
+      updateState({ isLoading: true, showSpinner: true });
+
+      const lookupPayload = {
+        branchCode: String(branchCode || "").trim(),
+        vendCode: "",
+      };
+
+      const response = await fetchData("getPOAPV_Summary", {
+        PARAMS: JSON.stringify({
+          ...lookupPayload,
+          json_data: lookupPayload,
+        }),
+      });
+
+      const payeeRows = buildAdvancePayeeBalanceRows(
+        extractOpenRRResponseRows(response)
+      );
+
+      if (payeeRows.length === 0) {
+        useSwalErrorAlert(
+          "APV Advances Payee",
+          "No payee with open advance balances found."
+        );
+        return;
+      }
+
+      updateState({
+        globalLookupRow: payeeRows,
+        globalLookupHeader: advancePayeeBalanceColumns,
+        globalLookupTitle: "Payees with Open Advances",
+        globalLookupBtnCaption: "Select Payee",
+        showRRRefModal: true,
+        modalContext: "advancePayeeBalance",
+      });
+    } catch (error) {
+      console.error("Failed to fetch APV advance payees:", error);
+      useSwalErrorAlert(
+        "APV Advances Payee",
+        error?.response?.data?.message ||
+          error?.response?.data?.error ||
+          error?.message ||
+          "Unable to fetch payees with open advance balances."
+      );
+    } finally {
+      updateState({ isLoading: false, showSpinner: false });
+    }
   };
 
   const fetchRRReferenceDetails = async (item) => {
@@ -1018,60 +1263,188 @@ const handleOpenReferenceLCImportation = async (overrides = {}) => {
 };
 
   const enrichRRReferenceItem = async (item) => {
-
   const referenceSource = String(
     item.referenceSource || "RR"
   )
     .trim()
     .toUpperCase();
 
-  // PO without RR already has the information
-  // required by APV. Do not call RR/PO detail endpoint.
   if (referenceSource === "PO") {
     return item;
   }
 
-  const detailRows = await fetchRRReferenceDetails(item);
+  const detailRows =
+    await fetchRRReferenceDetails(item);
 
   if (detailRows.length === 0) {
     return item;
   }
 
-    const detailAmount = detailRows.reduce(
-      (total, detailRow) => total + getRRLineAmount(detailRow),
-      0,
+  const detailAmount =
+    detailRows.reduce(
+      (total, detailRow) =>
+        total + getRRLineAmount(detailRow),
+      0
     );
-    const detailVatAmount = detailRows.reduce(
-      (total, detailRow) => total + getLookupNumber(detailRow, rrVatAmountKeys),
-      0,
-    );
-    const firstDetail = detailRows[0] || {};
 
-    return {
-      ...item,
-      ...Object.fromEntries(
-        Object.entries({
-          drAcct: item.drAcct || item.debitAcct || firstDetail.drAcct || firstDetail.debitAcct,
-          debitAcct: item.debitAcct || item.drAcct || firstDetail.debitAcct || firstDetail.drAcct,
-          rcCode: item.rcCode || firstDetail.rcCode,
-          rcName: item.rcName || firstDetail.rcName,
-          vatCode: item.vatCode || firstDetail.vatCode,
-          vatDesc: item.vatDesc || firstDetail.vatDesc,
-          categCode: item.categCode || firstDetail.categCode,
-          siNo: item.siNo || firstDetail.siNo,
-          siDate: item.siDate || firstDetail.siDate,
-          paytermCode: item.paytermCode || firstDetail.paytermCode,
-          terms: item.terms || firstDetail.terms,
-          dueDate: item.dueDate || firstDetail.dueDate,
-          remarks: item.remarks || firstDetail.remarks,
-        }).filter(([, value]) => value !== undefined && value !== null && value !== ""),
+  const detailVatAmount =
+    detailRows.reduce(
+      (total, detailRow) =>
+        total +
+        getLookupNumber(
+          detailRow,
+          rrVatAmountKeys
+        ),
+      0
+    );
+
+  const firstDetail =
+    detailRows[0] || {};
+
+
+  return {
+    ...item,
+
+    ...Object.fromEntries(
+      Object.entries({
+
+        drAcct:
+          item.drAcct ||
+          item.debitAcct ||
+          firstDetail.drAcct ||
+          firstDetail.debitAcct,
+
+        debitAcct:
+          item.debitAcct ||
+          item.drAcct ||
+          firstDetail.debitAcct ||
+          firstDetail.drAcct,
+
+        rcCode:
+          item.rcCode ||
+          firstDetail.rcCode,
+
+        rcName:
+          item.rcName ||
+          firstDetail.rcName,
+
+        vatCode:
+          item.vatCode ||
+          firstDetail.vatCode,
+
+        vatDesc:
+          item.vatDesc ||
+          firstDetail.vatDesc,
+
+        categCode:
+          item.categCode ||
+          firstDetail.categCode,
+
+        siNo:
+          item.siNo ||
+          firstDetail.siNo,
+
+        siDate:
+          item.siDate ||
+          firstDetail.siDate,
+
+        paytermCode:
+          item.paytermCode ||
+          firstDetail.paytermCode,
+
+        terms:
+          item.terms ||
+          firstDetail.terms,
+
+        dueDate:
+          item.dueDate ||
+          firstDetail.dueDate,
+
+        remarks:
+          item.remarks ||
+          firstDetail.remarks,
+
+        // ==========================================
+        // ADVANCE
+        // ==========================================
+
+        advpoNo:
+          firstDetail.advpoNo ||
+          item.advpoNo ||
+          firstDetail.poNo ||
+          item.poNo ||
+          "",
+
+        advAcct:
+          firstDetail.advAcct ||
+          item.advAcct ||
+          "",
+
+        advanceVatCode:
+          firstDetail.advanceVatCode ||
+          item.advanceVatCode ||
+          "",
+
+        advanceAtcCode:
+          firstDetail.advanceAtcCode ||
+          item.advanceAtcCode ||
+          "",
+
+      }).filter(
+        ([, value]) =>
+          value !== undefined &&
+          value !== null &&
+          value !== ""
+      )
+    ),
+
+
+    siAmount:
+      detailAmount ||
+      getRRLineAmount(item),
+
+    amount:
+      detailAmount ||
+      getRRLineAmount(item),
+
+    vatAmount:
+      detailVatAmount ||
+      getLookupNumber(
+        item,
+        rrVatAmountKeys
       ),
-      siAmount: detailAmount || getRRLineAmount(item),
-      amount: detailAmount || getRRLineAmount(item),
-      vatAmount: detailVatAmount || getLookupNumber(item, rrVatAmountKeys),
-      rrDetailRows: detailRows,
-    };
+
+
+    // ==========================================
+    // REMAINING ADVANCE
+    // ==========================================
+
+    advanceBalance:
+      parseFormattedNumber(
+        firstDetail.advanceBalance ??
+        item.advanceBalance ??
+        0
+      ) || 0,
+
+    advanceVatBalance:
+      parseFormattedNumber(
+        firstDetail.advanceVatBalance ??
+        item.advanceVatBalance ??
+        0
+      ) || 0,
+
+    advanceEwtBalance:
+      parseFormattedNumber(
+        firstDetail.advanceEwtBalance ??
+        item.advanceEwtBalance ??
+        0
+      ) || 0,
+
+
+    rrDetailRows:
+      detailRows,
   };
+};
 
   const extractOpenRRRows = (value) => {
   if (!value) return [];
@@ -2086,7 +2459,29 @@ const extractOpenRRResponseRows = (response) => {
 
         return {
           ...item,
-          rrNo: item.rrNo || item.rr_no || item.RR_NO || item.msrrNo || item.MSRR_NO || "",
+          rrNo:
+            item.rrNo ||
+            item.rr_no ||
+            item.RR_NO ||
+            item.pcvNo ||
+            item.pcv_no ||
+            item.PCV_NO ||
+            item.msrrNo ||
+            item.MSRR_NO ||
+            "",
+          pcvNo:
+            item.pcvNo ||
+            item.pcv_no ||
+            item.PCV_NO ||
+            item.rrNo ||
+            item.rr_no ||
+            item.RR_NO ||
+            "",
+          pcvId:
+            item.pcvId ||
+            item.pcv_id ||
+            item.PCV_ID ||
+            "",
           poNo:
             item.poNo ||
             item.po_no ||
@@ -2127,25 +2522,18 @@ const extractOpenRRResponseRows = (response) => {
               0,
           ),
           advpoVatAmount: formatNumber(
-            item.advpoVatAmount ||
-              item.advpoVATAmount ||
-              item.advVatAmount ||
-              item.advpoAtcAmount ||
-              item.advpo_atc_amount ||
-              item.ADVPO_ATC_AMOUNT ||
-              item.appliedAdvancesVat ||
-              item.APPLIED_ADVANCES_VAT ||
-              0,
-          ),
-          // Backend column is currently advpo_atc_amount; keep this alias for save/retrieve compatibility.
-          advpoAtcAmount: formatNumber(
-            item.advpoAtcAmount ||
-              item.advpo_atc_amount ||
-              item.ADVPO_ATC_AMOUNT ||
-              item.advpoVatAmount ||
-              item.appliedAdvancesVat ||
-              0,
-          ),
+  item.advpoVatAmount ||
+    item.advpo_vat_amount ||
+    item.ADVPO_VAT_AMOUNT ||
+    0
+),
+
+advpoAtcAmount: formatNumber(
+  item.advpoAtcAmount ||
+    item.advpo_atc_amount ||
+    item.ADVPO_ATC_AMOUNT ||
+    0
+),
           siDate: formattedSiDate,
           dueDate: formattedDueDate,
           REC_RC: item.REC_RC || "N",
@@ -2615,36 +3003,9 @@ const extractOpenRRResponseRows = (response) => {
   currentUserRow?.userCode ||
   user?.USER_CODE ||
   "",
-      dt1: detailRows.map((row, index) => ({
-        lnNo: String(index + 1),
-        invType: row.invType,
-        rrNo: row.rrNo || "",
-        poNo: row.poNo || "",
-        siNo: row.siNo,
-        siDate: row.siDate,
-        amount: parseFormattedNumber(row.amount),
-        siAmount: parseFormattedNumber(row.siAmount),
-        debitAcct: row.debitAcct,
-        vatAcct: row.vatAcct,
-        advAcct: row.advAcct || "",
-        sltypeCode: isDetailSlRequired(row) ? row.sltypeCode : "",
-        slCode: row.slCode,
-        slName: row.slName,
-        rcCode: row.rcCode,
-        vatCode: row.vatCode,
-        vatAmount: parseFormattedNumber(row.vatAmount),
-        atcCode: row.atcCode,
-        atcAmount: parseFormattedNumber(row.atcAmount),
-        paytermCode: row.paytermCode,
-        dueDate: row.dueDate,
-        advpoNo: row.advpoNo || "",
-        advpoAmount: parseFormattedNumber(row.advpoAmount || 0),
-        // sproc_PHP_APV currently reads this as advAtcAmount / advpo_atc_amount.
-        // UI label is Applied Advances VAT.
-        advAtcAmount: parseFormattedNumber(
-          row.advpoVatAmount ?? row.advpoAtcAmount ?? 0,
-        ),
-      })),
+      dt1: detailRows.map((row, index) =>
+        buildApvDetailPayloadRow(row, index, selectedApType),
+      ),
       dt2: detailRowsGL.map((entry, index) => ({
         recNo: String(index + 1),
         acctCode: entry.acctCode,
@@ -2878,6 +3239,60 @@ const extractOpenRRResponseRows = (response) => {
           const defaultAtcCode = item.atcCode || vendName?.atcCode || "";
           const atcData = defaultAtcCode ? await useTopATCRow(defaultAtcCode) : null;
 
+          const availableAdvance =
+  parseFormattedNumber(
+    item.advanceBalance || 0
+  ) || 0;
+
+const availableAdvanceVat =
+  parseFormattedNumber(
+    item.advanceVatBalance || 0
+  ) || 0;
+
+const availableAdvanceEwt =
+  parseFormattedNumber(
+    item.advanceEwtBalance || 0
+  ) || 0;
+
+
+/*
+|--------------------------------------------------------------------------
+| Apply only up to this invoice/RR amount
+|--------------------------------------------------------------------------
+*/
+
+const appliedAdvance =
+  Math.min(
+    Math.max(amount, 0),
+    Math.max(availableAdvance, 0)
+  );
+
+
+/*
+|--------------------------------------------------------------------------
+| Proportionately apply VAT and EWT
+|--------------------------------------------------------------------------
+*/
+
+const advanceRatio =
+  availableAdvance > 0
+    ? appliedAdvance / availableAdvance
+    : 0;
+
+
+const appliedAdvanceVat =
+  Math.min(
+    availableAdvanceVat,
+    availableAdvanceVat * advanceRatio
+  );
+
+
+const appliedAdvanceEwt =
+  Math.min(
+    availableAdvanceEwt,
+    availableAdvanceEwt * advanceRatio
+  );
+
           return {
             lnNo: "",
             invType: "",
@@ -2916,18 +3331,44 @@ const extractOpenRRResponseRows = (response) => {
             atcCode: defaultAtcCode,
             atcName: atcData?.atcName || item.atcName || "",
             atcAmount: "0.00",
+            advpoNo:
+  appliedAdvance > 0
+    ? (
+        item.advpoNo ||
+        item.poNo ||
+        ""
+      )
+    : "",
 
-            advpoNo: "",
-            advpoAmount: "0.00",
-            advpoVatAmount: "0.00",
-            advpoAtcAmount: "0.00",
-            advAcct:
-              item.advAcct ||
-              item.adv_acct ||
-              item.ADV_ACCT ||
-              item.advanceAcct ||
-              item.advancesAcct ||
-              defaultAdvancesAcctCode,
+
+advpoAmount:
+  formatNumber(
+    appliedAdvance
+  ),
+
+
+advpoVatAmount:
+  formatNumber(
+    appliedAdvanceVat
+  ),
+
+
+advpoAtcAmount:
+  formatNumber(
+    appliedAdvanceEwt
+  ),
+
+
+advAcct:
+  appliedAdvance > 0
+    ? (
+        item.advAcct ||
+        item.adv_acct ||
+        item.ADV_ACCT ||
+        defaultAdvancesAcctCode ||
+        ""
+      )
+    : "",
             
             paytermCode: item.paytermCode || "",
             dueDate: useGetCurrentDayV2(),
@@ -2968,6 +3409,11 @@ const extractOpenRRResponseRows = (response) => {
 
   const handleAddInvoiceRow = async () => {
     setShowInvoiceAddDropdown(false);
+
+    if (!vendCode) {
+      await handleOpenPayeeLookup("addPayeeDetail");
+      return;
+    }
 
     if (String(selectedApType || "").toUpperCase() === "APV07") {
       await handleOpenReferenceLCImportation();
@@ -3171,6 +3617,21 @@ const extractOpenRRResponseRows = (response) => {
 };
 
 const handleCloseRRRefModal = async (selectedItems) => {
+  if (modalContext === "advancePayeeBalance") {
+    const selectedPayee = Array.isArray(selectedItems?.records)
+      ? selectedItems.records[0]
+      : selectedItems?.records || selectedItems;
+
+    updateState({
+      showRRRefModal: false,
+      globalLookupTitle: "",
+      globalLookupBtnCaption: "",
+    });
+
+    await handleClosePayeeModal(selectedPayee || null);
+    return;
+  }
+
   if (!selectedItems || !selectedItems.records) {
     updateState({
       showRRRefModal: false,
@@ -3464,61 +3925,321 @@ const isPCVFlow = modalContext === "openPCV";
         }
 
         if (isPOAdvanceFlow) {
-  const amount = parseFormattedNumber(item.poAmount || item.amount || item.siAmount || 0);
-  const vatAmount = parseFormattedNumber(item.vatAmount || 0);
+  // =========================================================
+  // APV03 - ADVANCES FROM PO
+  // =========================================================
 
-  const vCode = item.vatCode || vendName?.vatCode || "";
-  const vatData = vCode ? await useTopVatRow(vCode) : null;
+  const amount =
+    parseFormattedNumber(
+      item.poAmount ??
+      item.amount ??
+      item.siAmount ??
+      0
+    ) || 0;
+
+
+  // =========================================================
+  // PO REFERENCE
+  // =========================================================
+
+  const advancePoNo =
+    item.poJoNo ||
+    item.poNo ||
+    item.PO_NO ||
+    "";
+
+
+  // =========================================================
+  // IMPORTANT:
+  // DO NOT INHERIT VAT FROM THE PO AUTOMATICALLY.
+  //
+  // Do NOT use:
+  //   item.vatAmount
+  //   item.vatCode
+  //   vendName?.vatCode
+  //
+  // Only use VAT specifically supplied as an APV/Advance VAT.
+  // =========================================================
+
+  const explicitAdvanceVatAmount =
+    parseFormattedNumber(
+      item.apvVatAmount ??
+      item.advanceVatAmount ??
+      item.advpoVatAmount ??
+      item.advpo_vat_amount ??
+      item.ADVPO_VAT_AMOUNT ??
+      0
+    ) || 0;
+
+
+  const explicitAdvanceVatCode =
+    explicitAdvanceVatAmount > 0
+      ? (
+          item.apvVatCode ||
+          item.advanceVatCode ||
+          item.advpoVatCode ||
+          item.advpo_vat_code ||
+          item.ADVPO_VAT_CODE ||
+          ""
+        )
+      : "";
+
+
+  const advanceVatData =
+    explicitAdvanceVatCode
+      ? await useTopVatRow(
+          explicitAdvanceVatCode
+        )
+      : null;
+
+
+  // =========================================================
+  // IMPORTANT:
+  // DO NOT GENERATE EWT FROM VENDOR MASTER.
+  //
+  // Do NOT use:
+  //   vendName?.atcCode
+  //   useTopATCAmount(...)
+  //
+  // Only use ATC/EWT specifically supplied by an APV/Advance.
+  // =========================================================
+
+  const explicitAdvanceAtcAmount =
+    parseFormattedNumber(
+      item.apvAtcAmount ??
+      item.advanceAtcAmount ??
+      item.advanceEwtAmount ??
+      item.advpoAtcAmount ??
+      item.advpo_atc_amount ??
+      item.ADVPO_ATC_AMOUNT ??
+      0
+    ) || 0;
+
+
+  const explicitAdvanceAtcCode =
+    explicitAdvanceAtcAmount > 0
+      ? (
+          item.apvAtcCode ||
+          item.advanceAtcCode ||
+          item.advanceEwtCode ||
+          item.advpoAtcCode ||
+          item.advpo_atc_code ||
+          item.ADVPO_ATC_CODE ||
+          ""
+        )
+      : "";
+
+
+  const advanceAtcData =
+    explicitAdvanceAtcCode
+      ? await useTopATCRow(
+          explicitAdvanceAtcCode
+        )
+      : null;
+
+
+  // =========================================================
+  // ADVANCES ACCOUNT
+  // =========================================================
+
+  const advanceAccount =
+    item.advAcct ||
+    item.adv_acct ||
+    item.ADV_ACCT ||
+    item.advanceAcct ||
+    item.advancesAcct ||
+    defaultAdvancesAcctCode ||
+    "";
+
+
+  // =========================================================
+  // RETURN APV03 DETAIL ROW
+  // =========================================================
 
   return {
     lnNo: "",
-    invType: item.docType || "PO",
+
+    // ---------------------------------------------------------
+    // Reference
+    // ---------------------------------------------------------
+
+    invType:
+      item.docType ||
+      item.invType ||
+      "PO",
 
     rrNo: "",
-    poNo: item.poJoNo || item.poNo || "",
 
-    siNo: item.poJoNo || item.poNo || "",
-    siDate: item.poJoDate || item.poDate || useGetCurrentDayV2(),
+    poNo:
+      advancePoNo,
 
-    amount: formatNumber(amount),
-    siAmount: formatNumber(amount),
+    siNo:
+      advancePoNo,
 
-    debitAcct: item.debitAcct || "",
+    siDate:
+      item.poJoDate ||
+      item.poDate ||
+      item.PO_DATE ||
+      useGetCurrentDayV2(),
 
-    rcCode: "",
-    rcName: "",
 
-    sltypeCode: "SU",
-    slCode: item.vendCode || vendCode,
-    slName: item.vendName || vendName?.vendName || "",
+    // ---------------------------------------------------------
+    // Amount
+    // ---------------------------------------------------------
 
-    vatCode: vCode,
-    vatName: vatData?.vatName || item.vatName || "",
-    vatAmount: formatNumber(vatAmount),
+    amount:
+      formatNumber(amount),
 
-    atcCode: vendName?.atcCode || "",
-    atcName: "",
-    atcAmount: "0.00",
+    siAmount:
+      formatNumber(amount),
 
-    advpoNo: item.poJoNo || item.poNo || "",
-    advpoAmount: formatNumber(amount),
-    advpoVatAmount: formatNumber(vatAmount),
-    // Backend column is currently advpo_atc_amount; this mirrors Applied Advances VAT for compatibility.
-    advpoAtcAmount: formatNumber(vatAmount),
+
+    // ---------------------------------------------------------
+    // Debit Account
+    // APV03 uses Advances Account instead.
+    // ---------------------------------------------------------
+
+    debitAcct:
+      "",
+
+
+    // ---------------------------------------------------------
+    // Responsibility Center
+    // ---------------------------------------------------------
+
+    rcCode:
+      item.rcCode ||
+      item.RC_CODE ||
+      "",
+
+    rcName:
+      item.rcName ||
+      item.RC_NAME ||
+      "",
+
+
+    // ---------------------------------------------------------
+    // Supplier SL
+    // ---------------------------------------------------------
+
+    sltypeCode:
+      "SU",
+
+    slCode:
+      item.vendCode ||
+      item.VEND_CODE ||
+      vendCode ||
+      "",
+
+    slName:
+      item.vendName ||
+      item.VEND_NAME ||
+      vendName?.vendName ||
+      "",
+
+
+    // =========================================================
+    // ACTUAL APV03 VAT
+    //
+    // Will be zero unless an explicit APV/Advance VAT exists.
+    // =========================================================
+
+    vatCode:
+      explicitAdvanceVatCode,
+
+    vatName:
+      advanceVatData?.vatName ||
+      item.advanceVatName ||
+      "",
+
+    vatAmount:
+      formatNumber(
+        explicitAdvanceVatAmount
+      ),
+
+
+    // =========================================================
+    // ACTUAL APV03 ATC / EWT
+    //
+    // Will be zero unless an explicit APV/Advance ATC exists.
+    // =========================================================
+
+    atcCode:
+      explicitAdvanceAtcCode,
+
+    atcName:
+      advanceAtcData?.atcName ||
+      item.advanceAtcName ||
+      "",
+
+    atcAmount:
+      formatNumber(
+        explicitAdvanceAtcAmount
+      ),
+
+
+    // =========================================================
+    // ADVANCE REFERENCE
+    // =========================================================
+
+    advpoNo:
+      advancePoNo,
+
+    advpoAmount:
+      formatNumber(amount),
+
     advAcct:
-      item.advAcct ||
-      item.adv_acct ||
-      item.ADV_ACCT ||
-      item.advanceAcct ||
-      item.advancesAcct ||
-      defaultAdvancesAcctCode,
-
-    paytermCode: item.paytermCode || "",
-    dueDate: useGetCurrentDayV2(),
+      advanceAccount,
 
 
-    REC_RC: "N",
-    REC_SL: "Y",
+    // =========================================================
+    // ADVANCE TAX
+    //
+    // Must be the SAME tax that actually exists on APV03.
+    // Never calculate it from PO/vendor.
+    // =========================================================
+
+    advpoVatAmount:
+      formatNumber(
+        explicitAdvanceVatAmount
+      ),
+
+    advpoAtcAmount:
+      formatNumber(
+        explicitAdvanceAtcAmount
+      ),
+
+
+    // ---------------------------------------------------------
+    // Payment terms
+    // ---------------------------------------------------------
+
+    paytermCode:
+      item.paytermCode ||
+      item.payterm ||
+      "",
+
+    dueDate:
+      item.dueDate ||
+      useGetCurrentDayV2(),
+
+
+    // ---------------------------------------------------------
+    // Misc
+    // ---------------------------------------------------------
+
+    remarks:
+      item.remarks ||
+      "",
+
+    REC_RC:
+      item.rcCode ||
+      item.RC_CODE
+        ? "Y"
+        : "N",
+
+    REC_SL:
+      "Y",
   };
 }
 
@@ -3553,6 +4274,54 @@ const netOfVat = +(amount - vatAmount).toFixed(2);
 const calculatedAtcAmount = aCode
   ? await useTopATCAmount(aCode, netOfVat)
   : 0;
+
+  // =========================================================
+// ADVANCE BALANCE FROM POSTED APV03
+// =========================================================
+
+const availableAdvance =
+  parseFormattedNumber(
+    item.advanceBalance || 0
+  ) || 0;
+
+const availableAdvanceVat =
+  parseFormattedNumber(
+    item.advanceVatBalance || 0
+  ) || 0;
+
+const availableAdvanceEwt =
+  parseFormattedNumber(
+    item.advanceEwtBalance || 0
+  ) || 0;
+
+
+// Maximum advance applicable to this RR invoice.
+const appliedAdvance =
+  Math.min(
+    Math.max(amount, 0),
+    Math.max(availableAdvance, 0)
+  );
+
+
+// Allocate remaining VAT/EWT proportionately.
+const advanceRatio =
+  availableAdvance > 0
+    ? appliedAdvance / availableAdvance
+    : 0;
+
+
+const appliedAdvanceVat =
+  Math.min(
+    availableAdvanceVat,
+    availableAdvanceVat * advanceRatio
+  );
+
+
+const appliedAdvanceEwt =
+  Math.min(
+    availableAdvanceEwt,
+    availableAdvanceEwt * advanceRatio
+  );
 
         return {
   lnNo: "",
@@ -3589,17 +4358,36 @@ const calculatedAtcAmount = aCode
   atcName: atcData?.atcName || "",
   atcAmount: formatNumber(calculatedAtcAmount),
 
-  advpoNo: "",
-  advpoAmount: "0.00",
-  advpoVatAmount: "0.00",
-  advpoAtcAmount: "0.00",
-  advAcct:
-    item.advAcct ||
-    item.adv_acct ||
-    item.ADV_ACCT ||
-    item.advanceAcct ||
-    item.advancesAcct ||
-    defaultAdvancesAcctCode,
+  advpoNo:
+  appliedAdvance > 0
+    ? item.advpoNo || item.poNo || ""
+    : "",
+
+advpoAmount:
+  formatNumber(
+    appliedAdvance
+  ),
+
+advpoVatAmount:
+  formatNumber(
+    appliedAdvanceVat
+  ),
+
+advpoAtcAmount:
+  formatNumber(
+    appliedAdvanceEwt
+  ),
+
+advAcct:
+  appliedAdvance > 0
+    ? (
+        item.advAcct ||
+        item.adv_acct ||
+        item.ADV_ACCT ||
+        defaultAdvancesAcctCode ||
+        ""
+      )
+    : "",
 
   paytermCode: item.terms || item.paytermCode || "",
   dueDate: item.dueDate || useGetCurrentDayV2(),
@@ -3929,6 +4717,7 @@ const calculatedAtcAmount = aCode
   const isRRFlow = modalContext === "openRR";
   const isPOAdvanceFlow = modalContext === "openPOAdvance";
   const isPCVFlow = modalContext === "openPCV";
+  const isAddPayeeDetailFlow = modalContext === "addPayeeDetail";
 
   updateState({
     payeeModalOpen: false,
@@ -4133,6 +4922,66 @@ const calculatedAtcAmount = aCode
           branchCode,
         });
       }, 100);
+    } else if (isAddPayeeDetailFlow) {
+      const items = await handleFetchDetail(foundVendCode);
+      const itemList = Array.isArray(items) ? items : [items];
+
+      if (itemList.length > 0) {
+        const defaultAdvancesAcctCode = await getDefaultAdvancesAcctCode();
+        const newRows = await Promise.all(
+          itemList.map(async (item) => {
+            const amount = parseFormattedNumber(item.origAmount || 0);
+            const defaultVatCode = item.vatCode || foundVatCode || "";
+            const vatRate = await getVatRate(defaultVatCode);
+            const vatData = defaultVatCode ? await useTopVatRow(defaultVatCode) : null;
+            const defaultAtcCode = item.atcCode || foundAtcCode || "";
+            const atcData = defaultAtcCode ? await useTopATCRow(defaultAtcCode) : null;
+
+            return {
+              lnNo: "",
+              invType: "",
+              rrNo: "",
+              poNo: "",
+              siNo: "",
+              siDate: useGetCurrentDayV2(),
+              amount: formatNumber(amount),
+              siAmount: formatNumber(amount),
+              debitAcct: "",
+              sltypeCode: item.sltypeCode || "VE",
+              slCode: foundVendCode || "",
+              slName: foundVendName || "",
+              vatCode: defaultVatCode,
+              vatName: vatData?.vatName || item.vatName || "",
+              vatAmount: formatNumber(
+                vatRate > 0 ? (amount / (1 + vatRate)) * vatRate : 0
+              ),
+              atcCode: defaultAtcCode,
+              atcName: atcData?.atcName || item.atcName || "",
+              atcAmount: "0.00",
+              advpoNo: "",
+              advpoAmount: "0.00",
+              advpoVatAmount: "0.00",
+              advpoAtcAmount: "0.00",
+              advAcct:
+                item.advAcct ||
+                item.adv_acct ||
+                item.ADV_ACCT ||
+                item.advanceAcct ||
+                item.advancesAcct ||
+                defaultAdvancesAcctCode,
+              paytermCode: item.paytermCode || "",
+              dueDate: useGetCurrentDayV2(),
+              remarks: "",
+              REC_RC: item.REC_RC || "N",
+              REC_SL: item.REC_SL || "N",
+            };
+          }),
+        );
+
+        const updatedRows = [...detailRows, ...newRows];
+        updateState({ detailRows: updatedRows });
+        updateTotals(updatedRows);
+      }
     }
 
   } catch (error) {
@@ -5290,6 +6139,11 @@ const regularApvDetailColumnDefs = [
           label: "Applied Advances VAT",
           width: 150,
         },
+        {
+  key: "advpoAtcAmount",
+  label: "Applied Advances EWT",
+  width: 150,
+},
       ]
     : []),
 
@@ -5483,6 +6337,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
         row.rrId ||
         row.rr_id ||
         row.RR_ID ||
+        row.pcvNo ||
+        row.PCV_NO ||
+        row.pcvId ||
+        row.PCV_ID ||
         row.lcId ||
         row.lc_id ||
         row.LC_ID ||
@@ -5675,7 +6533,7 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                 type="lookup"
                 value={vendName?.vendCode || ""}
                 disabled={isFormDisabled}
-                onLookup={() => updateState({ payeeModalOpen: true })}
+                onLookup={() => handleOpenPayeeLookup()}
               />
 
               {/* Payee Name Display */}
@@ -6078,11 +6936,17 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
     </tr>
   ) : (
     <tr key={index} className="global-tran-tr-ui">
-                          <td className="global-tran-td-ui text-center">
+                          <td
+                            data-apv-column-key="ln"
+                            className="global-tran-td-ui text-center"
+                          >
                             {index + 1}
                           </td>
                           {fieldVisibility.invType && (
-                            <td className="global-tran-td-ui">
+                            <td
+                              data-apv-column-key="invType"
+                              className="global-tran-td-ui"
+                            >
                               <select
                                 className="w-[50px] global-tran-td-inputclass-ui"
                                 value={row.invType || ""}
@@ -6108,7 +6972,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                             </td>
                           )}
                           {fieldVisibility.rrNo && !isImportationAPType && (
-                            <td className="global-tran-td-ui">
+                            <td
+                              data-apv-column-key="rrNo"
+                              className="global-tran-td-ui"
+                            >
                               <input
                                 type="text"
                                 className="w-[100px] global-tran-td-inputclass-ui"
@@ -6127,7 +6994,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                             </td>
                           )}
                           {fieldVisibility.poNo && (
-                            <td className="global-tran-td-ui">
+                            <td
+                              data-apv-column-key="poNo"
+                              className="global-tran-td-ui"
+                            >
                               <input
                                 type="text"
                                 className="w-[100px] global-tran-td-inputclass-ui"
@@ -6145,7 +7015,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                               />
                             </td>
                           )}
-                          <td className="global-tran-td-ui">
+                          <td
+                            data-apv-column-key="siNo"
+                            className="global-tran-td-ui"
+                          >
                             <input
                               type="text"
                               className="w-[100px] global-tran-td-inputclass-ui"
@@ -6162,7 +7035,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                               disabled={isFormDisabled}
                             />
                           </td>
-                          <td className="global-tran-td-ui">
+                          <td
+                            data-apv-column-key="siDate"
+                            className="global-tran-td-ui"
+                          >
                             <div className="w-[110px]">
                               <DateFormatInput
                                 id={`siDate_${index}`}
@@ -6184,7 +7060,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                               />
                             </div>
                           </td>
-                          <td className="global-tran-td-ui">
+                          <td
+                            data-apv-column-key="amount"
+                            className="global-tran-td-ui"
+                          >
                             <input
                               type="text"
                               ref={(el) => (amountRefs.current[index] = el)}
@@ -6245,7 +7124,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                               }}
                             />
                           </td>
-                          <td className="global-tran-td-ui">
+                          <td
+                            data-apv-column-key="currCode"
+                            className="global-tran-td-ui"
+                          >
                             <input
                               type="text"
                               className="w-[80px] global-tran-td-inputclass-ui text-center"
@@ -6258,7 +7140,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                               disabled={isFormDisabled}
                             />
                           </td>
-                          <td className="global-tran-td-ui">
+                          <td
+                            data-apv-column-key="siAmount"
+                            className="global-tran-td-ui"
+                          >
                             <input
                               type="text"
                               className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
@@ -6270,7 +7155,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                           {showDrAccountColumn && (
                             <>
                               {/* DR Account */}
-                              <td className="global-tran-td-ui relative">
+                              <td
+                                data-apv-column-key="debitAcct"
+                                className="global-tran-td-ui relative"
+                              >
                                 <div className="flex items-center">
                                   <input
                                     type="text"
@@ -6297,7 +7185,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                             </>
                           )}
                           {/* RC Code */}
-                          <td className="global-tran-td-ui relative">
+                          <td
+                            data-apv-column-key="rcCode"
+                            className="global-tran-td-ui relative"
+                          >
                             <div className="flex items-center">
                               <input
                                 type="text"
@@ -6327,7 +7218,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                                 )}
                             </div>
                           </td>
-                          <td className="global-tran-td-ui">
+                          <td
+                            data-apv-column-key="rcName"
+                            className="global-tran-td-ui"
+                          >
                             <input
                               type="text"
                               className="w-[250px] global-tran-td-inputclass-ui"
@@ -6337,7 +7231,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                             />
                           </td>
                           {fieldVisibility.sltypeCode && (
-                            <td className="global-tran-td-ui">
+                            <td
+                              data-apv-column-key="sltypeCode"
+                              className="global-tran-td-ui"
+                            >
                               <input
                                 type="text"
                                 className="w-[100px] global-tran-td-inputclass-ui"
@@ -6355,7 +7252,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                             </td>
                           )}
                           {/* SL Code */}
-                          <td className="global-tran-td-ui relative">
+                          <td
+                            data-apv-column-key="slCode"
+                            className="global-tran-td-ui relative"
+                          >
                             <div className="flex items-center">
                               <input
                                 type="text"
@@ -6386,7 +7286,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                             </div>
                           </td>
                           {/* VAT Code */}
-                          <td className="global-tran-td-ui relative">
+                          <td
+                            data-apv-column-key="vatCode"
+                            className="global-tran-td-ui relative"
+                          >
                             <div className="flex items-center">
                               <input
                                 type="text"
@@ -6411,7 +7314,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                           </td>
 
                           {/* VAT Name */}
-                          <td className="global-tran-td-ui">
+                          <td
+                            data-apv-column-key="vatName"
+                            className="global-tran-td-ui"
+                          >
                             <input
                               type="text"
                               className="w-[250px] global-tran-td-inputclass-ui"
@@ -6423,7 +7329,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                           </td>
 
                           {/* VAT Amount */}
-                          <td className="global-tran-td-ui">
+                          <td
+                            data-apv-column-key="vatAmount"
+                            className="global-tran-td-ui"
+                          >
                             <input
                               type="text"
                               className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
@@ -6441,7 +7350,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                           </td>
 
                           {/* ATC Code */}
-                          <td className="global-tran-td-ui relative">
+                          <td
+                            data-apv-column-key="atcCode"
+                            className="global-tran-td-ui relative"
+                          >
                             <div className="flex items-center">
                               <input
                                 type="text"
@@ -6466,7 +7378,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                           </td>
 
                           {/* ATC Name */}
-                          <td className="global-tran-td-ui">
+                          <td
+                            data-apv-column-key="atcName"
+                            className="global-tran-td-ui"
+                          >
                             <input
                               type="text"
                               className="w-[250px] global-tran-td-inputclass-ui"
@@ -6478,7 +7393,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                           </td>
 
                           {/* ATC Amount */}
-                          <td className="global-tran-td-ui">
+                          <td
+                            data-apv-column-key="atcAmount"
+                            className="global-tran-td-ui"
+                          >
                             <input
                               type="text"
                               className="w-[100px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
@@ -6504,7 +7422,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
 
 
 
-                          <td className="global-tran-td-ui relative">
+                          <td
+                            data-apv-column-key="paytermCode"
+                            className="global-tran-td-ui relative"
+                          >
                             <div className="flex items-center">
                               <input
                                 type="text"
@@ -6530,7 +7451,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                               )}
                             </div>
                           </td>
-                          <td className="global-tran-td-ui">
+                          <td
+                            data-apv-column-key="dueDate"
+                            className="global-tran-td-ui"
+                          >
                             <div className="w-[110px]">
                               <DateFormatInput
                                 id={`dueDate_${index}`}
@@ -6557,7 +7481,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                           {showAppliedAdvancesColumns && (
                             <>
                               {/* Applied Advances PO */}
-                              <td className="global-tran-td-ui">
+                              <td
+                                data-apv-column-key="advpoNo"
+                                className="global-tran-td-ui"
+                              >
                                 <input
                                   type="text"
                                   className="w-[120px] global-tran-td-inputclass-ui"
@@ -6576,7 +7503,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                               </td>
 
                               {/* Applied Advances Amount */}
-                              <td className="global-tran-td-ui">
+                              <td
+                                data-apv-column-key="advpoAmount"
+                                className="global-tran-td-ui"
+                              >
                                 <input
                                   type="text"
                                   className="w-[120px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
@@ -6609,11 +7539,16 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                               </td>
 
                               {/* Applied Advances VAT */}
-                              <td className="global-tran-td-ui">
+                              <td
+                                data-apv-column-key="advpoVatAmount"
+                                className="global-tran-td-ui"
+                              >
                                 <input
                                   type="text"
                                   className="w-[120px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
-                                  value={row.advpoVatAmount ?? row.advpoAtcAmount ?? "0.00"}
+                                  value={
+  row.advpoVatAmount || "0.00"
+}
                                   onChange={(e) => {
                                     const value = e.target.value;
                                     if (/^-?\d{0,12}(\.\d{0,2})?$/.test(value) || value === "") {
@@ -6640,6 +7575,52 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                                   disabled={isFormDisabled}
                                 />
                               </td>
+                              {/* Applied Advances EWT */}
+<td
+  data-apv-column-key="advpoAtcAmount"
+  className="global-tran-td-ui"
+>
+  <input
+    type="text"
+    className="w-[120px] h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
+    value={
+      row.advpoAtcAmount || "0.00"
+    }
+    onChange={(e) => {
+      const value = e.target.value;
+
+      if (
+        /^-?\d{0,12}(\.\d{0,2})?$/.test(value) ||
+        value === ""
+      ) {
+        handleDetailChange(
+          index,
+          "advpoAtcAmount",
+          value,
+          false
+        );
+      }
+    }}
+    onBlur={(e) => {
+      if (isFormDisabled) return;
+
+      const num =
+        parseFormattedNumber(
+          e.target.value
+        );
+
+      handleDetailChange(
+        index,
+        "advpoAtcAmount",
+        formatNumber(
+          isNaN(num) ? 0 : num
+        ),
+        false
+      );
+    }}
+    disabled={isFormDisabled}
+  />
+</td>
 
                             </>
                           )}
@@ -6647,7 +7628,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                           {showAdvancesAccountColumn && (
                             <>
                               {/* Advances Account */}
-                              <td className="global-tran-td-ui relative">
+                              <td
+                                data-apv-column-key="advAcct"
+                                className="global-tran-td-ui relative"
+                              >
                                 <div className="flex items-center">
                                   <input
                                     type="text"
@@ -6686,6 +7670,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                                   onClick={() => {
                                     if (isImportationAPType) {
                                       handleOpenReferenceLCImportation();
+                                      return;
+                                    }
+                                    if (!vendCode) {
+                                      handleOpenPayeeLookup("addPayeeDetail");
                                       return;
                                     }
                                     handleAddRow(index);
@@ -7708,7 +8696,7 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
         globalLookupConfigEndpoint: "",
       })
     }
-    singleSelect={false}
+    singleSelect={modalContext === "advancePayeeBalance"}
   />
 )}
 

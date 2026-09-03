@@ -1827,28 +1827,30 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
           : [];
       };
 
-      let endpoint = "getFGPORR_OpenSummary";
-      let detailEndpoint = "getFGPORR_OpenDetail";
-      let rawRows = await loadJsonSummaryRows(endpoint);
-      let openRows = normalizeAndFilterOpenPORows(rawRows);
+      const endpoint = "getFGPORR_OpenSummary";
+const detailEndpoint = "getFGPORR_OpenDetail";
 
-      if (openRows.length === 0) {
-        endpoint = "getPORR_OpenSummary";
-        detailEndpoint = "getPORR_OpenDetail";
-        rawRows = await loadJsonSummaryRows(endpoint);
-        openRows = normalizeAndFilterOpenPORows(rawRows);
-      }
+const rawRows = await loadJsonSummaryRows(endpoint);
+const openRows = normalizeAndFilterOpenPORows(rawRows);
 
-      if (openRows.length === 0) {
-        endpoint = "getPOOpen";
-        detailEndpoint = "/getPOOpen";
-        const response = await postRequest("/getPOOpen", {
-          mode: "Header",
-          branchCode: lookupBranchCode,
-          poTranType: null,
-        });
-        openRows = normalizeAndFilterOpenPORows(response?.data || []);
-      }
+if (openRows.length === 0) {
+  useSwalErrorAlert(
+    "Open Purchase Order",
+    selectedPayeeCode || selectedPayeeName
+      ? "No open FG Purchase Order records found for the selected payee."
+      : "No open FG Purchase Order records found."
+  );
+
+  updateState({
+    isLoading: false,
+    openPODataSummary: [],
+    openPORRColSummary: [],
+    openPORRColDetail: [],
+    poLookupModalOpen: false,
+  });
+
+  return;
+}
 
       const colConfig = endpoint === "getPOOpen" ? [] : await getSelectedHSColConfig(endpoint);
       const colConfigDetail = endpoint === "getPOOpen" ? [] : await getSelectedHSColConfig(detailEndpoint);
@@ -1884,16 +1886,34 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
         isLoading: false,
       });
     } catch (error) {
-      console.error("Open PO lookup error:", error);
-      useSwalErrorAlert("Open Purchase Order", "Error in fetching record.");
-      updateState({
-        openPODataSummary: [],
-        openPORRColSummary: [],
-        openPORRColDetail: [],
-        poLookupModalOpen: false,
-        isLoading: false,
-      });
-    }
+  const backendMessage =
+    error?.response?.data?.message ||
+    error?.response?.data?.details ||
+    error?.response?.data?.error ||
+    error?.message ||
+    "Error in fetching record.";
+
+  console.error("Open PO lookup error:", {
+    status: error?.response?.status,
+    url: error?.config?.url,
+    method: error?.config?.method,
+    response: error?.response?.data,
+    error,
+  });
+
+  useSwalErrorAlert(
+    "Open Purchase Order",
+    backendMessage
+  );
+
+  updateState({
+    openPODataSummary: [],
+    openPORRColSummary: [],
+    openPORRColDetail: [],
+    poLookupModalOpen: false,
+    isLoading: false,
+  });
+}
   };
 
   const handleClosePOOpenModal = async (selection) => {
