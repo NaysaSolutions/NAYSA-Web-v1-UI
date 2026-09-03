@@ -32,6 +32,7 @@ import RCLookupModal from "../../../Lookup/SearchRCMast.jsx";
 import ItemMastLookupModal from "../../../Lookup/SearchItemMast.jsx";
 import PayeeMastLookupModal from "../../../Lookup/SearchVendMast";
 import PaytermLookupModal from "../../../Lookup/SearchPayTermRef.jsx";
+import RequiredUomLookupModal from "../../../Lookup/SearchRequiredUOM.jsx";
 import GlobalCombinedLookup from "../../../Lookup/SearchGlobalCombinedLookup.jsx";
 import VATLookupModal from "../../../Lookup/SearchVATRef.jsx";
 import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
@@ -93,6 +94,7 @@ import {
   parseFormattedNumber,
   useSwalProceedConfirm,
   useSwalErrorAlert,
+  useSwalInfoAlert,
   useSwalshowSaveSuccessDialog,
   useSwalSuccessAlert,
   useSwalvalidateRequiredFields,
@@ -113,6 +115,7 @@ const MSRR = () => {
   const loadedFromUrlRef = useRef(false);
   const detailRowsRef = useRef([]);
   const detailRowsGLRef = useRef([]);
+  const msrrQuantityEditStartRef = useRef({});
   const currRateBeforeEditRef = useRef("");
   const [shouldGenerateGLAfterCurrRateChange, setShouldGenerateGLAfterCurrRateChange] =
     useState(false);
@@ -121,6 +124,7 @@ const MSRR = () => {
 
   const { resetFlag } = useReset();
   const { user, companyInfo, currentUserRow} = useAuth();
+  const isInventoryConversionEnabled = companyInfo?.allInvConversion === "E";
   // const { companyInfo, currentUserRow, getAllDropDown, refsLoaded, getAllTopHSDocRow } = useAuth();
   const [isViewDocument, setIsViewDocument] = useState(false);
   const [msInvGLModeSetting, setMsInvGLModeSetting] = useState("");
@@ -513,6 +517,7 @@ groupId,
     rr_date: new Date().toISOString().split("T")[0],
   });
   const [editingMSRRDetailCell, setEditingMSRRDetailCell] = useState(null);
+  const [convertedUomLookup, setConvertedUomLookup] = useState({ isOpen: false, rowIndex: null, data: [] });
 
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
   const [showLotPickingModal, setShowLotPickingModal] = useState(false);
@@ -611,6 +616,7 @@ rrQty: "",
     String(state.msrrTranType || "MSRR01").toUpperCase() === "MSRR02";
   const payeeLookupFilter = isDirectReceiving ? "ActiveAll" : "OpenMSRR";
   const openPOAfterPayeeRef = useRef(false);
+  const [isPayeeUpdating, setIsPayeeUpdating] = useState(false);
   const isRegularReceiving =
     String(state.msrrTranType || "MSRR01").trim().toUpperCase() === "MSRR01";
   const isPayeeLockedForRegularDetails =
@@ -637,6 +643,12 @@ rrQty: "",
     { key: "poBalance", label: "PO Balance", width: 130 },
     { key: "rrQty", label: "RR Quantity", width: 130 },
     { key: "freeQty", label: "Free Quantity", width: 130 },
+    ...(isInventoryConversionEnabled
+      ? [
+          { key: "convertedUomCode", label: "Converted UOM", width: 130 },
+          { key: "convertedQuantity", label: "Converted Quantity", width: 155 },
+        ]
+      : []),
     {
       key: "unitCost",
       label: `Unit Price (${headerCurrCode || "PHP"})`,
@@ -667,7 +679,7 @@ rrQty: "",
     { key: "whouseCode", label: "Warehouse", width: 120 },
     { key: "LocCode", label: "Location", width: 120 },
   ],
-  [companyDefaultCurrCode, headerCurrCode, isForeignHeaderCurrency]
+  [companyDefaultCurrCode, headerCurrCode, isForeignHeaderCurrency, isInventoryConversionEnabled]
 );
 
   const {
@@ -774,7 +786,7 @@ rrQty: "",
   [getSortedMSRRDetailRows, detailRows]
 )
 
-  const msrrDetailEnterNextRowZeroClearFields = ["rrQty", "freeQty", "unitCost"];
+  const msrrDetailEnterNextRowZeroClearFields = ["rrQty", "freeQty", "convertedQuantity", "unitCost"];
 
   const glTransactionCurrCode = String(currCode || "").trim().toUpperCase();
   const glDefaultCurrCode = String(glCurrDefault || "PHP").trim().toUpperCase();
@@ -1977,6 +1989,9 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
         itemSpecs: d.itemSpecs || "",
 
         uomCode: d.uomCode || "",
+        convertedUomCode: d.requiredUomCode || d.uomCode || "",
+        conversionFactor: parseFormattedNumber(d.conversionFactor) || 1,
+        convertedQuantity: formatNumber(qtyBalance / (parseFormattedNumber(d.conversionFactor) || 1), decQty),
         uomCode2: d.uomCode2 || "",
         uomQty2: formatNumber(d.uomQty2 || 0, 6),
 
@@ -2694,6 +2709,9 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
 
           rrQty: formatNumber(r.rrQty || r.quantity || 0, decQty),
           freeQty: formatNumber(r.freeQty || r.freeQuantity || 0, decQty),
+          convertedUomCode: getPOField(r, "convertedUomCode", "CONVERTED_UOM_CODE") || r.uomCode || "",
+          convertedQuantity: formatNumber(getPOField(r, "convertedQuantity", "CONVERTED_QUANTITY") || r.rrQty || r.quantity || 0, decQty),
+          conversionFactor: parseFormattedNumber(getPOField(r, "conversionFactor", "CONVERSION_FACTOR")) || 1,
 
           amount: formatNumber(r.itemAmount || r.grossAmount || 0),
           itemAmount: formatNumber(r.itemAmount || r.grossAmount || 0),
@@ -3261,6 +3279,9 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
       itemCode: "",
       itemName: "",
       uomCode: "",
+      convertedUomCode: "",
+      convertedQuantity: formatNumber(0, decQty),
+      conversionFactor: 1,
       qtyOnHand: "0.000000",
       qtyAlloc: "0.000000",
       qtyNeeded: "0.000000",
@@ -3828,10 +3849,82 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
 
   const formatMSRRByField = (field, value) => {
     if (!Number.isFinite(value)) return "";
-    if (["rrQty", "freeQty"].includes(field)) return formatNumber(value, decQty);
+    if (["rrQty", "freeQty", "convertedQuantity"].includes(field)) return formatNumber(value, decQty);
     if (field === "unitCost") return formatNumber(value, decUcost);
     if (field === "vatRate") return formatNumber(value, 2);
     return formatNumber(value);
+  };
+
+  const parseItemConversionRows = (response) => {
+    const result = response?.data?.data?.[0]?.result;
+    if (typeof result === "string") {
+      try { return JSON.parse(result); } catch { return []; }
+    }
+    return Array.isArray(response?.data?.data) ? response.data.data : [];
+  };
+
+  const isSameUom = (leftUomCode, rightUomCode) =>
+    String(leftUomCode || "").trim().toUpperCase() === String(rightUomCode || "").trim().toUpperCase();
+
+  const openConvertedUomLookup = async (index) => {
+    const row = detailRowsRef.current?.[index] || detailRows?.[index];
+    if (!row?.itemCode || !row?.invType) {
+      useSwalInfoAlert("Converted UOM", "Select an item first.");
+      return;
+    }
+    try {
+      updateState({ showSpinner: true });
+      const response = await apiClient.get("/itemConversion", {
+        params: { invType: row.invType, itemCode: row.itemCode },
+      });
+      const data = parseItemConversionRows(response).map((conversion) => ({
+        ...conversion,
+        groupId: conversion.itemUomConvId || conversion.uomCode,
+      }));
+      if (!data.some((conversion) => !isSameUom(conversion.uomCode, row.uomCode))) {
+        setConvertedUomLookup({ isOpen: false, rowIndex: null, data: [] });
+        useSwalInfoAlert("Converted UOM", "No other UOM is defined.");
+        return;
+      }
+      setConvertedUomLookup({ isOpen: true, rowIndex: index, data });
+    } catch (error) {
+      useSwalErrorAlert("Converted UOM", error?.response?.data?.message || error.message || "Unable to load item conversions.");
+    } finally {
+      updateState({ showSpinner: false });
+    }
+  };
+
+  const handleConvertedUomSelect = async (selected) => {
+    const index = convertedUomLookup.rowIndex;
+    setConvertedUomLookup({ isOpen: false, rowIndex: null, data: [] });
+    if (!selected || index === null) return;
+    const rows = [...(detailRowsRef.current || detailRows || [])];
+    const row = { ...rows[index] };
+    try {
+      updateState({ showSpinner: true });
+      let conversionFactor = 1;
+      if (!isSameUom(selected.uomCode, row.uomCode)) {
+        const response = await postRequest("convertItemUom", {
+          json_data: {
+            invType: row.invType, itemCode: row.itemCode, fromUomCode: row.uomCode,
+            toUomCode: selected.uomCode, quantity: parseFormattedNumber(row.rrQty) || 0,
+          },
+        });
+        const result = response?.data?.[0] || response?.data?.data?.[0] || {};
+        if (Number(result.errorcount || 0) > 0) throw new Error(result.errormsg || "Unable to convert the item quantity.");
+        conversionFactor = parseFormattedNumber(result.toConvQty) || 1;
+      }
+      rows[index] = {
+        ...row, convertedUomCode: selected.uomCode, conversionFactor,
+        convertedQuantity: formatNumber((parseFormattedNumber(row.rrQty) || 0) / conversionFactor, decQty),
+      };
+      detailRowsRef.current = rows;
+      updateState({ detailRows: rows });
+    } catch (error) {
+      useSwalErrorAlert("Conversion Failed", error.message || "Unable to convert the item quantity.");
+    } finally {
+      updateState({ showSpinner: false });
+    }
   };
 
  const handleDetailChange = async (index, field, value, extraData = {}) => {
@@ -3929,6 +4022,7 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
     const numericFieldDecimals = {
       rrQty: decQty,
       freeQty: decQty,
+      convertedQuantity: decQty,
       unitCost: decUcost,
       vatRate: 2,
     };
@@ -3952,17 +4046,36 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
     }
 
     // ✅ apply any extra lookup fields (names, etc.)
-    if (extraData && typeof extraData === "object") {
-      row = { ...row, ...extraData };
-    }
+    if (extraData && typeof extraData === "object") {
+      row = { ...row, ...extraData };
+    }
+
+    if (isInventoryConversionEnabled && field === "convertedQuantity") {
+      const conversionFactor = parseFormattedNumber(row.conversionFactor) || 1;
+      row.rrQty = formatNumber((parseFormattedNumber(row.convertedQuantity) || 0) * conversionFactor, decQty);
+      row.lotDetails = [];
+    }
+    if (isInventoryConversionEnabled && field === "rrQty") {
+      const conversionFactor = parseFormattedNumber(row.conversionFactor) || 1;
+      row.convertedUomCode = row.convertedUomCode || row.uomCode || "";
+      row.convertedQuantity = formatNumber((parseFormattedNumber(row.rrQty) || 0) / conversionFactor, decQty);
+    }
 
     // ✅ recompute amounts only when needed
-    if (["rrQty", "freeQty", "unitCost", "vatRate"].includes(field)) {
+    if (["rrQty", "freeQty", "convertedQuantity", "unitCost", "vatRate"].includes(field)) {
       row = recalcMSRRRow(row);
     }
 
     updatedRows[index] = row;
-    if (field === "rrQty" && !validateRRQtyWithinPOBalance(updatedRows)) return;
+    if (["rrQty", "convertedQuantity"].includes(field) && !validateRRQtyWithinPOBalance(updatedRows)) {
+      const originalRow = msrrQuantityEditStartRef.current[index] || rows[index];
+      const restoredRows = [...rows];
+      restoredRows[index] = { ...originalRow };
+      detailRowsRef.current = restoredRows;
+      updateState({ detailRows: restoredRows });
+      updateTotalsDisplay(restoredRows);
+      return;
+    }
     detailRowsRef.current = updatedRows;
     const shouldClearGlEntries =
       ["rrQty", "unitCost"].includes(field) &&
@@ -4253,6 +4366,9 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
           itemCode: r.itemCode || "",
           itemName: r.itemName || "",
           uomCode: r.uomCode || "",
+          convertedUomCode: r.convertedUomCode || r.uomCode || "",
+          convertedQuantity: parseFormattedNumber(r.convertedQuantity ?? r.rrQty ?? r.quantity ?? 0),
+          conversionFactor: parseFormattedNumber(r.conversionFactor) || 1,
           quantity: parseFormattedNumber(r.rrQty || r.quantity || 0),
           poNo: isDirectReceiving ? "" : rowPoNo || state.poNo || "",
           poLineno: r.poLineno || r.poLineNo || r.lnNo || r.Ln || r.lineNo || "",
@@ -4890,6 +5006,7 @@ const handleClosePayeeLookup = async (row) => {
     const shouldOpenPOAfterPayee = openPOAfterPayeeRef.current && isRegularReceiving;
     openPOAfterPayeeRef.current = false;
 
+    setIsPayeeUpdating(true);
     updateState({ payeeLookupOpen: false, isLoading: true });
 
     try {
@@ -5003,9 +5120,14 @@ const handleClosePayeeLookup = async (row) => {
     if (shouldOpenPOAfterPayee) {
       await handleOpenPOOpenLookup({ vendCode: nextVendCode, vendName: nextVendName });
     }
+
+    await new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
+    });
     } catch (error) {
       console.error("Error loading Payee defaults:", error);
     } finally {
+      setIsPayeeUpdating(false);
       updateState({ payeeLookupOpen: false, isLoading: false });
     }
   };
@@ -5264,7 +5386,7 @@ const handleClosePayeeLookup = async (row) => {
       e.preventDefault();
       let nextValue = e.currentTarget.value;
 
-      if (["rrQty", "freeQty", "unitCost", "vatRate"].includes(field)) {
+      if (["rrQty", "freeQty", "convertedQuantity", "unitCost", "vatRate"].includes(field)) {
         const numericValue = parseFormattedNumber(nextValue || 0);
         nextValue = formatMSRRByField(
           field,
@@ -5308,6 +5430,9 @@ const handleClosePayeeLookup = async (row) => {
       itemCode: "",
       itemName: "",
       uomCode: "",
+      convertedUomCode: "",
+      convertedQuantity: formatNumber(0, decQty),
+      conversionFactor: 1,
       qtyOnHand: formatNumber(0, decQty),
       qtyAlloc: formatNumber(0, decQty),
       qtyNeeded: formatNumber(0, decQty),
@@ -5476,6 +5601,24 @@ const handleClosePayeeLookup = async (row) => {
       freeQty: () => (
         <td key={columnKey} className="global-tran-td-ui" style={style}>
           {msrrNumericInput(row, index, "freeQty")}
+        </td>
+      ),
+      convertedUomCode: () => (
+        <td key={columnKey} className="global-tran-td-ui relative" style={style}>
+          <div className="flex items-center">
+            <input type="text" id={`convertedUomCode-${index}`}
+              className="w-full global-tran-td-inputclass-ui pr-6 text-center cursor-pointer"
+              value={row.convertedUomCode || row.uomCode || ""} readOnly disabled={isFormDisabled}
+              onClick={() => !isFormDisabled && openConvertedUomLookup(index)} />
+            {!isFormDisabled && <FontAwesomeIcon icon={faMagnifyingGlass}
+              className="absolute right-2 text-blue-600 cursor-pointer hover:text-blue-900"
+              onClick={() => openConvertedUomLookup(index)} />}
+          </div>
+        </td>
+      ),
+      convertedQuantity: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {msrrNumericInput(row, index, "convertedQuantity")}
         </td>
       ),
       unitCost: () => (
@@ -5713,6 +5856,7 @@ const handleClosePayeeLookup = async (row) => {
         }}
         onFocus={(e) => {
           if (readOnly || disabled) return;
+          if (["rrQty", "convertedQuantity"].includes(field)) msrrQuantityEditStartRef.current[index] = { ...row };
           setEditingMSRRDetailCell(cellKey);
 
           if (typeof clearMSRRDetailZeroOnFocus === "function") {
@@ -5731,6 +5875,7 @@ const handleClosePayeeLookup = async (row) => {
         onBlur={async (e) => {
           if (readOnly || disabled) return;
           await handleDetailChange(index, field, e.target.value, true);
+          if (["rrQty", "convertedQuantity"].includes(field)) delete msrrQuantityEditStartRef.current[index];
           setEditingMSRRDetailCell(null);
         }}
         onKeyDown={(e) => handleMSRRGridKeyDown(e, index, field, { readOnly, disabled })}
@@ -5975,7 +6120,7 @@ const handleClosePayeeLookup = async (row) => {
 
   return (
     <div className="global-tran-main-div-ui">
-      {showSpinner && <LoadingSpinner />}
+      {(showSpinner || isPayeeUpdating) && <LoadingSpinner />}
 
       <div className="global-tran-headerToolbar-ui">
         <Header
@@ -6782,6 +6927,11 @@ const handleClosePayeeLookup = async (row) => {
       </div>
 
       {/* MODALS */}
+      {convertedUomLookup.isOpen && (
+        <RequiredUomLookupModal isOpen={convertedUomLookup.isOpen} title="Select Converted UOM"
+          decimalPlaces={decQty} data={convertedUomLookup.data} onClose={handleConvertedUomSelect} />
+      )}
+
       {branchModalOpen && (
         <BranchLookupModal
           isOpen={branchModalOpen}
@@ -7321,7 +7471,6 @@ const handleClosePayeeLookup = async (row) => {
         </div>
       )}
 
-      {showSpinner && <LoadingSpinner />}
     </div>
   );
 };

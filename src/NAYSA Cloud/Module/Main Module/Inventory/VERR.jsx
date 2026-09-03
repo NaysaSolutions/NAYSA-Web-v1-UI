@@ -27,6 +27,7 @@ import PayeeMastLookupModal from "../../../Lookup/SearchVendMast";
 import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
 import QstatLookupModal from "../../../Lookup/SearchQStatRef.jsx";
+import VEColorLookupModal from "../../../Lookup/SearchVEColor.jsx";
 import VATLookupModal from "../../../Lookup/SearchVATRef.jsx";
 import COAMastLookupModal from "../../../Lookup/SearchCOAMast.jsx";
 import SLMastLookupModal from "../../../Lookup/SearchSLMast.jsx";
@@ -88,6 +89,8 @@ import {
 } from "@/NAYSA Cloud/Global/datatable.jsx";
 
 const VERR = () => {
+  const loadedFromUrlRef = useRef(false);
+  const initialResetRef = useRef(false);
   const { resetFlag } = useReset();
   const { user, companyInfo, currentUserRow } = useAuth();
 
@@ -102,6 +105,11 @@ const VERR = () => {
   const [veInvGLMode, setVEInvGLMode] = useState("E");
   const isGeneralLedgerEnabled = String(veInvGLMode || "E").toUpperCase() !== "D";
   const [topTab, setTopTab] = useState("details");
+  const [defaultsReady, setDefaultsReady] = useState(false);
+  const isViewDocument = useMemo(
+    () => new URLSearchParams(window.location.search).get("viewDocument") === "true",
+    [],
+  );
   const [header, setHeader] = useState({
     rr_date: new Date().toISOString().split("T")[0],
   });
@@ -177,6 +185,8 @@ const VERR = () => {
     warehouseLookupRowIndex: null,
     qstatLookupOpen: false,
     qstatLookupRowIndex: null,
+    colorLookupOpen: false,
+    colorLookupRowIndex: null,
     vatLookupOpen: false,
     vatLookupRowIndex: null,
     poLookupModalOpen: false,
@@ -262,9 +272,9 @@ const VERR = () => {
     CANCELLED: "global-tran-stat-text-closed-ui",
   }[displayStatus] || "";
 
-  const isFormDisabled = ["POSTED", "FINALIZED", "CLOSED", "CANCELLED"].includes(
-    displayStatus,
-  );
+  const isFormDisabled =
+    isViewDocument ||
+    ["POSTED", "FINALIZED", "CLOSED", "CANCELLED"].includes(displayStatus);
 
 
   useEffect(() => {
@@ -696,7 +706,7 @@ const VERR = () => {
     }
   }, [baseCurrency, companyInfo, docType, documentTitle, updateState]);
 
-  const handleReset = useCallback(() => {
+  const handleReset = useCallback(async () => {
     const today = new Date().toISOString().split("T")[0];
     setHeader({ rr_date: today });
     setTopTab("details");
@@ -751,12 +761,14 @@ const VERR = () => {
       veLookupModalOpen: false,
       selectedRowIndex: null,
     }));
-    initializeDefaults();
+    await initializeDefaults();
   }, [baseCurrency, defaultBranchCode, defaultBranchName, initializeDefaults]);
 
   useEffect(() => {
-    handleReset();
-  }, []);
+    if (initialResetRef.current) return;
+    initialResetRef.current = true;
+    handleReset().finally(() => setDefaultsReady(true));
+  }, [handleReset]);
 
   useEffect(() => {
     if (resetFlag) handleReset();
@@ -791,7 +803,7 @@ const VERR = () => {
 
   const fetchTranData = useCallback(
     async (rrNo, branchCode, direction = "") => {
-      if (!rrNo || !branchCode) return;
+      if ((!rrNo && !direction) || !branchCode) return null;
       updateState({ isLoading: true });
       try {
         const data = await useFetchTranData(rrNo, branchCode, docType, "rrNo", direction);
@@ -800,7 +812,7 @@ const VERR = () => {
 
         if (!verrId) {
           useSwalErrorAlert("No Records Found", "Transaction does not exist.");
-          return;
+          return null;
         }
 
         const rawStatus = parsed?.cancelled === "Y" ? "X" : parsed?.stat || "";
@@ -887,15 +899,28 @@ const VERR = () => {
           isFetchDisabled: true,
           isSaveDisabled: parsedStatus !== "OPEN",
         });
+        return parsed;
       } catch (error) {
         console.error("VERR fetch error", error);
         useSwalErrorAlert("VERR Retrieval", error?.message || "Unable to retrieve transaction.");
+        return null;
       } finally {
         updateState({ isLoading: false });
       }
     },
     [baseCurrency, docType, state.branchName, updateState],
   );
+
+  useEffect(() => {
+    if (!defaultsReady) return;
+    const params = new URLSearchParams(window.location.search);
+    const rrNo = params.get("rrNo") || params.get("verrNo");
+    const branchCode = params.get("branchCode");
+    if (!loadedFromUrlRef.current && rrNo && branchCode) {
+      loadedFromUrlRef.current = true;
+      fetchTranData(rrNo, branchCode);
+    }
+  }, [defaultsReady, fetchTranData]);
 
   const handleDocNoBlur = () => {
     if (!state.documentID && state.documentNo && state.branchCode) {
@@ -954,27 +979,8 @@ const VERR = () => {
         }
       }
 
-      if (String(row.requireModel || "N").toUpperCase() === "Y") {
-        if (!String(row.model || "").trim()) errors.push(`Line ${ln} - Model Required`);
-        if (!String(row.modelYear || "").trim()) errors.push(`Line ${ln} - Model Year Required`);
-      }
       if (modelYear && !isValidModelYear(modelYear)) {
         errors.push(`Line ${ln} - Model Year must be a 4-digit year from ${MODEL_YEAR_MIN} to ${getMaximumModelYear()}`);
-      }
-      if (String(row.requireSerial || "N").toUpperCase() === "Y" && !String(row.serialNo || "").trim()) {
-        errors.push(`Line ${ln} - Serial No. Required`);
-      }
-      if (String(row.requireEngine || "N").toUpperCase() === "Y" && !String(row.engineNo || "").trim()) {
-        errors.push(`Line ${ln} - Engine No. Required`);
-      }
-      if (String(row.requireProdNo || "N").toUpperCase() === "Y" && !String(row.prodNo || "").trim()) {
-        errors.push(`Line ${ln} - Production No. Required`);
-      }
-      if (String(row.requireColor || "N").toUpperCase() === "Y" && !String(row.color || "").trim()) {
-        errors.push(`Line ${ln} - Color Required`);
-      }
-      if (String(row.requireQsCode || "N").toUpperCase() === "Y" && !String(row.qstatCode || "").trim()) {
-        errors.push(`Line ${ln} - QS Status Required`);
       }
     });
 
@@ -1262,12 +1268,6 @@ const VERR = () => {
       prNo: "",
       whouseCode: state.whouseCode || baseRow.whouseCode || "",
 
-      requireModel: mast?.requireModel || "N",
-      requireSerial: mast?.requireSerial || "N",
-      requireEngine: mast?.requireEngine || "N",
-      requireColor: mast?.requireColor || "N",
-      requireQsCode: mast?.requireQsCode || "N",
-      requireProdNo: mast?.requireProdNo || "N",
     });
   };
 
@@ -1618,27 +1618,8 @@ const VERR = () => {
         }
       }
 
-      if (String(row.requireModel || "N").toUpperCase() === "Y") {
-        if (!String(row.model || "").trim()) errors.push(`Line ${ln} - Model Required`);
-        if (!String(row.modelYear || "").trim()) errors.push(`Line ${ln} - Model Year Required`);
-      }
       if (modelYear && !isValidModelYear(modelYear)) {
         errors.push(`Line ${ln} - Model Year must be a 4-digit year from ${MODEL_YEAR_MIN} to ${getMaximumModelYear()}`);
-      }
-      if (String(row.requireSerial || "N").toUpperCase() === "Y" && !String(row.serialNo || "").trim()) {
-        errors.push(`Line ${ln} - Serial No. Required`);
-      }
-      if (String(row.requireEngine || "N").toUpperCase() === "Y" && !String(row.engineNo || "").trim()) {
-        errors.push(`Line ${ln} - Engine No. Required`);
-      }
-      if (String(row.requireProdNo || "N").toUpperCase() === "Y" && !String(row.prodNo || "").trim()) {
-        errors.push(`Line ${ln} - Production No. Required`);
-      }
-      if (String(row.requireColor || "N").toUpperCase() === "Y" && !String(row.color || "").trim()) {
-        errors.push(`Line ${ln} - Color Required`);
-      }
-      if (String(row.requireQsCode || "N").toUpperCase() === "Y" && !String(row.qstatCode || "").trim()) {
-        errors.push(`Line ${ln} - QS Status Required`);
       }
     });
 
@@ -1798,12 +1779,6 @@ const VERR = () => {
         poLineno: source.poLineno || source.poln || "",
         prln: source.prln || source.prLineno || "",
         prLineno: source.prLineno || source.prln || "",
-        requireModel: source.requireModel || "N",
-        requireSerial: source.requireSerial || "N",
-        requireEngine: source.requireEngine || "N",
-        requireColor: source.requireColor || "N",
-        requireQsCode: source.requireQsCode || "N",
-        requireProdNo: source.requireProdNo || "N",
         currCode: source.currCode || state.currCode || baseCurrency,
         currRate: parseFormattedNumber(source.currRate || state.currRate || 1),
         whouseCode: uploaded.whouseCode || source.whouseCode || state.whouseCode || "",
@@ -2376,12 +2351,6 @@ const VERR = () => {
               landedCost: 0,
               unitShipCost: 0,
               unitLandedCost: 0,
-              requireModel: mast?.requireModel || "N",
-              requireSerial: mast?.requireSerial || "N",
-              requireEngine: mast?.requireEngine || "N",
-              requireColor: mast?.requireColor || "N",
-              requireQsCode: mast?.requireQsCode || "N",
-              requireProdNo: mast?.requireProdNo || "N",
             });
           });
         }),
@@ -2654,7 +2623,7 @@ const VERR = () => {
   const handleClosePost = async (confirmation) => {
     if (confirmation && state.documentID && displayStatus === "OPEN") {
       await useHandlePostTran(
-        [state.documentID],
+        [{ groupId: state.documentID }],
         confirmation.password,
         docType,
         user?.USER_CODE || user?.userCode || "NSI",
@@ -2876,6 +2845,21 @@ const VERR = () => {
               icon={faMagnifyingGlass}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
               onClick={() => updateState({ qstatLookupOpen: true, qstatLookupRowIndex: index })}
+            />
+          )}
+        </td>
+      );
+    }
+
+    if (column.key === "color") {
+      return (
+        <td key={column.key} className="global-tran-td-ui relative" style={commonStyle}>
+          <input className="global-tran-td-inputclass-ui w-full pr-6 cursor-pointer" value={row.color || ""} readOnly />
+          {!isFormDisabled && (
+            <FontAwesomeIcon
+              icon={faMagnifyingGlass}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+              onClick={() => updateState({ colorLookupOpen: true, colorLookupRowIndex: index })}
             />
           )}
         </td>
@@ -3141,6 +3125,30 @@ const VERR = () => {
     fetchTranData(rrNo, branchCode);
   };
 
+  const handleTranDocNoRetrieval = async (data) => {
+    const retrieved = await fetchTranData(
+      data.docNo,
+      data.branchCode || state.branchCode,
+      data.key,
+    );
+    if (!retrieved?.verrId) return;
+
+    updateState({
+      documentNo: retrieved.rrNo || data.docNo,
+      branchCode: retrieved.branchCode || data.branchCode || state.branchCode,
+      showAllTranDocNo: data.modalClose,
+    });
+  };
+
+  const handleTranDocNoSelection = async (data) => {
+    await handleReset();
+    updateState({
+      showAllTranDocNo: false,
+      documentNo: data.docNo,
+      branchCode: data.branchCode || state.branchCode,
+    });
+  };
+
   return (
     <div className="global-tran-main-div-ui">
       {state.showSpinner && <LoadingSpinner />}
@@ -3179,6 +3187,7 @@ const VERR = () => {
           isAttachDisabled={!state.documentID}
           isPrintDisabled={!state.documentID || displayStatus === "CANCELLED"}
           isCancelDisabled={!state.documentID || displayStatus !== "OPEN"}
+          isViewDocument={isViewDocument}
         />
       </div>
 
@@ -3465,7 +3474,7 @@ const VERR = () => {
                 </thead>
                 <tbody className="relative">
                   {sortedDetailRows.map(({ row, originalIndex }) => (
-                    <tr key={row.groupId || `${row.itemCode}-${originalIndex}`} className="global-tran-tr-ui">
+                    <tr key={`${row.groupId || row.itemCode || "vehicle"}-${row.lnNo || originalIndex + 1}`} className="global-tran-tr-ui">
                       {visibleDetailColumns.map((column) =>
                         renderDetailCell(column, row, originalIndex),
                       )}
@@ -3853,6 +3862,22 @@ const VERR = () => {
         />
       )}
 
+      {state.colorLookupOpen && (
+        <VEColorLookupModal
+          isOpen={state.colorLookupOpen}
+          itemCode={state.detailRows?.[state.colorLookupRowIndex]?.itemCode || ""}
+          onClose={(selected) => {
+            if (selected && state.colorLookupRowIndex !== null) {
+              const rows = [...(state.detailRows || [])];
+              const index = state.colorLookupRowIndex;
+              rows[index] = { ...rows[index], color: selected.code || "" };
+              updateState({ detailRows: rows });
+            }
+            updateState({ colorLookupOpen: false, colorLookupRowIndex: null });
+          }}
+        />
+      )}
+
       {state.vatLookupOpen && (
         <VATLookupModal
           isOpen={state.vatLookupOpen}
@@ -3966,15 +3991,9 @@ const VERR = () => {
             documentTitle,
             fieldNo: "rrNo",
           }}
-          onRetrieve={async (data) => {
-            await fetchTranData(data.docNo, data.branchCode || state.branchCode, data.key);
-            updateState({ showAllTranDocNo: data.modalClose });
-          }}
+          onRetrieve={handleTranDocNoRetrieval}
           onResponse={{ documentNo: state.documentNo }}
-          onSelected={(data) => {
-            handleReset();
-            updateState({ showAllTranDocNo: false, documentNo: data.docNo });
-          }}
+          onSelected={handleTranDocNoSelection}
           onClose={() => updateState({ showAllTranDocNo: false })}
         />
       )}

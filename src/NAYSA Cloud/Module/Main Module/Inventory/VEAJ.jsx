@@ -31,6 +31,7 @@ import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
 import QstatLookupModal from "../../../Lookup/SearchQStatRef.jsx";
+import VEColorLookupModal from "../../../Lookup/SearchVEColor.jsx";
 import ItemMastLookupModal from "../../../Lookup/SearchItemMast.jsx";
 
 
@@ -291,6 +292,7 @@ const VEAJ = () => {
     showPostingModal:false,
     showAllTranDocNo:false,
     showQstatModal:false,
+    showColorModal:false,
     locationLookupOpen:false
    });
 
@@ -392,6 +394,7 @@ const VEAJ = () => {
   showPostingModal,
   showAllTranDocNo,
   showQstatModal,
+  showColorModal,
   msLookupModalOpen,
   itemMastLookupOpen,
   warehouseLookupOpen,
@@ -3070,7 +3073,7 @@ const renderVeajDetailColumn = (columnKey, row, index) => {
     serialNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("serialNo", { maxLength: useGetFieldLength(tblFieldArray, "serial_no") })}</td>,
     engineNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("engineNo", { maxLength: useGetFieldLength(tblFieldArray, "engine_no") })}</td>,
     prodNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("prodNo", { maxLength: useGetFieldLength(tblFieldArray, "prod_no") })}</td>,
-    color: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("color", { maxLength: useGetFieldLength(tblFieldArray, "color") })}</td>,
+    color: () => lookupCell("color", () => updateState({ selectedRowIndex: index, showColorModal: true })),
     qstatCode: () => lookupCell("qstatCode", () => updateState({ selectedRowIndex: index, showQstatModal: true }), { hideIcon: !canLookupStock }),
     pnpNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("pnpNo", { maxLength: useGetFieldLength(tblFieldArray, "pnp_no") })}</td>,
     csrNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("csrNo", { maxLength: useGetFieldLength(tblFieldArray, "csr_no") })}</td>,
@@ -3832,6 +3835,19 @@ return (
           isOpen={showQstatModal}
           onClose={handleCloseQStatLookup}
           filter="ActiveAll"
+        />
+      )}
+
+      {showColorModal && (
+        <VEColorLookupModal
+          isOpen={showColorModal}
+          itemCode={detailRows?.[selectedRowIndex]?.itemCode || ""}
+          onClose={(selected) => {
+            if (selected && selectedRowIndex !== null) {
+              handleDetailChange(selectedRowIndex, "color", selected.code || "", false);
+            }
+            updateState({ showColorModal: false, selectedRowIndex: null });
+          }}
         />
       )}
 
