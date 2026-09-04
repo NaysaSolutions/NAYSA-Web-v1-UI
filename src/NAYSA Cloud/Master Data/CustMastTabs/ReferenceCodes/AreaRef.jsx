@@ -64,6 +64,7 @@ const extractRows = (payload) => {
 const DEFAULT_FORM = {
   areaCode: "",
   areaName: "",
+  active: "Y",
   registeredBy: "",
   registeredDate: "",
   lastUpdatedBy: "",
@@ -74,6 +75,7 @@ const DEFAULT_FORM = {
 const normalizeRecord = (record) => ({
   areaCode: record?.areaCode ?? record?.area_code ?? record?.code ?? "",
   areaName: record?.areaName ?? record?.area_description ?? record?.name ?? "",
+  active: record?.active ?? record?.IS_ACTIVE,
   registeredBy: record?.registeredBy ?? "",
   registeredDate: record?.registeredDate ?? "",
   lastUpdatedBy: record?.lastUpdatedBy ?? "",
@@ -83,7 +85,7 @@ const normalizeRecord = (record) => ({
 
 /* ================= COMPONENT ================= */
 
-const AreaRef = forwardRef(({ onStateChange }, ref) => {
+const AreaRef = forwardRef(({ onStateChange, }, ref) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const tableSize = "Half";
@@ -111,6 +113,7 @@ const AreaRef = forwardRef(({ onStateChange }, ref) => {
     setForm(next);
   }, []);
 
+  const updateForm = (updates) => setForm((prev) => ({ ...prev, ...updates }));
   /* ================= LOAD LIST ================= */
 
   const areaListQuery = useQuery({
@@ -207,6 +210,7 @@ const AreaRef = forwardRef(({ onStateChange }, ref) => {
           json_data: {
             areaCode: payload.areaCode,
             areaName: payload.areaName,
+            active: payload.active,
             userCode: payload.userCode,
           },
         }),
@@ -242,6 +246,7 @@ const AreaRef = forwardRef(({ onStateChange }, ref) => {
     const payload = {
       areaCode: String(form.areaCode || "").trim().toUpperCase(),
       areaName: String(form.areaName || "").trim(),
+      active: form.active,
       userCode,
     };
 
@@ -354,6 +359,7 @@ const handleEdit = useCallback(
       },
       { key: "areaCode", label: "Area Code", sortable: true, width: 80 },
       { key: "areaName", label: "Area Name", sortable: true, width: 150 },
+      { key: "active", label: "Active", width: 120 , render: (row) => (row.active === "Y" ? "Yes" : "No"),},
     ],
     [handleEdit, handleDelete]
   );
@@ -423,6 +429,17 @@ const handleEdit = useCallback(
           maxLength={50}
           onChange={(v) => setField("areaName", v ?? "")}
           disabled={!isEditing}
+        />
+        <FieldRenderer
+          label="Active"
+          type="select"
+          value={form.active}
+          disabled={!isEditing}
+          options={[
+            { value: "Y", label: "Yes" },
+            { value: "N", label: "No" },
+          ]}
+          onChange={(v) => updateForm({ active: v })}
         />
         <RegistrationInfo data={form} layout="stacked" />
       </Card>

@@ -26,8 +26,8 @@ const FGMast_DataTab = ({
   const [searchMode, setSearchMode] = useState("part"); // default to "Contains"
 
   const tableColumns = useMemo(() => [
-    { key: "itemCode",      label: "Item No",           sortable: true, width: 130 },
-    { key: "itemDesc",      label: "Item Description",  sortable: true, width: 260 },
+    { key: "itemCode",      label: "Item Code",           sortable: true, width: 130 },
+    { key: "itemDesc",      label: "Item Name",  sortable: true, width: 260 },
     { key: "uom",           label: "UOM",               sortable: true, width: 80  },
     { key: "uom2",          label: "UOM2",              sortable: true, width: 80  },
     { key: "qtyOnHand",     label: "Qty on Hand",       sortable: true, width: 110 },

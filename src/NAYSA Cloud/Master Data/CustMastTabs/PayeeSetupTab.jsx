@@ -439,7 +439,7 @@ const PayeeSetupTab = forwardRef(
                 disabled={isDisabled}
               />
               <FieldRenderer
-                label="Active?"
+                label="Active"
                 type="select"
                 value={form.active || "Y"}
                 options={activeOptions}

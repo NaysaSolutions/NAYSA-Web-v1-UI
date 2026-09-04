@@ -498,6 +498,7 @@ const DEFAULT_FORM = {
   salesRepName: "",
   salesRepType: "SR",
   salesRepBranch: "HO",
+  active: "Y",
   registeredBy: "",
   registeredDate: "",
   lastUpdatedBy: "",
@@ -510,6 +511,7 @@ const normalizeRecord = (record) => ({
   salesRepName: record?.salesRepName ?? record?.sales_rep_name ?? record?.name ?? "",
   salesRepType: record?.salesRepType ?? "SR",
   salesRepBranch: record?.salesRepBranch ?? "HO",
+  active: record?.active ?? record?.IS_ACTIVE ?? record?.is_active ?? record?.isActive ?? "Y",
   registeredBy: record?.registeredBy ?? "",
   registeredDate: record?.registeredDate ?? "",
   lastUpdatedBy: record?.lastUpdatedBy ?? "",
@@ -558,6 +560,7 @@ const SalesRep = forwardRef(({
   const resetForm = useCallback((next = DEFAULT_FORM) => {
     setForm(next);
   }, []);
+  const updateForm = (updates) => setForm((prev) => ({ ...prev, ...updates }));
 
   /* ================= LOAD LIST ================= */
 
@@ -700,6 +703,7 @@ const SalesRep = forwardRef(({
             salesRepName: payload.salesRepName,
             salesRepType: payload.salesRepType,
             salesRepBranch: payload.salesRepBranch,
+            active: payload.active,
             userCode: payload.userCode,
           },
         }),
@@ -734,6 +738,7 @@ const SalesRep = forwardRef(({
       salesRepName: String(form.salesRepName || "").trim(),
       salesRepType: form.salesRepType,
       salesRepBranch: form.salesRepBranch,
+      active: form.active,
       userCode,
     });
   }, [form, isEditing, saveMutation, userCode, isReadOnly, canSave]);
@@ -824,6 +829,7 @@ const SalesRep = forwardRef(({
       { key: "salesRepName", label: "Agent Name", sortable: true, width: 250, minWidth: 150, maxWidth: 250, requiredVisible: true },
       { key: "salesRepType", label: "Agent Type", sortable: true, width: 100, minWidth: 120},
       { key: "salesRepBranch", label: "Branch", sortable: true, width: 120, minWidth: 120 },
+      { key: "active", label: "Active", width: 120 , render: (row) => (row.active === "Y" ? "Yes" : "No"),},
     ],
     [handleEdit, handleDelete, isReadOnly, canEdit, canDelete]
   );
@@ -915,6 +921,17 @@ const SalesRep = forwardRef(({
               value={form.salesRepBranch}
               onChange={(v) => setField("salesRepBranch", v)}
               disabled={isReadOnly || !isEditing}
+            />
+            <FieldRenderer
+              label="Active"
+              type="select"
+              value={form.active}
+              disabled={!isEditing}
+              options={[
+                { value: "Y", label: "Yes" },
+                { value: "N", label: "No" },
+              ]}
+              onChange={(v) => updateForm({ active: v })}
             />
             <RegistrationInfo data={form} layout="stacked" />
           </div>

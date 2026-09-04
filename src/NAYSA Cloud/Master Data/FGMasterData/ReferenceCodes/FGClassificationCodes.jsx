@@ -69,6 +69,7 @@ const DEFAULT_FORM = {
   description: "",
   categCode:   "",
   categName:   "",
+  active:      "Y",
   registeredBy:    "",
   registeredDate:  "",
   lastUpdatedBy:   "",
@@ -114,6 +115,8 @@ const FGClassificationCodes = forwardRef(({
   const resetForm = useCallback((next = DEFAULT_FORM) => {
     setForm(next);
   }, []);
+
+  const updateForm = (updates) => setForm((prev) => ({ ...prev, ...updates }));
 
   /* ================= LOAD LIST ================= */
 
@@ -188,6 +191,7 @@ const FGClassificationCodes = forwardRef(({
             code:        payload.code,
             description: payload.description,
             categCode:   payload.categCode,
+            active:      payload.active,
             userCode:    payload.userCode,
           },
         }),
@@ -234,6 +238,7 @@ const FGClassificationCodes = forwardRef(({
       code:        String(form.code        || "").trim(),
       description: String(form.description || "").trim(),
       categCode:   String(form.categCode   || "").trim(),
+      active:     form.active,
       userCode,
     };
 
@@ -325,6 +330,7 @@ const FGClassificationCodes = forwardRef(({
       description:     row.description || row.classDesc   || "",
       categCode:       row.categCode   || row.categ_code  || "",
       categName:       row.categName   || row.categ_name  || "",
+      active:          row.active,
       registeredBy:    row.registeredBy    || "",
       registeredDate:  row.registeredDate  || "",
       lastUpdatedBy:   row.lastUpdatedBy   || "",
@@ -416,6 +422,7 @@ const FGClassificationCodes = forwardRef(({
       { key: "description", label: "Classification Description / Name", sortable: true, width: 280 },
       { key: "categCode",   label: "Category Code",                    sortable: true, width: 120 },
       { key: "categName",   label: "Category Name",                    sortable: true, width: 200 },
+      { key: "active", label: "Active", width: 120 , render: (row) => (row.active === "Y" ? "Yes" : "No"),},
     ],
     [handleEdit, handleDelete, isReadOnly, canEdit, canDelete]
   );
@@ -431,6 +438,7 @@ const FGClassificationCodes = forwardRef(({
       description: row.description || row.classDesc  || "",
       categCode:   row.categCode   || row.categ_code || "",
       categName:   row.categName   || row.categ_name || "",
+      active:      row.active,
       __idx: index,
     }));
 
@@ -508,7 +516,7 @@ const FGClassificationCodes = forwardRef(({
             />
 
             <FieldRenderer
-              label="Classification Description"
+              label="Classification Name"
               required
               value={form.description}
               maxLength={150}
@@ -529,12 +537,22 @@ const FGClassificationCodes = forwardRef(({
             />
 
             <FieldRenderer
-              label="Category Description"
+              label="Category Name"
               value={form.categName}
               readOnly
               disabled
             />
-
+            <FieldRenderer
+              label="Active"
+              type="select"
+              value={form.active}
+              disabled={!isEditing}
+              options={[
+                { value: "Y", label: "Yes" },
+                { value: "N", label: "No" },
+              ]}
+              onChange={(v) => updateForm({ active: v })}
+            />
           </div>
         </Card>
 
