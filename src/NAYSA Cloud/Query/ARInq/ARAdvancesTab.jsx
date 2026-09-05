@@ -235,20 +235,12 @@ const ARAdvancesTab = forwardRef(function ARAdvancesTab({ registerActions }, ref
 
   try {
     const [detailRes, summaryRes] = await Promise.all([
-      requestOnce(
-        `rows:${ENDPOINT_DETAIL}:${branchCode}:${custCode}:${status}`,
-        () =>
-          fetchData(ENDPOINT_DETAIL, {
-            json_data: { json_data: { branchCode, custCode, status } },
-          })
-      ),
-      requestOnce(
-        `rows:${ENDPOINT_SUMMARY}:${branchCode}:${custCode}:${status}`,
-        () =>
-          fetchData(ENDPOINT_SUMMARY, {
-            json_data: { json_data: { branchCode, custCode, status } },
-          })
-      ),
+      fetchData(ENDPOINT_DETAIL, {
+        json_data: { json_data: { branchCode, custCode, status } },
+      }),
+      fetchData(ENDPOINT_SUMMARY, {
+        json_data: { json_data: { branchCode, custCode, status } },
+      }),
     ]);
 
     const dtDetail = detailRes?.data?.[0]?.result
@@ -293,15 +285,11 @@ const ARAdvancesTab = forwardRef(function ARAdvancesTab({ registerActions }, ref
     async (selectedCustomer) => {
       updateState({ isLoading: true });
       try {
-        const resp = await requestOnce(
-          `rows:${ENDPOINT_DETAIL}:${branchCode}:${selectedCustomer}:${status}`,
-          () =>
-            fetchData(ENDPOINT_DETAIL, {
-              json_data: {
-                json_data: { branchCode, custCode: selectedCustomer, status },
-              },
-            })
-        );
+        const resp = await fetchData(ENDPOINT_DETAIL, {
+          json_data: {
+            json_data: { branchCode, custCode: selectedCustomer, status },
+          },
+        });
 
         const dt = resp?.data?.[0]?.result ? JSON.parse(resp.data[0].result) : [];
         const rowsBottom = dt?.[0]?.dt1 ?? dt ?? [];
@@ -315,7 +303,7 @@ const ARAdvancesTab = forwardRef(function ARAdvancesTab({ registerActions }, ref
         updateState({ isLoading: false });
       }
     },
-    [branchCode, status, requestOnce]
+    [branchCode, status]
   );
 
   // hydrate from cache OR load defaults once

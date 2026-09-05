@@ -15,6 +15,8 @@ import {
   faTrashAlt,
   faFolderOpen,
   faSpinner,
+  faDownload,
+  faUpload,
 } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
@@ -34,11 +36,25 @@ import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import DocumentSignatories from "../../../Lookup/SearchSignatory.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
+import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
+import { usePagePermission } from "@/NAYSA Cloud/Global/usePagePermission.js";
+import {
+  extractSingleUploadValidationResult,
+  getSingleUploadTemplateColumns as getGlobalSingleUploadTemplateColumns,
+  handleDownloadSingleUploadTemplate as downloadGlobalSingleUploadTemplate,
+  handleSingleUploadExcelFile,
+  showSingleUploadErrorList,
+  toSingleUploadDateValue,
+  toSingleUploadExcelDate,
+  transactionActionsCellStyle,
+  transactionActionsHeaderStyle,
+  useResizableTableColumns,
+} from "@/NAYSA Cloud/Global/datatable.jsx";
 
 // Configuration
-import { fetchData, postRequest } from "../../../Configuration/BaseURL.jsx";
+import { fetchDataJson, postRequest } from "../../../Configuration/BaseURL.jsx";
 import { useReset } from "../../../Components/ResetContext";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import DateFormatInput from "@/NAYSA Cloud/Global/DateFormatInput.jsx";
@@ -84,8 +100,15 @@ import { useHandlePrint } from "@/NAYSA Cloud/Global/report";
 import {
   formatNumber,
   parseFormattedNumber,
+  useSwalErrorAlert,
+  useSwalProceedConfirm,
+  useSwalSuccessAlert,
   useSwalshowSaveSuccessDialog,
-} from "@/NAYSA Cloud/Global/behavior";
+} from "@/NAYSA Cloud/Global/behavior.jsx";
+import {
+  useSelectedHSColConfig,
+  useSelectedOpenARBalance,
+} from "@/NAYSA Cloud/Global/selectedData.js";
 
 // Header
 import Header from "@/NAYSA Cloud/Components/Header";
@@ -93,13 +116,18 @@ import { faAdd } from "@fortawesome/free-solid-svg-icons/faAdd";
 
 const JV = () => {
   const loadedFromUrlRef = useRef(false);
+  const reversalFetchInProgressRef = useRef(false);
+  const singleUploadDropdownRef = useRef(null);
+  const uploadInputRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation();
   const [topTab, setTopTab] = useState("details");
+  const [showSingleUploadDropdown, setShowSingleUploadDropdown] = useState(false);
 
-  const { user, getAllTopHSDocRow, getAllDropDown, refsLoaded } = useAuth();
+  const { user, companyInfo, currentUserRow, getAllTopHSDocRow, getAllDropDown, refsLoaded } = useAuth();
   const { resetFlag } = useReset();
   const [isViewDocument, setIsViewDocument] = useState(false);
+  const isViewDocumentUrl = isViewDocument;
 
   useEffect(() => {
     const p = new URLSearchParams(location.search);
@@ -110,13 +138,13 @@ const JV = () => {
 
   const [state, setState] = useState({
     // HS Option
-    glCurrMode: "M",
-    glCurrDefault: "PHP",
+    glCurrMode: companyInfo?.glCurrMode || "M",
+    glCurrDefault: companyInfo?.currCode || "PHP",
     withCurr2: false,
     withCurr3: false,
-    glCurrGlobal1: "",
-    glCurrGlobal2: "",
-    glCurrGlobal3: "",
+    glCurrGlobal1: companyInfo?.glCurrGlobal1 || "",
+    glCurrGlobal2: companyInfo?.glCurrGlobal2 || "",
+    glCurrGlobal3: companyInfo?.glCurrGlobal3 || "",
 
     // Document information
     documentName: "",
@@ -139,12 +167,10 @@ const JV = () => {
     tblFieldArray: [],
 
     // Header information
-    header: {
-      jv_date: useGetCurrentDayV2(),
-    },
+    documentDate: useGetCurrentDayV2(),
 
-    branchCode: "HO",
-    branchName: "Head Office",
+    branchCode: currentUserRow?.branchCode || "",
+    branchName: currentUserRow?.branchName || "",
 
     // Vendor information
     custCode: "",
@@ -152,15 +178,17 @@ const JV = () => {
     attention: "",
 
     // Currency information
-    currCode: "",
+    currCode: companyInfo?.currCode || "",
     currName: "",
-    currRate: "",
-    defaultCurrRate: "1.000000",
+    currRate: formatNumber(companyInfo?.currRate || 1, 6),
+    defaultCurrRate: formatNumber(companyInfo?.currRate || 1, 6),
 
     // Other Header Info
     jvTypes: [],
     refdocTypes: [],
     refDocNo: "",
+    refDocAmount: "0.00",
+    refAdvAcct: "",
     refDocNo2: "",
     fromDate: null,
     toDate: null,
@@ -171,7 +199,7 @@ const JV = () => {
     selectedRefDocType: "",
     noReprints: "0",
 
-    userCode: user.USER_CODE,
+    userCode: currentUserRow?.userCode || user.USER_CODE,
 
     // Detail 1-2
     detailRows: [],
@@ -179,6 +207,10 @@ const JV = () => {
 
     totalDebit: "0.00",
     totalCredit: "0.00",
+    totalDebitFx1: "0.00",
+    totalCreditFx1: "0.00",
+    totalDebitFx2: "0.00",
+    totalCreditFx2: "0.00",
 
     // Modal states
     modalContext: "",
@@ -200,6 +232,10 @@ const JV = () => {
     showSlModal: false,
     showPostModal: false,
     showAllTranDocNo: false,
+    showARBalanceModal: false,
+    globalLookupRow: [],
+    globalLookupHeader: [],
+    globalLookupMode: "invoice",
   });
 
   const updateState = (updates) => {
@@ -231,7 +267,7 @@ const JV = () => {
     glCurrGlobal2,
     glCurrGlobal3,
     defaultCurrRate,
-    header,
+    documentDate,
     branchCode,
     branchName,
     custCode,
@@ -242,6 +278,8 @@ const JV = () => {
     jvTypes,
     refdocTypes,
     refDocNo,
+    refDocAmount,
+    refAdvAcct,
     refDocNo2,
     fromDate,
     toDate,
@@ -255,6 +293,10 @@ const JV = () => {
     detailRowsGL,
     totalDebit,
     totalCredit,
+    totalDebitFx1,
+    totalCreditFx1,
+    totalDebitFx2,
+    totalCreditFx2,
     modalContext,
     selectionContext,
     selectedRowIndex,
@@ -274,6 +316,10 @@ const JV = () => {
     showSlModal,
     showPostModal,
     showAllTranDocNo,
+    showARBalanceModal,
+    globalLookupRow,
+    globalLookupHeader,
+    globalLookupMode,
   } = state;
 
   const [focusedCell, setFocusedCell] = useState(null);
@@ -286,18 +332,265 @@ const JV = () => {
   const hsDoc = getAllTopHSDocRow ? getAllTopHSDocRow(docType) : null;
   const documentTitle = hsDoc.docName + " Transaction";
 
+  const {
+    isReadOnly,
+    isFullAccess,
+    canAdd,
+    canSave,
+    canPost,
+    canCancel,
+  } = usePagePermission({
+    componentKey: "JV",
+    menuName: documentTitle,
+    debug: false,
+  });
+
   // Status Global Setup
   const displayStatus = status || "OPEN";
+  const normalizedStatus = String(displayStatus).trim().toUpperCase();
   const statusMap = {
     OPEN: "global-tran-stat-text-open-ui",
+    POSTED: "global-tran-stat-text-finalized-ui",
     FINALIZED: "global-tran-stat-text-finalized-ui",
     CANCELLED: "global-tran-stat-text-closed-ui",
     CLOSED: "global-tran-stat-text-finalized-ui",
   };
-  const statusColor = statusMap[String(displayStatus).trim().toUpperCase()] || "";
-  const isFormDisabled = ["FINALIZED", "CANCELLED", "CLOSED"].includes(
-    displayStatus,
+  const statusColor = statusMap[normalizedStatus] || "";
+  const isFormDisabled =
+    isReadOnly ||
+    isViewDocumentUrl ||
+    ["POSTED", "FINALIZED", "CANCELLED", "CLOSED"].includes(normalizedStatus);
+  const isARSettlement = String(selectedJVType || "").toUpperCase() === "JV03";
+  const isRegularJV = String(selectedJVType || "").toUpperCase() === "JV01";
+
+  const jvSettlementColumnDefs = [
+    { key: "ln", label: "LN", width: 56 },
+    { key: "docCode", label: "Doc Type", width: 100 },
+    { key: "docNo", label: "Invoice No.", width: 130 },
+    { key: "docDate", label: "Invoice Date", width: 120 },
+    { key: "docAmount", label: "Invoice Amount", width: 140 },
+    { key: "appliedAmount", label: "Applied Amount", width: 140 },
+    { key: "unappliedAmount", label: "Settlement Amount", width: 150 },
+    { key: "balance", label: "Balance", width: 140 },
+    { key: "advances", label: "Advances", width: 140 },
+    { key: "arAcct", label: "AR Account", width: 120 },
+    { key: "custvendCode", label: "Customer Code", width: 130 },
+    { key: "custvendName", label: "Customer Name", width: 240 },
+    { key: "remarks", label: "Remarks", width: 220 },
+  ];
+  const {
+    getColumnStyle: getJvSettlementColumnStyle,
+    getFrozenColumnStyle: getJvSettlementFrozenStyle,
+    getOrderedColumns: getOrderedJvSettlementColumns,
+    getSortedRows: getSortedJvSettlementRows,
+    setColumnOrder: setJvSettlementColumnOrder,
+    clearAllSorting: clearJvSettlementSorting,
+    clearZeroValueOnFocus: clearJvSettlementZeroOnFocus,
+    focusNextRowInput: focusNextJvSettlementRowInput,
+    renderHeaderContextMenu: renderJvSettlementHeaderContextMenu,
+    renderResizableHeader: renderJvSettlementHeader,
+  } = useResizableTableColumns(jvSettlementColumnDefs);
+  const orderedJvSettlementColumns = getOrderedJvSettlementColumns(jvSettlementColumnDefs);
+  const sortedJvSettlementRows = getSortedJvSettlementRows(
+    detailRows.map((row, originalIndex) => ({ row, originalIndex })),
+    (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? "",
   );
+  const getJvSettlementCellStyle = (key) => {
+    const width = jvSettlementColumnDefs.find((column) => column.key === key)?.width || 120;
+    return {
+      ...getJvSettlementColumnStyle(key, width),
+      ...getJvSettlementFrozenStyle(key, orderedJvSettlementColumns, width, { isHeader: false }),
+    };
+  };
+
+  useEffect(() => {
+    setJvSettlementColumnOrder(jvSettlementColumnDefs.map((column) => column.key));
+  }, [setJvSettlementColumnOrder]);
+
+  const jvGlColumnDefs = [
+    { key: "ln", label: "LN", width: 56 },
+    { key: "acctCode", label: "Account Code", width: 120 },
+    { key: "rcCode", label: "RC Code", width: 120 },
+    { key: "sltypeCode", label: "SL Type Code", width: 120 },
+    { key: "slCode", label: "SL Code", width: 120 },
+    { key: "particular", label: "Particulars", width: 320 },
+    { key: "vatCode", label: "VAT Code", width: 120 },
+    { key: "vatName", label: "VAT Name", width: 220 },
+    { key: "atcCode", label: "ATC", width: 120 },
+    { key: "atcName", label: "ATC Name", width: 220 },
+    { key: "debit", label: `Debit (${glCurrDefault})`, width: 140 },
+    { key: "credit", label: `Credit (${glCurrDefault})`, width: 140 },
+    ...(withCurr2
+      ? [
+          { key: "debitFx1", label: `Debit (${withCurr3 ? glCurrGlobal2 : currCode})`, width: 140 },
+          { key: "creditFx1", label: `Credit (${withCurr3 ? glCurrGlobal2 : currCode})`, width: 140 },
+        ]
+      : []),
+    ...(withCurr3
+      ? [
+          { key: "debitFx2", label: `Debit (${glCurrGlobal3})`, width: 140 },
+          { key: "creditFx2", label: `Credit (${glCurrGlobal3})`, width: 140 },
+        ]
+      : []),
+    { key: "slRefNo", label: "SL Ref. No.", width: 120 },
+    { key: "slRefDate", label: "SL Ref. Date", width: 120 },
+    { key: "remarks", label: "Remarks", width: 160 },
+  ];
+  const {
+    getColumnStyle: getJvGlColumnStyle,
+    getFrozenColumnStyle: getJvGlFrozenStyle,
+    getOrderedColumns: getOrderedJvGlColumns,
+    getSortedRows: getSortedJvGlRows,
+    setColumnOrder: setJvGlColumnOrder,
+    clearAllSorting: clearJvGlSorting,
+    clearZeroValueOnFocus: clearJvGlZeroOnFocus,
+    focusNextRowInput: focusNextJvGlRowInput,
+    renderHeaderContextMenu: renderJvGlHeaderContextMenu,
+    renderResizableHeader: renderJvGlHeader,
+  } = useResizableTableColumns(jvGlColumnDefs);
+  const orderedJvGlColumns = getOrderedJvGlColumns(jvGlColumnDefs);
+  const getJvGlFallbackWidth = (key) =>
+    jvGlColumnDefs.find((column) => column.key === key)?.width || 120;
+  const getJvGlCellStyle = (key, fallbackWidth) => ({
+    ...getJvGlColumnStyle(key, fallbackWidth),
+    ...getJvGlFrozenStyle(key, orderedJvGlColumns, fallbackWidth, { isHeader: false }),
+  });
+  const sortedJvGlRows = getSortedJvGlRows(
+    detailRowsGL.map((row, originalIndex) => ({ row, originalIndex })),
+    (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? "",
+  );
+  const jvGlZeroClearFields = [
+    "debit", "credit", "debitFx1", "creditFx1", "debitFx2", "creditFx2",
+  ];
+
+  const getSingleUploadTemplateColumns = () =>
+    getGlobalSingleUploadTemplateColumns(orderedJvGlColumns, {
+      excludeKeys: ["ln", "vatName", "atcName"],
+    });
+
+  const createEmptyGlRow = () => ({
+    acctCode: "", rcCode: "", sltypeCode: "", slCode: "", particular: "",
+    vatCode: "", vatName: "", atcCode: "", atcName: "", debit: "0.00",
+    credit: "0.00", debitFx1: "0.00", creditFx1: "0.00", debitFx2: "0.00",
+    creditFx2: "0.00", slRefNo: "", slRefDate: "", remarks: "",
+  });
+
+  const handleDownloadSingleUploadTemplate = async () => {
+    await downloadGlobalSingleUploadTemplate({
+      columns: getSingleUploadTemplateColumns(),
+      rows: sortedJvGlRows,
+      fileName: "JV Regular Account Upload Template.xlsx",
+      sheetName: "General Ledger",
+      decimalColumnFormats: {
+        debit: 2, credit: 2, debitFx1: 2, creditFx1: 2, debitFx2: 2, creditFx2: 2,
+      },
+      dateColumns: ["slRefDate"],
+      rightAlignedColumns: ["debit", "credit", "debitFx1", "creditFx1", "debitFx2", "creditFx2"],
+      centerAlignedColumns: ["acctCode", "rcCode", "sltypeCode", "slCode", "vatCode", "atcCode", "slRefNo", "slRefDate"],
+      getCellValue: ({ rowEntry, column }) => {
+        const row = rowEntry.row || rowEntry;
+        if (["debit", "credit", "debitFx1", "creditFx1", "debitFx2", "creditFx2"].includes(column.key)) {
+          return parseFormattedNumber(row[column.key] || 0) || 0;
+        }
+        if (column.key === "slRefDate") {
+          return toSingleUploadExcelDate(row.slRefDate, useformatToDatev2);
+        }
+        return String(row[column.key] ?? "");
+      },
+    });
+  };
+
+  const parseSingleUploadRow = ({ rawValuesByKey }) => {
+    const row = createEmptyGlRow();
+    getSingleUploadTemplateColumns().forEach((column) => {
+      const rawCell = rawValuesByKey[column.key];
+      const value = rawCell?.value;
+      if (["debit", "credit", "debitFx1", "creditFx1", "debitFx2", "creditFx2"].includes(column.key)) {
+        row[column.key] = parseFormattedNumber(value || 0) || 0;
+      } else if (column.key === "slRefDate") {
+        row.slRefDate = toSingleUploadDateValue(rawCell?.cell?.value || value, useformatToDatev2);
+      } else {
+        row[column.key] = String(value ?? "").trim();
+      }
+    });
+    return row;
+  };
+
+  const handleUploadExcelFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    updateState({ isLoading: true, showSpinner: true });
+    try {
+      const uploadResult = await handleSingleUploadExcelFile({
+        file,
+        columns: getSingleUploadTemplateColumns(),
+        createEmptyRow: createEmptyGlRow,
+        parseRow: parseSingleUploadRow,
+        validateRows: async (rows) => {
+          const response = await postRequest("validateJVUpload", {
+            json_data: { branchCode, jvDate: documentDate, currCode, currRate, dt2: rows },
+          });
+          return extractSingleUploadValidationResult(response);
+        },
+      });
+
+      if (uploadResult?.cancelled) return;
+      if (!uploadResult?.ok) {
+        showSingleUploadErrorList(uploadResult?.title || "Upload Error", uploadResult?.errors || []);
+        return;
+      }
+
+      const result = uploadResult.validationResult;
+      const errors = result?.errors || [];
+      if (!result || Number(result.errorCount || 0) > 0 || errors.length > 0) {
+        showSingleUploadErrorList(
+          result ? "Upload Rejected" : "Upload Validation Error",
+          result ? errors.map((row) => row.errorMsg || row.message || JSON.stringify(row)) : ["Unable to read validation response from the server."],
+        );
+        return;
+      }
+
+      const finalRows = (result.rows || []).map((row) => ({
+        ...createEmptyGlRow(),
+        ...row,
+        debit: formatNumber(parseFormattedNumber(row.debit || 0), 2),
+        credit: formatNumber(parseFormattedNumber(row.credit || 0), 2),
+        debitFx1: formatNumber(parseFormattedNumber(row.debitFx1 || 0), 2),
+        creditFx1: formatNumber(parseFormattedNumber(row.creditFx1 || 0), 2),
+        debitFx2: formatNumber(parseFormattedNumber(row.debitFx2 || 0), 2),
+        creditFx2: formatNumber(parseFormattedNumber(row.creditFx2 || 0), 2),
+      }));
+
+      if (finalRows.length === 0) {
+        showSingleUploadErrorList("Upload Validation Error", ["The server returned no validated rows."]);
+        return;
+      }
+
+      updateState({ detailRowsGL: finalRows, ...getGLTotalsState(finalRows) });
+      useSwalSuccessAlert("Upload Completed", `${finalRows.length} account row(s) uploaded and validated successfully.`);
+    } catch (error) {
+      console.error("JV upload transaction error:", error);
+      showSingleUploadErrorList("Upload Error", [error?.response?.data?.details || error?.message || "Unable to process the uploaded Excel file."]);
+    } finally {
+      updateState({ isLoading: false, showSpinner: false });
+    }
+  };
+
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      if (singleUploadDropdownRef.current && !singleUploadDropdownRef.current.contains(event.target)) {
+        setShowSingleUploadDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
+
+  useEffect(() => {
+    setJvGlColumnOrder(jvGlColumnDefs.map((column) => column.key));
+  }, [setJvGlColumnOrder, withCurr2, withCurr3, glCurrDefault, currCode, glCurrGlobal2, glCurrGlobal3]);
 
   const [totals, setTotals] = useState({
     totalGrossAmount: "0.00",
@@ -336,19 +629,45 @@ const JV = () => {
     });
   };
 
-  useEffect(() => {
-    const debitSum = detailRowsGL.reduce(
+  const getGLTotalsState = (rows) => {
+    const sourceRows = Array.isArray(rows) ? rows : [];
+    const debitSum = sourceRows.reduce(
       (acc, row) => acc + (parseFormattedNumber(row.debit) || 0),
       0,
     );
-    const creditSum = detailRowsGL.reduce(
+    const creditSum = sourceRows.reduce(
       (acc, row) => acc + (parseFormattedNumber(row.credit) || 0),
       0,
     );
-    updateState({
+    const debitFx1Sum = sourceRows.reduce(
+      (acc, row) => acc + (parseFormattedNumber(row.debitFx1) || 0),
+      0,
+    );
+    const creditFx1Sum = sourceRows.reduce(
+      (acc, row) => acc + (parseFormattedNumber(row.creditFx1) || 0),
+      0,
+    );
+    const debitFx2Sum = sourceRows.reduce(
+      (acc, row) => acc + (parseFormattedNumber(row.debitFx2) || 0),
+      0,
+    );
+    const creditFx2Sum = sourceRows.reduce(
+      (acc, row) => acc + (parseFormattedNumber(row.creditFx2) || 0),
+      0,
+    );
+
+    return {
       totalDebit: formatNumber(debitSum),
       totalCredit: formatNumber(creditSum),
-    });
+      totalDebitFx1: formatNumber(debitFx1Sum),
+      totalCreditFx1: formatNumber(creditFx1Sum),
+      totalDebitFx2: formatNumber(debitFx2Sum),
+      totalCreditFx2: formatNumber(creditFx2Sum),
+    };
+  };
+
+  useEffect(() => {
+    updateState(getGLTotalsState(detailRowsGL));
   }, [detailRowsGL]);
 
   useEffect(() => {
@@ -393,9 +712,14 @@ const JV = () => {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+  const isInitialMount = useRef(true);
 
   useEffect(() => {
-    handleReset();
+    if (isInitialMount.current) {
+      handleReset();
+      loadCompanyData();
+      isInitialMount.current = false;
+    }
   }, []);
 
   // NEW Dropdown Fetching Logic (Adopted from CR.jsx)
@@ -426,7 +750,7 @@ const JV = () => {
   }, [docType, refsLoaded]);
 
   // OPTIMIZED: Parallel data loading for speed (Removed dropdown calls)
-  const loadInitialData = async () => {
+  const loadCompanyData = async () => {
     updateState({ isLoading: true, showSpinner: true });
     try {
       const [hsOptionReq, fieldLengthsReq, docControlReq] = await Promise.all([
@@ -474,30 +798,57 @@ const JV = () => {
   };
 
   const handleReset = () => {
-    loadInitialData();
+    clearJvGlSorting();
+    clearJvSettlementSorting();
+
     updateState({
-      header: { jv_date: useGetCurrentDayV2() },
-      branchCode: "HO",
-      branchName: "Head Office",
+      branchCode: currentUserRow?.branchCode || "",
+      branchName: currentUserRow?.branchName || "",
+      userCode: currentUserRow?.userCode || "",
+      documentDate: useGetCurrentDayV2(),
+      currCode: companyInfo?.currCode || "",
+      glCurrDefault: companyInfo?.currCode || "",
+      currName: companyInfo?.currName || "",
+      currRate: formatNumber(companyInfo?.currRate || 1, 6),
       refDocNo: "",
+      refDocAmount: "0.00",
+      refAdvAcct: "",
       refDocNo2: "",
       fromDate: null,
       toDate: null,
       remarks: "",
+      noReprints: "0",
       custName: "",
       custCode: "",
+      attention: "",
       documentNo: "",
       documentID: "",
       detailRows: [],
       detailRowsGL: [],
+      glCurrMode: companyInfo?.glCurrMode || glCurrMode,
+      glCurrGlobal1: companyInfo?.glCurrGlobal1 || glCurrGlobal1,
+      glCurrGlobal2: companyInfo?.glCurrGlobal2 || glCurrGlobal2,
+      glCurrGlobal3: companyInfo?.glCurrGlobal3 || glCurrGlobal3,
+      defaultCurrRate: formatNumber(companyInfo?.currRate || 1, 6),
+      totalDebit: "0.00",
+      totalCredit: "0.00",
+      totalDebitFx1: "0.00",
+      totalCreditFx1: "0.00",
+      totalDebitFx2: "0.00",
+      totalCreditFx2: "0.00",
       documentStatus: "",
+      selectedJVType: "JV01",
+      selectedRefDocType: "JV",
       activeTab: "basic",
-      GLactiveTab: "entries",
+      GLactiveTab: "invoice",
       isDocNoDisabled: false,
       isSaveDisabled: false,
       isResetDisabled: false,
       isFetchDisabled: false,
       status: "Open",
+      showARBalanceModal: false,
+      globalLookupRow: [],
+      globalLookupHeader: [],
     });
     updateTotalsDisplay(0, 0, 0, 0, 0, 0);
   };
@@ -541,11 +892,10 @@ const JV = () => {
       );
 
       if (!data?.jvId) {
-        Swal.fire({
-          icon: "info",
-          title: "No Records Found",
-          text: "Transaction does not exist.",
-        });
+        useSwalErrorAlert(
+          "Transaction Reversal",
+          "Transaction does not exist.",
+        );
         return resetState();
       }
 
@@ -553,9 +903,12 @@ const JV = () => {
 
       const retrievedDetailRows = (data.dt1 || []).map((item) => ({
         ...item,
-        jvAmount: formatNumber(item.jvAmount),
+        docAmount: formatNumber(item.docAmount),
         vatAmount: formatNumber(item.vatAmount),
         atcAmount: formatNumber(item.atcAmount),
+        appliedAmount: formatNumber(item.appliedAmount),
+        unappliedAmount: formatNumber(item.unappliedAmount),
+        balance: formatNumber(item.balance),
       }));
 
       const formattedGLRows = (data.dt2 || []).map((glRow) => ({
@@ -575,13 +928,17 @@ const JV = () => {
         documentID: data.jvId,
         documentNo: data.jvNo,
         branchCode: data.branchCode,
-        header: { ...state.header, jv_date: jvDateForHeader },
+        documentDate: jvDateForHeader,
         selectedJVType: data.jvtranType,
         noReprints: data.noReprints,
-        selectedRefDocType: data.refDocType,
+        selectedRefDocType:
+          data.refDocType ||
+          (String(data.jvtranType || "").toUpperCase() === "JV03" ? "CR" : "JV"),
         custCode: data.slCode,
         custName: data.slName,
         refDocNo: data.refDocNo,
+        refDocAmount: formatNumber(data.docAmt || 0),
+        refAdvAcct: retrievedDetailRows[0]?.advAcct || "",
         refDocNo2: data.refDocNo1,
         currCode: data.currCode,
         currName: data.currName,
@@ -604,10 +961,24 @@ const JV = () => {
   };
 
   const fetchTranDataReversal = async (documentNo, branchCode, docType) => {
+    if (reversalFetchInProgressRef.current) return;
+
+    const getReversalErrorMessage = (error) => {
+      const rawMessage = String(
+        error?.response?.data?.message || error?.message || "Unable to retrieve transaction.",
+      );
+      const sqlServerMessage = rawMessage.match(
+        /\[SQL Server\]([\s\S]*?)(?:\s*\(Connection:|$)/i,
+      );
+
+      return (sqlServerMessage?.[1] || rawMessage).trim();
+    };
+
     const resetState = () => {
       updateState({
         documentNo: "",
         documentID: "",
+        refDocNo: "",
         documentStatus: "",
         status: "",
         isDocNoDisabled: false,
@@ -616,6 +987,7 @@ const JV = () => {
       updateTotalsDisplay(0, 0, 0, 0, 0, 0);
     };
 
+    reversalFetchInProgressRef.current = true;
     updateState({ isLoading: true });
 
     try {
@@ -638,9 +1010,12 @@ const JV = () => {
 
       const retrievedDetailRows = (data.dt1 || []).map((item) => ({
         ...item,
-        jvAmount: formatNumber(item.jvAmount),
+        docAmount: formatNumber(item.docAmount),
         vatAmount: formatNumber(item.vatAmount),
         atcAmount: formatNumber(item.atcAmount),
+        appliedAmount: formatNumber(item.appliedAmount),
+        unappliedAmount: formatNumber(item.unappliedAmount),
+        balance: formatNumber(item.balance),
       }));
 
       const formattedGLRows = (data.dt2 || []).map((glRow) => ({
@@ -670,10 +1045,19 @@ const JV = () => {
 
       updateTotals(retrievedDetailRows);
     } catch (error) {
-      console.error("Error fetching transaction data:", error);
-      Swal.fire({ icon: "error", title: "Fetch Error", text: error.message });
+      const errorMessage = getReversalErrorMessage(error);
+
+      if (!error?.response?.data?.message) {
+        console.error("Error fetching transaction data:", error);
+      }
+
+      useSwalErrorAlert(
+        "Transaction Reversal",
+        errorMessage,
+      );
       resetState();
     } finally {
+      reversalFetchInProgressRef.current = false;
       updateState({ isLoading: false });
     }
   };
@@ -712,7 +1096,7 @@ const JV = () => {
         branchCode,
         documentNo,
         documentID,
-        header,
+        documentDate,
         selectedJVType,
         selectedRefDocType,
         custCode,
@@ -733,16 +1117,18 @@ const JV = () => {
         branchCode: branchCode,
         jvNo: documentNo || "",
         jvId: documentID || "",
-        jvDate: header.jv_date.includes("/")
-          ? new Date(header.jv_date).toISOString().split("T")[0]
-          : header.jv_date,
+        jvDate: documentDate.includes("/")
+          ? new Date(documentDate).toISOString().split("T")[0]
+          : documentDate,
         jvtranType: selectedJVType,
         refDocType: selectedRefDocType,
         slCode: custCode,
         slName: custName,
         refDocNo: refDocNo,
         refDocNo2: refDocNo2,
-        docAmt: parseFormattedNumber(totals.totalGrossAmount) || 0,
+        docAmt: parseFormattedNumber(
+          isARSettlement ? refDocAmount : totals.totalGrossAmount,
+        ) || 0,
         fromDate: fromDate,
         toDate: toDate,
         currCode: currCode || "PHP",
@@ -751,16 +1137,27 @@ const JV = () => {
         userCode: user.USER_CODE,
         dt1: detailRows.map((row, index) => ({
           lnNo: String(index + 1),
-          jvSpecs: row.jvSpecs || "",
-          jvAmount: parseFormattedNumber(row.jvAmount || 0),
-          vatCode: row.vatCode,
-          vatName: row.vatName,
+          docCode: row.docCode || "",
+          docNo: row.docNo || "",
+          docDate: row.docDate || null,
+          docAmount: parseFormattedNumber(row.docAmount || 0),
+          vatCode: row.vatCode || "",
           vatAmount: parseFormattedNumber(row.vatAmount || 0),
           atcCode: row.atcCode || "",
-          atcName: row.atcName || "",
-          atcAmount: parseFormattedNumber(row.atcAmount),
-          vatAcct: row.vatAcct,
-          rcCode: row.rcCode,
+          atcAmount: parseFormattedNumber(row.atcAmount || 0),
+          balance: parseFormattedNumber(row.balance || 0),
+          appliedAmount: parseFormattedNumber(row.appliedAmount || 0),
+          unappliedAmount: parseFormattedNumber(row.unappliedAmount || 0),
+          advAcct: row.advAcct || "",
+          arAcct: row.arAcct || "",
+          remarks: row.remarks || "",
+          custvendCode: row.custvendCode || custCode,
+          custvendName: row.custvendName || custName,
+          refBranchCode: row.refBranchCode || branchCode,
+          sourceGroupId: row.sourceGroupId || "",
+          docCurrCode: row.docCurrCode || currCode,
+          docCurrRate: parseFormattedNumber(row.docCurrRate || currRate || 1),
+          dt1Lineno: row.dt1Lineno || "",
         })),
         dt2: detailRowsGL.map((entry, index) => ({
           recNo: String(index + 1),
@@ -899,7 +1296,53 @@ const JV = () => {
 
     updateState({
       detailRowsGL: updatedRowsGL,
+      ...getGLTotalsState(updatedRowsGL),
     });
+  };
+
+  const handleCopyGLRow = (index) => {
+    const updatedRowsGL = [...detailRowsGL];
+    const sourceRow = updatedRowsGL[index];
+
+    if (!sourceRow) return;
+
+    updatedRowsGL.splice(index + 1, 0, { ...sourceRow });
+
+    updateState({
+      detailRowsGL: updatedRowsGL,
+      ...getGLTotalsState(updatedRowsGL),
+    });
+  };
+
+  const handleInsertGLRowClick = async (index) => {
+    const result = await useSwalProceedConfirm(
+      "Insert Detail Row",
+      "Do you want to copy the selected record or insert a new record?",
+      "Copy Record",
+      "Insert New Record",
+    );
+
+    if (result.isConfirmed) {
+      handleCopyGLRow(index);
+      return;
+    }
+
+    if (isARSettlement && ["GenerateGL", "Upsert"].includes(action)) {
+      const advanceAmount = parseFormattedNumber(refDocAmount || 0) || 0;
+      const totalSettlement = detailRows.reduce(
+        (total, row) => total + (parseFormattedNumber(row.unappliedAmount || 0) || 0),
+        0,
+      );
+
+      if (totalSettlement > advanceAmount + 0.001) {
+        showAdvanceAllocationWarning();
+        return;
+      }
+    }
+
+    if (result.dismiss === Swal.DismissReason.cancel) {
+      handleAddRowGL(index);
+    }
   };
 
   const handleDeleteRowGL = (index) => {
@@ -1060,6 +1503,338 @@ const JV = () => {
     }
   };
 
+  const updateSettlementTotals = (rows) => {
+    const settlementAmount = (Array.isArray(rows) ? rows : []).reduce(
+      (total, row) =>
+        total + (parseFormattedNumber(row.unappliedAmount || 0) || 0),
+      0,
+    );
+
+    updateTotalsDisplay(settlementAmount, 0, settlementAmount, 0, 0, settlementAmount);
+  };
+
+  const showAdvanceAllocationWarning = () => {
+    Swal.fire({
+      toast: true,
+      position: "top-end",
+      icon: "warning",
+      title: "Advances amount exceeded",
+      text: "Total settlement cannot exceed the selected collection receipt balance.",
+      showConfirmButton: false,
+      timer: 4000,
+      timerProgressBar: true,
+    });
+  };
+
+  const handleOpenARBalance = async () => {
+    if (!custCode) {
+      useSwalErrorAlert(
+        "AR Settlement Application",
+        "Please select a customer before loading invoice details.",
+      );
+      return;
+    }
+
+    if (isARSettlement && !refDocNo) {
+      useSwalErrorAlert(
+        "AR Settlement Application",
+        "Please select an open collection receipt before loading invoice details.",
+      );
+      return;
+    }
+
+    try {
+      updateState({ isLoading: true });
+      const endpoint = "getOpenARBalance";
+      const response = await fetchDataJson(endpoint, { custCode, branchCode });
+      const records = response?.data?.[0]?.result
+        ? JSON.parse(response.data[0].result)
+        : [];
+      const columns = await useSelectedHSColConfig(endpoint);
+
+      if (records.length === 0) {
+        useSwalErrorAlert(
+          "Open AR Balance",
+          "There are no open invoices for the selected customer and branch.",
+        );
+        return;
+      }
+
+      updateState({
+        globalLookupRow: records,
+        globalLookupHeader: columns || [],
+        globalLookupMode: "invoice",
+        showARBalanceModal: true,
+      });
+    } catch (error) {
+      console.error("Failed to load open AR balances:", error);
+      useSwalErrorAlert("Open AR Balance", "Failed to load open AR balances.");
+    } finally {
+      updateState({ isLoading: false });
+    }
+  };
+
+  const handleOpenARAdvance = async () => {
+    try {
+      updateState({ isLoading: true });
+      const endpoint = "getCROpenARAdvances";
+      const response = await fetchDataJson(endpoint, { branchCode, custCode });
+      const records = response?.data?.[0]?.result
+        ? JSON.parse(response.data[0].result)
+        : [];
+      const columns = await useSelectedHSColConfig("getARAdvances");
+
+      if (records.length === 0) {
+        useSwalErrorAlert(
+          "Open Collection Receipts",
+          "There are no unapplied collection receipts for the selected criteria.",
+        );
+        return;
+      }
+
+      updateState({
+        globalLookupRow: records,
+        globalLookupHeader: columns || [],
+        globalLookupMode: "advance",
+        showARBalanceModal: true,
+      });
+    } catch (error) {
+      console.error("Failed to load open collection receipts:", error);
+      useSwalErrorAlert(
+        "Open Collection Receipts",
+        "Failed to load unapplied collection receipts.",
+      );
+    } finally {
+      updateState({ isLoading: false });
+    }
+  };
+
+  const handleCloseARAdvance = (payload) => {
+    const selected = payload?.records?.[0];
+    if (!selected) {
+      updateState({ showARBalanceModal: false });
+      return;
+    }
+
+    updateState({
+      refDocNo: selected.docNo || "",
+      refDocAmount: formatNumber(selected.balance || 0),
+      refAdvAcct: selected.acctCode || "",
+      selectedRefDocType: "CR",
+      custCode: selected.custCode || custCode,
+      custName: selected.custName || custName,
+      currCode: selected.currCode || currCode,
+      currRate: formatNumber(selected.currRate || 1, 6),
+      showARBalanceModal: false,
+    });
+  };
+
+  const handleCloseARBalance = async (payload) => {
+    if (!payload) {
+      updateState({ showARBalanceModal: false });
+      return;
+    }
+
+    try {
+      updateState({ isLoading: true });
+      const result = await useSelectedOpenARBalance(payload);
+
+      if (result) {
+        const existingKeys = new Set(
+          detailRows.map((row) => `${row.refDocCode || row.docCode}|${row.docNo}`),
+        );
+        let remainingAdvance = Math.max(
+          (parseFormattedNumber(refDocAmount || 0) || 0) -
+            detailRows.reduce(
+              (total, row) => total + (parseFormattedNumber(row.unappliedAmount || 0) || 0),
+              0,
+            ),
+          0,
+        );
+        const newRows = result
+          .filter(
+            (entry) =>
+              !existingKeys.has(`${entry.refDocCode || entry.docCode}|${entry.siNo || entry.docNo}`),
+          )
+          .map((entry, index) => {
+            const documentAmount = parseFormattedNumber(entry.balance || 0) || 0;
+            const atcAmount = parseFormattedNumber(entry.atcAmount || 0) || 0;
+            const maximumSettlement = Math.max(documentAmount - atcAmount, 0);
+            const settlementAmount = Math.min(maximumSettlement, remainingAdvance);
+            const ratio = maximumSettlement > 0 ? settlementAmount / maximumSettlement : 0;
+            const appliedAmount = documentAmount * ratio;
+            remainingAdvance = Math.max(remainingAdvance - settlementAmount, 0);
+
+            return {
+              lnNo: detailRows.length + index + 1,
+              docCode: entry.refDocCode || entry.docCode || "SI",
+              docNo: entry.siNo || entry.docNo || "",
+              docDate: entry.siDate || entry.docDate || "",
+              docAmount: formatNumber(documentAmount),
+              vatCode: entry.vatCode || "",
+              vatAmount: formatNumber((parseFormattedNumber(entry.vatAmount || 0) || 0) * ratio),
+              atcCode: entry.atcCode || "",
+              atcAmount: formatNumber(atcAmount * ratio),
+              originalAppliedAmount: documentAmount,
+              originalVatAmount: parseFormattedNumber(entry.vatAmount || 0) || 0,
+              originalAtcAmount: atcAmount,
+              appliedAmount: formatNumber(appliedAmount),
+              unappliedAmount: formatNumber(settlementAmount),
+              balance: formatNumber(Math.max(documentAmount - appliedAmount, 0)),
+              advAcct: refAdvAcct,
+              arAcct: entry.arAcct || "",
+              remarks: entry.remarks || "",
+              custvendCode: entry.custCode || custCode,
+              custvendName: entry.custName || custName,
+              refBranchCode: entry.refBranchCode || branchCode,
+              sourceGroupId: entry.groupId || "",
+              docCurrCode: entry.currCode || currCode,
+              docCurrRate: formatNumber(entry.currRate || 1, 6),
+              dt1Lineno:
+                entry.dt1Lineno ||
+                entry.lineNo ||
+                (String(entry.groupId || "").length > 36
+                  ? String(entry.groupId).substring(36, 40)
+                  : ""),
+            };
+          });
+        const updatedRows = [...detailRows, ...newRows];
+
+        updateState({ detailRows: updatedRows });
+        updateSettlementTotals(updatedRows);
+      }
+    } finally {
+      updateState({ showARBalanceModal: false, isLoading: false });
+    }
+  };
+
+  const handleSettlementAmountChange = (index, value, formatValue = false) => {
+    const updatedRows = [...detailRows];
+    const row = { ...updatedRows[index] };
+    const documentAmount = parseFormattedNumber(row.docAmount || 0) || 0;
+    const originalApplied = parseFormattedNumber(row.originalAppliedAmount || row.docAmount || 0) || 0;
+    const originalVat = parseFormattedNumber(row.originalVatAmount || row.vatAmount || 0) || 0;
+    const originalAtc = parseFormattedNumber(row.originalAtcAmount || row.atcAmount || 0) || 0;
+    const invoiceMaximumSettlement = Math.max(originalApplied - originalAtc, 0);
+    const otherSettlementAmount = updatedRows.reduce(
+      (total, currentRow, currentIndex) =>
+        currentIndex === index
+          ? total
+          : total + (parseFormattedNumber(currentRow.unappliedAmount || 0) || 0),
+      0,
+    );
+    const availableAdvance = Math.max(
+      (parseFormattedNumber(refDocAmount || 0) || 0) - otherSettlementAmount,
+      0,
+    );
+    const maximumSettlement = Math.min(invoiceMaximumSettlement, availableAdvance);
+    const requestedAmount = Math.max(parseFormattedNumber(value || 0) || 0, 0);
+    const settlementAmount = Math.min(requestedAmount, maximumSettlement);
+    const ratio = invoiceMaximumSettlement > 0 ? settlementAmount / invoiceMaximumSettlement : 0;
+    const appliedAmount = originalApplied * ratio;
+
+    row.originalAppliedAmount = originalApplied;
+    row.originalVatAmount = originalVat;
+    row.originalAtcAmount = originalAtc;
+    row.unappliedAmount = formatValue || requestedAmount > maximumSettlement
+      ? formatNumber(settlementAmount)
+      : value;
+    row.appliedAmount = formatNumber(appliedAmount);
+    row.vatAmount = formatNumber(originalVat * ratio);
+    row.atcAmount = formatNumber(originalAtc * ratio);
+    row.balance = formatNumber(Math.max(documentAmount - appliedAmount, 0));
+    updatedRows[index] = row;
+
+    updateState({ detailRows: updatedRows });
+    updateSettlementTotals(updatedRows);
+
+    if (requestedAmount > maximumSettlement) {
+      showAdvanceAllocationWarning();
+    }
+  };
+
+  const handleDeleteSettlementRow = (index) => {
+    const updatedRows = detailRows.filter((_, rowIndex) => rowIndex !== index);
+    updateState({
+      detailRows: updatedRows.map((row, rowIndex) => ({ ...row, lnNo: rowIndex + 1 })),
+      detailRowsGL: [],
+    });
+    updateSettlementTotals(updatedRows);
+  };
+
+  const renderJvSettlementCell = (columnKey, row, index) => {
+    const style = getJvSettlementCellStyle(columnKey);
+    const readOnlyAmount = (value, decimals = 2) => (
+      <input
+        type="text"
+        className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
+        value={formatNumber(parseFormattedNumber(value || 0), decimals)}
+        readOnly
+      />
+    );
+    const readOnlyText = (value, className = "") => (
+      <input
+        type="text"
+        className={`w-full global-tran-td-inputclass-ui ${className}`.trim()}
+        value={value || ""}
+        readOnly
+      />
+    );
+
+    const renderers = {
+      ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
+      docCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readOnlyText(row.docCode, "text-center")}</td>,
+      docNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readOnlyText(row.docNo)}</td>,
+      docDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readOnlyText(row.docDate ? useformatToDatev2(row.docDate) : "", "text-center")}</td>,
+      docAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readOnlyAmount(row.docAmount)}</td>,
+      appliedAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readOnlyAmount(row.appliedAmount)}</td>,
+      unappliedAmount: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          <input
+            type="text"
+            id={`unappliedAmount-${index}`}
+            className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0"
+            value={row.unappliedAmount || ""}
+            disabled={isFormDisabled}
+            onChange={(event) => {
+              const sanitizedValue = event.target.value.replace(/[^0-9.]/g, "");
+              if (/^\d*(\.\d{0,2})?$/.test(sanitizedValue) || sanitizedValue === "") {
+                handleSettlementAmountChange(index, sanitizedValue);
+              }
+            }}
+            onFocus={(event) => clearJvSettlementZeroOnFocus(event, {
+              isEditable: !isFormDisabled,
+              onClear: (value) => handleSettlementAmountChange(index, value),
+            })}
+            onBlur={(event) => handleSettlementAmountChange(index, event.target.value, true)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              handleSettlementAmountChange(index, event.currentTarget.value, true);
+              focusNextJvSettlementRowInput(index, "unappliedAmount", {
+                rows: detailRows,
+                zeroClearFields: ["unappliedAmount"],
+                parseValue: parseFormattedNumber,
+                onClearNextValue: (nextIndex, _field, value) =>
+                  handleSettlementAmountChange(nextIndex, value),
+              });
+            }}
+            data-field="unappliedAmount"
+            data-row-index={index}
+          />
+        </td>
+      ),
+      balance: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readOnlyAmount(row.balance)}</td>,
+      advances: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readOnlyAmount(refDocAmount)}</td>,
+      arAcct: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readOnlyText(row.arAcct, "text-center")}</td>,
+      custvendCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readOnlyText(row.custvendCode)}</td>,
+      custvendName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readOnlyText(row.custvendName)}</td>,
+      remarks: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{readOnlyText(row.remarks)}</td>,
+    };
+
+    return renderers[columnKey]?.() ?? null;
+  };
+
   const updateTotals = (rows) => {
     let totalVAT = 0;
     let totalATC = 0;
@@ -1213,12 +1988,15 @@ const JV = () => {
       }
     }
 
-    if (["slRefNo", "slRefDate", "remarks"].includes(field)) {
+    if (["particular", "atcName", "vatName", "slRefNo", "slRefDate", "remarks"].includes(field)) {
       row[field] = value;
     }
 
     updatedRowsGL[index] = row;
-    updateState({ detailRowsGL: updatedRowsGL });
+    updateState({
+      detailRowsGL: updatedRowsGL,
+      ...getGLTotalsState(updatedRowsGL),
+    });
   };
 
   const handleBlurGL = async (index, field, value, autoCompute = false) => {
@@ -1248,7 +2026,7 @@ const JV = () => {
           value,
           currCode,
           currRate,
-          header.jv_date,
+          documentDate,
         );
         if (data) {
           row.debit = formatNumber(data.debit);
@@ -1276,7 +2054,10 @@ const JV = () => {
     }
 
     updatedRowsGL[index] = row;
-    updateState({ detailRowsGL: updatedRowsGL });
+    updateState({
+      detailRowsGL: updatedRowsGL,
+      ...getGLTotalsState(updatedRowsGL),
+    });
   };
 
   const handleCloseAccountModal = (selectedAccount) => {
@@ -1460,7 +2241,7 @@ const JV = () => {
         const rate =
           currCode === glCurrDefault
             ? defaultCurrRate
-            : await useTopForexRate(currCode, header.jv_date);
+            : await useTopForexRate(currCode, documentDate);
 
         updateState({
           currCode: result.currCode,
@@ -1505,6 +2286,138 @@ const handleTranDocNoSelection = async (data) => {
   fetchTranData(data.docNo, data.branchCode || branchCode);
 };
 
+  const renderJvGlCell = (columnKey, row, index) => {
+    const style = getJvGlCellStyle(columnKey, getJvGlFallbackWidth(columnKey));
+    const focusNextGlCell = (field) => {
+      focusNextJvGlRowInput(index, field, {
+        rows: detailRowsGL,
+        zeroClearFields: jvGlZeroClearFields,
+        parseValue: parseFormattedNumber,
+        onClearNextValue: (nextIndex, nextField, value) =>
+          handleDetailChangeGL(nextIndex, nextField, value),
+      });
+    };
+    const modalHandlers = {
+      acctCode: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "acctCode" }),
+      rcCode: () => updateState({ selectedRowIndex: index, showRcModal: true }),
+      slCode: () => updateState({ selectedRowIndex: index, showSlModal: true }),
+      vatCode: () => updateState({ selectedRowIndex: index, showVatModal: true }),
+      atcCode: () => updateState({ selectedRowIndex: index, showAtcModal: true }),
+    };
+    const textInput = (field, options = {}) => (
+      <input
+        id={`${field}-${index}`}
+        type="text"
+        className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()}
+        value={row[field] || ""}
+        readOnly={isFormDisabled || options.readOnly}
+        maxLength={options.maxLength}
+        onChange={(event) => handleDetailChangeGL(index, field, event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" || isFormDisabled || options.readOnly) return;
+          event.preventDefault();
+          focusNextGlCell(field);
+        }}
+      />
+    );
+    const lookupInput = (field, editable = false) => (
+      <div className="relative w-full">
+        <input
+          id={`${field}-${index}`}
+          type="text"
+          className="w-full pr-6 global-tran-td-inputclass-ui cursor-pointer"
+          value={row[field] || ""}
+          readOnly={isFormDisabled || !editable}
+          onChange={(event) => handleDetailChangeGL(index, field, event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || isFormDisabled) return;
+            event.preventDefault();
+            focusNextGlCell(field);
+          }}
+        />
+        {!isFormDisabled && (editable || String(row[field] || "").trim()) && (
+          <FontAwesomeIcon
+            icon={faMagnifyingGlass}
+            className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer text-lg text-blue-600 hover:text-blue-900"
+            onClick={modalHandlers[field]}
+          />
+        )}
+      </div>
+    );
+    const amountInput = (field) => (
+      <input
+        id={`${field}-${index}`}
+        type="text"
+        className="w-full global-tran-td-inputclass-ui text-right"
+        value={row[field] || ""}
+        readOnly={isFormDisabled}
+        onChange={(event) => {
+          const value = event.target.value.replace(/[^0-9.]/g, "");
+          if (/^\d*\.?\d{0,2}$/.test(value) || value === "") {
+            handleDetailChangeGL(index, field, value);
+          }
+        }}
+        onFocus={(event) =>
+          clearJvGlZeroOnFocus(event, {
+            isEditable: !isFormDisabled,
+            onClear: (value) => handleDetailChangeGL(index, field, value),
+          })
+        }
+        onBlur={(event) => {
+          if (!isFormDisabled) handleBlurGL(index, field, event.target.value);
+        }}
+        onKeyDown={async (event) => {
+          if (event.key !== "Enter" || isFormDisabled) return;
+          event.preventDefault();
+          await handleBlurGL(index, field, event.target.value, true);
+          focusNextGlCell(field);
+        }}
+      />
+    );
+
+    const renderers = {
+      ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
+      acctCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{lookupInput(columnKey, true)}</td>,
+      rcCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{lookupInput(columnKey)}</td>,
+      slCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{lookupInput(columnKey)}</td>,
+      vatCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{lookupInput(columnKey)}</td>,
+      atcCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{lookupInput(columnKey)}</td>,
+      sltypeCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey)}</td>,
+      particular: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey)}</td>,
+      vatName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { readOnly: true })}</td>,
+      atcName: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey)}</td>,
+      debit: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput(columnKey)}</td>,
+      credit: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput(columnKey)}</td>,
+      debitFx1: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput(columnKey)}</td>,
+      creditFx1: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput(columnKey)}</td>,
+      debitFx2: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput(columnKey)}</td>,
+      creditFx2: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput(columnKey)}</td>,
+      slRefNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { maxLength: useGetFieldLength(tblFieldArray, "slref_no") || 50 })}</td>,
+      slRefDate: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          <DateFormatInput
+            id={`slRefDate_${index}`}
+            value={row.slRefDate || ""}
+            disabled={isFormDisabled}
+            className="w-full global-tran-td-inputclass-ui text-center pr-7"
+            updateState={(updates) => {
+              if (updates[`slRefDate_${index}`] !== undefined) {
+                handleDetailChangeGL(index, "slRefDate", updates[`slRefDate_${index}`]);
+              }
+            }}
+            onKeyDownCustom={(event) => {
+              if (event.key !== "Enter" || isFormDisabled) return;
+              event.preventDefault();
+              focusNextGlCell("slRefDate");
+            }}
+          />
+        </td>
+      ),
+      remarks: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput(columnKey, { maxLength: useGetFieldLength(tblFieldArray, "remarks") || 250 })}</td>,
+    };
+    return renderers[columnKey]?.() ?? null;
+  };
+
   const handleJVTypeChange = (e) => {
     const selectedType = e.target.value;
     updateState({ selectedJVType: selectedType });
@@ -1518,6 +2431,13 @@ const handleTranDocNoSelection = async (data) => {
   return (
     <div className="global-tran-main-div-ui">
       {showSpinner && <LoadingSpinner />}
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept=".xlsx"
+        className="hidden"
+        onChange={handleUploadExcelFile}
+      />
 
       <div className="global-tran-headerToolbar-ui">
         <Header
@@ -1535,21 +2455,27 @@ const handleTranDocNoSelection = async (data) => {
           activeTopTab={topTab}
           showActions={topTab === "details"}
           showBIRForm={false}
+          isViewDocument={isViewDocument}
           onDetails={() => setTopTab("details")}
           onHistory={() => setTopTab("history")}
           disableRouteNavigation={true}
           detailsRoute="/page/JV"
           isSaveDisabled={
-            state.isSaveDisabled || isFormDisabled || detailRowsGL.length === 0
+            !canSave || state.isSaveDisabled || isFormDisabled || detailRowsGL.length === 0
           }
           isResetDisabled={state.isResetDisabled}
-          isAttachDisabled={!documentID}
-          isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
-          isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
+          isAttachDisabled={!isFullAccess || !documentID}
+          isPrintDisabled={!documentID || normalizedStatus === "CANCELLED"}
+          isCopyDisabled={!canAdd || !documentID || normalizedStatus === "CANCELLED"}
           isCancelDisabled={
+            !canCancel ||
             !documentID ||
-            displayStatus === "CANCELLED" ||
-            displayStatus === "FINALIZED"
+            ["POSTED", "FINALIZED", "CANCELLED", "CLOSED"].includes(normalizedStatus)
+          }
+          isPostDisabled={
+            !canPost ||
+            !documentID ||
+            ["POSTED", "FINALIZED", "CANCELLED", "CLOSED"].includes(normalizedStatus)
           }
         />
       </div>
@@ -1623,7 +2549,7 @@ const handleTranDocNoSelection = async (data) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
                       handleSviNoBlur();
-                      document.getElementById("jv_date")?.focus();
+                      document.getElementById("documentDate")?.focus();
                     }
                   }}
                 />
@@ -1634,21 +2560,19 @@ const handleTranDocNoSelection = async (data) => {
                     className={`flex items-stretch global-ref-textbox-ui ${!isFormDisabled ? "global-ref-textbox-enabled" : "global-ref-textbox-disabled"}`}
                   >
                     <DateFormatInput
-                      id="jv_date"
+                      id="documentDate"
                       className="peer flex-grow bg-transparent border-none px-3 focus:outline-none cursor-pointer"
-                      value={header.jv_date}
+                      value={documentDate}
                       disabled={isFormDisabled}
                       updateState={(updates) => {
-                        if (updates.jv_date !== undefined) {
-                          updateState({
-                            header: { ...header, jv_date: updates.jv_date },
-                          });
+                        if (updates.documentDate !== undefined) {
+                          updateState({ documentDate: updates.documentDate });
                         }
                       }}
                     />
                   </div>
                   <label
-                    htmlFor="jv_date"
+                    htmlFor="documentDate"
                     className={`global-ref-floating-label ${!isFormDisabled ? "global-ref-label-enabled" : "global-ref-label-disabled"}`}
                   >
                     JV Date
@@ -1660,7 +2584,7 @@ const handleTranDocNoSelection = async (data) => {
               <div className="global-tran-textbox-group-div-ui">
                 <FieldRenderer
                   id="custCode"
-                  label="Customer Code"
+                  label="Customer/Payee Code"
                   type="lookup"
                   value={custCode || ""}
                   disabled={isFormDisabled}
@@ -1672,7 +2596,7 @@ const handleTranDocNoSelection = async (data) => {
                 <div className="relative w-full md:w-6/6 lg:w-4/4">
                   <FieldRenderer
                     id="custName"
-                    label="Customer Name"
+                    label="Customer/Payee Name"
                     type="text"
                     value={custName || ""}
                     disabled
@@ -1685,8 +2609,19 @@ const handleTranDocNoSelection = async (data) => {
                   label="JV Type"
                   type="select"
                   value={selectedJVType}
-                  disabled={isFormDisabled}
-                  onChange={(val) => updateState({ selectedJVType: val })}
+                  disabled={isFormDisabled || (isARSettlement && detailRows.length > 0)}
+                  onChange={(val) =>
+                    updateState({
+                      selectedJVType: val,
+                      selectedRefDocType: val === "JV03" ? "CR" : selectedRefDocType,
+                      refDocNo: val === selectedJVType ? refDocNo : "",
+                      refDocAmount: val === selectedJVType ? refDocAmount : "0.00",
+                      refAdvAcct: val === selectedJVType ? refAdvAcct : "",
+                      detailRows: val === selectedJVType ? detailRows : [],
+                      detailRowsGL: [],
+                      activeTab: val === "JV03" ? "invoice" : activeTab,
+                    })
+                  }
                   options={jvTypes.map((t) => ({
                     label: t.DROPDOWN_NAME,
                     value: t.DROPDOWN_CODE,
@@ -1701,26 +2636,47 @@ const handleTranDocNoSelection = async (data) => {
                   label="Ref Doc Type"
                   type="select"
                   value={selectedRefDocType}
-                  disabled={isFormDisabled}
+                  disabled={isFormDisabled || isARSettlement || selectedJVType === "JV01"}
                   onChange={(val) => updateState({ selectedRefDocType: val })}
-                  options={refdocTypes.map((t) => ({
+                  options={refdocTypes
+                    .filter((t) => !isARSettlement || t.DROPDOWN_CODE === "CR")
+                    .map((t) => ({
                     label: t.DROPDOWN_NAME,
                     value: t.DROPDOWN_CODE,
-                  }))}
+                    }))}
                 />
 
                 <FieldRenderer
                   id="refDocNo"
                   label="Ref Doc No."
-                  type="text"
+                  type={isARSettlement ? "lookup" : "text"}
                   value={refDocNo || ""}
                   disabled={isFormDisabled}
-                  onChange={(val) => updateState({ refDocNo: val })}
+                  readOnly={isARSettlement}
+                  lookupDisabled={isFormDisabled || (isARSettlement && detailRows.length > 0)}
+                  onLookup={isARSettlement ? handleOpenARAdvance : undefined}
+                  onChange={(val) => {
+                    if (!isARSettlement) updateState({ refDocNo: val });
+                  }}
+                  onBlur={() => {
+                    if (selectedJVType === "JV02" && refDocNo && branchCode) {
+                      fetchTranDataReversal(refDocNo, branchCode, selectedRefDocType);
+                    }
+                  }}
                   maxLength={useGetFieldLength(tblFieldArray, "refDocNo") || 50}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
+                    if (
+                      e.key === "Enter" &&
+                      selectedJVType === "JV02" &&
+                      refDocNo &&
+                      branchCode
+                    ) {
                       e.preventDefault();
-                      fetchTranDataReversal(state.refDocNo, state.branchCode, state.selectedRefDocType);
+                      fetchTranDataReversal(
+                        refDocNo,
+                        branchCode,
+                        selectedRefDocType,
+                      );
                     }
                   }}
                 />
@@ -1729,7 +2685,7 @@ const handleTranDocNoSelection = async (data) => {
                   id="totalGrossAmount"
                   label="Reference Amount"
                   type="amount"
-                  value={totals.totalGrossAmount || ""}
+                  value={isARSettlement ? refDocAmount : totals.totalGrossAmount || ""}
                   disabled
                 />
               </div>
@@ -1798,6 +2754,78 @@ const handleTranDocNoSelection = async (data) => {
           </div>
         </div>
 
+        {isARSettlement && (
+          <div className="global-tran-tab-div-ui">
+            <div className="global-tran-tab-nav-ui">
+              <div className="flex flex-row sm:flex-row">
+                <button
+                  type="button"
+                  className="global-tran-tab-padding-ui global-tran-tab-text_active-ui"
+                >
+                  Invoice Details
+                </button>
+              </div>
+
+            </div>
+
+            <div className="global-tran-table-main-div-ui">
+              <div className="global-tran-table-main-sub-div-ui">
+                <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
+                  <thead className="global-tran-thead-div-ui">
+                    <tr>
+                      {orderedJvSettlementColumns.map((column) =>
+                        renderJvSettlementHeader(column.label, column.key, column.width, {
+                          orderedColumns: orderedJvSettlementColumns,
+                        })
+                      )}
+                      {!isFormDisabled && (
+                        <th className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>
+                          Actions
+                        </th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody className="relative">
+                    {sortedJvSettlementRows.map(({ row, originalIndex }) => (
+                      <tr key={`${row.docCode}-${row.docNo}-${originalIndex}`} className="global-tran-tr-ui">
+                        {orderedJvSettlementColumns.map((column) =>
+                          renderJvSettlementCell(column.key, row, originalIndex)
+                        )}
+                        {!isFormDisabled && (
+                          <td className="global-tran-td-ui sticky right-0 bg-white text-center dark:bg-black" style={transactionActionsCellStyle}>
+                            <button
+                              type="button"
+                              className="global-tran-td-button-delete-ui"
+                              onClick={() => handleDeleteSettlementRow(originalIndex)}
+                            >
+                              <FontAwesomeIcon icon={faTrashAlt} />
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {renderJvSettlementHeaderContextMenu()}
+              </div>
+            </div>
+
+            <div className="global-tran-tab-footer-main-div-ui">
+              <div className="global-tran-tab-footer-button-div-ui">
+                <button
+                  type="button"
+                  onClick={handleOpenARBalance}
+                  className="global-tran-tab-footer-button-add-ui"
+                  style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
+                >
+                  <FontAwesomeIcon icon={faPlus} className="mr-2" />
+                  Add
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* General Ledger Button */}
         <div className="global-tran-tab-div-ui">
           {/* Tab Navigation */}
@@ -1817,28 +2845,67 @@ const handleTranDocNoSelection = async (data) => {
             </div>
 
             {/* Action Button */}
+            {isARSettlement && (
             <div className="flex justify-end">
               <button
                 onClick={() => handleActivityOption("GenerateGL")}
                 className="global-tran-button-generateGL"
-                disabled={isLoading || selectedJVType === "JV01"}
+                disabled={isLoading}
                 style={{
                   visibility: isFormDisabled ? "hidden" : "visible",
-                  opacity: isLoading || selectedJVType === "JV01" ? 0.5 : 1,
-                  cursor:
-                    isLoading || selectedJVType === "JV01"
-                      ? "not-allowed"
-                      : "pointer",
+                  opacity: isLoading ? 0.5 : 1,
+                  cursor: isLoading ? "not-allowed" : "pointer",
                 }}
               >
-                {isLoading ? "Generating..." : "Generate GL Entries"}
+                {isLoading ? "Generating..." : "Generate Entries"}
               </button>
             </div>
+            )}
           </div>
 
           {/* GL Details Table */}
           <div className="global-tran-table-main-div-ui">
             <div className="global-tran-table-main-sub-div-ui">
+              <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
+                <thead className="global-tran-thead-div-ui">
+                  <tr>
+                    {orderedJvGlColumns.map((column) =>
+                      renderJvGlHeader(column.label, column.key, column.width, {
+                        orderedColumns: orderedJvGlColumns,
+                      })
+                    )}
+                    {!isFormDisabled && (
+                      <th className="global-tran-th-ui sticky top-0 right-0" style={transactionActionsHeaderStyle}>
+                        Actions
+                      </th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody className="relative">
+                  {sortedJvGlRows.map(({ row, originalIndex }) => (
+                    <tr key={originalIndex} className="global-tran-tr-ui">
+                      {orderedJvGlColumns.map((column) =>
+                        renderJvGlCell(column.key, row, originalIndex)
+                      )}
+                      {!isFormDisabled && (
+                        <td className="global-tran-td-ui sticky right-0 bg-white text-center dark:bg-black" style={transactionActionsCellStyle}>
+                          <div className="flex items-center justify-center gap-1">
+                            <button type="button" className="global-tran-td-button-add-ui" onClick={() => handleInsertGLRowClick(originalIndex)}>
+                              <FontAwesomeIcon icon={faPlus} />
+                            </button>
+                            <button type="button" className="global-tran-td-button-delete-ui" onClick={() => handleDeleteRowGL(originalIndex)}>
+                              <FontAwesomeIcon icon={faTrashAlt} />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {renderJvGlHeaderContextMenu()}
+
+              {false && (
               <table className="min-w-full border-collapse">
                 <thead className="global-tran-thead-div-ui">
                   <tr>
@@ -2471,7 +3538,7 @@ const handleTranDocNoSelection = async (data) => {
                             <button
                               type="button"
                               className="global-tran-td-button-add-ui"
-                              onClick={() => handleAddRowGL(index)}
+                              onClick={() => handleInsertGLRowClick(index)}
                             >
                               <FontAwesomeIcon icon={faPlus} />
                             </button>
@@ -2490,20 +3557,73 @@ const handleTranDocNoSelection = async (data) => {
                   ))}
                 </tbody>
               </table>
+              )}
             </div>
           </div>
 
           <div className="global-tran-tab-footer-main-div-ui">
             {/* Add Button */}
             <div className="global-tran-tab-footer-button-div-ui">
-              <button
-                onClick={handleAddRowGL}
-                className="global-tran-tab-footer-button-add-ui"
-                style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
-              >
-                <FontAwesomeIcon icon={faPlus} className="mr-2" />
-                Add
-              </button>
+              <div ref={singleUploadDropdownRef} className="relative inline-block">
+                {isRegularJV && showSingleUploadDropdown && !isFormDisabled && (
+                  <div className="absolute bottom-[110%] left-0 mb-3 z-[9999] w-[270px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur-sm dark:border-slate-700 dark:bg-slate-800">
+                    <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-700">
+                      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
+                        Add Account
+                      </div>
+                    </div>
+                    <div className="p-2">
+                      <button
+                        type="button"
+                        className="flex w-full items-center rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-700"
+                        onClick={() => { setShowSingleUploadDropdown(false); handleAddRowGL(); }}
+                      >
+                        <span className="mr-3 flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                          <FontAwesomeIcon icon={faFolderOpen} />
+                        </span>
+                        <span className="flex flex-col items-start">
+                          <span>Add Account</span>
+                          <span className="text-[11px] font-normal text-slate-400">Select account details</span>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="mt-1 flex w-full items-center rounded-xl px-3 py-2.5 text-sm font-medium text-blue-700 transition-all duration-150 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-slate-700"
+                        onClick={() => { setShowSingleUploadDropdown(false); handleDownloadSingleUploadTemplate(); }}
+                      >
+                        <span className="mr-3 flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-slate-700 dark:text-blue-300">
+                          <FontAwesomeIcon icon={faDownload} />
+                        </span>
+                        <span className="flex flex-col items-start">
+                          <span>Download Template</span>
+                          <span className="text-[11px] font-normal text-slate-400">Excel account columns</span>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="mt-1 flex w-full items-center rounded-xl px-3 py-2.5 text-sm font-medium text-blue-700 transition-all duration-150 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-slate-700"
+                        onClick={() => { setShowSingleUploadDropdown(false); uploadInputRef.current?.click(); }}
+                      >
+                        <span className="mr-3 flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-slate-700 dark:text-blue-300">
+                          <FontAwesomeIcon icon={faUpload} />
+                        </span>
+                        <span className="flex flex-col items-start">
+                          <span>Upload Transaction</span>
+                          <span className="text-[11px] font-normal text-slate-400">Import Excel file</span>
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <button
+                  onClick={() => isRegularJV ? setShowSingleUploadDropdown((previous) => !previous) : handleAddRowGL()}
+                  className="global-tran-tab-footer-button-add-ui"
+                  style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
+                >
+                  <FontAwesomeIcon icon={faPlus} className="mr-2" />
+                  Add
+                </button>
+              </div>
             </div>
 
             {/* Totals Section */}
@@ -2514,7 +3634,7 @@ const handleTranDocNoSelection = async (data) => {
                   htmlFor="TotalDebit"
                   className="global-tran-tab-footer-total-label-ui"
                 >
-                  Total Debit:
+                  Total Debit ({glCurrDefault}):
                 </label>
                 <label
                   htmlFor="TotalDebit"
@@ -2530,7 +3650,7 @@ const handleTranDocNoSelection = async (data) => {
                   htmlFor="TotalCredit"
                   className="global-tran-tab-footer-total-label-ui"
                 >
-                  Total Credit:
+                  Total Credit ({glCurrDefault}):
                 </label>
                 <label
                   htmlFor="TotalCredit"
@@ -2539,6 +3659,48 @@ const handleTranDocNoSelection = async (data) => {
                   {totalCredit}
                 </label>
               </div>
+
+              {glCurrDefault !== currCode && (
+                <>
+                  <div className="global-tran-tab-footer-total-div-ui">
+                    <label className="global-tran-tab-footer-total-label-ui">
+                      Total Debit ({currCode}):
+                    </label>
+                    <label className="global-tran-tab-footer-total-value-ui">
+                      {totalDebitFx1}
+                    </label>
+                  </div>
+                  <div className="global-tran-tab-footer-total-div-ui">
+                    <label className="global-tran-tab-footer-total-label-ui">
+                      Total Credit ({currCode}):
+                    </label>
+                    <label className="global-tran-tab-footer-total-value-ui">
+                      {totalCreditFx1}
+                    </label>
+                  </div>
+                </>
+              )}
+
+              {withCurr3 && (
+                <>
+                  <div className="global-tran-tab-footer-total-div-ui">
+                    <label className="global-tran-tab-footer-total-label-ui">
+                      Total Debit ({glCurrGlobal3}):
+                    </label>
+                    <label className="global-tran-tab-footer-total-value-ui">
+                      {totalDebitFx2}
+                    </label>
+                  </div>
+                  <div className="global-tran-tab-footer-total-div-ui">
+                    <label className="global-tran-tab-footer-total-label-ui">
+                      Total Credit ({glCurrGlobal3}):
+                    </label>
+                    <label className="global-tran-tab-footer-total-value-ui">
+                      {totalCreditFx2}
+                    </label>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -2671,6 +3833,19 @@ const handleTranDocNoSelection = async (data) => {
     onSelected={handleTranDocNoSelection}
     onClose={() => updateState({ showAllTranDocNo: false })}
   />
+        )}
+
+        {showARBalanceModal && (
+          <GlobalLookupModalv1
+            isOpen={showARBalanceModal}
+            data={globalLookupRow}
+            btnCaption={globalLookupMode === "advance" ? "Use Collection Receipt" : "Get Selected Invoice"}
+            title={globalLookupMode === "advance" ? "Select Open Collection Receipt" : "Open AR Balance"}
+            endpoint={globalLookupHeader}
+            singleSelect={globalLookupMode === "advance"}
+            onClose={globalLookupMode === "advance" ? handleCloseARAdvance : handleCloseARBalance}
+            onCancel={() => updateState({ showARBalanceModal: false })}
+          />
         )}
 
         {showSpinner && <LoadingSpinner />}

@@ -1,7 +1,6 @@
 import {
   useState,
   useEffect,
-  useLayoutEffect,
   useCallback,
   useRef,
   useMemo,
@@ -18,7 +17,10 @@ import {
   faChevronDown,
   faNoteSticky,
   faUndo,
-  faDatabase,
+  faListCheck,
+  faEraser,
+  faInbox,
+  faPause,
 } from "@fortawesome/free-solid-svg-icons";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 
@@ -46,7 +48,7 @@ import {
   useGetCurrentDay,
   useFormatToDate,
 } from "@/NAYSA Cloud/Global/dates";
-import { useSwalSuccessAlert,} from '@/NAYSA Cloud/Global/behavior';
+import { useSwalSuccessAlert,} from '@/NAYSA Cloud/Global/behavior.jsx';
 
 const ENDPOINT = "getARCWLCLInquiry";
 
@@ -66,50 +68,18 @@ function buildStatusDisplay(code) {
 }
 
 export default function CWTMonitoring() {
-  const { user, companyInfo, currentUserRow } = useAuth();
+  const { user, companyInfo, currentUserRow, getAllDropDown } = useAuth();
+  const isCwvatEnabled = String(companyInfo?.oeCWVat || "").toUpperCase() === "E";
   const [userPassword, setUserPassword] = useState(null);
-  // ----- Layout (fixed header bar) -----
-  const barRef = useRef(null);
-  const [headerH, setHeaderH] = useState(48);
-  const [barH, setBarH] = useState(48);
-
-  useLayoutEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const header =
-      document.querySelector("#appHeader") ||
-      document.querySelector(".global-app-topbar") ||
-      document.querySelector("header[role='banner']") ||
-      document.querySelector("header");
-
-    const remeasure = () => {
-      if (header) {
-        const rect = header.getBoundingClientRect();
-        setHeaderH(Math.max(0, Math.round(rect.height)));
-      }
-      if (barRef.current) {
-        const rect = barRef.current.getBoundingClientRect();
-        setBarH(Math.max(0, Math.round(rect.height)));
-      }
-    };
-
-    remeasure();
-    window.addEventListener("resize", remeasure);
-    const a = requestAnimationFrame(remeasure);
-    const b = requestAnimationFrame(remeasure);
-    return () => {
-      window.removeEventListener("resize", remeasure);
-      cancelAnimationFrame(a);
-      cancelAnimationFrame(b);
-    };
-  }, []);
-
+  const [selectedCwtKeys, setSelectedCwtKeys] = useState([]);
   // ----- App state -----
   const [state, setState] = useState({
     branchCode: "",
     branchName: "",
     custCode: "",
     custName: "",
+    accountClass: "CWTCL",
+    isAccountLocked: false,
 
     // Date range & status
     startDate: "",
@@ -146,6 +116,8 @@ export default function CWTMonitoring() {
     branchName,
     custCode,
     custName,
+    accountClass,
+    isAccountLocked,
     startDate,
     endDate,
     status,
@@ -170,6 +142,9 @@ export default function CWTMonitoring() {
   const [actionModal, setActionModal] = useState({
     open: false,
     row: null,
+    rows: [],
+    isBatch: false,
+    batchStatus: "",
     status: "R",
     originalStatus: "",
     receivedBy: "",
@@ -179,6 +154,71 @@ export default function CWTMonitoring() {
 
   // Table ref
   const tableRef = useRef(null);
+  const cwtTableContainerRef = useRef(null);
+
+  useEffect(() => {
+    const container = cwtTableContainerRef.current;
+    if (!container) return;
+
+    const applySelectionHighlight = () => {
+      container
+        .querySelectorAll("thead th:first-child, tbody td:first-child, tfoot td:first-child")
+        .forEach((actionCell) => {
+          actionCell.style.width = "96px";
+          actionCell.style.minWidth = "96px";
+          actionCell.style.maxWidth = "96px";
+        });
+
+      container.querySelectorAll("tbody tr").forEach((tableRow) => {
+        const rowText = tableRow.textContent || "";
+        const matchingRow = rows.find((row) =>
+          [row?.docCode, row?.docNo, row?.atcCode]
+            .filter(Boolean)
+            .every((value) => rowText.includes(String(value)))
+        );
+        const rowKey = matchingRow
+          ? `${matchingRow?.tran_id || ""}::${matchingRow?.atcCode || ""}`
+          : "";
+        const isSelected = selectedCwtKeys.includes(rowKey);
+
+        tableRow.querySelectorAll("td").forEach((cell) => {
+          cell.style.backgroundColor = isSelected ? "#bfdbfe" : "";
+        });
+
+        const actionContainer = tableRow.querySelector("td:first-child > div");
+        if (!actionContainer || !matchingRow) return;
+        actionContainer.style.gap = "6px";
+
+        let checkbox = actionContainer.querySelector("input[data-cwt-select]");
+        if (!checkbox) {
+          checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.dataset.cwtSelect = "true";
+          checkbox.title = "Select for batch update";
+          checkbox.className = "h-4 w-4 cursor-pointer accent-blue-600";
+          checkbox.addEventListener("click", (event) => event.stopPropagation());
+          checkbox.addEventListener("change", () => {
+            setSelectedCwtKeys((current) =>
+              current.includes(rowKey)
+                ? current.filter((key) => key !== rowKey)
+                : [...current, rowKey]
+            );
+          });
+          actionContainer.appendChild(checkbox);
+        }
+
+        checkbox.checked = isSelected;
+        checkbox.disabled = String(
+          matchingRow?.originalDocStatus || matchingRow?.docStatus || ""
+        ).trim().toUpperCase() === "R";
+      });
+    };
+
+    applySelectionHighlight();
+    const observer = new MutationObserver(applySelectionHighlight);
+    observer.observe(container, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [rows, selectedCwtKeys]);
 
   // Spinner smoothing
   useEffect(() => {
@@ -314,6 +354,8 @@ export default function CWTMonitoring() {
     updateState({
       custCode: "",
       custName: "",
+      accountClass: "CWTCL",
+      isAccountLocked: false,
       rows: [],
       baseAmount: "0.00",
       atcAmount: "0.00",
@@ -325,6 +367,7 @@ export default function CWTMonitoring() {
       startDate: firstDayStr,
       endDate: todayStr,
     });
+    setSelectedCwtKeys([]);
     tableRef.current?.clearAllState();
   }, []);
 
@@ -353,13 +396,14 @@ export default function CWTMonitoring() {
 
   // Find: load rows + decorate status
   const doFind = useCallback(async (stat=status) => {
-    updateState({ isLoading: true });
+    updateState({ isLoading: true, isAccountLocked: true });
     try {
       const resp = await fetchData(ENDPOINT, {
         json_data: {
           json_data: {
             branchCode,
             custCode,
+            accountClass: isCwvatEnabled ? accountClass : "CWTCL",
             startDate,
             endDate,
             status: stat,
@@ -384,6 +428,7 @@ export default function CWTMonitoring() {
       updateState({
         rows: decorated,
       });
+      setSelectedCwtKeys([]);
 
       computeTotals(decorated);
     } catch (e) {
@@ -391,7 +436,16 @@ export default function CWTMonitoring() {
     } finally {
       updateState({ isLoading: false });
     }
-  }, [branchCode, custCode, startDate, endDate, status, computeTotals]);
+  }, [branchCode, custCode, accountClass, isCwvatEnabled, startDate, endDate, status, computeTotals]);
+
+  const accountClassOptions = useMemo(
+    () =>
+      (getAllDropDown("CWT_ACCOUNT", "CWT") || []).map((item) => ({
+        value: item.DROPDOWN_CODE,
+        label: item.DROPDOWN_NAME,
+      })),
+    [getAllDropDown]
+  );
 
   // Initial defaults
   useEffect(() => {
@@ -523,15 +577,11 @@ const doLoadCWTReversal = useCallback(
     computeTotals(filtered);
 
 
-    if(!openModalAfter) {
-       await Swal.fire({
-      icon: "success",
-      title: "CWT loaded for reversal",
-      text: `${filtered.length} record(s) found and loaded based on the criteria.`,
-      timer: 2000,
-      showConfirmButton: false,
-    });
-
+    if (!openModalAfter) {
+      useSwalSuccessAlert(
+        "Success",
+        `CWT Loaded for Reversal - ${filtered.length} record(s) found.`
+      );
     }
    
 
@@ -729,6 +779,9 @@ const doGenerateCWTReversal = useCallback(
       setActionModal({
         open: true,
         row,
+        rows: [row],
+        isBatch: false,
+        batchStatus: "",
         status: initialStatus,
         originalStatus: rawStatus || "",
         receivedBy: row?.receivedBy || defaultUserName,
@@ -740,10 +793,34 @@ const doGenerateCWTReversal = useCallback(
   );
 
   const handleActionModalCancel = () => {
-    setActionModal((prev) => ({ ...prev, open: false, row: null }));
+    setActionModal((prev) => ({ ...prev, open: false, row: null, rows: [] }));
   };
 
-  
+  const openBatchStatusModal = useCallback((batchStatus) => {
+    const selectedSet = new Set(selectedCwtKeys);
+    const selectedRows = rows.filter((row) =>
+      selectedSet.has(`${row?.tran_id || ""}::${row?.atcCode || ""}`)
+    );
+
+    if (selectedRows.length === 0) {
+      Swal.fire("No Selection", "Select at least one CWT document.", "info");
+      return;
+    }
+
+    const defaultUserName = user?.userName || currentUserRow?.userName || "";
+    setActionModal({
+      open: true,
+      row: selectedRows[0],
+      rows: selectedRows,
+      isBatch: true,
+      batchStatus,
+      status: batchStatus,
+      originalStatus: "",
+      receivedBy: defaultUserName,
+      receivedDate: batchStatus === "H" ? "" : useGetCurrentDay(),
+      remarks: "",
+    });
+  }, [selectedCwtKeys, rows, user?.userName, currentUserRow?.userName]);
 
   const handlePost = async (selectedData, userPw) => {
    
@@ -767,19 +844,9 @@ const doGenerateCWTReversal = useCallback(
  
                 const { data: res } = await apiClient.post("generateJVARCWLCL", payload);        
                 if (res?.success) {
-
-                 Swal.fire({
-                      title: 'Success!',
-                      text: 'Generate JV Completed',
-                      icon: 'success',
-                      timer: 2000, 
-                      timerProgressBar: true,
-                      showConfirmButton: false, 
-                      didClose: () => {
-                         updateState({ status: "O" });
-                         doFind("O");
-                      }
-                  });             
+                  updateState({ status: "O" });
+                  await doFind("O");
+                  useSwalSuccessAlert("Success", "JV Successfully Completed");
                 }
                     
               updateState({ showReversalModal: false });
@@ -829,8 +896,9 @@ const doGenerateCWTReversal = useCallback(
       return;
     }
 
-    const { row, status: newStatus, receivedBy, receivedDate, remarks } =
+    const { row, rows: selectedRows, isBatch, status, batchStatus, receivedBy, receivedDate, remarks } =
       actionModal;
+    const newStatus = isBatch ? batchStatus : status;
 
     // Remarks mandatory when status = 'H'
     if (newStatus === "H" && !String(remarks || "").trim()) {
@@ -847,7 +915,14 @@ const doGenerateCWTReversal = useCallback(
 
       const payload = {
         json_data: {
-          tranId: row.tran_id, // <-- make sure this matches your key
+          tranId: row.tran_id,
+          atcCode: row.atcCode,
+          dt1: isBatch
+            ? selectedRows.map((item) => ({
+                tranId: item.tran_id,
+                atcCode: item.atcCode,
+              }))
+            : undefined,
           status: newStatus,
           receivedDate,
           receivedBy,
@@ -855,9 +930,10 @@ const doGenerateCWTReversal = useCallback(
         },
       };
 
-      console.log("updateARCWLCL payload:", JSON.stringify(payload, null, 2));
-
-      const { data: res } = await apiClient.post("updateARCWLCL", payload);
+      const { data: res } = await apiClient.post(
+        isBatch ? "updateBatchARCWLCL" : "updateARCWLCL",
+        payload
+      );
 
       if (res?.status !== "success") {
         await Swal.fire(
@@ -868,17 +944,13 @@ const doGenerateCWTReversal = useCallback(
         return;
       }
 
-      // 🔹 Reload table (same as clicking Find)
-      await doFind();
+      updateState({ status: newStatus });
+      await doFind(newStatus);
 
-      // 🔹 Toaster
-      await Swal.fire({
-        icon: "success",
-        title: "Receiving completed",
-        text: "Document status has been updated successfully.",
-        timer: 1800,
-        showConfirmButton: false,
-      });
+      useSwalSuccessAlert(
+        "Success",
+        isBatch ? `${selectedRows.length} CWT Documents Updated` : "Receiving Completed"
+      )
 
       handleActionModalCancel();
     } catch (error) {
@@ -900,29 +972,19 @@ const doGenerateCWTReversal = useCallback(
     actionModal.status === "H" && !String(actionModal.remarks || "").trim();
 
   return (
-    <div className="global-tran-main-div-ui">
+    <div className="global-ref-main-div-ui">
       {showSpinner && <LoadingSpinner />}
 
-      {/* spacer below fixed bar */}
-      <div style={{ height: barH }} />
-
-      {/* Fixed header bar */}
-      <div
-        ref={barRef}
-        className="fixed left-0 right-0 z-40 bg-white/95 backdrop-blur supports-backdrop-blur:bg-white/80 border-b shadow-sm"
-        style={{ top: headerH }}
-      >
-        <div className="flex justify-between items-center px-6 py-2">
-          {/* Single "tab" label */}
-          <div className="flex flex-row gap-2">
-            <span className="flex items-center px-3 py-2 rounded-md text-xs md:text-sm font-bold bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
-              <FontAwesomeIcon icon={faDatabase} className="w-4 h-4 mr-2" />
-              Creditable Witholding Tax Monitoring
-            </span>
+      <div className="global-ref-header-ui">
+        <div className="w-full flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="w-full md:w-auto flex md:justify-start">
+            <h1 className="global-ref-headertext-ui w-full md:w-auto truncate text-center md:text-left">
+              Creditable Withholding Tax Monitoring
+            </h1>
           </div>
 
-          {/* Inline ActionBar */}
-          <div className="flex flex-wrap items-center justify-end gap-1 lg:gap-2">
+          <div className="w-full md:w-auto flex md:justify-end">
+            <div className="flex flex-wrap items-center justify-center md:justify-end gap-1 lg:gap-2">
             <button
               onClick={() => onAction("find")}
               className="px-3 py-2 text-xs font-medium rounded-md text-white bg-blue-600 hover:opacity-90"
@@ -967,8 +1029,13 @@ const doGenerateCWTReversal = useCallback(
                 }
                 className="px-3 py-2 text-xs font-medium rounded-md text-white bg-blue-600 hover:opacity-90 flex items-center"
               >
-                <FontAwesomeIcon icon={faFileLines} />
+                <FontAwesomeIcon icon={faListCheck} />
                 <span className="hidden lg:inline ml-2">Action</span>
+                {selectedCwtKeys.length > 0 && (
+                  <span className="ml-2 rounded-full bg-white px-1.5 text-[10px] font-bold text-blue-700">
+                    {selectedCwtKeys.length}
+                  </span>
+                )}
                 <FontAwesomeIcon
                   icon={faChevronDown}
                   className="ml-2 text-[10px]"
@@ -976,10 +1043,66 @@ const doGenerateCWTReversal = useCallback(
               </button>
 
               {showGenerateMenu && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-gray-700 dark:ring-gray-600 z-50">
+                <div className="absolute right-0 mt-2 w-52 overflow-hidden bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-gray-700 dark:ring-gray-600 z-50">
+                  <div className="px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400">
+                    Batch Status
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedCwtKeys(
+                        rows
+                          .filter((row) => String(row?.originalDocStatus || row?.docStatus || "").toUpperCase() !== "R")
+                          .map((row) => `${row?.tran_id || ""}::${row?.atcCode || ""}`)
+                      );
+                      updateState({ showGenerateMenu: false });
+                    }}
+                    disabled={!rows.length}
+                    className="w-full px-2.5 py-1.5 text-xs text-left hover:bg-gray-100 disabled:opacity-40 dark:text-gray-200 dark:hover:bg-gray-600 flex items-center gap-2"
+                  >
+                    <FontAwesomeIcon icon={faListCheck} className="w-3.5 text-blue-600" />
+                    <span>Select All</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedCwtKeys([]);
+                      updateState({ showGenerateMenu: false });
+                    }}
+                    disabled={!selectedCwtKeys.length}
+                    className="w-full px-2.5 py-1.5 text-xs text-left hover:bg-gray-100 disabled:opacity-40 dark:text-gray-200 dark:hover:bg-gray-600 flex items-center gap-2"
+                  >
+                    <FontAwesomeIcon icon={faEraser} className="w-3.5 text-slate-500" />
+                    <span>Clear Selection</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      updateState({ showGenerateMenu: false });
+                      openBatchStatusModal("R");
+                    }}
+                    disabled={!selectedCwtKeys.length}
+                    className="w-full px-2.5 py-1.5 text-xs text-left hover:bg-blue-50 disabled:opacity-40 dark:text-gray-200 dark:hover:bg-gray-600 flex items-center gap-2"
+                  >
+                    <FontAwesomeIcon icon={faInbox} className="w-3.5 text-blue-600" />
+                    <span>Receive Selected</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      updateState({ showGenerateMenu: false });
+                      openBatchStatusModal("H");
+                    }}
+                    disabled={!selectedCwtKeys.length}
+                    className="w-full px-2.5 py-1.5 text-xs text-left hover:bg-amber-50 disabled:opacity-40 dark:text-gray-200 dark:hover:bg-gray-600 flex items-center gap-2"
+                  >
+                    <FontAwesomeIcon icon={faPause} className="w-3.5 text-amber-600" />
+                    <span>Hold Selected</span>
+                  </button>
+
+                  <div className="my-1 border-t border-slate-200 dark:border-gray-600" />
+                  <div className="px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400">
+                    Reversal
+                  </div>
                   <button
                     onClick={() => onAction("load-cwt-reversal")}
-                    className="w-full px-3 py-2 text-sm text-left hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-600 flex items-center gap-2"
+                    className="w-full px-2.5 py-1.5 text-xs text-left hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-600 flex items-center gap-2"
                   >
                     <FontAwesomeIcon
                       icon={faNoteSticky}
@@ -989,7 +1112,7 @@ const doGenerateCWTReversal = useCallback(
                   </button>
                   <button
                     onClick={() => onAction("gen-cwt-reversal")}
-                    className="w-full px-3 py-2 text-sm text-left hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-600 flex items-center gap-2"
+                    className="w-full px-2.5 py-1.5 text-xs text-left hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-600 flex items-center gap-2"
                   >
                     <FontAwesomeIcon
                       icon={faNoteSticky}
@@ -1022,14 +1145,16 @@ const doGenerateCWTReversal = useCallback(
                 </div>
               )}
             </div>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Filters + JV Header */}
-      <div id="summary" className="global-tran-tab-div-ui">
-        <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-          <div className="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-gray-200">
+      <div className="mt-32 sm:mt-24 px-1">
+        <div id="summary" className="global-tran-tab-div-ui">
+          <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
+            <div className="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-gray-200">
             {/* Customer Details */}
             <section className="p-5">
               <h3 className="flex items-center gap-2 text-gray-800 font-semibold mb-4">
@@ -1075,6 +1200,19 @@ const doGenerateCWTReversal = useCallback(
                   readOnly
                   disabled
                 />
+
+                {isCwvatEnabled && (
+                  <FieldRenderer
+                    type="select"
+                    id="accountClass"
+                    name="accountClass"
+                    label="Account"
+                    value={accountClass}
+                    onChange={(value) => updateState({ accountClass: value })}
+                    disabled={isLoading || isAccountLocked}
+                    options={accountClassOptions}
+                  />
+                )}
               </div>
             </section>
 
@@ -1113,7 +1251,7 @@ const doGenerateCWTReversal = useCallback(
                   type="select"
                   id="status"
                   name="status"
-                  label="Check Status"
+                  label="CWT Status"
                   value={status}
                   onChange={(value) => updateState({ status: value })}
                   disabled={isLoading}
@@ -1149,21 +1287,21 @@ const doGenerateCWTReversal = useCallback(
 
                 <FieldRenderer
                   type="date"
-                  id="jvDate"
-                  name="jvDate"
-                  label="JV Date"
-                  value={jvDate}
-                  onChange={(value) => updateState({ jvDate: value })}
-                  disabled={isLoading}
-                />
-
-                <FieldRenderer
-                  type="date"
                   id="recvFromDate"
                   name="recvFromDate"
                   label="Received from Date"
                   value={recvFromDate}
                   onChange={(value) => updateState({ recvFromDate: value })}
+                  disabled={isLoading}
+                />
+
+                <FieldRenderer
+                  type="date"
+                  id="jvDate"
+                  name="jvDate"
+                  label="JV Date"
+                  value={jvDate}
+                  onChange={(value) => updateState({ jvDate: value })}
                   disabled={isLoading}
                 />
 
@@ -1178,21 +1316,25 @@ const doGenerateCWTReversal = useCallback(
                 />
               </div>
             </section>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Detailed Table ONLY */}
       <div className="global-tran-tab-div-ui">
-        {/* <div className="global-tran-tab-nav-ui"> */}
-          {/* <div className="flex flex-row sm:flex-row"> */}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button className="global-tran-tab-padding-ui global-tran-tab-text_active-ui">
               Detailed
             </button>
-          {/* </div> */}
-        {/* </div> */}
+            <span className="text-xs text-slate-500">
+              Selected: {selectedCwtKeys.length}
+            </span>
+          </div>
+        </div>
 
-      <div className="global-tran-table-main-div-ui mt-4">
+      <div ref={cwtTableContainerRef} className="global-tran-table-main-div-ui mt-4">
           <div className="max-h-[600px] overflow-y-auto relative">
             <SearchGlobalReportTable
               docType={`CWT Monitoring`}
@@ -1200,12 +1342,13 @@ const doGenerateCWTReversal = useCallback(
               columns={colsWithActions}
               data={rows}
               itemsPerPage={50}
-              rightActionLabel="View"
+              rightActionLabel="Actions"
               onRowAction={(row) => {
                 const url = `${window.location.origin}${row.pathUrl}`;
                 window.open(url, "_blank", "noopener,noreferrer");
               }}
               onRowActionsClick={handleRowActionsClick}
+              onRowDoubleClick={handleRowActionsClick}
             />
           </div>
         </div>
@@ -1231,31 +1374,36 @@ const doGenerateCWTReversal = useCallback(
 
       {/* Actions Modal (for single row status update) */}
       {actionModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-5">
+          <div className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-white shadow-lg sm:max-h-[calc(100dvh-2.5rem)]">
+            <div className="overflow-y-auto p-3 sm:p-4">
             {/* Header with document info */}
             <div className="mb-3 border-b pb-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                <div className="flex min-w-0 items-start gap-2 sm:items-center">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100">
                     <FontAwesomeIcon
                       icon={faFileLines}
                       className="text-blue-600"
                     />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs font-semibold text-gray-800">
-                      Update CWT Status
+                      {isLocked ? "View CWT Status" : "Update CWT Status"}
                     </p>
-                    <p className="text-[11px] text-gray-500">
-                      Apply status and remarks for this document.
+                    <p className="text-[10px] leading-4 text-gray-500 sm:text-[11px]">
+                      {isLocked
+                        ? "View the receiving status and information for this document."
+                        : actionModal.isBatch
+                        ? `Apply status and remarks to ${actionModal.rows.length} selected documents.`
+                        : "Apply status and remarks for this document."}
                     </p>
                   </div>
                 </div>
 
                 {/* Status pill */}
-                <span
-                  className={`px-2 py-1 rounded-full text-[10px] font-semibold ${
+                {!actionModal.isBatch && <span
+                  className={`w-fit shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold ${
                     actionModal.originalStatus === "R"
                       ? "bg-blue-100 text-blue-700"
                       : actionModal.originalStatus === "H"
@@ -1268,36 +1416,72 @@ const doGenerateCWTReversal = useCallback(
                     : actionModal.originalStatus === "H"
                     ? "🔴 Hold"
                     : "🟢 Open"}
-                </span>
+                </span>}
               </div>
 
-              {/* Doc info row */}
-              <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
-                <div>
-                  <div className="text-[10px] uppercase tracking-wide text-gray-400">
-                    Branch
+              {!actionModal.isBatch && (
+              <div className="mt-3 grid grid-cols-1 gap-2 text-[11px] sm:mt-4 sm:grid-cols-2 sm:gap-3 md:grid-cols-3">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 sm:p-3">
+                  <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+                    Customer Information
                   </div>
-                  <div className="font-mono text-gray-800">
-                    {selectedRow.branchCode || "—"}
+                  <div className="text-gray-500">Customer Code</div>
+                  <div className="text-xs font-normal leading-5 text-gray-800">
+                    {selectedRow.custCode || "—"}
                   </div>
-                </div>
-                <div>
-                  <div className="text-[10px] uppercase tracking-wide text-gray-400">
-                    Doc Code
-                  </div>
-                  <div className="font-mono text-gray-800">
-                    {selectedRow.docCode || "—"}
+                  <div className="mt-2 text-gray-500">Customer Name</div>
+                  <div className="text-xs font-normal leading-5 text-gray-800 break-words">
+                    {selectedRow.custName || "—"}
                   </div>
                 </div>
-                <div>
-                  <div className="text-[10px] uppercase tracking-wide text-gray-400">
-                    Document No.
+
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 sm:p-3">
+                  <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+                    Document Information
                   </div>
-                  <div className="font-mono text-gray-800">
-                    {selectedRow.docNo || "—"}
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                    <div>
+                      <div className="text-gray-500">Document</div>
+                      <div className="text-xs font-normal leading-5 text-gray-800">
+                        {selectedRow.docCode || "—"} {selectedRow.docNo || ""}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500">Date</div>
+                      <div className="text-xs font-normal leading-5 text-gray-800">
+                        {selectedRow.docDate ? useFormatToDate(selectedRow.docDate) : "—"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500">Branch</div>
+                      <div className="text-xs font-normal leading-5 text-gray-800">
+                        {selectedRow.branchCode || "—"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500">ATC</div>
+                      <div className="text-xs font-normal leading-5 text-gray-800">
+                        {selectedRow.atcCode || "—"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-2.5 sm:col-span-2 sm:p-3 md:col-span-1">
+                  <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+                    Amount
+                  </div>
+                  <div className="text-gray-500">Base Amount</div>
+                  <div className="text-right text-xs font-normal leading-5 text-gray-800">
+                    {formatNumber(selectedRow.baseAmount ?? selectedRow.baseAmt ?? 0)}
+                  </div>
+                  <div className="mt-2 text-gray-500">CWT Amount</div>
+                  <div className="text-right text-xs font-normal leading-5 text-blue-700">
+                    {formatNumber(selectedRow.atcAmount ?? selectedRow.atcAmt ?? 0)}
                   </div>
                 </div>
               </div>
+              )}
             </div>
 
             {/* Body fields */}
@@ -1318,7 +1502,7 @@ const doGenerateCWTReversal = useCallback(
                           : prev.receivedDate || useGetCurrentDay(),
                     }));
                   }}
-                  disabled={isLocked}
+                  disabled={isLocked || actionModal.isBatch}
                   className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-500"
                 >
                   <option value="R">R - Received</option>
@@ -1342,6 +1526,7 @@ const doGenerateCWTReversal = useCallback(
                   }
                   className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-500"
                   readOnly={isLocked}
+                  disabled={isLocked}
                 />
               </div>
 
@@ -1360,6 +1545,7 @@ const doGenerateCWTReversal = useCallback(
                     }))
                   }
                   readOnly={isLocked}
+                  disabled={isLocked}
                   className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -1382,6 +1568,7 @@ const doGenerateCWTReversal = useCallback(
                     }))
                   }
                   readOnly={isLocked}
+                  disabled={isLocked}
                   className={`w-full border rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-500 resize-y ${
                     isRemarksRequired ? "border-red-500" : ""
                   }`}
@@ -1395,23 +1582,25 @@ const doGenerateCWTReversal = useCallback(
               </div>
             </div>
 
-            <div className="mt-4 flex justify-end gap-2">
+            </div>
+
+            <div className="flex shrink-0 justify-end gap-2 border-t bg-white px-3 py-3 sm:mt-4 sm:border-t-0 sm:px-4 sm:pb-4 sm:pt-0">
               <button
                 type="button"
                 onClick={handleActionModalCancel}
-                className="px-3 py-1.5 text-xs rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
+                className="min-w-20 rounded border border-gray-300 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 sm:min-w-0 sm:py-1.5"
                 disabled={isLoading}
               >
-                Cancel
+                {isLocked ? "Close" : "Cancel"}
               </button>
-              <button
+              {!isLocked && <button
                 type="button"
                 onClick={handleActionModalApply}
-                className="px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
-                disabled={isLoading || isLocked || isRemarksRequired}
+                className="min-w-20 rounded bg-blue-600 px-3 py-2 text-xs text-white hover:bg-blue-700 disabled:opacity-60 sm:min-w-0 sm:py-1.5"
+                disabled={isLoading || isRemarksRequired}
               >
                 Apply
-              </button>
+              </button>}
             </div>
           </div>
         </div>

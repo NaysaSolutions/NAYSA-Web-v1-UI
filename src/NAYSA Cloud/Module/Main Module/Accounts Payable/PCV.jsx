@@ -699,6 +699,7 @@ useEffect(() => {
       vendName:"",
       vendCode:"",
       employee:"",
+      selectedPCVType: "REG",
       documentNo: "",
       documentID: "",
       detailRows: [],
@@ -1212,13 +1213,7 @@ const addLookupGroupId = (row, index) => ({
 const handleOpenReferenceRR = async () => {
   if (isFormDisabled) return;
 
-  const lookupVendCode = String(vendCode || "").trim();
   const lookupBranchCode = String(branchCode || "").trim();
-
-  if (!lookupVendCode) {
-    useSwalErrorAlert("Open RR", "Please select a Payee first.");
-    return;
-  }
 
   try {
     updateState({ isLoading: true, showSpinner: true });
@@ -1226,6 +1221,7 @@ const handleOpenReferenceRR = async () => {
     const lookupPayload = {
       branchCode: lookupBranchCode,
       vendCode: "",
+      source: "PCV",
     };
 
     const requestAttempts = [
@@ -1252,7 +1248,10 @@ const handleOpenReferenceRR = async () => {
     }
 
     if (rawRows.length === 0) {
-      useSwalErrorAlert("Open RR", "No open RR found for this payee.");
+      useSwalErrorAlert(
+        "Open RR",
+        "No open RR found with PO payment terms starting with PC.",
+      );
       return;
     }
 
@@ -2305,6 +2304,19 @@ const handleAtcNameDoubleClick = (index) => {
 const renderPcvDetailCell = (columnKey, row, index) => {
   const columnWidth = getPcvDetailFallbackWidth(columnKey);
   const style = getPcvDetailCellStyle(columnKey, columnWidth);
+  const isReceivingDetail = String(selectedPCVType || "").toUpperCase() === "RR";
+  const receivingEditableFields = [
+    "siNo",
+    "siDate",
+    "drAcct",
+    "rcCode",
+    "address1",
+    "address2",
+    "address3",
+    "tin",
+  ];
+  const isReceivingFieldEditable = (field) =>
+    !isReceivingDetail || receivingEditableFields.includes(field);
   const detailModalHandlers = {
     vendCode: () => updateState({ selectedRowIndex: index, vendModalOpen: true, accountModalSource: "vendCodeDetail" }),
     drAcct: () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "drAcct" }),
@@ -2320,7 +2332,11 @@ const renderPcvDetailCell = (columnKey, row, index) => {
       id={`${field}-${index}`}
       className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()}
       value={row[field] || ""}
-      disabled={options.disabled ?? isFormDisabled}
+      disabled={
+        isFormDisabled ||
+        !isReceivingFieldEditable(field) ||
+        Boolean(options.disabled)
+      }
       readOnly={options.readOnly}
       maxLength={options.maxLength}
       onChange={(e) => handleDetailChange(index, field, e.target.value)}
@@ -2352,7 +2368,7 @@ const renderPcvDetailCell = (columnKey, row, index) => {
       maxLength={options.maxLength}
       className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()}
       value={row[field] || ""}
-      disabled={isFormDisabled}
+      disabled={isFormDisabled || !isReceivingFieldEditable(field)}
       readOnly={options.readOnly}
       onChange={(e) => handleDetailChange(index, field, e.target.value, false, false)}
       onBlur={(e) => {
@@ -2382,7 +2398,7 @@ const renderPcvDetailCell = (columnKey, row, index) => {
       <td key={columnKey} className="global-tran-td-ui relative" style={style}>
         <div className="flex items-center">
           {detailLookupInput(columnKey, { className: "pr-6 cursor-pointer", maxLength: pcvFieldLengths.vendCode })}
-          {!isFormDisabled && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={detailModalHandlers[columnKey]} />}
+          {!isFormDisabled && isReceivingFieldEditable(columnKey) && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={detailModalHandlers[columnKey]} />}
         </div>
       </td>
     ),
@@ -2390,19 +2406,19 @@ const renderPcvDetailCell = (columnKey, row, index) => {
     siNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("siNo", { maxLength: pcvFieldLengths.siNo, onCommit: (value) => handleInvoiceNoCommit(index, value) })}</td>,
     siDate: () => (
       <td key={columnKey} className="global-tran-td-ui" style={style}>
-        <DateFormatInput id={`siDate${index}`} value={row.siDate || ""} disabled={isFormDisabled} className="w-full global-tran-td-inputclass-ui text-center pr-7" updateState={(updates) => { if (updates[`siDate${index}`] !== undefined) handleDetailChange(index, "siDate", updates[`siDate${index}`], false); }} onKeyDownCustom={(e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); focusNextPcvDetailRowInput(index, "siDate", { rows: detailRows, zeroClearFields: pcvDetailEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChange(nextIndex, nextField, value, false) }); }} />
+        <DateFormatInput id={`siDate${index}`} value={row.siDate || ""} disabled={isFormDisabled || !isReceivingFieldEditable("siDate")} className="w-full global-tran-td-inputclass-ui text-center pr-7" updateState={(updates) => { if (updates[`siDate${index}`] !== undefined) handleDetailChange(index, "siDate", updates[`siDate${index}`], false); }} onKeyDownCustom={(e) => { if (e.key !== "Enter" || isFormDisabled) return; e.preventDefault(); focusNextPcvDetailRowInput(index, "siDate", { rows: detailRows, zeroClearFields: pcvDetailEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChange(nextIndex, nextField, value, false) }); }} />
       </td>
     ),
     origAmount: () => (
       <td key={columnKey} className="global-tran-td-ui" style={style}>
-        <input type="text" id={`${columnKey}-${index}`} className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0" value={row.origAmount || ""} disabled={isFormDisabled} onChange={(e) => { const sanitizedValue = e.target.value.replace(/[^0-9.]/g, ""); if (/^\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") handleDetailChange(index, "origAmount", sanitizedValue, false); }} onFocus={(e) => clearPcvDetailZeroOnFocus(e, { isEditable: !isFormDisabled, onClear: (value) => handleDetailChange(index, "origAmount", value, false) })} onBlur={async (e) => { const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, "origAmount", num, true); setFocusedCell(null); }} onKeyDown={async (e) => { if (e.key === "Enter") { e.preventDefault(); const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, "origAmount", num, true); focusNextPcvDetailRowInput(index, "origAmount", { rows: detailRows, zeroClearFields: pcvDetailEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChange(nextIndex, nextField, value, false) }); } }} />
+        <input type="text" id={`${columnKey}-${index}`} className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0" value={row.origAmount || ""} disabled={isFormDisabled || isReceivingDetail} onChange={(e) => { const sanitizedValue = e.target.value.replace(/[^0-9.]/g, ""); if (/^\d*\.?\d{0,2}$/.test(sanitizedValue) || sanitizedValue === "") handleDetailChange(index, "origAmount", sanitizedValue, false); }} onFocus={(e) => clearPcvDetailZeroOnFocus(e, { isEditable: !isFormDisabled && !isReceivingDetail, onClear: (value) => handleDetailChange(index, "origAmount", value, false) })} onBlur={async (e) => { const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, "origAmount", num, true); setFocusedCell(null); }} onKeyDown={async (e) => { if (e.key === "Enter" && !isReceivingDetail) { e.preventDefault(); const num = parseFormattedNumber(e.target.value); if (!isNaN(num)) await handleDetailChange(index, "origAmount", num, true); focusNextPcvDetailRowInput(index, "origAmount", { rows: detailRows, zeroClearFields: pcvDetailEnterNextRowZeroClearFields, parseValue: parseFormattedNumber, onClearNextValue: (nextIndex, nextField, value) => handleDetailChange(nextIndex, nextField, value, false) }); } }} />
       </td>
     ),
     drAcct: () => (
       <td key={columnKey} className="global-tran-td-ui relative" style={style}>
         <div className="flex items-center">
           {detailLookupInput(columnKey, { className: "text-center pr-6 cursor-pointer", maxLength: pcvFieldLengths.debitAcct, validateOnCommit: true })}
-          {!isFormDisabled && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={detailModalHandlers[columnKey]} />}
+          {!isFormDisabled && isReceivingFieldEditable(columnKey) && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={detailModalHandlers[columnKey]} />}
         </div>
       </td>
     ),
@@ -2410,7 +2426,7 @@ const renderPcvDetailCell = (columnKey, row, index) => {
       <td key={columnKey} className="global-tran-td-ui relative" style={style}>
         <div className="flex items-center">
           {detailLookupInput(columnKey, { className: "text-center pr-6 cursor-pointer", maxLength: pcvFieldLengths.rcCode, validateOnCommit: true })}
-          {!isFormDisabled && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={detailModalHandlers[columnKey]} />}
+          {!isFormDisabled && isReceivingFieldEditable(columnKey) && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={detailModalHandlers[columnKey]} />}
         </div>
       </td>
     ),
@@ -2419,22 +2435,22 @@ const renderPcvDetailCell = (columnKey, row, index) => {
       <td key={columnKey} className="global-tran-td-ui relative" style={style}>
         <div className="flex items-center">
           <input type="text" className="w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer" value={row[columnKey] || ""} readOnly />
-          {!isFormDisabled && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={detailModalHandlers[columnKey]} />}
+          {!isFormDisabled && !isReceivingDetail && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={detailModalHandlers[columnKey]} />}
         </div>
       </td>
     ),
-    vatName: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full global-tran-td-inputclass-ui" value={row.vatName || ""} readOnly onDoubleClick={!isFormDisabled ? () => handleVatNameDoubleClick(index) : undefined} /></td>,
+    vatName: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full global-tran-td-inputclass-ui" value={row.vatName || ""} readOnly onDoubleClick={!isFormDisabled && !isReceivingDetail ? () => handleVatNameDoubleClick(index) : undefined} /></td>,
     vatAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0" value={formatNumber(parseFormattedNumber(row.vatAmount)) || ""} readOnly /></td>,
     atcCode: () => (
       <td key={columnKey} className="global-tran-td-ui relative" style={style}>
         <div className="flex items-center">
           <input type="text" className="w-full global-tran-td-inputclass-ui text-center pr-6 cursor-pointer" value={row[columnKey] || ""} readOnly />
-          {!isFormDisabled && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={detailModalHandlers[columnKey]} />}
+          {!isFormDisabled && !isReceivingDetail && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={detailModalHandlers[columnKey]} />}
         </div>
       </td>
     ),
-    atcName: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full global-tran-td-inputclass-ui" value={row.atcName || ""} readOnly onDoubleClick={!isFormDisabled ? () => handleAtcNameDoubleClick(index) : undefined} /></td>,
-    atcAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0" value={formatNumber(parseFormattedNumber(row.atcAmount)) || ""} onChange={(e) => handleDetailChange(index, "atcAmount", e.target.value)} /></td>,
+    atcName: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full global-tran-td-inputclass-ui" value={row.atcName || ""} readOnly onDoubleClick={!isFormDisabled && !isReceivingDetail ? () => handleAtcNameDoubleClick(index) : undefined} /></td>,
+    atcAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0" value={formatNumber(parseFormattedNumber(row.atcAmount)) || ""} disabled={isFormDisabled || isReceivingDetail} onChange={(e) => handleDetailChange(index, "atcAmount", e.target.value)} /></td>,
     netAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className="w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0" value={formatNumber(parseFormattedNumber(row.netAmount)) || ""} readOnly /></td>,
     address1: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("address1", { className: "text-left", maxLength: pcvFieldLengths.address1 })}</td>,
     address2: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("address2", { className: "text-left", maxLength: pcvFieldLengths.address2 })}</td>,
@@ -2943,7 +2959,7 @@ const handleCloseBranchModal = (selectedBranch) => {
         label="PCV Type"
         type="select"
         value={selectedPCVType}
-        disabled={isFormDisabled}
+        disabled={isFormDisabled || detailRows.length > 0}
         onChange={(val) => updateState({ selectedPCVType: val })}
         options={pcvTypes.map((t) => ({
                       label: t.DROPDOWN_NAME,
@@ -3107,13 +3123,15 @@ const handleCloseBranchModal = (selectedBranch) => {
               style={transactionActionsCellStyle}
             >
               <div className="flex items-center justify-center gap-1">
-                <button
-                  type="button"
-                  className="global-tran-td-button-add-ui"
-                  onClick={() => handleInsertDetailRowClick(originalIndex)}
-                >
-                  <FontAwesomeIcon icon={faPlus} />
-                </button>
+                {String(selectedPCVType || "").toUpperCase() !== "RR" && (
+                  <button
+                    type="button"
+                    className="global-tran-td-button-add-ui"
+                    onClick={() => handleInsertDetailRowClick(originalIndex)}
+                  >
+                    <FontAwesomeIcon icon={faPlus} />
+                  </button>
+                )}
 
                 <button
                   type="button"

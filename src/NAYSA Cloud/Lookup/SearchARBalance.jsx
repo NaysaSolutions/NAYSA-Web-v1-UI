@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTimes, faSort, faSortUp, faSortDown, faSpinner } from '@fortawesome/free-solid-svg-icons';
-import { formatNumber } from '../Global/behavior';
+import { formatNumber } from '../Global/behavior.jsx';
 
 
 
