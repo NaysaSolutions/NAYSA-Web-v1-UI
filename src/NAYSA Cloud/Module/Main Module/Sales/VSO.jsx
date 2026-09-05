@@ -1432,8 +1432,9 @@ const VSO = () => {
                     <div className="text-xs font-semibold text-slate-700 dark:text-slate-200">Vehicle Selection</div>
                     <button
                       type="button"
+                      disabled={["CLOSED", "CANCELLED"].includes(displayStatus)}
                       onClick={() => updateState({ showVehicleAvailability: true })}
-                      className="inline-flex min-w-[36px] items-center justify-center rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white transition-all duration-200 hover:bg-blue-700 dark:bg-blue-800 dark:hover:bg-blue-700"
+                      className="inline-flex min-w-[36px] items-center justify-center rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white transition-all duration-200 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-800 dark:hover:bg-blue-700"
                     >
                       <FontAwesomeIcon icon={faMagnifyingGlass} />
                       <span className="ml-2">Check Availability</span>
