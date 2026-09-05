@@ -5,6 +5,7 @@ import {
   faCalculator,
   faEllipsis,
   faIdCard,
+  faMagnifyingGlass,
   faMoneyBill,
   faPlus,
   faReceipt,
@@ -26,6 +27,7 @@ import AttachDocumentModal from "../../../Lookup/SearchAttachment.jsx";
 import AllTranHistory from "../../../Lookup/SearchGlobalTranHistory.jsx";
 import AllTranDocNo from "../../../Lookup/SearchDocNo.jsx";
 import GlobalLookupModalv1 from "../../../Lookup/SearchGlobalLookupv1.jsx";
+import SearchVEAvailabilityVSO from "../../../Lookup/SearchVEAvailabilityVSO.jsx";
 
 import Header from "@/NAYSA Cloud/Components/Header";
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
@@ -527,6 +529,7 @@ const VSO = () => {
     showCancelModal: false,
     showAttachModal: false,
     showAllTranDocNo: false,
+    showVehicleAvailability: false,
   });
 
   const updateState = useCallback((patch) => {
@@ -772,7 +775,7 @@ const VSO = () => {
       accessories1Rows: [], accessories2Rows: [], incidentalRows: [], discountRows: [], issueRows: [],
       branchModalOpen: false, customerModalOpen: false, payeeLookupOpen: false, warehouseLookupOpen: false, billTermLookupOpen: false, salesRepLookupOpen: false, salesRepLookupTarget: "rep",
       inventoryLookupOpen: false, inventoryLookupRows: [], inventoryLookupColumns: [],
-      showCancelModal: false, showAttachModal: false, showAllTranDocNo: false,
+      showCancelModal: false, showAttachModal: false, showAllTranDocNo: false, showVehicleAvailability: false,
       isFetchDisabled: false,
       isDocNoDisabled: false,
     }));
@@ -1231,6 +1234,44 @@ const VSO = () => {
     }
   }, [isFormDisabled, recalcSales, state.branchCode, state.csNo, state.documentID, updateState]);
 
+  const handleAvailableVehicleSelection = useCallback((payload) => {
+    const vehicle = Array.isArray(payload?.records) ? payload.records[0] : payload?.records || payload;
+    if (!vehicle) {
+      updateState({ showVehicleAvailability: false });
+      return;
+    }
+
+    if (String(vehicle.branchCode || "").trim().toUpperCase() !== String(state.branchCode || "").trim().toUpperCase()) {
+      useSwalErrorAlert("Vehicle Inventory", "Only vehicles from the current VSO branch can be selected.");
+      return;
+    }
+
+    if (String(vehicle.availabilityStatus || "").trim().toUpperCase() !== "AVAILABLE") {
+      useSwalErrorAlert("Vehicle Inventory", `This vehicle is reserved under VSO ${vehicle.reservedVsoNo || ""} and cannot be selected.`);
+      return;
+    }
+
+    updateState({
+      showVehicleAvailability: false,
+      vehicleVeId: vehicle.veId || "",
+      itemCode: vehicle.itemCode || "",
+      itemName: vehicle.itemName || "",
+      csNo: vehicle.csNo || "",
+      make: vehicle.make || "",
+      modelYr: vehicle.modelYear || "",
+      model: vehicle.model || "",
+      serialNo: vehicle.serialNo || "",
+      engineNo: vehicle.engineNo || "",
+      prodNo: vehicle.prodNo || "",
+      color: vehicle.color || "",
+      pnpNo: vehicle.pnpNo || "",
+      csrNo: vehicle.csrNo || "",
+      sellingPrice: n(vehicle.sellingPrice),
+      discAmt: 0,
+    });
+    recalcSales({ sellingPrice: n(vehicle.sellingPrice), discAmt: 0 });
+  }, [recalcSales, state.branchCode, updateState]);
+
   const gridTabs = [
     ["accessories1", "Accessories", faCar],
     ["accessories2", "Installed Items", faTag],
@@ -1387,7 +1428,17 @@ const VSO = () => {
             <FieldGroup title="Vehicle Information" icon={faCar}>
               <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
                 <section className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40 xl:col-span-2">
-                  <div className="mb-3 text-xs font-semibold text-slate-700 dark:text-slate-200">Vehicle Selection</div>
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="text-xs font-semibold text-slate-700 dark:text-slate-200">Vehicle Selection</div>
+                    <button
+                      type="button"
+                      onClick={() => updateState({ showVehicleAvailability: true })}
+                      className="inline-flex min-w-[36px] items-center justify-center rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white transition-all duration-200 hover:bg-blue-700 dark:bg-blue-800 dark:hover:bg-blue-700"
+                    >
+                      <FontAwesomeIcon icon={faMagnifyingGlass} />
+                      <span className="ml-2">Check Availability</span>
+                    </button>
+                  </div>
                   <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
                   <Field label="CS / Chassis No." value={state.csNo} required disabled={isFormDisabled} onChange={(v) => updateState({ csNo: v })} onBlur={loadVehicleByCsNo} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); loadVehicleByCsNo(); } }} />
                   <Field label="Item Code" value={state.itemCode} disabled readOnly />
@@ -1732,6 +1783,12 @@ const VSO = () => {
       )}
 
       {state.showCancelModal && <CancelTranModal isOpen={state.showCancelModal} onClose={handleCloseCancel} />}
+
+      <SearchVEAvailabilityVSO
+        isOpen={state.showVehicleAvailability}
+        branchCode={state.branchCode}
+        onClose={handleAvailableVehicleSelection}
+      />
 
       {state.showAttachModal && (
         <AttachDocumentModal

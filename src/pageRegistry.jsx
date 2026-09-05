@@ -152,6 +152,7 @@ export const pageRegistry = {
   FGINQ: lazyPage(() => import("./NAYSA Cloud/Query/INVInq/FGStockCard.jsx")),
   RMINQ: lazyPage(() => import("./NAYSA Cloud/Query/INVInq/RMStockCard.jsx")),
   VEINQ: lazyPage(() => import("./NAYSA Cloud/Query/INVInq/VEStockCard.jsx")),
+  VEAvailabilityInquiry: lazyPage(() => import("./NAYSA Cloud/Query/INVInq/VEAvailabilityInquiry.jsx")),
   SalesTracker: lazyPage(() => import("./NAYSA Cloud/Query/SOInq/SalesTracker.jsx")),
   FAINQ: lazyPage(() => import("./NAYSA Cloud/Query/FAInq/FAAssetInquiry.jsx")),
   FAAssetInquiry: lazyPage(() => import("./NAYSA Cloud/Query/FAInq/FAAssetInquiry.jsx")),

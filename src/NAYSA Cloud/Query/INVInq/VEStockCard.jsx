@@ -26,7 +26,6 @@ import {
   Car,
   Fingerprint,
   MapPin,
-  ImageIcon,
 } from "lucide-react";
 
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
@@ -44,6 +43,7 @@ import SearchGlobalReportTable from "@/NAYSA Cloud/Lookup/SearchGlobalReportTabl
 import WarehouseLookupModal from "@/NAYSA Cloud/Lookup/SearchWareMast.jsx";
 import GlobalLookupModalv1 from "@/NAYSA Cloud/Lookup/SearchGlobalLookupv1.jsx";
 import { useSwalErrorAlert } from "@/NAYSA Cloud/Global/behavior";
+import genericVehicleImage from "@/NAYSA Cloud/Master Data/VEMasterData/naysa-generic-vehicle.png";
 
 const safeArray = (value) => (Array.isArray(value) ? value : []);
 const formatDateValue = (value) => value || "";
@@ -493,6 +493,10 @@ function VEStockCardQuery() {
       warehouseName: "",
       locationCode: "",
       locationName: "",
+      itemCode: "",
+      itemName: "",
+      veId: "",
+      vehicleName: "",
       startDate: defaultReferenceDate,
       endDate: getStockStatusEndDate(defaultReportType, defaultReferenceDate),
     }),
@@ -644,7 +648,7 @@ function VEStockCardQuery() {
     (payload) => {
       const vehicle = Array.isArray(payload?.records) ? payload.records[0] : payload?.records || payload;
       if (vehicle) {
-        const vehicleName = [vehicle.csNo, vehicle.make, vehicle.model, vehicle.color]
+        const vehicleName = [vehicle.itemCode, vehicle.itemName]
           .filter(Boolean)
           .join(" - ");
         patchFiltersByScope(lookupState.scope, {
@@ -863,7 +867,7 @@ function VEStockCardQuery() {
     ? (String(trackedVehicle.vehicleImageBase64).startsWith("data:")
         ? trackedVehicle.vehicleImageBase64
         : `data:image/jpeg;base64,${trackedVehicle.vehicleImageBase64}`)
-    : "";
+    : genericVehicleImage;
 
   const scrollWorkflowTo = React.useCallback((requestedIndex) => {
     if (!vehicleTransactionRows.length) return;
@@ -1249,10 +1253,10 @@ function VEStockCardQuery() {
             type="lookup"
             label="Vehicle"
             name="veId"
-            value={formatLookupValue(balanceFilters.veId, balanceFilters.vehicleName)}
+            value={formatLookupValue(balanceFilters.itemCode, balanceFilters.itemName)}
             onLookup={() => openLookup("vehicle", "balance")}
             editableLookup
-            onClear={() => setBalanceFilters((prev) => ({ ...prev, veId: "", vehicleName: "" }))}
+            onClear={() => setBalanceFilters((prev) => ({ ...prev, veId: "", vehicleName: "", itemCode: "", itemName: "" }))}
           />
 
         </FilterPanel>
@@ -1392,10 +1396,10 @@ function VEStockCardQuery() {
             type="lookup"
             label="Vehicle"
             name="veId"
-            value={formatLookupValue(stockCardFilters.veId, stockCardFilters.vehicleName)}
+            value={formatLookupValue(stockCardFilters.itemCode, stockCardFilters.itemName)}
             onLookup={() => openLookup("vehicle", "stockCard")}
             editableLookup
-            onClear={() => setStockCardFilters((prev) => ({ ...prev, veId: "", vehicleName: "" }))}
+            onClear={() => setStockCardFilters((prev) => ({ ...prev, veId: "", vehicleName: "", itemCode: "", itemName: "" }))}
           />
           <FieldRenderer
             type="lookup"
@@ -1583,10 +1587,10 @@ function VEStockCardQuery() {
               type="lookup"
               label="Vehicle"
               name="veId"
-              value={formatLookupValue(stockStatusFilters.veId, stockStatusFilters.vehicleName)}
+              value={formatLookupValue(stockStatusFilters.itemCode, stockStatusFilters.itemName)}
               onLookup={() => openLookup("vehicle", "stockStatus")}
               editableLookup
-              onClear={() => setStockStatusFilters((prev) => ({ ...prev, veId: "", vehicleName: "" }))}
+              onClear={() => setStockStatusFilters((prev) => ({ ...prev, veId: "", vehicleName: "", itemCode: "", itemName: "" }))}
             />
 
             <CalendarField
@@ -1742,20 +1746,15 @@ function VEStockCardQuery() {
           </div>
           <div className="grid gap-4 p-4 lg:grid-cols-[260px_minmax(0,1fr)]">
             <div className="flex min-h-52 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-slate-100 shadow-inner dark:border-slate-700 dark:from-slate-800 dark:to-slate-900">
-              {trackedVehicleImage ? (
-                <img
-                  src={trackedVehicleImage}
-                  alt={trackedVehicle.itemName || "Vehicle"}
-                  className="h-full max-h-64 w-full object-contain p-2"
-                />
-              ) : (
-                <div className="flex flex-col items-center gap-2 px-5 text-center text-slate-400 dark:text-slate-500">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-                    <ImageIcon size={22} strokeWidth={1.7} />
-                  </span>
-                  <span className="text-xs font-medium">No vehicle image registered</span>
-                </div>
-              )}
+              <img
+                src={trackedVehicleImage}
+                alt={trackedVehicle.itemName || "Vehicle"}
+                className="h-full max-h-64 w-full object-contain p-2"
+                onError={(event) => {
+                  event.currentTarget.onerror = null;
+                  event.currentTarget.src = genericVehicleImage;
+                }}
+              />
             </div>
 
             <div className="grid min-w-0 gap-3 xl:grid-cols-[1.15fr_1.15fr_0.8fr]">
