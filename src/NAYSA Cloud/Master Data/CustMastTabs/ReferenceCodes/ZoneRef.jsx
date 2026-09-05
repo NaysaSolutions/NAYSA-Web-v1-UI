@@ -64,6 +64,7 @@ const extractRows = (payload) => {
 const DEFAULT_FORM = {
     zoneCode: "",
     zoneName: "",
+    active: "Y",
     registeredBy: "",
     registeredDate: "",
     lastUpdatedBy: "",
@@ -74,6 +75,7 @@ const DEFAULT_FORM = {
 const normalizeRecord = (record) => ({
     zoneCode: record?.zoneCode ?? record?.zone_code ?? record?.code ?? "",
     zoneName: record?.zoneName ?? record?.zone_description ?? record?.name ?? "",
+    active: record?.active ?? record?.IS_ACTIVE,
     registeredBy: record?.registeredBy ?? "",
     registeredDate: record?.registeredDate ?? "",
     lastUpdatedBy: record?.lastUpdatedBy ?? "",
@@ -110,6 +112,8 @@ const ZoneRef = forwardRef(({ onStateChange }, ref) => {
     const resetForm = useCallback((next = DEFAULT_FORM) => {
         setForm(next);
     }, []);
+
+    const updateForm = (updates) => setForm((prev) => ({ ...prev, ...updates }));
 
     /* ================= LOAD LIST ================= */
 
@@ -207,6 +211,7 @@ const ZoneRef = forwardRef(({ onStateChange }, ref) => {
                     json_data: {
                         zoneCode: payload.zoneCode,
                         zoneName: payload.zoneName,
+                        active: payload.active,
                         userCode: payload.userCode,
                     },
                 }),
@@ -242,6 +247,7 @@ const ZoneRef = forwardRef(({ onStateChange }, ref) => {
         const payload = {
             zoneCode: String(form.zoneCode || "").trim().toUpperCase(),
             zoneName: String(form.zoneName || "").trim(),
+            active: form.active,
             userCode,
         };
 
@@ -352,6 +358,7 @@ const ZoneRef = forwardRef(({ onStateChange }, ref) => {
             },
             { key: "zoneCode", label: "Zone Code", sortable: true, width: 80 },
             { key: "zoneName", label: "Zone Name", sortable: true, width: 150 },
+            { key: "active", label: "Active", width: 120 , render: (row) => (row.active === "Y" ? "Yes" : "No"),},
         ],
         [handleEdit, handleDelete]
     );
@@ -421,6 +428,17 @@ const ZoneRef = forwardRef(({ onStateChange }, ref) => {
                     maxLength={50}
                     onChange={(v) => setField("zoneName", v ?? "")}
                     disabled={!isEditing}
+                />
+                <FieldRenderer
+                    label="Active"
+                    type="select"
+                    value={form.active}
+                    disabled={!isEditing}
+                    options={[
+                    { value: "Y", label: "Yes" },
+                    { value: "N", label: "No" },
+                    ]}
+                    onChange={(v) => updateForm({ active: v })}
                 />
                 <RegistrationInfo data={form} layout="stacked" />
             </Card>

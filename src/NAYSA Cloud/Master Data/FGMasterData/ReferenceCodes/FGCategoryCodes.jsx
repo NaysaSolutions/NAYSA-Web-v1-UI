@@ -75,6 +75,7 @@ const DEFAULT_FORM = {
   cosAcct: "",  cosAcctName: "",
   expAcct: "",  expAcctName: "",
   rcCode: "",   rcName: "",
+  active: "Y",
   registeredBy: "",
   registeredDate: "",
   lastUpdatedBy: "",
@@ -124,6 +125,8 @@ const FGCategoryCodes = forwardRef(({
   const resetForm = useCallback((next = DEFAULT_FORM) => {
     setForm(next);
   }, []);
+
+  const updateForm = (updates) => setForm((prev) => ({ ...prev, ...updates }));
 
   /* ================= LOAD LIST ================= */
 
@@ -205,6 +208,7 @@ const FGCategoryCodes = forwardRef(({
             cosAcct:     payload.cosAcct,
             expAcct:     payload.expAcct,
             rcCode:      payload.rcCode,
+            active:      payload.active,
             userCode:    payload.userCode,
           },
         }),
@@ -261,6 +265,7 @@ const FGCategoryCodes = forwardRef(({
       cosAcct:     String(form.cosAcct     || "").trim(),
       expAcct:     String(form.expAcct     || "").trim(),
       rcCode:      String(form.rcCode      || "").trim(),
+      active:      form.active === "Y" ? "Y" : "N",
       userCode,
     };
 
@@ -403,6 +408,7 @@ const FGCategoryCodes = forwardRef(({
         expAcctName:    row.expAcctName    || row.exp_acct_name   || "",
         rcCode:         row.rcCode         || row.rc_code         || "",
         rcName:         row.rcName         || row.rc_name         || "",
+        active:         row.active         || row.isActive        || row.IS_ACTIVE      || "Y",
         registeredBy:     row.registeredBy     || row.registered_by     || "",
         registeredDate:   row.registeredDate   || row.registered_date   || "",
         lastUpdatedBy:    row.lastUpdatedBy    || row.last_updated_by   || row.updatedBy    || row.updated_by    || "",
@@ -496,6 +502,7 @@ const FGCategoryCodes = forwardRef(({
         width: 80,
         render: (row) => (row.uCostFlag === "Y" ? "Y" : "N"),
       },
+      { key: "active", label: "Active", width: 120 , render: (row) => (row.active === "Y" ? "Yes" : "No"),},
     ],
     [handleEdit, handleDelete, isReadOnly, canEdit, canDelete]
   );
@@ -602,7 +609,7 @@ const FGCategoryCodes = forwardRef(({
             />
 
             <FieldRenderer
-              label="Category Description"
+              label="Category Name"
               required
               value={form.description}
               maxLength={150}
@@ -611,7 +618,7 @@ const FGCategoryCodes = forwardRef(({
             />
 
             <FieldRenderer
-              label="UCost Flag"
+              label="Unit Cost Flag"
               type="select"
               required
               value={!form.uCostFlag || form.uCostFlag === "" ? "N" : form.uCostFlag}
@@ -621,6 +628,17 @@ const FGCategoryCodes = forwardRef(({
                 { value: "N", label: "No" },
               ]}
               disabled={!isEditing || isReadOnly}
+            />
+            <FieldRenderer
+              label="Active"
+              type="select"
+              value={form.active}
+              disabled={!isEditing}
+              options={[
+                { value: "Y", label: "Yes" },
+                { value: "N", label: "No" },
+              ]}
+              onChange={(v) => updateForm({ active: v })}
             />
           </div>
         </Card>
@@ -648,7 +666,7 @@ const FGCategoryCodes = forwardRef(({
                 onLookup={() => openCoaLookup("sales")} onChange={(v) => setField("salesAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
 
               {/* SDiscount Account */}
-              <FieldRenderer label="SDiscount Acct" type="lookup" required labelClassName="text-xs"
+              <FieldRenderer label="Sales Discount Acct" type="lookup" required labelClassName="text-xs"
                 value={form.sdiscAcct ? `${form.sdiscAcct}${form.sdiscAcctName ? ` — ${form.sdiscAcctName}` : ""}` : ""}
                 onLookup={() => openCoaLookup("sdisc")} onChange={(v) => setField("sdiscAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
             </div>
@@ -666,7 +684,7 @@ const FGCategoryCodes = forwardRef(({
                 onLookup={() => openCoaLookup("rr")} onChange={(v) => setField("rrAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
 
               {/* SRet Account */}
-              <FieldRenderer label="SRet Account" type="lookup" required labelClassName="text-xs"
+              <FieldRenderer label="Sales Return Account" type="lookup" required labelClassName="text-xs"
                 value={form.sretAcct ? `${form.sretAcct}${form.sretAcctName ? ` — ${form.sretAcctName}` : ""}` : ""}
                 onLookup={() => openCoaLookup("sret")} onChange={(v) => setField("sretAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
 

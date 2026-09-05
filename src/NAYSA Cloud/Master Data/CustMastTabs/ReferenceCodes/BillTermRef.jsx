@@ -68,6 +68,7 @@ const DEFAULT_FORM = {
   billtermCode: "",
   billtermName: "",
   daysDue: 0,
+  active: "Y",
   registeredBy: "",
   registeredDate: "",
   lastUpdatedBy: "",
@@ -79,6 +80,7 @@ const normalizeRecord = (record) => ({
   billtermCode: record?.billtermCode ?? record?.billterm_code ?? record?.code ?? "",
   billtermName: record?.billtermName ?? record?.billterm_name ?? record?.name ?? "",
   daysDue: record?.daysDue ?? record?.days_due ?? record?.dueDays ?? 0,
+  active: record?.active ?? record?.IS_ACTIVE ?? record?.is_active ?? record?.isActive ?? "Y",
   registeredBy: record?.registeredBy ?? "",
   registeredDate: record?.registeredDate ?? "",
   lastUpdatedBy: record?.lastUpdatedBy ?? "",
@@ -113,6 +115,8 @@ const BillTermRef = forwardRef(({ onStateChange }, ref) => {
   const resetForm = useCallback((next = DEFAULT_FORM) => {
     setForm(next);
   }, []);
+
+  const updateForm = (updates) => setForm((prev) => ({ ...prev, ...updates }));
 
   /* ================= LOAD LIST ================= */
 
@@ -184,6 +188,7 @@ const BillTermRef = forwardRef(({ onStateChange }, ref) => {
             billtermCode: payload.billtermCode,
             billtermName: payload.billtermName,
             dueDays: payload.dueDays,
+            active: payload.active,
             userCode: payload.userCode,
           },
         }),
@@ -206,10 +211,12 @@ const BillTermRef = forwardRef(({ onStateChange }, ref) => {
 
   const handleSave = useCallback(() => {
     if (!isEditing || saveMutation.isPending) return;
+
     saveMutation.mutate({
       billtermCode: String(form.billtermCode || "").trim().toUpperCase(),
       billtermName: String(form.billtermName || "").trim(),
       dueDays: form.daysDue === "" ? 0 : Number(form.daysDue),
+      active: form.active,
       userCode,
     });
   }, [form, isEditing, saveMutation, userCode]);
@@ -242,6 +249,8 @@ const BillTermRef = forwardRef(({ onStateChange }, ref) => {
       const res = await apiClient.get("/getBillterm", { params: { BILLTERM_CODE: row.billtermCode } });
       const record = extractRows(res)?.[0];
       if (!record) return;
+
+      console.log("its working", record)
       setForm({ ...DEFAULT_FORM, ...normalizeRecord(record), __existing: true });
       setIsEditing(true);
       setSelectedRow(row);
@@ -308,6 +317,7 @@ const BillTermRef = forwardRef(({ onStateChange }, ref) => {
         className: "text-right",
         render: (row) => <span>{row?.daysDue ?? 0}</span>,
       },
+      { key: "active", label: "Active", width: 120 , render: (row) => (row.active === "Y" ? "Yes" : "No"),},  
     ],
     [handleEdit, handleDelete]
   );
@@ -371,6 +381,17 @@ const BillTermRef = forwardRef(({ onStateChange }, ref) => {
                 setField("daysDue", value);
               }}
               disabled={!isEditing}
+            />
+            <FieldRenderer
+              label="Active"
+              type="select"
+              value={form.active}
+              disabled={!isEditing}
+              options={[ 
+                { value: "Y", label: "Yes" },
+                { value: "N", label: "No" },
+              ]}
+              onChange={(v) => updateForm({ active: v })}
             />
             <RegistrationInfo data={form} layout="stacked" />
           </div>

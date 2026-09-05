@@ -64,6 +64,7 @@ const extractRows = (payload) => {
 const DEFAULT_FORM = {
   custTypeCode: "",
   custTypeName: "",
+  active: "Y",
   registeredBy: "",
   registeredDate: "",
   lastUpdatedBy: "",
@@ -74,6 +75,7 @@ const DEFAULT_FORM = {
 const normalizeRecord = (record) => ({
   custTypeCode: record?.custTypeCode ?? record?.cust_type_code ?? record?.code ?? "",
   custTypeName: record?.custTypeName ?? record?.cust_type_name ?? record?.name ?? "",
+  active: record?.active ?? record?.IS_ACTIVE ?? record?.is_active ?? record?.isActive ?? "Y",
   registeredBy: record?.registeredBy ?? "",
   registeredDate: record?.registeredDate ?? "",
   lastUpdatedBy: record?.lastUpdatedBy ?? "",
@@ -110,6 +112,8 @@ const CustTypeRef = forwardRef(({ onStateChange }, ref) => {
   const resetForm = useCallback((next = DEFAULT_FORM) => {
     setForm(next);
   }, []);
+
+  const updateForm = (updates) => setForm((prev) => ({ ...prev, ...updates }));
 
   /* ================= LOAD LIST ================= */
 
@@ -230,6 +234,7 @@ const CustTypeRef = forwardRef(({ onStateChange }, ref) => {
           json_data: {
             custTypeCode: payload.custTypeCode,
             custTypeName: payload.custTypeName,
+            active: payload.active,
             userCode: payload.userCode,
           },
         }),
@@ -257,6 +262,7 @@ const CustTypeRef = forwardRef(({ onStateChange }, ref) => {
     const payload = {
       custTypeCode: String(form.custTypeCode || "").trim().toUpperCase(),
       custTypeName: String(form.custTypeName || "").trim(),
+      active: form.active, 
       userCode,
     };
 
@@ -341,6 +347,7 @@ const CustTypeRef = forwardRef(({ onStateChange }, ref) => {
       },
       { key: "custTypeCode", label: "Code", sortable: true, width: 80 },
       { key: "custTypeName", label: "Description", sortable: true, width: 150 },
+      { key: "active", label: "Active", width: 120 , render: (row) => (row.active === "Y" ? "Yes" : "No"),},
     ],
     [handleEdit, handleDelete]
   );
@@ -410,6 +417,17 @@ const CustTypeRef = forwardRef(({ onStateChange }, ref) => {
           maxLength={50}
           onChange={(v) => setField("custTypeName", v ?? "")}
           disabled={!isEditing}
+        />
+        <FieldRenderer
+          label="Active"
+          type="select"
+          value={form.active}
+          disabled={!isEditing}
+          options={[
+            { value: "Y", label: "Yes" },
+            { value: "N", label: "No" },
+          ]}
+          onChange={(v) => updateForm({ active: v })}
         />
         <RegistrationInfo data={form} layout="stacked" />
       </Card>
