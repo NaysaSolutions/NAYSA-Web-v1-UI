@@ -67,6 +67,7 @@ import {
   useTopPayTermRow,
   useTopPayeeRow,
   useTopVatRow,
+  useTopBranchRow,
 } from "@/NAYSA Cloud/Global/top1RefTable";
 
 import {
@@ -187,7 +188,6 @@ const PO = () => {
 
     WHcode: "",
     WHname: "",
-    warehouseLookupOpen: false,
 
     // UI state
     activeTab: "basic",
@@ -197,6 +197,7 @@ const PO = () => {
     isSaveDisabled: false,
     isResetDisabled: false,
     isFetchDisabled: true,
+    deliveryAddressLookupOpen: false,
 
     // PR Style Lookup Logic Variables
     itemSingleSelect: false,
@@ -964,18 +965,6 @@ const PO = () => {
     );
   };
 
-  const handleCloseWarehouseLookup = (row) => {
-    if (!row) {
-      updateState({ warehouseLookupOpen: false });
-      return;
-    }
-    updateState({
-      warehouseLookupOpen: false,
-      WHcode: row?.whCode ?? "",
-      WHname: row?.whName ?? "",
-    });
-  };
-
   useEffect(() => {
     detailRowsRef.current = detailRows || [];
   }, [detailRows]);
@@ -1185,8 +1174,10 @@ const PO = () => {
       showOpenPRModal: false,
       showAllTranDocNo: false,
       selectedRowIndex: null,
+      deliveryAddressLookupOpen: false,
     });
 
+    loadBranchDeliveryAddress(defaultBranchCode);
     updateTotalsDisplay([]);
   };
 
@@ -1585,6 +1576,25 @@ const PO = () => {
 
     updateState({ selectedPoType: e.target.value });
     setPoDetailActiveTab("detailed");
+  };
+
+  const loadBranchDeliveryAddress = async (selectedBranchCode) => {
+    const requestedBranchCode = String(selectedBranchCode || "").trim();
+    if (!requestedBranchCode) return;
+
+    try {
+      const branchRow = await useTopBranchRow(requestedBranchCode);
+      const branchAddress = [branchRow?.branchAddr1, branchRow?.branchAddr2, branchRow?.branchAddr3]
+        .filter((value) => String(value || "").trim())
+        .join(", ");
+
+      setState((prev) => {
+        if (prev.documentID || String(prev.branchCode || "").trim() !== requestedBranchCode) return prev;
+        return { ...prev, delAddress: branchAddress };
+      });
+    } catch (error) {
+      console.error("Error loading PO branch delivery address:", error);
+    }
   };
 
   const formatFetchedHeaderDate = (value) => {
@@ -3291,14 +3301,38 @@ const PO = () => {
     updateState({ showSpinner: false });
   };
 
-  const handleCloseBranchModal = (selectedBranch) => {
+  const handleCloseBranchModal = async (selectedBranch) => {
     if (selectedBranch) {
+      const branchRow = await useTopBranchRow(selectedBranch.branchCode);
+      const branchAddress = [branchRow?.branchAddr1, branchRow?.branchAddr2, branchRow?.branchAddr3]
+        .filter((value) => String(value || "").trim())
+        .join(", ");
+
       updateState({
         branchCode: selectedBranch.branchCode,
         branchName: selectedBranch.branchName,
+        delAddress: branchAddress,
+        branchModalOpen: false,
       });
+      return;
     }
     updateState({ branchModalOpen: false });
+  };
+
+  const handleCloseDeliveryAddressLookup = (selectedWarehouse) => {
+    if (!selectedWarehouse) {
+      updateState({ deliveryAddressLookupOpen: false });
+      return;
+    }
+
+    const warehouseAddress = selectedWarehouse.address || [selectedWarehouse.address1, selectedWarehouse.address2]
+      .filter((value) => String(value || "").trim())
+      .join(", ");
+
+    updateState({
+      delAddress: warehouseAddress,
+      deliveryAddressLookupOpen: false,
+    });
   };
 
   const handleCloseRCModal = (selectedRC) => {
@@ -4330,7 +4364,7 @@ const PO = () => {
 
               </div>
 
-              {/* Column 3: Currency / Rate / Attention / Warehouse / Delivery Date */}
+              {/* Column 3: Currency / Rate / Attention / Delivery Address / Delivery Date */}
               <div className="global-tran-textbox-group-div-ui">
                 <div className="flex gap-4">
                   <input type="hidden" id="currCode" value={currCode || ""} readOnly />
@@ -4389,16 +4423,18 @@ const PO = () => {
                   onChange={(val) => updateState({ attention: val })}
                 />
 
-                {/* Warehouse */}
                 <FieldRenderer
-                  id="WHcode"
-                  label="Warehouse"
+                  id="delAddress"
+                  label="Delivery Address"
                   type="lookup"
-                  value={state.WHname || state.WHcode || ""}
-                  readOnly
+                  value={delAddress || ""}
                   disabled={isFormDisabled}
-                  lookupDisabled={isFormDisabled}
-                  onLookup={() => !isFormDisabled && updateState({ warehouseLookupOpen: true })}
+                  lookupDisabled={isFormDisabled || !branchCode}
+                  allowLookupInput
+                  editableLookup
+                  onChange={(val) => updateState({ delAddress: val })}
+                  onClear={() => updateState({ delAddress: "" })}
+                  onLookup={() => updateState({ deliveryAddressLookupOpen: true })}
                 />
 
                 {/* Delivery Date */}
@@ -4423,18 +4459,8 @@ const PO = () => {
                 </div>
               </div>
 
-              {/* Column 4: Delivery Address / References / Status */}
+              {/* Column 4: References / Status */}
               <div className="global-tran-textbox-group-div-ui">
-                {/* Delivery Address */}
-                <FieldRenderer
-                  id="delAddress"
-                  label="Delivery Address"
-                  type="text"
-                  value={delAddress || ""}
-                  disabled={isFormDisabled}
-                  onChange={(val) => updateState({ delAddress: val })}
-                />
-
                 <FieldRenderer
                   id="refPoNo1"
                   label="Ref PO No. 1"
@@ -4966,11 +4992,12 @@ const PO = () => {
         />
       )}
 
-      {state.warehouseLookupOpen && (
+      {state.deliveryAddressLookupOpen && (
         <WarehouseLookupModal
-          isOpen={state.warehouseLookupOpen}
-          onClose={handleCloseWarehouseLookup}
+          isOpen={state.deliveryAddressLookupOpen}
+          onClose={handleCloseDeliveryAddressLookup}
           filter="ActiveAll"
+          branchCode={branchCode}
         />
       )}
 

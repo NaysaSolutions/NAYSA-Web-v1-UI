@@ -17,16 +17,16 @@ const WarehouseLookupModal = ({
 }) => {
   const [warehouse, setWarehouse] = useState([]);
   const [filtered, setFiltered] = useState([]);
-  const [filters, setFilters] = useState({ whCode: "", whName: "" });
+  const [filters, setFilters] = useState({ whCode: "", whName: "", address: "" });
   const [loading, setLoading] = useState(false);
   const hasActiveFilters = Object.values(filters).some((val) => val !== "");
-  const resetFilters = () => setFilters({ whCode: "", whName: "" });
+  const resetFilters = () => setFilters({ whCode: "", whName: "", address: "" });
 
   useEffect(() => {
     if (!isOpen) {
       setWarehouse([]);
       setFiltered([]);
-      setFilters({ whCode: "", whName: "" });
+      setFilters({ whCode: "", whName: "", address: "" });
       return;
     }
 
@@ -65,10 +65,12 @@ const WarehouseLookupModal = ({
     const newFiltered = warehouse.filter((item) => {
       const code = (item.whCode || "").toLowerCase();
       const name = (item.whName || "").toLowerCase();
+      const address = (item.address || "").toLowerCase();
 
       return (
         code.includes((filters.whCode || "").toLowerCase()) &&
-        name.includes((filters.whName || "").toLowerCase())
+        name.includes((filters.whName || "").toLowerCase()) &&
+        address.includes((filters.address || "").toLowerCase())
       );
     });
 
@@ -85,7 +87,7 @@ const WarehouseLookupModal = ({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 animate-fade-in">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col relative overflow-hidden transform animate-scale-in border border-slate-200">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-[630px] max-h-[85vh] flex flex-col relative overflow-hidden transform animate-scale-in border border-slate-200">
         <div className="flex items-center justify-between bg-slate-100 border-b border-slate-200">
           <div className="flex items-center gap-2 pl-2 sm:pl-3">
             <h2 className="global-lookup-headertext-ui">Select Warehouse</h2>
@@ -122,6 +124,7 @@ const WarehouseLookupModal = ({
             <table className="min-w-full border-separate border-spacing-0 table-fixed">
   <colgroup>
     <col className="w-[120px]" />
+    <col className="w-[280px]" />
     <col className="w-auto" />
   </colgroup>
 
@@ -130,6 +133,7 @@ const WarehouseLookupModal = ({
       {[
         { label: "Warehouse Code", key: "whCode" },
         { label: "Warehouse Name", key: "whName" },
+        { label: "Address", key: "address" },
       ].map((col) => (
         <th key={col.key} className="global-lookup-th-ui">
           <div className="flex items-center gap-3 mb-1">
@@ -163,11 +167,12 @@ const WarehouseLookupModal = ({
                     >
                       <td className="global-lookup-td-ui font-bold">{row.whCode}</td>
                       <td className="global-lookup-td-ui">{row.whName}</td>
+                      <td className="global-lookup-td-ui whitespace-normal">{row.address}</td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="2" className="px-4 py-20 text-center text-slate-400 italic text-sm">
+                    <td colSpan="3" className="px-4 py-20 text-center text-slate-400 italic text-sm">
                       No matching records found.
                     </td>
                   </tr>
