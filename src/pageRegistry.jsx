@@ -267,6 +267,7 @@ export const pageRegistry = {
   MSINVReportModal: reportModal("MS"),
   FGINVReportModal: reportModal("FG"),
   RMINVReportModal: reportModal("RM"),
+  VEINVReportModal: reportModal("VE"),
   FAReportModal: reportModal("FA"),
   IMPReportModal: reportModal("IMP"),
   SalesReportModal: reportModal("OE"),

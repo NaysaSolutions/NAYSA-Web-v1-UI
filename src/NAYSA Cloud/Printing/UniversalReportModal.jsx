@@ -37,6 +37,8 @@ import {
   useHandleDownloadExcelMSINVReport,
   useHandlePrintRMINVReport,
   useHandleDownloadExcelRMINVReport,
+  useHandlePrintVEINVReport,
+  useHandleDownloadExcelVEINVReport,
   useHandleDownloadExcelFAReport,
   useHandlePrintFAReport,
   useHandleDownloadExcelIMPReport,
@@ -82,6 +84,15 @@ const RMLookupModal = (props) => (
   />
 );
 
+const VELookupModal = (props) => (
+  <ItemMastLookupModal
+    {...props}
+    endpoint="getInvLookupVE"
+    docType="VE"
+    enableMultiSelect={false}
+  />
+);
+
 const MODULE_DEFS = {
   AP:  { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelAPReport,    hasExtra: false, hasCutoff: false, hasReportType: false },
   VI:  { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelAPReport,    hasExtra: false, hasCutoff: false, hasReportType: false },
@@ -95,6 +106,7 @@ const MODULE_DEFS = {
   FG:  { label: "Item",     lookup: FGLookupModal,           print: useHandlePrintFGINVReport,  excel: useHandleDownloadExcelFGINVReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasInventory: true, hasSingleMain: true },
   MS:  { label: "Item",     lookup: MSLookupModal,           print: useHandlePrintMSINVReport,  excel: useHandleDownloadExcelMSINVReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasInventory: true, hasSingleMain: true },
   RM:  { label: "Item",     lookup: RMLookupModal,           print: useHandlePrintRMINVReport,  excel: useHandleDownloadExcelRMINVReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasInventory: true, hasSingleMain: true },
+  VE:  { label: "Vehicle",  lookup: VELookupModal,           print: useHandlePrintVEINVReport,  excel: useHandleDownloadExcelVEINVReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasInventory: true, hasSingleMain: true },
   FA:  { label: "Asset",    lookup: null,                    print: useHandlePrintFAReport,     excel: useHandleDownloadExcelFAReport,    hasExtra: false, hasCutoff: false, hasReportType: false, hasFA: true, hasSingleMain: true, hasSingleRc: true, rcLabel: "Department/RC" },
   IMP: { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,     excel: useHandleDownloadExcelIMPReport,   hasExtra: false, hasCutoff: false, hasReportType: false, hasSingleMain: true, hasSingleRc: true, rcLabel: "Department/RC" },
   BUD: { label: "Budget",   lookup: null,                    print: useHandlePrintBUDReport,    excel: useHandleDownloadExcelBUDReport,   hasExtra: false, hasCutoff: false, hasReportType: false, hasBudget: true, hasSingleRc: true, rcLabel: "Department/RC" },

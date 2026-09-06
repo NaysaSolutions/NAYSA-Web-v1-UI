@@ -566,6 +566,62 @@ export async function useHandleDownloadExcelRMINVReport(params) {
 }
 
 
+export async function useHandlePrintVEINVReport(params) {
+  try {
+    const responseDocRpt = await useTopHSRptRow(params.reportId);
+    const formName = responseDocRpt?.reportName;
+    if (!formName) {
+      throw new Error("Report Name not defined");
+    }
+
+    const payload = {
+      branchCode: params.branchCode,
+      startDate: params.startDate,
+      endDate: params.endDate,
+      itemCode: params.itemCode,
+      whCode: params.whCode,
+      locCode: params.locCode,
+      reportName: formName,
+      sprocMode: "",
+      sprocName: "",
+      export: "",
+    };
+
+    const pdfBlob = await postPdfRequest("/printVEINVReport", payload);
+
+    if (!(pdfBlob instanceof Blob) || pdfBlob.type !== "application/pdf") {
+      throw new Error("Expected a PDF file but received something else.");
+    }
+
+    openPdfPreview(pdfBlob);
+  } catch (error) {
+    showPrintError(error);
+  }
+}
+
+
+export async function useHandleDownloadExcelVEINVReport(params) {
+  try {
+    const payload = {
+      PARAMS: JSON.stringify({
+        mode: params.mode,
+        branchCode: params.branchCode,
+        startDate: params.startDate,
+        endDate: params.endDate,
+        itemCode: params.itemCode,
+        whCode: params.whCode,
+        locCode: params.locCode,
+      })
+    };
+
+    return await postRequest("getVEINVReport", payload);
+  } catch (error) {
+    console.error("Error downloading VE inventory report:", error);
+    return { Data: {} };
+  }
+}
+
+
 
 export async function useHandleDownloadExcelPURReport(params) {
   const { mode, branchCode, startDate, endDate, payeeCode, rcCode } = params;
