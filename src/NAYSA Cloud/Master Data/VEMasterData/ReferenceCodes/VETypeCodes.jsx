@@ -59,6 +59,7 @@ const extractRows = (payload) => {
 const DEFAULT_FORM = {
   code: "",
   description: "",
+  active: "Y",
   registeredBy: "",
   registeredDate: "",
   lastUpdatedBy: "",
@@ -69,6 +70,7 @@ const DEFAULT_FORM = {
 const normalizeRecord = (row = {}) => ({
   code: row.code ?? row.crefCode ?? row.cref_code ?? "",
   description: row.description ?? row.crefName ?? row.cref_name ?? "",
+  active: row.active ?? row.IS_ACTIVE ?? true,
   registeredBy: row.registeredBy ?? row.registered_by ?? "",
   registeredDate: row.registeredDate ?? row.registered_date ?? "",
   lastUpdatedBy: row.lastUpdatedBy ?? row.updatedBy ?? row.updated_by ?? "",
@@ -147,6 +149,7 @@ const VETypeCodes = forwardRef((
               json_data: {
                 code: payload.code,
                 description: payload.description,
+                active: payload.active,
                 userCode: payload.userCode,
               },
             }),
@@ -208,7 +211,6 @@ const VETypeCodes = forwardRef((
           }
         );
       },
-
 
       onSuccess: async (response) => {
         const row =
@@ -358,6 +360,7 @@ const VETypeCodes = forwardRef((
         const payload = {
           code: String(form.code || "") .trim().toUpperCase(),
           description: String(form.description || "").trim(),
+          active: form.active,
           userCode,
         };
         
@@ -589,20 +592,23 @@ const VETypeCodes = forwardRef((
           ),
         },
 
-
         {
           key: "code",
           label: "Type Code",
           sortable: true,
           width: 140,
         },
-
-
         {
           key: "description",
           label: "Type Description",
           sortable: true,
           width: 320,
+        },
+        {
+          key: "active",
+          label: "Active",
+          width: 120,
+          render: (row) => (row.active === "Y" ? "Yes" : "No"),
         },
       ],
       [
@@ -675,20 +681,13 @@ const VETypeCodes = forwardRef((
         save: handleSave,
         reset: () => {
           resetForm(DEFAULT_FORM);
-
           setIsEditing(false);
-
           setSelectedRow(null);
-
           setIsDupCode(false);
         },
       }),
       [
-        canAdd,
-        handleSave,
-        isReadOnly,
-        resetForm,
-        showReadOnlyAlert,
+        canAdd, handleSave, isReadOnly, resetForm, showReadOnlyAlert,
       ]
     );
 
@@ -696,7 +695,6 @@ const VETypeCodes = forwardRef((
     const isLoading =
       isInitialLoading || saveMutation.isPending || deleteMutation.isPending;
 
-  
     // UI
     return (
       <div className="flex flex-col h-full gap-3 w-full relative">
@@ -712,40 +710,45 @@ const VETypeCodes = forwardRef((
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               
               {/* TYPE CODE */}
-              <FieldRenderer label="Type Code" required value={form.code} inputRef={codeInputRef}
-
-                onChange={(v) => {
-                  setField(
-                    "code", String(v ?? "") .toUpperCase()
-                  );
-                  setIsDupCode(false);
-                }}
-
-                onBlur={handleCodeValidate}
+              <FieldRenderer 
+              label="Type Code" 
+              required 
+              value={form.code} 
+              inputRef={codeInputRef}
+              onChange={(v) => {
+                setField(
+                  "code", String(v ?? "") .toUpperCase()
+                );
+                setIsDupCode(false);
+              }}
+              onBlur={handleCodeValidate}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     handleCodeValidate(e);
                   }
                 }}
-
-                disabled={
-                  isReadOnly || !isEditing || form.__existing
-                }
+                disabled={ isReadOnly || !isEditing || form.__existing}
               />
 
-              {/* TYPE DESCRIPTION */}
-              <FieldRenderer label="Type Description" required value={form.description}
-                onChange={(v) =>
-                  setField(
-                    "description",
-                    v ?? ""
-                  )
-                }
-                disabled={
-                  isReadOnly ||
-                  !isEditing
-                }
+              <FieldRenderer 
+              label="Type Description" 
+              required 
+              value={form.description}
+              onChange={(v) => setField( "description",v ?? "")}
+                disabled={ isReadOnly || !isEditing}
               />
+              <FieldRenderer
+                label="Active"
+                type="select"
+                value={form.active}
+                disabled={!isEditing}
+                options={[
+                  { value: "Y", label: "Yes" },
+                  { value: "N", label: "No" },
+                ]}
+                onChange={(v) => setField("active", v)}
+              />
+
             </div>
           </Card>
 

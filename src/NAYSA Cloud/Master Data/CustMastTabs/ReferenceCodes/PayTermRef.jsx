@@ -65,6 +65,7 @@ const DEFAULT_FORM = {
   paytermName: "",
   daysDue: 0,
   advances: "",
+  active: "Y",
   registeredBy: "",
   registeredDate: "",
   lastUpdatedBy: "",
@@ -111,6 +112,7 @@ const PayTermRef = forwardRef(({
     setForm(next);
   }, []);
 
+  const updateForm = (updates) => setForm((prev) => ({ ...prev, ...updates }));
 
   /* ================= LOAD LIST ================= */
 
@@ -203,6 +205,7 @@ const PayTermRef = forwardRef(({
           paytermName: payload.paytermName,
           dueDays: payload.dueDays,
           advances: payload.advances,
+          active: payload.active,
           userCode: payload.userCode,
         },
       });
@@ -266,6 +269,7 @@ const PayTermRef = forwardRef(({
       paytermName: String(form.paytermName || "").trim(),
       dueDays,
       advances: form.advances === "Y" ? "Y" : "",
+      active: form.active === "Y" ? "Y" : "",
       userCode,
     };
 
@@ -358,6 +362,7 @@ const PayTermRef = forwardRef(({
         ...record,
         advances: record.advances || record.ADVANCES || "",
         daysDue: record.daysDue || record.DAYS_DUE || record.dueDays || "",
+        active: record.active || record.ACTIVE || "",
       };
 
       setForm({ ...DEFAULT_FORM, ...normalizedRecord, __existing: true });
@@ -438,6 +443,11 @@ const PayTermRef = forwardRef(({
         width: 120,
         render: (row) => (row.advances === "Y" ? "Yes" : "No"),
       },
+      { key: "active", 
+        label: "Active", 
+        width: 120 , 
+        render: (row) => (row.active === "Y" ? "Yes" : "No"),
+      },
     ],
     [handleEdit, handleDelete, isReadOnly, canEdit, canDelete]
   );
@@ -450,12 +460,14 @@ const PayTermRef = forwardRef(({
           if (!s) return true;
 
           const advStatus = row.advances === "Y" ? "yes" : "no";
+          const activeStatus = row.active === "Y" ? "yes" : "no";
 
           return (
             String(row?.paytermCode || "").toLowerCase().includes(s) ||
             String(row?.paytermName || "").toLowerCase().includes(s) ||
             String(row?.daysDue || "").toLowerCase().includes(s) ||
-            advStatus.includes(s)
+            advStatus.includes(s) ||
+            activeStatus.includes(s)
           );
         })
         .map((row, index) => ({
@@ -555,6 +567,7 @@ const PayTermRef = forwardRef(({
             }}
             disabled={isReadOnly || !isEditing}
           />
+
           <FieldRenderer
             label="AP Advances"
             type="select"
@@ -567,6 +580,18 @@ const PayTermRef = forwardRef(({
               { value: "Y", label: "Yes" },
             ]}
             disabled={isReadOnly || !isEditing}
+          />
+          
+          <FieldRenderer
+            label="Active"
+            type="select"
+            value={form.active}
+            disabled={!isEditing}
+            options={[
+              { value: "Y", label: "Yes" },
+              { value: "N", label: "No" },
+            ]}
+            onChange={(v) => updateForm({ active: v })}
           />
 
           <RegistrationInfo data={form} layout="stacked" />

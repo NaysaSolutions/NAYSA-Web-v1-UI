@@ -81,7 +81,7 @@ const TABS = [
   },
   {
     id: "others",
-    label: "Others",
+    label: "Ordering and Pricing",
     icon: (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="4" cy="8" r="1" fill="currentColor" stroke="none" />
@@ -471,7 +471,7 @@ const FGMast_SetupTab = ({
                       disabled={isDisabled}
                     />
                     <FieldRenderer
-                      label="Plan Type"
+                      label="Plant Type"
                       type="select"
                       options={[
                         { value: "Purchased", label: "Purchased" },

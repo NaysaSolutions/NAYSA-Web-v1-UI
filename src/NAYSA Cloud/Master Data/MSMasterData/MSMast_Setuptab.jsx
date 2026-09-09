@@ -178,7 +178,7 @@ const MSMast_SetupTab = ({
               }`}
           >
             <FieldRenderer
-              label="Item No"
+              label="Item Code"
               required
               editableLookup
               type="lookup"
@@ -194,7 +194,7 @@ const MSMast_SetupTab = ({
           </div>
 
           <FieldRenderer
-            label="Item Description"
+            label="Item Name"
             required
             type="text"
             value={form.itemDesc || ""}

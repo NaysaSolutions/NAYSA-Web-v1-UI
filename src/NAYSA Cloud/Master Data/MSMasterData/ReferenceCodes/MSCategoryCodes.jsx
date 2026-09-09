@@ -681,7 +681,7 @@ const CategoryCodes = forwardRef(({
       { key: "rcCode", label: "RC Code", sortable: true, width: 120 },
       {
         key: "uCostFlag",
-        label: "UCost",
+        label: "Unit Cost Flag",
         sortable: true,
         width: 100,
         render: (row) => (row.uCostFlag === "Y" ? "Y" : "N"),
@@ -805,7 +805,7 @@ const CategoryCodes = forwardRef(({
             />
 
             <FieldRenderer
-              label="Category Description"
+              label="Category Name"
               required
               value={form.description}
               maxLength={100}
@@ -814,7 +814,7 @@ const CategoryCodes = forwardRef(({
             />
 
             <FieldRenderer
-              label="UCost Flag"
+              label="Unit Cost Flag"
               type="select"
               required
               value={!form.uCostFlag || form.uCostFlag === "" ? "N" : form.uCostFlag}

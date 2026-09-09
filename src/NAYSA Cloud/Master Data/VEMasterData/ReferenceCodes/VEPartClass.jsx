@@ -58,6 +58,7 @@ const extractRows = (payload) => {
 const DEFAULT_FORM = {
   code: "",
   description: "",
+  active: "Y",
   registeredBy: "",
   registeredDate: "",
   lastUpdatedBy: "",
@@ -67,45 +68,14 @@ const DEFAULT_FORM = {
 
 const normalizeRecord = (row = {}) => ({
   code:
-    row.code ??
-    row.partClassCode ??
-    row.part_class_code ??
-    row.PART_CLASS_CODE ??
+    row.code ?? row.partClassCode ??row.part_class_code ??row.PART_CLASS_CODE ??
     "",
-
-  description:
-    row.description ??
-    row.partClassDescription ??
-    row.part_class_description ??
-    row.PART_CLASS_DESCRIPTION ??
-    "",
-
-  registeredBy:
-    row.registeredBy ??
-    row.registered_by ??
-    row.REGISTERED_BY ??
-    "",
-
-  registeredDate:
-    row.registeredDate ??
-    row.registered_date ??
-    row.REGISTERED_DATE ??
-    "",
-
-  lastUpdatedBy:
-    row.lastUpdatedBy ??
-    row.updatedBy ??
-    row.updated_by ??
-    row.UPDATED_BY ??
-    "",
-
-  lastUpdatedDate:
-    row.lastUpdatedDate ??
-    row.updatedDate ??
-    row.updated_date ??
-    row.UPDATED_DATE ??
-    "",
-
+  description: row.description ?? row.partClassDescription ?? row.part_class_description ?? row.PART_CLASS_DESCRIPTION ?? "",
+  active: row.active ?? row.IS_ACTIVE ?? true,    
+  registeredBy: row.registeredBy ?? row.registered_by ?? row.REGISTERED_BY ?? "",
+  registeredDate: row.registeredDate ?? row.registered_date ?? row.REGISTERED_DATE ?? "",
+  lastUpdatedBy: row.lastUpdatedBy ?? row.updatedBy ?? row.updated_by ?? row.UPDATED_BY ?? "",
+  lastUpdatedDate: row.lastUpdatedDate ?? row.updatedDate ?? row.updated_date ?? row.UPDATED_DATE ?? "",
   __existing: Boolean(row.__existing),
 });
 
@@ -131,10 +101,7 @@ const VEPartClass = forwardRef(
     const queryClient = useQueryClient();
 
     const userCode =
-      user?.USER_CODE ||
-      user?.userCode ||
-      user?.code ||
-      "ADMIN";
+      user?.USER_CODE || user?.userCode || user?.code || "ADMIN";
 
     const codeInputRef = useRef(null);
     const [isEditing, setIsEditing] = useState(false);
@@ -159,6 +126,8 @@ const VEPartClass = forwardRef(
       },
       []
     );
+    
+    const updateForm = (updates) => setForm((prev) => ({ ...prev, ...updates }));
 
     const showReadOnlyAlert = useCallback(
       async (action) => {
@@ -211,6 +180,7 @@ const VEPartClass = forwardRef(
           json_data: {
             code: payload.code,
             description: payload.description,
+            active: payload.active,
             userCode: payload.userCode,
           },
         };
@@ -358,17 +328,11 @@ const VEPartClass = forwardRef(
           "Deleted!",
           "Vehicle Part Class deleted successfully."
         );
-
-
         resetForm(DEFAULT_FORM);
-
         setSelectedRow(null);
-
         setIsEditing(false);
-
         setIsDupCode(false);
       },
-
 
       onError: async (error) => {
         console.error(
@@ -638,7 +602,6 @@ const VEPartClass = forwardRef(
             !canEdit
           ) {
             handleRetrieve(row);
-
             return;
           }
           fillFormFromRow(row);
@@ -763,20 +726,23 @@ const VEPartClass = forwardRef(
           ),
         },
 
-        // PART CLASS CODE
         {
           key: "code",
           label: "Part Class Code",
           sortable: true,
           width: 180,
         },
-
-        // PART CLASS DESCRIPTION
         {
           key: "description",
           label: "Part Class Description",
           sortable: true,
-          width: 320,
+          width: 300,
+        },
+        {
+          key: "active",
+          label: "Active",
+          width: 120,
+          render: (row) => (row.active === "Y" ? "Yes" : "No"),
         },
       ],
       [
@@ -892,19 +858,12 @@ const VEPartClass = forwardRef(
                 value={form.code}
                 inputRef={codeInputRef}
                 onChange={(v) => {
-                  setField(
-                    "code",
-                    String(
-                      v ?? ""
-                    ).toUpperCase()
-                  );
+                  setField("code",String( v ?? "").toUpperCase());
                   setIsDupCode(false);
                 }}
-
                 onBlur={
                   handleCodeValidate
                 }
-
                 onKeyDown={(e) => {
                   if (
                     e.key === "Enter"
@@ -914,46 +873,39 @@ const VEPartClass = forwardRef(
                     );
                   }
                 }}
-
-                disabled={
-                  isReadOnly ||
-                  !isEditing ||
-                  form.__existing
+                disabled={isReadOnly ||!isEditing ||form.__existing
                 }
               />
-
-
-              {/* PART CLASS DESCRIPTION */}
-
               <FieldRenderer
                 label="Part Class Description"
                 required
-                value={
-                  form.description
-                }
-
+                value={form.description}
                 onChange={(v) => {
-                  setField(
-                    "description", v ?? ""
-                  );
+                  setField("description", v ?? "" );
                 }}
-
                 disabled={
                   isReadOnly || !isEditing
                 }
               />
+              <FieldRenderer
+                label="Active"
+                type="select"
+                value={form.active}
+                disabled={!isEditing}
+                options={[
+                  { value: "Y", label: "Yes" },
+                  { value: "N", label: "No" },
+                ]}
+                onChange={(v) => setField("active", v)}
+              />
             </div>
           </Card>
 
-          {/* =================================================
-              REGISTRATION INFORMATION
-              ================================================= */}
+          {/* REGISTRATION INFORMATION */}
           <RegistrationInfo data={form} layout="stacked" />
         </div>
 
-        {/* ==================================================
-            TABLE
-            ================================================== */}
+        {/* TABLE */}
         <div className="flex-1 bg-white rounded-md shadow-sm border border-slate-200 overflow-hidden min-h-[300px] flex flex-col">
           <SearchGlobalReferenceTable
             columns={
