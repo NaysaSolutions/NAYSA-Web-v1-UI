@@ -88,17 +88,7 @@ import {
   useResizableTableColumns,
 } from "@/NAYSA Cloud/Global/datatable.jsx";
 
-const DEFAULT_VESR_TRAN_TYPE = "VESR01";
-const getRegularVESRTranType = (tranTypes = [], fallback = DEFAULT_VESR_TRAN_TYPE) => {
-  const options = Array.isArray(tranTypes) ? tranTypes : [];
-  const regularTranType = options.find((type) => {
-    const name = String(type?.DROPDOWN_NAME || type?.label || "").trim().toUpperCase();
-    const code = String(type?.DROPDOWN_CODE || type?.value || "").trim().toUpperCase();
-    return name === "REGULAR" || code === "REGULAR";
-  });
-
-  return regularTranType?.DROPDOWN_CODE || regularTranType?.value || fallback;
-};
+const DEFAULT_VESR_TRAN_TYPE = "Regular";
 
 const VESR = () => {
   const { resetFlag } = useReset();
@@ -622,11 +612,10 @@ const VESR = () => {
   const initializeDefaults = useCallback(async () => {
     updateState({ isLoading: true });
     try {
-      const [docControl, hsOption, fieldLengths, vesrTranTypeData] = await Promise.all([
+      const [docControl, hsOption, fieldLengths] = await Promise.all([
         useTopDocControlRow(docType),
         useTopHSOption(),
         useFieldLenghtCheck("vesr_hd,vesr_dt1,vesr_dt2"),
-        useTopDocDropDown(docType, "VESRTRAN_TYPE"),
       ]);
 
       const defaultCurr = String(hsOption?.glCurrDefault || baseCurrency).toUpperCase();
@@ -637,7 +626,6 @@ const VESR = () => {
         hsOption?.veinvGLMode ||
         companyInfo?.veinvGLMode ||
         "E";
-      const regularTranType = getRegularVESRTranType(vesrTranTypeData);
 
       setVEInvGLMode(String(loadedVEGLMode || "E").toUpperCase());
 
@@ -658,8 +646,8 @@ const VESR = () => {
         currName:
           currencyRow?.currName || transactionCurr,
         currRate: "1.000000",
-        vesrTranTypes: vesrTranTypeData || [],
-        vesrTranType: regularTranType,
+        vesrTranTypes: [],
+        vesrTranType: DEFAULT_VESR_TRAN_TYPE,
         tblFieldArray: Array.isArray(fieldLengths) ? fieldLengths : [],
       });
     } catch (error) {
@@ -684,7 +672,7 @@ const VESR = () => {
       branchCode: defaultBranchCode,
       branchName: defaultBranchName,
       cutoffCode: "",
-      vesrTranType: getRegularVESRTranType(prev.vesrTranTypes),
+      vesrTranType: DEFAULT_VESR_TRAN_TYPE,
       vendCode: "",
       vendName: "",
       custCode: "",
@@ -829,7 +817,7 @@ const VESR = () => {
           branchCode: parsed?.branchCode || branchCode,
           branchName: parsed?.branchName || state.branchName,
           cutoffCode: parsed?.cutoffCode || "",
-          vesrTranType: parsed?.vesrTranType || getRegularVESRTranType(state.vesrTranTypes),
+          vesrTranType: parsed?.vesrTranType || DEFAULT_VESR_TRAN_TYPE,
           vendCode: parsed?.vendCode || "",
           vendName: parsed?.vendName || "",
           custCode: parsed?.custCode || parsed?.customerCode || "",
@@ -878,7 +866,7 @@ const VESR = () => {
         updateState({ isLoading: false });
       }
     },
-    [baseCurrency, docType, state.branchName, state.vesrTranTypes, updateState],
+    [baseCurrency, docType, state.branchName, updateState],
   );
 
   const handleDocNoBlur = () => {
@@ -902,8 +890,8 @@ const VESR = () => {
     const errors = [];
     if (!state.branchCode) errors.push("Header - Branch Code");
     if (!header.sr_date) errors.push("Header - SR Date");
-    if (!String(state.vesrTranType || "").trim()) errors.push("Header - Tran Type");
     if (!state.vendCode) errors.push("Header - Vendor Code");
+    if (!String(state.custCode || "").trim()) errors.push("Header - Customer Code");
     if (String(state.siNo || "").trim() && !state.siDate) errors.push("Header - SI Date");
     if (state.siDate && !String(state.siNo || "").trim()) errors.push("Header - SI No.");
     if (!state.whouseCode) errors.push("Header - Warehouse");
@@ -1140,6 +1128,11 @@ const VESR = () => {
 
   const handleOpenVELookup = (rowIndex = null) => {
     if (isFormDisabled) return;
+
+    if (!String(state.custCode || "").trim()) {
+      useSwalErrorAlert("Customer Required", "Please select a customer before adding vehicle items.");
+      return;
+    }
 
     updateState({
       veLookupModalOpen: true,
@@ -2456,7 +2449,7 @@ const VESR = () => {
     vesrId: state.documentID || "",
     srDate: header.sr_date,
     cutoffCode: state.cutoffCode || "",
-    vesrTranType: state.vesrTranType || getRegularVESRTranType(state.vesrTranTypes),
+    vesrTranType: state.vesrTranType || DEFAULT_VESR_TRAN_TYPE,
     whouseCode: state.whouseCode || "",
     locCode: state.locCode || "",
     vendCode: state.vendCode || "",
@@ -3259,18 +3252,13 @@ const VESR = () => {
                   disabled={isFormDisabled}
                 />
 
-                  <FieldRenderer
+                <FieldRenderer
                   id="vesrTranType"
                   label="Tran Type"
-                  required
-                  type="select"
-                  value={state.vesrTranType || getRegularVESRTranType(state.vesrTranTypes)}
-                  disabled={isFormDisabled || (state.detailRows || []).length > 0}
-                  onChange={(value) => updateState({ vesrTranType: value })}
-                  options={(state.vesrTranTypes || []).map((type) => ({
-                    label: type.DROPDOWN_NAME,
-                    value: type.DROPDOWN_CODE,
-                  }))}
+                  type="text"
+                  value={DEFAULT_VESR_TRAN_TYPE}
+                  readOnly
+                  disabled={isFormDisabled}
                 />
 
               
@@ -3281,6 +3269,7 @@ const VESR = () => {
                 <FieldRenderer
                   id="custCode"
                   label="Customer Code"
+                  required
                   type="lookup"
                   value={state.custCode || ""}
                   readOnly
@@ -3842,7 +3831,7 @@ const VESR = () => {
       {state.veLookupModalOpen && (
         <ItemMastLookupModal
           isOpen={state.veLookupModalOpen}
-          endpoint="getInvLookupVE"
+          endpoint="/veMast"
           onClose={handleCloseVELookup}
           onGetSelectedItems={handleCloseVELookup}
           onCancel={() =>

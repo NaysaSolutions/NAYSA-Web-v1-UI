@@ -69,6 +69,47 @@ const createFilterObject = (cols = []) =>
     return acc;
   }, {});
 
+const normalizeLookupRow = (row = {}) => {
+  if (!row || typeof row !== "object") return row;
+
+  const itemCode = row.itemCode ?? row.ITEM_CODE ?? row.item_code ?? "";
+
+  return {
+    ...row,
+    itemCode,
+    itemName:
+      row.itemName ??
+      row.itemDesc ??
+      row.ITEM_NAME ??
+      row.ITEM_DESC ??
+      row.item_desc ??
+      "",
+    uomCode: row.uomCode ?? row.uom ?? row.UOM_CODE ?? row.UOM ?? "",
+    qtyHand: row.qtyHand ?? row.qtyOnHand ?? row.QTY_HAND ?? row.QTY_ON_HAND ?? 0,
+    unitCost: row.unitCost ?? row.UNIT_COST ?? row.unit_cost ?? 0,
+    categCode:
+      row.categCode ??
+      row.categoryCode ??
+      row.CATEG_CODE ??
+      row.CATEGORY_CODE ??
+      "",
+    categName:
+      row.categName ??
+      row.categoryName ??
+      row.CATEG_NAME ??
+      row.CATEGORY_NAME ??
+      "",
+    classCode: row.classCode ?? row.CLASS_CODE ?? "",
+    className: row.className ?? row.CLASS_NAME ?? "",
+    groupId: row.groupId ?? row.GROUP_ID ?? row.group_id ?? itemCode,
+  };
+};
+
+const normalizeLookupRows = (rows = []) =>
+  rows
+    .filter((row) => !row?.errorMsg && !row?.ERROR_MSG)
+    .map((row) => normalizeLookupRow(row));
+
 const ItemMastLookupModal = ({
   isOpen,
   onClose,
@@ -129,11 +170,11 @@ const ItemMastLookupModal = ({
     return enableMultiSelect ? "Select Items" : "Select Item";
   }, [docType, enableMultiSelect, endpoint]);
 
-  // For FA records use faCode as the unique key; inventory uses groupId
+  // For FA records use faCode as the unique key; inventory uses groupId/itemCode
   const getRowUniqueKey = (row) => {
     const dt = String(docType || "").toUpperCase();
-    if (dt === "FA") return String(row?.faCode ?? "");
-    return String(row?.groupId ?? "");
+    if (dt === "FA") return String(row?.faCode ?? row?.FA_CODE ?? "");
+    return String(row?.groupId ?? row?.GROUP_ID ?? row?.group_id ?? row?.itemCode ?? row?.ITEM_CODE ?? "");
   };
 
   const selectedItemKeys = useMemo(() => {
@@ -152,17 +193,17 @@ const ItemMastLookupModal = ({
         if (typeof rawJson === "string") {
           try {
             const parsed = JSON.parse(rawJson);
-            return Array.isArray(parsed) ? parsed : [];
+            return Array.isArray(parsed) ? normalizeLookupRows(parsed) : [];
           } catch (error) {
             console.error("Failed to parse SQL JSON result:", error);
             return [];
           }
         }
-        if (Array.isArray(rawJson)) return rawJson;
+        if (Array.isArray(rawJson)) return normalizeLookupRows(rawJson);
         return [];
       }
       // Plain flat array (e.g. FAMast lookup response)
-      return result.data;
+      return normalizeLookupRows(result.data);
     }
 
     return [];
