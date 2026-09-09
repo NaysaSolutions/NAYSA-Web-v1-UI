@@ -13,6 +13,7 @@ import {
   faClipboardCheck,
   faBoxOpen,
   faWarehouse,
+  faXmark,
 } from "@fortawesome/free-solid-svg-icons";
 
 // Lookup/Modal
@@ -390,8 +391,9 @@ const [isViewDocument, setIsViewDocument] = useState(false);
     accountModalSource: null,
     showQstatModal: false,
 
-    msLookupModalOpen: false,
-    tblFieldArray: [],
+	    msLookupModalOpen: false,
+	    altItemLookupOpen: false,
+	    tblFieldArray: [],
 
     activeTab: "basic",
     GLactiveTab: "invoice", // same pattern as FGAJ (optional)
@@ -526,8 +528,9 @@ groupId,
     rcLookupContext,
     showAllTranDocNo,
 
-    msLookupModalOpen,
-  } = state;
+	    msLookupModalOpen,
+	    altItemLookupOpen,
+	  } = state;
 
   const [header, setHeader] = useState({
     rr_date: new Date().toISOString().split("T")[0],
@@ -666,6 +669,7 @@ rrQty: "",
       { key: "qstatCode", label: "QC Status", width: 120 },
       { key: "whouseCode", label: "Warehouse", width: 120 },
       { key: "LocCode", label: "Location", width: 120 },
+      { key: "altItemno", label: "Alternate Item", width: 196 },
     ],
     [headerCurrCode, isForeignHeaderCurrency, isInventoryConversionEnabled],
   );
@@ -3217,7 +3221,7 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
         rrQty: baseRow.rrQty || "0.000000",
         freeQty: baseRow.freeQty || "0.000000",
       }));
-    };
+	  };
 
     if (selectedItems.length > 1 && selectedRowIndex === null) {
       const newRows = await Promise.all(selectedItems.map((item) => buildFGRRRow(item)));
@@ -3264,6 +3268,53 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
     );
     updateTotalsDisplay(updatedRows);
   };
+
+  const handleCloseAltItemLookup = (selectedPayload) => {
+    if (!selectedPayload) {
+      updateState({ altItemLookupOpen: false, selectedRowIndex: null });
+      return;
+    }
+
+    const selectedItem = Array.isArray(selectedPayload?.records)
+      ? selectedPayload.records[0]
+      : Array.isArray(selectedPayload)
+        ? selectedPayload[0]
+        : selectedPayload;
+    const altItemno = String(selectedItem?.itemCode || "").trim();
+    const alternateUomCode = String(selectedItem?.uomCode || "").trim();
+    const rowIndex = state.selectedRowIndex;
+    const currentRow = (detailRowsRef.current || detailRows || [])[rowIndex];
+
+    if (!altItemno || rowIndex === null || rowIndex === undefined || !currentRow) {
+      updateState({ altItemLookupOpen: false, selectedRowIndex: null });
+      return;
+    }
+
+    if (altItemno.toUpperCase() === String(currentRow.itemCode || "").trim().toUpperCase()) {
+      useSwalErrorAlert(
+        "Alternate Item",
+        "Alternate Item must be different from the original Item Code.",
+      );
+      return;
+    }
+
+    if (alternateUomCode.toUpperCase() !== String(currentRow.uomCode || "").trim().toUpperCase()) {
+      useSwalErrorAlert(
+        "Alternate Item",
+        "Alternate Item UOM must be the same as the original Item UOM.",
+      );
+      return;
+    }
+
+    const updatedRows = [...(detailRowsRef.current || detailRows || [])];
+    updatedRows[rowIndex] = { ...currentRow, altItemno };
+    detailRowsRef.current = updatedRows;
+    updateState({
+      detailRows: updatedRows,
+      altItemLookupOpen: false,
+      selectedRowIndex: null,
+    });
+  };
 
   const handlePrNoBlur = () => {
     if (!state.documentID && state.documentNo && state.branchCode) {
@@ -5887,6 +5938,41 @@ const handleClosePayeeLookup = async (row) => {
           </div>
         </td>
       ),
+      altItemno: () => (
+        <td key={columnKey} className="global-tran-td-ui relative" style={style}>
+          <div className="flex items-center">
+            <input
+              type="text"
+              id={`altItemno-${index}`}
+              className="w-full global-tran-td-inputclass-ui text-center pr-12 cursor-pointer"
+              value={row.altItemno || ""}
+              readOnly
+              disabled={isFormDisabled}
+              onClick={() =>
+                !rowLocked &&
+                updateState({ selectedRowIndex: index, altItemLookupOpen: true })
+              }
+            />
+            {!rowLocked && row.altItemno && (
+              <FontAwesomeIcon
+                icon={faXmark}
+                title="Clear Alternate Item"
+                className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-500 cursor-pointer hover:text-red-600"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  const updatedRows = [...(detailRowsRef.current || detailRows || [])];
+                  updatedRows[index] = { ...updatedRows[index], altItemno: "" };
+                  detailRowsRef.current = updatedRows;
+                  updateState({ detailRows: updatedRows });
+                }}
+              />
+            )}
+            {lookupIcon(() =>
+              updateState({ selectedRowIndex: index, altItemLookupOpen: true })
+            )}
+          </div>
+        </td>
+      ),
     };
 
     return (
@@ -7896,7 +7982,7 @@ const handleClosePayeeLookup = async (row) => {
         />
       )}
 
-      {msLookupModalOpen && (
+	      {msLookupModalOpen && (
         <ItemMastLookupModal
           isOpen={msLookupModalOpen}
           endpoint="getInvLookupFG"
@@ -7909,7 +7995,22 @@ const handleClosePayeeLookup = async (row) => {
           customParam="ActiveAll"
           docType="PRFG"
         />
-      )}
+	      )}
+
+      {altItemLookupOpen && (
+        <ItemMastLookupModal
+          isOpen={altItemLookupOpen}
+          endpoint="getInvLookupFG"
+          onClose={handleCloseAltItemLookup}
+          onGetSelectedItems={handleCloseAltItemLookup}
+          onCancel={() =>
+            updateState({ altItemLookupOpen: false, selectedRowIndex: null })
+          }
+          enableMultiSelect={false}
+          customParam="ActiveAll"
+          docType="PRFG"
+        />
+      )}
 
       {state.specsModalOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4">
