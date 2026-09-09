@@ -35,7 +35,7 @@ const ReportViewTabs = ({ activeView, onChange, className = "" }) => (
         key={key}
         type="button"
         onClick={() => onChange?.(key)}
-        className={`inline-flex w-[108px] items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs font-medium transition-colors sm:w-[116px] ${
+        className={`inline-flex h-9 w-[116px] items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1.5 text-xs font-medium transition-colors sm:w-[122px] ${
           activeView === key
             ? "bg-blue-600 text-white shadow-sm hover:opacity-90"
             : "border border-slate-200 bg-white text-slate-600 hover:text-blue-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
@@ -210,7 +210,7 @@ function IncomeExpenseReport({
         }
       `}</style>
       <ReportViewTabs activeView={activeView} onChange={onActiveViewChange} className="mb-2 xl:hidden" />
-      <ReportViewTabs activeView={activeView} onChange={onActiveViewChange} className="absolute left-0 top-2 z-30 hidden xl:grid" />
+      <ReportViewTabs activeView={activeView} onChange={onActiveViewChange} className="absolute left-0 top-1 z-30 hidden xl:grid" />
       <div className="min-h-0 flex-1">
         <SearchGlobalReportTable
           key={`incExp-${activeView}-${view.loadedAt || "idle"}`}
