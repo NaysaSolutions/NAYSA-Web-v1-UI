@@ -101,7 +101,7 @@ const InvoiceQueuing = ({
             icon: "warning",
             title: "Missing Column Configuration",
             message:
-              "No HS_COLCONFIG records were found for endpoint eisPosting.",
+              "No HS_COLCONFIG records were found for endpoint iesPosting.",
           });
 
           onClose?.();
@@ -307,7 +307,7 @@ const InvoiceQueuing = ({
        *   1. the JSON response body directly; or
        *   2. an Axios-style object containing response.data.
        *
-       * The controller now returns the accepted ESRS result at the
+       * The controller returns the accepted IES result at the
        * top level. It no longer returns the old SQL result under
        * response.data[0].result.
        */
@@ -354,8 +354,8 @@ const InvoiceQueuing = ({
       }
 
       /*
-       * The ESRS integration result is normally rows[0].
-       * Keep a fallback to esrsResponse.rows[0] for compatibility.
+       * Older deployments returned the integration result in rows[0].
+       * Keep the fallback while all environments are being updated.
        */
       const integrationRow =
         (
@@ -413,7 +413,7 @@ const InvoiceQueuing = ({
           }
         } catch (parseError) {
           console.warn(
-            "Unable to parse the ESRS per-document result:",
+            "Unable to parse the IES per-document result:",
             parseError
           );
         }
@@ -468,15 +468,13 @@ const InvoiceQueuing = ({
         .toUpperCase();
 
       /*
-       * ACCEPTED means received by ESRS. It does not mean that the
-       * customer email was already sent.
+       * ACCEPTED means the ZIP files were uploaded and IES processing
+       * was triggered successfully.
        */
       let successMessage =
         `${documentCount} document${
           documentCount === 1 ? "" : "s"
-        } accepted by ESRS for customer notification.` +
-        ` Inserted: ${insertedCount};` +
-        ` Already existing: ${duplicateCount}.`;
+        } queued successfully in IES.`;
 
       if (
         customerInsertedCount > 0 ||
