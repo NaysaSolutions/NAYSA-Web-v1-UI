@@ -434,7 +434,7 @@ const VECategCodes = forwardRef(({
     if (!code) return;
 
     try {
-      const checkRes = await apiClient.post("/checkVECategInUsed", {
+      const checkRes = await apiClient.post("/checkInUsedVECateg", {
         json_data: { code },
       });
       if (getResultFlag(checkRes) === "1") {

@@ -24,6 +24,7 @@ import {
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
 import SearchGlobalReferenceTable from "@/NAYSA Cloud/Lookup/SearchGlobalReferenceTable.jsx";
+import SearchFGInvCateg from "@/NAYSA Cloud/Lookup/SearchFGInvCateg.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 /* ================= HELPERS ================= */
@@ -116,6 +117,7 @@ const VEClassCodes = forwardRef(({
   const [selectedRow, setSelectedRow] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isDupCode, setIsDupCode] = useState(false);
+  const [isCategOpen, setIsCategOpen] = useState(false);
 
   const setField = useCallback((key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -337,7 +339,7 @@ const VEClassCodes = forwardRef(({
     if (!code || !categCode) return;
 
     try {
-      const checkRes = await apiClient.post("/checkVEClassInUsed", {
+      const checkRes = await apiClient.post("/checkInUsedVEClass", {
         json_data: { code, categCode },
       });
       if (getResultFlag(checkRes) === "1") {
@@ -447,12 +449,16 @@ const VEClassCodes = forwardRef(({
   ], [canDelete, canEdit, handleDelete, handleEdit, isReadOnly]);
 
   const tableData = useMemo(
-    () => (Array.isArray(classifications) ? classifications : []).map((row, index) => ({
-      ...row,
-      ...normalizeRecord(row),
-      __idx: index,
-    })),
-    [classifications]
+    () => {
+      const selectedCategory = String(form.categCode || "").trim().toUpperCase();
+      if (!selectedCategory) return [];
+
+      return (Array.isArray(classifications) ? classifications : [])
+        .map((row) => ({ ...row, ...normalizeRecord(row) }))
+        .filter((row) => String(row.categCode || "").trim().toUpperCase() === selectedCategory)
+        .map((row, index) => ({ ...row, __idx: index }));
+    },
+    [classifications, form.categCode]
   );
 
   /* ================= EXPOSE TO PARENT ================= */
@@ -473,7 +479,12 @@ const VEClassCodes = forwardRef(({
       setIsEditing(true);
       setSelectedRow(null);
       setIsDupCode(false);
-      resetForm({ ...DEFAULT_FORM, __existing: false });
+      setForm((prev) => ({
+        ...DEFAULT_FORM,
+        categCode: prev.categCode,
+        categName: prev.categName,
+        __existing: false,
+      }));
       setTimeout(() => codeInputRef.current?.focus?.(), 0);
     },
     save: handleSave,
@@ -491,28 +502,23 @@ const VEClassCodes = forwardRef(({
     <div className="flex flex-col h-full gap-3 w-full relative">
       {isLoading && <LoadingSpinner />}
 
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-3 shrink-0">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 shrink-0">
         <Card className="p-4 flex flex-col">
           <SectionHeader title="BASIC INFORMATION" />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="space-y-3">
             <FieldRenderer
-              label="Category"
+              label="Category Code"
               required
-              type="select"
-              options={categoryOptions}
+              type="lookup"
               value={form.categCode}
-              onChange={(v) => {
-                const value = String(v ?? "");
-                const selected = categories.find((row) =>
-                  String(row.code ?? row.categCode ?? row.categ_code ?? "") === value
-                );
-                setForm((prev) => ({
-                  ...prev,
-                  categCode: value,
-                  categName: selected?.description ?? selected?.categName ?? selected?.categ_desc ?? "",
-                }));
-              }}
-              disabled={isReadOnly || !isEditing || form.__existing}
+              onLookup={() => setIsCategOpen(true)}
+              disabled={false}
+            />
+            <FieldRenderer
+              label="Category Name"
+              value={form.categName}
+              readOnly
+              disabled
             />
             <FieldRenderer
               label="Class Code"
@@ -550,6 +556,23 @@ const VEClassCodes = forwardRef(({
           autoFillGrid
         />
       </div>
+
+      <SearchFGInvCateg
+        isOpen={isCategOpen}
+        endpoint="/veCateg"
+        queryKey="lookupVECateg"
+        title="Search Vehicle Category Codes"
+        onClose={(selected) => {
+          setIsCategOpen(false);
+          if (selected) {
+            setForm((prev) => ({
+              ...prev,
+              categCode: selected.code ?? selected.categCode ?? selected.categ_code ?? "",
+              categName: selected.description ?? selected.categName ?? selected.categ_desc ?? "",
+            }));
+          }
+        }}
+      />
     </div>
   );
 });

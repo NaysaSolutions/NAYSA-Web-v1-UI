@@ -302,7 +302,7 @@ const VEColorCodes = forwardRef(({
     if (!code) return;
 
     try {
-      const checkRes = await apiClient.post("/checkVEColorInUsed", {
+      const checkRes = await apiClient.post("/checkInUsedVEColor", {
         json_data: { code },
       });
       if (getResultFlag(checkRes) === "1") {
@@ -455,10 +455,10 @@ const VEColorCodes = forwardRef(({
     <div className="flex flex-col h-full gap-3 w-full relative">
       {isLoading && <LoadingSpinner />}
 
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-3 shrink-0">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 shrink-0">
         <Card className="p-4 flex flex-col">
           <SectionHeader title="BASIC INFORMATION" />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="space-y-3">
             <FieldRenderer
               label="Color Code"
               required
