@@ -819,7 +819,7 @@ const fetchTranData = async (documentNo, branchCode,direction="") => {
     updateState({
       documentStatus: data.pcvStatus,
       status: data.docStatus,
-      noReprints:data.noReprints,
+      noReprints: data.noReprints ?? "0",
       documentID: data.pcvId,
       documentNo: data.pcvNo,
       branchCode: data.branchCode,
@@ -3629,7 +3629,12 @@ const handleCloseBranchModal = (selectedBranch) => {
 {showSignatoryModal && (
       <DocumentSignatories
         isOpen={showSignatoryModal}
-        params={{noReprints,documentID,docType,docNo: documentNo}}
+        params={{
+          noReprints,
+          documentID: printDocumentIDRef.current || documentID,
+          docType,
+          docNo: documentNo,
+        }}
         onClose={handleCloseSignatory}
         onCancel={() => updateState({ showSignatoryModal: false })}
       />

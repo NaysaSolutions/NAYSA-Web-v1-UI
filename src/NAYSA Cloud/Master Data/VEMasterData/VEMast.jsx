@@ -325,7 +325,7 @@ const VEMast = () => {
     if (!code || form.__isNew) return;
 
     try {
-      const usedRes = await apiClient.post("/checkVEMastInUsed", { json_data: { itemCode: code } });
+      const usedRes = await apiClient.post("/checkInUsedVEMast", { json_data: { itemCode: code } });
       if (resultFlag(usedRes) === "1") {
         await useSwalErrorAlert("Cannot Delete", "Vehicle item is already used by a transaction. Set Active to N instead.");
         return;
