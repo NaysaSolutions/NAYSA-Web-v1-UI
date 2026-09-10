@@ -844,6 +844,8 @@ const fetchTranData = async (documentNo, branchCode,direction="") => {
 
     updateTotals(retrievedDetailRows);
 
+ 
+    
   } catch (error) {
     console.error("Error fetching transaction data:", error);
     Swal.fire({ icon: 'error', title: 'Fetch Error', text: error.message });
@@ -1470,6 +1472,9 @@ const handlePrint = async () => {
     updateState({ showSignatoryModal: true });
   }
 };
+
+
+
 
 const handlePrint2307 = () => {
   const hasPrintable2307Entry = (detailRowsGL || []).some(
@@ -3621,20 +3626,16 @@ const handleCloseBranchModal = (selectedBranch) => {
 
 
 
-
 {showSignatoryModal && (
-  <DocumentSignatories
-    isOpen={showSignatoryModal}
-        params={{
-          noReprints,
-          documentID: printDocumentIDRef.current || documentID,
-          docType,
-          docNo: documentNo,
-        }}
-    onClose={handleCloseSignatory}
-    onCancel={() => updateState({ showSignatoryModal: false })}
-  />
+      <DocumentSignatories
+        isOpen={showSignatoryModal}
+        params={{noReprints,documentID,docType,docNo: documentNo}}
+        onClose={handleCloseSignatory}
+        onCancel={() => updateState({ showSignatoryModal: false })}
+      />
 )}
+
+    
 
 
 
