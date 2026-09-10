@@ -417,7 +417,7 @@ const RMMast = () => {
 
     // ── tabs ──────────────────────────────────────────────────────────────────
     const tabs = [
-        { id: "setup",  label: "Item Masterfile Set Up", icon: faFolderOpen },
+        { id: "setup",  label: "Item Master Data Set Up", icon: faFolderOpen },
         { id: "master", label: "Item Master Data",        icon: faList },
         { id: "ref",    label: "Reference Codes",         icon: faTags },
     ];

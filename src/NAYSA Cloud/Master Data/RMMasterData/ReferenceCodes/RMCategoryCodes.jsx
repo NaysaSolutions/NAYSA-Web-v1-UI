@@ -664,7 +664,7 @@ const RMCategoryCodes = forwardRef(({
         ),
       },
       { key: "code",        label: "Category Code",               sortable: true, width: 140 },
-      { key: "description", label: "Category Description / Name", sortable: true, width: 280 },
+      { key: "description", label: "Category Name", sortable: true, width: 280 },
       { key: "invAcct",     label: "Inv Acct",                    sortable: true, width: 120 },
       { key: "expAcct",     label: "Expense Acct",                sortable: true, width: 120 },
       { key: "rrAcct",      label: "RR Acct",                     sortable: true, width: 120 },
@@ -792,7 +792,7 @@ const RMCategoryCodes = forwardRef(({
               disabled={isReadOnly || !isEditing || form.__existing}
             />
             <FieldRenderer
-              label="Category Description"
+              label="Category Name"
               required
               value={form.description}
               maxLength={150}
@@ -800,7 +800,7 @@ const RMCategoryCodes = forwardRef(({
               disabled={isReadOnly || !isEditing}
             />
             <FieldRenderer
-              label="UCost Flag"
+              label="Unit Cost Flag"
               type="select"
               required
               value={!form.uCostFlag || form.uCostFlag === "" ? "N" : form.uCostFlag}

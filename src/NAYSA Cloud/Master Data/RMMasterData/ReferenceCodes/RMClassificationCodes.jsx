@@ -415,7 +415,7 @@ const ClassificationCodes = forwardRef(({
         },
       },
       { key: "code",        label: "Classification Code",              sortable: true, width: 150 },
-      { key: "description", label: "Classification Description / Name", sortable: true, width: 280 },
+      { key: "description", label: "Classification Name", sortable: true, width: 280 },
       { key: "categCode",   label: "Category Code",                    sortable: true, width: 120 },
       { key: "categName",   label: "Category Name",                    sortable: true, width: 200 },
     ],
@@ -519,7 +519,7 @@ const ClassificationCodes = forwardRef(({
             />
 
             <FieldRenderer
-              label="Classification Description"
+              label="Classification Name"
               required
               value={form.description}
               maxLength={150}
@@ -543,7 +543,7 @@ const ClassificationCodes = forwardRef(({
             />
 
             <FieldRenderer
-              label="Category Description"
+              label="Category Name"
               value={form.categName}
               readOnly
               disabled

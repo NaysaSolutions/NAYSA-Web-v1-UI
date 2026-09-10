@@ -185,7 +185,7 @@ const RMMast_SetupTab = ({
               }`}
           >
             <FieldRenderer
-              label="Item No"
+              label="Item Code"
               required
               editableLookup
               type="lookup"
@@ -201,7 +201,7 @@ const RMMast_SetupTab = ({
 
           {/* Descriptions */}
           <FieldRenderer
-            label="Item Description"
+            label="Item Name"
             required
             type="text"
             value={form.itemDesc || ""}
@@ -211,7 +211,7 @@ const RMMast_SetupTab = ({
             maxLength={getLen("item_name", 200)}
           />
           <FieldRenderer
-            label="Item Description 2"
+            label="Item Name 2"
             type="text"
             value={form.itemDesc2 || ""}
             onChange={(v) => onChangeForm({ itemDesc2: getValue(v) })}
@@ -220,7 +220,7 @@ const RMMast_SetupTab = ({
             maxLength={getLen("rm2_name", 200)}
           />
           <FieldRenderer
-            label="Item Description 3"
+            label="Item Name 3"
             type="text"
             value={form.itemDesc3 || ""}
             onChange={(v) => onChangeForm({ itemDesc3: getValue(v) })}

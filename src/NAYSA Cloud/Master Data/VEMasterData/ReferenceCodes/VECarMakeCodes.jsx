@@ -476,7 +476,7 @@ const VECarMakeCodes = forwardRef(({
 
         <RegistrationInfo data={form} layout="stacked" />
       </div>
-
+      {/* for table */}
       <div className="flex-1 bg-white rounded-md shadow-sm border border-slate-200 overflow-hidden min-h-[300px] flex flex-col">
         <SearchGlobalReferenceTable
           columns={tableColumns}
