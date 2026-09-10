@@ -78,6 +78,12 @@ const EMPTY_FORM = {
   insuranceName: "",
   policyNo: "",
 
+  vehicleImageFile: null,
+  vehicleImagePreviewUrl: "",
+  vehicleImageUrl: "",
+  vehicleImageBase64: "",
+  removeVehicleImage: false,
+
   registeredBy: "",
   registeredDate: "",
   updatedBy: "",
@@ -126,7 +132,12 @@ const VEHSVMast = () => {
     canEdit,
     canSave,
     canDelete,
-  } = usePagePermission("VEHSVMast");
+  } = usePagePermission({
+    componentKey: "VEHSVMast",
+    menuCode: "VE0070",
+    menuName: "Vehicle Service Master Data",
+    debug: true,
+  });
 
   const [activeTab, setActiveTab] = useState("setup");
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -273,6 +284,26 @@ const VEHSVMast = () => {
         row.policy_no ??
         row.POLICY_NO ??
         "",
+
+      vehicleImagePreviewUrl: "",
+      vehicleImageFile: null,
+      vehicleImageUrl:
+        row.vehicleImageUrl ??
+        row.vehicle_image_url ??
+        row.VEHICLE_IMAGE_URL ??
+        row.imageUrl ??
+        row.image_url ??
+        row.IMAGE_URL ??
+        "",
+      vehicleImageBase64:
+        row.vehicleImageBase64 ??
+        row.vehicle_image_base64 ??
+        row.VEHICLE_IMAGE_BASE64 ??
+        row.imageBase64 ??
+        row.image_base64 ??
+        row.IMAGE_BASE64 ??
+        "",
+      removeVehicleImage: false,
 
       registeredBy:
         row.registeredBy ??
@@ -467,6 +498,11 @@ const VEHSVMast = () => {
         insuranceName: form.insuranceName || "",
         policyNo: form.policyNo || "",
 
+        vehicleImageBase64: form.removeVehicleImage
+          ? ""
+          : form.vehicleImageBase64 || "",
+        removeVehicleImage: form.removeVehicleImage ? true : false,
+
         userCode,
       };
 
@@ -644,7 +680,7 @@ const VEHSVMast = () => {
           label: <span className="hidden sm:inline ml-1">Reset</span>,
           icon: faUndo,
           onClick: handleReset,
-          disabled: isLoading,
+          disabled: false,
           className: `${baseBtn} bg-blue-600 hover:bg-blue-700 disabled:opacity-50`,
         },
         {
@@ -757,6 +793,7 @@ const VEHSVMast = () => {
 
           <div className="flex-shrink-0 w-full lg:w-auto flex flex-wrap items-center justify-center lg:justify-end gap-1.5">
             <PermissionBadge
+              variant="reference"
               permission={pagePermission}
               isReadOnly={isReadOnly}
               isFullAccess={isFullAccess}
@@ -810,6 +847,7 @@ const VEHSVMast = () => {
             ref={refTabRef}
             onStateChange={setRefState}
             isReadOnly={isReadOnly}
+            isFullAccess={isFullAccess}
             canAdd={canAdd}
             canEdit={canEdit}
             canSave={canSave}
