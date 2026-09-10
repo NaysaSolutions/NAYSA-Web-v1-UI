@@ -1,4 +1,4 @@
-// src/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEClassCodes.jsx
+// src/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEServiceTypeCodes.jsx
 
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState} from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -33,6 +33,7 @@ const SectionHeader = ({ title }) => (
   </div>
 );
 
+// pang get ng rows from the API
 const extractRows = (payload) => {
   const res =
     payload?.data?.data?.[0]?.result ??
@@ -67,17 +68,63 @@ const DEFAULT_FORM = {
 };
 
 const normalizeRecord = (row = {}) => ({
-  code: row.code ?? row.crefCode ?? row.cref_code ?? "",
-  description: row.description ?? row.crefName ?? row.cref_name ?? "",
-  active: row.active ?? row.IS_ACTIVE ?? true,
-  registeredBy: row.registeredBy ?? row.registered_by ?? "",
-  registeredDate: row.registeredDate ?? row.registered_date ?? "",
-  lastUpdatedBy: row.lastUpdatedBy ?? row.updatedBy ?? row.updated_by ?? "",
-  lastUpdatedDate: row.lastUpdatedDate ?? row.updatedDate ?? row.updated_date ?? "",
+  code:
+    row.code ??
+    row.serviceTypeCode ??
+    row.service_type_code ??
+    row.SERVICE_TYPE_CODE ??
+    row.crefCode ??
+    row.cref_code ??
+    "",
+
+  description:
+    row.description ??
+    row.serviceTypeName ??
+    row.serviceTypeDescription ??
+    row.service_type_name ??
+    row.service_type_description ??
+    row.SERVICE_TYPE_NAME ??
+    row.SERVICE_TYPE_DESCRIPTION ??
+    row.crefName ??
+    row.cref_name ??
+    "",
+
+  active:
+    row.active ??
+    row.ACTIVE ??
+    row.IS_ACTIVE ??
+    "Y",
+
+  registeredBy:
+    row.registeredBy ??
+    row.registered_by ??
+    row.REGISTERED_BY ??
+    "",
+
+  registeredDate:
+    row.registeredDate ??
+    row.registered_date ??
+    row.REGISTERED_DATE ??
+    "",
+
+  lastUpdatedBy:
+    row.lastUpdatedBy ??
+    row.updatedBy ??
+    row.updated_by ??
+    row.UPDATED_BY ??
+    "",
+
+  lastUpdatedDate:
+    row.lastUpdatedDate ??
+    row.updatedDate ??
+    row.updated_date ??
+    row.UPDATED_DATE ??
+    "",
+
   __existing: Boolean(row.__existing),
 });
 
-const VEHClassCodes = forwardRef((
+const VEServiceTypeCodes = forwardRef((
   {
     onStateChange,
     isReadOnly = false,
@@ -118,15 +165,16 @@ const VEHClassCodes = forwardRef((
     );
 
     // LOAD      
+    // GET /veType
     const typeListQuery = useQuery({
-        queryKey: ["vehClassCodesList"],
-        queryFn: async () => {
-            const response =
-            await apiClient.get("/vehClass");
-            return extractRows(response).map(
-            normalizeRecord
-            );
-        },
+      queryKey: ["veServiceTypeCodesList"],
+      queryFn: async () => {
+        const response =
+          await apiClient.get("/veServiceType");
+        return extractRows(response).map(
+          normalizeRecord
+        );
+      },
     });
 
     const types = useMemo(
@@ -137,10 +185,11 @@ const VEHClassCodes = forwardRef((
     const isInitialLoading = typeListQuery.isLoading;
 
     // SAVE MUTATION
+    // POST /upsertVEType
     const saveMutation = useMutation({
       mutationFn: async (payload) => {
         return apiClient.post(
-          "/upsertVEHClass",
+          "/upsertVEServiceType",
           {
             json_data: JSON.stringify({
               json_data: {
@@ -168,16 +217,16 @@ const VEHClassCodes = forwardRef((
           response?.data?.success === false || response?.data?.oks === false || errorcount > 0
         ) {
           await useSwalErrorAlert(
-            "Validation Error", errormsg || "Failed to save Vehicle Class Code."
+            "Validation Error", errormsg || "Failed to save Vehicle Service Type Code."
           );
           return;
         }
         await queryClient.invalidateQueries({
-          queryKey: ["vehClassCodesList"],
+          queryKey: ["veServiceTypeCodesList"],
         });
         await useSwalSuccessAlert(
           "Success!",
-          "Vehicle Class Code saved successfully."
+          "Vehicle Service Type Code saved successfully."
         );
         setIsEditing(false);
         setSelectedRow(null);
@@ -186,7 +235,7 @@ const VEHClassCodes = forwardRef((
       },
       onError: async (error) => {
         const msg =
-          error?.response?.data?.message || error?.response?.data?.errormsg || error?.message || "Failed to save Vehicle Class Code.";
+          error?.response?.data?.message || error?.response?.data?.errormsg || error?.message || "Failed to save Vehicle Service Type Code.";
         await useSwalErrorAlert(
           "Error",
           msg
@@ -195,10 +244,11 @@ const VEHClassCodes = forwardRef((
     });
 
     //  DELETE MUTATION
+    //  POST /deleteVEType
     const deleteMutation = useMutation({
       mutationFn: async (payload) => {
         return apiClient.post(
-          "/deleteVEHClass",
+          "/deleteVEServiceType",
           {
             json_data: {
               code: payload.code,
@@ -213,6 +263,7 @@ const VEHClassCodes = forwardRef((
           response?.data?.data?.[0] ||
           response?.data ||
           {};
+
 
         const errorcount = Number(
             row?.errorcount ??
@@ -233,18 +284,18 @@ const VEHClassCodes = forwardRef((
           await useSwalErrorAlert(
             "Delete Error",
             errormsg ||
-              "Failed to delete Vehicle Class Code."
+              "Failed to delete Vehicle Service Type Code."
           );
           return;
         }
 
         await queryClient.invalidateQueries({
-          queryKey: ["vehClassCodesList"],
+          queryKey: ["veServiceTypeCodesList"],
         });
 
         await useSwalSuccessAlert(
           "Deleted!",
-          "Vehicle Class Code deleted successfully."
+          "Vehicle Service Type Code deleted successfully."
         );
         resetForm(DEFAULT_FORM);
         setSelectedRow(null);
@@ -257,7 +308,7 @@ const VEHClassCodes = forwardRef((
           error?.response?.data?.message ||
           error?.response?.data?.errormsg ||
           error?.message ||
-          "Failed to delete Vehicle Class Code.";
+          "Failed to delete Vehicle Service Type Code.";
 
         await useSwalErrorAlert(
           "Delete Error",
@@ -267,6 +318,7 @@ const VEHClassCodes = forwardRef((
     });
 
     // CHECK DUPLICATE
+    // POST /checkDuplicateVEType
     const checkDuplicate = useCallback(
       async (code) => {
         const normalizedCode = String(code || "").trim().toUpperCase();
@@ -276,7 +328,7 @@ const VEHClassCodes = forwardRef((
         try {
           const response =
             await apiClient.post(
-              "/checkDuplicateVEHClass",
+              "/checkDuplicateVEServiceType",
               {
                 json_data: {code: normalizedCode},
               }
@@ -289,7 +341,7 @@ const VEHClassCodes = forwardRef((
           );
         } catch (error) {
           console.error(
-            "Vehicle Class duplicate check failed:",
+            "VE Service Type duplicate check failed:",
             error
           );
           return false;
@@ -324,7 +376,7 @@ const VEHClassCodes = forwardRef((
         if (duplicate) {
           await useSwalErrorAlert(
             "Duplicate Entry",
-            `Vehicle Class Code "${code}" already exists.`
+            `Vehicle Service Type Code "${code}" already exists.`
           );
         }
       },
@@ -342,7 +394,7 @@ const VEHClassCodes = forwardRef((
       async () => {
         if (isReadOnly || !canSave) {
           await showReadOnlyAlert(
-            "save vehicle type codes"
+            "save vehicle service type codes"
           );
           return;
         }
@@ -361,13 +413,15 @@ const VEHClassCodes = forwardRef((
         /* REQUIRED FIELD VALIDATION */
         const missing = [];
         if (!payload.code) {
-          missing.push("Class Code");
+          missing.push("Service Type Code");
         }
+
         if (!payload.description) {
           missing.push(
-            "Class Description"
+            "Service Type Description"
           );
         }
+
         if (missing.length) {
           await useSwalErrorAlert(
             "Validation Error",
@@ -375,6 +429,7 @@ const VEHClassCodes = forwardRef((
           );
           return;
         }
+
         /* DUPLICATE CHECK */
         if (!form.__existing) {
           const duplicate =
@@ -387,7 +442,7 @@ const VEHClassCodes = forwardRef((
 
             await useSwalErrorAlert(
               "Duplicate Entry",
-              `Vehicle Class Code "${payload.code}" already exists.`
+              `Vehicle Service Type Code "${payload.code}" already exists.`
             );
             return;
           }
@@ -434,7 +489,7 @@ const VEHClassCodes = forwardRef((
       async (row) => {
         if (isReadOnly || !canEdit) {
           await showReadOnlyAlert(
-            "edit vehicle type codes"
+            "edit vehicle service type codes"
           );
           return;
         }
@@ -473,7 +528,7 @@ const VEHClassCodes = forwardRef((
       async (row) => {
         if (isReadOnly || !canDelete) {
           await showReadOnlyAlert(
-            "delete vehicle type codes"
+            "delete vehicle service type codes"
           );
 
           return;
@@ -486,7 +541,7 @@ const VEHClassCodes = forwardRef((
         }
         const confirmed =
           await useSwalDeleteConfirm(
-            "Delete Vehicle Class Code?",
+            "Delete Vehicle Service Type Code?",
             `Are you sure you want to delete "${row.code}"?`
           );
 
@@ -506,6 +561,7 @@ const VEHClassCodes = forwardRef((
         userCode,
       ]
     );
+
 
     
     // FOR COLUMNS
@@ -584,13 +640,13 @@ const VEHClassCodes = forwardRef((
 
         {
           key: "code",
-          label: "Vehicle Class Code",
+          label: "Service Type Code",
           sortable: true,
           width: 140,
         },
         {
           key: "description",
-          label: "Vehicle Class Description",
+          label: "Service Type Description",
           sortable: true,
           width: 320,
         },
@@ -652,7 +708,7 @@ const VEHClassCodes = forwardRef((
         add: async () => {
           if (isReadOnly || !canAdd) {
             await showReadOnlyAlert(
-              "add vehicle class codes"
+              "add vehicle service type codes"
             );
 
             return;
@@ -690,14 +746,18 @@ const VEHClassCodes = forwardRef((
       <div className="flex flex-col h-full gap-3 w-full relative">
         {isLoading && <LoadingSpinner />}
 
+        {/* =================================================
+            BASIC INFORMATION
+            ================================================= */}
+
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-3 shrink-0">
           <Card className="p-4 flex flex-col">
             <SectionHeader title="BASIC INFORMATION"/>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               
-              {/* VEHICLE CLASS CODE */}
+              {/* TYPE CODE */}
               <FieldRenderer 
-              label="Vehicle Class Code" 
+              label="Service Type Code" 
               required 
               value={form.code} 
               inputRef={codeInputRef}
@@ -717,7 +777,7 @@ const VEHClassCodes = forwardRef((
               />
 
               <FieldRenderer 
-              label="Vehicle Class Description" 
+              label="Service Type Description" 
               required 
               value={form.description}
               onChange={(v) => setField( "description",v ?? "")}
@@ -727,7 +787,7 @@ const VEHClassCodes = forwardRef((
                 label="Active"
                 type="select"
                 value={form.active}
-                disabled={!isEditing}
+                disabled={isReadOnly || !isEditing}
                 options={[
                   { value: "Y", label: "Yes" },
                   { value: "N", label: "No" },
@@ -748,7 +808,7 @@ const VEHClassCodes = forwardRef((
         {/* TABLE */}
         <div className="flex-1 bg-white rounded-md shadow-sm border border-slate-200 overflow-hidden min-h-[300px] flex flex-col">
           <SearchGlobalReferenceTable columns={tableColumns}
-            data={tableData} isLoading={isInitialLoading} docType="VE Class Codes"
+            data={tableData} isLoading={isInitialLoading} docType="VE Service Type Codes"
             itemsPerPage={50} onRowDoubleClick={ handleRowDoubleClick }
             onRowClick={(row) =>
               setSelectedRow(row)
@@ -761,5 +821,5 @@ const VEHClassCodes = forwardRef((
     );
   }
 );
-VEHClassCodes.displayName = "VEHClassCodes";
-export default VEHClassCodes;
+VEServiceTypeCodes.displayName = "VEServiceTypeCodes";
+export default VEServiceTypeCodes;

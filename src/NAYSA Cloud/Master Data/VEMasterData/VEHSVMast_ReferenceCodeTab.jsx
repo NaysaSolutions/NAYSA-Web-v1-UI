@@ -1,5 +1,3 @@
-// src/NAYSA Cloud/Master Data/VEHSVServiceMaster/VEHSVMast_ReferenceCodeTab.jsx
-
 import React, {
   forwardRef,
   useImperativeHandle,
@@ -28,11 +26,9 @@ import VECarMakeCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCode
 import VETypeCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VETypeCodes.jsx";
 import VECarModelCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEModelCodes.jsx";
 import VEPartClass from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEPartClass.jsx";
-import VEHClassCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEHClassCodes.jsx";
+import VEServiceTypeCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEServiceTypeCodes.jsx";
 
-// Add these imports once the actual components are available:
-// import VEClassCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEClassCodes.jsx";
-// import VEServiceTypeCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEServiceTypeCodes.jsx";
+import VEClassCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEHClassCodes.jsx";
 // import VEServiceCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEServiceCodes.jsx";
 
 const SectionHeader = ({ title, subtitle }) => (
@@ -373,9 +369,6 @@ const VEHSVMast_ReferenceCodeTab = forwardRef(
             />
           );
 
-        /*
-         * Uncomment this case once VEClassCodes exists/imported.
-         */
         case "class":
           return (
             <VEClassCodes
@@ -394,18 +387,18 @@ const VEHSVMast_ReferenceCodeTab = forwardRef(
             />
           );
 
-        /*
-         * Uncomment these cases once the components exist/imported.
-         */
-        // case "serviceType":
-        //   return (
-        //     <VEServiceTypeCodes
-        //       ref={serviceTypeRef}
-        //       onStateChange={childStateChange}
-        //       {...permissionProps}
-        //     />
-        //   );
+        case "serviceType":
+          return (
+            <VEServiceTypeCodes
+              ref={serviceTypeRef}
+              onStateChange={childStateChange}
+              {...permissionProps}
+            />
+          );
 
+        /*
+         * Uncomment this case once VEServiceCodes exists/imported.
+         */
         // case "serviceCodes":
         //   return (
         //     <VEServiceCodes
