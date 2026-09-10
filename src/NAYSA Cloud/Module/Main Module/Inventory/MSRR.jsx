@@ -3812,7 +3812,7 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
     const vatRate = parseFormattedNumber(row.vatRate || 0);
     const effectiveCurrRate = parseFormattedNumber(rateOverride || 1) || 0;
 
-    const chargeableQty = Math.max(rrQty - freeQty, 0);
+    // const chargeableQty = Math.max(rrQty - freeQty, 0);
     const gross = chargeableQty * unitCost;
     const vatAmt = vatRate ? gross - gross / (1 + vatRate / 100) : 0;
     const netAmt = gross - vatAmt;

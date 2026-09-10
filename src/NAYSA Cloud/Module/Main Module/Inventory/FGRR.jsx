@@ -3843,63 +3843,90 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
     handleCloseLotPickingModal();
   };
 
-  const recalcFGRRRow = (row) => {
-return recalcFGRRRowWithCurrencyRate(row);
-    const freeQty = parseFormattedNumber(row.freeQty || 0);
-    const unitCost = parseFormattedNumber(row.unitCost || 0);
-    const vatRate = parseFormattedNumber(row.vatRate || 0);
-
-    // ✅ ONLY chargeable quantity
-    const chargeableQty = Math.max(rrQty - freeQty, 0);
-
-    const gross = chargeableQty * unitCost;
-
-    // VAT-inclusive example (adjust if exclusive in your setup)
-    const vatAmt = vatRate ? gross - gross / (1 + vatRate / 100) : 0;
-
-    const netAmt = gross - vatAmt;
-
-    return {
-      ...row,
-      grossAmount: formatNumber(gross, 2),
-      itemAmount: formatNumber(gross, 2),
-      vatAmount: formatNumber(vatAmt, 2),
-      netAmount: formatNumber(netAmt, 2),
-      amount: formatNumber(gross, 2), // your Amount column
-    };
-  };
-
+const recalcFGRRRow = (row) => {
+  return recalcFGRRRowWithCurrencyRate(row);
+};
   const recalcFGRRRowWithCurrencyRate = (row) => {
-    const rrQty = parseFormattedNumber(row.rrQty || 0);
-    const freeQty = parseFormattedNumber(row.freeQty || 0);
-    const unitCost = parseFormattedNumber(row.unitCost || 0);
-    const vatRate = parseFormattedNumber(row.vatRate || 0);
-    const rowCurrCode = normalizeCurrencyCode(row.currCode || currCode || state.currCode || "PHP");
-    const rowCurrRate = parseFormattedNumber(row.currRate ?? currRate ?? state.currRate ?? 1) || 1;
-    const chargeableQty = Math.max(rrQty - freeQty, 0);
-    const gross = chargeableQty * unitCost;
-    const vatAmt = vatRate ? gross - gross / (1 + vatRate / 100) : 0;
-    const netAmtFx = gross - vatAmt;
-    const netAmt = rowCurrCode !== "PHP" ? netAmtFx * rowCurrRate : netAmtFx;
-    const unitCostPhp = rowCurrCode !== "PHP" ? unitCost * rowCurrRate : unitCost;
-    const grossPhp = rowCurrCode !== "PHP" ? gross * rowCurrRate : gross;
+  const rrQty = parseFormattedNumber(row.rrQty || 0);
+  const freeQty = parseFormattedNumber(row.freeQty || 0);
+  const unitCost = parseFormattedNumber(row.unitCost || 0);
+  const vatRate = parseFormattedNumber(row.vatRate || 0);
 
-    return {
-      ...row,
-      currCode: rowCurrCode,
-      currRate: formatNumber(rowCurrRate, 6),
-      grossAmount: formatNumber(gross, 2),
-      itemAmount: formatNumber(gross, 2),
-      vatAmount: formatNumber(vatAmt, 2),
-      fxAmount: formatNumber(netAmtFx, 2),
-      netAmount: formatNumber(netAmt, 2),
-      amount: formatNumber(gross, 2),
-      unitCostPhp: formatNumber(unitCostPhp, decUcost),
-      grossAmountPhp: formatNumber(grossPhp, 2),
-      itemAmountPhp: formatNumber(grossPhp, 2),
-      amountPhp: formatNumber(grossPhp, 2),
-    };
+  const rowCurrCode = normalizeCurrencyCode(
+    row.currCode || currCode || state.currCode || "PHP"
+  );
+
+  const rowCurrRate =
+    parseFormattedNumber(
+      row.currRate ?? currRate ?? state.currRate ?? 1
+    ) || 1;
+
+  /*
+  |--------------------------------------------------------------------------
+  | IMPORTANT
+  |--------------------------------------------------------------------------
+  | RR Quantity and Free Quantity are separate quantities.
+  |
+  | Free Quantity MUST NOT be deducted from RR Quantity.
+  |
+  | Example:
+  | RR Qty   = 10
+  | Free Qty = 2
+  |
+  | Amount is based on RR Qty = 10.
+  | Free Qty remains additional inventory quantity.
+  |--------------------------------------------------------------------------
+  */
+
+  const gross = rrQty * unitCost;
+
+  const vatAmt = vatRate
+    ? gross - gross / (1 + vatRate / 100)
+    : 0;
+
+  const netAmtFx = gross - vatAmt;
+
+  const netAmt =
+    rowCurrCode !== "PHP"
+      ? netAmtFx * rowCurrRate
+      : netAmtFx;
+
+  const unitCostPhp =
+    rowCurrCode !== "PHP"
+      ? unitCost * rowCurrRate
+      : unitCost;
+
+  const grossPhp =
+    rowCurrCode !== "PHP"
+      ? gross * rowCurrRate
+      : gross;
+
+  return {
+    ...row,
+
+    // Keep both quantities independently
+    rrQty: formatNumber(rrQty, decQty),
+    freeQty: formatNumber(freeQty, decQty),
+
+    currCode: rowCurrCode,
+    currRate: formatNumber(rowCurrRate, 6),
+
+    grossAmount: formatNumber(gross, 2),
+    itemAmount: formatNumber(gross, 2),
+    amount: formatNumber(gross, 2),
+
+    vatAmount: formatNumber(vatAmt, 2),
+
+    fxAmount: formatNumber(netAmtFx, 2),
+    netAmount: formatNumber(netAmt, 2),
+
+    unitCostPhp: formatNumber(unitCostPhp, decUcost),
+
+    grossAmountPhp: formatNumber(grossPhp, 2),
+    itemAmountPhp: formatNumber(grossPhp, 2),
+    amountPhp: formatNumber(grossPhp, 2),
   };
+};
 
   const parseItemConversionRows = (response) => {
     const result = response?.data?.data?.[0]?.result;

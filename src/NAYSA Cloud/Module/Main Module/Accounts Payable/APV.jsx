@@ -463,7 +463,49 @@ const APV = () => {
     openRRDataSummary: [],
     openRRColSummary: [],
     openRRColDetail: [],
+
+    showOpenLCModal: false,
+    openLC_Data_Summary: [],
+    openLC_Col_Summary: [],
+    openLC_Col_Detail: [],
   });
+
+
+
+  const openLCSummaryColumns = [
+  { key: "branchCode", label: "Branch", width: 80 },
+  { key: "lcNo", label: "LC No.", width: 120 },
+  { key: "lcDate", label: "LC Date", width: 110 },
+  { key: "importationDate", label: "Importation Date", width: 120 },
+  { key: "importEntryNo", label: "Import Entry No.", width: 130 },
+  { key: "awbBlNo", label: "AWB/BL No.", width: 130 },
+  { key: "vendCode", label: "Broker Code", width: 110 },
+  { key: "vendName", label: "Broker Name", width: 220 },
+  { key: "forwarderCode", label: "Forwarder Code", width: 120 },
+  { key: "forwarderName", label: "Forwarder Name", width: 220 },
+  { key: "invoiceCount", label: "Invoices", width: 80 },
+  { key: "totalBillAmount", label: "Bill Amount", width: 130, type: "amount" },
+  { key: "totalVatAmount", label: "VAT Amount", width: 130, type: "amount" },
+  { key: "totalNetAmount", label: "Net Amount", width: 130, type: "amount" },
+];
+
+const openLCDetailColumns = [
+  { key: "lcNo", label: "LC No.", width: 120 },
+  { key: "lcLineNo", label: "Line", width: 70 },
+  { key: "billCode", label: "Bill Code", width: 100 },
+  { key: "billDesc", label: "Bill Description", width: 220 },
+  { key: "vendCode", label: "Payee Code", width: 110 },
+  { key: "vendName", label: "Payee Name", width: 220 },
+  { key: "siNo", label: "Invoice No.", width: 120 },
+  { key: "siDate", label: "Invoice Date", width: 110 },
+  { key: "billAmt", label: "Bill Amount", width: 130, type: "amount" },
+  { key: "vatCode", label: "VAT Code", width: 100 },
+  { key: "vatAmount", label: "VAT Amount", width: 130, type: "amount" },
+  { key: "netAmount", label: "Net Amount", width: 130, type: "amount" },
+  { key: "debitAcct", label: "DR Account", width: 120 },
+  { key: "rcCode", label: "RC Code", width: 100 },
+  { key: "rcName", label: "RC Name", width: 200 },
+];
   const [showInvoiceAddDropdown, setShowInvoiceAddDropdown] = useState(false);
 
   // Helper function to update state
@@ -884,23 +926,25 @@ const handleOpenReferencePOAdvance = async (overrides = {}) => {
 };
 
 
-const handleOpenReferenceLCImportation = async (overrides = {}) => {
+const handleOpenReferenceLCImportation = async () => {
   setShowInvoiceAddDropdown(false);
 
-  const lookupVendCode = String(overrides.vendCode ?? vendCode ?? "").trim();
-  const lookupBranchCode = String(overrides.branchCode ?? branchCode ?? "").trim();
+  const lookupBranchCode = String(branchCode || "").trim();
 
   try {
-    updateState({ isLoading: true, showSpinner: true });
+    updateState({
+      isLoading: true,
+      showSpinner: true,
+    });
 
     const rawRows = await fetchAPVReferenceSummary({
       apvtranType: "APV07",
       referenceType: "LC",
       branchCode: lookupBranchCode,
-      vendCode: lookupVendCode,
+      vendCode: "",
     });
 
-    if (rawRows.length === 0) {
+    if (!rawRows.length) {
       useSwalErrorAlert(
         "LC Importation Reference",
         "No open LC Importation reference found."
@@ -909,25 +953,169 @@ const handleOpenReferenceLCImportation = async (overrides = {}) => {
     }
 
     updateState({
-      globalLookupRow: rawRows,
-      globalLookupHeader: openLCLookupColumns,
-      globalLookupConfigEndpoint: "",
-      globalLookupTitle: "Open LC Importation References",
-      globalLookupBtnCaption: "Get Selected LC",
-      showRRRefModal: true,
-      modalContext: "openLCImportation",
+      openLC_Data_Summary: rawRows,
+      openLC_Col_Summary: openLCSummaryColumns,
+      openLC_Col_Detail: openLCDetailColumns,
+      showOpenLCModal: true,
     });
   } catch (error) {
-    console.error("Failed to fetch LC Importation reference:", error);
+    console.error("Failed to fetch LC Summary:", error);
+
     useSwalErrorAlert(
       "LC Importation Reference",
       error?.response?.data?.message ||
-        error?.response?.data?.error ||
         error?.message ||
-        "Error in fetching LC Importation reference."
+        "Unable to fetch LC references."
     );
   } finally {
-    updateState({ isLoading: false, showSpinner: false });
+    updateState({
+      isLoading: false,
+      showSpinner: false,
+    });
+  }
+};
+
+const handleCloseLCModal = async (selection) => {
+  const selectedDetails = Array.isArray(selection?.details)
+    ? selection.details
+    : [];
+
+  if (!selectedDetails.length) {
+    updateState({
+      showOpenLCModal: false,
+    });
+    return;
+  }
+
+  updateState({
+    isLoading: true,
+    showSpinner: true,
+    showOpenLCModal: false,
+  });
+
+  try {
+    const foundAtcCode = vendName?.atcCode || "";
+
+    const masterAtcRow = foundAtcCode
+      ? await useTopATCRow(foundAtcCode)
+      : null;
+
+    const mappedRows = await Promise.all(
+      selectedDetails.map(async (item) => {
+        const amount =
+          parseFormattedNumber(
+            item.billAmt ??
+            item.siAmount ??
+            item.amount ??
+            0
+          ) || 0;
+
+        const vatAmount =
+          parseFormattedNumber(
+            item.vatAmount ??
+            item.vatAmt ??
+            0
+          ) || 0;
+
+        const netAmount =
+          parseFormattedNumber(
+            item.netAmount ??
+            item.netAmt ??
+            amount - vatAmount
+          ) || 0;
+
+        const atcAmount = foundAtcCode
+          ? await useTopATCAmount(foundAtcCode, netAmount)
+          : 0;
+
+        return {
+          lnNo: "",
+          invType: "LC",
+
+          rrNo: "",
+
+          poNo: item.lcNo || "",
+
+          siNo: item.siNo || "",
+
+          siDate:
+            useformatToDatev2(item.siDate || item.lcDate) ||
+            useGetCurrentDayV2(),
+
+          amount: formatNumber(amount),
+          siAmount: formatNumber(amount),
+
+          debitAcct:
+            item.debitAcct ||
+            item.drAcct ||
+            "",
+
+          rcCode: item.rcCode || "",
+          rcName: item.rcName || "",
+
+          sltypeCode: "SU",
+          slCode: item.vendCode || "",
+          slName: item.vendName || "",
+
+          vatCode: item.vatCode || "",
+          vatName: item.vatName || "",
+          vatAmount: formatNumber(vatAmount),
+
+          atcCode: foundAtcCode,
+          atcName: masterAtcRow?.atcName || "",
+          atcAmount: formatNumber(atcAmount),
+
+          advpoNo: "",
+          advpoAmount: "0.00",
+          advpoVatAmount: "0.00",
+          advpoAtcAmount: "0.00",
+          advAcct: "",
+
+          paytermCode: "",
+          dueDate: useGetCurrentDayV2(),
+
+          remarks: item.remarks || "",
+
+          REC_RC: item.rcCode ? "Y" : "N",
+          REC_SL: "Y",
+
+          lcId: item.lcId || "",
+          lcNo: item.lcNo || "",
+        };
+      })
+    );
+
+    const updatedRows = [
+      ...detailRows,
+      ...mappedRows,
+    ];
+
+    updateState({
+      detailRows: updatedRows,
+      detailRowsGL: [],
+
+      showOpenLCModal: false,
+      openLC_Data_Summary: [],
+      openLC_Col_Summary: [],
+      openLC_Col_Detail: [],
+
+      triggerGLEntries: true,
+    });
+
+    updateTotals(updatedRows);
+  } catch (error) {
+    console.error("Failed to apply LC details:", error);
+
+    useSwalErrorAlert(
+      "LC Importation",
+      error?.message ||
+        "Unable to apply selected LC details."
+    );
+  } finally {
+    updateState({
+      isLoading: false,
+      showSpinner: false,
+    });
   }
 };
 
@@ -3878,130 +4066,452 @@ const isPCVFlow = modalContext === "openPCV";
   return;
 }
     if (isLCImportationFlow) {
-      const selectedLC = itemsArray[0] || {};
-      const selectedIds = itemsArray
-        .map((row) => row.groupId || row.lcId || "")
-        .filter(Boolean)
-        .join(",");
+  // =========================================================
+  // APV07 - USER SELECTED LC FROM SUMMARY
+  // Now fetch LC_DT3 details using OpenAPVLC_OpenDetail
+  // =========================================================
 
-      const detailPayload = {
-        json_data: {
-          selectedIds,
-          lcId: itemsArray.length === 1 ? selectedLC.lcId || "" : "",
-          branchCode: selectedLC.branchCode || branchCode || "",
-        },
+  const selectedLC = itemsArray[0] || {};
+
+  // ---------------------------------------------------------
+  // Build selected LC IDs.
+  //
+  // Summary groupId sample:
+  // 98BFF7DF-6ACB-4846-978C-42AD1BD4EC10|EM000001
+  //
+  // OpenAPVLC_OpenDetail already strips everything after "|".
+  // ---------------------------------------------------------
+  const selectedIds = itemsArray
+    .map((row) => {
+      return (
+        row.groupId ||
+        row.lcId ||
+        row.LC_ID ||
+        ""
+      );
+    })
+    .filter(Boolean)
+    .join(",");
+
+  const selectedLcId =
+    selectedLC.lcId ||
+    selectedLC.LC_ID ||
+    String(selectedLC.groupId || "").split("|")[0] ||
+    "";
+
+  console.log("SELECTED LC SUMMARY:", selectedLC);
+  console.log("SELECTED LC IDS:", selectedIds);
+  console.log("SELECTED LC ID:", selectedLcId);
+
+  // =========================================================
+  // CALL OPEN APV LC DETAIL
+  // =========================================================
+  const detailPayload = {
+    json_data: {
+      selectedIds: selectedIds,
+      selectedId: selectedIds,
+
+      lcId: selectedLcId,
+
+      branchCode:
+        selectedLC.branchCode ||
+        branchCode ||
+        "",
+
+      // Optional reference information
+      lcNo:
+        selectedLC.lcNo ||
+        "",
+
+      type: "LC",
+      invType: "LC",
+      referenceType: "LC",
+    },
+  };
+
+  console.log(
+    "getAPVLC_OpenDetail PAYLOAD:",
+    detailPayload
+  );
+
+  const detailResponse = await postRequest(
+    "getAPVLC_OpenDetail",
+    detailPayload
+  );
+
+  console.log(
+    "RAW getAPVLC_OpenDetail RESPONSE:",
+    detailResponse
+  );
+
+  // =========================================================
+  // EXTRACT LC_DT3 DETAIL ROWS
+  // =========================================================
+  const lcDetailRows =
+    extractOpenRRResponseRows(detailResponse);
+
+  console.log(
+    "LC DETAIL ROWS:",
+    lcDetailRows
+  );
+
+  if (!lcDetailRows.length) {
+    useSwalErrorAlert(
+      "LC Importation Reference",
+      "No invoice details found for the selected LC reference."
+    );
+
+    return;
+  }
+
+  // =========================================================
+  // SUMMARY INFORMATION
+  // =========================================================
+  const firstDetail = lcDetailRows[0] || {};
+
+  /*
+  |--------------------------------------------------------------------------
+  | IMPORTANT
+  |--------------------------------------------------------------------------
+  | Do NOT replace APV Header Payee with LC Broker.
+  |
+  | APV Header:
+  |   vendCode / vendName remain whatever user selected.
+  |
+  | LC Detail:
+  |   vendor/broker comes from LC_DT3 / LC Summary.
+  |--------------------------------------------------------------------------
+  */
+
+  const foundVatCode =
+    vendName?.vatCode ||
+    "";
+
+  const foundAtcCode =
+    vendName?.atcCode ||
+    "";
+
+  const masterAtcRow =
+    foundAtcCode
+      ? await useTopATCRow(foundAtcCode)
+      : null;
+
+  const defaultAdvancesAcctCode =
+    await getDefaultAdvancesAcctCode();
+
+  // ---------------------------------------------------------
+  // Header-level LC information from selected summary
+  // ---------------------------------------------------------
+  const lcBrokerCode =
+    selectedLC.vendCode ||
+    "";
+
+  const lcBrokerName =
+    selectedLC.vendName ||
+    "";
+
+  const lcForwarderCode =
+    selectedLC.forwarderCode ||
+    "";
+
+  const lcForwarderName =
+    selectedLC.forwarderName ||
+    "";
+
+  // =========================================================
+  // MAP LC_DT3 → APV DT1
+  // =========================================================
+  const mappedRows = await Promise.all(
+    lcDetailRows.map(async (item) => {
+      const amount =
+        parseFormattedNumber(
+          item.siAmount ??
+          item.amount ??
+          item.billAmt ??
+          0
+        ) || 0;
+
+      const vatAmount =
+        parseFormattedNumber(
+          item.vatAmount ??
+          item.vatAmt ??
+          0
+        ) || 0;
+
+      const netAmount =
+        parseFormattedNumber(
+          item.netAmount ??
+          item.netAmt ??
+          amount - vatAmount
+        ) || 0;
+
+      // -------------------------------------------------------
+      // Invoice date
+      // -------------------------------------------------------
+      const rawSiDate =
+        item.siDate ||
+        item.lcDate ||
+        selectedLC.lcDate ||
+        "";
+
+      const formattedSiDate = rawSiDate
+        ? (
+            useformatToDatev2(rawSiDate) ||
+            normalizeSlrefDate(rawSiDate) ||
+            useGetCurrentDayV2()
+          )
+        : useGetCurrentDayV2();
+
+      // -------------------------------------------------------
+      // EWT based on current APV Payee ATC
+      // -------------------------------------------------------
+      const calculatedAtcAmount =
+        foundAtcCode
+          ? await useTopATCAmount(
+              foundAtcCode,
+              netAmount
+            )
+          : 0;
+
+      // -------------------------------------------------------
+      // LC detail vendor
+      //
+      // IMPORTANT:
+      // The detail stored procedure returns:
+      // d.vend_code
+      // d.vend_name
+      //
+      // Use BOTH code and actual NAME.
+      // -------------------------------------------------------
+      const detailVendCode =
+        item.vendCode ||
+        lcBrokerCode ||
+        "";
+
+      const detailVendName =
+        item.vendName ||
+        lcBrokerName ||
+        "";
+
+      return {
+        lnNo: "",
+
+        // -----------------------------------------------------
+        // Reference
+        // -----------------------------------------------------
+        invType:
+          item.invType ||
+          "LC",
+
+        rrNo: "",
+
+        // Store LC No. in current PO/Reference column
+        poNo:
+          item.lcNo ||
+          selectedLC.lcNo ||
+          "",
+
+        // Actual supplier invoice
+        siNo:
+          item.siNo ||
+          "",
+
+        siDate:
+          formattedSiDate,
+
+        // -----------------------------------------------------
+        // Amount
+        // -----------------------------------------------------
+        amount:
+          formatNumber(amount),
+
+        siAmount:
+          formatNumber(amount),
+
+        // -----------------------------------------------------
+        // Debit Account / RC
+        // -----------------------------------------------------
+        debitAcct:
+          item.debitAcct ||
+          item.drAcct ||
+          "",
+
+        rcCode:
+          item.rcCode ||
+          "",
+
+        rcName:
+          item.rcName ||
+          "",
+
+        // -----------------------------------------------------
+        // SL
+        //
+        // LC_DT3 vendor is the SL for this invoice line.
+        // -----------------------------------------------------
+        sltypeCode:
+          "SU",
+
+        slCode:
+          detailVendCode,
+
+        slName:
+          detailVendName,
+
+        // -----------------------------------------------------
+        // LC Broker / Forwarder Reference
+        // -----------------------------------------------------
+        brokerCode:
+          item.brokerCode ||
+          lcBrokerCode,
+
+        brokerName:
+          item.brokerName ||
+          lcBrokerName,
+
+        forwarderCode:
+          item.forwarderCode ||
+          lcForwarderCode,
+
+        forwarderName:
+          item.forwarderName ||
+          lcForwarderName,
+
+        // -----------------------------------------------------
+        // VAT
+        // -----------------------------------------------------
+        vatCode:
+          item.vatCode ||
+          foundVatCode,
+
+        vatName:
+          item.vatName ||
+          "",
+
+        vatAmount:
+          formatNumber(vatAmount),
+
+        // -----------------------------------------------------
+        // ATC
+        // -----------------------------------------------------
+        atcCode:
+          foundAtcCode,
+
+        atcName:
+          masterAtcRow?.atcName ||
+          "",
+
+        atcAmount:
+          formatNumber(
+            calculatedAtcAmount
+          ),
+
+        // -----------------------------------------------------
+        // Advance fields
+        // -----------------------------------------------------
+        advpoNo:
+          "",
+
+        advpoAmount:
+          "0.00",
+
+        advpoVatAmount:
+          "0.00",
+
+        advpoAtcAmount:
+          "0.00",
+
+        advAcct:
+          item.advAcct ||
+          item.adv_acct ||
+          item.ADV_ACCT ||
+          defaultAdvancesAcctCode ||
+          "",
+
+        // -----------------------------------------------------
+        // Other fields
+        // -----------------------------------------------------
+        paytermCode:
+          "",
+
+        dueDate:
+          useGetCurrentDayV2(),
+
+        remarks:
+          item.remarks ||
+          "",
+
+        REC_RC:
+          item.rcCode
+            ? "Y"
+            : "N",
+
+        REC_SL:
+          "Y",
+
+        // -----------------------------------------------------
+        // Preserve LC reference
+        // -----------------------------------------------------
+        lcId:
+          item.lcId ||
+          selectedLcId,
+
+        lcNo:
+          item.lcNo ||
+          selectedLC.lcNo ||
+          "",
       };
+    })
+  );
 
-      const detailResponse = await postRequest(
-        "getAPVLC_OpenDetail",
-        JSON.stringify(detailPayload),
-      );
+  console.log(
+    "MAPPED APV07 LC DETAIL ROWS:",
+    mappedRows
+  );
 
-      const lcDetailRows = extractOpenRRResponseRows(detailResponse);
+  // =========================================================
+  // ADD DETAILS TO CURRENT APV
+  // =========================================================
+  const updatedRows = [
+    ...detailRows,
+    ...mappedRows,
+  ];
 
-      if (lcDetailRows.length === 0) {
-        useSwalErrorAlert(
-          "LC Importation Reference",
-          "No invoice details found for the selected LC reference."
-        );
-        return;
-      }
+  updateState({
+    // Preserve current APV header Payee
+    vendCode,
+    vendName,
 
-      const firstDetail = lcDetailRows[0] || {};
+    // Preserve AP Account
+    apAccountCode,
+    apAccountName,
 
-      // APV07 LC selection should not overwrite the APV header payee.
-      // Keep the current header payee/account/currency and use LC broker/forwarder only as row reference info.
-      const foundVendCode = vendName?.vendCode || vendCode || "";
-      const foundVendName = vendName?.vendName || "";
-      const foundAcctCode = apAccountCode || "";
-      const foundAcctName = apAccountName || "";
-      const foundCurrCode = vendName?.currCode || currencyCode || "";
-      const foundCurrName = vendName?.currName || currencyName || "";
-      const foundVatCode = vendName?.vatCode || "";
-      const foundAtcCode = vendName?.atcCode || "";
-      const lcBrokerCode = firstDetail.vendCode || selectedLC.vendCode || "";
-      const lcBrokerName = firstDetail.vendName || selectedLC.vendName || "";
-      const lcForwarderCode = firstDetail.forwarderCode || selectedLC.forwarderCode || "";
-      const lcForwarderName = firstDetail.forwarderName || selectedLC.forwarderName || "";
-      const masterAtcRow = foundAtcCode ? await useTopATCRow(foundAtcCode) : null;
-      const defaultAdvancesAcctCode = await getDefaultAdvancesAcctCode();
+    // Preserve Currency
+    currencyCode,
+    currencyName,
+    currencyRate,
 
-      const mappedRows = await Promise.all(
-        lcDetailRows.map(async (item) => {
-          const amount = parseFormattedNumber(item.siAmount || item.amount || item.billAmt || 0);
-          const vatAmount = parseFormattedNumber(item.vatAmount || item.vatAmt || 0);
-          const netAmount = parseFormattedNumber(item.netAmount || item.netAmt || 0);
-          const rawSiDate = item.siDate || item.lcDate || "";
-          const formattedSiDate = rawSiDate
-            ? useformatToDatev2(rawSiDate) || normalizeSlrefDate(rawSiDate) || useGetCurrentDayV2()
-            : useGetCurrentDayV2();
-          const calculatedAtcAmount = foundAtcCode
-            ? await useTopATCAmount(foundAtcCode, netAmount)
-            : 0;
+    // Add LC invoice details
+    detailRows: updatedRows,
 
-          return {
-            lnNo: "",
-            invType: item.invType || "LC",
-            rrNo: "",
-            poNo: item.poNo || item.lcNo || "",
-            siNo: item.siNo || "",
-            siDate: formattedSiDate,
-            amount: formatNumber(amount),
-            siAmount: formatNumber(amount),
-            debitAcct: item.debitAcct || item.drAcct || "",
-            rcCode: item.rcCode || "",
-            rcName: item.rcName || "",
-            sltypeCode: "SU",
-            slCode:  item.vendCode,
-            slName:  item.vendCode,
-            brokerCode: item.vendCode || lcBrokerCode,
-            brokerName: item.vendName || lcBrokerName,
-            forwarderCode: item.forwarderCode || lcForwarderCode,
-            forwarderName: item.forwarderName || lcForwarderName,
-            vatCode: item.vatCode || foundVatCode,
-            vatName: item.vatName || "",
-            vatAmount: formatNumber(vatAmount),
-            atcCode: foundAtcCode,
-            atcName: masterAtcRow?.atcName || "",
-            atcAmount: formatNumber(calculatedAtcAmount),
-            advpoNo: "",
-            advpoAmount: "0.00",
-            advpoVatAmount: "0.00",
-            advpoAtcAmount: "0.00",
-            advAcct: item.advAcct || item.adv_acct || item.ADV_ACCT || defaultAdvancesAcctCode,
-            paytermCode: "",
-            dueDate: useGetCurrentDayV2(),
-            remarks: item.remarks || "",
-            REC_RC: item.rcCode ? "Y" : "N",
-            REC_SL: "Y",
-            lcId: item.lcId || selectedLC.lcId || "",
-            lcNo: item.lcNo || selectedLC.lcNo || "",
-          };
-        }),
-      );
+    // Clear old GL; regenerate using selected LC
+    detailRowsGL: [],
 
-      const updatedRows = [...detailRows, ...mappedRows];
+    // Close summary lookup
+    showRRRefModal: false,
+    modalContext: "",
+    globalLookupTitle: "",
+    globalLookupBtnCaption: "",
+    globalLookupConfigEndpoint: "",
 
-      updateState({
-        // Preserve APV header values after selecting LC reference.
-        vendCode,
-        vendName,
-        apAccountCode,
-        apAccountName,
-        currencyCode,
-        currencyName,
-        currencyRate,
-        detailRows: updatedRows,
-        showRRRefModal: false,
-        triggerGLEntries: true,
-        modalContext: "",
-        globalLookupTitle: "",
-        globalLookupBtnCaption: "",
-        globalLookupConfigEndpoint: "",
-      });
-      updateTotals(updatedRows);
-      return;
-    }
+    // Generate APV07 GL
+    triggerGLEntries: true,
+  });
+
+  updateTotals(updatedRows);
+
+  return;
+}
 
     const referenceItems = isPOAdvanceFlow
       ? itemsArray
@@ -8823,7 +9333,7 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
           source={accountModalSource}
         />
 
-       {state.showRRRefModal && (
+       {state.showRRRefModal && modalContext !== "openLCImportation" && (
   <GlobalLookupModalv1
     isOpen={state.showRRRefModal}
     title={
@@ -8980,6 +9490,99 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
           historyExportName={`${documentTitle} History`}
         />
       </div>
+
+      {state.showOpenLCModal && (
+  <GlobalCombinedLookup
+    isOpen={state.showOpenLCModal}
+
+    title="Open LC Importation"
+
+    summarySelectionMode="multiple"
+    detailSelectionMode="multiple"
+
+    summaryColumns={state.openLC_Col_Summary}
+    detailColumns={state.openLC_Col_Detail}
+
+    summaryData={state.openLC_Data_Summary}
+
+    tabTitles={[
+      "Open LC Summary",
+      "Open LC Detail",
+    ]}
+
+    summaryPersistKey="APVLC_OpenSummary"
+    detailPersistKey="APVLC_OpenDetail"
+
+    fetchDetailApi={async (selectedIds) => {
+      const idString = Array.isArray(selectedIds)
+        ? selectedIds.join(",")
+        : selectedIds;
+
+      const payload = {
+        json_data: {
+          selectedIds: idString,
+          branchCode: branchCode || "",
+        },
+      };
+
+      try {
+        updateState({
+          isLoading: true,
+          showSpinner: true,
+        });
+
+        console.log(
+          "Fetching LC OpenDetail:",
+          payload
+        );
+
+        const response = await postRequest(
+          "getAPVLC_OpenDetail",
+          payload
+        );
+
+        const detailRows =
+          extractOpenRRResponseRows(response);
+
+        console.log(
+          "LC OpenDetail:",
+          detailRows
+        );
+
+        return {
+          success: true,
+          data: detailRows,
+        };
+      } catch (error) {
+        console.error(
+          "getAPVLC_OpenDetail failed:",
+          error
+        );
+
+        return {
+          success: false,
+          data: [],
+        };
+      } finally {
+        updateState({
+          isLoading: false,
+          showSpinner: false,
+        });
+      }
+    }}
+
+    onClose={handleCloseLCModal}
+
+    onCancel={() =>
+      updateState({
+        showOpenLCModal: false,
+        openLC_Data_Summary: [],
+        openLC_Col_Summary: [],
+        openLC_Col_Detail: [],
+      })
+    }
+  />
+)}
     </div>
   );
 };
