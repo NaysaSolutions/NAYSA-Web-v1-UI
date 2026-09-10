@@ -721,11 +721,28 @@ const openPCVLookupColumns = [
   { key: "rcName", label: "RC Name", width: 200 },
 ];
 
+const openLCLookupColumns = [
+  { key: "branchCode", label: "Branch", width: 80 },
+  { key: "lcNo", label: "LC No.", width: 120 },
+  { key: "lcDate", label: "LC Date", width: 110 },
+  { key: "importationDate", label: "Importation Date", width: 120 },
+  { key: "importEntryNo", label: "Import Entry No.", width: 130 },
+  { key: "awbBlNo", label: "AWB/BL No.", width: 130 },
+  { key: "vendCode", label: "Broker Code", width: 110 },
+  { key: "vendName", label: "Broker Name", width: 220 },
+  { key: "forwarderCode", label: "Forwarder Code", width: 120 },
+  { key: "forwarderName", label: "Forwarder Name", width: 220 },
+  { key: "invoiceCount", label: "Invoices", width: 80 },
+  { key: "totalBillAmount", label: "Bill Amount", width: 130, type: "amount" },
+  { key: "totalVatAmount", label: "VAT Amount", width: 130, type: "amount" },
+  { key: "totalNetAmount", label: "Net Amount", width: 130, type: "amount" },
+];
+
 const openPOAPVLookupColumns = [
   { key: "branchCode", label: "Branch", width: 80 },
   { key: "docType", label: "Document Code", width: 110 },
-  { key: "poJoNo", label: "PO/JO No", width: 120 },
-  { key: "poJoDate", label: "PO/JO Date", width: 110 },
+  { key: "poJoNo", label: "PO No", width: 120 },
+  { key: "poJoDate", label: "PO Date", width: 110 },
   { key: "vendCode", label: "Payee Code", width: 110 },
   { key: "vendName", label: "Payee Name", width: 220 },
   { key: "payterm", label: "Payterm", width: 180 },
@@ -754,6 +771,42 @@ const resolveGlobalLookupColumns = async (endpointKey) => {
 };
 
 
+const fetchAPVReferenceSummary = async ({
+  apvtranType = selectedApType,
+  referenceType = "",
+  branchCode: overrideBranchCode,
+  vendCode: overrideVendCode,
+  extraPayload = {},
+} = {}) => {
+  const lookupBranchCode = String(
+    overrideBranchCode ?? branchCode ?? ""
+  ).trim();
+
+  const lookupVendCode = String(
+    overrideVendCode ?? vendCode ?? ""
+  ).trim();
+
+  const normalizedApType = String(apvtranType || "")
+    .trim()
+    .toUpperCase();
+
+  const normalizedReferenceType = String(referenceType || "")
+    .trim()
+    .toUpperCase();
+
+  const response = await postRequest("apv/reference-summary", {
+    json_data: {
+      apvtranType: normalizedApType,
+      referenceType: normalizedReferenceType,
+      branchCode: lookupBranchCode,
+      vendCode: lookupVendCode,
+      ...extraPayload,
+    },
+  });
+
+  return extractOpenRRResponseRows(response);
+};
+
 const handleOpenReferencePOAdvance = async (overrides = {}) => {
   setShowInvoiceAddDropdown(false);
 
@@ -771,21 +824,12 @@ const handleOpenReferencePOAdvance = async (overrides = {}) => {
   try {
     updateState({ isLoading: true, showSpinner: true });
 
-    const lookupPayload = {
+    const rawRows = (await fetchAPVReferenceSummary({
+      apvtranType: "APV03",
+      referenceType: "PO",
       branchCode: lookupBranchCode,
       vendCode: lookupVendCode,
-    };
-
-    // Keep both payload shapes for compatibility with PO procedure versions
-    // that read either $.branchCode/$.vendCode or $.json_data.*.
-    const response = await fetchData("getPOAPV_Summary", {
-      PARAMS: JSON.stringify({
-        ...lookupPayload,
-        json_data: lookupPayload,
-      }),
-    });
-
-    const rawRows = extractOpenRRResponseRows(response).filter((row) => {
+    })).filter((row) => {
       const rowBranchCode = String(row.branchCode ??  "").trim();
       const rowVendCode = String( row.vendCode ??  "").trim();
 
@@ -820,8 +864,8 @@ const handleOpenReferencePOAdvance = async (overrides = {}) => {
     updateState({
       globalLookupRow: normalizedRows,
       globalLookupHeader: openPOAPVLookupColumns,
-      globalLookupTitle: "Open PO / JO References",
-      globalLookupBtnCaption: "Get Selected PO/JO",
+      globalLookupTitle: "Open PO References",
+      globalLookupBtnCaption: "Get Selected PO",
       showRRRefModal: true,
       modalContext: "openPOAdvance",
     });
@@ -845,44 +889,16 @@ const handleOpenReferenceLCImportation = async (overrides = {}) => {
 
   const lookupVendCode = String(overrides.vendCode ?? vendCode ?? "").trim();
   const lookupBranchCode = String(overrides.branchCode ?? branchCode ?? "").trim();
-  const lcSummaryEndpoint = "getAPVLC_OpenSummary";
 
   try {
     updateState({ isLoading: true, showSpinner: true });
 
-    const lookupPayload = {
+    const rawRows = await fetchAPVReferenceSummary({
+      apvtranType: "APV07",
+      referenceType: "LC",
       branchCode: lookupBranchCode,
-      ...(lookupVendCode ? { vendCode: lookupVendCode } : {}),
-    };
-
-    const requestAttempts = [
-      async () => fetchDataJson(lcSummaryEndpoint, lookupPayload),
-      async () => fetchData(lcSummaryEndpoint, {
-        PARAMS: JSON.stringify({ json_data: lookupPayload }),
-      }),
-      async () => postRequest(
-        lcSummaryEndpoint,
-        JSON.stringify({ json_data: lookupPayload }),
-      ),
-    ];
-
-    let rawRows = [];
-    let lastError = null;
-
-    for (const requestOpenLCReference of requestAttempts) {
-      try {
-        const response = await requestOpenLCReference();
-        rawRows = extractOpenRRResponseRows(response);
-        if (rawRows.length > 0) break;
-      } catch (requestError) {
-        lastError = requestError;
-        console.warn("Open LC Importation lookup attempt failed:", requestError);
-      }
-    }
-
-    if (lastError && rawRows.length === 0) {
-      throw lastError;
-    }
+      vendCode: lookupVendCode,
+    });
 
     if (rawRows.length === 0) {
       useSwalErrorAlert(
@@ -892,12 +908,10 @@ const handleOpenReferenceLCImportation = async (overrides = {}) => {
       return;
     }
 
-    const lcSummaryColumns = await resolveGlobalLookupColumns(lcSummaryEndpoint);
-
     updateState({
       globalLookupRow: rawRows,
-      globalLookupHeader: lcSummaryColumns,
-      globalLookupConfigEndpoint: lcSummaryEndpoint,
+      globalLookupHeader: openLCLookupColumns,
+      globalLookupConfigEndpoint: "",
       globalLookupTitle: "Open LC Importation References",
       globalLookupBtnCaption: "Get Selected LC",
       showRRRefModal: true,
@@ -1066,21 +1080,14 @@ const handleOpenReferenceLCImportation = async (overrides = {}) => {
     try {
       updateState({ isLoading: true, showSpinner: true });
 
-      const lookupPayload = {
+      const openAdvanceRows = await fetchAPVReferenceSummary({
+        apvtranType: "APV03",
+        referenceType: "PO",
         branchCode: String(branchCode || "").trim(),
         vendCode: "",
-      };
-
-      const response = await fetchData("getPOAPV_Summary", {
-        PARAMS: JSON.stringify({
-          ...lookupPayload,
-          json_data: lookupPayload,
-        }),
       });
 
-      const payeeRows = buildAdvancePayeeBalanceRows(
-        extractOpenRRResponseRows(response)
-      );
+      const payeeRows = buildAdvancePayeeBalanceRows(openAdvanceRows);
 
       if (payeeRows.length === 0) {
         useSwalErrorAlert(
@@ -1245,11 +1252,15 @@ const handleOpenReferenceLCImportation = async (overrides = {}) => {
       detailPayload
     );
 
+    console.log("RAW getAPVRR_OpenDetail RESPONSE:", response);
 
-    return extractOpenRRResponseRows(response).map(
-      (row, index) =>
-        normalizeOpenRRRow(row, index)
+    const normalizedDetails = extractOpenRRResponseRows(response).map(
+      (row, index) => normalizeOpenRRRow(row, index)
     );
+
+    console.log("NORMALIZED RR DETAILS:", normalizedDetails);
+
+    return normalizedDetails;
 
   } catch (error) {
 
@@ -1367,6 +1378,26 @@ const handleOpenReferenceLCImportation = async (overrides = {}) => {
         // ==========================================
         // ADVANCE
         // ==========================================
+
+        advanceApvId:
+          firstDetail.advanceApvId ||
+          item.advanceApvId ||
+          "",
+
+        advanceApvNo:
+          firstDetail.advanceApvNo ||
+          item.advanceApvNo ||
+          "",
+
+        advanceCvId:
+          firstDetail.advanceCvId ||
+          item.advanceCvId ||
+          "",
+
+        advancePaid:
+          firstDetail.advancePaid ??
+          item.advancePaid ??
+          false,
 
         advpoNo:
           firstDetail.advpoNo ||
@@ -2208,25 +2239,43 @@ const extractOpenRRResponseRows = (response) => {
       }
 
       const date = new Date(year, month - 1, day);
+      if (
+        date.getFullYear() !== year ||
+        date.getMonth() !== month - 1 ||
+        date.getDate() !== day
+      ) {
+        return "";
+      }
+
       date.setDate(date.getDate() + parsedDaysDue);
 
       const yyyy = date.getFullYear();
       const mm = String(date.getMonth() + 1).padStart(2, "0");
       const dd = String(date.getDate()).padStart(2, "0");
-      return `${yyyy}-${mm}-${dd}`;
+      return `${mm}/${dd}/${yyyy}`;
     } catch (error) {
       console.error("Error calculating due date:", error);
       return "";
     }
   };
 
-  const getPaytermDaysDue = (paytermData) =>
-    paytermData?.daysDue ??
-    paytermData?.days_due ??
-    paytermData?.DAYS_DUE ??
-    paytermData?.dueDays ??
-    paytermData?.due_days ??
-    "";
+  const getPaytermDaysDue = (paytermData) => {
+    const rawDays =
+      paytermData?.daysDue ??
+      paytermData?.days_due ??
+      paytermData?.DAYS_DUE ??
+      paytermData?.dueDays ??
+      paytermData?.due_days ??
+      paytermData?.PAYTERM_DAYS ??
+      paytermData?.paytermDays ??
+      paytermData?.payterm_days ??
+      getPaytermCode(paytermData) ??
+      getPaytermName(paytermData) ??
+      "";
+
+    const matchedDays = String(rawDays).match(/\d+/);
+    return matchedDays ? matchedDays[0] : "";
+  };
 
   const getPaytermCode = (paytermData) =>
     paytermData?.paytermCode ??
@@ -3404,6 +3453,8 @@ advAcct:
       return;
     }
 
+    // APV01 now opens the dropdown so the user can choose RR or JO.
+    // APV03/APV04 also use the same dropdown for their reference action.
     setShowInvoiceAddDropdown((prev) => !prev);
   };
 
@@ -3417,6 +3468,11 @@ advAcct:
 
     if (String(selectedApType || "").toUpperCase() === "APV07") {
       await handleOpenReferenceLCImportation();
+      return;
+    }
+
+    if (isPurchasesAPType) {
+      await handleOpenReferenceRR();
       return;
     }
 
@@ -3448,20 +3504,12 @@ advAcct:
       showSpinner: true,
     });
 
-    // IMPORTANT:
-    // Use POST because Laravel route is Route::post(...)
-    // Also use the exact Laravel route name.
-    const response = await postRequest(
-      "getPCVAPV_Summary",
-      JSON.stringify({
-        json_data: {
-          branchCode: lookupBranchCode,
-          vendCode: lookupVendCode,
-        },
-      })
-    );
-
-    const rawRows = extractOpenRRResponseRows(response);
+    const rawRows = await fetchAPVReferenceSummary({
+      apvtranType: "APV04",
+      referenceType: "PCV",
+      branchCode: lookupBranchCode,
+      vendCode: lookupVendCode,
+    });
 
     const normalizedRows = rawRows.map((row, index) => ({
       ...row,
@@ -3564,53 +3612,111 @@ advAcct:
   try {
     updateState({ isLoading: true, showSpinner: true });
 
-    const lookupPayload = {
+    const rawRows = await fetchAPVReferenceSummary({
+      apvtranType: "APV01",
+      referenceType: "RR",
       branchCode: lookupBranchCode,
       vendCode: lookupVendCode,
-      includeClosed: true,
-      includeClosedRR: true,
-    };
+      extraPayload: {
+        includeClosed: true,
+        includeClosedRR: true,
+      },
+    });
 
-    // Match the advances lookup payload: support procedure versions that read
-    // either the top-level values or the nested $.json_data values.
-    const requestParams = {
-      PARAMS: JSON.stringify({
-        ...lookupPayload,
-        json_data: lookupPayload,
-      }),
-    };
-
-    const [rrResponse, poResponse, joResponse] = await Promise.all([
-  fetchData("getAPVRR_OpenSummary", requestParams),
-  fetchData("getAPVPO_OpenSummary", requestParams),
-  fetchData("getAPVJO_OpenSummary", requestParams),
-]);
-
-    const rawRows = [
-  ...extractOpenRRResponseRows(rrResponse),
-  ...extractOpenRRResponseRows(poResponse),
-  ...extractOpenRRResponseRows(joResponse),
-];
+    console.log('Unified APV RR response rows:', rawRows);
 
     const normalizedRows = rawRows.map((row, index) =>
       normalizeOpenRRRow(row, index),
     );
 
     if (normalizedRows.length === 0) {
-      useSwalErrorAlert("Open Reference", "No open RR/JO found for this supplier.");
+      useSwalErrorAlert("Open Reference", "No open RR found for this supplier.");
       return;
     }
 
     updateState({
       globalLookupRow: normalizedRows,
       globalLookupHeader: openRRLookupColumns,
-      globalLookupTitle: "Open RR / JO References",
-      globalLookupBtnCaption: "Get Selected RR/JO",
+      globalLookupTitle: "Open RR References",
+      globalLookupBtnCaption: "Get Selected RR",
       showRRRefModal: true,
       modalContext: "openRR",
     });
   } catch (error) {
     console.error("Failed to fetch Open RR:", error);
+  } finally {
+    updateState({ isLoading: false, showSpinner: false });
+  }
+};
+
+const handleOpenReferenceJO = async (overrides = {}) => {
+  setShowInvoiceAddDropdown(false);
+
+  const lookupVendCode = String(
+    overrides.vendCode ?? vendCode ?? ""
+  ).trim();
+
+  const lookupBranchCode = String(
+    overrides.branchCode ?? branchCode ?? ""
+  ).trim();
+
+  if (!lookupVendCode) {
+    updateState({
+      payeeModalOpen: true,
+      modalContext: "openJO",
+    });
+    return;
+  }
+
+  try {
+    updateState({ isLoading: true, showSpinner: true });
+
+    const rawRows = await fetchAPVReferenceSummary({
+      apvtranType: "APV01",
+      referenceType: "JO",
+      branchCode: lookupBranchCode,
+      vendCode: lookupVendCode,
+    });
+
+    const normalizedRows = rawRows.map((row, index) =>
+      normalizeOpenRRRow(
+        {
+          ...row,
+          type: row.type || "JO",
+          referenceSource: "JO",
+          rrNo: row.rrNo || row.joNo || "",
+          rrDate: row.rrDate || row.joDate || "",
+          poNo: row.poNo || row.joNo || "",
+        },
+        index,
+      ),
+    );
+
+    if (normalizedRows.length === 0) {
+      useSwalErrorAlert(
+        "Open JO Reference",
+        "No open JO found for this supplier."
+      );
+      return;
+    }
+
+    updateState({
+      globalLookupRow: normalizedRows,
+      globalLookupHeader: openRRLookupColumns,
+      globalLookupTitle: "Open JO References",
+      globalLookupBtnCaption: "Get Selected JO",
+      showRRRefModal: true,
+      modalContext: "openJO",
+    });
+  } catch (error) {
+    console.error("Failed to fetch Open JO:", error);
+    useSwalErrorAlert(
+      "Open JO Reference",
+      error?.response?.data?.message ||
+        error?.response?.data?.details ||
+        error?.message ||
+        "Error fetching open JO references."
+    );
   } finally {
     updateState({ isLoading: false, showSpinner: false });
   }
@@ -3901,6 +4007,8 @@ const isPCVFlow = modalContext === "openPCV";
       ? itemsArray
       : await Promise.all(itemsArray.map((item) => enrichRRReferenceItem(item)));
 
+    console.log("APV REFERENCE ITEMS AFTER ENRICH:", referenceItems);
+
     const defaultAdvancesAcctCode = await getDefaultAdvancesAcctCode();
 
     const mappedRows = await Promise.all(
@@ -3947,6 +4055,21 @@ const isPCVFlow = modalContext === "openPCV";
     item.poNo ||
     item.PO_NO ||
     "";
+
+  const rawAdvanceInvoiceDate =
+    item.siDate ||
+    item.SI_DATE ||
+    item.poJoDate ||
+    item.poDate ||
+    item.PO_JO_DATE ||
+    item.PO_DATE ||
+    "";
+
+  const formattedAdvanceInvoiceDate = rawAdvanceInvoiceDate
+    ? useformatToDatev2(rawAdvanceInvoiceDate) ||
+      normalizeSlrefDate(rawAdvanceInvoiceDate) ||
+      useGetCurrentDayV2()
+    : useGetCurrentDayV2();
 
 
   // =========================================================
@@ -4077,10 +4200,7 @@ const isPCVFlow = modalContext === "openPCV";
       advancePoNo,
 
     siDate:
-      item.poJoDate ||
-      item.poDate ||
-      item.PO_DATE ||
-      useGetCurrentDayV2(),
+      formattedAdvanceInvoiceDate,
 
 
     // ---------------------------------------------------------
@@ -4400,6 +4520,8 @@ advAcct:
       })
     );
 
+    console.log("APV MAPPED ROWS WITH ADVANCE:", mappedRows);
+
     const updatedRows = [...detailRows, ...mappedRows];
     updateState({
       detailRows: updatedRows,
@@ -4715,6 +4837,7 @@ advAcct:
 
   // Save the lookup flow BEFORE changing modal state
   const isRRFlow = modalContext === "openRR";
+  const isJOFlow = modalContext === "openJO";
   const isPOAdvanceFlow = modalContext === "openPOAdvance";
   const isPCVFlow = modalContext === "openPCV";
   const isAddPayeeDetailFlow = modalContext === "addPayeeDetail";
@@ -4900,6 +5023,14 @@ advAcct:
     if (isRRFlow) {
       setTimeout(() => {
         handleOpenReferenceRR({
+          vendCode: foundVendCode,
+          branchCode,
+        });
+      }, 100);
+
+    } else if (isJOFlow) {
+      setTimeout(() => {
+        handleOpenReferenceJO({
           vendCode: foundVendCode,
           branchCode,
         });
@@ -6048,10 +6179,11 @@ const handleAtcNameDoubleClick = (index) => {
     .includes("REPLENISH");
 
   const isImportationAPType = selectedApType === "APV07";
+  const isPurchasesAPType = selectedApType === "APV01";
 
-  const showAppliedAdvancesColumns = selectedApType === "APV01" || isImportationAPType;
+  const showAppliedAdvancesColumns = isPurchasesAPType || isImportationAPType;
 
-  const showAdvancesAccountColumn = selectedApType === "APV01" || isAdvancesAPType || isImportationAPType;
+  const showAdvancesAccountColumn = isPurchasesAPType || isAdvancesAPType || isImportationAPType;
   const showDrAccountColumn = !isAdvancesAPType;
   const replenishmentDetailColumnDefs = [
   { key: "ln", label: "LN", width: 56 },
@@ -6353,19 +6485,19 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
 
   const openReferenceLabel = isImportationAPType
   ? "Open Reference LC"
-  : isReplenishmentAPType
-    ? "Open Reference PCV"
-    : isAdvancesAPType
-      ? "Open Reference PO/JO"
-      : "Open Reference RR/JO";
+    : isReplenishmentAPType
+      ? "Open Reference PCV"
+      : isAdvancesAPType
+      ? "Open Reference PO"
+      : "Open Reference RR";
 
   const openReferenceDescription = isImportationAPType
   ? "Pull LC Importation details"
-  : isReplenishmentAPType
-    ? "Pull PCV details"
-    : isAdvancesAPType
-      ? "Pull PO/JO advances"
-      : "Pull RR/JO details";
+    : isReplenishmentAPType
+      ? "Pull PCV details"
+      : isAdvancesAPType
+      ? "Pull PO advances"
+      : "Pull RR details";
 
   // Render the component
   return (
@@ -7672,6 +7804,10 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                                       handleOpenReferenceLCImportation();
                                       return;
                                     }
+                                    if (isPurchasesAPType) {
+                                      handleOpenReferenceRR();
+                                      return;
+                                    }
                                     if (!vendCode) {
                                       handleOpenPayeeLookup("addPayeeDetail");
                                       return;
@@ -7761,6 +7897,33 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                               </div>
                             </div>
                           </button>
+
+                          {isPurchasesAPType && (
+                            <>
+                              <div className="my-1.5 border-t border-slate-100 dark:border-slate-700" />
+
+                              <button
+                                type="button"
+                                className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium text-indigo-700 transition-all duration-150 hover:bg-indigo-50 hover:text-indigo-900 dark:text-indigo-300 dark:hover:bg-slate-700"
+                                onClick={() => {
+                                  setShowInvoiceAddDropdown(false);
+                                  handleOpenReferenceJO();
+                                }}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-slate-700 dark:text-indigo-300">
+                                    <FontAwesomeIcon icon={faFileLines} />
+                                  </span>
+                                  <div className="flex flex-col items-start">
+                                    <span>Open JO Reference</span>
+                                    <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500">
+                                      Select an open Job Order
+                                    </span>
+                                  </div>
+                                </div>
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     )}
@@ -8667,11 +8830,11 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
   state.globalLookupTitle ||
   (modalContext === "openLCImportation"
     ? "Open LC Importation References"
-    : modalContext === "openPCV"
+      : modalContext === "openPCV"
       ? "Open PCV References"
       : modalContext === "openPOAdvance"
-        ? "Open PO / JO References"
-        : "Open RR / JO References")
+        ? "Open PO References"
+        : "Open RR References")
 }
     data={state.globalLookupRow}
     endpoint={Array.isArray(state.globalLookupHeader) ? state.globalLookupHeader : openRRLookupColumns}
@@ -8679,11 +8842,11 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
   state.globalLookupBtnCaption ||
   (modalContext === "openLCImportation"
     ? "Get Selected LC"
-    : modalContext === "openPCV"
+      : modalContext === "openPCV"
       ? "Get Selected PCV"
       : modalContext === "openPOAdvance"
-        ? "Get Selected PO/JO"
-        : "Get Selected RR/JO")
+        ? "Get Selected PO"
+        : "Get Selected RR")
 }
     idKey="groupId"
     onClose={handleCloseRRRefModal}

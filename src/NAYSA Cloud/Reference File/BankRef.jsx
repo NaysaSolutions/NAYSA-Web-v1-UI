@@ -57,6 +57,7 @@ const extractRows = (payload) => {
 const DEFAULT_FORM = {
   bankTypeCode: "",
   bankTypeName: "",
+  active: "Y",
   __existing: false,
 };
 
@@ -153,11 +154,11 @@ const BankRef = forwardRef(
     const isInitialLoading = bankTypeListQuery.isLoading;
 
     const saveMutation = useMutation({
-      mutationFn: async (payload) => {
-        return apiClient.post("/upsertBankType", {
-          json_data: JSON.stringify(payload),
-        });
-      },
+  mutationFn: async (payload) => {
+    return apiClient.post("/upsertBankType", {
+      json_data: payload,
+    });
+  },
       onSuccess: async (response) => {
         const sqlRow = response?.data?.data?.[0] || {};
         const errorcount = Number(sqlRow.errorcount ?? sqlRow.ERRORCOUNT ?? 0);
@@ -327,10 +328,11 @@ const BankRef = forwardRef(
         }
 
         const payload = {
-          bankTypeCode: code,
-          bankTypeName: name,
-          userCode: user?.USER_CODE || "ADMIN",
-        };
+  bankTypeCode: code,
+  bankTypeName: name,
+  active: form.active || "Y",
+  userCode: user?.USER_CODE || "ADMIN",
+};
 
         saveMutation.mutate(payload);
       } catch (error) {
