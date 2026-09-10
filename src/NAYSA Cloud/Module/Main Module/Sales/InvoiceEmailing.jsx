@@ -289,45 +289,24 @@ const InvoiceQueuing = ({
 
     try {
       const requestId = generateRequestId();
+      let rawResponse = null;
 
-      const requestBody = {
-        /*
-         * These credentials are used only by the existing
-         * posting.credential middleware.
-         */
-        userCode: userCode || "",
-        userPassword: userPassword || "",
+      for (let index = 0; index < selectedDocuments.length; index += 1) {
+        useSwalSuccessAlert(
+          "Invoice Queuing Progress",
+          `Sending invoice ${index + 1}/${selectedDocuments.length}`
+        );
 
-        /*
-         * This is the exact selection wrapper expected by
-         * dbo.sproc_PHP_InvoiceTransmission.
-         */
-        json_data: {
+        rawResponse = await postRequest("invoiceEmailing", {
           userCode: userCode || "",
-          requestId,
-          dt1: selectedDocuments,
-        },
-      };
-
-      /*
-       * Never log the actual posting password.
-       */
-      console.log(
-        "Invoice Queuing request:",
-        {
-          userCode: requestBody.userCode,
-          userPassword:
-            requestBody.userPassword
-              ? "[PROVIDED]"
-              : "[MISSING]",
-          json_data: requestBody.json_data,
-        }
-      );
-
-      const rawResponse = await postRequest(
-        "invoiceEmailing",
-        requestBody
-      );
+          userPassword: userPassword || "",
+          json_data: {
+            userCode: userCode || "",
+            requestId: `${requestId}-${index + 1}`,
+            dt1: [selectedDocuments[index]],
+          },
+        });
+      }
 
       /*
        * BaseURL helpers may return either:
@@ -407,7 +386,7 @@ const InvoiceQueuing = ({
         .trim()
         .toUpperCase();
 
-      if (status !== "ACCEPTED") {
+      if (!["ACCEPTED", "PENDING", "QUEUED"].includes(status)) {
         throw new Error(
           response?.message ||
             integrationRow?.message ||
@@ -451,12 +430,7 @@ const InvoiceQueuing = ({
           integrationRow.result;
       }
 
-      const documentCount = Number(
-        response?.documentCount ??
-          integrationRow?.documentCount ??
-          acceptedDocuments.length ??
-          selectedDocuments.length
-      );
+      const documentCount = selectedDocuments.length;
 
       const insertedCount = Number(
         response?.insertedCount ??
@@ -498,10 +472,10 @@ const InvoiceQueuing = ({
        * ACCEPTED means the ZIP files were uploaded and IES processing
        * was triggered successfully.
        */
-      let successMessage =
-        `${documentCount} document${
-          documentCount === 1 ? "" : "s"
-        } queued successfully in IES.`;
+      const isBackgroundPending = status === "PENDING" || status === "QUEUED";
+      let successMessage = isBackgroundPending
+        ? `${documentCount} document${documentCount === 1 ? "" : "s"} submitted for background queuing.`
+        : `${documentCount} document${documentCount === 1 ? "" : "s"} queued successfully in IES.`;
 
       if (
         customerInsertedCount > 0 ||
@@ -521,7 +495,7 @@ const InvoiceQueuing = ({
       }
 
       await useSwalSuccessAlert(
-        "Invoice Queuing Accepted",
+        isBackgroundPending ? "Invoice Queuing Submitted" : "Invoice Queuing Accepted",
         successMessage
       );
 
