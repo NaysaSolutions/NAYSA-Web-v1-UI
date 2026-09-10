@@ -7427,8 +7427,8 @@ const handleClosePayeeLookup = async (row) => {
         <AllTranHistory
           showHeader={false}
           endpoint="/getFGRRHistory"
-          cacheKey={`PR:${state.branchCode || ""}:${state.documentNo || ""}`}
-          activeTabKey="PR_Summary"
+          cacheKey={`FGRR:${state.branchCode || ""}:${state.documentNo || ""}`}
+          activeTabKey="FGRR_Summary"
           branchCode={state.branchCode}
           startDate={null}
           endDate={null}

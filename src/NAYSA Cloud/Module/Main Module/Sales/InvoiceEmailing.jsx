@@ -183,6 +183,33 @@ const InvoiceQueuing = ({
       };
     }
 
+    const invalidEmailRow = selectedData.find((row) => {
+      const email = String(row?.buyerEmail ?? "").trim();
+      return !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    });
+
+    if (invalidEmailRow) {
+      const documentType = String(
+        invalidEmailRow?.documentType ?? invalidEmailRow?.sourceDocumentType ?? "Invoice"
+      ).trim().toUpperCase();
+      const documentNo = String(invalidEmailRow?.documentNo ?? "").trim();
+      const email = String(invalidEmailRow?.buyerEmail ?? "").trim();
+      const message = email
+        ? `${documentType} ${documentNo} has an invalid email address: ${email}.`
+        : `${documentType} ${documentNo} has no customer email address.`;
+
+      useSwalValidationAlert({
+        icon: "warning",
+        title: "Invalid Email Address",
+        message: `${message} Please update the customer email before queuing the invoice.`,
+      });
+
+      return {
+        success: false,
+        message,
+      };
+    }
+
     /*
      * Normalize the selected rows into the exact structure expected by
      * dbo.sproc_PHP_InvoiceTransmission.

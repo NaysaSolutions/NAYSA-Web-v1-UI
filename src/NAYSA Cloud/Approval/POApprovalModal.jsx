@@ -572,31 +572,35 @@ const POApprovalModal = ({
   }
 
   return (
-    <GlobalApprovalModal
-      {...modalProps}
-      isOpen={isOpen}
-      onClose={onClose}
-      title={transactionLabel}
-      transactionLabel={transactionLabel}
-      documentName={documentName}
-      approverName={effectiveApproverName}
-      approverImageSrc={effectiveApproverImageSrc}
-      approvalLevel={approvalLevel}
-      department={effectiveDepartment}
-      detailColumns={effectiveColumns}
-      detailRows={rows}
-      isDetailLoading={isLoading}
-      isProcessing={isApproving}
-      onViewDocument={onViewDocument}
-      onViewAttachment={onViewAttachment}
-      onReloadRecords={reloadApprovalRows}
-      onRowApprove={handleApproveRows}
-      onRowDisapprove={handleDisapproveRows}
-      onRowComment={handleCommentRows}
-      onApproveSelected={handleApproveRows}
-      onRejectSelected={handleDisapproveRows}
-      onCommentSelected={handleCommentRows}
-    />
+    <>
+      <GlobalApprovalModal
+        {...modalProps}
+        isOpen={isOpen}
+        onClose={onClose}
+        title={transactionLabel}
+        transactionLabel={transactionLabel}
+        documentName={documentName}
+        approverName={effectiveApproverName}
+        approverImageSrc={effectiveApproverImageSrc}
+        approvalLevel={approvalLevel}
+        department={effectiveDepartment}
+        detailColumns={effectiveColumns}
+        detailRows={rows}
+        isDetailLoading={isLoading}
+        isProcessing={isApproving}
+        onViewDocument={onViewDocument}
+        onViewAttachment={onViewAttachment}
+        onReloadRecords={reloadApprovalRows}
+        onRowApprove={handleApproveRows}
+        onRowDisapprove={handleDisapproveRows}
+        onRowComment={handleCommentRows}
+        onApproveSelected={handleApproveRows}
+        onRejectSelected={handleDisapproveRows}
+        onCommentSelected={handleCommentRows}
+      />
+
+      {isApproving && <LoadingSpinner />}
+    </>
   );
 };
 
