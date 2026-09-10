@@ -3,6 +3,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faCalendarAlt,
   faMagnifyingGlass,
+  faRotateRight,
   faUndo,
   faUser,
 } from "@fortawesome/free-solid-svg-icons";
@@ -15,6 +16,10 @@ import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import SearchGlobalReportTable from "@/NAYSA Cloud/Lookup/SearchGlobalReportTable.jsx";
 import BranchLookupModal from "@/NAYSA Cloud/Lookup/SearchBranchRef";
 import CustomerMastLookupModal from "@/NAYSA Cloud/Lookup/SearchCustMast";
+import {
+  useSwalProceedConfirm,
+  useSwalSuccessAlert,
+} from "@/NAYSA Cloud/Global/behavior.jsx";
 
 const API_ENDPOINT = "iesHistory";
 const COLUMN_CONFIG_ENDPOINT = "iesHistory";
@@ -227,6 +232,67 @@ export default function InvoiceQueuingHistory() {
     }
   }, []);
 
+  const handleResend = useCallback(async (row) => {
+    const documentType = String(row?.documentType || "").trim().toUpperCase();
+    const selectedBranchCode = String(row?.branchCode || "").trim();
+    const groupId = String(row?.groupId || "").trim();
+    const documentNo = String(row?.documentNo || "").trim();
+
+    if (!documentType || !selectedBranchCode || !groupId) {
+      await Swal.fire(
+        "Unable to Resend",
+        "The selected history record is missing its document information.",
+        "warning"
+      );
+      return;
+    }
+
+    const confirmation = await useSwalProceedConfirm(
+      "Resend Invoice?",
+      `Do you want to resend ${documentType} ${documentNo} to IES?`,
+      "Yes, resend",
+      "Cancel"
+    );
+
+    if (!confirmation.isConfirmed) return;
+
+    updateState({ isLoading: true });
+
+    try {
+      const response = await apiClient.post("invoiceEmailing", {
+        json_data: {
+          resend: true,
+          requestId: `NAYSA-CLOUD-RESEND-${Date.now()}`,
+          dt1: [{
+            documentType,
+            branchCode: selectedBranchCode,
+            groupId,
+          }],
+        },
+      });
+
+      if (response?.data?.success === false) {
+        throw new Error(response.data.message || "Unable to resend the invoice.");
+      }
+
+      await useSwalSuccessAlert(
+        "Invoice Queuing Accepted",
+        `${documentType} ${documentNo} was queued successfully in IES.`
+      );
+
+      await handleFind();
+    } catch (error) {
+      console.error("Unable to resend invoice:", error);
+      await Swal.fire(
+        "Invoice Resend Failed",
+        error?.response?.data?.message || error?.message || "Unable to resend the invoice.",
+        "error"
+      );
+    } finally {
+      updateState({ isLoading: false });
+    }
+  }, [handleFind, updateState]);
+
   return (
     <div className="global-ref-main-div-ui">
       {showSpinner && <LoadingSpinner />}
@@ -380,6 +446,9 @@ export default function InvoiceQueuingHistory() {
               docType="Invoice Queuing History"
               rightActionLabel="View"
               onRowAction={handleViewDocument}
+              onRowActionsClick={handleResend}
+              actionsIcon={faRotateRight}
+              actionsTitle="Resend"
             />
           </div>
         </div>

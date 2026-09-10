@@ -11,6 +11,64 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 
+const parseLookupRows = (payload) => {
+  const raw =
+    payload?.data?.[0]?.result ??
+    payload?.data?.[0]?.RESULT ??
+    payload?.data?.[0]?.JsonResult ??
+    payload?.data?.result ??
+    payload?.data?.RESULT ??
+    payload?.result ??
+    payload?.RESULT ??
+    payload?.JsonResult ??
+    payload?.data ??
+    payload;
+
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      return parseLookupRows(parsed);
+    } catch {
+      return [];
+    }
+  }
+
+  if (Array.isArray(raw?.data)) return raw.data;
+  if (Array.isArray(raw?.rows)) return raw.rows;
+  if (Array.isArray(raw?.dt1)) return raw.dt1;
+
+  if (typeof raw === "object" && Object.keys(raw).length > 0) {
+    return [raw];
+  }
+
+  return [];
+};
+
+const normalizeBankTypeRow = (row) => ({
+  ...row,
+  bankTypeCode:
+    row?.bankTypeCode ??
+    row?.banktypeCode ??
+    row?.banktype_code ??
+    row?.bank_type_code ??
+    row?.BANKTYPE_CODE ??
+    row?.BANK_TYPE_CODE ??
+    "",
+  bankTypeName:
+    row?.bankTypeName ??
+    row?.banktypeName ??
+    row?.banktype_name ??
+    row?.bank_type_name ??
+    row?.BANKTYPE_NAME ??
+    row?.BANK_TYPE_NAME ??
+    row?.description ??
+    row?.DESCRIPTION ??
+    "",
+});
+
 // Simple debounce hook to prevent excessive filtering
 function useDebounce(value, delay) {
   const [debouncedValue, setDebouncedValue] = useState(value);
@@ -40,18 +98,12 @@ const BankTypeLookupModal = ({ isOpen, onClose }) => {
     queryKey: ["lookupBankType"],
     queryFn: async () => {
       const { data: result } = await apiClient.get("/lookupBankType", {
-        params: {
-          PARAMS: JSON.stringify({
-            json_data: {
-              bankTypeCode: "",
-              bankTypeName: "",
-              userCode: "SYSTEM",
-            },
-          }),
-        },
-      });
-      const rawData = result?.data?.[0]?.result || "[]";
-      return Array.isArray(rawData) ? rawData : JSON.parse(rawData);
+  params: {
+    bankTypeCode: "",
+    bankTypeName: "",
+  },
+});
+      return parseLookupRows(result).map(normalizeBankTypeRow);
     },
     enabled: isOpen,
     staleTime: 1000 * 60 * 5,
@@ -98,7 +150,7 @@ const BankTypeLookupModal = ({ isOpen, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 animate-fade-in">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[75vh] flex flex-col relative overflow-hidden transform animate-scale-in border border-slate-200">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[75vh] flex flex-col relative overflow-hidden transform animate-scale-in border border-slate-200">
         
         {/* Header */}
         <div className="flex items-center justify-between p-2 border-b bg-slate-100">

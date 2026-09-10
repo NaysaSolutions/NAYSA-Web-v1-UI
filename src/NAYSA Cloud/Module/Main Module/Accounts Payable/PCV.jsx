@@ -137,6 +137,7 @@ const PCV = () => {
   const loadedFromUrlRef = useRef(false);
   const detailRowsRef = useRef([]);
   const detailRowsGLRef = useRef([]);
+  const printDocumentIDRef = useRef("");
   const navigate = useNavigate();
   const location = useLocation();
   const { companyInfo, currentUserRow,getAllDropDown,refsLoaded ,getAllTopATCRow, getAllTopVatRow,getAllTopVatAmount,getAllTopATCAmount,getAllTopHSDocRow } = useAuth();
@@ -1044,13 +1045,15 @@ const handleActivityOption = async (action) => {
         const responseDocNo =  response.data[0].pcvNo;
         const responseDocId =  response.data[0].pcvId;
 
+        printDocumentIDRef.current = responseDocId;
+
         await fetchTranData(responseDocNo,branchCode);
 
         const isZero = Number(noReprints) === 0;
         const onSaveAndPrint =
           isZero
             ? () => updateState({ showSignatoryModal: true })
-            : () => handleSaveAndPrint(response.data[0].pcvId);
+            : () => handleSaveAndPrint(responseDocId);
 
         useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
 
@@ -1225,13 +1228,13 @@ const handleOpenReferenceRR = async () => {
     };
 
     const requestAttempts = [
-      async () => fetchDataJson("getAPVRR_OpenSummary", lookupPayload),
+      async () => fetchDataJson("getPCVRR_OpenSummary", lookupPayload),
       async () =>
-        fetchData("getAPVRR_OpenSummary", {
+        fetchData("getPCVRR_OpenSummary", {
           PARAMS: JSON.stringify({ json_data: lookupPayload }),
         }),
       async () =>
-        fetchData("getAPVRR_OpenSummary", {
+        fetchData("getPCVRR_OpenSummary", {
           PARAMS: JSON.stringify(lookupPayload),
         }),
     ];
@@ -1463,6 +1466,7 @@ const handlePrint = async () => {
       return;
       }
   if (documentID) {
+    printDocumentIDRef.current = documentID;
     updateState({ showSignatoryModal: true });
   }
 };
@@ -2651,18 +2655,30 @@ const handleCloseCancel = async (confirmation) => {
 
 
 
-const handleCloseSignatory = async (mode) => {
+const handleCloseSignatory = async (mode = "Inline") => {
+  const printMode =
+    typeof mode === "string"
+      ? mode
+      : mode?.mode || mode?.printMode || "Inline";
 
-    updateState({
-        showSpinner: true,
-        showSignatoryModal: false,
-        noReprints: mode === "Final" ? 1 : 0, });
-    await useHandlePrint(documentID, docType, mode,userCode );
+  updateState({
+    showSpinner: true,
+    showSignatoryModal: false,
+    noReprints: printMode === "Final" ? 1 : 0,
+  });
 
-    updateState({
-      showSpinner: false
-    });
-
+  try {
+    await useHandlePrint(
+      printDocumentIDRef.current || documentID,
+      docType,
+      printMode,
+      userCode || currentUserRow?.userCode || ""
+    );
+  } catch (error) {
+    console.error("PCV print error:", error?.response?.data || error);
+  } finally {
+    updateState({ showSpinner: false });
+  }
 };
 
 
@@ -2671,11 +2687,20 @@ const handleCloseSignatory = async (mode) => {
 
 
 const handleSaveAndPrint = async (documentID) => {
+  updateState({ showSpinner: true });
 
-    updateState({ showSpinner: true });
-    await useHandlePrint(documentID, docType);
-
-    updateState({showSpinner: false});
+  try {
+    await useHandlePrint(
+      documentID,
+      docType,
+      "Inline",
+      userCode || currentUserRow?.userCode || ""
+    );
+  } catch (error) {
+    console.error("PCV print error:", error?.response?.data || error);
+  } finally {
+    updateState({ showSpinner: false });
+  }
 };
 
 
@@ -3600,7 +3625,12 @@ const handleCloseBranchModal = (selectedBranch) => {
 {showSignatoryModal && (
   <DocumentSignatories
     isOpen={showSignatoryModal}
-        params={{noReprints,documentID,docType,docNo: documentNo}}
+        params={{
+          noReprints,
+          documentID: printDocumentIDRef.current || documentID,
+          docType,
+          docNo: documentNo,
+        }}
     onClose={handleCloseSignatory}
     onCancel={() => updateState({ showSignatoryModal: false })}
   />

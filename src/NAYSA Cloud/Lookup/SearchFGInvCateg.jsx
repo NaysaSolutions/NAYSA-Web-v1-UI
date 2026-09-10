@@ -28,6 +28,8 @@ const SearchFGInvCateg = ({
   onClose,
   title = "Search FG Inventory Category Codes",
   withPagination = false,
+  endpoint = "/fgCateg",
+  queryKey = "lookupFGInvCateg",
 }) => {
   const [filters, setFilters] = useState({
     code: "",
@@ -66,9 +68,9 @@ const SearchFGInvCateg = ({
     isFetching,
     refetch,
   } = useQuery({
-    queryKey: ["lookupFGInvCateg"],
+    queryKey: [queryKey, endpoint],
     queryFn: async () => {
-      const res = await apiClient.get("/fgCateg");
+      const res = await apiClient.get(endpoint);
 
       const rawData =
         res?.data?.data?.[0]?.result ??

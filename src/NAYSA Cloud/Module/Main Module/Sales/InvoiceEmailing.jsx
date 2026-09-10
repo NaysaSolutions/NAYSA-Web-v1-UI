@@ -101,7 +101,7 @@ const InvoiceQueuing = ({
             icon: "warning",
             title: "Missing Column Configuration",
             message:
-              "No HS_COLCONFIG records were found for endpoint eisPosting.",
+              "No HS_COLCONFIG records were found for endpoint iesPosting.",
           });
 
           onClose?.();
@@ -175,6 +175,33 @@ const InvoiceQueuing = ({
         icon: "warning",
         title: "No Selected Invoice",
         message,
+      });
+
+      return {
+        success: false,
+        message,
+      };
+    }
+
+    const invalidEmailRow = selectedData.find((row) => {
+      const email = String(row?.buyerEmail ?? "").trim();
+      return !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    });
+
+    if (invalidEmailRow) {
+      const documentType = String(
+        invalidEmailRow?.documentType ?? invalidEmailRow?.sourceDocumentType ?? "Invoice"
+      ).trim().toUpperCase();
+      const documentNo = String(invalidEmailRow?.documentNo ?? "").trim();
+      const email = String(invalidEmailRow?.buyerEmail ?? "").trim();
+      const message = email
+        ? `${documentType} ${documentNo} has an invalid email address: ${email}.`
+        : `${documentType} ${documentNo} has no customer email address.`;
+
+      useSwalValidationAlert({
+        icon: "warning",
+        title: "Invalid Email Address",
+        message: `${message} Please update the customer email before queuing the invoice.`,
       });
 
       return {
@@ -262,52 +289,31 @@ const InvoiceQueuing = ({
 
     try {
       const requestId = generateRequestId();
+      let rawResponse = null;
 
-      const requestBody = {
-        /*
-         * These credentials are used only by the existing
-         * posting.credential middleware.
-         */
-        userCode: userCode || "",
-        userPassword: userPassword || "",
+      for (let index = 0; index < selectedDocuments.length; index += 1) {
+        useSwalSuccessAlert(
+          "Invoice Queuing Progress",
+          `Sending invoice ${index + 1}/${selectedDocuments.length}`
+        );
 
-        /*
-         * This is the exact selection wrapper expected by
-         * dbo.sproc_PHP_InvoiceTransmission.
-         */
-        json_data: {
+        rawResponse = await postRequest("invoiceEmailing", {
           userCode: userCode || "",
-          requestId,
-          dt1: selectedDocuments,
-        },
-      };
-
-      /*
-       * Never log the actual posting password.
-       */
-      console.log(
-        "Invoice Queuing request:",
-        {
-          userCode: requestBody.userCode,
-          userPassword:
-            requestBody.userPassword
-              ? "[PROVIDED]"
-              : "[MISSING]",
-          json_data: requestBody.json_data,
-        }
-      );
-
-      const rawResponse = await postRequest(
-        "invoiceEmailing",
-        requestBody
-      );
+          userPassword: userPassword || "",
+          json_data: {
+            userCode: userCode || "",
+            requestId: `${requestId}-${index + 1}`,
+            dt1: [selectedDocuments[index]],
+          },
+        });
+      }
 
       /*
        * BaseURL helpers may return either:
        *   1. the JSON response body directly; or
        *   2. an Axios-style object containing response.data.
        *
-       * The controller now returns the accepted ESRS result at the
+       * The controller returns the accepted IES result at the
        * top level. It no longer returns the old SQL result under
        * response.data[0].result.
        */
@@ -354,8 +360,8 @@ const InvoiceQueuing = ({
       }
 
       /*
-       * The ESRS integration result is normally rows[0].
-       * Keep a fallback to esrsResponse.rows[0] for compatibility.
+       * Older deployments returned the integration result in rows[0].
+       * Keep the fallback while all environments are being updated.
        */
       const integrationRow =
         (
@@ -380,7 +386,7 @@ const InvoiceQueuing = ({
         .trim()
         .toUpperCase();
 
-      if (status !== "ACCEPTED") {
+      if (!["ACCEPTED", "PENDING", "QUEUED"].includes(status)) {
         throw new Error(
           response?.message ||
             integrationRow?.message ||
@@ -413,7 +419,7 @@ const InvoiceQueuing = ({
           }
         } catch (parseError) {
           console.warn(
-            "Unable to parse the ESRS per-document result:",
+            "Unable to parse the IES per-document result:",
             parseError
           );
         }
@@ -424,12 +430,7 @@ const InvoiceQueuing = ({
           integrationRow.result;
       }
 
-      const documentCount = Number(
-        response?.documentCount ??
-          integrationRow?.documentCount ??
-          acceptedDocuments.length ??
-          selectedDocuments.length
-      );
+      const documentCount = selectedDocuments.length;
 
       const insertedCount = Number(
         response?.insertedCount ??
@@ -468,15 +469,13 @@ const InvoiceQueuing = ({
         .toUpperCase();
 
       /*
-       * ACCEPTED means received by ESRS. It does not mean that the
-       * customer email was already sent.
+       * ACCEPTED means the ZIP files were uploaded and IES processing
+       * was triggered successfully.
        */
-      let successMessage =
-        `${documentCount} document${
-          documentCount === 1 ? "" : "s"
-        } accepted by ESRS for customer notification.` +
-        ` Inserted: ${insertedCount};` +
-        ` Already existing: ${duplicateCount}.`;
+      const isBackgroundPending = status === "PENDING" || status === "QUEUED";
+      let successMessage = isBackgroundPending
+        ? `${documentCount} document${documentCount === 1 ? "" : "s"} submitted for background queuing.`
+        : `${documentCount} document${documentCount === 1 ? "" : "s"} queued successfully in IES.`;
 
       if (
         customerInsertedCount > 0 ||
@@ -496,7 +495,7 @@ const InvoiceQueuing = ({
       }
 
       await useSwalSuccessAlert(
-        "Invoice Queuing Accepted",
+        isBackgroundPending ? "Invoice Queuing Submitted" : "Invoice Queuing Accepted",
         successMessage
       );
 
