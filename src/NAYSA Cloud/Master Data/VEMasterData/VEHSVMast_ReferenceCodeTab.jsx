@@ -28,6 +28,7 @@ import VECarMakeCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCode
 import VETypeCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VETypeCodes.jsx";
 import VECarModelCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEModelCodes.jsx";
 import VEPartClass from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEPartClass.jsx";
+import VEHClassCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEHClassCodes.jsx";
 
 // Add these imports once the actual components are available:
 // import VEClassCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEClassCodes.jsx";
@@ -375,14 +376,14 @@ const VEHSVMast_ReferenceCodeTab = forwardRef(
         /*
          * Uncomment this case once VEClassCodes exists/imported.
          */
-        // case "class":
-        //   return (
-        //     <VEClassCodes
-        //       ref={classRef}
-        //       onStateChange={childStateChange}
-        //       {...permissionProps}
-        //     />
-        //   );
+        case "class":
+          return (
+            <VEClassCodes
+              ref={classRef}
+              onStateChange={childStateChange}
+              {...permissionProps}
+            />
+          );
 
         case "partClass":
           return (

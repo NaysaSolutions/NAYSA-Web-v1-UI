@@ -72,6 +72,7 @@ const extractRows = (payload) => {
 const DEFAULT_FORM = {
   rcTypeCode: "",
   rcTypeName: "",
+  active: "Y",
   registeredBy: "",
   registeredDate: "",
   lastUpdatedBy: "",
@@ -91,6 +92,20 @@ const RcRef = forwardRef(
   ) => {
     const { user } = useAuth();
     const queryClient = useQueryClient();
+    const auditUserCode = String(
+      [user?.USER_CODE, user?.user_code, user?.userCode].find(
+        (value) => value != null && String(value).trim() !== "",
+      ) ?? "",
+    ).trim();
+
+    const showRequestError = (error) => {
+      const message = error?.response?.data?.message;
+      if (typeof message === "string" && message.trim()) {
+        swalErrorAlert("System Error", message);
+        return;
+      }
+      swalErrorAlertAPI("System Error", error);
+    };
 
     const docType = "RcType";
     const documentTitle = reftables?.[docType] || "RC Type";
@@ -215,14 +230,14 @@ const RcRef = forwardRef(
         handleReset();
       },
       onError: (error) => {
-        swalErrorAlertAPI("System Error", error);
+        showRequestError(error);
       },
     });
 
     const deleteMutation = useMutation({
       mutationFn: async (rcTypeCode) => {
         return apiClient.post("/deleteRcType", {
-          json_data: JSON.stringify({ rcTypeCode }),
+          json_data: JSON.stringify({ rcTypeCode, userCode: auditUserCode }),
         });
       },
       onSuccess: (response) => {
@@ -239,7 +254,7 @@ const RcRef = forwardRef(
         handleReset();
       },
       onError: (error) => {
-        swalErrorAlertAPI("System Error", error);
+        showRequestError(error);
       },
     });
 
@@ -321,7 +336,8 @@ const RcRef = forwardRef(
           .trim()
           .toUpperCase(),
         rcTypeName: String(form.rcTypeName || "").trim(),
-        userCode: user?.USER_CODE || "ADMIN",
+        active: form.active ?? "Y",
+        userCode: auditUserCode,
         // Enforce the edit flag for the SQL procedure to bypass key constraint re-insertions
         isEdit: form.__existing ? 1 : 0, 
       };
@@ -335,7 +351,7 @@ const RcRef = forwardRef(
       }
 
       saveMutation.mutate(payload);
-    }, [form, isEditing, saveMutation, user?.USER_CODE]);
+    }, [form, isEditing, saveMutation, auditUserCode]);
 
     const handleEdit = useCallback(
       async (row) => {
