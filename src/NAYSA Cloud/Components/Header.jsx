@@ -17,12 +17,16 @@ import {
   faBell,
   faEllipsisH,
   faLock,
+  faChevronDown,
 } from "@fortawesome/free-solid-svg-icons";
 import { useNavigate, useLocation } from "react-router-dom";
+import SearchGlobalBatchPrinting from "@/NAYSA Cloud/Lookup/SearchGlobalBatchPrinting.jsx";
+import { useTopDocControlRow } from "@/NAYSA Cloud/Global/top1RefTable";
 // import { useReset } from "./ResetContext"; // if you need it, keep; otherwise remove
 
 const Header = ({
   // navigation / tabs
+  docType,
   activeTopTab, // 'details' | 'history' (optional; overrides auto-detection)
   detailsRoute = "/page/SVI",
   historyRoute = "/page/AllTranHistory",
@@ -55,6 +59,8 @@ const Header = ({
   pdfLink,
   videoLink,
   onPrint,
+  onBatchPrint,
+  showBatchPrint = false,
   onPrintBIR,
   onPrintCheck,
   printData,
@@ -74,8 +80,12 @@ const Header = ({
 
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [isPrintOpen, setIsPrintOpen] = useState(false);
+  const [isBatchPrintingOpen, setIsBatchPrintingOpen] = useState(false);
+  const [documentControl, setDocumentControl] = useState(null);
   const guideDropdownRef = useRef(null);
   const moreDropdownRef = useRef(null);
+  const printDropdownRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -92,10 +102,40 @@ const Header = ({
       ) {
         setIsMoreOpen(false);
       }
+
+      if (
+        printDropdownRef.current &&
+        !printDropdownRef.current.contains(e.target)
+      ) {
+        setIsPrintOpen(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!docType) {
+      setDocumentControl(null);
+      return () => {
+        active = false;
+      };
+    }
+
+    useTopDocControlRow(docType)
+      .then((row) => {
+        if (active) setDocumentControl(row || null);
+      })
+      .catch(() => {
+        if (active) setDocumentControl(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [docType]);
 
   // ---- compute which tab is active ----
   const computedActive =
@@ -136,6 +176,25 @@ const Header = ({
   const handlePrint = () => onPrint?.(printData);
   const handlePrintBIR = () => (onPrintBIR ?? onPrint)?.(printData);
   const resolvedPrintBIRDisabled = isPrintBIRDisabled ?? isPrintDisabled;
+  const isBatchPrintEnabled = Boolean(docType) || showBatchPrint;
+  const batchBranchCode =
+    printData?.branchCode || printData?.branch || printData?.BRANCH_CODE || "";
+  const batchBranchName = printData?.branchName || printData?.BRANCH_NAME || "";
+  const batchDocumentNo =
+    printData?.documentNo ||
+    printData?.docNo ||
+    Object.entries(printData || {}).find(([key]) => /(^|_)no$/i.test(key))?.[1] ||
+    "";
+  const isSinglePrintDisabled = isPrintDisabled || !batchDocumentNo;
+
+  const openBatchPrinting = () => {
+    if (onBatchPrint) {
+      onBatchPrint();
+      return;
+    }
+
+    setIsBatchPrintingOpen(true);
+  };
   const handlePrintCheck = () => onPrintCheck?.();
   const handleUpload = () => onUpload?.();
   const handleNotify = () => onNotify?.();
@@ -227,15 +286,62 @@ const Header = ({
                 <span className={desktopLabelClass}>Copy</span>
               </button>
             )}
-            <button 
-              onClick={handlePrint} 
-              disabled={isPrintDisabled}
-              className={getBlueButtonClass(isPrintDisabled)}
-            >
-              <FontAwesomeIcon icon={faPrint} />
-              <span className={mobileLabelClass}>Print</span>
-              <span className={desktopLabelClass}>Print</span>
-            </button>
+            {isBatchPrintEnabled ? (
+              <div className="relative" ref={printDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsPrintOpen((open) => !open)}
+                  className={getBlueButtonClass(false)}
+                >
+                  <FontAwesomeIcon icon={faPrint} />
+                  <span className={mobileLabelClass}>Print</span>
+                  <span className={desktopLabelClass}>Print</span>
+                  <FontAwesomeIcon icon={faChevronDown} className="ml-1 text-[9px]" />
+                </button>
+                {isPrintOpen && (
+                  <div className="absolute right-0 z-50 mt-2 w-36 overflow-hidden rounded-md bg-white py-1 shadow-lg ring-1 ring-black/10 dark:bg-gray-700">
+                    <button
+                      type="button"
+                      disabled={isSinglePrintDisabled}
+                      onClick={() => {
+                        if (isSinglePrintDisabled) return;
+                        setIsPrintOpen(false);
+                        handlePrint();
+                      }}
+                      className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold ${
+                        isSinglePrintDisabled
+                          ? "cursor-not-allowed text-gray-400 opacity-60 dark:text-gray-500"
+                          : "text-gray-700 hover:bg-blue-50 dark:text-gray-200 dark:hover:bg-gray-600"
+                      }`}
+                    >
+                      <FontAwesomeIcon icon={faPrint} className="text-blue-600" />
+                      Single
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsPrintOpen(false);
+                        openBatchPrinting();
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-gray-700 hover:bg-blue-50 dark:text-gray-200 dark:hover:bg-gray-600"
+                    >
+                      <FontAwesomeIcon icon={faPrint} className="text-blue-600" />
+                      Batch
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button 
+                onClick={handlePrint} 
+                disabled={isPrintDisabled}
+                className={getBlueButtonClass(isPrintDisabled)}
+              >
+                <FontAwesomeIcon icon={faPrint} />
+                <span className={mobileLabelClass}>Print</span>
+                <span className={desktopLabelClass}>Print</span>
+              </button>
+            )}
             {showPrintCheck && (
               <button 
                 onClick={handlePrintCheck} 
@@ -428,6 +534,19 @@ const Header = ({
           </div>
         )}
       </div>
+      {isBatchPrintingOpen && (
+        <SearchGlobalBatchPrinting
+          isOpen={isBatchPrintingOpen}
+          onClose={() => setIsBatchPrintingOpen(false)}
+          docCode={docType}
+          docDescription={documentControl?.docName || docType}
+          formName={documentControl?.formName || ""}
+          branchCode={batchBranchCode}
+          branchName={batchBranchName}
+          initialStartNo={batchDocumentNo}
+          initialEndNo={batchDocumentNo}
+        />
+      )}
     </div>
   );
 };

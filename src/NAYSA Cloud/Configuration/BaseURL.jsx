@@ -602,10 +602,12 @@ export const getApiErrorMessage = (error, fallback = "Unable to generate the rep
   return getFriendlyReportError(rawMessage);
 };
 
-export const postPdfRequest = async (endpoint, body = {}) => {
+export const postPdfRequest = async (endpoint, body = {}, requestConfig = {}) => {
   try {
     const { data } = await apiClient.post(endpoint, body, {
+      ...requestConfig,
       headers: {
+        ...(requestConfig.headers || {}),
         Accept: "application/pdf",
       },
       responseType: "blob",
