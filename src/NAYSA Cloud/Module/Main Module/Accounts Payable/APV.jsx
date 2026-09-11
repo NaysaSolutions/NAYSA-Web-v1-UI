@@ -1814,6 +1814,9 @@ const extractOpenRRResponseRows = (response) => {
     "rmrrNo",
     "RMRR_NO",
 
+    "verrNo",
+    "VERR_NO",
+
     "joNo",
     "jo_no",
     "JO_NO",
@@ -1846,6 +1849,9 @@ const extractOpenRRResponseRows = (response) => {
 
     "rmrrId",
     "RMRR_ID",
+
+    "verrId",
+    "VERR_ID",
 
     "joId",
     "jo_id",
@@ -2133,7 +2139,11 @@ const extractOpenRRResponseRows = (response) => {
     "FGRRTRAN_TYPE",
 
     "rmrrtranType",
-    "RMRRTRAN_TYPE"
+    "RMRRTRAN_TYPE",
+
+    "verrTranType",
+    "verrtranType",
+    "VERRTRAN_TYPE"
   );
 
 
@@ -3062,6 +3072,11 @@ advpoAtcAmount: formatNumber(
     return null;
   };
 
+  const findMissingInvoiceNoRow = (rows) =>
+    (Array.isArray(rows) ? rows : []).findIndex(
+      (row) => !normalizeInvoiceNo(row?.siNo),
+    );
+
   const parseApiResultRows = (response) => {
     const rawResult = response?.data?.[0]?.result;
     if (!rawResult) return [];
@@ -3215,6 +3230,18 @@ advpoAtcAmount: formatNumber(
   if (action === "Upsert") {
     const canSaveInvoiceNos = await validateInvoiceNoAvailability();
     if (!canSaveInvoiceNos) return;
+  }
+
+  if (action === "GenerateGL" && fieldVisibility.invoiceDetails && fieldVisibility.siNo) {
+    const missingInvoiceNoRow = findMissingInvoiceNoRow(detailRows);
+
+    if (missingInvoiceNoRow >= 0) {
+      useSwalErrorAlert(
+        "Generate GL",
+        `Invoice No. is required in row ${missingInvoiceNoRow + 1} before generating GL entries.`
+      );
+      return;
+    }
   }
 
   if (documentStatus === "" || documentStatus === "OPEN") {
@@ -3782,7 +3809,7 @@ advAcct:
   }
 };
 
-  const handleOpenReferenceRR = async (overrides = {}) => {
+const handleOpenReferenceRR = async (overrides = {}) => {
   setShowInvoiceAddDropdown(false);
   
   // 1. Determine which vendor code to use
@@ -3837,6 +3864,39 @@ advAcct:
   }
 };
 
+const getReferenceApprovalStatus = (row = {}) =>
+  String(
+    row.approvalStatus ||
+    row.documentStatus ||
+    row.docStatus ||
+    row.doc_stat ||
+    row.joStatusDesc ||
+    row.jo_status_desc ||
+    row.joStatus ||
+    row.jo_status ||
+    row.statusDesc ||
+    row.status ||
+    ""
+  )
+    .trim()
+    .toUpperCase();
+
+const hasUnapprovedReferenceStatus = (row = {}) => {
+  const status = getReferenceApprovalStatus(row);
+  if (!status) return false;
+
+  return (
+    ["D", "N", "PENDING", "DRAFT", "FOR APPROVAL", "FOR JO APPROVAL", "UNAPPROVED", "DISAPPROVED", "REJECTED", "X", "CANCELLED"].includes(status) ||
+    status.includes("FOR APPROVAL") ||
+    status.includes("PENDING") ||
+    status.includes("DRAFT") ||
+    status.includes("UNAPPROVED") ||
+    status.includes("DISAPPROVED") ||
+    status.includes("REJECTED") ||
+    status.includes("CANCELLED")
+  );
+};
+
 const handleOpenReferenceJO = async (overrides = {}) => {
   setShowInvoiceAddDropdown(false);
 
@@ -3866,19 +3926,21 @@ const handleOpenReferenceJO = async (overrides = {}) => {
       vendCode: lookupVendCode,
     });
 
-    const normalizedRows = rawRows.map((row, index) =>
-      normalizeOpenRRRow(
-        {
-          ...row,
-          type: row.type || "JO",
-          referenceSource: "JO",
-          rrNo: row.rrNo || row.joNo || "",
-          rrDate: row.rrDate || row.joDate || "",
-          poNo: row.poNo || row.joNo || "",
-        },
-        index,
-      ),
-    );
+    const normalizedRows = rawRows
+      .filter((row) => !hasUnapprovedReferenceStatus(row))
+      .map((row, index) =>
+        normalizeOpenRRRow(
+          {
+            ...row,
+            type: row.type || "JO",
+            referenceSource: "JO",
+            rrNo: row.rrNo || row.joNo || "",
+            rrDate: row.rrDate || row.joDate || "",
+            poNo: row.poNo || row.joNo || "",
+          },
+          index,
+        ),
+      );
 
     if (normalizedRows.length === 0) {
       useSwalErrorAlert(
@@ -3907,6 +3969,117 @@ const handleOpenReferenceJO = async (overrides = {}) => {
     );
   } finally {
     updateState({ isLoading: false, showSpinner: false });
+  }
+};
+
+const getCategoryAccountCode = (row = {}) =>
+  row.drAcct ||
+  row.dr_acct ||
+  row.DR_ACCT ||
+  row.debitAcct ||
+  row.debit_acct ||
+  row.DEBIT_ACCT ||
+  row.expAcct ||
+  row.expacctCode ||
+  row.expacct_code ||
+  row.EXPACCT_CODE ||
+  row.invAcct ||
+  row.invAcctCode ||
+  row.inv_acct ||
+  row.invacct_code ||
+  row.INV_ACCT ||
+  row.INVACCT_CODE ||
+  row.acctCode ||
+  row.acct_code ||
+  row.ACCT_CODE ||
+  "";
+
+const extractCategoryAccountRows = (response) => {
+  const raw =
+    response?.data?.[0]?.result ??
+    response?.data?.result ??
+    response?.result ??
+    response?.data ??
+    response;
+
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [parsed];
+    } catch {
+      return [];
+    }
+  }
+
+  return typeof raw === "object" ? [raw] : [];
+};
+
+const resolveReferenceDebitAccount = async (item = {}) => {
+  const existingAccount = getCategoryAccountCode(item);
+  if (existingAccount) return existingAccount;
+
+  const detailRows = Array.isArray(item.rrDetailRows) ? item.rrDetailRows : [];
+  const detailWithAccount = detailRows.find((row) => getCategoryAccountCode(row));
+  const detailAccount = getCategoryAccountCode(detailWithAccount);
+  if (detailAccount) return detailAccount;
+
+  const detailWithCategory = detailRows.find(
+    (row) => row?.categCode || row?.CATEG_CODE || row?.categ_code || row?.categoryCode || row?.category
+  ) || {};
+
+  const itemCategoryCode =
+    item.categCode ||
+    item.CATEG_CODE ||
+    item.categ_code ||
+    item.categoryCode ||
+    item.category_code ||
+    item.category ||
+    detailWithCategory.categCode ||
+    detailWithCategory.CATEG_CODE ||
+    detailWithCategory.categ_code ||
+    detailWithCategory.categoryCode ||
+    detailWithCategory.category ||
+    "";
+
+  const categoryCode = String(itemCategoryCode || "").trim();
+  if (!categoryCode) return "";
+
+  const invType = String(item.type || item.invType || item.rrSource || "").trim().toUpperCase();
+  const categoryEndpointByType = {
+    RM: "getRMCategoryAccount",
+    RMRR: "getRMCategoryAccount",
+    MS: "getMSCategoryAccount",
+    MSRR: "getMSCategoryAccount",
+    FG: "getFGCategoryAccount",
+    FGRR: "getFGCategoryAccount",
+  };
+
+  const endpoint = categoryEndpointByType[invType] || "getCategoryDetails";
+  const payload =
+    endpoint === "getRMCategoryAccount"
+      ? { categCode: categoryCode, rmcategCode: categoryCode }
+      : endpoint === "getCategoryDetails"
+        ? { code: categoryCode }
+        : { categCode: categoryCode };
+
+  try {
+    const response =
+      endpoint === "getCategoryDetails"
+        ? await fetchData(endpoint, payload)
+        : await fetchDataJson(endpoint, payload);
+
+    const rows = extractCategoryAccountRows(response);
+    const accountRow = rows.find((row) => getCategoryAccountCode(row)) || {};
+    return getCategoryAccountCode(accountRow);
+  } catch (categoryLookupError) {
+    console.warn(
+      `Could not resolve ${invType || "inventory"} category account for: ${categoryCode}`,
+      categoryLookupError
+    );
+    return "";
   }
 };
 
@@ -4523,24 +4696,9 @@ const isPCVFlow = modalContext === "openPCV";
 
     const mappedRows = await Promise.all(
       referenceItems.map(async (item) => {
-        // 1. Resolve DR Account: Use the record's drAcct value, fallback to dynamic category lookup if missing
-        let resolvedDebitAcct = item.drAcct || item.debitAcct || "";
-        const itemCategoryCode = item.categCode || item.CATEG_CODE || item.categoryCode || item.category || "";
-
-        if (!resolvedDebitAcct && itemCategoryCode) {
-          try {
-            const categResponse = await fetchData("getCategoryDetails", { code: itemCategoryCode });
-            if (categResponse?.success && categResponse?.data?.[0]?.result) {
-              const categData = JSON.parse(categResponse.data[0].result);
-              const categRow = Array.isArray(categData) ? categData[0] : categData;
-              if (categRow?.invAcct || categRow?.inv_acct || categRow?.INV_ACCT) {
-                resolvedDebitAcct = categRow.invAcct || categRow.inv_acct || categRow.INV_ACCT;
-              }
-            }
-          } catch (categoryLookupError) {
-            console.warn(`Could not resolve category mapping fallback for: ${itemCategoryCode}`, categoryLookupError);
-          }
-        }
+        // 1. Resolve DR Account from the reference row/detail first, then from the
+        // matching inventory category table for RM/MS/FG.
+        const resolvedDebitAcct = await resolveReferenceDebitAccount(item);
 
         if (isPOAdvanceFlow) {
   // =========================================================
@@ -7607,6 +7765,7 @@ const getApvGlCellStyle = (key, fallbackWidth) =>
                                 <option value="FG">FG</option>
                                 <option value="MS">MS</option>
                                 <option value="RM">RM</option>
+                                <option value="VE">VE</option>
                                 {selectedApType === "APV01" && <option value="JO">JO</option>}
                                 {isAdvancesAPType && <option value="PO">PO</option>}
                                 {isAdvancesAPType && <option value="JO">JO</option>}

@@ -1800,6 +1800,50 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
    return false;
  };
 
+ const getOpenPOApprovalStatus = (row = {}) =>
+   String(
+     getPOField(
+       row,
+       "ApprovalStatus",
+       "approvalStatus",
+       "APPROVAL_STATUS",
+       "DocumentStatus",
+       "documentStatus",
+       "DOC_STATUS",
+       "docStatus",
+       "doc_stat",
+       "PoStatusDesc",
+       "poStatusDesc",
+       "PO_STATUS_DESC",
+       "StatusDesc",
+       "statusDesc",
+       "Status",
+       "status",
+       "PO_STATUS",
+       "PoStatus",
+       "poStatus",
+       "po_status",
+     ) || "",
+   )
+     .trim()
+     .toUpperCase();
+
+ const hasUnapprovedOpenPOStatus = (row = {}) => {
+   const status = getOpenPOApprovalStatus(row);
+   if (!status) return false;
+
+   return (
+     ["D", "N", "PENDING", "DRAFT", "FOR APPROVAL", "FOR PO APPROVAL", "UNAPPROVED", "DISAPPROVED", "REJECTED", "X", "CANCELLED"].includes(status) ||
+     status.includes("FOR APPROVAL") ||
+     status.includes("PENDING") ||
+     status.includes("DRAFT") ||
+     status.includes("UNAPPROVED") ||
+     status.includes("DISAPPROVED") ||
+     status.includes("REJECTED") ||
+     status.includes("CANCELLED")
+   );
+ };
+
  const handleOpenPOOpenLookup = async (payeeOverride = null) => {
     try {
       updateState({ isLoading: true });
@@ -1830,6 +1874,8 @@ PreparedBy: getPOField(row, "PreparedBy", "PREPARED_BY", "preparedBy"),
               "BalanceQty",
             ) || 0,
           );
+
+            if (hasUnapprovedOpenPOStatus(row)) return false;
 
             return !statusText || statusText === "O" || statusText.includes("OPEN") || qtyBalance > 0;
           })
