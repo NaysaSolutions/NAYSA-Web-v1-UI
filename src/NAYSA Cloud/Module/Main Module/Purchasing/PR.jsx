@@ -168,6 +168,8 @@ const resolveDecimalPlaces = (...values) => {
     companyInfo?.itemDecqtyPur
   ) ?? 2;
 
+  
+
 
       
   useEffect(() => {
@@ -2172,7 +2174,7 @@ const renderPrDetailColumn = (columnKey, row, index) => {
 
           showBIRForm={false}   
           showCopyForm ={true} 
-          showUpload ={true} 
+          showUpload ={hsDoc?.batchUpload === "Y"} 
           isViewDocument={isViewDocument}  
           onDetails={() => setTopTab("details")}
           onHistory={() => setTopTab("history")}
@@ -2620,6 +2622,8 @@ const renderPrDetailColumn = (columnKey, row, index) => {
             </span>
           </button>
 
+          {false && (
+          <>
           <div className="my-2 border-t border-slate-100 dark:border-slate-700" />
 
           <button
@@ -2645,6 +2649,8 @@ const renderPrDetailColumn = (columnKey, row, index) => {
               Scan
             </span>
           </button>
+          </>
+          )}
         </div>
       </div>
 

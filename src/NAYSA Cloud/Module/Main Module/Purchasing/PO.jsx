@@ -2600,7 +2600,7 @@ const PO = () => {
 
   const formatByField = (field, num) => {
     if (!Number.isFinite(num)) return "";
-    if (["unitPrice"].includes(field)) return formatNumber(num, DEC_PRICE);
+    if (["unitPrice"].includes(field)) return formatNumber(num, decUPrice);
     if (["qtyOnHand", "prBalance", "poQty", "requiredQty"].includes(field)) return formatNumber(num, DEC_QTY);
     if (["grossAmt", "discRate", "discAmt", "totalAmt", "vatAmt", "netAmt"].includes(field)) return formatNumber(num, DEC_AMT);
     return formatNumber(num);

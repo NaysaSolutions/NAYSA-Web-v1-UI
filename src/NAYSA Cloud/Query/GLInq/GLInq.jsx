@@ -1131,6 +1131,8 @@ import {
   faFilter,
   faDatabase,
   faListOl,
+  faArrowTrendUp,
+  faArrowTrendDown,
 } from "@fortawesome/free-solid-svg-icons";
 
 import {
@@ -2386,22 +2388,34 @@ const ContextCards = ({ summary, activeTab }) => {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-end">
-        <div className="grid w-full grid-cols-1 gap-3 md:w-auto md:grid-cols-2">
-          {totals.map((item) => (
+    <div className="flex flex-wrap justify-end gap-2">
+      {totals.map((item, index) => {
+        const isPositive = index === 0;
+        const iconClass = isPositive
+          ? "bg-emerald-50 text-emerald-600"
+          : "bg-rose-50 text-rose-500";
+        const valueClass = isPositive ? "text-emerald-700" : "text-rose-600";
+        const icon = isPositive ? faArrowTrendUp : faArrowTrendDown;
+
+        return (
             <div
               key={item.label}
-              className="min-w-[260px] rounded-xl border bg-white px-4 py-3 shadow-sm"
+              className="group flex w-full items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm transition-all duration-200 hover:border-slate-300 hover:shadow-md sm:w-[216px]"
             >
-              <div className="text-xs text-gray-500">{item.label}</div>
-              <div className="mt-1 text-right text-base font-semibold text-gray-800">
-                {item.value}
+              <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-transform duration-200 group-hover:scale-110 ${iconClass}`}>
+                <FontAwesomeIcon icon={icon} className="text-sm" />
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-[10px] font-semibold uppercase leading-tight tracking-widest text-slate-400">
+                  {item.label}
+                </div>
+                <div className={`mt-0.5 text-sm font-bold tabular-nums ${valueClass}`}>
+                  {item.value}
+                </div>
               </div>
             </div>
-          ))}
-        </div>
-      </div>
+        );
+      })}
     </div>
   );
 };

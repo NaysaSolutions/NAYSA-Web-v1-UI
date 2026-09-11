@@ -1161,6 +1161,32 @@ function MSStockCardQuery() {
     );
   };
 
+  const viewStockCardDocument = (row) => {
+    const docType = String(row?.docType || "").trim().toUpperCase();
+    const docNo = String(row?.docNo || "").trim();
+    const branchCode = String(row?.branchCode || stockCardFilters?.branchCode || "").trim();
+    const documentRoutes = {
+      MSRR: { path: "/page/MSRR", field: "rrNo" },
+      MSIS: { path: "/page/MSIS", field: "msisNo" },
+      MSAJ: { path: "/page/MSAJ", field: "msajNo" },
+      MSRTV: { path: "/page/MSRTV", field: "msrtvNo" },
+      MSST: { path: "/page/MSST", field: "msstNo" },
+    };
+    const documentRoute = documentRoutes[docType];
+
+    if (!documentRoute || !docNo || !branchCode) {
+      useSwalErrorAlert("View Document", "This stock movement document cannot be opened.");
+      return;
+    }
+
+    const query = new URLSearchParams({
+      [documentRoute.field]: docNo,
+      branchCode,
+      viewDocument: "true",
+    });
+    window.open(`${window.location.origin}${documentRoute.path}?${query.toString()}`, "_blank", "noopener,noreferrer");
+  };
+
   // ─── Stock Card Tab ───────────────────────────────────────────────────────
   const renderStockCardTab = () => {
     return (
@@ -1331,6 +1357,8 @@ function MSStockCardQuery() {
             data={stockCardRows}
             isLoading={stockCardQuery.isLoading}
             isFetching={stockCardQuery.isFetching}
+            rightActionLabel="View"
+            onRowAction={viewStockCardDocument}
             tableHeight="2000px"
             docType="Stock Card"
             // autoFillGrid

@@ -124,7 +124,8 @@ const RMRR = (item) => {
   const { resetFlag } = useReset();
   const { user, companyInfo, currentUserRow } = useAuth();
   const isInventoryConversionEnabled = companyInfo?.allInvConversion === "E";
-const [isViewDocument, setIsViewDocument] = useState(false);
+  const [isViewDocument, setIsViewDocument] = useState(false);
+  const [defaultsReady, setDefaultsReady] = useState(false);
   const [rmInvGLModeSetting, setRmInvGLModeSetting] = useState("");
 
   useEffect(() => {
@@ -2012,9 +2013,9 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
     updateTotalsDisplay(newMappedRows);
   } catch (error) {
     console.error("PO Lookup Error:", error);
-  } finally {
-    updateState({ isLoading: false });
-  }
+	} finally {
+	  updateState({ isLoading: false });
+	}
 };
 
   useEffect(() => {
@@ -2253,16 +2254,17 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
       if (Array.isArray(lens)) {
         updateState({ tblFieldArray: lens });
       }
-    } catch (err) {
-      console.error("loadCompanyData error:", err);
+	} catch (err) {
+	  console.error("loadCompanyData error:", err);
       Swal.fire({
         icon: "error",
         title: "Initialization Error",
         text: err?.message || "Failed to load defaults.",
       });
-    } finally {
-      updateState({ isLoading: false });
-    }
+	} finally {
+	  updateState({ isLoading: false });
+	  setDefaultsReady(true);
+	}
   };
 
   const loadCurrencyMode = (
@@ -5009,17 +5011,18 @@ const handleClosePayeeLookup = async (row) => {
     setTopTab("details");
   }, []);
 
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const docNo = params.get("rrNo");
-    const brCode = params.get("branchCode");
+	useEffect(() => {
+	  if (!defaultsReady) return;
+	  const params = new URLSearchParams(location.search);
+	  const docNo = params.get("rrNo");
+	  const brCode = params.get("branchCode");
 
-    if (!loadedFromUrlRef.current && docNo && brCode) {
-      loadedFromUrlRef.current = true;
-      handleHistoryRowPick({ docNo, branchCode: brCode });
-      cleanUrl();
-    }
-  }, [location.search, handleHistoryRowPick, cleanUrl]);
+	  if (!loadedFromUrlRef.current && docNo && brCode) {
+		loadedFromUrlRef.current = true;
+		fetchTranData(docNo, brCode);
+		setTopTab("details");
+	  }
+	}, [defaultsReady, location.search, fetchTranData]);
 
   const printData = {
     pr_no: documentNo,

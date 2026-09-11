@@ -1150,6 +1150,33 @@ function FGStockCardQuery() {
     );
   };
 
+  const viewStockCardDocument = (row) => {
+    const docType = String(row?.docType || "").trim().toUpperCase();
+    const docNo = String(row?.docNo || "").trim();
+    const branchCode = String(row?.branchCode || stockCardFilters?.branchCode || "").trim();
+    const documentRoutes = {
+      FGRR: { path: "/page/FGRR", field: "rrNo" },
+      FGIS: { path: "/page/FGIS", field: "fgisNo" },
+      FGAJ: { path: "/page/FGAJ", field: "fgajNo" },
+      FGRTV: { path: "/page/FGRTV", field: "fgrtvNo" },
+      FGST: { path: "/page/FGST", field: "fgstNo" },
+      FGSR: { path: "/page/FGSR", field: "fgsrNo" },
+    };
+    const documentRoute = documentRoutes[docType];
+
+    if (!documentRoute || !docNo || !branchCode) {
+      useSwalErrorAlert("View Document", "This stock movement document cannot be opened.");
+      return;
+    }
+
+    const query = new URLSearchParams({
+      [documentRoute.field]: docNo,
+      branchCode,
+      viewDocument: "true",
+    });
+    window.open(`${window.location.origin}${documentRoute.path}?${query.toString()}`, "_blank", "noopener,noreferrer");
+  };
+
   // ─── Stock Card Tab ───────────────────────────────────────────────────────
   const renderStockCardTab = () => {
     return (
@@ -1320,6 +1347,8 @@ function FGStockCardQuery() {
             data={stockCardRows}
             isLoading={stockCardQuery.isLoading}
             isFetching={stockCardQuery.isFetching}
+            rightActionLabel="View"
+            onRowAction={viewStockCardDocument}
             tableHeight="2000px"
             // autoFillGrid
           />

@@ -1500,6 +1500,8 @@ function VEStockCardQuery() {
             isLoading={stockCardQuery.isLoading}
             isFetching={stockCardQuery.isFetching}
             tableHeight="2000px"
+            rightActionLabel="View"
+            onRowAction={viewStockCardDocument}
             // autoFillGrid
           />
         </TablePanel>
@@ -1692,6 +1694,43 @@ function VEStockCardQuery() {
       return;
     }
     setShouldLoadVehicleHistory((prev) => prev + 1);
+  };
+
+  const viewStockCardDocument = (row) => {
+    const docType = String(row?.docType || "").trim().toUpperCase();
+    const docNo = String(row?.docNo || "").trim();
+    const branchCode = String(
+      row?.branchCode || stockCardFilters?.branchCode || "",
+    ).trim();
+    const documentRoutes = {
+      VERR: { path: "/page/VERR", field: "rrNo" },
+      VERTV: { path: "/page/VERTV", field: "vertvNo" },
+      VEAJ: { path: "/page/VEAJ", field: "adjNo" },
+      VEST: { path: "/page/VEST", field: "vestNo" },
+      VESR: { path: "/page/VESR", field: "srNo" },
+      VDR: { path: "/page/VDR", field: "vdrNo" },
+      VSI: { path: "/page/VSI", field: "vsiNo" },
+    };
+    const documentRoute = documentRoutes[docType];
+
+    if (!documentRoute || !docNo || !branchCode) {
+      useSwalErrorAlert(
+        "View Document",
+        "This stock movement document cannot be opened.",
+      );
+      return;
+    }
+
+    const query = new URLSearchParams({
+      [documentRoute.field]: docNo,
+      branchCode,
+      viewDocument: "true",
+    });
+    window.open(
+      `${window.location.origin}${documentRoute.path}?${query.toString()}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
   };
 
   const viewVehicleDocument = (transaction) => {
