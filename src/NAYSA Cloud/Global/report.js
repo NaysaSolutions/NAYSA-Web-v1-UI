@@ -275,6 +275,7 @@ export async function useHandlePrintARReport(params) {
               sCustCode: params.sCustCode,
               eCustCode: params.eCustCode,
               reportName: formName,
+              userCode: params.userCode || getCachedUserCode(),
               sprocMode:"",
               sprocName : "",
               export :"" };
@@ -344,6 +345,7 @@ export async function useHandlePrintAPReport(params) {
               sPayee: params.sVendCode,
               ePayee: params.eVendCode,
               reportName: formName,
+              userCode: params.userCode || getCachedUserCode(),
               sprocMode:"",
               sprocName : "",
               export :"" };
@@ -688,6 +690,7 @@ export async function useHandlePrintFAReport(params) {
       locCode: params.locCode,
       faCode: params.faCode,
       reportName: formName,
+      userCode: params.userCode || getCachedUserCode(),
       sprocMode: "",
       sprocName: "",
       export: "",
@@ -768,6 +771,7 @@ export async function useHandlePrintSalesReport(params) {
       itemCode: params.itemCode || params.sCode,
       chainCustomer: params.chainCustomer || params.chainCode,
       reportName: formName,
+      userCode: params.userCode || getCachedUserCode(),
       sprocMode: "",
       sprocName: "",
       export: "",
@@ -833,6 +837,7 @@ export async function useHandlePrintBUDReport(params) {
       groupBy: params.groupBy || "ACCOUNT_RC",
       monthlyView: params.monthlyView || "BUDGET",
       reportName: formName,
+      userCode: params.userCode || getCachedUserCode(),
       sprocMode: "",
       sprocName: "",
       export: "",
@@ -953,6 +958,7 @@ export async function useHandlePrintGLReport(params) {
               sRC: params.sRCCode,
               eRC: params.eRCCode,
               reportName: formName,
+              userCode: params.userCode || getCachedUserCode(),
               sprocMode:"",
               sprocName : "",
               export :"" };
