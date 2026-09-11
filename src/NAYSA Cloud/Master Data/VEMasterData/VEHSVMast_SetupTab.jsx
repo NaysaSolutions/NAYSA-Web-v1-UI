@@ -14,6 +14,8 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
+import { useSwalErrorAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
+import genericVehicleImage from "@/NAYSA Cloud/Master Data/VEMasterData/naysa-generic-vehicle.png";
 
 import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import RegistrationInfo from "@/NAYSA Cloud/Global/RegistrationInfo.jsx";
@@ -301,40 +303,51 @@ const VEHSVMast_SetupTab = ({
      ───────────────────────────────────────────────────────────────────────── */
 
   const imageSrc =
-    form.vehicleImageBase64
-      ? String(
-        form.vehicleImageBase64
-      ).startsWith("data:")
+    form.vehicleImagePreviewUrl ||
+    form.vehicleImageUrl ||
+    (form.vehicleImageBase64
+      ? String(form.vehicleImageBase64).startsWith("data:")
         ? form.vehicleImageBase64
         : `data:image/jpeg;base64,${form.vehicleImageBase64}`
-      : "";
+      : "") ||
+    genericVehicleImage;
 
-  const handleImage = (file) => {
+  const handleImage = async (file) => {
     if (!file) return;
 
-    if (
-      !/^image\//i.test(
-        file.type || ""
-      )
-    ) {
+    const allowedTypes = [
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/webp",
+    ];
+
+    if (!allowedTypes.includes(String(file.type || "").toLowerCase())) {
+      await useSwalErrorAlert(
+        "Invalid Image",
+        "Please select a JPG, JPEG, PNG, or WebP image file."
+      );
       return;
     }
 
-    const reader =
-      new FileReader();
+    if (file.size >= 10 * 1024 * 1024) {
+      await useSwalErrorAlert(
+        "Image Too Large",
+        "Vehicle image must be less than 10 MB."
+      );
+      return;
+    }
+
+    const reader = new FileReader();
 
     reader.onload = () => {
-      const dataUrl =
-        String(
-          reader.result || ""
-        );
+      const dataUrl = String(reader.result || "");
 
       onChangeForm?.({
-        vehicleImageBase64:
-          dataUrl,
-
-        removeVehicleImage:
-          false,
+        vehicleImageFile: file,
+        vehicleImagePreviewUrl: dataUrl,
+        vehicleImageBase64: dataUrl,
+        removeVehicleImage: false,
       });
     };
 
@@ -343,15 +356,15 @@ const VEHSVMast_SetupTab = ({
 
   const handleRemoveImage = () => {
     onChangeForm?.({
+      vehicleImageFile: null,
+      vehicleImagePreviewUrl: "",
+      vehicleImageUrl: genericVehicleImage,
       vehicleImageBase64: "",
       removeVehicleImage: true,
     });
 
-    if (
-      imageInputRef.current
-    ) {
-      imageInputRef.current.value =
-        "";
+    if (imageInputRef.current) {
+      imageInputRef.current.value = "";
     }
   };
 
@@ -676,51 +689,29 @@ const VEHSVMast_SetupTab = ({
                 justify-center
               "
             >
-              {imageSrc ? (
-                <img
-                  src={imageSrc}
-                  alt="Vehicle"
-                  className="
-                    h-full
-                    max-h-[280px]
-                    w-full
-                    object-contain
-                  "
-                />
-              ) : (
-                <div
-                  className="
-                    flex
-                    flex-col
-                    items-center
-                    justify-center
-                    text-slate-400
-                  "
-                >
-                  <FontAwesomeIcon
-                    icon={faCarSide}
-                    className="
-                      mb-3
-                      text-5xl
-                    "
-                  />
-
-                  <span className="text-xs">
-                    No vehicle image
-                  </span>
-                </div>
-              )}
+              <img
+                src={imageSrc}
+                alt="Vehicle"
+                className="block max-h-full max-w-full"
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "contain",
+                  objectPosition: "center",
+                }}
+                onError={(event) => {
+                  if (event.currentTarget.dataset.fallbackApplied === "1") return;
+                  event.currentTarget.dataset.fallbackApplied = "1";
+                  event.currentTarget.src = genericVehicleImage;
+                }}
+              />
             </div>
 
             {/* HIDDEN FILE INPUT */}
             <input
               ref={imageInputRef}
               type="file"
-              accept="
-                image/jpeg,
-                image/jpg,
-                image/png
-              "
+              accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
               className="hidden"
               onChange={(event) => {
                 const file =
@@ -778,7 +769,7 @@ const VEHSVMast_SetupTab = ({
                 }
                 disabled={
                   isDisabled ||
-                  !imageSrc
+                  imageSrc === genericVehicleImage
                 }
                 className="
                   inline-flex

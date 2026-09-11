@@ -10,6 +10,8 @@ import React, {
 
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 
+import { useSwalErrorAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
+
 import {
   faIndustry,
   faCarSide,
@@ -58,6 +60,7 @@ const VEHSVMast_ReferenceCodeTab = forwardRef(
     {
       onStateChange,
       isReadOnly = false,
+      isFullAccess = !isReadOnly,
       canAdd = true,
       canEdit = true,
       canSave = true,
@@ -87,6 +90,7 @@ const VEHSVMast_ReferenceCodeTab = forwardRef(
 
     const permissionProps = {
       isReadOnly,
+      isFullAccess,
       canAdd,
       canEdit,
       canSave,
@@ -226,7 +230,15 @@ const VEHSVMast_ReferenceCodeTab = forwardRef(
     useImperativeHandle(
       ref,
       () => ({
-        add: () => {
+        add: async () => {
+          if (isReadOnly || !canAdd) {
+            await useSwalErrorAlert(
+              "Read Only",
+              "You are not allowed to add Vehicle Service reference codes."
+            );
+            return;
+          }
+
           switch (activeRefTab) {
             case "make":
               makeRef.current?.add?.();
@@ -261,7 +273,15 @@ const VEHSVMast_ReferenceCodeTab = forwardRef(
           }
         },
 
-        save: () => {
+        save: async () => {
+          if (isReadOnly || !canSave) {
+            await useSwalErrorAlert(
+              "Read Only",
+              "You are not allowed to save Vehicle Service reference codes."
+            );
+            return;
+          }
+
           switch (activeRefTab) {
             case "make":
               makeRef.current?.save?.();
@@ -331,7 +351,7 @@ const VEHSVMast_ReferenceCodeTab = forwardRef(
           }
         },
       }),
-      [activeRefTab]
+      [activeRefTab, isReadOnly, canAdd, canSave]
     );
 
     /*
