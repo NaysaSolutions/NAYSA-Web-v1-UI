@@ -33,6 +33,8 @@ import {
   useHandleDownloadExcelBIRReport,
   useHandlePrintFGINVReport,
   useHandleDownloadExcelFGINVReport,
+  useHandlePrintVEINVReport,
+  useHandleDownloadExcelVEINVReport,
   useHandlePrintMSINVReport,
   useHandleDownloadExcelMSINVReport,
   useHandlePrintRMINVReport,
@@ -63,6 +65,7 @@ import RCLookupModal from "@/NAYSA Cloud/Lookup/SearchRCMast";
 import CutoffLookupModal from "@/NAYSA Cloud/Lookup/SearchCutoffRef";
 import FGLookupModal from "@/NAYSA Cloud/Lookup/SearchFGMast";
 import MSLookupModal from "@/NAYSA Cloud/Lookup/SearchMSMast";
+import VELookupModal from "@/NAYSA Cloud/Lookup/SearchItemMast";
 import ItemMastLookupModal from "@/NAYSA Cloud/Lookup/SearchItemMast.jsx";
 import WarehouseLookupModal from "@/NAYSA Cloud/Lookup/SearchWareMast";
 import LocationLookupModal from "@/NAYSA Cloud/Lookup/SearchLocation";
@@ -104,6 +107,7 @@ const MODULE_DEFS = {
   GL:  { label: "Account",  lookup: COAMastLookupModal,      print: useHandlePrintGLReport,    excel: useHandleDownloadExcelGLReport,    hasExtra: true,  hasCutoff: false, hasReportType: false },
   BIR: { label: "",         lookup: null,                    print: useHandlePrintGLReport,    excel: useHandleDownloadExcelBIRReport,   hasExtra: false, hasCutoff: true,  hasReportType: true },
   FG:  { label: "Item",     lookup: FGLookupModal,           print: useHandlePrintFGINVReport,  excel: useHandleDownloadExcelFGINVReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasInventory: true, hasSingleMain: true },
+  VE:  { label: "Item",     lookup: VELookupModal,           print: useHandlePrintVEINVReport,  excel: useHandleDownloadExcelVEINVReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasInventory: true, hasSingleMain: true },
   MS:  { label: "Item",     lookup: MSLookupModal,           print: useHandlePrintMSINVReport,  excel: useHandleDownloadExcelMSINVReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasInventory: true, hasSingleMain: true },
   RM:  { label: "Item",     lookup: RMLookupModal,           print: useHandlePrintRMINVReport,  excel: useHandleDownloadExcelRMINVReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasInventory: true, hasSingleMain: true },
   VE:  { label: "Vehicle",  lookup: VELookupModal,           print: useHandlePrintVEINVReport,  excel: useHandleDownloadExcelVEINVReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasInventory: true, hasSingleMain: true },
