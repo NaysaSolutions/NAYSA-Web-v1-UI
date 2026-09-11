@@ -568,6 +568,33 @@ export async function useHandleDownloadExcelRMINVReport(params) {
 }
 
 
+export async function useHandleBatchPrint({
+  transactionIds,
+  formName,
+  docCode,
+  printMode = "Final",
+  userCode,
+}) {
+  const payload = buildPrintPayload({
+    tranIds: Array.isArray(transactionIds) ? transactionIds : [],
+    formName,
+    docCode,
+    printMode,
+    userCode: userCode || getCachedUserCode(),
+  });
+
+  const pdfBlob = await postPdfRequest("/printFormBatch", payload, {
+    timeout: 600000,
+  });
+
+  if (!(pdfBlob instanceof Blob) || pdfBlob.type !== "application/pdf") {
+    throw new Error("Expected a combined PDF file but received something else.");
+  }
+
+  openPdfPreview(pdfBlob);
+}
+
+
 export async function useHandlePrintVEINVReport(params) {
   try {
     const responseDocRpt = await useTopHSRptRow(params.reportId);
