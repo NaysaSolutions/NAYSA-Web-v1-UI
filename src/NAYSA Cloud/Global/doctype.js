@@ -3,6 +3,7 @@ import DR from "../Module/Main Module/Sales/DR";
 export const docTypes = {
   SO: "SO",
   DR: "DR",
+  DRC: "DRC",
   VDR: "VDR",
   VSO: "VSO",
   VSI: "VSI",
@@ -72,6 +73,7 @@ export const docTypeNames = {
     SVI: "Service Invoice Transaction",
     SO: "Sales Order Transaction",
     DR: "Delivery Receipt Transaction",
+    DRC: "Delivery Receipt Consignment Transaction",
     ARDM: "AR Debit Memo Transaction",
     ARCM: "AR Credit Memo Transaction",
     CR: "Collection Receipt Transaction",
