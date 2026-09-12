@@ -532,6 +532,8 @@ groupId,
     rr_date: new Date().toISOString().split("T")[0],
   });
   const [editingFGRRDetailCell, setEditingFGRRDetailCell] = useState(null);
+  const [fgrrNumericDrafts, setFgrrNumericDrafts] = useState({});
+  const fgrrNumericDraftsRef = useRef({});
   const [convertedUomLookup, setConvertedUomLookup] = useState({
     isOpen: false,
     rowIndex: null,
@@ -4081,8 +4083,15 @@ const recalcFGRRRow = (row) => {
   };
 
   const handleDetailChange = async (index, field, value, extraData = {}) => {
-    const rows = Array.isArray(detailRows) ? detailRows : [];
-    const updatedRows = [...rows];
+    const latestRows = Array.isArray(detailRowsRef.current)
+      ? detailRowsRef.current
+      : [];
+    const rows = latestRows.length === (detailRows || []).length
+      ? latestRows
+      : Array.isArray(detailRows)
+        ? detailRows
+        : [];
+    const updatedRows = [...rows];
 
     // ✅ guard: invalid index or row not found
     if (
@@ -4235,6 +4244,7 @@ const recalcFGRRRow = (row) => {
       ["rrQty", "unitCost"].includes(field) &&
       previousNumericValue !== parseFormattedNumber(row[field] || 0);
     if (shouldClearGlEntries) detailRowsGLRef.current = [];
+    detailRowsRef.current = updatedRows;
     updateState({
       detailRows: updatedRows,
       ...(shouldClearGlEntries ? { detailRowsGL: [] } : {}),
@@ -5551,15 +5561,37 @@ const handleClosePayeeLookup = async (row) => {
     const disabled = options.disabled ?? false;
     const cellKey = `${field}-${index}`;
     const rawValue = row[field];
-    const displayValue = editingFGRRDetailCell === cellKey
-      ? rawValue || ""
+    const isEditing = editingFGRRDetailCell === cellKey;
+    const hasDraft = Object.prototype.hasOwnProperty.call(fgrrNumericDrafts, cellKey);
+    const displayValue = isEditing && hasDraft
+      ? fgrrNumericDrafts[cellKey]
       : rawValue === "" || rawValue === null || rawValue === undefined
         ? ""
         : formatFGRRByField(field, parseFormattedNumber(rawValue));
 
+    const commitNumericValue = async (value) => {
+      const sanitizedValue = String(value ?? "").replace(/[^0-9.]/g, "");
+      const numericValue = parseFormattedNumber(sanitizedValue || 0);
+      const formattedValue = formatFGRRByField(
+        field,
+        Number.isFinite(numericValue) ? numericValue : 0,
+      );
+
+      await handleDetailChange(index, field, formattedValue, true);
+
+      delete fgrrNumericDraftsRef.current[cellKey];
+      setFgrrNumericDrafts((prev) => {
+        const next = { ...prev };
+        delete next[cellKey];
+        return next;
+      });
+      setEditingFGRRDetailCell(null);
+    };
+
     return (
       <input
         type="text"
+        inputMode="decimal"
         id={`${field}-${index}`}
         className={`w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 ${options.className || ""}`.trim()}
         value={displayValue}
@@ -5568,38 +5600,80 @@ const handleClosePayeeLookup = async (row) => {
         onChange={(e) => {
           const sanitizedValue = e.target.value.replace(/[^0-9.]/g, "");
           if (/^\d*\.?\d*$/.test(sanitizedValue) || sanitizedValue === "") {
-            handleDetailChange(index, field, sanitizedValue, false);
+            fgrrNumericDraftsRef.current[cellKey] = sanitizedValue;
+            setFgrrNumericDrafts((prev) => ({
+              ...prev,
+              [cellKey]: sanitizedValue,
+            }));
           }
         }}
         onFocus={(e) => {
           if (readOnly || disabled) return;
+
           if (["rrQty", "convertedQuantity"].includes(field)) {
             fgrrQuantityEditStartRef.current[index] = { ...row };
           }
+
+          const numericValue = parseFormattedNumber(rawValue || 0);
+          const editValue =
+            Number.isFinite(numericValue) && numericValue !== 0
+              ? String(numericValue)
+              : "";
+
           setEditingFGRRDetailCell(cellKey);
+          fgrrNumericDraftsRef.current[cellKey] = editValue;
+          setFgrrNumericDrafts((prev) => ({
+            ...prev,
+            [cellKey]: editValue,
+          }));
 
-          if (typeof clearFGRRDetailZeroOnFocus === "function") {
-            clearFGRRDetailZeroOnFocus(e, {
-              isEditable: true,
-              onClear: (val) => handleDetailChange(index, field, val, false),
-            });
-            return;
-          }
-
-          if (parseFormattedNumber(e.target.value) === 0) {
-            handleDetailChange(index, field, "", false);
-            setTimeout(() => e.target.select(), 0);
-          }
+          requestAnimationFrame(() => {
+            if (typeof e.target.select === "function") e.target.select();
+          });
         }}
         onBlur={async (e) => {
           if (readOnly || disabled) return;
-          await handleDetailChange(index, field, e.target.value, true);
+
+          const valueToCommit = Object.prototype.hasOwnProperty.call(
+            fgrrNumericDraftsRef.current,
+            cellKey,
+          )
+            ? fgrrNumericDraftsRef.current[cellKey]
+            : e.currentTarget.value;
+
+          await commitNumericValue(valueToCommit);
+
           if (["rrQty", "convertedQuantity"].includes(field)) {
             delete fgrrQuantityEditStartRef.current[index];
           }
-          setEditingFGRRDetailCell(null);
         }}
-        onKeyDown={(e) => handleFGRRGridKeyDown(e, index, field, { readOnly, disabled })}
+        onKeyDown={(e) => {
+          if (readOnly || disabled || isFormDisabled) return;
+
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.currentTarget.blur();
+            setTimeout(() => focusNextFGRRDetailCell(index, field), 0);
+            return;
+          }
+
+          if (e.key === "ArrowUp") {
+            e.preventDefault();
+            focusFGRRDetailCell(field, Math.max(0, index - 1));
+            return;
+          }
+
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            focusFGRRDetailCell(
+              field,
+              Math.min(
+                (detailRowsRef.current || detailRows || []).length - 1,
+                index + 1,
+              ),
+            );
+          }
+        }}
       />
     );
   };
@@ -5811,7 +5885,7 @@ const handleClosePayeeLookup = async (row) => {
       ),
       unitCost: () => (
         <td key={columnKey} className="global-tran-td-ui" style={style}>
-          {fgrrNumericInput(row, index, "unitCost")}
+          {fgrrNumericInput(row, index, "unitCost", { readOnly: isFormDisabled || isRegularReceiving })}
         </td>
       ),
       grossAmount: () => (

@@ -509,6 +509,8 @@ groupId,
     rr_date: new Date().toISOString().split("T")[0],
   });
   const [editingRMRRDetailCell, setEditingRMRRDetailCell] = useState(null);
+  const [rmrrNumericDrafts, setRmrrNumericDrafts] = useState({});
+  const rmrrNumericDraftsRef = useRef({});
   const [convertedUomLookup, setConvertedUomLookup] = useState({ isOpen: false, rowIndex: null, data: [] });
 
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
@@ -3801,7 +3803,14 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
   };
 
  const handleDetailChange = async (index, field, value, extraData = {}) => {
-    const rows = Array.isArray(detailRows) ? detailRows : [];
+    const latestRows = Array.isArray(detailRowsRef.current)
+      ? detailRowsRef.current
+      : [];
+    const rows = latestRows.length === (detailRows || []).length
+      ? latestRows
+      : Array.isArray(detailRows)
+        ? detailRows
+        : [];
     const updatedRows = [...rows];
 
     // ✅ guard: invalid index or row not found
@@ -3952,6 +3961,7 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
       ["rrQty", "unitCost"].includes(field) &&
       previousNumericValue !== parseFormattedNumber(row[field] || 0);
     if (shouldClearGlEntries) detailRowsGLRef.current = [];
+    detailRowsRef.current = updatedRows;
     updateState({
       detailRows: updatedRows,
       ...(shouldClearGlEntries ? { detailRowsGL: [] } : {}),
@@ -5491,7 +5501,7 @@ const handleCloseBillTermModal = async (selectedBillTerm) => {
       ),
       unitCost: () => (
         <td key={columnKey} className="global-tran-td-ui" style={style}>
-          {rmrrNumericInput(row, index, "unitCost")}
+          {rmrrNumericInput(row, index, "unitCost", { readOnly: isFormDisabled || isRegularReceiving })}
         </td>
       ),
       grossAmount: () => (
@@ -5695,51 +5705,119 @@ const handleCloseBillTermModal = async (selectedBillTerm) => {
     const disabled = options.disabled ?? false;
     const cellKey = `${field}-${index}`;
     const rawValue = row[field];
-    const displayValue = editingRMRRDetailCell === cellKey
-      ? rawValue || ""
+    const isEditing = editingRMRRDetailCell === cellKey;
+    const hasDraft = Object.prototype.hasOwnProperty.call(rmrrNumericDrafts, cellKey);
+    const displayValue = isEditing && hasDraft
+      ? rmrrNumericDrafts[cellKey]
       : rawValue === "" || rawValue === null || rawValue === undefined
         ? ""
         : formatRMRRByField(field, parseFormattedNumber(rawValue));
 
+    const commitNumericValue = async (value) => {
+      const sanitizedValue = sanitizeRMRRNumeric(value);
+      const numericValue = parseFormattedNumber(sanitizedValue || 0);
+      const formattedValue = formatRMRRByField(
+        field,
+        Number.isFinite(numericValue) ? numericValue : 0,
+      );
+
+      await handleDetailChange(index, field, formattedValue, true);
+
+      delete rmrrNumericDraftsRef.current[cellKey];
+      setRmrrNumericDrafts((prev) => {
+        const next = { ...prev };
+        delete next[cellKey];
+        return next;
+      });
+      setEditingRMRRDetailCell(null);
+    };
+
     return (
       <input
         type="text"
+        inputMode="decimal"
         id={`${field}-${index}`}
         className={`w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 ${options.className || ""}`.trim()}
         value={displayValue}
         readOnly={readOnly}
         disabled={disabled}
         onChange={(e) => {
-          const sanitizedValue = e.target.value.replace(/[^0-9.]/g, "");
+          const sanitizedValue = sanitizeRMRRNumeric(e.target.value);
           if (/^\d*\.?\d*$/.test(sanitizedValue) || sanitizedValue === "") {
-            handleDetailChange(index, field, sanitizedValue, false);
+            rmrrNumericDraftsRef.current[cellKey] = sanitizedValue;
+            setRmrrNumericDrafts((prev) => ({
+              ...prev,
+              [cellKey]: sanitizedValue,
+            }));
           }
         }}
         onFocus={(e) => {
           if (readOnly || disabled) return;
-          if (["rrQty", "convertedQuantity"].includes(field)) rmrrQuantityEditStartRef.current[index] = { ...row };
+
+          if (["rrQty", "convertedQuantity"].includes(field)) {
+            rmrrQuantityEditStartRef.current[index] = { ...row };
+          }
+
+          const numericValue = parseFormattedNumber(rawValue || 0);
+          const editValue =
+            Number.isFinite(numericValue) && numericValue !== 0
+              ? String(numericValue)
+              : "";
+
           setEditingRMRRDetailCell(cellKey);
+          rmrrNumericDraftsRef.current[cellKey] = editValue;
+          setRmrrNumericDrafts((prev) => ({
+            ...prev,
+            [cellKey]: editValue,
+          }));
 
-          if (typeof clearRMRRDetailZeroOnFocus === "function") {
-            clearRMRRDetailZeroOnFocus(e, {
-              isEditable: true,
-              onClear: (val) => handleDetailChange(index, field, val, false),
-            });
-            return;
-          }
-
-          if (parseFormattedNumber(e.target.value) === 0) {
-            handleDetailChange(index, field, "", false);
-            setTimeout(() => e.target.select(), 0);
-          }
+          requestAnimationFrame(() => {
+            if (typeof e.target.select === "function") e.target.select();
+          });
         }}
         onBlur={async (e) => {
           if (readOnly || disabled) return;
-          await handleDetailChange(index, field, e.target.value, true);
-          if (["rrQty", "convertedQuantity"].includes(field)) delete rmrrQuantityEditStartRef.current[index];
-          setEditingRMRRDetailCell(null);
+
+          const valueToCommit = Object.prototype.hasOwnProperty.call(
+            rmrrNumericDraftsRef.current,
+            cellKey,
+          )
+            ? rmrrNumericDraftsRef.current[cellKey]
+            : e.currentTarget.value;
+
+          await commitNumericValue(valueToCommit);
+
+          if (["rrQty", "convertedQuantity"].includes(field)) {
+            delete rmrrQuantityEditStartRef.current[index];
+          }
         }}
-        onKeyDown={(e) => handleRMRRGridKeyDown(e, index, field, { readOnly, disabled })}
+        onKeyDown={(e) => {
+          if (readOnly || disabled || isFormDisabled) return;
+
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.currentTarget.blur();
+            setTimeout(() => focusNextRMRRDetailCell(index, field), 0);
+            return;
+          }
+
+          if (e.key === "ArrowUp") {
+            e.preventDefault();
+            focusRMRRDetailCell(field, Math.max(0, index - 1));
+            return;
+          }
+
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            focusRMRRDetailCell(
+              field,
+              Math.min(
+                (detailRowsRef.current || detailRows || []).length - 1,
+                index + 1,
+              ),
+            );
+          }
+        }}
       />
     );
   };
