@@ -33,7 +33,7 @@ const PostJV = ({ isOpen, onClose, userCode, branchCode }) => {
         if (custData.length === 0 && !alertFired.current) {
           useSwalValidationAlert({
             icon: "info",
-            title: "No Records Found",
+            title: "No Transactions to Post",
             message: "There are no records to display.",
           });
           alertFired.current = true;

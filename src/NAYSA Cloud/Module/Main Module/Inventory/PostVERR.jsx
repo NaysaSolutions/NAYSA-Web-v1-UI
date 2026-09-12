@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import { fetchDataJson } from '../../../Configuration/BaseURL.jsx';
 import { useSelectedHSColConfig } from '@/NAYSA Cloud/Global/selectedData';
 import GlobalGLPostingModalv1 from "../../../Lookup/SearchGlobalGLPostingv1.jsx";
-import { useSwalValidationAlert } from '@/NAYSA Cloud/Global/behavior';
+import { useSwalValidationAlert } from '@/NAYSA Cloud/Global/behavior.jsx';
 import { useHandlePostTran } from '@/NAYSA Cloud/Global/procedure';
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
@@ -52,7 +52,7 @@ const PostVERR = ({ isOpen, onClose, userCode }) => {
         if (!rawData.length && !alertFired.current) {
           useSwalValidationAlert({
             icon: "info",
-            title: "No Records Found",
+            title: "No Transactions to Post",
             message: "There are no Vehicle Receiving Reports available for posting.",
           });
 
@@ -98,8 +98,8 @@ const PostVERR = ({ isOpen, onClose, userCode }) => {
   };
 
  const pickDocAndBranch = (row) => ({
-  docNo: row?.rrNo || null,
-  branchCode: row?.branchCode || null,
+  docNo: row?.rrNo || row?.rr_no || row?.RR_NO || row?.verrNo || row?.documentNo || row?.docNo || null,
+  branchCode: row?.branchCode || row?.branch_code || row?.BRANCH_CODE || row?.branch || null,
 });
 
   // =========================================

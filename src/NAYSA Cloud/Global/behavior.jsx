@@ -29,6 +29,10 @@ export const parseAndFormat = (value, decimals = 2) => {
 };
 
 export const useSwalValidationAlert = ({ icon = "info", title = "", message = "" }) => {
+  if (title === "No Transactions to Post") {
+    return useSwalInfoAlert(title, "There are no transactions to post.", "postingEmpty");
+  }
+
   const formattedMessage = (message || "")
     .toString()
     .replace(/\r?\n/g, "<br/>");
@@ -596,14 +600,27 @@ export const useSwalInfoAlert = (
     message = "Ending Cut-off must not be earlier than Starting Cut-off.";
   }
 
+  const isPostingEmpty = title === "No Transactions to Post" || fixedMsg === "postingEmpty";
+
+  if (isPostingEmpty) {
+    const currentMenuName = typeof document !== "undefined"
+      ? String(document.title || "").trim()
+      : "";
+
+    title = currentMenuName && currentMenuName !== "NAYSA Financials"
+      ? currentMenuName
+      : "Transaction Posting";
+    message = "There are no transactions to post.";
+  }
+
   return Swal.fire({
     toast: true,
     position: "top-end",
     icon: undefined,
     title: "",
     html: `
-      <div class="swal-sonner-error-toast-wrap">
-        <div class="swal-sonner-error-toast-icon">
+      <div class="swal-sonner-info-toast-wrap">
+        <div class="swal-sonner-info-toast-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="9"></circle>
             <path d="M12 8v4"></path>
@@ -611,11 +628,11 @@ export const useSwalInfoAlert = (
           </svg>
         </div>
 
-        <div class="swal-sonner-error-toast-content">
-          <div class="swal-sonner-error-toast-title">${title}</div>
+        <div class="swal-sonner-info-toast-content">
+          <div class="swal-sonner-info-toast-title">${title}</div>
           ${
             message
-              ? `<div class="swal-sonner-error-toast-message">${String(message).replace(/\n/g, "<br/>")}</div>`
+              ? `<div class="swal-sonner-info-toast-message">${String(message).replace(/\n/g, "<br/>")}</div>`
               : ""
           }
         </div>
@@ -629,9 +646,9 @@ export const useSwalInfoAlert = (
     padding: "0",
     background: "#ffffff",
     customClass: {
-      popup: "swal-sonner-error-toast-popup",
-      htmlContainer: "swal-sonner-error-toast-html",
-      closeButton: "swal-sonner-error-toast-close",
+      popup: "swal-sonner-info-toast-popup",
+      htmlContainer: "swal-sonner-info-toast-html",
+      closeButton: "swal-sonner-info-toast-close",
       timerProgressBar: "swal-sonner-info-toast-progress", // 👈 NEW CLASS
     },
     didOpen: (toast) => {
@@ -639,8 +656,8 @@ export const useSwalInfoAlert = (
       if (popup) {
         popup.style.borderRadius = "10px";
 
-        const titleEl = popup.querySelector(".swal-sonner-error-toast-title");
-        const messageEl = popup.querySelector(".swal-sonner-error-toast-message");
+        const titleEl = popup.querySelector(".swal-sonner-info-toast-title");
+        const messageEl = popup.querySelector(".swal-sonner-info-toast-message");
 
         if (titleEl) {
           titleEl.style.fontSize = "13px";

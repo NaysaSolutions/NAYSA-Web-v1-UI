@@ -21,6 +21,9 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { useNavigate, useLocation } from "react-router-dom";
 import SearchGlobalBatchPrinting from "@/NAYSA Cloud/Lookup/SearchGlobalBatchPrinting.jsx";
+import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
+import { useSwalErrorAlert, useSwalInfoAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
+import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import { useTopDocControlRow } from "@/NAYSA Cloud/Global/top1RefTable";
 // import { useReset } from "./ResetContext"; // if you need it, keep; otherwise remove
 
@@ -82,6 +85,7 @@ const Header = ({
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [isPrintOpen, setIsPrintOpen] = useState(false);
   const [isBatchPrintingOpen, setIsBatchPrintingOpen] = useState(false);
+  const [isBatchPrintChecking, setIsBatchPrintChecking] = useState(false);
   const [documentControl, setDocumentControl] = useState(null);
   const guideDropdownRef = useRef(null);
   const moreDropdownRef = useRef(null);
@@ -187,13 +191,50 @@ const Header = ({
     "";
   const isSinglePrintDisabled = isPrintDisabled || !batchDocumentNo;
 
-  const openBatchPrinting = () => {
+  const openBatchPrinting = async () => {
+    if (isBatchPrintChecking) return;
+
     if (onBatchPrint) {
       onBatchPrint();
       return;
     }
 
-    setIsBatchPrintingOpen(true);
+    const batchTitle = `${documentControl?.docName || docType || "Transaction"} Batch Printing`;
+
+    if (!docType || !batchBranchCode) {
+      useSwalErrorAlert(batchTitle, "Document type and branch are required.");
+      return;
+    }
+
+    try {
+      setIsBatchPrintChecking(true);
+
+      const response = await apiClient.get("/getBatchPrintDocuments", {
+        params: {
+          mode: "Latest",
+          docCode: docType,
+          branchCode: batchBranchCode,
+        },
+      });
+      const latestDocNo = String(response?.data?.latestDocNo || "").trim();
+
+      if (!latestDocNo) {
+        useSwalInfoAlert(
+          batchTitle,
+          "There are no transactions available for printing.",
+        );
+        return;
+      }
+
+      setIsBatchPrintingOpen(true);
+    } catch (error) {
+      useSwalErrorAlert(
+        batchTitle,
+        error?.response?.data?.message || "Unable to check transactions for batch printing.",
+      );
+    } finally {
+      setIsBatchPrintChecking(false);
+    }
   };
   const handlePrintCheck = () => onPrintCheck?.();
   const handleUpload = () => onUpload?.();
@@ -288,18 +329,30 @@ const Header = ({
             )}
             {isBatchPrintEnabled ? (
               <div className="relative" ref={printDropdownRef}>
-                <button
-                  type="button"
-                  onClick={() => setIsPrintOpen((open) => !open)}
-                  className={getBlueButtonClass(false)}
-                >
-                  <FontAwesomeIcon icon={faPrint} />
-                  <span className={mobileLabelClass}>Print</span>
-                  <span className={desktopLabelClass}>Print</span>
-                  <FontAwesomeIcon icon={faChevronDown} className="ml-1 text-[9px]" />
-                </button>
+                <div className="flex w-[62px] overflow-hidden rounded-md bg-blue-600 dark:bg-blue-800 lg:w-[78px]">
+                  <button
+                    type="button"
+                    onClick={handlePrint}
+                    disabled={isSinglePrintDisabled}
+                    className={`${getBlueButtonClass(false)} min-w-0 flex-1 rounded-none border-r border-blue-500/70 px-1.5 text-white disabled:cursor-not-allowed disabled:bg-blue-600 lg:px-2 dark:border-blue-700 dark:disabled:bg-blue-800`}
+                    title={isSinglePrintDisabled ? "Retrieve a document to use Single Print" : "Print current document"}
+                  >
+                    <FontAwesomeIcon icon={faPrint} className="translate-x-0.5" />
+                    <span className={mobileLabelClass}>Print</span>
+                    <span className={desktopLabelClass}>Print</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsPrintOpen((open) => !open)}
+                    className="inline-flex w-[22px] shrink-0 items-center justify-center bg-blue-600 px-1 text-white transition-colors hover:bg-blue-700 dark:bg-blue-800 dark:hover:bg-blue-700"
+                    aria-label="Open print options"
+                    aria-expanded={isPrintOpen}
+                  >
+                    <FontAwesomeIcon icon={faChevronDown} className="text-[9px]" />
+                  </button>
+                </div>
                 {isPrintOpen && (
-                  <div className="absolute right-0 z-50 mt-2 w-36 overflow-hidden rounded-md bg-white py-1 shadow-lg ring-1 ring-black/10 dark:bg-gray-700">
+                  <div className="absolute right-0 z-50 mt-2 w-52 overflow-hidden rounded-lg bg-white py-1.5 shadow-xl ring-1 ring-black/10 dark:bg-gray-700">
                     <button
                       type="button"
                       disabled={isSinglePrintDisabled}
@@ -308,25 +361,36 @@ const Header = ({
                         setIsPrintOpen(false);
                         handlePrint();
                       }}
-                      className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold ${
+                      className={`flex w-full items-start gap-3 px-3 py-2.5 text-left ${
                         isSinglePrintDisabled
                           ? "cursor-not-allowed text-gray-400 opacity-60 dark:text-gray-500"
                           : "text-gray-700 hover:bg-blue-50 dark:text-gray-200 dark:hover:bg-gray-600"
                       }`}
                     >
-                      <FontAwesomeIcon icon={faPrint} className="text-blue-600" />
-                      Single
+                      <FontAwesomeIcon icon={faPrint} className="mt-0.5 w-4 text-blue-600" />
+                      <span>
+                        <span className="block text-xs font-semibold">Single Print</span>
+                        <span className="mt-0.5 block text-[10px] font-normal text-gray-500 dark:text-gray-300">
+                          Print current document
+                        </span>
+                      </span>
                     </button>
+                    <div className="mx-3 border-t border-gray-100 dark:border-gray-600" />
                     <button
                       type="button"
                       onClick={() => {
                         setIsPrintOpen(false);
                         openBatchPrinting();
                       }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-gray-700 hover:bg-blue-50 dark:text-gray-200 dark:hover:bg-gray-600"
+                      className="flex w-full items-start gap-3 px-3 py-2.5 text-left text-gray-700 hover:bg-blue-50 dark:text-gray-200 dark:hover:bg-gray-600"
                     >
-                      <FontAwesomeIcon icon={faPrint} className="text-blue-600" />
-                      Batch
+                      <FontAwesomeIcon icon={faCopy} className="mt-0.5 w-4 text-blue-600" />
+                      <span>
+                        <span className="block text-xs font-semibold">Batch Printing</span>
+                        <span className="mt-0.5 block text-[10px] font-normal text-gray-500 dark:text-gray-300">
+                          Print a document range
+                        </span>
+                      </span>
                     </button>
                   </div>
                 )}
@@ -534,6 +598,7 @@ const Header = ({
           </div>
         )}
       </div>
+      {isBatchPrintChecking && <LoadingSpinner />}
       {isBatchPrintingOpen && (
         <SearchGlobalBatchPrinting
           isOpen={isBatchPrintingOpen}

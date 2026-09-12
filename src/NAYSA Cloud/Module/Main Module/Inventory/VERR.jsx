@@ -914,8 +914,8 @@ const VERR = () => {
   useEffect(() => {
     if (!defaultsReady) return;
     const params = new URLSearchParams(window.location.search);
-    const rrNo = params.get("rrNo") || params.get("verrNo");
-    const branchCode = params.get("branchCode");
+    const rrNo = params.get("rrNo") || params.get("verrNo") || params.get("docNo") || params.get("documentNo");
+    const branchCode = params.get("branchCode") || params.get("branch");
     if (!loadedFromUrlRef.current && rrNo && branchCode) {
       loadedFromUrlRef.current = true;
       fetchTranData(rrNo, branchCode);

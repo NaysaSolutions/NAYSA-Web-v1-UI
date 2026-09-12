@@ -1360,17 +1360,20 @@ body {
     transform: translate3d(20px, 0, 0);
   }
 }
-.swal-sonner-error-toast-popup {
+.swal-sonner-error-toast-popup,
+.swal-sonner-info-toast-popup {
   border-radius: 14px !important;
   overflow: hidden !important;
 }
 
-.swal-sonner-error-toast-html {
+.swal-sonner-error-toast-html,
+.swal-sonner-info-toast-html {
   margin: 0 !important;
   padding: 0 !important;
 }
 
-.swal-sonner-error-toast-wrap {
+.swal-sonner-error-toast-wrap,
+.swal-sonner-info-toast-wrap {
     display: flex;
     align-items: flex-start; /* Keeps icon at the top */
     padding: 12px 10px;
@@ -1385,7 +1388,8 @@ body {
     margin-top: 2px;
 }
 
-.swal-sonner-error-toast-content {
+.swal-sonner-error-toast-content,
+.swal-sonner-info-toast-content {
     display: flex;
     flex-direction: column;
     text-align: left;
@@ -1397,7 +1401,20 @@ body {
   height: 18px;
 }
 
-.swal-sonner-error-toast-title {
+.swal-sonner-info-toast-icon {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  margin-top: 2px;
+}
+
+.swal-sonner-info-toast-icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.swal-sonner-error-toast-title,
+.swal-sonner-info-toast-title {
   font-size: 14px;
   font-weight: 600;
   color: #0f172a;
@@ -1405,7 +1422,8 @@ body {
   margin: 0;
 }
 
-.swal-sonner-error-toast-message {
+.swal-sonner-error-toast-message,
+.swal-sonner-info-toast-message {
   margin-top: 6px;
   font-size: 14px;
   line-height: 1.45;
@@ -1414,7 +1432,8 @@ body {
   word-break: break-word;
 }
 
-.swal-sonner-error-toast-close {
+.swal-sonner-error-toast-close,
+.swal-sonner-info-toast-close {
   outline: none !important;
   box-shadow: none !important;
 }

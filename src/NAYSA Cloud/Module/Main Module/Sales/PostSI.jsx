@@ -32,7 +32,7 @@ const PostSI = ({ isOpen, onClose, userCode }) => {
           : [];
 
         if (siData.length === 0 && !alertFired.current) {
-          useSwalInfoAlert("No Records Found", "There are no records to display.");
+          useSwalInfoAlert("No Transactions to Post", "There are no records to display.");
           alertFired.current = true;
           onClose?.();
         }

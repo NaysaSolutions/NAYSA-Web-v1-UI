@@ -29,7 +29,7 @@ const PostVSI = ({ isOpen, onClose, userCode }) => {
           : response?.data || [];
         if (!rows.length) {
           if (!alertFired.current) {
-            useSwalInfoAlert("No Records Found", "There are no Vehicle Sales Invoices to finalize.");
+            useSwalInfoAlert("No Transactions to Post", "There are no Vehicle Sales Invoices to finalize.");
           }
           alertFired.current = true;
           onClose?.();

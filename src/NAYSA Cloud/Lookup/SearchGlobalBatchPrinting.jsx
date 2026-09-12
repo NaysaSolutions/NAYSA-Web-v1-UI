@@ -5,7 +5,7 @@ import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import { useSwalErrorAlert, useSwalWarningAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import { useHandleBatchPrint } from "@/NAYSA Cloud/Global/report.js";
-import { useTopDocControlRow } from "@/NAYSA Cloud/Global/top1RefTable";
+import { useTopBranchRow, useTopDocControlRow } from "@/NAYSA Cloud/Global/top1RefTable";
 
 const SearchGlobalBatchPrinting = ({
   isOpen,
@@ -29,6 +29,13 @@ const SearchGlobalBatchPrinting = ({
   const [printing, setPrinting] = useState(false);
   const [printMenuOpen, setPrintMenuOpen] = useState(false);
   const [resolvedFormName, setResolvedFormName] = useState(formName || "");
+  const [resolvedBranchName, setResolvedBranchName] = useState(branchName || "");
+  const [loadingLatestNo, setLoadingLatestNo] = useState(
+    Boolean(isOpen && docCode && branchCode),
+  );
+  const [loadingBranchName, setLoadingBranchName] = useState(
+    Boolean(isOpen && !branchName && branchCode),
+  );
 
   useEffect(() => {
     if (!isOpen) return;
@@ -38,6 +45,47 @@ const SearchGlobalBatchPrinting = ({
     setSelectedIds([]);
     setPrintMenuOpen(false);
   }, [isOpen, initialStartNo, initialEndNo]);
+
+  useEffect(() => {
+    if (!isOpen || !docCode || !branchCode) {
+      setLoadingLatestNo(false);
+      return;
+    }
+
+    let active = true;
+    setLoadingLatestNo(true);
+
+    apiClient
+      .get("/getBatchPrintDocuments", {
+        params: {
+          mode: "Latest",
+          docCode,
+          branchCode,
+        },
+      })
+      .then((response) => {
+        if (!active) return;
+
+        const latestDocNo = String(response?.data?.latestDocNo || "").trim();
+        const suggestedStartNo = String(initialStartNo || latestDocNo).trim();
+
+        setStartNo(suggestedStartNo);
+        setEndNo(latestDocNo || suggestedStartNo);
+      })
+      .catch(() => {
+        if (!active) return;
+
+        setStartNo(initialStartNo);
+        setEndNo(initialEndNo || initialStartNo);
+      })
+      .finally(() => {
+        if (active) setLoadingLatestNo(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isOpen, docCode, branchCode, initialStartNo, initialEndNo]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -61,9 +109,49 @@ const SearchGlobalBatchPrinting = ({
     };
   }, [isOpen, docCode, formName]);
 
+  useEffect(() => {
+    if (!isOpen) {
+      setLoadingBranchName(false);
+      return;
+    }
+
+    if (branchName) {
+      setResolvedBranchName(branchName);
+      setLoadingBranchName(false);
+      return;
+    }
+
+    if (!branchCode) {
+      setResolvedBranchName("");
+      setLoadingBranchName(false);
+      return;
+    }
+
+    let active = true;
+    setLoadingBranchName(true);
+    useTopBranchRow(branchCode)
+      .then((branchRow) => {
+        if (active) setResolvedBranchName(branchRow?.branchName || branchCode);
+      })
+      .catch(() => {
+        if (active) setResolvedBranchName(branchCode);
+      })
+      .finally(() => {
+        if (active) setLoadingBranchName(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isOpen, branchCode, branchName]);
+
   const allSelected = useMemo(
     () => rows.length > 0 && selectedIds.length === rows.length,
     [rows, selectedIds],
+  );
+  const hasDraftAvailable = useMemo(
+    () => rows.some((row) => Number(row.noReprints || 0) === 0),
+    [rows],
   );
 
   const handleStartNoChange = (event) => {
@@ -175,11 +263,12 @@ const SearchGlobalBatchPrinting = ({
   };
 
   if (!isOpen) return null;
+  if (loadingLatestNo || loadingBranchName) return <LoadingSpinner />;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/45 p-4">
       {(loading || printing) && <LoadingSpinner />}
-      <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+      <div className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3 dark:border-slate-700">
           <div>
             <h2 className="text-base font-bold text-slate-800 dark:text-white">
@@ -205,7 +294,7 @@ const SearchGlobalBatchPrinting = ({
               Branch
             </span>
             <input
-              value={branchName ? `${branchCode} - ${branchName}` : branchCode || ""}
+              value={resolvedBranchName || branchCode || ""}
               disabled
               className="h-10 w-full rounded-lg border border-slate-300 bg-slate-100 px-3 text-sm text-slate-600 outline-none dark:border-slate-700 dark:bg-slate-800"
             />
@@ -244,21 +333,30 @@ const SearchGlobalBatchPrinting = ({
           </div>
         </div>
 
-        <div className="min-h-[260px] flex-1 overflow-auto p-4">
-          <table className="w-full border-collapse text-sm">
-            <thead className="sticky top-0 bg-blue-100 text-slate-700 dark:bg-blue-950 dark:text-slate-200">
+        <div className="min-h-[260px] flex-1 overflow-auto px-4 pb-4">
+          <table className="w-full table-fixed border-separate border-spacing-0 border-l border-t border-slate-200 text-xs dark:border-slate-700">
+            <colgroup>
+              <col className="w-[5%]" />
+              <col className="w-[12%]" />
+              <col className="w-[11%]" />
+              <col className="w-[18%]" />
+              <col className="w-[18%]" />
+              <col className="w-[18%]" />
+              <col className="w-[18%]" />
+            </colgroup>
+            <thead className="text-slate-700 dark:text-slate-200">
               <tr>
-                <th className="w-14 border border-slate-200 px-3 py-2 text-center dark:border-slate-700">
+                <th className="sticky top-0 z-20 border-b border-r border-slate-200 bg-blue-100 px-2 py-1.5 text-center dark:border-slate-700 dark:bg-blue-950">
                   <button type="button" onClick={toggleAll} aria-label="Select all documents">
                     {allSelected ? <CheckSquare size={17} className="text-blue-600" /> : <Square size={17} />}
                   </button>
                 </th>
-                <th className="border border-slate-200 px-3 py-2 text-left dark:border-slate-700">Document No.</th>
-                <th className="border border-slate-200 px-3 py-2 text-left dark:border-slate-700">Print Status</th>
-                <th className="border border-slate-200 px-3 py-2 text-left dark:border-slate-700">Prepared By</th>
-                <th className="border border-slate-200 px-3 py-2 text-left dark:border-slate-700">Checked By</th>
-                <th className="border border-slate-200 px-3 py-2 text-left dark:border-slate-700">Noted By</th>
-                <th className="border border-slate-200 px-3 py-2 text-left dark:border-slate-700">Approved By</th>
+                <th className="sticky top-0 z-20 border-b border-r border-slate-200 bg-blue-100 px-2 py-1.5 text-left dark:border-slate-700 dark:bg-blue-950">Document No.</th>
+                <th className="sticky top-0 z-20 border-b border-r border-slate-200 bg-blue-100 px-2 py-1.5 text-left dark:border-slate-700 dark:bg-blue-950">Print Status</th>
+                <th className="sticky top-0 z-20 border-b border-r border-slate-200 bg-blue-100 px-2 py-1.5 text-left dark:border-slate-700 dark:bg-blue-950">Prepared By</th>
+                <th className="sticky top-0 z-20 border-b border-r border-slate-200 bg-blue-100 px-2 py-1.5 text-left dark:border-slate-700 dark:bg-blue-950">Checked By</th>
+                <th className="sticky top-0 z-20 border-b border-r border-slate-200 bg-blue-100 px-2 py-1.5 text-left dark:border-slate-700 dark:bg-blue-950">Noted By</th>
+                <th className="sticky top-0 z-20 border-b border-r border-slate-200 bg-blue-100 px-2 py-1.5 text-left dark:border-slate-700 dark:bg-blue-950">Approved By</th>
               </tr>
             </thead>
             <tbody>
@@ -271,25 +369,25 @@ const SearchGlobalBatchPrinting = ({
                     onClick={() => toggleRow(key)}
                     className={`cursor-pointer ${selected ? "bg-blue-50 dark:bg-blue-950/40" : "hover:bg-slate-50 dark:hover:bg-slate-800/50"}`}
                   >
-                    <td className="border border-slate-200 px-3 py-2 text-center dark:border-slate-700">
+                    <td className="border-b border-r border-slate-200 px-2 py-1.5 text-center dark:border-slate-700">
                       {selected ? <CheckSquare size={17} className="mx-auto text-blue-600" /> : <Square size={17} className="mx-auto text-slate-400" />}
                     </td>
-                    <td className="border border-slate-200 px-3 py-2 font-medium dark:border-slate-700">{row.docNo}</td>
-                    <td className="border border-slate-200 px-3 py-2 dark:border-slate-700">
+                    <td className="border-b border-r border-slate-200 px-2 py-1.5 font-medium dark:border-slate-700">{row.docNo}</td>
+                    <td className="border-b border-r border-slate-200 px-2 py-1.5 dark:border-slate-700">
                       {Number(row.noReprints || 0) > 0 ? (
-                        <span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
                           Final Printed
                         </span>
                       ) : (
-                        <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
                           Draft Available
                         </span>
                       )}
                     </td>
-                    <td className="border border-slate-200 px-3 py-2 dark:border-slate-700">{row.preparedBy || ""}</td>
-                    <td className="border border-slate-200 px-3 py-2 dark:border-slate-700">{row.checkedBy || ""}</td>
-                    <td className="border border-slate-200 px-3 py-2 dark:border-slate-700">{row.notedBy || ""}</td>
-                    <td className="border border-slate-200 px-3 py-2 dark:border-slate-700">{row.approvedBy || ""}</td>
+                    <td className="border-b border-r border-slate-200 px-2 py-1.5 dark:border-slate-700">{row.preparedBy || ""}</td>
+                    <td className="border-b border-r border-slate-200 px-2 py-1.5 dark:border-slate-700">{row.checkedBy || ""}</td>
+                    <td className="border-b border-r border-slate-200 px-2 py-1.5 dark:border-slate-700">{row.notedBy || ""}</td>
+                    <td className="border-b border-r border-slate-200 px-2 py-1.5 dark:border-slate-700">{row.approvedBy || ""}</td>
                   </tr>
                 );
               })}
@@ -318,17 +416,17 @@ const SearchGlobalBatchPrinting = ({
               Cancel
             </button>
             <div className="relative">
-              {printMenuOpen && !printing && (
-                <div className="absolute bottom-full right-0 z-50 mb-2 w-32 rounded-lg border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+              {hasDraftAvailable && printMenuOpen && !printing && (
+                <div className="absolute bottom-full right-0 z-50 mb-2 w-40 rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900">
                   <button
                     type="button"
                     onClick={() => {
                       setPrintMenuOpen(false);
                       handlePrint("Draft");
                     }}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] font-semibold text-slate-700 hover:bg-blue-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                    className="flex w-full items-center gap-2.5 rounded-md px-3 py-2.5 text-left text-xs font-semibold text-slate-700 hover:bg-blue-50 dark:text-slate-200 dark:hover:bg-slate-800"
                   >
-                    <FileText size={13} className="text-blue-500" /> Draft
+                    <FileText size={16} className="text-blue-500" /> Draft
                   </button>
                   <button
                     type="button"
@@ -336,20 +434,27 @@ const SearchGlobalBatchPrinting = ({
                       setPrintMenuOpen(false);
                       handlePrint("Final");
                     }}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] font-semibold text-slate-700 hover:bg-blue-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                    className="flex w-full items-center gap-2.5 rounded-md px-3 py-2.5 text-left text-xs font-semibold text-slate-700 hover:bg-blue-50 dark:text-slate-200 dark:hover:bg-slate-800"
                   >
-                    <CheckCircle size={13} className="text-blue-500" /> Final
+                    <CheckCircle size={16} className="text-blue-500" /> Final
                   </button>
                 </div>
               )}
               <button
                 type="button"
-                onClick={() => setPrintMenuOpen((open) => !open)}
+                onClick={() => {
+                  if (hasDraftAvailable) {
+                    setPrintMenuOpen((open) => !open);
+                    return;
+                  }
+
+                  handlePrint("Final");
+                }}
                 disabled={!selectedIds.length || loading || printing}
                 className="flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
               >
                 <Printer size={15} /> {printing ? "Generating..." : "Preview Batch"}
-                {!printing && <ChevronDown size={13} />}
+                {!printing && hasDraftAvailable && <ChevronDown size={13} />}
               </button>
             </div>
           </div>

@@ -26,7 +26,7 @@ const PostVDR = ({ isOpen, onClose, userCode }) => {
         const response = await fetchDataJson(endpoint);
         const rows = response?.data?.[0]?.result ? JSON.parse(response.data[0].result) : response?.data || [];
         if (!rows.length) {
-          if (!alertFired.current) useSwalInfoAlert("No Records Found", "There are no Vehicle Delivery Receipts to finalize.");
+          if (!alertFired.current) useSwalInfoAlert("No Transactions to Post", "There are no Vehicle Delivery Receipts to finalize.");
           alertFired.current = true;
           onClose?.();
           return;

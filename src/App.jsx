@@ -56,6 +56,7 @@ import AuthProvider, {
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import PdfViewer from "@/NAYSA Cloud/Printing/PdfViewer.jsx";
 import ElectronScannerPage from "@/NAYSA Cloud/Electron/ElectronScannerPage.jsx";
+import DocumentTitleManager from "@/NAYSA Cloud/Global/DocumentTitleManager.jsx";
 
 const LICENSE_ADMIN_MODE = "LICENSE_ADMIN";
 const SYSTEM_ADMIN_MODE = "SYSTEM_ADMIN";
@@ -798,6 +799,11 @@ const AppContent = () => {
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden bg-gray-50 font-roboto dark:bg-black">
+      <DocumentTitleManager
+        menuItems={menuItems}
+        routeRows={routeRows}
+        activeComponentKey={activeModalKey}
+      />
       <div className="sticky top-0 z-40">
         <Navbar
           onMenuClick={() => {

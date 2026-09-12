@@ -3,7 +3,7 @@ import ReactDOM from "react-dom";
 import { fetchDataJson, postRequest } from "../../../Configuration/BaseURL.jsx";
 import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
 import GlobalGLPostingModalv1 from "../../../Lookup/SearchGlobalGLPostingv1.jsx";
-import { useSwalValidationAlert } from "@/NAYSA Cloud/Global/behavior";
+import { useSwalValidationAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 const POSTING_AUTH_FLAG = "naysa_posting_auth_in_progress";
@@ -75,7 +75,7 @@ const PostVEST = ({ isOpen, onClose, userCode }) => {
         if (postingData.length === 0 && !alertFired.current) {
           useSwalValidationAlert({
             icon: "info",
-            title: "No Records Found",
+            title: "No Transactions to Post",
             message: "There are no records to display.",
           });
           alertFired.current = true;

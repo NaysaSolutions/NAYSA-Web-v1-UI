@@ -121,18 +121,13 @@ const FGRR = (item) => {
   const { resetFlag } = useReset();
   const { user, companyInfo, currentUserRow } = useAuth();
   const isInventoryConversionEnabled = companyInfo?.allInvConversion === "E";
-const [isViewDocument, setIsViewDocument] = useState(false);
+  const isViewDocumentUrl = useMemo(
+    () => new URLSearchParams(location.search).get("viewDocument") === "true",
+    [location.search],
+  );
+  const isViewDocument = isViewDocumentUrl;
   const [defaultsReady, setDefaultsReady] = useState(false);
   const [fgInvGLModeSetting, setFgInvGLModeSetting] = useState("");
-
-  useEffect(() => {
-    const p = new URLSearchParams(location.search);
-    if (p.get("viewDocument") === "true") {
-      setIsViewDocument(true);
-    }
-  }, []);
-
-  const isViewDocumentUrl = isViewDocument;
 
   const resolveGLMode = (...values) =>
     String(
@@ -2485,16 +2480,16 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
 
     try {
       const data = await useFetchTranData(rrNo, branchCode, docType, "rrNo", direction);
+      const parsed = data?.result && typeof data.result === "object" ? data.result : data;
 
-      if (!data?.rrId) {
+      if (!(parsed?.rrId || parsed?.rrHdId || parsed?.RR_ID)) {
         Swal.fire({ icon: 'info', title: 'No Records Found', text: 'Transaction does not exist.' });
         updateState({ isLoading: false });
         return;
       }
 
-      const parsed = data;
-      const parsedDocumentNo = parsed.rrNo || "";
-      const parsedDocumentId = parsed.rrId || parsed.rrHdId;
+      const parsedDocumentNo = parsed.rrNo || parsed.docNo || parsed.RR_NO || rrNo || "";
+      const parsedDocumentId = parsed.rrId || parsed.rrHdId || parsed.RR_ID;
       const rawParsedStatus = getPOField(
         parsed,
         "rrStatus",
@@ -5213,8 +5208,8 @@ const handleClosePayeeLookup = async (row) => {
 	useEffect(() => {
 	  if (!defaultsReady) return;
 	  const params = new URLSearchParams(location.search);
-	  const docNo = params.get("rrNo") || params.get("poNo");
-	  const brCode = params.get("branchCode");
+	  const docNo = params.get("rrNo") || params.get("fgrrNo") || params.get("docNo") || params.get("documentNo");
+	  const brCode = params.get("branchCode") || params.get("branch");
 
 	  if (!loadedFromUrlRef.current && docNo && brCode) {
 		loadedFromUrlRef.current = true;

@@ -46,7 +46,7 @@ const PostBUDBB = ({ isOpen, onClose, userCode }) => {
         const budbbData = Array.isArray(parsedData) ? parsedData : [];
 
         if (budbbData.length === 0 && !alertFired.current) {
-          useSwalInfoAlert("No Records Found", "There are no records to display.");
+          useSwalInfoAlert("No Transactions to Post", "There are no records to display.");
           alertFired.current = true;
           onClose?.();
           return;

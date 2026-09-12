@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import { fetchDataJson } from '../../../Configuration/BaseURL.jsx';
 import { useSelectedHSColConfig } from '@/NAYSA Cloud/Global/selectedData';
 import GlobalGLPostingModalv1 from '../../../Lookup/SearchGlobalGLPostingv1.jsx';
-import { useSwalValidationAlert } from '@/NAYSA Cloud/Global/behavior';
+import { useSwalValidationAlert } from '@/NAYSA Cloud/Global/behavior.jsx';
 import { useHandlePostTran } from '@/NAYSA Cloud/Global/procedure';
 import { LoadingSpinner } from '@/NAYSA Cloud/Global/utilities.jsx';
 
@@ -409,7 +409,7 @@ const normalizeColumnConfig = (columns) =>
           if (!alertFired.current) {
             useSwalValidationAlert({
               icon: 'info',
-              title: 'No Records Found',
+              title: 'No Transactions to Post',
               message: 'There are no MSIS records available for posting.',
             });
 

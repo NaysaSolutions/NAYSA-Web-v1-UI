@@ -35,7 +35,7 @@ const PostFADS = ({ isOpen, onClose, userCode = "" }) => {
         if (postingRows.length === 0 && !alertFired.current) {
           useSwalValidationAlert({
             icon: "info",
-            title: "No Records Found",
+            title: "No Transactions to Post",
             message: "There are no FA Disposal records to post.",
           });
 

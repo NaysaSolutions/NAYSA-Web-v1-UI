@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom";
 import { fetchDataJson } from "../../../Configuration/BaseURL.jsx";
 import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
-import { useSwalValidationAlert } from "@/NAYSA Cloud/Global/behavior";
+import { useSwalValidationAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 import { useHandlePostTran } from "@/NAYSA Cloud/Global/procedure";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import GlobalGLPostingModalv1 from "../../../Lookup/SearchGlobalGLPostingv1.jsx";
@@ -39,7 +39,7 @@ const PostVEAJ = ({ isOpen, onClose, userCode }) => {
           if (!alertFired.current) {
             useSwalValidationAlert({
               icon: "info",
-              title: "No Records Found",
+              title: "No Transactions to Post",
               message: "There are no Vehicle Inventory Adjustment records to post.",
             });
             alertFired.current = true;
