@@ -3663,9 +3663,7 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
     const rowCurrRate = parseFormattedNumber(row.currRate ?? currRate ?? state.currRate ?? 1) || 1;
 
     // ✅ ONLY chargeable quantity
-//     const chargeableQty = Math.max(rrQty - freeQty, 0);
-
-    const gross = chargeableQty * unitCost;
+    const gross = rrQty * unitCost;
 
     // VAT-inclusive example (adjust if exclusive in your setup)
     const vatAmt = vatRate ? gross - gross / (1 + vatRate / 100) : 0;
@@ -3693,8 +3691,7 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
     const vatRate = parseFormattedNumber(row.vatRate || 0);
     const rowCurrCode = normalizeCurrencyCode(row.currCode || currCode || state.currCode || "PHP");
     const rowCurrRate = parseFormattedNumber(row.currRate ?? currRate ?? state.currRate ?? 1) || 1;
-    // const chargeableQty = Math.max(rrQty - freeQty, 0);
-    const gross = chargeableQty * unitCost;
+    const gross = rrQty * unitCost;
     const vatAmt = vatRate ? gross - gross / (1 + vatRate / 100) : 0;
     const netAmtFx = gross - vatAmt;
     const netAmt = rowCurrCode !== "PHP" ? netAmtFx * rowCurrRate : netAmtFx;
