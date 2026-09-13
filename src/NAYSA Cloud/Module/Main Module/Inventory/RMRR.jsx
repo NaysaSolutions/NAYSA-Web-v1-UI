@@ -122,7 +122,7 @@ const RMRR = (item) => {
   const location = useLocation();
 
   const { resetFlag } = useReset();
-  const { user, companyInfo, currentUserRow } = useAuth();
+  const { user, companyInfo, currentUserRow, getReplacementVatRow } = useAuth();
   const isInventoryConversionEnabled = companyInfo?.allInvConversion === "E";
   const isViewDocumentUrl = useMemo(
     () => new URLSearchParams(location.search).get("viewDocument") === "true",
@@ -569,6 +569,10 @@ rrQty: "",
   const isDirectReceiving =
     String(state.rmrrTranType || "RMRR01").toUpperCase() === "RMRR02";
   const payeeLookupFilter = isDirectReceiving ? "ActiveAll" : "OpenRMRR";
+  const getRrGoodsVatRow = useCallback(
+    (vatCode) => getReplacementVatRow(vatCode || "", "I", "S", "G"),
+    [getReplacementVatRow],
+  );
   const openPOAfterPayeeRef = useRef(false);
   const [isPayeeUpdating, setIsPayeeUpdating] = useState(false);
   const isRegularReceiving =
@@ -576,6 +580,9 @@ rrQty: "",
   const isPayeeLockedForRegularDetails =
     isRegularReceiving && Array.isArray(detailRows) && detailRows.length > 0;
   const closeCurrRate = parseFormattedNumber(currRate);
+  const showFinalizedLandedCosts =
+    String(displayStatus || "").trim().toUpperCase() === "FINALIZED" &&
+    Number.isFinite(closeCurrRate) && closeCurrRate !== 1;
   const canShowCloseTransaction =
     String(state.rmrrTranType || "RMRR01").trim().toUpperCase() === "RMRR01" &&
     currRate !== undefined &&
@@ -614,6 +621,10 @@ rrQty: "",
     { key: "vatRate", label: "VAT Rate", width: 120 },
     { key: "vatAmount", label: "VAT Amount", width: 120 },
     { key: "netAmount", label: "Net Amount", width: 120 },
+    { key: "shippingCost", label: "Shipping Cost", width: 130 },
+    { key: "landedCost", label: "Landed Cost", width: 130 },
+    { key: "unitShipcost", label: "Unit Shipping Cost", width: 155 },
+    { key: "unitLandedcost", label: "Unit Landed Cost", width: 150 },
     { key: "lotNo", label: "Lot No", width: 200 },
     { key: "bbDate", label: "BB Date", width: 130 },
     { key: "qstatCode", label: "QC Status", width: 120 },
@@ -648,15 +659,23 @@ rrQty: "",
           "grossAmountPhp",
           "vatRate",
           "vatAmount",
+          "shippingCost",
+          "landedCost",
+          "unitShipcost",
+          "unitLandedcost",
           "netAmount",
         ]
       : [];
+    const landedCostColumns = showFinalizedLandedCosts
+      ? []
+      : ["shippingCost", "landedCost", "unitShipcost", "unitLandedcost"];
 
     setRMRRDetailHiddenColumnKeys([
       ...transactionTypeColumns,
       ...costAmountColumns,
+      ...landedCostColumns,
     ]);
-  }, [hideCostAmount, setRMRRDetailHiddenColumnKeys, state.rmrrTranType]);
+  }, [hideCostAmount, setRMRRDetailHiddenColumnKeys, showFinalizedLandedCosts, state.rmrrTranType]);
 
   const visibleRMRRDetailColumns = useMemo(
   () => {
@@ -2557,6 +2576,10 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
           vatCode: r.vatCode || "",
           vatRate: r.vatCode ? formatNumber(vatRateMap[r.vatCode] ?? 0, 2) : "",
           vatAmount: formatNumber(r.vatAmount ?? 0),
+          shippingCost: formatNumber(getPOField(r, "shippingCost", "shipping_cost", "SHIPPING_COST") || 0, 2),
+          landedCost: formatNumber(getPOField(r, "landedCost", "landed_cost", "LANDED_COST") || 0, 2),
+          unitShipcost: formatNumber(getPOField(r, "unitShipcost", "unitShipCost", "unit_shipcost", "UNIT_SHIPCOST") || 0, decUcost),
+          unitLandedcost: formatNumber(getPOField(r, "unitLandedcost", "unitLandedCost", "unit_landedcost", "UNIT_LANDEDCOST") || 0, decUcost),
 
           qsCode: firstLot.qstatCode || r.qsCode || "",
           qstatCode: firstLot.qstatCode || r.qstatCode || r.qsCode || "",
@@ -2610,11 +2633,20 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
         dt1Lineno: g.dt1Lineno || "",
       }));
 
+      const recalculatedMappedDT1 = mappedDT1.map((row) =>
+        recalcRMRRRowWithCurrencyRate({
+          ...row,
+          currCode: parsedCurrencyCode,
+          currRate: parsedCurrencyRate,
+        }),
+      );
+
       updateState({
-        detailRows: mappedDT1,
+        detailRows: recalculatedMappedDT1,
         detailRowsGL: mappedDT2,
         dt3,
       });
+      updateTotalsDisplay(recalculatedMappedDT1);
     } catch (e) {
       console.error("fetchTranData error:", e);
       Swal.fire({ icon: 'error', title: 'Fetch Error', text: e.message });
@@ -3194,11 +3226,7 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
     detailRowsGLRef.current = [];
     updateState({ detailRows: updatedRows, detailRowsGL: [] });
 
-    const totalQty = updatedRows.reduce(
-      (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
-      0,
-    );
-    updateTotalsDisplay(totalQty);
+    updateTotalsDisplay(updatedRows);
   };
 
   const handleCloseWarehouseLookup = (row) => {
@@ -4550,10 +4578,10 @@ const newGlEntries = await useGenerateGLEntries(docType, getNetAmountGLData());
         });
 
         // success + print
-        useSwalshowSaveSuccessDialog(
+		useSwalshowSaveSuccessDialog(
   () => {
     handleReset();
-    setTopTab("history");
+    setTopTab("details");
   },
   () => handleSaveAndPrint(savedId)
 );
@@ -4895,11 +4923,14 @@ const handleClosePayeeLookup = async (row) => {
     try {
     const nextVendCode = row?.vend_code ?? row?.vendCode ?? "";
     const nextVendName = row?.vend_name ?? row?.vendName ?? "";
-    const nextVatCode =
+    const sourceVatCode =
       row?.vatCode ?? row?.VatCode ?? row?.VAT_CODE ?? row?.vat_code ?? "";
-    const nextVatName =
-      row?.vatName ?? row?.VatName ?? row?.VAT_NAME ?? row?.vat_name ?? "";
+    const replacementVat = getRrGoodsVatRow(sourceVatCode);
+    const nextVatCode = replacementVat?.vatCode || sourceVatCode;
+    const nextVatName = replacementVat?.vatName ||
+      (row?.vatName ?? row?.VatName ?? row?.VAT_NAME ?? row?.vat_name ?? "");
     const lookupVatRate =
+      replacementVat?.vatRate ??
       row?.vatRate ?? row?.VatRate ?? row?.VAT_RATE ?? row?.vat_rate ?? row?.rate ?? "";
     const fetchedVatRate = nextVatCode ? await fetchVatRate(nextVatCode) : "";
     const nextVatRate =
@@ -5569,6 +5600,26 @@ const handleCloseBillTermModal = async (selectedBillTerm) => {
             "vatAmount",
             formatNumber(parseFormattedNumber(row.vatAmount)) || "",
           )}
+        </td>
+      ),
+      shippingCost: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {readOnlyNumberInput("shippingCost", formatNumber(parseFormattedNumber(row.shippingCost), 2))}
+        </td>
+      ),
+      landedCost: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {readOnlyNumberInput("landedCost", formatNumber(parseFormattedNumber(row.landedCost), 2))}
+        </td>
+      ),
+      unitShipcost: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {readOnlyNumberInput("unitShipcost", formatNumber(parseFormattedNumber(row.unitShipcost ?? row.unitShipCost), decUcost))}
+        </td>
+      ),
+      unitLandedcost: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {readOnlyNumberInput("unitLandedcost", formatNumber(parseFormattedNumber(row.unitLandedcost ?? row.unitLandedCost), decUcost))}
         </td>
       ),
       netAmount: () => (

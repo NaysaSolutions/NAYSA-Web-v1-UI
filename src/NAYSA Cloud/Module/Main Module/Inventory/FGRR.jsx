@@ -119,7 +119,7 @@ const FGRR = (item) => {
   const location = useLocation();
 
   const { resetFlag } = useReset();
-  const { user, companyInfo, currentUserRow } = useAuth();
+  const { user, companyInfo, currentUserRow, getReplacementVatRow } = useAuth();
   const isInventoryConversionEnabled = companyInfo?.allInvConversion === "E";
   const isViewDocumentUrl = useMemo(
     () => new URLSearchParams(location.search).get("viewDocument") === "true",
@@ -622,9 +622,16 @@ rrQty: "",
   const isDirectReceiving =
     String(state.fgrrTranType || "FGRR01").trim().toUpperCase() === "FGRR02";
   const payeeLookupFilter = isDirectReceiving ? "ActiveAll" : "OpenFGRR";
+  const getRrGoodsVatRow = useCallback(
+    (vatCode) => getReplacementVatRow(vatCode || "", "I", "S", "G"),
+    [getReplacementVatRow],
+  );
   const openPOAfterPayeeRef = useRef(false);
   const [isPayeeUpdating, setIsPayeeUpdating] = useState(false);
   const closeCurrRate = parseFormattedNumber(currRate);
+  const showFinalizedLandedCosts =
+    String(displayStatus || "").trim().toUpperCase() === "FINALIZED" &&
+    Number.isFinite(closeCurrRate) && closeCurrRate !== 1;
   const canShowCloseTransaction =
     String(state.fgrrTranType || "FGRR01").trim().toUpperCase() === "FGRR01" &&
     currRate !== undefined &&
@@ -662,6 +669,10 @@ rrQty: "",
       { key: "vatRate", label: "VAT Rate", width: 120 },
       { key: "vatAmount", label: "VAT Amount", width: 120 },
       { key: "netAmount", label: "Net Amount", width: 120 },
+      { key: "shippingCost", label: "Shipping Cost", width: 130 },
+      { key: "landedCost", label: "Landed Cost", width: 130 },
+      { key: "unitShipcost", label: "Unit Shipping Cost", width: 155 },
+      { key: "unitLandedcost", label: "Unit Landed Cost", width: 150 },
       { key: "lotNo", label: "Lot No", width: 200 },
       { key: "bbDate", label: "BB Date", width: 130 },
       { key: "qstatCode", label: "QC Status", width: 120 },
@@ -697,15 +708,23 @@ rrQty: "",
           "grossAmountPhp",
           "vatRate",
           "vatAmount",
+          "shippingCost",
+          "landedCost",
+          "unitShipcost",
+          "unitLandedcost",
           "netAmount",
         ]
       : [];
+    const landedCostColumns = showFinalizedLandedCosts
+      ? []
+      : ["shippingCost", "landedCost", "unitShipcost", "unitLandedcost"];
 
     setFGRRDetailHiddenColumnKeys([
       ...transactionTypeColumns,
       ...costAmountColumns,
+      ...landedCostColumns,
     ]);
-  }, [hideCostAmount, setFGRRDetailHiddenColumnKeys, state.fgrrTranType]);
+  }, [hideCostAmount, setFGRRDetailHiddenColumnKeys, showFinalizedLandedCosts, state.fgrrTranType]);
 
   const visibleFGRRDetailColumns = useMemo(
     () => {
@@ -3074,11 +3093,16 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
         dt1Lineno: g.dt1Lineno || "",
       }));
 
+      const recalculatedMappedDT1 = mappedDT1.map((row) =>
+        recalcFGRRRowWithCurrencyRate(row),
+      );
+
       updateState({
-        detailRows: mappedDT1,
+        detailRows: recalculatedMappedDT1,
         detailRowsGL: mappedDT2,
         dt3,
       });
+      updateTotalsDisplay(recalculatedMappedDT1);
     } catch (e) {
       console.error("fetchTranData error:", e);
       Swal.fire({ icon: 'error', title: 'Fetch Error', text: e.message });
@@ -3515,11 +3539,7 @@ const normalizeRetrievedLots = (lots = [], sourceRow = {}) =>
     detailRowsGLRef.current = [];
     updateState({ detailRows: updatedRows, detailRowsGL: [] });
 
-    const totalQty = updatedRows.reduce(
-      (acc, r) => acc + (parseFormattedNumber(r.qtyNeeded) || 0),
-      0,
-    );
-    updateTotalsDisplay(totalQty);
+    updateTotalsDisplay(updatedRows);
   };
 
   const handleCloseWarehouseLookup = (row) => {
@@ -4800,7 +4820,7 @@ const newGlEntries = await useGenerateGLEntries(docType, getNetAmountGLData());
         useSwalshowSaveSuccessDialog(
   () => {
     handleReset();
-    setTopTab("history");
+    setTopTab("details");
   },
   () => handleSaveAndPrint(savedId)
 );
@@ -5141,11 +5161,14 @@ const handleClosePayeeLookup = async (row) => {
     try {
     const nextVendCode = row?.vend_code ?? row?.vendCode ?? "";
     const nextVendName = row?.vend_name ?? row?.vendName ?? "";
-    const nextVatCode =
+    const sourceVatCode =
       row?.vatCode ?? row?.VatCode ?? row?.VAT_CODE ?? row?.vat_code ?? "";
-    const nextVatName =
-      row?.vatName ?? row?.VatName ?? row?.VAT_NAME ?? row?.vat_name ?? "";
+    const replacementVat = getRrGoodsVatRow(sourceVatCode);
+    const nextVatCode = replacementVat?.vatCode || sourceVatCode;
+    const nextVatName = replacementVat?.vatName ||
+      (row?.vatName ?? row?.VatName ?? row?.VAT_NAME ?? row?.vat_name ?? "");
     const lookupVatRate =
+      replacementVat?.vatRate ??
       row?.vatRate ?? row?.VatRate ?? row?.VAT_RATE ?? row?.vat_rate ?? row?.rate ?? "";
     const fetchedVatRate = nextVatCode ? await fetchVatRate(nextVatCode) : "";
     const nextVatRate =
@@ -5963,6 +5986,26 @@ const handleClosePayeeLookup = async (row) => {
             "vatAmount",
             formatNumber(parseFormattedNumber(row.vatAmount)) || "",
           )}
+        </td>
+      ),
+      shippingCost: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {readOnlyNumberInput("shippingCost", formatNumber(parseFormattedNumber(row.shippingCost), 2))}
+        </td>
+      ),
+      landedCost: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {readOnlyNumberInput("landedCost", formatNumber(parseFormattedNumber(row.landedCost), 2))}
+        </td>
+      ),
+      unitShipcost: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {readOnlyNumberInput("unitShipcost", formatNumber(parseFormattedNumber(row.unitShipcost ?? row.unitShipCost), decUcost))}
+        </td>
+      ),
+      unitLandedcost: () => (
+        <td key={columnKey} className="global-tran-td-ui" style={style}>
+          {readOnlyNumberInput("unitLandedcost", formatNumber(parseFormattedNumber(row.unitLandedcost ?? row.unitLandedCost), decUcost))}
         </td>
       ),
       netAmount: () => (

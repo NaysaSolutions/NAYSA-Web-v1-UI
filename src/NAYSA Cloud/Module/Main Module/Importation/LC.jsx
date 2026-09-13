@@ -580,8 +580,9 @@ const LC = () => {
       );
     }
 
-    const allocRate = totalShippingCost / baseTotal;
+    const shippingRate = totalShippingCost / baseTotal;
     let allocatedShipping = 0;
+    let allocatedPercentage = 0;
 
     return rows.map((row, index) => {
       const itemAmount =
@@ -590,15 +591,25 @@ const LC = () => {
           : parseFormattedNumber(row.itemCost || 0);
       let shippingCostValue = index === rows.length - 1
         ? totalShippingCost - allocatedShipping
-        : Math.round((itemAmount * allocRate) * 100) / 100;
+        : Math.round((itemAmount * shippingRate) * 100) / 100;
 
       if (index !== rows.length - 1) {
         allocatedShipping += shippingCostValue;
       }
 
+      const allocationPercentage = index === rows.length - 1
+        ? 100 - allocatedPercentage
+        : Math.round(((itemAmount / baseTotal) * 100) * 100000) / 100000;
+
+      if (index !== rows.length - 1) {
+        allocatedPercentage += allocationPercentage;
+      }
+
       return recalcShipmentItemRow({
         ...row,
-        allocRate: formatNumber(allocRate, 5),
+        // Allocation rate is the line's percentage share of the allocation base.
+        // Keep shippingRate separate because it is the cost multiplier, not a percent.
+        allocRate: formatNumber(allocationPercentage, 5),
         shippingCost: formatNumber(shippingCostValue, DEC_AMT),
       });
     });
