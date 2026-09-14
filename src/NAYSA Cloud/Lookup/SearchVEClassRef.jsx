@@ -1,4 +1,4 @@
-// src/NAYSA Cloud/Lookup/SearchVEMakeRef.jsx
+// src/NAYSA Cloud/Lookup/SearchVEClassRef.jsx
 
 import React, {
   useEffect,
@@ -82,19 +82,23 @@ const extractRows = (payload) => {
    NORMALIZE
    ============================================================ */
 
-const normalizeMake = (row = {}) => ({
+const normalizeClass = (row = {}) => ({
   code:
     row.code ??
-    row.makeCode ??
-    row.make_code ??
-    row.MAKE_CODE ??
+    row.classCode ??
+    row.class_code ??
+    row.CLASS_CODE ??
+    row.vehClass ??
+    row.VEH_CLASS ??
     "",
 
   description:
     row.description ??
-    row.makeName ??
-    row.make_name ??
-    row.MAKE_NAME ??
+    row.className ??
+    row.class_name ??
+    row.CLASS_NAME ??
+    row.vehClassName ??
+    row.VEH_CLASS_NAME ??
     "",
 
   active:
@@ -109,11 +113,11 @@ const normalizeMake = (row = {}) => ({
    COMPONENT
    ============================================================ */
 
-const SearchVEMakeRef = ({
+const SearchVEClassRef = ({
   isOpen,
   onClose,
   customParam = "",
-  title = "Search Vehicle Make",
+  title = "Search Vehicle Class",
   withPagination = false,
 }) => {
   /* ============================================================
@@ -176,34 +180,34 @@ const SearchVEMakeRef = ({
   }, [debouncedFilters]);
 
   /* ============================================================
-     LOAD VEHICLE MAKE
+     LOAD VEHICLE CLASS
      ============================================================ */
 
   const {
-    data: makes = [],
+    data: classes = [],
     isLoading,
     isFetching,
     refetch,
   } = useQuery({
     queryKey: [
-      "lookupVEMake",
+      "lookupVEClass",
       customParam,
     ],
 
     queryFn: async () => {
       /*
-       * Existing VEMakeController index()
-       * returns the same Load result used by VECarMakeCodes.
+       * Existing VEHClassController/index endpoint
+       * returns the same Load result used by VEHClassCodes.
        */
       const response =
         await apiClient.get(
-          "/veMake"
+          "/vehClass"
         );
 
       return extractRows(
         response
       )
-        .map(normalizeMake)
+        .map(normalizeClass)
         .filter(
           (row) =>
             String(
@@ -244,12 +248,12 @@ const SearchVEMakeRef = ({
 
   const filteredAndSorted =
     useMemo(() => {
-      if (!makes.length) {
+      if (!classes.length) {
         return [];
       }
 
       let result =
-        makes.filter(
+        classes.filter(
           (item) => {
             const code =
               String(
@@ -316,7 +320,7 @@ const SearchVEMakeRef = ({
 
       return result;
     }, [
-      makes,
+      classes,
       debouncedFilters,
       sortConfig,
     ]);
@@ -368,26 +372,26 @@ const SearchVEMakeRef = ({
   };
 
   /* ============================================================
-     APPLY SELECTED VEHICLE MAKE
+     APPLY SELECTED VEHICLE CLASS
      ============================================================ */
 
-  const handleApply = (make) => {
-    if (!make) {
+  const handleApply = (vehicleClass) => {
+    if (!vehicleClass) {
       return;
     }
 
     /*
-     * Return both generic names and make-specific names.
-     * This makes the lookup convenient for multiple consumers.
+     * Return both generic names and class-specific names.
+     * This classes the lookup convenient for multiple consumers.
      */
     onClose?.({
-      ...make,
+      ...vehicleClass,
 
-      makeCode:
-        make.code || "",
+      classCode:
+        vehicleClass.code || "",
 
-      makeName:
-        make.description || "",
+      className:
+        vehicleClass.description || "",
     });
   };
 
@@ -514,14 +518,14 @@ const SearchVEMakeRef = ({
                   {[
                     {
                       label:
-                        "Make Code",
+                        "Class Code",
                       key: "code",
                       width:
                         "w-[130px]",
                     },
                     {
                       label:
-                        "Make Description",
+                        "Class Description",
                       key:
                         "description",
                     },
@@ -612,30 +616,30 @@ const SearchVEMakeRef = ({
                 0 ? (
                   paginatedData.map(
                     (
-                      make,
+                      vehicleClass,
                       index
                     ) => (
                       <tr
                         key={
-                          make.code ||
+                          vehicleClass.code ||
                           index
                         }
                         onClick={() =>
                           handleApply(
-                            make
+                            vehicleClass
                           )
                         }
                         className="group hover:bg-blue-50 cursor-pointer transition-colors"
                       >
                         <td className="global-lookup-td-ui font-bold">
                           {
-                            make.code
+                            vehicleClass.code
                           }
                         </td>
 
                         <td className="global-lookup-td-ui">
                           {
-                            make.description
+                            vehicleClass.description
                           }
                         </td>
                       </tr>
@@ -798,4 +802,4 @@ const SearchVEMakeRef = ({
   );
 };
 
-export default SearchVEMakeRef;
+export default SearchVEClassRef;

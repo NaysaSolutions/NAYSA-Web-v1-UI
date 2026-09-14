@@ -85,7 +85,7 @@ const emptyForm = {
 const FGMast = () => {
     const [activeTab, setActiveTab] = useState("setup");
     const [isLoading, setIsLoading] = useState(false);
-    const generationMode = "Manual";
+    const [generationMode, setGenerationMode] = useState("Manual");
 
     const { user } = useAuth();
     const userCode = user?.USER_CODE || user?.userCode || user?.code || "";
@@ -118,6 +118,7 @@ const FGMast = () => {
 
     useEffect(() => {
         loadMasterList();
+        loadGenerationMode();
     }, []);
 
     const updateForm = (patch) => {
@@ -132,6 +133,38 @@ const FGMast = () => {
         }
         if (Array.isArray(rows) && rows.length && typeof rows[0] === "object") return rows;
         return [];
+    };
+
+    const loadGenerationMode = async () => {
+        try {
+            const res = await apiClient.get("/fgMastGenerationMode");
+
+            const row =
+                res?.data?.data?.[0] ||
+                res?.data?.[0] ||
+                res?.data ||
+                {};
+
+            const rawMode =
+                row?.generationMode ||
+                row?.generationmode ||
+                row?.DOC_SERIES ||
+                row?.docSeries ||
+                "Manual";
+
+            const mode = String(rawMode).trim().toUpperCase();
+
+            if (mode === "SYSTEM") {
+                setGenerationMode("System");
+            } else if (mode === "AUTO") {
+                setGenerationMode("Auto");
+            } else {
+                setGenerationMode("Manual");
+            }
+        } catch (e) {
+            console.error("Failed to load FG generation mode:", e);
+            setGenerationMode("Manual");
+        }
     };
 
     const loadMasterList = async () => {
@@ -280,22 +313,29 @@ const FGMast = () => {
             return;
         }
 
+        const mode = String(generationMode || "").trim().toUpperCase();
         const code = String(form?.itemCode || "").trim();
+        const isNewRecord = !selectedItemCode;
 
-        // Extra duplicate guard on save for new records
-        if (!selectedItemCode) {
+        // Item Code is required only for MANUAL mode.
+        // SYSTEM intentionally sends blank so SQL can generate the code on Save.
+        if (isNewRecord && mode === "MANUAL" && !code) {
+            await useSwalErrorAlert("Required", "Item Code is required.");
+            return;
+        }
+
+        // Duplicate check is only needed for user-defined/manual Item Codes.
+        if (isNewRecord && mode === "MANUAL") {
             const isDup = await checkDuplicate(code);
             if (isDup) return;
         }
 
         setIsLoading(true);
         try {
-            // FIX: pass json_data as a plain object — do NOT JSON.stringify it.
-            // The sproc reads fields via json_value(@params, '$.json_data.*'),
-            // so the API must receive a real nested JSON object, not a string.
             const payload = {
                 json_data: {
                     ...form,
+                    itemCode: isNewRecord && mode === "SYSTEM" ? "" : code,
                     action: selectedItemCode ? "edit" : "add",
                     userCode,
                 },
@@ -313,10 +353,18 @@ const FGMast = () => {
 
             await useSwalSuccessAlert("Success!", "Item saved successfully.");
             setSelectedItemCode(finalCode);
+            setForm((prev) => ({
+                ...prev,
+                itemCode: finalCode,
+                __isNew: false,
+            }));
             setIsEditing(false);
             await loadMasterList();
-            await fetchItemByCode(finalCode);
+            if (finalCode) {
+                await fetchItemByCode(finalCode);
+            }
         } catch (e) {
+            console.error("Save FG item failed:", e);
             await useSwalErrorAlert("Save Failed", "Failed to save item.");
         } finally {
             setIsLoading(false);
@@ -330,9 +378,58 @@ const FGMast = () => {
         }
 
         setSelectedItemCode("");
-        setForm({ ...emptyForm, __isNew: true });
-        setIsEditing(true);
         setActiveTab("setup");
+
+        const mode = String(generationMode || "").trim().toUpperCase();
+
+        // SYSTEM: keep Item Code blank. SQL generates it only when Save is clicked.
+        if (mode === "SYSTEM") {
+            setForm({
+                ...emptyForm,
+                itemCode: "",
+                __isNew: true,
+            });
+            setIsEditing(true);
+            return;
+        }
+
+        // AUTO: assign and display the next Item Code immediately on Add.
+        if (mode === "AUTO") {
+            setIsLoading(true);
+            try {
+                const res = await apiClient.get("/fgMastGenerateCode");
+                const generatedCode =
+                    res?.data?.data?.[0]?.generatedCode ||
+                    res?.data?.data?.[0]?.generatedcode ||
+                    "";
+
+                if (!generatedCode) {
+                    await useSwalErrorAlert("Generation Failed", "Unable to generate Item Code.");
+                    return;
+                }
+
+                setForm({
+                    ...emptyForm,
+                    itemCode: generatedCode,
+                    __isNew: true,
+                });
+                setIsEditing(true);
+            } catch (e) {
+                console.error("Failed to generate FG Item Code:", e);
+                await useSwalErrorAlert("Generation Failed", "Unable to generate Item Code.");
+            } finally {
+                setIsLoading(false);
+            }
+            return;
+        }
+
+        // MANUAL: user enters Item Code.
+        setForm({
+            ...emptyForm,
+            itemCode: "",
+            __isNew: true,
+        });
+        setIsEditing(true);
     };
 
     const handleEdit = async () => {
@@ -450,7 +547,7 @@ const FGMast = () => {
                         generationMode={generationMode}
                         onChangeForm={updateForm}
                         onLookupSelect={(itemCode) => fetchItemByCode(itemCode, false)}
-                        onBlurItemCode={isReadOnly ? undefined : checkDuplicate}
+                        onBlurItemCode={isReadOnly || String(generationMode).toUpperCase() === "AUTO" ? undefined : checkDuplicate}
                     />
                 )}
                 {activeTab === "master" && (

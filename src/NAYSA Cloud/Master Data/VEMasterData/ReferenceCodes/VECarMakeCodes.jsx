@@ -72,6 +72,7 @@ const getResultFlag = (response) => {
 const normalizeRecord = (row = {}) => ({
   code: row.code ?? row.crefCode ?? row.cref_code ?? "",
   description: row.description ?? row.crefName ?? row.cref_name ?? "",
+  active: row.active ?? row.ACTIVE ?? "Y",
   registeredBy: row.registeredBy ?? row.registered_by ?? "",
   registeredDate: row.registeredDate ?? row.registered_date ?? "",
   lastUpdatedBy: row.lastUpdatedBy ?? row.updatedBy ?? row.updated_by ?? "",
@@ -84,6 +85,7 @@ const normalizeRecord = (row = {}) => ({
 const DEFAULT_FORM = {
   code: "",
   description: "",
+  active: "Y",
   registeredBy: "",
   registeredDate: "",
   lastUpdatedBy: "",
@@ -190,6 +192,7 @@ const VECarMakeCodes = forwardRef(({
           json_data: {
             code: payload.code,
             description: payload.description,
+            active: payload.active,
             userCode: payload.userCode,
           },
         }),
@@ -234,6 +237,7 @@ const VECarMakeCodes = forwardRef(({
     const payload = {
       code: String(form.code || "").trim(),
       description: String(form.description || "").trim(),
+      active: form.active || "Y",
       userCode,
     };
 
@@ -400,8 +404,17 @@ const VECarMakeCodes = forwardRef(({
         </div>
       ),
     },
-    { key: "code", label: "Make Code", sortable: true, width: 140 },
-    { key: "description", label: "Make Description", sortable: true, width: 320 },
+    { key: "code", label: "Vehicle Make Code", sortable: true, width: 140 },
+    { key: "description", label: "Vehicle Make Description", sortable: true, width: 320 },
+    {
+      key: "active",
+      label: "Active",
+      width: 100,
+      render: (row) =>
+        String(row.active || "Y").toUpperCase() === "Y"
+          ? "Yes"
+          : "No",
+    },
   ], [canDelete, canEdit, handleDelete, handleEdit, isReadOnly]);
 
   const tableData = useMemo(
@@ -454,7 +467,7 @@ const VECarMakeCodes = forwardRef(({
           <SectionHeader title="BASIC INFORMATION" />
           <div className="space-y-3">
             <FieldRenderer
-              label="Make Code"
+              label="Vehicle Make Code"
               required
               value={form.code}
               inputRef={codeInputRef}
@@ -464,10 +477,22 @@ const VECarMakeCodes = forwardRef(({
               disabled={isReadOnly || !isEditing || form.__existing}
             />
             <FieldRenderer
-              label="Make Description"
+              label="Vehicle Make Description"
               required
               value={form.description}
               onChange={(v) => setField("description", v ?? "")}
+              disabled={isReadOnly || !isEditing}
+            />
+
+            <FieldRenderer
+              label="Active"
+              type="select"
+              value={form.active || "Y"}
+              options={[
+                { value: "Y", label: "Yes" },
+                { value: "N", label: "No" },
+              ]}
+              onChange={(v) => setField("active", v ?? "Y")}
               disabled={isReadOnly || !isEditing}
             />
             

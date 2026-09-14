@@ -1,4 +1,4 @@
-// src/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEClassCodes.jsx
+// src/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEHClassCodes.jsx
 
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState} from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -77,7 +77,7 @@ const normalizeRecord = (row = {}) => ({
   __existing: Boolean(row.__existing),
 });
 
-const VEHClassCodes = forwardRef((
+const VEClassCodes = forwardRef((
   {
     onStateChange,
     isReadOnly = false,
@@ -297,6 +297,59 @@ const VEHClassCodes = forwardRef((
       },[]
     );
 
+    // CHECK IN USED
+    // POST /checkInUsedVEHClass
+    const checkInUsed = useCallback(
+      async (code) => {
+        const normalizedCode = String(code || "")
+          .trim()
+          .toUpperCase();
+
+        if (!normalizedCode) {
+          throw new Error("Vehicle Class Code is required.");
+        }
+
+        const response = await apiClient.post(
+          "/checkInUsedVEHClass",
+          {
+            json_data: {
+              code: normalizedCode,
+            },
+          }
+        );
+
+        /*
+         * Do NOT assume missing result means "not used".
+         * Only an explicit result of "0" is safe to delete.
+         */
+        if (response?.data?.success !== true) {
+          throw new Error(
+            response?.data?.message ||
+            "Unable to verify if the Vehicle Class is already in use."
+          );
+        }
+
+        const row =
+          response?.data?.data?.[0] ??
+          null;
+
+        const rawResult =
+          row?.result;
+
+        const result =
+          String(rawResult ?? "").trim();
+
+        if (result !== "0" && result !== "1") {
+          throw new Error(
+            "Invalid CheckInUsed response. Delete has been blocked for safety."
+          );
+        }
+
+        return result === "1";
+      },
+      []
+    );
+
     // FOR VALIDATION
     const handleCodeValidate = useCallback(
       async (eventOrValue) => {
@@ -473,33 +526,79 @@ const VEHClassCodes = forwardRef((
       async (row) => {
         if (isReadOnly || !canDelete) {
           await showReadOnlyAlert(
-            "delete vehicle type codes"
+            "delete vehicle class codes"
           );
-
           return;
         }
+
         if (
           !row?.code ||
           deleteMutation.isPending
         ) {
           return;
         }
+
+        const code = String(
+          row.code || ""
+        )
+          .trim()
+          .toUpperCase();
+
+        /*
+         * Check usage BEFORE asking for delete confirmation.
+         * If already referenced, deletion is not allowed.
+         */
+        let inUsed;
+
+        try {
+          inUsed =
+            await checkInUsed(code);
+        } catch (error) {
+          console.error(
+            "Vehicle Class CheckInUsed error:",
+            error
+          );
+
+          await useSwalErrorAlert(
+            "Delete Blocked",
+            error?.message ||
+            "Unable to verify whether this Vehicle Class is in use. Delete has been blocked for safety."
+          );
+
+          return;
+        }
+
+        if (inUsed) {
+          await useSwalErrorAlert(
+            "Cannot Delete",
+            `Vehicle Class Code "${code}" is already used.`
+          );
+          return;
+        }
+
         const confirmed =
           await useSwalDeleteConfirm(
             "Delete Vehicle Class Code?",
-            `Are you sure you want to delete "${row.code}"?`
+            `Are you sure you want to delete "${code}"?`
           );
 
-        if (!confirmed) {
+        /*
+         * useSwalDeleteConfirm returns a SweetAlert result object.
+         * Cancel/Dismiss still returns an object, so checking only
+         * `if (!confirmed)` is not sufficient.
+         */
+        if (!confirmed?.isConfirmed) {
           return;
         }
+
         deleteMutation.mutate({
-          code: row.code,
+          code,
           userCode,
         });
       },
       [
         canDelete,
+        checkInUsed,
         deleteMutation,
         isReadOnly,
         showReadOnlyAlert,
@@ -695,7 +794,7 @@ const VEHClassCodes = forwardRef((
             <SectionHeader title="BASIC INFORMATION"/>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               
-              {/* VEHICLE CLASS CODE */}
+              {/* CLASS CODE */}
               <FieldRenderer 
               label="Vehicle Class Code" 
               required 
@@ -717,7 +816,7 @@ const VEHClassCodes = forwardRef((
               />
 
               <FieldRenderer 
-              label="Vehicle Class Description" 
+              label="VehicleClass Description" 
               required 
               value={form.description}
               onChange={(v) => setField( "description",v ?? "")}
@@ -761,5 +860,5 @@ const VEHClassCodes = forwardRef((
     );
   }
 );
-VEHClassCodes.displayName = "VEHClassCodes";
-export default VEHClassCodes;
+VEClassCodes.displayName = "VEClassCodes";
+export default VEClassCodes;

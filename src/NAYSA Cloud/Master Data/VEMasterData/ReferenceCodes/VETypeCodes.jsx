@@ -594,13 +594,13 @@ const VETypeCodes = forwardRef((
 
         {
           key: "code",
-          label: "Type Code",
+          label: "Vehicle Type Code",
           sortable: true,
           width: 140,
         },
         {
           key: "description",
-          label: "Type Description",
+          label: "Vehicle Type Description",
           sortable: true,
           width: 320,
         },
@@ -711,7 +711,7 @@ const VETypeCodes = forwardRef((
               
               {/* TYPE CODE */}
               <FieldRenderer 
-              label="Type Code" 
+              label="Vehicle Type Code" 
               required 
               value={form.code} 
               inputRef={codeInputRef}
@@ -731,7 +731,7 @@ const VETypeCodes = forwardRef((
               />
 
               <FieldRenderer 
-              label="Type Description" 
+              label="Vehicle Type Description" 
               required 
               value={form.description}
               onChange={(v) => setField( "description",v ?? "")}

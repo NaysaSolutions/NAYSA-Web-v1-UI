@@ -1,7 +1,6 @@
 // src/NAYSA Cloud/Master Data/VEMasterData/VEHSVMast_SetupTab.jsx
 
 import React, {
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -13,7 +12,6 @@ import {
   faCarSide,
 } from "@fortawesome/free-solid-svg-icons";
 
-import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { useSwalErrorAlert } from "@/NAYSA Cloud/Global/behavior.jsx";
 import genericVehicleImage from "@/NAYSA Cloud/Master Data/VEMasterData/naysa-generic-vehicle.png";
 
@@ -23,6 +21,7 @@ import SearchCustMast from "@/NAYSA Cloud/Lookup/SearchCustMast.jsx";
 import SearchVEMakeRef from "@/NAYSA Cloud/Lookup/SearchVEMakeRef.jsx";
 import SearchVEModelRef from "@/NAYSA Cloud/Lookup/SearchVEModelRef.jsx";
 import SearchVETypeRef from "@/NAYSA Cloud/Lookup/SearchVETypeRef.jsx";
+import SearchVEClassRef from "@/NAYSA Cloud/Lookup/SearchVEClassRef.jsx";
 
 /* ─────────────────────────────────────────────────────────────────────────────
    SHARED UI
@@ -55,26 +54,6 @@ const Card = ({ children, className = "" }) => (
    HELPERS
    ───────────────────────────────────────────────────────────────────────────── */
 
-const extractRows = (payload) => {
-  const res =
-    payload?.data?.data?.[0]?.result ??
-    payload?.data?.result ??
-    payload?.data?.data;
-
-  if (!res) return [];
-  if (Array.isArray(res)) return res;
-
-  if (typeof res === "string") {
-    try {
-      return JSON.parse(res) || [];
-    } catch {
-      return [];
-    }
-  }
-
-  return [];
-};
-
 const getValue = (input) => {
   if (input && typeof input === "object") {
     if ("target" in input) return input.target?.value ?? "";
@@ -84,44 +63,7 @@ const getValue = (input) => {
   return input ?? "";
 };
 
-const makeOptions = (
-  rows,
-  codeKeys,
-  nameKeys
-) =>
-  (Array.isArray(rows) ? rows : [])
-    .map((row) => {
-      const code =
-        codeKeys
-          .map((key) => row?.[key])
-          .find(
-            (value) =>
-              value !== undefined &&
-              value !== null &&
-              String(value).trim() !== ""
-          ) ?? "";
 
-      const name =
-        nameKeys
-          .map((key) => row?.[key])
-          .find(
-            (value) =>
-              value !== undefined &&
-              value !== null &&
-              String(value).trim() !== ""
-          ) ?? "";
-
-      return {
-        value: String(code),
-
-        label: name
-          ? `${String(code)} - ${String(name)}`
-          : String(code),
-
-        raw: row,
-      };
-    })
-    .filter((item) => item.value);
 
 /* ─────────────────────────────────────────────────────────────────────────────
    COMPONENT
@@ -161,88 +103,12 @@ const VEHSVMast_SetupTab = ({
   const [isTypeOpen, setIsTypeOpen] =
     useState(false);
 
-  const [classes, setClasses] =
-    useState([]);
-
-  const [loadingRefs, setLoadingRefs] =
+  const [isClassOpen, setIsClassOpen] =
     useState(false);
-
-  /* ─────────────────────────────────────────────────────────────────────────
-     LOAD REFERENCE CODES
-     ───────────────────────────────────────────────────────────────────────── */
-
-  useEffect(() => {
-    let mounted = true;
-
-    const loadReferences = async () => {
-      setLoadingRefs(true);
-
-      try {
-        const results =
-          await Promise.allSettled([
-            apiClient.get("/veHSVClass"),
-          ]);
-
-        if (!mounted) return;
-
-        const rowsFrom = (result) =>
-          result.status === "fulfilled"
-            ? extractRows(result.value)
-            : [];
-
-        setClasses(
-          rowsFrom(results[0])
-        );
-      } catch (error) {
-        console.error(
-          "Failed to load Vehicle Service references",
-          error
-        );
-
-        if (!mounted) return;
-
-        setClasses([]);
-      } finally {
-        if (mounted) {
-          setLoadingRefs(false);
-        }
-      }
-    };
-
-    loadReferences();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   /* ─────────────────────────────────────────────────────────────────────────
      REFERENCE OPTIONS
      ───────────────────────────────────────────────────────────────────────── */
-
-    const classList = useMemo(
-    () =>
-      makeOptions(
-        classes,
-        [
-          "code",
-          "classCode",
-          "class_code",
-          "CLASS_CODE",
-          "vehClass",
-          "VEH_CLASS",
-        ],
-        [
-          "description",
-          "className",
-          "class_name",
-          "CLASS_NAME",
-          "vehClassName",
-          "VEH_CLASS_NAME",
-        ]
-      ),
-    [classes]
-  );
 
   const transmissionOptions =
     useMemo(
@@ -258,45 +124,6 @@ const VEHSVMast_SetupTab = ({
       ],
       []
     );
-
-  const getRawRow = (
-    options,
-    value
-  ) =>
-    options.find(
-      (item) =>
-        String(item.value) ===
-        String(value ?? "")
-    )?.raw;
-
-  /* ─────────────────────────────────────────────────────────────────────────
-     VEHICLE REFERENCE CHANGE HANDLERS
-     ───────────────────────────────────────────────────────────────────────── */
-
-  const setClass = (input) => {
-    const value =
-      getValue(input);
-
-    const row =
-      getRawRow(
-        classList,
-        value
-      );
-
-    onChangeForm?.({
-      vehClass:
-        value,
-
-      vehClassName:
-        row?.description ??
-        row?.className ??
-        row?.class_name ??
-        row?.CLASS_NAME ??
-        row?.vehClassName ??
-        row?.VEH_CLASS_NAME ??
-        "",
-    });
-  };
 
   /* ─────────────────────────────────────────────────────────────────────────
      VEHICLE IMAGE
@@ -593,17 +420,32 @@ const VEHSVMast_SetupTab = ({
 
             <FieldRenderer
               label="Vehicle Class"
-              type="select"
-              options={classList}
+              type="lookup"
               value={
                 form.vehClass || ""
               }
-              onChange={setClass}
+              onChange={(v) => {
+                const value = String(
+                  getValue(v) ?? ""
+                )
+                  .trim()
+                  .toUpperCase();
+
+                onChangeForm?.({
+                  vehClass: value,
+                  vehClassName:
+                    value === form.vehClass
+                      ? form.vehClassName || ""
+                      : "",
+                });
+              }}
+              onLookup={() => {
+                if (!isDisabled) {
+                  setIsClassOpen(true);
+                }
+              }}
               readOnly={readOnly}
-              disabled={
-                isDisabled ||
-                loadingRefs
-              }
+              disabled={isDisabled}
             />
 
             <FieldRenderer
@@ -1071,6 +913,46 @@ const VEHSVMast_SetupTab = ({
           onChangeForm?.({
             vehModel: modelCode,
             vehModelName: modelName,
+          });
+        }}
+      />
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          VEHICLE CLASS LOOKUP
+          ══════════════════════════════════════════════════════════════════════ */}
+
+      <SearchVEClassRef
+        isOpen={isClassOpen}
+        onClose={(selected) => {
+          setIsClassOpen(false);
+
+          if (!selected) {
+            return;
+          }
+
+          const classCode = String(
+            selected.code ??
+            selected.classCode ??
+            selected.class_code ??
+            selected.vehClass ??
+            selected.VEH_CLASS ??
+            ""
+          )
+            .trim()
+            .toUpperCase();
+
+          const className = String(
+            selected.description ??
+            selected.className ??
+            selected.class_name ??
+            selected.vehClassName ??
+            selected.VEH_CLASS_NAME ??
+            ""
+          ).trim();
+
+          onChangeForm?.({
+            vehClass: classCode,
+            vehClassName: className,
           });
         }}
       />

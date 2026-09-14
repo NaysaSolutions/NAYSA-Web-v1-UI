@@ -127,7 +127,9 @@ const MSMast_SetupTab = ({
   const getLen = (col, fallback = undefined) =>
     useGetFieldLength(tblFieldArray, col) || fallback;
 
-  const canType = isNewRecord;
+  const generationModeValue = String(generationMode || "").trim().toUpperCase();
+  const isManualGeneration = generationModeValue === "MANUAL";
+  const canType = isNewRecord && isManualGeneration;
   const overrideRef = useRef(null);
 
   useEffect(() => {
@@ -179,16 +181,16 @@ const MSMast_SetupTab = ({
           >
             <FieldRenderer
               label="Item Code"
-              required
+              required={isManualGeneration}
               editableLookup
               type="lookup"
               value={form.itemCode || ""}
-              onChange={(v) => onChangeForm({ itemCode: String(getValue(v)).toUpperCase() })}
-              onLookup={canType ? undefined : () => !isLoading && setIsItemLookupOpen(true)}
+              onChange={(v) => canType && onChangeForm({ itemCode: String(getValue(v)).toUpperCase() })}
+              onLookup={() => !isLoading && !isNewRecord && setIsItemLookupOpen(true)}
               readOnly={true}
               disabled={false}
               lookupDisabled={isLoading}
-              hideClearButton={!isNewRecord}
+              hideClearButton={!isNewRecord || !isManualGeneration}
               maxLength={getLen("item_code", 30)}
             />
           </div>

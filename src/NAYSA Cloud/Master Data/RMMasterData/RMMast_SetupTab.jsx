@@ -131,8 +131,17 @@ const RMMast_SetupTab = ({
   const getLen = (col, fallback = undefined) =>
     useGetFieldLength(tblFieldArray, col) || fallback;
 
-  // ── Item Code: typed when new, lookup when existing ──────────────────────
-  const canType = isNewRecord;
+  // ── Item Code generation behavior ───────────────────────────────────────
+  const generationModeValue = String(generationMode || "")
+    .trim()
+    .toUpperCase();
+
+  const isManualGeneration = generationModeValue === "MANUAL";
+
+  // Only MANUAL allows typing for a new record.
+  // SYSTEM stays blank/locked until Save.
+  // AUTO displays the pre-assigned code and stays locked.
+  const canType = isNewRecord && isManualGeneration;
   const overrideRef = useRef(null);
 
   useEffect(() => {
@@ -186,15 +195,15 @@ const RMMast_SetupTab = ({
           >
             <FieldRenderer
               label="Item Code"
-              required
+              required={isManualGeneration}
               editableLookup
               type="lookup"
               value={form.itemCode || ""}
-              onChange={(v) => onChangeForm({ itemCode: String(getValue(v)).toUpperCase() })}
-              onLookup={canType ? undefined : () => !isLoading && setIsItemLookupOpen(true)}
+              onChange={(v) => canType && onChangeForm({ itemCode: String(getValue(v)).toUpperCase() })}
+              onLookup={() => !isLoading && !isNewRecord && setIsItemLookupOpen(true)}
               readOnly={true}
               disabled={isLoading}
-              hideClearButton={!isNewRecord}
+              hideClearButton={!isNewRecord || !isManualGeneration}
               maxLength={getLen("item_code", 30)}
             />
           </div>
