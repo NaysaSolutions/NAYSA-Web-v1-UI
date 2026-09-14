@@ -31,7 +31,7 @@ import FieldRenderer from "@/NAYSA Cloud/Global/FieldRenderer.jsx";
 import GlobalApprovalStatus from "@/NAYSA Cloud/Approval/GlobalApprovalStatus.jsx";
 
 // Configuration
-import { fetchData, fetchDataJson, postRequest } from "../../../Configuration/BaseURL.jsx";
+import { apiClient, fetchData, fetchDataJson, postRequest } from "../../../Configuration/BaseURL.jsx";
 import { useReset } from "../../../Components/ResetContext";
 import {
   useGetCurrentDayV2,
@@ -118,6 +118,49 @@ const LC = () => {
   const decUPrice = companyInfo?.pur_decuprice ?? 2;
   const docType = docTypes?.LC || "LC";
   const hsDoc = getAllTopHSDocRow(docType) || {};
+
+  const handleOpenLCPayeeLookup = async () => {
+    if (isFormDisabled) return;
+
+    updateState({ isLoading: true });
+
+    try {
+      const payload = {
+        json_data: {
+          search: null,
+          filter: "OpenIMP",
+          searchMode: "part",
+        },
+      };
+      const { data: response } = await apiClient.get("/lookupVendMast", {
+        params: { json_data: JSON.stringify(payload) },
+      });
+      const rawResult = response?.data?.[0]?.result;
+      const openPayees = rawResult
+        ? typeof rawResult === "string"
+          ? JSON.parse(rawResult)
+          : rawResult
+        : [];
+
+      if (!Array.isArray(openPayees) || openPayees.length === 0) {
+        useSwalInfoAlert(
+          "Landed Cost Payee",
+          "No payee with pending transactions for Landed Cost was found.",
+        );
+        return;
+      }
+
+      updateState({ payeeLookupContext: "payee", payeeModalOpen: true });
+    } catch (error) {
+      console.error("Error checking open Landed Cost payees:", error);
+      useSwalErrorAlert(
+        "Landed Cost Payee",
+        "Failed to check payees with pending transactions for Landed Cost.",
+      );
+    } finally {
+      updateState({ isLoading: false });
+    }
+  };
 
   useEffect(() => {
     const p = new URLSearchParams(location.search);
@@ -2549,10 +2592,7 @@ const handleActivityOption = async (action) => {
                   readOnly
                   disabled={isFormDisabled}
                   lookupDisabled={isFormDisabled}
-                  onLookup={() =>
-                    !isFormDisabled &&
-                    updateState({ payeeLookupContext: "payee", payeeModalOpen: true })
-                  }
+                  onLookup={handleOpenLCPayeeLookup}
                 />
 
                 <FieldRenderer
