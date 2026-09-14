@@ -57,6 +57,13 @@ const normalizeRecord = (row = {}) => ({
     row.crefName ??
     row.cref_name ??
     "",
+
+  active:
+    row.active ??
+    row.ACTIVE ??
+    row.isActive ??
+    row.IS_ACTIVE ??
+    "Y",
 });
 
 const SearchVETypeRef = ({
@@ -87,7 +94,22 @@ const SearchVETypeRef = ({
       const response = await apiClient.get("/veType");
       return extractRows(response)
         .map(normalizeRecord)
-        .filter((row) => String(row.code || "").trim() !== "");
+        .filter((row) => String(row.code || "").trim() !== "")
+        .filter((row) => {
+          const active = String(
+            row.active ?? "Y"
+          )
+            .trim()
+            .toUpperCase();
+
+          return [
+            "Y",
+            "YES",
+            "1",
+            "TRUE",
+            "ACTIVE",
+          ].includes(active);
+        });
     },
     enabled: Boolean(isOpen),
     staleTime: 1000 * 60 * 5,

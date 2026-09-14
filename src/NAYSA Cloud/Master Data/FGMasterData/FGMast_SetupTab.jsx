@@ -140,7 +140,15 @@ const FGMast_SetupTab = ({
   const getLen = (col, fallback = undefined) =>
     useGetFieldLength(tblFieldArray, col) || fallback;
 
-  const canType = isNewRecord;
+  const generationModeValue = String(generationMode || "Manual")
+    .trim()
+    .toUpperCase();
+
+  const isManualGeneration = generationModeValue === "MANUAL";
+
+  // Item Code is editable only for a NEW record when HS_DOC.DOC_SERIES = Manual.
+  // System stays blank until Save. Auto is assigned/displayed on Add.
+  const canType = isNewRecord && isManualGeneration;
   const overrideRef = useRef(null);
 
   useEffect(() => {
@@ -188,18 +196,20 @@ const FGMast_SetupTab = ({
               }`}
           >
             <FieldRenderer
-              label="Item 
-              Code"
-              required
+              label="Item Code"
+              required={isManualGeneration}
               type="lookup"
               editableLookup
               value={form.itemCode || ""}
-              onChange={(v) => onChangeForm({ itemCode: String(getValue(v)).toUpperCase() })}
+              onChange={(v) => {
+                if (!canType) return;
+                onChangeForm({ itemCode: String(getValue(v)).toUpperCase() });
+              }}
               onLookup={() => !isLoading && !isNewRecord && setIsItemLookupOpen(true)}
-              readOnly={true}
+              readOnly={!canType}
               disabled={false}
-              lookupDisabled={isLoading}
-              hideClearButton={!isNewRecord}
+              lookupDisabled={isLoading || isNewRecord}
+              hideClearButton={!canType}
               maxLength={getLen("item_code", 30)}
             />
           </div>

@@ -241,14 +241,21 @@ const SearchVEModelRef = ({
          * models to Vehicle Service Master.
          */
         .filter(
-          (row) =>
-            String(
-              row.active ??
-              "Y"
+          (row) => {
+            const active = String(
+              row.active ?? "Y"
             )
               .trim()
-              .toUpperCase() ===
-              "Y"
+              .toUpperCase();
+
+            return [
+              "Y",
+              "YES",
+              "1",
+              "TRUE",
+              "ACTIVE",
+            ].includes(active);
+          }
         );
     },
 

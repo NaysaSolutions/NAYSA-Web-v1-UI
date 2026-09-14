@@ -59,6 +59,13 @@ const normalizeRecord = (row = {}) => ({
     row.part_class_description ??
     row.PART_CLASS_DESCRIPTION ??
     "",
+
+  active:
+    row.active ??
+    row.ACTIVE ??
+    row.isActive ??
+    row.IS_ACTIVE ??
+    "Y",
 });
 
 const SearchVEPartClassRef = ({
@@ -89,7 +96,22 @@ const SearchVEPartClassRef = ({
       const response = await apiClient.get("/vePartClass");
       return extractRows(response)
         .map(normalizeRecord)
-        .filter((row) => String(row.code || "").trim() !== "");
+        .filter((row) => String(row.code || "").trim() !== "")
+        .filter((row) => {
+          const active = String(
+            row.active ?? "Y"
+          )
+            .trim()
+            .toUpperCase();
+
+          return [
+            "Y",
+            "YES",
+            "1",
+            "TRUE",
+            "ACTIVE",
+          ].includes(active);
+        });
     },
     enabled: Boolean(isOpen),
     staleTime: 1000 * 60 * 5,

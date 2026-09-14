@@ -107,7 +107,7 @@ const emptyForm = {
 const RMMast = () => {
     const [activeTab, setActiveTab]       = useState("setup");
     const [isLoading, setIsLoading]       = useState(false);
-    const generationMode                  = "Manual";   // item_code is always user-supplied
+    const [generationMode, setGenerationMode] = useState("Manual");
 
     const { user } = useAuth();
     const userCode = user?.USER_CODE || user?.userCode || user?.code || "";
@@ -131,6 +131,7 @@ const RMMast = () => {
     // ── init ─────────────────────────────────────────────────────────────────
     useEffect(() => {
         loadMasterList();
+        loadGenerationMode();
     }, []);
 
     // ── helpers ──────────────────────────────────────────────────────────────
@@ -144,6 +145,38 @@ const RMMast = () => {
         }
         if (Array.isArray(rows) && rows.length && typeof rows[0] === "object") return rows;
         return [];
+    };
+
+    const loadGenerationMode = async () => {
+        try {
+            const res = await apiClient.get("/rmMastGenerationMode");
+
+            const row =
+                res?.data?.data?.[0] ||
+                res?.data?.[0] ||
+                res?.data ||
+                {};
+
+            const rawMode =
+                row?.generationMode ||
+                row?.generationmode ||
+                row?.DOC_SERIES ||
+                row?.docSeries ||
+                "Manual";
+
+            const mode = String(rawMode).trim().toUpperCase();
+
+            if (mode === "SYSTEM") {
+                setGenerationMode("System");
+            } else if (mode === "AUTO") {
+                setGenerationMode("Auto");
+            } else {
+                setGenerationMode("Manual");
+            }
+        } catch (e) {
+            console.error("Failed to load RM generation mode:", e);
+            setGenerationMode("Manual");
+        }
     };
 
     // ── load master list ──────────────────────────────────────────────────────
@@ -282,9 +315,19 @@ const RMMast = () => {
             return;
         }
 
+        const mode = String(generationMode || "").trim().toUpperCase();
         const code = String(form?.itemCode || "").trim();
+        const isNewRecord = !selectedItemCode;
 
-        if (form.__isNew) {
+        // Item Code is required only for MANUAL.
+        // SYSTEM intentionally remains blank until SQL generates it on Save.
+        if (isNewRecord && mode === "MANUAL" && !code) {
+            await useSwalErrorAlert("Required", "Item Code is required.");
+            return;
+        }
+
+        // Manual codes are checked before Save.
+        if (isNewRecord && mode === "MANUAL") {
             const isDup = await checkDuplicate(code);
             if (isDup) return;
         }
@@ -293,10 +336,10 @@ const RMMast = () => {
         try {
             const payload = {
                 json_data: {
-                    itemCode:           code,
+                    itemCode:           isNewRecord && mode === "SYSTEM" ? "" : code,
                     itemName:           form.itemDesc        || null,
-                    itemDesc2:          form.itemDesc2       || null,
-                    itemDesc3:          form.itemDesc3       || null,
+                    itemName2:          form.itemDesc2       || null,
+                    itemName3:          form.itemDesc3       || null,
                     categCode:          form.categoryCode    || null,
                     classCode:          form.classCode       || null,
                     subclass1:          form.subClass1Code   || null,
@@ -346,6 +389,7 @@ const RMMast = () => {
                     stdDmCost:          form.stdDmCost       || null,
                     barcode:            form.barcode         || null,
                     userCode:           userCode             || null,
+                    action:             isNewRecord ? "add" : "edit",
                 },
             };
 
@@ -361,10 +405,18 @@ const RMMast = () => {
 
             await useSwalSuccessAlert("Success!", "Item saved successfully.");
             setSelectedItemCode(finalCode);
+            setForm((prev) => ({
+                ...prev,
+                itemCode: finalCode,
+                __isNew: false,
+            }));
             setIsEditing(false);
             await loadMasterList();
-            await fetchItemByCode(finalCode);
-        } catch {
+            if (finalCode) {
+                await fetchItemByCode(finalCode);
+            }
+        } catch (e) {
+            console.error("Save RM item failed:", e);
             await useSwalErrorAlert("Save Failed", "Failed to save item.");
         } finally {
             setIsLoading(false);
@@ -377,10 +429,61 @@ const RMMast = () => {
             await useSwalErrorAlert("Read Only", "You only have read access.");
             return;
         }
+
         setSelectedItemCode("");
-        setForm({ ...emptyForm, __isNew: true });
-        setIsEditing(true);
         setActiveTab("setup");
+
+        const mode = String(generationMode || "").trim().toUpperCase();
+
+        // SYSTEM: Item Code stays blank. SQL generates it only on Save.
+        if (mode === "SYSTEM") {
+            setForm({
+                ...emptyForm,
+                itemCode: "",
+                __isNew: true,
+            });
+            setIsEditing(true);
+            return;
+        }
+
+        // AUTO: assign and display the next Item Code immediately on Add.
+        if (mode === "AUTO") {
+            setIsLoading(true);
+            try {
+                const res = await apiClient.get("/rmMastGenerateCode");
+
+                const generatedCode =
+                    res?.data?.data?.[0]?.generatedCode ||
+                    res?.data?.data?.[0]?.generatedcode ||
+                    "";
+
+                if (!generatedCode) {
+                    await useSwalErrorAlert("Generation Failed", "Unable to generate Item Code.");
+                    return;
+                }
+
+                setForm({
+                    ...emptyForm,
+                    itemCode: generatedCode,
+                    __isNew: true,
+                });
+                setIsEditing(true);
+            } catch (e) {
+                console.error("Failed to generate RM Item Code:", e);
+                await useSwalErrorAlert("Generation Failed", "Unable to generate Item Code.");
+            } finally {
+                setIsLoading(false);
+            }
+            return;
+        }
+
+        // MANUAL: user enters the Item Code.
+        setForm({
+            ...emptyForm,
+            itemCode: "",
+            __isNew: true,
+        });
+        setIsEditing(true);
     };
 
     const handleEdit = async () => {

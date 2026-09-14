@@ -31,7 +31,7 @@ import VEPartClass from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/V
 import VEServiceTypeCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEServiceTypeCodes.jsx";
 
 import VEClassCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEHClassCodes.jsx";
-// import VEServiceCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEServiceCodes.jsx";
+import VEServiceCodes from "@/NAYSA Cloud/Master Data/VEMasterData/ReferenceCodes/VEServiceCodes.jsx";
 
 const SectionHeader = ({ title, subtitle }) => (
   <div className="mb-3">
@@ -416,17 +416,14 @@ const VEHSVMast_ReferenceCodeTab = forwardRef(
             />
           );
 
-        /*
-         * Uncomment this case once VEServiceCodes exists/imported.
-         */
-        // case "serviceCodes":
-        //   return (
-        //     <VEServiceCodes
-        //       ref={serviceCodeRef}
-        //       onStateChange={childStateChange}
-        //       {...permissionProps}
-        //     />
-        //   );
+        case "serviceCodes":
+          return (
+            <VEServiceCodes
+              ref={serviceCodeRef}
+              onStateChange={childStateChange}
+              {...permissionProps}
+            />
+          );
 
         default:
           return (
