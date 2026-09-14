@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 
-const DEFAULT_APPLICATION_TITLE = "NAYSA Financials";
+const DEFAULT_APPLICATION_TITLE = "NAYSA Financials Cloud";
 
 const normalizePath = (value) => {
   const path = String(value || "").trim();

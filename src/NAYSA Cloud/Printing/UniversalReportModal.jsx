@@ -47,9 +47,9 @@ import {
   useHandleDownloadExcelTaxReport,
   useHandlePrintSalesReport,
   useHandlePrintBUDReport,
+  exportGenericHistoryExcel,
 } from "@/NAYSA Cloud/Global/report";
 import { useSelectedHSColConfig } from "@/NAYSA Cloud/Global/selectedData";
-import { exportGenericHistoryExcel } from "@/NAYSA Cloud/Global/report";
 import { useGetCurrentDay, useFormatToDate } from "@/NAYSA Cloud/Global/dates";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
@@ -94,25 +94,114 @@ const VELookupModal = (props) => (
   />
 );
 
-const MODULE_DEFS = {
-  AP:  { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelAPReport,    hasExtra: false, hasCutoff: false, hasReportType: false },
-  VI:  { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelTaxReport,   hasExtra: false, hasCutoff: false, hasReportType: false },
-  EWT: { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelTaxReport,   hasExtra: false, hasCutoff: false, hasReportType: false },
-  PUR: { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelAPReport,    hasExtra: false, hasCutoff: false, hasReportType: false, hasSingleMain: true, hasSingleRc: true, rcLabel: "Department/RC" },
-  AR:  { label: "Customer", lookup: CustomerMastLookupModal, print: useHandlePrintARReport,    excel: useHandleDownloadExcelARReport,    hasExtra: false, hasCutoff: false, hasReportType: false },
-  VO:  { label: "Customer", lookup: CustomerMastLookupModal, print: useHandlePrintARReport,    excel: useHandleDownloadExcelTaxReport,   hasExtra: false, hasCutoff: false, hasReportType: false },
-  CWT: { label: "Customer", lookup: CustomerMastLookupModal, print: useHandlePrintARReport,    excel: useHandleDownloadExcelTaxReport,   hasExtra: false, hasCutoff: false, hasReportType: false },
-  GL:  { label: "Account",  lookup: COAMastLookupModal,      print: useHandlePrintGLReport,    excel: useHandleDownloadExcelGLReport,    hasExtra: true,  hasCutoff: false, hasReportType: false },
-  BIR: { label: "",         lookup: null,                    print: useHandlePrintGLReport,    excel: useHandleDownloadExcelBIRReport,   hasExtra: false, hasCutoff: true,  hasReportType: true },
-  FG:  { label: "Item",     lookup: FGLookupModal,           print: useHandlePrintFGINVReport,  excel: useHandleDownloadExcelFGINVReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasInventory: true, hasSingleMain: true },
-  MS:  { label: "Item",     lookup: MSLookupModal,           print: useHandlePrintMSINVReport,  excel: useHandleDownloadExcelMSINVReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasInventory: true, hasSingleMain: true },
-  RM:  { label: "Item",     lookup: RMLookupModal,           print: useHandlePrintRMINVReport,  excel: useHandleDownloadExcelRMINVReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasInventory: true, hasSingleMain: true },
-  VE:  { label: "Vehicle",  lookup: VELookupModal,           print: useHandlePrintVEINVReport,  excel: useHandleDownloadExcelVEINVReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasInventory: true, hasSingleMain: true },
-  FA:  { label: "Asset",    lookup: null,                    print: useHandlePrintFAReport,     excel: useHandleDownloadExcelFAReport,    hasExtra: false, hasCutoff: false, hasReportType: false, hasFA: true, hasSingleMain: true, hasSingleRc: true, rcLabel: "Department/RC" },
-  IMP: { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,     excel: useHandleDownloadExcelIMPReport,   hasExtra: false, hasCutoff: false, hasReportType: false, hasSingleMain: true, hasSingleRc: true, rcLabel: "Department/RC" },
-  BUD: { label: "Budget",   lookup: null,                    print: useHandlePrintBUDReport,    excel: useHandleDownloadExcelBUDReport,   hasExtra: false, hasCutoff: false, hasReportType: false, hasBudget: true, hasSingleRc: true, rcLabel: "Department/RC" },
-  OE: { label: "Customer", lookup: CustomerMastLookupModal, print: useHandlePrintSalesReport, excel: useHandleDownloadExcelSalesReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasSales: true },
+// Keep definitions grouped by business module. Adding a new report module should
+// normally require one entry here plus its pageRegistry mapping.
+const AP_MODULES = {
+  AP: {
+    label: "Payee", lookup: PayeeMastLookupModal,
+    print: useHandlePrintAPReport, excel: useHandleDownloadExcelAPReport,
+  },
+  VI: {
+    label: "Payee", lookup: PayeeMastLookupModal,
+    print: useHandlePrintAPReport, excel: useHandleDownloadExcelTaxReport,
+  },
+  EWT: {
+    label: "Payee", lookup: PayeeMastLookupModal,
+    print: useHandlePrintAPReport, excel: useHandleDownloadExcelTaxReport,
+  },
+  PUR: {
+    label: "Payee", lookup: PayeeMastLookupModal,
+    print: useHandlePrintAPReport, excel: useHandleDownloadExcelAPReport,
+    hasSingleMain: true, hasSingleRc: true, rcLabel: "Department/RC",
+  },
+  IMP: {
+    label: "Payee", lookup: PayeeMastLookupModal,
+    print: useHandlePrintAPReport, excel: useHandleDownloadExcelIMPReport,
+    hasSingleMain: true, hasSingleRc: true, rcLabel: "Department/RC",
+  },
 };
+
+const AR_AND_SALES_MODULES = {
+  AR: {
+    label: "Customer", lookup: CustomerMastLookupModal,
+    print: useHandlePrintARReport, excel: useHandleDownloadExcelARReport,
+  },
+  VO: {
+    label: "Customer", lookup: CustomerMastLookupModal,
+    print: useHandlePrintARReport, excel: useHandleDownloadExcelTaxReport,
+  },
+  CWT: {
+    label: "Customer", lookup: CustomerMastLookupModal,
+    print: useHandlePrintARReport, excel: useHandleDownloadExcelTaxReport,
+  },
+  OE: {
+    label: "Customer", lookup: CustomerMastLookupModal,
+    print: useHandlePrintSalesReport, excel: useHandleDownloadExcelSalesReport,
+    hasSales: true,
+  },
+};
+
+const INVENTORY_MODULES = {
+  FG: {
+    label: "Item", lookup: FGLookupModal,
+    print: useHandlePrintFGINVReport, excel: useHandleDownloadExcelFGINVReport,
+    hasInventory: true, hasSingleMain: true,
+  },
+  MS: {
+    label: "Item", lookup: MSLookupModal,
+    print: useHandlePrintMSINVReport, excel: useHandleDownloadExcelMSINVReport,
+    hasInventory: true, hasSingleMain: true,
+  },
+  RM: {
+    label: "Item", lookup: RMLookupModal,
+    print: useHandlePrintRMINVReport, excel: useHandleDownloadExcelRMINVReport,
+    hasInventory: true, hasSingleMain: true,
+  },
+  VE: {
+    label: "Vehicle", lookup: VELookupModal,
+    print: useHandlePrintVEINVReport, excel: useHandleDownloadExcelVEINVReport,
+    hasInventory: true, hasSingleMain: true,
+  },
+};
+
+const FINANCIAL_MODULES = {
+  GL: {
+    label: "Account", lookup: COAMastLookupModal,
+    print: useHandlePrintGLReport, excel: useHandleDownloadExcelGLReport,
+    hasExtra: true,
+  },
+  BIR: {
+    label: "", lookup: null,
+    print: useHandlePrintGLReport, excel: useHandleDownloadExcelBIRReport,
+    hasCutoff: true, hasReportType: true,
+  },
+  FA: {
+    label: "Asset", lookup: null,
+    print: useHandlePrintFAReport, excel: useHandleDownloadExcelFAReport,
+    hasFA: true, hasSingleMain: true, hasSingleRc: true,
+    rcLabel: "Department/RC",
+  },
+  BUD: {
+    label: "Budget", lookup: null,
+    print: useHandlePrintBUDReport, excel: useHandleDownloadExcelBUDReport,
+    hasBudget: true, hasSingleRc: true, rcLabel: "Department/RC",
+  },
+};
+
+const DEFAULT_MODULE_OPTIONS = {
+  hasExtra: false,
+  hasCutoff: false,
+  hasReportType: false,
+};
+
+const MODULE_DEFS = Object.fromEntries(
+  Object.entries({
+    ...AP_MODULES,
+    ...AR_AND_SALES_MODULES,
+    ...INVENTORY_MODULES,
+    ...FINANCIAL_MODULES,
+  }).map(([code, definition]) => [code, { ...DEFAULT_MODULE_OPTIONS, ...definition }]),
+);
 
 // ─── SYSTEM COLOR THEME (blue) ────────────────────────────────────────────────
 const THEME = {
@@ -140,6 +229,110 @@ const sanitizeFileName = (value = "") =>
 const buildBIRFileName = (reportName, sCutOff, eCutOff, ext) =>
   [sanitizeFileName(reportName || "BIR Report"), sanitizeFileName(sCutOff || ""), sanitizeFileName(eCutOff || "")]
     .filter(Boolean).join(" ") + `.${ext}`;
+
+const formatCutoff = (date) =>
+  `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}`;
+
+const get2307Cutoffs = (mode, startDate) => {
+  const selectedDate = new Date(`${startDate}T00:00:00`);
+  if (Number.isNaN(selectedDate.getTime())) return { startingCutoff: "", endingCutoff: "" };
+
+  if (mode === "WTax2307Quarterly") {
+    const quarterStart = new Date(
+      selectedDate.getFullYear(),
+      Math.floor(selectedDate.getMonth() / 3) * 3,
+      1,
+    );
+    return {
+      startingCutoff: formatCutoff(quarterStart),
+      endingCutoff: formatCutoff(new Date(quarterStart.getFullYear(), quarterStart.getMonth() + 2, 1)),
+    };
+  }
+
+  const monthlyCutoff = formatCutoff(selectedDate);
+  return { startingCutoff: monthlyCutoff, endingCutoff: monthlyCutoff };
+};
+
+// Central request map used by every report handler. Keep aliases here because
+// the existing report procedures use different parameter names per module.
+const buildReportParams = ({ reportId, mode, filters, config, userCode }) => ({
+  reportId,
+  mode,
+  userCode,
+  branchCode: filters.branchCode,
+  startDate: filters.startDate,
+  endDate: filters.endDate,
+
+  // AP / AR range filters
+  sPayeeCode: filters.sCode,
+  ePayeeCode: config.hasSingleMain ? filters.sCode : filters.eCode,
+  sCustCode: filters.sCode,
+  eCustCode: config.hasSingleMain ? filters.sCode : filters.eCode,
+  payeeCode: filters.sCode,
+  vendCode: filters.sCode,
+  custCode: config.hasSales
+    ? filters.custCode
+    : (filters.custCode || filters.customerCode || filters.sCustCode),
+  chainCustomer: config.hasSales
+    ? filters.chainCustomer
+    : (filters.chainCustomer || filters.chainCode),
+
+  // GL / SL / RC filters
+  sAccCode: filters.sCode,
+  eAccCode: config.hasSingleMain ? filters.sCode : filters.eCode,
+  sSLCode: filters.sSlCode,
+  eSLCode: filters.eSlCode,
+  sRcCode: config.hasSingleRc ? filters.rcCode : filters.sRcCode,
+  eRcCode: config.hasSingleRc ? filters.rcCode : filters.eRcCode,
+  slCode: filters.sSlCode,
+  rcCode: config.hasSingleRc ? filters.rcCode : filters.sRcCode,
+  departmentCode: filters.rcCode,
+
+  // Inventory / fixed asset filters
+  itemCode: config.hasSales ? filters.itemCode : filters.sCode,
+  whCode: filters.whCode,
+  wwhCode: filters.whCode,
+  locCode: filters.locCode,
+  categCode: filters.categCode,
+  classCode: filters.classCode,
+  faCode: filters.faCode,
+
+  // BIR / budget filters
+  sCutOff: filters.sCutOff,
+  eCutOff: filters.eCutOff,
+  sCutoffCode: filters.sCutOff,
+  eCutoffCode: filters.eCutOff,
+  reportType: filters.reportType,
+  budgetYear: filters.budgetYear,
+  cutoffCode: filters.cutoffCode,
+  budgetCode: filters.budgetCode,
+  acctCode: filters.acctCode,
+  groupBy: filters.groupBy || "ACCOUNT_RC",
+  monthlyView: filters.monthlyView || "BUDGET",
+});
+
+const is2307ReportMode = (mode) =>
+  ["WTax2307Monthly", "WTax2307Quarterly"].includes(mode);
+
+// 2307 uses the dedicated form renderer instead of the standard tabular preview.
+const open2307Report = ({ mode, filters }) => {
+  const { startingCutoff, endingCutoff } = get2307Cutoffs(mode, filters.startDate);
+  const query = new URLSearchParams({
+    viewDocument: "true",
+    reportMode: mode,
+    branchCode: filters.branchCode || "",
+    sPayeeCode: filters.sCode || "",
+    ePayeeCode: filters.eCode || "",
+    startingCutoff,
+    endingCutoff,
+  });
+  const baseUrl = import.meta.env.BASE_URL || "/";
+  window.open(
+    `${baseUrl.replace(/\/?$/, "/")}page/APV2307?${query.toString()}`,
+    "_blank",
+    "noopener,noreferrer",
+  );
+};
 
 const downloadBlobFile = (content, fileName, mimeType) => {
   const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
@@ -431,40 +624,27 @@ const UniversalReportModal = ({ isOpen, onClose, userCode, module = "AP" }) => {
     }
   }, [data]);
 
-  // action: "preview" | "download". Print reports ignore the action and open normally.
+  // ── Generate / preview / download ─────────────────────────────────────────
+  // Trace order: hs_rpt metadata → module handler → hs_colconfig_rpt → output.
+  // requestedAction is used by exported reports; Crystal reports open directly.
   const generateMutation = useMutation({
     mutationFn: async (requestedAction = "download") => {
       const meta = await useTopHSRptRow(ui.selected.id);
-      const params = {
+      const params = buildReportParams({
         reportId: ui.selected.id,
-        branchCode: filters.branchCode,
-        startDate: filters.startDate,
-        endDate: filters.endDate,
-        custCode: config.hasSales ? filters.custCode : (filters.custCode || filters.customerCode || filters.sCustCode),
-        chainCustomer: config.hasSales ? filters.chainCustomer : (filters.chainCustomer || filters.chainCode),
-        sPayeeCode: filters.sCode, ePayeeCode: config.hasSingleMain ? filters.sCode : filters.eCode,
-        sCustCode:  filters.sCode, eCustCode:  config.hasSingleMain ? filters.sCode : filters.eCode,
-        sAccCode:   filters.sCode, eAccCode:   config.hasSingleMain ? filters.sCode : filters.eCode,
-        payeeCode: filters.sCode, vendCode: filters.sCode, departmentCode: filters.rcCode,
-        itemCode: config.hasSales ? filters.itemCode : filters.sCode, whCode: filters.whCode, wwhCode: filters.whCode, locCode: filters.locCode,
-        categCode: filters.categCode, classCode: filters.classCode, faCode: filters.faCode,
-        sSLCode: filters.sSlCode, eSLCode: filters.eSlCode,
-        sRcCode: config.hasSingleRc ? filters.rcCode : filters.sRcCode,
-        eRcCode: config.hasSingleRc ? filters.rcCode : filters.eRcCode,
-        slCode: filters.sSlCode, rcCode: config.hasSingleRc ? filters.rcCode : filters.sRcCode,
-        sCutOff: filters.sCutOff, eCutOff: filters.eCutOff,
-        sCutoffCode: filters.sCutOff, eCutoffCode: filters.eCutOff,
-        reportType: filters.reportType,
-        budgetYear: filters.budgetYear,
-        cutoffCode: filters.cutoffCode,
-        budgetCode: filters.budgetCode,
-        acctCode: filters.acctCode,
-        groupBy: filters.groupBy || "ACCOUNT_RC",
-        monthlyView: filters.monthlyView || "BUDGET",
-        userCode: effectiveUserCode,
         mode: meta.sprocMode,
-      };
+        filters,
+        config,
+        userCode: effectiveUserCode,
+      });
 
+      // Form-based BIR output bypasses the generic table/Excel pipeline.
+      if (is2307ReportMode(meta.sprocMode)) {
+        open2307Report({ mode: meta.sprocMode, filters });
+        return null;
+      }
+
+      // hs_rpt.EXPORT selects an API data export or a Crystal/PDF print handler.
       const isExcelReport = meta.export === "Y";
       const handler = isExcelReport ? config.excel : config.print;
       const response = await handler(params);

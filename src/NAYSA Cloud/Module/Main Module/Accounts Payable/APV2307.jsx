@@ -1242,6 +1242,11 @@ export default function APV2307({
       docCode: String(query.get("docCode") || "").trim().toUpperCase(),
       tranId: String(query.get("tranId") || "").trim(),
       documentNo: String(query.get("documentNo") || "").trim(),
+      reportMode: String(query.get("reportMode") || "").trim(),
+      sPayeeCode: String(query.get("sPayeeCode") || "").trim(),
+      ePayeeCode: String(query.get("ePayeeCode") || "").trim(),
+      startingCutoff: String(query.get("startingCutoff") || "").trim(),
+      endingCutoff: String(query.get("endingCutoff") || "").trim(),
     };
   }, [location.search]);
 
@@ -1256,7 +1261,16 @@ export default function APV2307({
         return;
       }
 
-      if (!requestParams.branchCode || !requestParams.docCode || !requestParams.tranId) {
+      const isReportRequest = ["WTax2307Monthly", "WTax2307Quarterly"].includes(
+        requestParams.reportMode,
+      );
+
+      if (
+        !requestParams.branchCode ||
+        (isReportRequest
+          ? !requestParams.startingCutoff || !requestParams.endingCutoff
+          : !requestParams.docCode || !requestParams.tranId)
+      ) {
         setApiForms([]);
         setErrorMessage(
           "Missing BIR 2307 request information. Branch, document code, and transaction ID are required.",
@@ -1274,11 +1288,13 @@ export default function APV2307({
           JSON.stringify({
             json_data: {
               branchCode: requestParams.branchCode,
-              docCode: requestParams.docCode,
-              tranId: requestParams.tranId,
+              docCode: isReportRequest ? null : requestParams.docCode,
+              tranId: isReportRequest ? null : requestParams.tranId,
               vendCode: null,
-              startingCutoff: null,
-              endingCutoff: null,
+              sPayeeCode: requestParams.sPayeeCode || null,
+              ePayeeCode: requestParams.ePayeeCode || null,
+              startingCutoff: isReportRequest ? requestParams.startingCutoff : null,
+              endingCutoff: isReportRequest ? requestParams.endingCutoff : null,
             },
           }),
         );
@@ -1345,6 +1361,14 @@ export default function APV2307({
   );
 
   const outputFileName = useMemo(() => {
+    if (requestParams.reportMode) {
+      const periodType = requestParams.reportMode === "WTax2307Quarterly" ? "QUARTERLY" : "MONTHLY";
+      const periodLabel = requestParams.startingCutoff === requestParams.endingCutoff
+        ? requestParams.startingCutoff
+        : `${requestParams.startingCutoff}_${requestParams.endingCutoff}`;
+      return `BIR_2307_${periodType}_${periodLabel}`;
+    }
+
     const docLabel = requestParams.documentNo || requestParams.tranId || "TRANSACTION";
     return `BIR_2307_${requestParams.docCode || "AP"}_${docLabel}`.replace(
       /[^A-Z0-9_-]+/gi,
