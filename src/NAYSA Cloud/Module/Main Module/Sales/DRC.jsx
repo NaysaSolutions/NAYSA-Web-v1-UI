@@ -599,6 +599,7 @@ useEffect(() => {
     const mapHeaderDrcStatus = (value) => {
       const normalizedValue = String(value || "").toUpperCase();
       if (normalizedValue === "OPEN" || normalizedValue === "O") return "O";
+      if (normalizedValue === "FINALIZED" || normalizedValue === "F") return "F";
       if (normalizedValue === "CANCELLED" || normalizedValue === "X") return "X";
       if (normalizedValue === "CLOSED" || normalizedValue === "C") return "C";
       return "O";
@@ -609,6 +610,7 @@ useEffect(() => {
       drcTranType: state.drcTranType || defaultDrType,
       drcStatusOptions: [
         { DROPDOWN_CODE: "O", DROPDOWN_NAME: "Open" },
+        { DROPDOWN_CODE: "F", DROPDOWN_NAME: "Finalized" },
         { DROPDOWN_CODE: "X", DROPDOWN_NAME: "Cancelled" },
         { DROPDOWN_CODE: "C", DROPDOWN_NAME: "Closed" },
       ],
@@ -1630,6 +1632,7 @@ const handlePrint = async () => {
           custCode: lookupShipToCode,
           shipToCode: lookupShipToCode,
           branchCode: lookupBranchCode,
+          sotranType: "SO02",
         });
       } catch (error) {
         console.error(`${endpoint} failed:`, {
