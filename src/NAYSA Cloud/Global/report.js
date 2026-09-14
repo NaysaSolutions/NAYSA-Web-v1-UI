@@ -400,6 +400,35 @@ export async function useHandleDownloadExcelAPReport(params) {
 }
 
 
+export async function useHandleDownloadExcelTaxReport(params) {
+  const {
+    mode,
+    branchCode,
+    startDate,
+    endDate,
+    sPayeeCode,
+    ePayeeCode,
+    sCustCode,
+    eCustCode,
+  } = params;
+
+  const payload = {
+    PARAMS: JSON.stringify({
+      mode,
+      branchCode,
+      startDate,
+      endDate,
+      sPayeeCode,
+      ePayeeCode,
+      sCustCode,
+      eCustCode,
+    }),
+  };
+
+  return await postRequest("getTaxReport", payload);
+}
+
+
 export async function useHandlePrintFGINVReport(params) {
   try {
     const responseDocRpt = await useTopHSRptRow(params.reportId);

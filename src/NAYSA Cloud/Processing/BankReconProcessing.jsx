@@ -3106,34 +3106,6 @@ const BankReconProcessing = () => {
     return renderReadOnlyCell(column, row, originalIndex, getHistoryCellStyle, getHistoryFallbackWidth);
   };
 
-  const renderTableFooter = (columns, rows, getCellStyle, getFallbackWidth, label = "Total") => (
-    <tfoot className="sticky bottom-0 z-[35] bg-slate-100 font-bold">
-      <tr className="h-8 bg-slate-100">
-        {columns.map((column, index) => {
-          const isNumeric = ["integer", "number"].includes(column.renderType);
-          const style = {
-            ...(column.key === "__actions" ? { width: 92, minWidth: 92 } : getCellStyle(column.key, getFallbackWidth(column.key))),
-            backgroundColor: "#f1f5f9",
-          };
-          const cellStyle = column.key === "view"
-            ? getStickyViewStyle(style, { isFooter: true, backgroundColor: "#f1f5f9" })
-            : style;
-          const value = isNumeric
-            ? rows.reduce((sum, row) => sum + normalizeNumber(row?.[column.key]), 0)
-            : index === 1 || (index === 0 && columns.length === 1)
-              ? `${label} (${rows.length} records)`
-              : "";
-
-          return (
-            <td key={`footer-${column.key}`} className={`global-tran-td-ui py-1 ${isNumeric ? "text-right" : "text-left"}`} style={cellStyle}>
-              {column.renderType === "integer" ? Math.trunc(normalizeNumber(value)) : isNumeric ? <Amount value={value} /> : value}
-            </td>
-          );
-        })}
-      </tr>
-    </tfoot>
-  );
-
   const renderMobileCardControl = (column, row, originalIndex, renderActions) => {
     if (column.key === "view") {
       const isHistory = activeTab === "history";
@@ -3421,14 +3393,6 @@ const BankReconProcessing = () => {
               })
             )}
           </tbody>
-          {renderTableFooter(
-            renderActions
-              ? [...orderedColumns.filter((column) => !hiddenColumnKeys.includes(column.key)), { key: "__actions", label: "Actions", renderType: "text", width: 92 }]
-              : orderedColumns.filter((column) => !hiddenColumnKeys.includes(column.key)),
-            rows,
-            getCellStyle,
-            getFallbackWidth
-          )}
         </table>
         {renderHeaderContextMenu()}
       </div>

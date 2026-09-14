@@ -70,6 +70,7 @@ const DEFAULT_FORM = {
   salesAcct: "", salesAcctName: "",
   sdiscAcct: "", sdiscAcctName: "",
   wipAcct: "",  wipAcctName: "",
+  lcAcct: "",   lcAcctName: "",
   rrAcct: "",   rrAcctName: "",
   sretAcct: "", sretAcctName: "",
   cosAcct: "",  cosAcctName: "",
@@ -203,6 +204,7 @@ const FGCategoryCodes = forwardRef(({
             salesAcct:   payload.salesAcct,
             sdiscAcct:   payload.sdiscAcct,
             wipAcct:     payload.wipAcct,
+            lcAcct:      payload.lcAcct,
             rrAcct:      payload.rrAcct,
             sretAcct:    payload.sretAcct,
             cosAcct:     payload.cosAcct,
@@ -260,6 +262,7 @@ const FGCategoryCodes = forwardRef(({
       salesAcct:   String(form.salesAcct   || "").trim(),
       sdiscAcct:   String(form.sdiscAcct   || "").trim(),
       wipAcct:     String(form.wipAcct     || "").trim(),
+      lcAcct:      String(form.lcAcct      || "").trim(),
       rrAcct:      String(form.rrAcct      || "").trim(),
       sretAcct:    String(form.sretAcct    || "").trim(),
       cosAcct:     String(form.cosAcct     || "").trim(),
@@ -350,6 +353,8 @@ const FGCategoryCodes = forwardRef(({
         sdiscAcctName:  row.sdiscAcctName  || row.sdisc_acct_name || "",
         wipAcct:        row.wipAcct        || row.wip_acct        || "",
         wipAcctName:    row.wipAcctName    || row.wip_acct_name   || "",
+        lcAcct:         row.lcAcct         || row.lcacct_code     || "",
+        lcAcctName:     row.lcAcctName     || row.lc_acct_name    || "",
         rrAcct:         row.rrAcct         || row.rr_acct         || "",
         rrAcctName:     row.rrAcctName     || row.rr_acct_name    || "",
         sretAcct:       row.sretAcct       || row.sret_acct       || "",
@@ -398,6 +403,8 @@ const FGCategoryCodes = forwardRef(({
         sdiscAcctName:  row.sdiscAcctName  || row.sdisc_acct_name || "",
         wipAcct:        row.wipAcct        || row.wip_acct        || "",
         wipAcctName:    row.wipAcctName    || row.wip_acct_name   || "",
+        lcAcct:         row.lcAcct         || row.lcacct_code     || "",
+        lcAcctName:     row.lcAcctName     || row.lc_acct_name    || "",
         rrAcct:         row.rrAcct         || row.rr_acct         || "",
         rrAcctName:     row.rrAcctName     || row.rr_acct_name    || "",
         sretAcct:       row.sretAcct       || row.sret_acct       || "",
@@ -490,6 +497,7 @@ const FGCategoryCodes = forwardRef(({
       { key: "salesAcct",   label: "Sales Acct",                 sortable: true, width: 100 },
       { key: "sdiscAcct",   label: "SDisc Acct",                 sortable: true, width: 100 },
       { key: "wipAcct",     label: "WIP Acct",                   sortable: true, width: 100 },
+      { key: "lcAcct",      label: "LC Acct",                    sortable: true, width: 100 },
       { key: "rrAcct",      label: "RR Acct",                    sortable: true, width: 100 },
       { key: "sretAcct",    label: "SRet Acct",                  sortable: true, width: 100 },
       { key: "cosAcct",     label: "COS Acct",                   sortable: true, width: 100 },
@@ -529,6 +537,7 @@ const FGCategoryCodes = forwardRef(({
         String(row.salesAcct  || "").toLowerCase().includes(s) ||
         String(row.sdiscAcct  || "").toLowerCase().includes(s) ||
         String(row.wipAcct    || "").toLowerCase().includes(s) ||
+        String(row.lcAcct     || "").toLowerCase().includes(s) ||
         String(row.rrAcct     || "").toLowerCase().includes(s) ||
         String(row.sretAcct   || "").toLowerCase().includes(s) ||
         String(row.cosAcct    || "").toLowerCase().includes(s) ||
@@ -700,6 +709,10 @@ const FGCategoryCodes = forwardRef(({
               <FieldRenderer label="Expense Acct" type="lookup" required labelClassName="text-xs"
                 value={form.expAcct ? `${form.expAcct}${form.expAcctName ? ` — ${form.expAcctName}` : ""}` : ""}
                 onLookup={() => openCoaLookup("exp")} onChange={(v) => setField("expAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
+
+              <FieldRenderer label="Landed Cost Account" type="lookup" labelClassName="text-xs"
+                value={form.lcAcct ? `${form.lcAcct}${form.lcAcctName ? ` — ${form.lcAcctName}` : ""}` : ""}
+                onLookup={() => openCoaLookup("lc")} onChange={(v) => setField("lcAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
 
               {/* RC Code */}
               <FieldRenderer label="RC Code" type="lookup" required labelClassName="text-xs"

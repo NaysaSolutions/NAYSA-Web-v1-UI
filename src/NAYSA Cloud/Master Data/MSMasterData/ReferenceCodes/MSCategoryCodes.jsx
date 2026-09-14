@@ -677,7 +677,7 @@ const CategoryCodes = forwardRef(({
       { key: "invAcct", label: "Inv Acct", sortable: true, width: 120 },
       { key: "expAcct", label: "Expense Acct", sortable: true, width: 120 },
       { key: "rrAcct", label: "RR Acct", sortable: true, width: 120 },
-      // { key: "lcAcct", label: "LC Acct", sortable: true, width: 120 },
+      { key: "lcAcct", label: "LC Acct", sortable: true, width: 120 },
       { key: "rcCode", label: "RC Code", sortable: true, width: 120 },
       {
         key: "uCostFlag",
@@ -712,7 +712,7 @@ const CategoryCodes = forwardRef(({
         String(row.invAcct || "").toLowerCase().includes(s) ||
         String(row.expAcct || "").toLowerCase().includes(s) ||
         String(row.rrAcct || "").toLowerCase().includes(s) ||
-        // String(row.lcAcct || "").toLowerCase().includes(s) ||
+        String(row.lcAcct || "").toLowerCase().includes(s) ||
         String(row.rcCode || "").toLowerCase().includes(s) ||
         uCostStatus.includes(s)
       );
@@ -868,29 +868,14 @@ const CategoryCodes = forwardRef(({
               disabled={isReadOnly || !isEditing}
             />
 
-            {/* Landed Cost Account
-            <div className="grid grid-cols-3 gap-2">
-              <div className="col-span-1">
-                <FieldRenderer
-                  label="Landed Cost Account"
-                  type="lookup"
-                  value={form.lcAcct}
-                  required
-                  onLookup={() => openCoaLookup("lc")}
-                  onChange={(v) => setField("lcAcct", v ?? "")}
-                  disabled={isReadOnly || !isEditing}
-                />
-              </div>
-              <div className="col-span-2">
-                <FieldRenderer
-                  label=""
-                  type="text"
-                  value={form.lcAcctName}
-                  readOnly
-                  disabled
-                />
-              </div>
-            </div> */}
+            <FieldRenderer
+              label="Landed Cost Account"
+              type="lookup"
+              value={form.lcAcct ? `${form.lcAcct}${form.lcAcctName ? ` — ${form.lcAcctName}` : ""}` : ""}
+              onLookup={() => openCoaLookup("lc")}
+              onChange={(v) => setField("lcAcct", v ?? "")}
+              disabled={isReadOnly || !isEditing}
+            />
 
             {/* Responsibility Center */}
             <FieldRenderer

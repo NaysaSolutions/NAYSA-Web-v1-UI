@@ -104,6 +104,9 @@ const isHiddenColumn = (column) => {
 const normalizeRenderType = (rawType, key, rows) => {
   const type = String(rawType || "").trim().toLowerCase();
 
+  if (["text", "string", "varchar", "nvarchar", "char", "nchar"].includes(type)) {
+    return "text";
+  }
   if (["money", "currency", "amount"].includes(type)) return "currency";
   if (["number", "numeric", "decimal", "float", "double", "integer", "int"].includes(type)) {
     return "number";

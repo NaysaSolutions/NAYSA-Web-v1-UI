@@ -44,6 +44,7 @@ import {
   useHandleDownloadExcelIMPReport,
   useHandleDownloadExcelBUDReport,
   useHandleDownloadExcelSalesReport,
+  useHandleDownloadExcelTaxReport,
   useHandlePrintSalesReport,
   useHandlePrintBUDReport,
 } from "@/NAYSA Cloud/Global/report";
@@ -95,12 +96,12 @@ const VELookupModal = (props) => (
 
 const MODULE_DEFS = {
   AP:  { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelAPReport,    hasExtra: false, hasCutoff: false, hasReportType: false },
-  VI:  { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelAPReport,    hasExtra: false, hasCutoff: false, hasReportType: false },
-  EWT: { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelAPReport,    hasExtra: false, hasCutoff: false, hasReportType: false },
+  VI:  { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelTaxReport,   hasExtra: false, hasCutoff: false, hasReportType: false },
+  EWT: { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelTaxReport,   hasExtra: false, hasCutoff: false, hasReportType: false },
   PUR: { label: "Payee",    lookup: PayeeMastLookupModal,    print: useHandlePrintAPReport,    excel: useHandleDownloadExcelAPReport,    hasExtra: false, hasCutoff: false, hasReportType: false, hasSingleMain: true, hasSingleRc: true, rcLabel: "Department/RC" },
   AR:  { label: "Customer", lookup: CustomerMastLookupModal, print: useHandlePrintARReport,    excel: useHandleDownloadExcelARReport,    hasExtra: false, hasCutoff: false, hasReportType: false },
-  VO:  { label: "Customer", lookup: CustomerMastLookupModal, print: useHandlePrintARReport,    excel: useHandleDownloadExcelARReport,    hasExtra: false, hasCutoff: false, hasReportType: false },
-  CWT: { label: "Customer", lookup: CustomerMastLookupModal, print: useHandlePrintARReport,    excel: useHandleDownloadExcelARReport,    hasExtra: false, hasCutoff: false, hasReportType: false },
+  VO:  { label: "Customer", lookup: CustomerMastLookupModal, print: useHandlePrintARReport,    excel: useHandleDownloadExcelTaxReport,   hasExtra: false, hasCutoff: false, hasReportType: false },
+  CWT: { label: "Customer", lookup: CustomerMastLookupModal, print: useHandlePrintARReport,    excel: useHandleDownloadExcelTaxReport,   hasExtra: false, hasCutoff: false, hasReportType: false },
   GL:  { label: "Account",  lookup: COAMastLookupModal,      print: useHandlePrintGLReport,    excel: useHandleDownloadExcelGLReport,    hasExtra: true,  hasCutoff: false, hasReportType: false },
   BIR: { label: "",         lookup: null,                    print: useHandlePrintGLReport,    excel: useHandleDownloadExcelBIRReport,   hasExtra: false, hasCutoff: true,  hasReportType: true },
   FG:  { label: "Item",     lookup: FGLookupModal,           print: useHandlePrintFGINVReport,  excel: useHandleDownloadExcelFGINVReport, hasExtra: false, hasCutoff: false, hasReportType: false, hasInventory: true, hasSingleMain: true },

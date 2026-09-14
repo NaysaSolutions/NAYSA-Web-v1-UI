@@ -75,6 +75,7 @@ const DEFAULT_FORM = {
   expAcct: "", expAcctName: "",
   rrAcct: "", rrAcctName: "",
   wipAcct: "", wipAcctName: "",   // renamed from lcAcct / lcAcctName
+  lcAcct: "", lcAcctName: "",
   rcCode: "", rcName: "",
 
   registeredBy: "",
@@ -411,6 +412,7 @@ const RMCategoryCodes = forwardRef(({
             expAcct:     payload.expAcct,
             rrAcct:      payload.rrAcct,
             wipAcct:     payload.wipAcct,   // renamed from lcAcct
+            lcAcct:      payload.lcAcct,
             rcCode:      payload.rcCode,
             userCode:    payload.userCode,
           },
@@ -463,6 +465,7 @@ const RMCategoryCodes = forwardRef(({
       expAcct:     String(form.expAcct     || "").trim(),
       rrAcct:      String(form.rrAcct      || "").trim(),
       wipAcct:     String(form.wipAcct     || "").trim(),  // renamed from lcAcct
+      lcAcct:      String(form.lcAcct      || "").trim(),
       rcCode:      String(form.rcCode      || "").trim(),
       userCode,
     };
@@ -568,6 +571,8 @@ const RMCategoryCodes = forwardRef(({
     rrAcctName:      row.rrAcctName      || row.rr_acct_name  || "",
     wipAcct:         row.wipAcct         || row.wip_acct      || "",   // renamed from lcAcct
     wipAcctName:     row.wipAcctName     || row.wip_acct_name || "",   // renamed from lcAcctName
+    lcAcct:          row.lcAcct          || row.lcacct_code   || "",
+    lcAcctName:      row.lcAcctName      || row.lc_acct_name  || "",
     rcCode:          row.rcCode          || row.rc_code       || "",
     rcName:          row.rcName          || row.rc_name       || "",
     registeredBy:    row.registeredBy    || row.registered_by    || "",
@@ -669,6 +674,7 @@ const RMCategoryCodes = forwardRef(({
       { key: "expAcct",     label: "Expense Acct",                sortable: true, width: 120 },
       { key: "rrAcct",      label: "RR Acct",                     sortable: true, width: 120 },
       { key: "wipAcct",     label: "WIP Acct",                    sortable: true, width: 120 },
+      { key: "lcAcct",      label: "LC Acct",                     sortable: true, width: 120 },
       { key: "rcCode",      label: "RC Code",                     sortable: true, width: 120 },
       {
         key: "uCostFlag",
@@ -703,6 +709,7 @@ const RMCategoryCodes = forwardRef(({
         String(row.expAcct     || "").toLowerCase().includes(s) ||
         String(row.rrAcct      || "").toLowerCase().includes(s) ||
         String(row.wipAcct     || "").toLowerCase().includes(s) ||
+        String(row.lcAcct      || "").toLowerCase().includes(s) ||
         String(row.rcCode      || "").toLowerCase().includes(s) ||
         uCostStatus.includes(s)
       );
@@ -860,6 +867,15 @@ const RMCategoryCodes = forwardRef(({
             />
 
             <FieldRenderer
+              label="Landed Cost Account"
+              type="lookup"
+              value={form.lcAcct ? `${form.lcAcct}${form.lcAcctName ? ` — ${form.lcAcctName}` : ""}` : ""}
+              onLookup={() => openCoaLookup("lc")}
+              onChange={(v) => setField("lcAcct", v ?? "")}
+              disabled={isReadOnly || !isEditing}
+            />
+
+            <FieldRenderer
               label="Responsibility Center"
               type="lookup"
               required
@@ -904,6 +920,7 @@ const RMCategoryCodes = forwardRef(({
               exp:  ["expAcct",  "expAcctName"],
               rr:   ["rrAcct",   "rrAcctName"],
               wip:  ["wipAcct",  "wipAcctName"],   // renamed from lc
+              lc:   ["lcAcct",   "lcAcctName"],
             };
             const [acctField, nameField] = fieldMap[source] || [`${source}Acct`, `${source}AcctName`];
             setField(acctField, selected.acctCode);
