@@ -607,7 +607,7 @@ export const useSwalInfoAlert = (
       ? String(document.title || "").trim()
       : "";
 
-    title = currentMenuName && currentMenuName !== "NAYSA Financials Cloud"
+    title = currentMenuName && currentMenuName !== "NAYSA Financials Cloud v26.08"
       ? currentMenuName
       : "Transaction Posting";
     message = "There are no transactions to post.";
