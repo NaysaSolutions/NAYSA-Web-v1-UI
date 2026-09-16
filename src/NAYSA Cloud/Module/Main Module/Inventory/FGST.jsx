@@ -105,7 +105,6 @@ import {
 // Header
 import Header from "@/NAYSA Cloud/Components/Header";
 
-
 const toDateInputValue = (value) => {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -162,7 +161,10 @@ const getFGSTSaveResult = (response) => {
   return { documentNo, documentID };
 };
 
-const normalizeCode = (value) => String(value ?? "").trim().toUpperCase();
+const normalizeCode = (value) =>
+  String(value ?? "")
+    .trim()
+    .toUpperCase();
 
 const isIntransitWarehouse = (warehouse) => {
   const whCode = normalizeCode(
@@ -198,7 +200,15 @@ const getWarehouseBranchCode = (warehouse) =>
       "",
   ).trim();
 
-const PostFGST = ({ isOpen, onClose, userCode, docType = "FGST", documentTitle = "FG Stock Transfer", detailsRoute = "/page/FGST", fieldNo = "fgstNo" }) => {
+const PostFGST = ({
+  isOpen,
+  onClose,
+  userCode,
+  docType = "FGST",
+  documentTitle = "FG Stock Transfer",
+  detailsRoute = "/page/FGST",
+  fieldNo = "fgstNo",
+}) => {
   const [data, setData] = useState([]);
   const [colConfigData, setcolConfigData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -264,7 +274,14 @@ const PostFGST = ({ isOpen, onClose, userCode, docType = "FGST", documentTitle =
   }, [isOpen, onClose]);
 
   const handlePost = async (selectedData, userPw) => {
-    await useHandlePostTran(selectedData, userPw, docType, userCode, setLoading, onClose);
+    await useHandlePostTran(
+      selectedData,
+      userPw,
+      docType,
+      userCode,
+      setLoading,
+      onClose,
+    );
   };
 
   const pickDocAndBranch = (row) => ({
@@ -295,7 +312,7 @@ const PostFGST = ({ isOpen, onClose, userCode, docType = "FGST", documentTitle =
         <GlobalGLPostingModalv1
           data={data}
           colConfigData={colConfigData}
-        title={`Finalize ${documentTitle}`}
+          title={`Finalize ${documentTitle}`}
           userPassword={userPassword}
           btnCaption="Okay"
           onClose={onClose}
@@ -305,7 +322,10 @@ const PostFGST = ({ isOpen, onClose, userCode, docType = "FGST", documentTitle =
         />
       )}
 
-      {ReactDOM.createPortal(loading ? <LoadingSpinner /> : null, document.body)}
+      {ReactDOM.createPortal(
+        loading ? <LoadingSpinner /> : null,
+        document.body,
+      )}
     </>
   );
 };
@@ -371,7 +391,8 @@ const FGST = () => {
   const hsDoc = getAllTopHSDocRow?.(docType);
   const pdfLink = docTypePDFGuide[docType];
   const videoLink = docTypeVideoGuide[docType];
-  const documentTitle = hsDoc?.docName || docTypeNames[docType] || "FG Stock Transfer";
+  const documentTitle =
+    hsDoc?.docName || docTypeNames[docType] || "FG Stock Transfer";
   const detailsRoute = "/page/FGST";
   const documentNoField = "fgstNo";
   const [state, setState] = useState({
@@ -569,7 +590,12 @@ const FGST = () => {
   const lookupColumnConfigRef = useRef({});
 
   const getLookupColumnConfig = async (endpoint) => {
-    if (Object.prototype.hasOwnProperty.call(lookupColumnConfigRef.current, endpoint)) {
+    if (
+      Object.prototype.hasOwnProperty.call(
+        lookupColumnConfigRef.current,
+        endpoint,
+      )
+    ) {
       return lookupColumnConfigRef.current[endpoint];
     }
 
@@ -601,9 +627,9 @@ const FGST = () => {
         "dropdown_code",
         "code",
         "value",
-        "tranType",     
-        "tran_type",    
-        "TRAN_TYPE",    
+        "tranType",
+        "tran_type",
+        "TRAN_TYPE",
       ]),
     ).trim();
 
@@ -615,17 +641,20 @@ const FGST = () => {
         "dropdown_name",
         "name",
         "label",
-        "tranName",     
-        "tran_name",    
-        "TRAN_NAME",    
-        "tranDesc",     
-        "tran_desc",    
-        "TRAN_DESC",    
-        "description"   
+        "tranName",
+        "tran_name",
+        "TRAN_NAME",
+        "tranDesc",
+        "tran_desc",
+        "TRAN_DESC",
+        "description",
       ]),
     ).trim();
 
-  const getTranTypeColumn = (tranTypeCode = selectedTranType, list = tranTypes) => {
+  const getTranTypeColumn = (
+    tranTypeCode = selectedTranType,
+    list = tranTypes,
+  ) => {
     const row = (list || []).find(
       (x) => normalizeCode(getTranTypeCode(x)) === normalizeCode(tranTypeCode),
     );
@@ -648,20 +677,34 @@ const FGST = () => {
     if (!row) return false;
     const name = getTranTypeName(row);
     const code = getTranTypeCode(row);
-    return normalizeCode(name).includes("INTER BRANCH") || normalizeCode(code) === "FGST06" || normalizeCode(code) === "IB";
+    return (
+      normalizeCode(name).includes("INTER BRANCH") ||
+      normalizeCode(code) === "FGST06" ||
+      normalizeCode(code) === "IB"
+    );
   };
 
-  const isIntransitToBranch = (tranTypeCode = selectedTranType, list = tranTypes) => {
+  const isIntransitToBranch = (
+    tranTypeCode = selectedTranType,
+    list = tranTypes,
+  ) => {
     const row = (list || []).find(
       (x) => normalizeCode(getTranTypeCode(x)) === normalizeCode(tranTypeCode),
     );
     if (!row) return false;
     const name = getTranTypeName(row);
     const code = getTranTypeCode(row);
-    return normalizeCode(name).includes("INTRANSIT TO BRANCH") || normalizeCode(code) === "FGST05" || normalizeCode(code) === "INB";
+    return (
+      normalizeCode(name).includes("INTRANSIT TO BRANCH") ||
+      normalizeCode(code) === "FGST05" ||
+      normalizeCode(code) === "INB"
+    );
   };
 
-  const isIntransitToWarehouse = (tranTypeCode = selectedTranType, list = tranTypes) => {
+  const isIntransitToWarehouse = (
+    tranTypeCode = selectedTranType,
+    list = tranTypes,
+  ) => {
     const row = (list || []).find(
       (x) => normalizeCode(getTranTypeCode(x)) === normalizeCode(tranTypeCode),
     );
@@ -676,21 +719,41 @@ const FGST = () => {
     );
   };
 
-  const isIntransitTransfer = (tranTypeCode = selectedTranType, list = tranTypes) =>
-    isIntransitToWarehouse(tranTypeCode, list) || isIntransitToBranch(tranTypeCode, list);
+  const isIntransitTransfer = (
+    tranTypeCode = selectedTranType,
+    list = tranTypes,
+  ) =>
+    isIntransitToWarehouse(tranTypeCode, list) ||
+    isIntransitToBranch(tranTypeCode, list);
 
-  const isBranchTransfer = (tranTypeCode = selectedTranType, list = tranTypes) =>
-    isInterBranch(tranTypeCode, list) || isIntransitToBranch(tranTypeCode, list);
+  const isBranchTransfer = (
+    tranTypeCode = selectedTranType,
+    list = tranTypes,
+  ) =>
+    isInterBranch(tranTypeCode, list) ||
+    isIntransitToBranch(tranTypeCode, list);
 
-  const requiresBranchSelection = (tranTypeCode = selectedTranType, list = tranTypes) => {
-    return isInterBranch(tranTypeCode, list) || isIntransitToBranch(tranTypeCode, list);
+  const requiresBranchSelection = (
+    tranTypeCode = selectedTranType,
+    list = tranTypes,
+  ) => {
+    return (
+      isInterBranch(tranTypeCode, list) ||
+      isIntransitToBranch(tranTypeCode, list)
+    );
   };
 
-  const isWarehouseTransfer = (tranTypeCode = selectedTranType, list = tranTypes) =>
-    getTranTypeColumn(tranTypeCode, list) === "WH_TRANSFER" || 
+  const isWarehouseTransfer = (
+    tranTypeCode = selectedTranType,
+    list = tranTypes,
+  ) =>
+    getTranTypeColumn(tranTypeCode, list) === "WH_TRANSFER" ||
     getTranTypeColumn(tranTypeCode, list) === "BRANCH_TRANSFER";
 
-  const isInterWarehouseOrInterBranch = (tranTypeCode = selectedTranType, list = tranTypes) => {
+  const isInterWarehouseOrInterBranch = (
+    tranTypeCode = selectedTranType,
+    list = tranTypes,
+  ) => {
     const normalizedCode = normalizeCode(tranTypeCode);
     const column = getTranTypeColumn(tranTypeCode, list);
     const row = (list || []).find(
@@ -707,9 +770,12 @@ const FGST = () => {
     );
   };
 
-  const hideFromWarehouseAndLocationSearch = (tranTypeCode = selectedTranType, list = tranTypes) =>
-    isInterWarehouseOrInterBranch(tranTypeCode, list) || isIntransitTransfer(tranTypeCode, list);
-
+  const hideFromWarehouseAndLocationSearch = (
+    tranTypeCode = selectedTranType,
+    list = tranTypes,
+  ) =>
+    isInterWarehouseOrInterBranch(tranTypeCode, list) ||
+    isIntransitTransfer(tranTypeCode, list);
 
   const normalizeTranDropDownResponse = (value) => {
     if (!value) return [];
@@ -775,7 +841,9 @@ const FGST = () => {
         rows.find((x) => normalizeCode(getTranTypeCode(x)) === "FGST04"),
       ) ||
       getTranTypeCode(
-        rows.find((x) => normalizeCode(getTranTypeName(x)).includes("INTER WAREHOUSE")),
+        rows.find((x) =>
+          normalizeCode(getTranTypeName(x)).includes("INTER WAREHOUSE"),
+        ),
       ) ||
       getTranTypeCode(
         rows.find(
@@ -799,7 +867,8 @@ const FGST = () => {
     updateState({
       tranTypes: rows,
       selectedTranType:
-        selectedTranType && rows.some((x) => getTranTypeCode(x) === selectedTranType)
+        selectedTranType &&
+        rows.some((x) => getTranTypeCode(x) === selectedTranType)
           ? selectedTranType
           : getDefaultTranType(rows),
     });
@@ -822,11 +891,17 @@ const FGST = () => {
 
     const [dbRows1, dbRows2] = await Promise.all([
       useTopDocDropDown(docType, "TRAN_TYPE").catch((error) => {
-        console.warn("Unable to load FGST TRAN_TYPE using docType/type order.", error);
+        console.warn(
+          "Unable to load FGST TRAN_TYPE using docType/type order.",
+          error,
+        );
         return [];
       }),
       useTopDocDropDown("TRAN_TYPE", docType).catch((error) => {
-        console.warn("Unable to load FGST TRAN_TYPE using type/docType order.", error);
+        console.warn(
+          "Unable to load FGST TRAN_TYPE using type/docType order.",
+          error,
+        );
         return [];
       }),
     ]);
@@ -848,10 +923,13 @@ const FGST = () => {
     CANCELLED: "global-tran-stat-text-closed-ui",
     CLOSED: "global-tran-stat-text-finalized-ui",
   };
-  const statusColor = statusMap[String(displayStatus).trim().toUpperCase()] || "";
+  const statusColor =
+    statusMap[String(displayStatus).trim().toUpperCase()] || "";
   const isFormDisabled =
     isViewDocumentUrl ||
-    ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+    ["FINALIZED", "CANCELLED", "CLOSED"].includes(
+      String(displayStatus).trim().toUpperCase(),
+    );
 
   const [totals, setTotals] = useState({
     totalQuantity: "0.00",
@@ -1118,11 +1196,13 @@ const FGST = () => {
         documentNo: data.fgstNo,
         branchCode: data.branchCode,
         documentDate: useformatToDatev2(data.fgstDate),
-        selectedTranType: data.tranType || data.tran_type || getDefaultTranType(),
+        selectedTranType:
+          data.tranType || data.tran_type || getDefaultTranType(),
         toBranchCode: data.toBranchCode || data.to_branch_code || "",
         toBranchName: data.toBranchName || data.to_branch_name || "",
         fromWhCode: data.frmwhouseCode || data.fromWhCode || data.from_wh || "",
-        fromWhName: data.frmwhouseName || data.fromWhName || data.from_wh_name || "",
+        fromWhName:
+          data.frmwhouseName || data.fromWhName || data.from_wh_name || "",
         toWhCode: data.towhouseCode || data.toWhCode || data.to_wh || "",
         toWhName: data.towhouseName || data.toWhName || data.to_wh_name || "",
         refDocNo1: data.refDocNo1,
@@ -1166,12 +1246,18 @@ const FGST = () => {
       for (let i = 0; i < detailRows.length; i++) {
         const row = detailRows[i];
         if (row.whouseCode && !row.locCode?.trim()) {
-          useSwalErrorAlert("Validation Error", `Row ${i + 1}: From Location code is required for the selected From Warehouse.`);
+          useSwalErrorAlert(
+            "Validation Error",
+            `Row ${i + 1}: From Location code is required for the selected From Warehouse.`,
+          );
           updateState({ isLoading: false });
           return;
         }
         if (row.toWHcode && !row.tolocCode?.trim()) {
-          useSwalErrorAlert("Validation Error", `Row ${i + 1}: To Location code is required for the selected To Warehouse.`);
+          useSwalErrorAlert(
+            "Validation Error",
+            `Row ${i + 1}: To Location code is required for the selected To Warehouse.`,
+          );
           updateState({ isLoading: false });
           return;
         }
@@ -1228,7 +1314,8 @@ const FGST = () => {
           whouseCode: row.whouseCode || row.frmwhouseCode || fromWhCode || "",
           toWHcode: row.toWHcode || row.towhouseCode || toWhCode || "",
           locCode: row.locCode || row.frmlocCode || "",
-          frmwhouseCode: row.frmwhouseCode || row.whouseCode || fromWhCode || "",
+          frmwhouseCode:
+            row.frmwhouseCode || row.whouseCode || fromWhCode || "",
           towhouseCode: row.towhouseCode || row.toWHcode || toWhCode || "",
           frmlocCode: row.frmlocCode || row.locCode || "",
           tolocCode: row.tolocCode || "",
@@ -1367,8 +1454,8 @@ const FGST = () => {
     qtyHand: "0.00",
     whouseCode: fromWhCode || "",
     toWHcode: toWhCode || "",
-    locCode: isIntransitWarehouse(fromWhCode || "") ? "INTRANSIT" : "", 
-    tolocCode: isIntransitWarehouse(toWhCode || "") ? "INTRANSIT" : "", 
+    locCode: isIntransitWarehouse(fromWhCode || "") ? "INTRANSIT" : "",
+    tolocCode: isIntransitWarehouse(toWhCode || "") ? "INTRANSIT" : "",
     acctCode: "",
     rcCode: "",
     sltypeCode: "",
@@ -1401,7 +1488,8 @@ const FGST = () => {
     };
 
     if (isInterBranch()) fieldsToCheck["Header : To Branch"] = toBranchCode;
-    if (isIntransitToBranch()) fieldsToCheck["Header : From Branch"] = toBranchCode;
+    if (isIntransitToBranch())
+      fieldsToCheck["Header : From Branch"] = toBranchCode;
 
     const isValid = await useSwalvalidateRequiredFields(
       fieldsToCheck,
@@ -1524,7 +1612,10 @@ const FGST = () => {
     }
 
     if (!detailRows || detailRows.length === 0) {
-      useSwalInfoAlert("Cancel Transaction", "No item details found to cancel.");
+      useSwalInfoAlert(
+        "Cancel Transaction",
+        "No item details found to cancel.",
+      );
       return;
     }
 
@@ -1607,9 +1698,14 @@ const FGST = () => {
     { key: "operation", label: "Operation", width: 120 },
   ];
   const visibleFgstDetailColumns = fgstDetailColumnDefs.filter((column) => {
-    if (["categCode", "uniqueKey", "operation", "sltypeCode"].includes(column.key)) return false;
-    if (["quantity", "itemAmount"].includes(column.key)) return !handleFieldBehavior("hiddenCAMode");
-    if (["acctCode", "rcCode", "slCode"].includes(column.key)) return !handleFieldBehavior("hiddenBBMode");
+    if (
+      ["categCode", "uniqueKey", "operation", "sltypeCode"].includes(column.key)
+    )
+      return false;
+    if (["quantity", "itemAmount"].includes(column.key))
+      return !handleFieldBehavior("hiddenCAMode");
+    if (["acctCode", "rcCode", "slCode"].includes(column.key))
+      return !handleFieldBehavior("hiddenBBMode");
     return true;
   });
   const {
@@ -1620,7 +1716,8 @@ const FGST = () => {
   } = useResizableTableColumns(visibleFgstDetailColumns);
   const sortedFgstDetailRows = getSortedFgstDetailRows(
     detailRows.map((row, originalIndex) => ({ row, originalIndex })),
-    (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? "",
+    (entry, sortKey) =>
+      sortKey === "ln" ? entry.originalIndex + 1 : (entry.row?.[sortKey] ?? ""),
   );
 
   const fgstGlColumnDefs = [
@@ -1632,14 +1729,26 @@ const FGST = () => {
     { key: "particular", label: "Particulars", width: 320 },
     { key: "debit", label: `Debit (${glCurrDefault})`, width: 140 },
     { key: "credit", label: `Credit (${glCurrDefault})`, width: 140 },
-    ...(withCurr2 ? [
-      { key: "debitFx1", label: `Debit (${withCurr3 ? glCurrGlobal2 : currCode})`, width: 140 },
-      { key: "creditFx1", label: `Credit (${withCurr3 ? glCurrGlobal2 : currCode})`, width: 140 },
-    ] : []),
-    ...(withCurr3 ? [
-      { key: "debitFx2", label: `Debit (${glCurrGlobal3})`, width: 140 },
-      { key: "creditFx2", label: `Credit (${glCurrGlobal3})`, width: 140 },
-    ] : []),
+    ...(withCurr2
+      ? [
+          {
+            key: "debitFx1",
+            label: `Debit (${withCurr3 ? glCurrGlobal2 : currCode})`,
+            width: 140,
+          },
+          {
+            key: "creditFx1",
+            label: `Credit (${withCurr3 ? glCurrGlobal2 : currCode})`,
+            width: 140,
+          },
+        ]
+      : []),
+    ...(withCurr3
+      ? [
+          { key: "debitFx2", label: `Debit (${glCurrGlobal3})`, width: 140 },
+          { key: "creditFx2", label: `Credit (${glCurrGlobal3})`, width: 140 },
+        ]
+      : []),
     { key: "slRefNo", label: "SL Ref. No.", width: 120 },
     { key: "slRefDate", label: "SL Ref. Date", width: 130 },
     { key: "remarks", label: "Remarks", width: 160 },
@@ -1652,7 +1761,8 @@ const FGST = () => {
   } = useResizableTableColumns(fgstGlColumnDefs);
   const sortedFgstGlRows = getSortedFgstGlRows(
     detailRowsGL.map((row, originalIndex) => ({ row, originalIndex })),
-    (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? "",
+    (entry, sortKey) =>
+      sortKey === "ln" ? entry.originalIndex + 1 : (entry.row?.[sortKey] ?? ""),
   );
 
   useEffect(() => {
@@ -1873,7 +1983,14 @@ const FGST = () => {
       row["categCode"] = value.categCode;
 
       // 🌟 ALIGNED LOGIC WITH MSST: Auto-populates the inventory account tagged in the FG category data
-      const invAccountCode = value.invAcct ?? value.invAcctCode ?? value.invAcct_code ?? value.INV_ACCT ?? value.acctCode ?? value.ACCT_CODE ?? "";
+      const invAccountCode =
+        value.invAcct ??
+        value.invAcctCode ??
+        value.invAcct_code ??
+        value.INV_ACCT ??
+        value.acctCode ??
+        value.ACCT_CODE ??
+        "";
       if (invAccountCode) {
         row["acctCode"] = invAccountCode;
         autoFillBlanks("acctCode", invAccountCode);
@@ -2103,11 +2220,15 @@ const FGST = () => {
 
   const handleCloseCurrencyModal = (selectedCurrency) => {
     if (selectedCurrency) {
-      const nextCurrCode = selectedCurrency.currCode || selectedCurrency.CURR_CODE || "";
+      const nextCurrCode =
+        selectedCurrency.currCode || selectedCurrency.CURR_CODE || "";
       updateState({
         currCode: nextCurrCode,
         currName: selectedCurrency.currName || selectedCurrency.CURR_NAME || "",
-        currRate: formatNumber(selectedCurrency.currRate || selectedCurrency.CURR_RATE || 1, 6),
+        currRate: formatNumber(
+          selectedCurrency.currRate || selectedCurrency.CURR_RATE || 1,
+          6,
+        ),
       });
       loadCurrencyMode(glCurrMode, glCurrDefault, nextCurrCode);
     }
@@ -2231,10 +2352,12 @@ const FGST = () => {
 
   const handleCloseToBranchModal = (selectedBranch) => {
     if (selectedBranch) {
-      if (normalizeCode(selectedBranch.branchCode) === normalizeCode(branchCode)) {
+      if (
+        normalizeCode(selectedBranch.branchCode) === normalizeCode(branchCode)
+      ) {
         useSwalInfoAlert(
           "Invalid Branch Selection",
-          `The ${isIntransitToBranch() ? "From Branch" : "To Branch"} must not be the same as your current branch.`
+          `The ${isIntransitToBranch() ? "From Branch" : "To Branch"} must not be the same as your current branch.`,
         );
         updateState({ toBranchModalOpen: false });
         return;
@@ -2317,21 +2440,23 @@ const FGST = () => {
     isIntransitWarehouse({ whCode: toWhCode, whName: toWhName });
 
   const getFromWarehouseLookupProps = () => {
-    const targetBranchCode = isIntransitToBranch() ? (toBranchCode || "") : (branchCode || "");
+    const targetBranchCode = isIntransitToBranch()
+      ? toBranchCode || ""
+      : branchCode || "";
     let filterStr = "ActiveOnly";
 
     if (targetBranchCode) {
       if (isInterWarehouseOrInterBranch()) {
         filterStr = `ByBC${targetBranchCode}`;
       } else if (isIntransitTransfer()) {
-        filterStr = `IntransitOnly`; 
+        filterStr = `IntransitOnly`;
       }
     }
-    
+
     if (toWhCode) {
       filterStr += `|ExcludeWh:${toWhCode}`;
     }
-    
+
     return {
       filter: filterStr,
       branchCode: targetBranchCode,
@@ -2339,7 +2464,9 @@ const FGST = () => {
   };
 
   const getToWarehouseLookupProps = () => {
-    const targetBranchCode = isInterBranch() ? (toBranchCode || "") : (branchCode || "");
+    const targetBranchCode = isInterBranch()
+      ? toBranchCode || ""
+      : branchCode || "";
     let filterStr = "ActiveOnly";
 
     if (targetBranchCode) {
@@ -2349,11 +2476,11 @@ const FGST = () => {
         filterStr = `IntransitOnly`;
       }
     }
-    
+
     if (fromWhCode) {
       filterStr += `|ExcludeWh:${fromWhCode}`;
     }
-    
+
     return {
       filter: filterStr,
       branchCode: targetBranchCode,
@@ -2405,11 +2532,11 @@ const FGST = () => {
     }
 
     if (isInterWarehouseOrInterBranch() && !fromWhCode) {
-       useSwalInfoAlert(
-         "From Warehouse Required", 
-         "Please select From Warehouse first."
-       );
-       return;
+      useSwalInfoAlert(
+        "From Warehouse Required",
+        "Please select From Warehouse first.",
+      );
+      return;
     }
 
     updateState({ towarehouseLookupOpen: true });
@@ -2428,16 +2555,24 @@ const FGST = () => {
     if (row) {
       const selectedIsTransit = isIntransitWarehouse(row);
       const selectedBranchCode = getWarehouseBranchCode(row);
-      const targetBranchCode = isIntransitToBranch() ? toBranchCode : branchCode;
+      const targetBranchCode = isIntransitToBranch()
+        ? toBranchCode
+        : branchCode;
 
       if (isIntransitTransfer() && !selectedIsTransit) {
-        useSwalInfoAlert("Invalid From Warehouse", "Kapag Intransit to Branch/Warehouse ang transaction, dapat INTRANSIT ang From Warehouse.");
+        useSwalInfoAlert(
+          "Invalid From Warehouse",
+          "Kapag Intransit to Branch/Warehouse ang transaction, dapat INTRANSIT ang From Warehouse.",
+        );
         updateState({ fromwarehouseLookupOpen: false });
         return;
       }
 
       if (isInterWarehouseOrInterBranch() && selectedIsTransit) {
-        useSwalInfoAlert("Invalid From Warehouse", "Kapag Inter Branch/Warehouse ang transaction, dapat physical warehouse ang From Warehouse, hindi Intransit.");
+        useSwalInfoAlert(
+          "Invalid From Warehouse",
+          "Kapag Inter Branch/Warehouse ang transaction, dapat physical warehouse ang From Warehouse, hindi Intransit.",
+        );
         updateState({ fromwarehouseLookupOpen: false });
         return;
       }
@@ -2456,16 +2591,16 @@ const FGST = () => {
       updateState({
         fromWhCode: row.whCode,
         fromWhName: row.whName,
-        toWhCode: newToWhCode, 
+        toWhCode: newToWhCode,
         toWhName: newToWhName,
         detailRows: (detailRows || []).map((item) => ({
           ...item,
           whouseCode: row.whCode,
           frmwhouseCode: row.whCode,
           locCode: selectedIsTransit ? "INTRANSIT" : "",
-          toWHcode: newToWhCode, 
+          toWHcode: newToWhCode,
           towhouseCode: newToWhCode,
-          tolocCode: newToWhCode === "INT" ? "INTRANSIT" : "", 
+          tolocCode: newToWhCode === "INT" ? "INTRANSIT" : "",
         })),
         detailRowsGL: [],
       });
@@ -2489,13 +2624,19 @@ const FGST = () => {
       }
 
       if (isInterWarehouseOrInterBranch() && !selectedIsTransit) {
-        useSwalInfoAlert("Invalid To Warehouse", "Kapag Inter Branch/Warehouse ang transaction, dapat INTRANSIT ang To Warehouse.");
+        useSwalInfoAlert(
+          "Invalid To Warehouse",
+          "Kapag Inter Branch/Warehouse ang transaction, dapat INTRANSIT ang To Warehouse.",
+        );
         updateState({ towarehouseLookupOpen: false });
         return;
       }
 
       if (isIntransitTransfer() && selectedIsTransit) {
-        useSwalInfoAlert("Invalid To Warehouse", "Kapag Intransit to Branch/Warehouse ang transaction, dapat physical warehouse ang To Warehouse, hindi Intransit.");
+        useSwalInfoAlert(
+          "Invalid To Warehouse",
+          "Kapag Intransit to Branch/Warehouse ang transaction, dapat physical warehouse ang To Warehouse, hindi Intransit.",
+        );
         updateState({ towarehouseLookupOpen: false });
         return;
       }
@@ -2530,15 +2671,15 @@ const FGST = () => {
       const endpoint = "getInvLookupFG";
       const lookupPayload = {
         userCode,
-        branchCode: apiSourceBranch,      
-        toBranchCode: apiToBranch,        
+        branchCode: apiSourceBranch,
+        toBranchCode: apiToBranch,
         whouseCode: fromWhCode || "",
         toWHcode: toWhCode || "",
         locCode: "",
         docType: "FGST",
         tranType: itemSingleSelect ? "IRR" : selectedTranType,
-        refDocNo: refDocNo1 || "",        
-        wtNo: refDocNo1 || ""
+        refDocNo: refDocNo1 || "",
+        wtNo: refDocNo1 || "",
       };
 
       const [response, colConfig] = await Promise.all([
@@ -2585,12 +2726,24 @@ const FGST = () => {
       const originalKey = item?.uniqueKey ?? "";
 
       // 🌟 FALLBACK RESOLUTION FOR ACCOUNT CODE MAPPING (ALIGNED WITH MSST)
-      const invAccountCode = item?.invAcct ?? item?.invAcctCode ?? item?.invAcct_code ?? item?.INV_ACCT ?? item?.acctCode ?? item?.ACCT_CODE ?? "";
+      const invAccountCode =
+        item?.invAcct ??
+        item?.invAcctCode ??
+        item?.invAcct_code ??
+        item?.INV_ACCT ??
+        item?.acctCode ??
+        item?.ACCT_CODE ??
+        "";
 
       if (itemSingleSelect && selectedTranType === "IR") {
         handleDetailChange(selectedRowIndex, "itemCode", item, false);
         if (invAccountCode) {
-          handleDetailChange(selectedRowIndex, "acctCode", { acctCode: invAccountCode }, false);
+          handleDetailChange(
+            selectedRowIndex,
+            "acctCode",
+            { acctCode: invAccountCode },
+            false,
+          );
         }
         updateState({ itemSingleSelect: false, fgLookupModalOpen: false });
         return [];
@@ -2611,8 +2764,12 @@ const FGST = () => {
         qstatCode: item?.qstatCode ?? "",
         whouseCode: item?.whouseCode ?? fromWhCode ?? "",
         toWHcode: toWhCode ?? "",
-        locCode: item?.locCode ?? (isIntransitWarehouse(item?.whouseCode ?? fromWhCode ?? "") ? "INTRANSIT" : ""), 
-        tolocCode: isIntransitWarehouse(toWhCode ?? "") ? "INTRANSIT" : "", 
+        locCode:
+          item?.locCode ??
+          (isIntransitWarehouse(item?.whouseCode ?? fromWhCode ?? "")
+            ? "INTRANSIT"
+            : ""),
+        tolocCode: isIntransitWarehouse(toWhCode ?? "") ? "INTRANSIT" : "",
         acctCode: invAccountCode, // 🌟 Updated from blank string to dynamic variable
         sltypeCode: "",
         rcCode: "",
@@ -2702,12 +2859,21 @@ const FGST = () => {
           onDetails={() => setTopTab("details")}
           onHistory={() => setTopTab("history")}
           disableRouteNavigation={true}
-          isSaveDisabled={isSaveDisabled || isFormDisabled || ((detailRows?.length || 0) + (detailRowsGL?.length || 0) === 0)}
+          isSaveDisabled={
+            isSaveDisabled ||
+            isFormDisabled ||
+            (detailRows?.length || 0) + (detailRowsGL?.length || 0) === 0
+          }
           isResetDisabled={isResetDisabled}
           isAttachDisabled={!documentID}
           isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
           isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
-          isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED" || displayStatus === "CLOSED"}
+          isCancelDisabled={
+            !documentID ||
+            displayStatus === "CANCELLED" ||
+            displayStatus === "FINALIZED" ||
+            displayStatus === "CLOSED"
+          }
           detailsRoute={detailsRoute}
         />
       </div>
@@ -2723,7 +2889,9 @@ const FGST = () => {
               <p className="global-tran-headerstat-text-ui">
                 Transaction Status
               </p>
-              <h1 className={`global-tran-stat-text-ui uppercase ${statusColor}`}>
+              <h1
+                className={`global-tran-stat-text-ui uppercase ${statusColor}`}
+              >
                 {displayStatus}
               </h1>
             </div>
@@ -2753,7 +2921,7 @@ const FGST = () => {
               <div className="global-tran-textbox-group-div-ui">
                 <div className="relative">
                   <FieldRenderer
-                    id="branchName" 
+                    id="branchName"
                     label="Branch"
                     type="lookup"
                     value={branchName || ""}
@@ -2764,7 +2932,9 @@ const FGST = () => {
                       isFormDisabled
                     }
                     lookupDisabled={isFetchDisabled}
-                    onLookup={() => !isFormDisabled && updateState({ branchModalOpen: true })}
+                    onLookup={() =>
+                      !isFormDisabled && updateState({ branchModalOpen: true })
+                    }
                     placeholder=" "
                   />
                 </div>
@@ -2809,7 +2979,10 @@ const FGST = () => {
                       }}
                     />
                   </div>
-                  <label htmlFor="fgstDate" className="global-ref-floating-label">
+                  <label
+                    htmlFor="fgstDate"
+                    className="global-ref-floating-label"
+                  >
                     FGST Date
                   </label>
                 </div>
@@ -2829,7 +3002,11 @@ const FGST = () => {
                       value: getTranTypeCode(type),
                       label: getTranTypeName(type),
                     }))}
-                    placeholder={tranTypes.length > 0 ? "Select Tran Type" : "Loading Tran Types..."}
+                    placeholder={
+                      tranTypes.length > 0
+                        ? "Select Tran Type"
+                        : "Loading Tran Types..."
+                    }
                   />
                 </div>
 
@@ -2845,12 +3022,15 @@ const FGST = () => {
                     disabled={isFormDisabled || isIntransitTransfer()}
                     lookupDisabled={isFetchDisabled || isIntransitTransfer()}
                     onLookup={() => {
-                        if (isFormDisabled || isIntransitTransfer()) return;
-                        if (isIntransitToBranch() && !toBranchCode) {
-                            useSwalInfoAlert("From Branch Required", "Please select From Branch first before selecting From Warehouse.");
-                            return;
-                        }
-                        updateState({ fromwarehouseLookupOpen: true })
+                      if (isFormDisabled || isIntransitTransfer()) return;
+                      if (isIntransitToBranch() && !toBranchCode) {
+                        useSwalInfoAlert(
+                          "From Branch Required",
+                          "Please select From Branch first before selecting From Warehouse.",
+                        );
+                        return;
+                      }
+                      updateState({ fromwarehouseLookupOpen: true });
                     }}
                   />
                 </div>
@@ -2865,9 +3045,12 @@ const FGST = () => {
                     readOnly
                     placeholder=" "
                     disabled={isFormDisabled || isInterWarehouseOrInterBranch()}
-                    lookupDisabled={isFetchDisabled || isInterWarehouseOrInterBranch()}
+                    lookupDisabled={
+                      isFetchDisabled || isInterWarehouseOrInterBranch()
+                    }
                     onLookup={() => {
-                      if (isFormDisabled || isInterWarehouseOrInterBranch()) return;
+                      if (isFormDisabled || isInterWarehouseOrInterBranch())
+                        return;
                       handleOpenToWarehouseLookup();
                     }}
                   />
@@ -2910,7 +3093,9 @@ const FGST = () => {
                   <div className="relative group">
                     <FieldRenderer
                       id="toBranchName"
-                      label={isIntransitToBranch() ? "From Branch" : "To Branch"}
+                      label={
+                        isIntransitToBranch() ? "From Branch" : "To Branch"
+                      }
                       type="lookup"
                       required
                       value={toBranchName || ""}
@@ -2975,13 +3160,24 @@ const FGST = () => {
                   <tr>
                     {visibleFgstDetailColumns.map((column) => (
                       <Fragment key={`detail-header-${column.key}`}>
-                        {renderFgstDetailHeader(column.label, column.key, column.width, {
-                          orderedColumns: visibleFgstDetailColumns,
-                        })}
+                        {renderFgstDetailHeader(
+                          column.label,
+                          column.key,
+                          column.width,
+                          {
+                            orderedColumns: visibleFgstDetailColumns,
+                          },
+                        )}
                       </Fragment>
                     ))}
                     {!isFormDisabled && (
-                      <th key="detail-actions" className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900" style={transactionActionsHeaderStyle}>Actions</th>
+                      <th
+                        key="detail-actions"
+                        className="global-tran-th-ui sticky top-0 right-0 bg-blue-100 dark:bg-blue-900"
+                        style={transactionActionsHeaderStyle}
+                      >
+                        Actions
+                      </th>
                     )}
                   </tr>
                   {renderFgstDetailHeaderContextMenu()}
@@ -2989,7 +3185,10 @@ const FGST = () => {
 
                 <tbody className="relative">
                   {sortedFgstDetailRows.map(({ row, originalIndex: index }) => (
-                    <tr key={`${row.uniqueKey || row.itemCode || "row"}-${index}`} className="global-tran-tr-ui">
+                    <tr
+                      key={`${row.uniqueKey || row.itemCode || "row"}-${index}`}
+                      className="global-tran-tr-ui"
+                    >
                       <td className="global-tran-td-ui text-center">
                         {index + 1}
                       </td>
@@ -3240,19 +3439,21 @@ const FGST = () => {
                             value={row.whouseCode || ""}
                             readOnly
                           />
-                          {!isFormDisabled && row.operation !== "S" && !hideFromWarehouseAndLocationSearch() && (
-                            <FontAwesomeIcon
-                              icon={faMagnifyingGlass}
-                              className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                              onClick={() => {
-                                updateState({
-                                  selectedRowIndex: index,
-                                  warehouseLookupOpen: true,
-                                  accountModalSource: "whouseCode",
-                                });
-                              }}
-                            />
-                          )}
+                          {!isFormDisabled &&
+                            row.operation !== "S" &&
+                            !hideFromWarehouseAndLocationSearch() && (
+                              <FontAwesomeIcon
+                                icon={faMagnifyingGlass}
+                                className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                                onClick={() => {
+                                  updateState({
+                                    selectedRowIndex: index,
+                                    warehouseLookupOpen: true,
+                                    accountModalSource: "whouseCode",
+                                  });
+                                }}
+                              />
+                            )}
                         </div>
                       </td>
 
@@ -3264,19 +3465,21 @@ const FGST = () => {
                             value={row.toWHcode || ""}
                             readOnly
                           />
-                          {!isFormDisabled && row.operation !== "S" && !isInterWarehouseOrInterBranch() && (
-                            <FontAwesomeIcon
-                              icon={faMagnifyingGlass}
-                              className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                              onClick={() => {
-                                updateState({
-                                  selectedRowIndex: index,
-                                  warehouseLookupOpen: true,
-                                  accountModalSource: "toWHcode",
-                                });
-                              }}
-                            />
-                          )}
+                          {!isFormDisabled &&
+                            row.operation !== "S" &&
+                            !isInterWarehouseOrInterBranch() && (
+                              <FontAwesomeIcon
+                                icon={faMagnifyingGlass}
+                                className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                                onClick={() => {
+                                  updateState({
+                                    selectedRowIndex: index,
+                                    warehouseLookupOpen: true,
+                                    accountModalSource: "toWHcode",
+                                  });
+                                }}
+                              />
+                            )}
                         </div>
                       </td>
 
@@ -3288,19 +3491,22 @@ const FGST = () => {
                             value={row.locCode || ""}
                             readOnly
                           />
-                          {!isFormDisabled && row.operation !== "S" && !hideFromWarehouseAndLocationSearch() && !isIntransitWarehouse(row.whouseCode) && (
-                            <FontAwesomeIcon
-                              icon={faMagnifyingGlass}
-                              className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                              onClick={() => {
-                                updateState({
-                                  selectedRowIndex: index,
-                                  locationLookupOpen: true,
-                                  accountModalSource: "locCode",
-                                });
-                              }}
-                            />
-                          )}
+                          {!isFormDisabled &&
+                            row.operation !== "S" &&
+                            !hideFromWarehouseAndLocationSearch() &&
+                            !isIntransitWarehouse(row.whouseCode) && (
+                              <FontAwesomeIcon
+                                icon={faMagnifyingGlass}
+                                className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                                onClick={() => {
+                                  updateState({
+                                    selectedRowIndex: index,
+                                    locationLookupOpen: true,
+                                    accountModalSource: "locCode",
+                                  });
+                                }}
+                              />
+                            )}
                         </div>
                       </td>
 
@@ -3312,19 +3518,25 @@ const FGST = () => {
                             value={row.tolocCode || ""}
                             readOnly
                           />
-                          {!isFormDisabled && row.operation !== "S" && !isIntransitWarehouse(row.toWHcode) && !isWarehouseTransfer(selectedTranType, tranTypes) && (
-                            <FontAwesomeIcon
-                              icon={faMagnifyingGlass}
-                              className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
-                              onClick={() => {
-                                updateState({
-                                  selectedRowIndex: index,
-                                  locationLookupOpen: true,
-                                  accountModalSource: "tolocCode",
-                                });
-                              }}
-                            />
-                          )}
+                          {!isFormDisabled &&
+                            row.operation !== "S" &&
+                            !isIntransitWarehouse(row.toWHcode) &&
+                            !isWarehouseTransfer(
+                              selectedTranType,
+                              tranTypes,
+                            ) && (
+                              <FontAwesomeIcon
+                                icon={faMagnifyingGlass}
+                                className="absolute right-2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+                                onClick={() => {
+                                  updateState({
+                                    selectedRowIndex: index,
+                                    locationLookupOpen: true,
+                                    accountModalSource: "tolocCode",
+                                  });
+                                }}
+                              />
+                            )}
                         </div>
                       </td>
 
@@ -3462,12 +3674,23 @@ const FGST = () => {
                       </td>
 
                       {!isFormDisabled && (
-                        <td className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black" style={transactionActionsCellStyle}>
+                        <td
+                          className="global-tran-td-ui text-center sticky right-0 bg-white dark:bg-black"
+                          style={transactionActionsCellStyle}
+                        >
                           <div className="flex items-center justify-center gap-1">
-                            <button type="button" className="global-tran-td-button-add-ui" onClick={() => handleAddRow(index)}>
+                            <button
+                              type="button"
+                              className="global-tran-td-button-add-ui"
+                              onClick={() => handleAddRow(index)}
+                            >
                               <FontAwesomeIcon icon={faPlus} />
                             </button>
-                            <button type="button" className="global-tran-td-button-delete-ui" onClick={() => handleDeleteRow(index)}>
+                            <button
+                              type="button"
+                              className="global-tran-td-button-delete-ui"
+                              onClick={() => handleDeleteRow(index)}
+                            >
                               <FontAwesomeIcon icon={faTrashAlt} />
                             </button>
                           </div>
@@ -3557,16 +3780,24 @@ const FGST = () => {
                   <tr>
                     {fgstGlColumnDefs.map((column) => (
                       <Fragment key={`gl-header-${column.key}`}>
-                        {renderFgstGlHeader(column.label, column.key, column.width, {
-                          orderedColumns: fgstGlColumnDefs,
-                        })}
+                        {renderFgstGlHeader(
+                          column.label,
+                          column.key,
+                          column.width,
+                          {
+                            orderedColumns: fgstGlColumnDefs,
+                          },
+                        )}
                       </Fragment>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="relative">
                   {sortedFgstGlRows.map(({ row, originalIndex: index }) => (
-                    <tr key={`${row.acctCode || "gl"}-${index}`} className="global-tran-tr-ui">
+                    <tr
+                      key={`${row.acctCode || "gl"}-${index}`}
+                      className="global-tran-tr-ui"
+                    >
                       <td className="global-tran-td-ui text-center">
                         {index + 1}
                       </td>
@@ -3577,6 +3808,7 @@ const FGST = () => {
                             type="text"
                             className="w-[100px] pr-6 global-tran-td-inputclass-ui cursor-pointer"
                             value={row.acctCode || ""}
+                            readOnly={isFormDisabled}
                             onChange={(e) =>
                               handleDetailChangeGL(
                                 index,
@@ -3638,6 +3870,7 @@ const FGST = () => {
                           type="text"
                           className="w-[100px] global-tran-td-inputclass-ui"
                           value={row.sltypeCode || ""}
+                          readOnly={isFormDisabled}
                           onChange={(e) =>
                             handleDetailChangeGL(
                               index,
@@ -3687,6 +3920,7 @@ const FGST = () => {
                           type="text"
                           className="w-[300px] global-tran-td-inputclass-ui"
                           value={row.particular || ""}
+                          readOnly={isFormDisabled}
                           onChange={(e) =>
                             handleDetailChange(
                               index,
@@ -4061,7 +4295,6 @@ const FGST = () => {
                           }
                         />
                       </td>
-
                     </tr>
                   ))}
                 </tbody>
@@ -4201,7 +4434,7 @@ const FGST = () => {
         {showSignatoryModal && (
           <DocumentSignatories
             isOpen={showSignatoryModal}
-        params={{ noReprints, documentID, docType, docNo: documentNo }}
+            params={{ noReprints, documentID, docType, docNo: documentNo }}
             onClose={handleCloseSignatory}
             onCancel={() => updateState({ showSignatoryModal: false })}
           />
@@ -4262,7 +4495,7 @@ const FGST = () => {
                 ? detailRows[selectedRowIndex]?.itemCode
                 : null
             }
-          invType="FG"
+            invType="FG"
           />
         )}
 
@@ -4273,7 +4506,7 @@ const FGST = () => {
             filter={getFromWarehouseLookupProps().filter}
             source={accountModalSource}
             branchCode={getFromWarehouseLookupProps().branchCode}
-          invType="FG"
+            invType="FG"
           />
         )}
 
@@ -4284,7 +4517,7 @@ const FGST = () => {
             filter={getToWarehouseLookupProps().filter}
             source={accountModalSource}
             branchCode={getToWarehouseLookupProps().branchCode}
-          invType="FG"
+            invType="FG"
           />
         )}
 
