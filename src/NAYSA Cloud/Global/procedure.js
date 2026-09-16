@@ -27,7 +27,7 @@ export const formatDateToMMDDYYYY = (value) => {
 
 
 
-export const useGenerateGLEntries = async (docCode, glData) => {
+export const useGenerateGLEntries = async (docCode, glData, options = {}) => {
     const payload = { json_data: glData };
 
     console.log(JSON.stringify(payload));
@@ -59,15 +59,21 @@ export const useGenerateGLEntries = async (docCode, glData) => {
             }
 
             let glEntries;
+            let invoiceDetails = [];
             try {
                 glEntries = resultData.result ? JSON.parse(resultData.result) : [];
                 if (!Array.isArray(glEntries)) glEntries = [glEntries];
+
+                if (resultData.invoiceDetails) {
+                    invoiceDetails = JSON.parse(resultData.invoiceDetails);
+                    if (!Array.isArray(invoiceDetails)) invoiceDetails = [invoiceDetails];
+                }
             } catch (parseError) {
-                throw new Error("Failed to parse GL entries.");
+                throw new Error("Failed to parse generated transaction entries.");
             }
 
             console.log(glEntries)
-           return glEntries.map((entry, idx) => {
+           const formattedGlEntries = glEntries.map((entry, idx) => {
           const rawSlRefDate = entry.slRefDate ?? "";
 
           return {
@@ -86,6 +92,10 @@ export const useGenerateGLEntries = async (docCode, glData) => {
                   : "",
           };
           });
+
+          return options.includeInvoiceDetails
+              ? { glEntries: formattedGlEntries, invoiceDetails }
+              : formattedGlEntries;
         }
         return null;
     } catch (error) {
@@ -99,7 +109,7 @@ export const useGenerateGLEntries = async (docCode, glData) => {
 
 export const useTransactionUpsert = async (docCode, glData, updateState, idKey, noKey) => {
     try {
-        updateState({ isLoading: true });
+        updateState({ isLoading: true, showSpinner: true });
         const payload = { json_data: glData };
         console.log(JSON.stringify(payload))
         const response = await postRequest("upsert" + docCode, JSON.stringify(payload));
@@ -113,6 +123,7 @@ export const useTransactionUpsert = async (docCode, glData, updateState, idKey, 
             const returnedErrorMsg = resultData['errorMsg'] || resultData['message'];
 
             if (returnedErrorMsg && returnedErrorCount > 0) {
+                updateState({ showSpinner: false });
                 if (returnedErrorMsg.includes("Unbalanced")) {
                     const glRows = Array.isArray(glData.dt2) ? glData.dt2 : [];
                     const tDebit = glRows.reduce((sum, row) => sum + (parseFloat(row.debit) || 0), 0);
@@ -142,6 +153,7 @@ export const useTransactionUpsert = async (docCode, glData, updateState, idKey, 
         } 
 
         if (response?.success === false || response?.status === 'error') {
+            updateState({ showSpinner: false });
             useSwalErrorAlert("Validation Failed", response?.message || "Unable to save transaction.");
         }
         return null;
@@ -159,10 +171,11 @@ export const useTransactionUpsert = async (docCode, glData, updateState, idKey, 
             message: error.message,
         });
 
+        updateState({ showSpinner: false });
         useSwalErrorAlert("Connection Error", backendMessage);
         return null;
     } finally {
-        updateState({ isSaveDisabled: false, isResetDisabled: false, isLoading: false });
+        updateState({ isSaveDisabled: false, isResetDisabled: false, isLoading: false, showSpinner: false });
     }
 };
 
