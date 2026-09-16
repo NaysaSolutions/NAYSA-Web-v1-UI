@@ -230,35 +230,20 @@ const APAdvancesTab = forwardRef(function APAdvancesTab({ registerActions }, ref
     updateState({ isLoading: true });
 
     try {
-      const [detailRes, summaryRes] = await Promise.all([
-        requestOnce(
-          `rows:${ENDPOINT_DETAIL}:${branchCode}:${vendCode}:${status}`,
-          () =>
-            fetchData(ENDPOINT_DETAIL, {
-              json_data: { json_data: { branchCode, vendCode, status } },
-            })
-        ),
-        requestOnce(
-          `rows:${ENDPOINT_SUMMARY}:${branchCode}:${vendCode}:${status}`,
-          () =>
-            fetchData(ENDPOINT_SUMMARY, {
-              json_data: { json_data: { branchCode, vendCode, status } },
-            })
-        ),
-      ]);
-
-      const dtDetail = detailRes?.data?.[0]?.result
-        ? JSON.parse(detailRes.data[0].result)
-        : [];
-
+      const summaryRes = await requestOnce(
+        `rows:${ENDPOINT_SUMMARY}:summary:${branchCode}:${vendCode}:${status}`,
+        () =>
+          fetchData(ENDPOINT_SUMMARY, {
+            json_data: { json_data: { branchCode, vendCode, status, viewMode: "Summary" } },
+          })
+      );
       const dtSummary = summaryRes?.data?.[0]?.result
         ? JSON.parse(summaryRes.data[0].result)
         : [];
 
-      const rowsBottom = Array.isArray(dtDetail?.[0]?.dt1) ? dtDetail[0].dt1 : [];
       const rowsTop = Array.isArray(dtSummary?.[0]?.dt2) ? dtSummary[0].dt2 : [];
 
-      if (rowsBottom.length === 0 && rowsTop.length === 0) {
+      if (rowsTop.length === 0) {
         updateState({
           apAdvancesData: [],
           apAdvancesDataUnfiltered: [],
@@ -270,8 +255,8 @@ const APAdvancesTab = forwardRef(function APAdvancesTab({ registerActions }, ref
       }
 
       updateState({
-        apAdvancesData: rowsBottom,
-        apAdvancesDataUnfiltered: rowsBottom,
+        apAdvancesData: [],
+        apAdvancesDataUnfiltered: [],
         apAdvancesDataS: rowsTop,
       });
     } catch (err) {
@@ -282,15 +267,22 @@ const APAdvancesTab = forwardRef(function APAdvancesTab({ registerActions }, ref
   }, [branchCode, vendCode, status, requestOnce]);
 
   const fetchRecordperPayee = useCallback(
-    async (selectedPayee) => {
+    async (selectedAdvance) => {
       updateState({ isLoading: true });
       try {
         const resp = await requestOnce(
-          `rows:${ENDPOINT_DETAIL}:${branchCode}:${selectedPayee}:${status}`,
+          `rows:${ENDPOINT_DETAIL}:detail:${selectedAdvance.apAdvId || selectedAdvance.docNo}`,
           () =>
             fetchData(ENDPOINT_DETAIL, {
               json_data: {
-                json_data: { branchCode, vendCode: selectedPayee, status },
+                json_data: {
+                  branchCode: selectedAdvance.branchCode || branchCode,
+                  vendCode: selectedAdvance.vendCode,
+                  apAdvId: selectedAdvance.apAdvId,
+                  advanceDocCode: selectedAdvance.docCode,
+                  advanceDocNo: selectedAdvance.docNo,
+                  viewMode: "Detail",
+                },
               },
             })
         );
@@ -308,7 +300,7 @@ const APAdvancesTab = forwardRef(function APAdvancesTab({ registerActions }, ref
         updateState({ isLoading: false });
       }
     },
-    [branchCode, status, requestOnce]
+    [branchCode, requestOnce]
   );
 
   useEffect(() => {
@@ -551,7 +543,7 @@ const APAdvancesTab = forwardRef(function APAdvancesTab({ registerActions }, ref
 
   const handleViewTop = useCallback(
     (row) => {
-      fetchRecordperPayee(row.vendCode);
+      fetchRecordperPayee(row);
       updateState({ vendName: row.vendName, vendCode: row.vendCode });
     },
     [fetchRecordperPayee]

@@ -561,13 +561,13 @@ const APV = () => {
     const openPOAPVLookupColumns = [
     { key: "branchCode", label: "Branch", width: 80 },
     { key: "docType", label: "Document Code", width: 110 },
-    { key: "poJoNo", label: "PO No", width: 120 },
-    { key: "poJoDate", label: "PO Date", width: 110 },
+    { key: "poJoNo", label: "PO / JO No", width: 120 },
+    { key: "poJoDate", label: "PO / JO Date", width: 110 },
     { key: "vendCode", label: "Payee Code", width: 110 },
     { key: "vendName", label: "Payee Name", width: 220 },
     { key: "payterm", label: "Payterm", width: 180 },
     { key: "currCode", label: "Currency", width: 90 },
-    { key: "poAmount", label: "PO Amount", width: 130, type: "amount" },
+    { key: "poAmount", label: "PO / JO Amount", width: 130, type: "amount" },
     { key: "vatCode", label: "VAT Code", width: 100 },
     { key: "vatAmount", label: "VAT Amount", width: 130, type: "amount" },
   ];
@@ -637,15 +637,15 @@ const APV = () => {
         vatCode: row.vatCode || "",
       }));
       if (normalizedRows.length === 0) {
-        useSwalErrorAlert("APV Advances Reference", "No PO with advance payment terms found for this supplier.");
+        useSwalErrorAlert("APV Advances Reference", "No PO or JO with advance payment terms found for this supplier.");
         return;
       }
 
       updateState({
         globalLookupRow: normalizedRows,
         globalLookupHeader: openPOAPVLookupColumns,
-        globalLookupTitle: "Open PO References",
-        globalLookupBtnCaption: "Get Selected PO",
+        globalLookupTitle: "Open PO / JO References",
+        globalLookupBtnCaption: "Get Selected PO / JO",
         showRRRefModal: true,
         modalContext: "openPOAdvance",
       });
@@ -2435,9 +2435,9 @@ const APV = () => {
             const payeeRow = selectedVendCode ? await fetchPayeeByCode(selectedVendCode) : null;
 
             // VAT
-            const vatCode = item.vatCode || payeeRow?.vatCode || "";
+            const vatCode = item.vatCode || "";
             const vatData = vatCode ? await useTopVatRow(vatCode) : null;
-            const vatName = vatData?.vatName || item.vatName || "";
+            const vatName = item.vatName || vatData?.vatName || "";
 
             const vatAmount =
               parseFormattedNumber(
@@ -4003,14 +4003,14 @@ const APV = () => {
     : isReplenishmentAPType
       ? "Open Reference PCV"
       : isAdvancesAPType
-        ? "Open Reference PO"
+        ? "Open Reference PO / JO"
         : "Open Reference RR";
   const openReferenceDescription = isImportationAPType
     ? "Pull LC Importation details"
     : isReplenishmentAPType
       ? "Pull PCV details"
       : isAdvancesAPType
-        ? "Pull PO advances"
+        ? "Pull PO or JO advances"
         : "Pull RR details";
 
   // PAGE AND MODAL LAYOUT
