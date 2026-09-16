@@ -2800,7 +2800,7 @@ const renderCrGlCell = (columnKey, row, index) => {
                       value={depAcctName || ""}
                       disabled={isFormDisabled}
                       readOnly
-                      lookupDisabled={isFetchDisabled}
+                      lookupDisabled={isFormDisabled}
                       onLookup={() => updateState({ showBankMastModal: true })}
                     />
 
