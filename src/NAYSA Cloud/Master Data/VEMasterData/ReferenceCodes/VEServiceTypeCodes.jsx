@@ -545,7 +545,7 @@ const VEServiceTypeCodes = forwardRef((
             `Are you sure you want to delete "${row.code}"?`
           );
 
-        if (!confirmed) {
+        if (!confirmed?.isConfirmed) {
           return;
         }
         deleteMutation.mutate({

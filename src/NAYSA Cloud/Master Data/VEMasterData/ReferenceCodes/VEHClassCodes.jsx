@@ -424,7 +424,7 @@ const VEClassCodes = forwardRef((
         if (missing.length) {
           await useSwalErrorAlert(
             "Validation Error",
-            `Please fill in the required field(s): • ${missing.join("\n• ")}`
+            `Please fill in the required field(s): \n• ${missing.join("\n• ")}`
           );
           return;
         }
@@ -816,7 +816,7 @@ const VEClassCodes = forwardRef((
               />
 
               <FieldRenderer 
-              label="VehicleClass Description" 
+              label="Vehicle Class Description" 
               required 
               value={form.description}
               onChange={(v) => setField( "description",v ?? "")}

@@ -269,7 +269,7 @@ const PayTermRef = forwardRef(({
       paytermName: String(form.paytermName || "").trim(),
       dueDays,
       advances: form.advances === "Y" ? "Y" : "",
-      active: form.active === "Y" ? "Y" : "",
+      active: form.active,
       userCode,
     };
 
@@ -362,7 +362,8 @@ const PayTermRef = forwardRef(({
         ...record,
         advances: record.advances || record.ADVANCES || "",
         daysDue: record.daysDue || record.DAYS_DUE || record.dueDays || "",
-        active: record.active || record.ACTIVE || "",
+        active: record.active || record.ACTIVE || record.IS_ACTIVE || "N",
+
       };
 
       setForm({ ...DEFAULT_FORM, ...normalizedRecord, __existing: true });
@@ -591,7 +592,7 @@ const PayTermRef = forwardRef(({
               { value: "Y", label: "Yes" },
               { value: "N", label: "No" },
             ]}
-            onChange={(v) => updateForm({ active: v })}
+            onChange={(v) => setField("active", v)}
           />
 
           <RegistrationInfo data={form} layout="stacked" />

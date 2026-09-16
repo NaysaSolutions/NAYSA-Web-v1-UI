@@ -75,7 +75,7 @@ const DEFAULT_FORM = {
 const normalizeRecord = (record) => ({
   areaCode: record?.areaCode ?? record?.area_code ?? record?.code ?? "",
   areaName: record?.areaName ?? record?.area_description ?? record?.name ?? "",
-  active: record?.active ?? record?.IS_ACTIVE,
+  active: record?.active ?? record?.ACTIVE ?? record?.IS_ACTIVE ?? "N",
   registeredBy: record?.registeredBy ?? "",
   registeredDate: record?.registeredDate ?? "",
   lastUpdatedBy: record?.lastUpdatedBy ?? "",
@@ -449,7 +449,7 @@ const handleEdit = useCallback(
           columns={tableColumns}
           data={tableData}
           isLoading={isInitialLoading}
-          docType="Areas"
+          docType="Area Codes"
           itemsPerPage={10}
           onRowDoubleClick={handleEdit}
           onRowClick={(row) => setSelectedRow(row)}

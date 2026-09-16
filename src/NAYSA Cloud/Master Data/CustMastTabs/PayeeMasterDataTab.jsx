@@ -307,7 +307,7 @@ const PayeeMasterDataTab = ({
   const slType = normalizeUpper(subsidiaryType);
 
   // Payee only
-  const docType = "VendMast";
+  const docType = "Payee Master Data";
 
   // Search state
   const [searchTerm, setSearchTerm] = useState("");

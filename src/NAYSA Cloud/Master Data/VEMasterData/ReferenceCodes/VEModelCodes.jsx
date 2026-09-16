@@ -171,8 +171,8 @@ const DEFAULT_FORM = {
 };
 
 const activeOptions = [
-  { value: "Y", label: "Active" },
-  { value: "N", label: "Inactive" },
+  { value: "Y", label: "Yes" },
+  { value: "N", label: "No" },
 ];
 
 /* ============================================================

@@ -71,7 +71,7 @@ const normalizeRecord = (row = {}) => ({
     row.code ?? row.partClassCode ??row.part_class_code ??row.PART_CLASS_CODE ??
     "",
   description: row.description ?? row.partClassDescription ?? row.part_class_description ?? row.PART_CLASS_DESCRIPTION ?? "",
-  active: row.active ?? row.IS_ACTIVE ?? true,    
+  active: row.active ?? row.IS_ACTIVE ?? "N",    
   registeredBy: row.registeredBy ?? row.registered_by ?? row.REGISTERED_BY ?? "",
   registeredDate: row.registeredDate ?? row.registered_date ?? row.REGISTERED_DATE ?? "",
   lastUpdatedBy: row.lastUpdatedBy ?? row.updatedBy ?? row.updated_by ?? row.UPDATED_BY ?? "",
@@ -497,13 +497,10 @@ const VEPartClass = forwardRef(
         if (missing.length) {
           await useSwalErrorAlert(
             "Validation Error",
-            `Please fill in the required field(s): • ${missing.join(
-              "\n• "
-            )}`
+            `Please fill in the required field(s): \n• ${missing.join("\n• ")}`
           );
           return;
         }
-
         // DUPLICATE CHECK
         if (!form.__existing) {
           const duplicate =
@@ -640,7 +637,7 @@ const VEPartClass = forwardRef(
             "Delete Vehicle Part Class?",
             `Are you sure you want to delete "${row.code}"?`
           );
-        if (!confirmed) {
+        if (!confirmed?.isConfirmed) {
           return;
         }
         deleteMutation.mutate({
@@ -834,7 +831,7 @@ const VEPartClass = forwardRef(
 
     const isLoading =
       isInitialLoading || saveMutation.isPending || deleteMutation.isPending;
-
+      console.log("FORM ACTIVE:", form.active);
     // UI
     return (
       <div className="flex flex-col h-full gap-3 w-full relative">
