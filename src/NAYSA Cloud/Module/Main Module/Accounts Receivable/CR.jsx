@@ -399,6 +399,7 @@ const CR = () => {
   };
   const statusColor = statusMap[normalizedDisplayStatus] || "";
   const isFormDisabled = isViewDocumentUrl || ["FINALIZED", "CANCELLED", "CLOSED"].includes(normalizedDisplayStatus);
+  const isBankSelectionDisabled = isFormDisabled;
   const crFieldLengths = {
     siNo: useGetFieldLength(tblFieldArray, "si_no"),
     checkNo: useGetFieldLength(tblFieldArray, "check_no"),
@@ -2608,7 +2609,6 @@ const renderCrGlCell = (columnKey, row, index) => {
               onReset={handleReset}
               onSave={() => handleActivityOption("Upsert")}
               onCancel={handleCancel}
-              onCopy={handleCopy}
               onAttach={handleAttach}
               activeTopTab={topTab}
               showActions={topTab === "details"}
@@ -2623,7 +2623,6 @@ const renderCrGlCell = (columnKey, row, index) => {
               isResetDisabled={state.isResetDisabled}
               isAttachDisabled={!documentID}
               isPrintDisabled={!documentID || displayStatus === "CANCELLED"}
-              isCopyDisabled={!documentID || displayStatus === "CANCELLED"}
               isCancelDisabled={!documentID || displayStatus === "CANCELLED" || displayStatus === "FINALIZED"|| displayStatus === "CLOSED"}
 
         />
@@ -2798,9 +2797,9 @@ const renderCrGlCell = (columnKey, row, index) => {
                       label="Bank Name"
                       type="lookup"
                       value={depAcctName || ""}
-                      disabled={isFormDisabled}
+                      disabled={isBankSelectionDisabled}
                       readOnly
-                      lookupDisabled={isFetchDisabled}
+                      lookupDisabled={isBankSelectionDisabled}
                       onLookup={() => updateState({ showBankMastModal: true })}
                     />
 
@@ -2988,7 +2987,7 @@ const renderCrGlCell = (columnKey, row, index) => {
                     label="Bank"
                     type="text"
                     value={bank || ""}
-                    disabled={handleFieldBehavior("disableOnNonCheckPay")}
+                    disabled={isFormDisabled}
                     onChange={(val) => updateState({ bank: val })}
                     maxLength={useGetFieldLength(tblFieldArray, "bank")}
                   />

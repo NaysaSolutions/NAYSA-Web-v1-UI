@@ -1,4 +1,11 @@
-import { useState, useEffect,useRef,useCallback, Fragment } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+  Fragment
+} from "react";
 import Swal from 'sweetalert2';
 import { useNavigate,useLocation  } from "react-router-dom";
 
@@ -882,19 +889,60 @@ const handleActivityOption = async (action) => {
 
     // --- STEP 3: UPSERT (SAVE) ---
     if (action === "Upsert") {
-      // We use currentGL variable because state updates are async 
-      // and wouldn't be available yet if we just generated them.
       const savePayload = getFormattedPayload(currentGL);
-      const response = await useTransactionUpsert(docType, savePayload, updateState, 'fgrtvId', 'fgrtvNo');
 
-      if (response) {
+      const response = await useTransactionUpsert(
+        docType,
+        savePayload,
+        updateState,
+        "fgrtvId",
+        "fgrtvNo"
+      );
+
+      if (response?.status === "success" && response?.data?.[0]) {
+        const savedRow =
+          response?.data?.data?.[0] ||
+          response?.data?.[0] ||
+          response?.[0] ||
+          response?.data ||
+          {};
+
+        const responseDocNo =
+          savedRow.fgrtvNo ||
+          savedRow.FGRTV_NO ||
+          savedRow.fgrtv_no ||
+          response?.fgrtvNo ||
+          response?.FGRTV_NO ||
+          "";
+        const responseDocId =
+          savedRow.fgrtvId ||
+          savedRow.FGRTV_ID ||
+          savedRow.fgrtv_id ||
+          response?.fgrtvId ||
+          response?.FGRTV_ID ||
+          "";
+
+        if (!responseDocNo) {
+          throw new Error(
+            "FGRTV was saved but the generated FGRTV No. was not returned."
+          );
+        }
+
+        updateState({
+          documentNo: responseDocNo,
+          documentID: responseDocId,
+          isDocNoDisabled: true,
+          isFetchDisabled: true,
+        });
+
+        await fetchTranData(responseDocNo, branchCode);
+
         const isZero = Number(noReprints) === 0;
         const onSaveAndPrint = isZero
           ? () => updateState({ showSignatoryModal: true })
-          : () => handleSaveAndPrint(response.data[0].fgrtvId);
+          : () => handleSaveAndPrint(responseDocId);
 
         useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
-        updateState({ isDocNoDisabled: true, isFetchDisabled: true });
       }
     }
   } catch (error) {
@@ -929,7 +977,33 @@ const createEmptyDetailRow = () => ({
   operation: "",
 });
 
+const validateWarehouseAndLocationForDetail = () => {
+  const selectedWarehouse = state.WHcode || state.whCode || whCode || "";
+  const selectedLocation = state.locCode || locCode || "";
+
+  if (!selectedWarehouse || !selectedLocation) {
+    useSwalErrorAlert(
+      "Validation Failed",
+      "Please select Warehouse and Location before adding item details."
+    );
+    return false;
+  }
+
+  return true;
+};
+
+const getLocationLookupWarehouseCode = () => {
+  if (accountModalSource === "locCode" && selectedRowIndex !== null) {
+    const row = detailRows[selectedRowIndex] || {};
+    return row.whouseCode || row.whCode || state.WHcode || state.whCode || whCode || "";
+  }
+
+  return state.WHcode || state.whCode || whCode || "";
+};
+
 const handleGetItem = async (index = null) => {
+  if (!validateWarehouseAndLocationForDetail()) return;
+
   const updatedRows = [...detailRows];
   const newRow = createEmptyDetailRow();
 
@@ -947,6 +1021,7 @@ const handleGetItem = async (index = null) => {
 
   const handleAddRow = async () => {
   // if (!vendCode) return;
+    if (!validateWarehouseAndLocationForDetail()) return;
 
     await handleOpenFGLookup();
     return;
@@ -1157,28 +1232,28 @@ const handleColumnLabel = (columnName) =>{
 }
   
 
-  const fgrtvDetailColumnDefs = [
-    { key: "ln", label: "LN", width: 56 },
-    { key: "itemCode", label: "Item Code", width: 120 },
-    { key: "itemName", label: "Item Name", width: 260 },
-    { key: "uomCode", label: "UOM", width: 90 },
-    { key: "quantity", label: "Quantity", width: 120 },
-    { key: "unitCost", label: handleColumnLabel("UnitCost"), width: 130 },
-    { key: "itemAmount", label: "Amount", width: 130 },
-    { key: "lotNo", label: "Lot No", width: 130 },
-    { key: "bbDate", label: "BB Date", width: 130 },
-    { key: "qstatCode", label: "Quality Status", width: 130 },
-    { key: "whouseCode", label: "Warehouse", width: 120 },
-    { key: "locCode", label: "Location", width: 120 },
-    { key: "acctCode", label: "Account Code", width: 130 },
-    { key: "rcCode", label: "RC Code", width: 120 },
-    { key: "sltypeCode", label: "SL Type Code", width: 120 },
-    { key: "slCode", label: "SL Code", width: 120 },
-    { key: "qtyHand", label: "Qty On Hand", width: 130 },
-    { key: "categCode", label: "Category", width: 120 },
-    { key: "uniqueKey", label: "Unique Key", width: 120 },
-    { key: "operation", label: "Operation", width: 120 },
-  ];
+  const fgrtvDetailColumnDefs = useMemo(() => [
+  { key: "ln", label: "LN", width: 56 },
+  { key: "itemCode", label: "Item Code", width: 120 },
+  { key: "itemName", label: "Item Name", width: 260 },
+  { key: "uomCode", label: "UOM", width: 90 },
+  { key: "quantity", label: "Quantity", width: 120 },
+  { key: "unitCost", label: "Unit Cost", width: 130 },
+  { key: "itemAmount", label: "Amount", width: 130 },
+  { key: "lotNo", label: "Lot No", width: 130 },
+  { key: "bbDate", label: "BB Date", width: 130 },
+  { key: "qstatCode", label: "Quality Status", width: 130 },
+  { key: "whouseCode", label: "Warehouse", width: 120 },
+  { key: "locCode", label: "Location", width: 120 },
+  { key: "acctCode", label: "Account Code", width: 130 },
+  { key: "rcCode", label: "RC Code", width: 120 },
+  { key: "sltypeCode", label: "SL Type Code", width: 120 },
+  { key: "slCode", label: "SL Code", width: 120 },
+  { key: "qtyHand", label: "Qty On Hand", width: 130 },
+  { key: "categCode", label: "Category", width: 120 },
+  { key: "uniqueKey", label: "Unique Key", width: 120 },
+  { key: "operation", label: "Operation", width: 120 },
+], []);
 
   const {
     getColumnStyle: getFgrtvDetailColumnStyle,
@@ -1210,57 +1285,122 @@ const handleColumnLabel = (columnName) =>{
     (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? ""
   );
 
-  const fgrtvGlColumnDefs = [
-    { key: "ln", label: "LN", width: 56 },
-    { key: "acctCode", label: "Account Code", width: 120 },
-    { key: "rcCode", label: "RC Code", width: 120 },
-    { key: "sltypeCode", label: "SL Type", width: 120 },
-    { key: "slCode", label: "SL Code", width: 120 },
-    { key: "particular", label: "Particulars", width: 320 },
-    { key: "debit", label: `Debit (${glCurrDefault})`, width: 140 },
-    { key: "credit", label: `Credit (${glCurrDefault})`, width: 140 },
-    ...(withCurr2 ? [
-      { key: "debitFx1", label: `Debit (${withCurr3 ? glCurrGlobal2 : currCode})`, width: 140 },
-      { key: "creditFx1", label: `Credit (${withCurr3 ? glCurrGlobal2 : currCode})`, width: 140 },
-    ] : []),
-    ...(withCurr3 ? [
-      { key: "debitFx2", label: `Debit (${glCurrGlobal3})`, width: 140 },
-      { key: "creditFx2", label: `Credit (${glCurrGlobal3})`, width: 140 },
-    ] : []),
-    { key: "slRefNo", label: "SL Ref. No.", width: 120 },
-    { key: "slRefDate", label: "SL Ref. Date", width: 130 },
-    { key: "remarks", label: "Remarks", width: 160 },
-  ];
+  const fgrtvGlColumnDefs = useMemo(() => [
+  { key: "ln", label: "LN", width: 56 },
+  { key: "acctCode", label: "Account Code", width: 120 },
+  { key: "rcCode", label: "RC Code", width: 120 },
+  { key: "sltypeCode", label: "SL Type", width: 120 },
+  { key: "slCode", label: "SL Code", width: 120 },
+  { key: "particular", label: "Particulars", width: 320 },
+
+  {
+    key: "debit",
+    label: `Debit (${glCurrDefault})`,
+    width: 140
+  },
+
+  {
+    key: "credit",
+    label: `Credit (${glCurrDefault})`,
+    width: 140
+  },
+
+  ...(withCurr2
+    ? [
+        {
+          key: "debitFx1",
+          label: `Debit (${withCurr3 ? glCurrGlobal2 : currCode})`,
+          width: 140,
+        },
+        {
+          key: "creditFx1",
+          label: `Credit (${withCurr3 ? glCurrGlobal2 : currCode})`,
+          width: 140,
+        },
+      ]
+    : []),
+
+  ...(withCurr3
+    ? [
+        {
+          key: "debitFx2",
+          label: `Debit (${glCurrGlobal3})`,
+          width: 140,
+        },
+        {
+          key: "creditFx2",
+          label: `Credit (${glCurrGlobal3})`,
+          width: 140,
+        },
+      ]
+    : []),
+
+  { key: "slRefNo", label: "SL Ref. No.", width: 120 },
+  { key: "slRefDate", label: "SL Ref. Date", width: 130 },
+  { key: "remarks", label: "Remarks", width: 160 },
+
+], [
+  withCurr2,
+  withCurr3,
+  glCurrDefault,
+  currCode,
+  glCurrGlobal2,
+  glCurrGlobal3,
+]);
 
   const {
-    getColumnStyle: getFgrtvGlColumnStyle,
-    getFrozenColumnStyle: getFgrtvGlFrozenStyle,
-    getOrderedColumns: getOrderedFgrtvGlColumns,
-    getSortedRows: getSortedFgrtvGlRows,
-    setColumnOrder: setFgrtvGlColumnOrder,
-    clearAllSorting: clearFgrtvGlSorting,
-    clearZeroValueOnFocus: clearFgrtvGlZeroOnFocus,
-    focusNextRowInput: focusNextFgrtvGlRowInput,
-    renderHeaderContextMenu: renderFgrtvGlHeaderContextMenu,
-    renderResizableHeader: renderFgrtvGlHeader,
-  } = useResizableTableColumns(fgrtvGlColumnDefs);
+  getColumnStyle: getFgrtvGlColumnStyle,
+  getFrozenColumnStyle: getFgrtvGlFrozenStyle,
+  getOrderedColumns: getOrderedFgrtvGlColumns,
+  getSortedRows: getSortedFgrtvGlRows,
+
+  clearAllSorting: clearFgrtvGlSorting,
+  clearZeroValueOnFocus: clearFgrtvGlZeroOnFocus,
+  focusNextRowInput: focusNextFgrtvGlRowInput,
+
+  renderHeaderContextMenu: renderFgrtvGlHeaderContextMenu,
+  renderResizableHeader: renderFgrtvGlHeader,
+} = useResizableTableColumns(fgrtvGlColumnDefs);
 
   const orderedFgrtvGlColumns = getOrderedFgrtvGlColumns(fgrtvGlColumnDefs);
   const getFgrtvGlFallbackWidth = (key) => fgrtvGlColumnDefs.find((column) => column.key === key)?.width || 120;
   const getFgrtvGlCellStyle = (key, fallbackWidth) => ({
-    ...getFgrtvGlColumnStyle(key, fallbackWidth),
-    ...getFgrtvGlFrozenStyle(key, orderedFgrtvGlColumns, fallbackWidth, { isHeader: false }),
-  });
-  useEffect(() => {
-    setFgrtvGlColumnOrder(fgrtvGlColumnDefs.map((column) => column.key));
-  }, [setFgrtvGlColumnOrder, withCurr2, withCurr3, glCurrDefault, currCode, glCurrGlobal2, glCurrGlobal3]);
-  const sortedFgrtvGlRows = getSortedFgrtvGlRows(
-    detailRowsGL.map((row, originalIndex) => ({ row, originalIndex })),
-    (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? ""
-  );
+  ...getFgrtvGlColumnStyle(key, fallbackWidth),
+  ...getFgrtvGlFrozenStyle(
+    key,
+    orderedFgrtvGlColumns,
+    fallbackWidth,
+    { isHeader: false }
+  ),
+});
 
-  const fgrtvDetailEnterNextRowZeroClearFields = ["quantity", "unitCost"];
-  const fgrtvGlEnterNextRowZeroClearFields = ["debit", "credit", "debitFx1", "creditFx1", "debitFx2", "creditFx2"];
+
+// ADD THIS BACK
+const sortedFgrtvGlRows = getSortedFgrtvGlRows(
+  detailRowsGL.map((row, originalIndex) => ({
+    row,
+    originalIndex,
+  })),
+  (entry, sortKey) =>
+    sortKey === "ln"
+      ? entry.originalIndex + 1
+      : entry.row?.[sortKey] ?? ""
+);
+
+
+const fgrtvDetailEnterNextRowZeroClearFields = [
+  "quantity",
+  "unitCost"
+];
+
+const fgrtvGlEnterNextRowZeroClearFields = [
+  "debit",
+  "credit",
+  "debitFx1",
+  "creditFx1",
+  "debitFx2",
+  "creditFx2"
+];
 
   const getSingleUploadTemplateColumns = () =>
     visibleFgrtvDetailColumns.filter((column) => column.key !== "qtyHand");
@@ -1623,6 +1763,7 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
 
   if (field === 'whouseCode') {
     row.whouseCode = value.whCode;
+    row.locCode = "";
     await autoFillBlanks('whouseCode', value.whCode);
   }
 
@@ -1816,23 +1957,35 @@ const handleCloseAccountModal = (selectedAccount) => {
 
 
   const handleCloseRcModalGL = async (selectedRc) => {
-    if (selectedRc && selectedRowIndex !== null) {
-      if (accountModalSource !== null) {
-        handleDetailChange(selectedRowIndex, 'rcCode', selectedRc, false);
-     
-     
-      } else {
-           const result = await useTopRCRow(selectedRc.rcCode);
-            if (result) {
-              handleDetailChangeGL(selectedRowIndex, 'rcCode', result);
-            }
-    }
-    updateState({
+    try {
+      if (selectedRc && selectedRowIndex !== null) {
+        if (accountModalSource !== null) {
+          await handleDetailChange(
+            selectedRowIndex,
+            "rcCode",
+            selectedRc,
+            false
+          );
+        } else {
+          const result = await useTopRCRow(selectedRc.rcCode);
+
+          if (result) {
+            await handleDetailChangeGL(
+              selectedRowIndex,
+              "rcCode",
+              result
+            );
+          }
+        }
+      }
+    } finally {
+      updateState({
         showRcModal: false,
         selectedRowIndex: null,
         accountModalSource: null
-    })};
-};
+      });
+    }
+  };
 
 
 
@@ -1950,7 +2103,11 @@ const handleCloseLocationLookup = (row) => {
       : updateState({ locCode: row.locCode, locName: row.locName });
   }
 
-  updateState({ locationLookupOpen: false });
+  updateState({
+    locationLookupOpen: false,
+    selectedRowIndex: null,
+    accountModalSource: null,
+  });
 };
 
 
@@ -2427,7 +2584,11 @@ return (
                      value={state.locName || state.locCode || ""}
                      onLookup={() =>
                        !isFormDisabled && (state.WHname || state.WHcode) &&
-                       updateState({ locationLookupOpen: true })
+                       updateState({
+                         locationLookupOpen: true,
+                         selectedRowIndex: null,
+                         accountModalSource: null,
+                       })
                      }
                      disabled={isFormDisabled || !(state.WHname || state.WHcode)}
                      readOnly
@@ -2966,6 +3127,7 @@ return (
           onClose={handleCloseLocationLookup}
           source={accountModalSource}
           filter="ActiveAll"
+          whCode={getLocationLookupWarehouseCode()}
         />
       )}
 
@@ -2993,7 +3155,7 @@ return (
       <AllTranHistory
         showHeader={false}
         endpoint="/getFGRTVHistory"
-        cacheKey={`FGRTV:${state.branchCode || ""}:${state.docNo || ""}`}  // ✅ per-transaction
+        cacheKey={`FGRTV:${state.branchCode || ""}:${state.documentNo || ""}`}  // ✅ per-transaction
         activeTabKey="FGRTV_Summary"
         branchCode={state.branchCode}
         startDate={state.fromDate}

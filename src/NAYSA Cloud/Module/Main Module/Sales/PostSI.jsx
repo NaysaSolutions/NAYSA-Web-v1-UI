@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { fetchDataJson } from '../../../Configuration/BaseURL.jsx';
 import { useSelectedHSColConfig } from '@/NAYSA Cloud/Global/selectedData';
 import GlobalGLPostingModalv1 from "../../../Lookup/SearchGlobalGLPostingv1.jsx";
-import { useSwalValidationAlert, useSwalInfoAlert } from '@/NAYSA Cloud/Global/behavior.jsx';
-import { useHandlePostTran } from '@/NAYSA Cloud/Global/procedure';
+import { parseFormattedNumber, useSwalValidationAlert, useSwalInfoAlert } from '@/NAYSA Cloud/Global/behavior.jsx';
+import { useFetchTranData, useHandlePostTran } from '@/NAYSA Cloud/Global/procedure';
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
 const PostSI = ({ isOpen, onClose, userCode }) => {
@@ -59,15 +59,84 @@ const PostSI = ({ isOpen, onClose, userCode }) => {
     };
   }, [isOpen, onClose]);
 
+  const getSiDocumentKeys = (row) => ({
+    docNo: row?.siNo || row?.docNo || row?.documentNo || "",
+    branchCode: row?.branchCode || row?.branch || "",
+  });
+
+  const getRowsNeedingPicking = (transaction) => {
+    const siTranType = String(
+      transaction?.siTranType || transaction?.sitranType || ""
+    ).toUpperCase();
+
+    if (siTranType !== "SI02") {
+      return [];
+    }
+
+    return (transaction?.dt1 || []).filter((row) => {
+      const rowStatus = String(row?.pickStat || row?.siStat || "").toUpperCase();
+      const siQty = parseFormattedNumber(row?.siQuantity || 0) || 0;
+      const pickedQty = parseFormattedNumber(row?.quantityPicked ?? row?.qtyPicked ?? 0) || 0;
+
+      return rowStatus !== "X" && siQty > 0 && pickedQty < siQty;
+    });
+  };
+
+  const validatePickingBeforePost = async (selectedData = []) => {
+    const invalidDocs = [];
+
+    for (const row of selectedData) {
+      const { docNo, branchCode } = getSiDocumentKeys(row);
+
+      if (!docNo || !branchCode) {
+        continue;
+      }
+
+      const transaction = await useFetchTranData(docNo, branchCode, "SI", "siNo", "");
+      const rowsNeedingPicking = getRowsNeedingPicking(transaction);
+
+      if (rowsNeedingPicking.length > 0) {
+        invalidDocs.push({
+          docNo,
+          rows: rowsNeedingPicking,
+        });
+      }
+    }
+
+    if (invalidDocs.length === 0) {
+      return true;
+    }
+
+    const detailLines = invalidDocs.flatMap(({ docNo, rows }) =>
+      rows.map((row) => {
+        const lineNo = row?.lnNo || row?.lineNo || row?.ln || "";
+        const itemCode = row?.itemCode ? ` - ${row.itemCode}` : "";
+        return ` - SI No. ${docNo}${lineNo ? ` LN # ${lineNo}` : ""}${itemCode}`;
+      })
+    );
+
+    useSwalValidationAlert({
+      icon: "warning",
+      title: "Picking Required",
+      message: `The following SI detail(s) still need to be picked before posting:\n\n${detailLines.join("\n")}`,
+    });
+
+    return false;
+  };
+
   const handlePost = async (selectedData, userPw) => {
+    const isValidForPosting = await validatePickingBeforePost(selectedData);
+    if (!isValidForPosting) {
+      return { success: false, code: "PICKING_REQUIRED" };
+    }
+
     await useHandlePostTran(selectedData, userPw, "SI", userCode, setLoading, onClose);
   };
 
   const pickDocAndBranch = (row) => {
     if (!row) return { docNo: null, branchCode: null };
 
-    const docNo = row.siNo;
-    const branchCode = row.branchCode;
+    const { docNo, branchCode } = getSiDocumentKeys(row);
 
     return { docNo, branchCode };
   };

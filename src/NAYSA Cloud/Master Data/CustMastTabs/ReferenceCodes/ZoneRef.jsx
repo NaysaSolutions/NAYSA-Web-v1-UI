@@ -273,6 +273,16 @@ const ZoneRef = forwardRef(({ onStateChange }, ref) => {
             await useSwalDeleteRecord("Deleted", `Zone ${zoneCode} has been removed.`);
             resetForm(DEFAULT_FORM);
             setIsEditing(false);
+            setSelectedRow(null);
+        },
+        onError: async (error) => {
+            const msg =
+                error?.response?.data?.message ||
+                error?.response?.data?.errormsg ||
+                error?.message ||
+                "Failed to delete zone.";
+
+            await useSwalErrorAlert("Error", msg);
         },
     });
 

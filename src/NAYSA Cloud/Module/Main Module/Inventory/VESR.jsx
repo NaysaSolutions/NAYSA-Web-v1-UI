@@ -1,4 +1,3 @@
-// VESR_v18 - VESR02 flexible Excel upload + VESR01 direct Add when no source details - 2026-08-19
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Swal from "sweetalert2";
 import ExcelJS from "exceljs";
@@ -28,6 +27,7 @@ import CustomerMastLookupModal from "../../../Lookup/SearchCustMast.jsx";
 import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
 import QstatLookupModal from "../../../Lookup/SearchQStatRef.jsx";
+import VEColorLookupModal from "../../../Lookup/SearchVEColor.jsx";
 import VATLookupModal from "../../../Lookup/SearchVATRef.jsx";
 import COAMastLookupModal from "../../../Lookup/SearchCOAMast.jsx";
 import SLMastLookupModal from "../../../Lookup/SearchSLMast.jsx";
@@ -88,7 +88,8 @@ import {
   useResizableTableColumns,
 } from "@/NAYSA Cloud/Global/datatable.jsx";
 
-const DEFAULT_VESR_TRAN_TYPE = "Regular";
+const DEFAULT_VESR_TRAN_TYPE = "VESR02";
+const DEFAULT_VESR_TRAN_TYPE_LABEL = "Regular";
 
 const VESR = () => {
   const { resetFlag } = useReset();
@@ -185,6 +186,8 @@ const VESR = () => {
     warehouseLookupRowIndex: null,
     qstatLookupOpen: false,
     qstatLookupRowIndex: null,
+    colorLookupOpen: false,
+    colorLookupRowIndex: null,
     vatLookupOpen: false,
     vatLookupRowIndex: null,
     poLookupModalOpen: false,
@@ -331,9 +334,29 @@ const VESR = () => {
           categoryResponse?.data?.[0]?.result ?? categoryResponse?.data ?? categoryResponse,
         );
         const category = categoryRows?.[0] || {};
+        const categoryRcCode =
+          category.actCode ||
+          category.rcCode ||
+          category.act_code ||
+          category.rc_code ||
+          mast.actCode ||
+          mast.rcCode ||
+          "";
+        const categoryRcName =
+          category.actName ||
+          category.rcName ||
+          category.act_name ||
+          category.rc_name ||
+          mast.actName ||
+          mast.rcName ||
+          "";
         return {
           ...mast,
           vehicleMake: category.vehicleMake || mast.vehicleMake || "",
+          actCode: categoryRcCode,
+          actName: categoryRcName,
+          rcCode: categoryRcCode,
+          rcName: categoryRcName,
         };
       } catch {
         return mast;
@@ -758,7 +781,7 @@ const VESR = () => {
 
   const fetchTranData = useCallback(
     async (srNo, branchCode, direction = "") => {
-      if (!srNo || !branchCode) return;
+      if ((!srNo && !direction) || !branchCode) return null;
       updateState({ isLoading: true });
       try {
         const data = await useFetchTranData(srNo, branchCode, docType, "srNo", direction);
@@ -767,7 +790,7 @@ const VESR = () => {
 
         if (!vesrId) {
           useSwalErrorAlert("No Records Found", "Transaction does not exist.");
-          return;
+          return null;
         }
 
         const rawStatus = parsed?.cancelled === "Y" ? "X" : parsed?.stat || "";
@@ -859,9 +882,11 @@ const VESR = () => {
           isFetchDisabled: true,
           isSaveDisabled: parsedStatus !== "OPEN",
         });
+        return parsed;
       } catch (error) {
         console.error("VESR fetch error", error);
         useSwalErrorAlert("VESR Retrieval", error?.message || "Unable to retrieve transaction.");
+        return null;
       } finally {
         updateState({ isLoading: false });
       }
@@ -890,7 +915,6 @@ const VESR = () => {
     const errors = [];
     if (!state.branchCode) errors.push("Header - Branch Code");
     if (!header.sr_date) errors.push("Header - SR Date");
-    if (!state.vendCode) errors.push("Header - Vendor Code");
     if (!String(state.custCode || "").trim()) errors.push("Header - Customer Code");
     if (String(state.siNo || "").trim() && !state.siDate) errors.push("Header - SI Date");
     if (state.siDate && !String(state.siNo || "").trim()) errors.push("Header - SI No.");
@@ -914,7 +938,6 @@ const VESR = () => {
       if (balance > 0 && qty > balance + 0.000001) {
         errors.push(`Line ${ln} - Quantity exceeds PO Balance ${formatNumber(balance, state.decQty)}`);
       }
-      if (!String(row.vatCode || "").trim()) errors.push(`Line ${ln} - VAT Code Required`);
       if (!String(row.locCode || "").trim()) errors.push(`Line ${ln} - Location Required`);
       if (!chassis) errors.push(`Line ${ln} - Chassis / CS No. Required`);
       if (chassis) {
@@ -927,7 +950,6 @@ const VESR = () => {
 
       if (String(row.requireModel || "N").toUpperCase() === "Y") {
         if (!String(row.model || "").trim()) errors.push(`Line ${ln} - Model Required`);
-        if (!String(row.modelYear || "").trim()) errors.push(`Line ${ln} - Model Year Required`);
       }
       if (modelYear && !isValidModelYear(modelYear)) {
         errors.push(`Line ${ln} - Model Year must be a 4-digit year from ${MODEL_YEAR_MIN} to ${getMaximumModelYear()}`);
@@ -1198,6 +1220,8 @@ const VESR = () => {
         0,
     );
     const selectedVatRate = lookupVatRate || await fetchVatRate(selectedVatCode);
+    const categoryRcCode = mast?.actCode || mast?.rcCode || "";
+    const categoryRcName = mast?.actName || mast?.rcName || "";
 
     return recalcVehicleRow({
       ...baseRow,
@@ -1245,9 +1269,10 @@ const VESR = () => {
       poQty: 0,
       specs: baseRow.specs || "",
       netAmount: 0,
-      actCode: baseRow.actCode || "",
-      actDesc: baseRow.actDesc || "",
-      rcCode: baseRow.rcCode || baseRow.actCode || "",
+      actCode: categoryRcCode || baseRow.actCode || baseRow.rcCode || "",
+      actDesc: categoryRcName || baseRow.actDesc || baseRow.rcName || "",
+      rcCode: categoryRcCode || baseRow.rcCode || baseRow.actCode || "",
+      rcName: categoryRcName || baseRow.rcName || baseRow.actDesc || "",
       prLineno: "",
       shippingCost: parseFormattedNumber(baseRow.shippingCost || 0),
       landedCost: parseFormattedNumber(baseRow.landedCost || 0),
@@ -1595,7 +1620,6 @@ const VESR = () => {
       if (!isDirectSalesReturn && balance > 0 && qty > balance + 0.000001) {
         errors.push(`Line ${ln} - Quantity exceeds PO Balance ${formatNumber(balance, state.decQty)}`);
       }
-      if (!String(row.vatCode || "").trim()) errors.push(`Line ${ln} - VAT Code Required`);
       if (!String(row.locCode || "").trim()) errors.push(`Line ${ln} - Location Required`);
       if (!chassis) errors.push(`Line ${ln} - Chassis / CS No. Required`);
 
@@ -1609,7 +1633,6 @@ const VESR = () => {
 
       if (String(row.requireModel || "N").toUpperCase() === "Y") {
         if (!String(row.model || "").trim()) errors.push(`Line ${ln} - Model Required`);
-        if (!String(row.modelYear || "").trim()) errors.push(`Line ${ln} - Model Year Required`);
       }
       if (modelYear && !isValidModelYear(modelYear)) {
         errors.push(`Line ${ln} - Model Year must be a 4-digit year from ${MODEL_YEAR_MIN} to ${getMaximumModelYear()}`);
@@ -1704,7 +1727,10 @@ const VESR = () => {
         chassisNo: uploaded.chassisNo || "",
         pnpNo: uploaded.pnpNo || "",
         csrNo: uploaded.csrNo || "",
-        rcCode: uploaded.rcCode || masterRow.rcCode || masterRow.actCode || "",
+        actCode: masterRow.actCode || masterRow.rcCode || uploaded.rcCode || "",
+        actDesc: masterRow.actDesc || masterRow.rcName || "",
+        rcCode: masterRow.rcCode || masterRow.actCode || uploaded.rcCode || "",
+        rcName: masterRow.rcName || masterRow.actDesc || "",
         qstatCode: uploaded.qstatCode || masterRow.qstatCode || "",
         whouseCode: uploaded.whouseCode || state.whouseCode || masterRow.whouseCode || "",
         locCode: uploaded.locCode || state.locCode || masterRow.locCode || "",
@@ -1794,7 +1820,10 @@ const VESR = () => {
         requireColor: source.requireColor || "N",
         requireQsCode: source.requireQsCode || "N",
         requireProdNo: source.requireProdNo || "N",
-        rcCode: uploaded.rcCode || source.rcCode || source.actCode || "",
+        actCode: source.actCode || source.rcCode || uploaded.rcCode || "",
+        actDesc: source.actDesc || source.rcName || "",
+        rcCode: source.rcCode || source.actCode || uploaded.rcCode || "",
+        rcName: source.rcName || source.actDesc || "",
         currCode: source.currCode || state.currCode || baseCurrency,
         currRate: parseFormattedNumber(source.currRate || state.currRate || 1),
         whouseCode: uploaded.whouseCode || source.whouseCode || state.whouseCode || "",
@@ -2082,6 +2111,81 @@ const VESR = () => {
     { key: "delDate", label: "Del Date", renderType: "date", width: 120 },
   ];
 
+  const vesrHistoryColumnConfig = useMemo(
+    () => ({
+      VESR_Summary: [
+        { key: "branchName", label: "Branch Name", renderType: "text", width: 140 },
+        { key: "docNo", label: "VESR No.", renderType: "text", width: 120 },
+        { key: "srDate", label: "VESR Date", renderType: "date", width: 120 },
+        { key: "custCode", label: "Customer Code", renderType: "text", width: 130 },
+        { key: "custName", label: "Customer Name", renderType: "text", width: 220 },
+        { key: "siNo", label: "SI No.", renderType: "text", width: 120 },
+        { key: "cmNo", label: "CM No.", renderType: "text", width: 120 },
+        { key: "whouseCode", label: "Warehouse", renderType: "text", width: 120 },
+        { key: "locCode", label: "Location", renderType: "text", width: 120 },
+        { key: "refsrNo", label: "Reference SR No.", renderType: "text", width: 140 },
+        { key: "vesrTranType", label: "Transaction Type", renderType: "text", width: 150 },
+        { key: "pnNo", label: "PN No.", renderType: "text", width: 120 },
+        { key: "particular", label: "Particular", renderType: "text", width: 260 },
+        { key: "docStatus", label: "Document Status", renderType: "status", width: 150 },
+        { key: "userCode", label: "User ID", renderType: "text", width: 100 },
+        { key: "dateStamp", label: "Date Stamp", renderType: "date", width: 120 },
+        { key: "timeStamp", label: "Time Stamp", renderType: "text", width: 100 },
+      ],
+      VESR_Item_Detail: [
+        { key: "branchName", label: "Branch Name", renderType: "text", width: 140 },
+        { key: "docNo", label: "VESR No.", renderType: "text", width: 120 },
+        { key: "srDate", label: "VESR Date", renderType: "date", width: 120 },
+        { key: "custCode", label: "Customer Code", renderType: "text", width: 130 },
+        { key: "custName", label: "Customer Name", renderType: "text", width: 220 },
+        { key: "lnNo", label: "LN", renderType: "number", width: 70 },
+        { key: "itemCode", label: "Item Code", renderType: "text", width: 130 },
+        { key: "itemName", label: "Item Name", renderType: "text", width: 260 },
+        { key: "uomCode", label: "UOM", renderType: "text", width: 80 },
+        { key: "quantity", label: "Quantity", renderType: "number", width: 110, roundingOff: 0 },
+        { key: "unitCost", label: "Unit Cost", renderType: "number", width: 130, roundingOff: 6 },
+        { key: "itemCost", label: "Item Cost", renderType: "number", width: 130, roundingOff: 2 },
+        { key: "make", label: "Make", renderType: "text", width: 120 },
+        { key: "modelYear", label: "Model Year", renderType: "text", width: 110 },
+        { key: "model", label: "Model", renderType: "text", width: 130 },
+        { key: "serialNo", label: "Serial No.", renderType: "text", width: 150 },
+        { key: "engineNo", label: "Engine No.", renderType: "text", width: 150 },
+        { key: "prodNo", label: "Production No.", renderType: "text", width: 150 },
+        { key: "color", label: "Color", renderType: "text", width: 110 },
+        { key: "chassisNo", label: "CS No.", renderType: "text", width: 140 },
+        { key: "rcCode", label: "RC Code", renderType: "text", width: 110 },
+        { key: "rcName", label: "RC Name", renderType: "text", width: 180 },
+        { key: "whouseCode", label: "Warehouse", renderType: "text", width: 120 },
+        { key: "locCode", label: "Location", renderType: "text", width: 120 },
+        { key: "qstatCode", label: "QC Status", renderType: "text", width: 120 },
+        { key: "csrNo", label: "CSR No.", renderType: "text", width: 130 },
+        { key: "pnpNo", label: "PNP No.", renderType: "text", width: 130 },
+        { key: "docStatus", label: "Document Status", renderType: "status", width: 150 },
+      ],
+      VESR_General_Ledger: [
+        { key: "branchName", label: "Branch Name", renderType: "text", width: 140 },
+        { key: "docNo", label: "VESR No.", renderType: "text", width: 120 },
+        { key: "srDate", label: "VESR Date", renderType: "date", width: 120 },
+        { key: "recNo", label: "LN", renderType: "number", width: 70 },
+        { key: "acctCode", label: "Acct Code", renderType: "text", width: 120 },
+        { key: "acctName", label: "Account Name", renderType: "text", width: 230 },
+        { key: "slCode", label: "SL Code", renderType: "text", width: 120 },
+        { key: "rcCode", label: "RC Code", renderType: "text", width: 110 },
+        { key: "rcName", label: "RC Name", renderType: "text", width: 180 },
+        { key: "particular", label: "Particular", renderType: "text", width: 260 },
+        { key: "vatCode", label: "VAT Code", renderType: "text", width: 110 },
+        { key: "ewtCode", label: "EWT Code", renderType: "text", width: 110 },
+        { key: "debit", label: "Debit", renderType: "number", width: 130, roundingOff: 2 },
+        { key: "credit", label: "Credit", renderType: "number", width: 130, roundingOff: 2 },
+        { key: "slRefNo", label: "SL Ref. No.", renderType: "text", width: 130 },
+        { key: "slRefDate", label: "SL Ref Date", renderType: "date", width: 120 },
+        { key: "remarks", label: "Remarks", renderType: "text", width: 220 },
+        { key: "docStatus", label: "Document Status", renderType: "status", width: 150 },
+      ],
+    }),
+    [],
+  );
+
   const handleOpenPayeeLookup = async () => {
     if (isFormDisabled || (state.detailRows || []).length > 0) return;
 
@@ -2319,6 +2423,9 @@ const VESR = () => {
           return Array.from({ length: unitCount }, (_, unitIndex) => {
             const runningPoBalance = unitCount - unitIndex;
 
+            const categoryRcCode = mast?.actCode || mast?.rcCode || row?.rcCode || "";
+            const categoryRcName = mast?.actName || mast?.rcName || row?.rcName || "";
+
             return recalcVehicleRow({
               groupId: row?.groupId || "",
               poId: row?.poId || "",
@@ -2362,9 +2469,10 @@ const VESR = () => {
               csrNo: "",
 
               specs: row?.itemSpecs || "",
-              actCode: row?.rcCode || "",
-              rcCode: row?.rcCode || "",
-              actDesc: row?.rcName || "",
+              actCode: categoryRcCode,
+              rcCode: categoryRcCode,
+              actDesc: categoryRcName,
+              rcName: categoryRcName,
               shippingCost: 0,
               landedCost: 0,
               unitShipCost: 0,
@@ -2436,7 +2544,7 @@ const VESR = () => {
       remarks: row.remarks || "",
       slrefNo: row.slrefNo || "",
       slRefDate: row.slRefDate || null,
-      vendCode: row.vendCode || state.vendCode || "",
+      vendCode: row.vendCode || state.vendCode || state.custCode || "",
       debitFx1: parseFormattedNumber(row.debitFx1 || 0),
       creditFx1: parseFormattedNumber(row.creditFx1 || 0),
       debitFx2: parseFormattedNumber(row.debitFx2 || 0),
@@ -2450,10 +2558,11 @@ const VESR = () => {
     srDate: header.sr_date,
     cutoffCode: state.cutoffCode || "",
     vesrTranType: state.vesrTranType || DEFAULT_VESR_TRAN_TYPE,
+    tranType: state.vesrTranType || DEFAULT_VESR_TRAN_TYPE,
     whouseCode: state.whouseCode || "",
     locCode: state.locCode || "",
-    vendCode: state.vendCode || "",
-    vendName: state.vendName || "",
+    vendCode: state.vendCode || state.custCode || "",
+    vendName: state.vendName || state.custName || "",
     custCode: state.custCode || "",
     custName: state.custName || "",
     poNo: state.poNo || "",
@@ -2505,8 +2614,8 @@ const VESR = () => {
       poQty: parseFormattedNumber(row.poQty || 0),
       specs: row.specs || "",
       netAmount: parseFormattedNumber(row.netAmount || 0),
-      actCode: row.actCode || "",
-      actDesc: row.actDesc || "",
+      actCode: row.actCode || row.rcCode || "",
+      actDesc: row.actDesc || row.rcName || "",
       // Latest sproc Upsert expects $.prln.
       prln: row.prln || row.prLineno || "",
       shippingCost: parseFormattedNumber(row.shippingCost || 0),
@@ -2738,7 +2847,7 @@ const VESR = () => {
       current,
       field,
       selected,
-      state.vendCode || "",
+      state.vendCode || state.custCode || "",
       docType,
     );
     rows[index] = lookedUp ? { ...current, ...lookedUp } : { ...current, ...selected };
@@ -2874,6 +2983,21 @@ const VESR = () => {
               icon={faMagnifyingGlass}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
               onClick={() => updateState({ qstatLookupOpen: true, qstatLookupRowIndex: index })}
+            />
+          )}
+        </td>
+      );
+    }
+
+    if (column.key === "color") {
+      return (
+        <td key={column.key} className="global-tran-td-ui relative" style={commonStyle}>
+          <input className="global-tran-td-inputclass-ui w-full pr-6 cursor-pointer" value={row.color || ""} readOnly />
+          {!isFormDisabled && (
+            <FontAwesomeIcon
+              icon={faMagnifyingGlass}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900"
+              onClick={() => updateState({ colorLookupOpen: true, colorLookupRowIndex: index })}
             />
           )}
         </td>
@@ -3140,6 +3264,30 @@ const VESR = () => {
     fetchTranData(srNo, branchCode);
   };
 
+  const handleTranDocNoRetrieval = async (data) => {
+    const retrieved = await fetchTranData(
+      data.docNo,
+      data.branchCode || state.branchCode,
+      data.key,
+    );
+    if (!retrieved?.vesrId) return;
+
+    updateState({
+      documentNo: retrieved.srNo || data.docNo,
+      branchCode: retrieved.branchCode || data.branchCode || state.branchCode,
+      showAllTranDocNo: data.modalClose,
+    });
+  };
+
+  const handleTranDocNoSelection = async (data) => {
+    await handleReset();
+    updateState({
+      showAllTranDocNo: false,
+      documentNo: data.docNo,
+      branchCode: data.branchCode || state.branchCode,
+    });
+  };
+
   return (
     <div className="global-tran-main-div-ui">
       {state.showSpinner && <LoadingSpinner />}
@@ -3256,7 +3404,7 @@ const VESR = () => {
                   id="vesrTranType"
                   label="Tran Type"
                   type="text"
-                  value={DEFAULT_VESR_TRAN_TYPE}
+                  value={DEFAULT_VESR_TRAN_TYPE_LABEL}
                   readOnly
                   disabled={isFormDisabled}
                 />
@@ -3698,6 +3846,7 @@ const VESR = () => {
           status="All"
           onRowDoubleClick={handleHistoryRowPick}
           historyExportName={`${documentTitle} History`}
+          columnConfigOverrides={vesrHistoryColumnConfig}
         />
       </div>
 
@@ -3802,6 +3951,22 @@ const VESR = () => {
               updateState({ detailRows: rows });
             }
             updateState({ qstatLookupOpen: false, qstatLookupRowIndex: null });
+          }}
+        />
+      )}
+
+      {state.colorLookupOpen && (
+        <VEColorLookupModal
+          isOpen={state.colorLookupOpen}
+          itemCode={state.detailRows?.[state.colorLookupRowIndex]?.itemCode || ""}
+          onClose={(selected) => {
+            if (selected && state.colorLookupRowIndex !== null) {
+              const rows = [...(state.detailRows || [])];
+              const index = state.colorLookupRowIndex;
+              rows[index] = { ...rows[index], color: selected.code || "" };
+              updateState({ detailRows: rows });
+            }
+            updateState({ colorLookupOpen: false, colorLookupRowIndex: null });
           }}
         />
       )}
@@ -3919,15 +4084,9 @@ const VESR = () => {
             documentTitle,
             fieldNo: "srNo",
           }}
-          onRetrieve={async (data) => {
-            await fetchTranData(data.docNo, data.branchCode || state.branchCode, data.key);
-            updateState({ showAllTranDocNo: data.modalClose });
-          }}
+          onRetrieve={handleTranDocNoRetrieval}
           onResponse={{ documentNo: state.documentNo }}
-          onSelected={(data) => {
-            handleReset();
-            updateState({ showAllTranDocNo: false, documentNo: data.docNo });
-          }}
+          onSelected={handleTranDocNoSelection}
           onClose={() => updateState({ showAllTranDocNo: false })}
         />
       )}
