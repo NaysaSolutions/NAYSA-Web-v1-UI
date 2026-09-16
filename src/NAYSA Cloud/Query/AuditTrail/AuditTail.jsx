@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
@@ -66,7 +67,7 @@ const ComparisonModal = ({ data, onClose }) => {
     new Set([...Object.keys(before), ...Object.keys(after)])
   );
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm">
       <div className="bg-white dark:bg-gray-900 w-full max-w-2xl rounded-xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-gray-200 dark:border-gray-800">
         <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
@@ -168,7 +169,8 @@ const ComparisonModal = ({ data, onClose }) => {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
@@ -389,12 +391,88 @@ const AuditTrail = () => {
   const {
     data: dataTrans,
     isFetching: isFetchTrans,
+    dataUpdatedAt: dataTransUpdatedAt,
   } = useAuditData("TRAN", "getDocTrail", searchFilterTrans, colsTrans, hasSearchedTrans);
 
   const {
     data: dataRef,
     isFetching: isFetchRef,
+    dataUpdatedAt: dataRefUpdatedAt,
   } = useAuditData("REF", "getRefTrail", searchFilterRef, colsRef, hasSearchedRef);
+
+  // Keep SearchGlobalReportTable unchanged. Audit payloads can contain very large
+  // data:image/...;base64 values (for example VehicleImageBase64). Those long,
+  // unbroken strings can disturb the browser's initial table-auto layout before
+  // SearchGlobalReportTable finishes measuring its columns.
+  //
+  // For TABLE DISPLAY only, replace image/base64 payloads with a short marker.
+  // The original row is retained so the View/Comparison modal still receives the
+  // complete audit record.
+  const sanitizeAuditPayloadForTable = (value) => {
+    if (value === null || value === undefined || value === "") return value;
+
+    const scrub = (input) => {
+      if (typeof input === "string") {
+        return /^data:image\/[^;]+;base64,/i.test(input)
+          ? "[Image Data]"
+          : input;
+      }
+
+      if (Array.isArray(input)) return input.map(scrub);
+
+      if (input && typeof input === "object") {
+        return Object.fromEntries(
+          Object.entries(input).map(([key, item]) => [key, scrub(item)])
+        );
+      }
+
+      return input;
+    };
+
+    if (typeof value !== "string") return scrub(value);
+
+    try {
+      return JSON.stringify(scrub(JSON.parse(value)));
+    } catch {
+      // Fallback for non-JSON strings that still contain an embedded image data URI.
+      return value.replace(
+        /data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/gi,
+        "[Image Data]"
+      );
+    }
+  };
+
+  const prepareAuditRowsForTable = (rows) =>
+    (Array.isArray(rows) ? rows : []).map((row) => ({
+      ...row,
+      beforeVal: sanitizeAuditPayloadForTable(row?.beforeVal),
+      afterVal: sanitizeAuditPayloadForTable(row?.afterVal),
+      __auditOriginalRow: row,
+    }));
+
+  const tableDataTrans = useMemo(
+    () => prepareAuditRowsForTable(dataTrans),
+    [dataTrans]
+  );
+
+  const tableDataRef = useMemo(
+    () => prepareAuditRowsForTable(dataRef),
+    [dataRef]
+  );
+
+  // A desktop table remount after the final search result arrives reproduces the
+  // browser reflow that currently happens when switching mobile -> desktop.
+  // This is done from AuditTrail only; SearchGlobalReportTable is not modified.
+  const transTableKey = useMemo(
+    () =>
+      `audit-trans-${JSON.stringify(searchFilterTrans)}-${dataTransUpdatedAt || 0}`,
+    [searchFilterTrans, dataTransUpdatedAt]
+  );
+
+  const refTableKey = useMemo(
+    () => `audit-ref-${JSON.stringify(searchFilterRef)}-${dataRefUpdatedAt || 0}`,
+    [searchFilterRef, dataRefUpdatedAt]
+  );
 
   const handleSearch = () => {
     setIsManualSearch(true);
@@ -426,10 +504,13 @@ const AuditTrail = () => {
   };
 
   const handleViewRow = (row) => {
+    const originalRow = row?.__auditOriginalRow || row;
+
     if (activeTab === "reference") {
-      setSelectedRowCompare(row);
+      setSelectedRowCompare(originalRow);
     } else {
-      row.pathUrl && window.open(row.pathUrl, "_blank", "noopener,noreferrer");
+      originalRow?.pathUrl &&
+        window.open(originalRow.pathUrl, "_blank", "noopener,noreferrer");
     }
   };
 
@@ -850,57 +931,55 @@ const AuditTrail = () => {
         </div>
       )}
 
-      <div
-        className={`global-tran-table-main-div-ui mt-4 p-4 ${
-          activeTab === "transactions" ? "block" : "hidden"
-        }`}
-      >
+      {activeTab === "transactions" && (
+      <div className="mt-4 p-4 min-w-0 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
         {isMobile && mobileView === "card" ? (
           <CardView data={dataTrans || []} type="transactions" />
         ) : (
-          <div className="relative overflow-x-auto overflow-y-visible">
-            <SearchGlobalReportTable
-              ref={tableRefTrans}
-              loading={isColsTransLoading || (isFetchTrans && isManualSearch)}
-              columns={colsTrans}
-              data={dataTrans || []}
-              itemsPerPage={50}
-              showFilters
-              rightActionLabel="View"
-              onRowAction={handleViewRow}
-              onStateChange={(tbl) => {
-                tableStateRef.current.transactions = tbl;
-              }}
-            />
-          </div>
+          <SearchGlobalReportTable
+            key={transTableKey}
+            ref={tableRefTrans}
+            isLoading={isColsTransLoading}
+            isFetching={isFetchTrans && isManualSearch}
+            columns={colsTrans}
+            data={tableDataTrans}
+            initialState={tableStateRef.current.transactions}
+            itemsPerPage={50}
+            showFilters
+            rightActionLabel="View"
+            onRowAction={handleViewRow}
+            onStateChange={(tbl) => {
+              tableStateRef.current.transactions = tbl;
+            }}
+          />
         )}
       </div>
+      )}
 
-      <div
-        className={`global-tran-table-main-div-ui mt-4 p-4 ${
-          activeTab === "reference" ? "block" : "hidden"
-        }`}
-      >
+      {activeTab === "reference" && (
+      <div className="mt-4 p-4 min-w-0 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
         {isMobile && mobileView === "card" ? (
           <CardView data={dataRef || []} type="reference" />
         ) : (
-          <div className="relative overflow-x-auto overflow-y-visible">
-            <SearchGlobalReportTable
-              ref={tableRefRef}
-              loading={isColsRefLoading || (isFetchRef && isManualSearch)}
-              columns={colsRef}
-              data={dataRef || []}
-              itemsPerPage={50}
-              showFilters
-              rightActionLabel="View"
-              onRowAction={handleViewRow}
-              onStateChange={(tbl) => {
-                tableStateRef.current.reference = tbl;
-              }}
-            />
-          </div>
+          <SearchGlobalReportTable
+            key={refTableKey}
+            ref={tableRefRef}
+            isLoading={isColsRefLoading}
+            isFetching={isFetchRef && isManualSearch}
+            columns={colsRef}
+            data={tableDataRef}
+            initialState={tableStateRef.current.reference}
+            itemsPerPage={50}
+            showFilters
+            rightActionLabel="View"
+            onRowAction={handleViewRow}
+            onStateChange={(tbl) => {
+              tableStateRef.current.reference = tbl;
+            }}
+          />
         )}
       </div>
+      )}
     </div>
   );
 };
