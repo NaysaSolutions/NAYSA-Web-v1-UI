@@ -379,7 +379,7 @@ const VETypeCodes = forwardRef((
         if (missing.length) {
           await useSwalErrorAlert(
             "Validation Error",
-            `Please fill in the required field(s): • ${missing.join("\n• ")}`
+            `Please fill in the required field(s): \n• ${missing.join("\n• ")}`
           );
           return;
         }
@@ -499,7 +499,7 @@ const VETypeCodes = forwardRef((
             `Are you sure you want to delete "${row.code}"?`
           );
 
-        if (!confirmed) {
+        if (!confirmed?.isConfirmed) {
           return;
         }
         deleteMutation.mutate({
@@ -737,6 +737,7 @@ const VETypeCodes = forwardRef((
               onChange={(v) => setField( "description",v ?? "")}
                 disabled={ isReadOnly || !isEditing}
               />
+              
               <FieldRenderer
                 label="Active"
                 type="select"

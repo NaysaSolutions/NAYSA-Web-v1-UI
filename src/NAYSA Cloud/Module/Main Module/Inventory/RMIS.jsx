@@ -68,6 +68,7 @@ import { useHandlePrint } from "@/NAYSA Cloud/Global/report";
 import {
   formatNumber,
   parseFormattedNumber,
+  useSwalErrorAlert,
   useSwalshowSaveSuccessDialog,
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
@@ -1571,6 +1572,30 @@ useEffect(() => {
     return 6;
   };
 
+  const getAvailableQty = (row) =>
+    parseFormattedNumber(row?.qtyOnHand ?? row?.qtyHand ?? 0) || 0;
+
+  const validateDetailQuantities = (rows) => {
+    const invalidRowIndex = (rows || []).findIndex((row) => {
+      const quantity = parseFormattedNumber(row?.quantity ?? row?.qtyNeeded ?? 0) || 0;
+      return quantity > getAvailableQty(row);
+    });
+
+    if (invalidRowIndex >= 0) {
+      const invalidRow = rows[invalidRowIndex];
+      const quantity = parseFormattedNumber(invalidRow?.quantity ?? invalidRow?.qtyNeeded ?? 0) || 0;
+      const availableQty = getAvailableQty(invalidRow);
+
+      useSwalErrorAlert(
+        "Exceeds Stock",
+        `Line ${invalidRowIndex + 1}: Quantity (${formatNumber(quantity, 6)}) exceeds Quantity on Hand (${formatNumber(availableQty, 6)}).`,
+      );
+      return false;
+    }
+
+    return true;
+  };
+
   const handleDetailChange = async (index, field, value, commit = false) => {
     const updatedRows = [...detailRows];
     const row = { ...updatedRows[index] };
@@ -1596,6 +1621,19 @@ useEffect(() => {
     }
 
     // ✅ auto compute amount when quantity or unitCost changes
+    if (field === "quantity" && commit) {
+      const quantity = parseFormattedNumber(row.quantity || 0) || 0;
+      const availableQty = getAvailableQty(row);
+
+      if (quantity > availableQty) {
+        useSwalErrorAlert(
+          "Exceeds Stock",
+          `Quantity (${formatNumber(quantity, 6)}) exceeds Quantity on Hand (${formatNumber(availableQty, 6)}). Value has been adjusted.`,
+        );
+        row.quantity = formatNumber(availableQty, 6);
+      }
+    }
+
     if (field === "quantity" || field === "unitCost") {
       const qty = parseFormattedNumber(row.quantity || 0) || 0;
       const cost = parseFormattedNumber(row.unitCost || 0) || 0;
@@ -1818,6 +1856,8 @@ useEffect(() => {
     updateState({ isLoading: true });
 
     try {
+      if (!validateDetailQuantities(state.detailRows || [])) return;
+
       let currentGL = [...(state.detailRowsGL || [])];
 
       // Auto-generate GL before saving when GL table is empty, same as MSRTV.

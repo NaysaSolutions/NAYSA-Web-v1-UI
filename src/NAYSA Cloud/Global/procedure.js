@@ -119,12 +119,25 @@ export const useTransactionUpsert = async (docCode, glData, updateState, idKey, 
 
         if (legacySuccess || normalizedSuccess) {
             const resultData = legacySuccess ? response.data[0] : response;
-            const returnedErrorCount = resultData['errorCount'];
-            const returnedErrorMsg = resultData['errorMsg'] || resultData['message'];
+            const returnedErrorCount = Number(
+                resultData['errorCount'] ??
+                resultData['errorcount'] ??
+                resultData['ERRORCOUNT'] ??
+                0
+            );
+            const returnedErrorMsg =
+                resultData['errorMsg'] ||
+                resultData['errormsg'] ||
+                resultData['ERRORMSG'] ||
+                resultData['errorfgg'] ||
+                resultData['ERRORFGG'] ||
+                resultData['message'] ||
+                resultData['Message'] ||
+                "";
 
-            if (returnedErrorMsg && returnedErrorCount > 0) {
+            if (returnedErrorCount > 0) {
                 updateState({ showSpinner: false });
-                if (returnedErrorMsg.includes("Unbalanced")) {
+                if (String(returnedErrorMsg).includes("Unbalanced")) {
                     const glRows = Array.isArray(glData.dt2) ? glData.dt2 : [];
                     const tDebit = glRows.reduce((sum, row) => sum + (parseFloat(row.debit) || 0), 0);
                     const tCredit = glRows.reduce((sum, row) => sum + (parseFloat(row.credit) || 0), 0);
@@ -134,7 +147,7 @@ export const useTransactionUpsert = async (docCode, glData, updateState, idKey, 
                         `Total Debit: ${formatNumber(tDebit)}\nTotal Credit: ${formatNumber(tCredit)}`
                     );
                 } else {
-                    useSwalErrorAlert("Validation Failed", returnedErrorMsg);
+                    useSwalErrorAlert("Validation Failed", returnedErrorMsg || "Unable to save transaction.");
                 }
                 return null;
             }

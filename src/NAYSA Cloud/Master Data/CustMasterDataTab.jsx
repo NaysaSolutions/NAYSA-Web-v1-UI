@@ -266,7 +266,7 @@ const CustMasterDataTab = ({
 }) => {
   const slType = normalizeUpper(subsidiaryType);
 
-  const docType = "CustMast";
+  const docType = "Customer Master Data";
 
   // Search state
   const [searchTerm, setSearchTerm] = useState("");

@@ -561,21 +561,52 @@ function FGStockCardQuery() {
   );
 
   const handleBranchLookupClose = React.useCallback(
-    (row) => {
-      if (row) {
-        patchFiltersByScope(lookupState.scope, {
-          branchCode: row.branchCode || row.BranchCode || row.BRANCH_CODE || "",
-          branchName: row.branchName || row.BranchName || row.BRANCH_NAME || "",
-          warehouseCode: "",
-          warehouseName: "",
-          locationCode: "",
-          locationName: "",
-        });
-      }
-      closeLookup();
-    },
-    [closeLookup, lookupState.scope, patchFiltersByScope]
-  );
+  (row) => {
+    if (row) {
+      const selectedBranchCode =
+        row.branchCode ||
+        row.branch_code ||
+        row.BranchCode ||
+        row.BRANCH_CODE ||
+        "";
+
+      const selectedBranchName =
+        row.branchName ||
+        row.branch_name ||
+        row.BranchName ||
+        row.BRANCH_NAME ||
+        "";
+
+      const branchPatch = {
+        branchCode: selectedBranchCode,
+        branchName: selectedBranchName,
+        warehouseCode: "",
+        warehouseName: "",
+        locationCode: "",
+        locationName: "",
+      };
+
+      // use the same branch for the whole FG Stock Card workspace
+      setBalanceFilters((prev) => ({
+        ...prev,
+        ...branchPatch,
+      }));
+
+      setStockCardFilters((prev) => ({
+        ...prev,
+        ...branchPatch,
+      }));
+
+      setStockStatusFilters((prev) => ({
+        ...prev,
+        ...branchPatch,
+      }));
+    }
+
+    closeLookup();
+  },
+  [closeLookup]
+);
 
   const handleItemLookupClose = React.useCallback(
     (payload) => {
@@ -720,15 +751,38 @@ function FGStockCardQuery() {
   });
 
   const stockCardQuery = useQuery({
-    queryKey: ["fg-stock-card-movement", shouldLoadStockCard, stockCardFilters],
-    enabled: shouldLoadStockCard > 0,
-    queryFn: async () => {
-      const response = await apiClient.get("/fg/inventory/stock-card/stock-card", {
+  queryKey: [
+    "fg-stock-card-movement",
+    shouldLoadStockCard,
+    stockCardRequestParams,
+  ],
+
+  enabled: shouldLoadStockCard > 0,
+
+  queryFn: async () => {
+    console.log(
+      "FG STOCK CARD REQUEST:",
+      stockCardRequestParams
+    );
+
+    const response = await apiClient.get(
+      "/fg/inventory/stock-card/stock-card",
+      {
         params: stockCardRequestParams,
-      });
-      return response?.data?.data || { rows: [], totals: {} };
-    },
-  });
+      }
+    );
+
+    console.log(
+      "FG STOCK CARD RESPONSE:",
+      response?.data
+    );
+
+    return response?.data?.data || {
+      rows: [],
+      totals: {},
+    };
+  },
+});
 
   const stockStatusQuery = useQuery({
     queryKey: ["fg-stock-status", shouldLoadStockStatus],

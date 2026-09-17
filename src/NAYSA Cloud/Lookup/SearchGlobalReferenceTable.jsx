@@ -1027,7 +1027,7 @@ const SearchGlobalReferenceTable = forwardRef(
     const getDefaultExportFileName = () => {
       const effectiveDocType = String(docType ?? "").trim();
       const title = reftables?.[effectiveDocType] || effectiveDocType || "Reference";
-      return sanitizeFileName(`${title}_${getDateTimeStamp()}`);
+      return sanitizeFileName(`${title} ${getDateTimeStamp()}`);
     };
 
     useImperativeHandle(ref, () => ({

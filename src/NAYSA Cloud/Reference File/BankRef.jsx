@@ -501,7 +501,7 @@ const BankRef = forwardRef(
           label: "Bank Type Code",
           sortable: true,
           width: 150,
-          minWidth: 150, 
+          minWidth: 120, 
           requiredVisible: true,
           render: (row) => row?.bankTypeCode,
         },
@@ -510,9 +510,15 @@ const BankRef = forwardRef(
           label: "Bank Type Name",
           sortable: true,
           width: 300,
-          minWidth: 150, 
+          minWidth: 100, 
           requiredVisible: true,
           render: (row) => row?.bankTypeName,
+        },
+        { 
+          key: "active", 
+          label: "Active", 
+          width: 100 , 
+          render: (row) => (row.active === "Y" ? "Yes" : "No"),
         },
       ],
       [handleDelete, isMobile, openMobileActionSheet],
@@ -525,6 +531,7 @@ const BankRef = forwardRef(
           __idx: index,
           bankTypeCode: row?.bankTypeCode,
           bankTypeName: row?.bankTypeName,
+          active: row?.active,
         })),
       [bankTypes],
     );
@@ -571,6 +578,18 @@ const BankRef = forwardRef(
                       onChange={(val) => setField("bankTypeName", val)}
                       maxLength={100}
                       disabled={!isEditing || saveMutation.isPending}
+                    />
+
+                    <FieldRenderer
+                      label="Active"
+                      type="select"
+                      value={form.active}
+                      disabled={!isEditing}
+                      options={[
+                        { value: "Y", label: "Yes" },
+                        { value: "N", label: "No" },
+                      ]}
+                      onChange={(v) => setField("active", v)}
                     />
                   </div>
                 </div>

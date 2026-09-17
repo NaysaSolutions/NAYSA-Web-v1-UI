@@ -32,7 +32,7 @@ import {
   useSwalErrorAlert,
 } from "../Global/behavior";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
-import apiClient, { ensureCsrf } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
+import apiClient, { ensureCsrf, getTenant } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import { Link, useNavigate } from "react-router-dom";
 
 const DEFAULT_AVATAR = "/3135715.png";
@@ -83,11 +83,26 @@ const Navbar = ({
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
 
-  const { user, setUser } = useAuth();
+  const { user, setUser, companyInfo } = useAuth();
 
   const apiBaseUrl = (apiClient?.defaults?.baseURL || "").replace(/\/$/, "");
   const companyDb =
     apiClient?.defaults?.headers?.common?.["X-Company-DB"] || "";
+  const companyCode =
+    companyInfo?.compCode ||
+    companyInfo?.companyCode ||
+    companyInfo?.COMP_CODE ||
+    getTenant() ||
+    localStorage.getItem("companyCode") ||
+    "";
+  const companyName =
+    companyInfo?.compName ||
+    companyInfo?.companyName ||
+    companyInfo?.COMP_NAME ||
+    "";
+  const companyLabel =
+    [companyName].filter(Boolean).join(" - ") ||
+    "NAYSA-Solutions, Inc.";
 
   const buildProfileImageUrl = useCallback(
     (userCode, bust = true) => {
@@ -1109,8 +1124,11 @@ const Navbar = ({
           </div>
 
           <div className="flex-grow text-center">
-            <span className="whitespace-nowrap text-xs font-bold uppercase tracking-tight text-blue-900 dark:text-white sm:text-lg">
-              NAYSA-SOLUTIONS INC.
+            <span
+              className="whitespace-nowrap text-xs font-bold uppercase tracking-tight text-blue-900 dark:text-white sm:text-lg"
+              title={companyLabel}
+            >
+              {companyLabel}
             </span>
           </div>
 
