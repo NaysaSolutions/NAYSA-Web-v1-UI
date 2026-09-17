@@ -660,7 +660,7 @@ const FGCategoryCodes = forwardRef(({
             {/* ── Column 1 (4 fields) ── */}
             <div className="space-y-3">
               {/* Inventory Account */}
-              <FieldRenderer label="Inventory Acct" type="lookup" required labelClassName="text-xs"
+              <FieldRenderer label="Inventory Account" type="lookup" required labelClassName="text-xs"
                 value={form.invAcct ? `${form.invAcct}${form.invAcctName ? ` — ${form.invAcctName}` : ""}` : ""}
                 onLookup={() => openCoaLookup("inv")} onChange={(v) => setField("invAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
 
@@ -675,7 +675,7 @@ const FGCategoryCodes = forwardRef(({
                 onLookup={() => openCoaLookup("sales")} onChange={(v) => setField("salesAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
 
               {/* SDiscount Account */}
-              <FieldRenderer label="Sales Discount Acct" type="lookup" required labelClassName="text-xs"
+              <FieldRenderer label="Sales Discount Account" type="lookup" required labelClassName="text-xs"
                 value={form.sdiscAcct ? `${form.sdiscAcct}${form.sdiscAcctName ? ` — ${form.sdiscAcctName}` : ""}` : ""}
                 onLookup={() => openCoaLookup("sdisc")} onChange={(v) => setField("sdiscAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
             </div>
@@ -706,7 +706,7 @@ const FGCategoryCodes = forwardRef(({
             {/* ── Column 3 (3 fields) ── */}
             <div className="space-y-3">
               {/* Expense Account */}
-              <FieldRenderer label="Expense Acct" type="lookup" required labelClassName="text-xs"
+              <FieldRenderer label="Expense Account" type="lookup" required labelClassName="text-xs"
                 value={form.expAcct ? `${form.expAcct}${form.expAcctName ? ` — ${form.expAcctName}` : ""}` : ""}
                 onLookup={() => openCoaLookup("exp")} onChange={(v) => setField("expAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
 

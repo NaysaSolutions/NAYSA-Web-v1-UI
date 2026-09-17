@@ -570,7 +570,7 @@ const FGMast_SetupTab = ({
                       />
                       <div className="col-span-2">
                         <FieldRenderer
-                          label="Alternate Item Desc"
+                          label="Alternate Item Name"
                           type="text"
                           value={form.altItemDesc || ""}
                           onChange={(v) => onChangeForm({ altItemDesc: getValue(v) })}
@@ -580,7 +580,7 @@ const FGMast_SetupTab = ({
                       </div>
                     </div>
                     <FieldRenderer
-                      label="Item Description (2)"
+                      label="Item Name (2)"
                       type="text"
                       value={form.itemDesc2 || ""}
                       onChange={(v) => onChangeForm({ itemDesc2: getValue(v) })}
@@ -589,7 +589,7 @@ const FGMast_SetupTab = ({
                       maxLength={getLen("fg2_name", 200)}
                     />
                     <FieldRenderer
-                      label="Item Description (3)"
+                      label="Item Name (3)"
                       type="text"
                       value={form.itemDesc3 || ""}
                       onChange={(v) => onChangeForm({ itemDesc3: getValue(v) })}
