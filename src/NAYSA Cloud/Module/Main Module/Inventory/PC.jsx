@@ -100,7 +100,7 @@ const PC = () => {
   const inv = INV[invType];
   const docType = { FG: "FGPC", RM: "RMPC", MS: "MSPC" }[invType] || "PC";
   const getLookupTranType = (mode = "load-balance") => (mode === "add-item" ? "IG" : "IL");
-  const historyEndpoint = { FG: "/getFGPCHistory", RM: "/getRMPCHistory", MS: "/getMSPCHistory" }[invType] || "/getPCHistory";
+  const historyEndpoint = "/getPCHistory";
   const hsDoc = getAllTopHSDocRow?.(docType);
   const decQty = companyInfo?.[inv.decQtyKey] ?? 2;
   const decUcost = companyInfo?.[inv.decCostKey] ?? 6;
@@ -261,6 +261,7 @@ const PC = () => {
     lnNo:r.lnNo??r.lineNo??i+1, itemCode:r.itemCode??r.itemNo??"", itemName:r.itemName??r.itemDesc??"",
     uomCode:r.uomCode??"", element:(r.element || r.Element || "E").toUpperCase(), invType:r.invType??invType, qstatCode:r.qstatCode??r.qsCode??"",
     lotNo:r.lotNo??"", colorCode:r.colorCode??"", orderStamp:r.orderStamp??"", rrNo:r.rrNo??"",
+    fifoDocNo:r.fifoDocNo??r.fifoDocno??r.rrNo??"", groupId:r.groupId??"",
     unitCost:formatNumber(parseFormattedNumber(r.unitCost??0)||0,decUcost),
     qtyHand:formatNumber(parseFormattedNumber(r.qtyHand??0)||0,decQty),
     varQty:formatNumber(parseFormattedNumber(r.varQty??0)||0,decQty),
@@ -281,7 +282,7 @@ const PC = () => {
     updateState({ isLoading: true });
 
     try {
-      const response = await postRequest("/getPC", { json_data:{ pcNo, branchCode:bc, invType, direction }});
+      const response = await postRequest("/getPC", { json_data:{ pcNo, branchCode:bc, invType, docType, direction }});
       const raw = response?.data?.[0]?.result ?? response?.data?.result ?? response?.result;
       const data = typeof raw === "string" ? JSON.parse(raw) : raw;
       const h = Array.isArray(data) ? data[0] : data;
@@ -298,7 +299,7 @@ const PC = () => {
         documentID:h.pcId||null,
         documentNo:h.pcNo||pcNo,
         documentDate:toDateInputValue(h.pcDate || documentDate),
-        status:h.status||h.stat||"OPEN",
+        status:h.docStatus||h.pcStatus||h.status||h.stat||"OPEN",
         noReprints:h.noReprints||"0",
         branchCode:h.branchCode||bc,
         branchName:h.branchName||"",
@@ -320,7 +321,7 @@ const PC = () => {
     } finally {
       updateState({ isLoading: false });
     }
-  }, [invType, decQty, decUcost, documentDate]);
+  }, [invType, docType, decQty, decUcost, documentDate]);
 
   const fetchPC = fetchTranData;
 
@@ -349,7 +350,7 @@ const PC = () => {
   };
 
   const payload = (action="S") => ({
-    pcId:documentID || "", pcNo:documentNo || "", pcDate:documentDate, branchCode, invType, action,
+    pcId:documentID || "", pcNo:documentNo || "", pcDate:documentDate, branchCode, invType, docType, action,
     refNo, whCode, locCode, countRef, particular, userCode,
     dt1:detailRows.map((r,i)=>({...r,lnNo:i+1,
       unitCost:parseFormattedNumber(r.unitCost)||0, qtyHand:parseFormattedNumber(r.qtyHand)||0,
@@ -377,6 +378,7 @@ const PC = () => {
         pcDate: documentDate,
         branchCode,
         invType,
+        docType,
         action,
         refNo,
         whCode,
@@ -413,28 +415,33 @@ const PC = () => {
         })),
       };
 
-      const response = await useTransactionUpsert("/upsertPC", pcData, "PC");
+      const response = await useTransactionUpsert(
+        "PC",
+        pcData,
+        updateState,
+        "pcId",
+        "pcNo"
+      );
 
       if (response) {
-        const responseDocNo = response?.data?.[0]?.pcNo || "";
-        const responseDocId = response?.data?.[0]?.pcId || "";
 
-        if (responseDocNo) {
-          await fetchTranData(responseDocNo, branchCode);
-        }
+        const responseDocNo =  response.data[0].pcNo;
+        const responseDocId =  response.data[0].pcId;
+
+        await fetchTranData(responseDocNo,branchCode);
 
         const isZero = Number(noReprints) === 0;
         const onSaveAndPrint = isZero
-          ? () => updateState({ showSignatoryModal: true })
-          : () => handleSaveAndPrint(responseDocId);
+            ? () => updateState({ showSignatoryModal: true })
+            : () => handleSaveAndPrint(responseDocId);
 
         useSwalshowSaveSuccessDialog(reset, onSaveAndPrint);
-      }
 
-      updateState({
-        documentNo: response?.data?.[0]?.pcNo || "",
-        documentID: response?.data?.[0]?.pcId || "",
-      });
+        updateState({
+          documentNo: responseDocNo,
+          documentID: responseDocId,
+        });
+      }
     } catch (error) {
       console.error("Error during transaction upsert:", error);
       useSwalErrorAlert("Physical Count", error?.message || "Save failed.");
@@ -445,7 +452,6 @@ const PC = () => {
 
   const handleSave = async () => {
     if (!(await validate(false))) return;
-    if (!(await useSwalProceedConfirm("Save Physical Count", "Proceed saving this transaction?"))) return;
     await handleActivityOption("S");
   };
 
