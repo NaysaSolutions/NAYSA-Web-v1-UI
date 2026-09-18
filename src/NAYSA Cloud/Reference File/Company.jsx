@@ -526,12 +526,12 @@ const Company = () => {
               onChange={(v) => updateForm({ compEmail: v })}
               maxLength={getMax("COMP_EMAIL")}
             />
-            <FieldRenderer
+            {/* <FieldRenderer
               label="Branch"
               type="lookup"
               value={formData.branchName || formData.branchCode}
               onLookup={() => toggleModal("branch", true)}
-            />
+            /> */}
             <FieldRenderer
               label="Cut-Off"
               required
