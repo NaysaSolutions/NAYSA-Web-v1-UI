@@ -558,7 +558,7 @@ const APV = () => {
     { key: "rcCode", label: "RC Code", width: 100 },
     { key: "rcName", label: "RC Name", width: 200 },
   ];
-    const openPOAPVLookupColumns = [
+  const openPOAPVLookupColumns = [
     { key: "branchCode", label: "Branch", width: 80 },
     { key: "docType", label: "Document Code", width: 110 },
     { key: "poJoNo", label: "PO / JO No", width: 120 },
@@ -571,6 +571,13 @@ const APV = () => {
     { key: "vatCode", label: "VAT Code", width: 100 },
     { key: "vatAmount", label: "VAT Amount", width: 130, type: "amount" },
   ];
+  const getPOAdvanceBalance = (row = {}) => {
+    if (row.advanceBalance !== undefined && row.advanceBalance !== null) return Math.max(parseFormattedNumber(row.advanceBalance) || 0, 0);
+    if (row.originalPoAmount !== undefined && row.originalPoAmount !== null) {
+      return Math.max((parseFormattedNumber(row.originalPoAmount) || 0) - (parseFormattedNumber(row.appliedAdvAmount) || 0), 0);
+    }
+    return Math.max(parseFormattedNumber(row.poAmount) || 0, 0);
+  };
     const fetchAPVReferenceSummary = async ({
     apvtranType = selectedApType,
     referenceType = "",
@@ -633,6 +640,7 @@ const APV = () => {
         poDate: row.poJoDate || "",
         siAmount: row.poAmount || 0,
         amount: row.poAmount || 0,
+        advanceBalance: getPOAdvanceBalance(row),
         vatAmount: row.vatAmount || 0,
         vatCode: row.vatCode || "",
       }));
@@ -1582,6 +1590,22 @@ const APV = () => {
 
 
   const getAdvanceValidationError = (rows = detailRows) => {
+    if (selectedApType === "APV03") {
+      for (let index = 0; index < rows.length; index += 1) {
+        const row = rows[index] || {};
+        const amount = parseFormattedNumber(row.amount) || 0;
+        const advanceBalance = Math.max(
+          parseFormattedNumber(row.advanceBalance ?? row.advpoAmount ?? row.amount) || 0,
+          0,
+        );
+        if (amount < 0) return `Advances Amount in row ${index + 1} cannot be negative.`;
+        if (amount > advanceBalance) {
+          return `Advances Amount in row ${index + 1} cannot exceed the Advances Balance of ${formatNumber(advanceBalance)}.`;
+        }
+      }
+      return "";
+    }
+
     const rules = [
       { field: "advpoAmount", limitField: "amount", label: "Applied Advances Amount", limitLabel: "Original Amount" },
       { field: "advpoVatAmount", limitField: "vatAmount", label: "Applied Advances VAT", limitLabel: "VAT Amount" },
@@ -2477,6 +2501,7 @@ const APV = () => {
 
               amount: formatNumber(amount),
               siAmount: formatNumber(amount),
+              advanceBalance: getPOAdvanceBalance(item),
 
               debitAcct: "",
               rcCode: item.rcCode || "",
