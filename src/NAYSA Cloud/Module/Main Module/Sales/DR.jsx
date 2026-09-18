@@ -6078,10 +6078,12 @@ const handleSODetailRowChange = (index, field, value) => {
   }
 
   if (field === "drQuantity" && isRegularDrType) {
+    const freeItem = String(detailRowsRef.current?.[index]?.freeItem || "").trim().toUpperCase();
+    const isFreeItem = freeItem === "Y" || freeItem === "YES";
     const drQty = parseFormattedNumber(value || 0) || 0;
     const soBalance = parseFormattedNumber(detailRowsRef.current?.[index]?.soBalance || 0) || 0;
 
-    if (drQty > soBalance) {
+    if (!isFreeItem && drQty > soBalance) {
       useSwalErrorAlert("Invalid DR Quantity", "DR Quantity cannot be more than SO Balance.");
       return;
     }
