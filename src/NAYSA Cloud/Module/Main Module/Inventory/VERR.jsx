@@ -51,6 +51,7 @@ import {
   docTypePDFGuide,
 } from "@/NAYSA Cloud/Global/doctype";
 import {
+  useTopForexRate,
   useTopCurrencyRow,
   useTopDocControlRow,
   useTopDocDropDown,
@@ -2225,7 +2226,11 @@ const VERR = () => {
         summary?.currCode || details[0]?.currCode || state.currCode || baseCurrency,
       ).toUpperCase();
       const selectedCurrRate =
-        parseFormattedNumber(summary?.currRate || state.currRate || 1) || 1;
+        selectedCurrCode === String(baseCurrency || "").toUpperCase()
+          ? parseFormattedNumber(state.defaultCurrRate || 1) || 1
+          : parseFormattedNumber(
+              await useTopForexRate(selectedCurrCode, header.rr_date),
+            ) || 1;
       const currencyRow = await useTopCurrencyRow(selectedCurrCode);
 
       /*
@@ -2274,7 +2279,7 @@ const VERR = () => {
         details.map(async (row, detailIndex) => {
           const itemCode = row?.itemCode || "";
           const mast = itemCode ? await loadVehicleMasterInfo(itemCode) : null;
-          const unitCost = parseFormattedNumber(row?.unitCost || 0);
+          const poUnitCost = parseFormattedNumber(row?.unitCost || 0);
           const poQuantity = parseFormattedNumber(row?.poQuantity || 0);
           const qtyBalance = parseFormattedNumber(row?.qtyBalance || 0);
           const rowCurrCode = String(row?.currCode || selectedCurrCode).toUpperCase();
@@ -2319,11 +2324,11 @@ const VERR = () => {
               poQty: poQuantity,
               balance: runningPoBalance,
               quantity: 1,
-              unitCost,
-              unitCostFx:
+              unitCost:
                 rowCurrCode === baseCurrency
-                  ? unitCost
-                  : unitCost / Math.max(selectedCurrRate, 0.000001),
+                  ? poUnitCost
+                  : poUnitCost * Math.max(selectedCurrRate, 0.000001),
+              unitCostFx: poUnitCost,
               currCode: rowCurrCode,
               currRate: selectedCurrRate,
               vatCode: rowVatCode,
@@ -2385,6 +2390,7 @@ const VERR = () => {
 
       detailRowsRef.current = mappedRows;
       detailRowsGLRef.current = [];
+      currRateBeforeEditRef.current = formatNumber(selectedCurrRate, 6);
     } catch (error) {
       console.error("VERR PO selection error", error);
       useSwalErrorAlert(
