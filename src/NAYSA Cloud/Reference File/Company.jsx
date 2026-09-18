@@ -394,8 +394,33 @@ const Company = () => {
       <BranchLookupModal isOpen={modals.branch} onClose={(v) => { toggleModal("branch", false); if(v) updateForm({ branchCode: v.branchCode, branchName: v.branchName }) }} />
       <CompanyCutoffLookup isOpen={modals.cutoff} onClose={(v) => { toggleModal("cutoff", false); if(v) updateForm({ cutoffCode: v.cutoffCode, cutoffName: v.cutoffName }) }} />
       <SearchCurrRef isOpen={modals.currency} onClose={(v) => { toggleModal("currency", false); if(v) updateForm({ currencyCode: v.currCode, currencyName: v.currName }) }} />
-      <SearchBankMast isOpen={modals.disbBank} onClose={(v) => { toggleModal("disbBank", false); if(v) updateForm({ disbursementBankCode: v.bankCode , disbursementBankName: v.bankAcctNo }) }} />
-      <SearchBankMast isOpen={modals.depBank} onClose={(v) => { toggleModal("depBank", false); if(v) updateForm({ depositBankCode: v.bankCode , depositBankName: v.bankAcctNo }) }} />
+      <SearchBankMast
+  isOpen={modals.disbBank}
+  onClose={(v) => {
+    toggleModal("disbBank", false);
+
+    if (v) {
+      updateForm({
+        disbursementBankCode: v.bankCode || "",
+        disbursementBankName: v.acctName || "",
+      });
+    }
+  }}
+/>
+
+<SearchBankMast
+  isOpen={modals.depBank}
+  onClose={(v) => {
+    toggleModal("depBank", false);
+
+    if (v) {
+      updateForm({
+        depositBankCode: v.bankCode || "",
+        depositBankName: v.acctName || "",
+      });
+    }
+  }}
+/>
       <SearchRCMast isOpen={modals.rc} onClose={(v) => { toggleModal("rc", false); if(v && rcType) updateForm({ [`${rcType}RespCenter`]: v.rcCode, [`${rcType}RespCenterName`]: v.rcName  });}} />
 
       {/* Header & ButtonBar */}
