@@ -323,6 +323,11 @@ const JV = () => {
   } = state;
 
   const [focusedCell, setFocusedCell] = useState(null);
+  const detailRowsGLRef = useRef(detailRowsGL);
+
+  useEffect(() => {
+    detailRowsGLRef.current = detailRowsGL;
+  }, [detailRowsGL]);
 
   // Document Global Setup & Updated Transaction Name Logic
   const docType = docTypes.JV;
@@ -1929,7 +1934,7 @@ const JV = () => {
   };
 
   const handleDetailChangeGL = async (index, field, value) => {
-    const updatedRowsGL = [...state.detailRowsGL];
+    const updatedRowsGL = [...(detailRowsGLRef.current || [])];
     let row = { ...updatedRowsGL[index] };
 
     if (
@@ -1993,6 +1998,7 @@ const JV = () => {
     }
 
     updatedRowsGL[index] = row;
+    detailRowsGLRef.current = updatedRowsGL;
     updateState({
       detailRowsGL: updatedRowsGL,
       ...getGLTotalsState(updatedRowsGL),
@@ -2000,7 +2006,7 @@ const JV = () => {
   };
 
   const handleBlurGL = async (index, field, value, autoCompute = false) => {
-    const updatedRowsGL = [...state.detailRowsGL];
+    const updatedRowsGL = [...(detailRowsGLRef.current || [])];
     const row = { ...updatedRowsGL[index] };
 
     const parsedValue = parseFormattedNumber(value);
@@ -2054,6 +2060,7 @@ const JV = () => {
     }
 
     updatedRowsGL[index] = row;
+    detailRowsGLRef.current = updatedRowsGL;
     updateState({
       detailRowsGL: updatedRowsGL,
       ...getGLTotalsState(updatedRowsGL),
@@ -2290,7 +2297,7 @@ const handleTranDocNoSelection = async (data) => {
     const style = getJvGlCellStyle(columnKey, getJvGlFallbackWidth(columnKey));
     const focusNextGlCell = (field) => {
       focusNextJvGlRowInput(index, field, {
-        rows: detailRowsGL,
+        rows: detailRowsGLRef.current,
         zeroClearFields: jvGlZeroClearFields,
         parseValue: parseFormattedNumber,
         onClearNextValue: (nextIndex, nextField, value) =>

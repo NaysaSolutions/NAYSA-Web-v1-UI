@@ -217,6 +217,7 @@ const VERR = () => {
   const detailRowsRef = useRef([]);
   const detailRowsGLRef = useRef([]);
   const currRateBeforeEditRef = useRef("1.000000");
+  const [shouldGenerateGLAfterCurrRateChange, setShouldGenerateGLAfterCurrRateChange] = useState(false);
 
 
   useEffect(() => {
@@ -2590,6 +2591,12 @@ const VERR = () => {
     }
   };
 
+  useEffect(() => {
+    if (!shouldGenerateGLAfterCurrRateChange) return;
+    setShouldGenerateGLAfterCurrRateChange(false);
+    handleActivityOption("GenerateGL");
+  }, [shouldGenerateGLAfterCurrRateChange]);
+
   const handleCancel = () => {
     if (state.documentID && displayStatus === "OPEN") {
       updateState({ showCancelModal: true });
@@ -2652,17 +2659,39 @@ const VERR = () => {
     if (state.documentID) updateState({ showAttachModal: true });
   };
 
-  const handleHeaderCurrencyRateBlur = () => {
+  const handleHeaderCurrencyRateBlur = async () => {
     let rate = parseFormattedNumber(state.currRate || 1);
     if (!rate || rate <= 0) rate = 1;
     const oldRate = parseFormattedNumber(currRateBeforeEditRef.current || 1);
-    updateState({ currRate: formatNumber(rate, 6) });
-    if (Math.abs(rate - oldRate) < 0.0000001) return;
+    const nextRate = formatNumber(rate, 6);
+    const previousRate = formatNumber(oldRate, 6);
+
+    if (Math.abs(rate - oldRate) < 0.0000001) {
+      updateState({ currRate: nextRate });
+      return;
+    }
+
+    const result = await useSwalProceedConfirm(
+      "Apply Currency Rate changes?",
+      `Currency Rate changed from ${previousRate} to ${nextRate}. Do you want to recalculate the PHP amounts and regenerate the GL Entries?`,
+      "Yes, apply changes",
+      "No",
+    );
+
+    if (!result.isConfirmed) {
+      updateState({ currRate: previousRate });
+      return;
+    }
 
     const rows = (state.detailRows || []).map((row) =>
       recalcVehicleRow({ ...row, currRate: rate, currCode: state.currCode }),
     );
-    updateState({ detailRows: rows });
+    detailRowsRef.current = rows;
+    currRateBeforeEditRef.current = nextRate;
+    updateState({ currRate: nextRate, detailRows: rows, detailRowsGL: [] });
+    if (rows.length > 0 && isGeneralLedgerEnabled) {
+      setShouldGenerateGLAfterCurrRateChange(true);
+    }
   };
 
   const handleAddGLRow = (index = null) => {
