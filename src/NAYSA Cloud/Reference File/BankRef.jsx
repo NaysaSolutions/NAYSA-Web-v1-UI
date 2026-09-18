@@ -187,7 +187,7 @@ const BankRef = forwardRef(
     const deleteMutation = useMutation({
       mutationFn: async (bankTypeCode) => {
         return apiClient.post("/deleteBankType", {
-          json_data: { bankTypeCode },
+          json_data: { bankTypeCode, userCode: user?.USER_CODE || "ADMIN" },
         });
       },
       onSuccess: async () => {

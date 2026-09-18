@@ -64,9 +64,18 @@ const toDateInputValue = (value) => {
 };
 
 const INV = {
-  FG: { name: "Finished Goods", decQtyKey: "itemDecqtyFG", decCostKey: "itemDecUcostFG" },
-  RM: { name: "Raw Materials", decQtyKey: "itemDecqtyRM", decCostKey: "itemDecUcostRM" },
-  MS: { name: "Material Supplies", decQtyKey: "itemDecqtyMS", decCostKey: "itemDecUcostMS" },
+  FG: { name: "Finished Goods", decQtyKey: "itemDecqtyFG", decCostKey: "itemDecUcostFG",costing :"fginvCosting" },
+  RM: { name: "Raw Materials", decQtyKey: "itemDecqtyRM", decCostKey: "itemDecUcostRM" ,costing :"rminvCosting" },
+  MS: { name: "Material Supplies", decQtyKey: "itemDecqtyMS", decCostKey: "itemDecUcostMS",costing :"msinvCosting" },
+};
+
+const getInventoryLookupEndpoint = (type) => {
+  const normalizedType = String(type || "FG").toUpperCase();
+  return {
+    FG: "getInvLookupFG",
+    RM: "getInvLookupRM",
+    MS: "getInvLookupMS",
+  }[normalizedType] || "getInvLookupFG";
 };
 
 const getInvType = (location) => {
@@ -98,14 +107,17 @@ const PC = () => {
 
   const invType = useMemo(() => getInvType(location), [location.pathname, location.search]);
   const inv = INV[invType];
+  const inventoryLookupEndpoint = getInventoryLookupEndpoint(invType);
   const docType = { FG: "FGPC", RM: "RMPC", MS: "MSPC" }[invType] || "PC";
   const getLookupTranType = (mode = "load-balance") => (mode === "add-item" ? "IG" : "IL");
   const historyEndpoint = "/getPCHistory";
   const hsDoc = getAllTopHSDocRow?.(docType);
   const decQty = companyInfo?.[inv.decQtyKey] ?? 2;
   const decUcost = companyInfo?.[inv.decCostKey] ?? 6;
-  const documentTitle = `${inv.name} Physical Count`;
-
+  const costingMethod = companyInfo?.[inv.costing] ?? "FIFO";
+  const isWacCosting = String(costingMethod || "FIFO").trim().toUpperCase() === "WAC";
+  const documentTitle = `${invType} Physical Count`;
+  
   const [topTab, setTopTab] = useState("details");
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [itemInsertIndex, setItemInsertIndex] = useState(null);
@@ -219,7 +231,10 @@ const PC = () => {
   } = useResizableTableColumns(pcDetailColumnDefs);
 
   const visiblePcDetailColumns = getOrderedPcDetailColumns(pcDetailColumnDefs).filter(
-    (column) => column.key !== "actualQty" || countRef === "A",
+    (column) => {
+      if (column.key === "fifoDocNo" && isWacCosting) return false;
+      return column.key !== "actualQty" || countRef === "A";
+    },
   );
   const sortedPcDetailRows = getSortedPcDetailRows(
     detailRows.map((row, originalIndex) => ({ row, originalIndex })),
@@ -325,10 +340,39 @@ const PC = () => {
 
   const fetchPC = fetchTranData;
 
+  const cleanUrl = useCallback(() => {
+    window.history.replaceState({}, "", window.location.origin);
+  }, []);
+
+  const handleHistoryRowPick = useCallback(async (row) => {
+    const docNo = row?.pcNo || row?.docNo;
+    const selectedBranchCode = row?.branchCode;
+    if (!docNo || !selectedBranchCode) return;
+
+    await fetchPC(docNo, selectedBranchCode);
+    setTopTab("details");
+    cleanUrl();
+  }, [fetchPC, cleanUrl]);
+
+  const handleTranDocNoRetrieval = useCallback(async (result) => {
+    const selectedDocNo = result?.documentNo || result?.pcNo || result?.docNo;
+    if (!selectedDocNo) return;
+
+    await fetchPC(selectedDocNo, result?.branchCode || branchCode);
+  }, [fetchPC, branchCode]);
+
+  const handleTranDocNoSelection = useCallback((selectedDoc) => {
+    const docNo = selectedDoc?.pcNo || selectedDoc?.documentNo || selectedDoc?.docNo;
+    if (!docNo) return;
+
+    fetchPC(docNo, selectedDoc?.branchCode || branchCode);
+    updateState({ showAllTranDocNo: false });
+  }, [fetchPC, branchCode, updateState]);
+
   useEffect(() => {
     const p=new URLSearchParams(location.search), pcNo=p.get("pcNo"), bc=p.get("branchCode");
-    if(!loadedFromUrlRef.current && pcNo && bc){ loadedFromUrlRef.current=true; fetchPC(pcNo,bc); }
-  },[location.search,fetchPC]);
+    if(!loadedFromUrlRef.current && pcNo && bc){ loadedFromUrlRef.current=true; handleHistoryRowPick({ pcNo, branchCode: bc }); }
+  },[location.search, handleHistoryRowPick]);
 
   const invalidNegative = (rows) => countRef==="V" ? rows.filter(r => {
     const v=parseFormattedNumber(r.varQty)||0, q=parseFormattedNumber(r.qtyHand)||0;
@@ -337,7 +381,7 @@ const PC = () => {
 
   const validate = async (forPosting=false) => {
     if (!(await useSwalvalidateRequiredFields({
-      Branch:branchCode, "Physical Count Date":documentDate, Warehouse:whCode, "Count Reference":countRef
+      Branch:branchCode, "Physical Count Date":documentDate, "Count Reference":countRef
     },"Physical Count"))) return false;
     if (!detailRows.length) { useSwalInfoAlert("Physical Count","No Physical Count Details."); return false; }
     const neg=invalidNegative(detailRows);
@@ -612,7 +656,7 @@ const PC = () => {
     updateState({ isLoading: true, itemLookupOpen: true });
 
     try {
-      const response = await fetchDataJson("getInvLookupFG", {
+      const response = await fetchDataJson(inventoryLookupEndpoint, {
         userCode,
         whouseCode: whCode || "",
         locCode: locCode || "",
@@ -724,8 +768,7 @@ const PC = () => {
     updateState({ isLoading: true });
 
     try {
-      const endpoint = "getInvLookupFG";
-      const response = await fetchDataJson(endpoint, {
+      const response = await fetchDataJson(inventoryLookupEndpoint, {
         userCode,
         whouseCode: whCode || "",
         locCode: locCode || "",
@@ -1040,7 +1083,7 @@ const PC = () => {
                     label="Count Reference"
                     type="select"
                     value={countRef || "V"}
-                    disabled={isExisting || isFormDisabled}
+                    disabled={isFormDisabled}
                     onChange={(val) => updateState({ countRef: val })}
                     options={[
                       { label: "Variance Count", value: "V" },
@@ -1220,15 +1263,18 @@ const PC = () => {
           )}
         </div>
 
-        <div className={topTab === "history" ? "" : "hidden"}>
+       <div className={topTab === "history" ? "" : "hidden"}>
           <AllTranHistory
             showHeader={false}
             endpoint={historyEndpoint}
-            cacheKey={`PC:${invType}:${branchCode}:${documentNo}`}
+            cacheKey={`PC:${invType}:${state.branchCode || ""}:${state.documentNo || ""}`}
             activeTabKey="PC_Summary"
-            branchCode={branchCode}
+            branchCode={state.branchCode}
+            startDate={state.fromDate}
+            endDate={state.toDate}
+            invType={invType}
             status="All"
-            onRowDoubleClick={(r) => fetchPC(r.pcNo || r.docNo, r.branchCode)}
+            onRowDoubleClick={handleHistoryRowPick}
             historyExportName={`${documentTitle} History`}
           />
         </div>
@@ -1285,7 +1331,7 @@ const PC = () => {
             }}
             invType={invType}
             enableMultiSelect={selectedRowIndex === null}
-            endpoint="getInvLookupFG"
+            endpoint={inventoryLookupEndpoint}
             customParam="ActiveAll"
             docType={docType}
             tranType={getLookupTranType("add-item")}
@@ -1311,13 +1357,12 @@ const PC = () => {
 
         {showAllTranDocNo && (
           <AllTranDocNo
-            isOpen
-            onClose={(r) => {
-              updateState({ showAllTranDocNo: false });
-              if (r) fetchPC(r.docNo || r.pcNo, r.branchCode || branchCode);
-            }}
-            docType={docType}
-            branchCode={branchCode}
+            isOpen={showAllTranDocNo}
+            params={{branchCode, branchName, docType, documentTitle, fieldNo : "pcNo"}}
+            onRetrieve={handleTranDocNoRetrieval}
+            onResponse={{documentNo}}
+            onSelected={handleTranDocNoSelection}
+            onClose={() => updateState({ showAllTranDocNo: false })}
           />
         )}
 

@@ -186,6 +186,7 @@ const AllTranHistory = (props) => {
     showHeader: showHeaderProp,
     cacheKey: cacheKeyProp,
     historyExportName: historyExportNameProp,
+    invType: invTypeProp = "",
     isActive = true,
     quantityDecimals,
     amountDecimals,
@@ -586,6 +587,7 @@ const AllTranHistory = (props) => {
           endDate: params.endDate,
           branchCode: params.branchCode,
           userCode: params.userCode,
+          invType: params.invType || "",
         },
       };
 
@@ -659,6 +661,8 @@ const AllTranHistory = (props) => {
         endDate: appliedFilters.endDate,
         branchCode: appliedFilters.branchCode,
         userCode: currentUserRow?.userCode,
+        invType: invTypeProp || "",
+
       },
     ],
     queryFn: fetchHistoryData,
