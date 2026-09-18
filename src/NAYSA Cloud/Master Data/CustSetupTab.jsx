@@ -100,16 +100,16 @@ const TABS = [
       </svg>
     ),
   },
-  {
-    id: "tcsignatory",
-    label: "TC Signatory",
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M10.5 2.5l3 3-7 7H3.5v-3l7-7z" />
-        <path d="M8.5 4.5l3 3" />
-      </svg>
-    ),
-  },
+  // {
+  //   id: "tcsignatory",
+  //   label: "TC Signatory",
+  //   icon: (
+  //     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+  //       <path d="M10.5 2.5l3 3-7 7H3.5v-3l7-7z" />
+  //       <path d="M8.5 4.5l3 3" />
+  //     </svg>
+  //   ),
+  // },
 ];
 
 const CustSetupTab = forwardRef(
@@ -120,10 +120,12 @@ const CustSetupTab = forwardRef(
       form = {},
       generationMode,
       sltypeOptions = [],
+      allSltypeOptions = [],
       sourceOptions = [],
       activeOptions = [],
       onChangeForm,
       onNameBlur,
+      onSlTypeChange,
       onSelectCustomerCode,
       taxClassOptions = [],
     },
@@ -156,14 +158,19 @@ const CustSetupTab = forwardRef(
       return n || fallback;
     };
 
-    // Same Manual/Auto behavior used by Payee Code.
-    // Manual + new record = editable.
-    // Auto + new record = read-only with lookup.
-    // Existing record = read-only with lookup.
-    const isManualMode = useMemo(() => {
-      const mode = normalizeUpper(generationMode || "Auto");
-      return mode === "MANUAL" || mode === "M";
-    }, [generationMode]);
+    // Customer Code generation behavior:
+    // System + new = blank/read-only; generated only on Save.
+    // Auto   + new = generated/displayed immediately on Add; read-only.
+    // Manual + new = editable.
+    // Existing     = always read-only.
+    const generationModeValue = useMemo(
+      () => normalizeUpper(generationMode || "System"),
+      [generationMode]
+    );
+
+    const isManualMode =
+      generationModeValue === "MANUAL" ||
+      generationModeValue === "M";
 
     const canTypeCustomerCode = isNewRecord && isManualMode;
     const customerCodeOverrideRef = useRef(null);
@@ -217,6 +224,13 @@ const CustSetupTab = forwardRef(
       [form?.taxClass]
     );
 
+    const sourceValue = useMemo(
+      () => normalizeUpper(form?.source || "L"),
+      [form?.source]
+    );
+
+    const isForeign = sourceValue === "F" || sourceValue === "FOREIGN";
+
     const isCustomer = ["CU", "CUST", "CUSTOMER"].includes(sl);
     const isEmployee = ["EM", "EMP", "EMPLOYEE"].includes(sl);
     const isIndividual = isEmployee || taxClass === "WI";
@@ -231,62 +245,98 @@ const CustSetupTab = forwardRef(
     // const nameAutoRef = useRef({ businessTouched: false });
 
     const mappedSltypeOptions = useMemo(() => {
-      const base = [
-        { value: "CUSTOMER", label: "CUSTOMER" },
-        { value: "AGENCY", label: "AGENCY" },
-        { value: "OTHERS", label: "OTHERS" },
-        { value: "EM", label: "EMPLOYEE" },
-      ];
-
       const normalizeOption = (o) => {
         const value = normalizeUpper(
           typeof o === "string"
             ? o
-            : o?.value ?? o?.code ?? o?.sltypeCode ?? o?.sltype_code ?? ""
+            : o?.value ?? o?.code ?? o?.slTypeCode ?? o?.sltypeCode ?? o?.sltype_code ?? ""
         );
 
         if (!value) return null;
 
-        const rawLabel = normalizeUpper(
+        const label = String(
           typeof o === "string"
             ? value
-            : o?.label ?? o?.name ?? o?.sltypeName ?? o?.sltype_name ?? value
-        );
+            : o?.label ?? o?.name ?? o?.slTypeName ?? o?.sltypeName ?? o?.sltype_name ?? value
+        ).trim();
 
-        // Display EMPLOYEE but save EM, so code generation becomes EM000001.
-        if (["EM", "EMP", "EMPLOYEE"].includes(value) || rawLabel === "EMPLOYEE") {
-          return { value: "EM", label: "EMPLOYEE" };
-        }
-
-        return { value, label: rawLabel };
+        return {
+          value,
+          label: label || value,
+        };
       };
 
-      const extra = (Array.isArray(sltypeOptions) ? sltypeOptions : [])
+      // These are the ONLY SL Types allowed for new Customer records:
+      // Active = Yes + Customer = Yes (already filtered by CustMast.jsx).
+      const selectableOptions = (Array.isArray(sltypeOptions) ? sltypeOptions : [])
         .map(normalizeOption)
         .filter(Boolean);
 
+      // Complete reference is used only to resolve/display an existing record's
+      // historical SL Type name. It does NOT make inactive/non-customer types
+      // selectable for a new record.
+      const referenceOptions = (Array.isArray(allSltypeOptions) ? allSltypeOptions : [])
+        .map(normalizeOption)
+        .filter(Boolean);
+
+      const referenceByCode = new Map(
+        referenceOptions.map((option) => [option.value, option])
+      );
+
       const seen = new Set();
-      return [...extra, ...base].filter((x) => {
-        const key = x.label || x.value;
-        if (seen.has(key)) return false;
-        seen.add(key);
+      const unique = selectableOptions.filter((option) => {
+        if (seen.has(option.value)) return false;
+        seen.add(option.value);
         return true;
       });
-    }, [sltypeOptions]);
+
+      // Existing Customer records must remain retrievable even when their SL Type
+      // is later made inactive or changed to Customer = No / Payee = No.
+      // Add ONLY that record's stored SL Type back into the dropdown for display.
+      const currentValue = normalizeUpper(form?.sltypeCode || "");
+      if (!isNewRecord && currentValue && !seen.has(currentValue)) {
+        const historicalOption = referenceByCode.get(currentValue);
+
+        unique.unshift({
+          value: currentValue,
+          label: historicalOption?.label || currentValue,
+        });
+      }
+
+      return unique;
+    }, [sltypeOptions, allSltypeOptions, form?.sltypeCode, isNewRecord]);
 
     useEffect(() => {
       if (!isEditing) return;
 
+      // Normalize Employee SL Type and always use Individual tax class.
       if (["EMP", "EMPLOYEE"].includes(sl)) {
-        onChangeForm({ sltypeCode: "EM" });
+        onChangeForm({
+          sltypeCode: "EM",
+          taxClass: "WI",
+        });
         return;
       }
 
-      const desiredTaxClass = isCustomer ? "WC" : isEmployee ? "WI" : "";
-      if (desiredTaxClass && taxClass !== desiredTaxClass) {
-        onChangeForm({ taxClass: desiredTaxClass });
+      // Employee records must remain Individual.
+      if (isEmployee && taxClass !== "WI") {
+        onChangeForm({ taxClass: "WI" });
+        return;
       }
-    }, [isEditing, isCustomer, isEmployee, sl, taxClass, onChangeForm]);
+
+      // Customer defaults to Corporate only when Tax Rate Class is blank.
+      // Do not overwrite WI when the user manually selects Individual.
+      if (isCustomer && !taxClass) {
+        onChangeForm({ taxClass: "WC" });
+      }
+    }, [
+      isEditing,
+      isCustomer,
+      isEmployee,
+      sl,
+      taxClass,
+      onChangeForm,
+    ]);
 
     useEffect(() => {
       if (!isEditing || !isIndividual) return;
@@ -358,11 +408,18 @@ const CustSetupTab = forwardRef(
             <div className="grid grid-cols-3 gap-3">
               <FieldRenderer
                 label="SL Type"
+                required
                 type="select"
                 value={form?.sltypeCode || ""}
                 options={mappedSltypeOptions}
                 onChange={(v) => {
                   const nextSl = normalizeUpper(getValue(v));
+
+                  if (onSlTypeChange) {
+                    onSlTypeChange(nextSl);
+                    return;
+                  }
+
                   const updates = { sltypeCode: nextSl };
 
                   if (["EM", "EMP", "EMPLOYEE"].includes(nextSl)) {
@@ -409,7 +466,7 @@ const CustSetupTab = forwardRef(
                 <FieldRenderer
                   key={`customer-code-${canTypeCustomerCode ? "manual" : "readonly"}`}
                   label="Customer Code"
-                  required
+                  required={isManualMode}
                   type="lookup"
                   editableLookup
                   value={form?.custCode || ""}
@@ -701,7 +758,7 @@ const CustSetupTab = forwardRef(
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       <FieldRenderer
                         label="TIN"
-                        required
+                        required={!isForeign}
                         type="text"
                         value={form?.custTin || ""}
                         onChange={(v) => onChangeForm({ custTin: getValue(v) })}
@@ -834,36 +891,41 @@ const CustSetupTab = forwardRef(
                       <FieldRenderer
                         label="Chain Flag"
                         type="select"
-                        value={form?.chainFlag || ""}
+                        value={form?.chainFlag || "N"}
                         options={[
                           { value: "Y", label: "Yes" },
                           { value: "N", label: "No" },
                         ]}
                         onChange={(v) => {
-                          const chainFlag = getValue(v);
+                          const chainFlag = normalizeUpper(getValue(v));
 
-                          if (chainFlag !== "Y") {
+                          if (chainFlag === "Y") {
+                            // Mother / Parent Customer:
+                            // Chain Group must point to itself.
+                            const selfCode = form?.custCode || "";
+                            const selfName = form?.custName || form?.businessName || "";
+
                             onChangeForm({
-                              chainFlag: "N",
-                              chainCode: "",
-                              chainCustomer: "",
-                              chainCustomerCode: "",
-                              chainCustomerName: "",
-                              custGroup: "",
+                              chainFlag: "Y",
+                              chainCode: selfCode,
+                              chainCustomerCode: selfCode,
+                              chainCustomer: selfName,
+                              chainCustomerName: selfName,
+                              custGroup: selfCode,
                             });
                             return;
                           }
 
-                          const selfCode = form?.custCode || "";
-                          const selfName = form?.custName || form?.businessName || "";
-
+                          // Child Customer:
+                          // Clear the previous self/mother assignment, then allow the
+                          // user to choose a Mother Customer from the Chain Customer lookup.
                           onChangeForm({
-                            chainFlag: "Y",
-                            chainCode: selfCode,
-                            chainCustomerCode: selfCode,
-                            chainCustomer: selfName,
-                            chainCustomerName: selfName,
-                            custGroup: selfCode,
+                            chainFlag: "N",
+                            chainCode: "",
+                            chainCustomer: "",
+                            chainCustomerCode: "",
+                            chainCustomerName: "",
+                            custGroup: "",
                           });
                         }}
                         readOnly={isReadOnly}
@@ -880,9 +942,17 @@ const CustSetupTab = forwardRef(
                         label="Chain Customer"
                         type="lookup"
                         value={form?.chainCustomer || form?.chainCustomerName || ""}
-                        onLookup={isDisabled || form?.chainFlag !== "Y" ? undefined : () => setIsChainCustomerLookupOpen(true)}
-                        readOnly={isReadOnly}
-                        disabled={isDisabled || form?.chainFlag !== "Y"}
+                        onLookup={
+                          isDisabled || normalizeUpper(form?.chainFlag || "N") === "Y"
+                            ? undefined
+                            : () => setIsChainCustomerLookupOpen(true)
+                        }
+                        readOnly={
+                          isReadOnly || normalizeUpper(form?.chainFlag || "N") === "Y"
+                        }
+                        disabled={
+                          isDisabled || normalizeUpper(form?.chainFlag || "N") === "Y"
+                        }
                       />
                     </div>
 
@@ -1060,7 +1130,9 @@ const CustSetupTab = forwardRef(
             if (!chainCode) return;
 
             onChangeForm({
-              chainFlag: "Y",
+              // Selecting a Mother Customer must NOT turn this child
+              // into a Mother. Keep Chain Flag = No.
+              chainFlag: "N",
               chainCode,
               chainCustomerCode: chainCode,
               chainCustomer,

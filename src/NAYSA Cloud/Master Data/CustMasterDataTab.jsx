@@ -244,18 +244,11 @@ const pickAnyCase = (row, key) => {
   return pick(row, [k, k.toLowerCase(), k.toUpperCase(), toSnake(k), toSnake(k).toUpperCase()]);
 };
 
-// Customer SL Types
-const SLTYPE_OPTIONS = [
-  { value: "", label: "" },
-  { value: "AG", label: "AGENCY" },
-  { value: "CU", label: "CUSTOMER" },
-  { value: "OT", label: "OTHERS" },
-];
-
 const CustMasterDataTab = ({
   isLoading = false,
-  subsidiaryType = "", // AG | CU | OT
+  subsidiaryType = "",
   onChangeSubsidiaryType,
+  sltypeOptions = [],
   filters = {},
   onChangeFilter,
   rows = [],
@@ -267,6 +260,58 @@ const CustMasterDataTab = ({
   const slType = normalizeUpper(subsidiaryType);
 
   const docType = "Customer Master Data";
+
+  const mappedSltypeOptions = useMemo(() => {
+    const seen = new Set();
+
+    const options = (Array.isArray(sltypeOptions) ? sltypeOptions : [])
+      .map((option) => {
+        const value = normalizeUpper(
+          typeof option === "string"
+            ? option
+            : option?.value ??
+              option?.code ??
+              option?.slTypeCode ??
+              option?.sltypeCode ??
+              option?.sltype_code ??
+              ""
+        );
+
+        if (!value) return null;
+
+        const label = String(
+          typeof option === "string"
+            ? value
+            : option?.label ??
+              option?.name ??
+              option?.slTypeName ??
+              option?.sltypeName ??
+              option?.sltype_name ??
+              value
+        ).trim();
+
+        return {
+          value,
+          label: label || value,
+        };
+      })
+      .filter(Boolean)
+      .filter((option) => {
+        if (seen.has(option.value)) return false;
+        seen.add(option.value);
+        return true;
+      });
+
+    const currentValue = normalizeUpper(subsidiaryType);
+    if (currentValue && !seen.has(currentValue)) {
+      options.unshift({
+        value: currentValue,
+        label: currentValue,
+      });
+    }
+
+    return [{ value: "", label: "" }, ...options];
+  }, [sltypeOptions, subsidiaryType]);
 
   // Search state
   const [searchTerm, setSearchTerm] = useState("");
@@ -383,7 +428,7 @@ const CustMasterDataTab = ({
             className="global-tran-textbox-ui global-tran-textbox-enabled w-44"
             disabled={isLoading}
           >
-            {SLTYPE_OPTIONS.map((o) => (
+            {mappedSltypeOptions.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
