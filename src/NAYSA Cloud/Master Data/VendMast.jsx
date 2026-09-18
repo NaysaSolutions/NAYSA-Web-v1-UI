@@ -19,7 +19,7 @@ import {
   faVideo
 } from "@fortawesome/free-solid-svg-icons";
 
-import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
+import { apiClient, fetchData } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
 import SearchAttachment from "@/NAYSA Cloud/Lookup/SearchAttachment.jsx";
 import SearchVendMast from "@/NAYSA Cloud/Lookup/SearchVendMast.jsx";
@@ -40,22 +40,19 @@ import PayeeMasterDataTab from "@/NAYSA Cloud/Master Data/CustMastTabs/PayeeMast
 import ReferenceCodesTab from "@/NAYSA Cloud/Master Data/CustMastTabs/ReferenceCodesTab";
 import { usePagePermission } from "@/NAYSA Cloud/Global/usePagePermission.js";
 import PermissionBadge from "@/NAYSA Cloud/Global/PermissionBadge.jsx";
+import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
-const normalizeSlType = (v) => {
+const normalizeSlType = (v) => String(v ?? "").toUpperCase().trim();
+
+const normalizeSource = (v) => {
   const s = String(v ?? "").toUpperCase().trim();
-  if (!s) return "";
-  if (["AG", "CU", "EM", "OT", "SU", "TN"].includes(s)) return s;
-  if (s === "CUSTOMER") return "CU";
-  if (s === "SUPPLIER") return "SU";
-  if (s === "AGENCY") return "AG";
-  if (s === "EMPLOYEE") return "EM";
-  if (s === "OTHERS") return "OT";
-  if (s === "TENANT") return "TN";
+  if (s === "FOREIGN") return "F";
+  if (s === "LOCAL") return "L";
   return s;
 };
 
 const emptyForm = {
-  sltypeCode: "SU",
+  sltypeCode: "",
   vendCode: "",
   vendName: "",
   vendContact: "",
@@ -97,6 +94,15 @@ const emptyForm = {
 const VendMast = () => {
   const [activeTab, setActiveTab] = useState("setup");
   const [isLoading, setIsLoading] = useState(false);
+  const [isSlTypeChanging, setIsSlTypeChanging] = useState(false);
+
+  // SL Types come from SL Master Data.
+  // allSltypeOptions: complete reference for existing/historical records.
+  // sltypeOptions: NEW Payee selectable types only (Active=Y + Payee=Y).
+  // sltypeFilterOptions: all Payee-tagged types, including inactive, for history/filtering.
+  const [allSltypeOptions, setAllSltypeOptions] = useState([]);
+  const [sltypeOptions, setSltypeOptions] = useState([]);
+  const [sltypeFilterOptions, setSltypeFilterOptions] = useState([]);
 
   const docType = "VendMast";
   const guideRef = useRef(null);
@@ -118,6 +124,164 @@ const VendMast = () => {
 
   const { user } = useAuth();
   const userCode = user?.userCode || user?.USER_CODE || user?.code || "";
+
+  // ============================================================
+  // PAYEE CODE GENERATION MODE
+  // HS_DOC SU supports three modes:
+  //   Auto   -> generate/display Payee Code when Add is clicked and
+  //             regenerate when SL Type changes while adding.
+  //   System -> keep Payee Code blank/read-only while encoding and
+  //             let sproc_PHP_VendMast generate the final code on Save.
+  //   Manual -> user types the Payee Code.
+  //
+  // The actual prefix/series is determined by
+  // sproc_PHP_VendMast -> fnReferenceCode(..., sltypeCode, ...).
+  // ============================================================
+  const [generationMode, setGenerationMode] = useState("System");
+
+  const parseHSDocRow = (response) => {
+    const rows = response?.data;
+    if (!Array.isArray(rows) || rows.length === 0) return null;
+
+    const firstRow = rows[0];
+    if (typeof firstRow?.result === "string") {
+      try {
+        const parsed = JSON.parse(firstRow.result);
+        if (Array.isArray(parsed)) return parsed[0] || null;
+        if (parsed && typeof parsed === "object") return parsed;
+      } catch (error) {
+        console.error("Unable to parse SU HS_DOC result:", error);
+      }
+    }
+
+    return firstRow && typeof firstRow === "object" ? firstRow : null;
+  };
+
+  const normalizeGenerationMode = (value) => {
+    const mode = String(value ?? "").trim().toUpperCase();
+
+    if (mode === "MANUAL" || mode === "M") return "Manual";
+    if (mode === "AUTO" || mode === "A") return "Auto";
+    if (mode === "SYSTEM" || mode === "S") return "System";
+
+    // Safest fallback: do not allow manual encoding or pre-generate a code
+    // when HS_DOC contains an unexpected value. Generate on Save instead.
+    return "System";
+  };
+
+  const loadPayeeGenerationMode = async ({ showError = false } = {}) => {
+    try {
+      const response = await fetchData("getHSDoc", { DOC_ID: "SU" });
+
+      if (!response?.success) {
+        throw new Error(
+          response?.message || "Unable to retrieve Payee document setup."
+        );
+      }
+
+      const hsDoc = parseHSDocRow(response);
+      if (!hsDoc) {
+        throw new Error("HS_DOC setup for SU was not found.");
+      }
+
+      const mode = normalizeGenerationMode(
+        hsDoc?.docSeries ?? hsDoc?.DOC_SERIES ?? hsDoc?.doc_series
+      );
+
+      setGenerationMode(mode);
+      return mode;
+    } catch (error) {
+      console.error("Failed to load SU HS_DOC:", error);
+      setGenerationMode("System");
+
+      if (showError) {
+        await useSwalErrorAlert(
+          "Payee Code Setup",
+          error?.message ||
+            "Unable to determine whether Payee Code is Auto, System, or Manual."
+        );
+      }
+
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    loadPayeeGenerationMode();
+  }, []);
+
+  const extractGeneratedPayeeCode = (response) => {
+    const rows = response?.data?.data;
+    const row = Array.isArray(rows) ? rows[0] : null;
+
+    if (!row) {
+      return {
+        code: "",
+        errorCount: 1,
+        errorMsg: "No code was returned.",
+      };
+    }
+
+    if (row?.generatedCode !== undefined || row?.generatedcode !== undefined) {
+      return {
+        code: String(row.generatedCode ?? row.generatedcode ?? "").trim(),
+        errorCount: Number(row.errorcount ?? row.errorCount ?? 0),
+        errorMsg: String(row.errormsg ?? row.errorMsg ?? ""),
+      };
+    }
+
+    if (typeof row?.result === "string") {
+      try {
+        const parsed = JSON.parse(row.result);
+        const parsedRow = Array.isArray(parsed) ? parsed[0] : parsed;
+        return {
+          code: String(parsedRow?.generatedCode ?? parsedRow?.generatedcode ?? "").trim(),
+          errorCount: Number(parsedRow?.errorcount ?? parsedRow?.errorCount ?? 0),
+          errorMsg: String(parsedRow?.errormsg ?? parsedRow?.errorMsg ?? ""),
+        };
+      } catch {
+        // fall through below
+      }
+    }
+
+    return {
+      code: "",
+      errorCount: 1,
+      errorMsg: "Unable to read the generated Payee Code.",
+    };
+  };
+
+  const generatePayeeCode = async (sltypeCode, { showError = true } = {}) => {
+    const sl = normalizeSlType(sltypeCode);
+    if (!sl) return "";
+
+    try {
+      const response = await apiClient.post("/payeeGenerateCode", {
+        sltypeCode: sl,
+      });
+
+      const generated = extractGeneratedPayeeCode(response);
+
+      if (generated.errorCount > 0 || !generated.code) {
+        throw new Error(generated.errorMsg || "Unable to generate Payee Code.");
+      }
+
+      return generated.code;
+    } catch (error) {
+      console.error("Failed to generate Payee Code:", error);
+
+      if (showError) {
+        await useSwalErrorAlert(
+          "Payee Code Generation",
+          error?.response?.data?.message ||
+            error?.message ||
+            "Unable to generate Payee Code."
+        );
+      }
+
+      return "";
+    }
+  };
 
   const {
     pagePermission,
@@ -164,7 +328,14 @@ const VendMast = () => {
 
   const showValidation = async (title, lines) => {
     const msg = Array.isArray(lines) ? lines.join("\n") : String(lines || "");
-    return useSwalValidationAlert({ icon: "error", title, message: msg });
+
+    // Match Customer Master save validation styling:
+    // useSwalErrorAlert renders the compact top-right Sonner-style toast
+    // instead of the centered SweetAlert modal with an OK button.
+    const toastTitle =
+      title === "Missing Required Field(s)" ? "Validation Failed" : title;
+
+    return useSwalErrorAlert(toastTitle, msg);
   };
 
   const checkDuplicateVendor = async (vendCode) => {
@@ -251,6 +422,94 @@ const VendMast = () => {
     if (Array.isArray(rows) && rows.length && typeof rows[0] === "object") return rows;
     return [];
   };
+
+  const loadPayeeSlTypes = async ({ showError = false } = {}) => {
+    try {
+      const res = await apiClient.get("/slType");
+      const rows = parseSprocJsonResult(res?.data?.data);
+
+      const configured = (Array.isArray(rows) ? rows : [])
+        .map((row) => ({
+          value: normalizeSlType(
+            row?.slTypeCode ??
+              row?.sltypeCode ??
+              row?.sltype_code ??
+              ""
+          ),
+          label: String(
+            row?.slTypeName ??
+              row?.sltypeName ??
+              row?.sltype_name ??
+              row?.slTypeCode ??
+              ""
+          ).trim(),
+          active: normalizeSlType(
+            row?.slTypeActive ??
+              row?.sltypeActive ??
+              row?.active ??
+              ""
+          ),
+          payee: normalizeSlType(
+            row?.slTypeIncSu ??
+              row?.sltypeIncSu ??
+              row?.incSu ??
+              row?.inc_su ??
+              ""
+          ),
+        }))
+        .filter((row) => row.value);
+
+      // Full reference: required so an old Payee can still be opened even if
+      // its SL Type is later inactive or Payee = No.
+      const allOptions = configured.map(({ value, label }) => ({
+        value,
+        label: label || value,
+      }));
+
+      // Master-data filter keeps Payee-tagged SL Types, including inactive ones,
+      // so historical Payee records remain filterable.
+      const filterOptions = configured
+        .filter((row) => row.payee === "Y")
+        .map(({ value, label }) => ({
+          value,
+          label: label || value,
+        }));
+
+      // NEW Payee records: only Active = Y AND Payee = Y.
+      const setupOptions = configured
+        .filter((row) => row.payee === "Y" && row.active === "Y")
+        .map(({ value, label }) => ({
+          value,
+          label: label || value,
+        }));
+
+      setAllSltypeOptions(allOptions);
+      setSltypeFilterOptions(filterOptions);
+      setSltypeOptions(setupOptions);
+
+      return setupOptions;
+    } catch (error) {
+      console.error("Failed to load Payee SL Types:", error);
+      setAllSltypeOptions([]);
+      setSltypeOptions([]);
+      setSltypeFilterOptions([]);
+
+      if (showError) {
+        await useSwalErrorAlert(
+          "SL Type Setup",
+          error?.response?.data?.message ||
+            error?.message ||
+            "Unable to load SL Types from SL Master Data."
+        );
+      }
+
+      return [];
+    }
+  };
+
+  useEffect(() => {
+    loadPayeeSlTypes();
+  }, []);
 
   const loadMasterList = async (options = {}) => {
     const {
@@ -466,6 +725,74 @@ const VendMast = () => {
 
     let code = String(form?.vendCode || form?.custCode || "").trim();
     const isAddMode = !selectedVendCode;
+    const normalizedGenerationMode = normalizeGenerationMode(generationMode);
+    const selectedSlType = normalizeSlType(form?.sltypeCode || "");
+    const source = normalizeSource(form?.source || "");
+    const taxClass = String(form?.taxClass || "").trim().toUpperCase();
+    const isIndividual = taxClass === "WI";
+    const isEmployee = selectedSlType === "EM";
+    const isForeign = source === "F";
+    const requiresLocalTaxData = !isEmployee && !isForeign;
+
+    // Collect ALL missing fields first so the user receives one complete
+    // validation message instead of one popup per field. This mirrors the
+    // STRING_AGG validation in sproc_PHP_VendMast.
+    const missingFields = [];
+    const addMissing = (condition, label) => {
+      if (condition) missingFields.push(`• ${label}`);
+    };
+
+    addMissing(!selectedSlType, "SL Type");
+
+    // System mode intentionally keeps a NEW Payee Code blank until Save.
+    // Auto should already have a generated code; Manual must be user-entered.
+    const payeeCodeRequiredNow =
+      !isAddMode || normalizedGenerationMode !== "System";
+    addMissing(payeeCodeRequiredNow && !code, "Payee Code");
+
+    addMissing(!String(form?.vendName || form?.custName || "").trim(), "Registered Name");
+    addMissing(!isIndividual && !String(form?.businessName || "").trim(), "Business Name");
+    addMissing(!String(form?.vendAddr1 || "").trim(), "Address 1");
+    addMissing(!source, "Source");
+
+    if (requiresLocalTaxData) {
+      addMissing(!String(form?.vendTin || form?.custTin || "").trim(), "TIN");
+      addMissing(!String(form?.vatCode || "").trim(), "Default VAT");
+    }
+
+    addMissing(!String(form?.paytermCode || "").trim(), "Default Payment Term");
+    addMissing(!String(form?.acctCode || "").trim(), "Default A/P Account");
+    addMissing(!taxClass, "Tax Rate Class");
+
+    if (isIndividual) {
+      addMissing(!String(form?.firstName || "").trim(), "First Name");
+      addMissing(!String(form?.lastName || "").trim(), "Last Name");
+    }
+
+    if (missingFields.length) {
+      await showValidation("Missing Required Field(s)", missingFields);
+      return;
+    }
+
+    // New Payees can only use a currently active SL Type tagged Payee = Yes.
+    // Existing records can keep their historical SL Type.
+    if (isAddMode) {
+      const availableSlTypes = sltypeOptions.length
+        ? sltypeOptions
+        : await loadPayeeSlTypes({ showError: true });
+
+      const isAllowed = availableSlTypes.some(
+        (option) => normalizeSlType(option?.value) === selectedSlType
+      );
+
+      if (!isAllowed) {
+        await useSwalErrorAlert(
+          "SL Type Not Available",
+          "The selected SL Type is inactive or is not tagged Payee = Yes in SL Master Data."
+        );
+        return;
+      }
+    }
 
     // 2. DUPLICATE CODE CHECK
     if (isAddMode && code) {
@@ -500,13 +827,14 @@ const VendMast = () => {
           vendTelno: form.vendTelno || "",
           vendMobileno: form.vendMobileno || "",
           vendEmail: form.vendEmail || "",
-          source: form.source || "",
+          source,
           currCode: form.currCode || "",
           vatCode: form.vatCode || "",
           atcCode: form.atcCode || "",
           paytermCode: form.paytermCode || "",
           acctCode: form.acctCode || "",
-          sltypeCode: normalizeSlType(form.sltypeCode),
+          sltypeCode: selectedSlType,
+          generationMode: normalizedGenerationMode,
           active: form.active || "Y",
           oldCode: form.oldCode || "",
           userCode,
@@ -568,20 +896,114 @@ const VendMast = () => {
     setMasterFilters((p) => ({ ...p, [key]: value }));
   };
 
+  const handlePayeeSlTypeChange = async (value) => {
+    const sl = normalizeSlType(value);
+
+    if (!sl) {
+      updateForm({ sltypeCode: "" });
+      return;
+    }
+
+    // Show the standard Utilities loading screen while changing SL Type.
+    // This is especially important in Auto mode because the new Payee Code
+    // is regenerated from the backend before the form is updated.
+    const spinnerStartedAt = Date.now();
+    setIsSlTypeChanging(true);
+
+    try {
+      // Give React one frame to paint the loading overlay before processing.
+      await new Promise((resolve) => {
+        if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+          window.requestAnimationFrame(() => resolve());
+        } else {
+          setTimeout(resolve, 0);
+        }
+      });
+
+      const patch = { sltypeCode: sl };
+
+      // Auto: regenerate when SL Type changes while adding.
+      // System: keep code blank so the sproc generates it on Save.
+      // Manual: keep the user's manually entered code untouched.
+      // Existing records always keep the code already saved in VEND_MAST.
+      if (form.__isNew) {
+        const mode = normalizeGenerationMode(generationMode);
+
+        if (mode === "Auto") {
+          const generatedCode = await generatePayeeCode(sl, { showError: true });
+          if (!generatedCode) return;
+
+          patch.vendCode = generatedCode;
+          patch.custCode = generatedCode;
+        } else if (mode === "System") {
+          patch.vendCode = "";
+          patch.custCode = "";
+        }
+      }
+
+      updateForm(patch);
+    } finally {
+      // Keep the overlay visible long enough to avoid a one-frame flicker
+      // on System/Manual mode, while Auto mode naturally stays visible
+      // for the duration of the API request.
+      const elapsed = Date.now() - spinnerStartedAt;
+      if (elapsed < 180) {
+        await new Promise((resolve) => setTimeout(resolve, 180 - elapsed));
+      }
+      setIsSlTypeChanging(false);
+    }
+  };
+
   const handleAdd = async () => {
     if (!canAdd) {
       await showReadOnlyAlert("add payee records");
       return;
     }
 
-    allowedDuplicatePayeeNameRef.current = ""; // Reset ref memory
-    const sl = normalizeSlType(form?.sltypeCode || "SU") || "SU";
+    // Always re-read HS_DOC before Add so Auto/System/Manual changes take effect.
+    const latestGenerationMode = await loadPayeeGenerationMode({
+      showError: true,
+    });
+
+    if (!latestGenerationMode) return;
+
+    allowedDuplicatePayeeNameRef.current = "";
+
+    const availableSlTypes = sltypeOptions.length
+      ? sltypeOptions
+      : await loadPayeeSlTypes({ showError: true });
+
+    if (!availableSlTypes.length) {
+      await useSwalErrorAlert(
+        "SL Type Setup",
+        "No active SL Type is configured with Payee = Yes. Please update SL Master Data first."
+      );
+      return;
+    }
+
+    const currentSl = normalizeSlType(form?.sltypeCode || "");
+    const sl = availableSlTypes.some(
+      (option) => normalizeSlType(option?.value) === currentSl
+    )
+      ? currentSl
+      : normalizeSlType(availableSlTypes[0]?.value || "");
+
+    let generatedCode = "";
+
+    // Auto pre-generates and displays the code.
+    // System stays blank until Save.
+    // Manual stays blank and becomes editable in PayeeSetupTab.
+    if (normalizeGenerationMode(latestGenerationMode) === "Auto") {
+      generatedCode = await generatePayeeCode(sl, { showError: true });
+      if (!generatedCode) return;
+    }
+
     setSelectedVendCode("");
     setForm({
       ...emptyForm,
       sltypeCode: sl,
-      vendCode: "",
-      custCode: "",
+      vendCode: generatedCode,
+      custCode: generatedCode,
       __isNew: true,
     });
     setIsEditing(true);
@@ -738,6 +1160,7 @@ const VendMast = () => {
 
   return (
     <div className="global-ref-main-div-ui">
+      {isSlTypeChanging && <LoadingSpinner />}
       <div className="global-ref-header-ui">
         <div className="w-full flex flex-col lg:flex-row items-center justify-between gap-3">
           {/* LEFT: title + tabs grouped together */}
@@ -821,12 +1244,9 @@ const VendMast = () => {
             canSave={canSave}
             canDelete={canDelete}
             form={form}
-            sltypeOptions={[
-              { value: "AG", label: "AGENCY" },
-              { value: "EM", label: "EMPLOYEE" },
-              { value: "OT", label: "OTHERS" },
-              { value: "SU", label: "SUPPLIER" },
-            ]}
+            generationMode={generationMode}
+            sltypeOptions={sltypeOptions}
+            allSltypeOptions={allSltypeOptions}
             sourceOptions={[
               { value: "L", label: "Local" },
               { value: "F", label: "Foreign" },
@@ -835,6 +1255,7 @@ const VendMast = () => {
               { value: "Y", label: "Yes" },
               { value: "N", label: "No" },
             ]}
+            onSltypeChange={handlePayeeSlTypeChange}
             onChangeForm={(patch) => {
               // Reset duplicate name memory if name is manually changed
               if (patch.vendName || patch.custName) {
@@ -852,6 +1273,7 @@ const VendMast = () => {
             isLoading={isLoading}
             subsidiaryType={subsidiaryType}
             onChangeSubsidiaryType={setSubsidiaryType}
+            sltypeOptions={sltypeFilterOptions}
             filters={masterFilters}
             onChangeFilter={handleChangeMasterFilter}
             rows={masterRows}

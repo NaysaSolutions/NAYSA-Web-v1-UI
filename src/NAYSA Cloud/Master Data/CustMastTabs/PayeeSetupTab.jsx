@@ -86,9 +86,11 @@ const PayeeSetupTab = forwardRef(
       form = {},
       generationMode,
       sltypeOptions = [],
+      allSltypeOptions = [],
       sourceOptions = [],
       activeOptions = [],
       onChangeForm,
+      onSltypeChange,
       onNameBlur,
       onSelectCustomerCode,
       payeeTypeOptions = [],
@@ -123,11 +125,22 @@ const PayeeSetupTab = forwardRef(
       return n || fallback;
     };
 
-    const isManualMode = useMemo(() => {
-      const mode = normalizeUpper(generationMode || "Manual");
-      return mode === "MANUAL" || mode === "M";
+    const normalizedGenerationMode = useMemo(() => {
+      const mode = normalizeUpper(generationMode || "System");
+
+      if (mode === "MANUAL" || mode === "M") return "MANUAL";
+      if (mode === "AUTO" || mode === "A") return "AUTO";
+      if (mode === "SYSTEM" || mode === "S") return "SYSTEM";
+
+      return "SYSTEM";
     }, [generationMode]);
 
+    const isManualMode = normalizedGenerationMode === "MANUAL";
+
+    // Manual + new record = editable.
+    // Auto + new record = read-only; code is generated on Add / SL Type change.
+    // System + new record = read-only and blank until Save.
+    // Existing records are always read-only.
     const canType = isNewRecord && isManualMode;
     const overrideRef = useRef(null);
 
@@ -158,7 +171,7 @@ const PayeeSetupTab = forwardRef(
     }, [canType, isNewRecord, onChangeForm, tblFieldArray]);
 
     const sl = useMemo(
-      () => normalizeUpper(form?.sltypeCode || "SU"),
+      () => normalizeUpper(form?.sltypeCode || ""),
       [form?.sltypeCode]
     );
 
@@ -170,8 +183,14 @@ const PayeeSetupTab = forwardRef(
     const isEmployee = sl === "EM";
     const isSupplier = sl === "SU";
     const isIndividualTaxClass = taxClass === "WI";
+    const source = normalizeUpper(form?.source || "L");
+    const isForeign = source === "F" || source === "FOREIGN";
 
-    const isTinRequired = !isEmployee;
+    // Local non-Employee Payees require tax registration details.
+    // Foreign Payees and Employee SL records do not require TIN/VAT validation.
+    const requiresLocalTaxData = !isEmployee && !isForeign;
+    const isTinRequired = requiresLocalTaxData;
+    const isVatRequired = requiresLocalTaxData;
 
     const shouldAutoNameFromParts = isEmployee || isIndividualTaxClass;
     const shouldDisableBusinessName = isEmployee;
@@ -222,6 +241,58 @@ const PayeeSetupTab = forwardRef(
       }),
       []
     );
+
+    const mappedSltypeOptions = useMemo(() => {
+      const normalizeOption = (o) => {
+        const value = normalizeUpper(
+          typeof o === "string"
+            ? o
+            : o?.value ?? o?.code ?? o?.slTypeCode ?? o?.sltypeCode ?? o?.sltype_code ?? ""
+        );
+
+        if (!value) return null;
+
+        const label = String(
+          typeof o === "string"
+            ? value
+            : o?.label ?? o?.name ?? o?.slTypeName ?? o?.sltypeName ?? o?.sltype_name ?? value
+        ).trim();
+
+        return { value, label: label || value };
+      };
+
+      // Active=Y + Payee=Y options supplied by VendMast.jsx.
+      const selectableOptions = (Array.isArray(sltypeOptions) ? sltypeOptions : [])
+        .map(normalizeOption)
+        .filter(Boolean);
+
+      // Full reference is only used to display an existing historical record.
+      const referenceOptions = (Array.isArray(allSltypeOptions) ? allSltypeOptions : [])
+        .map(normalizeOption)
+        .filter(Boolean);
+
+      const referenceByCode = new Map(
+        referenceOptions.map((option) => [option.value, option])
+      );
+
+      const seen = new Set();
+      const unique = selectableOptions.filter((option) => {
+        if (seen.has(option.value)) return false;
+        seen.add(option.value);
+        return true;
+      });
+
+      const currentValue = normalizeUpper(form?.sltypeCode || "");
+      if (!isNewRecord && currentValue && !seen.has(currentValue)) {
+        const historicalOption = referenceByCode.get(currentValue);
+        unique.unshift({
+          value: currentValue,
+          label: historicalOption?.label || currentValue,
+        });
+      }
+
+      return unique;
+    }, [sltypeOptions, allSltypeOptions, form?.sltypeCode, isNewRecord]);
 
     const mappedTaxClassOptions = useMemo(() => {
       const base = [
@@ -351,7 +422,7 @@ const PayeeSetupTab = forwardRef(
 
     useEffect(() => {
       if (!isEditing) return;
-      const desired = sl === "SU" ? "WC" : sl === "EM" ? "WI" : "";
+      const desired = isEmployee ? "WI" : "WC";
       if (!desired) { taxAutoRef.current.lastSl = sl; return; }
       const current = normalizeUpper(form?.taxClass || "");
       const wasAuto = current && current === taxAutoRef.current.lastAutoValue;
@@ -369,7 +440,7 @@ const PayeeSetupTab = forwardRef(
         onChangeForm({ taxClass: desired });
       }
       taxAutoRef.current.lastSl = sl;
-    }, [sl, isEditing, form?.taxClass, onChangeForm]);
+    }, [sl, isEmployee, isEditing, form?.taxClass, onChangeForm]);
 
     useEffect(() => {
       if (!isEditing) return;
@@ -431,10 +502,18 @@ const PayeeSetupTab = forwardRef(
             <div className="grid grid-cols-3 gap-3">
               <FieldRenderer
                 label="SL Type"
+                required
                 type="select"
                 value={form.sltypeCode || ""}
-                options={sltypeOptions}
-                onChange={(v) => onChangeForm({ sltypeCode: getValue(v) })}
+                options={mappedSltypeOptions}
+                onChange={(v) => {
+                  const value = normalizeUpper(getValue(v));
+                  if (onSltypeChange) {
+                    onSltypeChange(value);
+                  } else {
+                    onChangeForm({ sltypeCode: value });
+                  }
+                }}
                 readOnly={isReadOnly}
                 disabled={isDisabled}
               />
@@ -765,7 +844,7 @@ const PayeeSetupTab = forwardRef(
                           type="select"
                           value={form.source || ""}
                           options={sourceOptions}
-                          onChange={(v) => onChangeForm({ source: getValue(v) })}
+                          onChange={(v) => onChangeForm({ source: normalizeUpper(getValue(v)) })}
                           readOnly={isReadOnly}
                           disabled={isDisabled}
                         />
@@ -805,6 +884,7 @@ const PayeeSetupTab = forwardRef(
 
                         <FieldRenderer
                           label="Default VAT"
+                          required={isVatRequired}
                           type="lookup"
                           value={form.vatCode || ""}
                           onLookup={isDisabled ? undefined : () => setIsVATLookupOpen(true)}
