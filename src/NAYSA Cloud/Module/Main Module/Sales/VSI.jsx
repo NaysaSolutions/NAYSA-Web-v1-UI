@@ -1825,54 +1825,61 @@ const handleActivityOption = async (action) => {
   };
 
   const handleInsertSelectedOpenDR = async (payload) => {
-    const selectedSummaryRecords = Array.isArray(payload?.records) ? payload.records : [];
-    const selectedRecord = selectedSummaryRecords[0];
-    if (!selectedRecord) {
-      updateState({ showOpenDRModal: false });
-      return;
-    }
-    const selectedVatCode = selectedRecord.vatCode || vatCode || "";
-    const selectedVatRow = getAllTopVatRow(selectedVatCode);
-    const selectedAtcCode = selectedRecord.atcCode || atcCode || "";
-    const selectedAtcRow = getAllTopATCRow(selectedAtcCode);
-    const row = calculateRowAmountsFromRates(createSIDetailRow({
-      ...selectedRecord,
-      drId: selectedRecord.vdrId,
-      soId: selectedRecord.vsoId,
-      groupId: selectedRecord.vdrId,
-      siQuantity: formatNumber(1, quantityDecimals),
-      quantityPicked: formatNumber(1, quantityDecimals),
-      unitPrice: formatNumber(selectedRecord.sellingPrice || 0, sellingPriceDecimals),
-      vatCode: selectedVatCode,
-      vatRate: formatNumber(selectedRecord.vatRate ?? selectedVatRow?.vatRate ?? 0),
-      vatAmount: formatNumber(selectedRecord.vatAmt || 0),
-      totDiscount: formatNumber(selectedRecord.discAmt || 0),
-      itemSpecs: selectedRecord.itemSpecs || "",
-    }));
-    updateState({
-      refSiNo1: selectedRecord.drNo || "",
-      vdrId: selectedRecord.vdrId || "",
-      vsoId: selectedRecord.vsoId || "",
-      veId: selectedRecord.veId || "",
-      billToCustCode: selectedRecord.custCode || "",
-      billToCustName: selectedRecord.custName || "",
-      salesRepCode: selectedRecord.repCode || "",
-      billtermCode: selectedRecord.billTerm || "",
-      billtermName: selectedRecord.billTerm || "",
-      remarks: selectedRecord.remarks || remarks || "",
-      vatCode: selectedVatCode,
-      vatName: selectedVatRow?.vatName || vatName || "",
-      atcCode: selectedAtcCode,
-      atcName: selectedAtcRow?.atcName || atcName || "",
-      detailRows: [row],
-      showOpenDRModal: false,
-      openDRSI_Data_Summary: [],
-      openDRSI_Col_Summary: [],
-      insertAfterIndex: null,
-    });
-    updateTotals([row]);
-    setTopTab("details");
-  };
+  const selectedSummaryRecords = Array.isArray(payload?.records) ? payload.records : [];
+  const selectedRecord = selectedSummaryRecords[0];
+  if (!selectedRecord) {
+    updateState({ showOpenDRModal: false });
+    return;
+  }
+
+  const selectedVatCode = selectedRecord.vatCode || vatCode || "";
+  const selectedVatRow = getAllTopVatRow(selectedVatCode);
+  const selectedAtcCode = selectedRecord.atcCode || atcCode || "";
+  const selectedAtcRow = getAllTopATCRow(selectedAtcCode);
+
+  const row = calculateRowAmountsFromRates(createSIDetailRow({
+    ...selectedRecord,
+    drId: selectedRecord.vdrId,
+    soId: selectedRecord.vsoId,
+    groupId: selectedRecord.vdrId,
+    siQuantity: formatNumber(1, quantityDecimals),
+    quantityPicked: formatNumber(1, quantityDecimals),
+    unitPrice: formatNumber(selectedRecord.sellingPrice || 0, sellingPriceDecimals),
+    vatCode: selectedVatCode,
+    vatRate: formatNumber(selectedRecord.vatRate ?? selectedVatRow?.vatRate ?? 0),
+    vatAmount: formatNumber(selectedRecord.vatAmt || 0),
+    totDiscount: formatNumber(selectedRecord.discAmt || 0),
+    itemSpecs: selectedRecord.itemSpecs || "",
+  }));
+
+  updateState({
+    refSiNo1: selectedRecord.drNo || "",
+    vdrId: selectedRecord.vdrId || "",
+    vsoId: selectedRecord.vsoId || "",
+    veId: selectedRecord.veId || "",
+    billToCustCode: selectedRecord.custCode || "",
+    billToCustName: selectedRecord.custName || "",
+    salesRepCode: selectedRecord.repCode || "",
+    billtermCode: selectedRecord.billTerm || "",
+    billtermName: selectedRecord.billTerm || "",
+    remarks: selectedRecord.remarks || remarks || "",
+    vatCode: selectedVatCode,
+    vatName: selectedVatRow?.vatName || vatName || "",
+    atcCode: selectedAtcCode,
+    atcName: selectedAtcRow?.atcName || atcName || "",
+    detailRows: [row],
+    showOpenDRModal: false,
+    openDRSI_Data_Summary: [],
+    openDRSI_Col_Summary: [],
+    insertAfterIndex: null,
+  });
+
+  updateTotals([row], selectedAtcCode, cwvatCode);
+
+  setTopTab("details");
+};
+
+
 
   const normalizeItemModalRecords = (selectedItems) => {
     if (Array.isArray(selectedItems?.records)) {
