@@ -576,22 +576,50 @@ const SalesRep = forwardRef(({
   const representatives = useMemo(() => listQuery.data || [], [listQuery.data]);
   const isInitialLoading = listQuery.isLoading;
 
-  /* ================= DUPLICATE CHECK ================= */
+  const parseResultFlag = (res) => {
+  const row0 = res?.data?.data?.[0] || {};
+  const raw = row0?.result ?? row0?.[""] ?? '{"result":"0"}';
 
-  const checkDuplicate = async (code) => {
-    const c = String(code || "").trim();
-    if (!c) return false;
-
-    const res = await apiClient.post("/checkDuplicatesalesRep", {
-      json_data: { salesRepCode: c },
-    });
-
-    const row0 = res?.data?.data?.[0] || {};
-    const raw = row0?.result ?? row0?.[""] ?? '{"result":"0"}';
-    const parsed = JSON.parse(raw);
+  try {
+    const parsed = typeof raw === "string"
+      ? JSON.parse(raw)
+      : raw;
 
     return String(parsed?.result) === "1";
-  };
+  } catch {
+    return false;
+  }
+};
+
+  /* ================= DUPLICATE CHECK ================= */
+
+  const checkDuplicate = async (salesRepCode) => {
+  const c = String(salesRepCode || "").trim();
+
+  if (!c) return false;
+
+  const res = await apiClient.post("/checkDuplicatesalesRep", {
+    json_data: {
+      salesRepCode: c,
+    },
+  });
+
+  return parseResultFlag(res);
+};
+
+  const checkInUsed = async (salesRepCode) => {
+  const c = String(salesRepCode || "").trim();
+
+  if (!c) return false;
+
+  const res = await apiClient.post("/checkInUsedsalesRep", {
+    json_data: {
+      salesRepCode: c,
+    },
+  });
+
+  return parseResultFlag(res);
+};
 
   /* ================= RETRIEVE / VIEW ================= */
 
@@ -761,20 +789,67 @@ const SalesRep = forwardRef(({
   });
 
   const handleDelete = useCallback(
-    async (row) => {
-      if (isReadOnly || !canDelete) {
-        await useSwalErrorAlert("Read Only", "You are not allowed to delete reference codes.");
+  async (row) => {
+    if (isReadOnly || !canDelete) {
+      await useSwalErrorAlert(
+        "Read Only",
+        "You are not allowed to delete reference codes."
+      );
+      return;
+    }
+
+    const code =
+      row?.salesRepCode ??
+      row?.salesrep_code ??
+      "";
+
+    if (!code) {
+      useSwalErrorAlert(
+        "Error",
+        "No record selected."
+      );
+      return;
+    }
+
+    try {
+      const used = await checkInUsed(code);
+
+      if (used) {
+        useSwalErrorAlert(
+          "Cannot Delete",
+          `Agent Code "${code}" is already in use.`
+        );
+
         return;
       }
 
-      const code = row?.salesRepCode;
-      if (!code) return;
 
-      const confirm = await useSwalDeleteConfirm("Delete?", `Remove Agent "${code}"?`);
-      if (confirm?.isConfirmed) deleteMutation.mutate(code);
-    },
-    [deleteMutation, isReadOnly, canDelete]
-  );
+      const confirm = await useSwalDeleteConfirm(
+        "Delete Record?",
+        `Are you sure you want to delete Agent "${code}"?`,
+        "Yes, delete it"
+      );
+
+      if (!confirm?.isConfirmed) return;
+
+
+      deleteMutation.mutate(code);
+
+    } catch (error) {
+      useSwalErrorAlert(
+        "System Error",
+        error?.response?.data?.message ||
+          error?.message ||
+          "Failed to delete record."
+      );
+    }
+  },
+  [
+    deleteMutation,
+    isReadOnly,
+    canDelete,
+  ]
+);
 
   /* ================= TABLE ================= */
 

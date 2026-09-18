@@ -228,7 +228,7 @@ const CustSetupTab = forwardRef(
         .join(" ");
     };
 
-    const nameAutoRef = useRef({ businessTouched: false });
+    // const nameAutoRef = useRef({ businessTouched: false });
 
     const mappedSltypeOptions = useMemo(() => {
       const base = [
@@ -450,40 +450,44 @@ const CustSetupTab = forwardRef(
             </div>
 
             {/* Row 3: Registered Name | Business Name */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <FieldRenderer
-                label="Registered Name"
-                required
-                type="text"
-                value={form?.custName || ""}
-                onChange={(v) => onChangeForm({ custName: getValue(v) })}
-                onBlur={async () => {
-                  if (!isEditing || !form?.custName) return;
-                  await onNameBlur?.(form?.custName);
-                }}
-                readOnly={isReadOnly || isIndividual}
-                disabled={isDisabled || isIndividual}
-                maxLength={getLen("cust_name", 150)}
-              />
-              <FieldRenderer
-                label="Business Name"
-                required={!isIndividual}
-                type="text"
-                value={form?.businessName || ""}
-                onChange={(v) => {
-                  const businessName = getValue(v);
-                  nameAutoRef.current.businessTouched = true;
-                  const updates = { businessName };
-                  if (!isIndividual) {
-                    updates.custName = businessName;
-                  }
-                  onChangeForm(updates);
-                }}
-                readOnly={isReadOnly}
-                disabled={isDisabled}
-                maxLength={getLen("business_name", 150)}
-              />
-            </div>
+<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+  <FieldRenderer
+    label="Registered Name"
+    required
+    type="text"
+    value={form?.custName || ""}
+    onChange={(v) => {
+      const registeredName = getValue(v);
+
+      onChangeForm({
+        custName: registeredName,
+        businessName: registeredName,
+      });
+    }}
+    onBlur={async () => {
+      if (!isEditing || !form?.custName) return;
+      await onNameBlur?.(form?.custName);
+    }}
+    readOnly={isReadOnly || isIndividual}
+    disabled={isDisabled || isIndividual}
+    maxLength={getLen("cust_name", 150)}
+  />
+
+  <FieldRenderer
+    label="Business Name"
+    required={!isIndividual}
+    type="text"
+    value={form?.businessName || ""}
+    onChange={(v) => {
+      onChangeForm({
+        businessName: getValue(v),
+      });
+    }}
+    readOnly={isReadOnly}
+    disabled={isDisabled}
+    maxLength={getLen("business_name", 150)}
+  />
+</div>
 
             {/* Row 4: First Name | Middle Name | Last Name */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
