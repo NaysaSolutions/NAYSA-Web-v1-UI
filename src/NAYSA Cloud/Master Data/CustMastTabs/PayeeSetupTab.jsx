@@ -989,6 +989,7 @@ const PayeeSetupTab = forwardRef(
 
         <SearchVATRef
           isOpen={isVATLookupOpen}
+          customParam="InputAll"
           onClose={(selected) => {
             setIsVATLookupOpen(false);
             if (!selected) return;

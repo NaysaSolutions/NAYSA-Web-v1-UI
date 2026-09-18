@@ -1167,6 +1167,7 @@ const CustSetupTab = forwardRef(
 
         <SearchVATRef
           isOpen={isVATLookupOpen}
+          customParam="OutputAll"
           onClose={(selected) => {
             setIsVATLookupOpen(false);
             if (!selected) return;
