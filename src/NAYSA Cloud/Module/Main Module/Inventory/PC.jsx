@@ -13,12 +13,19 @@ import WarehouseLookupModal from "../../../Lookup/SearchWareMast.jsx";
 import LocationLookupModal from "../../../Lookup/SearchLocation.jsx";
 import QstatLookupModal from "../../../Lookup/SearchQStatRef.jsx";
 import ItemMastLookupModal from "../../../Lookup/SearchItemMast.jsx";
+import COAMastLookupModal from "../../../Lookup/SearchCOAMast.jsx";
+import RCLookupModal from "../../../Lookup/SearchRCMast.jsx";
+import SLMastLookupModal from "../../../Lookup/SearchSLMast.jsx";
 
 import { apiClient, postRequest, fetchDataJson } from "../../../Configuration/BaseURL.jsx";
 import { useReset } from "../../../Components/ResetContext";
 import { useAuth } from "@/NAYSA Cloud/Authentication/AuthContext.jsx";
 import { docTypes, docTypeVideoGuide, docTypePDFGuide } from "@/NAYSA Cloud/Global/doctype";
-import { useTransactionUpsert, useFetchTranData, useHandleCancel, useFieldLenghtCheck } from "@/NAYSA Cloud/Global/procedure";
+import {
+  useTransactionUpsert, useFetchTranData, useHandleCancel, useFieldLenghtCheck, useGetFieldLength,
+  useGenerateGLEntries, useUpdateRowGLEntries, useUpdateRowEditEntries
+} from "@/NAYSA Cloud/Global/procedure";
+import { useTopRCRow } from "@/NAYSA Cloud/Global/top1RefTable";
 import { useGetCurrentDay } from "@/NAYSA Cloud/Global/dates";
 import DateFormatInput from "@/NAYSA Cloud/Global/DateFormatInput.jsx";
 import {
@@ -34,7 +41,7 @@ import {
 import {
   formatNumber, parseFormattedNumber, useSwalshowSaveSuccessDialog,
   useSwalErrorAlert, useSwalInfoAlert, useSwalProceedConfirm,
-  useSwalvalidateRequiredFields
+  useSwalvalidateRequiredFields,useSwalSuccessAlert
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import { useHandlePrint } from "@/NAYSA Cloud/Global/report";
@@ -59,6 +66,25 @@ const toDateInputValue = (value) => {
     const month = String(parsed.getMonth() + 1).padStart(2, "0");
     const day = String(parsed.getDate()).padStart(2, "0");
     return `${month}/${day}/${year}`;
+  }
+  return "";
+};
+
+const toNativeDateInputValue = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (match) {
+    const [, mm, dd, yyyy] = match;
+    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+  }
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    const yyyy = parsed.getFullYear();
+    const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+    const dd = String(parsed.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
   }
   return "";
 };
@@ -102,6 +128,7 @@ const PC = () => {
   const uploadInputRef = useRef(null);
   const addMenuRef = useRef(null);
   const detailRowsRef = useRef([]);
+  const detailRowsGLRef = useRef([]);
   const { resetFlag } = useReset();
   const { companyInfo, currentUserRow, getAllTopHSDocRow } = useAuth();
 
@@ -117,6 +144,14 @@ const PC = () => {
   const costingMethod = companyInfo?.[inv.costing] ?? "FIFO";
   const isWacCosting = String(costingMethod || "FIFO").trim().toUpperCase() === "WAC";
   const documentTitle = `${invType} Physical Count`;
+  const glCurrMode = companyInfo?.glCurrMode || "";
+  const glCurrDefault = companyInfo?.currCode || "PHP";
+  const glCurrGlobal2 = companyInfo?.glCurrGlobal2 || "";
+  const glCurrGlobal3 = companyInfo?.glCurrGlobal3 || "";
+  const currCode = companyInfo?.currCode || glCurrDefault;
+  const currRate = formatNumber(companyInfo?.currRate || 1, 6);
+  const withCurr2 = String(glCurrMode || "").toUpperCase() === "T" && Boolean(glCurrGlobal2);
+  const withCurr3 = String(glCurrMode || "").toUpperCase() === "T" && Boolean(glCurrGlobal3);
   
   const [topTab, setTopTab] = useState("details");
   const [showAddMenu, setShowAddMenu] = useState(false);
@@ -130,16 +165,22 @@ const PC = () => {
     isLoading: false, branchModalOpen: false, warehouseLookupOpen: false, locationLookupOpen: false,
     itemLookupOpen: false, showQstatModal: false, showCancelModal: false, showAttachModal: false,
     showAllTranDocNo: false, selectedRowIndex: null, selectedWH: "",
+    showAccountModal: false, showRcModal: false, showSlModal: false, accountModalSource: null,
+    totalDebit: "0.00", totalCredit: "0.00", totalDebitFx1: "0.00", totalCreditFx1: "0.00",
+    totalDebitFx2: "0.00", totalCreditFx2: "0.00",
   });
   const updateState = (x) => setState((p) => ({ ...p, ...x }));
   const {
     documentID, documentNo, documentDate, status, noReprints, branchCode, branchName, userCode,
     whCode, whName, locCode, locName, refNo, countRef, particular, detailRows, detailRowsGL,
     isLoading, branchModalOpen, warehouseLookupOpen, locationLookupOpen, itemLookupOpen,
-    showQstatModal, showCancelModal, showAttachModal, showAllTranDocNo, selectedRowIndex, selectedWH
+    showQstatModal, showCancelModal, showAttachModal, showAllTranDocNo, selectedRowIndex, selectedWH,
+    showAccountModal, showRcModal, showSlModal, accountModalSource,
+    totalDebit, totalCredit, totalDebitFx1, totalCreditFx1, totalDebitFx2, totalCreditFx2
   } = state;
 
   useEffect(() => { detailRowsRef.current = detailRows; }, [detailRows]);
+  useEffect(() => { detailRowsGLRef.current = detailRowsGL; }, [detailRowsGL]);
   useEffect(() => { if (new URLSearchParams(location.search).get("viewDocument") === "true") setIsViewDocument(true); }, [location.search]);
   useEffect(() => {
     const closeAddMenu = (event) => {
@@ -201,6 +242,8 @@ const PC = () => {
   const isFormDisabled = isViewDocument || ["FINALIZED","POSTED","CANCELLED","CLOSED"].includes(displayStatus);
   const isExisting = Boolean(documentID);
 
+  const noViewCostamt = currentUserRow?.viewCostamt === "N";
+
   const pcDetailColumnDefs = [
     { key: "ln", label: "LN", width: 56 },
     { key: "element", label: "Element", width: 100 },
@@ -232,6 +275,7 @@ const PC = () => {
 
   const visiblePcDetailColumns = getOrderedPcDetailColumns(pcDetailColumnDefs).filter(
     (column) => {
+      if (column.key === "unitCost" && noViewCostamt) return false;
       if (column.key === "fifoDocNo" && isWacCosting) return false;
       return column.key !== "actualQty" || countRef === "A";
     },
@@ -245,8 +289,83 @@ const PC = () => {
     ...getPcDetailFrozenStyle(key, visiblePcDetailColumns, fallbackWidth, { isHeader: false }),
   });
 
+  const pcGlColumnDefs = [
+    { key: "ln", label: "LN", width: 56 },
+    { key: "acctCode", label: "Account Code", width: 120 },
+    { key: "rcCode", label: "RC Code", width: 120 },
+    { key: "sltypeCode", label: "SL Type", width: 120 },
+    { key: "slCode", label: "SL Code", width: 120 },
+    { key: "particular", label: "Particulars", width: 320 },
+    { key: "debit", label: `Debit (${glCurrDefault})`, width: 140 },
+    { key: "credit", label: `Credit (${glCurrDefault})`, width: 140 },
+    ...(withCurr2 ? [
+      { key: "debitFx1", label: `Debit (${glCurrGlobal2})`, width: 140 },
+      { key: "creditFx1", label: `Credit (${glCurrGlobal2})`, width: 140 },
+    ] : []),
+    ...(withCurr3 ? [
+      { key: "debitFx2", label: `Debit (${glCurrGlobal3})`, width: 140 },
+      { key: "creditFx2", label: `Credit (${glCurrGlobal3})`, width: 140 },
+    ] : []),
+    { key: "slRefNo", label: "SL Ref. No.", width: 120 },
+    { key: "slRefDate", label: "SL Ref. Date", width: 130 },
+    { key: "remarks", label: "Remarks", width: 160 },
+  ];
+
+  const {
+    getColumnStyle: getPcGlColumnStyle,
+    getFrozenColumnStyle: getPcGlFrozenStyle,
+    getOrderedColumns: getOrderedPcGlColumns,
+    getSortedRows: getSortedPcGlRows,
+    setColumnOrder: setPcGlColumnOrder,
+    clearZeroValueOnFocus: clearPcGlZeroOnFocus,
+    focusNextRowInput: focusNextPcGlRowInput,
+    renderHeaderContextMenu: renderPcGlHeaderContextMenu,
+    renderResizableHeader: renderPcGlHeader,
+  } = useResizableTableColumns(pcGlColumnDefs);
+
+  const orderedPcGlColumns = getOrderedPcGlColumns(pcGlColumnDefs);
+  const getPcGlFallbackWidth = (key) => pcGlColumnDefs.find((column) => column.key === key)?.width || 120;
+  const getPcGlCellStyle = (key, fallbackWidth) => ({
+    ...getPcGlColumnStyle(key, fallbackWidth),
+    ...getPcGlFrozenStyle(key, orderedPcGlColumns, fallbackWidth, { isHeader: false }),
+  });
+
+  useEffect(() => {
+    setPcGlColumnOrder(pcGlColumnDefs.map((column) => column.key));
+  }, [setPcGlColumnOrder, withCurr2, withCurr3, glCurrDefault, glCurrGlobal2, glCurrGlobal3]);
+
+  const sortedPcGlRows = getSortedPcGlRows(
+    detailRowsGL.map((row, originalIndex) => ({ row, originalIndex })),
+    (entry, sortKey) => sortKey === "ln" ? entry.originalIndex + 1 : entry.row?.[sortKey] ?? "",
+  );
+
+  const pcGlEnterNextRowZeroClearFields = ["debit", "credit", "debitFx1", "creditFx1", "debitFx2", "creditFx2"];
+
+  const getGLTotalsState = (rows) => {
+    const sourceRows = Array.isArray(rows) ? rows : [];
+    const debitSum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.debit) || 0), 0);
+    const creditSum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.credit) || 0), 0);
+    const debitFx1Sum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.debitFx1) || 0), 0);
+    const creditFx1Sum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.creditFx1) || 0), 0);
+    const debitFx2Sum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.debitFx2) || 0), 0);
+    const creditFx2Sum = sourceRows.reduce((acc, row) => acc + (parseFormattedNumber(row.creditFx2) || 0), 0);
+
+    return {
+      totalDebit: formatNumber(debitSum),
+      totalCredit: formatNumber(creditSum),
+      totalDebitFx1: formatNumber(debitFx1Sum),
+      totalCreditFx1: formatNumber(creditFx1Sum),
+      totalDebitFx2: formatNumber(debitFx2Sum),
+      totalCreditFx2: formatNumber(creditFx2Sum),
+    };
+  };
+
+  useEffect(() => {
+    updateState(getGLTotalsState(detailRowsGL));
+  }, [detailRowsGL]);
+
   const emptyRow = () => ({
-    lnNo: detailRowsRef.current.length + 1, itemCode:"", itemName:"", uomCode:"", element:"N",
+    lnNo: detailRowsRef.current.length + 1, itemCode:"", itemName:"", categCode:"", uomCode:"", element:"N",
     invType, qstatCode:"", lotNo:"", colorCode:"", orderStamp:"", fifoDocNo:"",
     unitCost:formatNumber(0,decUcost), qtyHand:formatNumber(0,decQty),
     varQty:formatNumber(0,decQty), actualQty:formatNumber(0,decQty),
@@ -274,7 +393,7 @@ const PC = () => {
 
   const normalizeRow = (r,i) => ({
     lnNo:r.lnNo??r.lineNo??i+1, itemCode:r.itemCode??r.itemNo??"", itemName:r.itemName??r.itemDesc??"",
-    uomCode:r.uomCode??"", element:(r.element || r.Element || "E").toUpperCase(), invType:r.invType??invType, qstatCode:r.qstatCode??r.qsCode??"",
+    categCode:r.categCode??r.categoryCode??"", uomCode:r.uomCode??"", element:(r.element || r.Element || "E").toUpperCase(), invType:r.invType??invType, qstatCode:r.qstatCode??r.qsCode??"",
     lotNo:r.lotNo??"", colorCode:r.colorCode??"", orderStamp:r.orderStamp??"", rrNo:r.rrNo??"",
     fifoDocNo:r.fifoDocNo??r.fifoDocno??r.rrNo??"", groupId:r.groupId??"",
     unitCost:formatNumber(parseFormattedNumber(r.unitCost??0)||0,decUcost),
@@ -326,7 +445,7 @@ const PC = () => {
         countRef:h.countRef||"V",
         particular:h.particular||"",
         detailRows:rows,
-        detailRowsGL:h.dt2||[],
+        detailRowsGL:(h.dt2||[]).map((r)=>({ ...r, debit:formatNumber(r.debit||0), credit:formatNumber(r.credit||0), debitFx1:formatNumber(r.debitFx1||0), creditFx1:formatNumber(r.creditFx1||0), debitFx2:formatNumber(r.debitFx2||0), creditFx2:formatNumber(r.creditFx2||0) })),
       });
 
     } catch (error) {
@@ -354,20 +473,16 @@ const PC = () => {
     cleanUrl();
   }, [fetchPC, cleanUrl]);
 
-  const handleTranDocNoRetrieval = useCallback(async (result) => {
-    const selectedDocNo = result?.documentNo || result?.pcNo || result?.docNo;
-    if (!selectedDocNo) return;
+  const handleTranDocNoRetrieval = async (data) => {
+    await fetchTranData(data.docNo, branchCode, data.key);
+    updateState({ showAllTranDocNo: data.modalClose });
+  };
 
-    await fetchPC(selectedDocNo, result?.branchCode || branchCode);
-  }, [fetchPC, branchCode]);
 
-  const handleTranDocNoSelection = useCallback((selectedDoc) => {
-    const docNo = selectedDoc?.pcNo || selectedDoc?.documentNo || selectedDoc?.docNo;
-    if (!docNo) return;
-
-    fetchPC(docNo, selectedDoc?.branchCode || branchCode);
-    updateState({ showAllTranDocNo: false });
-  }, [fetchPC, branchCode, updateState]);
+  const handleTranDocNoSelection = async (data) => {
+    reset();
+    updateState({ showAllTranDocNo: false, documentNo: data.docNo });
+  };
 
   useEffect(() => {
     const p=new URLSearchParams(location.search), pcNo=p.get("pcNo"), bc=p.get("branchCode");
@@ -410,74 +525,95 @@ const PC = () => {
     }))
   });
 
+  const buildPcData = (glRows = detailRowsGL) => ({
+    pcId: documentID || "",
+    pcNo: documentNo || "",
+    pcDate: documentDate,
+    branchCode,
+    invType,
+    docType,
+    refNo,
+    whCode,
+    locCode,
+    countRef,
+    particular,
+    userCode,
+    currCode,
+    currRate: parseFormattedNumber(currRate || 1),
+    dt1: detailRows.map((row, index) => ({
+      ...row,
+      lnNo: index + 1,
+      categCode: row.categCode || "",
+      unitCost: parseFormattedNumber(row.unitCost || 0),
+      qtyHand: parseFormattedNumber(row.qtyHand || 0),
+      varQty: parseFormattedNumber(row.varQty || 0),
+      actualQty: parseFormattedNumber(row.actualQty || 0),
+    })),
+    dt2: (glRows || []).map((row, index) => ({
+      recNo: String(index + 1),
+      acctCode: row.acctCode || "",
+      rcCode: row.rcCode || "",
+      sltypeCode: row.sltypeCode || "",
+      slCode: row.slCode || "",
+      particular: row.particular || "",
+      vatCode: row.vatCode || "",
+      atcCode: row.atcCode || "",
+      debit: parseFormattedNumber(row.debit || 0),
+      credit: parseFormattedNumber(row.credit || 0),
+      debitFx1: parseFormattedNumber(row.debitFx1 || 0),
+      creditFx1: parseFormattedNumber(row.creditFx1 || 0),
+      debitFx2: parseFormattedNumber(row.debitFx2 || 0),
+      creditFx2: parseFormattedNumber(row.creditFx2 || 0),
+      slRefNo: row.slRefNo || "",
+      slRefDate: row.slRefDate || null,
+      remarks: row.remarks || "",
+    })),
+  });
+
   const handleActivityOption = async (action) => {
     if ((detailRows?.length || 0) + (detailRowsGL?.length || 0) === 0) return;
 
     updateState({ isLoading: true });
 
     try {
-      const pcData = {
-        pcId: documentID || "",
-        pcNo: documentNo || "",
-        pcDate: documentDate,
-        branchCode,
-        invType,
-        docType,
-        action,
-        refNo,
-        whCode,
-        locCode,
-        countRef,
-        particular,
-        userCode,
-        dt1: detailRows.map((row, index) => ({
-          ...row,
-          lnNo: index + 1,
-          unitCost: parseFormattedNumber(row.unitCost || 0),
-          qtyHand: parseFormattedNumber(row.qtyHand || 0),
-          varQty: parseFormattedNumber(row.varQty || 0),
-          actualQty: parseFormattedNumber(row.actualQty || 0),
-        })),
-        dt2: detailRowsGL.map((row, index) => ({
-          recNo:String(index + 1),
-          acctCode: row.acctCode || "",
-          rcCode: row.rcCode || "",
-          sltypeCode: row.sltypeCode || "",
-          slCode: row.slCode || "",
-          particular: row.particular || "",
-          vatCode: row.vatCode || "",
-          atcCode: row.atcCode || "",
-          debit: parseFormattedNumber(row.debit || 0),
-          credit: parseFormattedNumber(row.credit || 0),
-          debitFx1: parseFormattedNumber(row.debitFx1 || 0),
-          creditFx1: parseFormattedNumber(row.creditFx1 || 0),
-          debitFx2: parseFormattedNumber(row.debitFx2 || 0),
-          creditFx2: parseFormattedNumber(row.creditFx2 || 0),
-          slRefNo: row.slRefNo || "",
-          slRefDate: row.slRefDate || null,
-          remarks: row.remarks || "",
-        })),
-      };
+      let finalDetailRowsGL = [...detailRowsGL];
 
-      const response = await useTransactionUpsert(
-        "PC",
-        pcData,
-        updateState,
-        "pcId",
-        "pcNo"
-      );
+      if (action === "GenerateGL") {
+        const newGlEntries = await useGenerateGLEntries("PC", buildPcData([]));
+        const nextRows = Array.isArray(newGlEntries) ? newGlEntries : [];
+        detailRowsGLRef.current = nextRows;
+        updateState({ detailRowsGL: nextRows, ...getGLTotalsState(nextRows) });
+        return;
+      }
+
+      const hasVariance = detailRows.some((row) => {
+        const variance = countRef === "A"
+          ? (parseFormattedNumber(row.actualQty || 0) || 0) - (parseFormattedNumber(row.qtyHand || 0) || 0)
+          : (parseFormattedNumber(row.varQty || 0) || 0);
+        return Math.abs(variance) > 0;
+      });
+
+      if (action === "S" && hasVariance && finalDetailRowsGL.length === 0) {
+        const newGlEntries = await useGenerateGLEntries("PC", buildPcData([]));
+        if (!newGlEntries || newGlEntries.length === 0) return;
+        finalDetailRowsGL = newGlEntries;
+        detailRowsGLRef.current = newGlEntries;
+        updateState({ detailRowsGL: newGlEntries, ...getGLTotalsState(newGlEntries) });
+      }
+
+      const pcData = buildPcData(finalDetailRowsGL);
+      const response = await useTransactionUpsert("PC", pcData, updateState, "pcId", "pcNo");
 
       if (response) {
+        const responseDocNo = response.data[0].pcNo;
+        const responseDocId = response.data[0].pcId;
 
-        const responseDocNo =  response.data[0].pcNo;
-        const responseDocId =  response.data[0].pcId;
-
-        await fetchTranData(responseDocNo,branchCode);
+        await fetchTranData(responseDocNo, branchCode);
 
         const isZero = Number(noReprints) === 0;
         const onSaveAndPrint = isZero
-            ? () => updateState({ showSignatoryModal: true })
-            : () => handleSaveAndPrint(responseDocId);
+          ? () => updateState({ showSignatoryModal: true })
+          : () => handleSaveAndPrint(responseDocId);
 
         useSwalshowSaveSuccessDialog(reset, onSaveAndPrint);
 
@@ -487,8 +623,8 @@ const PC = () => {
         });
       }
     } catch (error) {
-      console.error("Error during transaction upsert:", error);
-      useSwalErrorAlert("Physical Count", error?.message || "Save failed.");
+      console.error(`Error during ${action}:`, error);
+      useSwalErrorAlert("Physical Count", error?.message || "Transaction failed.");
     } finally {
       updateState({ isLoading: false });
     }
@@ -524,26 +660,29 @@ const PC = () => {
   };
 
   const handleCloseCancel = async (confirmation) => {
-    if (!confirmation || documentID === null || documentID === "") {
-      updateState({ showCancelModal: false });
-      return;
-    }
-
-    const result = await useHandleCancel(
-      docType,
-      documentID,
-      userCode,
-      confirmation.password,
-      confirmation.reason,
-      updateState
-    );
-
-    if (result?.success) {
-      await fetchPC(documentNo, branchCode);
-    }
-
+  if (!confirmation || !documentID) {
     updateState({ showCancelModal: false });
-  };
+    return;
+  }
+
+  const result = await useHandleCancel(
+    "PC",
+    documentID,
+    userCode,
+    confirmation.password,
+    confirmation.reason,
+    updateState
+  );
+
+  if (result?.success) {
+    useSwalSuccessAlert("Success", "Cancellation Completed");
+  }
+
+  await fetchPC(documentNo, branchCode);
+  updateState({ showCancelModal: false });
+};
+
+
 
   const handleCloseSignatory = async (mode) => {
     updateState({
@@ -571,7 +710,7 @@ const PC = () => {
     if(key==="actualQty" && countRef==="A"){
       row.varQty=formatNumber((parseFormattedNumber(value)||0)-(parseFormattedNumber(row.qtyHand)||0),decQty);
     }
-    rows[i]=row; detailRowsRef.current=rows; updateState({detailRows:rows});
+    rows[i]=row; detailRowsRef.current=rows; updateState({detailRows:rows,detailRowsGL:[]});
   };
 
 
@@ -587,6 +726,7 @@ const PC = () => {
       r.element = "N";
       r.itemCode = x.itemCode || x.itemNo || "";
       r.itemName = x.itemName || x.itemDesc || "";
+      r.categCode = x.categCode || x.categoryCode || "";
       r.uomCode = x.uomCode || "";
       r.qstatCode = x.qstatCode || x.qsCode || "";
       r.whouseCode = x.whouseCode || x.whCode || whCode || "";
@@ -605,7 +745,7 @@ const PC = () => {
     const numberedRows = rows.map((r, index) => ({ ...r, lnNo: index + 1 }));
     detailRowsRef.current = numberedRows;
     setItemInsertIndex(null);
-    updateState({ detailRows: numberedRows, itemLookupOpen: false, selectedRowIndex: null });
+    updateState({ detailRows: numberedRows, detailRowsGL: [], itemLookupOpen: false, selectedRowIndex: null });
   };
 
   const replaceSelectedRowItem = (items) => {
@@ -619,6 +759,7 @@ const PC = () => {
       ...row,
       itemCode: selected.itemCode  || row.itemCode || "",
       itemName: selected.itemName  || row.itemName || "",
+      categCode: selected.categCode || selected.categoryCode || row.categCode || "",
       uomCode: selected.uomCode || row.uomCode || "",
       unitCost: formatNumber(parseFormattedNumber(selected.unitCost || 0) || 0, decUcost),
       qtyHand: formatNumber(0, decQty),
@@ -633,7 +774,7 @@ const PC = () => {
 
     rows[selectedRowIndex] = nextRow;
     detailRowsRef.current = rows;
-    updateState({ detailRows: rows, itemLookupOpen: false, selectedRowIndex: null });
+    updateState({ detailRows: rows, detailRowsGL: [], itemLookupOpen: false, selectedRowIndex: null });
   };
 
 
@@ -642,7 +783,7 @@ const PC = () => {
   const removeRow=(i)=>{
     if(detailRows.length<=1){useSwalInfoAlert("Physical Count","Deleting of remaining record is not allowed.");return;}
     const rows=detailRows.filter((_,x)=>x!==i).map((r,x)=>({...r,lnNo:x+1}));
-    detailRowsRef.current=rows; updateState({detailRows:rows});
+    detailRowsRef.current=rows; updateState({detailRows:rows,detailRowsGL:[]});
   };
 
   const commitNumericCell=(index,field,value,decimals)=>{
@@ -759,6 +900,150 @@ const PC = () => {
     return renderers[column.key]?.()??<td key={column.key} className="global-tran-td-ui" style={style}>{String(row[column.key]??"")}</td>;
   };
 
+  const createEmptyGlRow = () => ({
+    acctCode: "", rcCode: "", sltypeCode: "", slCode: "", particular: "",
+    vatCode: "", vatName: "", atcCode: "", atcName: "",
+    debit: "0.00", credit: "0.00", debitFx1: "0.00", creditFx1: "0.00",
+    debitFx2: "0.00", creditFx2: "0.00", slRefNo: "", slRefDate: "", remarks: "",
+  });
+
+  const handleAddRowGL = (index = null) => {
+    const rows = [...detailRowsGLRef.current];
+    const newRow = createEmptyGlRow();
+    if (index !== null && index >= 0) rows.splice(index + 1, 0, newRow);
+    else rows.push(newRow);
+    detailRowsGLRef.current = rows;
+    updateState({ detailRowsGL: rows, ...getGLTotalsState(rows) });
+  };
+
+  const handleDeleteRowGL = (index) => {
+    const rows = [...detailRowsGLRef.current];
+    rows.splice(index, 1);
+    detailRowsGLRef.current = rows;
+    updateState({ detailRowsGL: rows, ...getGLTotalsState(rows) });
+  };
+
+  const handleDetailChangeGL = async (index, field, value) => {
+    const rows = [...detailRowsGLRef.current];
+    let row = { ...(rows[index] || {}) };
+
+    if (["acctCode", "slCode", "rcCode", "sltypeCode", "vatCode", "atcCode"].includes(field)) {
+      const data = await useUpdateRowGLEntries(row, field, value, "", docType);
+      if (data) {
+        row = {
+          ...row,
+          acctCode: data.acctCode,
+          sltypeCode: data.sltypeCode,
+          slCode: data.slCode,
+          rcCode: data.rcCode,
+          vatCode: data.vatCode,
+          vatName: data.vatName,
+          atcCode: data.atcCode,
+          atcName: data.atcName,
+          particular: data.particular,
+        };
+      }
+    } else {
+      row[field] = value;
+    }
+
+    if (["debit", "credit", "debitFx1", "creditFx1", "debitFx2", "creditFx2"].includes(field)) {
+      row[field] = value;
+      const parsedValue = parseFormattedNumber(value);
+      const pairs = { debit:"credit", credit:"debit", debitFx1:"creditFx1", creditFx1:"debitFx1", debitFx2:"creditFx2", creditFx2:"debitFx2" };
+      if (parsedValue > 0 && pairs[field]) row[pairs[field]] = "0.00";
+    }
+
+    rows[index] = row;
+    detailRowsGLRef.current = rows;
+    updateState({ detailRowsGL: rows, ...getGLTotalsState(rows) });
+  };
+
+  const handleBlurGL = async (index, field, value, autoCompute = false) => {
+    const rows = [...detailRowsGLRef.current];
+    const row = { ...(rows[index] || {}) };
+    const parsedValue = parseFormattedNumber(value);
+    row[field] = formatNumber(parsedValue);
+
+    if (autoCompute && ((withCurr2 && currCode !== glCurrDefault) || withCurr3)) {
+      const data = await useUpdateRowEditEntries(row, field, value, currCode, currRate, documentDate);
+      if (data) {
+        row.debit = formatNumber(data.debit);
+        row.credit = formatNumber(data.credit);
+        row.debitFx1 = formatNumber(data.debitFx1);
+        row.creditFx1 = formatNumber(data.creditFx1);
+        row.debitFx2 = formatNumber(data.debitFx2);
+        row.creditFx2 = formatNumber(data.creditFx2);
+      }
+    } else {
+      const pairs = [["debit","credit"],["debitFx1","creditFx1"],["debitFx2","creditFx2"]];
+      pairs.forEach(([a,b]) => {
+        if (field === a && parsedValue > 0) row[b] = formatNumber(0);
+        else if (field === b && parsedValue > 0) row[a] = formatNumber(0);
+      });
+    }
+
+    rows[index] = row;
+    detailRowsGLRef.current = rows;
+    updateState({ detailRowsGL: rows, ...getGLTotalsState(rows) });
+  };
+
+  const handleCloseAccountModal = (selectedAccount) => {
+    if (selectedAccount && selectedRowIndex !== null) handleDetailChangeGL(selectedRowIndex, "acctCode", selectedAccount);
+    updateState({ showAccountModal: false, selectedRowIndex: null, accountModalSource: null });
+  };
+
+  const handleCloseRcModalGL = async (selectedRc) => {
+    if (selectedRc && selectedRowIndex !== null) {
+      const result = await useTopRCRow(selectedRc.rcCode || selectedRc.code || selectedRc);
+      if (result) await handleDetailChangeGL(selectedRowIndex, "rcCode", result);
+    }
+    updateState({ showRcModal: false, selectedRowIndex: null, accountModalSource: null });
+  };
+
+  const handleCloseSlModalGL = async (selectedSl) => {
+    if (selectedSl && selectedRowIndex !== null) await handleDetailChangeGL(selectedRowIndex, "slCode", selectedSl);
+    updateState({ showSlModal: false, selectedRowIndex: null });
+  };
+
+  const renderPcGlColumn = (columnKey, row, index) => {
+    const columnWidth = getPcGlFallbackWidth(columnKey);
+    const style = getPcGlCellStyle(columnKey, columnWidth);
+    const focusNext = (field) => focusNextPcGlRowInput(index, field, {
+      rows: detailRowsGL,
+      zeroClearFields: pcGlEnterNextRowZeroClearFields,
+      parseValue: parseFormattedNumber,
+      onClearNextValue: (nextIndex, nextField, nextValue) => handleDetailChangeGL(nextIndex, nextField, nextValue),
+    });
+    const modalHandlers = {
+      acctCode: () => updateState({ selectedRowIndex:index, showAccountModal:true, accountModalSource:"acctCode" }),
+      rcCode: () => updateState({ selectedRowIndex:index, showRcModal:true, accountModalSource:null }),
+      slCode: () => updateState({ selectedRowIndex:index, showSlModal:true, accountModalSource:null }),
+    };
+    const textInput = (field, options={}) => <input type="text" id={`${field}-${index}`} className={`w-full global-tran-td-inputclass-ui ${options.className || ""}`.trim()} value={row[field] || ""} readOnly={options.readOnly ?? isFormDisabled} maxLength={options.maxLength} onChange={(e)=>handleDetailChangeGL(index,field,e.target.value)} onKeyDown={(e)=>{if(e.key!=="Enter"||options.readOnly||isFormDisabled)return;e.preventDefault();focusNext(field);}} />;
+    const lookupCell = (field, options={}) => <td key={columnKey} className="global-tran-td-ui" style={style}><div className="relative w-full"><input type="text" id={`${field}-${index}`} className="w-full pr-6 global-tran-td-inputclass-ui cursor-pointer" value={row[field] || ""} readOnly={options.readOnly ?? true} onChange={(e)=>handleDetailChangeGL(index,field,e.target.value)} onKeyDown={(e)=>{if(e.key!=="Enter"||isFormDisabled)return;e.preventDefault();focusNext(field);}} />{!isFormDisabled && (options.alwaysShowIcon || String(row[field] || "").trim()) && <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute top-1/2 right-2 -translate-y-1/2 text-blue-600 text-lg cursor-pointer hover:text-blue-900" onClick={modalHandlers[field]}/>}</div></td>;
+    const amountInput = (field) => <input type="text" id={`${field}-${index}`} className="w-full global-tran-td-inputclass-ui text-right" value={row[field] || ""} readOnly={isFormDisabled} onChange={(e)=>{const value=e.target.value.replace(/[^0-9.]/g,"");if(/^\d*\.?\d{0,2}$/.test(value)||value==="")handleDetailChangeGL(index,field,value);}} onFocus={(e)=>clearPcGlZeroOnFocus(e,{isEditable:!isFormDisabled,onClear:(nextValue)=>handleDetailChangeGL(index,field,nextValue)})} onBlur={(e)=>{if(!isFormDisabled)handleBlurGL(index,field,e.target.value);}} onKeyDown={async(e)=>{if(e.key!=="Enter"||isFormDisabled)return;e.preventDefault();await handleBlurGL(index,field,e.target.value,true);focusNext(field);}} />;
+
+    const renderers = {
+      ln: () => <td key={columnKey} className="global-tran-td-ui text-center" style={style}>{index + 1}</td>,
+      acctCode: () => lookupCell("acctCode", { alwaysShowIcon:true, readOnly:false }),
+      rcCode: () => lookupCell("rcCode"),
+      sltypeCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("sltypeCode")}</td>,
+      slCode: () => lookupCell("slCode"),
+      particular: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("particular")}</td>,
+      debit: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{amountInput("debit")}</td>,
+      credit: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{amountInput("credit")}</td>,
+      debitFx1: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{amountInput("debitFx1")}</td>,
+      creditFx1: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{amountInput("creditFx1")}</td>,
+      debitFx2: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{amountInput("debitFx2")}</td>,
+      creditFx2: () => <td key={columnKey} className="global-tran-td-ui text-right" style={style}>{amountInput("creditFx2")}</td>,
+      slRefNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("slRefNo",{maxLength:useGetFieldLength(state.tblFieldArray,"slref_no")})}</td>,
+      slRefDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="date" id={`slRefDate-${index}`} className="w-full global-tran-td-inputclass-ui text-center" value={toNativeDateInputValue(row.slRefDate)} readOnly={isFormDisabled} onChange={(e) => handleDetailChangeGL(index, "slRefDate", e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNext("slRefDate"); } }} /></td>,
+      remarks: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("remarks",{maxLength:useGetFieldLength(state.tblFieldArray,"remarks")})}</td>,
+    };
+    return renderers[columnKey]?.() ?? <td key={columnKey} className="global-tran-td-ui" style={style}>{String(row[columnKey] ?? "")}</td>;
+  };
+
   const loadBalanceToDetailRows = async () => {
     if (!branchCode) {
       useSwalInfoAlert("Physical Count","Please select a branch  before loading the inventory balance.");
@@ -815,6 +1100,7 @@ const PC = () => {
             lnNo: index + 1,
             itemCode,
             itemName,
+            categCode: row.categCode || row.categoryCode || "",
             uomCode: row.uomCode || "",
             element: "E",
             invType,
@@ -844,7 +1130,7 @@ const PC = () => {
       }));
 
       detailRowsRef.current = nextRows;
-      updateState({ detailRows: nextRows });
+      updateState({ detailRows: nextRows, detailRowsGL: [] });
       setShowAddMenu(false);
     } catch (error) {
       useSwalErrorAlert("Physical Count", error?.message || "Unable to load inventory balance.");
@@ -896,7 +1182,7 @@ const PC = () => {
       const result=extractSingleUploadValidationResult(response);
       if(result?.errors?.length){showSingleUploadErrorList(result.errors,"Physical Count Upload");return;}
       const loaded=(result?.rows||result?.data||[]).map(normalizeRow);
-      detailRowsRef.current=loaded; updateState({detailRows:loaded});
+      detailRowsRef.current=loaded; updateState({detailRows:loaded,detailRowsGL:[]});
     }catch(err){useSwalErrorAlert("Physical Count",err?.message||"Upload failed.");}
   };
 
@@ -991,7 +1277,7 @@ const PC = () => {
                     label="PC No."
                     type="lookup"
                     value={documentNo || ""}
-                    disabled={isFormDisabled}
+                    disabled={isExisting || isFormDisabled}
                     onChange={(val) => updateState({ documentNo: val })}
                     onLookup={() => updateState({ showAllTranDocNo: true })}
                     onKeyDown={(e) => {
@@ -1044,7 +1330,6 @@ const PC = () => {
                     id="warehouse"
                     label="Warehouse"
                     type="lookup"
-                    required
                     value={whName || whCode || ""}
                     disabled={isExisting || isFormDisabled}
                     readOnly
@@ -1219,47 +1504,75 @@ const PC = () => {
             </div>
           </div>
 
-          {detailRowsGL.length > 0 && (
-            <div id="pc_dt2" className="global-tran-tab-div-ui">
-              <div className="global-tran-tab-nav-ui">
-                <div className="flex flex-row sm:flex-row">
-                  <button className="global-tran-tab-padding-ui global-tran-tab-text_active-ui">
-                    GL Entries
-                  </button>
-                </div>
+          {!noViewCostamt && (
+          <div id="pc_dt2" className="global-tran-tab-div-ui">
+            <div className="global-tran-tab-nav-ui">
+              <div className="flex flex-row sm:flex-row">
+                <button className="global-tran-tab-padding-ui global-tran-tab-text_active-ui">General Ledger</button>
               </div>
-
-              <div className="global-tran-table-main-div-ui">
-                <div className="global-tran-table-main-sub-div-ui">
-                  <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
-                    <thead className="global-tran-thead-div-ui">
-                      <tr>
-                        <th className="global-tran-th-ui sticky top-0">ACCOUNT</th>
-                        <th className="global-tran-th-ui sticky top-0">ACCOUNT NAME</th>
-                        <th className="global-tran-th-ui sticky top-0 text-right">DEBIT</th>
-                        <th className="global-tran-th-ui sticky top-0 text-right">CREDIT</th>
-                        <th className="global-tran-th-ui sticky top-0">RC</th>
-                        <th className="global-tran-th-ui sticky top-0">SL</th>
-                        <th className="global-tran-th-ui sticky top-0">REMARKS</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {detailRowsGL.map((r, i) => (
-                        <tr key={i} className="global-tran-tr-ui">
-                          <td className="global-tran-td-ui">{r.acctCode}</td>
-                          <td className="global-tran-td-ui">{r.acctName}</td>
-                          <td className="global-tran-td-ui text-right">{r.debit}</td>
-                          <td className="global-tran-td-ui text-right">{r.credit}</td>
-                          <td className="global-tran-td-ui">{r.rcCode}</td>
-                          <td className="global-tran-td-ui">{r.slCode}</td>
-                          <td className="global-tran-td-ui">{r.remarks}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+              <div className="flex justify-end">
+                <button
+                  onClick={() => handleActivityOption("GenerateGL")}
+                  className="global-tran-button-generateGL"
+                  disabled={isLoading}
+                  style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
+                >
+                  {isLoading ? "Generating..." : "Generate GL Entries"}
+                </button>
               </div>
             </div>
+
+            <div className="global-tran-table-main-div-ui">
+              <div className="global-tran-table-main-sub-div-ui">
+                <table className="min-w-full border-separate border-spacing-0 [&_th]:border-b [&_th]:border-slate-200 [&_td]:border-t-0 [&_td]:border-l-0 [&_td]:border-r [&_td]:border-b [&_td]:border-slate-200 [&_tr>td:first-child]:border-l">
+                  <thead className="global-tran-thead-div-ui">
+                    <tr>
+                      {orderedPcGlColumns.map((column) => (
+                        <Fragment key={`pc-gl-header-${column.key}`}>
+                          {renderPcGlHeader(column.label, column.key, column.width, { orderedColumns: orderedPcGlColumns })}
+                        </Fragment>
+                      ))}
+                    </tr>
+                    {renderPcGlHeaderContextMenu()}
+                  </thead>
+                  <tbody className="relative">
+                    {sortedPcGlRows.map(({ row, originalIndex }) => (
+                      <tr key={`${row.acctCode || "gl"}-${originalIndex}`} className="global-tran-tr-ui">
+                        {orderedPcGlColumns.map((column) => renderPcGlColumn(column.key, row, originalIndex))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="global-tran-tab-footer-main-div-ui">
+              <div className="global-tran-tab-footer-button-div-ui">
+                <button onClick={() => handleAddRowGL()} className="global-tran-tab-footer-button-add-ui" style={{visibility:isFormDisabled?"hidden":"visible"}}>
+                  <FontAwesomeIcon icon={faPlus} className="mr-2"/>Add
+                </button>
+              </div>
+
+              <div className="global-tran-tab-footer-total-main-div-ui">
+                <div className="global-tran-tab-footer-total-div-ui">
+                  <label className="global-tran-tab-footer-total-label-ui">Total Debit ({glCurrDefault}):</label>
+                  <label className="global-tran-tab-footer-total-value-ui">{totalDebit}</label>
+                </div>
+                <div className="global-tran-tab-footer-total-div-ui">
+                  <label className="global-tran-tab-footer-total-label-ui">Total Credit ({glCurrDefault}):</label>
+                  <label className="global-tran-tab-footer-total-value-ui">{totalCredit}</label>
+                </div>
+                {withCurr2 && <>
+                  <div className="global-tran-tab-footer-total-div-ui"><label className="global-tran-tab-footer-total-label-ui">Total Debit ({glCurrGlobal2}):</label><label className="global-tran-tab-footer-total-value-ui">{totalDebitFx1}</label></div>
+                  <div className="global-tran-tab-footer-total-div-ui"><label className="global-tran-tab-footer-total-label-ui">Total Credit ({glCurrGlobal2}):</label><label className="global-tran-tab-footer-total-value-ui">{totalCreditFx1}</label></div>
+                </>}
+                {withCurr3 && <>
+                  <div className="global-tran-tab-footer-total-div-ui"><label className="global-tran-tab-footer-total-label-ui">Total Debit ({glCurrGlobal3}):</label><label className="global-tran-tab-footer-total-value-ui">{totalDebitFx2}</label></div>
+                  <div className="global-tran-tab-footer-total-div-ui"><label className="global-tran-tab-footer-total-label-ui">Total Credit ({glCurrGlobal3}):</label><label className="global-tran-tab-footer-total-value-ui">{totalCreditFx2}</label></div>
+                </>}
+              </div>
+            </div>
+          </div>
           )}
         </div>
 
@@ -1363,6 +1676,29 @@ const PC = () => {
             onResponse={{documentNo}}
             onSelected={handleTranDocNoSelection}
             onClose={() => updateState({ showAllTranDocNo: false })}
+          />
+        )}
+
+        {showAccountModal && (
+          <COAMastLookupModal
+            isOpen={showAccountModal}
+            onClose={handleCloseAccountModal}
+            source={accountModalSource}
+          />
+        )}
+
+        {showRcModal && (
+          <RCLookupModal
+            isOpen={showRcModal}
+            onClose={handleCloseRcModalGL}
+            source={accountModalSource}
+          />
+        )}
+
+        {showSlModal && (
+          <SLMastLookupModal
+            isOpen={showSlModal}
+            onClose={handleCloseSlModalGL}
           />
         )}
 
