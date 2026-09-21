@@ -758,7 +758,7 @@ const CustSetupTab = forwardRef(
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       <FieldRenderer
                         label="TIN"
-                        required={!isForeign}
+                        required={taxClass === "WC"}
                         type="text"
                         value={form?.custTin || ""}
                         onChange={(v) => onChangeForm({ custTin: getValue(v) })}
@@ -767,7 +767,8 @@ const CustSetupTab = forwardRef(
                         maxLength={getLen("cust_tin", 50)}
                       />
                       <FieldRenderer
-                        label="ATC Code"
+                        label="Default ATC"
+                        required={taxClass === "WC"}
                         type="lookup"
                         value={form?.atcCode || ""}
                         onLookup={isDisabled ? undefined : () => setIsATCLookupOpen(true)}
@@ -775,8 +776,8 @@ const CustSetupTab = forwardRef(
                         disabled={isDisabled}
                       />
                       <FieldRenderer
-                        label="VAT Code"
-                        required
+                        label="Default VAT"
+                        required={taxClass === "WC"}
                         type="lookup"
                         value={form?.vatCode || ""}
                         onLookup={isDisabled ? undefined : () => setIsVATLookupOpen(true)}
@@ -1002,7 +1003,7 @@ const CustSetupTab = forwardRef(
                       <FieldRenderer
                         label="Total AR"
                         type="number"
-                        value={form?.totalAR || ""}
+                        value={form?.arBalance ?? form?.totalAR ?? "0"}
                         readOnly={true}
                         disabled={true}
                       />

@@ -89,15 +89,16 @@ const TABS = [
 ];
 
 const primaryButton =
-  "inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r " +
-  "from-[#0369a1] to-[#1d4ed8] px-4 py-2.5 text-sm font-extrabold text-white " +
-  "shadow-sm transition hover:-translate-y-0.5 hover:shadow-md " +
-  "disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50";
+  "inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-blue-800 " +
+  "px-3.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-900 " +
+  "dark:bg-blue-600 dark:hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50";
 
 const secondaryButton =
-  "inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 " +
-  "bg-white px-4 py-2.5 text-sm font-extrabold text-slate-700 transition " +
-  "hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700 disabled:opacity-50";
+  "inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 " +
+  "bg-white dark:bg-slate-900 px-3.5 text-xs font-semibold text-slate-700 dark:text-slate-200 transition hover:border-blue-300 " +
+  "hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:text-blue-800 dark:border-slate-700 dark:bg-slate-900 " +
+  "dark:text-slate-200 dark:hover:border-blue-500 dark:hover:bg-slate-800 dark:hover:text-blue-300 " +
+  "disabled:cursor-not-allowed disabled:opacity-50";
 
 const errorText = (error, fallback) =>
   error?.response?.data?.details ||
@@ -106,20 +107,6 @@ const errorText = (error, fallback) =>
   fallback;
 
 const OPTION_MODULES = [
-  {
-    id: "sales-order",
-    label: "Sales Order",
-    shortLabel: "SO",
-    matches: (name) =>
-      name.startsWith("SO_") || name.startsWith("SOAPP_"),
-  },
-  {
-    id: "sales-invoice",
-    label: "Sales Invoice & DR",
-    shortLabel: "SI / DR",
-    matches: (name) =>
-      name.startsWith("SI_") || name.startsWith("DR_"),
-  },
   {
     id: "purchasing",
     label: "Purchasing",
@@ -132,8 +119,18 @@ const OPTION_MODULES = [
       name.startsWith("PRAPP_") ||
       name.startsWith("POAPP_") ||
       name.startsWith("JOAPP_") ||
-      name.startsWith("CVAPP_") ||
       name.startsWith("PUR"),
+  },
+  {
+    id: "payable",
+    label: "Payable",
+    shortLabel: "AP",
+    matches: (name) =>
+      name.startsWith("AP_") ||
+      name.startsWith("APV_") ||
+      name.startsWith("APDM_") ||
+      name.startsWith("CV_") ||
+      name.startsWith("CVAPP_"),
   },
   {
     id: "inventory",
@@ -143,35 +140,60 @@ const OPTION_MODULES = [
       name.startsWith("FGINV_") ||
       name.startsWith("RMINV_") ||
       name.startsWith("MSINV_") ||
-      name.startsWith("INVUOM2_"),
+      name.startsWith("INV_") ||
+      name.startsWith("INVUOM2_") ||
+      name.startsWith("ITEM_"),
   },
   {
-    id: "item-settings",
-    label: "Item Settings",
-    shortLabel: "ITEM",
-    matches: (name) => name.startsWith("ITEM_"),
+    id: "sales",
+    label: "Sales",
+    shortLabel: "SALES",
+    matches: (name) =>
+      name.startsWith("SO_") ||
+      name.startsWith("SOAPP_") ||
+      name.startsWith("SI_") ||
+      name.startsWith("DR_"),
   },
   {
-    id: "general-ledger",
-    label: "General Ledger",
-    shortLabel: "GL",
-    matches: (name) => name.startsWith("GL_"),
+    id: "receivable",
+    label: "Receivable",
+    shortLabel: "AR",
+    matches: (name) =>
+      name.startsWith("AR_") ||
+      name.startsWith("CR_") ||
+      name.startsWith("CM_") ||
+      name.startsWith("DM_") ||
+      name.startsWith("OR_"),
   },
   {
-    id: "payroll",
-    label: "Payroll",
-    shortLabel: "PAY",
-    matches: (name) => name.startsWith("MONTH13_"),
+    id: "bir-identification",
+    label: "BIR Identification",
+    shortLabel: "BIR",
+    matches: (name) =>
+      name.startsWith("BIR_") ||
+      name.startsWith("TIN_") ||
+      name.startsWith("ATC_") ||
+      name.startsWith("VAT_") ||
+      name.startsWith("EWT_") ||
+      name.startsWith("WT_") ||
+      name.startsWith("FORM2307_"),
   },
   {
-    id: "system",
-    label: "System",
-    shortLabel: "SYS",
-    matches: (name) => name === "PATH_PRINTING",
+    id: "integration",
+    label: "Integration",
+    shortLabel: "INT",
+    matches: (name) =>
+      name.startsWith("API_") ||
+      name.startsWith("IES_") ||
+      name.startsWith("MAIL_") ||
+      name.startsWith("EMAIL_") ||
+      name.startsWith("SMS_") ||
+      name.startsWith("SEMAPHORE_") ||
+      name === "PATH_PRINTING",
   },
   {
     id: "other",
-    label: "Other",
+    label: "Other Module",
     shortLabel: "OTHER",
     matches: () => true,
   },
@@ -205,13 +227,16 @@ const environmentGroupLabel = (groupId) => {
 };
 
 const cardSurface =
-  "rounded-2xl border border-slate-200/80 bg-white shadow-[0_8px_28px_rgba(15,23,42,.06)]";
+  "rounded-xl border border-slate-200/80 bg-white dark:bg-slate-900 shadow-sm " +
+  "dark:border-slate-700 dark:bg-slate-900";
 
 const inputClass =
-  "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm " +
-  "font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 " +
-  "focus:border-sky-500 focus:ring-4 focus:ring-sky-100 disabled:bg-slate-100 " +
-  "disabled:text-slate-500";
+  "w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm " +
+  "font-semibold text-slate-800 dark:text-slate-200 outline-none transition placeholder:text-slate-400 " +
+  "focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-950 disabled:bg-slate-100 " +
+  "disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 " +
+  "dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-950 " +
+  "dark:disabled:bg-slate-800 dark:disabled:text-slate-500";
 
 function Switch({ enabled, disabled, onChange, label }) {
   return (
@@ -241,11 +266,11 @@ function LoadingCards({ count = 6 }) {
       {Array.from({ length: count }).map((_, index) => (
         <div
           key={index}
-          className="animate-pulse rounded-2xl border border-slate-200 bg-white p-5"
+          className="animate-pulse rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5"
         >
-          <div className="h-3 w-24 rounded-full bg-slate-100" />
-          <div className="mt-4 h-6 w-3/4 rounded-lg bg-slate-100" />
-          <div className="mt-3 h-3 w-1/2 rounded-full bg-slate-100" />
+          <div className="h-3 w-24 rounded-full bg-slate-100 dark:bg-slate-800" />
+          <div className="mt-4 h-6 w-3/4 rounded-lg bg-slate-100 dark:bg-slate-800" />
+          <div className="mt-3 h-3 w-1/2 rounded-full bg-slate-100 dark:bg-slate-800" />
         </div>
       ))}
     </div>
@@ -257,7 +282,9 @@ function ApplicationSwitchTab() {
   const [loading, setLoading] = useState(true);
   const [savingField, setSavingField] = useState("");
   const [savingAll, setSavingAll] = useState(false);
-  const [activeModule, setActiveModule] = useState("");
+  const [activeModule, setActiveModule] = useState("purchasing");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -276,20 +303,17 @@ function ApplicationSwitchTab() {
       }));
 
       setFields(nextFields);
+      setLastUpdated(new Date());
 
       setActiveModule((current) => {
         if (
           current &&
-          nextFields.some((field) => field.moduleId === current)
+          OPTION_MODULES.some((module) => module.id === current)
         ) {
           return current;
         }
 
-        return (
-          OPTION_MODULES.find((module) =>
-            nextFields.some((field) => field.moduleId === module.id)
-          )?.id || ""
-        );
+        return "purchasing";
       });
     } catch (error) {
       await Swal.fire({
@@ -309,9 +333,7 @@ function ApplicationSwitchTab() {
 
   const availableModules = useMemo(
     () =>
-      OPTION_MODULES.filter((module) =>
-        fields.some((field) => field.moduleId === module.id)
-      ).map((module) => {
+      OPTION_MODULES.map((module) => {
         const moduleFields = fields.filter(
           (field) => field.moduleId === module.id
         );
@@ -342,6 +364,25 @@ function ApplicationSwitchTab() {
       ),
     [activeDefinition?.id, fields]
   );
+
+  const filteredActiveFields = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+
+    if (!query) return activeFields;
+
+    return activeFields.filter((field) =>
+      [
+        field.label,
+        field.name,
+        field.dataType,
+        field.controlType,
+        field.value,
+        field.originalValue,
+      ].some((value) =>
+        String(value ?? "").toLowerCase().includes(query)
+      )
+    );
+  }, [activeFields, searchTerm]);
 
   const dirtyFields = activeFields.filter(
     (field) =>
@@ -398,10 +439,16 @@ function ApplicationSwitchTab() {
                 value:
                   data?.data?.storedValue ??
                   field.value,
+                originalValue:
+                  data?.data?.storedValue ??
+                  field.value,
+                dirty: false,
               }
             : field
         )
       );
+
+      setLastUpdated(new Date());
     } catch (error) {
       setFields(previous);
 
@@ -476,6 +523,8 @@ function ApplicationSwitchTab() {
           : item
       )
     );
+
+    setLastUpdated(new Date());
 
     if (showSuccess) {
       await Swal.fire({
@@ -561,10 +610,13 @@ function ApplicationSwitchTab() {
 
   const renderInput = (field) => {
     const className =
-      "w-full min-w-[180px] rounded-lg border border-slate-300 bg-white " +
-      "px-3 py-2 text-sm font-semibold text-slate-800 outline-none " +
-      "focus:border-sky-500 focus:ring-2 focus:ring-sky-100 " +
-      "disabled:bg-slate-100 disabled:text-slate-500";
+      "h-9 w-full min-w-[170px] rounded-lg border border-slate-300 bg-white " +
+      "px-3 text-sm font-semibold text-slate-800 outline-none transition " +
+      "focus:border-blue-500 focus:ring-2 focus:ring-blue-100 " +
+      "disabled:bg-slate-100 disabled:text-slate-500 " +
+      "dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 " +
+      "dark:focus:border-blue-500 dark:focus:ring-blue-950 " +
+      "dark:disabled:bg-slate-800 dark:disabled:text-slate-500";
 
     if (field.controlType === "number") {
       return (
@@ -603,309 +655,647 @@ function ApplicationSwitchTab() {
     );
   };
 
+  const moduleIconFor = (moduleId) => {
+    const icons = {
+      purchasing: Boxes,
+      payable: FileText,
+      inventory: Database,
+      sales: Activity,
+      receivable: FileText,
+      "bir-identification": ShieldCheck,
+      integration: Layers3,
+      other: Grid2X2,
+    };
+
+    return icons[moduleId] || SlidersHorizontal;
+  };
+
+  const formatUpdated = () => {
+    if (!lastUpdated) return "Not loaded yet";
+
+    return lastUpdated.toLocaleString([], {
+      month: "short",
+      day: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
   return (
-    <section>
-      <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-        <div>
-          <h2 className="text-xl font-black text-slate-950">
-            Application Configuration
-          </h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Review and update HS_OPTION values in a compact table.
-          </p>
-        </div>
+    <section className="relative space-y-3">
+      {(savingField !== "" || savingAll) && <LoadingSpinner />}
 
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <button
-            type="button"
-            onClick={load}
-            disabled={loading || savingAll}
-            className={secondaryButton}
-          >
-            <RefreshCw
-              size={16}
-              className={loading ? "animate-spin" : ""}
-            />
-            Refresh
-          </button>
+      <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:rounded-2xl sm:p-4">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
+              <SlidersHorizontal size={20} />
+            </div>
 
-          <button
-            type="button"
-            onClick={() =>
-              saveFields(
-                allDirtyFields,
-                "Save all changed application values?"
-              )
-            }
-            disabled={
-              loading ||
-              savingAll ||
-              allDirtyFields.length === 0
-            }
-            className={primaryButton}
-          >
-            <SaveAll size={16} />
-            Save All
-            {allDirtyFields.length > 0
-              ? ` (${allDirtyFields.length})`
-              : ""}
-          </button>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg font-black text-slate-950 dark:text-white sm:text-xl">
+                  Application Switch
+                </h2>
+
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                  HeartStrong
+                </span>
+              </div>
+
+              <p className="mt-1 text-[11px] leading-4 text-slate-500 dark:text-slate-400 sm:text-sm">
+                Manage application settings by updating HS_OPTION values in a compact and secure interface.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+            <div className="hidden items-center gap-2 text-right text-[11px] text-slate-500 dark:text-slate-400 lg:flex">
+              <Activity size={15} className="text-blue-600 dark:text-blue-300" />
+              <div>
+                <p className="font-bold uppercase tracking-wide">
+                  Last updated
+                </p>
+                <p className="font-semibold">
+                  {formatUpdated()}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={load}
+              disabled={loading || savingAll}
+              className={secondaryButton}
+            >
+              <RefreshCw
+                size={15}
+                className={loading ? "animate-spin" : ""}
+              />
+              Refresh
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                saveFields(
+                  allDirtyFields,
+                  "Save all changed application values?"
+                )
+              }
+              disabled={
+                loading ||
+                savingAll ||
+                allDirtyFields.length === 0
+              }
+              className={primaryButton}
+            >
+              <SaveAll size={15} />
+              Save All
+              {allDirtyFields.length > 0
+                ? ` (${allDirtyFields.length})`
+                : ""}
+            </button>
+          </div>
         </div>
       </div>
 
       {loading ? (
         <LoadingCards count={6} />
       ) : fields.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center text-sm text-slate-500">
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-400">
           No HS_OPTION fields were found.
         </div>
       ) : (
-        <>
-          <div className="mb-4 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-2">
-            <div className="flex min-w-max gap-2">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <div className="overflow-x-auto border-b border-slate-200 bg-slate-50/70 px-2 pt-2 dark:border-slate-700 dark:bg-slate-950/40 sm:px-3 sm:pt-3">
+            <div className="flex min-w-max items-end">
               {availableModules.map((module) => {
                 const selected =
                   module.id === activeDefinition?.id;
+                const ModuleIcon = moduleIconFor(module.id);
 
                 return (
                   <button
                     key={module.id}
                     type="button"
-                    onClick={() =>
-                      setActiveModule(module.id)
-                    }
-                    className={`rounded-lg border px-4 py-2 text-left text-sm font-black transition ${
+                    onClick={() => {
+                      setActiveModule(module.id);
+                      setSearchTerm("");
+                    }}
+                    className={`group relative -mb-px flex min-w-[132px] items-center justify-center gap-1.5 border border-slate-200 px-3 py-2 text-[11px] font-extrabold transition first:rounded-tl-xl last:rounded-tr-xl dark:border-slate-700 sm:min-w-[150px] sm:gap-2 sm:px-4 sm:py-2.5 sm:text-xs ${
                       selected
-                        ? "border-blue-700 bg-blue-700 text-white"
-                        : "border-slate-200 bg-white text-slate-700 hover:border-sky-300 hover:bg-sky-50"
+                        ? "z-10 border-b-white bg-white text-blue-800 shadow-[0_-2px_8px_rgba(15,23,42,.04)] dark:border-b-slate-900 dark:bg-slate-900 dark:text-blue-300"
+                        : "bg-slate-50 text-slate-600 hover:bg-white hover:text-blue-700 dark:bg-slate-800/60 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-blue-300"
                     }`}
                   >
-                    {module.label}
-                    <span
-                      className={`ml-2 rounded-full px-2 py-0.5 text-[10px] ${
+                    <ModuleIcon
+                      size={14}
+                      className={
                         selected
-                          ? "bg-white/15 text-white"
-                          : module.changedCount > 0
-                            ? "bg-amber-100 text-amber-700"
-                            : "bg-slate-100 text-slate-500"
-                      }`}
-                    >
-                      {module.fieldCount}
-                      {module.changedCount > 0
-                        ? ` / ${module.changedCount} changed`
-                        : ""}
+                          ? "text-blue-700 dark:text-blue-300"
+                          : "text-slate-400 group-hover:text-blue-600"
+                      }
+                    />
+
+                    <span className="whitespace-nowrap">
+                      {module.label}
                     </span>
+
+                    {module.changedCount > 0 && (
+                      <span className="ml-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-black text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                        {module.changedCount}
+                      </span>
+                    )}
                   </button>
                 );
               })}
             </div>
           </div>
 
-          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="font-black text-slate-900">
-                {activeDefinition?.label}
-              </p>
-              <p className="text-xs text-slate-500">
-                {activeFields.length} configuration rows
+          <div className="flex flex-col gap-2.5 border-b border-slate-200 px-3 py-3 dark:border-slate-700 sm:px-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-lg font-black text-slate-950 dark:text-white">
+                  {activeDefinition?.label}
+                </h3>
+
+                <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-black text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                  {activeFields.length} configuration rows
+                </span>
+              </div>
+
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                Configure {activeDefinition?.label?.toLowerCase()} module options and system behavior.
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() =>
-                saveFields(
-                  dirtyFields,
-                  `Save changed ${activeDefinition?.label} values?`
-                )
-              }
-              disabled={
-                savingAll || dirtyFields.length === 0
-              }
-              className={primaryButton}
-            >
-              <Save size={16} />
-              Save Module
-              {dirtyFields.length > 0
-                ? ` (${dirtyFields.length})`
-                : ""}
-            </button>
+            <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center">
+              <div className="relative">
+                <Search
+                  size={15}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+
+                <input
+                  type="search"
+                  value={searchTerm}
+                  onChange={(event) =>
+                    setSearchTerm(event.target.value)
+                  }
+                  placeholder="Search settings or fields..."
+                  className="h-9 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-xs font-semibold text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-blue-950 sm:w-64"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  saveFields(
+                    dirtyFields,
+                    `Save changed ${activeDefinition?.label} values?`
+                  )
+                }
+                disabled={
+                  savingAll || dirtyFields.length === 0
+                }
+                className={primaryButton}
+              >
+                <Save size={15} />
+                Save Module
+                {dirtyFields.length > 0
+                  ? ` (${dirtyFields.length})`
+                  : ""}
+              </button>
+            </div>
           </div>
 
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="overflow-auto">
-              <table className="min-w-full divide-y divide-slate-200 text-sm">
-                <thead className="sticky top-0 z-10 bg-slate-100">
-                  <tr>
-                    <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600">
-                      Setting
-                    </th>
-                    <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600">
-                      Database Field
-                    </th>
-                    <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600">
-                      Type
-                    </th>
-                    <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600">
-                      Stored Value
-                    </th>
-                    <th className="min-w-[260px] px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600">
-                      Current / New Value
-                    </th>
-                    <th className="whitespace-nowrap px-4 py-3 text-center text-xs font-black uppercase tracking-wider text-slate-600">
-                      Status
-                    </th>
-                    <th className="sticky right-0 whitespace-nowrap bg-slate-100 px-4 py-3 text-right text-xs font-black uppercase tracking-wider text-slate-600">
-                      Action
-                    </th>
-                  </tr>
-                </thead>
+          {/* Mobile settings cards */}
+          <div className="space-y-2 p-2 md:hidden">
+            {filteredActiveFields.map((field) => {
+              const dirty =
+                field.controlType !== "switch" &&
+                String(field.value ?? "") !==
+                  String(field.originalValue ?? "");
 
-                <tbody className="divide-y divide-slate-100">
-                  {activeFields.map((field) => {
-                    const dirty =
-                      field.controlType !== "switch" &&
-                      String(field.value ?? "") !==
-                        String(field.originalValue ?? "");
+              const currentDisplay =
+                field.originalValue === null ||
+                field.originalValue === ""
+                  ? "NULL / blank"
+                  : String(field.originalValue);
 
-                    return (
-                      <tr
-                        key={field.name}
-                        className={
-                          dirty
-                            ? "bg-amber-50/60"
-                            : "hover:bg-sky-50/40"
-                        }
-                      >
-                        <td className="px-4 py-3 font-extrabold text-slate-900">
+              return (
+                <article
+                  key={`mobile-${field.name}`}
+                  className={`overflow-hidden rounded-xl border ${
+                    dirty
+                      ? "border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-950/15"
+                      : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3 px-3 py-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <h4 className="truncate text-sm font-extrabold text-slate-900 dark:text-slate-100">
                           {field.label}
-                        </td>
+                        </h4>
 
-                        <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-slate-500">
-                          {field.name}
-                        </td>
-
-                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[9px] font-black ${
+                            field.controlType === "switch"
+                              ? "bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-300"
+                              : "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+                          }`}
+                        >
                           {field.controlType === "switch"
                             ? "Switch"
-                            : field.dataType}
-                        </td>
+                            : String(field.dataType || "Value")}
+                        </span>
+                      </div>
 
-                        <td className="max-w-[220px] truncate px-4 py-3 font-mono text-xs text-slate-600">
-                          {field.originalValue === null ||
-                          field.originalValue === ""
-                            ? "NULL / blank"
-                            : String(field.originalValue)}
-                        </td>
+                      <p className="mt-1 truncate font-mono text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                        {field.name}
+                      </p>
+                    </div>
 
-                        <td className="px-4 py-3">
-                          {field.controlType === "switch" ? (
-                            <div className="flex items-center gap-3">
-                              <Switch
-                                label={field.label}
-                                enabled={Boolean(field.enabled)}
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-black uppercase ${
+                        field.controlType === "switch"
+                          ? field.enabled
+                            ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
+                            : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                          : dirty
+                            ? "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                            : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
+                      }`}
+                    >
+                      {field.controlType === "switch"
+                        ? field.enabled
+                          ? "Enabled"
+                          : "Disabled"
+                        : dirty
+                          ? "Unsaved"
+                          : "Saved"}
+                    </span>
+                  </div>
+
+                  <div className="border-t border-slate-100 bg-slate-50/70 px-3 py-3 dark:border-slate-800 dark:bg-slate-950/30">
+                    {field.controlType === "switch" ? (
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                            Current
+                          </p>
+                          <p className="mt-1 font-mono text-xs font-semibold text-slate-600 dark:text-slate-300">
+                            {currentDisplay}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            label={field.label}
+                            enabled={Boolean(field.enabled)}
+                            disabled={
+                              savingField === field.name ||
+                              savingAll
+                            }
+                            onChange={(next) =>
+                              toggle(field.name, next)
+                            }
+                          />
+
+                          <span
+                            className={`text-[11px] font-black ${
+                              field.enabled
+                                ? "text-emerald-600 dark:text-emerald-300"
+                                : "text-slate-400 dark:text-slate-500"
+                            }`}
+                          >
+                            {field.enabled
+                              ? `Enabled (${field.enabledValue})`
+                              : `Disabled (${field.disabledValue})`}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 dark:border-slate-700 dark:bg-slate-900">
+                            <p className="text-[9px] font-black uppercase tracking-wide text-slate-400">
+                              Current Value
+                            </p>
+                            <p className="mt-1 truncate font-mono text-xs font-semibold text-slate-700 dark:text-slate-200">
+                              {currentDisplay}
+                            </p>
+                          </div>
+
+                          <div className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 dark:border-slate-700 dark:bg-slate-900">
+                            <p className="text-[9px] font-black uppercase tracking-wide text-slate-400">
+                              Status
+                            </p>
+                            <p
+                              className={`mt-1 text-xs font-black ${
+                                dirty
+                                  ? "text-amber-700 dark:text-amber-300"
+                                  : "text-emerald-700 dark:text-emerald-300"
+                              }`}
+                            >
+                              {dirty ? "Unsaved change" : "Saved"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div>
+                          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                            New Value
+                          </p>
+                          {renderInput(field)}
+                        </div>
+
+                        <div className="flex justify-end gap-2">
+                          {dirty && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                resetValue(field.name)
+                              }
+                              disabled={
+                                savingField === field.name ||
+                                savingAll
+                              }
+                              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                            >
+                              <RotateCcw size={13} />
+                              Reset
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => saveValue(field)}
+                            disabled={
+                              savingField === field.name ||
+                              savingAll ||
+                              !dirty
+                            }
+                            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-blue-700 px-4 text-xs font-black text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-blue-600 dark:hover:bg-blue-500"
+                          >
+                            <Save size={13} />
+                            {savingField === field.name
+                              ? "Saving..."
+                              : "Save"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+
+            {filteredActiveFields.length === 0 && (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-white px-5 py-10 text-center dark:border-slate-700 dark:bg-slate-900">
+                <Search
+                  size={22}
+                  className="mx-auto text-slate-300 dark:text-slate-600"
+                />
+                <p className="mt-2 text-sm font-bold text-slate-600 dark:text-slate-300">
+                  No matching settings found
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Desktop / tablet settings table */}
+          <div className="hidden max-h-[calc(100vh-385px)] min-h-[360px] overflow-auto md:block">
+            <table className="min-w-[1120px] w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
+              <thead className="sticky top-0 z-20 bg-slate-100/95 backdrop-blur dark:bg-slate-800/95">
+                <tr>
+                  <th className="min-w-[240px] px-4 py-3 text-left text-[10px] font-black uppercase tracking-[0.08em] text-slate-600 dark:text-slate-300">
+                    Setting
+                  </th>
+                  <th className="min-w-[190px] px-4 py-3 text-left text-[10px] font-black uppercase tracking-[0.08em] text-slate-600 dark:text-slate-300">
+                    Database Field
+                  </th>
+                  <th className="w-[120px] px-4 py-3 text-left text-[10px] font-black uppercase tracking-[0.08em] text-slate-600 dark:text-slate-300">
+                    Type
+                  </th>
+                  <th className="w-[150px] px-4 py-3 text-left text-[10px] font-black uppercase tracking-[0.08em] text-slate-600 dark:text-slate-300">
+                    Current Value
+                  </th>
+                  <th className="min-w-[280px] px-4 py-3 text-left text-[10px] font-black uppercase tracking-[0.08em] text-slate-600 dark:text-slate-300">
+                    New Value
+                  </th>
+                  <th className="w-[130px] px-4 py-3 text-center text-[10px] font-black uppercase tracking-[0.08em] text-slate-600 dark:text-slate-300">
+                    Status
+                  </th>
+                  <th className="sticky right-0 z-30 w-[120px] bg-slate-100/95 px-4 py-3 text-right text-[10px] font-black uppercase tracking-[0.08em] text-slate-600 backdrop-blur dark:bg-slate-800/95 dark:text-slate-300">
+                    Action
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {filteredActiveFields.map((field) => {
+                  const dirty =
+                    field.controlType !== "switch" &&
+                    String(field.value ?? "") !==
+                      String(field.originalValue ?? "");
+
+                  const currentDisplay =
+                    field.originalValue === null ||
+                    field.originalValue === ""
+                      ? "NULL / blank"
+                      : String(field.originalValue);
+
+                  return (
+                    <tr
+                      key={field.name}
+                      className={`transition ${
+                        dirty
+                          ? "bg-amber-50/60 dark:bg-amber-950/15"
+                          : "hover:bg-blue-50/40 dark:hover:bg-slate-800/60"
+                      }`}
+                    >
+                      <td className="px-4 py-3">
+                        <p className="font-extrabold text-slate-900 dark:text-slate-100">
+                          {field.label}
+                        </p>
+                        <p className="mt-0.5 text-[10px] text-slate-400 dark:text-slate-500">
+                          {field.controlType === "switch"
+                            ? "Application behavior switch"
+                            : "Application configuration value"}
+                        </p>
+                      </td>
+
+                      <td className="whitespace-nowrap px-4 py-3 font-mono text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                        {field.name}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-black ${
+                            field.controlType === "switch"
+                              ? "bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-300"
+                              : "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+                          }`}
+                        >
+                          {field.controlType === "switch"
+                            ? "Switch"
+                            : String(field.dataType || "Value")}
+                        </span>
+                      </td>
+
+                      <td className="px-4 py-3 font-mono text-xs text-slate-600 dark:text-slate-300">
+                        {currentDisplay}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        {field.controlType === "switch" ? (
+                          <div className="flex items-center gap-3">
+                            <Switch
+                              label={field.label}
+                              enabled={Boolean(field.enabled)}
+                              disabled={
+                                savingField === field.name ||
+                                savingAll
+                              }
+                              onChange={(next) =>
+                                toggle(field.name, next)
+                              }
+                            />
+
+                            <span
+                              className={`text-xs font-black ${
+                                field.enabled
+                                  ? "text-emerald-600 dark:text-emerald-300"
+                                  : "text-slate-400 dark:text-slate-500"
+                              }`}
+                            >
+                              {field.enabled
+                                ? `Enabled (${field.enabledValue})`
+                                : `Disabled (${field.disabledValue})`}
+                            </span>
+                          </div>
+                        ) : (
+                          renderInput(field)
+                        )}
+                      </td>
+
+                      <td className="px-4 py-3 text-center">
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wide ${
+                            field.controlType === "switch"
+                              ? field.enabled
+                                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
+                                : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                              : dirty
+                                ? "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                                : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
+                          }`}
+                        >
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              field.controlType === "switch"
+                                ? field.enabled
+                                  ? "bg-emerald-500"
+                                  : "bg-slate-400"
+                                : dirty
+                                  ? "bg-amber-500"
+                                  : "bg-emerald-500"
+                            }`}
+                          />
+                          {field.controlType === "switch"
+                            ? field.enabled
+                              ? "Enabled"
+                              : "Disabled"
+                            : dirty
+                              ? "Unsaved"
+                              : "Saved"}
+                        </span>
+                      </td>
+
+                      <td className="sticky right-0 bg-white px-4 py-3 text-right dark:bg-slate-900">
+                        {field.controlType === "switch" ? (
+                          <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500">
+                            Auto-save
+                          </span>
+                        ) : (
+                          <div className="flex justify-end gap-2">
+                            {dirty && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  resetValue(field.name)
+                                }
                                 disabled={
                                   savingField === field.name ||
                                   savingAll
                                 }
-                                onChange={(next) =>
-                                  toggle(field.name, next)
-                                }
-                              />
-                              <span
-                                className={`text-xs font-black ${
-                                  field.enabled
-                                    ? "text-emerald-600"
-                                    : "text-slate-400"
-                                }`}
+                                className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                                title="Discard change"
                               >
-                                {field.enabled
-                                  ? `Enabled (${field.enabledValue})`
-                                  : `Disabled (${field.disabledValue})`}
-                              </span>
-                            </div>
-                          ) : (
-                            renderInput(field)
-                          )}
-                        </td>
-
-                        <td className="px-4 py-3 text-center">
-                          <span
-                            className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${
-                              field.controlType === "switch"
-                                ? field.enabled
-                                  ? "bg-emerald-50 text-emerald-700"
-                                  : "bg-slate-100 text-slate-500"
-                                : dirty
-                                  ? "bg-amber-100 text-amber-700"
-                                  : "bg-emerald-50 text-emerald-700"
-                            }`}
-                          >
-                            {field.controlType === "switch"
-                              ? field.enabled
-                                ? "Enabled"
-                                : "Disabled"
-                              : dirty
-                                ? "Unsaved"
-                                : "Saved"}
-                          </span>
-                        </td>
-
-                        <td className="sticky right-0 whitespace-nowrap bg-white px-4 py-3 text-right">
-                          {field.controlType === "switch" ? (
-                            <span className="text-xs font-semibold text-slate-400">
-                              Auto-save
-                            </span>
-                          ) : (
-                            <div className="flex justify-end gap-2">
-                              {dirty && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    resetValue(field.name)
-                                  }
-                                  disabled={
-                                    savingField === field.name ||
-                                    savingAll
-                                  }
-                                  className="rounded-lg border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                                  title="Discard change"
-                                >
-                                  <RotateCcw size={14} />
-                                </button>
-                              )}
-
-                              <button
-                                type="button"
-                                onClick={() => saveValue(field)}
-                                disabled={
-                                  savingField === field.name ||
-                                  savingAll ||
-                                  !dirty
-                                }
-                                className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-3 py-2 text-xs font-black text-white hover:bg-blue-800 disabled:opacity-40"
-                              >
-                                <Save size={14} />
-                                {savingField === field.name
-                                  ? "Saving..."
-                                  : "Save"}
+                                <RotateCcw size={13} />
                               </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                            )}
 
-            <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">
-              Showing {activeFields.length} rows for{" "}
-              {activeDefinition?.label}
-            </div>
+                            <button
+                              type="button"
+                              onClick={() => saveValue(field)}
+                              disabled={
+                                savingField === field.name ||
+                                savingAll ||
+                                !dirty
+                              }
+                              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-blue-700 px-3 text-[11px] font-black text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-blue-600 dark:hover:bg-blue-500"
+                            >
+                              <Save size={12} />
+                              {savingField === field.name
+                                ? "Saving..."
+                                : "Save"}
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {filteredActiveFields.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className="px-6 py-16 text-center"
+                    >
+                      <Search
+                        size={24}
+                        className="mx-auto text-slate-300 dark:text-slate-600"
+                      />
+                      <p className="mt-3 text-sm font-bold text-slate-600 dark:text-slate-300">
+                        No matching settings found
+                      </p>
+                      <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                        Try another search term or select a different module.
+                      </p>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
-        </>
+
+          <div className="flex flex-col gap-1 border-t border-slate-200 bg-slate-50 px-3 py-2 text-[9px] sm:gap-2 sm:px-4 sm:py-2.5 sm:text-[10px] font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400 sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              Showing {filteredActiveFields.length} of {activeFields.length} rows for{" "}
+              {activeDefinition?.label}
+            </span>
+
+            <span>
+              Changes are stored in HS_OPTION. Switches save automatically.
+            </span>
+          </div>
+        </div>
       )}
     </section>
   );
@@ -969,9 +1359,9 @@ function RecordEditor({
       Boolean(initialValues);
 
     const className =
-      "mt-2 w-full rounded-lg border border-slate-300 bg-white " +
-      "px-3 py-2.5 text-sm font-semibold text-slate-800 outline-none " +
-      "focus:border-sky-500 focus:ring-2 focus:ring-sky-100 " +
+      "mt-2 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 " +
+      "px-3 py-2.5 text-sm font-semibold text-slate-800 dark:text-slate-200 outline-none " +
+      "focus:border-sky-500 focus:ring-2 focus:ring-sky-100 dark:focus:ring-sky-950 " +
       "disabled:bg-slate-100 disabled:text-slate-500";
 
     if (
@@ -987,9 +1377,10 @@ function RecordEditor({
           disabled={disabled}
           className={className}
         >
-          {column.nullable && (
-            <option value="">Blank</option>
-          )}
+          {column.nullable &&
+            column.allowBlank !== false && (
+              <option value="">Blank</option>
+            )}
 
           {column.options.map((option) => (
             <option
@@ -1026,18 +1417,18 @@ function RecordEditor({
   };
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
-      <div className="max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-6 py-4">
+    <div className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/45 p-0 backdrop-blur-sm dark:bg-black/70 sm:items-center sm:p-4">
+      <div className="max-h-[94vh] w-full max-w-5xl overflow-hidden rounded-t-2xl bg-white shadow-2xl dark:bg-slate-900 dark:shadow-black/40 sm:max-h-[92vh] sm:rounded-2xl">
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-6 py-4">
           <div>
-            <h3 className="text-lg font-black text-slate-950">
+            <h3 className="text-lg font-black text-slate-950 dark:text-white">
               {title ||
                 (initialValues
                   ? "Edit Record"
                   : "Add Record")}
             </h3>
 
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               {subtitle || "HeartStrong setup"}
             </p>
           </div>
@@ -1045,20 +1436,20 @@ function RecordEditor({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-2 text-slate-500 hover:bg-white"
+            className="rounded-lg p-2 text-slate-500 dark:text-slate-400 hover:bg-white"
           >
             <X size={19} />
           </button>
         </div>
 
-        <div className="max-h-[70vh] overflow-y-auto p-6">
+        <div className="max-h-[72vh] overflow-y-auto p-4 sm:p-6">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {editableColumns.map((column) => (
               <label
                 key={column.name}
                 className="block"
               >
-                <span className="text-xs font-extrabold uppercase tracking-wider text-slate-600">
+                <span className="text-xs font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300">
                   {column.label}
 
                   {!column.nullable &&
@@ -1079,7 +1470,7 @@ function RecordEditor({
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4">
+        <div className="sticky bottom-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/95 sm:px-6 sm:py-4">
           <button
             type="button"
             onClick={onClose}
@@ -1195,6 +1586,16 @@ function DocumentSetupTab() {
     load();
   }, [load]);
 
+  const valueOf = useCallback((row, name) => {
+    const key = Object.keys(row || {}).find(
+      (columnName) =>
+        String(columnName).toUpperCase() ===
+        String(name).toUpperCase()
+    );
+
+    return key ? row?.[key] : undefined;
+  }, []);
+
   const filteredRows = useMemo(() => {
     const query =
       searchTerm.trim().toLowerCase();
@@ -1209,6 +1610,32 @@ function DocumentSetupTab() {
       )
     );
   }, [payload.rows, searchTerm]);
+
+  const summary = useMemo(() => {
+    const rows = payload.rows;
+
+    const countSeries = (series) =>
+      rows.filter(
+        (row) =>
+          String(valueOf(row, "DOC_SERIES") ?? "")
+            .trim()
+            .toLowerCase() === series.toLowerCase()
+      ).length;
+
+    const active = rows.filter(
+      (row) =>
+        String(valueOf(row, "DOC_STAT") ?? "")
+          .trim()
+          .toLowerCase() === "active"
+    ).length;
+
+    return {
+      active,
+      auto: countSeries("Auto"),
+      system: countSeries("System"),
+      manual: countSeries("Manual"),
+    };
+  }, [payload.rows, valueOf]);
 
   const keysForRow = (row) =>
     Object.fromEntries(
@@ -1232,6 +1659,7 @@ function DocumentSetupTab() {
         : {
             DOC_STAT: "Active",
           }),
+      DOC_SERIES: "Auto",
     }),
     [selectedModuleCode, selectedStatus]
   );
@@ -1246,7 +1674,12 @@ function DocumentSetupTab() {
           keys: editor.row
             ? keysForRow(editor.row)
             : null,
-          values,
+          values: {
+            ...values,
+            DOC_SERIES:
+              String(values?.DOC_SERIES ?? "").trim() ||
+              "Auto",
+          },
         },
         {
           withCredentials: true,
@@ -1284,166 +1717,391 @@ function DocumentSetupTab() {
     }
   };
 
+  const clearFilters = () => {
+    setSelectedModuleCode("");
+    setSelectedStatus("");
+    setSearchTerm("");
+  };
+
   const visibleColumns = payload.columns;
+  const activeFilterCount =
+    Number(Boolean(selectedModuleCode)) +
+    Number(Boolean(selectedStatus)) +
+    Number(Boolean(searchTerm.trim()));
+
+  const seriesBadgeClass = (series) => {
+    const normalized = String(series || "")
+      .trim()
+      .toLowerCase();
+
+    if (normalized === "auto") {
+      return "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300";
+    }
+
+    if (normalized === "system") {
+      return "bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-300";
+    }
+
+    if (normalized === "manual") {
+      return "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300";
+    }
+
+    return "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400";
+  };
 
   return (
-    <section>
-      <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-        <div>
-          <h2 className="text-xl font-black text-slate-950">
-            Document Setup
-          </h2>
+    <section className="relative space-y-3">
+      {saving && <LoadingSpinner />}
 
-          <p className="mt-1 text-sm text-slate-600">
-            Maintain document definitions from HS_DOC. New
-            HS_DOC columns are displayed automatically.
-          </p>
-        </div>
+      {/* Document Setup header */}
+      <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:rounded-2xl sm:p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 sm:h-11 sm:w-11">
+              <Layers3 size={19} />
+            </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-          <select
-            value={selectedModuleCode}
-            onChange={(event) => {
-              setSelectedModuleCode(
-                event.target.value
-              );
-              setSearchTerm("");
-            }}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-extrabold text-slate-700 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
-          >
-            <option value="">All Modules</option>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg font-black text-slate-950 dark:text-white sm:text-xl">
+                  Document Setup
+                </h2>
 
-            {payload.moduleCodes.map(
-              (moduleCode) => (
-                <option
-                  key={moduleCode}
-                  value={moduleCode}
-                >
-                  {moduleCode}
-                </option>
-              )
-            )}
-          </select>
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                  HS_DOC
+                </span>
+              </div>
 
-          <select
-            value={selectedStatus}
-            onChange={(event) => {
-              setSelectedStatus(
-                event.target.value
-              );
-              setSearchTerm("");
-            }}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-extrabold text-slate-700 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
-          >
-            <option value="">
-              All Document Statuses
-            </option>
-
-            {payload.statuses.map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
-            ))}
-          </select>
-
-          <div className="relative">
-            <Search
-              size={15}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-            />
-
-            <input
-              type="search"
-              value={searchTerm}
-              onChange={(event) =>
-                setSearchTerm(event.target.value)
-              }
-              placeholder="Search documents..."
-              className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm font-semibold outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 sm:w-60"
-            />
+              <p className="mt-1 text-[11px] leading-4 text-slate-500 dark:text-slate-400 sm:text-sm">
+                Maintain document definitions, numbering series, status,
+                approval, and document behavior.
+              </p>
+            </div>
           </div>
 
-          <button
-            type="button"
-            onClick={load}
-            disabled={loading}
-            className={secondaryButton}
-          >
-            <RefreshCw
-              size={16}
-              className={
-                loading ? "animate-spin" : ""
-              }
-            />
-            Refresh
-          </button>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+            <button
+              type="button"
+              onClick={load}
+              disabled={loading || saving}
+              className={secondaryButton}
+            >
+              <RefreshCw
+                size={15}
+                className={
+                  loading ? "animate-spin" : ""
+                }
+              />
+              Refresh
+            </button>
 
-          <button
-            type="button"
-            onClick={() =>
-              setEditor({
-                open: true,
-                row: null,
-              })
-            }
-            className={primaryButton}
-          >
-            <Plus size={16} />
-            Add Document
-          </button>
+            <button
+              type="button"
+              onClick={() =>
+                setEditor({
+                  open: true,
+                  row: null,
+                })
+              }
+              disabled={saving}
+              className={primaryButton}
+            >
+              <Plus size={15} />
+              Add Document
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">
-          Module: {selectedModuleCode || "All"}
-        </span>
+      {/* Summary */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+        {[
+          {
+            label: "Records",
+            value: payload.totalRows,
+            caption: "HS_DOC rows",
+            className:
+              "text-slate-900 dark:text-slate-100",
+          },
+          {
+            label: "Active",
+            value: summary.active,
+            caption: "Active documents",
+            className:
+              "text-emerald-700 dark:text-emerald-300",
+          },
+          {
+            label: "Auto",
+            value: summary.auto,
+            caption: "Series mode",
+            className:
+              "text-blue-700 dark:text-blue-300",
+          },
+          {
+            label: "System",
+            value: summary.system,
+            caption: "Series mode",
+            className:
+              "text-violet-700 dark:text-violet-300",
+          },
+          {
+            label: "Manual",
+            value: summary.manual,
+            caption: "Series mode",
+            className:
+              "text-amber-700 dark:text-amber-300",
+          },
+        ].map((item) => (
+          <div
+            key={item.label}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm dark:border-slate-700 dark:bg-slate-900"
+          >
+            <p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
+              {item.label}
+            </p>
 
-        <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
-          Status: {selectedStatus || "All"}
-        </span>
+            <p
+              className={`mt-0.5 text-xl font-black ${item.className}`}
+            >
+              {loading ? "—" : item.value}
+            </p>
 
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">
-          {payload.totalRows} records
-        </span>
+            <p className="mt-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+              {item.caption}
+            </p>
+          </div>
+        ))}
       </div>
 
-      <div className="mb-4 flex gap-3 rounded-xl border border-sky-200 bg-sky-50 p-3">
-        <FileText
-          size={18}
-          className="mt-0.5 flex-none text-sky-700"
-        />
+      {/* Filters */}
+      <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[190px_190px_minmax(260px,1fr)_auto]">
+          <label className="min-w-0">
+            <span className="mb-1 block text-[10px] font-black uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Module
+            </span>
 
-        <p className="text-sm text-sky-800">
-          Use Document Status to deactivate a
-          document instead of deleting its master
-          record.
-        </p>
-      </div>
+            <select
+              value={selectedModuleCode}
+              onChange={(event) => {
+                setSelectedModuleCode(
+                  event.target.value
+                );
+                setSearchTerm("");
+              }}
+              className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-blue-950"
+            >
+              <option value="">All Modules</option>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="max-h-[650px] overflow-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="sticky top-0 z-10 bg-slate-100">
-              <tr>
-                {visibleColumns.map((column) => (
-                  <th
-                    key={column.name}
-                    className="whitespace-nowrap px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600"
+              {payload.moduleCodes.map(
+                (moduleCode) => (
+                  <option
+                    key={moduleCode}
+                    value={moduleCode}
                   >
-                    {column.label}
+                    {moduleCode}
+                  </option>
+                )
+              )}
+            </select>
+          </label>
+
+          <label className="min-w-0">
+            <span className="mb-1 block text-[10px] font-black uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Status
+            </span>
+
+            <select
+              value={selectedStatus}
+              onChange={(event) => {
+                setSelectedStatus(
+                  event.target.value
+                );
+                setSearchTerm("");
+              }}
+              className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-blue-950"
+            >
+              <option value="">
+                All Document Statuses
+              </option>
+
+              {payload.statuses.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="min-w-0 sm:col-span-2 xl:col-span-1">
+            <span className="mb-1 block text-[10px] font-black uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Search
+            </span>
+
+            <div className="relative">
+              <Search
+                size={14}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+
+              <input
+                type="search"
+                value={searchTerm}
+                onChange={(event) =>
+                  setSearchTerm(event.target.value)
+                }
+                placeholder="Document code, name, module, form..."
+                className="h-9 w-full rounded-lg border border-slate-300 bg-white pl-8 pr-3 text-xs font-semibold text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-blue-950"
+              />
+            </div>
+          </label>
+
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={clearFilters}
+              disabled={activeFilterCount === 0}
+              className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 xl:w-auto"
+            >
+              <RotateCcw size={13} />
+              Clear
+              {activeFilterCount > 0 &&
+                ` (${activeFilterCount})`}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap gap-1.5">
+            <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-black text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+              Auto
+            </span>
+            <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[10px] font-black text-violet-700 dark:bg-violet-950/30 dark:text-violet-300">
+              System
+            </span>
+            <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-black text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+              Manual
+            </span>
+          </div>
+
+          <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+            New documents default to Document Series: Auto.
+          </p>
+        </div>
+      </div>
+
+      {loading ? (
+        <LoadingCards count={5} />
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          {/* Mobile document cards */}
+          <div className="space-y-2 p-2 md:hidden">
+            {filteredRows.map((row, rowIndex) => {
+              const documentCode =
+                valueOf(row, "DOC_CODE") || "—";
+              const documentName =
+                valueOf(row, "DOC_NAME") || "Unnamed Document";
+              const moduleCode =
+                valueOf(row, "MODULE_CODE") || "—";
+              const status =
+                valueOf(row, "DOC_STAT") || "—";
+              const series =
+                valueOf(row, "DOC_SERIES") || "Auto";
+
+              return (
+                <article
+                  key={
+                    JSON.stringify(
+                      keysForRow(row)
+                    ) || rowIndex
+                  }
+                  className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
+                >
+                  <div className="flex items-start justify-between gap-3 p-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="rounded-lg bg-blue-50 px-2 py-1 font-mono text-[10px] font-black text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                          {documentCode}
+                        </span>
+
+                        <span
+                          className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${
+                            String(status).toLowerCase() ===
+                            "active"
+                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
+                              : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                          }`}
+                        >
+                          {status}
+                        </span>
+
+                        <span
+                          className={`rounded-full px-2 py-1 text-[9px] font-black ${seriesBadgeClass(
+                            series
+                          )}`}
+                        >
+                          {series}
+                        </span>
+                      </div>
+
+                      <h3 className="mt-2 truncate text-sm font-extrabold text-slate-900 dark:text-slate-100">
+                        {documentName}
+                      </h3>
+
+                      <p className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                        Module:{" "}
+                        <span className="font-black text-slate-700 dark:text-slate-200">
+                          {moduleCode}
+                        </span>
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditor({
+                          open: true,
+                          row,
+                        })
+                      }
+                      className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-black text-blue-700 transition hover:bg-blue-50 dark:border-slate-700 dark:bg-slate-900 dark:text-blue-300 dark:hover:bg-blue-950/30"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+
+            {filteredRows.length === 0 && (
+              <div className="rounded-xl border border-dashed border-slate-300 px-5 py-10 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                No HS_DOC records were found.
+              </div>
+            )}
+          </div>
+
+          {/* Desktop / tablet document table */}
+          <div className="hidden max-h-[calc(100vh-350px)] min-h-[340px] overflow-auto md:block">
+            <table className="min-w-[1100px] w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
+              <thead className="sticky top-0 z-20 bg-slate-100/95 backdrop-blur dark:bg-slate-800/95">
+                <tr>
+                  {visibleColumns.map((column) => (
+                    <th
+                      key={column.name}
+                      className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300"
+                    >
+                      {column.label}
+                    </th>
+                  ))}
+
+                  <th className="sticky right-0 z-30 bg-slate-100/95 px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-wider text-slate-600 backdrop-blur dark:bg-slate-800/95 dark:text-slate-300">
+                    Action
                   </th>
-                ))}
+                </tr>
+              </thead>
 
-                <th className="sticky right-0 bg-slate-100 px-4 py-3 text-right text-xs font-black uppercase tracking-wider text-slate-600">
-                  Action
-                </th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-slate-100">
-              {!loading &&
-                filteredRows.map(
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {filteredRows.map(
                   (row, rowIndex) => (
                     <tr
                       key={
@@ -1451,55 +2109,69 @@ function DocumentSetupTab() {
                           keysForRow(row)
                         ) || rowIndex
                       }
-                      className="hover:bg-sky-50/40"
+                      className="transition hover:bg-blue-50/40 dark:hover:bg-slate-800/60"
                     >
                       {visibleColumns.map(
                         (column) => {
                           const value =
                             row?.[column.name];
 
-                          const isStatus =
+                          const columnName =
                             String(column.name)
-                              .toUpperCase() ===
+                              .toUpperCase();
+
+                          const isStatus =
+                            columnName ===
                             "DOC_STAT";
+
+                          const isSeries =
+                            columnName ===
+                            "DOC_SERIES";
 
                           const isYesNo = [
                             "DOC_CENTRAL",
                             "DOC_APP",
                             "DOC_UPLOAD",
                           ].includes(
-                            String(column.name)
-                              .toUpperCase()
+                            columnName
                           );
 
                           return (
                             <td
                               key={column.name}
-                              className="max-w-[260px] truncate whitespace-nowrap px-4 py-3 text-slate-700"
+                              className="max-w-[260px] truncate whitespace-nowrap px-3 py-2.5 text-xs text-slate-700 dark:text-slate-200"
                               title={String(
                                 value ?? ""
                               )}
                             >
                               {isStatus ? (
                                 <span
-                                  className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${
+                                  className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${
                                     String(value)
                                       .toLowerCase() ===
                                     "active"
-                                      ? "bg-emerald-50 text-emerald-700"
-                                      : "bg-slate-100 text-slate-500"
+                                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
+                                      : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
                                   }`}
                                 >
                                   {value || "—"}
                                 </span>
+                              ) : isSeries ? (
+                                <span
+                                  className={`rounded-full px-2.5 py-1 text-[9px] font-black ${seriesBadgeClass(
+                                    value || "Auto"
+                                  )}`}
+                                >
+                                  {value || "Auto"}
+                                </span>
                               ) : isYesNo ? (
                                 <span
-                                  className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${
+                                  className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${
                                     String(value)
                                       .toUpperCase() ===
                                     "Y"
-                                      ? "bg-blue-50 text-blue-700"
-                                      : "bg-slate-100 text-slate-500"
+                                      ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+                                      : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
                                   }`}
                                 >
                                   {String(value)
@@ -1520,7 +2192,7 @@ function DocumentSetupTab() {
                         }
                       )}
 
-                      <td className="sticky right-0 whitespace-nowrap bg-white px-4 py-2 text-right">
+                      <td className="sticky right-0 whitespace-nowrap bg-white px-3 py-2 text-right dark:bg-slate-900">
                         <button
                           type="button"
                           onClick={() =>
@@ -1529,7 +2201,7 @@ function DocumentSetupTab() {
                               row,
                             })
                           }
-                          className="rounded-lg px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-50"
+                          className="inline-flex h-8 items-center rounded-lg px-3 text-[11px] font-black text-blue-700 transition hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950/40"
                         >
                           Edit
                         </button>
@@ -1538,29 +2210,35 @@ function DocumentSetupTab() {
                   )
                 )}
 
-              {!loading &&
-                filteredRows.length === 0 && (
+                {filteredRows.length === 0 && (
                   <tr>
                     <td
                       colSpan={Math.max(
                         1,
                         visibleColumns.length + 1
                       )}
-                      className="px-6 py-14 text-center text-slate-500"
+                      className="px-6 py-14 text-center text-slate-500 dark:text-slate-400"
                     >
                       No HS_DOC records were found.
                     </td>
                   </tr>
                 )}
-            </tbody>
-          </table>
-        </div>
+              </tbody>
+            </table>
+          </div>
 
-        <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">
-          Showing {filteredRows.length} of{" "}
-          {payload.totalRows} records
+          <div className="flex flex-col gap-1 border-t border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400 sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              Showing {filteredRows.length} of{" "}
+              {payload.totalRows} records
+            </span>
+
+            <span>
+              Document Series: Auto / System / Manual
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
       <RecordEditor
         open={editor.open}
@@ -1573,7 +2251,11 @@ function DocumentSetupTab() {
             ? "Edit Document Setup"
             : "Add Document Setup"
         }
-        subtitle="HS_DOC"
+        subtitle={
+          editor.row
+            ? "Update the selected HS_DOC definition"
+            : "New records default to Document Series: Auto"
+        }
         onClose={() =>
           setEditor({
             open: false,
@@ -1770,13 +2452,14 @@ function DocumentDropdownTab() {
   };
 
   return (
-    <section>
+    <section className="relative">
+      {saving && <LoadingSpinner />}
       <div className="mb-5 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <h2 className="text-xl font-black text-slate-950">
+          <h2 className="text-xl font-black text-slate-950 dark:text-white">
             Document Dropdown
           </h2>
-          <p className="mt-1 text-sm text-slate-600">
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
             Select a document code to display only its
             HS_DROPDOWN records.
           </p>
@@ -1795,7 +2478,7 @@ function DocumentDropdownTab() {
                 setSearchTerm("");
               }}
               disabled={loading}
-              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-extrabold text-slate-700 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100 sm:min-w-[210px]"
+              className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100 dark:focus:ring-sky-950 sm:min-w-[190px] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             >
               <option value="">All Document Codes</option>
 
@@ -1824,7 +2507,7 @@ function DocumentDropdownTab() {
                   ? `Search ${selectedDocCode}...`
                   : "Search dropdown..."
               }
-              className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm font-semibold outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-100 sm:w-60"
+              className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 py-2 pl-9 pr-3 text-sm font-semibold outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-100 dark:focus:ring-sky-950 sm:w-60"
             />
           </div>
 
@@ -1858,14 +2541,14 @@ function DocumentDropdownTab() {
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">
+        <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1 text-xs font-black text-slate-600 dark:text-slate-300">
           Document Code:{" "}
-          <span className="text-blue-700">
+          <span className="text-blue-700 dark:text-blue-300">
             {selectedDocCode || "All"}
           </span>
         </span>
 
-        <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-black text-sky-700">
+        <span className="rounded-full bg-sky-50 dark:bg-sky-950/30 px-3 py-1 text-xs font-black text-sky-700 dark:text-sky-300">
           {payload.totalRows} matching records
         </span>
 
@@ -1876,7 +2559,7 @@ function DocumentDropdownTab() {
               setSelectedDocCode("");
               setSearchTerm("");
             }}
-            className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-3 py-1 text-xs font-black text-rose-700 transition hover:bg-rose-100"
+            className="inline-flex items-center gap-1 rounded-full bg-rose-50 dark:bg-rose-950/30 px-3 py-1 text-xs font-black text-rose-700 dark:text-rose-300 transition hover:bg-rose-100"
           >
             <X size={12} />
             Clear document filter
@@ -1884,27 +2567,27 @@ function DocumentDropdownTab() {
         )}
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="max-h-[620px] overflow-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="sticky top-0 z-10 bg-slate-50">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+        <div className="max-h-[calc(100vh-360px)] min-h-[340px] overflow-auto">
+          <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700 text-sm">
+            <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800/60">
               <tr>
                 {payload.columns.map((column) => (
                   <th
                     key={column.name}
-                    className="whitespace-nowrap px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500"
+                    className="whitespace-nowrap px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400"
                   >
                     {column.label}
                   </th>
                 ))}
 
-                <th className="sticky right-0 bg-slate-50 px-4 py-3 text-right text-xs font-black uppercase tracking-wider text-slate-500">
+                <th className="sticky right-0 bg-slate-50 dark:bg-slate-800/60 px-4 py-3 text-right text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Actions
                 </th>
               </tr>
             </thead>
 
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {!loading &&
                 filteredRows.map((row, rowIndex) => (
                   <tr
@@ -1917,7 +2600,7 @@ function DocumentDropdownTab() {
                     {payload.columns.map((column) => (
                       <td
                         key={column.name}
-                        className="max-w-[260px] truncate whitespace-nowrap px-4 py-3 text-slate-700"
+                        className="max-w-[260px] truncate whitespace-nowrap px-4 py-3 text-slate-700 dark:text-slate-200"
                         title={String(
                           row?.[column.name] ?? ""
                         )}
@@ -1928,7 +2611,7 @@ function DocumentDropdownTab() {
                       </td>
                     ))}
 
-                    <td className="sticky right-0 whitespace-nowrap bg-white px-4 py-2 text-right">
+                    <td className="sticky right-0 whitespace-nowrap bg-white dark:bg-slate-900 px-4 py-2 text-right">
                       <button
                         type="button"
                         onClick={() =>
@@ -1937,7 +2620,7 @@ function DocumentDropdownTab() {
                             row,
                           })
                         }
-                        className="rounded-lg px-3 py-1.5 text-xs font-extrabold text-sky-700 hover:bg-sky-50"
+                        className="rounded-lg px-3 py-1.5 text-xs font-extrabold text-sky-700 dark:text-sky-300 hover:bg-sky-50"
                       >
                         Edit
                       </button>
@@ -1945,7 +2628,7 @@ function DocumentDropdownTab() {
                       <button
                         type="button"
                         onClick={() => deleteRow(row)}
-                        className="ml-1 rounded-lg p-2 text-rose-600 hover:bg-rose-50"
+                        className="ml-1 rounded-lg p-2 text-rose-600 dark:text-rose-300 hover:bg-rose-50"
                         aria-label="Delete"
                       >
                         <Trash2 size={15} />
@@ -1961,7 +2644,7 @@ function DocumentDropdownTab() {
                       1,
                       payload.columns.length + 1
                     )}
-                    className="px-6 py-14 text-center text-slate-500"
+                    className="px-6 py-14 text-center text-slate-500 dark:text-slate-400"
                   >
                     {selectedDocCode
                       ? `No records were found for document code ${selectedDocCode}.`
@@ -1973,7 +2656,7 @@ function DocumentDropdownTab() {
           </table>
         </div>
 
-        <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">
+        <div className="border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400">
           Showing {filteredRows.length} of {payload.totalRows}{" "}
           records
           {selectedDocCode
@@ -2149,9 +2832,9 @@ function EnvironmentTab() {
     const key = setting.key;
     const value = values[key] ?? "";
     const className =
-      "w-full min-w-[220px] rounded-lg border border-slate-300 bg-white " +
-      "px-3 py-2 text-sm font-semibold text-slate-800 outline-none " +
-      "focus:border-sky-500 focus:ring-2 focus:ring-sky-100";
+      "w-full min-w-[220px] rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 " +
+      "px-3 py-2 text-sm font-semibold text-slate-800 dark:text-slate-200 outline-none " +
+      "focus:border-sky-500 focus:ring-2 focus:ring-sky-100 dark:focus:ring-sky-950";
 
     if (
       ["APP_DEBUG", "SESSION_SECURE_COOKIE"].includes(key)
@@ -2264,13 +2947,14 @@ function EnvironmentTab() {
   };
 
   return (
-    <section>
+    <section className="relative">
+      {saving && <LoadingSpinner />}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-xl font-black text-slate-950">
+          <h2 className="text-xl font-black text-slate-950 dark:text-white">
             API Environment
           </h2>
-          <p className="mt-1 text-sm text-slate-600">
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
             Approved Laravel environment values displayed in tables.
           </p>
         </div>
@@ -2306,12 +2990,12 @@ function EnvironmentTab() {
         </div>
       </div>
 
-      <div className="mb-4 flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+      <div className="mb-4 flex gap-3 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/30 p-3">
         <AlertTriangle
           size={18}
           className="mt-0.5 flex-none text-amber-600"
         />
-        <p className="text-sm text-amber-800">
+        <p className="text-sm text-amber-800 dark:text-amber-200">
           Laravel must be restarted after saving environment changes.
           Secret values remain hidden and blank values keep the existing
           secret.
@@ -2325,46 +3009,46 @@ function EnvironmentTab() {
           {Object.entries(grouped).map(([groupId, items]) => (
             <div
               key={groupId}
-              className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+              className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm"
             >
-              <div className="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-4 py-3">
+              <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-4 py-3">
                 <div>
-                  <p className="font-black text-slate-900">
+                  <p className="font-black text-slate-900 dark:text-slate-100">
                     {environmentGroupLabel(groupId)}
                   </p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     {items.length} approved values
                   </p>
                 </div>
 
-                <span className="rounded-full bg-white px-3 py-1 font-mono text-[10px] font-black text-slate-500">
+                <span className="rounded-full bg-white dark:bg-slate-900 px-3 py-1 font-mono text-[10px] font-black text-slate-500 dark:text-slate-400">
                   Laravel API .env
                 </span>
               </div>
 
-              <div className="overflow-auto">
-                <table className="min-w-full divide-y divide-slate-200 text-sm">
-                  <thead className="bg-slate-50">
+              <div className="max-h-[420px] overflow-auto">
+                <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700 text-sm">
+                  <thead className="bg-slate-50 dark:bg-slate-800/60">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600">
+                      <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
                         Setting
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600">
+                      <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
                         Environment Key
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600">
+                      <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
                         Stored Value
                       </th>
-                      <th className="min-w-[280px] px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600">
+                      <th className="min-w-[280px] px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
                         New Value
                       </th>
-                      <th className="px-4 py-3 text-center text-xs font-black uppercase tracking-wider text-slate-600">
+                      <th className="px-4 py-3 text-center text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
                         Status
                       </th>
                     </tr>
                   </thead>
 
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {items.map((setting) => {
                       const dirty =
                         values[setting.key] !==
@@ -2380,21 +3064,21 @@ function EnvironmentTab() {
                           }
                         >
                           <td className="px-4 py-3">
-                            <p className="font-extrabold text-slate-900">
+                            <p className="font-extrabold text-slate-900 dark:text-slate-100">
                               {setting.label}
                             </p>
                             {setting.help && (
-                              <p className="mt-1 max-w-[300px] text-xs text-slate-500">
+                              <p className="mt-1 max-w-[300px] text-xs text-slate-500 dark:text-slate-400">
                                 {setting.help}
                               </p>
                             )}
                           </td>
 
-                          <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-slate-500">
+                          <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-slate-500 dark:text-slate-400">
                             {setting.key}
                           </td>
 
-                          <td className="max-w-[220px] truncate px-4 py-3 font-mono text-xs text-slate-600">
+                          <td className="max-w-[220px] truncate px-4 py-3 font-mono text-xs text-slate-600 dark:text-slate-300">
                             {setting.secret
                               ? setting.hasValue
                                 ? "Configured"
@@ -2414,8 +3098,8 @@ function EnvironmentTab() {
                             <span
                               className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${
                                 dirty
-                                  ? "bg-amber-100 text-amber-700"
-                                  : "bg-emerald-50 text-emerald-700"
+                                  ? "bg-amber-100 text-amber-700 dark:text-amber-300"
+                                  : "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300"
                               }`}
                             >
                               {dirty ? "Changed" : "Saved"}
@@ -3090,7 +3774,7 @@ function ModuleLicensingTab() {
       {(savingKey !== "" || isRefreshing) && (
         <LoadingSpinner />
       )}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
         <div className="flex flex-col gap-3 bg-gradient-to-r from-slate-950 via-blue-950 to-blue-800 px-4 py-4 text-white lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -3140,7 +3824,7 @@ function ModuleLicensingTab() {
                 savingKey !== "" ||
                 totalMissingRows === 0
               }
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-black text-blue-800 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-white dark:bg-slate-900 px-3 py-2 text-xs font-black text-blue-800 dark:text-blue-200 transition hover:bg-blue-50 dark:hover:bg-blue-950/40 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <RotateCcw size={14} />
               {savingKey === "reset-all"
@@ -3173,31 +3857,31 @@ function ModuleLicensingTab() {
       {loading ? (
         <LoadingCards count={4} />
       ) : modules.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center text-sm text-slate-500">
+        <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-6 py-14 text-center text-sm text-slate-500 dark:text-slate-400">
           No HS_MENU modules were found in the JSON master.
         </div>
       ) : (
-        <div className="grid gap-3 xl:h-[calc(100vh-225px)] xl:min-h-[620px] xl:grid-cols-[330px_minmax(0,1fr)]">
-          <aside className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 bg-slate-50 px-3 py-3">
+        <div className="grid gap-3 xl:h-[calc(100vh-270px)] xl:min-h-[560px] xl:grid-cols-[330px_minmax(0,1fr)]">
+          <aside className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+            <div className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-3">
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-black text-slate-950">
+                  <p className="text-sm font-black text-slate-950 dark:text-white">
                     Module Selection
                   </p>
 
-                  <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     {selectedModules.length} selected
                   </p>
                 </div>
 
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs font-black text-slate-700 transition hover:border-blue-300 hover:bg-blue-50">
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-2.5 py-2 text-xs font-black text-slate-700 dark:text-slate-200 transition hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/40">
                   <input
                     type="checkbox"
                     checked={allModulesSelected}
                     onChange={toggleSelectAllModules}
                     disabled={savingKey !== ""}
-                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500"
                   />
 
                   {allModulesSelected
@@ -3237,11 +3921,11 @@ function ModuleLicensingTab() {
               </div>
 
               <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] font-black">
-                <div className="rounded-lg bg-emerald-50 px-2.5 py-2 text-emerald-700">
+                <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 px-2.5 py-2 text-emerald-700 dark:text-emerald-300">
                   {selectedInstalledRows} installed rows
                 </div>
 
-                <div className="rounded-lg bg-rose-50 px-2.5 py-2 text-rose-700">
+                <div className="rounded-lg bg-rose-50 dark:bg-rose-950/30 px-2.5 py-2 text-rose-700 dark:text-rose-300">
                   {selectedRemovedRows} removed rows
                 </div>
               </div>
@@ -3271,10 +3955,10 @@ function ModuleLicensingTab() {
                       key={moduleKey}
                       className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 transition ${
                         active
-                          ? "border-blue-400 bg-blue-50 ring-1 ring-blue-100"
+                          ? "border-blue-400 bg-blue-50 dark:bg-blue-950/40 ring-1 ring-blue-100"
                           : selected
                             ? "border-sky-300 bg-sky-50/60"
-                            : "border-slate-200 bg-white hover:border-sky-300 hover:bg-sky-50/40"
+                            : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-sky-300 hover:bg-sky-50/40"
                       }`}
                     >
                       <input
@@ -3287,7 +3971,7 @@ function ModuleLicensingTab() {
                         }
                         disabled={savingKey !== ""}
                         title={`Select ${module.name}`}
-                        className="h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        className="h-4 w-4 shrink-0 rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500"
                       />
 
                       <button
@@ -3302,11 +3986,11 @@ function ModuleLicensingTab() {
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="truncate text-xs font-black text-slate-900">
+                            <p className="truncate text-xs font-black text-slate-900 dark:text-slate-100">
                               {module.name}
                             </p>
 
-                            <p className="mt-0.5 font-mono text-[10px] font-black text-blue-700">
+                            <p className="mt-0.5 font-mono text-[10px] font-black text-blue-700 dark:text-blue-300">
                               {module.code}
                             </p>
                           </div>
@@ -3315,10 +3999,10 @@ function ModuleLicensingTab() {
                             <span
                               className={`inline-flex rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-wider ${
                                 fullyRemoved
-                                  ? "bg-rose-100 text-rose-700"
+                                  ? "bg-rose-100 text-rose-700 dark:text-rose-300"
                                   : fullyInstalled
-                                    ? "bg-emerald-100 text-emerald-700"
-                                    : "bg-amber-100 text-amber-700"
+                                    ? "bg-emerald-100 text-emerald-700 dark:text-emerald-300"
+                                    : "bg-amber-100 text-amber-700 dark:text-amber-300"
                               }`}
                             >
                               {fullyRemoved
@@ -3328,7 +4012,7 @@ function ModuleLicensingTab() {
                                   : "Partial"}
                             </span>
 
-                            <p className="mt-1 text-[10px] font-black text-slate-500">
+                            <p className="mt-1 text-[10px] font-black text-slate-500 dark:text-slate-400">
                               {module.existingCount ?? 0}/
                               {module.menuCount ?? 0}
                             </p>
@@ -3342,20 +4026,20 @@ function ModuleLicensingTab() {
             </div>
           </aside>
 
-          <main className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 bg-slate-50 px-3 py-3">
+          <main className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+            <div className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-3">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate text-base font-black text-slate-950">
+                    <p className="truncate text-base font-black text-slate-950 dark:text-white">
                       {activeModule?.name}
                     </p>
 
-                    <span className="rounded-full bg-blue-100 px-2 py-1 font-mono text-[9px] font-black text-blue-700">
+                    <span className="rounded-full bg-blue-100 px-2 py-1 font-mono text-[9px] font-black text-blue-700 dark:text-blue-300">
                       {activeModule?.code}
                     </span>
 
-                    <span className="rounded-full bg-slate-200 px-2 py-1 text-[9px] font-black text-slate-600">
+                    <span className="rounded-full bg-slate-200 px-2 py-1 text-[9px] font-black text-slate-600 dark:text-slate-300">
                       {activeModule?.existingCount ?? 0}/
                       {activeModule?.menuCount ?? 0} installed
                     </span>
@@ -3378,7 +4062,7 @@ function ModuleLicensingTab() {
                         )
                       }
                       placeholder="Search menu..."
-                      className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-8 pr-3 text-xs font-semibold outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 sm:w-52"
+                      className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 py-2 pl-8 pr-3 text-xs font-semibold outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 dark:focus:ring-sky-950 sm:w-52"
                     />
                   </div>
 
@@ -3432,32 +4116,32 @@ function ModuleLicensingTab() {
             </div>
 
             <div className="min-h-[360px] flex-1 overflow-auto xl:min-h-0">
-              <table className="min-w-full divide-y divide-slate-200 text-xs">
-                <thead className="sticky top-0 z-10 bg-slate-100">
+              <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700 text-xs">
+                <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-800">
                   <tr>
-                    <th className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-slate-600">
+                    <th className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
                       Menu Code
                     </th>
 
-                    <th className="min-w-[220px] px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-slate-600">
+                    <th className="min-w-[220px] px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
                       Menu Name
                     </th>
 
-                    <th className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-slate-600">
+                    <th className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
                       Sub Menu
                     </th>
 
-                    <th className="px-3 py-2.5 text-center text-[10px] font-black uppercase tracking-wider text-slate-600">
+                    <th className="px-3 py-2.5 text-center text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
                       Visibility
                     </th>
 
-                    <th className="sticky right-0 bg-slate-100 px-3 py-2.5 text-center text-[10px] font-black uppercase tracking-wider text-slate-600">
+                    <th className="sticky right-0 bg-slate-100 dark:bg-slate-800 px-3 py-2.5 text-center text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
                       Installed
                     </th>
                   </tr>
                 </thead>
 
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {filteredItems.map((item) => {
                     const key =
                       item.snapshotKey;
@@ -3473,15 +4157,15 @@ function ModuleLicensingTab() {
                             : "bg-rose-50/50 hover:bg-rose-50"
                         }
                       >
-                        <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[10px] font-black text-blue-700">
+                        <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[10px] font-black text-blue-700 dark:text-blue-300">
                           {item.menuCode || "—"}
                         </td>
 
-                        <td className="px-3 py-2.5 font-semibold text-slate-800">
+                        <td className="px-3 py-2.5 font-semibold text-slate-800 dark:text-slate-200">
                           {item.menuName || "—"}
                         </td>
 
-                        <td className="whitespace-nowrap px-3 py-2.5 text-slate-600">
+                        <td className="whitespace-nowrap px-3 py-2.5 text-slate-600 dark:text-slate-300">
                           {item.subMenu || "—"}
                         </td>
 
@@ -3489,8 +4173,8 @@ function ModuleLicensingTab() {
                           <span
                             className={`rounded-full px-2 py-1 text-[8px] font-black uppercase tracking-wider ${
                               item.isVisible
-                                ? "bg-emerald-50 text-emerald-700"
-                                : "bg-slate-100 text-slate-500"
+                                ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300"
+                                : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
                             }`}
                           >
                             {item.isVisible
@@ -3502,8 +4186,8 @@ function ModuleLicensingTab() {
                         <td
                           className={`sticky right-0 px-3 py-2.5 ${
                             item.exists
-                              ? "bg-white"
-                              : "bg-rose-50"
+                              ? "bg-white dark:bg-slate-900"
+                              : "bg-rose-50 dark:bg-rose-950/30"
                           }`}
                         >
                           <div className="flex items-center justify-center gap-2">
@@ -3527,8 +4211,8 @@ function ModuleLicensingTab() {
                             <span
                               className={`min-w-[72px] text-left text-[10px] font-black ${
                                 item.exists
-                                  ? "text-emerald-700"
-                                  : "text-rose-600"
+                                  ? "text-emerald-700 dark:text-emerald-300"
+                                  : "text-rose-600 dark:text-rose-300"
                               }`}
                             >
                               {savingKey === operationKey
@@ -3547,7 +4231,7 @@ function ModuleLicensingTab() {
                     <tr>
                       <td
                         colSpan={5}
-                        className="px-6 py-12 text-center text-sm text-slate-500"
+                        className="px-6 py-12 text-center text-sm text-slate-500 dark:text-slate-400"
                       >
                         No matching menu rows were found.
                       </td>
@@ -3557,7 +4241,7 @@ function ModuleLicensingTab() {
               </table>
             </div>
 
-            <div className="flex flex-col gap-1 border-t border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-semibold text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-1 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-2 text-[10px] font-semibold text-slate-500 dark:text-slate-400 sm:flex-row sm:items-center sm:justify-between">
               <span>
                 {filteredItems.length} menu row(s)
                 displayed.
@@ -3744,13 +4428,14 @@ function LicenseSeatsTab() {
   };
 
   return (
-    <section>
+    <section className="relative">
+      {saving && <LoadingSpinner />}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-xl font-black text-slate-950">
+          <h2 className="text-xl font-black text-slate-950 dark:text-white">
             License Seat Setup
           </h2>
-          <p className="mt-1 text-sm text-slate-600">
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
             Occupied seats are based on USERS.LOGIN_STAT = 1,
             not the number of users with ACTIVE = Y. Seat numbers are
             hidden by default; press and hold the eye button to reveal them.
@@ -3794,34 +4479,34 @@ function LicenseSeatsTab() {
         </div>
       </div>
 
-      <div className="mb-5 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-100">
+      <div className="mb-5 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700 text-sm">
+          <thead className="bg-slate-100 dark:bg-slate-800">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600">
+              <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
                 License Metric
               </th>
-              <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600">
+              <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
                 Current Value
               </th>
-              <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600">
+              <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
                 Basis
               </th>
-              <th className="min-w-[260px] px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600">
+              <th className="min-w-[260px] px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
                 Update
               </th>
             </tr>
           </thead>
 
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             <tr>
-              <td className="px-4 py-3 font-extrabold text-slate-900">
+              <td className="px-4 py-3 font-extrabold text-slate-900 dark:text-slate-100">
                 Seat Capacity
               </td>
-              <td className="px-4 py-3 text-lg font-black text-blue-700">
+              <td className="px-4 py-3 text-lg font-black text-blue-700 dark:text-blue-300">
                 {displaySeatNumber(currentCap)}
               </td>
-              <td className="px-4 py-3 text-slate-600">
+              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                 Encrypted LAC value in HS_SYS
               </td>
               <td className="px-4 py-3">
@@ -3838,7 +4523,7 @@ function LicenseSeatsTab() {
                       onChange={(event) =>
                         setSeatCount(event.target.value)
                       }
-                      className="w-32 rounded-lg border border-slate-300 py-2 pl-3 pr-10 text-center font-black tracking-widest outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                      className="w-32 rounded-lg border border-slate-300 dark:border-slate-600 py-2 pl-3 pr-10 text-center font-black tracking-widest outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 dark:focus:ring-sky-950"
                       aria-label="Allowed license seats"
                     />
 
@@ -3885,48 +4570,48 @@ function LicenseSeatsTab() {
             </tr>
 
             <tr>
-              <td className="px-4 py-3 font-extrabold text-slate-900">
+              <td className="px-4 py-3 font-extrabold text-slate-900 dark:text-slate-100">
                 Occupied Seats
               </td>
-              <td className="px-4 py-3 text-lg font-black text-emerald-700">
+              <td className="px-4 py-3 text-lg font-black text-emerald-700 dark:text-emerald-300">
                 {displaySeatNumber(activeSeats)}
               </td>
-              <td className="px-4 py-3 text-slate-600">
+              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                 USERS.LOGIN_STAT = 1, excluding HEARTSTRONG
                 and MIRACLE
               </td>
-              <td className="px-4 py-3 text-xs font-semibold text-slate-500">
+              <td className="px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400">
                 Updated by active login sessions
               </td>
             </tr>
 
             <tr>
-              <td className="px-4 py-3 font-extrabold text-slate-900">
+              <td className="px-4 py-3 font-extrabold text-slate-900 dark:text-slate-100">
                 Remaining Seats
               </td>
-              <td className="px-4 py-3 text-lg font-black text-amber-700">
+              <td className="px-4 py-3 text-lg font-black text-amber-700 dark:text-amber-300">
                 {displaySeatNumber(remainingSeats)}
               </td>
-              <td className="px-4 py-3 text-slate-600">
+              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                 Seat Capacity − Occupied Seats
               </td>
-              <td className="px-4 py-3 text-xs font-semibold text-slate-500">
+              <td className="px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400">
                 Calculated automatically
               </td>
             </tr>
 
             <tr>
-              <td className="px-4 py-3 font-extrabold text-slate-900">
+              <td className="px-4 py-3 font-extrabold text-slate-900 dark:text-slate-100">
                 Utilization
               </td>
-              <td className="px-4 py-3 text-lg font-black text-slate-950">
+              <td className="px-4 py-3 text-lg font-black text-slate-950 dark:text-white">
                 {loading ? "—" : `${utilization}%`}
               </td>
-              <td className="px-4 py-3 text-slate-600">
+              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                 Occupied Seats ÷ Seat Capacity
               </td>
               <td className="px-4 py-3">
-                <div className="h-2.5 min-w-[220px] overflow-hidden rounded-full bg-slate-100">
+                <div className="h-2.5 min-w-[220px] overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                   <div
                     className={`h-full rounded-full ${
                       utilization >= 90
@@ -3946,13 +4631,13 @@ function LicenseSeatsTab() {
         </table>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="font-black text-slate-900">
+            <p className="font-black text-slate-900 dark:text-slate-100">
               Users Occupying License Seats
             </p>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               Current users with LOGIN_STAT = 1
             </p>
           </div>
@@ -3970,31 +4655,31 @@ function LicenseSeatsTab() {
                 setSearchTerm(event.target.value)
               }
               placeholder="Search user..."
-              className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm font-semibold outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 sm:w-60"
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 py-2 pl-9 pr-3 text-sm font-semibold outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 dark:focus:ring-sky-950 sm:w-60"
             />
           </div>
         </div>
 
-        <div className="max-h-[500px] overflow-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="sticky top-0 z-10 bg-slate-50">
+        <div className="max-h-[calc(100vh-430px)] min-h-[260px] overflow-auto">
+          <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700 text-sm">
+            <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800/60">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600">
+                <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
                   User Code
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600">
+                <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
                   User Name
                 </th>
-                <th className="px-4 py-3 text-center text-xs font-black uppercase tracking-wider text-slate-600">
+                <th className="px-4 py-3 text-center text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
                   Login Status
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600">
+                <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
                   Last Seen
                 </th>
               </tr>
             </thead>
 
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading &&
                 Array.from({ length: 4 }).map(
                   (_, index) => (
@@ -4003,7 +4688,7 @@ function LicenseSeatsTab() {
                         colSpan={4}
                         className="px-4 py-4"
                       >
-                        <div className="h-4 animate-pulse rounded bg-slate-100" />
+                        <div className="h-4 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
                       </td>
                     </tr>
                   )
@@ -4021,20 +4706,20 @@ function LicenseSeatsTab() {
                       key={code}
                       className="hover:bg-sky-50/40"
                     >
-                      <td className="px-4 py-3 font-mono text-xs font-black text-blue-700">
+                      <td className="px-4 py-3 font-mono text-xs font-black text-blue-700 dark:text-blue-300">
                         {code}
                       </td>
-                      <td className="px-4 py-3 font-semibold text-slate-800">
+                      <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">
                         {row.USER_NAME ??
                           row.user_name ??
                           "—"}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-700">
+                        <span className="rounded-full bg-emerald-50 dark:bg-emerald-950/30 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
                           LOGIN_STAT = 1
                         </span>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-600 dark:text-slate-300">
                         {row.LAST_SEEN_AT ??
                           row.last_seen_at ??
                           "—"}
@@ -4048,7 +4733,7 @@ function LicenseSeatsTab() {
                   <tr>
                     <td
                       colSpan={4}
-                      className="px-6 py-12 text-center text-slate-500"
+                      className="px-6 py-12 text-center text-slate-500 dark:text-slate-400"
                     >
                       No users are currently occupying
                       license seats.
@@ -4059,7 +4744,7 @@ function LicenseSeatsTab() {
           </table>
         </div>
 
-        <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">
+        <div className="border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400">
           Showing {filteredUsers.length} occupied seats
         </div>
       </div>
@@ -4229,8 +4914,6 @@ export default function HeartStrong() {
   const activeDefinition =
     TABS.find((tab) => tab.id === activeTab) || TABS[0];
 
-  const ActiveDefinitionIcon = activeDefinition.icon;
-
   const ActiveTab =
     activeTab === "switches"
       ? ApplicationSwitchTab
@@ -4251,20 +4934,22 @@ export default function HeartStrong() {
 
   if (!canManage) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100 p-6">
-        <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-xl">
-          <Settings2
-            className="mx-auto text-slate-400"
-            size={42}
-          />
-          <h1 className="mt-4 text-xl font-black text-slate-950">
-            Access denied
-          </h1>
-          <p className="mt-2 text-sm text-slate-600">
-            Your account is not allowed to access HeartStrong.
-          </p>
+      <main className="mt-[80px] min-h-screen bg-slate-100/80 px-3 py-4">
+        <div className="mx-auto max-w-lg">
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 dark:bg-amber-950/30 p-6 text-center shadow-sm">
+            <Settings2
+              className="mx-auto text-amber-600"
+              size={38}
+            />
+            <h1 className="mt-3 text-lg font-extrabold text-slate-900 dark:text-slate-100">
+              Access denied
+            </h1>
+            <p className="mt-1 text-sm text-amber-800 dark:text-amber-200">
+              Your account is not allowed to access HeartStrong.
+            </p>
+          </div>
         </div>
-      </div>
+      </main>
     );
   }
 
@@ -4275,260 +4960,241 @@ export default function HeartStrong() {
     "HEARTSTRONG";
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(186,230,253,.55),_transparent_34%),linear-gradient(135deg,#f8fafc_0%,#eff6ff_46%,#e0f2fe_100%)]">
-      <div className="mx-auto max-w-[1500px] px-3 py-4 sm:px-5 lg:px-7">
-        <header className="relative overflow-hidden rounded-[28px] border border-white/60 bg-gradient-to-r from-slate-950 via-blue-950 to-sky-900 text-white shadow-[0_22px_70px_rgba(15,23,42,.22)]">
-          <div
-            className="pointer-events-none absolute inset-0 opacity-80"
-            style={{
-              backgroundImage:
-                "radial-gradient(circle at 12% 18%, rgba(125,211,252,.28), transparent 30%), radial-gradient(circle at 92% 8%, rgba(255,255,255,.16), transparent 28%), linear-gradient(120deg, transparent 35%, rgba(255,255,255,.06) 50%, transparent 65%)",
-            }}
-          />
-
-          <div className="relative flex flex-col gap-5 px-5 py-6 sm:px-7 lg:flex-row lg:items-center lg:justify-between lg:px-9">
-            <div className="flex min-w-0 items-center gap-4">
-              <div className="flex h-16 w-16 flex-none items-center justify-center rounded-2xl border border-white/20 bg-white/95 p-2 shadow-xl sm:h-20 sm:w-20">
-                <img
-                  src="/naysa_logo.png"
-                  alt="NAYSA Logo"
-                  className="max-h-full max-w-full object-contain"
-                />
-              </div>
-
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full border border-sky-300/20 bg-sky-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-sky-200">
-                    System Configuration
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-200">
-                    <CheckCircle2 size={12} />
-                    Online
-                  </span>
+    <main className="mt-[52px] min-h-screen bg-slate-100/80 px-2 py-2 transition-colors dark:bg-slate-950 sm:px-3 sm:py-3 lg:px-4 lg:py-3">
+      <div className="mx-auto max-w-[1900px] space-y-2 sm:space-y-3">
+        {/* Header - aligned with Employee Access Settings */}
+        <section className="overflow-hidden rounded-2xl bg-gradient-to-r from-blue-900 via-blue-800 to-blue-600 text-white shadow-lg dark:from-slate-950 dark:via-blue-950 dark:to-slate-900">
+          <div className="flex flex-col gap-2.5 p-3 sm:p-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/10 backdrop-blur-sm">
+                  <Settings2 size={22} />
                 </div>
 
-                <h1 className="mt-3 truncate text-3xl font-black tracking-tight sm:text-4xl">
-                  HeartStrong
-                </h1>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h1 className="text-lg font-extrabold sm:text-xl">
+                      HeartStrong
+                    </h1>
 
-                <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-300">
-                  Secure application, module, environment, and license
-                  setup for NAYSA Financials.
-                </p>
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-400/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-100">
+                      <CheckCircle2 size={11} />
+                      Online
+                    </span>
+                  </div>
+
+                  <p className="mt-0.5 text-[11px] leading-4 text-blue-100 sm:text-sm">
+                    Secure application, module, environment, and license setup for NAYSA Financials.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-1.5 text-[10px] sm:gap-2 sm:text-xs">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5">
+                  <Database size={12} />
+                  {currentTenant.company ||
+                    currentTenant.code ||
+                    "No tenant selected"}
+                </span>
+
+                {currentTenant.database && (
+                  <span className="rounded-full bg-white/10 px-3 py-1.5 font-mono">
+                    {currentTenant.database}
+                  </span>
+                )}
+
+                <span className="rounded-full bg-white/10 px-3 py-1.5">
+                  {accountCode}
+                </span>
+
+                <span className="rounded-full bg-white/10 px-3 py-1.5">
+                  {user?.ACCOUNT_MODE}
+                </span>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => setSidebarOpen(true)}
-                className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-extrabold text-white backdrop-blur transition hover:bg-white/15"
+                className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 text-sm font-semibold text-white transition hover:bg-white/20 sm:flex-none"
               >
-                <Menu size={17} />
+                <Menu size={16} />
                 Setup Navigation
               </button>
-
-              <div className="min-w-[220px] rounded-xl border border-amber-300/30 bg-amber-300/10 px-4 py-2.5 backdrop-blur">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-amber-300/15 text-amber-200">
-                    <Database size={17} />
-                  </span>
-
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-amber-200/80">
-                      Current Tenant
-                    </p>
-                    <p
-                      className="mt-0.5 truncate text-sm font-black text-white"
-                      title={
-                        currentTenant.company ||
-                        currentTenant.code ||
-                        "No tenant selected"
-                      }
-                    >
-                      {currentTenant.company ||
-                        currentTenant.code ||
-                        "No tenant selected"}
-                    </p>
-                    <p className="mt-0.5 truncate text-[11px] font-semibold text-amber-100/80">
-                      {currentTenant.code || "No code"}
-                      {currentTenant.database
-                        ? ` • ${currentTenant.database}`
-                        : ""}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 backdrop-blur">
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                  Signed in as
-                </p>
-                <p className="mt-0.5 text-sm font-black text-white">
-                  {accountCode}
-                  <span className="ml-2 font-semibold text-sky-300">
-                    {user?.ACCOUNT_MODE}
-                  </span>
-                </p>
-              </div>
             </div>
           </div>
-        </header>
+        </section>
 
-        {sidebarOpen && (
-          <div className="fixed inset-0 z-[120] flex">
-            <aside className="relative flex h-full w-[330px] max-w-[90vw] flex-col overflow-hidden bg-slate-950 text-white shadow-2xl">
-              <div className="relative overflow-hidden border-b border-white/10 bg-gradient-to-br from-blue-950 to-slate-950 p-5">
-                <div className="absolute -right-12 -top-12 h-36 w-36 rounded-full bg-sky-400/10 blur-2xl" />
+        {/* Configuration section selector */}
+        <section className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-2.5 shadow-sm dark:shadow-black/20 sm:p-3">
+          <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
+                Configuration Sections
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Choose the HeartStrong setup area to manage.
+              </p>
+            </div>
 
-                <div className="relative flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.25em] text-sky-300">
-                      HeartStrong
-                    </p>
-                    <h2 className="mt-1 text-xl font-black">
-                      Setup Navigation
-                    </h2>
-                    <p className="mt-1 text-xs leading-5 text-slate-400">
-                      Choose the configuration area to manage.
-                    </p>
-                  </div>
+            <span className="mt-2 rounded-full bg-blue-50 dark:bg-blue-950/40 px-3 py-1.5 text-xs font-bold text-blue-800 dark:text-blue-200 sm:mt-0">
+              {TABS.length} Sections
+            </span>
+          </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setSidebarOpen(false)}
-                    className="rounded-xl border border-white/10 bg-white/5 p-2 text-slate-300 transition hover:bg-white/10 hover:text-white"
-                    aria-label="Close setup navigation"
-                  >
-                    <PanelLeftClose size={19} />
-                  </button>
-                </div>
-              </div>
+          <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-3 sm:overflow-visible sm:pb-0 xl:grid-cols-6">
+            {TABS.map((tab) => {
+              const Icon = tab.icon;
+              const selected = tab.id === activeTab;
 
-              <nav className="flex-1 space-y-2 overflow-y-auto p-4">
-                {TABS.map((tab, index) => {
-                  const Icon = tab.icon;
-                  const selected = tab.id === activeTab;
-
-                  return (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => selectTab(tab.id)}
-                      className={`group flex w-full items-center gap-3 rounded-2xl border p-3.5 text-left transition ${
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => selectTab(tab.id)}
+                  className={`group min-w-[170px] snap-start rounded-xl border p-2.5 text-left transition sm:min-w-0 sm:p-3 ${
+                    selected
+                      ? "border-blue-300 bg-blue-50 dark:bg-blue-950/40 ring-1 ring-blue-100"
+                      : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-blue-200 hover:bg-slate-50 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <span
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
                         selected
-                          ? "border-sky-400/40 bg-gradient-to-r from-blue-600 to-sky-600 text-white shadow-lg shadow-blue-950/30"
-                          : "border-white/5 bg-white/[0.035] text-slate-300 hover:border-white/10 hover:bg-white/[0.07] hover:text-white"
+                          ? "bg-blue-800 text-white"
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-700"
                       }`}
                     >
+                      <Icon size={16} />
+                    </span>
+
+                    <span className="min-w-0 flex-1">
                       <span
-                        className={`flex h-10 w-10 flex-none items-center justify-center rounded-xl ${
+                        className={`block truncate text-xs font-extrabold ${
                           selected
-                            ? "bg-white/15 text-white"
-                            : "bg-white/5 text-slate-400 group-hover:text-white"
+                            ? "text-blue-900"
+                            : "text-slate-800 dark:text-slate-200"
                         }`}
                       >
-                        <Icon size={18} />
+                        {tab.label}
                       </span>
 
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate font-extrabold">
-                          {tab.label}
-                        </span>
-                        <span
-                          className={`mt-0.5 block truncate text-xs ${
-                            selected
-                              ? "text-blue-100"
-                              : "text-slate-500"
-                          }`}
-                        >
-                          {tab.description}
-                        </span>
+                      <span className="mt-0.5 block truncate text-[9px] text-slate-500 dark:text-slate-400 sm:mt-1 sm:text-[10px]">
+                        {tab.description}
                       </span>
-
-                      <span className="flex items-center gap-2">
-                        <span
-                          className={`text-[10px] font-black ${
-                            selected
-                              ? "text-blue-100"
-                              : "text-slate-600"
-                          }`}
-                        >
-                          0{index + 1}
-                        </span>
-                        <ChevronRight
-                          size={15}
-                          className={
-                            selected
-                              ? "text-white"
-                              : "text-slate-600"
-                          }
-                        />
-                      </span>
-                    </button>
-                  );
-                })}
-              </nav>
-
-              <div className="border-t border-white/10 p-4">
-                <div className="rounded-2xl border border-white/5 bg-white/[0.035] p-3">
-                  <p className="text-xs font-black text-slate-300">
-                    Protected setup area
-                  </p>
-                  <p className="mt-1 text-[11px] leading-5 text-slate-500">
-                    Available only to LICENSE_ADMIN and SYSTEM_ADMIN
-                    accounts.
-                  </p>
-                </div>
-              </div>
-            </aside>
-
-            <button
-              type="button"
-              className="flex-1 bg-slate-950/55 backdrop-blur-sm"
-              onClick={() => setSidebarOpen(false)}
-              aria-label="Close setup navigation overlay"
-            />
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
           </div>
-        )}
+        </section>
 
-        <main className="py-5">
-          <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-white/80 bg-white/80 p-4 shadow-sm backdrop-blur sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-11 w-11 flex-none items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-sky-500 text-white shadow-lg shadow-blue-200">
-                <ActiveDefinitionIcon size={20} />
-              </div>
+        {/* Active HeartStrong content */}
+        <section className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 shadow-sm dark:shadow-black/20 sm:p-4 lg:p-5">
+          <ActiveTab />
+        </section>
+      </div>
 
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">
-                  <span>HeartStrong</span>
-                  <ChevronRight size={13} />
-                  <span className="truncate text-blue-700">
-                    {activeDefinition.label}
-                  </span>
+      {/* Compact navigation drawer retained for navbar/mobile trigger */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-[120] flex">
+          <aside className="flex h-full w-[340px] max-w-[90vw] flex-col bg-white dark:bg-slate-950 shadow-2xl">
+            <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-blue-600 p-4 text-white">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-blue-100">
+                    HeartStrong
+                  </p>
+                  <h2 className="mt-1 text-lg font-extrabold">
+                    Setup Navigation
+                  </h2>
+                  <p className="mt-1 text-xs text-blue-100">
+                    Select a configuration section.
+                  </p>
                 </div>
 
-                <p className="mt-1 truncate text-sm font-semibold text-slate-600">
-                  {activeDefinition.description}
-                </p>
+                <button
+                  type="button"
+                  onClick={() => setSidebarOpen(false)}
+                  className="rounded-xl border border-white/20 bg-white/10 p-2 text-white transition hover:bg-white/20"
+                  aria-label="Close setup navigation"
+                >
+                  <PanelLeftClose size={18} />
+                </button>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setSidebarOpen(true)}
-              className={secondaryButton}
-            >
-              <Menu size={16} />
-              Change Section
-            </button>
-          </div>
+            <nav className="flex-1 space-y-2 overflow-y-auto p-3">
+              {TABS.map((tab) => {
+                const Icon = tab.icon;
+                const selected = tab.id === activeTab;
 
-          <div className="rounded-[28px] border border-white/90 bg-white/90 p-4 shadow-[0_24px_70px_rgba(15,23,42,.09)] backdrop-blur sm:p-6 lg:p-7">
-            <ActiveTab />
-          </div>
-        </main>
-      </div>
-    </div>
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => selectTab(tab.id)}
+                    className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${
+                      selected
+                        ? "border-blue-300 bg-blue-50 dark:bg-blue-950/40 text-blue-900"
+                        : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:border-blue-200 hover:bg-slate-50 dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    <span
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                        selected
+                          ? "bg-blue-800 text-white"
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
+                      }`}
+                    >
+                      <Icon size={16} />
+                    </span>
+
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-bold">
+                        {tab.label}
+                      </span>
+                      <span className="mt-0.5 block truncate text-[11px] text-slate-500 dark:text-slate-400">
+                        {tab.description}
+                      </span>
+                    </span>
+
+                    <ChevronRight
+                      size={15}
+                      className={
+                        selected
+                          ? "text-blue-700 dark:text-blue-300"
+                          : "text-slate-400"
+                      }
+                    />
+                  </button>
+                );
+              })}
+            </nav>
+
+            <div className="border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-3">
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3">
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Protected setup area
+                </p>
+                <p className="mt-1 text-[11px] leading-5 text-slate-500 dark:text-slate-400">
+                  Available only to LICENSE_ADMIN and SYSTEM_ADMIN accounts.
+                </p>
+              </div>
+            </div>
+          </aside>
+
+          <button
+            type="button"
+            className="flex-1 bg-slate-950/40 backdrop-blur-[1px]"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Close setup navigation overlay"
+          />
+        </div>
+      )}
+    </main>
   );
 }

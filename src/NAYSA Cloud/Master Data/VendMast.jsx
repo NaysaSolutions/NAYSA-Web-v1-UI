@@ -11,7 +11,6 @@ import {
   faPlus,
   faSave,
   faUndo,
-  faPenToSquare,
   faTrash,
   faInfoCircle,
   faChevronDown,
@@ -646,6 +645,9 @@ const VendMast = () => {
       });
 
       setSelectedVendCode(code);
+
+      // Retrieved Payee records are immediately editable.
+      setIsEditing(canEdit);
     } catch (e) {
       console.error(e);
       await useSwalErrorAlertAPI("Fetch Error", e?.message || "Failed to fetch payee.");
@@ -730,9 +732,8 @@ const VendMast = () => {
     const source = normalizeSource(form?.source || "");
     const taxClass = String(form?.taxClass || "").trim().toUpperCase();
     const isIndividual = taxClass === "WI";
+    const isCorporation = taxClass === "WC";
     const isEmployee = selectedSlType === "EM";
-    const isForeign = source === "F";
-    const requiresLocalTaxData = !isEmployee && !isForeign;
 
     // Collect ALL missing fields first so the user receives one complete
     // validation message instead of one popup per field. This mirrors the
@@ -755,8 +756,9 @@ const VendMast = () => {
     addMissing(!String(form?.vendAddr1 || "").trim(), "Address 1");
     addMissing(!source, "Source");
 
-    if (requiresLocalTaxData) {
+    if (isCorporation) {
       addMissing(!String(form?.vendTin || form?.custTin || "").trim(), "TIN");
+      addMissing(!String(form?.atcCode || "").trim(), "ATC");
       addMissing(!String(form?.vatCode || "").trim(), "Default VAT");
     }
 
@@ -860,9 +862,9 @@ const VendMast = () => {
 
       await useSwalSuccessAlert("Success!", "Payee saved successfully.");
       setSelectedVendCode(finalCode);
-      setIsEditing(false);
       await loadMasterList();
       await fetchVendorByCode(finalCode);
+      setIsEditing(canEdit);
     } catch (e) {
       console.error(e);
       const sprocErr = extractSprocError(e?.response);
@@ -1010,25 +1012,6 @@ const VendMast = () => {
     setActiveTab("setup");
   };
 
-  const handleEdit = async () => {
-    if (!canEdit) {
-      await showReadOnlyAlert("edit payee records");
-      return;
-    }
-
-    const code = String(form?.vendCode || "").trim();
-    if (!code) {
-      await useSwalErrorAlert({
-        icon: "warning",
-        title: "Required",
-        message: "Please select a Payee record first.",
-      });
-      return;
-    }
-    setIsEditing(true);
-    setActiveTab("setup");
-  };
-
   const handleResetSetup = () => {
     allowedDuplicatePayeeNameRef.current = ""; // Reset ref memory
     setSelectedVendCode("");
@@ -1088,14 +1071,7 @@ const VendMast = () => {
           disabled: isLoading,
           className: `${baseBtn} bg-blue-600 text-white hover:bg-blue-700`,
         },
-        {
-          key: "edit",
-          label: <span className="hidden sm:inline ml-1">Edit</span>,
-          icon: faPenToSquare,
-          onClick: handleEdit,
-          disabled: isLoading || isEditing || !hasRecord || !canEdit,
-          className: `${baseBtn} ${isLoading || isEditing || !hasRecord || !canEdit ? "bg-blue-400 opacity-50 cursor-not-allowed text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`,
-        },
+
         {
           key: "attach",
           label: <span className="hidden sm:inline ml-1">Attach</span>,
@@ -1109,8 +1085,8 @@ const VendMast = () => {
           label: <span className="hidden sm:inline ml-1">Delete</span>,
           icon: faTrash,
           onClick: deleteVendor,
-          disabled: isLoading || isEditing || !hasRecord || !canDelete,
-          className: `${baseBtn} ${isLoading || isEditing || !hasRecord || !canDelete ? "bg-red-400 opacity-50 cursor-not-allowed text-white" : "bg-red-500 text-white hover:bg-red-600"}`,
+          disabled: isLoading || !hasRecord || !canDelete,
+          className: `${baseBtn} ${isLoading || !hasRecord || !canDelete ? "bg-red-400 opacity-50 cursor-not-allowed text-white" : "bg-red-500 text-white hover:bg-red-600"}`,
         },
       ];
     }
