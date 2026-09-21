@@ -154,6 +154,10 @@ const PC = () => {
   const withCurr3 = String(glCurrMode || "").toUpperCase() === "T" && Boolean(glCurrGlobal3);
   
   const [topTab, setTopTab] = useState("details");
+  const [itemFilterLookupOpen, setItemFilterLookupOpen] = useState(false);
+  const [warehouseFilterLookupOpen, setWarehouseFilterLookupOpen] = useState(false);
+  const [selectedFilterItems, setSelectedFilterItems] = useState([]);
+  const [selectedFilterWarehouses, setSelectedFilterWarehouses] = useState([]);
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [itemInsertIndex, setItemInsertIndex] = useState(null);
   const [isViewDocument, setIsViewDocument] = useState(false);
@@ -241,6 +245,24 @@ const PC = () => {
   const statusColor = statusMap[displayStatus] || "";
   const isFormDisabled = isViewDocument || ["FINALIZED","POSTED","CANCELLED","CLOSED"].includes(displayStatus);
   const isExisting = Boolean(documentID);
+
+  const itemFilterDisplay = useMemo(() => {
+    if (!selectedFilterItems.length) return "All Items";
+    if (selectedFilterItems.length > 1) return "Various Items";
+    const item = selectedFilterItems[0] || {};
+    const code = item.itemCode || item.itemNo || "";
+    const name = item.itemName || item.itemDesc || "";
+    return [code, name].filter(Boolean).join(" - ") || "Selected Item";
+  }, [selectedFilterItems]);
+
+  const warehouseFilterDisplay = useMemo(() => {
+    if (!selectedFilterWarehouses.length) return "All Warehouses";
+    if (selectedFilterWarehouses.length > 1) return "Various Warehouses";
+    const row = selectedFilterWarehouses[0] || {};
+    const code = row.whCode || row.code || "";
+    const name = row.whName || row.name || "";
+    return [code, name].filter(Boolean).join(" - ") || "Selected Warehouse";
+  }, [selectedFilterWarehouses]);
 
   const noViewCostamt = currentUserRow?.viewCostamt === "N";
 
@@ -375,6 +397,10 @@ const PC = () => {
   const reset = useCallback(() => {
     detailRowsRef.current = [];
     setShowAddMenu(false);
+    setSelectedFilterItems([]);
+    setSelectedFilterWarehouses([]);
+    setItemFilterLookupOpen(false);
+    setWarehouseFilterLookupOpen(false);
     updateState({
       documentID:null, documentNo:"", documentDate:toDateInputValue(useGetCurrentDay()), status:"OPEN", noReprints:"0",
       branchCode:currentUserRow?.branchCode||"", branchName:currentUserRow?.branchName||"",
@@ -778,6 +804,43 @@ const PC = () => {
   };
 
 
+  const handleSelectedFilterItems = (items) => {
+    const payload = items && typeof items === "object" && !Array.isArray(items)
+      ? items.records ?? items.selectedItems ?? []
+      : items ?? [];
+    const selected = (Array.isArray(payload) ? payload : [payload]).filter(Boolean);
+    setSelectedFilterItems(selected);
+    setItemFilterLookupOpen(false);
+  };
+
+  const handleSelectedFilterWarehouses = (items) => {
+    const payload = items && typeof items === "object" && !Array.isArray(items)
+      ? items.records ?? items.selectedItems ?? []
+      : items ?? [];
+    const selected = (Array.isArray(payload) ? payload : [payload]).filter(Boolean);
+    setSelectedFilterWarehouses(selected);
+
+    if (selected.length === 1) {
+      const row = selected[0] || {};
+      updateState({
+        whCode: row.whCode || row.code || "",
+        whName: row.whName || row.name || "",
+        locCode: "",
+        locName: "",
+      });
+    } else {
+      updateState({
+        whCode: "",
+        whName: selected.length > 1 ? "Various Warehouses" : "",
+        locCode: "",
+        locName: "",
+      });
+    }
+
+    setWarehouseFilterLookupOpen(false);
+  };
+
+
 
 
   const removeRow=(i)=>{
@@ -1057,6 +1120,8 @@ const PC = () => {
         userCode,
         whouseCode: whCode || "",
         locCode: locCode || "",
+        itemCodes: selectedFilterItems.map((row) => row.itemCode || row.itemNo || "").filter(Boolean),
+        whouseCodes: selectedFilterWarehouses.map((row) => row.whCode || row.code || "").filter(Boolean),
         docType,
         tranType: getLookupTranType("load-balance"),
       });
@@ -1072,7 +1137,7 @@ const PC = () => {
       const inventoryRows = Array.isArray(parsed) ? parsed : [];
 
       if (!inventoryRows.length) {
-        useSwalInfoAlert("Physical Count","No inventory balance records were found for the current filter.");
+        useSwalInfoAlert("Physical Count","No inventory balance records were found for the selected item/warehouse filter.");
         return;
       }
 
@@ -1318,26 +1383,32 @@ const PC = () => {
 
                 <div className="global-tran-textbox-group-div-ui">
                   <FieldRenderer
-                    id="inventoryType"
-                    label="Inventory Type"
-                    type="text"
-                    value={`${invType} - ${inv.name}`}
-                    disabled
-                    readOnly
-                  />
-
-                  <FieldRenderer
-                    id="warehouse"
-                    label="Warehouse"
+                    id="itemFilter"
+                    label="Item Lookup"
                     type="lookup"
-                    value={whName || whCode || ""}
+                    value={itemFilterDisplay}
                     disabled={isExisting || isFormDisabled}
                     readOnly
                     lookupDisabled={isExisting || isFormDisabled}
                     onLookup={() =>
                       !isExisting &&
                       !isFormDisabled &&
-                      updateState({ selectedRowIndex: null, warehouseLookupOpen: true })
+                      setItemFilterLookupOpen(true)
+                    }
+                  />
+
+                  <FieldRenderer
+                    id="warehouse"
+                    label="Warehouse"
+                    type="lookup"
+                    value={warehouseFilterDisplay}
+                    disabled={isExisting || isFormDisabled}
+                    readOnly
+                    lookupDisabled={isExisting || isFormDisabled}
+                    onLookup={() =>
+                      !isExisting &&
+                      !isFormDisabled &&
+                      setWarehouseFilterLookupOpen(true)
                     }
                   />
 
@@ -1346,12 +1417,13 @@ const PC = () => {
                     label="Location"
                     type="lookup"
                     value={locName || locCode || ""}
-                    disabled={isExisting || isFormDisabled || !whCode}
+                    disabled={isExisting || isFormDisabled || selectedFilterWarehouses.length !== 1 || !whCode}
                     readOnly
-                    lookupDisabled={isExisting || isFormDisabled || !whCode}
+                    lookupDisabled={isExisting || isFormDisabled || selectedFilterWarehouses.length !== 1 || !whCode}
                     onLookup={() =>
                       !isExisting &&
                       !isFormDisabled &&
+                      selectedFilterWarehouses.length === 1 &&
                       whCode &&
                       updateState({
                         selectedRowIndex: null,
@@ -1597,13 +1669,38 @@ const PC = () => {
             isOpen
             onClose={(r) => {
               if (r) {
+                setSelectedFilterWarehouses([]);
                 updateState({
                   branchCode: r.branchCode || r.code,
                   branchName: r.branchName || r.name,
+                  whCode: "",
+                  whName: "",
+                  locCode: "",
+                  locName: "",
                 });
               }
               updateState({ branchModalOpen: false });
             }}
+          />
+        )}
+
+        {warehouseFilterLookupOpen && (
+          <WarehouseLookupModal
+            isOpen={warehouseFilterLookupOpen}
+            onClose={(payload) => {
+              if (!payload) {
+                setWarehouseFilterLookupOpen(false);
+                return;
+              }
+              handleSelectedFilterWarehouses(payload);
+            }}
+            onGetSelectedItems={handleSelectedFilterWarehouses}
+            filter={"ByBC" + branchCode}
+            branchCode={branchCode}
+            invType={invType}
+            enableMultiSelect
+            selectedItems={selectedFilterWarehouses}
+            allowEmptySelection
           />
         )}
 
@@ -1622,6 +1719,29 @@ const PC = () => {
             isOpen={locationLookupOpen}
             onClose={handleCloseLocationLookup}
             filter={"ByWH" + selectedWH}
+          />
+        )}
+
+        {itemFilterLookupOpen && (
+          <ItemMastLookupModal
+            isOpen
+            onClose={(payload) => {
+              if (!payload) {
+                setItemFilterLookupOpen(false);
+                return;
+              }
+              handleSelectedFilterItems(payload);
+            }}
+            onGetSelectedItems={handleSelectedFilterItems}
+            invType={invType}
+            enableMultiSelect
+            selectedItems={selectedFilterItems}
+            allowEmptySelection
+            endpoint={inventoryLookupEndpoint}
+            customParam="ActiveAll"
+            docType={docType}
+            tranType={getLookupTranType("add-item")}
+            method="get"
           />
         )}
 

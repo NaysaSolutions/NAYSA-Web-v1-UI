@@ -213,8 +213,8 @@ const JO = () => {
     rcCode: "",
     rcName: "", // responsibility center name for display
     requestDept: "",
-    refPrNo1: "",
-    refPrNo2: "",
+    refDocNo1: "",
+    refDocNo2: "",
     remarks: "",
     noReprints: "0",
     prCancelled: "",
@@ -328,6 +328,8 @@ const JO = () => {
     showApprovalStatusModal,
     paytermCode,
     paytermName,
+    refDocNo1,
+    refDocNo2,
     vatLookupModalOpen,
     showAllTranDocNo,
     showOpenPRModal,
@@ -548,6 +550,8 @@ useEffect(() => {
       payeeName:"",
       paytermName:"",
       paytermCode:"",
+      refDocNo1:"",
+      refDocNo2:"",
       attention:"",
       documentNo: "",
       documentID: "",
@@ -808,6 +812,8 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       currRate: formatNumber(data.currRate || 1, 6),
       paytermCode: data.paytermCode,
       paytermName: data.paytermName,
+      refDocNo1: data.refDocNo1,
+      refDocNo2: data.refDocNo2,
       prNo: data.prNo,   
       prId: data.prId,
       remarks: data.remarks,
@@ -1034,6 +1040,8 @@ const handleDeleteRow = (index) => {
         currCode,
         currRate,
         paytermCode,
+        refDocNo1,
+        refDocNo2,
         prNo,
         prId,
         documentDate,
@@ -1059,6 +1067,8 @@ const handleDeleteRow = (index) => {
         currCode: currCode || "",
         currRate: currRate || 1,
         paytermCode: paytermCode || "",
+        refDocNo1: refDocNo1 || "",
+        refDocNo2: refDocNo2 || "",
         prNo:prNo || "",
         remarks: remarks || "",
         joStatus: documentStatus?.length ? documentStatus : "O",
@@ -1921,11 +1931,8 @@ const renderJoDetailColumn = (columnKey, row, index) => {
                       readOnly
                       onLookup={() => handleOpenPRLookup()}
                     />
-                  </div>
 
-                  {/* Column 2 */}
-                  <div className="global-tran-textbox-group-div-ui">
-                    <FieldRenderer
+                      <FieldRenderer
                       id="rcName"
                       label="Department"
                       type="lookup"
@@ -1938,6 +1945,12 @@ const renderJoDetailColumn = (columnKey, row, index) => {
                         updateState({ rcLookupModalOpen: true })
                       }
                     />
+
+                  </div>
+
+                  {/* Column 2 */}
+                  <div className="global-tran-textbox-group-div-ui">
+                  
 
                     <FieldRenderer
                       id="payeeCode"
@@ -1962,19 +1975,6 @@ const renderJoDetailColumn = (columnKey, row, index) => {
                     />
 
                     <FieldRenderer
-                      id="attention"
-                      label="Attention"
-                      type="text"
-                      value={attention || ""}
-                      disabled={isFormDisabled}
-                      onChange={(val) => updateState({ attention: val })}
-                      maxLength={useGetFieldLength(tblFieldArray, "attention")}
-                    />
-                  </div>
-
-                  {/* Column 3 */}
-                  <div className="global-tran-textbox-group-div-ui">
-                    <FieldRenderer
                       id="currName"
                       label="Currency"
                       value={
@@ -1995,6 +1995,21 @@ const renderJoDetailColumn = (columnKey, row, index) => {
                       onBlur={handleCurrencyRateBlur}
                     />
 
+
+                    <FieldRenderer
+                      id="attention"
+                      label="Attention"
+                      type="text"
+                      value={attention || ""}
+                      disabled={isFormDisabled}
+                      onChange={(val) => updateState({ attention: val })}
+                      maxLength={useGetFieldLength(tblFieldArray, "attention")}
+                    />
+                  </div>
+
+                  {/* Column 3 */}
+                  <div className="global-tran-textbox-group-div-ui">
+                  
                     <FieldRenderer
                       id="payTerm"
                       label="Payment Term"
@@ -2009,6 +2024,26 @@ const renderJoDetailColumn = (columnKey, row, index) => {
                           selectedRowIndex: null,
                         })
                       }
+                    />
+
+                    <FieldRenderer
+                      id="refDocNo1"
+                      label="Ref Doc No1."
+                      type="text"
+                      value={refDocNo1 || ""}
+                      disabled={isFormDisabled}
+                      onChange={(val) => updateState({ refDocNo1: val })}
+                      maxLength={useGetFieldLength(tblFieldArray, "refdoc_no1")}
+                    />
+
+                    <FieldRenderer
+                      id="refDocNo2"
+                      label="Ref Doc No2."
+                      type="text"
+                      value={refDocNo2 || ""}
+                      disabled={isFormDisabled}
+                      onChange={(val) => updateState({ refDocNo2: val })}
+                      maxLength={useGetFieldLength(tblFieldArray, "refdoc_no2")}
                     />
 
                     <FieldRenderer
