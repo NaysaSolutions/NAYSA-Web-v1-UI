@@ -530,8 +530,8 @@ const Company = () => {
                 value={formData.classification}
                 onChange={(v) => updateForm({ classification: v })}
                 options={[
-                  { value: "VAT REG", label: "VAT REG" },
-                  { value: "NON-VAT", label: "NON-VAT REG" },
+                  { value: "VAT Reg", label: "VAT REG" },
+                  { value: "NON-VAT Reg", label: "NON-VAT REG" },
                 ]}
               />
               <FieldRenderer
