@@ -292,9 +292,9 @@ const FGRR = (item) => {
       rr_date: new Date().toISOString().split("T")[0], // PR Date
     },
 
-    branchCode: "HO",
-    branchName: "Head Office",
-
+    branchCode: currentUserRow?.branchCode,
+    branchName: currentUserRow?.branchName,
+  
     // Responsibility Center / Requesting Dept
     // Responsibility Center / Requesting Dept
     reqRcCode: "",
@@ -2269,14 +2269,27 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
 
     const today = new Date().toISOString().split("T")[0];
 
+
+const defaultBranchCode =
+      currentUserRow?.branchCode ||
+      user?.branchCode ||
+      user?.BRANCH_CODE ||
+      "HO";
+  
+    const defaultBranchName =
+      currentUserRow?.branchName ||
+      user?.branchName ||
+      user?.BRANCH_NAME ||
+      "Head Office";
+
     updateState({
       // ======================
       // HEADER
       // ======================
       header: { rr_date: today },
 
-      branchCode: "HO",
-      branchName: "Head Office",
+      branchCode: defaultBranchCode,
+      branchName: defaultBranchName,
       cutoffCode: "",
       poNo: "",
       fgrrTranType: "FGRR01",
