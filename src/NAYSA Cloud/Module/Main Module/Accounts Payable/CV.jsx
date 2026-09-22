@@ -121,6 +121,8 @@ const normalizeCvDateForInput = (value) => {
 
 const CV = () => {
    const loadedFromUrlRef = useRef(false);
+   const detailRowsRef = useRef([]);
+   const detailRowsGLRef = useRef([]);
    const navigate = useNavigate();
    const location = useLocation(); 
    const { companyInfo, currentUserRow,getAllDropDown,refsLoaded ,getAllTopATCRow, getAllTopVatRow,getAllTopVatAmount,getAllTopATCAmount,getAllTopHSDocRow } = useAuth();
@@ -388,6 +390,11 @@ const CV = () => {
 
 
 } = state;
+
+useEffect(() => {
+  detailRowsRef.current = detailRows || [];
+  detailRowsGLRef.current = detailRowsGL || [];
+}, [detailRows, detailRowsGL]);
 
 const selectedPayTypeOption = cvPayTypeDd.find(
   (opt) => opt.DROPDOWN_CODE === selectedPayType
@@ -1098,21 +1105,18 @@ const handleCurrRateNoBlur = (e) => {
 
 
  const handleActivityOption = async (action) => {
-   
-  if (action === "Upsert" && detailRowsGL.length === 0) {
-    updateState({ triggerGLEntries: true });
+  if ((detailRows?.length || 0) + (detailRowsGL?.length || 0) === 0) {
     return;
   }
 
   if (documentStatus === '') {
-   
-  updateState({ isLoading: true });
+    updateState({ isLoading: true });
 
-    const {
+    try {
+      const {
         branchCode,
         documentNo,
         documentID,
-        header,
         selectedWithAPV,
         selectedCvType,
         selectedPayType,
@@ -1125,83 +1129,81 @@ const handleCurrRateNoBlur = (e) => {
         checkDate,
         refDocNo1,
         refDocNo2,
-        OrigAmt,
         currCode,
-        currName,
         currRate,
-        CheckAmt,
         remarks,
+        userCode,
         detailRows,
-        detailRowsGL
-    } = state;
+        detailRowsGL,
+      } = state;
 
-
-    if (action === "Upsert") {
-      if (isCheckPayment && (!checkNo || checkNo.trim() === "")) {
+      if (action === "Upsert" && isCheckPayment && (!checkNo || checkNo.trim() === "")) {
         updateState({ isLoading: false });
-        useSwalErrorAlert("Validation Error", "Check No. is required when the Payment Type is Check.");
+        useSwalErrorAlert(
+          "Validation Error",
+          "Check No. is required when the Payment Type is Check."
+        );
         return;
       }
-    }
 
+      let finalDetailRowsGL = [...detailRowsGL];
 
-    const glData = {
-      branchCode: branchCode,
-      cvNo: documentNo || "",
-      cvId: documentID || "",
-      cvDate: documentDate,
-      checkDate: checkDate,
-      withAPV: selectedWithAPV,
-      vendCode: vendCode,
-      vendName: vendName,
-      cvtranType: selectedCvType,
-      payType: selectedPayType,
-      bankCode: bankCode,
-      bankAcctName: bankAcctName,
-      bankAcctNo: bankAcctNo,
-      checkNo: checkNo,
-      refDocNo1: refDocNo1,
-      refDocNo2: refDocNo2,
-      currAmount: parseFormattedNumber(totals.totalAmountDue),
-      currCode: currCode || "PHP",
-      currRate: parseFormattedNumber(currRate),
-      checkAmt: parseFormattedNumber(totals.totalFxAmountDue),
-      remarks: remarks || "",
-      userCode: userCode,
-      dt1: detailRows.map((row, index) => ({
-        lnNo: String(index + 1),       
-        apvNo: row.apvNo,
-        apvDate: row.apvDate,
-        rrNo: row.rrNo || "",
-        poNo: row.poNo || "",
-        siNo: row.siNo || "",
-        // siDate: useformatToDatev2(row.siDate) || useformatToDatev2(documentDate),
-        siDate: row.siDate,
-        origAmount: parseFormattedNumber(row.origAmount || 0),
-        currCode: row.currCode || "",
-        currRate: parseFormattedNumber(row.currRate),
-        siAmount: parseFormattedNumber(row.siAmount || 0),
-        appliedAmount: parseFormattedNumber(row.appliedAmount || 0),
-        appliedFx: parseFormattedNumber(row.appliedFx || 0),
-        unappliedAmount: parseFormattedNumber(row.unappliedAmount || 0),
-        balance: parseFormattedNumber(row.balance || 0),
-        apAcct: row.apAcct,
-        debitAcct: row.debitAcct,
-        vatAcct: row.vatAcct,
-        rcCode: row.rcCode,
-        rcName: row.rcName,
-        slCode: row.slCode,
-        slName: row.slName || vendName,
-        vatCode: row.vatCode,
-        vatName: row.vatName,
-        vatAmount: parseFormattedNumber(row.vatAmount || 0),
-        atcCode: row.atcCode || "",
-        atcName: row.atcName || "",
-        atcAmount: parseFormattedNumber(row.atcAmount),
-        amountDue: parseFormattedNumber(row.amountDue || 0),
-        groupId: row.groupId || ""
-      })),
-       dt2: detailRowsGL.map((entry, index) => ({
+      const buildGlData = (glRows) => ({
+        branchCode,
+        cvNo: documentNo || "",
+        cvId: documentID || "",
+        cvDate: documentDate,
+        checkDate,
+        withAPV: selectedWithAPV,
+        vendCode,
+        vendName,
+        cvtranType: selectedCvType,
+        payType: selectedPayType,
+        bankCode,
+        bankAcctName,
+        bankAcctNo,
+        checkNo,
+        refDocNo1,
+        refDocNo2,
+        currAmount: parseFormattedNumber(totals.totalAmountDue),
+        currCode: currCode || "PHP",
+        currRate: parseFormattedNumber(currRate),
+        checkAmt: parseFormattedNumber(totals.totalFxAmountDue),
+        remarks: remarks || "",
+        userCode,
+        dt1: detailRows.map((row, index) => ({
+          lnNo: String(index + 1),
+          apvNo: row.apvNo || "",
+          apvDate: row.apvDate || null,
+          rrNo: row.rrNo || "",
+          poNo: row.poNo || "",
+          siNo: row.siNo || "",
+          siDate: row.siDate || null,
+          origAmount: parseFormattedNumber(row.origAmount || 0),
+          currCode: row.currCode || "",
+          currRate: parseFormattedNumber(row.currRate || 0),
+          siAmount: parseFormattedNumber(row.siAmount || 0),
+          appliedAmount: parseFormattedNumber(row.appliedAmount || 0),
+          appliedFx: parseFormattedNumber(row.appliedFx || 0),
+          unappliedAmount: parseFormattedNumber(row.unappliedAmount || 0),
+          balance: parseFormattedNumber(row.balance || 0),
+          apAcct: row.apAcct || "",
+          debitAcct: row.debitAcct || "",
+          vatAcct: row.vatAcct || "",
+          rcCode: row.rcCode || "",
+          rcName: row.rcName || "",
+          slCode: row.slCode || "",
+          slName: row.slName || vendName || "",
+          vatCode: row.vatCode || "",
+          vatName: row.vatName || "",
+          vatAmount: parseFormattedNumber(row.vatAmount || 0),
+          atcCode: row.atcCode || "",
+          atcName: row.atcName || "",
+          atcAmount: parseFormattedNumber(row.atcAmount || 0),
+          amountDue: parseFormattedNumber(row.amountDue || 0),
+          groupId: row.groupId || "",
+        })),
+        dt2: glRows.map((entry, index) => ({
           recNo: String(index + 1),
           acctCode: entry.acctCode || "",
           rcCode: entry.rcCode || "",
@@ -1219,67 +1221,95 @@ const handleCurrRateNoBlur = (e) => {
           debitFx2: parseFormattedNumber(entry.debitFx2 || 0),
           creditFx2: parseFormattedNumber(entry.creditFx2 || 0),
           slRefNo: entry.slRefNo || "",
-          // slRefDate: entry.slRefDate && !isNaN(new Date(entry.slRefDate).getTime())
-          //   ? new Date(entry.slRefDate).toISOString().split("T")[0]
-          //   : null,
-          // slRefDate: entry.slRefDate && !isNaN(new Date(entry.slRefDate).getTime())
-          //   ? new Date(entry.slRefDate).toISOString().split("T")[0]
-          //   : null,
-          // slRefDate: useformatToDatev2(entry.slRefDate),
-          slrefDate: entry.slrefDate,
+          slRefDate: normalizeCvDateForInput(entry.slRefDate) || null,
           remarks: entry.remarks || "",
-          dt1Lineno: entry.dt1Lineno || ""
-        }))
-    };
+          dt1Lineno: entry.dt1Lineno || "",
+        })),
+      });
 
-    if (action === "GenerateGL") {
+      if (action === "GenerateGL") {
         try {
-            const newGlEntries = await useGenerateGLEntries(docType, glData);
+          updateState({ detailRowsGL: [] });
 
-            if (newGlEntries) {
-                updateState({ detailRowsGL: newGlEntries });
-            } else {
-                console.warn("GL entries generation failed or returned no data.");
-            }
+          const newGlEntries = await useGenerateGLEntries(
+            docType,
+            buildGlData([])
+          );
+
+          if (newGlEntries && newGlEntries.length > 0) {
+            const normalizedGlEntries = newGlEntries.map((entry) => ({
+              ...entry,
+              slRefDate: normalizeCvDateForInput(entry.slRefDate),
+            }));
+            updateState({ detailRowsGL: normalizedGlEntries });
+          } else {
+            updateState({ detailRowsGL: [] });
+            console.warn("GL entries generation failed or returned no data.");
+          }
         } catch (error) {
-            console.error("Error during GL generation:", error);
-        } finally {
-            updateState({ isLoading: false });
+          updateState({ detailRowsGL: [] });
+          console.error("Error during GL generation:", error);
         }
-    }
+        return;
+      }
 
+      if (action === "Upsert") {
+        if (finalDetailRowsGL.length === 0) {
+          const newGlEntries = await useGenerateGLEntries(
+            docType,
+            buildGlData([])
+          );
 
-
-
-    if (action === "Upsert") {
-        try {
-
-          const response = await useTransactionUpsert(docType, glData, updateState, 'cvId', 'cvNo');
-          if (response) {
-
-            const isZero = Number(noReprints) === 0;
-            const onSaveAndPrint =
-              isZero
-                ? () => updateState({ showSignatoryModal: true })                  
-                : () => handleSaveAndPrint(response.data[0].cvId); 
-            useSwalshowSaveSuccessDialog(
-              handleReset,
-              onSaveAndPrint
-            );
+          if (!newGlEntries || newGlEntries.length === 0) {
+            updateState({ detailRowsGL: [] });
+            console.warn("GL entries generation failed or returned no data.");
+            return;
           }
 
-         
-           
-        } catch (error) {
-            console.error("Error during transaction upsert:", error);
-        } finally {
-            updateState({ isLoading: false});
+          finalDetailRowsGL = newGlEntries.map((entry) => ({
+            ...entry,
+            slRefDate: normalizeCvDateForInput(entry.slRefDate),
+          }));
+          updateState({ detailRowsGL: finalDetailRowsGL });
         }
 
-        updateState({isDocNoDisabled: true,isFetchDisabled: true,});
+        const response = await useTransactionUpsert(
+          docType,
+          buildGlData(finalDetailRowsGL),
+          updateState,
+          'cvId',
+          'cvNo'
+        );
+
+        if (response) {
+          const responseDocNo = response?.data?.[0]?.cvNo;
+          const responseDocId = response?.data?.[0]?.cvId;
+
+          if (responseDocNo) {
+            await fetchTranData(responseDocNo, branchCode);
+          }
+
+          const isZero = Number(noReprints) === 0;
+          const onSaveAndPrint = isZero
+            ? () => updateState({ showSignatoryModal: true })
+            : () => handleSaveAndPrint(responseDocId);
+
+          useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
+        }
+
+        updateState({
+          documentNo: response?.data?.[0]?.cvNo || documentNo || "",
+          documentID: response?.data?.[0]?.cvId || documentID || "",
+          isDocNoDisabled: true,
+          isFetchDisabled: true,
+        });
+      }
+    } catch (error) {
+      console.error(`Error during ${action}:`, error);
+    } finally {
+      updateState({ isLoading: false });
     }
   }
-
 };
 
 
@@ -1420,7 +1450,7 @@ const handleAddRowGL = (index = null) => {
     const updatedRows = [...detailRows];
     updatedRows.splice(index, 1);
 
-    updateState({ detailRows: updatedRows });
+    updateState({ detailRows: updatedRows, detailRowsGL: [] });
     updateTotals(updatedRows);
   };
 
@@ -1567,6 +1597,7 @@ const handleCopy = async () => {
         siNo: "",
         poNo: "",
       })),
+      detailRowsGL: [],
      });
   }
 };
@@ -1634,6 +1665,7 @@ const handleCopy = async () => {
               vendCode: selectedData.vendCode,
               vendName: selectedData.vendName,
             })),
+            detailRowsGL: [],
         });
         
         if (!selectedData.currCode) {
@@ -1723,7 +1755,7 @@ const recalculateAllCvDetailRows = async (options = {}) => {
     )
   );
 
-  updateState({ detailRows: updatedRows });
+  updateState({ detailRows: updatedRows, detailRowsGL: [] });
   updateTotals(updatedRows);
 };
 
@@ -1772,7 +1804,8 @@ const recalculateAllCvDetailRows = async (options = {}) => {
 
 
 const handleDetailChange = async (index, field, value, runCalculations = true) => {
-    const updatedRows = [...detailRows];
+    const updatedRows = [...(detailRowsRef.current || [])];
+    const originalRow = { ...updatedRows[index] };
 
     updatedRows[index] = {
       ...updatedRows[index],
@@ -1918,14 +1951,20 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
 
 
     updatedRows[index] = row;
-    updateState({ detailRows: updatedRows });
+
+    const hasChanges = JSON.stringify(originalRow) !== JSON.stringify(row);
+
+    updateState({
+      detailRows: updatedRows,
+      ...(hasChanges ? { detailRowsGL: [] } : {}),
+    });
     updateTotals(updatedRows);
 
 };
 
 
 const handleDetailChangeGL = async (index, field, value) => {
-    const updatedRowsGL = [...state.detailRowsGL];
+    const updatedRowsGL = [...(detailRowsGLRef.current || [])];
     let row = { ...updatedRowsGL[index] };
 
 
@@ -2412,7 +2451,8 @@ const handleCloseAPBalance = async (payload) => {
         currCode: selectedCurrCode,
         currName: selectedCurrName,
         currRate: formatNumber(selectedCurrRate, 6),
-        detailRows: updatedRows
+        detailRows: updatedRows,
+        detailRowsGL: [],
       });
       updateTotals(updatedRows);
     }  
@@ -2615,7 +2655,7 @@ const handleVatNameDoubleClick = async (index) => {
 
   await recomputeCvDetailRowAmounts(updatedRows[index], "vatClear");
 
-  updateState({ detailRows: updatedRows });
+  updateState({ detailRows: updatedRows, detailRowsGL: [] });
   updateTotals(updatedRows);
 };
 
@@ -2632,7 +2672,7 @@ const handleAtcNameDoubleClick = async (index) => {
 
   await recomputeCvDetailRowAmounts(updatedRows[index], "atcCode");
 
-  updateState({ detailRows: updatedRows });
+  updateState({ detailRows: updatedRows, detailRowsGL: [] });
   updateTotals(updatedRows);
 };
 

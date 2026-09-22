@@ -12,7 +12,6 @@ import {
     faPlus,
     faSave,
     faUndo,
-    faPenToSquare,
     faTrash,
     faInfoCircle,
     faChevronDown,
@@ -791,6 +790,10 @@ const CustMast = () => {
             });
 
             setSelectedCustCode(code);
+
+            // Retrieved records are immediately editable.
+            // Read-only users remain non-editable.
+            setIsEditing(canEdit);
         } catch (e) {
             console.error(e);
             await useSwalErrorAlertAPI("Fetch Error", e?.message || "Failed to fetch customer.");
@@ -1105,9 +1108,11 @@ const CustMast = () => {
 
             await useSwalSuccessAlert("Success!", "Customer saved successfully.");
             setSelectedCustCode(finalCode);
-            setIsEditing(false);
             await loadMasterList({ force: true });
             await fetchCustomerByCode(finalCode);
+
+            // Keep the saved record editable after refresh.
+            setIsEditing(canEdit);
         } catch (e) {
             console.error(e);
             const sprocValidation = extractSprocValidation(e?.response);
@@ -1241,22 +1246,7 @@ const CustMast = () => {
         setActiveTab("setup");
     };
 
-    const handleEdit = async () => {
-        if (!canEdit) {
-            await useSwalErrorAlert("Read Only", "You only have read access. Editing customers is not allowed.");
-            return;
-        }
-
-        const code = String(form?.custCode || "").trim();
-        if (!code) {
-            await useSwalErrorAlert("Required", "Please select a Customer record first.");
-            return;
-        }
-        setIsEditing(true);
-        setActiveTab("setup");
-    };
-
-    const handleResetSetup = () => {
+        const handleResetSetup = () => {
         allowedDuplicateCustNameRef.current = ""; // Reset ref
         setSelectedCustCode("");
         setForm({ ...emptyForm });
@@ -1317,14 +1307,6 @@ const CustMast = () => {
                     className: resetBtn,
                 },
                 {
-                    key: "edit",
-                    label: <span className="hidden sm:inline ml-1">Edit</span>,
-                    icon: faPenToSquare,
-                    onClick: handleEdit,
-                    disabled: isLoading || isEditing || !hasRecord || !canEdit,
-                    className: isLoading || isEditing || !hasRecord || !canEdit ? disabledPrimaryBtn : primaryBtn,
-                },
-                {
                     key: "attach",
                     label: <span className="hidden sm:inline ml-1">Attach File</span>,
                     icon: faPaperclip,
@@ -1337,8 +1319,8 @@ const CustMast = () => {
                     label: <span className="hidden sm:inline ml-1">Delete</span>,
                     icon: faTrash,
                     onClick: deleteCustomer,
-                    disabled: isLoading || isEditing || !hasRecord || !canDelete,
-                    className: isLoading || isEditing || !hasRecord || !canDelete ? disabledDangerBtn : dangerBtn,
+                    disabled: isLoading || !hasRecord || !canDelete,
+                    className: isLoading || !hasRecord || !canDelete ? disabledDangerBtn : dangerBtn,
                 },
             ];
         }

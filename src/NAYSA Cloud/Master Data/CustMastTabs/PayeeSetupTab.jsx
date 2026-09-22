@@ -183,14 +183,16 @@ const PayeeSetupTab = forwardRef(
     const isEmployee = sl === "EM";
     const isSupplier = sl === "SU";
     const isIndividualTaxClass = taxClass === "WI";
+    const isCorporationTaxClass = taxClass === "WC";
     const source = normalizeUpper(form?.source || "L");
     const isForeign = source === "F" || source === "FOREIGN";
 
-    // Local non-Employee Payees require tax registration details.
-    // Foreign Payees and Employee SL records do not require TIN/VAT validation.
-    const requiresLocalTaxData = !isEmployee && !isForeign;
-    const isTinRequired = requiresLocalTaxData;
-    const isVatRequired = requiresLocalTaxData;
+    // Tax requirements are based on Tax Rate Class.
+    // Corporation (WC): TIN, ATC, VAT are required.
+    // Individual (WI): TIN, ATC, and VAT are optional.
+    const isTinRequired = isCorporationTaxClass;
+    const isAtcRequired = isCorporationTaxClass;
+    const isVatRequired = isCorporationTaxClass;
 
     const shouldAutoNameFromParts = isEmployee || isIndividualTaxClass;
     const shouldDisableBusinessName = isEmployee;
@@ -874,6 +876,7 @@ const PayeeSetupTab = forwardRef(
 
                         <FieldRenderer
                           label="Default ATC"
+                          required={isAtcRequired}
                           type="lookup"
                           value={form.atcCode || ""}
                           onLookup={isDisabled ? undefined : () => setIsATCLookupOpen(true)}

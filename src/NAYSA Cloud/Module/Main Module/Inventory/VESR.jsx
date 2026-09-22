@@ -793,8 +793,13 @@ const VESR = () => {
           return null;
         }
 
-        const rawStatus = parsed?.cancelled === "Y" ? "X" : parsed?.stat || "";
-        const parsedStatus = getFullStatus(rawStatus, parsed?.cancelled);
+        const rawCancelled =
+          parsed?.cancelled || parsed?.vesrCancelled || parsed?.vesr_cancelled || "";
+        const rawStatus =
+          String(rawCancelled || "").toUpperCase() === "Y"
+            ? "X"
+            : parsed?.vesrStatus || parsed?.vesr_status || parsed?.stat || "";
+        const parsedStatus = getFullStatus(rawStatus, rawCancelled);
         const parsedCurrency = String(parsed?.currCode || baseCurrency).toUpperCase();
         const currRow = await useTopCurrencyRow(parsedCurrency);
         const retrievedWhCode = parsed?.whouseCode || "";
@@ -835,7 +840,7 @@ const VESR = () => {
           documentID: vesrId,
           documentNo: parsed?.srNo || srNo,
           documentStatus: rawStatus,
-          cancelled: parsed?.cancelled || "",
+          cancelled: rawCancelled,
           status: parsedStatus,
           branchCode: parsed?.branchCode || branchCode,
           branchName: parsed?.branchName || state.branchName,
@@ -2528,28 +2533,35 @@ const VESR = () => {
   };
 
   const mapGLRowsForSave = (rows = []) =>
-    rows.map((row, index) => ({
-      recNo: String(index + 1).padStart(3, "0"),
-      acctCode: row.acctCode || "",
-      actCode: row.actCode || "",
-      sltypeCode: row.sltypeCode || "",
-      slCode: row.slCode || "",
-      particular: row.particular || "",
-      vatCode: row.vatCode || "",
-      vatDesc: row.vatDesc || "",
-      ewtCode: row.ewtCode || "",
-      ewtDesc: row.ewtDesc || "",
-      debit: parseFormattedNumber(row.debit || 0),
-      credit: parseFormattedNumber(row.credit || 0),
-      remarks: row.remarks || "",
-      slrefNo: row.slrefNo || "",
-      slRefDate: row.slRefDate || null,
-      vendCode: row.vendCode || state.vendCode || state.custCode || "",
-      debitFx1: parseFormattedNumber(row.debitFx1 || 0),
-      creditFx1: parseFormattedNumber(row.creditFx1 || 0),
-      debitFx2: parseFormattedNumber(row.debitFx2 || 0),
-      creditFx2: parseFormattedNumber(row.creditFx2 || 0),
-    }));
+    rows.map((row, index) => {
+      const debit = parseFormattedNumber(row.debit || 0);
+      const credit = parseFormattedNumber(row.credit || 0);
+      const debitFx1 = parseFormattedNumber(row.debitFx1 || 0);
+      const creditFx1 = parseFormattedNumber(row.creditFx1 || 0);
+
+      return {
+        recNo: String(index + 1).padStart(3, "0"),
+        acctCode: row.acctCode || "",
+        actCode: row.actCode || "",
+        sltypeCode: row.sltypeCode || "",
+        slCode: row.slCode || "",
+        particular: row.particular || "",
+        vatCode: row.vatCode || "",
+        vatDesc: row.vatDesc || "",
+        ewtCode: row.ewtCode || "",
+        ewtDesc: row.ewtDesc || "",
+        debit,
+        credit,
+        remarks: row.remarks || "",
+        slrefNo: row.slrefNo || "",
+        slRefDate: row.slRefDate || null,
+        vendCode: row.vendCode || state.vendCode || state.custCode || "",
+        debitFx1: debitFx1 || debit,
+        creditFx1: creditFx1 || credit,
+        debitFx2: parseFormattedNumber(row.debitFx2 || 0),
+        creditFx2: parseFormattedNumber(row.creditFx2 || 0),
+      };
+    });
 
   const buildTransactionPayload = (glRows = state.detailRowsGL) => ({
     branchCode: state.branchCode,
@@ -2761,7 +2773,7 @@ const VESR = () => {
   const handleClosePost = async (confirmation) => {
     if (confirmation && state.documentID && displayStatus === "OPEN") {
       await useHandlePostTran(
-        [state.documentID],
+        [{ groupId: state.documentID }],
         confirmation.password,
         docType,
         user?.USER_CODE || user?.userCode || "NSI",

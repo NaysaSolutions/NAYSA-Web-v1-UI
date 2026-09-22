@@ -33,7 +33,10 @@ const PostVESR = ({ isOpen, onClose, userCode }) => {
         if (Array.isArray(response?.data)) {
           if (response.data?.[0]?.result) {
             try {
-              rawData = JSON.parse(response.data[0].result || "[]");
+              rawData = JSON.parse(response.data[0].result || "[]").map((row) => ({
+                ...row,
+                groupId: row.groupId || row.vesrId,
+              }));
             } catch (err) {
               console.error("VESR posting JSON parse error:", err);
               rawData = [];
@@ -79,7 +82,10 @@ const PostVESR = ({ isOpen, onClose, userCode }) => {
 
   const handlePost = async (selectedData, userPw) => {
     await useHandlePostTran(
-      selectedData,
+      selectedData.map((row) => ({
+        ...row,
+        groupId: row.groupId || row.vesrId,
+      })),
       userPw,
       "VESR",
       userCode,
