@@ -41,6 +41,7 @@ import {
 const INITIAL_FORM = {
   qstatCode: "",
   qstatName: "",
+  oeHold: "N",
   active: "Y",
   __existing: false,
 };
@@ -201,6 +202,7 @@ const QualityStat = () => {
     return (qstatListQuery.data || []).map((row) => ({
       qstatCode: row?.qstatCode ?? row?.QSTAT_CODE ?? "",
       qstatName: row?.qstatName ?? row?.QSTAT_NAME ?? "",
+      oeHold: row?.oeHold ?? "N",
       active: row?.active ?? row?.ACTIVE ?? "Y",
       registeredBy: row?.registeredBy ?? row?.REGISTERED_BY ?? "",
       registeredDate: row?.registeredDate ?? row?.REGISTERED_DATE ?? "",
@@ -288,6 +290,7 @@ const QualityStat = () => {
     saveMutation.mutate({
       qstatCode,
       qstatName,
+      oeHold: form.oeHold,
       active: form.active,
       action: form.__existing ? "EDIT" : "ADD",
       userCode: user?.USER_CODE || "ADMIN",
@@ -396,6 +399,13 @@ const QualityStat = () => {
       },
       { key: "qstatCode", label: "Quality Status Code", sortable: true, width: 150 },
       { key: "qstatName", label: "Quality Status Name", sortable: true, width: 450, maxWidth: 450 },
+      {
+        key: "oeHold",
+        label: "Hold for Sales",
+        sortable: true,
+        width: 120,
+        render: (row) => (row.oeHold === "Y" ? "Yes" : "No"),
+      },
       {
         key: "active",
         label: "Active",
@@ -540,6 +550,17 @@ const QualityStat = () => {
                 disabled={!isEditing}
                 onChange={(v) => setField("qstatName", v)}
                 maxLength={getMax("QSTAT_NAME") || 100}
+              />
+              <FieldRenderer
+                label="Hold for Sales Y/N"
+                type="select"
+                value={form.oeHold}
+                options={[
+                  { value: "Y", label: "Yes" },
+                  { value: "N", label: "No" },
+                ]}
+                disabled={!isEditing}
+                onChange={(v) => setField("oeHold", v)}
               />
               <FieldRenderer
                 label="Active?"

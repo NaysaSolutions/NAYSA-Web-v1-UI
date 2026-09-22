@@ -1216,8 +1216,13 @@ const VSO = () => {
       const rows = raw ? JSON.parse(raw) : [];
       const vehicle = rows?.[0];
       if (!vehicle) {
-        updateState({ vehicleVeId: "", itemCode: "", itemName: "", make: "", modelYr: "", model: "", serialNo: "", engineNo: "", prodNo: "", color: "", pnpNo: "", csrNo: "", sellingPrice: 0, discAmt: 0, netAmt: 0 });
+        updateState({ vehicleVeId: "", itemCode: "", itemName: "", csNo: "", make: "", modelYr: "", model: "", serialNo: "", engineNo: "", prodNo: "", color: "", pnpNo: "", csrNo: "", sellingPrice: 0, discAmt: 0, netAmt: 0 });
         useSwalErrorAlert("CS Number", "The CS number is unavailable, already assigned to another open VSO, or does not belong to this branch.");
+        return;
+      }
+      if (vehicle.oeHold === "Y") {
+        updateState({ vehicleVeId: "", itemCode: "", itemName: "", make: "", modelYr: "", model: "", serialNo: "", engineNo: "", prodNo: "", color: "", pnpNo: "", csrNo: "", sellingPrice: 0, discAmt: 0, netAmt: 0 });
+        useSwalErrorAlert("Vehicle On Hold", "The selected CS is on hold for sales and cannot be used in VSO.");
         return;
       }
       updateState({
@@ -1248,6 +1253,11 @@ const VSO = () => {
 
     if (String(vehicle.availabilityStatus || "").trim().toUpperCase() !== "AVAILABLE") {
       useSwalErrorAlert("Vehicle Inventory", `This vehicle is reserved under VSO ${vehicle.reservedVsoNo || ""} and cannot be selected.`);
+      return;
+    }
+
+    if (vehicle.oeHold === "Y") {
+      useSwalErrorAlert("Vehicle On Hold", "The selected CS is on hold for sales and cannot be used in VSO.");
       return;
     }
 
