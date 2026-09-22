@@ -186,9 +186,11 @@ const AllTranHistory = (props) => {
     showHeader: showHeaderProp,
     cacheKey: cacheKeyProp,
     historyExportName: historyExportNameProp,
+    invType: invTypeProp = "",
     isActive = true,
     quantityDecimals,
     amountDecimals,
+    columnConfigOverrides,
   } = props || {};
 
   const didInitRef = useRef(false);
@@ -244,6 +246,26 @@ const AllTranHistory = (props) => {
 
   const getColumnConfig = useCallback(
     async (groupId) => {
+      const overrideConfig = columnConfigOverrides?.[groupId];
+      if (Array.isArray(overrideConfig) && overrideConfig.length) {
+        return overrideConfig.map((c) => ({
+          key: c.key,
+          label:
+            c.label ||
+            String(c.key || "")
+              .replace(/_/g, " ")
+              .replace(/\b\w/g, (ch) => ch.toUpperCase()),
+          classNames: c.classNames || "text-left",
+          renderType: c.renderType || "text",
+          renderFormat: c.renderFormat || "",
+          isWoTab: String(groupId || "").includes("WO_"),
+          roundingOff: typeof c.roundingOff === "number" ? c.roundingOff : undefined,
+          sortable: c.sortable !== false,
+          hidden: !!c.hidden,
+          width: c.width,
+        }));
+      }
+
       try {
         const response = await useSelectedHSColConfig(groupId, currentUserRow?.userCode || "");
         let config = [];
@@ -303,7 +325,7 @@ const AllTranHistory = (props) => {
         return [];
       }
     },
-    [amountDecimals, currentUserRow?.userCode, quantityDecimals]
+    [amountDecimals, columnConfigOverrides, currentUserRow?.userCode, quantityDecimals]
   );
 
   const initialDates = useCallback(() => {
@@ -565,6 +587,7 @@ const AllTranHistory = (props) => {
           endDate: params.endDate,
           branchCode: params.branchCode,
           userCode: params.userCode,
+          invType: params.invType || "",
         },
       };
 
@@ -638,6 +661,8 @@ const AllTranHistory = (props) => {
         endDate: appliedFilters.endDate,
         branchCode: appliedFilters.branchCode,
         userCode: currentUserRow?.userCode,
+        invType: invTypeProp || "",
+
       },
     ],
     queryFn: fetchHistoryData,
@@ -776,10 +801,23 @@ const AllTranHistory = (props) => {
     if (!activeTab || !baseColumns.length) return;
 
     setColumnOrderByTab((prev) => {
-      if (prev[activeTab]?.length) return prev;
+      const nextOrder = baseColumns.map((c) => c.key);
+      const currentOrder = prev[activeTab] || [];
+      if (currentOrder.length) {
+        const validKeys = new Set(nextOrder);
+        const currentValidOrder = currentOrder.filter((key) => validKeys.has(key));
+        const missingKeys = nextOrder.filter((key) => !currentValidOrder.includes(key));
+        if (currentValidOrder.length === currentOrder.length && missingKeys.length === 0) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [activeTab]: [...currentValidOrder, ...missingKeys],
+        };
+      }
       return {
         ...prev,
-        [activeTab]: baseColumns.map((c) => c.key),
+        [activeTab]: nextOrder,
       };
     });
 

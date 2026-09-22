@@ -882,38 +882,60 @@ const handleActivityOption = async (action) => {
 
     // --- STEP 3: UPSERT (SAVE) ---
     if (action === "Upsert") {
-      // We use currentGL variable because state updates are async 
-      // and wouldn't be available yet if we just generated them.
       const savePayload = getFormattedPayload(currentGL);
-      const response = await useTransactionUpsert(docType, savePayload, updateState, 'rmrtvId', 'rmrtvNo');
 
-      if (response) {
-        console.log("RMRTV UPSERT RESPONSE:", response);
+      const response = await useTransactionUpsert(
+        docType,
+        savePayload,
+        updateState,
+        "rmrtvId",
+        "rmrtvNo"
+      );
 
-      const savedRow =
-        response?.data?.data?.[0] ||
-        response?.data?.[0] ||
-        response?.[0] ||
-        response?.data ||
-        {};
+      if (response?.status === "success" && response?.data?.[0]) {
+        const savedRow =
+          response?.data?.data?.[0] ||
+          response?.data?.[0] ||
+          response?.[0] ||
+          response?.data ||
+          {};
 
-      const savedRmrtvId = savedRow.rmrtvId || response?.rmrtvId || "";
-      const savedRmrtvNo = savedRow.rmrtvNo || response?.rmrtvNo || "";
+        const responseDocNo =
+          savedRow.rmrtvNo ||
+          savedRow.RMRTV_NO ||
+          savedRow.rmrtv_no ||
+          response?.rmrtvNo ||
+          response?.RMRTV_NO ||
+          "";
+        const responseDocId =
+          savedRow.rmrtvId ||
+          savedRow.RMRTV_ID ||
+          savedRow.rmrtv_id ||
+          response?.rmrtvId ||
+          response?.RMRTV_ID ||
+          "";
 
-      updateState({
-        documentID: savedRmrtvId,
-        documentNo: savedRmrtvNo,
-        isDocNoDisabled: true,
-        isFetchDisabled: true,
-      });
+        if (!responseDocNo) {
+          throw new Error(
+            "RMRTV was saved but the generated RMRTV No. was not returned."
+          );
+        }
+
+        updateState({
+          documentNo: responseDocNo,
+          documentID: responseDocId,
+          isDocNoDisabled: true,
+          isFetchDisabled: true,
+        });
+
+        await fetchTranData(responseDocNo, branchCode);
 
         const isZero = Number(noReprints) === 0;
         const onSaveAndPrint = isZero
           ? () => updateState({ showSignatoryModal: true })
-          : () => handleSaveAndPrint(response.data[0].rmrtvId);
+          : () => handleSaveAndPrint(responseDocId);
 
         useSwalshowSaveSuccessDialog(handleReset, onSaveAndPrint);
-        updateState({ isDocNoDisabled: true, isFetchDisabled: true });
       }
     }
   } catch (error) {
@@ -948,7 +970,33 @@ const createEmptyDetailRow = () => ({
   operation: "",
 });
 
+const validateWarehouseAndLocationForDetail = () => {
+  const selectedWarehouse = state.WHcode || state.whCode || whCode || "";
+  const selectedLocation = state.locCode || locCode || "";
+
+  if (!selectedWarehouse || !selectedLocation) {
+    useSwalErrorAlert(
+      "Validation Failed",
+      "Please select Warehouse and Location before adding item details."
+    );
+    return false;
+  }
+
+  return true;
+};
+
+const getLocationLookupWarehouseCode = () => {
+  if (accountModalSource === "locCode" && selectedRowIndex !== null) {
+    const row = detailRows[selectedRowIndex] || {};
+    return row.whouseCode || row.whCode || state.WHcode || state.whCode || whCode || "";
+  }
+
+  return state.WHcode || state.whCode || whCode || "";
+};
+
 const handleGetItem = async (index = null) => {
+  if (!validateWarehouseAndLocationForDetail()) return;
+
   const updatedRows = [...detailRows];
   const newRow = createEmptyDetailRow();
 
@@ -966,6 +1014,7 @@ const handleGetItem = async (index = null) => {
 
   const handleAddRow = async () => {
   // if (!vendCode) return;
+    if (!validateWarehouseAndLocationForDetail()) return;
 
     await handleOpenRMLookup();
     return;
@@ -1642,6 +1691,7 @@ const handleDetailChange = async (index, field, value, runCalculations = true) =
 
   if (field === 'whouseCode') {
     row.whouseCode = value.whCode;
+    row.locCode = "";
     await autoFillBlanks('whouseCode', value.whCode);
   }
 
@@ -1835,23 +1885,35 @@ const handleCloseAccountModal = (selectedAccount) => {
 
 
   const handleCloseRcModalGL = async (selectedRc) => {
-    if (selectedRc && selectedRowIndex !== null) {
-      if (accountModalSource !== null) {
-        handleDetailChange(selectedRowIndex, 'rcCode', selectedRc, false);
-     
-     
-      } else {
-           const result = await useTopRCRow(selectedRc.rcCode);
-            if (result) {
-              handleDetailChangeGL(selectedRowIndex, 'rcCode', result);
-            }
-    }
-    updateState({
+    try {
+      if (selectedRc && selectedRowIndex !== null) {
+        if (accountModalSource !== null) {
+          await handleDetailChange(
+            selectedRowIndex,
+            "rcCode",
+            selectedRc,
+            false
+          );
+        } else {
+          const result = await useTopRCRow(selectedRc.rcCode);
+
+          if (result) {
+            await handleDetailChangeGL(
+              selectedRowIndex,
+              "rcCode",
+              result
+            );
+          }
+        }
+      }
+    } finally {
+      updateState({
         showRcModal: false,
         selectedRowIndex: null,
         accountModalSource: null
-    })};
-};
+      });
+    }
+  };
 
 
 
@@ -1969,7 +2031,11 @@ const handleCloseLocationLookup = (row) => {
       : updateState({ locCode: row.locCode, locName: row.locName });
   }
 
-  updateState({ locationLookupOpen: false });
+  updateState({
+    locationLookupOpen: false,
+    selectedRowIndex: null,
+    accountModalSource: null,
+  });
 };
 
 
@@ -2446,7 +2512,11 @@ return (
                      value={state.locName || state.locCode || ""}
                      onLookup={() =>
                        !isFormDisabled && (state.WHname || state.WHcode) &&
-                       updateState({ locationLookupOpen: true })
+                       updateState({
+                         locationLookupOpen: true,
+                         selectedRowIndex: null,
+                         accountModalSource: null,
+                       })
                      }
                      disabled={isFormDisabled || !(state.WHname || state.WHcode)}
                      readOnly
@@ -2985,6 +3055,7 @@ return (
           onClose={handleCloseLocationLookup}
           source={accountModalSource}
           filter="ActiveAll"
+          whCode={getLocationLookupWarehouseCode()}
         />
       )}
 
@@ -3012,7 +3083,7 @@ return (
       <AllTranHistory
         showHeader={false}
         endpoint="/getRMRTVHistory"
-        cacheKey={`RMRTV:${state.branchCode || ""}:${state.docNo || ""}`}  // ✅ per-transaction
+        cacheKey={`RMRTV:${state.branchCode || ""}:${state.documentNo || ""}`}  // ✅ per-transaction
         activeTabKey="RMRTV_Summary"
         branchCode={state.branchCode}
         startDate={state.fromDate}

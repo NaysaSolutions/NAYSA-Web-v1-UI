@@ -12,7 +12,6 @@ import {
     faPlus,
     faSave,
     faUndo,
-    faPenToSquare,
     faTrash,
     faInfoCircle,
     faChevronDown,
@@ -22,6 +21,7 @@ import {
 
 import { apiClient, fetchData } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
+import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 import SearchAttachment from "@/NAYSA Cloud/Lookup/SearchAttachment.jsx";
 import SearchCusMast from "@/NAYSA Cloud/Lookup/SearchCustMast.jsx";
 
@@ -42,21 +42,8 @@ import CustMasterDataTab from "@/NAYSA Cloud/Master Data/CustMasterDataTab.jsx";
 import ReferenceCodesTab from "@/NAYSA Cloud/Master Data/CustMastTabs/ReferenceCodesTab";
 import PermissionBadge from "@/NAYSA Cloud/Global/PermissionBadge.jsx";
 
-const normalizeSlType = (v) => {
-    const s = String(v ?? "").toUpperCase().trim();
-    if (!s) return "";
-    if (["CU", "AG", "OT"].includes(s)) return s;
-    if (s === "CUSTOMER") return "CU";
-    if (s === "AGENCY") return "AG";
-    if (s === "OTHERS") return "OT";
-    return s;
-};
-
-const sltypeOptions = [
-    { value: "CU", label: "CUSTOMER" },
-    { value: "AG", label: "AGENCY" },
-    { value: "OT", label: "OTHERS" },
-];
+const normalizeSlType = (v) =>
+    String(v ?? "").toUpperCase().trim();
 
 const activeOptions = [
     { value: "Y", label: "Yes" },
@@ -76,7 +63,7 @@ const mappedTaxClassOptions = [
 const payeeTypeOptions = [];
 
 const emptyForm = {
-    sltypeCode: "CU",
+    sltypeCode: "",
     custCode: "",
     taxClass: "",
     custName: "",
@@ -156,6 +143,15 @@ const emptyForm = {
 const CustMast = () => {
     const [activeTab, setActiveTab] = useState("setup");
     const [isLoading, setIsLoading] = useState(false);
+
+    // SL Types are loaded from SL Master Data instead of being hardcoded.
+    // allSltypeOptions: complete SL Type reference used to display existing records,
+    // even when the SL Type is later inactive or no longer tagged as Customer.
+    // sltypeOptions: selectable for NEW Customer records only (Active = Y + Customer = Y).
+    // sltypeFilterOptions: Customer-tagged SL Types for the Customer Master Data filter.
+    const [allSltypeOptions, setAllSltypeOptions] = useState([]);
+    const [sltypeOptions, setSltypeOptions] = useState([]);
+    const [sltypeFilterOptions, setSltypeFilterOptions] = useState([]);
 
     const docType = "CustMast";
     const guideRef = useRef(null);
@@ -255,7 +251,7 @@ const CustMast = () => {
     // HSDocController returns sproc_PHP_HSDoc output in data[0].result
     // as a JSON string, so it must be parsed before reading docSeries.
     // ============================================================
-    const [generationMode, setGenerationMode] = useState("Auto");
+    const [generationMode, setGenerationMode] = useState("System");
 
     const parseHSDocRow = (response) => {
         const rows = response?.data;
@@ -299,7 +295,11 @@ const CustMast = () => {
             return "Manual";
         }
 
-        return "Auto";
+        if (mode === "AUTO" || mode === "A") {
+            return "Auto";
+        }
+
+        return "System";
     };
 
     const loadCustomerGenerationMode = async ({ showError = false } = {}) => {
@@ -351,6 +351,38 @@ const CustMast = () => {
     useEffect(() => {
         loadCustomerGenerationMode();
     }, []);
+
+    const generateCustomerCode = async (sltypeCode) => {
+        const sl = normalizeSlType(sltypeCode || "");
+
+        if (!sl) {
+            throw new Error("SL Type is required before generating Customer Code.");
+        }
+
+        const res = await apiClient.post("/customerGenerateCode", {
+            sltypeCode: sl,
+        });
+
+        const row = res?.data?.data?.[0] || {};
+        const errorCount = Number(row?.errorcount ?? row?.errorCount ?? 0);
+        const errorMsg = String(row?.errormsg ?? row?.errorMsg ?? "");
+
+        if (errorCount > 0) {
+            throw new Error(errorMsg || "Unable to generate Customer Code.");
+        }
+
+        const generatedCode = String(
+            row?.generatedCode ??
+            row?.generatedcode ??
+            ""
+        ).trim();
+
+        if (!generatedCode) {
+            throw new Error("No Customer Code was generated.");
+        }
+
+        return generatedCode;
+    };
 
     const [form, setForm] = useState({ ...emptyForm });
     const [selectedCustCode, setSelectedCustCode] = useState("");
@@ -463,6 +495,97 @@ const CustMast = () => {
         return [];
     };
 
+    const loadCustomerSlTypes = async ({ showError = false } = {}) => {
+        try {
+            const res = await apiClient.get("/slType");
+            const rows = parseSprocJsonResult(res?.data?.data);
+
+            const configured = (Array.isArray(rows) ? rows : [])
+                .map((row) => ({
+                    value: normalizeSlType(
+                        row?.slTypeCode ??
+                        row?.sltypeCode ??
+                        row?.sltype_code ??
+                        ""
+                    ),
+                    label: String(
+                        row?.slTypeName ??
+                        row?.sltypeName ??
+                        row?.sltype_name ??
+                        row?.slTypeCode ??
+                        ""
+                    ).trim(),
+                    active: normalizeSlType(
+                        row?.slTypeActive ??
+                        row?.sltypeActive ??
+                        row?.active ??
+                        ""
+                    ),
+                    customer: normalizeSlType(
+                        row?.slTypeIncCu ??
+                        row?.sltypeIncCu ??
+                        row?.incCu ??
+                        row?.inc_cu ??
+                        ""
+                    ),
+                }))
+                .filter((row) => row.value);
+
+            // Keep the COMPLETE SL Type reference so old/existing Customer records
+            // can still display the correct SL Type name even if the setup changes later.
+            const allOptions = configured.map(({ value, label }) => ({
+                value,
+                label: label || value,
+            }));
+
+            // Customer Master filter follows every SL Type currently tagged Customer = Yes.
+            // Inactive types remain available here so historical Customer data can still be filtered.
+            const filterOptions = configured
+                .filter((row) => row.customer === "Y")
+                .map(({ value, label }) => ({
+                    value,
+                    label: label || value,
+                }));
+
+            // NEW Customer records may only use SL Types that are BOTH:
+            //   1) Active = Yes
+            //   2) Customer = Yes
+            // Therefore a type with Payee = No and Customer = No will never appear here.
+            const setupOptions = configured
+                .filter((row) => row.customer === "Y" && row.active === "Y")
+                .map(({ value, label }) => ({
+                    value,
+                    label: label || value,
+                }));
+
+            setAllSltypeOptions(allOptions);
+            setSltypeFilterOptions(filterOptions);
+            setSltypeOptions(setupOptions);
+
+            return setupOptions;
+        } catch (error) {
+            console.error("Failed to load Customer SL Types:", error);
+            setAllSltypeOptions([]);
+            setSltypeOptions([]);
+            setSltypeFilterOptions([]);
+
+            if (showError) {
+                await useSwalErrorAlert(
+                    "SL Type Setup",
+                    error?.response?.data?.message ||
+                    error?.message ||
+                    "Unable to load SL Types from SL Master Data."
+                );
+            }
+
+            return [];
+        }
+    };
+
+    useEffect(() => {
+        loadCustomerSlTypes();
+    }, []);
+
     const handleOpenAttach = async () => {
         if (!isFullAccess) {
             await useSwalErrorAlert("Read Only", "You only have read access. Attaching files is not allowed.");
@@ -504,7 +627,7 @@ const CustMast = () => {
 
                 const normalized = list.map((x) => ({
                     ...x,
-                    sltypeCode: normalizeSlType(x?.sltypeCode ?? "CU"),
+                    sltypeCode: normalizeSlType(x?.sltypeCode ?? ""),
                     custCode: x?.custCode ?? "",
                     custName: x?.custName ?? "",
                     address:
@@ -565,7 +688,7 @@ const CustMast = () => {
                 return;
             }
 
-            const sl = normalizeSlType(row?.sltypeCode ?? "CU");
+            const sl = normalizeSlType(row?.sltypeCode ?? "");
 
             updateForm({
                 ...emptyForm,
@@ -667,6 +790,10 @@ const CustMast = () => {
             });
 
             setSelectedCustCode(code);
+
+            // Retrieved records are immediately editable.
+            // Read-only users remain non-editable.
+            setIsEditing(canEdit);
         } catch (e) {
             console.error(e);
             await useSwalErrorAlertAPI("Fetch Error", e?.message || "Failed to fetch customer.");
@@ -735,6 +862,79 @@ const CustMast = () => {
         }
     };
 
+    const handleSlTypeChange = async (nextSlType) => {
+        const nextSl = normalizeSlType(nextSlType || "");
+        const mode = String(generationMode || "").trim().toUpperCase();
+        const isNewRecord = !!form.__isNew;
+
+        const updates = {
+            sltypeCode: nextSl,
+        };
+
+        if (["EM", "EMP", "EMPLOYEE"].includes(nextSl)) {
+            updates.sltypeCode = "EM";
+            updates.taxClass = "WI";
+        } else if (["CU", "CUST", "CUSTOMER"].includes(nextSl)) {
+            updates.taxClass = "WC";
+        }
+
+        // Existing records never regenerate Customer Code.
+        if (!isNewRecord) {
+            updateForm(updates);
+            return;
+        }
+
+        // MANUAL: clear the previous code so the user enters a code
+        // appropriate for the newly selected SL Type.
+        if (mode === "MANUAL") {
+            updateForm({
+                ...updates,
+                custCode: "",
+            });
+            return;
+        }
+
+        // SYSTEM: code must remain blank until Save.
+        if (mode === "SYSTEM") {
+            updateForm({
+                ...updates,
+                custCode: "",
+            });
+            return;
+        }
+
+        // AUTO: regenerate immediately using the newly selected SL Type.
+        if (mode === "AUTO") {
+            setIsLoading(true);
+
+            try {
+                const normalizedSl = normalizeSlType(updates.sltypeCode);
+                const generatedCode = await generateCustomerCode(normalizedSl);
+
+                updateForm({
+                    ...updates,
+                    custCode: generatedCode,
+                });
+            } catch (error) {
+                console.error("Failed to regenerate Customer Code:", error);
+
+                updateForm({
+                    ...updates,
+                    custCode: "",
+                });
+
+                await useSwalErrorAlert(
+                    "Customer Code Generation",
+                    error?.response?.data?.message ||
+                    error?.message ||
+                    "Unable to regenerate Customer Code."
+                );
+            } finally {
+                setIsLoading(false);
+            }
+        }
+    };
+
     const upsertCustomer = async () => {
         if (!canSave) {
             await useSwalErrorAlert("Read Only", "You only have read access. Saving customers is not allowed.");
@@ -747,11 +947,52 @@ const CustMast = () => {
 
         let code = String(form?.custCode || "").trim();
         const isAddMode = !selectedCustCode;
+        const selectedSlType = normalizeSlType(form?.sltypeCode || "");
+        const mode = String(generationMode || "")
+            .trim()
+            .toUpperCase();
+
+        // SYSTEM must intentionally send blank Customer Code on Add
+        // so sproc_PHP_CustMast generates it only when Save is clicked.
+        if (isAddMode && mode === "SYSTEM") {
+            code = "";
+        }
+
+        // SL Type is always required. Existing records are allowed to retain their
+        // historical SL Type even when it has since become inactive/non-customer.
+        if (!selectedSlType) {
+            await showValidation(
+                "Missing Required Field(s)",
+                ["• SL Type"]
+            );
+            return;
+        }
+
+        // For NEW records only, enforce the current SL Type setup. This prevents
+        // stale UI state or manual payload changes from assigning an SL Type that
+        // is inactive or not tagged Customer = Yes.
+        if (isAddMode) {
+            const availableSlTypes = sltypeOptions.length
+                ? sltypeOptions
+                : await loadCustomerSlTypes({ showError: true });
+
+            const isAllowedForNewCustomer = availableSlTypes.some(
+                (option) => normalizeSlType(option?.value) === selectedSlType
+            );
+
+            if (!isAllowedForNewCustomer) {
+                await useSwalErrorAlert(
+                    "SL Type Not Available",
+                    "The selected SL Type is inactive or is not tagged Customer = Yes in SL Master Data."
+                );
+                return;
+            }
+        }
 
         // Manual CU setup requires the user to supply Customer Code.
         if (
             isAddMode &&
-            String(generationMode || "").trim().toUpperCase() === "MANUAL" &&
+            mode === "MANUAL" &&
             !code
         ) {
             await showValidation(
@@ -823,7 +1064,7 @@ const CustMast = () => {
                     vatCode: form.vatCode || "",
                     atcCode: form.atcCode || "",
                     billtermCode: form.billtermCode || "",
-                    sltypeCode: normalizeSlType(form.sltypeCode || "CU"),
+                    sltypeCode: normalizeSlType(form.sltypeCode || ""),
                     active: form.active || "Y",
                     oldCode: form.oldCode || "",
                     creditInvestigator: form.creditInvestigator || "",
@@ -867,9 +1108,11 @@ const CustMast = () => {
 
             await useSwalSuccessAlert("Success!", "Customer saved successfully.");
             setSelectedCustCode(finalCode);
-            setIsEditing(false);
             await loadMasterList({ force: true });
             await fetchCustomerByCode(finalCode);
+
+            // Keep the saved record editable after refresh.
+            setIsEditing(canEdit);
         } catch (e) {
             console.error(e);
             const sprocValidation = extractSprocValidation(e?.response);
@@ -888,7 +1131,7 @@ const CustMast = () => {
         const selectedType = normalizeSlType(subsidiaryType);
 
         const filtered = masterAllRows.filter((row) => {
-            const rowType = normalizeSlType(row?.sltypeCode || "CU");
+            const rowType = normalizeSlType(row?.sltypeCode || "");
             if (selectedType && rowType !== selectedType) return false;
 
             for (const [key, val] of Object.entries(masterFilters || {})) {
@@ -923,8 +1166,6 @@ const CustMast = () => {
         }
 
         // Always re-read HS_DOC before entering Add mode.
-        // This makes a recent SQL change from Auto -> Manual take effect
-        // without depending on cached AuthContext reference data.
         const latestGenerationMode = await loadCustomerGenerationMode({
             showError: true,
         });
@@ -934,13 +1175,70 @@ const CustMast = () => {
         }
 
         allowedDuplicateCustNameRef.current = "";
-        const sl = normalizeSlType(form?.sltypeCode || "CU") || "CU";
 
+        const availableSlTypes = sltypeOptions.length
+            ? sltypeOptions
+            : await loadCustomerSlTypes({ showError: true });
+
+        if (!availableSlTypes.length) {
+            await useSwalErrorAlert(
+                "SL Type Setup",
+                "No active SL Type is configured with Customer = Yes. Please update SL Master Data first."
+            );
+            return;
+        }
+
+        const currentSl = normalizeSlType(form?.sltypeCode || "");
+
+        const sl = availableSlTypes.some(
+            (option) => normalizeSlType(option?.value) === currentSl
+        )
+            ? currentSl
+            : normalizeSlType(availableSlTypes[0]?.value || "");
+
+        const mode = String(latestGenerationMode || "")
+            .trim()
+            .toUpperCase();
+
+        let generatedCode = "";
+
+        // AUTO:
+        // Generate immediately for the FIRST/default SL Type shown on Add.
+        if (mode === "AUTO") {
+            setIsLoading(true);
+
+            try {
+                generatedCode = await generateCustomerCode(sl);
+            } catch (error) {
+                console.error(
+                    "Failed to generate initial Customer Code:",
+                    error
+                );
+
+                await useSwalErrorAlert(
+                    "Customer Code Generation",
+                    error?.response?.data?.message ||
+                    error?.message ||
+                    "Unable to generate Customer Code."
+                );
+
+                return;
+            } finally {
+                setIsLoading(false);
+            }
+        }
+
+        // SYSTEM:
+        // generatedCode remains blank and SQL generates on Save.
+        //
+        // MANUAL:
+        // generatedCode remains blank and user types Customer Code.
         setSelectedCustCode("");
+
         setForm({
             ...emptyForm,
             sltypeCode: sl,
-            custCode: "",
+            custCode: generatedCode,
             __isNew: true,
         });
 
@@ -948,22 +1246,7 @@ const CustMast = () => {
         setActiveTab("setup");
     };
 
-    const handleEdit = async () => {
-        if (!canEdit) {
-            await useSwalErrorAlert("Read Only", "You only have read access. Editing customers is not allowed.");
-            return;
-        }
-
-        const code = String(form?.custCode || "").trim();
-        if (!code) {
-            await useSwalErrorAlert("Required", "Please select a Customer record first.");
-            return;
-        }
-        setIsEditing(true);
-        setActiveTab("setup");
-    };
-
-    const handleResetSetup = () => {
+        const handleResetSetup = () => {
         allowedDuplicateCustNameRef.current = ""; // Reset ref
         setSelectedCustCode("");
         setForm({ ...emptyForm });
@@ -1024,14 +1307,6 @@ const CustMast = () => {
                     className: resetBtn,
                 },
                 {
-                    key: "edit",
-                    label: <span className="hidden sm:inline ml-1">Edit</span>,
-                    icon: faPenToSquare,
-                    onClick: handleEdit,
-                    disabled: isLoading || isEditing || !hasRecord || !canEdit,
-                    className: isLoading || isEditing || !hasRecord || !canEdit ? disabledPrimaryBtn : primaryBtn,
-                },
-                {
                     key: "attach",
                     label: <span className="hidden sm:inline ml-1">Attach File</span>,
                     icon: faPaperclip,
@@ -1044,8 +1319,8 @@ const CustMast = () => {
                     label: <span className="hidden sm:inline ml-1">Delete</span>,
                     icon: faTrash,
                     onClick: deleteCustomer,
-                    disabled: isLoading || isEditing || !hasRecord || !canDelete,
-                    className: isLoading || isEditing || !hasRecord || !canDelete ? disabledDangerBtn : dangerBtn,
+                    disabled: isLoading || !hasRecord || !canDelete,
+                    className: isLoading || !hasRecord || !canDelete ? disabledDangerBtn : dangerBtn,
                 },
             ];
         }
@@ -1096,6 +1371,7 @@ const CustMast = () => {
 
     return (
         <div className="global-ref-main-div-ui">
+            {isLoading && <LoadingSpinner />}
             <div className="global-ref-header-ui">
                 <div className="w-full flex flex-col lg:flex-row items-center justify-between gap-3">
                     {/* LEFT: title + tabs grouped together */}
@@ -1191,12 +1467,14 @@ const CustMast = () => {
                             updateForm(patch);
                         }}
                         onNameBlur={confirmDuplicateCustName}
+                        onSlTypeChange={handleSlTypeChange}
                         onLookupCode={() => setIsSearchOpen(true)}
                         onSelectCustomerCode={fetchCustomerByCode}
                         sltypeOptions={sltypeOptions}
+                        allSltypeOptions={allSltypeOptions}
                         activeOptions={activeOptions}
                         sourceOptions={sourceOptions}
-                        mappedTaxClassOptions={mappedTaxClassOptions}
+                        taxClassOptions={mappedTaxClassOptions}
                         payeeTypeOptions={payeeTypeOptions}
                     />
                 )}
@@ -1208,6 +1486,7 @@ const CustMast = () => {
                         onRowDoubleClick={handleMasterRowDoubleClick}
                         subsidiaryType={subsidiaryType}
                         onChangeSubsidiaryType={setSubsidiaryType}
+                        sltypeOptions={sltypeFilterOptions}
                         filters={masterFilters}
                         onChangeFilter={handleChangeMasterFilter}
                         onFilter={applyMasterFilters}

@@ -229,31 +229,21 @@ const ARAdvancesTab = forwardRef(function ARAdvancesTab({ registerActions }, ref
 
 
 
-  // Fetch both summary + detail in a single "Find"
+  // Find loads the summary only. Detail is loaded from the selected summary row.
  const fetchRecord = useCallback(async () => {
   updateState({ isLoading: true });
 
   try {
-    const [detailRes, summaryRes] = await Promise.all([
-      fetchData(ENDPOINT_DETAIL, {
-        json_data: { json_data: { branchCode, custCode, status } },
-      }),
-      fetchData(ENDPOINT_SUMMARY, {
-        json_data: { json_data: { branchCode, custCode, status } },
-      }),
-    ]);
-
-    const dtDetail = detailRes?.data?.[0]?.result
-      ? JSON.parse(detailRes.data[0].result)
-      : [];
+    const summaryRes = await fetchData(ENDPOINT_SUMMARY, {
+      json_data: { json_data: { branchCode, custCode, status, viewMode: "Summary" } },
+    });
     const dtSummary = summaryRes?.data?.[0]?.result
       ? JSON.parse(summaryRes.data[0].result)
       : [];
 
-    const rowsBottom = Array.isArray(dtDetail?.[0]?.dt1) ? dtDetail[0].dt1 : [];
     const rowsTop = Array.isArray(dtSummary?.[0]?.dt2) ? dtSummary[0].dt2 : [];
 
-    if (rowsBottom.length === 0 && rowsTop.length === 0) {
+    if (rowsTop.length === 0) {
       updateState({
         arAdvancesData: [],
         arAdvancesDataUnfiltered: [],
@@ -265,8 +255,8 @@ const ARAdvancesTab = forwardRef(function ARAdvancesTab({ registerActions }, ref
     }
 
     updateState({
-      arAdvancesData: rowsBottom,
-      arAdvancesDataUnfiltered: rowsBottom,
+      arAdvancesData: [],
+      arAdvancesDataUnfiltered: [],
       arAdvancesDataS: rowsTop,
     });
   } catch (err) {
@@ -280,14 +270,20 @@ const ARAdvancesTab = forwardRef(function ARAdvancesTab({ registerActions }, ref
 
 
 
-  // For "View" on top table – refresh bottom detail for selected customer only
+  // Load the complete lifecycle of the advance selected from the summary.
   const fetchRecordperCustomer = useCallback(
-    async (selectedCustomer) => {
+    async (selectedAdvance) => {
       updateState({ isLoading: true });
       try {
         const resp = await fetchData(ENDPOINT_DETAIL, {
           json_data: {
-            json_data: { branchCode, custCode: selectedCustomer, status },
+            json_data: {
+              branchCode: selectedAdvance.branchCode || branchCode,
+              custCode: selectedAdvance.custCode,
+              advanceDocCode: selectedAdvance.docCode,
+              advanceDocNo: selectedAdvance.docNo,
+              viewMode: "Detail",
+            },
           },
         });
 
@@ -303,7 +299,7 @@ const ARAdvancesTab = forwardRef(function ARAdvancesTab({ registerActions }, ref
         updateState({ isLoading: false });
       }
     },
-    [branchCode, status]
+    [branchCode]
   );
 
   // hydrate from cache OR load defaults once
@@ -545,7 +541,7 @@ const ARAdvancesTab = forwardRef(function ARAdvancesTab({ registerActions }, ref
   // Row actions
   const handleViewTop = useCallback(
     (row) => {
-      fetchRecordperCustomer(row.custCode);
+      fetchRecordperCustomer(row);
       updateState({ custName: row.custName, custCode: row.custCode });
     },
     [fetchRecordperCustomer]

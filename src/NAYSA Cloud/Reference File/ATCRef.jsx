@@ -55,6 +55,7 @@ const DEFAULT_FORM = {
   cwtAcctName: "",
   clAcct: "",
   clAcctName: "",
+  active: "Y",
   registeredBy: "",
   registeredDate: "",
   lastUpdatedBy: "",
@@ -175,6 +176,8 @@ const mapAtcRow = (row) => ({
     row?.clAcctName ??
     row?.clAcctname ??
     "",
+
+  active: row?.active ?? row?.ACTIVE ?? row?.isActive ?? "Y",
 
   registeredBy: getRegistrationValue(row, ["registeredBy",]) || "",
   registeredDate: getRegistrationValue(row, ["registeredDate",]) || "",
@@ -473,6 +476,7 @@ const ATCRef = () => {
     const ewtAcct = String(form.ewtAcct || "").trim();
     const cwtAcct = String(form.cwtAcct || "").trim();
     const clAcct = String(form.clAcct || "").trim();
+    const active = form.active;
 
     try {
       if (!form.__existing) {
@@ -498,6 +502,7 @@ const ATCRef = () => {
         ewtAcct,
         cwtAcct,
         clAcct,
+        active,
         userCode: user?.USER_CODE || "ADMIN",
       });
     } catch (error) {
@@ -670,6 +675,7 @@ const ATCRef = () => {
           ? `${row.clAcct} - ${row.clAcctName}` 
           : row?.clAcct,
       },
+      { key: "active", label: "Active", width: 120 , render: (row) => (row.active === "Y" ? "Yes" : "No"),},
     ],
     [handleEdit, handleDelete, isMobile, openMobileActionSheet],
   );
@@ -837,6 +843,18 @@ const ATCRef = () => {
                   min="0"
                   disabled={!isEditing}
                   required
+                />
+
+                <FieldRenderer
+                    label="Active"
+                    type="select"
+                    value={form.active}
+                    disabled={!isEditing}
+                    options={[
+                    { value: "Y", label: "Yes" },
+                    { value: "N", label: "No" },
+                    ]}
+                    onChange={(v) => setField("active", v)}
                 />
               </div>
 

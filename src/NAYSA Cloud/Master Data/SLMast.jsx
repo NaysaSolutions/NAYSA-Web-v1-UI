@@ -694,7 +694,7 @@ const handleDeleteSLType = async (row) => {
         key: "slActive",
         label: "Active",
         sortable: true,
-        render: (row) => (row.slActive === "Y" ? "Y" : "N"),
+        render: (row) => (row.slActive === "Y" ? "Yes" : "No"),
       },
     ],
     [canDeleteSL]

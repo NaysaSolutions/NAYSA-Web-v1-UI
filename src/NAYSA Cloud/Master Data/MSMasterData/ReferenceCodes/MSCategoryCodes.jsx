@@ -72,6 +72,7 @@ const DEFAULT_FORM = {
   code: "",
   description: "",
   uCostFlag: "N",
+  active: "Y",
   invAcct: "", invAcctName: "",
   expAcct: "", expAcctName: "",
   rrAcct: "", rrAcctName: "",
@@ -408,6 +409,7 @@ const CategoryCodes = forwardRef(({
             code: payload.code,
             description: payload.description,
             uCostFlag: payload.uCostFlag,
+            active: payload.active,
             invAcct: payload.invAcct,
             expAcct: payload.expAcct,
             rrAcct: payload.rrAcct,
@@ -464,6 +466,7 @@ const CategoryCodes = forwardRef(({
       code: String(form.code || "").trim(),
       description: String(form.description || "").trim(),
       uCostFlag: form.uCostFlag === "Y" ? "Y" : "N",
+      active: form.active,
       invAcct: String(form.invAcct || "").trim(),
       expAcct: String(form.expAcct || "").trim(),
       rrAcct: String(form.rrAcct || "").trim(),
@@ -568,6 +571,7 @@ const CategoryCodes = forwardRef(({
     code: row.code || row.categoryCode || "",
     description: row.description || row.categoryDesc || "",
     uCostFlag: row.uCostFlag || row.u_cost_flag || "N",
+    active: row.active || row.active_flag || "Y",
     invAcct: row.invAcct || row.inv_acct || "",
     invAcctName: row.invAcctName || row.inv_acct_name || "",
     expAcct: row.expAcct || row.exp_acct || "",
@@ -685,6 +689,11 @@ const CategoryCodes = forwardRef(({
         sortable: true,
         width: 100,
         render: (row) => (row.uCostFlag === "Y" ? "Y" : "N"),
+      },
+      { key: "active", 
+        label: "Active", 
+        width: 120 , 
+        render: (row) => (row.active === "Y" ? "Yes" : "No"),
       },
     ],
     [handleEdit, handleDelete, isReadOnly, canEdit, canDelete]
@@ -826,6 +835,18 @@ const CategoryCodes = forwardRef(({
                 { value: "N", label: "No" },
               ]}
               disabled={isReadOnly || !isEditing}
+            />
+
+            <FieldRenderer
+              label="Active"
+              type="select"
+              value={form.active}
+              disabled={!isEditing}
+              options={[
+                { value: "Y", label: "Yes" },
+                { value: "N", label: "No" },
+              ]}
+              onChange={(v) => setField("active", v)}
             />
           </div>
         </Card>

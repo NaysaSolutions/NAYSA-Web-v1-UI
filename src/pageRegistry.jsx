@@ -84,11 +84,15 @@ export const pageRegistry = {
   FGRFP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/FGRFP.jsx")),
   RMRFP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/RMRFP.jsx")),
   MSRFP: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/MSRFP.jsx")),
+  FGPC: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PC.jsx")),
+  RMPC: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PC.jsx")),
+  MSPC: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PC.jsx")),
   ItemConversionMatrix: lazyPage(() => import("./NAYSA Cloud/Matrix/ItemConversionMatrix.jsx")),
   
   // Vehicle Service
   VEHSVMast: lazyPage(() => import("./NAYSA Cloud/Master Data/VEMasterData/VEHSVMast.jsx")),
-
+  VESVJOMotor: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Vehicle Service/MJO.jsx")),
+  VESVJO: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Vehicle Service/CJO.jsx")),
 
 
   // Production 
@@ -208,6 +212,7 @@ export const pageRegistry = {
   PostFGST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGST.jsx")),
   PostVEST: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostVEST.jsx")),
   PostFGSR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGSR.jsx")),
+  PostFGIS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGIS.jsx")),
   PostMSIS: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostMSIS.jsx")),
   PostRMRTV: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostRMRTV.jsx")),
   PostFGRR: lazyPage(() => import("./NAYSA Cloud/Module/Main Module/Inventory/PostFGRR.jsx")),

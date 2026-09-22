@@ -503,6 +503,12 @@ const RcRef = forwardRef(
             </div>
           )
         },
+        {
+        key: "active",
+        label: "Active",
+        width: 120,
+        render: (row) => (row.active === "Y" ? "Yes" : "No"),
+      },
       ],
       [handleEdit, handleDelete, isMobile],
     );
@@ -750,6 +756,18 @@ const RcRef = forwardRef(
                   disabled={!isEditing || saveMutation.isPending}
                   maxLength={getMax("RCTYPE_NAME")} 
                 />
+
+                <FieldRenderer
+                label="Active"
+                type="select"
+                value={form.active}
+                disabled={!isEditing}
+                options={[
+                  { value: "Y", label: "Yes" },
+                  { value: "N", label: "No" },
+                ]}
+                onChange={(v) => setForm((prev) => ({ ...prev, active: v }))}
+              />
               </div>
 
               <div className="w-full bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-8 xl:mb-0">

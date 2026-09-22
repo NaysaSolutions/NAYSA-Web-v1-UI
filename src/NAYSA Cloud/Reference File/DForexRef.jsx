@@ -84,6 +84,30 @@ const formatDate = (value) => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
+const formatDisplayDate = (value) => {
+  if (!value) return "";
+
+  const raw = String(value).trim();
+
+  // yyyy-mm-dd or yyyy-mm-ddT...
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+  if (match) {
+    const [, yyyy, mm, dd] = match;
+    return `${mm}/${dd}/${yyyy}`;
+  }
+
+  const d = new Date(value);
+
+  if (Number.isNaN(d.getTime())) return "";
+
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const yyyy = d.getFullYear();
+
+  return `${mm}/${dd}/${yyyy}`;
+};
+
 const pickValue = (row, keys, fallback = "") => {
   for (const key of keys) {
     const value = row?.[key];
@@ -615,8 +639,24 @@ const DForexRef = ({ onSelect }) => {
         width: 80, minWidth: 80, requiredVisible: true ,
         render: (row) => row.monthName || getMonthName(row.month),
       },
-      { key: "dateFrom", label: "Date From", sortable: true, width: 80, minWidth: 80, requiredVisible: true  },
-      { key: "dateTo", label: "Date To", sortable: true, width: 80, minWidth: 80, requiredVisible: true  },
+      {
+  key: "dateFrom",
+  label: "Date From",
+  sortable: true,
+  width: 100,
+  minWidth: 100,
+  requiredVisible: true,
+  render: (row) => formatDisplayDate(row.dateFrom),
+},
+{
+  key: "dateTo",
+  label: "Date To",
+  sortable: true,
+  width: 100,
+  minWidth: 100,
+  requiredVisible: true,
+  render: (row) => formatDisplayDate(row.dateTo),
+},
       { key: "rowCount", label: "Records", sortable: true, width: 80, minWidth: 80},
     ],
     []
@@ -676,8 +716,22 @@ const DForexRef = ({ onSelect }) => {
         render: (row) => row.monthName || getMonthName(row.month),
         width: 80, minWidth: 80
       },
-      { key: "dateFrom", label: "Date From", sortable: true, width: 100, minWidth: 80},
-      { key: "dateTo", label: "Date To", sortable: true, width: 100, minWidth: 80},
+      {
+  key: "dateFrom",
+  label: "Date From",
+  sortable: true,
+  width: 100,
+  minWidth: 100,
+  render: (row) => formatDisplayDate(row.dateFrom),
+},
+{
+  key: "dateTo",
+  label: "Date To",
+  sortable: true,
+  width: 100,
+  minWidth: 100,
+  render: (row) => formatDisplayDate(row.dateTo),
+},
       {
         key: "currCode",
         label: "Currency",
@@ -926,7 +980,7 @@ const DForexRef = ({ onSelect }) => {
                   lastUpdatedBy: form.lastUpdatedBy,
                   lastUpdatedDate: form.lastUpdatedDate,
                 }}
-                layout="minimize"
+                
               />
             </div>
           </div>

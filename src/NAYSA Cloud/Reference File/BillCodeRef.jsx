@@ -9,6 +9,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Save, Undo2, Edit, Trash2, Info } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
+  faPlus,
+  faSave,
+  faUndo,
   faEdit,
   faTrashAlt,
   faInfoCircle,
@@ -68,6 +71,7 @@ const DEFAULT_FORM = {
   billName: "",
   uomCode: "",
   unitPriceRequired: "N",
+  active: "Y",
   rcCode: "",
   rcName: "",
   arAcct: "",
@@ -299,6 +303,7 @@ const BillCodeRef = React.forwardRef((props, ref) => {
     const rcCode = String(form.rcCode || "").trim();
     const arAcct = String(form.arAcct || "").trim();
     const salesAcct = String(form.salesAcct || "").trim();
+    const active = form.active || "Y";
     try {
       if (!form.__existing) {
         const isDup = await checkDuplicate(billCode);
@@ -320,6 +325,7 @@ const BillCodeRef = React.forwardRef((props, ref) => {
         advancesAcct: String(form.advancesAcct || "").trim(),
         sDiscAcct: String(form.sDiscAcct || "").trim(),
         unitPriceRequired: toYN(form.unitPriceRequired, "N"),
+        active: form.active || "Y",
         userCode: user?.USER_CODE || "ADMIN",
       });
     } catch (error) {
@@ -506,6 +512,12 @@ const BillCodeRef = React.forwardRef((props, ref) => {
       { key: "salesAcct", label: "Sales Account", sortable: true, width: 100, minWidth: 100 },
       { key: "advancesAcct", label: "Advances Account", sortable: true, width: 100, minWidth: 100 },
       { key: "sDiscAcct", label: "Discount Account", sortable: true, width: 100, minWidth: 100 },
+      { 
+        key: "active", 
+        label: "Active", 
+        width: 120 , 
+        render: (row) => (row.active === "Y" ? "Yes" : "No"),
+      },
     ],
     [handleEdit, handleDelete, isMobile, openMobileActionSheet],
   );
@@ -528,7 +540,7 @@ const BillCodeRef = React.forwardRef((props, ref) => {
         disabled={isEditing}
         title="Add"
       >
-        <Plus size={14} />
+        <FontAwesomeIcon icon={faPlus}/>
         <span className="hidden sm:inline ml-1">Add</span>
       </button>
 
@@ -543,7 +555,7 @@ const BillCodeRef = React.forwardRef((props, ref) => {
         disabled={!isEditing || saveMutation.isPending}
         title="Save"
       >
-        <Save size={14} />
+        <FontAwesomeIcon icon={faSave}/>
         <span className="hidden sm:inline ml-1">Save</span>
       </button>
 
@@ -556,7 +568,7 @@ const BillCodeRef = React.forwardRef((props, ref) => {
         disabled={saveMutation.isPending}
         title="Reset"
       >
-        <Undo2 size={14} />
+        <FontAwesomeIcon icon={faUndo}/>
         <span className="hidden sm:inline ml-1">Reset</span>
       </button>
 
@@ -673,6 +685,18 @@ const BillCodeRef = React.forwardRef((props, ref) => {
                   onChange={(val) => setField("uomCode", val)}
                   disabled={!isEditing}
                   required
+                />
+
+                <FieldRenderer
+                  label="Active"
+                  type="select"
+                  value={form.active}
+                  disabled={!isEditing}
+                  options={[
+                    { value: "Y", label: "Yes" },
+                    { value: "N", label: "No" },
+                  ]}
+                  onChange={(v) => setField("active", v)}
                 />
 
               </div>

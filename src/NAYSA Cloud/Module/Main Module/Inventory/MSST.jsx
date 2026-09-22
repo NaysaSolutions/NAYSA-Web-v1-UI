@@ -2586,7 +2586,13 @@ if (field === "itemCode") {
       // checkbox selection can treat rows with the same groupId as one selection.
       const custData = rawCustData.map((row, index) => {
         const transferRefNo = row?.transferRefNo || row?.wtNo || row?.groupId || "";
-        const rowUniqueKey = row?.uniqueKey || row?.controlNo || row?.CONTROL_NO || "";
+        const rowUniqueKey =
+          row?.uniqueKey ||
+          row?.orderId ||
+          row?.ORDER_ID ||
+          row?.controlNo ||
+          row?.CONTROL_NO ||
+          "";
         const itemCodeKey = row?.itemCode || row?.ITEM_NO || "";
         const lotKey = row?.lotNo || row?.LOT_NO || "";
         const locKey = row?.locCode || row?.LOC_CODE || "";
@@ -2630,11 +2636,16 @@ if (field === "itemCode") {
     const itemsArray = Array.isArray(selectedItems.records)
       ? selectedItems.records
       : [selectedItems.records];
+
     if (itemsArray.length === 0) return;
 
-const firstValue = (...values) =>
-      values.find((value) => value !== undefined && value !== null && value !== "");
+    const firstValue = (...values) =>
+      values.find(
+        (value) => value !== undefined && value !== null && value !== "",
+      );
 
+    const receiverFlow = isIntransitTransfer();
+    const senderFlow = isInterWarehouseOrInterBranch();
 
     const defaultToLocCode = isIntransitWarehouse(toWhCode ?? "")
       ? "INTRANSIT"
@@ -2643,32 +2654,82 @@ const firstValue = (...values) =>
     const newRows = itemsArray.flatMap((item) => {
       const rawQtyHand = parseFormattedNumber(item?.qtyHand ?? 0);
       const rawUnitCost = parseFormattedNumber(item?.unitCost ?? 0);
-      const originalKey = item?.uniqueKey ?? "";
 
-      if (itemSingleSelect && selectedTranType === "IR") {
-        handleDetailChange(selectedRowIndex, "itemCode", item, false);
-        updateState({ itemSingleSelect: false, msLookupModalOpen: false });
-        return [];
-      }
-const invAccountCode = firstValue(
+      // FIFO/FEFO source layer key for sender flow.
+      // For receiver flow this can also fall back to the transfer CONTROL_NO.
+      const originalKey = firstValue(
+        item?.uniqueKey,
+        item?.orderId,
+        item?.ORDER_ID,
+        item?.controlNo,
+        item?.CONTROL_NO,
+        "",
+      );
+
+      const invAccountCode = firstValue(
         item?.invAcct,
         item?.invAcctCode,
         item?.INV_ACCT,
         item?.INV_ACCT_CODE,
         item?.acctCode,
         item?.ACCT_CODE,
-        ""
+        "",
       );
 
       if (itemSingleSelect && selectedTranType === "IR") {
         handleDetailChange(selectedRowIndex, "itemCode", item, false);
-        // Ensure account code is populated on single select as well
+
         if (invAccountCode) {
-          handleDetailChange(selectedRowIndex, "acctCode", { acctCode: invAccountCode }, false);
+          handleDetailChange(
+            selectedRowIndex,
+            "acctCode",
+            { acctCode: invAccountCode },
+            false,
+          );
         }
-        updateState({ itemSingleSelect: false, msLookupModalOpen: false });
+
+        updateState({
+          itemSingleSelect: false,
+          msLookupModalOpen: false,
+        });
         return [];
       }
+
+      // Same transfer rules used by FGST:
+      // sender   : physical source -> INT / INTRANSIT
+      // receiver : INT / INTRANSIT -> physical destination
+      const sourceWhCode = receiverFlow
+        ? fromWhCode || "INT"
+        : firstValue(
+            item?.whouseCode,
+            item?.WHOUSE_CODE,
+            item?.fromWhCode,
+            item?.FROM_WH,
+            fromWhCode,
+            "",
+          );
+
+      const sourceLocCode = receiverFlow
+        ? "INTRANSIT"
+        : firstValue(
+            item?.locCode,
+            item?.LOC_CODE,
+            item?.fromLocCode,
+            item?.FROM_LOC,
+            isIntransitWarehouse(sourceWhCode)
+              ? "INTRANSIT"
+              : fromWhDefaultLocCode,
+            "",
+          );
+
+      const destinationWhCode = senderFlow
+        ? toWhCode || "INT"
+        : toWhCode || "";
+
+      const destinationLocCode = senderFlow
+        ? "INTRANSIT"
+        : defaultToLocCode || toWhDefaultLocCode || "";
+
       const baseRow = {
         itemCode: item?.itemCode ?? "",
         itemName: item?.itemName ?? "",
@@ -2681,10 +2742,16 @@ const invAccountCode = firstValue(
           ? new Date(item.bbDate).toISOString().split("T")[0]
           : "",
         qstatCode: item?.qstatCode ?? "",
-        whouseCode: item?.whouseCode ?? fromWhCode ?? "",
-        toWHcode: toWhCode ?? "",
-        locCode: item?.locCode ?? (isIntransitWarehouse(item?.whouseCode ?? fromWhCode ?? "") ? "INTRANSIT" : (fromWhDefaultLocCode || "")), 
-        tolocCode: defaultToLocCode || toWhDefaultLocCode || "", 
+
+        // Keep both aliases synchronized because the save payload supports both.
+        whouseCode: sourceWhCode,
+        frmwhouseCode: sourceWhCode,
+        toWHcode: destinationWhCode,
+        towhouseCode: destinationWhCode,
+        locCode: sourceLocCode,
+        frmlocCode: sourceLocCode,
+        tolocCode: destinationLocCode,
+
         acctCode: invAccountCode,
         sltypeCode: "",
         rcCode: "",
@@ -2730,7 +2797,10 @@ const invAccountCode = firstValue(
       return { ...prev, detailRows: updated };
     });
 
-    updateState({ itemSingleSelect: false, msLookupModalOpen: false });
+    updateState({
+      itemSingleSelect: false,
+      msLookupModalOpen: false,
+    });
   };
 
   const handleCloseLocationLookup = (row) => {

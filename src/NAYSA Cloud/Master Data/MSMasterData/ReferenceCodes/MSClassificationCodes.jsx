@@ -101,6 +101,11 @@ const normalizeRecord = (row = {}) => ({
     row.categ_desc ??
     "",
 
+  active: 
+    row.active ?? 
+    row.ACTIVE ?? 
+    "Y",
+
   registeredBy:
     row.registeredBy ??
     row.registered_by ??
@@ -133,6 +138,7 @@ const DEFAULT_FORM = {
   description: "",
   categCode: "",
   categName: "",
+  active: "Y",
 
   registeredBy: "",
   registeredDate: "",
@@ -317,6 +323,7 @@ const MSClassificationCodes = forwardRef(
               code: payload.code,
               description: payload.description,
               categCode: payload.categCode,
+              active: payload.active,
               userCode: payload.userCode,
             },
           }),
@@ -418,13 +425,15 @@ const MSClassificationCodes = forwardRef(
           .trim()
           .toUpperCase(),
 
+        active: form.active,
+
         userCode,
       };
 
       const missing = [];
 
       if (!payload.categCode) {
-        missing.push("Category");
+        missing.push("Category Code");
       }
 
       if (!payload.code) {
@@ -766,6 +775,17 @@ const MSClassificationCodes = forwardRef(
           sortable: true,
           width: 280,
         },
+
+        {
+          key: "active",
+          label: "Active",
+          width: 100,
+          render: (row) =>
+            String(row.active || "Y").toUpperCase() === "Y"
+              ? "Yes"
+              : "No",
+        },
+
       ],
       [
         canDelete,
@@ -985,6 +1005,18 @@ const MSClassificationCodes = forwardRef(
                   isReadOnly ||
                   !isEditing
                 }
+              />
+
+              <FieldRenderer
+                label="Active"
+                type="select"
+                value={form.active || "Y"}
+                options={[
+                  { value: "Y", label: "Yes" },
+                  { value: "N", label: "No" },
+                ]}
+                onChange={(v) => setField("active", v ?? "Y")}
+                disabled={isReadOnly || !isEditing}
               />
 
             </div>

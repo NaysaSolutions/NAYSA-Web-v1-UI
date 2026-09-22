@@ -60,6 +60,7 @@ const INITIAL_FORM = {
   vatCategory: "V",
   acctCode: "",
   acctName: "",
+  active: "Y",
   tblFieldArray: [],
 };
 
@@ -247,6 +248,7 @@ const VATRef = () => {
       acctName: row.acctName,
       className: classNameFromRow || classNameFromDropdown, 
       vatRate: row.vatRate !== undefined ? row.vatRate : 0,
+      active: row.active || "Y",
     });
 
     setRegistrationInfo({
@@ -462,6 +464,7 @@ const VATRef = () => {
       },
       { key: "acctCode", label: "Account Code", sortable: true, width: 120, minWidth: 120 },
       { key: "acctName", label: "Account Name", sortable: true, width: 200, minWidth: 120 },
+      { key: "active", label: "Active", width: 120 , render: (row) => (row.active === "Y" ? "Yes" : "No"),},
     ],
     [dropdowns, isMobile], 
   );
@@ -729,6 +732,18 @@ const VATRef = () => {
               required
               readOnly
             />
+
+            <FieldRenderer
+              label="Active"
+              type="select"
+              value={formData.active}
+              disabled={!isEditing}
+              options={[
+              { value: "Y", label: "Yes" },
+              { value: "N", label: "No" },
+              ]}
+              onChange={(v) => updateForm({ active: v })}
+          />
           </div>
         </div>
 

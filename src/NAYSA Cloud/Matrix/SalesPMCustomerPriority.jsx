@@ -91,6 +91,15 @@ const extractPriorityCustomers = (response) => {
     }));
 };
 
+const extractGeneralPriorityRules = (response) => {
+  const raw =
+    response?.data?.generalData?.[0]?.result ??
+    response?.data?.generalData?.result ??
+    [];
+
+  return normalizeRules(parseJsonArray(raw));
+};
+
 const SalesPMCustomerPriority = forwardRef((props, ref) => {
   const [customers, setCustomers] = useState([]);
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
@@ -141,6 +150,12 @@ const SalesPMCustomerPriority = forwardRef((props, ref) => {
 
       const response = await apiClient.get("/getPriceMatrixPrio");
       setCustomers(extractPriorityCustomers(response));
+      const savedGeneralRules = extractGeneralPriorityRules(response);
+      setGeneralRules(
+        savedGeneralRules.length > 0
+          ? savedGeneralRules
+          : normalizeRules(DEFAULT_GENERAL_PRIORITY_RULES)
+      );
     } catch (error) {
       setCustomerLoadError(
         error?.response?.data?.message ||

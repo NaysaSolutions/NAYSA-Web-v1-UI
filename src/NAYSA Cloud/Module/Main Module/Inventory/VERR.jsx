@@ -51,6 +51,7 @@ import {
   docTypePDFGuide,
 } from "@/NAYSA Cloud/Global/doctype";
 import {
+  useTopForexRate,
   useTopCurrencyRow,
   useTopDocControlRow,
   useTopDocDropDown,
@@ -217,6 +218,7 @@ const VERR = () => {
   const detailRowsRef = useRef([]);
   const detailRowsGLRef = useRef([]);
   const currRateBeforeEditRef = useRef("1.000000");
+  const [shouldGenerateGLAfterCurrRateChange, setShouldGenerateGLAfterCurrRateChange] = useState(false);
 
 
   useEffect(() => {
@@ -2224,7 +2226,11 @@ const VERR = () => {
         summary?.currCode || details[0]?.currCode || state.currCode || baseCurrency,
       ).toUpperCase();
       const selectedCurrRate =
-        parseFormattedNumber(summary?.currRate || state.currRate || 1) || 1;
+        selectedCurrCode === String(baseCurrency || "").toUpperCase()
+          ? parseFormattedNumber(state.defaultCurrRate || 1) || 1
+          : parseFormattedNumber(
+              await useTopForexRate(selectedCurrCode, header.rr_date),
+            ) || 1;
       const currencyRow = await useTopCurrencyRow(selectedCurrCode);
 
       /*
@@ -2273,7 +2279,7 @@ const VERR = () => {
         details.map(async (row, detailIndex) => {
           const itemCode = row?.itemCode || "";
           const mast = itemCode ? await loadVehicleMasterInfo(itemCode) : null;
-          const unitCost = parseFormattedNumber(row?.unitCost || 0);
+          const poUnitCost = parseFormattedNumber(row?.unitCost || 0);
           const poQuantity = parseFormattedNumber(row?.poQuantity || 0);
           const qtyBalance = parseFormattedNumber(row?.qtyBalance || 0);
           const rowCurrCode = String(row?.currCode || selectedCurrCode).toUpperCase();
@@ -2318,11 +2324,11 @@ const VERR = () => {
               poQty: poQuantity,
               balance: runningPoBalance,
               quantity: 1,
-              unitCost,
-              unitCostFx:
+              unitCost:
                 rowCurrCode === baseCurrency
-                  ? unitCost
-                  : unitCost / Math.max(selectedCurrRate, 0.000001),
+                  ? poUnitCost
+                  : poUnitCost * Math.max(selectedCurrRate, 0.000001),
+              unitCostFx: poUnitCost,
               currCode: rowCurrCode,
               currRate: selectedCurrRate,
               vatCode: rowVatCode,
@@ -2384,6 +2390,7 @@ const VERR = () => {
 
       detailRowsRef.current = mappedRows;
       detailRowsGLRef.current = [];
+      currRateBeforeEditRef.current = formatNumber(selectedCurrRate, 6);
     } catch (error) {
       console.error("VERR PO selection error", error);
       useSwalErrorAlert(
@@ -2590,6 +2597,12 @@ const VERR = () => {
     }
   };
 
+  useEffect(() => {
+    if (!shouldGenerateGLAfterCurrRateChange) return;
+    setShouldGenerateGLAfterCurrRateChange(false);
+    handleActivityOption("GenerateGL");
+  }, [shouldGenerateGLAfterCurrRateChange]);
+
   const handleCancel = () => {
     if (state.documentID && displayStatus === "OPEN") {
       updateState({ showCancelModal: true });
@@ -2652,17 +2665,39 @@ const VERR = () => {
     if (state.documentID) updateState({ showAttachModal: true });
   };
 
-  const handleHeaderCurrencyRateBlur = () => {
+  const handleHeaderCurrencyRateBlur = async () => {
     let rate = parseFormattedNumber(state.currRate || 1);
     if (!rate || rate <= 0) rate = 1;
     const oldRate = parseFormattedNumber(currRateBeforeEditRef.current || 1);
-    updateState({ currRate: formatNumber(rate, 6) });
-    if (Math.abs(rate - oldRate) < 0.0000001) return;
+    const nextRate = formatNumber(rate, 6);
+    const previousRate = formatNumber(oldRate, 6);
+
+    if (Math.abs(rate - oldRate) < 0.0000001) {
+      updateState({ currRate: nextRate });
+      return;
+    }
+
+    const result = await useSwalProceedConfirm(
+      "Apply Currency Rate changes?",
+      `Currency Rate changed from ${previousRate} to ${nextRate}. Do you want to recalculate the PHP amounts and regenerate the GL Entries?`,
+      "Yes, apply changes",
+      "No",
+    );
+
+    if (!result.isConfirmed) {
+      updateState({ currRate: previousRate });
+      return;
+    }
 
     const rows = (state.detailRows || []).map((row) =>
       recalcVehicleRow({ ...row, currRate: rate, currCode: state.currCode }),
     );
-    updateState({ detailRows: rows });
+    detailRowsRef.current = rows;
+    currRateBeforeEditRef.current = nextRate;
+    updateState({ currRate: nextRate, detailRows: rows, detailRowsGL: [] });
+    if (rows.length > 0 && isGeneralLedgerEnabled) {
+      setShouldGenerateGLAfterCurrRateChange(true);
+    }
   };
 
   const handleAddGLRow = (index = null) => {

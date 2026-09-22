@@ -825,8 +825,11 @@ const moveFocusBeforeSave = async () => {
 
 
 
-const handleActivityOption = async (action) => {
-  if ((detailRows?.length || 0) === 0) {
+const handleActivityOption = async (action, options = {}) => {
+  const workingDetailRows = options.detailRows || detailRows;
+  const workingDetailRowsGL = options.detailRowsGL || detailRowsGL;
+
+  if ((workingDetailRows?.length || 0) === 0) {
     return;
   }
 
@@ -876,7 +879,7 @@ const handleActivityOption = async (action) => {
         detailRowsGL,
       } = state;
 
-      let finalDetailRowsGL = Array.isArray(detailRowsGL) ? [...detailRowsGL] : [];
+      let finalDetailRowsGL = Array.isArray(workingDetailRowsGL) ? [...workingDetailRowsGL] : [];
 
       const formatGeneratedGLRows = (rows = []) =>
         (Array.isArray(rows) ? rows : []).map((row) => ({
@@ -908,7 +911,7 @@ const handleActivityOption = async (action) => {
         remarks: remarks || "",
         userCode: userCode,
         drcStatus,
-        dt1: detailRows.map((row, index) => ({
+        dt1: workingDetailRows.map((row, index) => ({
           lnNo: String(index + 1),
           pickStat: row.drcStat || "F",
           itemCode: row.itemCode || "",
@@ -928,7 +931,7 @@ const handleActivityOption = async (action) => {
       });
 
       if (action === "GenerateGL") {
-        const totalPickedQuantity = getTotalQuantityPicked(detailRows);
+        const totalPickedQuantity = getTotalQuantityPicked(workingDetailRows);
 
         if (totalPickedQuantity <= 0) {
           updateState({
@@ -964,7 +967,7 @@ const handleActivityOption = async (action) => {
       }
 
       if (action === "Upsert") {
-        const totalPickedQuantity = getTotalQuantityPicked(detailRows);
+        const totalPickedQuantity = getTotalQuantityPicked(workingDetailRows);
 
         /*
           Important:
@@ -983,8 +986,8 @@ const handleActivityOption = async (action) => {
             ...getGLTotalsState([]),
           });
         } else {
-          finalDetailRowsGL = Array.isArray(detailRowsGL)
-            ? [...detailRowsGL]
+          finalDetailRowsGL = Array.isArray(workingDetailRowsGL)
+            ? [...workingDetailRowsGL]
             : [];
         }
 
@@ -2016,15 +2019,17 @@ const handleBulkPickingAllocation = async (mode) => {
       });
     }
 
-    const totalPickedQuantity = getTotalQuantityPicked(updatedRows);
-
     detailRowsRef.current = updatedRows;
     updateState({
       detailRows: updatedRows,
       detailRowsGL: [],
-      triggerGLEntries: totalPickedQuantity > 0,
+      triggerGLEntries: false,
     });
     updateTotals(updatedRows);
+    await handleActivityOption("Upsert", {
+      detailRows: updatedRows,
+      detailRowsGL: [],
+    });
   } catch (error) {
     console.error(`Failed to ${actionLabel.toLowerCase()} picking allocation:`, error);
     useSwalErrorAlert("Item Picking", getApiErrorMessage(error));
@@ -2470,10 +2475,12 @@ const handleSODetailRowChange = (index, field, value) => {
   }
 
   if (field === "drcQuantity" && isRegularDrType) {
+    const freeItem = String(detailRowsRef.current?.[index]?.freeItem || "").trim().toUpperCase();
+    const isFreeItem = freeItem === "Y" || freeItem === "YES";
     const drQty = parseFormattedNumber(value || 0) || 0;
     const soBalance = parseFormattedNumber(detailRowsRef.current?.[index]?.soBalance || 0) || 0;
 
-    if (drQty > soBalance) {
+    if (!isFreeItem && drQty > soBalance) {
       useSwalErrorAlert("Invalid Consignment Quantity", "Consignment Quantity cannot be more than SO Balance.");
       return;
     }

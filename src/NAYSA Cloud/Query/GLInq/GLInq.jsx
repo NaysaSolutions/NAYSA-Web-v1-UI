@@ -2888,107 +2888,183 @@ const DualFilterInput = ({
 
 const LookupManager = ({ filters, updateFilters }) => {
   const { showLookupModal, cutoffModalType } = filters;
+
   if (!showLookupModal) return null;
 
-  const close = () =>
+  const close = () => {
     updateFilters({
       showLookupModal: false,
       lookupType: "",
       cutoffModalType: "",
     });
+  };
+
 
   const handleBranchSelect = (row) => {
+    if (!row) {
+      close();
+      return;
+    }
+
     updateFilters({
-      branchCode: row.branchCode || row.brCode || row.code,
-      branchName: row.branchName || row.brName || row.name,
+      branchCode: row.branchCode || row.brCode || row.code || "",
+      branchName: row.branchName || row.brName || row.name || "",
       showLookupModal: false,
       lookupType: "",
       cutoffModalType: "",
     });
   };
+
 
   const handleAccountSelect = (row) => {
-    const code = row.acctCode;
-    const name = row.acctName;
+    if (!row) {
+      close();
+      return;
+    }
+
+    const code = row.acctCode || "";
+    const name = row.acctName || "";
 
     if (cutoffModalType === "accStart") {
-      updateFilters({ accCodeStart: code, accNameStart: name });
+      updateFilters({
+        accCodeStart: code,
+        accNameStart: name,
+      });
     } else if (cutoffModalType === "accEnd") {
-      updateFilters({ accCodeEnd: code, accNameEnd: name });
+      updateFilters({
+        accCodeEnd: code,
+        accNameEnd: name,
+      });
     } else {
-      updateFilters({ accCode: code, accName: name });
+      updateFilters({
+        accCode: code,
+        accName: name,
+      });
     }
 
-    updateFilters({
-      showLookupModal: false,
-      lookupType: "",
-      cutoffModalType: "",
-    });
+    close();
   };
+
 
   const handleSLSelect = (row) => {
+    if (!row) {
+      close();
+      return;
+    }
+
     updateFilters({
-      slCode: row.slCode,
-      slName: row.slName,
+      slCode: row.slCode || "",
+      slName: row.slName || "",
       showLookupModal: false,
       lookupType: "",
       cutoffModalType: "",
     });
   };
+
 
   const handleRCSelect = (row) => {
-    const rcCode = row.rcCode || row.rc_code || row.code;
-    const rcName = row.rcName || row.rc_name || row.name;
+    if (!row) {
+      close();
+      return;
+    }
+
+    const rcCode =
+      row.rcCode ||
+      row.rc_code ||
+      row.code ||
+      "";
+
+    const rcName =
+      row.rcName ||
+      row.rc_name ||
+      row.name ||
+      "";
 
     if (cutoffModalType === "rcStart") {
-      updateFilters({ rcCodeStart: rcCode, rcNameStart: rcName });
+      updateFilters({
+        rcCodeStart: rcCode,
+        rcNameStart: rcName,
+      });
     } else if (cutoffModalType === "rcEnd") {
-      updateFilters({ rcCodeEnd: rcCode, rcNameEnd: rcName });
+      updateFilters({
+        rcCodeEnd: rcCode,
+        rcNameEnd: rcName,
+      });
     } else {
-      updateFilters({ rcCode, rcName });
+      updateFilters({
+        rcCode,
+        rcName,
+      });
     }
 
-    updateFilters({
-      showLookupModal: false,
-      lookupType: "",
-      cutoffModalType: "",
-    });
+    close();
   };
+
 
   const handleCutoffSelect = (row) => {
-    const cutCode = row.cutoffCode || row.cutOffCode || row.code;
-    const cutName = row.cutoffName || row.cutOffName || row.name;
+    if (!row) {
+      close();
+      return;
+    }
+
+    const cutCode =
+      row.cutoffCode ||
+      row.cutOffCode ||
+      row.code ||
+      "";
+
+    const cutName =
+      row.cutoffName ||
+      row.cutOffName ||
+      row.name ||
+      "";
 
     if (cutoffModalType === "cutoffStart") {
-      updateFilters({ cutoffStartCode: cutCode, cutoffStartName: cutName });
+      updateFilters({
+        cutoffStartCode: cutCode,
+        cutoffStartName: cutName,
+      });
     } else if (cutoffModalType === "cutoffEnd") {
-      updateFilters({ cutoffEndCode: cutCode, cutoffEndName: cutName });
+      updateFilters({
+        cutoffEndCode: cutCode,
+        cutoffEndName: cutName,
+      });
     } else {
-      updateFilters({ cutoffCode: cutCode, cutoffName: cutName });
+      updateFilters({
+        cutoffCode: cutCode,
+        cutoffName: cutName,
+      });
+    }
+
+    close();
+  };
+
+
+  const handleCurrencySelect = (row) => {
+    if (!row) {
+      close();
+      return;
     }
 
     updateFilters({
+      currCode: row.currCode || "",
+      currName: row.currName || "",
       showLookupModal: false,
       lookupType: "",
       cutoffModalType: "",
     });
   };
 
-  const handleCurrencySelect = (row) => {
-    updateFilters({
-      currCode: row.currCode || "PHP",
-      currName: row.currName || "Philippine Peso",
-      showLookupModal: false,
-      lookupType: "",
-      cutoffModalType: "",
-    });
-  };
 
   switch (cutoffModalType) {
     case "branch":
       return (
-        <SearchBranchRef isOpen={showLookupModal} onClose={handleBranchSelect} />
+        <SearchBranchRef
+          isOpen={showLookupModal}
+          onClose={handleBranchSelect}
+        />
       );
+
     case "sl":
       return (
         <SearchSLMast
@@ -2997,6 +3073,7 @@ const LookupManager = ({ filters, updateFilters }) => {
           context="sl"
         />
       );
+
     case "acc":
     case "accStart":
     case "accEnd":
@@ -3007,6 +3084,7 @@ const LookupManager = ({ filters, updateFilters }) => {
           context={cutoffModalType}
         />
       );
+
     case "rc":
     case "rcStart":
     case "rcEnd":
@@ -3017,6 +3095,7 @@ const LookupManager = ({ filters, updateFilters }) => {
           context="rc"
         />
       );
+
     case "cutoffSingle":
     case "cutoffStart":
     case "cutoffEnd":
@@ -3027,6 +3106,7 @@ const LookupManager = ({ filters, updateFilters }) => {
           context={cutoffModalType}
         />
       );
+
     case "currency":
       return (
         <CurrLookupModal
@@ -3035,8 +3115,8 @@ const LookupManager = ({ filters, updateFilters }) => {
           context={cutoffModalType}
         />
       );
+
     default:
-      close();
       return null;
   }
 };
