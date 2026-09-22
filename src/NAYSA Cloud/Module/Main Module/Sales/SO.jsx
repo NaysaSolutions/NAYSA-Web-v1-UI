@@ -1533,12 +1533,19 @@ const handleActivityOption = async (action) => {
     custCode = billToCustCode || "",
     rows = detailRows,
     docDate = documentDate,
+    preserveManualRows = false,
   } = {}) => {
     if (!Array.isArray(rows) || rows.length === 0 || !custCode) {
       return;
     }
 
-    const selectedRecords = rows.map((row, index) => ({
+    const rowsToPrice = rows
+      .map((row, index) => ({ row, index }))
+      .filter(({ row }) => !preserveManualRows || String(row?.pmType || "").trim().toUpperCase() !== "*MANUAL");
+
+    if (rowsToPrice.length === 0) return;
+
+    const selectedRecords = rowsToPrice.map(({ row }, index) => ({
       sequence: index + 1,
       itemCode: row?.itemCode || "",
     }));
@@ -1546,12 +1553,13 @@ const handleActivityOption = async (action) => {
       custCode,
       docDate,
     });
-    const updatedRows = rows.map((row, index) =>
-      applyPriceMatrixToDetailRow(
+    const updatedRows = [...rows];
+    rowsToPrice.forEach(({ row, index: rowIndex }, priceIndex) => {
+      updatedRows[rowIndex] = applyPriceMatrixToDetailRow(
         row,
-        getPriceMatrixRowForItem(priceMatrixRows, row, index)
-      )
-    );
+        getPriceMatrixRowForItem(priceMatrixRows, row, priceIndex)
+      );
+    });
 
     updateState({ detailRows: updatedRows });
     updateTotals(updatedRows);
@@ -1999,11 +2007,28 @@ const handleSaveAndPrint = async (documentID) => {
         const nextBillToCustCode = isShipTo
           ? billToCustCode || ""
           : selectedData?.custCode || "";
-        const shouldRepriceDetailRows =
+        const isBillToCustomerChanged =
           !isShipTo &&
-          detailRows.length > 0 &&
           String(nextBillToCustCode).trim() !== "" &&
           String(nextBillToCustCode).trim() !== String(billToCustCode || "").trim();
+        const hasRowsToReprice = (detailRowsRef.current || []).some(
+          (row) => String(row?.pmType || "").trim().toUpperCase() !== "*MANUAL"
+        );
+
+        if (isBillToCustomerChanged) {
+          const result = await useSwalProceedConfirm(
+            "Change Bill To Customer?",
+            hasRowsToReprice
+              ? "Changing the Bill To Customer will update the Price and Discount based on the new customer's price matrix."
+              : "Do you want to change the Bill To Customer?",
+            "Yes",
+            "No"
+          );
+
+          if (!result?.isConfirmed) return;
+        }
+
+        const shouldRepriceDetailRows = isBillToCustomerChanged && hasRowsToReprice;
         const shouldSyncShipTo = !isShipTo && !String(shipToCode || "").trim();
         const shouldSyncBillTo = isShipTo && !String(billToCustCode || "").trim();
         updateState(
@@ -2080,6 +2105,8 @@ const handleSaveAndPrint = async (documentID) => {
         if (shouldRepriceDetailRows) {
             await refreshDetailRowsFromPriceMatrix({
               custCode: nextBillToCustCode,
+              rows: detailRowsRef.current,
+              preserveManualRows: true,
             });
         }
 
@@ -2882,7 +2909,7 @@ return (
               value={billToCustCode || ""}
               disabled={isFormDisabled}
               readOnly
-              lookupDisabled={isFetchDisabled}
+              lookupDisabled={isFormDisabled}
               onLookup={() => updateState({ custModalOpen: true, modalContext: "billTo" })}
             />
 
@@ -2973,7 +3000,7 @@ return (
               value={shipToCode || ""}
               disabled={isFormDisabled}
               readOnly
-              lookupDisabled={isFetchDisabled}
+              lookupDisabled={isFormDisabled}
               onLookup={() => updateState({ custModalOpen: true, modalContext: "shipTo" })}
             />
 
@@ -3005,13 +3032,12 @@ return (
                   type="button"
                   onClick={() =>
                     !isFormDisabled &&
-                    !isFetchDisabled &&
                     updateState({ custModalOpen: true, modalContext: "shipTo" })
                   }
-                  disabled={isFormDisabled || isFetchDisabled}
+                  disabled={isFormDisabled}
                   title="Search"
                   className={`absolute right-0 top-0 h-8 sm:h-8 w-10 flex items-center justify-center rounded-r-lg border border-l-0 transition-colors ${
-                    !isFormDisabled && !isFetchDisabled
+                    !isFormDisabled
                       ? "bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white"
                       : "bg-gray-100 text-gray-400"
                   }`}
