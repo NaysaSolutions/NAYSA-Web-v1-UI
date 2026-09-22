@@ -15,7 +15,7 @@ import {
   faInfoCircle,
   faChevronDown,
   faFilePdf,
-  faVideo
+  faVideo,
 } from "@fortawesome/free-solid-svg-icons";
 
 import { apiClient, fetchData } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
@@ -23,7 +23,10 @@ import ButtonBar from "@/NAYSA Cloud/Global/ButtonBar";
 import SearchAttachment from "@/NAYSA Cloud/Lookup/SearchAttachment.jsx";
 import SearchVendMast from "@/NAYSA Cloud/Lookup/SearchVendMast.jsx";
 
-import { reftablesPDFGuide, reftablesVideoGuide } from "@/NAYSA Cloud/Global/reftable";
+import {
+  reftablesPDFGuide,
+  reftablesVideoGuide,
+} from "@/NAYSA Cloud/Global/reftable";
 
 import {
   useSwalErrorAlert,
@@ -32,7 +35,7 @@ import {
   useSwalErrorAlertAPI,
   useSwalDeleteConfirm,
   useSwalDeleteRecord,
-  useSwalProceedConfirm // Added for duplicate name check
+  useSwalProceedConfirm, // Added for duplicate name check
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 import PayeeSetupTab from "@/NAYSA Cloud/Master Data/CustMastTabs/PayeeSetupTab";
 import PayeeMasterDataTab from "@/NAYSA Cloud/Master Data/CustMastTabs/PayeeMasterDataTab";
@@ -41,10 +44,15 @@ import { usePagePermission } from "@/NAYSA Cloud/Global/usePagePermission.js";
 import PermissionBadge from "@/NAYSA Cloud/Global/PermissionBadge.jsx";
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
 
-const normalizeSlType = (v) => String(v ?? "").toUpperCase().trim();
+const normalizeSlType = (v) =>
+  String(v ?? "")
+    .toUpperCase()
+    .trim();
 
 const normalizeSource = (v) => {
-  const s = String(v ?? "").toUpperCase().trim();
+  const s = String(v ?? "")
+    .toUpperCase()
+    .trim();
   if (s === "FOREIGN") return "F";
   if (s === "LOCAL") return "L";
   return s;
@@ -157,7 +165,9 @@ const VendMast = () => {
   };
 
   const normalizeGenerationMode = (value) => {
-    const mode = String(value ?? "").trim().toUpperCase();
+    const mode = String(value ?? "")
+      .trim()
+      .toUpperCase();
 
     if (mode === "MANUAL" || mode === "M") return "Manual";
     if (mode === "AUTO" || mode === "A") return "Auto";
@@ -174,7 +184,7 @@ const VendMast = () => {
 
       if (!response?.success) {
         throw new Error(
-          response?.message || "Unable to retrieve Payee document setup."
+          response?.message || "Unable to retrieve Payee document setup.",
         );
       }
 
@@ -184,7 +194,7 @@ const VendMast = () => {
       }
 
       const mode = normalizeGenerationMode(
-        hsDoc?.docSeries ?? hsDoc?.DOC_SERIES ?? hsDoc?.doc_series
+        hsDoc?.docSeries ?? hsDoc?.DOC_SERIES ?? hsDoc?.doc_series,
       );
 
       setGenerationMode(mode);
@@ -197,7 +207,7 @@ const VendMast = () => {
         await useSwalErrorAlert(
           "Payee Code Setup",
           error?.message ||
-            "Unable to determine whether Payee Code is Auto, System, or Manual."
+            "Unable to determine whether Payee Code is Auto, System, or Manual.",
         );
       }
 
@@ -234,8 +244,12 @@ const VendMast = () => {
         const parsed = JSON.parse(row.result);
         const parsedRow = Array.isArray(parsed) ? parsed[0] : parsed;
         return {
-          code: String(parsedRow?.generatedCode ?? parsedRow?.generatedcode ?? "").trim(),
-          errorCount: Number(parsedRow?.errorcount ?? parsedRow?.errorCount ?? 0),
+          code: String(
+            parsedRow?.generatedCode ?? parsedRow?.generatedcode ?? "",
+          ).trim(),
+          errorCount: Number(
+            parsedRow?.errorcount ?? parsedRow?.errorCount ?? 0,
+          ),
           errorMsg: String(parsedRow?.errormsg ?? parsedRow?.errorMsg ?? ""),
         };
       } catch {
@@ -274,7 +288,7 @@ const VendMast = () => {
           "Payee Code Generation",
           error?.response?.data?.message ||
             error?.message ||
-            "Unable to generate Payee Code."
+            "Unable to generate Payee Code.",
         );
       }
 
@@ -309,7 +323,10 @@ const VendMast = () => {
   const [isEditing, setIsEditing] = useState(false);
 
   const refTabRef = useRef(null);
-  const [refState, setRefState] = useState({ isEditing: false, canSave: false });
+  const [refState, setRefState] = useState({
+    isEditing: false,
+    canSave: false,
+  });
 
   const allowedDuplicatePayeeNameRef = useRef("");
 
@@ -374,7 +391,9 @@ const VendMast = () => {
       return {
         errorCount: Number(data[0].errorCount ?? data[0].errorcount ?? 0),
         errorMsg: String(data[0].errorMsg ?? data[0].errormsg ?? ""),
-        generatedCode: String(data[0].generatedCode ?? data[0].generatedcode ?? "")
+        generatedCode: String(
+          data[0].generatedCode ?? data[0].generatedcode ?? "",
+        ),
       };
     }
 
@@ -392,10 +411,10 @@ const VendMast = () => {
           return {
             errorCount: Number(row.errorCount ?? row.errorcount ?? 0),
             errorMsg: String(row.errorMsg ?? row.errormsg ?? ""),
-            generatedCode: String(row.generatedCode ?? row.generatedcode ?? "")
+            generatedCode: String(row.generatedCode ?? row.generatedcode ?? ""),
           };
         }
-      } catch { }
+      } catch {}
     }
 
     const fallbackMsg = payload?.message || payload?.error || payload?.msg;
@@ -418,7 +437,8 @@ const VendMast = () => {
         return [];
       }
     }
-    if (Array.isArray(rows) && rows.length && typeof rows[0] === "object") return rows;
+    if (Array.isArray(rows) && rows.length && typeof rows[0] === "object")
+      return rows;
     return [];
   };
 
@@ -430,30 +450,24 @@ const VendMast = () => {
       const configured = (Array.isArray(rows) ? rows : [])
         .map((row) => ({
           value: normalizeSlType(
-            row?.slTypeCode ??
-              row?.sltypeCode ??
-              row?.sltype_code ??
-              ""
+            row?.slTypeCode ?? row?.sltypeCode ?? row?.sltype_code ?? "",
           ),
           label: String(
             row?.slTypeName ??
               row?.sltypeName ??
               row?.sltype_name ??
               row?.slTypeCode ??
-              ""
+              "",
           ).trim(),
           active: normalizeSlType(
-            row?.slTypeActive ??
-              row?.sltypeActive ??
-              row?.active ??
-              ""
+            row?.slTypeActive ?? row?.sltypeActive ?? row?.active ?? "",
           ),
           payee: normalizeSlType(
             row?.slTypeIncSu ??
               row?.sltypeIncSu ??
               row?.incSu ??
               row?.inc_su ??
-              ""
+              "",
           ),
         }))
         .filter((row) => row.value);
@@ -498,7 +512,7 @@ const VendMast = () => {
           "SL Type Setup",
           error?.response?.data?.message ||
             error?.message ||
-            "Unable to load SL Types from SL Master Data."
+            "Unable to load SL Types from SL Master Data.",
         );
       }
 
@@ -519,7 +533,10 @@ const VendMast = () => {
     } = options;
 
     const cleanedFilters = Object.fromEntries(
-      Object.entries(filters || {}).map(([key, value]) => [key, String(value || "").trim()])
+      Object.entries(filters || {}).map(([key, value]) => [
+        key,
+        String(value || "").trim(),
+      ]),
     );
 
     setIsLoading(true);
@@ -556,7 +573,7 @@ const VendMast = () => {
         e?.code === "ECONNABORTED"
           ? "Payee list loading timed out. Please use a filter or try again."
           : "Failed to load payee list.",
-        "error"
+        "error",
       );
       setMasterAllRows([]);
       setMasterRows([]);
@@ -650,7 +667,10 @@ const VendMast = () => {
       setIsEditing(canEdit);
     } catch (e) {
       console.error(e);
-      await useSwalErrorAlertAPI("Fetch Error", e?.message || "Failed to fetch payee.");
+      await useSwalErrorAlertAPI(
+        "Fetch Error",
+        e?.message || "Failed to fetch payee.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -672,14 +692,14 @@ const VendMast = () => {
     if (isUsed) {
       await useSwalErrorAlert(
         "Delete Not Allowed",
-        `Payee Code ${code} is already used in transaction(s).`
+        `Payee Code ${code} is already used in transaction(s).`,
       );
       return;
     }
 
     const confirm = await useSwalDeleteConfirm(
       "Delete Payee?",
-      `This will permanently delete Payee Code ${code}. This action cannot be undone.`
+      `This will permanently delete Payee Code ${code}. This action cannot be undone.`,
     );
     if (!confirm?.isConfirmed) return;
 
@@ -697,11 +717,17 @@ const VendMast = () => {
       const errorMsg = String(r0.errormsg ?? r0.errorMsg ?? "");
 
       if (errorCount > 0) {
-        await useSwalErrorAlert("Delete Not Allowed", errorMsg || "Unable to delete payee.");
+        await useSwalErrorAlert(
+          "Delete Not Allowed",
+          errorMsg || "Unable to delete payee.",
+        );
         return;
       }
 
-      await useSwalDeleteRecord("Deleted", `Payee Code ${code} has been successfully removed.`);
+      await useSwalDeleteRecord(
+        "Deleted",
+        `Payee Code ${code} has been successfully removed.`,
+      );
 
       setForm({ ...emptyForm });
       setSelectedVendCode("");
@@ -709,7 +735,10 @@ const VendMast = () => {
       await loadMasterList();
     } catch (e) {
       console.error(e);
-      await useSwalErrorAlert("Error", e?.response?.data?.message || e?.message || "Failed to delete payee.");
+      await useSwalErrorAlert(
+        "Error",
+        e?.response?.data?.message || e?.message || "Failed to delete payee.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -730,7 +759,9 @@ const VendMast = () => {
     const normalizedGenerationMode = normalizeGenerationMode(generationMode);
     const selectedSlType = normalizeSlType(form?.sltypeCode || "");
     const source = normalizeSource(form?.source || "");
-    const taxClass = String(form?.taxClass || "").trim().toUpperCase();
+    const taxClass = String(form?.taxClass || "")
+      .trim()
+      .toUpperCase();
     const isIndividual = taxClass === "WI";
     const isCorporation = taxClass === "WC";
     const isEmployee = selectedSlType === "EM";
@@ -751,8 +782,14 @@ const VendMast = () => {
       !isAddMode || normalizedGenerationMode !== "System";
     addMissing(payeeCodeRequiredNow && !code, "Payee Code");
 
-    addMissing(!String(form?.vendName || form?.custName || "").trim(), "Registered Name");
-    addMissing(!isIndividual && !String(form?.businessName || "").trim(), "Business Name");
+    addMissing(
+      !String(form?.vendName || form?.custName || "").trim(),
+      "Registered Name",
+    );
+    addMissing(
+      !isIndividual && !String(form?.businessName || "").trim(),
+      "Business Name",
+    );
     addMissing(!String(form?.vendAddr1 || "").trim(), "Address 1");
     addMissing(!source, "Source");
 
@@ -784,13 +821,13 @@ const VendMast = () => {
         : await loadPayeeSlTypes({ showError: true });
 
       const isAllowed = availableSlTypes.some(
-        (option) => normalizeSlType(option?.value) === selectedSlType
+        (option) => normalizeSlType(option?.value) === selectedSlType,
       );
 
       if (!isAllowed) {
         await useSwalErrorAlert(
           "SL Type Not Available",
-          "The selected SL Type is inactive or is not tagged Payee = Yes in SL Master Data."
+          "The selected SL Type is inactive or is not tagged Payee = Yes in SL Master Data.",
         );
         return;
       }
@@ -800,7 +837,10 @@ const VendMast = () => {
     if (isAddMode && code) {
       const isDuplicate = await checkDuplicateVendor(code);
       if (isDuplicate) {
-        await useSwalErrorAlert("Duplicate Record", `Payee Code ${code} already exists.`);
+        await useSwalErrorAlert(
+          "Duplicate Record",
+          `Payee Code ${code} already exists.`,
+        );
         return;
       }
     }
@@ -810,7 +850,7 @@ const VendMast = () => {
       const jsonData = {
         json_data: {
           action: selectedVendCode ? "edit" : "add",
-          vendCode: code, 
+          vendCode: code,
           vendName: form.vendName || form.custName || "",
           businessName: form.businessName || "",
           checkName: form.checkName || "",
@@ -853,7 +893,7 @@ const VendMast = () => {
       if (sprocErr?.errorCount > 0) {
         await useSwalErrorAlert(
           "Validation Failed",
-          sprocErr.errorMsg || "Please complete the required fields."
+          sprocErr.errorMsg || "Please complete the required fields.",
         );
         return;
       }
@@ -872,7 +912,8 @@ const VendMast = () => {
         await useSwalErrorAlert("Save Failed", String(sprocErr.errorMsg));
         return;
       }
-      const msg = e?.response?.data?.message || e?.message || "Failed to save payee.";
+      const msg =
+        e?.response?.data?.message || e?.message || "Failed to save payee.";
       await useSwalErrorAlert("Save Failed", msg);
     } finally {
       setIsLoading(false);
@@ -891,7 +932,12 @@ const VendMast = () => {
   const resetMasterFilters = async () => {
     setSubsidiaryType("");
     setMasterFilters({});
-    await loadMasterList({ page: 1, pageSize: 300, filters: {}, sltypeCode: "" });
+    await loadMasterList({
+      page: 1,
+      pageSize: 300,
+      filters: {},
+      sltypeCode: "",
+    });
   };
 
   const handleChangeMasterFilter = (key, value) => {
@@ -915,7 +961,10 @@ const VendMast = () => {
     try {
       // Give React one frame to paint the loading overlay before processing.
       await new Promise((resolve) => {
-        if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+        if (
+          typeof window !== "undefined" &&
+          typeof window.requestAnimationFrame === "function"
+        ) {
           window.requestAnimationFrame(() => resolve());
         } else {
           setTimeout(resolve, 0);
@@ -932,7 +981,9 @@ const VendMast = () => {
         const mode = normalizeGenerationMode(generationMode);
 
         if (mode === "Auto") {
-          const generatedCode = await generatePayeeCode(sl, { showError: true });
+          const generatedCode = await generatePayeeCode(sl, {
+            showError: true,
+          });
           if (!generatedCode) return;
 
           patch.vendCode = generatedCode;
@@ -978,14 +1029,14 @@ const VendMast = () => {
     if (!availableSlTypes.length) {
       await useSwalErrorAlert(
         "SL Type Setup",
-        "No active SL Type is configured with Payee = Yes. Please update SL Master Data first."
+        "No active SL Type is configured with Payee = Yes. Please update SL Master Data first.",
       );
       return;
     }
 
     const currentSl = normalizeSlType(form?.sltypeCode || "");
     const sl = availableSlTypes.some(
-      (option) => normalizeSlType(option?.value) === currentSl
+      (option) => normalizeSlType(option?.value) === currentSl,
     )
       ? currentSl
       : normalizeSlType(availableSlTypes[0]?.value || "");
@@ -1025,7 +1076,7 @@ const VendMast = () => {
       { id: "master", label: "Payee Master Data", icon: faList },
       { id: "ref", label: "Reference Codes", icon: faTags },
     ],
-    []
+    [],
   );
 
   const handleMasterRowDoubleClick = async (row) => {
@@ -1041,10 +1092,12 @@ const VendMast = () => {
   };
 
   const headerButtons = useMemo(() => {
-    const baseBtn = "flex items-center justify-center h-8 w-8 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md transition-all shadow-sm";
+    const baseBtn =
+      "flex items-center justify-center h-8 w-8 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md transition-all shadow-sm";
 
     if (activeTab === "setup") {
-      const hasRecord = String(form?.vendCode || form?.custCode || "").trim() && !form.__isNew;
+      const hasRecord =
+        String(form?.vendCode || form?.custCode || "").trim() && !form.__isNew;
 
       return [
         {
@@ -1132,7 +1185,18 @@ const VendMast = () => {
     }
 
     return [];
-  }, [activeTab, isLoading, isEditing, form, refState, canAdd, canEdit, canSave, canDelete, isReadOnly]);
+  }, [
+    activeTab,
+    isLoading,
+    isEditing,
+    form,
+    refState,
+    canAdd,
+    canEdit,
+    canSave,
+    canDelete,
+    isReadOnly,
+  ]);
 
   return (
     <div className="global-ref-main-div-ui">
@@ -1145,25 +1209,24 @@ const VendMast = () => {
               <h1 className="global-ref-headertext-ui truncate flex items-center gap-2">
                 {activeTab === "setup" && "Payee Master Data"}
                 {activeTab === "master" && "Payee Master Data"}
-                {activeTab === "ref" && "Payee Master Data"} 
+                {activeTab === "ref" && "Payee Master Data"}
               </h1>
             </div>
 
             <div className="overflow-x-auto no-scrollbar">
               <div className="flex flex-nowrap border-b border-blue-300 dark:border-gray-700">
-                
                 {tabs.map((tab) => (
                   <button
                     key={tab.id}
                     type="button"
                     onClick={() => setActiveTab(tab.id)}
                     className={`shrink-0 whitespace-nowrap px-3 py-1 sm:py-2 sm:px-4 text-[10px] sm:text-[13px] font-bold transition-all border-b-2 rounded-md
-                      ${activeTab === tab.id
-                        ? "border-blue-700 text-blue-700 bg-blue-50/50"
-                        : "border-transparent text-gray-500 hover:text-blue-500"
+                      ${
+                        activeTab === tab.id
+                          ? "border-blue-700 text-blue-700 bg-blue-50/50"
+                          : "border-transparent text-gray-500 hover:text-blue-500"
                       }`}
                   >
-                    
                     <FontAwesomeIcon icon={tab.icon} className="mr-1.5" />
                     {tab.label}
                   </button>
@@ -1175,10 +1238,10 @@ const VendMast = () => {
           {/* RIGHT: buttons stay on the far right */}
           <div className="flex-shrink-0 w-full lg:w-auto flex flex-wrap items-center justify-center lg:justify-end gap-1.5">
             <PermissionBadge
-                  permission={pagePermission}
-                  isReadOnly={isReadOnly}
-                  isFullAccess={isFullAccess}
-                />
+              permission={pagePermission}
+              isReadOnly={isReadOnly}
+              isFullAccess={isFullAccess}
+            />
             {!!headerButtons.length && <ButtonBar buttons={headerButtons} />}
             {activeTab === "setup" && (
               <div ref={guideRef} className="relative z-[60]">
@@ -1186,17 +1249,43 @@ const VendMast = () => {
                   onClick={() => setOpenGuide((v) => !v)}
                   className="flex items-center justify-center h-8 w-8 sm:w-auto sm:h-8 sm:px-4 text-[11px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-sm"
                 >
-                  <FontAwesomeIcon icon={faInfoCircle} className="text-[12px]" />
+                  <FontAwesomeIcon
+                    icon={faInfoCircle}
+                    className="text-[12px]"
+                  />
                   <span className="hidden sm:inline ml-1">Info</span>
-                  <FontAwesomeIcon icon={faChevronDown} className="hidden sm:inline ml-1 text-[10px] opacity-80" />
+                  <FontAwesomeIcon
+                    icon={faChevronDown}
+                    className="hidden sm:inline ml-1 text-[10px] opacity-80"
+                  />
                 </button>
                 {isOpenGuide && (
                   <div className="absolute right-0 mt-2 w-52 rounded-md shadow-xl bg-white ring-1 ring-black/10 z-[60] overflow-hidden">
-                    <button onClick={() => { window.open(pdfLink, "_blank"); setOpenGuide(false); }} className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 border-b border-gray-100 transition-colors">
-                      <FontAwesomeIcon icon={faFilePdf} className="mr-2 text-red-500" /> PDF Guide
+                    <button
+                      onClick={() => {
+                        window.open(pdfLink, "_blank");
+                        setOpenGuide(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 border-b border-gray-100 transition-colors"
+                    >
+                      <FontAwesomeIcon
+                        icon={faFilePdf}
+                        className="mr-2 text-red-500"
+                      />{" "}
+                      PDF Guide
                     </button>
-                    <button onClick={() => { window.open(videoLink, "_blank"); setOpenGuide(false); }} className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 transition-colors">
-                      <FontAwesomeIcon icon={faVideo} className="mr-2 text-blue-500" /> Video Guide
+                    <button
+                      onClick={() => {
+                        window.open(videoLink, "_blank");
+                        setOpenGuide(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 text-xs hover:bg-blue-50 transition-colors"
+                    >
+                      <FontAwesomeIcon
+                        icon={faVideo}
+                        className="mr-2 text-blue-500"
+                      />{" "}
+                      Video Guide
                     </button>
                   </div>
                 )}
@@ -1207,9 +1296,9 @@ const VendMast = () => {
       </div>
 
       <div
-                className="global-tran-tab-div-ui mt-36 sm:mt-32 md:mt-28 lg:mt-24"
-                style={{ minHeight: "calc(100vh - 170px)" }}
-            >
+        className="global-tran-tab-div-ui mt-36 sm:mt-32 md:mt-28 lg:mt-24"
+        style={{ minHeight: "calc(100vh - 170px)" }}
+      >
         {activeTab === "setup" && (
           <PayeeSetupTab
             isLoading={isLoading}
@@ -1233,11 +1322,54 @@ const VendMast = () => {
             ]}
             onSltypeChange={handlePayeeSlTypeChange}
             onChangeForm={(patch) => {
-              // Reset duplicate name memory if name is manually changed
-              if (patch.vendName || patch.custName) {
+              const hasField = (field) =>
+                Object.prototype.hasOwnProperty.call(patch, field);
+
+              if (hasField("vendName") || hasField("custName")) {
                 allowedDuplicatePayeeNameRef.current = "";
               }
-              updateForm(patch);
+
+              setForm((prev) => {
+                const next = { ...prev, ...patch };
+
+                const vendNameChanged =
+                  hasField("vendName") && patch.vendName !== prev.vendName;
+
+                const custNameChanged =
+                  hasField("custName") && patch.custName !== prev.custName;
+
+                const nameChanged = vendNameChanged || custNameChanged;
+
+                // Keep both Registered Name fields synchronized.
+                if (nameChanged) {
+                  const registeredName =
+                    (vendNameChanged ? patch.vendName : patch.custName) ?? "";
+
+                  next.vendName = registeredName;
+                  next.custName = registeredName;
+                }
+
+                const taxClass = String(next.taxClass ?? "")
+                  .trim()
+                  .toUpperCase();
+                const previousTaxClass = String(prev.taxClass ?? "")
+                  .trim()
+                  .toUpperCase();
+
+                const taxClassChanged =
+                  hasField("taxClass") && taxClass !== previousTaxClass;
+
+                // WC = Corporation, WI = Individual
+                if (
+                  (taxClass === "WC" || taxClass === "WI") &&
+                  (nameChanged || taxClassChanged)
+                ) {
+                  next.businessName = next.vendName || next.custName || "";
+                  next.checkName = next.businessName;
+                }
+
+                return next;
+              });
             }}
             // onNameBlur={confirmDuplicatePayeeName} // Pass the name blur logic
             onSelectCustomerCode={fetchVendorByCode}
@@ -1284,7 +1416,7 @@ const VendMast = () => {
           CodeLabel: "Payee Code",
           Code: documentNo,
           NameLabel: "Payee Name",
-          Name: form.vendName || "N/A"
+          Name: form.vendName || "N/A",
         }}
       />
 
@@ -1295,9 +1427,10 @@ const VendMast = () => {
         onClose={async (selected) => {
           setIsSearchOpen(false);
           if (!selected) return;
-          const code = getValue(selected?.vendCode) || getValue(selected?.vend_code);
+          const code =
+            getValue(selected?.vendCode) || getValue(selected?.vend_code);
           if (code) {
-              await fetchVendorByCode(code);
+            await fetchVendorByCode(code);
           }
         }}
       />
