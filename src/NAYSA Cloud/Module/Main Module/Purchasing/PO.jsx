@@ -99,6 +99,7 @@ import {
 } from '@/NAYSA Cloud/Global/selectedData';
 
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
+import { getAccessibleMenuModules, hasAccessibleMenuModule } from "@/NAYSA Cloud/Global/menuAccess.js";
 import {
   transactionActionsCellStyle,
   transactionActionsHeaderStyle,
@@ -137,6 +138,11 @@ const PO = () => {
   const addTypeDropdownRef = useRef(null);
   const navigate = useNavigate();
   const { companyInfo, currentUserRow, getAllDropDown, refsLoaded, getAllTopHSDocRow, getReplacementVatRow, getAllTopVatAmount } = useAuth();
+  const accessibleMenuModules = getAccessibleMenuModules();
+  const canAddFGItem = hasAccessibleMenuModule(accessibleMenuModules, "FG");
+  const canAddMSItem = hasAccessibleMenuModule(accessibleMenuModules, "MS");
+  const canAddRMItem = hasAccessibleMenuModule(accessibleMenuModules, "RM");
+  const canAddVEItem = hasAccessibleMenuModule(accessibleMenuModules, "VE");
   const { resetFlag } = useReset();
   const location = useLocation();
   const [isViewDocument, setIsViewDocument] = useState(false);
@@ -4655,7 +4661,7 @@ const PO = () => {
                         </div>
 
                         <div className="p-2">
-                          <button
+                          {canAddFGItem && <button
                             type="button"
                             className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
                             onClick={() => {
@@ -4677,9 +4683,9 @@ const PO = () => {
                             <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
                               FG
                             </span>
-                          </button>
+                          </button>}
 
-                          <button
+                          {canAddMSItem && <button
                             type="button"
                             className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
                             onClick={() => {
@@ -4701,9 +4707,9 @@ const PO = () => {
                             <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
                               MS
                             </span>
-                          </button>
+                          </button>}
 
-                          <button
+                          {canAddRMItem && <button
                             type="button"
                             className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
                             onClick={() => {
@@ -4725,9 +4731,9 @@ const PO = () => {
                             <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
                               RM
                             </span>
-                          </button>
+                          </button>}
 
-                          <button
+                          {canAddVEItem && <button
                             type="button"
                             className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
                             onClick={() => {
@@ -4749,7 +4755,7 @@ const PO = () => {
                             <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
                               VE
                             </span>
-                          </button>
+                          </button>}
 
                           {!isDirectPo && <>
                           <div className="my-2 border-t border-slate-100 dark:border-slate-700" />
