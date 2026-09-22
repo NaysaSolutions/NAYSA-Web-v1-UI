@@ -355,4 +355,26 @@ SLQueryReport.buildJsonData = (payload) => ({
   cutoffCode: payload?.cutoffCode || "",
 });
 
+SLQueryReport.parseResponse = (response) => {
+  const rawResult = response?.data?.[0]?.result;
+  if (!rawResult) return null;
+
+  const parsed = typeof rawResult === "string" ? JSON.parse(rawResult) : rawResult;
+  const block = Array.isArray(parsed) ? parsed[0] || {} : parsed || {};
+  const toNumber = (value) => {
+    const number = Number(String(value ?? 0).replace(/,/g, ""));
+    return Number.isFinite(number) ? number : 0;
+  };
+
+  return {
+    rows: Array.isArray(block.dt1) ? block.dt1 : [],
+    summary: {
+      beginningBalance: toNumber(block.begbal),
+      totalDebit: toNumber(block.debit),
+      totalCredit: toNumber(block.credit),
+      endingBalance: toNumber(block.endbal),
+    },
+  };
+};
+
 export default SLQueryReport;

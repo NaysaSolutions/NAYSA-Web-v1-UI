@@ -1134,6 +1134,7 @@ import {
   faArrowTrendUp,
   faArrowTrendDown,
 } from "@fortawesome/free-solid-svg-icons";
+import { ArrowLeftRight, Layers } from "lucide-react";
 
 import {
   useTopCompanyRow,
@@ -1707,6 +1708,8 @@ export default function GLINQ({
           (Array.isArray(colsResp) ? colsResp : []);
         const finalRows = parsedReport?.rows ?? normalizeRows(rowsResp);
         const isEmpty = !finalRows || finalRows.length === 0;
+        const rowSummary = summarizeRows(finalRows);
+        const reportSummary = parsedReport?.summary || {};
 
         setViews((prev) => ({
           ...prev,
@@ -1723,7 +1726,11 @@ export default function GLINQ({
               : "",
             comparisonPeriods: [],
             reportData: parsedReport?.reportData ?? null,
-            summary: summarizeRows(finalRows),
+            summary: {
+              ...rowSummary,
+              ...reportSummary,
+              showBalances: ["glQuery", "slQuery"].includes(tabKey) && Boolean(String(payload.accCode || "").trim()),
+            },
           },
         }));
       } catch (e) {
@@ -2376,14 +2383,26 @@ const ContextCards = ({ summary, activeTab }) => {
     ];
   } else {
     totals = [
+      ...(["glQuery", "slQuery"].includes(activeTab) && summary?.showBalances
+        ? [{ label: "Beginning Balance", value: formatNumberDisplay(summary?.beginningBalance), icon: Layers, iconClass: "bg-slate-100 text-slate-700", valueClass: "text-slate-700" }]
+        : []),
       {
         label: "Total Debit",
         value: formatNumberDisplay(summary?.totalDebit),
+        faIcon: faArrowTrendUp,
+        iconClass: "bg-emerald-50 text-emerald-600",
+        valueClass: "text-emerald-700",
       },
       {
         label: "Total Credit",
         value: formatNumberDisplay(summary?.totalCredit),
+        faIcon: faArrowTrendDown,
+        iconClass: "bg-rose-50 text-rose-500",
+        valueClass: "text-rose-600",
       },
+      ...(["glQuery", "slQuery"].includes(activeTab) && summary?.showBalances
+        ? [{ label: "Ending Balance", value: formatNumberDisplay(summary?.endingBalance), icon: ArrowLeftRight, iconClass: "bg-blue-50 text-blue-600", valueClass: "text-blue-700" }]
+        : []),
     ];
   }
 
@@ -2391,11 +2410,12 @@ const ContextCards = ({ summary, activeTab }) => {
     <div className="flex flex-wrap justify-end gap-2">
       {totals.map((item, index) => {
         const isPositive = index === 0;
-        const iconClass = isPositive
+        const iconClass = item.iconClass || (isPositive
           ? "bg-emerald-50 text-emerald-600"
-          : "bg-rose-50 text-rose-500";
-        const valueClass = isPositive ? "text-emerald-700" : "text-rose-600";
-        const icon = isPositive ? faArrowTrendUp : faArrowTrendDown;
+          : "bg-rose-50 text-rose-500");
+        const valueClass = item.valueClass || (isPositive ? "text-emerald-700" : "text-rose-600");
+        const icon = item.faIcon || (isPositive ? faArrowTrendUp : faArrowTrendDown);
+        const Icon = item.icon;
 
         return (
             <div
@@ -2403,7 +2423,7 @@ const ContextCards = ({ summary, activeTab }) => {
               className="group flex w-full items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm transition-all duration-200 hover:border-slate-300 hover:shadow-md sm:w-[216px]"
             >
               <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-transform duration-200 group-hover:scale-110 ${iconClass}`}>
-                <FontAwesomeIcon icon={icon} className="text-sm" />
+                {Icon ? <Icon size={16} /> : <FontAwesomeIcon icon={icon} className="text-sm" />}
               </div>
               <div className="min-w-0">
                 <div className="truncate text-[10px] font-semibold uppercase leading-tight tracking-widest text-slate-400">
