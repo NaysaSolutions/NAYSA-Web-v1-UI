@@ -3615,6 +3615,17 @@ return (
             </button>
           </div>
 
+          <div className="flex justify-end">
+            <button
+              onClick={() => handleActivityOption("GenerateGL")}
+              className="global-tran-button-generateGL"
+              disabled={isLoading}
+              style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
+            >
+              {isLoading ? "Generating..." : "Generate GL Entries"}
+            </button>
+          </div>
+
         </div>
 
         {/* GL Details Table */}
