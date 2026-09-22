@@ -165,7 +165,7 @@ const PC = () => {
     documentID: null, documentNo: "", documentDate: toDateInputValue(useGetCurrentDay()), status: "OPEN", noReprints: "0",
     branchCode: currentUserRow?.branchCode || "", branchName: currentUserRow?.branchName || "",
     userCode: currentUserRow?.userCode || "", whCode: "", whName: "", locCode: "", locName: "",
-    refNo: "", countRef: "V", particular: "", detailRows: [], detailRowsGL: [], tblFieldArray: [],
+    refNo: "", countRef: "A", particular: "", detailRows: [], detailRowsGL: [], tblFieldArray: [],
     isLoading: false, branchModalOpen: false, warehouseLookupOpen: false, locationLookupOpen: false,
     itemLookupOpen: false, showQstatModal: false, showCancelModal: false, showAttachModal: false,
     showAllTranDocNo: false, selectedRowIndex: null, selectedWH: "",
@@ -388,7 +388,7 @@ const PC = () => {
 
   const emptyRow = () => ({
     lnNo: detailRowsRef.current.length + 1, itemCode:"", itemName:"", categCode:"", uomCode:"", element:"N",
-    invType, qstatCode:"", lotNo:"", colorCode:"", orderStamp:"", fifoDocNo:"",
+    invType, qstatCode:"", lotNo:"", colorCode:"", orderStamp:"", fifoDocCode:"", fifoDocNo:"", uniqueKey:"", groupId:"",
     unitCost:formatNumber(0,decUcost), qtyHand:formatNumber(0,decQty),
     varQty:formatNumber(0,decQty), actualQty:formatNumber(0,decQty),
     whouseCode:whCode, locCode, bbDate:""
@@ -405,7 +405,7 @@ const PC = () => {
       documentID:null, documentNo:"", documentDate:toDateInputValue(useGetCurrentDay()), status:"OPEN", noReprints:"0",
       branchCode:currentUserRow?.branchCode||"", branchName:currentUserRow?.branchName||"",
       userCode:currentUserRow?.userCode||"", whCode:"", whName:"", locCode:"", locName:"",
-      refNo:"", countRef:"V", particular:"", detailRows:[], detailRowsGL:[],
+      refNo:"", countRef:"A", particular:"", detailRows:[], detailRowsGL:[],
       selectedRowIndex:null, selectedWH:""
     });
   }, [currentUserRow, invType]);
@@ -421,7 +421,7 @@ const PC = () => {
     lnNo:r.lnNo??r.lineNo??i+1, itemCode:r.itemCode??r.itemNo??"", itemName:r.itemName??r.itemDesc??"",
     categCode:r.categCode??r.categoryCode??"", uomCode:r.uomCode??"", element:(r.element || r.Element || "E").toUpperCase(), invType:r.invType??invType, qstatCode:r.qstatCode??r.qsCode??"",
     lotNo:r.lotNo??"", colorCode:r.colorCode??"", orderStamp:r.orderStamp??"", rrNo:r.rrNo??"",
-    fifoDocNo:r.fifoDocNo??r.fifoDocno??r.rrNo??"", groupId:r.groupId??"",
+    fifoDocCode:r.fifoDocCode??"", fifoDocNo:r.fifoDocNo??r.fifoDocno??r.rrNo??"", uniqueKey:r.uniqueKey??"", groupId:r.groupId??"",
     unitCost:formatNumber(parseFormattedNumber(r.unitCost??0)||0,decUcost),
     qtyHand:formatNumber(parseFormattedNumber(r.qtyHand??0)||0,decQty),
     varQty:formatNumber(parseFormattedNumber(r.varQty??0)||0,decQty),
@@ -468,7 +468,7 @@ const PC = () => {
         locCode:h.locCode||"",
         locName:h.locName||"",
         refNo:h.refNo||"",
-        countRef:h.countRef||"V",
+        countRef:h.countRef||"A",
         particular:h.particular||"",
         detailRows:rows,
         detailRowsGL:(h.dt2||[]).map((r)=>({ ...r, debit:formatNumber(r.debit||0), credit:formatNumber(r.credit||0), debitFx1:formatNumber(r.debitFx1||0), creditFx1:formatNumber(r.creditFx1||0), debitFx2:formatNumber(r.debitFx2||0), creditFx2:formatNumber(r.creditFx2||0) })),
@@ -517,7 +517,7 @@ const PC = () => {
 
   const invalidNegative = (rows) => countRef==="V" ? rows.filter(r => {
     const v=parseFormattedNumber(r.varQty)||0, q=parseFormattedNumber(r.qtyHand)||0;
-    return v<0 && Math.abs(v)>q;
+    return String(r.element || "E").toUpperCase() !== "N" && v<0 && Math.abs(v)>q;
   }) : [];
 
   const validate = async (forPosting=false) => {
@@ -525,6 +525,14 @@ const PC = () => {
       Branch:branchCode, "Physical Count Date":documentDate, "Count Reference":countRef
     },"Physical Count"))) return false;
     if (!detailRows.length) { useSwalInfoAlert("Physical Count","No Physical Count Details."); return false; }
+    const incompleteNewRows=detailRows.filter(r=>{
+      if(String(r.element||"").toUpperCase()!=="N") return false;
+      const quantity=countRef==="V"?(parseFormattedNumber(r.varQty)||0):(parseFormattedNumber(r.actualQty)||0);
+      return !r.whouseCode||!r.locCode||quantity<=0;
+    });
+    if(incompleteNewRows.length){useSwalErrorAlert("Physical Count",`Warehouse, Location, and a positive Quantity are required for New Record: Line(s) ${incompleteNewRows.map(x=>x.lnNo).join(", ")}`);return false;}
+    const negativeNewRows=detailRows.filter(r=>String(r.element||"").toUpperCase()==="N"&&(parseFormattedNumber(r.varQty)||0)<0);
+    if(negativeNewRows.length){useSwalErrorAlert("Physical Count",`New Record allows positive variance only: Line(s) ${negativeNewRows.map(x=>x.lnNo).join(", ")}`);return false;}
     const neg=invalidNegative(detailRows);
     if(neg.length){ useSwalErrorAlert("Physical Count",`Insufficient Quantity on Hand: Line(s) ${neg.map(x=>x.lnNo).join(", ")}`); return false; }
     if(forPosting){
@@ -619,12 +627,19 @@ const PC = () => {
         return Math.abs(variance) > 0;
       });
 
-      if (action === "S" && hasVariance && finalDetailRowsGL.length === 0) {
+      // Always rebuild GL from the current count before saving. This prevents
+      // previously generated entries from becoming stale after a detail edit.
+      if (action === "S" && hasVariance) {
         const newGlEntries = await useGenerateGLEntries("PC", buildPcData([]));
         if (!newGlEntries || newGlEntries.length === 0) return;
         finalDetailRowsGL = newGlEntries;
         detailRowsGLRef.current = newGlEntries;
         updateState({ detailRowsGL: newGlEntries, ...getGLTotalsState(newGlEntries) });
+      } else if (action === "S") {
+        // A zero movement must not retain GL entries generated from an older count.
+        finalDetailRowsGL = [];
+        detailRowsGLRef.current = [];
+        updateState({ detailRowsGL: [], ...getGLTotalsState([]) });
       }
 
       const pcData = buildPcData(finalDetailRowsGL);
@@ -736,6 +751,9 @@ const PC = () => {
     if(key==="actualQty" && countRef==="A"){
       row.varQty=formatNumber((parseFormattedNumber(value)||0)-(parseFormattedNumber(row.qtyHand)||0),decQty);
     }
+    if(key==="varQty" && countRef==="V"){
+      row.actualQty=formatNumber((parseFormattedNumber(row.qtyHand)||0)+(parseFormattedNumber(value)||0),decQty);
+    }
     rows[i]=row; detailRowsRef.current=rows; updateState({detailRows:rows,detailRowsGL:[]});
   };
 
@@ -761,6 +779,7 @@ const PC = () => {
       r.qtyHand = formatNumber(0, decQty);
       r.actualQty = formatNumber(0, decQty);
       r.varQty = formatNumber(0, decQty);
+      r.fifoDocCode = x.fifoDocCode || "";
       r.fifoDocNo = x.fifoDocNo || x.fifoDocno || x.rrNo || "";
       if (r.itemCode) addedRows.push(r);
     });
@@ -793,6 +812,7 @@ const PC = () => {
       whouseCode: selected.whouseCode || row.whouseCode || whCode || "",
       locCode: selected.locCode || row.locCode || locCode || "",
       fifoDocNo: selected.fifoDocNo  || row.fifoDocNo || "",
+      fifoDocCode: selected.fifoDocCode || row.fifoDocCode || "",
       actualQty: formatNumber(0, decQty),
       varQty: formatNumber(0, decQty),
       element: "N",
@@ -850,8 +870,26 @@ const PC = () => {
   };
 
   const commitNumericCell=(index,field,value,decimals)=>{
-    const number=parseFormattedNumber(value);
-    changeRow(index,field,formatNumber(Number.isFinite(number)?number:0,decimals));
+    const row=detailRowsRef.current[index]||{};
+    let number=parseFormattedNumber(value);
+    number=Number.isFinite(number)?number:0;
+
+    if(field==="varQty"&&countRef==="V"){
+      const isNew=String(row.element||"").toUpperCase()==="N";
+      const qtyHand=parseFormattedNumber(row.qtyHand)||0;
+
+      if(isNew&&number<0){
+        useSwalErrorAlert("Physical Count","New Record allows positive variance only.");
+        number=0;
+      }else if(!isNew&&number<(-qtyHand)){
+        useSwalErrorAlert("Physical Count",`Negative variance cannot exceed Quantity on Hand of ${formatNumber(qtyHand,decQty)}.`);
+        number=-qtyHand;
+      }
+    }
+
+    const formattedValue=formatNumber(number,decimals);
+    changeRow(index,field,formattedValue);
+    return formattedValue;
   };
 
   const openItemLookup = async () => {
@@ -924,7 +962,8 @@ const PC = () => {
         onKeyDown={(e)=>{
           if(e.key!=="Enter"||readOnly||isFormDisabled)return;
           e.preventDefault();
-          commitNumericCell(index, field, e.currentTarget.value, decimals);
+          const formattedValue=commitNumericCell(index,field,e.currentTarget.value,decimals);
+          e.currentTarget.value=formattedValue;
           if (field === "actualQty" && countRef === "A") {
             const rows = [...detailRowsRef.current];
             const current = rows[index] || {};
@@ -955,8 +994,8 @@ const PC = () => {
       fifoDocNo:()=> <td key={column.key} className="global-tran-td-ui" style={style}>{textInput("fifoDocNo",{readOnly:true,className:"text-center"})}</td>,
       unitCost:()=> <td key={column.key} className="global-tran-td-ui" style={style}>{numericInput("unitCost",{decimals:decUcost,readOnly: isFormDisabled || row.element === "E"})}</td>,
       qtyHand:()=> <td key={column.key} className="global-tran-td-ui" style={style}>{numericInput("qtyHand",{decimals:decQty,readOnly:true})}</td>,
-      actualQty:()=> <td key={column.key} className="global-tran-td-ui" style={style}>{numericInput("actualQty",{decimals:decQty, readOnly: isFormDisabled})}</td>,
-      varQty:()=> <td key={column.key} className="global-tran-td-ui" style={style}>{numericInput("varQty",{decimals:decQty,readOnly: countRef === "A" || isFormDisabled || (row.element === "E" && !isNewRecordRow),allowNegative:true})}</td>,
+      actualQty:()=> <td key={column.key} className="global-tran-td-ui" style={style}>{numericInput("actualQty",{decimals:decQty,readOnly:countRef === "V" || isFormDisabled})}</td>,
+      varQty:()=> <td key={column.key} className="global-tran-td-ui" style={style}>{numericInput("varQty",{decimals:decQty,readOnly:countRef !== "V" || isFormDisabled,allowNegative:!isNewRecordRow})}</td>,
       whouseCode:()=>lookupCell("whouseCode",()=>updateState({selectedRowIndex:index,selectedWH:row.whouseCode,warehouseLookupOpen:true}),{disabled:isFormDisabled || row.element === "E" || !isNewRecordRow}),
       locCode:()=>lookupCell("locCode",()=>updateState({selectedRowIndex:index,selectedWH:row.whouseCode,locationLookupOpen:true}),{disabled: isFormDisabled || row.element === "E" || !isNewRecordRow || !row.whouseCode}),
     };
@@ -1158,8 +1197,7 @@ const PC = () => {
           const locCodeValue = row.locCode || row.LocCode || locCode || "";
           const whouseCodeValue = row.whouseCode || row.whCode || whCode || "";
           const bbDateValue = row.bbDate ? new Date(row.bbDate).toISOString().split("T")[0] : "";
-          const uniqueKeyValue = row.uniqueKey ?? row.order_id ?? "";
-          const groupIdValue = row.groupId ?? row.order_id ?? "";
+          const uniqueKeyValue = row.uniqueKey ?? row.groupId ?? row.order_id ?? "";
 
           return {
             lnNo: index + 1,
@@ -1173,9 +1211,10 @@ const PC = () => {
             lotNo: row.lotNo || "",
             colorCode: row.colorCode || "",
             orderStamp: row.orderStamp || "",
+            fifoDocCode: row.fifoDocCode || "",
             fifoDocNo: row.fifoDocNo || "",
             uniqueKey: uniqueKeyValue,
-            groupId: groupIdValue,
+            groupId: "",
             unitCost: formatNumber(unitCost, decUcost),
             qtyHand: formatNumber(qtyHand, decQty),
             varQty: formatNumber(0, decQty),
@@ -1218,6 +1257,7 @@ const PC = () => {
           if (key === "ln") exportRow[key] = row.lnNo ?? row.ln ?? rowIndex + 1;
           else if (key === "element") exportRow[key] = row.element || "N";
           else if (key === "fifoDocNo") exportRow[key] = row.fifoDocNo ?? row.fifoDocno ?? row.rrNo ?? "";
+          else if (["unitCost", "qtyHand", "actualQty", "varQty"].includes(key)) exportRow[key] = parseFormattedNumber(row[key] ?? 0) || 0;
           else exportRow[key] = row[key] ?? "";
         });
         return exportRow;
@@ -1241,14 +1281,34 @@ const PC = () => {
 
   const uploadExcel=async(e)=>{
     const file=e.target.files?.[0]; e.target.value=""; if(!file)return;
+    updateState({isLoading:true});
     try{
-      const rows=await handleSingleUploadExcelFile(file);
-      const response=await postRequest("/validatePCUpload",{json_data:{branchCode,invType,whCode,locCode,countRef,dt1:rows}});
-      const result=extractSingleUploadValidationResult(response);
-      if(result?.errors?.length){showSingleUploadErrorList(result.errors,"Physical Count Upload");return;}
-      const loaded=(result?.rows||result?.data||[]).map(normalizeRow);
+      const columns=visiblePcDetailColumns.map(column=>({key:column.key,label:column.label.toUpperCase()}));
+      const uploadResult=await handleSingleUploadExcelFile({
+        file,
+        columns,
+        parseRow:({rawValuesByKey})=>{
+          const row={};
+          columns.forEach(column=>{row[column.key]=rawValuesByKey[column.key]?.value??"";});
+          row.lnNo=parseFormattedNumber(row.ln)||0;
+          ["unitCost","qtyHand","actualQty","varQty"].forEach(key=>{row[key]=parseFormattedNumber(row[key])||0;});
+          return row;
+        },
+        validateRows:async(rows)=>{
+          const response=await postRequest("/validatePCUpload",{json_data:{branchCode,invType,whCode,locCode,countRef,dt1:rows}});
+          return extractSingleUploadValidationResult(response);
+        },
+      });
+      if(uploadResult?.cancelled)return;
+      if(!uploadResult?.ok){showSingleUploadErrorList(uploadResult?.title||"Physical Count Upload",uploadResult?.errors||[]);return;}
+      const result=uploadResult.validationResult;
+      if(!result){showSingleUploadErrorList("Physical Count Upload",["Unable to read the upload validation response."]);return;}
+      if(Number(result.errorCount||0)>0||result?.errors?.length){showSingleUploadErrorList("Physical Count Upload",(result.errors||[]).map(error=>error.errorMsg||error.message||String(error)));return;}
+      const loaded=(result.rows||[]).map(normalizeRow);
+      if(!loaded.length){showSingleUploadErrorList("Physical Count Upload",["No validated Physical Count records were returned."]);return;}
       detailRowsRef.current=loaded; updateState({detailRows:loaded,detailRowsGL:[]});
     }catch(err){useSwalErrorAlert("Physical Count",err?.message||"Upload failed.");}
+    finally{updateState({isLoading:false});}
   };
 
   return (
@@ -1439,7 +1499,7 @@ const PC = () => {
                     id="countRef"
                     label="Count Reference"
                     type="select"
-                    value={countRef || "V"}
+                    value={countRef || "A"}
                     disabled={isFormDisabled}
                     onChange={(val) => updateState({ countRef: val })}
                     options={[
