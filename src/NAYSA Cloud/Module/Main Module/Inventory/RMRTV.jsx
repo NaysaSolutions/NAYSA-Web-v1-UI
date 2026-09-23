@@ -552,8 +552,11 @@ useEffect(() => {
 
       updateState({
         
-      branchCode: "HO",
-      branchName: "Head Office",
+      branchCode: currentUserRow?.branchCode || "",
+      branchName: currentUserRow?.branchName || "",
+
+
+
       userCode:user.USER_CODE,
       documentDate: useGetCurrentDayV2(),
 
