@@ -135,6 +135,12 @@ const isNonPurchasesApType = (value) =>
       .trim()
       .toUpperCase(),
   );
+const isReimbursementLikeApType = (value) =>
+  ["APV05", "APV06"].includes(
+    String(value || "")
+      .trim()
+      .toUpperCase(),
+  );
 const isRequirementEnabled = (...values) =>
   values.some((value) =>
     ["Y", "YES", "TRUE"].includes(
@@ -1626,7 +1632,7 @@ const APV = () => {
   };
 
 
-    const buildTransactionPayload = (glRows = detailRowsGL, invoiceRows = detailRows) => ({
+  const buildTransactionPayload = (glRows = detailRowsGL, invoiceRows = detailRows) => ({
     branchCode,
     apvNo: documentNo || "",
     apvId: documentID || "",
@@ -1660,6 +1666,134 @@ const APV = () => {
       dt1Lineno: entry.dt1Lineno || "",
     })),
   });
+
+  const getAccountRequirement = (accountRow) => ({
+    reqRc: isRequirementEnabled(accountRow?.reqRc, accountRow?.reqRC, accountRow?.rcReq, accountRow?.recRc) ? "Y" : "N",
+    reqSl: isRequirementEnabled(accountRow?.reqSl, accountRow?.reqSL, accountRow?.slReq, accountRow?.recSl) ? "Y" : "N",
+  });
+
+  const buildGlParticular = (acctName, slName, rcName) =>
+    [acctName, slName, rcName]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .join(" / ");
+
+  const buildGlRow = ({
+    accountRow,
+    acctCode,
+    acctName = "",
+    row = {},
+    debit = 0,
+    credit = 0,
+    vatCode = "",
+    atcCode = "",
+    forceSupplierSl = false,
+  }) => {
+    const accountRequirement = getAccountRequirement(accountRow);
+    const requiresRc = accountRequirement.reqRc === "Y";
+    const requiresSl = accountRequirement.reqSl === "Y" || forceSupplierSl;
+    const selectedSlType = row.sltypeCode || vendName?.sltypeCode || "SU";
+    const selectedSlCode = row.slCode || vendCode || "";
+    const selectedSlName = row.slName || vendName?.vendName || "";
+    const selectedAcctName = acctName || accountRow?.acctName || accountRow?.acct_name || "";
+    const selectedRcName = requiresRc ? row.rcName || "" : "";
+    const selectedParticular = buildGlParticular(selectedAcctName, requiresSl ? selectedSlName : "", selectedRcName);
+
+    return {
+      acctCode: acctCode || "",
+      acctName: selectedAcctName,
+      rcCode: requiresRc ? row.rcCode || "REQ RC" : "",
+      rcName: selectedRcName,
+      sltypeCode: requiresSl ? selectedSlType : "",
+      slCode: requiresSl ? selectedSlCode || "REQ SL" : "",
+      slName: requiresSl ? selectedSlName : "",
+      particular: selectedParticular,
+      debit: formatNumber(debit),
+      credit: formatNumber(credit),
+      debitFx1: "0.00",
+      creditFx1: "0.00",
+      debitFx2: "0.00",
+      creditFx2: "0.00",
+      vatCode,
+      atcCode,
+      slRefNo: row.siNo || "",
+      slrefDate: normalizeSlrefDate(row.siDate),
+      remarks: row.remarks || header.remarks || "",
+      reqRc: requiresRc ? "Y" : "N",
+      reqSl: requiresSl ? "Y" : "N",
+      dt1Lineno: row.lnNo || "",
+    };
+  };
+
+  const buildReimbursementLikeGLEntries = async () => {
+    const apAccountRow = apAccountCode ? await useTopAccountRow(apAccountCode) : null;
+    const generatedRows = [];
+
+    for (let index = 0; index < detailRows.length; index += 1) {
+      const row = detailRows[index] || {};
+      const rcDetails = row.rcCode && row.rcCode !== "REQ RC" ? await fetchRCDetails(row.rcCode) : null;
+      const lineRow = { ...row, lnNo: String(index + 1), rcName: row.rcName || rcDetails?.rcName || "" };
+      const grossAmount = parseFormattedNumber(row.siAmount || row.amount || 0) || 0;
+      const vatAmount = parseFormattedNumber(row.vatAmount || 0) || 0;
+      const atcAmount = parseFormattedNumber(row.atcAmount || 0) || 0;
+      const debitAcct = String(row.debitAcct || "").trim();
+      const debitAccountRow = debitAcct ? await useTopAccountRow(debitAcct) : null;
+      const vatRow = row.vatCode ? await useTopVatRow(row.vatCode) : null;
+      const atcRow = row.atcCode ? await useTopATCRow(row.atcCode) : null;
+      const vatAcctCode = vatRow?.acctCode || vatRow?.acct_code || "";
+      const atcAcctCode = atcRow?.ewtAcct || atcRow?.ewt_acct || atcRow?.acctCode || atcRow?.acct_code || "";
+
+      generatedRows.push(
+        buildGlRow({
+          accountRow: debitAccountRow,
+          acctCode: debitAcct,
+          row: lineRow,
+          debit: grossAmount - vatAmount,
+        }),
+      );
+
+      if (vatAmount > 0 && vatAcctCode) {
+        const vatAccountRow = await useTopAccountRow(vatAcctCode);
+        generatedRows.push(
+          buildGlRow({
+            accountRow: vatAccountRow,
+            acctCode: vatAcctCode,
+            acctName: vatRow?.acctName || vatRow?.acct_name || "",
+            row: lineRow,
+            debit: vatAmount,
+            vatCode: row.vatCode || "",
+          }),
+        );
+      }
+
+      if (atcAmount > 0 && atcAcctCode) {
+        const atcAccountRow = await useTopAccountRow(atcAcctCode);
+        generatedRows.push(
+          buildGlRow({
+            accountRow: atcAccountRow,
+            acctCode: atcAcctCode,
+            acctName: atcRow?.acctName || atcRow?.acct_name || "",
+            row: lineRow,
+            credit: atcAmount,
+            atcCode: row.atcCode || "",
+          }),
+        );
+      }
+
+      generatedRows.push(
+        buildGlRow({
+          accountRow: apAccountRow,
+          acctCode: apAccountCode,
+          acctName: apAccountName,
+          row: lineRow,
+          credit: grossAmount - atcAmount,
+          forceSupplierSl: true,
+        }),
+      );
+    }
+
+    return generatedRows.filter((row) => (parseFormattedNumber(row.debit) || 0) + (parseFormattedNumber(row.credit) || 0) !== 0);
+  };
 
   // Main action dispatcher: Generate GL, then Upsert
 
@@ -1764,6 +1898,24 @@ const APV = () => {
             };
 
             finalGlEntries = [blankRow, apRow];
+          } else if (isReimbursementLikeApType(selectedApType)) {
+            if (!apAccountCode) {
+              useSwalErrorAlert("Generate GL", "AP Account is required before generating GL entries.");
+              return;
+            }
+
+            if (!detailRows.length) {
+              useSwalErrorAlert("Generate GL", "Please add at least one invoice detail row before generating GL entries.");
+              return;
+            }
+
+            const missingDebitAccountIndex = detailRows.findIndex((row) => !String(row.debitAcct || "").trim());
+            if (missingDebitAccountIndex >= 0) {
+              useSwalErrorAlert("Generate GL", `DR Account is required in row ${missingDebitAccountIndex + 1} before generating GL entries.`);
+              return;
+            }
+
+            finalGlEntries = await buildReimbursementLikeGLEntries();
           } else {
             const generatedResponse = await useGenerateGLEntries(docType, glData, { includeInvoiceDetails: selectedApType === "APV01" });
             const generatedEntries = Array.isArray(generatedResponse) ? generatedResponse : generatedResponse?.glEntries;

@@ -444,7 +444,7 @@ const Location = forwardRef(
         {/* Modals */}
         <SearchWareMast
           isOpen={isWarehouseModalOpen}
-          filter="Active" // <-- Changed "ActiveAll" to "Active" to match standard filtering logic
+          filter="ActiveAll"
           onClose={(row) => {
             setWarehouseModalOpen(false);
             if (row) {
