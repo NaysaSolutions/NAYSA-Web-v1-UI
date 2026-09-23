@@ -3134,6 +3134,10 @@ function ModuleLicensingTab() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [savingKey, setSavingKey] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [
+    selectedMenuKeys,
+    setSelectedMenuKeys,
+  ] = useState([]);
 
   const moduleKeyFor = useCallback(
     (module) =>
@@ -3244,6 +3248,23 @@ function ModuleLicensingTab() {
           );
         });
 
+        setSelectedMenuKeys((current) => {
+          const validInstalledMenuKeys = new Set(
+            nextModules.flatMap((module) =>
+              (Array.isArray(module?.items)
+                ? module.items
+                : []
+              )
+                .filter((item) => Boolean(item?.exists))
+                .map((item) => item.snapshotKey)
+            )
+          );
+
+          return current.filter((key) =>
+            validInstalledMenuKeys.has(key)
+          );
+        });
+
         setActiveModuleKey((current) => {
           if (
             current &&
@@ -3263,6 +3284,7 @@ function ModuleLicensingTab() {
         if (initial) {
           setModules([]);
           setSelectedModuleKeys([]);
+          setSelectedMenuKeys([]);
         }
 
         await showApiError({
@@ -3361,6 +3383,68 @@ function ModuleLicensingTab() {
     );
   }, [activeModule, searchTerm]);
 
+  const installedFilteredItems = useMemo(
+    () =>
+      filteredItems.filter((item) =>
+        Boolean(item.exists)
+      ),
+    [filteredItems]
+  );
+
+  const selectedMenus = useMemo(() => {
+    const selected = new Set(selectedMenuKeys);
+
+    return (Array.isArray(activeModule?.items)
+      ? activeModule.items
+      : []
+    ).filter(
+      (item) =>
+        Boolean(item.exists) &&
+        selected.has(item.snapshotKey)
+    );
+  }, [activeModule, selectedMenuKeys]);
+
+  const allVisibleInstalledMenusSelected =
+    installedFilteredItems.length > 0 &&
+    installedFilteredItems.every((item) =>
+      selectedMenuKeys.includes(item.snapshotKey)
+    );
+
+  const toggleMenuSelection = (snapshotKey) => {
+    setSelectedMenuKeys((current) =>
+      current.includes(snapshotKey)
+        ? current.filter(
+            (key) => key !== snapshotKey
+          )
+        : [...current, snapshotKey]
+    );
+  };
+
+  const toggleSelectAllVisibleMenus = () => {
+    const visibleKeys = installedFilteredItems.map(
+      (item) => item.snapshotKey
+    );
+
+    setSelectedMenuKeys((current) => {
+      const selected = new Set(current);
+      const allSelected = visibleKeys.every((key) =>
+        selected.has(key)
+      );
+
+      if (allSelected) {
+        visibleKeys.forEach((key) =>
+          selected.delete(key)
+        );
+      } else {
+        visibleKeys.forEach((key) =>
+          selected.add(key)
+        );
+      }
+
+      return [...selected];
+    });
+  };
+
   const toggleModuleSelection = (moduleKey) => {
     setSelectedModuleKeys((current) =>
       current.includes(moduleKey)
@@ -3446,6 +3530,112 @@ function ModuleLicensingTab() {
     } finally {
       setSavingKey("");
     }
+  };
+
+  const removeSelectedMenus = async () => {
+    if (selectedMenus.length === 0) {
+      await showValidation({
+        title: "No menus selected",
+        message:
+          "Select at least one installed menu using the checkbox before continuing.",
+        details: [
+          "Only installed menus can be selected for removal.",
+          "Use the checkbox in the table header to select all visible installed menus.",
+        ],
+      });
+      return;
+    }
+
+    const preview = selectedMenus
+      .slice(0, 8)
+      .map(
+        (item) =>
+          `${item.menuName} (${item.menuCode})`
+      );
+
+    if (selectedMenus.length > 8) {
+      preview.push(
+        `+ ${selectedMenus.length - 8} more menu(s)`
+      );
+    }
+
+    const confirmation =
+      await useSwalDeleteConfirm(
+        `Remove ${selectedMenus.length} Selected Menu(s)?`,
+        `${selectedMenus.length} installed HS_MENU row(s) under ${activeModule?.name || "the selected module"} will be removed. They remain recoverable from the tenant JSON master.\n\n${preview
+          .map((item) => `• ${item}`)
+          .join("\n")}`
+      );
+
+    if (!confirmation?.isConfirmed) return;
+
+    setSavingKey("bulk-menu-remove");
+
+    let removedMenus = 0;
+    let affectedRows = 0;
+    const failedMenus = [];
+
+    for (const item of selectedMenus) {
+      try {
+        const { data } = await apiClient.post(
+          "/heartstrong/modules",
+          {
+            scope: "menu",
+            snapshotKey: item.snapshotKey,
+            enabled: false,
+          },
+          {
+            withCredentials: true,
+          }
+        );
+
+        removedMenus += 1;
+        affectedRows += Number(
+          data?.data?.affectedRows ?? 0
+        );
+      } catch (error) {
+        failedMenus.push({
+          item,
+          message: errorText(
+            error,
+            "Unknown server error"
+          ),
+        });
+      }
+    }
+
+    await load({ silent: true });
+
+    setSelectedMenuKeys(
+      failedMenus.map(
+        ({ item }) => item.snapshotKey
+      )
+    );
+
+    if (removedMenus > 0) {
+      await useSwalDeleteRecord(
+        "Removed",
+        `${removedMenus} menu(s) removed. ${affectedRows} HS_MENU row(s) were deleted and remain recoverable from JSON.`
+      );
+    }
+
+    if (failedMenus.length > 0) {
+      await showApiError({
+        title: `${failedMenus.length} menu operation(s) failed`,
+        error: {
+          message:
+            "Some selected menus could not be removed. Failed menus remain selected.",
+        },
+        fallback:
+          "Some selected menus could not be removed.",
+        details: failedMenus.map(
+          ({ item, message }) =>
+            `${item.menuName} (${item.menuCode}): ${message}`
+        ),
+      });
+    }
+
+    setSavingKey("");
   };
 
   const updateWholeModule = async (
@@ -3643,6 +3833,7 @@ function ModuleLicensingTab() {
           {
             scope: "module",
             moduleCode: module.code,
+            moduleName: module.name,
             enabled,
           },
           {
@@ -3981,6 +4172,7 @@ function ModuleLicensingTab() {
                             moduleKey
                           );
                           setSearchTerm("");
+                          setSelectedMenuKeys([]);
                         }}
                         className="min-w-0 flex-1 text-left"
                       >
@@ -4046,7 +4238,34 @@ function ModuleLicensingTab() {
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                  <div className="flex items-center gap-2">
+                    <label className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-[10px] font-black text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-blue-950/30">
+                      <input
+                        type="checkbox"
+                        checked={
+                          allVisibleInstalledMenusSelected
+                        }
+                        onChange={
+                          toggleSelectAllVisibleMenus
+                        }
+                        disabled={
+                          savingKey !== "" ||
+                          installedFilteredItems.length === 0
+                        }
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-600"
+                      />
+
+                      {allVisibleInstalledMenusSelected
+                        ? "Clear Visible"
+                        : "Select Visible"}
+                    </label>
+
+                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-black text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                      {selectedMenus.length} selected
+                    </span>
+                  </div>
+
                   <div className="relative">
                     <Search
                       size={14}
@@ -4065,6 +4284,25 @@ function ModuleLicensingTab() {
                       className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 py-2 pl-8 pr-3 text-xs font-semibold outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 dark:focus:ring-sky-950 sm:w-52"
                     />
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={removeSelectedMenus}
+                    disabled={
+                      savingKey !== "" ||
+                      selectedMenus.length === 0
+                    }
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-rose-600 px-3 py-2 text-xs font-black text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Trash2 size={13} />
+                    {savingKey === "bulk-menu-remove"
+                      ? "Removing Selected..."
+                      : `Remove Selected${
+                          selectedMenus.length > 0
+                            ? ` (${selectedMenus.length})`
+                            : ""
+                        }`}
+                  </button>
 
                   <button
                     type="button"
@@ -4119,6 +4357,24 @@ function ModuleLicensingTab() {
               <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700 text-xs">
                 <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-800">
                   <tr>
+                    <th className="w-[44px] px-3 py-2.5 text-center">
+                      <input
+                        type="checkbox"
+                        checked={
+                          allVisibleInstalledMenusSelected
+                        }
+                        onChange={
+                          toggleSelectAllVisibleMenus
+                        }
+                        disabled={
+                          savingKey !== "" ||
+                          installedFilteredItems.length === 0
+                        }
+                        title="Select all visible installed menus"
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-600"
+                      />
+                    </th>
+
                     <th className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
                       Menu Code
                     </th>
@@ -4147,16 +4403,40 @@ function ModuleLicensingTab() {
                       item.snapshotKey;
                     const operationKey =
                       `menu:${key}`;
+                    const menuSelected =
+                      selectedMenuKeys.includes(key);
 
                     return (
                       <tr
                         key={key}
                         className={
-                          item.exists
-                            ? "hover:bg-sky-50/40"
-                            : "bg-rose-50/50 hover:bg-rose-50"
+                          menuSelected
+                            ? "bg-blue-50/70 hover:bg-blue-50 dark:bg-blue-950/20 dark:hover:bg-blue-950/30"
+                            : item.exists
+                              ? "hover:bg-sky-50/40 dark:hover:bg-slate-800/60"
+                              : "bg-rose-50/50 hover:bg-rose-50 dark:bg-rose-950/20 dark:hover:bg-rose-950/30"
                         }
                       >
+                        <td className="px-3 py-2.5 text-center">
+                          <input
+                            type="checkbox"
+                            checked={menuSelected}
+                            onChange={() =>
+                              toggleMenuSelection(key)
+                            }
+                            disabled={
+                              savingKey !== "" ||
+                              !item.exists
+                            }
+                            title={
+                              item.exists
+                                ? `Select ${item.menuName}`
+                                : "Removed menus cannot be selected for removal"
+                            }
+                            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-35 dark:border-slate-600"
+                          />
+                        </td>
+
                         <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[10px] font-black text-blue-700 dark:text-blue-300">
                           {item.menuCode || "—"}
                         </td>
@@ -4230,7 +4510,7 @@ function ModuleLicensingTab() {
                   {filteredItems.length === 0 && (
                     <tr>
                       <td
-                        colSpan={5}
+                        colSpan={6}
                         className="px-6 py-12 text-center text-sm text-slate-500 dark:text-slate-400"
                       >
                         No matching menu rows were found.
@@ -4243,11 +4523,14 @@ function ModuleLicensingTab() {
 
             <div className="flex flex-col gap-1 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-2 text-[10px] font-semibold text-slate-500 dark:text-slate-400 sm:flex-row sm:items-center sm:justify-between">
               <span>
-                {filteredItems.length} menu row(s)
-                displayed.
+                {filteredItems.length} menu row(s) displayed
+                {selectedMenus.length > 0
+                  ? ` · ${selectedMenus.length} selected`
+                  : ""}.
               </span>
 
               <span>
+                Select installed menus and use Remove Selected.
                 Removed rows remain recoverable from JSON.
               </span>
             </div>
