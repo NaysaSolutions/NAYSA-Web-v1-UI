@@ -22,6 +22,7 @@ import {
   RotateCcw,
   ImagePlus,
   CircleHelp,
+  Headset,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { FiSun, FiMoon } from "react-icons/fi";
@@ -778,6 +779,28 @@ const Navbar = ({
                 </div>
                 <div className="text-xs text-slate-500 dark:text-slate-400">
                   Edit profile/password
+                </div>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsDropdownOpen(false);
+                navigate("/support-center");
+              }}
+              className={`${dropdownItemClass} hover:bg-blue-50 dark:hover:bg-blue-500/10`}
+            >
+              <div className={`${dropdownIconWrapClass} group-hover:bg-blue-100 group-hover:text-blue-600 dark:group-hover:bg-blue-500/20 dark:group-hover:text-blue-300`}>
+                <Headset className="h-4 w-4" />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                  Support Center
+                </div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">
+                  Create and track support tickets
                 </div>
               </div>
             </button>

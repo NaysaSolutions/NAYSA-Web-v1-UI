@@ -1211,29 +1211,13 @@ function MSStockCardQuery() {
   };
 
   const viewStockCardDocument = (row) => {
-    const docType = String(row?.docType || "").trim().toUpperCase();
-    const docNo = String(row?.docNo || "").trim();
-    const branchCode = String(row?.branchCode || stockCardFilters?.branchCode || "").trim();
-    const documentRoutes = {
-      MSRR: { path: "/page/MSRR", field: "rrNo" },
-      MSIS: { path: "/page/MSIS", field: "msisNo" },
-      MSAJ: { path: "/page/MSAJ", field: "msajNo" },
-      MSRTV: { path: "/page/MSRTV", field: "msrtvNo" },
-      MSST: { path: "/page/MSST", field: "msstNo" },
-    };
-    const documentRoute = documentRoutes[docType];
-
-    if (!documentRoute || !docNo || !branchCode) {
+    const pathUrl = String(row?.pathUrl || "").trim();
+    if (!pathUrl) {
       useSwalErrorAlert("View Document", "This stock movement document cannot be opened.");
       return;
     }
-
-    const query = new URLSearchParams({
-      [documentRoute.field]: docNo,
-      branchCode,
-      viewDocument: "true",
-    });
-    window.open(`${window.location.origin}${documentRoute.path}?${query.toString()}`, "_blank", "noopener,noreferrer");
+    const url = new URL(pathUrl, window.location.origin);
+    window.open(url.toString(), "_blank", "noopener,noreferrer");
   };
 
   // ─── Stock Card Tab ───────────────────────────────────────────────────────
