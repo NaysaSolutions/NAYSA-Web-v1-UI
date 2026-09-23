@@ -91,6 +91,7 @@ import {
 } from "@/NAYSA Cloud/Global/behavior.jsx";
 
 import { LoadingSpinner } from "@/NAYSA Cloud/Global/utilities.jsx";
+import { getAccessibleMenuModules, hasAccessibleMenuModule } from "@/NAYSA Cloud/Global/menuAccess.js";
 
 // Header
 import Header from "@/NAYSA Cloud/Components/Header";
@@ -159,6 +160,11 @@ const resolveDecimalPlaces = (...values) => {
   const location = useLocation(); 
   const [isViewDocument, setIsViewDocument] = useState(false);
   const { companyInfo, currentUserRow,getAllDropDown,refsLoaded,getAllTopHSDocRow } = useAuth();
+  const accessibleMenuModules = getAccessibleMenuModules();
+  const canAddFGItem = hasAccessibleMenuModule(accessibleMenuModules, "FG");
+  const canAddMSItem = hasAccessibleMenuModule(accessibleMenuModules, "MS");
+  const canAddRMItem = hasAccessibleMenuModule(accessibleMenuModules, "RM");
+  const canAddVEItem = hasAccessibleMenuModule(accessibleMenuModules, "VE");
   const [hsOptionRow, setHsOptionRow] = useState(null);
   const decQty = resolveDecimalPlaces(
     hsOptionRow?.itemDecqtyPur,
@@ -2526,7 +2532,7 @@ const renderPrDetailColumn = (columnKey, row, index) => {
         </div>
 
         <div className="p-2">
-          <button
+          {canAddFGItem && <button
             type="button"
             className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
             onClick={() => {
@@ -2548,9 +2554,9 @@ const renderPrDetailColumn = (columnKey, row, index) => {
             <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
               FG
             </span>
-          </button>
+          </button>}
 
-          <button
+          {canAddMSItem && <button
             type="button"
             className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
             onClick={() => {
@@ -2572,9 +2578,9 @@ const renderPrDetailColumn = (columnKey, row, index) => {
             <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
               MS
             </span>
-          </button>
+          </button>}
 
-          <button
+          {canAddRMItem && <button
             type="button"
             className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
             onClick={() => {
@@ -2596,9 +2602,9 @@ const renderPrDetailColumn = (columnKey, row, index) => {
             <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
               RM
             </span>
-          </button>
+          </button>}
 
-          <button
+          {canAddVEItem && <button
             type="button"
             className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
             onClick={() => {
@@ -2620,7 +2626,7 @@ const renderPrDetailColumn = (columnKey, row, index) => {
             <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
               VE
             </span>
-          </button>
+          </button>}
 
           {false && (
           <>

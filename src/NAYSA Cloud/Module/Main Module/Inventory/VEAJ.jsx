@@ -3064,7 +3064,7 @@ const renderVeajDetailColumn = (columnKey, row, index) => {
 
       return <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("quantity", { allowNegative: true, decimals: hasFixedVehicleQuantity ? 0 : decQty, readOnly: isFormDisabled || hasFixedVehicleQuantity, value: hasFixedVehicleQuantity ? fixedVehicleQuantity : undefined })}</td>;
     },
-    unitCost: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("unitCost", { decimals: decUcost, readOnly: isFormDisabled || selectedAJType === "IL" || (selectedAJType === "IR" && row.operation === "S") })}</td>,
+    unitCost: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{amountInput("unitCost", { allowNegative: selectedAJType === "CA", decimals: decUcost, readOnly: isFormDisabled || selectedAJType === "IL" || (selectedAJType === "IR" && row.operation === "S") })}</td>,
     itemAmount: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="text" className={`w-full h-7 text-xs bg-transparent text-right focus:outline-none focus:ring-0 ${textColorClass}`.trim()} value={formatNumber(parseFormattedNumber(row.itemAmount)) || ""} readOnly /></td>,
     chassisNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("chassisNo", { maxLength: useGetFieldLength(tblFieldArray, "cs_no") })}</td>,
     make: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("make", { readOnly: isFormDisabled || ["BB", "IG"].includes(selectedAJType), maxLength: useGetFieldLength(tblFieldArray, "make") })}</td>,
@@ -3612,6 +3612,17 @@ return (
               onClick={() => updateState({ GLactiveTab: "invoice" })}
             >
               General Ledger
+            </button>
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              onClick={() => handleActivityOption("GenerateGL")}
+              className="global-tran-button-generateGL"
+              disabled={isLoading}
+              style={{ visibility: isFormDisabled ? "hidden" : "visible" }}
+            >
+              {isLoading ? "Generating..." : "Generate GL Entries"}
             </button>
           </div>
 

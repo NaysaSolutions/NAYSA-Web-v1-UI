@@ -959,7 +959,13 @@ function VEStockCardQuery() {
       { key: "itemCode", header: "Item Code", size: 120, width: 120, minWidth: 120, cellClassName: "text-left text-[11px]" },
       { key: "itemName", header: "Item Name", size: 300, width: 300, minWidth: 120, cellClassName: "text-left text-[11px]" },
       { key: "uomCode", header: "UOM", size: 100, width: 100, minWidth: 100, cellClassName: "text-center text-[11px]" },
-      { key: "rrDate", header: "RR Date", size: 90, width: 90, minWidth: 90, cellClassName: "text-center text-[11px]", type: "date" },
+      { key: "model", header: "Model", size: 130, width: 130, minWidth: 120, cellClassName: "text-left text-[11px]" },
+      { key: "serialNo", header: "Serial No.", size: 140, width: 140, minWidth: 120, cellClassName: "text-left text-[11px]" },
+      { key: "engineNo", header: "Engine No.", size: 140, width: 140, minWidth: 120, cellClassName: "text-left text-[11px]" },
+      { key: "prodNo", header: "Production No.", size: 140, width: 140, minWidth: 120, cellClassName: "text-left text-[11px]" },
+      { key: "color", header: "Color", size: 120, width: 120, minWidth: 110, cellClassName: "text-left text-[11px]" },
+      { key: "csNo", header: "Chassis / CS No.", size: 150, width: 150, minWidth: 130, cellClassName: "text-left text-[11px]" },
+      // { key: "rrDate", header: "RR Date", size: 90, width: 90, minWidth: 90, cellClassName: "text-center text-[11px]", type: "date" },
       { key: "rrNo", header: "RR No", size: 140, width: 140, minWidth: 140, cellClassName: "text-[11px]" },
       { key: "unitCost", header: "Unit Cost", size: 120, width: 120, minWidth: 120, cellClassName: "text-right", type: "amount", decimals: 6 },
       { key: "qtyIn", header: "Qty In", size: 100, width: 100, minWidth: 100, cellClassName: "text-right text-emerald-700 font-semibold", type: "amount", decimals: 4 },
@@ -1025,10 +1031,10 @@ function VEStockCardQuery() {
       { key: "qtyIn", header: "Qty In", size: 110, cellClassName: "text-right text-emerald-700 font-semibold", type: "amount", decimals: 4 },
       { key: "qtyOut", header: "Qty Out", size: 110, cellClassName: "text-right text-rose-600 font-semibold", type: "amount", decimals: 4 },
       { key: "balance", header: "Balance", size: 110, cellClassName: "text-right font-bold", type: "amount", decimals: 4 },
-      { key: "runBal", header: "Run Bal", size: 110, cellClassName: "text-right font-bold", type: "amount", decimals: 4 },
-      { key: "unitCost", header: "Unit Cost", size: 120, cellClassName: "text-right", type: "amount", decimals: 6 },
+      // { key: "runBal", header: "Run Bal", size: 110, cellClassName: "text-right font-bold", type: "amount", decimals: 4 },
+      // { key: "unitCost", header: "Unit Cost", size: 120, cellClassName: "text-right", type: "amount", decimals: 6 },
       { key: "amount", header: "Amount", size: 130, cellClassName: "text-right font-semibold", type: "amount", decimals: 2 },
-      { key: "stockVal", header: "Stock Value", size: 130, cellClassName: "text-right font-semibold", type: "amount", decimals: 2 },
+      // { key: "stockVal", header: "Stock Value", size: 130, cellClassName: "text-right font-semibold", type: "amount", decimals: 2 },
       { key: "postedBy", header: "Posted By", size: 140 },
       { key: "dateStamp", header: "Date Stamp", size: 120, type: "date" },
       { key: "timeStamp", header: "Time Stamp", size: 110 },
@@ -1063,7 +1069,7 @@ function VEStockCardQuery() {
           ),
         },
         { key: "itemNo", header: "Item No", size: 150, cellClassName: "font-mono text-xs" },
-        { key: "itemDescription", header: "Item Description", size: 260 },
+        { key: "itemDescription", header: "Item Description", size: 400 },
         { key: "uom", header: "UOM", size: 80, cellClassName: "text-center" },
         { key: "category", header: "Category", size: 180 },
         { key: "itemClass", header: "Item Class", size: 120 },
@@ -1072,13 +1078,12 @@ function VEStockCardQuery() {
         { key: "quantityIn", header: "Qty In", size: 110, type: "amount", decimals: 4, cellClassName: "text-right text-emerald-700 font-semibold" },
         { key: "quantityOut", header: "Qty Out", size: 110, type: "amount", decimals: 4, cellClassName: "text-right text-rose-600 font-semibold" },
         { key: "endingBalance", header: "End. Balance", size: 130, type: "amount", decimals: 4, cellClassName: "text-right font-bold" },
-        { key: "unitCost", header: "Unit Cost", size: 120, type: "amount", decimals: 6, cellClassName: "text-right" },
         { key: "amount", header: "Amount", size: 130, type: "amount", decimals: 2, cellClassName: "text-right font-semibold" },
         { key: "inventoryAcct", header: "Inventory Acct", size: 140 },
       ],
       perVehicle: [
         { key: "itemNo", header: "Item No", size: 150, cellClassName: "font-mono text-xs" },
-        { key: "itemDescription", header: "Vehicle Item", size: 220 },
+        { key: "itemDescription", header: "Vehicle Item", size: 400 },
         { key: "csNo", header: "CS No.", size: 130 },
         { key: "serialNo", header: "Serial No.", size: 140 },
         { key: "engineNo", header: "Engine No.", size: 140 },
@@ -1092,7 +1097,6 @@ function VEStockCardQuery() {
         { key: "quantityIn", header: "Qty In", size: 110, type: "amount", decimals: 4, cellClassName: "text-right text-emerald-700 font-semibold" },
         { key: "quantityOut", header: "Qty Out", size: 110, type: "amount", decimals: 4, cellClassName: "text-right text-rose-600 font-semibold" },
         { key: "endingBalance", header: "End. Balance", size: 130, type: "amount", decimals: 4, cellClassName: "text-right font-bold" },
-        { key: "unitCost", header: "Unit Cost", size: 120, type: "amount", decimals: 6, cellClassName: "text-right" },
         { key: "amount", header: "Amount", size: 130, type: "amount", decimals: 2, cellClassName: "text-right font-semibold" },
       ],
     }),
@@ -1150,6 +1154,31 @@ function VEStockCardQuery() {
         ),
       },
       ...balanceSummaryColumnsForTable,
+    ];
+    const allocationActionColumns = [
+      {
+        key: "__view",
+        label: "View",
+        width: 60,
+        minWidth: 60,
+        filterable: false,
+        sortable: false,
+        className: "text-center",
+        render: (row) => (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              viewStockCardDocument(row);
+            }}
+            className="inline-flex items-center justify-center rounded-md bg-blue-600 px-1.5 py-1 text-white shadow-sm transition hover:bg-blue-700 active:scale-95"
+            title="View Document"
+          >
+            <Eye size={12} />
+          </button>
+        ),
+      },
+      ...allocationColumnsForTable,
     ];
 
     return (
@@ -1306,7 +1335,7 @@ function VEStockCardQuery() {
             {/* Allocation Details */}
             <TablePanel title="Allocation Details" badge={selectedAllocatedRows.length || undefined}>
               <SearchGlobalReferenceTable
-                columns={allocationColumnsForTable}
+                columns={allocationActionColumns}
                 data={selectedAllocatedRows}
                 isLoading={balanceQuery.isLoading}
                 isFetching={balanceQuery.isFetching}
@@ -1697,40 +1726,16 @@ function VEStockCardQuery() {
   };
 
   const viewStockCardDocument = (row) => {
-    const docType = String(row?.docType || "").trim().toUpperCase();
-    const docNo = String(row?.docNo || "").trim();
-    const branchCode = String(
-      row?.branchCode || stockCardFilters?.branchCode || "",
-    ).trim();
-    const documentRoutes = {
-      VERR: { path: "/page/VERR", field: "rrNo" },
-      VERTV: { path: "/page/VERTV", field: "vertvNo" },
-      VEAJ: { path: "/page/VEAJ", field: "adjNo" },
-      VEST: { path: "/page/VEST", field: "vestNo" },
-      VESR: { path: "/page/VESR", field: "srNo" },
-      VDR: { path: "/page/VDR", field: "vdrNo" },
-      VSI: { path: "/page/VSI", field: "vsiNo" },
-    };
-    const documentRoute = documentRoutes[docType];
-
-    if (!documentRoute || !docNo || !branchCode) {
+    const pathUrl = String(row?.pathUrl || "").trim();
+    if (!pathUrl) {
       useSwalErrorAlert(
         "View Document",
         "This stock movement document cannot be opened.",
       );
       return;
     }
-
-    const query = new URLSearchParams({
-      [documentRoute.field]: docNo,
-      branchCode,
-      viewDocument: "true",
-    });
-    window.open(
-      `${window.location.origin}${documentRoute.path}?${query.toString()}`,
-      "_blank",
-      "noopener,noreferrer",
-    );
+    const url = new URL(pathUrl, window.location.origin);
+    window.open(url.toString(), "_blank", "noopener,noreferrer");
   };
 
   const viewVehicleDocument = (transaction) => {

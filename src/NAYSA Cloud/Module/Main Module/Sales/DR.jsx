@@ -3776,6 +3776,8 @@ const DR = () => {
 
     shipToCode: "",
     shipToName: "",
+    deliveryToCode: "",
+    deliveryToName: "",
     shipToAddress: "",
 
     tblFieldArray :[],
@@ -3872,6 +3874,8 @@ const DR = () => {
   branchName,
   shipToCode,
   shipToName,
+  deliveryToCode,
+  deliveryToName,
   shipToAddress,
   whseCode,
   whseName,
@@ -4249,6 +4253,8 @@ useEffect(() => {
       noReprints: "0",
       shipToCode: "",
       shipToName: "",
+      deliveryToCode: "",
+      deliveryToName: "",
       shipToAddress: "",
       documentNo: "",
       documentID: "",
@@ -4375,6 +4381,8 @@ const fetchTranData = async (documentNo, branchCode,direction='') => {
       drTranType: data.drTranType || data.drtranType || "DR01",
       shipToCode: data.custCode,
       shipToName: data.custName,
+      deliveryToCode: data.shipToCode || data.custCode || "",
+      deliveryToName: data.shipToName || data.custName || "",
       shipToAddress:data.shipToAddr,
       whseCode: data.whouseCode || "",
       whseName: data.whouseName || "",
@@ -4447,6 +4455,8 @@ const handleActivityOption = async (action, options = {}) => {
         documentID,
         shipToCode,
         shipToName,
+        deliveryToCode,
+        deliveryToName,
         shipToAddress,
         drTranType,
         refDocNo1,
@@ -4480,6 +4490,8 @@ const handleActivityOption = async (action, options = {}) => {
         drTranType: drTranType || "DR01",
         custCode: shipToCode,
         custName: shipToName,
+        shipToCode: deliveryToCode,
+        shipToName: deliveryToName,
         shipToAddr: shipToAddress,
         refDrNo1: refDocNo1,
         refDrNo2: refDocNo2,
@@ -4821,18 +4833,6 @@ useEffect(() => {
     });
   };
 
-  const getOpenSOShipToAddress = (records = []) => {
-    const addressKeys = ["shipto_addr", "shipToAddr", "shipToAddress", "shipToAddr1"];
-    const source = (records || []).find((record) =>
-      addressKeys.some((key) => String(record?.[key] || "").trim())
-    );
-
-    if (!source) return "";
-
-    const key = addressKeys.find((field) => String(source?.[field] || "").trim());
-    return String(source?.[key] || "").trim();
-  };
-
   const getUniqueOpenSORemarks = (records = []) => {
     const seen = new Set();
 
@@ -4902,7 +4902,10 @@ useEffect(() => {
     }
 
     const rowsToInsert = selectedRecords.map(mapOpenSORecordToDetailRow);
-    const selectedShipToAddress = getOpenSOShipToAddress(headerSourceRecords);
+    const shipToSource = headerSourceRecords[0] || {};
+    const selectedShipToCode = String(shipToSource.shiptoCustcode || "").trim();
+    const selectedShipToName = String(shipToSource.shiptoCustName || "").trim();
+    const selectedShipToAddress = String(shipToSource.shipto_addr || "").trim();
     const nextRemarks = appendMissingRemarks(
       remarks,
       getUniqueOpenSORemarks(headerSourceRecords)
@@ -4912,7 +4915,9 @@ useEffect(() => {
     setTopTab("details");
 
     updateState({
-      ...(selectedShipToAddress ? { shipToAddress: selectedShipToAddress } : {}),
+      deliveryToCode: selectedShipToCode,
+      deliveryToName: selectedShipToName,
+      shipToAddress: selectedShipToAddress,
       remarks: nextRemarks,
       showOpenSOModal: false,
       openSODR_Data_Summary: [],
@@ -5767,7 +5772,7 @@ const handleHistoryRowPick = useCallback(
 
 useEffect(() => {
   const params = new URLSearchParams(location.search);
-  const docNo = params.get("soNo");
+  const docNo = params.get("drNo") || params.get("soNo");
   const branchCode = params.get("branchCode");
 
   if (!loadedFromUrlRef.current && docNo && branchCode) {
@@ -5869,7 +5874,7 @@ const handleSaveAndPrint = async (documentID) => {
         const address = selectedData?.addr || "";
 
         // In DR, we only care about shipTo.
-        if (modalContext === "shipTo" || modalContext === "openSO") {
+        if (modalContext === "shipTo" || modalContext === "deliveryTo" || modalContext === "openSO") {
             // Fetch full details from master data to ensure data is complete and up-to-date
             const payload = { CUST_CODE: selectedData.custCode };
             const response = await postRequest("getCustomer", JSON.stringify(payload));
@@ -5896,15 +5901,25 @@ const handleSaveAndPrint = async (documentID) => {
               ? await useTopWarehouseRow(finalWhseCode)
               : null;
 
-            updateState({
-                shipToName: finalName,
-                shipToCode: finalCode,
-                shipToAddress: finalAddress,
-                whseCode: selectedWarehouse?.whouseCode || finalWhseCode || "",
-                whseName: selectedWarehouse?.whouseName || "",
-                locCode: "",
-                locName: "",
-            });
+            updateState(
+              modalContext === "deliveryTo"
+                ? {
+                    deliveryToCode: finalCode,
+                    deliveryToName: finalName,
+                    shipToAddress: finalAddress,
+                  }
+                : {
+                    shipToName: finalName,
+                    shipToCode: finalCode,
+                    deliveryToCode: finalCode,
+                    deliveryToName: finalName,
+                    shipToAddress: finalAddress,
+                    whseCode: selectedWarehouse?.whouseCode || finalWhseCode || "",
+                    whseName: selectedWarehouse?.whouseName || "",
+                    locCode: "",
+                    locName: "",
+                  }
+            );
 
             if (modalContext === "openSO") {
               await handleOpenSalesOrderLookup({
@@ -6648,8 +6663,34 @@ return (
               disabled
               readOnly
             />
- 
-            <div className="relative w-full">
+
+            <FieldRenderer
+              id="deliveryToCode"
+              label="Ship To Customer Code"
+              required
+              type="lookup"
+              value={deliveryToCode || ""}
+              disabled={isFormDisabled}
+              readOnly
+              lookupDisabled={isFormDisabled}
+              onLookup={() => !isFormDisabled && updateState({ custModalOpen: true, modalContext: "deliveryTo" })}
+            />
+
+            <FieldRenderer
+              id="deliveryToName"
+              label="Ship To Customer Name"
+              required
+              type="text"
+              value={deliveryToName || ""}
+              disabled
+              readOnly
+            />
+
+          </div>
+
+          <div className="global-tran-textbox-group-div-ui">
+
+             <div className="relative w-full">
               <div className="relative flex items-center w-full">
                 <input
                   id="shipToAddress"
@@ -6691,9 +6732,7 @@ return (
                 Ship To Address
               </label>
             </div>
-          </div> 
 
-          <div className="global-tran-textbox-group-div-ui">
             <FieldRenderer
               id="whseName"
               label="Warehouse"

@@ -9,6 +9,8 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { apiClient } from "@/NAYSA Cloud/Configuration/BaseURL.jsx";
 
+const EMPTY_SELECTED_ITEMS = [];
+
 const WarehouseLookupModal = ({
   isOpen,
   onClose,
@@ -17,7 +19,7 @@ const WarehouseLookupModal = ({
   invType = "",
   enableMultiSelect = false,
   onGetSelectedItems,
-  selectedItems: externalSelectedItems = [],
+  selectedItems: externalSelectedItems = EMPTY_SELECTED_ITEMS,
   allowEmptySelection = false,
 }) => {
   const [warehouse, setWarehouse] = useState([]);
@@ -45,8 +47,6 @@ const WarehouseLookupModal = ({
       setInternalSelectedItems([]);
       return;
     }
-
-    setInternalSelectedItems(Array.isArray(externalSelectedItems) ? externalSelectedItems : []);
 
     let alive = true;
     (async () => {
@@ -77,7 +77,25 @@ const WarehouseLookupModal = ({
     return () => {
       alive = false;
     };
-  }, [isOpen, filter, branchCode, invType, externalSelectedItems]);
+  }, [isOpen, filter, branchCode, invType]);
+
+  useEffect(() => {
+    if (!isOpen || !enableMultiSelect) return;
+
+    const nextSelectedItems = Array.isArray(externalSelectedItems)
+      ? externalSelectedItems
+      : EMPTY_SELECTED_ITEMS;
+
+    setInternalSelectedItems((currentItems) => {
+      const currentKeys = currentItems.map(getRowKey);
+      const nextKeys = nextSelectedItems.map(getRowKey);
+      const unchanged =
+        currentKeys.length === nextKeys.length &&
+        currentKeys.every((key, index) => key === nextKeys[index]);
+
+      return unchanged ? currentItems : nextSelectedItems;
+    });
+  }, [isOpen, enableMultiSelect, externalSelectedItems]);
 
   useEffect(() => {
     const newFiltered = warehouse.filter((item) => {
