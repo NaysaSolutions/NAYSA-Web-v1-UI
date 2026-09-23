@@ -1069,7 +1069,7 @@ function VEStockCardQuery() {
           ),
         },
         { key: "itemNo", header: "Item No", size: 150, cellClassName: "font-mono text-xs" },
-        { key: "itemDescription", header: "Item Description", size: 260 },
+        { key: "itemDescription", header: "Item Description", size: 400 },
         { key: "uom", header: "UOM", size: 80, cellClassName: "text-center" },
         { key: "category", header: "Category", size: 180 },
         { key: "itemClass", header: "Item Class", size: 120 },
@@ -1083,7 +1083,7 @@ function VEStockCardQuery() {
       ],
       perVehicle: [
         { key: "itemNo", header: "Item No", size: 150, cellClassName: "font-mono text-xs" },
-        { key: "itemDescription", header: "Vehicle Item", size: 220 },
+        { key: "itemDescription", header: "Vehicle Item", size: 400 },
         { key: "csNo", header: "CS No.", size: 130 },
         { key: "serialNo", header: "Serial No.", size: 140 },
         { key: "engineNo", header: "Engine No.", size: 140 },
@@ -1154,6 +1154,31 @@ function VEStockCardQuery() {
         ),
       },
       ...balanceSummaryColumnsForTable,
+    ];
+    const allocationActionColumns = [
+      {
+        key: "__view",
+        label: "View",
+        width: 60,
+        minWidth: 60,
+        filterable: false,
+        sortable: false,
+        className: "text-center",
+        render: (row) => (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              viewStockCardDocument(row);
+            }}
+            className="inline-flex items-center justify-center rounded-md bg-blue-600 px-1.5 py-1 text-white shadow-sm transition hover:bg-blue-700 active:scale-95"
+            title="View Document"
+          >
+            <Eye size={12} />
+          </button>
+        ),
+      },
+      ...allocationColumnsForTable,
     ];
 
     return (
@@ -1310,7 +1335,7 @@ function VEStockCardQuery() {
             {/* Allocation Details */}
             <TablePanel title="Allocation Details" badge={selectedAllocatedRows.length || undefined}>
               <SearchGlobalReferenceTable
-                columns={allocationColumnsForTable}
+                columns={allocationActionColumns}
                 data={selectedAllocatedRows}
                 isLoading={balanceQuery.isLoading}
                 isFetching={balanceQuery.isFetching}

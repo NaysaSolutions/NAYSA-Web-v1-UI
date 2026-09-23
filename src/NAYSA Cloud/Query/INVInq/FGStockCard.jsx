@@ -117,6 +117,30 @@ const normalizeBalanceResponse = (payload) => ({
   allocated: rowsByItemCode(payload?.allocated),
 });
 
+const normalizeStockStatusAmounts = (payload) => {
+  const perLot = safeArray(payload?.perLot);
+  const itemAmounts = new Map();
+  const locationAmounts = new Map();
+
+  perLot.forEach((row) => {
+    const amount = toNumber(row?.amount);
+    const itemKey = String(row?.itemNo || "");
+    const locationKey = `${itemKey}|${row?.warehouse || ""}|${row?.location || ""}`;
+    itemAmounts.set(itemKey, (itemAmounts.get(itemKey) || 0) + amount);
+    locationAmounts.set(locationKey, (locationAmounts.get(locationKey) || 0) + amount);
+  });
+
+  return {
+    ...payload,
+    summary: safeArray(payload?.summary).map((row) => ({ ...row, amount: itemAmounts.get(String(row?.itemNo || "")) || 0 })),
+    perItem: safeArray(payload?.perItem).map((row) => ({
+      ...row,
+      amount: locationAmounts.get(`${row?.itemNo || ""}|${row?.warehouse || ""}|${row?.location || ""}`) || 0,
+    })),
+    perLot,
+  };
+};
+
 const MAIN_TABS = {
   FIFO: [
     { key: "fifo", label: "FIFO Balance", icon: Package },
@@ -132,7 +156,7 @@ const MAIN_TABS = {
 
 const STOCK_STATUS_SUBTABS = [
   { key: "summary", label: "Summary" },
-  { key: "perItem", label: "Per Item" },
+  { key: "perItem", label: "Per Item / WH / Loc" },
   { key: "perLot", label: "Per Lot / BB / QC" },
 ];
 
@@ -791,7 +815,7 @@ function FGStockCardQuery() {
       const response = await apiClient.get("/fg/inventory/stock-card/stock-status", {
         params: stockStatusRequestParams,
       });
-      return response?.data?.data || { summary: [], perItem: [], perLot: [] };
+      return normalizeStockStatusAmounts(response?.data?.data || { summary: [], perItem: [], perLot: [] });
     },
   });
 
@@ -916,6 +940,7 @@ function FGStockCardQuery() {
     () => {
       const costingMode = String(inventorySetup || "FIFO").toUpperCase();
       const isWacCosting = costingMode === "WAC";
+      const stockReferenceLabel = costingMode === "SPID" ? "SPID Doc No" : "FIFO Doc No";
 
       return [
       { key: "cutoff", header: "Cut-Off", size: 100 },
@@ -923,7 +948,7 @@ function FGStockCardQuery() {
       { key: "docNo", header: "Doc No", size: 110, cellClassName: "font-mono text-xs" },
       { key: "docDate", header: "Doc Date", size: 110, type: "date" },
       ...(!isWacCosting
-        ? [{ key: "rrNo", header: "RR No", size: 130, cellClassName: "font-mono text-xs" }]
+        ? [{ key: "rrNo", header: stockReferenceLabel, size: 130, cellClassName: "font-mono text-xs" }]
         : []),
       { key: "particular", header: "Particular", size: 260 },
       { key: "itemNo", header: "Item No", size: 120 },
@@ -932,7 +957,6 @@ function FGStockCardQuery() {
       { key: "location", header: "Location", size: 120 },
       { key: "qtyIn", header: "Qty In", size: 110, cellClassName: "text-right text-emerald-700 font-semibold", type: "amount", decimals: 4 },
       { key: "qtyOut", header: "Qty Out", size: 110, cellClassName: "text-right text-rose-600 font-semibold", type: "amount", decimals: 4 },
-      { key: "balance", header: "Balance", size: 110, cellClassName: "text-right font-bold", type: "amount", decimals: 4 },
       { key: "runBal", header: "Run Bal", size: 110, cellClassName: "text-right font-bold", type: "amount", decimals: 4 },
       { key: "unitCost", header: "Unit Cost", size: 120, cellClassName: "text-right", type: "amount", decimals: 6 },
       { key: "amount", header: "Amount", size: 130, cellClassName: "text-right font-semibold", type: "amount", decimals: 2 },
@@ -949,48 +973,48 @@ function FGStockCardQuery() {
   );
 
   const stockStatusColumnsMap = useMemo(
-    () => ({
+    () => {
+      return ({
       summary: [
         { key: "itemNo", header: "Item No", size: 150, cellClassName: "font-mono text-xs" },
-        { key: "itemDescription", header: "Item Description", size: 260 },
+        { key: "itemDescription", header: "Item Description", size: 400 },
         { key: "uom", header: "UOM", size: 80, cellClassName: "text-center" },
         { key: "category", header: "Category", size: 180 },
         { key: "itemClass", header: "Item Class", size: 120 },
-        { key: "rrNo", header: "RR No", size: 130, cellClassName: "font-mono text-xs" },
         { key: "beginningBalance", header: "Beg. Balance", size: 130, type: "amount", decimals: 4, cellClassName: "text-right" },
         { key: "quantityIn", header: "Qty In", size: 110, type: "amount", decimals: 4, cellClassName: "text-right text-emerald-700 font-semibold" },
         { key: "quantityOut", header: "Qty Out", size: 110, type: "amount", decimals: 4, cellClassName: "text-right text-rose-600 font-semibold" },
         { key: "endingBalance", header: "End. Balance", size: 130, type: "amount", decimals: 4, cellClassName: "text-right font-bold" },
-        { key: "unitCost", header: "Unit Cost", size: 120, type: "amount", decimals: 6, cellClassName: "text-right" },
         { key: "amount", header: "Amount", size: 130, type: "amount", decimals: 2, cellClassName: "text-right font-semibold" },
         { key: "inventoryAcct", header: "Inventory Acct", size: 140 },
       ],
       perItem: [
         { key: "itemNo", header: "Item No", size: 150, cellClassName: "font-mono text-xs" },
-        { key: "itemDescription", header: "Item Description", size: 260 },
+        { key: "itemDescription", header: "Item Description", size: 400 },
+        { key: "uom", header: "UOM", size: 80, cellClassName: "text-center" },
         { key: "warehouse", header: "Warehouse", size: 120 },
         { key: "location", header: "Location", size: 120 },
         { key: "beginningBalance", header: "Beg. Balance", size: 130, type: "amount", decimals: 4, cellClassName: "text-right" },
         { key: "quantityIn", header: "Qty In", size: 110, type: "amount", decimals: 4, cellClassName: "text-right text-emerald-700 font-semibold" },
         { key: "quantityOut", header: "Qty Out", size: 110, type: "amount", decimals: 4, cellClassName: "text-right text-rose-600 font-semibold" },
         { key: "endingBalance", header: "End. Balance", size: 130, type: "amount", decimals: 4, cellClassName: "text-right font-bold" },
-        { key: "unitCost", header: "Unit Cost", size: 120, type: "amount", decimals: 6, cellClassName: "text-right" },
         { key: "amount", header: "Amount", size: 130, type: "amount", decimals: 2, cellClassName: "text-right font-semibold" },
       ],
       perLot: [
         { key: "itemNo", header: "Item No", size: 150, cellClassName: "font-mono text-xs" },
-        { key: "itemDescription", header: "Item Description", size: 260 },
+        { key: "itemDescription", header: "Item Description", size: 400 },
+        { key: "uom", header: "UOM", size: 80, cellClassName: "text-center" },
         { key: "warehouse", header: "Warehouse", size: 120 },
         { key: "location", header: "Location", size: 120 },
         { key: "lotNo", header: "Lot No", size: 120 },
         { key: "bbDate", header: "BB Date", size: 110, type: "date" },
         { key: "qcStat", header: "QC Status", size: 110 },
         { key: "balance", header: "Balance", size: 120, type: "amount", decimals: 4, cellClassName: "text-right font-bold" },
-        { key: "unitCost", header: "Unit Cost", size: 120, type: "amount", decimals: 6, cellClassName: "text-right" },
         { key: "amount", header: "Amount", size: 130, type: "amount", decimals: 2, cellClassName: "text-right font-semibold" },
       ],
-    }),
-    []
+      });
+    },
+    [inventorySetup]
   );
 
 
@@ -1043,6 +1067,31 @@ function FGStockCardQuery() {
         ),
       },
       ...balanceSummaryColumnsForTable,
+    ];
+    const allocationActionColumns = [
+      {
+        key: "__view",
+        label: "View",
+        width: 60,
+        minWidth: 60,
+        filterable: false,
+        sortable: false,
+        className: "text-center",
+        render: (row) => (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              viewStockCardDocument(row);
+            }}
+            className="inline-flex items-center justify-center rounded-md bg-blue-600 px-1.5 py-1 text-white shadow-sm transition hover:bg-blue-700 active:scale-95"
+            title="View Document"
+          >
+            <Eye size={12} />
+          </button>
+        ),
+      },
+      ...allocationColumnsForTable,
     ];
 
     return (
@@ -1190,7 +1239,7 @@ function FGStockCardQuery() {
             {/* Allocation Details */}
             <TablePanel title="Allocation Details" badge={selectedAllocatedRows.length || undefined}>
               <SearchGlobalReferenceTable
-                columns={allocationColumnsForTable}
+                columns={allocationActionColumns}
                 data={selectedAllocatedRows}
                 isLoading={balanceQuery.isLoading}
                 isFetching={balanceQuery.isFetching}
@@ -1404,6 +1453,7 @@ function FGStockCardQuery() {
             rightActionLabel="View"
             onRowAction={viewStockCardDocument}
             tableHeight="2000px"
+            totalExemptions={["rate", "percent", "ratio", "id", "code", "ROW_NO", "runbal", "unitcost", "stockval"]}
             // autoFillGrid
           />
         </TablePanel>
@@ -1558,10 +1608,12 @@ function FGStockCardQuery() {
         {/* Data Table */}
         <TablePanel title={STOCK_STATUS_SUBTABS.find((t) => t.key === stockStatusTab)?.label || "Stock Status"}>
           <SearchGlobalReportTable
+            key={stockStatusTab}
             columns={stockStatusColumnsMapForTable[stockStatusTab] || []}
             data={stockStatusRows}
             isLoading={stockStatusQuery.isLoading}
             isFetching={stockStatusQuery.isFetching}
+            autoFit
             // autoFillGrid
             // pagination
           />
