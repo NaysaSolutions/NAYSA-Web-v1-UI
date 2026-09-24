@@ -536,6 +536,8 @@ useEffect(() => {
       warehouseLookupOpen: false,
       WHcode: row?.whCode ?? "",
       WHname: row?.whName ?? "",
+      locCode: "",
+      locName: "",
     });
   };
 
@@ -3282,6 +3284,7 @@ useEffect(() => {
           isOpen={state.locationLookupOpen}
           onClose={handleCloseLocationLookup}
           filter="ActiveAll"
+          whCode={state.WHcode || ""}
         />
       )}
 
