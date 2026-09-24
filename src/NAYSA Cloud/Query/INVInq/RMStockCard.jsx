@@ -1208,12 +1208,37 @@ function RMStockCardQuery() {
   };
 
   const viewStockCardDocument = (row) => {
-    const pathUrl = String(row?.pathUrl || "").trim();
-    if (!pathUrl) {
+    const pathUrl = String(row?.pathUrl || row?.pathURL || "").trim();
+    if (pathUrl) {
+      const url = new URL(pathUrl, window.location.origin);
+      window.open(url.toString(), "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    const docType = String(row?.docType || row?.docCode || "").trim().toUpperCase();
+    const docNo = String(row?.docNo || row?.documentNo || "").trim();
+    const branchCode = String(
+      row?.branchCode || row?.branch_code || row?.BC || stockCardFilters.branchCode || ""
+    ).trim();
+    const docParamByType = {
+      RMRR: "rrNo",
+      RMRFP: "poNo",
+      RMIS: "rmisNo",
+      RMAJ: "rmajNo",
+      RMST: "rmstNo",
+      RMRTV: "rmrtvNo",
+    };
+    const docParam = docParamByType[docType];
+
+    if (!docType || !docParam || !docNo || !branchCode) {
       useSwalErrorAlert("View Document", "This stock movement document cannot be opened.");
       return;
     }
-    const url = new URL(pathUrl, window.location.origin);
+
+    const url = new URL(`/page/${docType}`, window.location.origin);
+    url.searchParams.set(docParam, docNo);
+    url.searchParams.set("branchCode", branchCode);
+    url.searchParams.set("viewDocument", "true");
     window.open(url.toString(), "_blank", "noopener,noreferrer");
   };
 
@@ -1390,7 +1415,7 @@ function RMStockCardQuery() {
             rightActionLabel="View"
             onRowAction={viewStockCardDocument}
             tableHeight="2000px"
-            totalExemptions={["rate", "percent", "ratio", "id", "code", "ROW_NO", "runbal", "unitcost", "stockval"]}
+            totalExemptions={["rate", "percent", "ratio", "id", "code", "ROW_NO", "runbal", "unitcost", "wac", "stockval"]}
             // autoFillGrid
           />
         </TablePanel>
