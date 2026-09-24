@@ -2533,6 +2533,8 @@ const PO = () => {
       useSwalProceedConfirm(
         "Duplicate Items Detected",
         "Some items are already in the list. Do you want to add them anyway?",
+        "Yes",
+        "No",
       ).then((result) => {
         if (result.isConfirmed) {
           processAddition(itemsArray);

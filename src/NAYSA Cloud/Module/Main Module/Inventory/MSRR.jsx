@@ -3831,9 +3831,11 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
   };
 
   const recalcMSRRRow = (row, rateOverride = currRate) => {
-    const rrQty = parseFormattedNumber(row.rrQty || 0);
-    const freeQty = isDirectReceiving ? 0 : parseFormattedNumber(row.freeQty || 0);
-    const unitCost = parseFormattedNumber(row.unitCost || 0);
+    const rrQty = Math.max(parseFormattedNumber(row.rrQty || 0), 0);
+    const freeQty = isDirectReceiving
+      ? 0
+      : Math.max(parseFormattedNumber(row.freeQty || 0), 0);
+    const unitCost = Math.max(parseFormattedNumber(row.unitCost || 0), 0);
     const vatRate = parseFormattedNumber(row.vatRate || 0);
     const effectiveCurrRate = parseFormattedNumber(rateOverride || 1) || 0;
 
@@ -3847,6 +3849,8 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
 
     return {
       ...row,
+      rrQty: formatNumber(rrQty, decQty),
+      freeQty: formatNumber(freeQty, decQty),
       grossAmount: formatNumber(gross, 2),
       itemAmount: formatNumber(gross, 2),
       vatAmount: formatNumber(vatAmt, 2),

@@ -3699,9 +3699,9 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
   };
 
   const recalcRMRRRow = (row) => {
-    const rrQty = parseFormattedNumber(row.rrQty || 0);
-    const freeQty = parseFormattedNumber(row.freeQty || 0);
-    const unitCost = parseFormattedNumber(row.unitCost || 0);
+    const rrQty = Math.max(parseFormattedNumber(row.rrQty || 0), 0);
+    const freeQty = Math.max(parseFormattedNumber(row.freeQty || 0), 0);
+    const unitCost = Math.max(parseFormattedNumber(row.unitCost || 0), 0);
     const vatRate = parseFormattedNumber(row.vatRate || 0);
     const rowCurrCode = normalizeCurrencyCode(row.currCode || currCode || state.currCode || "PHP");
     const rowCurrRate = parseFormattedNumber(row.currRate ?? currRate ?? state.currRate ?? 1) || 1;
@@ -3718,6 +3718,8 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
 
     return {
       ...row,
+      rrQty: formatNumber(rrQty, decQty),
+      freeQty: formatNumber(freeQty, decQty),
       grossAmount: formatNumber(gross, 2),
       unitCostPhp: formatNumber(unitCostPhp, decUcost),
       grossAmountPhp: formatNumber(grossAmountPhp, 2),
@@ -3729,9 +3731,9 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
   };
 
   const recalcRMRRRowWithCurrencyRate = (row) => {
-    const rrQty = parseFormattedNumber(row.rrQty || 0);
-    const freeQty = parseFormattedNumber(row.freeQty || 0);
-    const unitCost = parseFormattedNumber(row.unitCost || 0);
+    const rrQty = Math.max(parseFormattedNumber(row.rrQty || 0), 0);
+    const freeQty = Math.max(parseFormattedNumber(row.freeQty || 0), 0);
+    const unitCost = Math.max(parseFormattedNumber(row.unitCost || 0), 0);
     const vatRate = parseFormattedNumber(row.vatRate || 0);
     const rowCurrCode = normalizeCurrencyCode(row.currCode || currCode || state.currCode || "PHP");
     const rowCurrRate = parseFormattedNumber(row.currRate ?? currRate ?? state.currRate ?? 1) || 1;
@@ -3744,6 +3746,8 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
 
     return {
       ...row,
+      rrQty: formatNumber(rrQty, decQty),
+      freeQty: formatNumber(freeQty, decQty),
       currCode: rowCurrCode,
       currRate: formatNumber(rowCurrRate, 6),
       grossAmount: formatNumber(gross, 2),

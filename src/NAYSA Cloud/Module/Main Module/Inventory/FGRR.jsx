@@ -3925,9 +3925,9 @@ const recalcFGRRRow = (row) => {
   return recalcFGRRRowWithCurrencyRate(row);
 };
   const recalcFGRRRowWithCurrencyRate = (row) => {
-  const rrQty = parseFormattedNumber(row.rrQty || 0);
-  const freeQty = parseFormattedNumber(row.freeQty || 0);
-  const unitCost = parseFormattedNumber(row.unitCost || 0);
+  const rrQty = Math.max(parseFormattedNumber(row.rrQty || 0), 0);
+  const freeQty = Math.max(parseFormattedNumber(row.freeQty || 0), 0);
+  const unitCost = Math.max(parseFormattedNumber(row.unitCost || 0), 0);
   const vatRate = parseFormattedNumber(row.vatRate || 0);
 
   const rowCurrCode = normalizeCurrencyCode(
@@ -4005,6 +4005,13 @@ const recalcFGRRRow = (row) => {
     amountPhp: formatNumber(grossPhp, 2),
   };
 };
+
+  const sanitizeFGRRNumeric = (value) => {
+    const raw = String(value ?? "");
+    const cleaned = raw.replace(/[^0-9.]/g, "");
+    const parts = cleaned.split(".");
+    return parts.length <= 1 ? cleaned : `${parts.shift()}.${parts.join("")}`;
+  };
 
   const parseItemConversionRows = (response) => {
     const result = response?.data?.data?.[0]?.result;
@@ -4223,10 +4230,14 @@ const recalcFGRRRow = (row) => {
     const shouldFormatNumeric = extraData === true;
 
     if (Object.prototype.hasOwnProperty.call(numericFieldDecimals, field)) {
-      const numericValue = parseFormattedNumber(normalizedValue ?? 0);
+      const sanitized = sanitizeFGRRNumeric(normalizedValue);
+      const numericValue = parseFormattedNumber(sanitized);
       row[field] = shouldFormatNumeric
-        ? formatNumber(numericValue, numericFieldDecimals[field])
-        : String(normalizedValue ?? "").replace(/[^0-9.]/g, "");
+        ? formatNumber(
+            Number.isFinite(numericValue) && numericValue > 0 ? numericValue : 0,
+            numericFieldDecimals[field],
+          )
+        : sanitized;
     } else {
       row[field] = normalizedValue ?? "";
     }
