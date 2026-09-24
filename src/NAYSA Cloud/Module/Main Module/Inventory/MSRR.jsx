@@ -1059,6 +1059,8 @@ setTotals({
     return "";
   };
 
+  const normalizeCurrencyCode = (code) => String(code || "").trim().toUpperCase();
+
   const extractLookupRows = (value) => {
     if (!value) return [];
     const parsed = typeof value === "string" ? JSON.parse(value) : value;
@@ -1949,6 +1951,20 @@ console.log("Open Reference PO - Filtered Open Summary Rows:", openRows);
 
     const vatRateMap = Object.fromEntries(vatRatePairs);
 
+    const selectedCurrRate =
+      parseFormattedNumber(
+        getPOField(details?.[0], "CurrRate", "CURR_RATE", "currRate", "curr_rate") ||
+          getPOField(summary, "CurrRate", "CURR_RATE", "currRate", "curr_rate") ||
+          state.currRate ||
+          1,
+      ) || 1;
+    const selectedCurrCode = normalizeCurrencyCode(
+      getPOField(details?.[0], "CurrCode", "CURR_CODE", "currCode", "curr_code") ||
+        getPOField(summary, "CurrCode", "CURR_CODE", "currCode", "curr_code") ||
+        currCode ||
+        "PHP",
+    );
+
     const newMappedRows = details.map((d, idx) => {
       const poQty = parseFormattedNumber(d.poQuantity || 0);
       const prevRrQty = parseFormattedNumber(d.rrQty || 0);
@@ -2026,7 +2042,8 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
         poBalance: formatNumber(qtyBalance, 6),
         freeQty: formatNumber(0, 6),
 
-        currCode: d.currCode || summary.currCode || "PHP",
+        currCode: normalizeCurrencyCode(d.currCode || selectedCurrCode || "PHP"),
+        currRate: formatNumber(selectedCurrRate, 6),
         unitCost: formatNumber(unitCost, 6),
 
         amount: formatNumber(d.itemAmount || gross, 2),
@@ -2055,29 +2072,40 @@ categCode: d.categCode || d.CATEG_CODE || d.categ_code || "",
       };
     });
 
+    const recalculatedMappedRows = newMappedRows.map((row) =>
+      recalcMSRRRow(
+        {
+          ...row,
+          currCode: selectedCurrCode,
+          currRate: selectedCurrRate,
+        },
+        selectedCurrRate,
+      ),
+    );
+
     const nextState = {
   poNo: selectedPoNos.join(", ") || summary.poNo || "",
   branchCode: summary.branchCode || branchCode,
   rcCode: summary.rcCode || rcCode,
   vendCode: getPOField(summary, "VendCode", "VEND_CODE", "vendCode", "vend_code"),
   vendName: getPOField(summary, "VendName", "VEND_NAME", "vendName", "vend_name"),
-  currCode: summary.currCode || currCode || "PHP",
-  currRate: formatNumber(summary.currRate || 1, 6),
+  currCode: selectedCurrCode,
+  currRate: formatNumber(selectedCurrRate, 6),
   WHCode: poWhCode || WHCode || "",
   WHcode: poWhCode || WHcode || "",
   WHName: poWhName || WHName || "",
   LocCode: state.LocCode || LocCode || "",
   LocName: state.LocName || LocName || "",
-  detailRows: newMappedRows,
+  detailRows: recalculatedMappedRows,
 };
 
 updateState(nextState);
-updateTotalsDisplay(newMappedRows);
+updateTotalsDisplay(recalculatedMappedRows);
 
 if (shouldAutoGenerateGLOnSave) {
   const nextStateIsDirectReceiving =
-    newMappedRows.length > 0 && newMappedRows.every((row) => !hasPONoValue(row));
-  const dt1PayloadForGL = newMappedRows.map((r, index) => ({
+    recalculatedMappedRows.length > 0 && recalculatedMappedRows.every((row) => !hasPONoValue(row));
+  const dt1PayloadForGL = recalculatedMappedRows.map((r, index) => ({
     lnNo: String(index + 1),
     poId: r.poId || r.po_id || r.PO_ID || "",
     prId: r.prId || r.pr_id || r.PR_ID || "",
@@ -2145,7 +2173,7 @@ if (shouldAutoGenerateGLOnSave) {
   }
 }
 
-    updateTotalsDisplay(newMappedRows);
+    updateTotalsDisplay(recalculatedMappedRows);
   } catch (error) {
     console.error("PO Lookup Error:", error);
 	} finally {
@@ -3837,30 +3865,34 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
       : Math.max(parseFormattedNumber(row.freeQty || 0), 0);
     const unitCost = Math.max(parseFormattedNumber(row.unitCost || 0), 0);
     const vatRate = parseFormattedNumber(row.vatRate || 0);
-    const effectiveCurrRate = parseFormattedNumber(rateOverride || 1) || 0;
+    const rowCurrCode = normalizeCurrencyCode(row.currCode || currCode || state.currCode || "PHP");
+    const rowCurrRate = parseFormattedNumber(rateOverride ?? row.currRate ?? currRate ?? state.currRate ?? 1) || 1;
 
     const gross = rrQty * unitCost;
     const vatAmt = vatRate ? gross - gross / (1 + vatRate / 100) : 0;
-    const netAmt = gross - vatAmt;
-    const unitCostPhp = unitCost * effectiveCurrRate;
-    const grossPhp = gross * effectiveCurrRate;
-    const vatAmtPhp = vatAmt * effectiveCurrRate;
-    const netAmtPhp = netAmt * effectiveCurrRate;
+    const netAmtFx = gross - vatAmt;
+    const netAmt = rowCurrCode !== "PHP" ? netAmtFx * rowCurrRate : netAmtFx;
+    const unitCostPhp = rowCurrCode !== "PHP" ? unitCost * rowCurrRate : unitCost;
+    const grossPhp = rowCurrCode !== "PHP" ? gross * rowCurrRate : gross;
+    const vatAmtPhp = rowCurrCode !== "PHP" ? vatAmt * rowCurrRate : vatAmt;
 
     return {
       ...row,
       rrQty: formatNumber(rrQty, decQty),
       freeQty: formatNumber(freeQty, decQty),
+      currCode: rowCurrCode,
+      currRate: formatNumber(rowCurrRate, 6),
       grossAmount: formatNumber(gross, 2),
       itemAmount: formatNumber(gross, 2),
       vatAmount: formatNumber(vatAmt, 2),
+      fxAmount: formatNumber(netAmtFx, 2),
       netAmount: formatNumber(netAmt, 2),
       amount: formatNumber(gross, 2),
       unitCostPhp: formatNumber(unitCostPhp, decUcost),
       grossAmountPhp: formatNumber(grossPhp, 2),
       itemAmountPhp: formatNumber(grossPhp, 2),
       vatAmountPhp: formatNumber(vatAmtPhp, 2),
-      netAmountPhp: formatNumber(netAmtPhp, 2),
+      netAmountPhp: formatNumber(netAmt, 2),
       amountPhp: formatNumber(grossPhp, 2),
     };
   };

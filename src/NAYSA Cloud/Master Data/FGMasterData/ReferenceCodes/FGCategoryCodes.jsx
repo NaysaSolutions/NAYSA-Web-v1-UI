@@ -599,7 +599,7 @@ const FGCategoryCodes = forwardRef(({
       {isLoading && <LoadingSpinner />}
 
       {/* TOP PANELS */}
-      <div className="grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_280px] gap-3 shrink-0">
+      <div className="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)_0px] gap-3 shrink-0">
 
         {/* BOX 1: BASIC INFORMATION */}
         <Card className="p-4 flex flex-col">
@@ -655,7 +655,7 @@ const FGCategoryCodes = forwardRef(({
         {/* BOX 2: ACCOUNTING INFORMATION — 3 sub-columns: 4 | 4 | 3 fields */}
         <Card className="p-4 flex flex-col">
           <SectionHeader title="ACCOUNTING INFORMATION" />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-3">
 
             {/* ── Column 1 (4 fields) ── */}
             <div className="space-y-3">
@@ -678,10 +678,23 @@ const FGCategoryCodes = forwardRef(({
               <FieldRenderer label="Sales Discount Account" type="lookup" required labelClassName="text-xs"
                 value={form.sdiscAcct ? `${form.sdiscAcct}${form.sdiscAcctName ? ` — ${form.sdiscAcctName}` : ""}` : ""}
                 onLookup={() => openCoaLookup("sdisc")} onChange={(v) => setField("sdiscAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
+            
+              {/* SRet Account */}
+              <FieldRenderer label="Sales Return Account" type="lookup" required labelClassName="text-xs"
+                value={form.sretAcct ? `${form.sretAcct}${form.sretAcctName ? ` — ${form.sretAcctName}` : ""}` : ""}
+                onLookup={() => openCoaLookup("sret")} onChange={(v) => setField("sretAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
+
+            
             </div>
 
             {/* ── Column 2 (4 fields) ── */}
             <div className="space-y-3">
+              {/* Expense Account */}
+              <FieldRenderer label="Expense Account" type="lookup" required labelClassName="text-xs"
+                value={form.expAcct ? `${form.expAcct}${form.expAcctName ? ` — ${form.expAcctName}` : ""}` : ""}
+                onLookup={() => openCoaLookup("exp")} onChange={(v) => setField("expAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
+
+
               {/* WIP Account */}
               <FieldRenderer label="WIP Account" type="lookup" required labelClassName="text-xs"
                 value={form.wipAcct ? `${form.wipAcct}${form.wipAcctName ? ` — ${form.wipAcctName}` : ""}` : ""}
@@ -692,42 +705,45 @@ const FGCategoryCodes = forwardRef(({
                 value={form.rrAcct ? `${form.rrAcct}${form.rrAcctName ? ` — ${form.rrAcctName}` : ""}` : ""}
                 onLookup={() => openCoaLookup("rr")} onChange={(v) => setField("rrAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
 
-              {/* SRet Account */}
-              <FieldRenderer label="Sales Return Account" type="lookup" required labelClassName="text-xs"
-                value={form.sretAcct ? `${form.sretAcct}${form.sretAcctName ? ` — ${form.sretAcctName}` : ""}` : ""}
-                onLookup={() => openCoaLookup("sret")} onChange={(v) => setField("sretAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
-
               {/* COS Account */}
               <FieldRenderer label="COS Account" type="lookup" required labelClassName="text-xs"
                 value={form.cosAcct ? `${form.cosAcct}${form.cosAcctName ? ` — ${form.cosAcctName}` : ""}` : ""}
                 onLookup={() => openCoaLookup("cos")} onChange={(v) => setField("cosAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
+              
+              {/* RC Code */}
+              <FieldRenderer label="RC Code" type="lookup" required labelClassName="text-xs"
+                value={form.rcCode ? `${form.rcCode}${form.rcName ? ` — ${form.rcName}` : ""}` : ""}
+                onLookup={() => setIsRcOpen(true)} onChange={(v) => setField("rcCode", v ?? "")} disabled={!isEditing || isReadOnly} />
+       
+            
             </div>
 
             {/* ── Column 3 (3 fields) ── */}
-            <div className="space-y-3">
+            {/* <div className="space-y-3"> */}
+
               {/* Expense Account */}
-              <FieldRenderer label="Expense Account" type="lookup" required labelClassName="text-xs"
+              {/* <FieldRenderer label="Expense Account" type="lookup" required labelClassName="text-xs"
                 value={form.expAcct ? `${form.expAcct}${form.expAcctName ? ` — ${form.expAcctName}` : ""}` : ""}
                 onLookup={() => openCoaLookup("exp")} onChange={(v) => setField("expAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
 
               <FieldRenderer label="Landed Cost Account" type="lookup" labelClassName="text-xs"
                 value={form.lcAcct ? `${form.lcAcct}${form.lcAcctName ? ` — ${form.lcAcctName}` : ""}` : ""}
-                onLookup={() => openCoaLookup("lc")} onChange={(v) => setField("lcAcct", v ?? "")} disabled={!isEditing || isReadOnly} />
+                onLookup={() => openCoaLookup("lc")} onChange={(v) => setField("lcAcct", v ?? "")} disabled={!isEditing || isReadOnly} /> */}
 
               {/* RC Code */}
-              <FieldRenderer label="RC Code" type="lookup" required labelClassName="text-xs"
+              {/* <FieldRenderer label="RC Code" type="lookup" required labelClassName="text-xs"
                 value={form.rcCode ? `${form.rcCode}${form.rcName ? ` — ${form.rcName}` : ""}` : ""}
-                onLookup={() => setIsRcOpen(true)} onChange={(v) => setField("rcCode", v ?? "")} disabled={!isEditing || isReadOnly} />
-            </div>
+                onLookup={() => setIsRcOpen(true)} onChange={(v) => setField("rcCode", v ?? "")} disabled={!isEditing || isReadOnly} /> */}
+            {/* </div> */}
 
           </div>
         </Card>
 
-        {/* BOX 3: REGISTRATION INFORMATION */}
-        <RegistrationInfo data={form} layout="stacked" />
 
       </div>
 
+        {/* BOX 3: REGISTRATION INFORMATION */}
+        <RegistrationInfo data={form} layout="straight" />
       {/* LIST TABLE */}
       <div className="flex-1 bg-white rounded-md shadow-sm border border-slate-200 overflow-hidden min-h-[300px] flex flex-col">
         <SearchGlobalReferenceTable
