@@ -56,6 +56,8 @@ const WarehouseLookupModal = ({
           params: { filter, branchCode, invType },
         });
 
+      
+
         const rows =
           Array.isArray(result?.data) && result.data[0]?.result
             ? JSON.parse(result.data[0].result)
