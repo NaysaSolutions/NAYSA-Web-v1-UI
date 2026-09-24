@@ -2120,7 +2120,8 @@ if (shouldAutoGenerateGLOnSave) {
     poLineno: r.poLineno || r.poLineNo || r.lnNo || r.Ln || r.lineNo || "",
     poQty: parseFormattedNumber(r.poQty || r.poQuantity || r.PO_QUANTITY || 0),
     poBalance: parseFormattedNumber(r.poBalance || r.qtyBalance || 0),
-    freeQuantity: parseFormattedNumber(r.freeQty || r.freeQuantity || 0),
+    freeQty: 0,
+    freeQuantity: 0,
     unitCost: parseFormattedNumber(r.unitCost || 0),
     unitCostFx: parseFormattedNumber(r.unitCostFx || r.unitCost || 0),
     amount: parseFormattedNumber(r.netAmount || r.net_amount || 0),
@@ -4613,6 +4614,8 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
 
           return {
             ...row,
+            freeQty: 0,
+            freeQuantity: 0,
             amount: netAmount,
             itemAmount: netAmount,
             grossAmount: netAmount,

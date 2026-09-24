@@ -4474,6 +4474,8 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
 
           return {
             ...row,
+            freeQty: 0,
+            freeQuantity: 0,
             amount: netAmount,
             itemAmount: netAmount,
             grossAmount: netAmount,

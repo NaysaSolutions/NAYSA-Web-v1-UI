@@ -4705,6 +4705,8 @@ const recalcFGRRRow = (row) => {
 
           return {
             ...row,
+            freeQty: 0,
+            freeQuantity: 0,
             itemAmount: netAmount,
             fxAmount: netAmount,
             netAmount,
