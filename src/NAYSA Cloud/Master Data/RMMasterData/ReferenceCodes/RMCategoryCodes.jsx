@@ -796,7 +796,7 @@ const RMCategoryCodes = forwardRef(({
       />
 
       {/* TOP PANELS */}
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,1fr)] gap-3 shrink-0">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 shrink-0">
 
         {/* BOX 1: BASIC INFORMATION */}
         <Card className="p-4 flex flex-col">
@@ -914,10 +914,12 @@ const RMCategoryCodes = forwardRef(({
           </div>
         </Card>
 
-        {/* BOX 3: REGISTRATION INFORMATION */}
-        <RegistrationInfo data={form} layout="stacked" />
-
       </div>
+
+
+        {/* BOX 3: REGISTRATION INFORMATION */}
+        <RegistrationInfo data={form} layout="straight" />
+
 
       {/* LIST TABLE */}
       <div className="flex-1 bg-white rounded-md shadow-sm border border-slate-200 overflow-hidden min-h-[300px] flex flex-col">

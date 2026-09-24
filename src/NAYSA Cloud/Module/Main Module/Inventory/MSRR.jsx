@@ -2120,7 +2120,8 @@ if (shouldAutoGenerateGLOnSave) {
     poLineno: r.poLineno || r.poLineNo || r.lnNo || r.Ln || r.lineNo || "",
     poQty: parseFormattedNumber(r.poQty || r.poQuantity || r.PO_QUANTITY || 0),
     poBalance: parseFormattedNumber(r.poBalance || r.qtyBalance || 0),
-    freeQuantity: parseFormattedNumber(r.freeQty || r.freeQuantity || 0),
+    freeQty: 0,
+    freeQuantity: 0,
     unitCost: parseFormattedNumber(r.unitCost || 0),
     unitCostFx: parseFormattedNumber(r.unitCostFx || r.unitCost || 0),
     amount: parseFormattedNumber(r.netAmount || r.net_amount || 0),
@@ -3859,9 +3860,11 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
   };
 
   const recalcMSRRRow = (row, rateOverride = currRate) => {
-    const rrQty = parseFormattedNumber(row.rrQty || 0);
-    const freeQty = isDirectReceiving ? 0 : parseFormattedNumber(row.freeQty || 0);
-    const unitCost = parseFormattedNumber(row.unitCost || 0);
+    const rrQty = Math.max(parseFormattedNumber(row.rrQty || 0), 0);
+    const freeQty = isDirectReceiving
+      ? 0
+      : Math.max(parseFormattedNumber(row.freeQty || 0), 0);
+    const unitCost = Math.max(parseFormattedNumber(row.unitCost || 0), 0);
     const vatRate = parseFormattedNumber(row.vatRate || 0);
     const rowCurrCode = normalizeCurrencyCode(row.currCode || currCode || state.currCode || "PHP");
     const rowCurrRate = parseFormattedNumber(rateOverride ?? row.currRate ?? currRate ?? state.currRate ?? 1) || 1;
@@ -4611,6 +4614,8 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
 
           return {
             ...row,
+            freeQty: 0,
+            freeQuantity: 0,
             amount: netAmount,
             itemAmount: netAmount,
             grossAmount: netAmount,

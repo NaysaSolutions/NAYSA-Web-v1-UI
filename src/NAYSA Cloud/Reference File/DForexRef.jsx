@@ -587,7 +587,6 @@ const DForexRef = ({ onSelect }) => {
     if (!form.fromDate) missing.push("• Start Date");
     if (!form.toDate) missing.push("• End Date");
     if (!String(form.currCode || "").trim()) missing.push("• Currency");
-    if (!String(form.currRate || "").trim()) missing.push("• Currency Rate");
     if (!String(form.currCode2 || "").trim()) missing.push("• Currency 2");
     if (!String(form.currRate2 || "").trim()) missing.push("• Currency Rate 2");
 
@@ -604,7 +603,7 @@ const DForexRef = ({ onSelect }) => {
       fromDate: form.fromDate,
       toDate: form.toDate,
       currCode: String(form.currCode || "").trim().toUpperCase(),
-      currRate: String(form.currRate || "").trim(),
+      currRate: String(form.currRate2 || "").trim(),
       currCode2: String(form.currCode2 || "").trim().toUpperCase(),
       currRate2: String(form.currRate2 || "").trim(),
       userCode: user?.USER_CODE || user?.username || "SYSTEM",
@@ -745,13 +744,6 @@ const DForexRef = ({ onSelect }) => {
         sortable: true,
         render: (row) => row.fCurrName ?? row.FCURR_NAME ?? "",
         width: 130, minWidth: 80, requiredVisible: true 
-      },
-      {
-        key: "currRate",
-        label: "Curr Rate",
-        sortable: true,
-        render: (row) => row.currRate ?? row.CURR_RATE ?? "",
-        width: 100, minWidth: 80, requiredVisible: true 
       },
       {
         key: "currCode2",
@@ -930,15 +922,6 @@ const DForexRef = ({ onSelect }) => {
                   readOnly
                 />
 
-                <FieldRenderer
-                  label="Currency Rate"
-                  type="number"
-                  value={form.currRate}
-                  onChange={(value) => setField("currRate", value)}
-                  disabled={!isEditing || isBusy}
-                  required
-                  step="0.000001"
-                />
               </div>
 
               <div className="flex flex-col gap-4">
