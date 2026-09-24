@@ -568,67 +568,6 @@ const SalesTracker = () => {
         .sales-donut-breathe {
           animation: salesDonutBreathe 3.2s ease-in-out infinite;
         }
-        .sales-performance-table table thead tr > th:nth-child(2) {
-          position: sticky;
-          left: 80px;
-          z-index: 30;
-          width: 120px !important;
-          min-width: 120px !important;
-          max-width: 120px !important;
-        }
-        .sales-performance-table table thead tr > th:nth-child(3) {
-          position: sticky;
-          left: 200px;
-          z-index: 30;
-          width: 210px !important;
-          min-width: 210px !important;
-          max-width: 210px !important;
-          box-shadow: 1px 0 0 #dbeafe;
-        }
-        .sales-performance-table table tbody tr > td:not([colspan]):nth-child(2) {
-          position: sticky;
-          left: 80px;
-          z-index: 5;
-          width: 120px !important;
-          min-width: 120px !important;
-          max-width: 120px !important;
-          background: #fff;
-        }
-        .sales-performance-table table tbody tr > td:not([colspan]):nth-child(3) {
-          position: sticky;
-          left: 200px;
-          z-index: 5;
-          width: 210px !important;
-          min-width: 210px !important;
-          max-width: 210px !important;
-          background: #fff;
-          box-shadow: 1px 0 0 #e2e8f0;
-        }
-        .sales-performance-table table tbody tr:hover > td:not([colspan]):nth-child(2),
-        .sales-performance-table table tbody tr:hover > td:not([colspan]):nth-child(3),
-        .sales-performance-table table tbody tr.bg-blue-50 > td:not([colspan]):nth-child(2),
-        .sales-performance-table table tbody tr.bg-blue-50 > td:not([colspan]):nth-child(3) {
-          background: #eff6ff;
-        }
-        .sales-performance-table table tfoot tr > td:nth-child(2) {
-          position: sticky;
-          left: 80px;
-          z-index: 15;
-          width: 120px !important;
-          min-width: 120px !important;
-          max-width: 120px !important;
-          background: #dbeafe;
-        }
-        .sales-performance-table table tfoot tr > td:nth-child(3) {
-          position: sticky;
-          left: 200px;
-          z-index: 15;
-          width: 210px !important;
-          min-width: 210px !important;
-          max-width: 210px !important;
-          background: #dbeafe;
-          box-shadow: 1px 0 0 #bfdbfe;
-        }
       `}</style>
       {isLoading && <LoadingSpinner />}
 
@@ -813,9 +752,9 @@ const FilterPanel = ({ activePage, filters, setFilters, setLookup, onApply, onRe
         <FilterGroupCard
           title="Customer / Scope"
           icon={faLayerGroup}
-          className="xl:col-span-5"
+          className="xl:col-span-4"
         >
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-1">
             <CompactLookup label="Branch" code={filters.branchCode} name={filters.branchName} onLookup={() => setLookup("branch")} onClear={() => setFilters((prev) => ({ ...prev, branchCode: "", branchName: "" }))} />
             <CompactLookup label="Customer" code={filters.custCode} name={filters.custName} onLookup={() => setLookup("customer")} onClear={() => setFilters((prev) => ({ ...prev, custCode: "", custName: "" }))} />
             <CompactLookup label="Salesman" code={filters.salesRepCode} name={filters.salesRepName} onLookup={() => setLookup("salesman")} onClear={() => setFilters((prev) => ({ ...prev, salesRepCode: "", salesRepName: "" }))} />
@@ -825,7 +764,7 @@ const FilterPanel = ({ activePage, filters, setFilters, setLookup, onApply, onRe
         <FilterGroupCard
           title="Date Coverage"
           icon={faClock}
-          className="xl:col-span-3"
+          className="xl:col-span-4"
         >
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-1">
             <SelectInput label="Date Basis" value={filters.dateBasis} onChange={(value) => setField("dateBasis", value)} options={DATE_BASIS_OPTIONS} />

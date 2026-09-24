@@ -552,8 +552,11 @@ useEffect(() => {
 
       updateState({
         
-      branchCode: "HO",
-      branchName: "Head Office",
+      branchCode: currentUserRow?.branchCode || "",
+      branchName: currentUserRow?.branchName || "",
+
+
+
       userCode:user.USER_CODE,
       documentDate: useGetCurrentDayV2(),
 
@@ -819,6 +822,7 @@ const handleActivityOption = async (action) => {
         slTypeCode: row.sltypeCode || row.slTypeCode || "",
         slCode: row.slCode || vendCode || "",
         uniqueKey: row.uniqueKey || "",
+        groupId: row.groupId || "",
         operation: row.operation || "S"
       })),
 
@@ -2174,6 +2178,7 @@ const handleCloseBranchModal = (selectedBranch) => {
     locCode: item?.locCode ?? state.locCode ?? "",
     qtyHand: formatNumber(parseFormattedNumber(item?.qtyHand ?? 0), decQty),
     uniqueKey: item?.uniqueKey ?? "",
+    groupId: item?.groupId ?? "",
     operation: "A",
     acctCode: item?.rrAcctCode ?? "",
     sltypeCode: "SU",

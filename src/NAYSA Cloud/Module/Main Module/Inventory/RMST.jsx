@@ -808,10 +808,34 @@ const RMST = () => {
     CANCELLED: "global-tran-stat-text-closed-ui",
     CLOSED: "global-tran-stat-text-finalized-ui",
   };
-  const statusColor = statusMap[String(displayStatus).trim().toUpperCase()] || "";
-  const isFormDisabled =
-    isViewDocumentUrl ||
-    ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+ const normalizedStatus = String(displayStatus || "")
+  .trim()
+  .toUpperCase();
+
+const normalizedDocumentStatus = String(documentStatus || "")
+  .trim()
+  .toUpperCase();
+
+const isFinalized =
+  ["FINALIZED", "F"].includes(normalizedStatus) ||
+  ["FINALIZED", "F"].includes(normalizedDocumentStatus);
+
+const isCancelled =
+  ["CANCELLED", "CANCELED", "X"].includes(normalizedStatus) ||
+  ["CANCELLED", "CANCELED", "X"].includes(normalizedDocumentStatus);
+
+const isClosed =
+  ["CLOSED", "C"].includes(normalizedStatus) ||
+  ["CLOSED", "C"].includes(normalizedDocumentStatus);
+
+const isTransactionLocked =
+  isFinalized || isCancelled || isClosed;
+
+const statusColor =
+  statusMap[normalizedStatus] || "";
+
+const isFormDisabled =
+  isViewDocumentUrl || isTransactionLocked;
 
   const [totals, setTotals] = useState({
     totalQuantity: "0.00",
@@ -1063,6 +1087,8 @@ const RMST = () => {
         toWHcode: item.towhouseCode || item.toWHcode || "",
         locCode: item.frmlocCode || item.locCode || "",
         tolocCode: item.tolocCode || "",
+        groupId: item.groupId || item.group_id || "",
+        uniqueKey: item.uniqueKey || item.unique_key || "",
       }));
 
       const formattedGLRows = (data.dt2 || []).map((glRow) => ({
@@ -1118,10 +1144,17 @@ const RMST = () => {
     }
   };
 
-  const handleActivityOption = async (action) => {
-    if ((detailRows?.length || 0) + (detailRowsGL?.length || 0) === 0) {
-      return;
-    }
+const handleActivityOption = async (action) => {
+  if (
+    isTransactionLocked &&
+    ["Upsert", "GenerateGL"].includes(action)
+  ) {
+    useSwalInfoAlert(
+      "Transaction Locked",
+      "Finalized transactions can no longer be edited."
+    );
+    return;
+  }
 
     if (!validateInterWarehouseFlow()) {
       return;
@@ -1357,6 +1390,7 @@ const RMST = () => {
     rcCode: "",
     sltypeCode: "",
     slCode: "",
+    groupId: "",
     uniqueKey: "",
     operation: "",
   });
@@ -2551,28 +2585,15 @@ if (field === "itemCode") {
         ? JSON.parse(response.data[0].result)
         : [];
 
-      // Make every lookup row key unique.
-      // Intransit rows can share the same Transfer Ref No / WT_NO, and the global lookup
-      // checkbox selection can treat rows with the same groupId as one selection.
-      const custData = rawCustData.map((row, index) => {
+      // Preserve the source groupId. It is the inventory layer/control identifier
+      // expected by RMST and must not include item, location, or row-index values.
+      const custData = rawCustData.map((row) => {
         const transferRefNo = row?.transferRefNo || row?.wtNo || row?.groupId || "";
-        const rowUniqueKey =
-          row?.uniqueKey ||
-          row?.orderId ||
-          row?.ORDER_ID ||
-          row?.controlNo ||
-          row?.CONTROL_NO ||
-          "";
-        const itemCodeKey = row?.itemCode || row?.ITEM_NO || "";
-        const lotKey = row?.lotNo || row?.LOT_NO || "";
-        const locKey = row?.locCode || row?.LOC_CODE || "";
 
         return {
           ...row,
           transferRefNo,
-          groupId: [transferRefNo, rowUniqueKey, itemCodeKey, lotKey, locKey, index]
-            .filter((value) => value !== undefined && value !== null && value !== "")
-            .join("|"),
+          groupId: row?.groupId || row?.group_id || row?.GROUP_ID || "",
         };
       });
 
@@ -2768,6 +2789,8 @@ if (field === "itemCode") {
           {
             ...baseRow,
             uniqueKey: originalKey,
+            groupId: selectedGroupId,
+            group_id: selectedGroupId,
             quantity: formatNumber(rawQtyHand * -1, decQty),
             qtyHand: formatNumber(rawQtyHand, decQty),
             itemAmount: formatNumber(rawQtyHand * rawUnitCost * -1, 2),
@@ -2776,6 +2799,8 @@ if (field === "itemCode") {
           {
             ...baseRow,
             uniqueKey: "",
+            groupId: selectedGroupId,
+            group_id: selectedGroupId,
             quantity: formatNumber(rawQtyHand, decQty),
             qtyHand: formatNumber(0, decQty),
             itemAmount: formatNumber(rawQtyHand * rawUnitCost, 2),
@@ -2788,6 +2813,8 @@ if (field === "itemCode") {
         {
           ...baseRow,
           uniqueKey: originalKey,
+          groupId: selectedGroupId,
+          group_id: selectedGroupId,
           qtyHand: formatNumber(rawQtyHand, decQty),
           quantity: formatNumber(0, decQty),
           itemAmount: formatNumber(0, 2),

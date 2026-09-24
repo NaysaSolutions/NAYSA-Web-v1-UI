@@ -50,6 +50,7 @@ import UserManuals from "./NAYSA Cloud/Authentication/UserManuals.jsx";
 import VideoTutorials from "./NAYSA Cloud/Authentication/VideoTutorials.jsx";
 import SupportTicket from "./NAYSA Cloud/Authentication/SupportTicket.jsx";
 import ContactUs from "./NAYSA Cloud/Authentication/ContactUs.jsx";
+import Freshdesk from "./NAYSA Cloud/Authentication/Freshdesk.jsx";
 import AuthProvider, {
   useAuth,
 } from "./NAYSA Cloud/Authentication/AuthContext.jsx";
@@ -975,6 +976,17 @@ const AppContent = () => {
                     <Navigate to="/heartstrong" replace />
                   ) : (
                     <ContactUs />
+                  )
+                }
+              />
+
+              <Route
+                path="/support-center"
+                element={
+                  isLicenseAdmin ? (
+                    <Navigate to="/heartstrong" replace />
+                  ) : (
+                    <Freshdesk />
                   )
                 }
               />
