@@ -800,6 +800,7 @@ const APV = () => {
   const rrVatAmountKeys = ["vatAmount", "vatAmt"];
   const rrQuantityKeys = ["qty", "quantity", "recQty"];
   const rrUnitCostKeys = ["unitCost", "cost", "price"];
+  const rrCategoryKeys = ["categCode", "categoryCode", "category", "categ_code", "CATEG_CODE", "CATEGORY_CODE", "msCategCode", "rmcategCode", "rmCategCode", "fgCategCode"];
 
 
   const getLookupNumber = (row, keys) => {
@@ -816,6 +817,39 @@ const APV = () => {
     const unitCost = getLookupNumber(row, rrUnitCostKeys);
     return quantity && unitCost ? quantity * unitCost : 0;
   };
+
+  const getLookupText = (row, keys) => {
+    const value = keys.map((key) => row?.[key]).find((item) => item !== undefined && item !== null && String(item).trim() !== "");
+    return String(value ?? "").trim();
+  };
+
+
+  const getReferenceCategoryCode = (row = {}) => getLookupText(row, rrCategoryKeys);
+
+
+  const getBackendReferenceId = (value) => {
+    const id = String(value ?? "").trim();
+    return /^\d+$/.test(id) ? id : "";
+  };
+
+
+  const getRRReferenceBackendIds = (item) =>
+    [
+      item?.rrId,
+      item?.rrHdId,
+      item?.rrHDId,
+      item?.rrhdID,
+      item?.rrID,
+      item?.rrhdId,
+      item?.RR_ID,
+      item?.RRHD_ID,
+      item?.RRHDID,
+      item?.sourceId,
+      item?.id,
+      item?.groupId,
+    ]
+      .map((value) => getBackendReferenceId(value))
+      .filter((value, index, values) => value && values.indexOf(value) === index);
 
 
   const handleOpenPayeeLookup = (context = "") => {
@@ -864,16 +898,20 @@ const APV = () => {
         );
       }
 
-      const selectedIds = [item.rrId, item.groupId, item.id]
-        .map((value) => String(value || "").trim())
-        .filter(Boolean)
-        .join(",");
+      const hasReferenceNo = Boolean(String(item.rrNo || item.poNo || "").trim());
+      const backendIds = getRRReferenceBackendIds(item);
+      if (backendIds.length === 0 && !hasReferenceNo) {
+        return [];
+      }
+
+      const selectedIds = backendIds.join(",");
+      const primaryReferenceId = backendIds[0] || "";
       const detailPayload = {
         json_data: {
           selectedIds,
           selectedId: selectedIds,
-          rrId: item.rrId || "",
-          rrHdId: item.rrId || "",
+          rrId: primaryReferenceId,
+          rrHdId: primaryReferenceId,
           rrNo: item.rrNo || "",
           poNo: item.poNo || "",
           branchCode: item.branchCode || branchCode || "",
@@ -1011,16 +1049,17 @@ const APV = () => {
           break;
       }
     }
-    const rrNo = row.rrNo || row.joNo || row.docNo || row.tranNo || "";
-    const rrId = row.rrId || row.joId || "";
-    const poId = row.poId || "";
-    const poNo = row.poNo || row.poJoNo || row.joNo || "";
+    const rrNo = row.rrNo || row.RR_NO || row.joNo || row.docNo || row.tranNo || "";
+    const rrId = row.rrId || row.rrHdId || row.rrHDId || row.RR_ID || row.RRHD_ID || row.RRHDID || row.joId || row.JO_ID || "";
+    const poId = row.poId || row.PO_ID || "";
+    const poNo = row.poNo || row.PO_NO || row.poJoNo || row.joNo || "";
     const rrDate = row.rrDate || row.poDate || row.poJoDate || row.joDate || "";
     const poDate = row.poDate || row.poJoDate || row.rrDate || "";
     const siNo = row.siNo || row.drNo || "";
     const siDate = row.siDate || row.rrDate || row.poDate || row.joDate || "";
     const siAmount = row.siAmount ?? row.amount ?? row.rrAmount ?? row.joAmount ?? row.itemAmount ?? row.netAmount ?? row.poAmount ?? 0;
-    const drAcct = row.drAcct || row.debitAcct || row.expAcct || row.invAcct || "";
+    const drAcct = row.drAcct || row.debitAcct || row.expAcct || row.expacctCode || row.expAcctCode || row.EXPACCT_CODE || row.invAcct || row.invAcctCode || row.INVACCT_CODE || row.acctCode || row.ACCT_CODE || "";
+    const categCode = getReferenceCategoryCode(row);
     const generatedGroupId = [referenceSource, menuCode, poId, rrId, rrNo, poNo, row.branchCode, index + 1].filter((value) => value !== undefined && value !== null && String(value).trim() !== "").join("-") || String(index + 1);
     return {
       ...row,
@@ -1052,7 +1091,7 @@ const APV = () => {
       vatCode: row.vatCode || "",
       vatDesc: row.vatDesc || row.vatName || "",
       vatAmount: row.vatAmount ?? row.vatAmt ?? 0,
-      categCode: row.categCode || row.categoryCode || row.category || "",
+      categCode,
       remarks: row.remarks || row.particular || "",
     };
   };
@@ -1134,7 +1173,7 @@ const APV = () => {
       totalATC += atcAmount;
     });
 
-    totalPayable = totalInvoice + totalVAT - totalATC;
+    totalPayable = totalInvoice - totalATC;
     updateTotalsDisplay(totalInvoice, totalVAT, totalATC, totalPayable);
   };
 
@@ -2336,10 +2375,17 @@ const APV = () => {
     row.drAcct ||
     row.debitAcct ||
     row.expAcct ||
+    row.expAcctCode ||
     row.expacctCode ||
+    row.expacct_code ||
+    row.EXPACCT_CODE ||
     row.invAcct ||
     row.invAcctCode ||
+    row.invacct_code ||
+    row.INVACCT_CODE ||
     row.acctCode ||
+    row.acct_code ||
+    row.ACCT_CODE ||
     "";
 
 
@@ -2367,15 +2413,8 @@ const APV = () => {
     const detailWithAccount = detailRows.find((row) => getCategoryAccountCode(row));
     const detailAccount = getCategoryAccountCode(detailWithAccount);
     if (detailAccount) return detailAccount;
-    const detailWithCategory = detailRows.find((row) => row?.categCode || row?.categoryCode || row?.category) || {};
-    const itemCategoryCode =
-      item.categCode ||
-      item.categoryCode ||
-      item.category ||
-      detailWithCategory.categCode ||
-      detailWithCategory.categoryCode ||
-      detailWithCategory.category ||
-      "";
+    const detailWithCategory = detailRows.find((row) => getReferenceCategoryCode(row)) || {};
+    const itemCategoryCode = getReferenceCategoryCode(item) || getReferenceCategoryCode(detailWithCategory);
     const categoryCode = String(itemCategoryCode || "").trim();
     if (!categoryCode) return "";
     const invType = String(item.type || item.invType || item.rrSource || "")
@@ -5319,7 +5358,7 @@ const APV = () => {
                     </label>
                   </div>
 
-                  {/* Total Payable Amount (Invoice + VAT - ATC) */}
+                  {/* Total Payable Amount (Invoice - ATC) */}
                   <div className="global-tran-tab-footer-total-div-ui">
                     <label className="global-tran-tab-footer-total-label-ui">Total Payable Amount:</label>
                     <label id="totalPayableAmount" className="global-tran-tab-footer-total-value-ui">

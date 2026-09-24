@@ -539,6 +539,8 @@ useEffect(() => {
       warehouseLookupOpen: false,
       WHcode: row?.whCode ?? "",
       WHname: row?.whName ?? "",
+      locCode: "",
+      locName: "",
     });
   };
 
@@ -3318,9 +3320,11 @@ useEffect(() => {
         <LocationLookupModal
           isOpen={state.locationLookupOpen}
           onClose={handleCloseLocationLookup}
+          filter="ActiveAll"
+          whCode={state.WHcode || ""}
           // filter="ActiveAll"
           source={accountModalSource}
-          filter={"ByWH" + selectedWH}
+        
           // autoSelectSingle={!accountModalSource && (selectedAJType === "BB" || selectedAJType === "IG")}
         />
       )}

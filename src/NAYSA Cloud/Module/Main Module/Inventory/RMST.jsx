@@ -808,10 +808,34 @@ const RMST = () => {
     CANCELLED: "global-tran-stat-text-closed-ui",
     CLOSED: "global-tran-stat-text-finalized-ui",
   };
-  const statusColor = statusMap[String(displayStatus).trim().toUpperCase()] || "";
-  const isFormDisabled =
-    isViewDocumentUrl ||
-    ["FINALIZED", "CANCELLED", "CLOSED"].includes(displayStatus);
+ const normalizedStatus = String(displayStatus || "")
+  .trim()
+  .toUpperCase();
+
+const normalizedDocumentStatus = String(documentStatus || "")
+  .trim()
+  .toUpperCase();
+
+const isFinalized =
+  ["FINALIZED", "F"].includes(normalizedStatus) ||
+  ["FINALIZED", "F"].includes(normalizedDocumentStatus);
+
+const isCancelled =
+  ["CANCELLED", "CANCELED", "X"].includes(normalizedStatus) ||
+  ["CANCELLED", "CANCELED", "X"].includes(normalizedDocumentStatus);
+
+const isClosed =
+  ["CLOSED", "C"].includes(normalizedStatus) ||
+  ["CLOSED", "C"].includes(normalizedDocumentStatus);
+
+const isTransactionLocked =
+  isFinalized || isCancelled || isClosed;
+
+const statusColor =
+  statusMap[normalizedStatus] || "";
+
+const isFormDisabled =
+  isViewDocumentUrl || isTransactionLocked;
 
   const [totals, setTotals] = useState({
     totalQuantity: "0.00",
@@ -1120,10 +1144,17 @@ const RMST = () => {
     }
   };
 
-  const handleActivityOption = async (action) => {
-    if ((detailRows?.length || 0) + (detailRowsGL?.length || 0) === 0) {
-      return;
-    }
+const handleActivityOption = async (action) => {
+  if (
+    isTransactionLocked &&
+    ["Upsert", "GenerateGL"].includes(action)
+  ) {
+    useSwalInfoAlert(
+      "Transaction Locked",
+      "Finalized transactions can no longer be edited."
+    );
+    return;
+  }
 
     if (!validateInterWarehouseFlow()) {
       return;
