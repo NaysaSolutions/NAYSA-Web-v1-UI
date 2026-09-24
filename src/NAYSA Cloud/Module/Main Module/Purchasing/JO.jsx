@@ -1090,6 +1090,7 @@ const handleDeleteRow = (index) => {
           vatCode: row.vatCode || "",
           vatAmt: parseFormattedNumber(row.vatAmt || 0),
           netAmt: parseFormattedNumber(row.netAmt || 0),
+          rcCode: row.rcCode || rcCode || "",
           deliveryDate: row.deliveryDate || null    
         })),
       };
@@ -1934,7 +1935,11 @@ const renderJoDetailColumn = (columnKey, row, index) => {
 
                       <FieldRenderer
                       id="rcName"
-                      label="Department"
+                       label={
+                    <>
+                      Department <span style={{ color: "red" }}>*</span>
+                    </>
+                  }
                       type="lookup"
                       value={rcName || ""}
                       disabled={isFormDisabled}

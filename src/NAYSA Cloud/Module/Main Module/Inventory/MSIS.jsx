@@ -552,6 +552,8 @@ useEffect(() => {
       warehouseLookupOpen: false,
       WHcode: row?.whCode ?? "",
       WHname: row?.whName ?? "",
+      locCode: "",
+      locName: "",
     });
   };
 
@@ -3375,6 +3377,7 @@ const itemAmountValue = parsedItemAmount || Number((quantityValue * unitCostValu
           isOpen={state.locationLookupOpen}
           onClose={handleCloseLocationLookup}
           filter="ActiveAll"
+          whCode={state.WHcode || ""}
         />
       )}
 

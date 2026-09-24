@@ -55,7 +55,7 @@ const LocationLookupModal = ({ isOpen, onClose, filter = "ActiveAll", whCode = "
     return () => {
       alive = false;
     };
-  }, [isOpen, filter]);
+  }, [isOpen, filter, whCode]);
 
   useEffect(() => {
     const newFiltered = location.filter((item) => {

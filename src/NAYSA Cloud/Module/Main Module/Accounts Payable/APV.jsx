@@ -135,6 +135,12 @@ const isNonPurchasesApType = (value) =>
       .trim()
       .toUpperCase(),
   );
+const isReimbursementLikeApType = (value) =>
+  ["APV05", "APV06"].includes(
+    String(value || "")
+      .trim()
+      .toUpperCase(),
+  );
 const isRequirementEnabled = (...values) =>
   values.some((value) =>
     ["Y", "YES", "TRUE"].includes(
@@ -794,6 +800,7 @@ const APV = () => {
   const rrVatAmountKeys = ["vatAmount", "vatAmt"];
   const rrQuantityKeys = ["qty", "quantity", "recQty"];
   const rrUnitCostKeys = ["unitCost", "cost", "price"];
+  const rrCategoryKeys = ["categCode", "categoryCode", "category", "categ_code", "CATEG_CODE", "CATEGORY_CODE", "msCategCode", "rmcategCode", "rmCategCode", "fgCategCode"];
 
 
   const getLookupNumber = (row, keys) => {
@@ -810,6 +817,39 @@ const APV = () => {
     const unitCost = getLookupNumber(row, rrUnitCostKeys);
     return quantity && unitCost ? quantity * unitCost : 0;
   };
+
+  const getLookupText = (row, keys) => {
+    const value = keys.map((key) => row?.[key]).find((item) => item !== undefined && item !== null && String(item).trim() !== "");
+    return String(value ?? "").trim();
+  };
+
+
+  const getReferenceCategoryCode = (row = {}) => getLookupText(row, rrCategoryKeys);
+
+
+  const getBackendReferenceId = (value) => {
+    const id = String(value ?? "").trim();
+    return /^\d+$/.test(id) ? id : "";
+  };
+
+
+  const getRRReferenceBackendIds = (item) =>
+    [
+      item?.rrId,
+      item?.rrHdId,
+      item?.rrHDId,
+      item?.rrhdID,
+      item?.rrID,
+      item?.rrhdId,
+      item?.RR_ID,
+      item?.RRHD_ID,
+      item?.RRHDID,
+      item?.sourceId,
+      item?.id,
+      item?.groupId,
+    ]
+      .map((value) => getBackendReferenceId(value))
+      .filter((value, index, values) => value && values.indexOf(value) === index);
 
 
   const handleOpenPayeeLookup = (context = "") => {
@@ -858,16 +898,20 @@ const APV = () => {
         );
       }
 
-      const selectedIds = [item.rrId, item.groupId, item.id]
-        .map((value) => String(value || "").trim())
-        .filter(Boolean)
-        .join(",");
+      const hasReferenceNo = Boolean(String(item.rrNo || item.poNo || "").trim());
+      const backendIds = getRRReferenceBackendIds(item);
+      if (backendIds.length === 0 && !hasReferenceNo) {
+        return [];
+      }
+
+      const selectedIds = backendIds.join(",");
+      const primaryReferenceId = backendIds[0] || "";
       const detailPayload = {
         json_data: {
           selectedIds,
           selectedId: selectedIds,
-          rrId: item.rrId || "",
-          rrHdId: item.rrId || "",
+          rrId: primaryReferenceId,
+          rrHdId: primaryReferenceId,
           rrNo: item.rrNo || "",
           poNo: item.poNo || "",
           branchCode: item.branchCode || branchCode || "",
@@ -1005,16 +1049,17 @@ const APV = () => {
           break;
       }
     }
-    const rrNo = row.rrNo || row.joNo || row.docNo || row.tranNo || "";
-    const rrId = row.rrId || row.joId || "";
-    const poId = row.poId || "";
-    const poNo = row.poNo || row.poJoNo || row.joNo || "";
+    const rrNo = row.rrNo || row.RR_NO || row.joNo || row.docNo || row.tranNo || "";
+    const rrId = row.rrId || row.rrHdId || row.rrHDId || row.RR_ID || row.RRHD_ID || row.RRHDID || row.joId || row.JO_ID || "";
+    const poId = row.poId || row.PO_ID || "";
+    const poNo = row.poNo || row.PO_NO || row.poJoNo || row.joNo || "";
     const rrDate = row.rrDate || row.poDate || row.poJoDate || row.joDate || "";
     const poDate = row.poDate || row.poJoDate || row.rrDate || "";
     const siNo = row.siNo || row.drNo || "";
     const siDate = row.siDate || row.rrDate || row.poDate || row.joDate || "";
     const siAmount = row.siAmount ?? row.amount ?? row.rrAmount ?? row.joAmount ?? row.itemAmount ?? row.netAmount ?? row.poAmount ?? 0;
-    const drAcct = row.drAcct || row.debitAcct || row.expAcct || row.invAcct || "";
+    const drAcct = row.drAcct || row.debitAcct || row.expAcct || row.expacctCode || row.expAcctCode || row.EXPACCT_CODE || row.invAcct || row.invAcctCode || row.INVACCT_CODE || row.acctCode || row.ACCT_CODE || "";
+    const categCode = getReferenceCategoryCode(row);
     const generatedGroupId = [referenceSource, menuCode, poId, rrId, rrNo, poNo, row.branchCode, index + 1].filter((value) => value !== undefined && value !== null && String(value).trim() !== "").join("-") || String(index + 1);
     return {
       ...row,
@@ -1046,7 +1091,7 @@ const APV = () => {
       vatCode: row.vatCode || "",
       vatDesc: row.vatDesc || row.vatName || "",
       vatAmount: row.vatAmount ?? row.vatAmt ?? 0,
-      categCode: row.categCode || row.categoryCode || row.category || "",
+      categCode,
       remarks: row.remarks || row.particular || "",
     };
   };
@@ -1128,7 +1173,7 @@ const APV = () => {
       totalATC += atcAmount;
     });
 
-    totalPayable = totalInvoice + totalVAT - totalATC;
+    totalPayable = totalInvoice - totalATC;
     updateTotalsDisplay(totalInvoice, totalVAT, totalATC, totalPayable);
   };
 
@@ -1626,7 +1671,7 @@ const APV = () => {
   };
 
 
-    const buildTransactionPayload = (glRows = detailRowsGL, invoiceRows = detailRows) => ({
+  const buildTransactionPayload = (glRows = detailRowsGL, invoiceRows = detailRows) => ({
     branchCode,
     apvNo: documentNo || "",
     apvId: documentID || "",
@@ -1660,6 +1705,134 @@ const APV = () => {
       dt1Lineno: entry.dt1Lineno || "",
     })),
   });
+
+  const getAccountRequirement = (accountRow) => ({
+    reqRc: isRequirementEnabled(accountRow?.reqRc, accountRow?.reqRC, accountRow?.rcReq, accountRow?.recRc) ? "Y" : "N",
+    reqSl: isRequirementEnabled(accountRow?.reqSl, accountRow?.reqSL, accountRow?.slReq, accountRow?.recSl) ? "Y" : "N",
+  });
+
+  const buildGlParticular = (acctName, slName, rcName) =>
+    [acctName, slName, rcName]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .join(" / ");
+
+  const buildGlRow = ({
+    accountRow,
+    acctCode,
+    acctName = "",
+    row = {},
+    debit = 0,
+    credit = 0,
+    vatCode = "",
+    atcCode = "",
+    forceSupplierSl = false,
+  }) => {
+    const accountRequirement = getAccountRequirement(accountRow);
+    const requiresRc = accountRequirement.reqRc === "Y";
+    const requiresSl = accountRequirement.reqSl === "Y" || forceSupplierSl;
+    const selectedSlType = row.sltypeCode || vendName?.sltypeCode || "SU";
+    const selectedSlCode = row.slCode || vendCode || "";
+    const selectedSlName = row.slName || vendName?.vendName || "";
+    const selectedAcctName = acctName || accountRow?.acctName || accountRow?.acct_name || "";
+    const selectedRcName = requiresRc ? row.rcName || "" : "";
+    const selectedParticular = buildGlParticular(selectedAcctName, requiresSl ? selectedSlName : "", selectedRcName);
+
+    return {
+      acctCode: acctCode || "",
+      acctName: selectedAcctName,
+      rcCode: requiresRc ? row.rcCode || "REQ RC" : "",
+      rcName: selectedRcName,
+      sltypeCode: requiresSl ? selectedSlType : "",
+      slCode: requiresSl ? selectedSlCode || "REQ SL" : "",
+      slName: requiresSl ? selectedSlName : "",
+      particular: selectedParticular,
+      debit: formatNumber(debit),
+      credit: formatNumber(credit),
+      debitFx1: "0.00",
+      creditFx1: "0.00",
+      debitFx2: "0.00",
+      creditFx2: "0.00",
+      vatCode,
+      atcCode,
+      slRefNo: row.siNo || "",
+      slrefDate: normalizeSlrefDate(row.siDate),
+      remarks: row.remarks || header.remarks || "",
+      reqRc: requiresRc ? "Y" : "N",
+      reqSl: requiresSl ? "Y" : "N",
+      dt1Lineno: row.lnNo || "",
+    };
+  };
+
+  const buildReimbursementLikeGLEntries = async () => {
+    const apAccountRow = apAccountCode ? await useTopAccountRow(apAccountCode) : null;
+    const generatedRows = [];
+
+    for (let index = 0; index < detailRows.length; index += 1) {
+      const row = detailRows[index] || {};
+      const rcDetails = row.rcCode && row.rcCode !== "REQ RC" ? await fetchRCDetails(row.rcCode) : null;
+      const lineRow = { ...row, lnNo: String(index + 1), rcName: row.rcName || rcDetails?.rcName || "" };
+      const grossAmount = parseFormattedNumber(row.siAmount || row.amount || 0) || 0;
+      const vatAmount = parseFormattedNumber(row.vatAmount || 0) || 0;
+      const atcAmount = parseFormattedNumber(row.atcAmount || 0) || 0;
+      const debitAcct = String(row.debitAcct || "").trim();
+      const debitAccountRow = debitAcct ? await useTopAccountRow(debitAcct) : null;
+      const vatRow = row.vatCode ? await useTopVatRow(row.vatCode) : null;
+      const atcRow = row.atcCode ? await useTopATCRow(row.atcCode) : null;
+      const vatAcctCode = vatRow?.acctCode || vatRow?.acct_code || "";
+      const atcAcctCode = atcRow?.ewtAcct || atcRow?.ewt_acct || atcRow?.acctCode || atcRow?.acct_code || "";
+
+      generatedRows.push(
+        buildGlRow({
+          accountRow: debitAccountRow,
+          acctCode: debitAcct,
+          row: lineRow,
+          debit: grossAmount - vatAmount,
+        }),
+      );
+
+      if (vatAmount > 0 && vatAcctCode) {
+        const vatAccountRow = await useTopAccountRow(vatAcctCode);
+        generatedRows.push(
+          buildGlRow({
+            accountRow: vatAccountRow,
+            acctCode: vatAcctCode,
+            acctName: vatRow?.acctName || vatRow?.acct_name || "",
+            row: lineRow,
+            debit: vatAmount,
+            vatCode: row.vatCode || "",
+          }),
+        );
+      }
+
+      if (atcAmount > 0 && atcAcctCode) {
+        const atcAccountRow = await useTopAccountRow(atcAcctCode);
+        generatedRows.push(
+          buildGlRow({
+            accountRow: atcAccountRow,
+            acctCode: atcAcctCode,
+            acctName: atcRow?.acctName || atcRow?.acct_name || "",
+            row: lineRow,
+            credit: atcAmount,
+            atcCode: row.atcCode || "",
+          }),
+        );
+      }
+
+      generatedRows.push(
+        buildGlRow({
+          accountRow: apAccountRow,
+          acctCode: apAccountCode,
+          acctName: apAccountName,
+          row: lineRow,
+          credit: grossAmount - atcAmount,
+          forceSupplierSl: true,
+        }),
+      );
+    }
+
+    return generatedRows.filter((row) => (parseFormattedNumber(row.debit) || 0) + (parseFormattedNumber(row.credit) || 0) !== 0);
+  };
 
   // Main action dispatcher: Generate GL, then Upsert
 
@@ -1764,6 +1937,24 @@ const APV = () => {
             };
 
             finalGlEntries = [blankRow, apRow];
+          } else if (isReimbursementLikeApType(selectedApType)) {
+            if (!apAccountCode) {
+              useSwalErrorAlert("Generate GL", "AP Account is required before generating GL entries.");
+              return;
+            }
+
+            if (!detailRows.length) {
+              useSwalErrorAlert("Generate GL", "Please add at least one invoice detail row before generating GL entries.");
+              return;
+            }
+
+            const missingDebitAccountIndex = detailRows.findIndex((row) => !String(row.debitAcct || "").trim());
+            if (missingDebitAccountIndex >= 0) {
+              useSwalErrorAlert("Generate GL", `DR Account is required in row ${missingDebitAccountIndex + 1} before generating GL entries.`);
+              return;
+            }
+
+            finalGlEntries = await buildReimbursementLikeGLEntries();
           } else {
             const generatedResponse = await useGenerateGLEntries(docType, glData, { includeInvoiceDetails: selectedApType === "APV01" });
             const generatedEntries = Array.isArray(generatedResponse) ? generatedResponse : generatedResponse?.glEntries;
@@ -2184,10 +2375,17 @@ const APV = () => {
     row.drAcct ||
     row.debitAcct ||
     row.expAcct ||
+    row.expAcctCode ||
     row.expacctCode ||
+    row.expacct_code ||
+    row.EXPACCT_CODE ||
     row.invAcct ||
     row.invAcctCode ||
+    row.invacct_code ||
+    row.INVACCT_CODE ||
     row.acctCode ||
+    row.acct_code ||
+    row.ACCT_CODE ||
     "";
 
 
@@ -2215,15 +2413,8 @@ const APV = () => {
     const detailWithAccount = detailRows.find((row) => getCategoryAccountCode(row));
     const detailAccount = getCategoryAccountCode(detailWithAccount);
     if (detailAccount) return detailAccount;
-    const detailWithCategory = detailRows.find((row) => row?.categCode || row?.categoryCode || row?.category) || {};
-    const itemCategoryCode =
-      item.categCode ||
-      item.categoryCode ||
-      item.category ||
-      detailWithCategory.categCode ||
-      detailWithCategory.categoryCode ||
-      detailWithCategory.category ||
-      "";
+    const detailWithCategory = detailRows.find((row) => getReferenceCategoryCode(row)) || {};
+    const itemCategoryCode = getReferenceCategoryCode(item) || getReferenceCategoryCode(detailWithCategory);
     const categoryCode = String(itemCategoryCode || "").trim();
     if (!categoryCode) return "";
     const invType = String(item.type || item.invType || item.rrSource || "")
@@ -5167,7 +5358,7 @@ const APV = () => {
                     </label>
                   </div>
 
-                  {/* Total Payable Amount (Invoice + VAT - ATC) */}
+                  {/* Total Payable Amount (Invoice - ATC) */}
                   <div className="global-tran-tab-footer-total-div-ui">
                     <label className="global-tran-tab-footer-total-label-ui">Total Payable Amount:</label>
                     <label id="totalPayableAmount" className="global-tran-tab-footer-total-value-ui">

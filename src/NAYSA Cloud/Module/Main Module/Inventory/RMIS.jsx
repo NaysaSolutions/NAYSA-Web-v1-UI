@@ -94,6 +94,7 @@ const RMIS = () => {
   const location = useLocation();
 
   const [isViewDocument, setIsViewDocument] = useState(false);
+  const { companyInfo, currentUserRow, getAllDropDown, refsLoaded, getAllTopHSDocRow } = useAuth();
 
 useEffect(() => {
   const p = new URLSearchParams(location.search);
@@ -140,8 +141,8 @@ useEffect(() => {
       rr_date: new Date().toISOString().split("T")[0], // PR Date
     },
 
-    branchCode: "HO",
-    branchName: "Head Office",
+    branchCode: currentUserRow?.branchCode||"",
+    branchName: currentUserRow?.branchName||"",
 
     // Responsibility Center / Requesting Dept
     // Responsibility Center / Requesting Dept
@@ -150,6 +151,7 @@ useEffect(() => {
     attention: "",
     vendCOde: "",
     vendName: "",
+    selectedWH: "",
 
     // Currency information (not used by sproc_PHP_PR but kept for UI consistency)
     currCode: "",
@@ -250,6 +252,7 @@ useEffect(() => {
     poNo,
     selectedPOType,
     selectedRowIndex,
+    selectedWH,
 
     glCurrMode,
     glCurrDefault,
@@ -469,8 +472,8 @@ useEffect(() => {
 
     updateState({
       header: { rr_date: today },
-      branchCode: "HO",
-      branchName: "Head Office",
+      branchCode: currentUserRow?.branchCode||"",
+      branchName: currentUserRow?.branchName||"",
       cutoffCode: "",
       rcCode: "",
       rcName: "",
@@ -536,6 +539,8 @@ useEffect(() => {
       warehouseLookupOpen: false,
       WHcode: row?.whCode ?? "",
       WHname: row?.whName ?? "",
+      locCode: "",
+      locName: "",
     });
   };
 
@@ -1209,6 +1214,7 @@ useEffect(() => {
 
           qtyOnHand: formatNumber(rawQtyHand, 6),
           uniqueKey: item?.uniqueKey ?? "",
+          groupId: item?.groupId ?? "",
 
           // Defaulted from rm_categ.expacct_code, but still editable through the DR Acct lookup cell.
           drAcctCode: defaultDrAccount.code || "",
@@ -1748,6 +1754,9 @@ useEffect(() => {
         attention,
         vendCode,
         vendName,
+        
+        custCode,
+        custName,
 
         remarks,
         noReprints,
@@ -1777,6 +1786,9 @@ useEffect(() => {
 
         empCode: vendCode || "",
         empName: vendName || "",
+
+        custCode: custCode || "",
+        custName: custName || "",
 
         remarks: remarks || "",
         status: status || "OPEN",
@@ -1820,6 +1832,7 @@ useEffect(() => {
             sltypeCode: row.sltypeCode || row.slTypeCode || "",
             slCode: row.slCode || vendCode || "",
 
+            groupId: row.groupId || "",
             uniqueKey: row.uniqueKey || "",
             operation: row.operation || "S",
           };
@@ -2144,6 +2157,21 @@ useEffect(() => {
       handleDetailChangeGL(selectedRowIndex, "slCode", selectedSL);
     }
     updateState({ showSlModal: false, selectedRowIndex: null, accountModalSource: null });
+  };
+
+  const handleCloseEmployeeCodeLookup = (selectedSL) => {
+    if (selectedSL) {
+      const selectedCode = selectedSL.slCode || selectedSL.sl_code || "";
+      const selectedName = selectedSL.slName || selectedSL.sl_name || "";
+
+      updateState({
+        vendCode: selectedCode,
+        vendCOde: selectedCode,
+        vendName: selectedName,
+      });
+    }
+
+    updateState({ showSlModal: false });
   };
 
   const handlePOStatChange = (e) => {
@@ -2501,8 +2529,18 @@ useEffect(() => {
       lotNo: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("lotNo", { readOnly: rowLocked })}</td>,
       bbDate: () => <td key={columnKey} className="global-tran-td-ui" style={style}><input type="date" id={`bbDate-${index}`} className="w-full global-tran-td-inputclass-ui text-center" value={row.bbDate || ""} readOnly={rowLocked} disabled={rowLocked} onChange={(e) => handleDetailChange(index, "bbDate", e.target.value)} onKeyDown={(e) => handleGridKeyDown(e, "bbDate", { readOnly: rowLocked })} /></td>,
       itemStat: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("itemStat", { readOnly: rowLocked })}</td>,
-      whouseCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("whouseCode", { readOnly: true, value: row.whouseName ?? row.whName ?? row.whouseCode ?? row.WHname ?? row.WHcode ?? "" })}</td>,
-      locCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("locCode", { readOnly: true, value: row.locName ?? row.locCode ?? "" })}</td>,
+      // whouseCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("whouseCode", { readOnly: true, value: row.whouseName ?? row.whName ?? row.whouseCode ?? row.WHname ?? row.WHcode ?? "" })}</td>,
+      // locCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("locCode", { readOnly: true, value: row.locName ?? row.locCode ?? "" })}</td>,
+      whouseCode: () => lookupCell(
+        "whouseCode",
+        row.whouseName ?? row.whName ?? row.whouseCode ?? row.WHname ?? row.WHcode ?? "",
+        () => updateState({ selectedRowIndex: index, warehouseLookupOpen: true, accountModalSource: "whouseCode" }),
+      ),
+      locCode: () => lookupCell(
+        "locCode",
+        row.locName ?? row.locCode ?? "",
+        () => updateState({ selectedRowIndex: index, locationLookupOpen: true, selectedWH: row.whouseCode, accountModalSource: "locCode" }),
+      ),
       drAcctCode: () => lookupCell("drAcctCode", row.drAcctCode || "", () => updateState({ selectedRowIndex: index, showAccountModal: true, accountModalSource: "drAcct" })),
       rcCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("rcCode", { readOnly: rowLocked, value: row.rcCode || rcCode || "" })}</td>,
       slCode: () => <td key={columnKey} className="global-tran-td-ui" style={style}>{textInput("slCode", { readOnly: rowLocked })}</td>,
@@ -2838,7 +2876,8 @@ useEffect(() => {
                   readOnly
                   disabled={isFormDisabled}
                   lookupDisabled={isFormDisabled}
-                  onLookup={() => !isFormDisabled && updateState({ locationLookupOpen: true })}
+                  // onLookup={() => !isFormDisabled && updateState({ locationLookupOpen: true })}
+                  onLookup={() => !isFormDisabled && state.WHname !== "" && updateState({ locationLookupOpen: true, selectedWH: state.WHcode })}
                 />
               </div>
 
@@ -2855,8 +2894,8 @@ useEffect(() => {
                   onLookup={() =>
                     !isFormDisabled &&
                     updateState({
-                      rcLookupModalOpen: true,
-                      rcLookupContext: "payeeCode",
+                      showSlModal: true,
+                      selectedRowIndex: null,
                     })
                   }
                 />
@@ -3233,7 +3272,7 @@ useEffect(() => {
         <GlobalLookupModalv1
           isOpen={rmLookupModalOpen}
           data={globalLookupRow}
-          btnCaption="Get Selected Raw Materials"
+          btnCaption="Get Selected Items"
           title="RM Location Balance"
           endpoint={globalLookupHeader}
           onClose={handleCloseRMLookup}
@@ -3273,7 +3312,7 @@ useEffect(() => {
       {showSlModal && (
         <SLMastLookupModal
           isOpen={showSlModal}
-          onClose={handleCloseSlModalGL}
+          onClose={selectedRowIndex === null ? handleCloseEmployeeCodeLookup : handleCloseSlModalGL}
         />
       )}
 
@@ -3282,6 +3321,11 @@ useEffect(() => {
           isOpen={state.locationLookupOpen}
           onClose={handleCloseLocationLookup}
           filter="ActiveAll"
+          whCode={state.WHcode || ""}
+          // filter="ActiveAll"
+          source={accountModalSource}
+        
+          // autoSelectSingle={!accountModalSource && (selectedAJType === "BB" || selectedAJType === "IG")}
         />
       )}
 
