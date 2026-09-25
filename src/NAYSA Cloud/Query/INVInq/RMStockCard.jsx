@@ -32,6 +32,12 @@ import WarehouseLookupModal from "@/NAYSA Cloud/Lookup/SearchWareMast.jsx";
 import { useSwalErrorAlert } from "@/NAYSA Cloud/Global/behavior";
 
 const safeArray = (value) => (Array.isArray(value) ? value : []);
+const normalizeInventorySetup = (value, fallback = "") => {
+  const setup = String(value || "").trim().toUpperCase();
+  if (setup === "FEFO") return "FIFO";
+  if (setup === "FIFO" || setup === "WAC" || setup === "SPID") return setup;
+  return fallback;
+};
 const formatDateValue = (value) => value || "";
 const parseDateValue = (value) => {
   if (!value) return null;
@@ -149,6 +155,11 @@ const MAIN_TABS = {
   ],
   WAC: [
     { key: "location", label: "Location Balance", icon: Boxes },
+    { key: "stockCard", label: "Stock Card", icon: ClipboardList },
+    { key: "stockStatus", label: "Stock Status", icon: FileBarChart2 },
+  ],
+  SPID: [
+    { key: "spid", label: "SPID Balance", icon: Package },
     { key: "stockCard", label: "Stock Card", icon: ClipboardList },
     { key: "stockStatus", label: "Stock Status", icon: FileBarChart2 },
   ],
@@ -431,7 +442,7 @@ function RMStockCardQuery() {
     "";
   const defaultReferenceDate = useGetCurrentDayV2();
   const defaultReportType = companyInfo?.stockStatusReportType || companyInfo?.reportType || "Daily";
-  const defaultInventorySetup = companyInfo?.rminvCosting || "";
+  const defaultInventorySetup = normalizeInventorySetup(companyInfo?.rminvCosting);
 
   const defaultBalanceFilters = useMemo(
     () => ({
@@ -676,7 +687,7 @@ function RMStockCardQuery() {
   }, [defaultInventorySetup, inventorySetup]);
 
   useEffect(() => {
-    setActiveMainTab(inventorySetup === "WAC" ? "location" : "fifo");
+    setActiveMainTab(inventorySetup === "SPID" ? "spid" : inventorySetup === "WAC" ? "location" : "fifo");
   }, [inventorySetup]);
 
   const setupQuery = useQuery({
@@ -690,14 +701,17 @@ function RMStockCardQuery() {
 
   useEffect(() => {
     if (setupQuery.data?.inventorySetup) {
-      setInventorySetup(setupQuery.data.inventorySetup);
+      const setup = normalizeInventorySetup(setupQuery.data.inventorySetup, defaultInventorySetup);
+      setInventorySetup(defaultInventorySetup === "SPID" && setup === "FIFO" ? defaultInventorySetup : setup);
     }
-  }, [setupQuery.data]);
+  }, [defaultInventorySetup, setupQuery.data]);
 
   const balanceEndpoint =
-    inventorySetup === "FIFO"
-      ? "/rm/inventory/stock-card/fifo-balance"
-      : "/rm/inventory/stock-card/location-balance";
+    inventorySetup === "SPID"
+      ? "/rm/inventory/stock-card/spid-balance"
+      : inventorySetup === "FIFO"
+        ? "/rm/inventory/stock-card/fifo-balance"
+        : "/rm/inventory/stock-card/location-balance";
 
   const balanceRequestParams = useMemo(
     () => ({
@@ -812,11 +826,6 @@ function RMStockCardQuery() {
           : toNumber(stockCardRows[stockCardRows.length - 1]?.runBal),
     };
   }, [stockCardQuery.data, stockCardRows]);
-  const stockCardTotalOverrides = useMemo(() => {
-    const lastRow = stockCardRows[stockCardRows.length - 1];
-    return lastRow?.stockVal === undefined ? {} : { amount: toNumber(lastRow.stockVal) };
-  }, [stockCardRows]);
-
   const stockStatusRows = safeArray(stockStatusQuery.data?.[stockStatusTab]);
 
   // ─── Column Definitions ──────────────────────────────────────────────────
@@ -988,8 +997,8 @@ function RMStockCardQuery() {
 
   // ─── Balance Tab ─────────────────────────────────────────────────────────
   const renderBalanceTab = () => {
-    const detailColumns = inventorySetup === "FIFO" ? fifoDetailColumnsForTable : locationDetailColumnsForTable;
-    const tabLabel = inventorySetup === "FIFO" ? "FIFO Balance" : "Location Balance";
+    const detailColumns = inventorySetup === "WAC" ? locationDetailColumnsForTable : fifoDetailColumnsForTable;
+    const tabLabel = inventorySetup === "SPID" ? "SPID Balance" : inventorySetup === "FIFO" ? "FIFO Balance" : "Location Balance";
     const balanceActionColumns = [
       {
         key: "__actions",
@@ -1419,7 +1428,6 @@ function RMStockCardQuery() {
             rightActionLabel="View"
             onRowAction={viewStockCardDocument}
             tableHeight="2000px"
-            totalOverrides={stockCardTotalOverrides}
             totalExemptions={["rate", "percent", "ratio", "id", "code", "ROW_NO", "runbal", "unitcost", "wac", "stockval"]}
             // autoFillGrid
           />
@@ -1701,7 +1709,7 @@ function RMStockCardQuery() {
         </div>
 
         <div className="p-3 bg-slate-50/30 dark:bg-slate-800/20">
-          {(activeMainTab === "fifo" || activeMainTab === "location") && renderBalanceTab()}
+          {(activeMainTab === "fifo" || activeMainTab === "location" || activeMainTab === "spid") && renderBalanceTab()}
           {activeMainTab === "stockCard" && renderStockCardTab()}
           {activeMainTab === "stockStatus" && renderStockStatusTab()}
         </div>

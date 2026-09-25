@@ -32,6 +32,12 @@ import WarehouseLookupModal from "@/NAYSA Cloud/Lookup/SearchWareMast.jsx";
 import { useSwalErrorAlert } from "@/NAYSA Cloud/Global/behavior";
 
 const safeArray = (value) => (Array.isArray(value) ? value : []);
+const normalizeInventorySetup = (value, fallback = "") => {
+  const setup = String(value || "").trim().toUpperCase();
+  if (setup === "FEFO") return "FIFO";
+  if (setup === "FIFO" || setup === "WAC" || setup === "SPID") return setup;
+  return fallback;
+};
 const formatDateValue = (value) => value || "";
 const parseDateValue = (value) => {
   if (!value) return null;
@@ -149,6 +155,11 @@ const MAIN_TABS = {
   ],
   WAC: [
     { key: "location", label: "Location Balance", icon: Boxes },
+    { key: "stockCard", label: "Stock Card", icon: ClipboardList },
+    { key: "stockStatus", label: "Stock Status", icon: FileBarChart2 },
+  ],
+  SPID: [
+    { key: "spid", label: "SPID Balance", icon: Package },
     { key: "stockCard", label: "Stock Card", icon: ClipboardList },
     { key: "stockStatus", label: "Stock Status", icon: FileBarChart2 },
   ],
@@ -431,7 +442,7 @@ function FGStockCardQuery() {
     "";
   const defaultReferenceDate = useGetCurrentDayV2();
   const defaultReportType = companyInfo?.stockStatusReportType || companyInfo?.reportType || "Daily";
-  const defaultInventorySetup = companyInfo?.fginvCosting || "";
+  const defaultInventorySetup = normalizeInventorySetup(companyInfo?.fginvCosting);
 
   const defaultBalanceFilters = useMemo(
     () => ({
@@ -707,7 +718,7 @@ function FGStockCardQuery() {
   }, [defaultInventorySetup, inventorySetup]);
 
   useEffect(() => {
-    setActiveMainTab(inventorySetup === "WAC" ? "location" : "fifo");
+    setActiveMainTab(inventorySetup === "SPID" ? "spid" : inventorySetup === "WAC" ? "location" : "fifo");
   }, [inventorySetup]);
 
   const setupQuery = useQuery({
@@ -721,14 +732,17 @@ function FGStockCardQuery() {
 
   useEffect(() => {
     if (setupQuery.data?.inventorySetup) {
-      setInventorySetup(setupQuery.data.inventorySetup);
+      const setup = normalizeInventorySetup(setupQuery.data.inventorySetup, defaultInventorySetup);
+      setInventorySetup(defaultInventorySetup === "SPID" && setup === "FIFO" ? defaultInventorySetup : setup);
     }
-  }, [setupQuery.data]);
+  }, [defaultInventorySetup, setupQuery.data]);
 
   const balanceEndpoint =
-    inventorySetup === "FIFO"
-      ? "/fg/inventory/stock-card/fifo-balance"
-      : "/fg/inventory/stock-card/location-balance";
+    inventorySetup === "SPID"
+      ? "/fg/inventory/stock-card/spid-balance"
+      : inventorySetup === "FIFO"
+        ? "/fg/inventory/stock-card/fifo-balance"
+        : "/fg/inventory/stock-card/location-balance";
 
   const balanceRequestParams = useMemo(
     () => ({
@@ -866,11 +880,6 @@ function FGStockCardQuery() {
           : toNumber(stockCardRows[stockCardRows.length - 1]?.runBal),
     };
   }, [stockCardQuery.data, stockCardRows]);
-  const stockCardTotalOverrides = useMemo(() => {
-    const lastRow = stockCardRows[stockCardRows.length - 1];
-    return lastRow?.stockVal === undefined ? {} : { amount: toNumber(lastRow.stockVal) };
-  }, [stockCardRows]);
-
   const stockStatusRows = safeArray(stockStatusQuery.data?.[stockStatusTab]);
 
   // ─── Column Definitions ──────────────────────────────────────────────────
@@ -1043,8 +1052,8 @@ function FGStockCardQuery() {
 
   // ─── Balance Tab ─────────────────────────────────────────────────────────
   const renderBalanceTab = () => {
-    const detailColumns = inventorySetup === "FIFO" ? fifoDetailColumnsForTable : locationDetailColumnsForTable;
-    const tabLabel = inventorySetup === "FIFO" ? "FIFO Balance" : "Location Balance";
+    const detailColumns = inventorySetup === "WAC" ? locationDetailColumnsForTable : fifoDetailColumnsForTable;
+    const tabLabel = inventorySetup === "SPID" ? "SPID Balance" : inventorySetup === "FIFO" ? "FIFO Balance" : "Location Balance";
     const balanceActionColumns = [
       {
         key: "__actions",
@@ -1466,7 +1475,6 @@ function FGStockCardQuery() {
             rightActionLabel="View"
             onRowAction={viewStockCardDocument}
             tableHeight="2000px"
-            totalOverrides={stockCardTotalOverrides}
             totalExemptions={["rate", "percent", "ratio", "id", "code", "ROW_NO", "runbal", "unitcost", "wac", "stockval"]}
             // autoFillGrid
           />
@@ -1748,7 +1756,7 @@ function FGStockCardQuery() {
         </div>
 
         <div className="p-3 bg-slate-50/30 dark:bg-slate-800/20">
-          {(activeMainTab === "fifo" || activeMainTab === "location") && renderBalanceTab()}
+          {(activeMainTab === "fifo" || activeMainTab === "location" || activeMainTab === "spid") && renderBalanceTab()}
           {activeMainTab === "stockCard" && renderStockCardTab()}
           {activeMainTab === "stockStatus" && renderStockStatusTab()}
         </div>
