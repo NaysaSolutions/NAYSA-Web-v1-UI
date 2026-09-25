@@ -85,6 +85,7 @@ import {
   useGenerateGLEntries,
   useUpdateRowGLEntries,
   useUpdateRowEditEntries,
+  applyLastPurchasePrices,
 } from "@/NAYSA Cloud/Global/procedure";
 
 import { useHandlePrint } from "@/NAYSA Cloud/Global/report";
@@ -2891,6 +2892,10 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
     if (isDirectReceiving) {
       detailRowsGLRef.current = [];
       updateState({ detailRowsGL: [] });
+      const pricedItems = await applyLastPurchasePrices(selectedItems, state.branchCode, "MS");
+      pricedItems.forEach((item, index) => {
+        selectedItems[index] = item;
+      });
     }
 
     const getSelectedUomCode = (selectedItem = {}) =>
@@ -2920,6 +2925,7 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
 
     const buildMSRRRow = async (selectedItem) => {
       const selectedUnitCost = firstValue(
+        selectedItem.lastPurchasePrice,
         selectedItem.unitCost,
         selectedItem.UnitCost,
         selectedItem.UNIT_COST,
@@ -3044,6 +3050,7 @@ const lotDetails = normalizeRetrievedLots(matchedLots, r);
 
     const selectedItem = selectedItems[0];
     const selectedUnitCost = firstValue(
+      selectedItem.lastPurchasePrice,
       selectedItem.unitCost,
       selectedItem.UnitCost,
       selectedItem.UNIT_COST,

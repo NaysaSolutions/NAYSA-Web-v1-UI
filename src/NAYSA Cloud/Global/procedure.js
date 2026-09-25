@@ -12,6 +12,46 @@ import {
 
 
 
+export const applyLastPurchasePrices = async (rows, branchCode, defaultInvType = "") => {
+  const sourceRows = Array.isArray(rows) ? rows : [];
+  const groups = new Map();
+
+  sourceRows.forEach((row) => {
+    const itemCode = String(row?.itemCode || row?.item_code || "").trim();
+    const invType = String(row?.invType || defaultInvType || "").trim().toUpperCase();
+    if (!itemCode || !invType) return;
+    if (!groups.has(invType)) groups.set(invType, new Set());
+    groups.get(invType).add(itemCode);
+  });
+
+  const priceMap = new Map();
+  await Promise.all(
+    [...groups.entries()].map(async ([invType, itemCodes]) => {
+      const response = await postRequest("po/last-purchase-price", {
+        branchCode,
+        invType,
+        itemCodeList: [...itemCodes],
+      });
+
+      (response?.data || []).forEach((priceRow) => {
+        priceMap.set(
+          `${invType}|${String(priceRow.itemCode || "").trim()}`,
+          Number(priceRow.unitPrice || 0),
+        );
+      });
+    }),
+  );
+
+  return sourceRows.map((row) => {
+    const itemCode = String(row?.itemCode || row?.item_code || "").trim();
+    const invType = String(row?.invType || defaultInvType || "").trim().toUpperCase();
+    return { ...row, lastPurchasePrice: priceMap.get(`${invType}|${itemCode}`) || 0 };
+  });
+};
+
+
+
+
 export const formatDateToMMDDYYYY = (value) => {
   if (!value) return "";
 

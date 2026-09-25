@@ -81,6 +81,7 @@ import {
   useHandlePost,
   useFieldLenghtCheck,
   useGetFieldLength,
+  applyLastPurchasePrices,
 } from "@/NAYSA Cloud/Global/procedure";
 
 import { useHandlePrint } from "@/NAYSA Cloud/Global/report";
@@ -2240,7 +2241,12 @@ const PO = () => {
         getUniqueOpenPRRemarks(remarksSourceRows),
       );
 
-      const newDetailRows = selectedDetails.map((d, i) => {
+      const pricedSelectedDetails = await applyLastPurchasePrices(
+        selectedDetails,
+        branchCode,
+      );
+
+      const newDetailRows = pricedSelectedDetails.map((d, i) => {
         const relatedSummary =
           summaryByPrNo[String(d?.prNo || d?.pr_no || "").trim()] ||
           summaryByGroupId[
@@ -2304,7 +2310,7 @@ const PO = () => {
           serviceCode: "",
           serviceName: "",
 
-          unitPrice: formatNumber(0, DEC_PRICE),
+          unitPrice: formatNumber(d.lastPurchasePrice || 0, DEC_PRICE),
           grossAmt: formatNumber(0, DEC_AMT),
           discRate: formatNumber(0, DEC_AMT),
           discAmt: formatNumber(0, DEC_AMT),
@@ -2412,7 +2418,7 @@ const PO = () => {
     await handleOpenMSLookup(true, type);
   };
 
-  const handleCloseMSLookup = (selectedItems) => {
+  const handleCloseMSLookup = async (selectedItems) => {
     if (!selectedItems) {
       updateState({ msLookupModalOpen: false });
       return;
@@ -2428,6 +2434,17 @@ const PO = () => {
       updateState({ msLookupModalOpen: false });
       return;
     }
+
+    const pricedItems = await applyLastPurchasePrices(
+      itemsArray.map((item) => ({
+        ...item,
+        invType: getInvTypeFromDocType(state.selectedDocType),
+      })),
+      branchCode,
+    );
+    pricedItems.forEach((item, index) => {
+      itemsArray[index] = item;
+    });
 
     const lookupInvType = getInvTypeFromDocType(state.selectedDocType);
     const isDuplicateLookupItem = (newItem) =>
@@ -2449,7 +2466,7 @@ const PO = () => {
           itemName: singleItem.itemName || "",
           uomCode: singleItem.uomCode || singleItem.uom || "",
           qtyOnHand: formatNumber(singleItem.qtyHand ?? 0, decQty),
-          unitPrice: formatNumber(singleItem.unitCost ?? 0, DEC_PRICE),
+          unitPrice: formatNumber(singleItem.lastPurchasePrice ?? 0, DEC_PRICE),
         };
         updatedRows[state.selectedRowIndex] = recalcDetailRow(
           updatedRows[state.selectedRowIndex],
@@ -2505,7 +2522,7 @@ const PO = () => {
           serviceName: "",
           poQty: formatNumber(0, decQty),
           rrQty: formatNumber(0, decQty),
-          unitPrice: formatNumber(item?.unitCost ?? 0, DEC_PRICE),
+          unitPrice: formatNumber(item?.lastPurchasePrice ?? 0, DEC_PRICE),
           grossAmt: formatNumber(0, DEC_AMT),
           discRate: formatNumber(0, DEC_AMT),
           discAmt: formatNumber(0, DEC_AMT),
